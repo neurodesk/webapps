@@ -1,4 +1,5 @@
-// Stages the browser runtimes into public/ (gitignored): Greedy's threaded WASM and niimath's Emscripten module.
+// Stages the browser runtimes into public/ (gitignored): Greedy's threaded WASM, niimath's Emscripten module and
+// meica's single-threaded WASM (npm ships no other build).
 // Vite bundles the fastprep core and glm WASM (wasm-bindgen's default URL) and MindGrab's models; the MNI template
 // comes from the pinned manifest.
 import { cp, mkdir, rm } from "node:fs/promises";
@@ -17,3 +18,4 @@ const stage = async (name, from, files) => {
 
 await stage("greedy-wasm", new URL("../../../packages/greedy/wasm/", import.meta.url));
 await stage("niimath", dirname(require.resolve("@niivue/niimath/niimath.js")), ["niimath.js", "niimath.wasm"]);
+await stage("meica/single", dirname(require.resolve("@niivue/meica/dist/single/meica_wasm.js")), ["meica_wasm.js", "meica_wasm_bg.wasm"]);

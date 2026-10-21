@@ -647,6 +647,9 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@niivue/meica':
+        specifier: 0.1.20261021
+        version: 0.1.20261021
       '@niivue/niimath':
         specifier: 1.4.20261016
         version: 1.4.20261016
@@ -1331,6 +1334,10 @@ importers:
         version: link:../components
 
   packages/fastprep:
+    dependencies:
+      '@niivue/meica':
+        specifier: 0.1.20261021
+        version: 0.1.20261021
     devDependencies:
       '@brainchop/mindgrab':
         specifier: 0.1.20261008
@@ -3500,6 +3507,10 @@ packages:
 
   '@niivue/dcm2niix@1.2.0':
     resolution: {integrity: sha512-wGontzVdVvLzeptZvJCcCQfpneoCme+9oCl82USjWMuer048+ZByO3b4FhbGnyEVQPh7hVgDA7A2+l6vW29bDg==}
+
+  '@niivue/meica@0.1.20261021':
+    resolution: {integrity: sha512-aBznyCHh81ULmA2D5JeF8zANaxcCVb3ayiK0iYYzSV7FRufwU/Fmk5Lj8Nej6zNZn5Xj1/Eh4gQnDcbpntJcGA==}
+    engines: {node: '>=22'}
 
   '@niivue/niimath@1.3.2':
     resolution: {integrity: sha512-mQ4O67leukvO7binFvqNDhMj+sJnVG43rzqQhpQTKHTadRGvU6I0UNyzAnfFlYbyiYX7yO2Ek718JkShxTRoVA==}
@@ -10833,6 +10844,8 @@ snapshots:
     optional: true
 
   '@niivue/dcm2niix@1.2.0': {}
+
+  '@niivue/meica@0.1.20261021': {}
 
   '@niivue/niimath@1.3.2': {}
 

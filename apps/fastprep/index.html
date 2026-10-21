@@ -88,6 +88,8 @@
 
     <template id="aboutContent">
       <p>fastprep follows the fMRIPrep workflow with permissively licensed tools: niimath, MindGrab, Greedy, SynthSR and glm.
+        Runs with three or more echoes are also denoised with ME-ICA by meica, an LGPL-2.1 port of tedana; the report compares
+        the original and denoised task maps.
         The Rust orchestration is the same as the native <code>fastprep</code> command, so this page writes the same derivatives and HTML report.</p>
       <p>Input: one subject of a BIDS dataset with a T1w and BOLD runs, each with its JSON sidecar. An <code>events.tsv</code> with
         <code>left</code>/<code>right</code> trial types adds a task analysis. Runs are limited to 1 GB of float32 BOLD here;

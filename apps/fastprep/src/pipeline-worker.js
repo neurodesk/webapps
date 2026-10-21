@@ -1,9 +1,10 @@
 // Runs one fastprep session off the main thread. The Rust core (WASM) plans every step; each step runs on its
 // browser runtime here: niimath (Emscripten), MindGrab (WebGPU/WebGL2/CPU), Greedy (threaded WASM), SynthSR (ONNX
-// Runtime Web) and glm (WASM). Steps run one at a time to bound peak memory.
+// Runtime Web), glm (WASM) and meica (WASM; ME-ICA of multi-echo runs). Steps run one at a time to bound peak memory.
 import { runFastprep } from "@neurodesk/fastprep";
 import { fetchModel } from "@neurodesk/webapp-components/worker";
 import { loadGreedy } from "@neurodesk/greedy";
+import { loadMeica } from "@niivue/meica";
 import { runSynthsr } from "@neurodesk/synthsr";
 import { createBrowserSession } from "@neurodesk/synthsr/browser";
 import { segment, segmentTissues } from "@brainchop/mindgrab";
@@ -45,6 +46,7 @@ self.onmessage = async ({ data }) => {
     post({ log: `Loading tools (${threads} threads)…` });
     const niimath = (await import(/* @vite-ignore */ `${base}niimath/niimath.js`)).default;
     const greedy = await loadGreedy(`${base}greedy-wasm/greedy_rs_wasm.js`, threads);
+    const meica = await loadMeica({ threads: 1, baseUrl: `${base}meica/` });
     const tpl = await Promise.all(TEMPLATES.map(async (a) => [
       a.filename.slice("templates/".length),
       new Uint8Array(await fetchAsset(fastprepManifest, a)),
@@ -58,6 +60,7 @@ self.onmessage = async ({ data }) => {
         mindgrabOptions: { backend: "auto", worker: false, timeoutMs: 900_000 },
         greedy,
         synthsr,
+        meica,
       },
       options: { omp: threads, nprocs: threads, ...options },
       onLog: (line) => post({ log: line }),

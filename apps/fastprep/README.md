@@ -2,7 +2,8 @@
 
 fMRIPrep-style preprocessing of one BIDS subject (T1w and BOLD with JSON sidecars, events optional), entirely in
 the browser. Images are not uploaded. The Rust core (`exes/fastprep`, WASM) plans each step and
-`@neurodesk/fastprep` runs it on niimath, MindGrab, Greedy, SynthSR and glm in a worker. Output is the
+`@neurodesk/fastprep` runs it on niimath, MindGrab, Greedy, SynthSR, glm and, for runs with three or more echoes,
+meica (`@niivue/meica`, ME-ICA) in a worker. Output is the
 derivatives tree, confounds, the HTML report (shown in the viewer) and, with events, left/right task t maps, as
 one zip.
 

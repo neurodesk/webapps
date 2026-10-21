@@ -20,6 +20,7 @@
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/synthsr": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/meica": "0.1.20261021",
     "@niivue/niimath": "1.4.20261016",
     "fflate": "^0.8.2",
     "onnxruntime-web": "1.29.0"

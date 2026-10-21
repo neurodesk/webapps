@@ -133,7 +133,7 @@ impl Host for Web {
 }
 
 /// Run fastprep over the host's files. `options`: `{bids, out, work, templates, labels, synthsr, frisgo,
-/// robustfov, t1w, surfaces, maxBoldBytes, omp, nprocs}`; paths are host paths.
+/// robustfov, t1w, surfaces, maxBoldBytes, meica, meicaTree, omp, nprocs}`; paths are host paths.
 #[wasm_bindgen(js_name = runFastprep)]
 pub async fn run_fastprep(host: JsHost, options: JsValue) -> Result<(), JsValue> {
     let get = |k: &str| Reflect::get(&options, &k.into()).unwrap_or(JsValue::UNDEFINED);
@@ -152,8 +152,7 @@ pub async fn run_fastprep(host: JsHost, options: JsValue) -> Result<(), JsValue>
         t1w: get("t1w").as_string(),
         surfaces: get("surfaces").as_bool().unwrap_or(false),
         max_bold_bytes: get("maxBoldBytes").as_f64().map(|b| b as u64),
-        // ponytail: off until packages/fastprep maps meica to @niivue/meica (needs its --denoise release)
-        meica: text("meica", "off"),
+        meica: text("meica", "auto"),
         meica_tree: text("meicaTree", "tedana_orig"),
     };
     let omp = num("omp", 1.0) as usize;

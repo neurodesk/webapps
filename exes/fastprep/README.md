@@ -67,9 +67,11 @@ Runs with three or more magnitude echoes get ME-ICA after `bold_apply` (`--meica
 `--meica-tree`), as fastprep.py: the echoes are resampled onto the boldref grid with the run's own FRISGO, STC, HMC
 and SDC, `meica` (meica-rs) classifies the components, and `meica --denoise` writes `desc-denoised` beside each
 `desc-preproc` series. `glm --meica-qc` relates the components to the task design and motion for the report.
-On motor3T (2026-10-21) the commands, every ME-ICA output and the report sections match fastprep.py. The browser
-build defaults to `meica: "off"` until `packages/fastprep` maps `meica` to `@niivue/meica` (which needs a release
-with `--denoise`); its glm driver already takes `--meica-qc`.
+On motor3T (2026-10-21) the commands, every ME-ICA output and the report sections match fastprep.py. In the
+browser, `packages/fastprep` runs `meica` on `@niivue/meica`'s single-threaded WASM and `glm --meica-qc` on the glm
+WASM; its Node run of motor3T (`validation/node-demo.mjs`) classifies the same 17 components (10 accepted, 7
+rejected), with denoised series at median voxel r 0.997 to native (the browser's niimath and MindGrab already
+move preproc to r 0.9993).
 
 ## GPU slots
 

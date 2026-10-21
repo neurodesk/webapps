@@ -1,4 +1,4 @@
-// Runs the browser host end to end under Node: the WASM core, niimath WASM, glm WASM and MindGrab's CPU modules
+// Runs the browser host end to end under Node: the WASM core, niimath WASM, glm WASM, meica WASM and MindGrab's CPU modules
 // (via @neurodesk/node-drivers). Greedy's threaded WASM and SynthSR's ONNX session need a browser, so here they are
 // native binaries behind the same API the drivers call; the drivers' argv mapping is still exercised.
 //
@@ -9,6 +9,7 @@ import { cpus, tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import createNiimath from '@niivue/niimath/niimath.js';
 import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
+import { loadMeica } from '@niivue/meica';
 import { runFastprep } from '../src/index.js';
 
 const [bids, tplDir, outDir, bin, omp = String(cpus().length)] = process.argv.slice(2);
@@ -62,6 +63,7 @@ const files = await runFastprep({
     mindgrabOptions: { backend: 'cpu' },
     greedy,
     synthsr,
+    meica: await loadMeica({ threads: 1 }),
     wasm: { core: wasm('fastprep'), glm: wasm('glm') },
   },
   options: { omp: Number(omp), nprocs: Number(omp) },

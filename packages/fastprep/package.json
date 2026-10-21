@@ -32,5 +32,8 @@
     "type": "git",
     "url": "https://github.com/neurodesk/webapps.git",
     "directory": "packages/fastprep"
+  },
+  "dependencies": {
+    "@niivue/meica": "0.1.20261021"
   }
 }

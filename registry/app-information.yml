@@ -1399,6 +1399,7 @@ apps:
       - { name: Greedy, url: https://github.com/rordenlab/greedy, role: template and SDC registration }
       - { name: SynthSR, url: https://github.com/BBillot/SynthSR, role: fieldmap-less distortion correction }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: SynthSR inference }
+      - { name: meica, url: https://github.com/niivue/meica-rs, role: multi-echo ICA denoising (a Rust port of tedana) }
     citations:
       - group: Method
         title: fMRIPrep
@@ -1437,3 +1438,15 @@ apps:
         title: Prais-Winsten AR(1) prewhitening
         reference: "Prais SJ, Winsten CB. Trend Estimators and Serial Correlation. Cowles Commission Discussion Paper, Statistics No. 383. 1954."
         url: https://cowles.yale.edu/sites/default/files/2023-05/s-0383.pdf
+      - group: Multi-echo denoising
+        title: tedana
+        reference: "DuPre EM, Salo T, Ahmed Z, et al. TE-dependent analysis of multi-echo fMRI with tedana. Journal of Open Source Software. 2021;6(66):3669."
+        doi: 10.21105/joss.03669
+      - group: Multi-echo denoising
+        title: ME-ICA
+        reference: "Kundu P, Inati SJ, Evans JW, Luh WM, Bandettini PA. Differentiating BOLD and non-BOLD signals in fMRI time series using multi-echo EPI. NeuroImage. 2012;60(3):1759-1770."
+        doi: 10.1016/j.neuroimage.2011.12.028
+      - group: Multi-echo denoising
+        title: maPCA dimensionality estimate
+        reference: "Li YO, Adali T, Calhoun VD. Estimating the number of independent components for functional magnetic resonance imaging data. Human Brain Mapping. 2007;28(11):1251-1266."
+        doi: 10.1002/hbm.20359

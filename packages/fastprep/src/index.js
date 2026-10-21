@@ -62,7 +62,8 @@ let ready;
  * @param {object} args
  * @param {Iterable<[string, Blob|Uint8Array]>} args.dataset relative path -> file, rooted at the BIDS directory
  * @param {Iterable<[string, Blob|Uint8Array]>} args.templates relative path -> file, rooted at the templates directory
- * @param {object} args.runtimes `{niimath, mindgrab, mindgrabOptions, greedy, synthsr}` (see drivers.js) and
+ * @param {object} args.runtimes `{niimath, mindgrab, mindgrabOptions, greedy, synthsr, meica}` (see drivers.js; `meica`:
+ *   the module `loadMeica` returns, needed for ME-ICA) and
  *   optional `wasm: {core, glm}` init inputs (URLs or bytes) for the fastprep and glm modules
  * @param {object} [args.options] core options: labels, synthsr, frisgo, robustfov, t1w, omp, nprocs
  * @returns {Promise<Files>} all files; derivatives under /out, commands.sh under /work
