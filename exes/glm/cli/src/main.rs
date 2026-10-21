@@ -2,17 +2,20 @@
 //!
 //!   glm bold.nii.gz confounds.tsv events.tsv condition out.nii.gz [--fwhm 0] [--ols]
 //!   glm --task-analysis bold.nii.gz confounds.tsv events.tsv l>r r>l l r --summary s.json [--fwhm 5]
+//!   glm --meica-qc mixing.tsv metrics.tsv confounds.tsv events.tsv|'' bold.json out.json
 
-use glm_core::io::{single, task_analysis};
+use glm_core::io::{meica_qc, single, task_analysis};
 use std::fs;
 
 const USAGE: &str = "usage: glm bold.nii.gz confounds.tsv events.tsv condition out.nii.gz [--fwhm 0] [--ols]
        glm --task-analysis bold.nii.gz confounds.tsv events.tsv OUT_LGR OUT_RGL OUT_L OUT_R --summary S.json [--fwhm 5]
+       glm --meica-qc mixing.tsv metrics.tsv confounds.tsv events.tsv|'' bold.json OUT.json
 
 Model: condition boxcar(s) * double-gamma HRF, intercept, DCT drift (128 s), 6 motion parameters; non-steady-state
 volumes (confounds non_steady_state_*) dropped. Noise: AR(1) prewhitening (lag-1 autocorrelation of the OLS
 residuals, smoothed 5 mm, quantised to 0.01, Prais-Winsten refit). --task-analysis writes the four left/right
-contrasts (NIfTI t-test intent, p1 = df) and a JSON summary.";
+contrasts (NIfTI t-test intent, p1 = df) and a JSON summary. --meica-qc relates ME-ICA components to the task
+design and motion (report only).";
 
 fn read(path: &str) -> Result<Vec<u8>, String> {
     fs::read(path).map_err(|e| format!("{path}: {e}"))
@@ -27,6 +30,24 @@ fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
 }
 
 fn run(args: Vec<String>) -> Result<(), String> {
+    if args.first().is_some_and(|a| a == "--meica-qc") {
+        let [_, mixing, metrics, conf, events, side, out] = args.as_slice() else {
+            return Err(USAGE.into());
+        };
+        let events = if events.is_empty() {
+            None
+        } else {
+            Some(text(events)?)
+        };
+        let qc = meica_qc(
+            &text(mixing)?,
+            &text(metrics)?,
+            &text(conf)?,
+            events.as_deref(),
+            &text(side)?,
+        )?;
+        return write(out, qc.as_bytes());
+    }
     let task = args.first().is_some_and(|a| a == "--task-analysis");
     let mut pos = vec![];
     let (mut fwhm, mut ols, mut summary) = (if task { 5.0 } else { 0.0 }, false, None);

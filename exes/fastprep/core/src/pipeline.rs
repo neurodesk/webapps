@@ -19,6 +19,9 @@ pub struct Options {
     pub surfaces: bool,
     /// Refuse runs whose float32 BOLD (all echoes) exceeds this many bytes, before any processing.
     pub max_bold_bytes: Option<u64>,
+    /// ME-ICA for runs with >= 3 echoes: auto, on or off; and the meica decision tree.
+    pub meica: String,
+    pub meica_tree: String,
 }
 
 /// Decoded float32 size of a run, summed over its magnitude and phase echoes.
@@ -200,6 +203,7 @@ pub async fn run<H: Host>(c: &Ctx<H>, o: &Options) -> Result<(), String> {
                 unreachable!()
             };
             stages::bold_apply(c, b, &fit, &anat).await?;
+            stages::bold_meica(c, b, &fit, &o.meica, &o.meica_tree).await?;
             runs.push((b.clone(), *fit));
         }
         done.push(Subject {
@@ -210,7 +214,16 @@ pub async fn run<H: Host>(c: &Ctx<H>, o: &Options) -> Result<(), String> {
         });
     }
     for s in &done {
-        let runs: Vec<Run> = s.runs.iter().map(|(bold, fit)| Run { bold, fit }).collect();
+        let mut runs: Vec<Run> = vec![];
+        for (bold, fit) in &s.runs {
+            let p = join(crate::host::parent(&fit.nss), "meica.json");
+            let meica = if c.h.exists(&p) {
+                Some(c.json(&p).await?)
+            } else {
+                None
+            };
+            runs.push(Run { bold, fit, meica });
+        }
         report::report(c, &s.label, &s.t1, &s.anat, &runs, t0).await?;
     }
     let (prev, n) = c.wall;

@@ -152,6 +152,9 @@ pub async fn run_fastprep(host: JsHost, options: JsValue) -> Result<(), JsValue>
         t1w: get("t1w").as_string(),
         surfaces: get("surfaces").as_bool().unwrap_or(false),
         max_bold_bytes: get("maxBoldBytes").as_f64().map(|b| b as u64),
+        // ponytail: off until packages/fastprep maps meica to @niivue/meica (needs its --denoise release)
+        meica: text("meica", "off"),
+        meica_tree: text("meicaTree", "tedana_orig"),
     };
     let omp = num("omp", 1.0) as usize;
     let tpl = Templates::new(&text("templates", "/templates"));

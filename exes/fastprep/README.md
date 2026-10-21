@@ -10,7 +10,7 @@ FASTPREP_HOME=/path/to/home target/release/fastprep bids_dir out_dir participant
 ```
 
 `$FASTPREP_HOME` (default: the executable's directory) holds `bin/` (niimath, brainchop-mindgrab,
-brainchop-mindmap, greedy-rs, synthsr, topofit, glm; searched before `PATH`) and
+brainchop-mindmap, greedy-rs, synthsr, topofit, glm, meica; searched before `PATH`) and
 `templates/tpl-MNI152NLin2009cAsym/`. The bids_dir is the folder that holds `sub-*`.
 
 A development home can link the release builds, so rebuilding updates it:
@@ -22,6 +22,7 @@ ln -sfn $E/fastprep/target/release/fastprep $E/glm/target/release/glm $E/greedy/
   $E/synthsr/target/release/synthsr .
 ln -sfn ~/src/niimath/src/niimath ~/src/brainchopC/src/brainchop-mind{grab,map} .
 ln -sfn ~/src/topofit/node/topofit.mjs topofit
+ln -sfn ~/src/meica-rs/target/release/meica .
 ln -sfn ~/src/fastprep/templates ~/fastprep/templates
 FASTPREP_HOME=~/fastprep ~/fastprep/bin/fastprep BIDS OUT participant -w WORK
 ```
@@ -59,6 +60,16 @@ Fixed here; fastprep.py still has these:
   `--synthsr off --no-robustfov` matches a clean run. Derivatives from an earlier configuration are not removed.
 
 The goal is otherwise byte parity of `commands.sh` and outputs with fastprep.py; list any new divergence here.
+
+## ME-ICA
+
+Runs with three or more magnitude echoes get ME-ICA after `bold_apply` (`--meica auto|on|off`,
+`--meica-tree`), as fastprep.py: the echoes are resampled onto the boldref grid with the run's own FRISGO, STC, HMC
+and SDC, `meica` (meica-rs) classifies the components, and `meica --denoise` writes `desc-denoised` beside each
+`desc-preproc` series. `glm --meica-qc` relates the components to the task design and motion for the report.
+On motor3T (2026-10-21) the commands, every ME-ICA output and the report sections match fastprep.py. The browser
+build defaults to `meica: "off"` until `packages/fastprep` maps `meica` to `@niivue/meica` (which needs a release
+with `--denoise`); its glm driver already takes `--meica-qc`.
 
 ## GPU slots
 

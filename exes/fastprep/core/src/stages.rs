@@ -5,6 +5,7 @@ use crate::bids::{self, Image, axis_zooms, disagreement_mm, readout_time};
 use crate::host::{Host, join};
 use crate::nifti;
 use crate::py;
+use crate::report::{TASK_CONTRASTS, field, tsv};
 use crate::run::{Ctx, TEMPLATE};
 use serde_json::{Map, Value, json};
 use std::f64::consts::PI;
@@ -13,6 +14,41 @@ use std::rc::Rc;
 const SHORT_RUN: usize = 20; // fewer volumes: FRISGO's run-mean odd/even error is mostly noise, tSNR's fit is (near) singular
 const MP2RAGE_FACTOR: i64 = 6; // -mp2rage noise multiple: best match to Siemens UNI-DEN (lambda 0.2) on motor7T, r 0.994
 const ZST: Option<&str> = Some("NIFTI_ZST");
+const MEICA_MIN_VOLUMES: usize = 100; // ponytail: --meica auto cutoff; maPCA is weak on short runs, not a validated boundary
+type Ents = &'static [(&'static str, Option<&'static str>)];
+/// meica's published tables and maps: (meica file name, suffix, extension, entities).
+const MEICA_PUBLISHED: [(&str, &str, &str, Ents); 5] = [
+    (
+        "desc-tedana_metrics.tsv",
+        "metrics",
+        ".tsv",
+        &[("desc", Some("tedana"))],
+    ),
+    (
+        "desc-ICA_mixing.tsv",
+        "mixing",
+        ".tsv",
+        &[("desc", Some("ICA"))],
+    ),
+    (
+        "desc-ICA_status_table.tsv",
+        "status_table",
+        ".tsv",
+        &[("desc", Some("ICA"))],
+    ),
+    (
+        "desc-ICA_decision_tree.json",
+        "decision_tree",
+        ".json",
+        &[("desc", Some("ICA"))],
+    ),
+    (
+        "desc-ICA_stat-z_components.nii.gz",
+        "components",
+        ".nii.gz",
+        &[("stat", Some("z")), ("desc", Some("ICA"))],
+    ),
+];
 
 pub fn short_run() -> usize {
     SHORT_RUN
@@ -1195,6 +1231,47 @@ pub fn tsnr_paths<H: Host>(
     ))
 }
 
+/// FRISGO and slice-timing arguments for every read of this run's raw series: (args, STC reference time or None).
+/// Slice timing applies along k only, reversed for k-.
+async fn series_args<H: Host>(
+    c: &Ctx<H>,
+    bold: &Image,
+    fit: &Fit,
+    w: &str,
+) -> Result<(Vec<String>, Option<f64>), String> {
+    let mut args = fit.frisgo_args.clone();
+    let meta = &bold.meta;
+    let Some(st) = bids::slice_timing(meta).filter(|_| bids::stc_applies(meta)) else {
+        return Ok((args, None));
+    };
+    let st: Vec<Value> = if bids::slice_encoding(meta) == "k-" {
+        st.iter().rev().cloned().collect()
+    } else {
+        st.clone()
+    };
+    // fMRIPrep: slice-time ref 0.5 = midpoint of the slice acquisition range
+    let t: Vec<f64> = st.iter().filter_map(Value::as_f64).collect();
+    let (lo, hi) = (
+        t.iter().copied().fold(f64::INFINITY, f64::min),
+        t.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+    );
+    let tz = py::round(lo + 0.5 * (hi - lo), 3);
+    let txt = join(w, "slicetiming.txt");
+    c.put(
+        &txt,
+        &st.iter().map(py::value).collect::<Vec<_>>().join(","),
+    )
+    .await?;
+    args.extend(argv![
+        "-stc",
+        "--slicetiming",
+        format!("@{txt}"),
+        "-tzero",
+        tz
+    ]);
+    Ok((args, Some(tz)))
+}
+
 /// One BOLD read -> STC -> confounds -> one-shot cubic resampling (HMC + coreg [+ MNI warp]) per space.
 pub async fn bold_apply<H: Host>(
     c: &Ctx<H>,
@@ -1230,53 +1307,15 @@ pub async fn bold_apply<H: Host>(
             &[("space", Some(sp)), ("desc", Some("preproc"))],
         )?);
     }
-    let mut cmd = argv![
-        "niimath",
-        fit.series,
-        "-p",
-        c.omp,
-        ..fit.frisgo_args.clone()
-    ];
     let sed = bids::slice_encoding(meta);
-    let st = bids::slice_timing(meta);
-    let along_k = bids::stc_applies(meta);
-    if st.is_some() && !along_k {
+    if bids::slice_timing(meta).is_some() && !bids::stc_applies(meta) {
         c.h.log(&format!(
             "  warning: {}: SliceEncodingDirection {sed}; slice timing not corrected",
             bold.name()
         ));
     }
-    let st: Option<Vec<Value>> = st.filter(|_| along_k).map(|a| {
-        if sed == "k-" {
-            a.iter().rev().cloned().collect()
-        } else {
-            a.clone()
-        }
-    });
-    let mut tzero = None;
-    if let Some(st) = &st {
-        // fMRIPrep: slice-time ref 0.5 = midpoint of the slice acquisition range
-        let t: Vec<f64> = st.iter().filter_map(Value::as_f64).collect();
-        let (lo, hi) = (
-            t.iter().copied().fold(f64::INFINITY, f64::min),
-            t.iter().copied().fold(f64::NEG_INFINITY, f64::max),
-        );
-        let tz = py::round(lo + 0.5 * (hi - lo), 3);
-        tzero = Some(tz);
-        let txt = join(&w, "slicetiming.txt");
-        c.put(
-            &txt,
-            &st.iter().map(py::value).collect::<Vec<_>>().join(","),
-        )
-        .await?;
-        cmd.extend(argv![
-            "-stc",
-            "--slicetiming",
-            format!("@{txt}"),
-            "-tzero",
-            tz
-        ]);
-    }
+    let (pre, tzero) = series_args(c, bold, fit, &w).await?;
+    let mut cmd = argv!["niimath", fit.series, "-p", c.omp, ..pre];
     let confounds = d("timeseries", ".tsv", &[("desc", Some("confounds"))])?;
     let dummy = c.json(&fit.nss).await?["dummy_scans"].clone();
     let (tsnr_map, tsnr_json) = tsnr_paths(c, bold, fit)?;
@@ -1333,7 +1372,7 @@ pub async fn bold_apply<H: Host>(
         "SusceptibilityDistortionCorrected".into(),
         json!(!fit.sdc.is_empty()),
     );
-    side.insert("SliceTimingCorrected".into(), json!(st.is_some()));
+    side.insert("SliceTimingCorrected".into(), json!(tzero.is_some()));
     if let Some(tz) = tzero {
         side.insert("StartTime".into(), json!(tz));
     }
@@ -1369,4 +1408,330 @@ pub async fn bold_apply<H: Host>(
         c.put(&o.replace(".nii.gz", ".json"), &text).await?;
     }
     Ok(())
+}
+
+pub fn sidecar_of(p: &str) -> String {
+    p.replace(".nii.gz", ".json")
+}
+
+/// ME-ICA derivatives: published tables/maps (meica name, path), denoised series (space, path), denoised t maps.
+pub struct MeicaPaths {
+    pub published: Vec<(&'static str, String)>,
+    pub denoised: Vec<(&'static str, String)>,
+    pub tmaps: Vec<String>,
+}
+
+pub fn meica_paths<H: Host>(c: &Ctx<H>, bold: &Image) -> Result<MeicaPaths, String> {
+    let mut p = MeicaPaths {
+        published: vec![],
+        denoised: vec![],
+        tmaps: vec![],
+    };
+    for (m, suffix, ext, ents) in MEICA_PUBLISHED {
+        p.published.push((m, c.deriv(bold, suffix, ext, ents)?));
+    }
+    for sp in ["T1w", TEMPLATE] {
+        let o = c.deriv(
+            bold,
+            "bold",
+            ".nii.gz",
+            &[("space", Some(sp)), ("desc", Some("denoised"))],
+        )?;
+        p.denoised.push((sp, o));
+    }
+    for (k, _) in TASK_CONTRASTS {
+        let desc = format!("{k}Denoised");
+        p.tmaps.push(c.deriv(
+            bold,
+            "boldmap",
+            ".nii.gz",
+            &[
+                ("space", Some("T1w")),
+                ("stat", Some("t")),
+                ("desc", Some(&desc)),
+            ],
+        )?);
+    }
+    Ok(p)
+}
+
+/// Whether a meica tree (bundled name or JSON file) decides with external regressors (`--external`).
+async fn tree_takes_regressors<H: Host>(c: &Ctx<H>, tree: &str) -> Result<bool, String> {
+    if matches!(tree, "motion_f" | "motion_aroma") || tree.starts_with("demo_external") {
+        return Ok(true);
+    }
+    if !c.h.exists(tree) {
+        return Ok(false);
+    }
+    let config = c
+        .json(tree)
+        .await?
+        .get("external_regressor_config")
+        .cloned();
+    Ok(config.is_some_and(|v| match v {
+        Value::Null => false,
+        Value::Array(a) => !a.is_empty(),
+        Value::Object(o) => !o.is_empty(),
+        _ => true,
+    }))
+}
+
+/// ME-ICA (meica: tedana's workflow in Rust) after bold_apply, for runs with >= 3 echoes. Components are classified
+/// on the echoes resampled onto the boldref grid with the preproc series' own FRISGO, STC, HMC and SDC; the rejected
+/// ones are then regressed from each space's preproc series (tedana's non-aggressive denoising), so the outputs keep
+/// their single interpolation. Unless `mode` is "on", a failure leaves preproc alone and is reported.
+pub async fn bold_meica<H: Host>(
+    c: &Ctx<H>,
+    bold: &Image,
+    fit: &Fit,
+    mode: &str,
+    tree: &str,
+) -> Result<(), String> {
+    if bold.echoes.is_empty() {
+        return Ok(());
+    }
+    let w = join(&c.sub_work(bold), &bold.name());
+    let status_file = join(&w, "meica.json");
+    let old = if c.h.exists(&status_file) {
+        c.json(&status_file).await?
+    } else {
+        json!({})
+    };
+    let p = meica_paths(c, bold)?;
+    let mut made: Vec<String> = p.published.iter().map(|(_, x)| x.clone()).collect();
+    made.extend(p.denoised.iter().map(|(_, x)| x.clone()));
+    made.extend(p.denoised.iter().map(|(_, x)| sidecar_of(x)));
+    made.extend(p.tmaps.iter().cloned());
+    made.push(join(&w, "task_glm_denoised.json"));
+    made.push(join(&w, "meica_qc.json"));
+    made.extend(
+        TASK_CONTRASTS
+            .iter()
+            .map(|(k, _)| join(&w, &format!("tstat_{k}_denoised_on_t1w.nii.zst"))),
+    );
+    let n = bold.hdr.shape.get(3).copied().unwrap_or(1);
+    let nss = c.json(&fit.nss).await?["dummy_scans"].clone();
+    let usable = n.saturating_sub(nss.as_u64().unwrap_or(0) as usize);
+    let skip = if mode == "off" {
+        Some("turned off (--meica off)".to_string())
+    } else if bold.echoes.len() < 3 {
+        Some(format!(
+            "{} echoes; ME-ICA needs 3 or more",
+            bold.echoes.len()
+        ))
+    } else if mode == "auto" && usable < MEICA_MIN_VOLUMES {
+        Some(format!(
+            "{usable} usable volumes, under the {MEICA_MIN_VOLUMES} --meica auto requires (--meica on overrides)"
+        ))
+    } else {
+        None
+    };
+    // nothing from another tree, or from a run that no longer gets ME-ICA, survives
+    if skip.is_some() || old.get("tree").and_then(Value::as_str) != Some(tree) {
+        for f in &made {
+            c.h.remove(f);
+        }
+    }
+    if let Some(reason) = skip {
+        let status = json!({"status": "skipped", "reason": reason});
+        return c.put(&status_file, &status.to_string()).await.map(|_| ());
+    }
+    // ponytail: one folder per tree name; a JSON tree edited in place under the same name needs work/ cleared
+    let mut slug = String::new();
+    for ch in tree.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch);
+        } else if !slug.ends_with('_') || slug.is_empty() {
+            slug.push('_');
+        }
+    }
+    let dir = format!("meica_{slug}");
+    let md = join(&w, &dir);
+    let mut preproc = vec![];
+    for (sp, _) in &p.denoised {
+        preproc.push(c.deriv(
+            bold,
+            "bold",
+            ".nii.gz",
+            &[("space", Some(sp)), ("desc", Some("preproc"))],
+        )?);
+    }
+    let conf = c.deriv(bold, "timeseries", ".tsv", &[("desc", Some("confounds"))])?;
+    let (metrics, mixing) = (
+        join(&md, "desc-tedana_metrics.tsv"),
+        join(&md, "desc-ICA_mixing.tsv"),
+    );
+    let rel = |x: &str| {
+        x.strip_prefix(&format!("{}/", c.out))
+            .unwrap_or(x)
+            .to_string()
+    };
+    let result: Result<Value, String> = async {
+        let (pre, _) = series_args(c, bold, fit, &w).await?;
+        let mut echoes = vec![];
+        for (i, e) in bold.echoes.iter().enumerate() {
+            // classification input only; gzip because meica reads no .nii.zst
+            let o = join(&w, &format!("echo-{}_space-boldref_bold.nii.gz", i + 1));
+            c.run(
+                argv![
+                    "niimath",
+                    e.path,
+                    "-p",
+                    c.omp,
+                    ..pre.clone(),
+                    "-resample",
+                    fit.reference,
+                    "-hmc",
+                    fit.hmc,
+                    ..fit.sdc.clone(),
+                    o
+                ],
+                std::slice::from_ref(&o),
+                None,
+                None,
+            )
+            .await?;
+            echoes.push(o);
+        }
+        let tes: Vec<String> = bold
+            .echoes
+            .iter()
+            .map(|e| py::g(1000.0 * e.f64("EchoTime").unwrap_or(f64::NAN)))
+            .collect();
+        let ext = if tree_takes_regressors(c, tree).await? {
+            argv!["--external", conf]
+        } else {
+            vec![]
+        };
+        let mut outs = vec![join(&md, "desc-ICACrossComponent_metrics.json")];
+        outs.extend(MEICA_PUBLISHED.iter().map(|(m, ..)| join(&md, m)));
+        // ponytail: the mask shares the echoes' boldref grid by construction (meica checks only the dimensions)
+        c.run(
+            argv![
+                "meica",
+                "-d",
+                ..echoes,
+                "-e",
+                ..tes,
+                "--mask",
+                fit.mask,
+                "--dummy-scans",
+                nss,
+                "--tree",
+                tree,
+                ..ext,
+                "--n-threads",
+                c.omp,
+                "--quiet",
+                "--out-dir",
+                md
+            ],
+            &outs,
+            None,
+            None,
+        )
+        .await?;
+        for (m, x) in &p.published {
+            c.h.copy(&join(&md, m), x)?;
+        }
+        let classes: Vec<String> = tsv(&c.text(&metrics).await?)
+            .iter()
+            .map(|r| field(r, "classification").to_string())
+            .collect();
+        let count = |k: &str| classes.iter().filter(|c| *c == k).count();
+        let version = c.json(&join(&md, "dataset_description.json")).await?["GeneratedBy"][0]
+            ["Version"]
+            .clone();
+        let info = json!({"Tree": tree, "Components": classes.len(), "Accepted": count("accepted"), "Rejected": count("rejected"), "Version": version});
+        let published = |m: &str| p.published.iter().find(|(x, _)| *x == m).unwrap().1.as_str();
+        for ((_, o), pp) in p.denoised.iter().zip(&preproc) {
+            c.run(
+                argv![
+                    "meica",
+                    "--denoise",
+                    pp,
+                    "--mixing",
+                    mixing,
+                    "--metrics",
+                    metrics,
+                    "--dummy-scans",
+                    nss,
+                    "-o",
+                    o
+                ],
+                std::slice::from_ref(o),
+                None,
+                None,
+            )
+            .await?;
+            let mut side = c
+                .json(&sidecar_of(pp))
+                .await?
+                .as_object()
+                .cloned()
+                .unwrap_or_default();
+            side.insert(
+                "Sources".into(),
+                json!([
+                    rel(pp),
+                    rel(published("desc-ICA_mixing.tsv")),
+                    rel(published("desc-tedana_metrics.tsv"))
+                ]),
+            );
+            side.insert("MEICA".into(), info.clone());
+            c.put(&sidecar_of(o), &serde_json::to_string_pretty(&side).unwrap())
+                .await?;
+        }
+        let qc = join(&w, "meica_qc.json");
+        let events = bids::run_events(bold)
+            .filter(|e| c.h.exists(e))
+            .unwrap_or_default();
+        c.run(
+            argv![
+                "glm",
+                "--meica-qc",
+                mixing,
+                metrics,
+                conf,
+                events,
+                sidecar_of(&preproc[0]),
+                qc
+            ],
+            std::slice::from_ref(&qc),
+            None,
+            None,
+        )
+        .await?;
+        let mut status = json!({"status": "ran", "tree": tree, "dir": dir});
+        status
+            .as_object_mut()
+            .unwrap()
+            .extend(info.as_object().unwrap().clone());
+        Ok(status)
+    }
+    .await;
+    let status = match result {
+        Ok(s) => s,
+        Err(e) if mode == "on" => return Err(e),
+        Err(e) => {
+            for f in &made {
+                c.h.remove(f);
+            }
+            // the failing tool's last line (its error), not the command line before it
+            let reason: String = e
+                .trim()
+                .lines()
+                .last()
+                .unwrap_or("")
+                .chars()
+                .take(300)
+                .collect();
+            c.h.log(&format!(
+                "  warning: ME-ICA failed for {}; preproc kept: {reason}",
+                bold.name()
+            ));
+            json!({"status": "failed", "tree": tree, "reason": reason})
+        }
+    };
+    c.put(&status_file, &status.to_string()).await.map(|_| ())
 }

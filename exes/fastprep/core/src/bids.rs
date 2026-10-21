@@ -620,6 +620,19 @@ pub fn affine_rows(a: &[[f64; 4]; 3]) -> Vec<Vec<f64>> {
 
 /// ('ascending'|'descending'|'interleaved', multiband factor) from BIDS SliceTiming.
 /// A sidecar's SliceTiming, if it is a non-empty list of numbers; anything malformed counts as absent.
+/// The run's events.tsv: events belong to the run, not to an echo or part (BIDS allows `.nii` as well as `.nii.gz`).
+pub fn run_events(bold: &Image) -> Option<String> {
+    let name: String = file_name(&bold.path)
+        .split('_')
+        .filter(|p| !(p.starts_with("echo-") || p.starts_with("part-")))
+        .collect::<Vec<_>>()
+        .join("_");
+    name.strip_suffix(".gz")
+        .unwrap_or(&name)
+        .strip_suffix("_bold.nii")
+        .map(|stem| join(parent(&bold.path), &format!("{stem}_events.tsv")))
+}
+
 pub fn slice_timing(meta: &Map<String, Value>) -> Option<&Vec<Value>> {
     meta.get("SliceTiming")
         .and_then(Value::as_array)

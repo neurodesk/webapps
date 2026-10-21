@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import createNiimath from '@niivue/niimath/niimath.js';
 import { Files, gzip, isGzip } from '../src/files.js';
-import { greedyDriver, mindgrabDriver, niimathDriver } from '../src/drivers.js';
+import { glmDriver, greedyDriver, mindgrabDriver, niimathDriver } from '../src/drivers.js';
 
 /** Minimal float32 NIfTI-1 of `side`^3 voxels, all `value`. */
 function nifti(side, value) {
@@ -85,4 +85,20 @@ test('mindgrab: brain, mask and tissue maps land on the native names', async () 
   assert.deepEqual(seen.map((o) => [o.model, o.mask, o.backend, o.gzipOutput]), [['mindgrab', true, 'cpu', true], ['mindmap', undefined, 'cpu', true]]);
   for (const p of ['/w/brain.nii.gz', '/o/mask.nii.gz', '/w/pve_gm.nii.gz', '/w/pve_wm.nii.gz', '/w/pve_csf.nii.gz']) assert.ok(files.has(p), p);
   assert.ok(isGzip(await files.bytes('/o/mask.nii.gz'))); // the fake returned raw bytes: gzip follows the name
+});
+
+test('glm --meica-qc: text inputs in, JSON out; an empty events path means no task', async () => {
+  const files = new Files();
+  const enc = (s) => new TextEncoder().encode(s);
+  for (const p of ['/w/mix.tsv', '/w/metrics.tsv', '/o/conf.tsv', '/o/bold.json', '/d/events.tsv']) files.put(p, enc(p));
+  const calls = [];
+  const glm = { meica_qc: (...a) => (calls.push(a), '{"conditions":[]}') };
+  const run = glmDriver(glm);
+  const argv = (events) => ['glm', '--meica-qc', '/w/mix.tsv', '/w/metrics.tsv', '/o/conf.tsv', events, '/o/bold.json', '/w/qc.json'];
+  assert.equal((await run(argv('/d/events.tsv'), { files })).code, 0);
+  assert.deepEqual(calls[0], ['/w/mix.tsv', '/w/metrics.tsv', '/o/conf.tsv', '/d/events.tsv', '/o/bold.json']);
+  assert.equal(await files.text('/w/qc.json'), '{"conditions":[]}');
+  await run(argv(''), { files });
+  assert.equal(calls[1][3], '');
+  await assert.rejects(run(['glm', '--meica-qc', '/w/mix.tsv'], { files }), /expects/);
 });

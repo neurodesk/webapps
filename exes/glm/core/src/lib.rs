@@ -13,7 +13,7 @@ pub struct Mat {
 }
 
 impl Mat {
-    fn at(&self, r: usize, c: usize) -> f64 {
+    pub(crate) fn at(&self, r: usize, c: usize) -> f64 {
         self.v[r * self.p + c]
     }
 }
@@ -24,7 +24,7 @@ pub struct Event {
     pub trial_type: String,
 }
 
-const MOTION: [&str; 6] = ["trans_x", "trans_y", "trans_z", "rot_x", "rot_y", "rot_z"];
+pub(crate) const MOTION: [&str; 6] = ["trans_x", "trans_y", "trans_z", "rot_x", "rot_y", "rot_z"];
 
 /// `np.arange(0, stop, step)` length.
 fn arange_len(stop: f64, step: f64) -> usize {

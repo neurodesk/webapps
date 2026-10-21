@@ -14,6 +14,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const USAGE: &str = "usage: fastprep bids_dir output_dir participant [--participant-label L ...] [--nprocs N]
        [--omp-nthreads N] [-w WORK_DIR] [--no-gpu] [--gpu-slots N] [--gpu-lock-dir DIR]
        [--synthsr auto|all|off] [--frisgo runwise|lpass|spline|simple|off] [--no-robustfov] [--t1w GLOB]
+       [--meica auto|on|off] [--meica-tree TREE]
 
 fastprep: lean fMRIPrep-style preprocessing. Tools are found in <home>/bin, then PATH;
 templates in <home>/templates (home: $FASTPREP_HOME, else the executable's directory).
@@ -29,7 +30,10 @@ templates in <home>/templates (home: $FASTPREP_HOME, else the executable's direc
                         auto = only runs without a usable fieldmap/MEDIC; off
   --frisgo              fuzzy-ripple correction of dual-polarity 3D EPI (default runwise)
   --no-robustfov        keep the full T1w field of view
-  --t1w                 anatomical file-name glob (default: best T1w)";
+  --t1w                 anatomical file-name glob (default: best T1w)
+  --meica               ME-ICA denoising of runs with >= 3 echoes (auto: from 100 usable volumes, a failure
+                        warns; on: any length, a failure stops fastprep; off: never)
+  --meica-tree          meica decision tree: tedana_orig (default), motion_f, motion_aroma, ... or a JSON file";
 
 struct Native {
     bin: PathBuf,
@@ -239,6 +243,8 @@ struct Args {
     frisgo: String,
     robustfov: bool,
     t1w: Option<String>,
+    meica: String,
+    meica_tree: String,
 }
 
 fn parse(argv: Vec<String>) -> Result<Args, String> {
@@ -258,6 +264,8 @@ fn parse(argv: Vec<String>) -> Result<Args, String> {
         frisgo: "runwise".into(),
         robustfov: true,
         t1w: None,
+        meica: "auto".into(),
+        meica_tree: "tedana_orig".into(),
     };
     let mut it = argv
         .into_iter()
@@ -300,6 +308,8 @@ fn parse(argv: Vec<String>) -> Result<Args, String> {
             }
             "--no-robustfov" => a.robustfov = false,
             "--t1w" => a.t1w = Some(it.next().ok_or("--t1w: expected a glob")?),
+            "--meica" => a.meica = choice(it.next(), &k, &["auto", "on", "off"])?,
+            "--meica-tree" => a.meica_tree = it.next().ok_or("--meica-tree: expected a tree")?,
             s if s.starts_with('-') => return Err(format!("unknown option {s}\n{USAGE}")),
             _ => pos.push(k),
         }
@@ -409,6 +419,8 @@ fn start(a: Args) -> Result<(), String> {
             t1w: a.t1w,
             surfaces: true,
             max_bold_bytes: None,
+            meica: a.meica,
+            meica_tree: a.meica_tree,
         };
         pipeline::run(&ctx, &o).await
     })

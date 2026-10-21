@@ -1,11 +1,11 @@
 //! HTML report: subject page with niimath -bitmap figures, methods text and the task-analysis page.
 
 use crate::argv;
-use crate::bids::{ENTITY_ORDER, Image, PEPOLAR_DEFERRED, axis_zooms, pe_words, slice_order};
-use crate::host::{Host, file_name, join, parent};
+use crate::bids::{self, ENTITY_ORDER, Image, PEPOLAR_DEFERRED, axis_zooms, pe_words, slice_order};
+use crate::host::{Host, join, parent};
 use crate::py::{self, escape as esc, g};
 use crate::run::{Ctx, TEMPLATE};
-use crate::stages::{Anat, Fit, invert_xfm, mp2rage_factor, short_run, tsnr_paths};
+use crate::stages::{Anat, Fit, invert_xfm, meica_paths, mp2rage_factor, short_run, tsnr_paths};
 use serde_json::Value;
 use std::cell::Cell;
 
@@ -20,7 +20,7 @@ const NUMBER_WORDS: [&str; 11] = [
     "No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
 ];
 /// Keys and order match glm's task contrasts.
-const TASK_CONTRASTS: [(&str, &str); 4] = [
+pub(crate) const TASK_CONTRASTS: [(&str, &str); 4] = [
     ("leftGreaterRight", "left > right [1 -1]"),
     ("rightGreaterLeft", "right > left [-1 1]"),
     ("leftActive", "left > baseline [1 0]"),
@@ -69,7 +69,7 @@ pub fn tsv(text: &str) -> Vec<Vec<(String, String)>> {
         .collect()
 }
 
-fn field<'a>(row: &'a [(String, String)], k: &str) -> &'a str {
+pub(crate) fn field<'a>(row: &'a [(String, String)], k: &str) -> &'a str {
     row.iter()
         .find(|(a, _)| a == k)
         .map_or("", |(_, v)| v.as_str())
@@ -78,6 +78,8 @@ fn field<'a>(row: &'a [(String, String)], k: &str) -> &'a str {
 pub struct Run<'a> {
     pub bold: &'a Image,
     pub fit: &'a Fit,
+    /// The run's ME-ICA status (`meica.json`) when it has echoes.
+    pub meica: Option<Value>,
 }
 
 fn tag(b: &Image) -> String {
@@ -499,6 +501,23 @@ pub fn methods(t1: &Image, runs: &[Run], anat: &Anat) -> String {
         }
     );
     let mut pre = vec![p0, p1];
+    let ran: Vec<&Run> = runs
+        .iter()
+        .filter(|r| r.meica.as_ref().is_some_and(|m| m["status"] == "ran"))
+        .collect();
+    if let Some(m) = ran.first().and_then(|r| r.meica.as_ref()) {
+        let bs: Vec<&Image> = ran.iter().map(|r| r.bold).collect();
+        pre.push(format!(
+            "{} {} also denoised with multi-echo ICA (ME-ICA) using meica {}, a Rust port of tedana {}. The echoes were resampled onto the BOLD reference grid with the same slice-timing, head-motion and distortion corrections, the dimensionality was estimated with maPCA {}, and FastICA components were classified by their echo-time dependence (κ, ρ) {} with the {} decision tree. The rejected components were regressed from each preprocessed series (tedana's non-aggressive denoising: all components fitted, only the rejected removed), written as desc-denoised beside desc-preproc.",
+            names(&bs),
+            if ran.len() == 1 { "was" } else { "were" },
+            py::value(&m["Version"]),
+            cite(&["tedana"]),
+            cite(&["mapca"]),
+            cite(&["kundu"]),
+            py::value(&m["tree"])
+        ));
+    }
     let mut sdc_text: Vec<(String, Vec<&Image>)> = vec![];
     for r in runs {
         let fit = r.fit;
@@ -724,6 +743,275 @@ impl<H: Host> Figures<'_, H> {
     }
 }
 
+/// Multi-echo ICA summary for a run's report section: what meica rejected and whether that looks like the task.
+async fn meica_section<H: Host>(
+    f: &Figures<'_, H>,
+    bold: &Image,
+    fit: &Fit,
+    status: Option<&Value>,
+) -> Result<String, String> {
+    let c = f.c;
+    let Some(s) = status.filter(|_| !bold.echoes.is_empty()) else {
+        return Ok(String::new());
+    };
+    let text = |k: &str| py::value(&s[k]);
+    if s["status"] != "ran" {
+        let failed = s["status"] == "failed";
+        return Ok(format!(
+            "<h3>Multi-echo ICA</h3><p class=\"{}\">ME-ICA {}: {}.{}</p>",
+            if failed { "warn" } else { "mut" },
+            if failed { "failed" } else { "not run" },
+            esc(&text("reason")),
+            if failed {
+                " The preprocessed series is unaffected; no denoised series was written."
+            } else {
+                ""
+            }
+        ));
+    }
+    let w = parent(&fit.nss);
+    let md = join(w, &text("dir"));
+    let comps = tsv(&c.text(&join(&md, "desc-tedana_metrics.tsv")).await?);
+    let rej_var = num(&c
+        .json(&join(&md, "desc-ICACrossComponent_metrics.json"))
+        .await?["rejected_variance"]);
+    let qc = c.json(&join(w, "meica_qc.json")).await?;
+    let conds: Vec<String> = qc["conditions"]
+        .as_array()
+        .map_or(vec![], |a| a.iter().map(py::value).collect());
+    let rq = &qc["components"];
+    let f2 = |x: f64| {
+        if x.is_nan() {
+            String::new()
+        } else {
+            format!("{x:.2}")
+        }
+    };
+    let val = |row: &[(String, String)], k: &str| field(row, k).parse::<f64>().unwrap_or(f64::NAN);
+    // kappa-rho scatter: area ~ variance explained; accepted green, rejected red
+    let (kmax, rmax) = comps
+        .iter()
+        .fold((f64::NEG_INFINITY, f64::NEG_INFINITY), |(a, b), r| {
+            (a.max(val(r, "kappa")), b.max(val(r, "rho")))
+        });
+    let (wd, ht, pd) = (600.0, 260.0, 30.0);
+    let or1 = |x: f64| if x == 0.0 { 1.0 } else { x };
+    let sx = |x: f64| pd + x / or1(kmax) * (wd - 2.0 * pd);
+    let sy = |y: f64| ht - pd - y / or1(rmax) * (ht - 2.0 * pd);
+    let mut dots = String::new();
+    for r in &comps {
+        let (k, rho, var) = (val(r, "kappa"), val(r, "rho"), val(r, "variance explained"));
+        let class = field(r, "classification");
+        dots += &format!(
+            "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"{:.1}\" fill=\"{}\" opacity=\".7\"><title>{}: κ {k:.1}, ρ {rho:.1}, {var:.1} % variance, {}</title></circle>",
+            sx(k),
+            sy(rho),
+            2.0 + var.sqrt() * 2.0,
+            if class == "accepted" {
+                "#2ca02c"
+            } else {
+                "#d62728"
+            },
+            esc(field(r, "Component")),
+            esc(class)
+        );
+    }
+    let axes = format!(
+        "<line x1=\"{pd}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"currentColor\"/><line x1=\"{pd}\" y1=\"{pd}\" x2=\"{pd}\" y2=\"{}\" stroke=\"currentColor\"/><text x=\"{}\" y=\"{}\" text-anchor=\"end\" font-size=\"12\" fill=\"currentColor\">κ (TE-dependent, BOLD) → {kmax:.0}</text><text x=\"{}\" y=\"{}\" font-size=\"12\" fill=\"currentColor\">ρ (TE-independent) ↑ {rmax:.0}</text>",
+        ht - pd,
+        wd - pd,
+        ht - pd,
+        ht - pd,
+        wd - pd,
+        ht - 8.0,
+        pd + 4.0,
+        pd - 8.0
+    );
+    let mut rejected: Vec<&Vec<(String, String)>> = comps
+        .iter()
+        .filter(|r| field(r, "classification") == "rejected")
+        .collect();
+    rejected.sort_by(|a, b| val(b, "variance explained").total_cmp(&val(a, "variance explained")));
+    let task = |name: &str, t: &str| num(&rq[name]["task"][t]);
+    let flagged = |name: &str| conds.iter().any(|t| task(name, t).abs() >= 0.3);
+    let chance = num(&s["Rejected"]) / num(&qc["volumes"]);
+    let label = |t: &str| {
+        if t == "all" {
+            "combined task (all conditions)".to_string()
+        } else {
+            t.to_string()
+        }
+    };
+    let head: String = conds
+        .iter()
+        .map(|t| format!("<th class=\"n\">r {}</th>", esc(t)))
+        .collect();
+    let mut rows = String::new();
+    for r in &rejected {
+        let name = field(r, "Component");
+        rows += &format!(
+            "<tr{}><td>{}</td><td class=\"n\">{:.1}</td><td class=\"n\">{:.1}</td><td class=\"n\">{:.1}</td><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td>",
+            if flagged(name) { " class=flag" } else { "" },
+            esc(name),
+            val(r, "kappa"),
+            val(r, "rho"),
+            val(r, "variance explained"),
+            esc(field(r, "classification_tags")),
+            f2(num(&rq[name]["fd"])),
+            f2(num(&rq[name]["motion"]))
+        );
+        for t in &conds {
+            rows += &format!("<td class=\"n\">{}</td>", f2(task(name, t)));
+        }
+        rows += "</tr>";
+    }
+    let span = qc["span"].as_object().cloned().unwrap_or_default();
+    let warn = if conds.is_empty() {
+        "<p class=\"mut\">Task correlation unavailable: this run has no events file.</p>"
+            .to_string()
+    } else {
+        let mut w = String::new();
+        for (t, v) in &span {
+            let v = num(&v["rejected"]);
+            if v >= 0.3 {
+                w += &format!(
+                    "<p class=\"warn\"><b>The rejected components span {:.0} % of the <i>{}</i> regressor's variance</b> (chance {:.0} %): denoising removes that much of the task design. Compare the original and ME-ICA denoised task maps.</p>",
+                    100.0 * v,
+                    esc(&label(t)),
+                    100.0 * chance
+                );
+            }
+        }
+        let shares: Vec<String> = span
+            .iter()
+            .map(|(t, v)| format!("{} {:.0} %", esc(&label(t)), 100.0 * num(&v["rejected"])))
+            .collect();
+        w + &format!(
+            "<p class=\"mut\">Share of each task regressor's variance in the rejected components (chance {:.0} %): {}. Rejected components with |r| ≥ 0.3 to a task regressor are highlighted below.</p>",
+            100.0 * chance,
+            shares.join(", ")
+        )
+    };
+    let mut maps = String::new();
+    for r in rejected.iter().take(3) {
+        // the largest rejected components' |weight| maps on the boldref
+        let name = field(r, "Component");
+        let zvol = join(&md, &format!("{name}_absz.nii.gz"));
+        let index: usize = name
+            .rsplit('_')
+            .next()
+            .and_then(|i| i.parse().ok())
+            .unwrap_or(0);
+        c.run(
+            argv![
+                "niimath",
+                join(&md, "desc-ICA_stat-z_components.nii.gz"),
+                "-crop",
+                index,
+                1usize,
+                "-abs",
+                zvol
+            ],
+            std::slice::from_ref(&zvol),
+            None,
+            None,
+        )
+        .await?;
+        maps += &f
+            .figure(
+                &format!("Rejected {name} ({:.1} % variance)", val(r, "variance explained")),
+                &format!(
+                    "|weight| ≥ 0.2 on the BOLD reference (tedana's stat-z map: each voxel's standardised regression weight on the component, from −1 to 1); tags: {}.",
+                    esc(field(r, "classification_tags"))
+                ),
+                &fit.reference,
+                &zvol,
+                argv!["-T", 0.2, 0.8, "-C", "redyellow", 1usize, "-s", 2usize],
+            )
+            .await?
+            .0;
+    }
+    let table = if rejected.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<div class=\"wrap\"><table><tr><th>Rejected</th><th class=\"n\">κ</th><th class=\"n\">ρ</th><th class=\"n\">var %</th><th>tags</th><th class=\"n\">r FD</th><th class=\"n\">max |r| motion</th>{head}</tr>{rows}</table></div>"
+        )
+    };
+    Ok(format!(
+        "<h3>Multi-echo ICA</h3><p>meica {} (tedana's workflow), tree <code>{}</code>: {} components, {} accepted, {} rejected; rejected_variance (meica's sum of the rejected components' variance explained) {rej_var:.1} %. Motion parameters are reported here, not used to classify, unless the tree takes them. When head motion is locked to the task, ME-ICA can reject task signal along with the motion.</p>{warn}<div class=\"plot\"><svg viewBox=\"0 0 {wd} {ht}\" role=\"img\" aria-label=\"kappa against rho per component\">{axes}{dots}</svg></div><div class=\"key\"><span><i style=\"background:#2ca02c\"></i>accepted</span><span><i style=\"background:#d62728\"></i>rejected</span><span>area: variance explained</span></div>{table}{maps}",
+        esc(&text("Version")),
+        esc(&text("tree")),
+        text("Components"),
+        text("Accepted"),
+        text("Rejected")
+    ))
+}
+
+/// One series' rows and figures on the task page; `tag` names a series other than the original ("denoised").
+#[allow(clippy::too_many_arguments)]
+async fn task_rows<H: Host>(
+    f: &Figures<'_, H>,
+    st: &Value,
+    tag: &str,
+    maps: &[String],
+    w: &str,
+    anat: &Anat,
+    rows: &mut String,
+    figs: &mut String,
+) -> Result<(), String> {
+    let c = f.c;
+    let thr = num(&st["t_display"]);
+    for ((key, title), map) in TASK_CONTRASTS.iter().zip(maps) {
+        let title = if tag.is_empty() {
+            title.to_string()
+        } else {
+            format!("{title} (ME-ICA {tag})")
+        };
+        let s = &st[*key];
+        let link = esc(map.strip_prefix(&format!("{}/", c.out)).unwrap_or(map));
+        let peak: Vec<String> = s["peak_mm"]
+            .as_array()
+            .map_or(vec![], |a| a.iter().map(py::value).collect());
+        let peak_t = num(&s["peak_t"]);
+        *rows += &format!(
+            "<tr><td>{}</td><td class=\"n\">{peak_t:.2}</td><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{:.2}</td><td><a href=\"{link}\">t map</a></td></tr>",
+            esc(&title),
+            peak.join(", "),
+            py::value(&s["voxels_above_display"]),
+            num(&s["median_rho"])
+        );
+        if peak_t > thr {
+            // maps are on the BOLD-resolution T1w grid; -bitmap needs the base's grid
+            let sep = if tag.is_empty() { "" } else { "_" };
+            let on_t1 = join(w, &format!("tstat_{key}{sep}{tag}_on_t1w.nii.zst"));
+            c.run(
+                argv!["niimath", map, "-resample", anat.preproc, on_t1],
+                std::slice::from_ref(&on_t1),
+                Some("NIFTI_ZST"),
+                None,
+            )
+            .await?;
+            let cap = format!(
+                "t ≥ {thr:.2} (p &lt; {} uncorrected, df {}).",
+                py::value(&st["p_display"]),
+                py::value(&st["df"])
+            );
+            *figs += &f
+                .figure(
+                    &title,
+                    &cap,
+                    &anat.preproc,
+                    &on_t1,
+                    argv!["-T", thr, peak_t, "-C", "redyellow", 1usize, "-s", 2usize],
+                )
+                .await?
+                .0;
+        }
+    }
+    Ok(())
+}
+
 /// Left/right block GLM (glm) on the T1w-space BOLD, written as its own page; returns the link.
 async fn task_page<H: Host>(
     f: &Figures<'_, H>,
@@ -733,19 +1021,7 @@ async fn task_page<H: Host>(
     label: &str,
 ) -> Result<String, String> {
     let c = f.c;
-    // events belong to the run, not to an echo or part: drop those entities from the BOLD name
-    let name: String = file_name(&bold.path)
-        .split('_')
-        .filter(|p| !(p.starts_with("echo-") || p.starts_with("part-")))
-        .collect::<Vec<_>>()
-        .join("_");
-    // BIDS allows .nii as well as .nii.gz
-    let events = name
-        .strip_suffix(".gz")
-        .unwrap_or(&name)
-        .strip_suffix("_bold.nii")
-        .map(|stem| join(parent(&bold.path), &format!("{stem}_events.tsv")));
-    let Some(events) = events.filter(|e| c.h.exists(e)) else {
+    let Some(events) = bids::run_events(bold).filter(|e| c.h.exists(e)) else {
         return Ok(String::new());
     };
     let ev = c.text(&events).await?;
@@ -772,7 +1048,7 @@ async fn task_page<H: Host>(
             ],
         )?);
     }
-    let summary = join(parent(&fit.nss), "task_glm.json");
+    let w = parent(&fit.nss);
     let preproc = c.deriv(
         bold,
         "bold",
@@ -780,27 +1056,46 @@ async fn task_page<H: Host>(
         &[("space", Some("T1w")), ("desc", Some("preproc"))],
     )?;
     let conf = c.deriv(bold, "timeseries", ".tsv", &[("desc", Some("confounds"))])?;
-    let mut outs = maps.clone();
-    outs.push(summary.clone());
-    c.run(
-        argv![
-            "glm",
-            "--task-analysis",
-            preproc,
-            conf,
-            events,
-            ..maps.clone(),
-            "--summary",
-            summary,
-            "--fwhm",
-            5usize
-        ],
-        &outs,
-        None,
-        None,
-    )
-    .await?;
-    let st = c.json(&summary).await?;
+    let mut series = vec![("", preproc, maps, join(w, "task_glm.json"))];
+    let mp = meica_paths(c, bold)?;
+    if c.h.exists(&mp.denoised[0].1) {
+        // ME-ICA ran: the same GLM on the denoised series, beside the original
+        series.push((
+            "denoised",
+            mp.denoised[0].1.clone(),
+            mp.tmaps.clone(),
+            join(w, "task_glm_denoised.json"),
+        ));
+    }
+    let (mut rows, mut figs) = (String::new(), String::new());
+    let mut st = Value::Null;
+    for (tag, src, maps, summary) in &series {
+        let mut outs = maps.clone();
+        outs.push(summary.clone());
+        c.run(
+            argv![
+                "glm",
+                "--task-analysis",
+                src,
+                conf,
+                events,
+                ..maps.clone(),
+                "--summary",
+                summary,
+                "--fwhm",
+                5usize
+            ],
+            &outs,
+            None,
+            None,
+        )
+        .await?;
+        let s = c.json(summary).await?;
+        task_rows(f, &s, tag, maps, w, anat, &mut rows, &mut figs).await?;
+        if tag.is_empty() {
+            st = s;
+        }
+    }
     let thr = num(&st["t_display"]);
     let meta = &bold.meta;
     let nss = c.json(&fit.nss).await?["dummy_scans"].as_i64().unwrap_or(0);
@@ -836,47 +1131,15 @@ async fn task_page<H: Host>(
         );
     }
     data += " Motion correction, distortion correction and the BOLD→T1w registration were applied in one interpolation.";
-    let (mut rows, mut figs) = (String::new(), String::new());
-    for ((key, title), map) in TASK_CONTRASTS.iter().zip(&maps) {
-        let s = &st[*key];
-        let link = esc(map.strip_prefix(&format!("{}/", c.out)).unwrap_or(map));
-        let peak: Vec<String> = s["peak_mm"]
-            .as_array()
-            .map_or(vec![], |a| a.iter().map(py::value).collect());
-        let peak_t = num(&s["peak_t"]);
-        rows += &format!(
-            "<tr><td>{}</td><td class=\"n\">{peak_t:.2}</td><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{:.2}</td><td><a href=\"{link}\">t map</a></td></tr>",
-            esc(title),
-            peak.join(", "),
-            py::value(&s["voxels_above_display"]),
-            num(&s["median_rho"])
+    if series.len() > 1 {
+        let m = c.json(&join(w, "meica.json")).await?;
+        data += &format!(
+            " ME-ICA (meica {}, tree {}) rejected {} of {} components; rows marked \"ME-ICA denoised\" repeat the GLM on the series with those components regressed out. When head motion is locked to the task, ME-ICA can reject task signal with the motion: compare the two.",
+            py::value(&m["Version"]),
+            py::value(&m["tree"]),
+            py::value(&m["Rejected"]),
+            py::value(&m["Components"])
         );
-        if peak_t > thr {
-            // maps are on the BOLD-resolution T1w grid; -bitmap needs the base's grid
-            let on_t1 = join(parent(&fit.nss), &format!("tstat_{key}_on_t1w.nii.zst"));
-            c.run(
-                argv!["niimath", map, "-resample", anat.preproc, on_t1],
-                &[on_t1.clone()],
-                Some("NIFTI_ZST"),
-                None,
-            )
-            .await?;
-            let cap = format!(
-                "t ≥ {thr:.2} (p &lt; {} uncorrected, df {}).",
-                py::value(&st["p_display"]),
-                py::value(&st["df"])
-            );
-            figs += &f
-                .figure(
-                    title,
-                    &cap,
-                    &anat.preproc,
-                    &on_t1,
-                    argv!["-T", thr, peak_t, "-C", "redyellow", 1usize, "-s", 2usize],
-                )
-                .await?
-                .0;
-        }
     }
     let stem: Vec<String> = ENTITY_ORDER[..ENTITY_ORDER.iter().position(|k| *k == "echo").unwrap()]
         .iter()
@@ -1080,6 +1343,7 @@ pub async fn report<H: Host>(
                 );
             }
         }
+        body += &meica_section(&figs, bold, fit, r.meica.as_ref()).await?;
         body += &task_page(&figs, bold, fit, anat, label).await?;
         let task = meta.get("TaskName").map_or(name.clone(), py::value);
         sections.push((

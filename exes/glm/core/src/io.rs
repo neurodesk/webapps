@@ -356,9 +356,174 @@ pub fn single(
     Ok((encode(&img, &maps[0], None), line))
 }
 
+/// Pearson r over the pairs where both are finite; NaN with fewer than 3 or a constant side (NumPy `corrcoef`).
+fn pearson(x: &[f64], y: &[f64]) -> f64 {
+    let (a, b): (Vec<f64>, Vec<f64>) = x
+        .iter()
+        .zip(y)
+        .filter(|(p, q)| p.is_finite() && q.is_finite())
+        .map(|(p, q)| (*p, *q))
+        .unzip();
+    let n = a.len() as f64;
+    let (ma, mb) = (a.iter().sum::<f64>() / n, b.iter().sum::<f64>() / n);
+    let (mut sab, mut saa, mut sbb) = (0.0, 0.0, 0.0);
+    for (p, q) in a.iter().zip(&b) {
+        sab += (p - ma) * (q - mb);
+        saa += (p - ma) * (p - ma);
+        sbb += (q - mb) * (q - mb);
+    }
+    if a.len() > 2 && saa > 0.0 && sbb > 0.0 {
+        sab / (saa * sbb).sqrt()
+    } else {
+        f64::NAN
+    }
+}
+
+/// R² of `y` on an intercept and `cols` (modified Gram-Schmidt; dependent columns add nothing).
+fn r2(y: &[f64], cols: &[&[f64]]) -> f64 {
+    let n = y.len();
+    let mean = y.iter().sum::<f64>() / n as f64;
+    let mut basis: Vec<Vec<f64>> = vec![];
+    let ones = vec![1.0; n];
+    for c in std::iter::once(ones.as_slice()).chain(cols.iter().copied()) {
+        let mut v = c.to_vec();
+        for q in &basis {
+            let d: f64 = v.iter().zip(q).map(|(a, b)| a * b).sum();
+            v.iter_mut().zip(q).for_each(|(a, b)| *a -= d * b);
+        }
+        let norm = v.iter().map(|a| a * a).sum::<f64>().sqrt();
+        if norm > 1e-10 * (n as f64).sqrt() {
+            basis.push(v.iter().map(|a| a / norm).collect());
+        }
+    }
+    let mut e = y.to_vec();
+    for q in &basis {
+        let d: f64 = e.iter().zip(q).map(|(a, b)| a * b).sum();
+        e.iter_mut().zip(q).for_each(|(a, b)| *a -= d * b);
+    }
+    1.0 - e.iter().map(|a| a * a).sum::<f64>()
+        / y.iter().map(|a| (a - mean) * (a - mean)).sum::<f64>()
+}
+
+/// `--meica-qc` (glm.py `meica_qc`): per ICA component, r with each HRF-convolved trial type and, given several,
+/// all of them summed; r with FD and the largest |r| with the 6 motion parameters; per regressor, R² of the rejected
+/// and of the accepted components' time courses. Over the usable volumes; nonfinite FD skipped pairwise.
+pub fn meica_qc(
+    mixing: &str,
+    metrics: &str,
+    conf_tsv: &str,
+    events_tsv: Option<&str>,
+    sidecar: &str,
+) -> Result<String, String> {
+    let mix = columns(mixing);
+    let num = |v: &String| {
+        v.parse::<f64>()
+            .map_err(|_| format!("mixing: '{v}' is not a number"))
+    };
+    let mix: Vec<(String, Vec<f64>)> = mix
+        .into_iter()
+        .map(|(k, v)| Ok((k, v.iter().map(num).collect::<Result<_, String>>()?)))
+        .collect::<Result<_, String>>()?;
+    let conf = confounds(conf_tsv)?;
+    let raw = columns(conf_tsv);
+    let col = |k: &str| {
+        conf.iter()
+            .find(|(n, _)| n == k)
+            .map(|(_, v)| v.as_slice())
+            .ok_or(format!("confounds lack {k}"))
+    };
+    let nvol = col("trans_x")?.len();
+    let drop = conf
+        .iter()
+        .filter(|(k, _)| k.starts_with("non_steady_state"))
+        .count();
+    let rows = mix.first().map_or(0, |(_, v)| v.len());
+    if rows + drop != nvol {
+        return Err("mixing rows must equal the usable volumes".into());
+    }
+    let side: Map<String, Value> =
+        serde_json::from_str(sidecar).map_err(|e| format!("sidecar: {e}"))?;
+    let mut regs: Vec<(String, Vec<f64>)> = vec![];
+    if let Some(ev) = events_tsv {
+        let ev = events(ev)?;
+        let mut conds: Vec<&str> = ev.iter().map(|e| e.trial_type.as_str()).collect();
+        conds.sort_unstable();
+        conds.dedup();
+        let (d, _) = design(
+            nvol,
+            repetition_time(&side)?,
+            &ev,
+            &conds,
+            &conf,
+            side.get("StartTime").and_then(Value::as_f64),
+        )?;
+        for (j, c) in conds.iter().enumerate() {
+            regs.push((c.to_string(), (0..d.n).map(|r| d.at(r, j)).collect()));
+        }
+        if conds.len() > 1 {
+            regs.push((
+                "all".into(),
+                (0..d.n)
+                    .map(|r| (0..conds.len()).map(|j| d.at(r, j)).sum())
+                    .collect(),
+            ));
+        }
+    }
+    let class: Vec<String> = columns(metrics)
+        .into_iter()
+        .find(|(k, _)| k == "classification")
+        .ok_or("metrics: no classification column")?
+        .1;
+    let fd: Vec<f64> = raw
+        .iter()
+        .find(|(k, _)| k == "framewise_displacement")
+        .ok_or("confounds lack framewise_displacement")?
+        .1[drop..]
+        .iter()
+        .map(|v| v.parse().unwrap_or(f64::NAN))
+        .collect();
+    let of = |label: &str| -> Vec<&[f64]> {
+        mix.iter()
+            .zip(&class)
+            .filter(|(_, c)| *c == label)
+            .map(|((_, v), _)| v.as_slice())
+            .collect()
+    };
+    let mut span = Map::new();
+    for (c, y) in &regs {
+        span.insert(
+            c.clone(),
+            json!({"rejected": r2(y, &of("rejected")), "accepted": r2(y, &of("accepted"))}),
+        );
+    }
+    let mut comps = Map::new();
+    for (name, m) in &mix {
+        let task: Map<String, Value> = regs
+            .iter()
+            .map(|(c, y)| (c.clone(), json!(pearson(m, y))))
+            .collect();
+        let motion = crate::MOTION
+            .iter()
+            .map(|q| col(q).map(|v| pearson(m, &v[drop..]).abs()))
+            .collect::<Result<Vec<f64>, _>>()?
+            .into_iter()
+            .fold(f64::NAN, f64::max);
+        comps.insert(
+            name.clone(),
+            json!({"task": task, "fd": pearson(m, &fd), "motion": motion}),
+        );
+    }
+    let conditions: Vec<&String> = regs.iter().map(|(c, _)| c).collect();
+    Ok(
+        json!({"conditions": conditions, "volumes": rows, "span": span, "components": comps})
+            .to_string(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::confounds;
+    use super::{confounds, meica_qc};
+    use serde_json::{Value, json};
 
     #[test]
     fn confounds_reject_nonfinite_cells_with_location() {
@@ -381,5 +546,65 @@ mod tests {
                 ("rot_z".into(), vec![0.0, 0.001]),
             ]
         );
+    }
+
+    #[test]
+    fn meica_qc_relates_components_to_task_and_fd() {
+        let n = 40;
+        let events = "onset\tduration\ttrial_type\n10\t10\tleft\n50\t10\tright\n";
+        let motion = ["trans_x", "trans_y", "trans_z", "rot_x", "rot_y", "rot_z"];
+        let mut conf = format!(
+            "non_steady_state_outlier00\tframewise_displacement\t{}\n",
+            motion.join("\t")
+        );
+        for t in 0..n {
+            let fd = if t == 0 {
+                "n/a".to_string()
+            } else {
+                format!("{:.3}", (t - 1) as f64 / (n - 2) as f64)
+            };
+            conf += &format!(
+                "{}\t{fd}\t0.0\t0.0\t0.0\t0.0\t0.0\t{}\n",
+                (t == 0) as u8,
+                t % 7
+            );
+        }
+        let zero: Vec<(String, Vec<f64>)> = motion
+            .iter()
+            .map(|m| (m.to_string(), vec![0.0; n]))
+            .chain([(
+                "non_steady_state_outlier00".into(),
+                (0..n).map(|t| (t == 0) as u8 as f64).collect(),
+            )])
+            .collect();
+        let (d, _) = crate::design(
+            n,
+            2.0,
+            &super::events(events).unwrap(),
+            &["left", "right"],
+            &zero,
+            None,
+        )
+        .unwrap();
+        let mut mix = "ICA_00\tICA_01\n".to_string();
+        for r in 0..d.n {
+            mix += &format!("{}\t{r}\n", d.at(r, 0));
+        }
+        let metrics = "Component\tclassification\nICA_00\trejected\nICA_01\taccepted\n";
+        let q: Value = serde_json::from_str(
+            &meica_qc(
+                &mix,
+                metrics,
+                &conf,
+                Some(events),
+                r#"{"RepetitionTime": 2.0}"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(q["conditions"], json!(["left", "right", "all"]));
+        assert!((q["components"]["ICA_00"]["task"]["left"].as_f64().unwrap() - 1.0).abs() < 1e-9);
+        assert!((q["components"]["ICA_01"]["fd"].as_f64().unwrap() - 1.0).abs() < 1e-4); // FD's n/a row is the dummy
+        assert!((q["span"]["left"]["rejected"].as_f64().unwrap() - 1.0).abs() < 1e-9);
     }
 }

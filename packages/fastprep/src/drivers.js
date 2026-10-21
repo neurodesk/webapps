@@ -150,10 +150,17 @@ export function synthsrDriver(synthesize) {
   };
 }
 
-/** glm --task-analysis through the glm WASM module. */
+/** glm --task-analysis and --meica-qc through the glm WASM module. */
 export function glmDriver(glm) {
   const arity = { '--task-analysis': 0, '--summary': 1, '--fwhm': 1 };
   return async (argv, { files }) => {
+    if (argv[1] === '--meica-qc') {
+      if (argv.length !== 8) throw new Error('glm: --meica-qc expects MIXING METRICS CONFOUNDS EVENTS SIDECAR OUT');
+      const [mixing, metrics, conf, events, side, out] = argv.slice(2);
+      const read = (p) => files.text(p);
+      files.put(out, text(glm.meica_qc(await read(mixing), await read(metrics), await read(conf), events ? await read(events) : '', await read(side))));
+      return { code: 0, stdout: '', stderr: '' };
+    }
     const a = parse(argv, arity);
     if (!a.has('--task-analysis') || a.pos.length !== 7) throw new Error('glm: only --task-analysis is supported in the browser');
     const [bold, conf, events, ...maps] = a.pos;
