@@ -48,5 +48,83 @@
         "sha256": "2f242d5849df80cbc4b3f8153733b6619d74bcc2fc538d9973e40bc626c867e7"
       }
     ]
+  },
+  {
+    "id": "motor3t-me",
+    "label": "Motor task: T1w + 3-echo BOLD (ME-ICA)",
+    "description": "The same 3T session with all three echoes (TE 15, 35, 55 ms) of the 150-volume run, left/right blocks.",
+    "expectedResult": "Preprocessed and ME-ICA denoised BOLD, the ME-ICA component report and original and denoised task t maps.",
+    "files": [
+      {
+        "role": "dataset",
+        "name": "dataset_description.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/dataset_description.json",
+        "bytes": 148,
+        "sha256": "d0f1e07cb9350e9e81e78d5e614ae9db36fccbd0329d4d42af5f16a8a45a32d5"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_T1w.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/anat/sub-01_T1w.json",
+        "bytes": 2095,
+        "sha256": "4ed766311e03cb46d4a03d7c4be31cb921cc89faad952ec7e97227ede22aa4ca"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/anat/sub-01_T1w.nii.gz",
+        "bytes": 7380892,
+        "sha256": "1f2e921ff17f09b1bce0947a92afb636eaa027e60edccd562e647507e1ac6336"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_echo-1_bold.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-1_bold.json",
+        "bytes": 3036,
+        "sha256": "181bd610c0d4f28de473caf7a5bb63d55389a79ac0842b2f4120bf09c4cf1463"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_echo-1_bold.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-1_bold.nii.gz",
+        "bytes": 48097415,
+        "sha256": "4f72c6238baa6b5a6ef742f18c72be3f5ef71d215d03bb4e4c60ec4145f07d42"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_echo-2_bold.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-2_bold.json",
+        "bytes": 3039,
+        "sha256": "d6c1a9bf15143c9a3bf24d6afad840674aa80ed875eb72fe52d9b32912217a65"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_echo-2_bold.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-2_bold.nii.gz",
+        "bytes": 45830153,
+        "sha256": "addfc62310465b3ea3a825cd0913a265067435cd9ffa3b58c5734fe58d2a9e36"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_echo-3_bold.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-3_bold.json",
+        "bytes": 3035,
+        "sha256": "dc37e7fb2299ccc302b46d68f9830ec7a37d0fa10880b43ace7b5ea0e7864f7a"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_echo-3_bold.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-3_bold.nii.gz",
+        "bytes": 44321455,
+        "sha256": "30b6627ae56acb0fae1fda8f0e5edfe7ddeda9c33e1ce7ecd65370153a4e976f"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_events.tsv",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_events.tsv",
+        "bytes": 99,
+        "sha256": "2f242d5849df80cbc4b3f8153733b6619d74bcc2fc538d9973e40bc626c867e7"
+      }
+    ]
   }
 ]

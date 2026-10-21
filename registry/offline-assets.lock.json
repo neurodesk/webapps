@@ -3336,6 +3336,76 @@
       "kind": "model",
       "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/dataset_description.json": {
+      "sha256": "d0f1e07cb9350e9e81e78d5e614ae9db36fccbd0329d4d42af5f16a8a45a32d5",
+      "bytes": 148,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/anat/sub-01_T1w.json": {
+      "sha256": "4ed766311e03cb46d4a03d7c4be31cb921cc89faad952ec7e97227ede22aa4ca",
+      "bytes": 2095,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-1_bold.json": {
+      "sha256": "181bd610c0d4f28de473caf7a5bb63d55389a79ac0842b2f4120bf09c4cf1463",
+      "bytes": 3036,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-2_bold.json": {
+      "sha256": "d6c1a9bf15143c9a3bf24d6afad840674aa80ed875eb72fe52d9b32912217a65",
+      "bytes": 3039,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-3_bold.json": {
+      "sha256": "dc37e7fb2299ccc302b46d68f9830ec7a37d0fa10880b43ace7b5ea0e7864f7a",
+      "bytes": 3035,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/anat/sub-01_T1w.nii.gz": {
+      "sha256": "1f2e921ff17f09b1bce0947a92afb636eaa027e60edccd562e647507e1ac6336",
+      "bytes": 7380892,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_events.tsv": {
+      "sha256": "2f242d5849df80cbc4b3f8153733b6619d74bcc2fc538d9973e40bc626c867e7",
+      "bytes": 99,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-3_bold.nii.gz": {
+      "sha256": "30b6627ae56acb0fae1fda8f0e5edfe7ddeda9c33e1ce7ecd65370153a4e976f",
+      "bytes": 44321455,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-2_bold.nii.gz": {
+      "sha256": "addfc62310465b3ea3a825cd0913a265067435cd9ffa3b58c5734fe58d2a9e36",
+      "bytes": 45830153,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-1_bold.nii.gz": {
+      "sha256": "4f72c6238baa6b5a6ef742f18c72be3f5ef71d215d03bb4e4c60ec4145f07d42",
+      "bytes": 48097415,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -4103,7 +4173,17 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_T1w.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/88c3dd6b9aac13429f760d9b0b48249040d3ee5f/synthsr/models/synthsr-v2.onnx"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/88c3dd6b9aac13429f760d9b0b48249040d3ee5f/synthsr/models/synthsr-v2.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/dataset_description.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/anat/sub-01_T1w.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/anat/sub-01_T1w.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-1_bold.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-1_bold.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-2_bold.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-2_bold.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-3_bold.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_echo-3_bold.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0465e27ac572d6be66d32f705d2d45d7354c3ba9/fastprep/example-me/sub-01/func/sub-01_task-motor_events.tsv"
     ]
   }
 }

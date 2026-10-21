@@ -24,6 +24,9 @@ Current folders:
   example lesion/scan pairs, see `disconnectome.manifest.json`.
 - `fastprep/example/`: one-subject BIDS example (cropped T1w, single-echo BOLD, left/right events) for the
   fastprep demo (`neurodeskorg/webapps`), see `fastprep.manifest.json`.
+- `fastprep/example-me/`: the same session with all three echoes of that run (revision `0465e27a`), for fastprep's
+  ME-ICA example (`apps/fastprep/examples.json`). Staged by `stage_me_example.py` in the fastprep.py repository:
+  the same crop, flip and sidecar scrub as `fastprep/example/`, stored as uint16 (echo 1 exceeds int16).
 - `syncro/tutorials/`: seven deidentified inputs for SYNcro's four documented
   walkthroughs (`neurodeskorg/webapps`), see
   `syncro-tutorials.manifest.json` and `syncro-tutorials.README.md`.

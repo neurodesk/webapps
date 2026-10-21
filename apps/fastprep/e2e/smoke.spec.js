@@ -149,3 +149,29 @@ test("the example runs end to end and downloads the derivatives @slow", async ({
     writeFileSync(`${process.env.FASTPREP_E2E_OUT}/browser.log`, `${(Date.now() - t0) / 1000} s\n${log.join("\n")}\n`);
   }
 });
+
+test("the multi-echo example runs ME-ICA end to end @slow", async ({ page }) => {
+  // the 3-echo run adds meica (single-threaded WASM) to the pipeline above; same hardware-GPU requirement
+  test.skip(!hardwareGpu, "needs a hardware GPU");
+  test.setTimeout(60 * 60 * 1000);
+  await page.goto("/");
+  await page.locator("select[data-neurodesk-example]").selectOption("motor3t-me");
+  await expect(page.locator("#fileInfo")).toContainText("10 files · sub-01", { timeout: 600_000 });
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText(/fastprep finished|error|failed/i, { timeout: 55 * 60 * 1000 });
+  await expect(page.locator("#statusText")).toContainText("fastprep finished");
+  const report = page.frameLocator("#viewer iframe");
+  await expect(report.locator("h3", { hasText: "Multi-echo ICA" })).toBeVisible();
+  await expect(report.locator("body")).toContainText("tree tedana_orig");
+  const download = page.waitForEvent("download");
+  await page.locator("#resultList").getByRole("button", { name: "Download", exact: true }).click();
+  const files = unzipSync(new Uint8Array(readFileSync(await (await download).path())));
+  const names = Object.keys(files);
+  for (const space of ["T1w", "MNI152NLin2009cAsym"]) {
+    expect(names).toContain(`fastprep/sub-01/func/sub-01_task-motor_space-${space}_desc-preproc_bold.nii.gz`);
+    expect(names).toContain(`fastprep/sub-01/func/sub-01_task-motor_space-${space}_desc-denoised_bold.nii.gz`);
+  }
+  const metrics = new TextDecoder().decode(files["fastprep/sub-01/func/sub-01_task-motor_desc-tedana_metrics.tsv"]);
+  expect(metrics).toMatch(/\trejected(\t|$)/m);
+  expect(names).toContain("fastprep/sub-01/func/sub-01_task-motor_space-T1w_stat-t_desc-leftActiveDenoised_boldmap.nii.gz");
+});
