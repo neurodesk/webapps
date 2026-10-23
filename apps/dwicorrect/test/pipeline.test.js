@@ -143,3 +143,17 @@ test("the displacement chart uses the shared chart classes and marks volumes wit
   assert.match(svg, /nd-chart-median/);
   assert.doesNotMatch(svg, /#[0-9a-f]{3,6}\b|style=/i);
 });
+
+test("animation frames: one slice per volume, one grey scale per pair, anterior up", async () => {
+  const { axialSlices, greyPixels, greyScale } = await import("../src/frames.js");
+  const dims = [2, 2, 3];
+  const data = Float32Array.from({ length: 2 * 12 }, (_, i) => i);
+  const slices = axialSlices(data, dims, 2);
+  assert.deepEqual([...slices[0]], [4, 5, 6, 7]);
+  assert.deepEqual([...slices[1]], [16, 17, 18, 19]);
+  assert.equal(greyScale(Float32Array.of(0, 1, 2), Float32Array.of(4, -1)), 4);
+  const pixels = greyPixels(Float32Array.of(0, 2, 4, 8), [2, 2], 8);
+  // Row y = 1 (values 4, 8) is drawn first.
+  assert.deepEqual([pixels[0], pixels[4], pixels[8], pixels[12]], [128, 255, 0, 64]);
+  assert.equal(pixels[3], 255);
+});

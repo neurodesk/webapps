@@ -44,9 +44,12 @@ test("the series sets the defaults, and each states its rule", async ({ page }) 
   await expect(page.locator("#seriesInfo")).toContainText("6 b0, b1000×32, b2000×64");
   await expect(page.locator("#fieldInfo")).toContainText("Reverse-PE b0: sub-phantom_dir-reverse_epi.nii.gz");
   await expect(page.locator("#fieldSource")).toHaveValue("reverse");
-  await expect(page.locator("#fieldRule")).toHaveText("Reverse-PE b0 found → estimate the field");
+  await expect(page.locator("#fieldDefault")).toHaveText("Default: Reverse-PE b0 found → estimate the field");
   await expect(page.locator("#model")).toHaveValue("shore");
-  await expect(page.locator("#modelRule")).toHaveText("≥ 72 DWIs → 3dSHORE (96)");
+  await expect(page.locator("#modelDefault")).toHaveText("Default: ≥ 72 DWIs → 3dSHORE (96); ≤ 6 b-values → shelled (2)");
+  await expect(page.locator("#compareGrid")).toBeVisible();
+  await expect(page.locator("#beforeTitle")).toHaveText("Before correction");
+  await expect(page.locator("#afterPanel")).toBeHidden();
   await expect(page.locator("#outlierType")).toHaveValue("sw");
   await expect(page.locator("#sliceToVolume")).toBeDisabled();
   await expect(page.locator("#acquisitionFields")).toBeHidden();
@@ -82,7 +85,7 @@ test("the phantom is corrected: field from the reverse b0, motion, outliers, dow
 test("without the reverse b0 the series is corrected without a field", async ({ page }) => {
   await loadPhantom(page, { skip: ["sub-phantom_dir-reverse_epi.nii.gz", "sub-phantom_dir-reverse_epi.json"] });
   await expect(page.locator("#fieldSource")).toHaveValue("none");
-  await expect(page.locator("#fieldRule")).toHaveText("No field → motion and eddy currents only");
+  await expect(page.locator("#fieldDefault")).toHaveText("Default: No field → motion and eddy currents only");
 });
 
 test("a sidecar without phase encoding asks for it", async ({ page }) => {
