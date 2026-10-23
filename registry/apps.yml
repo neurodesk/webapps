@@ -1062,7 +1062,7 @@ apps:
     model_manifest: null
     asset_manifest_schema: null
     source: neurodesk/webapps@local
-    license: Apache-2.0 AND GPL-3.0-or-later
+    license: Apache-2.0 AND BSD-3-Clause AND GPL-3.0-or-later
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace

@@ -108,8 +108,8 @@ fn numbers(files: &dyn Files, path: &str) -> Result<Vec<Vec<f64>>, String> {
         .collect()
 }
 
-/// One direction per volume from the rows of a bvecs file: 3 rows of `nv` values (FSL's
-/// layout) or `nv` rows of 3.
+/// The gradient directions of `nv` volumes from the rows of a bvecs file: FSL's 3 × N, or
+/// N × 3. With 3 volumes the two are the same shape, and the file is read as FSL's.
 fn directions(rows: &[Vec<f64>], nv: usize, path: &str) -> Result<Vec<[f64; 3]>, String> {
     if rows.len() == 3 && rows.iter().all(|r| r.len() == nv) {
         Ok((0..nv)
@@ -118,8 +118,11 @@ fn directions(rows: &[Vec<f64>], nv: usize, path: &str) -> Result<Vec<[f64; 3]>,
     } else if rows.len() == nv && rows.iter().all(|r| r.len() == 3) {
         Ok(rows.iter().map(|r| [r[0], r[1], r[2]]).collect())
     } else {
+        let lengths: Vec<String> = rows.iter().map(|r| r.len().to_string()).collect();
         Err(format!(
-            "{path}: expected 3 rows of {nv} values or {nv} rows of 3, one direction per volume"
+            "{path}: expected 3 rows of {nv} directions (or {nv} rows of 3), found {} rows of {} values.",
+            rows.len(),
+            lengths.join(", ")
         ))
     }
 }
@@ -228,7 +231,19 @@ fn correct(
         let hz = c.evaluate(dims, flip)?;
         Some(hz.into_iter().map(|h| h as f32).collect())
     } else if let Some(path) = args.get("field") {
-        let f = nifti::decode(files.read(path)?, path)?;
+        let mut f = nifti::decode(files.read(path)?, path)?;
+        // As in --imain, a voxel without a value is taken as outside the field: 0 Hz.
+        let missing = f
+            .data
+            .iter_mut()
+            .filter(|x| !x.is_finite())
+            .map(|x| *x = 0.0)
+            .count();
+        if missing > 0 {
+            log(format!(
+                "--field: {missing} voxels without a value set to 0 Hz"
+            ));
+        }
         let matrix = match args.get("field_mat") {
             Some(m) => {
                 let rows = numbers(&*files, m)?;
@@ -858,33 +873,31 @@ mod tests {
     }
 
     #[test]
-    fn bvecs_in_either_layout_give_one_direction_per_volume() {
-        let expected = vec![
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 0.6, 0.8],
-            [0.0, 0.0, 1.0],
-        ];
-        let by_volume: Vec<Vec<f64>> = expected.iter().map(|g| g.to_vec()).collect();
-        let fsl: Vec<Vec<f64>> = (0..3)
-            .map(|c| expected.iter().map(|g| g[c]).collect())
-            .collect();
-        assert_eq!(directions(&fsl, 4, "bvecs").unwrap(), expected);
-        assert_eq!(directions(&by_volume, 4, "bvecs").unwrap(), expected);
-        // A square table is FSL's layout: its rows are x, y and z.
-        let square = vec![
-            vec![0.0, 1.0, 0.0],
-            vec![0.0, 0.0, 0.6],
-            vec![0.0, 0.0, 0.8],
-        ];
-        assert_eq!(directions(&square, 3, "bvecs").unwrap(), expected[..3]);
+    fn bvecs_in_either_orientation() {
+        let fsl = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![0.0, 0.0]];
+        let rows = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]];
+        let expected = vec![[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        assert_eq!(directions(&fsl, 2, "bvecs").unwrap(), expected);
+        assert_eq!(directions(&rows, 2, "bvecs").unwrap(), expected);
+    }
+
+    #[test]
+    fn malformed_bvecs_are_refused() {
+        // Three rows of unequal length, and N rows of two values: an error, not a panic.
+        let short = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0], vec![0.0, 0.0, 1.0]];
+        let error = directions(&short, 3, "bvecs").unwrap_err();
+        assert!(error.contains("expected 3 rows of 3"), "{error}");
+        let pairs = vec![vec![1.0, 0.0]; 20];
+        let error = directions(&pairs, 20, "bvecs").unwrap_err();
+        assert!(error.contains("20 rows of 2"), "{error}");
+        assert!(directions(&[], 4, "bvecs").is_err());
     }
 
     #[test]
     fn malformed_gradient_files_are_input_errors() {
         let bvals = "0 1000 1000 1000\n";
         let fsl = "0 1 0 0\n0 0 1 0\n0 0 0 1\n";
-        let expected_table = "bvecs: expected 3 rows of 4 values or 4 rows of 3";
+        let expected_table = "bvecs: expected 3 rows of 4 directions (or 4 rows of 3)";
         for (bvals, bvecs, expected) in [
             (bvals, "0 1 0 0\n0 0 1\n0 0 0 1\n", expected_table),
             (bvals, "0 0 0\n1 0 0\n0 1\n0 0 1\n", expected_table),

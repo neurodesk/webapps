@@ -7,3 +7,4 @@ export * from './NiftiUtils.js';
 export * from './bids-diffusion.js';
 export { createUint8PreviewNiftiFile } from './DisplayPreview.js';
 export * from './input-limits.js';
+export * from './input-values.js';

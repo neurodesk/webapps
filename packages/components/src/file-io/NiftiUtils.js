@@ -60,6 +60,7 @@ export function parseNiftiHeader(headerBuffer) {
     nz: dims[3],
     pixDims,
     voxelSize: [pixDims[1] || 1, pixDims[2] || 1, pixDims[3] || 1],
+    intentCode: view.getInt16(68, littleEndian),
     datatype: view.getInt16(70, littleEndian),
     bitpix: view.getInt16(72, littleEndian),
     xyztUnits: view.getUint8(123),

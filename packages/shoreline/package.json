@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Eddy-like correction of diffusion MRI (motion, eddy currents, susceptibility, slice outliers) in WebAssembly",
   "type": "module",
-  "license": "Apache-2.0",
+  "license": "Apache-2.0 AND BSD-3-Clause",
   "private": true,
   "engines": {
     "node": ">=22"
@@ -14,7 +14,8 @@
   "files": [
     "src",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build:wasm": "node scripts/build-wasm.mjs",

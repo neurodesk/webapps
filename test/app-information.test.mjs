@@ -102,9 +102,10 @@ test('QSMbly About credits and links its upstream application', () => {
   assert.match(information.apps.qsmbly.builders, /Ashley Stewart/);
 });
 
-test('DWI Correct About credits the author of the app and its shoreline core', () => {
+test('DWI Correct About credits the author of the app and its shoreline core, and its contributor', () => {
   assert.match(information.apps.dwicorrect.builders, /shoreline/);
   assert.match(information.apps.dwicorrect.builders, /https:\/\/github\.com\/parent41/);
+  assert.match(information.apps.dwicorrect.builders, /Gabriel A\. Devenyi \(https:\/\/github\.com\/gdevenyi\)/);
 });
 
 test('theme injection carries the app information as one JSON script and stays idempotent', () => {

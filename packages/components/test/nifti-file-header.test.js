@@ -86,3 +86,12 @@ for (const bytes of [new Uint8Array(20), new Uint8Array(352)]) {
     await assert.rejects(readNiftiHeader(new Blob([bytes])), /Input must be a NIfTI-1 image/);
   });
 }
+
+test('the header gives the intent code', () => {
+  for (const littleEndian of [true, false]) {
+    const bytes = header([4, 4, 4], littleEndian);
+    new DataView(bytes.buffer).setInt16(68, 2016, littleEndian);
+    assert.equal(parseNiftiHeader(bytes).intentCode, 2016);
+  }
+  assert.equal(parseNiftiHeader(header()).intentCode, 0);
+});

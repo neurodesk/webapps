@@ -1,12 +1,16 @@
 // Browser tests against `vite preview` of the production build: boot and the shared shell,
 // cross-origin isolation for the threaded module, the defaults the synthetic phantom sets, the
 // hosted ds006676 example through the whole correction (MindGrab mask, field from the PA b0,
-// shoreline) to its downloads, a failed example download and its retry, and cancellation and
-// retry of a correction.
+// shoreline) to its downloads, a failed example download and a cancelled example load with
+// their retries, and cancellation and retry of a correction.
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { exampleFiles, phantomDir } from "./fixtures.mjs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { exampleFiles, fieldmapOffGrid, seriesWithNaN } from "./fixtures.mjs";
+import { INPUTS, args as agreementArgs, assertAgreement, runNative } from "../../../packages/shoreline/test/agreement.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 // The example's outliers with the MindGrab mask from the threaded CPU module, which headless
@@ -19,12 +23,6 @@ async function download(page, label) {
   await page.locator("#resultList .nd-volume-toggle").filter({ hasText: label }).getByRole("button", { name: "Download" }).click();
   return readFileSync(await (await event).path());
 }
-
-// The phantom is built by cargo on first use, which takes longer than one test may.
-test.beforeAll(() => {
-  test.setTimeout(600_000);
-  phantomDir();
-});
 
 async function loadPhantom(page, options) {
   await page.goto("/");
@@ -73,6 +71,102 @@ test("the series sets the defaults, and each states its rule", async ({ page }) 
   await expect(page.locator("#readoutField")).toBeHidden();
 });
 
+test("a refused selection leaves the loaded series, its settings and the footer as they were", async ({ page }) => {
+  await loadPhantom(page);
+  await expect(page.locator("#fieldSource")).toHaveValue("reverse");
+  await page.locator("#imageInput").setInputFiles([...exampleFiles(), ...fieldmapOffGrid()]);
+  await expect(page.locator("#statusText")).toHaveText(/sub-phantom_fieldmap\.nii\.gz is not on the series' grid/);
+  await expect(page.locator("#statusText")).toHaveClass(/error/);
+  await expect(page.locator("#fileInfo")).toHaveText("sub-phantom_dwi.nii.gz");
+  await expect(page.locator("#fieldInfo")).toContainText("Reverse-PE b0");
+  await expect(page.locator("#fieldSource")).toHaveValue("reverse");
+  await expect(page.locator('#fieldSource option[value="upload"]')).toBeDisabled();
+  await expect(page.locator("#runButton")).toBeEnabled();
+  // The footer bar is reset, not left animating.
+  await expect(page.locator("#status progress")).toHaveAttribute("value", "0");
+  await expect(page.locator("#cancelButton")).toBeHidden();
+
+  await page.locator("#imageInput").setInputFiles([seriesWithNaN(), ...exampleFiles({ skip: ["sub-phantom_dwi.nii.gz"] })]);
+  await expect(page.locator("#statusText")).toHaveText("sub-phantom_dwi.nii.gz holds values that are not finite numbers (NaN or infinity).");
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
+
+test("a multiband factor that does not divide the slices is refused before the run", async ({ page }) => {
+  await loadPhantom(page);
+  await page.locator("#multiband").fill("7");
+  await expect(page.locator("#statusText")).toHaveText(/The multiband factor 7 does not divide the \d+ slices\./);
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await page.locator("#multiband").fill("1");
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await expect(page.locator("#statusText")).toHaveText(/loaded: \d+ volumes/);
+  await expect(page.locator("#statusText")).not.toHaveClass(/error/);
+});
+
+test("Outliers stays off after a run while replacement is off", async ({ page }) => {
+  // Without the sidecar the readout is entered; 0 fails at once, before the brain mask.
+  await loadPhantom(page, { skip: ["sub-phantom_dwi.json", "sub-phantom_dir-reverse_epi.nii.gz", "sub-phantom_dir-reverse_epi.json"] });
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#replaceOutliers").uncheck();
+  await expect(page.locator("#outlierType")).toBeDisabled();
+  await page.locator("#readoutTime").fill("0");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("Give the series' total readout time in seconds.");
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await expect(page.locator("#outlierType")).toBeDisabled();
+});
+
+test("the threaded WebAssembly module agrees with the native binary on a phantom", async ({ page }) => {
+  test.setTimeout(600_000);
+  const dir = mkdtempSync(join(process.env.TMPDIR || tmpdir(), "dwicorrect-agreement-"));
+  try {
+    runNative(dir);
+    // On the context: the requests come from a worker.
+    await page.context().route("**/__agreement__/*", (route) => route.fulfill({ body: readFileSync(join(dir, new URL(route.request().url()).pathname.split("/").pop())) }));
+    await page.goto("/");
+    expect(await page.evaluate(() => self.crossOriginIsolated)).toBe(true);
+    const run = await page.evaluate(async ({ inputs, args }) => {
+      // Threaded WebAssembly blocks on Atomics.wait, which only a worker may: run it in one.
+      const source = `
+        import init, { initThreadPool, Session } from "${new URL("shoreline-wasm/threads/shoreline_wasm.js", document.baseURI)}";
+        self.onmessage = async ({ data }) => {
+          try {
+            await init();
+            await initThreadPool(data.threads);
+            const session = new Session();
+            for (const name of data.inputs) session.addFile(name, new Uint8Array(await (await fetch(data.base + "__agreement__/" + name)).arrayBuffer()));
+            session.run(data.args, () => {});
+            const outputs = {};
+            for (const name of session.fileNames()) if (name.startsWith("wasm.")) outputs[name] = session.takeFile(name);
+            self.postMessage({ outputs });
+          } catch (error) {
+            self.postMessage({ error: String(error?.message ?? error) });
+          }
+        };`;
+      const threads = Math.max(2, Math.min(8, navigator.hardwareConcurrency || 2));
+      const worker = new Worker(URL.createObjectURL(new Blob([source], { type: "text/javascript" })), { type: "module" });
+      const reply = await new Promise((resolve) => {
+        worker.onmessage = ({ data }) => resolve(data);
+        worker.onerror = (event) => resolve({ error: event.message || "the worker failed" });
+        worker.postMessage({ inputs, args, threads, base: document.baseURI });
+      });
+      worker.terminate();
+      if (reply.error) return { error: reply.error };
+      const base64 = (bytes) => {
+        let text = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return btoa(text);
+      };
+      return { threads, outputs: Object.fromEntries(Object.entries(reply.outputs).map(([name, bytes]) => [name, base64(bytes)])) };
+    }, { inputs: INPUTS, args: agreementArgs("wasm") });
+    expect(run.error).toBeUndefined();
+    const outputs = Object.fromEntries(Object.entries(run.outputs).map(([name, text]) => [name, Buffer.from(text, "base64")]));
+    const differences = assertAgreement(outputs, dir);
+    console.log(`threaded WebAssembly (${run.threads} threads) against native (2 threads), largest relative difference: ${JSON.stringify(differences)}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // The full runs use the hosted example, ds006676 S3P1 (multiband 3 with a PA b0): MindGrab finds
 // no brain in the synthetic phantom, so a phantom run stops at the mask.
 const example = examples[0];
@@ -101,7 +195,7 @@ test("the example is corrected: field from the PA b0, motion, outliers, download
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Corrected in", { timeout: 840_000 });
   await expect(page.locator("#statusText")).toContainText("outlier slices replaced");
-  for (const label of ["Corrected series", "b-values", "Rotated b-vectors", "Sidecar", "Movement per volume", "Outlier slices", "Brain mask (MindGrab)", "Field map (Hz)", "Log"]) {
+  for (const label of ["Corrected series", "b-values", "Rotated b-vectors", "Sidecar", "Movement per volume", "Outlier slices", "Brain mask (MindGrab)", "Field map (Hz)", "Field map JSON", "Log"]) {
     await expect(page.locator("#resultList .nd-volume-toggle").filter({ hasText: label })).toHaveCount(1);
   }
   expect(niftiShape(gunzipSync(await download(page, "Corrected series")))).toEqual({ dims: [112, 112, 72], frames: 141 });
@@ -122,6 +216,9 @@ test("the example is corrected: field from the PA b0, motion, outliers, download
   expect(sidecar.DwicorrectSettings.CommandLine).toContain("--ol_type=both");
   expect(sidecar.DwicorrectSettings.CommandLine).toContain("--mb=3");
   expect(sidecar.PhaseEncodingDirection).toBe("j-");
+  const fieldSidecar = JSON.parse((await download(page, "Field map JSON")).toString());
+  expect(fieldSidecar.Units).toBe("Hz");
+  expect(fieldSidecar.PhaseEncodingDirection).toBe("j-");
   const mask = sidecar.DwicorrectSettings.BrainMask;
   expect(mask).toMatch(/^mindgrab-/);
   await expect(page.locator("#statusText"), `outliers with the mask from ${mask}`).toContainText(OUTLIER_STATUS);
@@ -178,30 +275,67 @@ test("a correction can be cancelled and run again", { tag: "@slow" }, async ({ p
   await expect(page.locator("#statusText")).toContainText(OUTLIER_STATUS);
 });
 
-for (const failure of ["download", "empty image"]) {
-  test(`a failed ${failure} can retry the same example`, async ({ page }) => {
-    test.setTimeout(400_000);
-    const image = example.files.find((file) => file.role === "image");
-    let attempts = 0;
-    await page.context().route(image.url, (route) => {
-      attempts++;
-      if (attempts > 1) return route.fallback();
-      return route.fulfill({ status: failure === "download" ? 503 : 200, body: "" });
-    });
-    await page.goto("/");
-    const picker = page.getByRole("combobox", { name: "Input", exact: true });
-    await picker.selectOption(example.id);
-    await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "error", { timeout: 120_000 });
-    await expect(page.locator("#runButton")).toBeDisabled();
-    await expect(page.locator("#inputInfo")).toBeHidden();
-    await expect(picker).toBeEnabled();
-    await picker.selectOption(example.id);
-    await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 300_000 });
-    await expect(page.locator("#runButton")).toBeEnabled();
-    await expect(page.locator("#fileInfo")).toHaveText(image.name);
-    expect(attempts).toBe(2);
+test("a failed example download shows the error and the same example can load again", async ({ page }) => {
+  test.setTimeout(300_000);
+  const bval = example.files.find((file) => file.role === "bval");
+  let attempts = 0;
+  await page.context().route(bval.url, (route) => {
+    attempts++;
+    if (attempts > 1) return route.fallback();
+    return route.fulfill({ status: 503, body: "" });
   });
-}
+  await page.goto("/");
+  const picker = page.getByRole("combobox", { name: "Input", exact: true });
+  const selector = page.locator("[data-neurodesk-examples]");
+  await picker.selectOption(example.id);
+  await expect(selector).toHaveAttribute("data-example-state", "error");
+  await expect(page.locator("#statusText")).toHaveText(`Could not download ${bval.name} (HTTP 503). Load the example again to retry.`);
+  await expect(page.locator("#inputInfo")).toBeHidden();
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect(picker).toBeEnabled();
+  await picker.selectOption(example.id);
+  await expect(selector).toHaveAttribute("data-example-state", "ready", { timeout: 240_000 });
+  await expect(page.locator("#fileInfo")).toHaveText(example.files[0].name);
+  await expect(page.locator("#runButton")).toBeEnabled();
+  expect(attempts).toBe(2);
+});
+
+test("cancelling an example load commits nothing and the example can load again", async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.goto("/");
+  // Hold the first read of a downloaded file until the load is cancelled, so the files arrive
+  // after the cancel.
+  await page.evaluate(() => {
+    const read = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = function () {
+      const file = this;
+      return new Promise((resolve, reject) => {
+        window.finishExampleRead = () => {
+          File.prototype.arrayBuffer = read;
+          read.call(file).then(resolve, reject);
+        };
+      });
+    };
+  });
+  const picker = page.getByRole("combobox", { name: "Input", exact: true });
+  const selector = page.locator("[data-neurodesk-examples]");
+  await picker.selectOption(example.id);
+  await expect(selector).toHaveAttribute("data-example-state", "loading");
+  await page.waitForFunction(() => typeof window.finishExampleRead === "function", null, { timeout: 120_000 });
+  await page.getByRole("button", { name: "Cancel example download", exact: true }).click();
+  await expect(selector).toHaveAttribute("data-example-state", "cancelled");
+  await page.evaluate(() => window.finishExampleRead());
+  // Give the released read time to reach the page; it must not load the series.
+  await page.waitForTimeout(2_000);
+  await expect(selector).toHaveAttribute("data-example-state", "cancelled");
+  await expect(page.locator("#inputInfo")).toBeHidden();
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect(picker).toBeEnabled();
+  await picker.selectOption(example.id);
+  await expect(selector).toHaveAttribute("data-example-state", "ready", { timeout: 240_000 });
+  await expect(page.locator("#fileInfo")).toHaveText(example.files[0].name);
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
 
 test("the example selector lists the examples", async ({ page }) => {
   await page.goto("/");

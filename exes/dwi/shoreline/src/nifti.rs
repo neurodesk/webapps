@@ -157,19 +157,34 @@ pub fn decode_series(raw: Vec<u8>, path: &str) -> Result<(Image, Vec<Vec<f32>>),
         swap_header(&mut header);
     }
     let h = &header[..];
+    // At least three dimensions: a missing one has length 1.
     let ndim = i16_at(h, 40).clamp(1, 7) as usize;
-    let dims: Vec<usize> = (1..=ndim)
-        .map(|i| i16_at(h, 40 + 2 * i).max(1) as usize)
+    let dims: Vec<usize> = (1..=ndim.max(3))
+        .map(|i| {
+            if i <= ndim {
+                i16_at(h, 40 + 2 * i).max(1) as usize
+            } else {
+                1
+            }
+        })
         .collect();
     let datatype = i16_at(h, 70);
     let pixdim = [1, 2, 3].map(|i| f32_at(h, 76 + 4 * i).abs() as f64);
-    let offset = f32_at(h, 108) as usize;
+    let offset = f32_at(h, 108);
+    if !(offset.is_finite() && offset >= 0.0) {
+        return Err(format!("{path}: the header's data offset is not valid."));
+    }
+    let offset = offset as usize;
     let mut slope = f32_at(h, 112);
     let inter = f32_at(h, 116);
     if slope == 0.0 || !slope.is_finite() {
         slope = 1.0;
     }
-    let n: usize = dims.iter().product();
+    let too_large = || format!("{path}: the header's dimensions are too large.");
+    let n = dims
+        .iter()
+        .try_fold(1usize, |a, &d| a.checked_mul(d))
+        .ok_or_else(too_large)?;
     let size = match datatype {
         2 | 256 => 1,
         4 | 512 => 2,
@@ -181,8 +196,12 @@ pub fn decode_series(raw: Vec<u8>, path: &str) -> Result<(Image, Vec<Vec<f32>>),
             ));
         }
     };
+    let end = n
+        .checked_mul(size)
+        .and_then(|length| length.checked_add(offset))
+        .ok_or_else(too_large)?;
     let body = bytes
-        .get(offset..offset + n * size)
+        .get(offset..end)
         .ok_or_else(|| format!("{path} is shorter than its header says."))?;
     let per_volume = dims.iter().take(3).product::<usize>().max(1);
     let convert = |raw: &[u8]| -> f32 {
@@ -518,5 +537,42 @@ mod tests {
         write(out.to_str().unwrap(), &image, &[3, 2, 2, 2], &values).unwrap();
         assert_eq!(read(out.to_str().unwrap()).unwrap().data, values);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A little-endian NIfTI-1 header with `dims` (dim[0] first) and float32 data at 352.
+    fn header_with(dims: &[i16]) -> Vec<u8> {
+        let mut h = vec![0u8; 352];
+        h[0..4].copy_from_slice(&348i32.to_le_bytes());
+        for (i, d) in dims.iter().enumerate() {
+            h[40 + 2 * i..42 + 2 * i].copy_from_slice(&d.to_le_bytes());
+        }
+        h[70..72].copy_from_slice(&16i16.to_le_bytes());
+        h[108..112].copy_from_slice(&352f32.to_le_bytes());
+        h[344..348].copy_from_slice(b"n+1\0");
+        h
+    }
+
+    #[test]
+    fn images_with_fewer_than_three_dimensions_have_three() {
+        let mut bytes = header_with(&[2, 3, 2]);
+        for v in 0..6 {
+            bytes.extend_from_slice(&(v as f32).to_le_bytes());
+        }
+        let image = decode(bytes, "plane.nii").unwrap();
+        assert_eq!(image.dims, vec![3, 2, 1]);
+        assert_eq!(image.data.len(), 6);
+    }
+
+    #[test]
+    fn dimensions_too_large_for_memory_are_refused() {
+        // 32767^7 voxels overflow any usize; on wasm32 a product of 2^32 bytes or more
+        // would otherwise wrap and read a shorter body.
+        let bytes = header_with(&[7, 32767, 32767, 32767, 32767, 32767, 32767, 32767]);
+        let error = decode(bytes, "huge.nii").unwrap_err();
+        assert!(error.contains("too large"), "{error}");
+        let mut bytes = header_with(&[3, 2, 2, 2]);
+        bytes[108..112].copy_from_slice(&f32::NAN.to_le_bytes());
+        let error = decode(bytes, "offset.nii").unwrap_err();
+        assert!(error.contains("offset"), "{error}");
     }
 }

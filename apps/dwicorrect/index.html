@@ -16,7 +16,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <span>Drop a DWI series with bval, bvec and sidecar, or a BIDS folder</span>
           </label>
-          <p id="inputInfo" class="nd-file-info dwicorrect-info" hidden><span id="fileInfo" hidden></span><span id="seriesInfo" hidden></span><span id="acquisitionInfo" hidden></span><span id="fieldInfo" hidden></span></p>
+          <p id="inputInfo" class="nd-file-info nd-file-info-lines" hidden><span id="fileInfo" hidden></span><span id="seriesInfo" hidden></span><span id="acquisitionInfo" hidden></span><span id="fieldInfo" class="nd-file-info-gap" hidden></span></p>
           <div class="nd-row" id="acquisitionFields" hidden>
             <div class="nd-field" id="phaseEncodingField">
               <label for="phaseEncoding">Phase encoding
@@ -124,7 +124,7 @@
       <div class="nd-viewer-canvas-wrapper">
         <canvas id="gl1" aria-label="Image viewer"></canvas>
         <p id="emptyState" class="nd-viewer-empty">Drop a diffusion series anywhere, or choose an example.</p>
-        <img id="preview" class="dwicorrect-preview" alt="A diffusion-weighted slice of each volume, before and after correction" hidden />
+        <img id="preview" class="nd-viewer-image" alt="A diffusion-weighted slice of each volume, before and after correction" hidden />
         <section id="motionReport" class="nd-viewer-report" aria-label="Motion and outliers" hidden></section>
       </div>
       <div class="nd-viewer-info"><span id="imageLabel" class="nd-viewer-info-label"></span><span id="location" class="nd-viewer-info-primary"></span></div>

@@ -2,6 +2,7 @@
 // once per test run.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,3 +28,32 @@ export function exampleFiles({ skip = [] } = {}) {
   const names = ["sub-phantom_dwi.nii.gz", "sub-phantom_dwi.bval", "sub-phantom_dwi.bvec", "sub-phantom_dwi.json", "sub-phantom_dir-reverse_epi.nii.gz", "sub-phantom_dir-reverse_epi.json"];
   return names.filter((name) => !skip.includes(name)).map((name) => ({ name, mimeType: "application/octet-stream", buffer: readFileSync(join(dir, name)) }));
 }
+
+const payload = (name, buffer) => ({ name, mimeType: "application/octet-stream", buffer });
+
+/** The phantom series with one voxel set to NaN. */
+export function seriesWithNaN() {
+  const raw = gunzipSync(readFileSync(join(phantomDir(), "example", "sub-phantom_dwi.nii.gz")));
+  const offset = raw.readFloatLE(108);
+  raw.writeFloatLE(Number.NaN, offset + 4 * 1000);
+  return payload("sub-phantom_dwi.nii.gz", gzipSync(raw));
+}
+
+/** A field map in Hz on a 4 × 4 × 4 grid (not the series'), with its sidecar. */
+export function fieldmapOffGrid() {
+  const header = Buffer.alloc(352);
+  header.writeInt32LE(348, 0);
+  [3, 4, 4, 4, 1, 1, 1, 1].forEach((size, axis) => header.writeInt16LE(size, 40 + 2 * axis));
+  header.writeInt16LE(16, 70);
+  header.writeInt16LE(32, 72);
+  [1, 2, 2, 2].forEach((size, axis) => header.writeFloatLE(size, 76 + 4 * axis));
+  header.writeFloatLE(352, 108);
+  header.write("n+1\0", 344, "latin1");
+  const data = Buffer.alloc(4 * 64);
+  for (let i = 0; i < 64; i++) data.writeFloatLE(i % 7, 4 * i);
+  return [
+    payload("sub-phantom_fieldmap.nii.gz", gzipSync(Buffer.concat([header, data]))),
+    payload("sub-phantom_fieldmap.json", Buffer.from(JSON.stringify({ Units: "Hz" }))),
+  ];
+}
+

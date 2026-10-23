@@ -7,6 +7,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   ...e2eTier,
   testDir: "./e2e",
+  globalSetup: "./e2e/global-setup.mjs",
   webServer: {
     command: withBrowserBuild("pnpm preview --port 4173 --strictPort"),
     url: "http://localhost:4173",

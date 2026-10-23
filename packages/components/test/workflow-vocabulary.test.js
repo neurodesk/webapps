@@ -183,6 +183,15 @@ test('imaging workspace provides a reusable three-panel viewer layout', async ()
   assert.match(css, /orientation: landscape\) \{\s*\.nd-imaging-viewer:has\([^)]*\) \.nd-viewer-canvas-wrapper \{ height: calc\(100vw \/ 3\); \}/);
 });
 
+test('imaging workspace shows an image in place of the canvas, and file information in lines', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-viewer-image \{ position: absolute; inset: 0;[^}]*object-fit: contain;[^}]*background: var\(--nd-color-bg\); \}/);
+  assert.match(css, /\.nd-viewer-image\[hidden\] \{ display: none; \}/);
+  assert.match(css, /\.nd-file-info-lines > span \{ display: block; \}/);
+  assert.match(css, /\.nd-file-info-lines > span\[hidden\] \{ display: none; \}/);
+  assert.match(css, /\.nd-file-info-lines > \.nd-file-info-gap \{ margin-top: 1lh; \}/);
+});
+
 test('imaging workspace provides a session comparison grid with a marked active panel', async () => {
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
   assert.match(css, /\.nd-compare-grid \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);

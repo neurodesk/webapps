@@ -80,7 +80,7 @@ const WITHOUT_COMMAND_LINE = {
   nesvor: 'needs CUDA; its standalone form is the neurodesk-compute server',
   dicomview: 'interactive DICOM browser: dcm2niix and dicompare already ship as command lines',
   sdc: 'exes/sdc builds the sdc command line on the same core; its release packaging follows the app (#473)',
-  dwicorrect: 'exes/dwi/shoreline builds the shoreline command line that the app runs in WebAssembly; its release packaging follows the app, as sdc\'s does',
+  dwicorrect: 'exes/dwi/shoreline builds the shoreline command line on the same core; its release packaging follows the app',
   dwidenoise: 'the dwidenoise command line follows its app, as noddi\'s does (docs/architecture/dwi-microstructure-design.md)',
   n4: 'the n4 command line follows its app, as noddi\'s does (docs/architecture/dwi-microstructure-design.md)',
   fastprep: 'exes/fastprep drives separately installed niimath, brainchop, greedy-rs, synthsr, topofit and glm; a bundled release waits on packaging those (TopoFit licence pending)',

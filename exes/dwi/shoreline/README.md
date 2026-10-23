@@ -135,7 +135,7 @@ In a browser (headless Chromium 156, the `shoreline-wasm` module), a 141-volume 
 
 ## WebAssembly
 
-`cli::run` is the command line as a library function: the arguments, a `cli::Files` for reading and writing, and a sink for the progress lines. The binary passes the file system; `shoreline-wasm` passes files held in memory, so the browser runs the same code as the native binary (on the phantoms and on ds006676 the outputs are bit-identical). The progress log's clock is `set_clock`, because WebAssembly in a browser has no `Instant`. `shoreline-wasm` builds two modules: one threaded (feature `threads`, wasm-bindgen-rayon, as greedy's; it needs cross-origin isolation) and one single-threaded.
+`cli::run` is the command line as a library function: the arguments, a `cli::Files` for reading and writing, and a sink for the progress lines. The binary passes the file system; `shoreline-wasm` passes files held in memory, so the browser runs the same code as the native binary. On the command-line phantom the text outputs (parameters, movement, outlier maps, rotated b-vectors) are identical and the corrected images agree to float32 rounding (at most 1.7e-8 of the largest value), for the single-threaded module (`packages/shoreline/test/agreement.test.js`) and the threaded one on 8 threads (dwicorrect's browser test), against the native binary on 2 threads. The progress log's clock is `set_clock`, because WebAssembly in a browser has no `Instant`. `shoreline-wasm` builds two modules: one threaded (feature `threads`, wasm-bindgen-rayon, as greedy's; it needs cross-origin isolation) and one single-threaded.
 
 ## Tests
 

@@ -40,10 +40,16 @@ export function shellOf(bvals) {
   return bvals.map((b) => (b <= B0_MAX ? 0 : centres.reduce((best, c) => (Math.abs(c - b) < Math.abs(best - b) ? c : best))));
 }
 
+/** The sidecar's MultibandAccelerationFactor when it is a whole number that divides the slices, else null. */
+function declaredMultiband(sidecar, slices) {
+  const declared = Number(sidecar?.MultibandAccelerationFactor);
+  return Number.isInteger(declared) && declared >= 1 && slices % declared === 0 ? declared : null;
+}
+
 /** The multiband factor from a BIDS sidecar: MultibandAccelerationFactor, else SliceTiming's repeats. */
 export function multibandFactor(sidecar, slices) {
-  const declared = Number(sidecar?.MultibandAccelerationFactor);
-  if (Number.isInteger(declared) && declared > 1 && slices % declared === 0) return declared;
+  const declared = declaredMultiband(sidecar, slices);
+  if (declared > 1) return declared;
   const timing = sliceTiming(sidecar, slices);
   if (!timing) return 1;
   const groups = new Set(timing).size;
@@ -65,6 +71,14 @@ export function describeSeries({ bvals, sidecar, dims }) {
   for (const s of shells) if (s > 0) counts.set(s, (counts.get(s) ?? 0) + 1);
   const slices = dims[2];
   const pe = sidecar?.PhaseEncodingDirection ?? null;
+  // Refused at load, not after the brain mask: shoreline and PyHySCO take i, i-, j or j-.
+  if (pe !== null) {
+    try {
+      phaseEncoding(pe);
+    } catch {
+      throw new Error(`The sidecar's PhaseEncodingDirection is ${JSON.stringify(pe)}; DWI Correct needs i, i-, j or j-.`);
+    }
+  }
   const readout = Number(sidecar?.TotalReadoutTime);
   const dwiB = bvals.filter((b) => b > B0_MAX);
   return {
@@ -74,9 +88,11 @@ export function describeSeries({ bvals, sidecar, dims }) {
     dwi,
     shells: [...counts].sort((a, b) => a[0] - b[0]).map(([b, count]) => ({ b, count })),
     shelled: counts.size <= SHELLED_AT_MOST,
+    slices,
     multiband: multibandFactor(sidecar, slices),
-    // Whether the sidecar gives the multiband factor (or SliceTiming shows it); else the user can.
-    multibandKnown: Number(sidecar?.MultibandAccelerationFactor) >= 1 || sliceTiming(sidecar, slices) !== null,
+    // Whether the sidecar gives a usable multiband factor (or SliceTiming shows it); else the
+    // user can. A factor that does not divide the slices is not usable.
+    multibandKnown: declaredMultiband(sidecar, slices) !== null || sliceTiming(sidecar, slices) !== null,
     sliceTiming: sliceTiming(sidecar, slices) !== null,
     phaseEncodingDirection: pe,
     totalReadoutTime: Number.isFinite(readout) && readout > 0 ? readout : null,
@@ -149,11 +165,13 @@ export function defaultSettings(series, field) {
   };
 }
 
-/** The series with the multiband factor given in the field when the sidecar has none. */
+/** The series with the multiband factor given in the field when the sidecar has none; throws when it does not divide the slices. */
 export function withMultiband(series, entered) {
   if (series.multibandKnown) return series;
   const factor = Math.round(Number(entered));
-  return { ...series, multiband: Number.isInteger(factor) && factor > 1 ? factor : 1 };
+  const multiband = Number.isInteger(factor) && factor > 1 ? factor : 1;
+  if (series.slices % multiband) throw new Error(`The multiband factor ${multiband} does not divide the ${series.slices} slices.`);
+  return { ...series, multiband };
 }
 
 /** The acqp row of a BIDS phase-encoding direction, in FSL's voxel axes (x reversed when det > 0). */
@@ -289,8 +307,22 @@ export function motionSummary({ parameters, movementRms, outlierMap }) {
   }));
 }
 
+/**
+ * The sidecar of the estimated field map (BIDS `_fieldmap.json`): Units Hz, and the sign
+ * convention and the acquisition it applies to.
+ */
+export function fieldmapSidecar({ pe, readout, reverse, version }) {
+  return {
+    Units: "Hz",
+    Description: `Susceptibility off-resonance field estimated by PyHySCO from the mean b0 of the series and of ${reverse}, in topup's sign convention: the series corrected is series(x + u(x)), with u = field × TotalReadoutTime × the sign of PhaseEncodingDirection, in voxels along the phase-encoding axis.`,
+    PhaseEncodingDirection: pe,
+    TotalReadoutTime: readout,
+    GeneratedBy: [{ Name: "dwicorrect", Version: version, CodeURL: "https://github.com/neurodesk/webapps" }],
+  };
+}
+
 /** The sidecar of the corrected series: the input's, plus what was done. */
-export function preprocSidecar({ input, settings, args, field, threads, seconds, mask, version }) {
+export function preprocSidecar({ input, settings, args, field, fieldUnits = null, threads, seconds, mask, version }) {
   const sidecar = { ...input };
   sidecar.SkullStripped = false;
   sidecar.Sources = [input.Sources ?? []].flat();
@@ -309,6 +341,7 @@ export function preprocSidecar({ input, settings, args, field, threads, seconds,
     SliceToVolume: Boolean(settings.sliceToVolume),
     Iterations: settings.iterations,
     SusceptibilityField: field,
+    ...(fieldUnits ? { SusceptibilityFieldUnits: fieldUnits } : {}),
     BrainMask: mask,
     Threads: threads,
     Seconds: Math.round(seconds),
@@ -318,42 +351,58 @@ export function preprocSidecar({ input, settings, args, field, threads, seconds,
 }
 
 /**
- * The DWI series of a selection: of the entries with a bval and bvec, the one with the most
- * volumes, then the first by name, whatever order the files came in.
+ * The inputs of a selection: the DWI series (the one with gradients and the most volumes), a
+ * reverse phase-encoding image on its grid, and a field map (topup coefficients or a field in
+ * Hz). `series` entries are { image, sidecar, bval, bvec, frames, sameGrid, intent }.
  */
-export function dwiOf(entries) {
-  const withGradients = entries.filter((entry) => entry.bval && entry.bvec);
-  if (!withGradients.length) {
-    throw new Error("Choose a diffusion series with its .bval and .bvec (and its JSON sidecar).");
-  }
-  return [...withGradients].sort((a, b) => b.frames - a.frames || a.image.name.localeCompare(b.image.name))[0];
+/** BIDS fieldmap Units and the factor that gives Hz. */
+const FIELD_UNITS = Object.freeze({ Hz: 1, "rad/s": 1 / (2 * Math.PI) });
+
+const isTopup = (entry) => entry.intent === 2016 || /_fieldcoef\.nii(\.gz)?$/i.test(entry.image.name);
+const isFieldmap = (entry) => !isTopup(entry) && (/_fieldmap\.nii(\.gz)?$/i.test(entry.image.name) || ["Hz", "rad/s", "T", "Tesla"].includes(entry.sidecar?.Units));
+const isField = (entry) => isTopup(entry) || isFieldmap(entry);
+
+/** The DWI series of a selection: of the images with gradients (not field maps), the one with the most volumes, then by name. */
+export function chooseDwi(series) {
+  const withGradients = series.filter((entry) => !isField(entry) && entry.bval && entry.bvec);
+  return [...withGradients].sort((a, b) => b.frames - a.frames || a.image.name.localeCompare(b.image.name))[0] ?? null;
 }
 
 /**
- * The inputs of a selection: the DWI series (`dwiOf`), a reverse phase-encoding image on its
- * grid, and a field map (topup coefficients, or a field in Hz on its grid). `series` entries
- * are { image, sidecar, bval, bvec, frames, sameGrid, intent }, `sameGrid` against `dwiOf`'s.
+ * The inputs of a selection: the DWI series (`chooseDwi`), a reverse phase-encoding image on
+ * its grid, and a field map (topup coefficients, or a field map in Hz or rad/s with `scale` to
+ * Hz). `series` entries are { image, sidecar, bval, bvec, frames, intent }, and `sameGrid(entry,
+ * dwi)` says whether an image is on the series' grid (else each entry's `sameGrid`).
  */
-export function classifyInputs(series) {
-  const isTopup = (entry) => entry.intent === 2016 || /_fieldcoef\.nii(\.gz)?$/i.test(entry.image.name);
-  const isHz = (entry) => !isTopup(entry) && (entry.sidecar?.Units === "Hz" || /_fieldmap\.nii(\.gz)?$/i.test(entry.image.name));
-  const fields = series.filter((entry) => isTopup(entry) || isHz(entry));
+export function classifyInputs(series, { sameGrid = (entry) => Boolean(entry.sameGrid) } = {}) {
+  const fields = series.filter(isField);
   const images = series.filter((entry) => !fields.includes(entry));
-  const dwi = dwiOf(images);
-  if (fields.length > 1) throw new Error("Choose at most one field map: topup's _fieldcoef image or a field map in Hz.");
-  if (fields[0] && isHz(fields[0]) && !fields[0].sameGrid) {
-    throw new Error(`${fields[0].image.name} is not on the series' grid; give a field map in Hz on the DWI grid, or topup's _fieldcoef image.`);
+  const dwi = chooseDwi(series);
+  if (!dwi) {
+    throw new Error("Choose a diffusion series with its .bval and .bvec (and its JSON sidecar).");
   }
+  if (fields.length > 1) throw new Error("Choose at most one field map: topup's _fieldcoef image or a field map in Hz.");
+  const onGrid = (entry) => sameGrid(entry, dwi);
   const pe = dwi.sidecar?.PhaseEncodingDirection;
   const reverse = pe
-    ? images.filter((entry) => entry !== dwi && entry.sameGrid && entry.sidecar?.PhaseEncodingDirection && isReversePair(pe, entry.sidecar.PhaseEncodingDirection))
+    ? images.filter((entry) => entry !== dwi && entry.sidecar?.PhaseEncodingDirection && isReversePair(pe, entry.sidecar.PhaseEncodingDirection) && onGrid(entry))
     : [];
   if (reverse.length > 1) throw new Error("More than one reverse phase-encoding image; choose one.");
-  const field = fields[0] ?? null;
+  const entry = fields[0] ?? null;
+  let field = null;
+  if (entry && isTopup(entry)) field = { entry, kind: "topup", scale: 1, units: null, sameGrid: onGrid(entry) };
+  else if (entry) {
+    // BIDS requires Units in a fieldmap's sidecar; without one the map is taken as Hz.
+    const units = entry.sidecar?.Units ?? "Hz";
+    const scale = FIELD_UNITS[units];
+    if (!scale) throw new Error(`${entry.image.name} is in ${units}; give a field map in Hz or rad/s.`);
+    if (!onGrid(entry)) throw new Error(`${entry.image.name} is not on the series' grid; give a field map in Hz on the DWI grid, or topup's _fieldcoef image.`);
+    field = { entry, kind: "hz", scale, units, sameGrid: true };
+  }
   return {
     dwi,
     reverse: reverse[0] ?? null,
-    field: field && { entry: field, kind: isTopup(field) ? "topup" : "hz" },
+    field,
     ignored: images.filter((entry) => entry !== dwi && entry !== reverse[0]).map((entry) => entry.image.name),
   };
 }

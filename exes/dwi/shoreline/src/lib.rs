@@ -1538,6 +1538,9 @@ pub fn run(
     if input.mask.len() != grid.voxels() || input.volumes.iter().any(|v| v.len() != grid.voxels()) {
         return Err("The mask and every volume must match the grid.".into());
     }
+    if !input.mask.iter().any(|&m| m) {
+        return Err("The mask has no voxel: there is no brain to correct.".into());
+    }
     let b0: Vec<usize> = (0..nv)
         .filter(|&v| input.bvals[v] <= options.b0_threshold)
         .collect();
@@ -1755,12 +1758,12 @@ pub fn run(
         }
         if model == PredictionModel::GaussianProcess {
             // Sample voxels of the mask, with every diffusion-weighted volume defined.
-            let step = (ctx.domain.mask.len() / 1500).max(1);
+            let stride = (ctx.domain.mask.len() / 1500).max(1);
             let samples: Vec<Vec<f32>> = ctx
                 .domain
                 .mask
                 .iter()
-                .step_by(step)
+                .step_by(stride)
                 .map(|&c| {
                     ctx.dwi
                         .iter()
@@ -1776,7 +1779,8 @@ pub fn run(
             let leave_out = gp::fits(&hyper, &gradients)?;
             // Including the volume damps its registration: good against the prediction's
             // error once the volumes are close, but it holds back large corrections, so the
-            // first iteration leaves it out.
+            // first iteration leaves it out (`step` is the iteration; `predict` also takes
+            // the leave-out fits in that iteration).
             *ctx.fits.write().unwrap() = if options.gp_include_target && step > 0 {
                 gp::fits_including_target(&hyper, &gradients)?
             } else {
@@ -2137,7 +2141,9 @@ fn mbs_stage(
             .map(|v| ctx.correct(v, &smoothed[v], &params[v], interpolation))
             .collect();
         let predictions = ctx.predict(&corrected, true, 0.0);
-        let total = (0..nv)
+        // Per volume in parallel, then summed in volume order: the same total on any
+        // number of threads.
+        let per_volume: Vec<f64> = (0..nv)
             .into_par_iter()
             .map(|v| {
                 ctx.domain
@@ -2148,7 +2154,8 @@ fn mbs_stage(
                     .map(|r| r * r)
                     .sum::<f64>()
             })
-            .sum();
+            .collect();
+        let total = per_volume.iter().sum();
         (total, predictions)
     };
     let (mut cost, mut predictions) = residual();
