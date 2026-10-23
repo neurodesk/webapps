@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Page not found | Neurodesk Webapps</title>
   <script src="/dicompare/dicompare-routes.js"></script>
+  <script>
+    // dicom2vid was renamed MRI2VID (neurodesk/webapps#387); keep old links working.
+    if (/^\/dicom2vid(\/|$)/.test(location.pathname)) {
+      location.replace('/mri2vid' + location.pathname.slice('/dicom2vid'.length) + location.search + location.hash);
+    }
+  </script>
 </head>
 <body>
   <h1>Page not found</h1>

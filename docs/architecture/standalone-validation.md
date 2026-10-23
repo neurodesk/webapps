@@ -16,7 +16,7 @@ Source application bundles were built from commit `7244446`, including the Greed
 | Deface | Default-image defacing and NIfTI export |
 | EasyMP2RAGE | Denoising and derivatives ZIP export |
 | NiiMath | Add-one image operation and NIfTI export; a separate numerical check verified all 100,672 voxels with zero error |
-| DICOM2VID | Volume-to-video conversion and MP4 export |
+| MRI2VID | Volume-to-video conversion and MP4 export |
 | BrowserQC | Small-volume QC and JSON export |
 | SurfAnnotate | Surface import, border creation, fill and FreeSurfer label export |
 | ZARRo | Explicit local OME-Zarr directory grant, volume loading and NIfTI export |

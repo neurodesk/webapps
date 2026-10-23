@@ -26,7 +26,7 @@ async function fixture(t) {
   }
   await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'), 'junction');
   const registry = await loadAppsRegistry();
-  const apps = registry.apps.filter(app => ['dicom2vid', 'zarro'].includes(app.id))
+  const apps = registry.apps.filter(app => ['mri2vid', 'zarro'].includes(app.id))
     .map(app => ({ ...app, remote_compute: app.remote_compute || undefined }));
   const emptyAssets = Object.fromEntries(apps.map(app => [app.id, []]));
   const catalog = JSON.parse(await readFile(join(repoRoot, 'registry/standalone.json')));
@@ -50,13 +50,13 @@ async function fixture(t) {
   return root;
 }
 
-for (const app of [null, 'dicom2vid', 'zarro,dicom2vid']) {
+for (const app of [null, 'mri2vid', 'zarro,mri2vid']) {
   test(`offline ${app || 'suite'} assembly includes shared fonts and their licence`, async t => {
     const root = await fixture(t);
     const destination = join(root, 'offline');
     await run(process.execPath, [join(root, 'scripts/desktop/assemble.mjs'), '--out', destination, ...(app ? ['--app', app] : [])]);
     const manifest = JSON.parse(await readFile(join(destination, 'manifest.json')));
-    const ids = app ? app.split(',') : ['dicom2vid', 'zarro'];
+    const ids = app ? app.split(',') : ['mri2vid', 'zarro'];
     assert.deepEqual(manifest.apps.map(entry => entry.id).sort(), ids.sort());
     assert.equal(manifest.defaultApp, app && ids.length === 1 ? app : null);
     for (const path of ['fonts/inter.woff2', 'fonts/OFL.txt', '_runtime/worker.js', 'shell-adapters/components/core/dom.js']) {
@@ -70,7 +70,7 @@ for (const app of [null, 'dicom2vid', 'zarro,dicom2vid']) {
     await verifyBundle(destination);
     const { server, origin } = await startOfflineServer(destination);
     t.after(() => new Promise(resolve => server.close(resolve)));
-    const stylesheetUrl = new URL('../app-theme.css', `${origin}/dicom2vid/`);
+    const stylesheetUrl = new URL('../app-theme.css', `${origin}/mri2vid/`);
     const stylesheet = await (await fetch(stylesheetUrl)).text();
     const fontPath = /url\(["']?(fonts\/[^)"']+)/.exec(stylesheet)?.[1];
     assert.equal(fontPath, 'fonts/inter.woff2');

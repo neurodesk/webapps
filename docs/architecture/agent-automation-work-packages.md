@@ -78,7 +78,7 @@ Transport, geometry and artifact checks do not establish clinical accuracy.
 | SurfAnnotate | Actual surface geometry, source summary and viewer controls | None for tested viewer path |
 | ZARRo | Real Zarr chunk loading, world coordinates, layouts and measurement | Larger remote datasets remain data-specific |
 | DICOMpare | Actual Python analysis and protocol comparison on synthetic DICOM metadata | Protocol validity depends on the supplied schema |
-| DICOM2vid | Real playable WebM, encoded dimensions, hash and explicit DICOM series selection | Other browser codecs remain platform-specific |
+| MRI2VID | Real playable WebM, encoded dimensions, hash and explicit DICOM series selection | Other browser codecs remain platform-specific |
 | Deface | Real affine method, cancel/retry, preserved geometry and retained voxel intensities | Other seven method accuracies remain separate |
 | Disconnectome | ENIGMA result equals CLI TSV byte for byte; wrong-grid rejection | Atlas-specific scientific interpretation is unchanged |
 | SYNcro | Existing UI checks and wrong-grid rejection before downloads | Complete supplied-image normalization test is opt-in |

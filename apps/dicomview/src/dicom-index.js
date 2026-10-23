@@ -8,8 +8,8 @@
 // Series = { uid, studyUid, number, description, protocolName, modality, imageType, rows,
 //   cols, kind, files, summary, varyingTags }
 // DicomIndex = { series, skipped: [{ path, reason }] }
-import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
-import { classifySeries } from '@neurodesk/dicom2vid/series.js';
+import { parseDicomHeader } from '@neurodesk/mri2vid/readers/dicom.js';
+import { classifySeries } from '@neurodesk/mri2vid/series.js';
 
 export const PREFIX_BYTES = 131072;
 export const MAX_PREFIX_BYTES = 8 * 1024 * 1024;

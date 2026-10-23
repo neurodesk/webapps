@@ -1,7 +1,7 @@
 // Input adapters preserve nested scanner paths and keep archives in memory.
 // Header reading is delegated to the same DICOM reader used by DICOM View.
 import { unzip } from 'fflate';
-import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
+import { parseDicomHeader } from '@neurodesk/mri2vid/readers/dicom.js';
 
 const MAX_BYTES = 2 * 1024 ** 3;
 const HEADER_BYTES = 8 * 1024 ** 2;

@@ -20,39 +20,44 @@
     "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
   },
   {
-    "from": "apps/dicom2vid/web/js/annotate.js",
-    "to": "../vendor/dicom2vid/src/raster.js",
-    "reason": "packages/dicom2vid/scripts/stage-browser.mjs stages this shared browser module in apps/dicom2vid/web/vendor/dicom2vid before the app vendor, dev and build scripts run."
+    "from": "apps/mri2vid/web/js/annotate.js",
+    "to": "../vendor/mri2vid/src/raster.js",
+    "reason": "packages/mri2vid/scripts/stage-browser.mjs stages this shared browser module in apps/mri2vid/web/vendor/mri2vid before the app vendor, dev and build scripts run."
   },
   {
-    "from": "apps/dicom2vid/web/js/app.js",
-    "to": "../vendor/dicom2vid/src/pipeline.js",
-    "reason": "packages/dicom2vid/scripts/stage-browser.mjs stages this shared browser module in apps/dicom2vid/web/vendor/dicom2vid before the app vendor, dev and build scripts run."
+    "from": "apps/mri2vid/web/js/app.js",
+    "to": "../vendor/dcm2niix/index.jpeg.js",
+    "reason": "packages/mri2vid/scripts/stage-browser.mjs stages the @niivue/dcm2niix JPEG build in apps/mri2vid/web/vendor/dcm2niix before the app vendor, dev and build scripts run."
   },
   {
-    "from": "apps/dicom2vid/web/js/app.js",
-    "to": "../vendor/dicom2vid/src/raster.js",
-    "reason": "packages/dicom2vid/scripts/stage-browser.mjs stages this shared browser module in apps/dicom2vid/web/vendor/dicom2vid before the app vendor, dev and build scripts run."
+    "from": "apps/mri2vid/web/js/app.js",
+    "to": "../vendor/mri2vid/src/pipeline.js",
+    "reason": "packages/mri2vid/scripts/stage-browser.mjs stages this shared browser module in apps/mri2vid/web/vendor/mri2vid before the app vendor, dev and build scripts run."
   },
   {
-    "from": "apps/dicom2vid/web/js/app.js",
-    "to": "../vendor/dicom2vid/src/sources.js",
-    "reason": "packages/dicom2vid/scripts/stage-browser.mjs stages this shared browser module in apps/dicom2vid/web/vendor/dicom2vid before the app vendor, dev and build scripts run."
+    "from": "apps/mri2vid/web/js/app.js",
+    "to": "../vendor/mri2vid/src/raster.js",
+    "reason": "packages/mri2vid/scripts/stage-browser.mjs stages this shared browser module in apps/mri2vid/web/vendor/mri2vid before the app vendor, dev and build scripts run."
   },
   {
-    "from": "apps/dicom2vid/web/js/app.js",
-    "to": "../vendor/dicom2vid/src/volume.js",
-    "reason": "packages/dicom2vid/scripts/stage-browser.mjs stages this shared browser module in apps/dicom2vid/web/vendor/dicom2vid before the app vendor, dev and build scripts run."
+    "from": "apps/mri2vid/web/js/app.js",
+    "to": "../vendor/mri2vid/src/sources.js",
+    "reason": "packages/mri2vid/scripts/stage-browser.mjs stages this shared browser module in apps/mri2vid/web/vendor/mri2vid before the app vendor, dev and build scripts run."
   },
   {
-    "from": "apps/dicom2vid/web/js/encode.js",
-    "to": "../vendor/dicom2vid/src/raster.js",
-    "reason": "packages/dicom2vid/scripts/stage-browser.mjs stages this shared browser module in apps/dicom2vid/web/vendor/dicom2vid before the app vendor, dev and build scripts run."
+    "from": "apps/mri2vid/web/js/app.js",
+    "to": "../vendor/mri2vid/src/volume.js",
+    "reason": "packages/mri2vid/scripts/stage-browser.mjs stages this shared browser module in apps/mri2vid/web/vendor/mri2vid before the app vendor, dev and build scripts run."
   },
   {
-    "from": "apps/dicom2vid/web/js/encode.js",
-    "to": "../vendor/dicom2vid/src/video.js",
-    "reason": "packages/dicom2vid/scripts/stage-browser.mjs stages this shared browser module in apps/dicom2vid/web/vendor/dicom2vid before the app vendor, dev and build scripts run."
+    "from": "apps/mri2vid/web/js/encode.js",
+    "to": "../vendor/mri2vid/src/raster.js",
+    "reason": "packages/mri2vid/scripts/stage-browser.mjs stages this shared browser module in apps/mri2vid/web/vendor/mri2vid before the app vendor, dev and build scripts run."
+  },
+  {
+    "from": "apps/mri2vid/web/js/encode.js",
+    "to": "../vendor/mri2vid/src/video.js",
+    "reason": "packages/mri2vid/scripts/stage-browser.mjs stages this shared browser module in apps/mri2vid/web/vendor/mri2vid before the app vendor, dev and build scripts run."
   },
   {
     "from": "apps/musclemap/web/js/controllers/MuscleMapDicomInput.js",

@@ -89,7 +89,7 @@ input role. The hash identifies the uncompressed converted NIfTI. Reports retain
 the original source hashes, converted image metadata and conversion sidecars.
 An agent must choose from the actual candidates, not infer a series from a name.
 
-DICOMpare and DICOM2vid use raw DICOM metadata directly. For DICOM2vid's
+DICOMpare and MRI2VID use raw DICOM metadata directly. For MRI2VID's
 `encode-dicom`, select a reported candidate using `parameters.seriesUid`.
 DICOMpare analyzes all supplied series without converting them into images.
 

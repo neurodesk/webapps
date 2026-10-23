@@ -1,0 +1,384 @@
+# mri2vid
+
+## 0.5.20261022
+
+### Patch Changes
+
+- Updated dependencies [d32b485]
+  - @neurodesk/webapp-components@0.19.0
+  - @neurodesk/dicom2vid@0.5.20261022
+
+## 0.5.20261020
+
+### Patch Changes
+
+- Updated dependencies [c865c0c]
+  - @neurodesk/webapp-components@0.17.1
+  - @neurodesk/dicom2vid@0.5.20261020
+- Updated dependencies [a36fde4]
+
+  - @neurodesk/webapp-components@0.18.0
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [3f1d770]
+
+- Updated dependencies [d9718cd]
+
+- Updated dependencies [c1a4dda]
+
+- Updated dependencies [3329c39]
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies [d9718cd]
+
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/dicom2vid@0.5.20261020
+
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies [a36fde4]
+
+- Updated dependencies
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.18.0
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.1
+  - @neurodesk/dicom2vid@0.5.20261020
+- Updated dependencies [14db080]
+
+- Updated dependencies [4b40da1]
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.2
+  - @neurodesk/dicom2vid@0.5.20261020
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.1
+  - @neurodesk/dicom2vid@0.5.20261020
+- Updated dependencies [14db080]
+
+## 0.5.20261019
+
+### Patch Changes
+
+- Updated dependencies [af2e8db]
+
+- Updated dependencies [b3404ec]
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/dicom2vid@0.5.20261019
+
+## 0.5.20261018
+
+### Patch Changes
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [b68209b]
+
+  - @neurodesk/webapp-components@0.15.0
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [67a5a8f]
+
+- Updated dependencies [2ae93ae]
+
+- Updated dependencies [ccb2970]
+
+  - @neurodesk/dicom2vid@0.5.20261018
+  - @neurodesk/webapp-components@0.14.4
+
+- Updated dependencies [b68209b]
+
+  - @neurodesk/webapp-components@0.15.0
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [67a5a8f]
+
+  - @neurodesk/dicom2vid@0.5.20261018
+  - @neurodesk/webapp-components@0.14.4
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/dicom2vid@0.5.20261018
+
+## 0.5.20261017
+
+### Patch Changes
+
+- Updated dependencies [b547d52]
+  - @neurodesk/webapp-components@0.14.3
+  - @neurodesk/dicom2vid@0.5.20261017
+
+## 0.5.20261016
+
+### Patch Changes
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.14.2
+  - @neurodesk/dicom2vid@0.5.20261016
+
+- Updated dependencies [7443048]
+
+  - @neurodesk/webapp-components@0.14.1
+  - @neurodesk/dicom2vid@0.5.20261016
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.14.2
+  - @neurodesk/dicom2vid@0.5.20261016
+
+- Updated dependencies [7443048]
+  - @neurodesk/webapp-components@0.14.1
+  - @neurodesk/dicom2vid@0.5.20261016
+
+## 0.5.20261015
+
+### Minor Changes
+
+- bf4a4ae: Add the `dicom2vid` command line for Linux x64, Windows x64 and macOS on Apple
+  silicon. It reads NIfTI, MGZ and DICOM folders with the app's readers and
+  series selection, renders the app's frames and encodes them with libvpx VP9,
+  so its WebM matches the app's video in frame count, size, timing and key
+  frames. The app's pipeline moved into the shared `@neurodesk/dicom2vid`
+  package; its videos are byte-identical to before. The example volume now
+  carries its SHA-256 pin.
+
+### Patch Changes
+
+- dd65e6a: Visual refresh: Inter, neutral greys with the Neurodesk logo green for action,
+  focus and selection only, a compact 48px app bar, sentence-case section titles
+  and a quieter status bar. The example menu is now the input control: examples,
+  then Choose files… and Choose folder…. The whole window, the viewer included,
+  accepts dropped files; a drop mid-session replaces the inputs with Undo in the
+  status bar. Before any input the status reads "Drag and drop files". MuscleMap
+  drops its separate drop box and Add File(s) button.
+
+  Page drops fill empty image slots in order while keeping DICOM series together.
+  New selections supersede unfinished drop traversal, and registration apps load
+  each dropped image in order. The shared drop handler also respects the different
+  native input and file-field event contracts.
+  Failed imports leave only successfully loaded slots occupied, and Undo can
+  restore loaded examples.
+
+- 744ecdf: Preserve distinct DICOM records with identical file names. Verify browser MP4 frame content and download checksummed video references from pinned Hugging Face URLs.
+
+- Updated dependencies [dd65e6a]
+
+- Updated dependencies [bf4a4ae]
+
+- Updated dependencies [744ecdf]
+
+- Updated dependencies [dcc74e7]
+  - @neurodesk/webapp-components@0.14.0
+  - @neurodesk/dicom2vid@0.5.20261015
+
+## 0.4.20261014
+
+### Patch Changes
+
+- 850e642: Remove code that nothing calls, found by the unused-code report and checked by
+  repository-wide reference searches. The shared preview module no longer carries
+  a second NIfTI parser and writer; NiftiUtils remains the only one. Outputs and
+  behaviour are unchanged.
+
+- Updated dependencies [27c9549]
+
+- Updated dependencies [850e642]
+
+- Updated dependencies [ad92e2f]
+  - @neurodesk/webapp-components@0.13.0
+
+## 0.4.20261012
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.3
+
+## 0.4.20261010
+
+### Patch Changes
+
+- Declare workspace dependencies without expanding SYNcro portable runtime installations. Mark dicompare type imports explicitly and separate the unchanged NeSVoR reference validator from worker orchestration to remove dependency cycles.
+
+## 0.4.20260928
+
+### Patch Changes
+
+- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
+
+  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
+
+- Publish the current automation contract and JSON Schema at both static build URLs, including clean builds without a prior development session. Refresh cached builds when the shared automation contract or browser adapter changes.
+
+### Minor Changes
+
+- Expose typed operations across the application catalog, including multiple inputs, DICOM series selection, variable artifacts and viewer workflows. Share awaited processing and cancellation between each app and its agent adapter. Publish verified result reports and scientific provenance.
+
+  Add bounded desktop viewer sessions and MCP controls using public viewer APIs. Native SynthSeg now reports per-label counts and physical volumes. Include real-model CPU checks and a Mac runner for Metal, WebGPU and buffer-planning evidence without raising the validated SynthSeg limit.
+
+## 0.3.20260923
+
+### Patch Changes
+
+- 3e6b9a7: Add a Support action to the shared application bar, so every webapp offers one
+  route to the maintainers. It opens a GitHub issue on the monorepo that is
+  already filled in: the app and its build, the browser, the window size, whether
+  WebGPU and cross-origin isolation are available, and headings that ask for
+  reproduction steps or, for a feature suggestion, what the app should do instead.
+  The prefilled page address keeps only origin and path, because app state in a
+  query or fragment can name a user's own files.
+
+## 0.3.20260920
+
+### Patch Changes
+
+- efd8af3: Show the Example control before the file picker in every app, replace the registration apps' stale "Loading the default images" empty state, give FireANTs a CPU time budget and progress messages, ship BrowserQC's CPU MindGrab bundle with a longer segmentation budget, select CPU processing in SynthSR and brain extraction when no WebGPU adapter exists, start MuscleMap at 50 % overlap without WebGPU, and run VesselBoost's hosted example workflow in its browser tests.
+
+## 0.3.20260918
+
+### Patch Changes
+
+- Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+
+## 0.3.20260916
+
+### Patch Changes
+
+- Standardize example selection across the app catalog with complete scientific input bundles, shared cancellation and retry, and explicit processing. Add missing examples, curate existing datasets, fix QSMbly retry and TopoFit cancellation, and require example manifests and browser coverage for every app and the generator.
+
+## 0.3.20260915
+
+### Minor Changes
+
+- Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.
+
+## 0.2.20260910
+
+### Minor Changes
+
+- Release the complete application catalog after integrating BrowserQC, dwi2trx and SynthSeg. Preserve shared interface behavior and publish bundles with synchronized date versions.
+
+## 0.1.20260910
+
+### Changes
+
+- Adopt MAJOR.MINOR.YYYYMMDD versioning, link every app to the lightNIIng ecosystem (lightniing.org) from the app bar and About dialog, and keep build scratch files off the shared /tmp volume.
+
+## 0.1.9
+
+### Patch Changes
+
+- Apply the shared design system and the registry-driven About and Cite dialogs. Every app now states that it is developed and hosted by the Neurodesk team, lists the packages under the hood, names the lightning.org ecosystem, and cites one paper per implemented method plus the Neurodesk platform paper. SynthSR, SYNcro, Deface, BrowserQC and NiiMath use the shared workspace vocabulary (compact sections, one scan picker, shared toolbar, status bar and dialogs).
+
+## 0.1.8
+
+### Patch Changes
+
+- b5dc424: Sync MRI2VID with upstream commit `2fbd4e9`. Add Siemens mosaic 4D input, color-FA output, frame upscaling and interpolation controls, and corrected histogram rendering.
+
+## 0.1.7
+
+### Patch Changes
+
+- cd790d5: Finish shared imaging convergence by centralizing worker sessions, input handling, app-specific controllers, workspace styles, and runtime clients. Strengthen shell contracts and regression coverage.
+
+## 0.1.6
+
+### Patch Changes
+
+- 5560336: Consolidate imaging workers, pipeline execution, viewer behavior, NIfTI serialization, runtime wrappers, shared styling, and hosted shell controls. Fix CALMaR analysis startup and layout, and remove horizontal overflow from Deface controls.
+
+## 0.1.5
+
+### Patch Changes
+
+- 46be48e: Add a persistent light and dark theme switch to the webapp catalog and every hosted or standalone webapp bundle.
+
+## 0.1.4
+
+### Patch Changes
+
+- Standardize the Neurodesk app shell and add DNT/GPC-respecting page-view analytics with aggregate per-app usage statistics.
+
+## 0.1.3
+
+### Patch Changes
+
+- Align the application interfaces with the Neurodesk design system and point app source links at the webapps monorepo.
+
+## 0.1.2
+
+### Patch Changes
+
+- 4a4dd72: Apply the Neurodesk designer-guide theme to hosted and standalone webapp bundles.

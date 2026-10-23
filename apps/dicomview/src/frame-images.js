@@ -1,7 +1,7 @@
 // One image per frame, for a series dcm2niix refuses because its frames share no plane, such
 // as the differently oriented slices of an MPR localizer. Each frame becomes a one-slice
 // NIfTI in its own place and orientation. Only uncompressed greyscale frames are read.
-import { readDicomFrames } from '@neurodesk/dicom2vid/readers/dicom.js';
+import { readDicomFrames } from '@neurodesk/mri2vid/readers/dicom.js';
 import { createNiftiFromData, createNiftiHeaderFromVolume } from '@neurodesk/webapp-components/file-io/nifti';
 
 const unit = (vector) => {

@@ -1,0 +1,24 @@
+mri2vid
+Copyright (c) 2023, Thom Shaw, and the Neurodesk contributors
+BSD-3-Clause (LICENSE)
+
+The method follows MRI2vid.py (https://github.com/thomshaw92/MRI2Vid), kept in
+apps/mri2vid.
+
+src/vendor/mp4-muxer.js and src/vendor/webm-muxer.js are esbuild bundles of
+mp4-muxer 5.2.2 and webm-muxer 5.1.4 by Vanilagy, MIT licence
+(https://github.com/Vanilagy/mp4-muxer, https://github.com/Vanilagy/webm-muxer).
+
+src/font8x8.js is font8x8_basic by Daniel Hepper, public domain
+(https://github.com/dhepper/font8x8, commit 8e279d2d864e79128e96188a6b9526cfa3fbfef9).
+
+The command line depends on @libav.js/variant-vp9-opus 6.10.9, installed
+unmodified as its own module under node_modules/. It is libav.js 6.10.9.0
+(https://github.com/Yahweasel/libav.js, tag v6.10.9.0, commit
+c80e885c3461f7bb7ea565c9631b34243ae0dbf1) compiled with Emscripten from
+FFmpeg 9.0 (LGPL-2.1-or-later), libvpx 1.16.0 (BSD-3-Clause) and Opus 1.6.1
+(BSD-3-Clause). The full licence texts are at the top of each
+dist/libav-6.10.9.0-vp9-opus.*.mjs and .js file in that module. The
+corresponding source and build scripts are the libav.js tag above, which
+fetches the FFmpeg, libvpx and Opus release archives it names. You may
+replace the module with your own build of the same interface.

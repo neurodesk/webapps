@@ -193,7 +193,7 @@ test('catalog assigns task categories and shares apps across related categories'
     niimath: ['image-processing'],
     syncro: ['registration', 'lesion-mapping'],
     disconnectome: ['lesion-mapping', 'diffusion-imaging'],
-    dicom2vid: ['visualization'],
+    mri2vid: ['visualization'],
     surfannotate: ['surfaces', 'visualization'],
     topofit: ['surfaces'],
     lcmodel: ['quantitative-mri'],

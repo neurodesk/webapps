@@ -21,14 +21,14 @@ test('every catalog app declares explicit automation operations', async () => {
 test('static builds publish current contracts with clean or stale vendored sources', async () => {
   const scratch = await mkdtemp(join(tmpdir(), 'neurodesk-static-contract-'));
   try {
-    const app = join(scratch, 'apps', 'dicom2vid');
+    const app = join(scratch, 'apps', 'mri2vid');
     await mkdir(join(app, 'web'), { recursive: true });
     await symlink(join(repoRoot, 'packages'), join(scratch, 'packages'), process.platform === 'win32' ? 'junction' : 'dir');
-    const manifest = JSON.parse(await readFile(join(repoRoot, 'apps/dicom2vid/package.json'), 'utf8'));
+    const manifest = JSON.parse(await readFile(join(repoRoot, 'apps/mri2vid/package.json'), 'utf8'));
     await writeFile(join(app, 'package.json'), JSON.stringify(manifest));
     await writeFile(join(app, 'web/index.html'), '<!doctype html><title>Static contract check</title>');
     await writeFile(join(app, 'examples.json'), '[]');
-    const expected = await loadAppContract({ id: 'dicom2vid' }, manifest.version);
+    const expected = await loadAppContract({ id: 'mri2vid' }, manifest.version);
     for (const state of ['clean', 'stale']) {
       if (state === 'stale') {
         await mkdir(join(app, 'web/vendor'), { recursive: true });

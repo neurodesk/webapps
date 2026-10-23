@@ -39,7 +39,7 @@ const REQUIRED_METHODS = {
   deface: ['10.52294/001c.94384', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1098/rstb.2001.0915', '10.1016/j.jneumeth.2016.03.001'],
   'easy-mp2rage': ['10.1016/j.neuroimage.2009.10.002', '10.1371/journal.pone.0069294', '10.1002/mrm.23145', '10.1371/journal.pone.0099676'],
   niimath: ['10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001'],
-  dicom2vid: ['10.1007/s003300101100', 'github.com/Vanilagy/mp4-muxer'],
+  mri2vid: ['10.1007/s003300101100', '10.1016/j.jneumeth.2016.03.001', 'github.com/Vanilagy/mp4-muxer'],
   browserqc: ['10.1371/journal.pone.0184661', '10.21105/joss.05098', '10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001', '10.1098/rstb.2001.0915'],
   brain2print: ['10.1038/s41598-025-00014-5', '10.1016/j.neuroimage.2026.122074', '10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001'],
   topofit: ['arxiv.org/abs/2505.14017', 'proceedings.mlr.press/v172/hoopes22a.html', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue', '10.1016/j.neuroimage.2012.11.065', '10.52294/001c.94384'],

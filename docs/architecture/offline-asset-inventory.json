@@ -1346,7 +1346,7 @@
         "apps/niimath/main.js"
       ]
     },
-    "dicom2vid": {
+    "mri2vid": {
       "assets": [],
       "url_mappings": [],
       "runtime_packages": {},
