@@ -1755,12 +1755,12 @@ pub fn run(
         }
         if model == PredictionModel::GaussianProcess {
             // Sample voxels of the mask, with every diffusion-weighted volume defined.
-            let step = (ctx.domain.mask.len() / 1500).max(1);
+            let stride = (ctx.domain.mask.len() / 1500).max(1);
             let samples: Vec<Vec<f32>> = ctx
                 .domain
                 .mask
                 .iter()
-                .step_by(step)
+                .step_by(stride)
                 .map(|&c| {
                     ctx.dwi
                         .iter()
@@ -1776,7 +1776,8 @@ pub fn run(
             let leave_out = gp::fits(&hyper, &gradients)?;
             // Including the volume damps its registration: good against the prediction's
             // error once the volumes are close, but it holds back large corrections, so the
-            // first iteration leaves it out.
+            // first iteration leaves it out (`step` is the iteration; `predict` also takes
+            // the leave-out fits in that iteration).
             *ctx.fits.write().unwrap() = if options.gp_include_target && step > 0 {
                 gp::fits_including_target(&hyper, &gradients)?
             } else {
