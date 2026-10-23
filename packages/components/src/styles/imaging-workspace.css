@@ -9,13 +9,14 @@
 
      Shell      .nd-imaging-workspace / -app-header / -controls / -viewer / -status
      Sections   details.nd-sidebar-section > summary.nd-section-title + .nd-section-content
-     Fields     .nd-field, .nd-hint, .nd-check, .nd-row, .nd-file, .nd-file-button, .nd-file-info
+     Fields     .nd-field, .nd-hint, .nd-check, .nd-row, .nd-file, .nd-file-button, .nd-file-info,
+                .nd-file-info-lines > .nd-file-info-gap
      Images     nd-image-pair > .nd-image-slot (-header / -title / -clear / -actions)
      Buttons    .nd-btn, .nd-btn-primary, .nd-btn-secondary, .nd-btn-danger,
                 .nd-btn-sm, .nd-btn-icon
      Messages   .nd-message.(error|warning|success|info), .nd-info-icon
      Viewer     .nd-viewer-toolbar, .nd-view-tabs/.nd-view-tab, .nd-viewer-actions,
-                .nd-viewer-canvas-wrapper, .nd-viewer-empty, .nd-viewer-info
+                .nd-viewer-canvas-wrapper, .nd-viewer-image, .nd-viewer-empty, .nd-viewer-info
      Editing    .nd-mask-editor > .nd-tool-group/.nd-tool-btn, .nd-brush-control;
                 .nd-edit-btn in result rows
      Console    .nd-console-container / -header / -title / -actions / -clear / -output,
@@ -397,6 +398,9 @@ nd-imaging-brand {
 .nd-file:has(> input:disabled) { opacity: 0.5; cursor: not-allowed; }
 .nd-file-info { margin: 0; color: var(--nd-color-text-muted); font-size: 0.75rem; overflow-wrap: anywhere; }
 .nd-file-info strong { color: var(--nd-color-text); font-weight: 500; }
+/* A description in lines: each span on its own line; .nd-file-info-gap starts a group after an empty line. */
+.nd-file-info-lines > span { display: block; }
+.nd-file-info-lines > .nd-file-info-gap { margin-top: 1lh; }
 
 /* File picker as a button: the same label.nd-file around the native input,
    drawn as a secondary button, for slots that are drop zones themselves. */
@@ -580,6 +584,9 @@ nd-imaging-brand {
 
 .nd-viewer-canvas-wrapper { flex: 1; position: relative; min-height: 0; background: #000; }
 .nd-viewer-canvas-wrapper canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+/* An image (a rendered preview, an animation) shown in place of the canvas. */
+.nd-viewer-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--nd-color-bg); }
+.nd-viewer-image[hidden] { display: none; }
 .nd-viewer-panel-grid { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; overflow: hidden; background: var(--nd-color-border); }
 .nd-viewer-panel { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #000; }
 .nd-viewer-panel-title { position: absolute; top: var(--nd-space-sm); left: var(--nd-space-sm); z-index: 1; padding: 2px var(--nd-space-xs); color: var(--nd-color-text); background: var(--nd-color-surface); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font-size: 0.7rem; font-weight: 600; pointer-events: none; }
