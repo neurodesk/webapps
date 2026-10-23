@@ -190,14 +190,31 @@ pub fn fits(h: &Hyper, gradients: &[(f64, [f64; 3])]) -> Result<Vec<TargetFit>, 
                 sum[shell[j]] += z[i];
                 count[shell[j]] += 1;
             }
-            let own = count[shell[t]];
+            // A volume alone in its shell takes the mean of the nearest shell in ln b (the
+            // covariance's scale): without it the weights sum to zero and the prediction has
+            // no mean signal.
+            let mean_shell = if count[shell[t]] > 0 {
+                shell[t]
+            } else {
+                let distance = |j: usize| {
+                    (gradients[j].0.max(1.0) / gradients[t].0.max(1.0))
+                        .ln()
+                        .abs()
+                };
+                others
+                    .iter()
+                    .copied()
+                    .min_by(|&a, &b| distance(a).total_cmp(&distance(b)))
+                    .map_or(shell[t], |j| shell[j])
+            };
+            let own = count[mean_shell];
             let weights = others
                 .iter()
                 .enumerate()
                 .map(|(i, &j)| {
                     let s = shell[j];
                     let mut w = z[i] - sum[s] / count[s] as f64;
-                    if s == shell[t] && own > 0 {
+                    if s == mean_shell && own > 0 {
                         w += 1.0 / own as f64;
                     }
                     w
@@ -400,5 +417,27 @@ mod tests {
             model < 0.5 * mean,
             "median relative error {model:.3}, shell mean {mean:.3}"
         );
+    }
+
+    #[test]
+    fn a_volume_alone_in_its_shell_keeps_a_mean_signal() {
+        // 20 directions at b = 1000 and one volume at b = 1500, more than 100 from the shell:
+        // its leave-out prediction has no shell of its own, so the mean comes from the
+        // nearest shell, and the weights still sum to one.
+        let mut gradients: Vec<(f64, [f64; 3])> =
+            directions(20).into_iter().map(|g| (1000.0, g)).collect();
+        gradients.push((1500.0, directions(7)[3]));
+        let samples: Vec<Vec<f32>> = directions(30)
+            .iter()
+            .map(|&e| gradients.iter().map(|&(b, g)| tensor(b, g, e)).collect())
+            .collect();
+        let fits = fits(&fit_hyper(&gradients, &samples), &gradients).unwrap();
+        for (t, f) in fits.iter().enumerate() {
+            let total = f.weights.iter().sum::<f64>();
+            assert!(
+                (total - 1.0).abs() < 1e-9,
+                "volume {t}: weights sum to {total}"
+            );
+        }
     }
 }
