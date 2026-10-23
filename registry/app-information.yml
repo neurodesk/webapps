@@ -1807,6 +1807,7 @@ apps:
         url: https://github.com/niivue/niivue
 
   dwicorrect:
+    builders: DWI Correct and its shoreline core were written by GitHub user parent41 (https://github.com/parent41).
     packages:
       - name: shoreline (Rust and WebAssembly)
         url: https://github.com/neurodesk/webapps/tree/main/exes/dwi/shoreline
