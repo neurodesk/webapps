@@ -1,0 +1,19 @@
+[package]
+name = "dwi-shoreline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "shoreline"
+path = "src/main.rs"
+
+[dependencies]
+dwi-shore = { path = "../shore" }
+dwi-pe-field = { path = "../pe-field" }
+dwi-slice-outliers = { path = "../slice-outliers" }
+dwi-ec-distortion = { path = "../ec-distortion" }
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+rayon = "1"

@@ -1,5 +1,5 @@
 [workspace]
-members = ["gradients", "tensor", "amico", "degibbs", "denoise", "gp", "hmc", "noddi-wasm", "hmc-wasm", "degibbs-wasm", "denoise-wasm", "shore", "ec-distortion", "slice-outliers", "pe-field"]
+members = ["gradients", "tensor", "amico", "degibbs", "denoise", "gp", "hmc", "noddi-wasm", "hmc-wasm", "degibbs-wasm", "denoise-wasm", "shore", "ec-distortion", "slice-outliers", "pe-field", "shoreline"]
 resolver = "2"
 
 [workspace.package]
@@ -14,3 +14,10 @@ opt-level = 3
 lto = true
 panic = "abort"
 codegen-units = 1
+
+# The shoreline tests run the whole correction on a phantom; unoptimised, they take minutes.
+[profile.dev.package.dwi-shoreline]
+opt-level = 2
+
+[profile.dev.package.dwi-shore]
+opt-level = 2
