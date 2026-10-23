@@ -318,21 +318,32 @@ export function preprocSidecar({ input, settings, args, field, threads, seconds,
 }
 
 /**
- * The inputs of a selection: the DWI series (the one with gradients and the most volumes), a
- * reverse phase-encoding image on its grid, and a field map (topup coefficients or a field in
- * Hz). `series` entries are { image, sidecar, bval, bvec, frames, sameGrid, intent }.
+ * The DWI series of a selection: of the entries with a bval and bvec, the one with the most
+ * volumes, then the first by name, whatever order the files came in.
+ */
+export function dwiOf(entries) {
+  const withGradients = entries.filter((entry) => entry.bval && entry.bvec);
+  if (!withGradients.length) {
+    throw new Error("Choose a diffusion series with its .bval and .bvec (and its JSON sidecar).");
+  }
+  return [...withGradients].sort((a, b) => b.frames - a.frames || a.image.name.localeCompare(b.image.name))[0];
+}
+
+/**
+ * The inputs of a selection: the DWI series (`dwiOf`), a reverse phase-encoding image on its
+ * grid, and a field map (topup coefficients, or a field in Hz on its grid). `series` entries
+ * are { image, sidecar, bval, bvec, frames, sameGrid, intent }, `sameGrid` against `dwiOf`'s.
  */
 export function classifyInputs(series) {
   const isTopup = (entry) => entry.intent === 2016 || /_fieldcoef\.nii(\.gz)?$/i.test(entry.image.name);
   const isHz = (entry) => !isTopup(entry) && (entry.sidecar?.Units === "Hz" || /_fieldmap\.nii(\.gz)?$/i.test(entry.image.name));
   const fields = series.filter((entry) => isTopup(entry) || isHz(entry));
   const images = series.filter((entry) => !fields.includes(entry));
-  const withGradients = images.filter((entry) => entry.bval && entry.bvec);
-  if (!withGradients.length) {
-    throw new Error("Choose a diffusion series with its .bval and .bvec (and its JSON sidecar).");
-  }
-  const dwi = [...withGradients].sort((a, b) => b.frames - a.frames || a.image.name.localeCompare(b.image.name))[0];
+  const dwi = dwiOf(images);
   if (fields.length > 1) throw new Error("Choose at most one field map: topup's _fieldcoef image or a field map in Hz.");
+  if (fields[0] && isHz(fields[0]) && !fields[0].sameGrid) {
+    throw new Error(`${fields[0].image.name} is not on the series' grid; give a field map in Hz on the DWI grid, or topup's _fieldcoef image.`);
+  }
   const pe = dwi.sidecar?.PhaseEncodingDirection;
   const reverse = pe
     ? images.filter((entry) => entry !== dwi && entry.sameGrid && entry.sidecar?.PhaseEncodingDirection && isReversePair(pe, entry.sidecar.PhaseEncodingDirection))

@@ -4,6 +4,7 @@ import {
   acqpRow,
   bidsStem,
   classifyInputs,
+  dwiOf,
   confoundsTsv,
   defaultSettings,
   describeSeries,
@@ -129,6 +130,19 @@ test("inputs: the DWI series, a reverse b0 on its grid, and an optional field", 
   assert.equal(classifyInputs([dwi, { ...reverse, sameGrid: false }]).reverse, null);
   assert.throws(() => classifyInputs([reverse]), /\.bval and \.bvec/);
   assert.throws(() => classifyInputs([dwi, topup, hz]), /at most one field map/);
+  assert.throws(() => classifyInputs([dwi, { ...hz, sameGrid: false }]), /b0_map\.nii\.gz is not on the series' grid/);
+  assert.equal(classifyInputs([dwi, { ...topup, sameGrid: false }]).field.kind, "topup");
+});
+
+test("the DWI series is the same whatever order the files come in", () => {
+  // A full reverse-PE series: both have gradients and the same number of volumes.
+  const ap = { image: file("sub-01_dir-AP_dwi.nii.gz"), bval: file("ap.bval"), bvec: file("ap.bvec"), frames: 141 };
+  const pa = { image: file("sub-01_dir-PA_dwi.nii.gz"), bval: file("pa.bval"), bvec: file("pa.bvec"), frames: 141 };
+  const b0 = { image: file("sub-01_dir-AP_epi.nii.gz"), bval: null, bvec: null, frames: 2 };
+  assert.equal(dwiOf([pa, b0, ap]), ap);
+  assert.equal(dwiOf([ap, b0, pa]), ap);
+  assert.equal(dwiOf([b0, { ...pa, frames: 142 }, ap]).image.name, "sub-01_dir-PA_dwi.nii.gz");
+  assert.throws(() => dwiOf([b0]), /\.bval and \.bvec/);
 });
 
 test("the displacement chart uses the shared chart classes and marks volumes with outliers", async () => {

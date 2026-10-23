@@ -27,6 +27,7 @@ import {
   classifyInputs,
   confoundsTsv,
   defaultSettings,
+  dwiOf,
   withMultiband,
   inputSummary,
   describeSeries,
@@ -272,10 +273,9 @@ async function loadFiles(filesPromise, signal) {
       for (let d = 4; d <= header.dims[0]; d++) frames *= Math.max(1, header.dims[d]);
       read.push({ ...entry, buffer, frames, intent: intentCode(buffer) });
     }
-    const dwiGuess = [...read].filter((e) => e.bval && e.bvec).sort((a, b) => b.frames - a.frames)[0];
-    for (const entry of read) entry.sameGrid = Boolean(dwiGuess) && entry !== dwiGuess && sameNiftiGrid(entry.buffer, dwiGuess.buffer, 0.01);
+    const dwi = dwiOf(read);
+    for (const entry of read) entry.sameGrid = entry !== dwi && sameNiftiGrid(entry.buffer, dwi.buffer, 0.01);
     const found = classifyInputs(read);
-    const dwi = found.dwi;
     const frames = readNiftiFrames(dwi.buffer);
     const voxels = frames.dims[0] * frames.dims[1] * frames.dims[2];
     const bvalText = await dwi.bval.text();
@@ -318,9 +318,8 @@ async function loadFiles(filesPromise, signal) {
       series,
       meanB0,
       reverse,
-      field: found.field && { kind: found.field.kind, name: found.field.entry.image.name, file: found.field.entry.image, sameGrid: found.field.entry.sameGrid },
+      field: found.field && { kind: found.field.kind, name: found.field.entry.image.name, file: found.field.entry.image },
     };
-    if (input.field?.kind === "hz" && !input.field.sameGrid) throw new Error(`${input.field.name} is not on the series' grid; give a field map in Hz on the DWI grid, or topup's _fieldcoef image.`);
     clearOutputs();
     $("multiband").value = "1";
     applyDefaults();
@@ -423,6 +422,8 @@ async function correct(signal) {
   try {
     const settings = chosenSettings();
     const { pe, readout } = acquisition();
+    const series = effectiveSeries();
+    if (input.dims[2] % series.multiband) throw new Error(`The multiband factor ${series.multiband} does not divide the ${input.dims[2]} slices.`);
     const names = outputNames(input.name);
     const voxels = input.dims[0] * input.dims[1] * input.dims[2];
 
@@ -475,8 +476,6 @@ async function correct(signal) {
     }
     controller.signal.throwIfAborted();
 
-    const series = effectiveSeries();
-    if (input.dims[2] % series.multiband) throw new Error(`The multiband factor ${series.multiband} does not divide the ${input.dims[2]} slices.`);
     const args = shorelineArgs({ settings, series, field });
     const plan = { done: 0, total: 2 + settings.iterations + (settings.sliceToVolume && input.series.sliceTiming ? 5 : 0) + 1 };
     let threads = 1;
