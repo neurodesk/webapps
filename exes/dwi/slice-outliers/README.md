@@ -13,7 +13,7 @@ The crate is a prototype: the `hmc` app and command line do not use it until it 
 ## Method
 
 - `slice_statistics`: for each slice of one volume, the mean of observed - predicted over the slice's brain voxels, the mean squared difference, and the number of brain voxels.
-- `detect`: the statistics of one shell are standardised with their mean and sample standard deviation over all volumes and slices of that shell. A slice is an outlier when its standardised mean difference is below -`n_std`. With `positive`, a slice above +`n_std` is one too; with `squared`, a slice whose standardised mean squared difference is above `n_std`.
+- `detect`: within one shell, the statistics of each slice position are standardised robustly, with their median and 1.4826 · median absolute deviation over the shell's volumes. A position with fewer than `min_volumes_per_slice` (10) usable volumes keeps its own median (from 3 volumes) and takes the spread pooled over the shell's positions: the prediction error of an inferior slice position can be the same in every volume of a small shell (ADNI's 6-volume b = 500 shell flagged one slice in all six volumes with whole-shell statistics). `per_slice_position: false` uses the whole shell for every position. A slice is an outlier when its standardised mean difference is below -`n_std`. With `positive`, a slice above +`n_std` is one too; with `squared`, a slice whose standardised mean squared difference is above `n_std`.
 - `Params::default()` is eddy's default: `--ol_nstd=4`, `--ol_nvox=250` (slices with fewer brain voxels are not used and not flagged), negative deviations only.
 - `replace`: the brain voxels of the flagged slices take the prediction. Voxels outside the mask keep their values, because SHORELine predicts 0 there.
 - `OutlierMap` has eddy's three maps (outlier, `n_stdev`, `n_sqr_stdev`) and `report()` writes eddy's report lines.
@@ -28,7 +28,7 @@ Volumes are flat arrays in NIfTI voxel order (x fastest).
 ## Differences from eddy
 
 - eddy predicts with a Gaussian process per shell; this crate uses the 3dSHORE leave-out prediction.
-- The paper standardises the slice statistics within a shell. This crate pools all slices and volumes of the shell; whether eddy also pools the slice positions is not documented. The ADNI comparison shows whether the choice matters.
+- The paper standardises the slice statistics within a shell; how eddy computes the spread is not documented. A mean and standard deviation over the shell fail on sessions with much motion: the outliers inflate the standard deviation and hide themselves. On one ADNI3 session with 222 eddy outlier slices, they gave Dice 0.40 against `eddy_outlier_map` (sensitivity 0.27); the median and MAD per shell gave 0.78, and per slice position 0.82 (sensitivity 0.84, precision 0.81), both computed from the same run's statistics.
 - Multiband groups (eddy `--ol_type=gw` or `both`, `--slspec`) are not handled: each slice is tested alone.
 - b0 volumes are not tested: SHORELine aligns them in a separate stage and makes no prediction for them.
 
@@ -39,10 +39,11 @@ Volumes are flat arrays in NIfTI voxel order (x fastest).
 | Check | Result |
 | --- | --- |
 | Clean data, true signal as the prediction | no outliers |
-| Dropouts, true signal as the prediction | exactly the dropouts (z -7.9 to -18.7) |
+| Dropouts, true signal as the prediction | exactly the dropouts (z -61 to -280) |
 | A slice with fewer than 250 brain voxels | not used and not flagged |
 | A bright slice (x 1.6) | flagged only with `positive` |
-| Dropouts, 3dSHORE predictions from the corrupted data | exactly the dropouts (z -6.8 to -16.2) |
+| Dropouts, 3dSHORE predictions from the corrupted data | exactly the dropouts (z -5.9 to -34) |
+| 60 dropouts in one session (true signal as the prediction) | all 60, no others; a mean and standard deviation miss many |
 | Prediction bias in the shared slice, before and after replacement | 3.8 -> 1.3 and 15.2 -> 5.5 |
 | RMS error of the dropout slices against the truth: data, after one pass, after two | 63-282, 12-20, 12-16 |
 

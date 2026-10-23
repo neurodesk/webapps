@@ -3,7 +3,7 @@
 //! known volumes and slices.
 
 use dwi_shore::TargetFit;
-use dwi_slice_outliers::{Params, SliceGrid, detect, replace, slice_statistics};
+use dwi_slice_outliers::{Params, SliceGrid, SliceStatistic, detect, replace, slice_statistics};
 use std::f64::consts::PI;
 
 const DIMS: [usize; 3] = [24, 24, 20];
@@ -294,4 +294,63 @@ fn finds_the_dropouts_with_3dshore_predictions_and_replacement_helps() {
         assert!(two < 0.25 * raw);
         assert!(two <= one + 1e-9);
     }
+}
+
+#[test]
+fn many_dropouts_do_not_hide_each_other() {
+    // A session with much motion: 60 dropouts (signal x 0.5 to 0.8) over the brain slices.
+    // With a mean and standard deviation, these would inflate the spread and hide each
+    // other; the robust standardisation finds all of them.
+    let mut p = phantom();
+    let mut rng = Rng(4800);
+    let mut expected = Vec::new();
+    while expected.len() < 60 {
+        let v = (rng.uniform() * p.bvals.len() as f64) as usize;
+        let s = 3 + (rng.uniform() * (DIMS[2] - 6) as f64) as usize;
+        if !expected.contains(&(v, s)) {
+            expected.push((v, s));
+            drop_slice(&mut p, v, s, (0.5 + 0.3 * rng.uniform()) as f32);
+        }
+    }
+    expected.sort();
+    let stats: Vec<_> = (0..p.bvals.len())
+        .map(|v| slice_statistics(&p.grid, &p.observed[v], &p.truth[v], &p.mask))
+        .collect();
+    let map = detect(&stats, &shells(&p), &Params::default()).unwrap();
+    assert_eq!(flagged(&map), expected);
+}
+
+#[test]
+fn a_small_shell_keeps_a_centre_per_slice_position() {
+    // ADNI's b = 500 shell has 6 volumes. Near the skull base, the prediction error of one
+    // slice position is the same in all of them; that is not an outlier. A real dropout in
+    // the same shell is.
+    let mut rng = Rng(500);
+    let slices = 20;
+    let mut stats = Vec::new();
+    let mut shells = Vec::new();
+    for (shell, n) in [(1000.0, 40), (500.0, 6)] {
+        for v in 0..n {
+            let row: Vec<SliceStatistic> = (0..slices)
+                .map(|s| {
+                    let mut mean = rng.gaussian();
+                    if shell == 500.0 && s == 2 {
+                        mean -= 15.0;
+                    }
+                    if shell == 500.0 && v == 3 && s == 10 {
+                        mean -= 20.0;
+                    }
+                    SliceStatistic {
+                        mean,
+                        mean_square: mean * mean,
+                        voxels: 1000,
+                    }
+                })
+                .collect();
+            stats.push(row);
+            shells.push(shell);
+        }
+    }
+    let map = detect(&stats, &shells, &Params::default()).unwrap();
+    assert_eq!(flagged(&map), vec![(43, 10)]);
 }

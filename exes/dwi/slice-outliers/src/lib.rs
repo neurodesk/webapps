@@ -9,10 +9,14 @@
 //! so a dropout cannot hide in its own prediction.
 //!
 //! For each slice of each diffusion-weighted volume, the statistic is the mean of
-//! observed - predicted over the slice's brain voxels. The statistics of one shell are
-//! standardised with their mean and standard deviation over all its volumes and slices. A
-//! slice is an outlier when its standardised value is below -`n_std` (eddy's defaults:
-//! `--ol_nstd=4`, `--ol_nvox=250`, negative deviations only).
+//! observed - predicted over the slice's brain voxels. Within one shell, the statistics of
+//! each slice position are standardised robustly, with their median and 1.4826 · median
+//! absolute deviation over the shell's volumes. A shell with fewer than 10 volumes keeps the
+//! median per position and pools the deviation over positions. A slice is an outlier when its standardised value is below -`n_std`
+//! (eddy's defaults: `--ol_nstd=4`, `--ol_nvox=250`, negative deviations only). A mean and
+//! standard deviation would not do: in a session with much motion, the outliers inflate the
+//! standard deviation and hide themselves (Dice 0.40 against eddy on an ADNI3 session, 0.82
+//! with this standardisation).
 //!
 //! The observed and predicted volumes must be on one grid with the acquisition's slices:
 //! a dropout is a property of an acquired slice, so the caller warps each prediction back to
@@ -31,6 +35,11 @@ pub struct Params {
     pub positive: bool,
     /// Also flag slices by the mean squared difference (`--ol_sqr`).
     pub squared: bool,
+    /// Standardise each slice position on its own (within the shell), not the whole shell
+    /// together.
+    pub per_slice_position: bool,
+    /// A slice position with fewer usable volumes in the shell uses the whole shell.
+    pub min_volumes_per_slice: usize,
 }
 
 impl Default for Params {
@@ -40,6 +49,8 @@ impl Default for Params {
             min_voxels: 250,
             positive: false,
             squared: false,
+            per_slice_position: true,
+            min_volumes_per_slice: 10,
         }
     }
 }
@@ -156,6 +167,8 @@ impl OutlierMap {
 
 /// Finds outlier slices. `statistics[v]` holds volume v's `slice_statistics`; `shells[v]` is
 /// its shell (b-value rounded to the shell). Each shell is standardised on its own.
+// The slice position indexes the statistics and all three output maps.
+#[allow(clippy::needless_range_loop)]
 pub fn detect(
     statistics: &[Vec<SliceStatistic>],
     shells: &[f64],
@@ -177,25 +190,64 @@ pub fn detect(
     for shell in distinct {
         let members: Vec<usize> = (0..shells.len()).filter(|&v| shells[v] == shell).collect();
         let used = |v: usize, s: usize| statistics[v][s].voxels >= params.min_voxels;
-        let values = |f: fn(&SliceStatistic) -> f64| -> Vec<f64> {
+        // The statistics of the shell's volumes at the given slices.
+        let values = |f: fn(&SliceStatistic) -> f64, positions: &[usize]| -> Vec<f64> {
             members
                 .iter()
                 .flat_map(|&v| {
-                    (0..slices)
-                        .filter(move |&s| used(v, s))
-                        .map(move |s| f(&statistics[v][s]))
+                    positions
+                        .iter()
+                        .filter(move |&&s| used(v, s))
+                        .map(move |&s| f(&statistics[v][s]))
                 })
                 .collect()
         };
-        let (mean_m, sd_m) = mean_sd(&values(|x| x.mean));
-        let (mean_q, sd_q) = mean_sd(&values(|x| x.mean_square));
-        for &v in &members {
-            for (s, stat) in statistics[v].iter().enumerate() {
-                if stat.voxels < params.min_voxels {
+        let all: Vec<usize> = (0..slices).collect();
+        let shell_m = median_mad(&values(|x| x.mean, &all));
+        let shell_q = median_mad(&values(|x| x.mean_square, &all));
+        // A shell with too few volumes for a spread per slice position still gets a centre
+        // per position (a median of a few values is sound; the prediction error of a slice
+        // position near the skull base is systematic), with the spread pooled over positions.
+        let centre_at = |f: fn(&SliceStatistic) -> f64, s: usize, fallback: f64| -> f64 {
+            let at = values(f, &[s]);
+            if params.per_slice_position && at.len() >= 3 {
+                median_mad(&at).0
+            } else {
+                fallback
+            }
+        };
+        let pooled = |f: fn(&SliceStatistic) -> f64, fallback: f64| -> f64 {
+            let centred: Vec<f64> = (0..slices)
+                .flat_map(|s| {
+                    let c = centre_at(f, s, fallback);
+                    values(f, &[s]).into_iter().map(move |x| x - c)
+                })
+                .collect();
+            median_mad(&centred).1
+        };
+        let pooled_m = pooled(|x| x.mean, shell_m.0);
+        let pooled_q = pooled(|x| x.mean_square, shell_q.0);
+        for s in 0..slices {
+            let at = values(|x| x.mean, &[s]);
+            let (centre_m, spread_m, centre_q, spread_q) =
+                if params.per_slice_position && at.len() >= params.min_volumes_per_slice {
+                    let (cm, sm) = median_mad(&at);
+                    let (cq, sq) = median_mad(&values(|x| x.mean_square, &[s]));
+                    (cm, sm, cq, sq)
+                } else {
+                    (
+                        centre_at(|x| x.mean, s, shell_m.0),
+                        pooled_m,
+                        centre_at(|x| x.mean_square, s, shell_q.0),
+                        pooled_q,
+                    )
+                };
+            for &v in &members {
+                if !used(v, s) {
                     continue;
                 }
-                let z = (stat.mean - mean_m) / sd_m;
-                let zq = (stat.mean_square - mean_q) / sd_q;
+                let z = (statistics[v][s].mean - centre_m) / spread_m;
+                let zq = (statistics[v][s].mean_square - centre_q) / spread_q;
                 map.n_stdev[v][s] = z;
                 map.n_sqr_stdev[v][s] = zq;
                 map.outlier[v][s] = z < -params.n_std
@@ -207,17 +259,25 @@ pub fn detect(
     Ok(map)
 }
 
-/// Mean and sample standard deviation; a zero spread is reported as NaN so nothing is
-/// flagged.
-fn mean_sd(values: &[f64]) -> (f64, f64) {
-    let n = values.len() as f64;
+/// Median and 1.4826 · median absolute deviation, the standard deviation of a normal
+/// distribution that the outliers do not inflate. A zero spread is reported as NaN so
+/// nothing is flagged.
+fn median_mad(values: &[f64]) -> (f64, f64) {
     if values.len() < 2 {
         return (f64::NAN, f64::NAN);
     }
-    let mean = values.iter().sum::<f64>() / n;
-    let var = values.iter().map(|x| (x - mean) * (x - mean)).sum::<f64>() / (n - 1.0);
-    let sd = var.sqrt();
-    (mean, if sd > 0.0 { sd } else { f64::NAN })
+    let median = |v: &mut Vec<f64>| -> f64 {
+        v.sort_by(f64::total_cmp);
+        let n = v.len();
+        if n % 2 == 1 {
+            v[n / 2]
+        } else {
+            0.5 * (v[n / 2 - 1] + v[n / 2])
+        }
+    };
+    let centre = median(&mut values.to_vec());
+    let spread = 1.4826 * median(&mut values.iter().map(|x| (x - centre).abs()).collect());
+    (centre, if spread > 0.0 { spread } else { f64::NAN })
 }
 
 /// Replaces the brain voxels of the flagged slices of one volume with the prediction.
