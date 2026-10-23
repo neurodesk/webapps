@@ -87,23 +87,25 @@ const shownB = (b) => Math.round(b / 50) * 50;
 /**
  * The lines that describe the input under the file picker: the file, the volumes and shells,
  * the acquisition (multiband and slice timing only when present), and the field source.
+ * `entered` holds the phase encoding and readout given in the fields when the sidecar lacks them.
  */
-export function inputSummary({ name, series, reverse = null, field = null }) {
+export function inputSummary({ name, series, reverse = null, field = null, entered = {} }) {
   // Non-breaking spaces inside an item, so that a narrow sidebar wraps only between items.
   const nb = (text) => text.replaceAll(" ", "\u00a0");
   const shells = series.shelled
-    ? series.shells.map(({ b, count }) => nb(`b${shownB(b)} ×${count}`))
+    ? series.shells.map(({ b, count }) => `b${shownB(b)}×${count}`)
     : [nb(`${series.dwi} DWI, b ${shownB(series.bRange[0])}–${shownB(series.bRange[1])}`)];
+  const pe = series.phaseEncodingDirection ?? entered.pe;
+  const readout = series.totalReadoutTime ?? entered.readout;
+  const given = !series.phaseEncodingDirection || !series.totalReadoutTime ? " (set below)" : "";
   const acquisition = [
-    series.phaseEncodingDirection
-      ? `PE ${series.phaseEncodingDirection}${series.totalReadoutTime ? `, ${Math.round(series.totalReadoutTime * 1000)} ms readout` : ""}`
-      : "PE: not in sidecar",
+    pe ? `PE ${pe}${readout > 0 ? `, ${Math.round(readout * 1000)} ms readout` : ""}${given}` : "PE: not in sidecar",
     ...(series.multiband > 1 ? [`multiband ${series.multiband}`] : []),
     ...(series.sliceTiming ? ["slice timing"] : []),
   ];
   return [
     name,
-    `${series.volumes} volumes: ${[nb(`${series.b0} b0`), ...shells].join(" · ")}`,
+    `${series.volumes} vol: ${[nb(`${series.b0} b0`), ...shells].join(" · ")}`,
     acquisition.join(" · "),
     ...(field ? [`Field map: ${field}`] : reverse ? [`Reverse-PE b0: ${reverse}`] : []),
   ];

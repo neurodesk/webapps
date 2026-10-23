@@ -37,7 +37,7 @@ import {
   shorelineArgs,
 } from "./pipeline.js";
 import { renderMotionReport } from "./report.js";
-import { axialSlices } from "./frames.js";
+import { axialSlices, previewSlice } from "./frames.js";
 import { beforeAfterGif, previewVolumes } from "./before-after-gif.js";
 import "./style.css";
 import { correctSeries, estimateField } from "./workers.js";
@@ -288,7 +288,8 @@ async function loadFiles(filesPromise, signal) {
       throw new Error(`This series needs about ${gb(estimateMemory(size))} GB, more than WebAssembly's ${gb(MEMORY_LIMIT)} GB. Use the native shoreline command line (exes/dwi/shoreline).`);
     }
     const meanB0 = meanOf(frames.data, voxels, frames.frames, bvals);
-    const beforeSlices = axialSlices(frames.data, frames.dims, frames.frames);
+    const sliceZ = previewSlice(meanB0, frames.dims);
+    const beforeSlices = axialSlices(frames.data, frames.dims, frames.frames, sliceZ);
     const sizes = voxelSizes(frames.header.affine);
     const first = frames.data.subarray(0, voxels);
     let reverse = null;
@@ -310,6 +311,7 @@ async function loadFiles(filesPromise, signal) {
       bvecText,
       bvals,
       beforeSlices,
+      sliceZ,
       aspect: sizes[1] / sizes[0],
       sidecar,
       series,
@@ -354,11 +356,15 @@ function applyDefaults() {
   $("iterations").value = String(settings.iterations.value);
   const missingPe = !input.series.phaseEncodingDirection;
   const missingReadout = input.series.totalReadoutTime === null;
+  $("phaseEncodingField").hidden = !missingPe;
+  $("readoutField").hidden = !missingReadout;
   $("acquisitionFields").hidden = !missingPe && !missingReadout;
 }
 
 function renderInput() {
-  const lines = inputSummary({ name: input.name, series: input.series, reverse: input.reverse?.name, field: input.field?.name });
+  const entered = { pe: $("phaseEncoding").value, readout: Number($("readoutTime").value) };
+  const lines = inputSummary({ name: input.name, series: input.series, reverse: input.reverse?.name, field: input.field?.name, entered });
+  $("inputInfo").hidden = false;
   ["fileInfo", "seriesInfo", "acquisitionInfo", "fieldInfo"].forEach((id, k) => {
     $(id).hidden = !lines[k];
     $(id).textContent = lines[k] ?? "";
@@ -502,7 +508,7 @@ async function correct(signal) {
     const corrected = readNiftiFrames(await decodeNiftiBuffer(await rows.dwi.file.arrayBuffer()));
     const gif = beforeAfterGif({
       before: input.beforeSlices,
-      after: axialSlices(corrected.data, corrected.dims, corrected.frames),
+      after: axialSlices(corrected.data, corrected.dims, corrected.frames, input.sliceZ),
       dims: input.dims,
       aspect: input.aspect,
       volumes: previewVolumes(input.bvals),
@@ -559,6 +565,12 @@ $("imageInput").addEventListener("change", (event) => {
 });
 for (const id of ["fieldSource", "replaceOutliers", "model", "outlierType", "sliceToVolume", "eddyCurrents", "iterations"]) {
   $(id).addEventListener("change", () => clearOutputs());
+}
+for (const id of ["phaseEncoding", "readoutTime"]) {
+  $(id).addEventListener("input", () => {
+    clearOutputs();
+    if (input) renderInput();
+  });
 }
 $("replaceOutliers").addEventListener("change", () => {
   $("outlierType").disabled = !$("replaceOutliers").checked || !input;

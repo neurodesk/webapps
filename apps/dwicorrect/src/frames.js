@@ -1,6 +1,28 @@
 // The before/after preview's frames: one axial slice of every volume, shown with a grey
 // scale that is the same for both images of a volume.
 
+/**
+ * The preview's axial slice: 60 % of the way up the head in the mean b0 (at the lateral
+ * ventricles), the head being the slices with at least a fifth of the largest slice's signal
+ * area. The middle slice of a whole-brain series is lower, at the temporal lobes.
+ */
+export function previewSlice(meanB0, dims) {
+  const [nx, ny, nz] = dims;
+  const plane = nx * ny;
+  const sorted = Float32Array.from(meanB0).filter((x) => x > 0).sort();
+  if (!sorted.length) return Math.floor(nz / 2);
+  const threshold = 0.25 * sorted[Math.floor(0.99 * (sorted.length - 1))];
+  const area = Array.from({ length: nz }, (_, z) => {
+    let n = 0;
+    for (let i = z * plane; i < (z + 1) * plane; i++) if (meanB0[i] > threshold) n++;
+    return n;
+  });
+  const largest = Math.max(...area);
+  const lo = area.findIndex((n) => n >= largest / 5);
+  const hi = area.findLastIndex((n) => n >= largest / 5);
+  return Math.round(lo + 0.6 * (hi - lo));
+}
+
 /** The slice z (default the middle) of every volume of a series (x fastest, volumes last). */
 export function axialSlices(data, dims, frames, z = Math.floor(dims[2] / 2)) {
   const [nx, ny] = dims;

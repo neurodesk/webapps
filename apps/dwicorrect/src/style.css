@@ -1,2 +1,6 @@
 /* The before/after GIF of the Corrected series, in place of the viewer canvas. */
 .dwicorrect-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--nd-color-bg); }
+/* The input description: one line per item, without the section's gap between them. */
+.dwicorrect-info > span { display: block; }
+/* One empty line between the series and the second scan (reverse-PE b0 or field map). */
+.dwicorrect-info > #fieldInfo { margin-top: 1lh; }

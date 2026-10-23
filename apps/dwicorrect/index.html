@@ -16,12 +16,9 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <span>Drop a DWI series with bval, bvec and sidecar, or a BIDS folder</span>
           </label>
-          <p id="fileInfo" class="nd-file-info" hidden></p>
-          <p id="seriesInfo" class="nd-file-info" hidden></p>
-          <p id="acquisitionInfo" class="nd-file-info" hidden></p>
-          <p id="fieldInfo" class="nd-file-info" hidden></p>
+          <p id="inputInfo" class="nd-file-info dwicorrect-info" hidden><span id="fileInfo" hidden></span><span id="seriesInfo" hidden></span><span id="acquisitionInfo" hidden></span><span id="fieldInfo" hidden></span></p>
           <div class="nd-row" id="acquisitionFields" hidden>
-            <div class="nd-field">
+            <div class="nd-field" id="phaseEncodingField">
               <label for="phaseEncoding">Phase encoding
                 <span class="nd-info-icon" tabindex="0" aria-label="About the phase encoding">i<span class="nd-info-tooltip">The sidecar has no PhaseEncodingDirection. Give the series' direction in voxel axes, as BIDS does: j- is posterior to anterior for an axial RAS series.</span></span>
               </label>
@@ -32,7 +29,7 @@
                 <option value="i-">i-</option>
               </select>
             </div>
-            <div class="nd-field">
+            <div class="nd-field" id="readoutField">
               <label for="readoutTime">Readout <small>s</small>
                 <span class="nd-info-icon" tabindex="0" aria-label="About the readout time">i<span class="nd-info-tooltip">The sidecar has no TotalReadoutTime. It scales the eddy-current and susceptibility displacements; 0.05 s is typical.</span></span>
               </label>

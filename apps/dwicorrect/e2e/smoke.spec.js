@@ -44,7 +44,7 @@ test("shared app bar owns information actions and theme", async ({ page }) => {
 test("the series sets the defaults, and each states its rule", async ({ page }) => {
   await loadPhantom(page);
   await expect(page.locator("#fileInfo")).toHaveText("sub-phantom_dwi.nii.gz");
-  await expect(page.locator("#seriesInfo")).toHaveText("102 volumes: 6\u00a0b0 · b1000\u00a0×32 · b2000\u00a0×64");
+  await expect(page.locator("#seriesInfo")).toHaveText("102 vol: 6\u00a0b0 · b1000×32 · b2000×64");
   await expect(page.locator("#acquisitionInfo")).toHaveText("PE j, 50 ms readout");
   await expect(page.locator("#fieldInfo")).toContainText("Reverse-PE b0: sub-phantom_dir-reverse_epi.nii.gz");
   await expect(page.locator("#fieldSource")).toHaveValue("reverse");

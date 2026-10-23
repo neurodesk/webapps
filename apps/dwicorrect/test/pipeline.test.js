@@ -158,6 +158,16 @@ test("animation frames: one slice per volume, one grey scale per pair, anterior 
   assert.equal(pixels[3], 255);
 });
 
+test("the preview slice is 60 % of the way up the head, not the middle of the field of view", async () => {
+  const { previewSlice } = await import("../src/frames.js");
+  // A 4 × 4 × 20 b0 with the head in slices 6 to 14; slices 5 and 15 have too little area.
+  const dims = [4, 4, 20];
+  const mean = new Float32Array(4 * 4 * 20);
+  for (let z = 5; z <= 15; z++) for (let i = 0; i < (z === 5 || z === 15 ? 1 : 16); i++) mean[z * 16 + i] = 100;
+  assert.equal(previewSlice(mean, dims), 11);
+  assert.equal(previewSlice(new Float32Array(4 * 4 * 20), dims), 10);
+});
+
 test("the GIF encoder writes a looping GIF89a with one image per frame", async () => {
   const { encodeGif, lzw } = await import("../src/gif.js");
   const frames = [Uint8Array.from({ length: 12 }, (_, i) => i * 20), new Uint8Array(12).fill(255)];
@@ -189,17 +199,20 @@ test("the input summary: file, volumes and shells, acquisition, field source", a
   });
   assert.deepEqual(inputSummary({ name: "a.nii.gz", series: adni, reverse: "a_rev.nii.gz" }), [
     "a.nii.gz",
-    "127 volumes: 13 b0 · b500 ×6 · b1000 ×48 · b2000 ×60",
+    "127 vol: 13 b0 · b500×6 · b1000×48 · b2000×60",
     "PE j, 63 ms readout · multiband 3 · slice timing",
     "Reverse-PE b0: a_rev.nii.gz",
   ]);
   const clinical = describeSeries({ bvals: [...Array(5).fill(5), ...Array(30).fill(995)], sidecar: { PhaseEncodingDirection: "j-", TotalReadoutTime: 0.05 }, dims: [96, 96, 60] });
-  assert.deepEqual(inputSummary({ name: "dwi.nii.gz", series: clinical }), ["dwi.nii.gz", "35 volumes: 5 b0 · b1000 ×30", "PE j-, 50 ms readout"]);
+  assert.deepEqual(inputSummary({ name: "dwi.nii.gz", series: clinical }), ["dwi.nii.gz", "35 vol: 5 b0 · b1000×30", "PE j-, 50 ms readout"]);
   const dsi = describeSeries({ bvals: [0, ...Array.from({ length: 41 }, (_, k) => 800 + k * 105)], sidecar: {}, dims: [96, 96, 60] });
   assert.deepEqual(inputSummary({ name: "dsi.nii.gz", series: dsi, field: "topup_fieldcoef.nii.gz" }), [
     "dsi.nii.gz",
-    "42 volumes: 1 b0 · 41 DWI, b 800–5000",
+    "42 vol: 1 b0 · 41 DWI, b 800–5000",
     "PE: not in sidecar",
     "Field map: topup_fieldcoef.nii.gz",
   ]);
+  const noReadout = describeSeries({ bvals: [0, ...Array(30).fill(1000)], sidecar: { PhaseEncodingDirection: "j" }, dims: [96, 96, 60] });
+  assert.equal(inputSummary({ name: "x", series: noReadout, entered: { pe: "j-", readout: 0.05 } })[2], "PE j, 50 ms readout (set below)");
+  assert.equal(inputSummary({ name: "x", series: dsi, entered: { pe: "j-", readout: 0.05 } })[2], "PE j-, 50 ms readout (set below)");
 });
