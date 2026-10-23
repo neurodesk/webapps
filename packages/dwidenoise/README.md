@@ -2,6 +2,7 @@
 
 Patch2Self denoising of diffusion MRI (Fadnavis et al. 2020) for the `dwidenoise` web app and its command line.
 The numerical code is the Rust crate [`exes/dwi/denoise`](../../exes/dwi/denoise), a port of DIPY 1.12.1 `patch2self` version 1 (patch radius 0, `model="ols"`), compiled to `src/dwidenoise.wasm`.
+The port does not copy DIPY 1.12.1's `copy_X=False` defect in version 1 ([dipy/dipy#3967](https://github.com/dipy/dipy/issues/3967), fixed by [dipy/dipy#3976](https://github.com/dipy/dipy/pull/3976) and not yet released); see the crate's README.
 It is BSD-3-Clause, as the DIPY source is.
 The crate's README gives the method, the choices and why version 1 is used.
 
