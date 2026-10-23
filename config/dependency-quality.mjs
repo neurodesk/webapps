@@ -58,6 +58,8 @@ export const devRuntimeContracts = [
   ['apps/dicompare/electron/main.ts', 'electron'],
   ['apps/dicompare/electron/preload.ts', 'electron'],
   ['apps/dicompare/electron/main.ts', '@electron-toolkit/utils'],
+  // The node-drivers take the caller's pinned MindGrab; the CLI resolves the one installed beside it.
+  ['packages/node-drivers/bin/brainchop-mindgrab.js', '@brainchop/mindgrab'],
 ];
 
 export const sourceMirrors = {
