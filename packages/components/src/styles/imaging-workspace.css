@@ -1007,7 +1007,7 @@ nd-result-list {
 .dicompare-unchecked-toggle { display: flex; justify-content: space-between; width: 100%; margin-top: var(--nd-space-sm); padding: var(--nd-space-xs) var(--nd-space-sm); color: var(--nd-color-text-muted); background: none; border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font: inherit; font-size: 0.75rem; cursor: pointer; }
 .dicompare-unchecked-toggle:focus-visible { outline: 2px solid var(--nd-color-primary); outline-offset: 1px; }
 .nd-data-table [data-flag] td { font-weight: 600; }
-.nd-data-table .nd-numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.nd-data-table .nd-numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* A report made of stacked sections, each a heading and its table. */
 .nd-report-stack { display: flex; flex-direction: column; gap: var(--nd-space-lg); max-width: 760px; }
 .nd-report-stack section { display: flex; flex-direction: column; gap: var(--nd-space-sm); }

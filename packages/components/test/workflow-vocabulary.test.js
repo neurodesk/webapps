@@ -20,6 +20,12 @@ test('sidebar grids let long result labels shrink within their available width',
   assert.match(css, /\.nd-imaging-controls \.nd-section-content\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 });
 
+test('numeric table cells keep each number on one line and scroll instead', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-data-table \.nd-numeric \{[^}]*white-space: nowrap/);
+  assert.match(css, /\.nd-table-scroll \{[^}]*overflow-x: auto/);
+});
+
 test('createFileField produces the shared scan picker contract', () => {
   const document = dom();
   const field = createFileField({ id: 'imageInput', text: 'Drop NIfTI or DICOM files' }, document);
