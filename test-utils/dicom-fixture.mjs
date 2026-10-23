@@ -2,7 +2,9 @@
 // `patient` adds demographics: { birthDate, sex, age, studyDate } as DICOM DA/CS/AS strings.
 // `fieldStrength` adds MagneticFieldStrength in tesla as a DICOM DS string.
 // `volumes` repeats the slice positions as a time series, one TemporalPositionIdentifier each.
-export function dicomSeries({ series = 1, slices = 4, extension = '.dcm', patient = {}, fieldStrength, volumes = 1 } = {}) {
+// `geometry: false` leaves out ImagePositionPatient and ImageOrientationPatient.
+// `echoTimes` repeats the slice positions once per echo time, in one series.
+export function dicomSeries({ series = 1, slices = 4, extension = '.dcm', patient = {}, fieldStrength, volumes = 1, geometry = true, echoTimes = ['20'] } = {}) {
   const uid = `1.2.826.0.1.3680043.10.543.99.${series}`;
   const us = value => { const b = Buffer.alloc(2); b.writeUInt16LE(value); return b; };
   function tag(group, element, vr, value) {
@@ -14,9 +16,10 @@ export function dicomSeries({ series = 1, slices = 4, extension = '.dcm', patien
     if (long) head.writeUInt32LE(data.length, 8); else head.writeUInt16LE(data.length, 6);
     return Buffer.concat([head, data]);
   }
-  return Array.from({ length: slices * volumes }, (_, image) => {
+  return Array.from({ length: slices * volumes * echoTimes.length }, (_, image) => {
     const slice = image % slices;
-    const volume = Math.floor(image / slices);
+    const volume = Math.floor(image / slices) % volumes;
+    const echo = Math.floor(image / (slices * volumes));
     const pixels = Buffer.alloc(16 * 16 * 2);
     for (let i = 0; i < 256; i++) pixels.writeUInt16LE((slice + 1) * 100 + i, i * 2);
     const instance = `${uid}.${image + 1}`;
@@ -33,11 +36,12 @@ export function dicomSeries({ series = 1, slices = 4, extension = '.dcm', patien
       ...(patient.sex ? [tag(0x10, 0x40, 'CS', patient.sex)] : []),
       ...(patient.age ? [tag(0x10, 0x1010, 'AS', patient.age)] : []),
       tag(0x18, 0x1030, 'LO', `test_scan_${series}`),
-      tag(0x18, 0x50, 'DS', '1'), tag(0x18, 0x80, 'DS', '2000'), tag(0x18, 0x81, 'DS', '20'),
+      tag(0x18, 0x50, 'DS', '1'), tag(0x18, 0x80, 'DS', '2000'), tag(0x18, 0x81, 'DS', echoTimes[echo]),
+      ...(echoTimes.length > 1 ? [tag(0x18, 0x86, 'IS', echo + 1)] : []),
       ...(fieldStrength ? [tag(0x18, 0x87, 'DS', fieldStrength)] : []),
       tag(0x20, 0x0d, 'UI', '1.2.826.0.1.3680043.10.543.99'), tag(0x20, 0x0e, 'UI', uid),
       tag(0x20, 0x11, 'IS', series), tag(0x20, 0x13, 'IS', image + 1),
-      tag(0x20, 0x32, 'DS', `0\\0\\${slice}`), tag(0x20, 0x37, 'DS', '1\\0\\0\\0\\1\\0'),
+      ...(geometry ? [tag(0x20, 0x32, 'DS', `0\\0\\${slice}`), tag(0x20, 0x37, 'DS', '1\\0\\0\\0\\1\\0')] : []),
       ...(volumes > 1 ? [tag(0x20, 0x100, 'IS', volume + 1)] : []),
       tag(0x28, 2, 'US', us(1)), tag(0x28, 4, 'CS', 'MONOCHROME2'),
       tag(0x28, 0x10, 'US', us(16)), tag(0x28, 0x11, 'US', us(16)),

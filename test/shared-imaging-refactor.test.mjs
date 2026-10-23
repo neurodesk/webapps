@@ -168,7 +168,7 @@ test('registry shell metadata drives adapters without app-id branches', async ()
   const build = await source('scripts', 'build-site.mjs');
   assert.match(build, /shell:\s*app\.shell/);
   assert.match(shell, /metadata\.shell/);
-  assert.doesNotMatch(shell, /\b(calmar|dicompare|qsmbly|surfannotate|easy-mp2rage|dicom2vid)\b/);
+  assert.doesNotMatch(shell, /\b(calmar|dicompare|qsmbly|surfannotate|easy-mp2rage|mri2vid)\b/);
   assert.doesNotMatch(theme, /data-neurodesk-app=/);
 });
 

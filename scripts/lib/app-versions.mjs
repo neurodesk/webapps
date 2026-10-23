@@ -20,7 +20,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/degibbs': 'degibbs',
   '@neurodesk/dicompare': 'dicompare',
   '@neurodesk/nii2tvx': 'disconnectome',
-  '@neurodesk/dicom2vid': 'dicom2vid',
+  '@neurodesk/mri2vid': 'mri2vid',
   '@neurodesk/dwi2trx': 'dwi2trx',
   '@neurodesk/dwidenoise': 'dwidenoise',
   '@neurodesk/easy-mp2rage': 'easy-mp2rage',

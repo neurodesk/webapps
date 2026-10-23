@@ -361,7 +361,7 @@ try {
     await expect(page.locator('#downloads a')).toHaveCount(0);
     await expect(page.locator('#run')).toBeDisabled();
   });
-  await check('dicom2vid', async page => {
+  await check('mri2vid', async page => {
     await page.locator('#pickFiles').setInputFiles(nifti('interface-volume.nii'));
     await expect(page.locator('#optionsPanel')).toBeVisible();
     for (const kind of ['About','Privacy']) {

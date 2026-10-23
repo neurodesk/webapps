@@ -103,7 +103,7 @@ positive workflow needs a hardware GPU runner.
 Every app's example was rerun from a fresh production build with hosted bytes on an
 8-core host without a hardware GPU. Selecting the example and running the main
 action with default settings produced sensible output for ants, greedy, edgereg,
-niimath, qsmbly, easy-mp2rage, surfannotate, zarro, vesselboost, dicom2vid,
+niimath, qsmbly, easy-mp2rage, surfannotate, zarro, vesselboost, mri2vid,
 dicompare, spinalcordtoolbox, topofit and calmar. brain-extraction, synthsr and
 syncro (TRACE-only and CT examples) completed on their CPU paths. The rerun found
 and fixed: FireANTs exceeded the engine's 15-minute watchdog on CPU and showed no

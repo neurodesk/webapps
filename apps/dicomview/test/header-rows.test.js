@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import dcmjsDictionary from 'dcmjs/dictionary';
-import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
+import { parseDicomHeader } from '@neurodesk/mri2vid/readers/dicom.js';
 import { arrayBuffer, dicomFile, explicit, implicit, item, uint16 } from '../../../test-utils/dicom-fixture.mjs';
 import { createDictionary, filterRows, headerRows, rowsToCsv, sidecarRows } from '../src/header-rows.js';
 

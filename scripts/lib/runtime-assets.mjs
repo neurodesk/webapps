@@ -122,6 +122,12 @@ async function removeAppCopies(siteDist, registry) {
   }
 }
 
+// Vite names a bundled asset `<name>-<8-character hash>.<ext>`; a static app ships
+// the same bytes as `<name>.<ext>`. The checksum, not the name, proves identity.
+function unhashedName(file) {
+  return basename(file).replace(/-[\w-]{8}(?=\.[^.]+$)/, '');
+}
+
 // Runtime binaries can move to the shared store independently of their worker
 // modules. Worker families retain their app scope policy and cannot opt in.
 async function deduplicateSources({ manifest, files, siteDist, registry }) {
@@ -130,7 +136,7 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
       const targetPath = join(siteDist, '_runtime', family.target, asset.name);
       for (const app of registry.apps) {
         const appFiles = files.filter(file => file.startsWith(join(siteDist, app.path) + sep));
-        const copies = appFiles.filter(file => basename(file) === basename(asset.source));
+        const copies = appFiles.filter(file => unhashedName(file) === unhashedName(asset.source));
         if (!copies.length) continue;
         if (app.app_scoped_runtime_families?.includes(family.id)) throw new Error(`Cannot deduplicate scoped runtime ${family.id}`);
         for (const sourcePath of copies) {

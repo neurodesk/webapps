@@ -11,7 +11,7 @@ import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 import { startReferenceServer } from '../../test-utils/compute-reference-server.mjs';
 
-export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview', 'fastprep', 'noddi', 'degibbs', 'n4', 'dcm2niix', 'dwidenoise', 'sdc', 'me-ica'];
+export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'mri2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview', 'fastprep', 'noddi', 'degibbs', 'n4', 'dcm2niix', 'dwidenoise', 'sdc', 'me-ica'];
 
 /**
  * Anything a workflow needs before the desktop app starts. NeSVoR computes on a
@@ -304,7 +304,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     assert.equal(result.max, 100);
     return result;
   }
-  if (id === 'dicom2vid') {
+  if (id === 'mri2vid') {
     await page.locator('#pickFiles').setInputFiles(fixture);
     await expect(page.locator('#generate')).toBeEnabled({ timeout: 60000 });
     await page.locator('#generate').click();

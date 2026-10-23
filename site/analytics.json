@@ -91,8 +91,8 @@
       "countries": []
     },
     {
-      "id": "dicom2vid",
-      "path": "dicom2vid",
+      "id": "mri2vid",
+      "path": "mri2vid",
       "title": "MRI2VID",
       "users": 0,
       "pageViews": 0,

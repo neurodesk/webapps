@@ -121,10 +121,11 @@ test('composite JPEG DICOM workers use one pinned WASM without moving the worker
     for (const copy of copies) await assert.rejects(access(join(dist, app.path, copy)), { code: 'ENOENT' });
     const workers = standalone.filter(file => /(?:^|\/)worker\.jpeg[^/]*\.js$/.test(file));
     assert.ok(workers.length, `${app.id}: JPEG worker must remain app-local`);
-    for (const worker of workers) {
-      const source = await readFile(join(dist, app.path, worker), 'utf8');
-      assert.match(source, /_runtime\/dcm2niix-jpeg\/1\.2\.0\/dcm2niix\.jpeg\.wasm/);
-    }
+    // A bundled worker inlines the Emscripten glue; a static app keeps it beside the worker.
+    const modules = standalone.filter(file => /(?:^|\/)(?:worker|dcm2niix)\.jpeg[^/]*\.js$/.test(file));
+    const sources = await Promise.all(modules.map(file => readFile(join(dist, app.path, file), 'utf8')));
+    assert.ok(sources.some(source => /_runtime\/dcm2niix-jpeg\/1\.2\.0\/dcm2niix\.jpeg\.wasm/.test(source)),
+      `${app.id}: JPEG worker must load the shared WASM`);
   }
   assert.ok(consumers > 1, 'multiple app consumers must share the JPEG runtime');
 });

@@ -603,16 +603,22 @@ apps:
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
 
-  dicom2vid:
+  mri2vid:
     builders: MRI2VID was written by Thomas Shaw (University of Queensland), based on Ashley Stewart's QSMbly.
     packages:
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer and frame rendering }
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM decoding, compressed and Siemens mosaic included }
       - { name: mp4-muxer and webm-muxer, url: https://github.com/Vanilagy/mp4-muxer, role: video encoding through WebCodecs }
     citations:
       - group: DICOM reading
         title: DICOM standard
         reference: "Mildenberger P, Eichelberg M, Martin E. Introduction to the DICOM standard. European Radiology. 2002;12(4):920–927."
         doi: 10.1007/s003300101100
+      - group: DICOM reading
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
       - group: Video encoding
         title: mp4-muxer
         reference: "Vanilagy. mp4-muxer and webm-muxer: MP4 and WebM multiplexers for the browser [Computer software]."

@@ -12,8 +12,8 @@ CharLS — BSD-3-Clause, text below — https://github.com/team-charls/charls
 miniz — public domain (Unlicense) — https://github.com/richgel999/miniz
 nifti1_io — public domain — https://nifti.nimh.nih.gov
 fflate 0.8.2 — MIT, Copyright (c) 2023 Arjun Barrett — https://github.com/101arrowz/fflate
-@neurodesk/dicom2vid DICOM reader — BSD-3-Clause, Copyright (c) 2023 Thom Shaw
-  (packages/dicom2vid/LICENSE)
+@neurodesk/mri2vid DICOM reader — BSD-3-Clause, Copyright (c) 2023 Thom Shaw
+  (packages/mri2vid/LICENSE)
 
 Example data: series VS-SEG-001 of Vestibular-Schwannoma-SEG, The Cancer Imaging
 Archive, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), unchanged.

@@ -697,7 +697,7 @@
         }
       ]
     },
-    "dicom2vid": {
+    "mri2vid": {
       "desktop": true,
       "profile": "batch",
       "assets": [],

@@ -17,7 +17,7 @@ import { handoffTargets, sendHandoff } from '@neurodesk/webapp-components/handof
 import { readImageSeries } from '@neurodesk/runtime-support/dcm2niix-client';
 import { mountViewer } from '@neurodesk/runtime-support/freebrowse-viewer';
 import { SHOW_RENDER } from '@niivue/niivue';
-import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
+import { parseDicomHeader } from '@neurodesk/mri2vid/readers/dicom.js';
 import { APP } from './config.js';
 import { ConversionStore } from './conversions.js';
 import { frameImages } from './frame-images.js';

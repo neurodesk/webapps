@@ -18,7 +18,7 @@ the fork ratchet in `test/component-forks.test.mjs` lists which of those are for
 | deface |  | ✓ |  |  |  | ✓ |  |  |  | ✓ |  | ✓ |  |  |  |
 | easy-mp2rage |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | niimath |  | ✓ |  |  |  | ✓ |  |  |  | ✓ |  | ✓ |  |  |  |
-| dicom2vid |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| mri2vid |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | browserqc |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  |  |
 | surfannotate |  | ✓ |  |  |  | ✓ |  |  |  | ✓ |  | ✓ |  |  |  |
 | zarro |  | ✓ |  |  |  | ✓ | ✓ |  |  | ✓ |  | ✓ |  |  |  |

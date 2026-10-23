@@ -23,13 +23,13 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/me-ica`: LGPL-2.1-only, as the `@niivue/meica` package it ships (LGPL-2.1-only, from
   https://github.com/niivue/meica-rs; a port of tedana, LGPL-2.1, and mapca and GIFT, GPL-2.0,
   whose developers permitted the LGPL-2.1)
-- `apps/dicom2vid`: BSD-3-Clause (`apps/dicom2vid/LICENSE`)
-- `packages/dicom2vid`: BSD-3-Clause (`packages/dicom2vid/LICENSE`); the shared
-  dicom2vid pipeline and its command line. The vendored muxers are MIT and the
+- `apps/mri2vid`: BSD-3-Clause (`apps/mri2vid/LICENSE`)
+- `packages/mri2vid`: BSD-3-Clause (`packages/mri2vid/LICENSE`); the shared
+  mri2vid pipeline and its command line. The vendored muxers are MIT and the
   label font is public domain. The command line's VP9 encoder,
   `@libav.js/variant-vp9-opus`, is FFmpeg (LGPL-2.1-or-later) with libvpx and
   Opus (BSD-3-Clause), shipped unmodified as a separate replaceable module
-  (`packages/dicom2vid/NOTICE`).
+  (`packages/mri2vid/NOTICE`).
 - `apps/dcm2niix`: MIT (`apps/dcm2niix/LICENSE`); it runs the dcm2niix
   WebAssembly build (BSD, with OpenJPEG and CharLS) and its example is CC BY 4.0
   TCIA data. Notices are in `apps/dcm2niix/NOTICE`.

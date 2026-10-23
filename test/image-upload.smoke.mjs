@@ -95,7 +95,7 @@ const checks = [
     await expect(page.locator('#log')).toContainText('one series at a time');
     await expect(page.locator('#filetable tbody tr')).toHaveCount(1);
   }],
-  ['dicom2vid', '#pickFiles', async page => expect(page.locator('#optionsPanel')).toBeVisible()],
+  ['mri2vid', '#pickFiles', async page => expect(page.locator('#optionsPanel')).toBeVisible()],
 ];
 try {
   for (const [id, selector, verify] of checks) {

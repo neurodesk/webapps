@@ -136,7 +136,7 @@ an inventory of every non-production import:
 | `packages/synthstrip`, `apps/synthsr` | `onnxruntime-node` | numerical tests that loaded SynthSR's copy |
 | `packages/{calmar,seedseg,syncro,topofit,vesselboost}` | `@playwright/test` | browser reference scripts; SYNcro's benchmark loaded `apps/syncro`'s copy |
 | `apps/browserqc` | `@playwright/test`, `jsdom` | e2e specs, `test/rate.test.mjs` |
-| `apps/{deface,dicom2vid,easy-mp2rage,niimath}` | `@playwright/test` | e2e specs and config |
+| `apps/{deface,mri2vid,easy-mp2rage,niimath}` | `@playwright/test` | e2e specs and config |
 | `apps/{qsmbly,seedseg,dicompare}` | `@playwright/test` (and `yaml` for QSMbly) | e2e specs and config; kept as an adaptation in `upstream.json` |
 | `apps/white-matter-lesions` | `playwright` | `validation/browser-memory.mjs` |
 

@@ -291,8 +291,8 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
-  - id: dicom2vid
-    path: dicom2vid
+  - id: mri2vid
+    path: mri2vid
     title: MRI2VID
     description: Convert DICOM, NIfTI or MGZ volumes into scrolling videos.
     categories: [visualization]

@@ -58,7 +58,7 @@ changing them is per-app work. Proposals:
 | brain-extraction | Brain extraction | Brain Extraction | Title Case like most titles |
 | white-matter-lesions | White matter lesions | White Matter Lesions | Same |
 | easy-mp2rage | Easy MP2RAGE T1 Map | Easy MP2RAGE | The app also makes B1 maps and denoised UNI images |
-| dicom2vid | MRI2VID | keep, or rename id | The id and the title differ; the app also accepts CT |
+| mri2vid | MRI2VID | renamed from `dicom2vid` (#387) | The id now matches the title; the app also accepts CT |
 
 Lower-case upstream names (dicompare, dwi2trx, elastix, fastprep) stay as their
 projects write them.
