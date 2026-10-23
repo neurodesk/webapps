@@ -137,7 +137,8 @@ jobs:
             ~/.cargo/git/db
             apps/${{ matrix.app }}/**/target
             exes/greedy/target
-          key: rust-wasm-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('apps/{0}/**/Cargo.lock', matrix.app), 'exes/greedy/Cargo.lock') }}
+            exes/dwi/target
+          key: rust-wasm-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('apps/{0}/**/Cargo.lock', matrix.app), 'exes/greedy/Cargo.lock', 'exes/dwi/Cargo.lock') }}
           restore-keys: rust-wasm-${{ matrix.app }}-${{ runner.os }}-
       - uses: actions/setup-python@v7
         if: matrix.python_reference
@@ -302,7 +303,8 @@ jobs:
             ~/.cargo/git/db
             apps/${{ matrix.app }}/**/target
             exes/greedy/target
-          key: rust-wasm-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('apps/{0}/**/Cargo.lock', matrix.app), 'exes/greedy/Cargo.lock') }}
+            exes/dwi/target
+          key: rust-wasm-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('apps/{0}/**/Cargo.lock', matrix.app), 'exes/greedy/Cargo.lock', 'exes/dwi/Cargo.lock') }}
           restore-keys: rust-wasm-${{ matrix.app }}-${{ runner.os }}-
       - uses: actions/setup-python@v7
         if: matrix.python_reference
@@ -382,7 +384,8 @@ jobs:
             ~/.cargo/git/db
             apps/${{ matrix.app }}/**/target
             exes/greedy/target
-          key: rust-wasm-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('apps/{0}/**/Cargo.lock', matrix.app), 'exes/greedy/Cargo.lock') }}
+            exes/dwi/target
+          key: rust-wasm-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('apps/{0}/**/Cargo.lock', matrix.app), 'exes/greedy/Cargo.lock', 'exes/dwi/Cargo.lock') }}
           restore-keys: rust-wasm-${{ matrix.app }}-${{ runner.os }}-
       - uses: actions/setup-python@v7
         if: matrix.python_reference
