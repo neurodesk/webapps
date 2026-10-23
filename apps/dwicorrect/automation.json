@@ -86,6 +86,12 @@
           "minimum": 0,
           "maximum": 1
         },
+        "fieldSidecar": {
+          "type": "neuro:metadata",
+          "mediaType": "application/json",
+          "minimum": 0,
+          "maximum": 1
+        },
         "log": {
           "type": "neuro:metadata",
           "mediaType": "text/plain",
