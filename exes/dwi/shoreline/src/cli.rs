@@ -99,11 +99,29 @@ fn numbers(files: &dyn Files, path: &str) -> Result<Vec<Vec<f64>>, String> {
             l.split_whitespace()
                 .map(|v| {
                     v.parse::<f64>()
-                        .map_err(|_| format!("{path}: '{v}' is not a number"))
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .ok_or_else(|| format!("{path}: '{v}' is not a number"))
                 })
                 .collect()
         })
         .collect()
+}
+
+/// One direction per volume from the rows of a bvecs file: 3 rows of `nv` values (FSL's
+/// layout) or `nv` rows of 3.
+fn directions(rows: &[Vec<f64>], nv: usize, path: &str) -> Result<Vec<[f64; 3]>, String> {
+    if rows.len() == 3 && rows.iter().all(|r| r.len() == nv) {
+        Ok((0..nv)
+            .map(|i| [rows[0][i], rows[1][i], rows[2][i]])
+            .collect())
+    } else if rows.len() == nv && rows.iter().all(|r| r.len() == 3) {
+        Ok(rows.iter().map(|r| [r[0], r[1], r[2]]).collect())
+    } else {
+        Err(format!(
+            "{path}: expected 3 rows of {nv} values or {nv} rows of 3, one direction per volume"
+        ))
+    }
 }
 
 fn correct(
@@ -148,14 +166,8 @@ fn correct(
     let mask: Vec<bool> = mask_image.data.iter().map(|&m| m > 0.0).collect();
     let bvals: Vec<f64> = numbers(&*files, &get("bvals")?)?.concat();
     let bvals_in = bvals.clone();
-    let rows = numbers(&*files, &get("bvecs")?)?;
-    let bvecs: Vec<[f64; 3]> = if rows.len() == 3 {
-        (0..rows[0].len())
-            .map(|i| [rows[0][i], rows[1][i], rows[2][i]])
-            .collect()
-    } else {
-        rows.iter().map(|r| [r[0], r[1], r[2]]).collect()
-    };
+    let bvecs_path = get("bvecs")?;
+    let bvecs = directions(&numbers(&*files, &bvecs_path)?, nv, &bvecs_path)?;
     let flip = dwi_pe_field::fsl_flips_x(&image.affine);
     let acqp = text(&*files, &get("acqp")?)?;
     let acqp: Vec<&str> = acqp.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -198,11 +210,10 @@ fn correct(
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    if bvals.len() != nv || bvecs.len() != nv || acquisitions.len() != nv {
+    if bvals.len() != nv || acquisitions.len() != nv {
         return Err(format!(
-            "{nv} volumes, but {} b-values, {} directions, {} indices",
+            "{nv} volumes, but {} b-values, {} indices",
             bvals.len(),
-            bvecs.len(),
             index.len()
         ));
     }
@@ -787,4 +798,124 @@ fn slice_times(
 
 fn write(files: &mut dyn Files, path: &str, s: &str) -> Result<(), String> {
     files.write(path, s.as_bytes().to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct Memory(HashMap<String, Vec<u8>>);
+
+    impl Files for Memory {
+        fn read(&self, path: &str) -> Result<Vec<u8>, String> {
+            self.0
+                .get(path)
+                .cloned()
+                .ok_or_else(|| format!("{path}: no such file"))
+        }
+
+        fn write(&mut self, path: &str, bytes: Vec<u8>) -> Result<(), String> {
+            self.0.insert(path.to_string(), bytes);
+            Ok(())
+        }
+    }
+
+    /// A 4 × 4 × 4 series of four volumes with its mask, acqp and index, and the gradient
+    /// files given.
+    fn inputs(bvals: &str, bvecs: &str) -> Memory {
+        let mut header = vec![0u8; 348];
+        header[0..4].copy_from_slice(&348i32.to_le_bytes());
+        for (i, p) in [1.0f32, 2.0, 2.0, 2.0].iter().enumerate() {
+            header[76 + 4 * i..80 + 4 * i].copy_from_slice(&p.to_le_bytes());
+        }
+        header[344..348].copy_from_slice(b"n+1\0");
+        let like = nifti::Image {
+            header,
+            dims: vec![4, 4, 4],
+            pixdim: [2.0; 3],
+            affine: [[0.0; 4]; 4],
+            intent_code: 0,
+            data: Vec::new(),
+        };
+        let volume = vec![100.0f32; 64];
+        let series = [volume.as_slice(); 4];
+        let mut files = Memory::default();
+        let mut add = |name: &str, bytes: Vec<u8>| files.0.insert(name.to_string(), bytes);
+        add(
+            "dwi.nii",
+            nifti::encode_series("dwi.nii", &like, &[4, 4, 4, 4], &series).unwrap(),
+        );
+        add(
+            "mask.nii",
+            nifti::encode_series("mask.nii", &like, &[4, 4, 4], &[&[1.0; 64]]).unwrap(),
+        );
+        add("acqp", b"0 1 0 0.05\n".to_vec());
+        add("index", b"1 1 1 1\n".to_vec());
+        add("bvals", bvals.as_bytes().to_vec());
+        add("bvecs", bvecs.as_bytes().to_vec());
+        files
+    }
+
+    #[test]
+    fn bvecs_in_either_layout_give_one_direction_per_volume() {
+        let expected = vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 0.6, 0.8],
+            [0.0, 0.0, 1.0],
+        ];
+        let by_volume: Vec<Vec<f64>> = expected.iter().map(|g| g.to_vec()).collect();
+        let fsl: Vec<Vec<f64>> = (0..3)
+            .map(|c| expected.iter().map(|g| g[c]).collect())
+            .collect();
+        assert_eq!(directions(&fsl, 4, "bvecs").unwrap(), expected);
+        assert_eq!(directions(&by_volume, 4, "bvecs").unwrap(), expected);
+        // A square table is FSL's layout: its rows are x, y and z.
+        let square = vec![
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 0.6],
+            vec![0.0, 0.0, 0.8],
+        ];
+        assert_eq!(directions(&square, 3, "bvecs").unwrap(), expected[..3]);
+    }
+
+    #[test]
+    fn malformed_gradient_files_are_input_errors() {
+        let bvals = "0 1000 1000 1000\n";
+        let fsl = "0 1 0 0\n0 0 1 0\n0 0 0 1\n";
+        let expected_table = "bvecs: expected 3 rows of 4 values or 4 rows of 3";
+        for (bvals, bvecs, expected) in [
+            (bvals, "0 1 0 0\n0 0 1\n0 0 0 1\n", expected_table),
+            (bvals, "0 0 0\n1 0 0\n0 1\n0 0 1\n", expected_table),
+            (
+                bvals,
+                "0 0 0 0\n1 0 0 0\n0 1 0 0\n0 0 1 0\n",
+                expected_table,
+            ),
+            (bvals, "0 1 0 0\n0 0 1 0\n", expected_table),
+            (
+                bvals,
+                "0 1 0 0\n0 0 nan 0\n0 0 0 1\n",
+                "bvecs: 'nan' is not a number",
+            ),
+            ("0 1000 inf 1000\n", fsl, "bvals: 'inf' is not a number"),
+        ] {
+            let mut files = inputs(bvals, bvecs);
+            let argv: Vec<String> = [
+                "--imain=dwi.nii",
+                "--mask=mask.nii",
+                "--acqp=acqp",
+                "--index=index",
+                "--bvecs=bvecs",
+                "--bvals=bvals",
+                "--out=out",
+            ]
+            .map(String::from)
+            .to_vec();
+            let error = run(&argv, &mut files, &mut |_| {}).unwrap_err();
+            assert!(error.starts_with(expected), "{bvecs:?}: {error}");
+            assert!(files.0.contains_key("out.log"), "{bvecs:?}: no log");
+        }
+    }
 }
