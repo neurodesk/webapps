@@ -138,7 +138,7 @@ test("the displacement chart uses the shared chart classes and marks volumes wit
     { volume: 1, rms: 1.2, rmsPrevious: 1.2, outlierSlices: [4] },
     { volume: 2, rms: 0.8, rmsPrevious: 0.4, outlierSlices: [] },
   ]);
-  assert.match(svg, /class="nd-chart"/);
+  assert.match(svg, /<svg xmlns="http:\/\/www.w3.org\/2000\/svg" class="nd-chart"/);
   assert.equal((svg.match(/nd-chart-marker/g) || []).length, 1);
   assert.match(svg, /nd-chart-median/);
   assert.doesNotMatch(svg, /#[0-9a-f]{3,6}\b|style=/i);

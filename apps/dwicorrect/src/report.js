@@ -17,7 +17,7 @@ export function displacementChart(summary) {
   const x = (v) => round(MARGIN.left + ((right - MARGIN.left) * v) / Math.max(1, n - 1));
   const y = (mm) => round(bottom - ((bottom - MARGIN.top) * mm) / ceiling);
   const line = (key) => summary.filter((row) => Number.isFinite(row[key])).map((row) => `${x(row.volume)},${y(row[key])}`).join(" ");
-  const parts = [`<svg class="nd-chart" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="RMS displacement per volume">`];
+  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" class="nd-chart" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="RMS displacement per volume">`];
   for (let value = 0; value <= ceiling + 1e-9; value += scale) {
     parts.push(`<line class="nd-chart-gridline" x1="${MARGIN.left}" x2="${right}" y1="${y(value)}" y2="${y(value)}"/>`);
     parts.push(`<text x="${MARGIN.left - 4}" y="${y(value) + 3}" text-anchor="end">${Number(value.toFixed(2))}</text>`);

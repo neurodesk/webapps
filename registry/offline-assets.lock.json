@@ -3552,6 +3552,48 @@
       "contentType": "application/gzip",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dwi.nii.gz": {
+      "sha256": "67c8611d2113b5b8d61754dec4622160b6ad44b10db87c13d62ba2203284761e",
+      "bytes": 6420100,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dwi.bval": {
+      "sha256": "49e782032f6f4ff8c7d6a833944e4a12b34a29135c5c673d801511ae007920cd",
+      "bytes": 492,
+      "contentType": "text/plain",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dwi.bvec": {
+      "sha256": "487033f74aaaa6372ca297f2fbb2571238124cf715f5f65f9bb7434afaa6fd33",
+      "bytes": 4709,
+      "contentType": "text/plain",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dwi.json": {
+      "sha256": "1a72ee2d51dbc42cb5f20eb901d9cd2ce607b869dd5754cb15bf177bfbb773e4",
+      "bytes": 64,
+      "contentType": "application/json",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dir-reverse_epi.nii.gz": {
+      "sha256": "1c1cb92e5f47cc463d5822fcaaa46c9f394e5722c5a385fb550605f295f921fc",
+      "bytes": 63370,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dir-reverse_epi.json": {
+      "sha256": "ccff1b1381e66118f18a4adc06fda7fdf39e0a5ddbf6b54c722cec07449ce62b",
+      "bytes": 65,
+      "contentType": "application/json",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
