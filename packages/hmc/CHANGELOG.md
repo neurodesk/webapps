@@ -1,5 +1,12 @@
 # @neurodesk/hmc
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [3fc9cf2]
+  - @neurodesk/webapp-components@0.19.1
+
 ## 0.2.0
 
 ### Minor Changes

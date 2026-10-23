@@ -6,7 +6,7 @@
  */
 
 // Application version. `pnpm release` writes the date version (scripts/lib/app-versions.mjs).
-export const VERSION = '0.31.20261022';
+export const VERSION = '0.31.20261023';
 
 // Where deep-learning model weights are fetched from in the browser. The qsm-core model
 // registry points at OSF, which does NOT send CORS headers, so a browser fetch from it

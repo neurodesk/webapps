@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/browserqc",
-  "version": "1.6.20261022",
+  "version": "1.6.20261023",
   "description": "BrowserQC MRI quality control (MindGrab segmentation and niimath QC metrics) for browsers and the command line",
   "type": "module",
   "license": "BSD-2-Clause",

@@ -41,7 +41,7 @@ async function modelBytes(model) {
 
 self.onmessage = async ({ data: job }) => {
   try {
-    const runtime = { app: 'SynthSR web 0.6.20261022', ...browserRuntime(job.options.backend) };
+    const runtime = { app: 'SynthSR web 0.6.20261023', ...browserRuntime(job.options.backend) };
     const { buffer, provenance } = await runSynthsr({
       buffer: await job.file.arrayBuffer(),
       options: job.options,

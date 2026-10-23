@@ -1,5 +1,12 @@
 # @neurodesk/white-matter-lesions
 
+## 0.5.20261023
+
+### Patch Changes
+
+- @neurodesk/synthsr@0.6.20261023
+- @neurodesk/synthstrip@0.2.0
+
 ## 0.5.20261022
 
 ### Patch Changes
@@ -7,6 +14,7 @@
 - 330f5b3: Keep the exact NiiVue rc.33 release-age exception effective by removing its obsolete rc.14 exception. Frozen installs can use the reviewed rc.33 build immediately without relaxing the age policy for other versions.
 
   Reject duplicate exact package names in the release-age exclusions, which pnpm evaluates using the first match. Keep exact version unions and distinct package patterns valid, and remove the obsolete shadowing niimath exception.
+
 - @neurodesk/synthsr@0.6.20261022
 - @neurodesk/synthstrip@0.2.0
 

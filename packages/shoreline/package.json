@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/shoreline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Eddy-like correction of diffusion MRI (motion, eddy currents, susceptibility, slice outliers) in WebAssembly",
   "type": "module",
   "license": "Apache-2.0 AND BSD-3-Clause",

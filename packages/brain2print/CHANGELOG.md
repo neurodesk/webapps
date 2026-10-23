@@ -1,5 +1,12 @@
 # @neurodesk/brain2print
 
+## 0.5.20261023
+
+### Patch Changes
+
+- Updated dependencies [3fc9cf2]
+  - @neurodesk/webapp-components@0.19.1
+
 ## 0.5.20261022
 
 ### Patch Changes

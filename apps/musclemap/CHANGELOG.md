@@ -1,5 +1,13 @@
 # musclemap
 
+## 1.5.20261023
+
+### Patch Changes
+
+- Updated dependencies [3fc9cf2]
+  - @neurodesk/webapp-components@0.19.1
+  - @neurodesk/musclemap@1.5.20261023
+
 ## 1.5.20261022
 
 ### Patch Changes
