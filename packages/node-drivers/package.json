@@ -8,14 +8,19 @@
   "engines": {
     "node": ">=22"
   },
+  "bin": {
+    "brainchop-mindgrab": "./bin/brainchop-mindgrab.js"
+  },
   "exports": {
     "./niimath": "./src/niimath.js",
     "./mindgrab": "./src/mindgrab.js",
     "./dcm2niix": "./src/dcm2niix.js"
   },
   "files": [
+    "bin",
     "src",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "test": "node --test test/*.test.js",

@@ -7,6 +7,7 @@ for each app are recorded in `registry/apps.yml`.
 - `packages/calmar`: source licence unresolved, preserving CALMAR `NOASSERTION` as
   npm `UNLICENSED` (`packages/calmar/LICENSE`, `packages/calmar/NOTICE`).
 - `packages/components`: MIT (`packages/components/LICENSE`)
+- `packages/node-drivers`: MIT (`packages/node-drivers/LICENSE`); Node drivers and the `brainchop-mindgrab` command line
 - `apps/musclemap`: MIT (`apps/musclemap/web/LICENSE`)
 - `apps/qsmbly`: MIT (`apps/qsmbly/LICENSE`)
 - `packages/qsmbly`: GPL-3.0-only (`packages/qsmbly/LICENSE`, `packages/qsmbly/NOTICE`); its
