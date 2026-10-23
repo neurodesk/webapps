@@ -7,9 +7,12 @@
 //!
 //! - NIfTI `intent_code` 2016 ("FSL topup cubic spline"); `pixdim` 1-3 are the knot spacing in
 //!   voxels of the image grid topup ran on, and `intent_p1-3` that grid's voxel size in mm.
-//! - One coefficient per knot, ⌊N/k⌋ + 3 along an axis of N voxels with knot spacing k.
-//! - Knot j of an axis is at voxel (j - 1)·k, and the field is the tensor product of cubic
-//!   B-splines of width 4k centred on the knots.
+//! - One coefficient per knot, ⌊N/k⌋ + 3 along an axis of N voxels with knot spacing k ≥ 2;
+//!   knot j is at voxel (j - 1)·k.
+//! - With a knot spacing of 1 voxel (a warp resolution as fine as the voxels), N coefficients
+//!   and knot j at voxel j.
+//! - The field is the tensor product of cubic B-splines of width 4k centred on the knots;
+//!   knots past the coefficient grid count as 0.
 //! - The voxel axes are FSL's: for an image whose affine has a positive determinant, FSL counts
 //!   x from the other end (voxel x is N - 1 - i).
 
@@ -21,10 +24,13 @@ pub const INTENT_TOPUP_CUBIC_SPLINE: i32 = 2016;
 pub struct TopupCoefficients {
     dims: [usize; 3],
     knot_spacing: [usize; 3],
-    /// NIfTI order (x fastest), with one plane of zeros after the last knot of each axis: the
-    /// last voxel of an axis whose length is not a multiple of k reaches one knot past the
-    /// grid, and topup's field treats that knot's coefficient as 0.
+    /// NIfTI order (x fastest), with planes of zeros around the knots: one after the last
+    /// knot of each axis (the last voxel of an axis whose length is not a multiple of k
+    /// reaches one knot past the grid, and topup's field treats that knot's coefficient as 0);
+    /// on an axis with k = 1, one before the first knot and two after the last, so that the
+    /// knots of every voxel are inside.
     padded: Vec<f64>,
+    padded_dims: [usize; 3],
 }
 
 impl TopupCoefficients {
@@ -51,12 +57,15 @@ impl TopupCoefficients {
             }
             spacing[a] = k as usize;
         }
-        let [px, py, pz] = dims.map(|n| n + 1);
+        let lead = spacing.map(|k| usize::from(k == 1));
+        let padded_dims: [usize; 3] = std::array::from_fn(|a| dims[a] + 1 + 2 * lead[a]);
+        let [px, py, pz] = padded_dims;
         let mut padded = vec![0.0; px * py * pz];
         for c in 0..dims[2] {
             for b in 0..dims[1] {
                 for a in 0..dims[0] {
-                    padded[a + px * (b + py * c)] = data[a + dims[0] * (b + dims[1] * c)] as f64;
+                    padded[a + lead[0] + px * (b + lead[1] + py * (c + lead[2]))] =
+                        data[a + dims[0] * (b + dims[1] * c)] as f64;
                 }
             }
         }
@@ -64,12 +73,17 @@ impl TopupCoefficients {
             dims,
             knot_spacing: spacing,
             padded,
+            padded_dims,
         })
     }
 
-    /// Whether this coefficient grid fits an image grid of `dims` voxels: ⌊N/k⌋ + 3 per axis.
+    /// Whether this coefficient grid fits an image grid of `dims` voxels: ⌊N/k⌋ + 3 per axis,
+    /// or N for k = 1.
     pub fn fits(&self, dims: [usize; 3]) -> bool {
-        (0..3).all(|a| dims[a] / self.knot_spacing[a] + 3 == self.dims[a])
+        (0..3).all(|a| match self.knot_spacing[a] {
+            1 => dims[a] == self.dims[a],
+            k => dims[a] / k + 3 == self.dims[a],
+        })
     }
 
     /// The field in Hz at every voxel of the image grid topup ran on (`dims`, NIfTI order).
@@ -101,7 +115,9 @@ impl TopupCoefficients {
                     .collect()
             })
             .collect();
-        let [cx, cy] = [self.dims[0] + 1, self.dims[1] + 1];
+        // With k = 1, `knot_weights` gives knots i - 1 ..= i + 2 for voxel i as padded
+        // indices i ..= i + 3: the leading zero plane makes knot j sit at voxel j.
+        let [cx, cy, _] = self.padded_dims;
         let mut field = Vec::with_capacity(dims.iter().product());
         for wz in &weights[2] {
             for wy in &weights[1] {
@@ -172,6 +188,25 @@ mod tests {
             let field = c.evaluate(dims, flip).unwrap();
             assert_eq!(field.len(), 7 * 6 * 5);
             assert!(field.iter().all(|&f| (f - 12.5).abs() < 1e-12));
+        }
+    }
+
+    #[test]
+    fn a_knot_spacing_of_one_puts_knot_j_at_voxel_j() {
+        // A coefficient of 6 at knot 3 of a 7-voxel axis with k = 1: the field is 6 · B(i - 3).
+        // Along y and z (1 voxel, k = 2, so ⌊1/2⌋ + 3 = 3 knots) all coefficients are equal.
+        let mut data = vec![0.0f32; 7 * 3 * 3];
+        for b in 0..3 {
+            for cz in 0..3 {
+                data[3 + 7 * (b + 3 * cz)] = 6.0;
+            }
+        }
+        let c = TopupCoefficients::new([7, 3, 3], [1.0, 2.0, 2.0], &data).unwrap();
+        assert!(c.fits([7, 1, 1]));
+        let field = c.evaluate([7, 1, 1], false).unwrap();
+        let expected = [0.0, 0.0, 1.0, 4.0, 1.0, 0.0, 0.0];
+        for (f, e) in field.iter().zip(expected) {
+            assert!((f - e).abs() < 1e-12, "{field:?}");
         }
     }
 

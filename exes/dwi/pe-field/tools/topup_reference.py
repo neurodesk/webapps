@@ -11,7 +11,8 @@ flattened in NIfTI order (x fastest).
 
 Case A has a negative-determinant (radiological) affine, phase encoding along j and a knot
 spacing of 2 voxels; case B has a positive-determinant affine, for which FSL reverses the x
-voxel axis, phase encoding along i and a knot spacing of 3 voxels."""
+voxel axis, phase encoding along i and a knot spacing of 3 voxels. Cases C and D repeat
+those geometries with a knot spacing of 1 voxel (N coefficients per axis)."""
 
 import json
 import os
@@ -106,7 +107,13 @@ def case(name, shape, determinant, axis, knot_mm):
     }
 
 
-cases = [case("A", (19, 15, 11), -1, 1, 4), case("B", (16, 14, 10), 1, 0, 6)]
+cases = [
+    case("A", (19, 15, 11), -1, 1, 4),
+    case("B", (16, 14, 10), 1, 0, 6),
+    # A warp resolution as fine as the voxels: knot spacing 1, N coefficients per axis.
+    case("C", (17, 15, 11), -1, 1, 2),
+    case("D", (16, 14, 10), 1, 0, 2),
+]
 with open(out, "w") as f:
     json.dump({"fsl": fsl_version, "readout_time": READOUT, "cases": cases}, f, separators=(",", ":"))
     f.write("\n")

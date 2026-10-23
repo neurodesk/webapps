@@ -19,7 +19,7 @@ This crate evaluates them without FSL code.
 The format below comes from the file header and from fits to the field that topup writes with `--fout`:
 
 - NIfTI `intent_code` 2016 ("FSL topup cubic spline"). `pixdim` 1-3 is the knot spacing in voxels of the image grid topup ran on; `intent_p1-3` is that grid's voxel size in mm.
-- An axis of N voxels with knot spacing k has ⌊N/k⌋ + 3 coefficients. Knot j is at voxel (j - 1)·k.
+- An axis of N voxels with knot spacing k ≥ 2 has ⌊N/k⌋ + 3 coefficients, and knot j is at voxel (j - 1)·k. With k = 1 (a warp resolution as fine as the voxels, as in some ADNI sessions) it has N coefficients, and knot j is at voxel j.
 - The field at a voxel is the tensor product of centred cubic B-splines of width 4k on the knots. When N is not a multiple of k, the last voxel reaches one knot past the grid; that coefficient counts as 0.
 - The voxel axes are FSL's. FSL works in radiological voxel order, so for an affine with a positive determinant it counts x from the other end. The datain vectors use the same axes.
 - The coefficient file does not store the image grid. `TopupCoefficients::evaluate` takes it and refuses a grid that the coefficients do not fit.
