@@ -1,5 +1,5 @@
 // The Motion tab: displacement per volume (a shared .nd-chart) and a table of each volume's
-// movement and replaced slices; choosing a row shows that volume of the corrected series.
+// movement and replaced slices.
 
 const WIDTH = 640;
 const HEIGHT = 180;
@@ -56,14 +56,14 @@ function svgElement(markup) {
   return new DOMParser().parseFromString(markup, "image/svg+xml").documentElement;
 }
 
-/** Fills `section` with the chart and the table; `onVolume(v)` shows volume v. */
-export function renderMotionReport(section, summary, { onVolume }) {
+/** Fills `section` with the chart and the table. */
+export function renderMotionReport(section, summary) {
   const replaced = summary.filter((row) => row.outlierSlices.length);
   const slices = replaced.reduce((sum, row) => sum + row.outlierSlices.length, 0);
   const worst = summary.reduce((max, row) => Math.max(max, Number.isFinite(row.rms) ? row.rms : 0), 0);
   const lead = element("p", {
     className: "nd-report-lead",
-    textContent: `Largest displacement ${worst.toFixed(2)} mm. ${slices} outlier slice${slices === 1 ? "" : "s"} replaced in ${replaced.length} volume${replaced.length === 1 ? "" : "s"}. Select a volume to view it.`,
+    textContent: `Largest displacement ${worst.toFixed(2)} mm. ${slices} outlier slice${slices === 1 ? "" : "s"} replaced in ${replaced.length} volume${replaced.length === 1 ? "" : "s"}.`,
   });
   const legend = element("ul", { className: "nd-chart-legend" }, [
     element("li", { textContent: "Solid: RMS displacement from the reference (mm)" }),
@@ -80,23 +80,12 @@ export function renderMotionReport(section, summary, { onVolume }) {
   for (const row of summary) {
     const tr = body.insertRow();
     if (row.outlierSlices.length) tr.dataset.flag = "outliers";
-    tr.setAttribute("role", "button");
-    tr.tabIndex = 0;
-    tr.title = `Show volume ${row.volume + 1}`;
     const cells = [row.volume + 1, ...row.translation.map((t) => t.toFixed(2)), ...row.rotationDegrees.map((r) => r.toFixed(2)), Number.isFinite(row.rms) ? row.rms.toFixed(2) : "", row.outlierSlices.join(", ")];
     cells.forEach((value, k) => {
       const cell = tr.insertCell();
       cell.textContent = String(value);
       if (k < cells.length - 1) cell.className = "nd-numeric";
     });
-    const open = () => onVolume(row.volume);
-    tr.onclick = open;
-    tr.onkeydown = (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        open();
-      }
-    };
   }
   const scroll = element("div", { className: "nd-table-scroll" }, [table]);
   section.replaceChildren(lead, legend, figure, scroll);

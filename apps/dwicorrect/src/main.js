@@ -27,6 +27,7 @@ import {
   classifyInputs,
   confoundsTsv,
   defaultSettings,
+  inputSummary,
   describeSeries,
   motionSummary,
   outliersTsv,
@@ -36,8 +37,9 @@ import {
   shorelineArgs,
 } from "./pipeline.js";
 import { renderMotionReport } from "./report.js";
-import { createBeforeAfter } from "./animation.js";
 import { axialSlices } from "./frames.js";
+import { beforeAfterGif, previewVolumes } from "./before-after-gif.js";
+import "./style.css";
 import { correctSeries, estimateField } from "./workers.js";
 import examples from "../examples.json";
 
@@ -74,7 +76,6 @@ const toolbar = createViewerToolbar({
   download: false,
   screenshot: false,
   views: [
-    ["compare", "Before/after"],
     ["multiplanar", "3-Plane"],
     ["axial", "Axial"],
     ["coronal", "Coronal"],
@@ -84,21 +85,6 @@ const toolbar = createViewerToolbar({
     .concat({ id: "motion", label: "Motion", hidden: true, onClick: () => showReport() }),
 });
 $("viewer").prepend(toolbar);
-const animation = createBeforeAfter({
-  grid: $("compareGrid"),
-  before: $("beforeCanvas"),
-  after: $("afterCanvas"),
-  afterPanel: $("afterPanel"),
-  titles: [$("beforeTitle"), $("afterTitle")],
-  onFrame: (volume, count) => {
-    $("volumeField").hidden = false;
-    $("volume").max = String(count - 1);
-    $("volume").value = String(volume);
-    $("volumeLabel").textContent = `${volume + 1} of ${count}`;
-    const b = input?.bvals?.[volume];
-    $("imageLabel").textContent = `Volume ${volume + 1} of ${count}${b === undefined ? "" : ` · b = ${Math.round(b)}`}`;
-  },
-});
 const log = createConsole({ id: "technicalLog", resizable: true });
 $("viewer").append(log);
 const progress = new ProgressManager();
@@ -114,8 +100,8 @@ let loading = null;
 let running = null;
 /** The last run: result rows, the summary for the report, and the files for the zip. */
 let outputs = null;
-/** The 4D image on display, for the volume slider. */
-let displayed = null;
+/** The object URL of the preview GIF on display. */
+let previewUrl = null;
 
 function status(message, error = false) {
   $("statusText").textContent = message;
@@ -127,58 +113,52 @@ const results = createResultList({
   element: $("resultList"),
   onView: (_stage, result) => {
     if (loading || running) return;
-    void show(result.file, result.description, { frames: result.frames }).catch((error) => status(error.message, true));
+    if (result.preview) showPreview(result.preview, result.description);
+    else void show(result.file, result.description).catch((error) => status(error.message, true));
   },
   onDownload: (_stage, result) => downloadFile(result.file),
 });
 
+/** The preview image off; the NiiVue canvas back. */
+function hidePreview() {
+  $("preview").hidden = true;
+  $("gl1").hidden = false;
+}
+
 let showing = Promise.resolve();
-/** Shows one image (a File), 4D series at the slider's volume. */
-function show(file, label, { frames = 1, background = false } = {}) {
+/** Shows one 3D image (a File) in NiiVue. */
+function show(file, label) {
   showing = showing.catch(() => {}).then(async () => {
     await viewerReady;
     await viewer.loadVolumes([{ url: file, name: file.name, colormap: "gray" }]);
     $("emptyState").hidden = true;
     $("motionReport").hidden = true;
-    if (!background) {
-      animation.hide();
-      toolbar.setActive("multiplanar");
-    }
+    hidePreview();
+    toolbar.setActive("multiplanar");
+    viewer.sliceType = SLICE_TYPE.MULTIPLANAR;
     $("imageLabel").textContent = label;
-    displayed = frames > 1 ? { frames } : null;
-    $("volumeField").hidden = !displayed;
-    if (displayed) {
-      const volume = Math.min(Number($("volume").value), frames - 1);
-      $("volume").max = String(frames - 1);
-      $("volume").value = String(volume);
-      await setVolume(volume);
-    }
   });
   return showing;
 }
 
-async function setVolume(volume) {
-  $("volumeLabel").textContent = `${volume + 1} of ${displayed.frames}`;
-  const id = viewer.volumes.at(-1)?.id;
-  if (id !== undefined) await viewer.setFrame4D(id, volume);
+/** Shows the before/after GIF (a File) in place of the canvas. */
+function showPreview(file, label) {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = URL.createObjectURL(file);
+  $("preview").src = previewUrl;
+  $("preview").hidden = false;
+  $("gl1").hidden = true;
+  $("emptyState").hidden = true;
+  $("motionReport").hidden = true;
+  toolbar.setActive(null);
+  $("imageLabel").textContent = `${label}: a diffusion-weighted slice of each volume, before and after`;
 }
 
 function showLayout(id) {
   $("motionReport").hidden = true;
-  if (id === "compare") {
-    if (animation.ready) animation.show();
-    return;
-  }
-  animation.hide();
+  hidePreview();
+  toolbar.setActive(id);
   viewer.sliceType = LAYOUTS[id] ?? SLICE_TYPE.MULTIPLANAR;
-}
-
-/** The Before/after view, playing. */
-function showComparison() {
-  $("emptyState").hidden = true;
-  $("motionReport").hidden = true;
-  toolbar.setActive("compare");
-  animation.show();
 }
 
 function motionTab(visible) {
@@ -188,13 +168,8 @@ function motionTab(visible) {
 
 function showReport() {
   if (!outputs) return;
-  renderMotionReport($("motionReport"), outputs.summary, {
-    onVolume: (volume) => {
-      showComparison();
-      animation.pauseAt(volume);
-    },
-  });
-  animation.hide();
+  renderMotionReport($("motionReport"), outputs.summary);
+  hidePreview();
   $("motionReport").hidden = false;
   toolbar.setActive("motion");
 }
@@ -315,13 +290,14 @@ async function loadFiles(filesPromise, signal) {
     const meanB0 = meanOf(frames.data, voxels, frames.frames, bvals);
     const beforeSlices = axialSlices(frames.data, frames.dims, frames.frames);
     const sizes = voxelSizes(frames.header.affine);
+    const first = frames.data.subarray(0, voxels);
     let reverse = null;
     if (found.reverse) {
       const r = readNiftiFrames(found.reverse.buffer);
       const rBvals = found.reverse.bval ? readGradients(await found.reverse.bval.text(), await found.reverse.bvec.text(), r.frames).bvals : null;
       reverse = { name: found.reverse.image.name, sidecar: found.reverse.sidecar, mean: meanOf(r.data, voxels, r.frames, rBvals) };
     }
-    const meanFile = new File([await gzipBytes(createNiftiFromData(Float32Array.from(meanB0), dwi.buffer, { dims: frames.dims }))], "mean_b0.nii.gz");
+    const firstFile = new File([await gzipBytes(createNiftiFromData(Float32Array.from(first), dwi.buffer, { dims: frames.dims }))], "first_volume.nii.gz");
     controller.signal.throwIfAborted();
     input = {
       name: dwi.image.name,
@@ -333,6 +309,8 @@ async function loadFiles(filesPromise, signal) {
       bvalText,
       bvecText,
       bvals,
+      beforeSlices,
+      aspect: sizes[1] / sizes[0],
       sidecar,
       series,
       meanB0,
@@ -342,11 +320,9 @@ async function loadFiles(filesPromise, signal) {
     if (input.field?.kind === "hz" && !input.field.sameGrid) throw new Error(`${input.field.name} is not on the series' grid; give a field map in Hz on the DWI grid, or topup's _fieldcoef image.`);
     clearOutputs();
     applyDefaults();
-    renderInput(found.ignored);
-    await show(meanFile, "Mean b0 (input)", { background: true });
+    renderInput();
+    await show(firstFile, "Input, volume 1");
     controller.signal.throwIfAborted();
-    animation.setBefore(beforeSlices, frames.dims, sizes[1] / sizes[0]);
-    showComparison();
     $("dropZone").classList.add("has-files");
     $("imageInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
     progress.setProgress(0);
@@ -366,41 +342,27 @@ async function loadFiles(filesPromise, signal) {
 function applyDefaults() {
   const fieldSource = input.field ? "upload" : input.reverse ? "reverse" : "none";
   const settings = defaultSettings(input.series, fieldSource);
-  const note = (id, text) => {
-    $(id).textContent = `Default: ${text}`;
-  };
   $("fieldSource").value = settings.field.value;
-  note("fieldDefault", settings.field.rule);
   $("model").value = settings.model.value;
   $("model").options[0].disabled = input.series.dwi < 72;
-  note("modelDefault", `${settings.model.rule}; ${settings.shelled.rule}`);
   $("replaceOutliers").checked = true;
-  note("replaceDefault", "on");
   $("outlierType").value = settings.outliers.value;
   $("outlierType").options[0].disabled = input.series.multiband < 2;
   $("outlierType").options[2].disabled = input.series.multiband < 2;
-  note("outlierDefault", settings.outliers.rule);
   $("sliceToVolume").checked = settings.sliceToVolume.value;
-  note("sliceDefault", `off (${settings.sliceToVolume.rule})`);
   $("eddyCurrents").value = settings.eddyCurrents.value;
-  note("eddyDefault", settings.eddyCurrents.rule);
   $("iterations").value = String(settings.iterations.value);
-  note("iterationDefault", settings.iterations.rule);
   const missingPe = !input.series.phaseEncodingDirection;
   const missingReadout = input.series.totalReadoutTime === null;
   $("acquisitionFields").hidden = !missingPe && !missingReadout;
 }
 
-function renderInput(ignored) {
-  const s = input.series;
-  const shells = s.shells.map((shell) => `b${Math.round(shell.b)}×${shell.count}`).join(", ");
-  $("fileInfo").hidden = false;
-  $("fileInfo").textContent = `${input.name} · ${input.dims.join("×")} · ${s.volumes} volumes`;
-  $("seriesInfo").hidden = false;
-  $("seriesInfo").textContent = `${s.b0} b0, ${shells}${s.multiband > 1 ? ` · multiband ${s.multiband}` : ""}${s.phaseEncodingDirection ? ` · PE ${s.phaseEncodingDirection}` : ""}`;
-  const extras = [input.reverse && `Reverse-PE b0: ${input.reverse.name}`, input.field && `Field map: ${input.field.name}`, ignored.length && `Not used: ${ignored.join(", ")}`].filter(Boolean);
-  $("fieldInfo").hidden = !extras.length;
-  $("fieldInfo").textContent = extras.join(" · ");
+function renderInput() {
+  const lines = inputSummary({ name: input.name, series: input.series, reverse: input.reverse?.name, field: input.field?.name });
+  ["fileInfo", "seriesInfo", "acquisitionInfo", "fieldInfo"].forEach((id, k) => {
+    $(id).hidden = !lines[k];
+    $(id).textContent = lines[k] ?? "";
+  });
 }
 
 function chosenSettings() {
@@ -523,8 +485,7 @@ async function correct(signal) {
     const outlierMap = text("outlier_map");
     const sidecar = preprocSidecar({ input: input.sidecar, settings, args, field, threads, seconds, mask: maskSource, version: APP.version });
     const rows = {
-      dwi: { description: "Corrected series", file: new File([run.outputs[`${SESSION.out}.nii.gz`]], names.dwi, { type: "application/gzip" }), frames: input.frames },
-      input: { description: "Input series", file: input.file, frames: input.frames, download: false },
+      dwi: { description: "Corrected series", file: new File([run.outputs[`${SESSION.out}.nii.gz`]], names.dwi, { type: "application/gzip" }) },
       bval: { description: "b-values", file: textFile(text("bvals"), names.bval), viewable: false },
       bvec: { description: "Rotated b-vectors", file: textFile(text("rotated_bvecs"), names.bvec), viewable: false },
       sidecar: { description: "Sidecar", file: textFile(`${JSON.stringify(sidecar, null, 2)}\n`, names.sidecar, "application/json"), viewable: false },
@@ -536,18 +497,25 @@ async function correct(signal) {
     };
     const summary = motionSummary({ parameters, movementRms, outlierMap });
     outputs = { rows, summary, names };
-    results.render(Object.fromEntries(Object.entries(rows).filter(([key]) => key !== "input")));
+    results.render(rows);
+    progress.begin("Making the before/after preview…");
     const corrected = readNiftiFrames(await decodeNiftiBuffer(await rows.dwi.file.arrayBuffer()));
-    animation.setAfter(axialSlices(corrected.data, corrected.dims, corrected.frames));
-    await show(rows.dwi.file, rows.dwi.description, { frames: input.frames, background: true });
-    showComparison();
+    const gif = beforeAfterGif({
+      before: input.beforeSlices,
+      after: axialSlices(corrected.data, corrected.dims, corrected.frames),
+      dims: input.dims,
+      aspect: input.aspect,
+      volumes: previewVolumes(input.bvals),
+    });
+    rows.dwi.preview = new File([gif], names.preview, { type: "image/gif" });
+    showPreview(rows.dwi.preview, rows.dwi.description);
     $("outputSection").open = true;
     motionTab(true);
     const replaced = summary.reduce((sum, row) => sum + row.outlierSlices.length, 0);
     progress.end("Series corrected");
     status(`Corrected in ${Math.round(seconds)} s on ${threads} thread${threads === 1 ? "" : "s"}; ${replaced} outlier slice${replaced === 1 ? "" : "s"} replaced`);
     return {
-      artifacts: Object.entries(rows).filter(([key]) => key !== "input").map(([role, row]) => ({ role, file: row.file })),
+      artifacts: Object.entries(rows).map(([role, row]) => ({ role, file: row.file })),
       provenance: sidecar.DwicorrectSettings,
     };
   } catch (error) {
@@ -564,7 +532,7 @@ async function downloadAll() {
   if (!outputs) return;
   const entries = {};
   for (const row of Object.values(outputs.rows)) {
-    if (row.download === false) continue;
+    if (row.preview) entries[row.preview.name] = [new Uint8Array(await row.preview.arrayBuffer()), { level: 0 }];
     entries[row.file.name] = [new Uint8Array(await row.file.arrayBuffer()), { level: row.file.name.endsWith(".gz") ? 0 : 6 }];
   }
   downloadFile(new File([zipSync(entries)], outputs.names.zip, { type: "application/zip" }));
@@ -588,11 +556,6 @@ $("imageInput").addEventListener("change", (event) => {
   const files = Array.from(event.target.files);
   event.target.value = "";
   if (files.length) void importFiles(Promise.resolve(files));
-});
-$("volume").addEventListener("input", () => {
-  const volume = Number($("volume").value);
-  if (!$("compareGrid").hidden) animation.pauseAt(volume);
-  else if (displayed) void setVolume(volume);
 });
 for (const id of ["fieldSource", "replaceOutliers", "model", "outlierType", "sliceToVolume", "eddyCurrents", "iterations"]) {
   $(id).addEventListener("change", () => clearOutputs());

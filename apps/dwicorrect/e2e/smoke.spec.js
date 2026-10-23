@@ -18,6 +18,8 @@ async function download(page, label) {
 
 async function loadPhantom(page, options) {
   await page.goto("/");
+  // The app is ready once it has built its example selector.
+  await page.locator("select[data-neurodesk-example]").waitFor();
   await page.locator("#imageInput").setInputFiles(exampleFiles(options));
   await expect(page.locator("#runButton")).toBeEnabled({ timeout: 60_000 });
 }
@@ -41,15 +43,15 @@ test("shared app bar owns information actions and theme", async ({ page }) => {
 
 test("the series sets the defaults, and each states its rule", async ({ page }) => {
   await loadPhantom(page);
-  await expect(page.locator("#seriesInfo")).toContainText("6 b0, b1000×32, b2000×64");
+  await expect(page.locator("#fileInfo")).toHaveText("sub-phantom_dwi.nii.gz");
+  await expect(page.locator("#seriesInfo")).toHaveText("102 volumes: 6\u00a0b0 · b1000\u00a0×32 · b2000\u00a0×64");
+  await expect(page.locator("#acquisitionInfo")).toHaveText("PE j, 50 ms readout");
   await expect(page.locator("#fieldInfo")).toContainText("Reverse-PE b0: sub-phantom_dir-reverse_epi.nii.gz");
   await expect(page.locator("#fieldSource")).toHaveValue("reverse");
-  await expect(page.locator("#fieldDefault")).toHaveText("Default: Reverse-PE b0 found → estimate the field");
   await expect(page.locator("#model")).toHaveValue("shore");
-  await expect(page.locator("#modelDefault")).toHaveText("Default: ≥ 72 DWIs → 3dSHORE (96); ≤ 6 b-values → shelled (2)");
-  await expect(page.locator("#compareGrid")).toBeVisible();
-  await expect(page.locator("#beforeTitle")).toHaveText("Before correction");
-  await expect(page.locator("#afterPanel")).toBeHidden();
+
+  await expect(page.locator("#imageLabel")).toHaveText("Input, volume 1");
+  await expect(page.locator("#preview")).toBeHidden();
   await expect(page.locator("#outlierType")).toHaveValue("sw");
   await expect(page.locator("#sliceToVolume")).toBeDisabled();
   await expect(page.locator("#acquisitionFields")).toBeHidden();
@@ -77,6 +79,8 @@ test("the phantom is corrected: field from the reverse b0, motion, outliers, dow
   expect(sidecar.DwicorrectSettings.SusceptibilityField).toBe("estimated");
   expect(sidecar.DwicorrectSettings.CommandLine).toContain("--field=field.nii.gz");
   expect(sidecar.PhaseEncodingDirection).toBe("j");
+  await expect(page.locator("#preview")).toBeVisible();
+  expect(await page.locator("#preview").evaluate((img) => img.naturalWidth > 0 && img.src.startsWith("blob:"))).toBe(true);
   await page.locator("#viewer .nd-view-tab", { hasText: "Motion" }).click();
   await expect(page.locator("#motionReport")).toBeVisible();
   await expect(page.locator("#motionReport tr[data-flag]")).toHaveCount(4);
@@ -85,7 +89,7 @@ test("the phantom is corrected: field from the reverse b0, motion, outliers, dow
 test("without the reverse b0 the series is corrected without a field", async ({ page }) => {
   await loadPhantom(page, { skip: ["sub-phantom_dir-reverse_epi.nii.gz", "sub-phantom_dir-reverse_epi.json"] });
   await expect(page.locator("#fieldSource")).toHaveValue("none");
-  await expect(page.locator("#fieldDefault")).toHaveText("Default: No field → motion and eddy currents only");
+
 });
 
 test("a sidecar without phase encoding asks for it", async ({ page }) => {

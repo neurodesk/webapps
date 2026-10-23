@@ -18,6 +18,7 @@
           </label>
           <p id="fileInfo" class="nd-file-info" hidden></p>
           <p id="seriesInfo" class="nd-file-info" hidden></p>
+          <p id="acquisitionInfo" class="nd-file-info" hidden></p>
           <p id="fieldInfo" class="nd-file-info" hidden></p>
           <div class="nd-row" id="acquisitionFields" hidden>
             <div class="nd-field">
@@ -46,7 +47,7 @@
         <div class="nd-section-content">
           <div class="nd-field">
             <label for="fieldSource">Susceptibility field
-              <span class="nd-info-icon" tabindex="0" aria-label="About the susceptibility field">i<span class="nd-info-tooltip">A b0 with the opposite phase encoding (an AP/PA pair) gives the field through the SDC app's PyHySCO port. A topup _fieldcoef image or a field map in Hz on the series' grid can be loaded instead. Without one, only motion and eddy currents are corrected.<br /><span id="fieldDefault">Default: set when a series is loaded.</span></span></span>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the susceptibility field">i<span class="nd-info-tooltip">A b0 with the opposite phase encoding (an AP/PA pair) gives the field through the SDC app's PyHySCO port. A topup _fieldcoef image or a field map in Hz on the series' grid can be loaded instead. Without one, only motion and eddy currents are corrected.<br />Default: a loaded field map; else estimated from a reverse-PE b0; else none.</span></span>
             </label>
             <select id="fieldSource" disabled>
               <option value="reverse">Estimate from reverse-PE b0</option>
@@ -59,7 +60,7 @@
             <div class="nd-section-content">
               <div class="nd-field">
                 <label for="model">Prediction model
-                  <span class="nd-info-icon" tabindex="0" aria-label="About the prediction model">i<span class="nd-info-tooltip">Each volume is registered to a prediction from the others. 3dSHORE needs one diffusion-weighted volume per coefficient (72); smaller series use a Gaussian process, as eddy does. With more than 6 distinct b-values (DSI, spread b) the series counts as not shelled, and each volume's own image damps its prediction.<br /><span id="modelDefault">Default: set when a series is loaded.</span></span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the prediction model">i<span class="nd-info-tooltip">Each volume is registered to a prediction from the others. 3dSHORE needs one diffusion-weighted volume per coefficient (72); smaller series use a Gaussian process, as eddy does. With more than 6 distinct b-values (DSI, spread b) the series counts as not shelled, and each volume's own image damps its prediction.<br />Default: 3dSHORE with 72 or more diffusion-weighted volumes, else the Gaussian process.</span></span>
                 </label>
                 <select id="model" disabled>
                   <option value="shore">3dSHORE</option>
@@ -67,11 +68,11 @@
                 </select>
               </div>
               <label class="nd-check"><input id="replaceOutliers" type="checkbox" checked disabled /> Replace outlier slices
-                <span class="nd-info-icon" tabindex="0" aria-label="About outlier replacement">i<span class="nd-info-tooltip">A slice whose signal is more than 4 standard deviations below its prediction (signal dropout from motion during the diffusion encoding) is replaced by the prediction.<br /><span id="replaceDefault">Default: set when a series is loaded.</span></span></span>
+                <span class="nd-info-icon" tabindex="0" aria-label="About outlier replacement">i<span class="nd-info-tooltip">A slice whose signal is more than 4 standard deviations below its prediction (signal dropout from motion during the diffusion encoding) is replaced by the prediction.<br />Default: on.</span></span>
               </label>
               <div class="nd-field">
                 <label for="outlierType">Outliers
-                  <span class="nd-info-icon" tabindex="0" aria-label="About outlier groups">i<span class="nd-info-tooltip">With multiband, the slices excited together lose signal together, so they are also tested as one group.<br /><span id="outlierDefault">Default: set when a series is loaded.</span></span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About outlier groups">i<span class="nd-info-tooltip">With multiband, the slices excited together lose signal together, so they are also tested as one group.<br />Default: slices and multiband groups when the sidecar gives a multiband factor or slice timing; else single slices.</span></span>
                 </label>
                 <select id="outlierType" disabled>
                   <option value="both">Slices and multiband groups</option>
@@ -80,11 +81,11 @@
                 </select>
               </div>
               <label class="nd-check"><input id="sliceToVolume" type="checkbox" disabled /> Slice-to-volume motion
-                <span class="nd-info-icon" tabindex="0" aria-label="About slice-to-volume motion">i<span class="nd-info-tooltip">Corrects movement within a volume, slice group by slice group, from the sidecar's SliceTiming. It takes about 1.8 times as long.<br /><span id="sliceDefault">Default: set when a series is loaded.</span></span></span>
+                <span class="nd-info-icon" tabindex="0" aria-label="About slice-to-volume motion">i<span class="nd-info-tooltip">Corrects movement within a volume, slice group by slice group, from the sidecar's SliceTiming. It takes about 1.8 times as long.<br />Default: off. Available when the sidecar has SliceTiming.</span></span>
               </label>
               <div class="nd-field">
                 <label for="eddyCurrents">Eddy currents
-                  <span class="nd-info-icon" tabindex="0" aria-label="About the eddy-current model">i<span class="nd-info-tooltip">The eddy-current field of each volume is a polynomial in the scanner frame, tied to the gradient by a second-level model. Movement only corrects motion.<br /><span id="eddyDefault">Default: set when a series is loaded.</span></span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the eddy-current model">i<span class="nd-info-tooltip">The eddy-current field of each volume is a polynomial in the scanner frame, tied to the gradient by a second-level model. Movement only corrects motion.<br />Default: quadratic, linear in the gradient (eddy's default).</span></span>
                 </label>
                 <select id="eddyCurrents" disabled>
                   <option value="quadratic">Quadratic</option>
@@ -94,7 +95,7 @@
               </div>
               <div class="nd-field">
                 <label for="iterations">Iterations
-                  <span class="nd-info-icon" tabindex="0" aria-label="About the iterations">i<span class="nd-info-tooltip">Each iteration predicts every volume and registers it again; the first two run on smoothed images.<br /><span id="iterationDefault">Default: set when a series is loaded.</span></span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the iterations">i<span class="nd-info-tooltip">Each iteration predicts every volume and registers it again; the first two run on smoothed images.<br />Default: 5 (eddy's default).</span></span>
                 </label>
                 <input id="iterations" type="number" min="1" max="20" step="1" value="5" disabled />
               </div>
@@ -108,10 +109,6 @@
         <summary class="nd-section-title">Output</summary>
         <div class="nd-section-content">
           <div id="resultList"></div>
-          <div class="nd-field" id="volumeField" hidden>
-            <label for="volume">Volume <small id="volumeLabel"></small></label>
-            <input id="volume" type="range" min="0" max="0" step="1" value="0" />
-          </div>
           <button id="zipButton" class="nd-btn nd-btn-secondary" type="button" disabled>Download all outputs (.zip)</button>
         </div>
       </details>
@@ -124,16 +121,7 @@
       <div class="nd-viewer-canvas-wrapper">
         <canvas id="gl1" aria-label="Image viewer"></canvas>
         <p id="emptyState" class="nd-viewer-empty">Drop a diffusion series anywhere, or choose an example.</p>
-        <div id="compareGrid" class="nd-compare-grid" data-count="1" hidden>
-          <div class="nd-compare-panel" aria-current="false">
-            <button id="beforeTitle" class="nd-compare-title" type="button" aria-pressed="false">Before correction</button>
-            <canvas id="beforeCanvas" aria-label="An axial slice of each volume before correction"></canvas>
-          </div>
-          <div class="nd-compare-panel" id="afterPanel" aria-current="false" hidden>
-            <button id="afterTitle" class="nd-compare-title" type="button" aria-pressed="false">After correction</button>
-            <canvas id="afterCanvas" aria-label="The same slice after correction"></canvas>
-          </div>
-        </div>
+        <img id="preview" class="dwicorrect-preview" alt="A diffusion-weighted slice of each volume, before and after correction" hidden />
         <section id="motionReport" class="nd-viewer-report" aria-label="Motion and outliers" hidden></section>
       </div>
       <div class="nd-viewer-info"><span id="imageLabel" class="nd-viewer-info-label"></span><span id="location" class="nd-viewer-info-primary"></span></div>

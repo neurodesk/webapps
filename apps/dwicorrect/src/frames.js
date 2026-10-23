@@ -1,4 +1,4 @@
-// The before/after animation's frames: one axial slice of every volume, shown with a grey
+// The before/after preview's frames: one axial slice of every volume, shown with a grey
 // scale that is the same for both images of a volume.
 
 /** The slice z (default the middle) of every volume of a series (x fastest, volumes last). */

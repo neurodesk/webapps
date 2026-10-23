@@ -157,3 +157,49 @@ test("animation frames: one slice per volume, one grey scale per pair, anterior 
   assert.deepEqual([pixels[0], pixels[4], pixels[8], pixels[12]], [128, 255, 0, 64]);
   assert.equal(pixels[3], 255);
 });
+
+test("the GIF encoder writes a looping GIF89a with one image per frame", async () => {
+  const { encodeGif, lzw } = await import("../src/gif.js");
+  const frames = [Uint8Array.from({ length: 12 }, (_, i) => i * 20), new Uint8Array(12).fill(255)];
+  const gif = encodeGif({ width: 4, height: 3, frames });
+  assert.equal(new TextDecoder().decode(gif.subarray(0, 6)), "GIF89a");
+  assert.equal(gif[6] | (gif[7] << 8), 4);
+  assert.equal(gif.at(-1), 0x3b);
+  assert.equal(gif.filter((b, i) => b === 0x2c && gif[i - 8] === 0x21 && gif[i - 7] === 0xf9).length, 2);
+  // Clear code first (256 in 9 bits: low byte 0, then bit 0 of the next byte set).
+  const codes = lzw(Uint8Array.of(1, 1, 1, 1));
+  assert.equal(codes[0], 0);
+  assert.equal(codes[1] & 1, 1);
+});
+
+test("the preview leaves out the b0 volumes", async () => {
+  const { previewVolumes } = await import("../src/before-after-gif.js");
+  assert.deepEqual(previewVolumes([0, 1000, 5, 2000, 50, 51]), [1, 3, 5]);
+});
+
+test("the input summary: file, volumes and shells, acquisition, field source", async () => {
+  const { inputSummary: summary } = await import("../src/pipeline.js");
+  // Items keep non-breaking spaces; compare with ordinary ones.
+  const inputSummary = (args) => summary(args).map((line) => line.replaceAll("\u00a0", " "));
+  const timing = Array.from({ length: 60 }, (_, s) => s % 20);
+  const adni = describeSeries({
+    bvals: [...Array(13).fill(0), ...Array(6).fill(500), ...Array(48).fill(1000), ...Array(60).fill(2005)],
+    sidecar: { PhaseEncodingDirection: "j", TotalReadoutTime: 0.0632499, MultibandAccelerationFactor: 3, SliceTiming: timing },
+    dims: [96, 96, 60],
+  });
+  assert.deepEqual(inputSummary({ name: "a.nii.gz", series: adni, reverse: "a_rev.nii.gz" }), [
+    "a.nii.gz",
+    "127 volumes: 13 b0 · b500 ×6 · b1000 ×48 · b2000 ×60",
+    "PE j, 63 ms readout · multiband 3 · slice timing",
+    "Reverse-PE b0: a_rev.nii.gz",
+  ]);
+  const clinical = describeSeries({ bvals: [...Array(5).fill(5), ...Array(30).fill(995)], sidecar: { PhaseEncodingDirection: "j-", TotalReadoutTime: 0.05 }, dims: [96, 96, 60] });
+  assert.deepEqual(inputSummary({ name: "dwi.nii.gz", series: clinical }), ["dwi.nii.gz", "35 volumes: 5 b0 · b1000 ×30", "PE j-, 50 ms readout"]);
+  const dsi = describeSeries({ bvals: [0, ...Array.from({ length: 41 }, (_, k) => 800 + k * 105)], sidecar: {}, dims: [96, 96, 60] });
+  assert.deepEqual(inputSummary({ name: "dsi.nii.gz", series: dsi, field: "topup_fieldcoef.nii.gz" }), [
+    "dsi.nii.gz",
+    "42 volumes: 1 b0 · 41 DWI, b 800–5000",
+    "PE: not in sidecar",
+    "Field map: topup_fieldcoef.nii.gz",
+  ]);
+});
