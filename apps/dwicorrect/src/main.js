@@ -13,7 +13,7 @@ import {
   bindInfoTooltips,
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
-import { createNiftiFromData, decodeNiftiBuffer, downloadFile, parseNiftiHeader, readNiftiFrames, sameNiftiGrid } from "@neurodesk/webapp-components/file-io";
+import { createNiftiFromData, decodeNiftiBuffer, downloadFile, extractNiftiHeader, parseNiftiHeader, readNiftiFrames, sameNiftiGrid } from "@neurodesk/webapp-components/file-io";
 import { readBidsDiffusion } from "@neurodesk/webapp-components/file-io/bids";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { readDiffusionSeries, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
@@ -304,7 +304,7 @@ async function loadFiles(filesPromise, signal) {
     input = {
       name: dwi.image.name,
       file: dwi.image,
-      buffer: dwi.buffer,
+      headerBytes: extractNiftiHeader(dwi.buffer),
       header: frames.header,
       dims: frames.dims,
       frames: frames.frames,
@@ -430,14 +430,14 @@ async function correct(signal) {
     progress.begin("Extracting the brain from the mean b0 with MindGrab…");
     progress.setCancellable(true);
     status("Extracting the brain from the mean b0 with MindGrab");
-    const meanB0 = createNiftiFromData(Float32Array.from(input.meanB0), input.buffer, { dims: input.dims });
+    const meanB0 = createNiftiFromData(Float32Array.from(input.meanB0), input.headerBytes, { dims: input.dims });
     const extracted = await brainMask(new Uint8Array(meanB0), { assetPath: `${import.meta.env.BASE_URL}mindgrab/`, signal: controller.signal });
     const maskData = Uint8Array.from(readNiftiFrames(extracted.mask).data, (value) => (value > 0 ? 1 : 0));
     const maskVoxels = maskData.reduce((sum, v) => sum + v, 0);
     if (!maskVoxels) throw new Error("MindGrab found no brain in the mean b0; check the b0 volumes.");
     const maskSource = `mindgrab-${mindgrab.version}-${extracted.backend}`;
     log.log(`MindGrab ${mindgrab.version} brain mask on ${extracted.backend}: ${maskVoxels} voxels`, "info");
-    const maskNifti = createNiftiFromData(maskData, input.buffer, { dims: input.dims });
+    const maskNifti = createNiftiFromData(maskData, input.headerBytes, { dims: input.dims });
 
     const files = {
       [SESSION.series]: await input.file.arrayBuffer(),
@@ -464,7 +464,7 @@ async function correct(signal) {
         signal: controller.signal,
       });
       log.log(`PyHySCO field: ${out.iterations} Gauss-Newton iterations`, "info");
-      const fieldNifti = createNiftiFromData(Float32Array.from(out.field), input.buffer, { dims: input.dims });
+      const fieldNifti = createNiftiFromData(Float32Array.from(out.field), input.headerBytes, { dims: input.dims });
       files[SESSION.field] = fieldNifti.slice(0);
       fieldFile = new File([await gzipBytes(fieldNifti)], names.field, { type: "application/gzip" });
       field = "estimated";
