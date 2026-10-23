@@ -2141,7 +2141,9 @@ fn mbs_stage(
             .map(|v| ctx.correct(v, &smoothed[v], &params[v], interpolation))
             .collect();
         let predictions = ctx.predict(&corrected, true, 0.0);
-        let total = (0..nv)
+        // Per volume in parallel, then summed in volume order: the same total on any
+        // number of threads.
+        let per_volume: Vec<f64> = (0..nv)
             .into_par_iter()
             .map(|v| {
                 ctx.domain
@@ -2152,7 +2154,8 @@ fn mbs_stage(
                     .map(|r| r * r)
                     .sum::<f64>()
             })
-            .sum();
+            .collect();
+        let total = per_volume.iter().sum();
         (total, predictions)
     };
     let (mut cost, mut predictions) = residual();
