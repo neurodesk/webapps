@@ -400,6 +400,7 @@ nd-imaging-brand {
 .nd-file-info strong { color: var(--nd-color-text); font-weight: 500; }
 /* A description in lines: each span on its own line; .nd-file-info-gap starts a group after an empty line. */
 .nd-file-info-lines > span { display: block; }
+.nd-file-info-lines > span[hidden] { display: none; }
 .nd-file-info-lines > .nd-file-info-gap { margin-top: 1lh; }
 
 /* File picker as a button: the same label.nd-file around the native input,

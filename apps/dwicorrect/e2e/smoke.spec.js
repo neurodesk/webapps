@@ -98,6 +98,8 @@ test("a multiband factor that does not divide the slices is refused before the r
   await expect(page.locator("#runButton")).toBeDisabled();
   await page.locator("#multiband").fill("1");
   await expect(page.locator("#runButton")).toBeEnabled();
+  await expect(page.locator("#statusText")).toHaveText(/loaded: \d+ volumes/);
+  await expect(page.locator("#statusText")).not.toHaveClass(/error/);
 });
 
 test("Outliers stays off after a run while replacement is off", async ({ page }) => {

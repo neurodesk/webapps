@@ -188,6 +188,7 @@ test('imaging workspace shows an image in place of the canvas, and file informat
   assert.match(css, /\.nd-viewer-image \{ position: absolute; inset: 0;[^}]*object-fit: contain;[^}]*background: var\(--nd-color-bg\); \}/);
   assert.match(css, /\.nd-viewer-image\[hidden\] \{ display: none; \}/);
   assert.match(css, /\.nd-file-info-lines > span \{ display: block; \}/);
+  assert.match(css, /\.nd-file-info-lines > span\[hidden\] \{ display: none; \}/);
   assert.match(css, /\.nd-file-info-lines > \.nd-file-info-gap \{ margin-top: 1lh; \}/);
 });
 

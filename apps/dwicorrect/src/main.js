@@ -631,6 +631,7 @@ $("multiband").addEventListener("input", () => {
     }
     return;
   }
+  if ($("statusText").classList.contains("error")) status(`${input.name} loaded: ${input.frames} volumes`);
   applyOutlierDefault();
   renderInput();
 });
