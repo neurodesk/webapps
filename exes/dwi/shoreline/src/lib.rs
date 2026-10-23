@@ -1328,9 +1328,9 @@ impl Context<'_> {
                     _ => continue,
                 }
                 let jac = (1.0 - f) * jacobian[k] + f * jacobian[k + 1];
-                if let Some(value) = grid.trilinear(&full, m)
-                    && value.is_finite()
-                    && jac > 0.0
+                if let Some(value) = grid
+                    .trilinear(&full, m)
+                    .filter(|value| value.is_finite() && jac > 0.0)
                 {
                     let o = start + i * s;
                     predicted[o] = value / jac;

@@ -11,13 +11,14 @@ fn main() {
         .get("nthr")
         .and_then(|t| t.parse::<usize>().ok())
         .unwrap_or(0);
-    if threads > 0
-        && let Err(e) = rayon::ThreadPoolBuilder::new()
+    if threads > 0 {
+        if let Err(e) = rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
             .build_global()
-    {
-        eprintln!("shoreline: {e}");
-        std::process::exit(1);
+        {
+            eprintln!("shoreline: {e}");
+            std::process::exit(1);
+        }
     }
     if let Err(e) = cli::run(&argv, &mut cli::FileSystem, &mut |line| eprintln!("{line}")) {
         eprintln!("shoreline: {e}");
