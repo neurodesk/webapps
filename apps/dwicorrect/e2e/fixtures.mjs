@@ -21,7 +21,7 @@ export function phantomDir() {
   return dir;
 }
 
-/** The example bundle as Playwright file payloads; `skip` leaves out files by name. */
+/** The phantom series as Playwright file payloads; `skip` leaves out files by name. */
 export function exampleFiles({ skip = [] } = {}) {
   const dir = join(phantomDir(), "example");
   const names = ["sub-phantom_dwi.nii.gz", "sub-phantom_dwi.bval", "sub-phantom_dwi.bvec", "sub-phantom_dwi.json", "sub-phantom_dir-reverse_epi.nii.gz", "sub-phantom_dir-reverse_epi.json"];
