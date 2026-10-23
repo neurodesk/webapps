@@ -205,6 +205,9 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
   noddi: [
     { file: 'apps/noddi/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],
+  dwicorrect: [
+    { file: 'apps/dwicorrect/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
   qsmbly: [
     { file: 'apps/qsmbly/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
     { file: 'apps/qsmbly/rust-wasm/Cargo.toml', pattern: /(name = "qsm_wasm"\nversion = ")[^"]+("\n)/, replace: '$1{version}$2' },

@@ -219,6 +219,9 @@ test("the example is corrected: field from the PA b0, motion, outliers, download
   const fieldSidecar = JSON.parse((await download(page, "Field map JSON")).toString());
   expect(fieldSidecar.Units).toBe("Hz");
   expect(fieldSidecar.PhaseEncodingDirection).toBe("j-");
+  const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  expect(sidecar.GeneratedBy[0].Version).toBe(version);
+  expect(fieldSidecar.GeneratedBy[0].Version).toBe(version);
   const mask = sidecar.DwicorrectSettings.BrainMask;
   expect(mask).toMatch(/^mindgrab-/);
   await expect(page.locator("#statusText"), `outliers with the mask from ${mask}`).toContainText(OUTLIER_STATUS);
