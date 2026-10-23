@@ -23,6 +23,7 @@ const REQUIRED_METHODS = {
   'brain-extraction': ['10.1002/hbm.10062', 'arxiv.org/abs/2506.11860', '10.1016/j.neuroimage.2022.119474', 'github.com/niivue/niivue'],
   dwi2trx: ['10.1016/S0006-3495(94)80775-1', 'github.com/dipy/GPUStreamlines', 'PMC5381389', 'brainder.org/2025/05/05/15656/'],
   sdc: ['arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  dwicorrect: ['10.1016/j.neuroimage.2015.10.019', '10.1016/j.neuroimage.2016.06.058', '10.1016/j.neuroimage.2017.02.085', '10.1016/j.neuroimage.2015.07.067', '10.1016/j.media.2013.02.010', '10.1038/s41592-021-01185-5', 'arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   dwidenoise: ['arxiv.org/abs/2011.01355', '10.3389/fninf.2014.00008', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   degibbs: ['10.1002/mrm.26054', '10.1016/j.neuroimage.2019.116137', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   n4: ['10.1109/TMI.2010.2046908', '10.1016/j.neuroimage.2010.09.025', '10.1016/j.neuroimage.2019.116137', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],

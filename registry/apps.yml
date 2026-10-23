@@ -1046,3 +1046,28 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: dwicorrect
+    path: dwicorrect
+    title: DWI Correct
+    description: Correct motion, eddy currents and distortion in DWI.
+    categories: [diffusion-imaging]
+    keywords: [motion correction, eddy currents, susceptibility distortion, outlier replacement, slice-to-volume, topup, eddy, diffusion MRI, WebAssembly]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    handoff: dicom
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0 AND GPL-3.0-or-later
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node, rust-wasm]
+      shared_runtime: false
+      browser_test: true
+      release: false

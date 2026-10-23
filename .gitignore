@@ -16,6 +16,7 @@ playwright-report/
 test-results/
 apps/*/public/brainchop/
 apps/*/public/greedy-wasm/
+apps/*/public/shoreline-wasm/
 apps/me-ica/public/meica-wasm/
 apps/*/public/cfireants/
 apps/syncro/public/mindgrab/
@@ -40,6 +41,8 @@ exes/*/target/
 # WASM files (downloaded by per-app setup.sh)
 apps/*/web/wasm/
 packages/greedy/wasm/
+packages/shoreline/wasm/
+packages/shoreline/.wasm-build.lock/
 packages/fastprep/wasm/
 packages/greedy/.wasm-build.lock/
 

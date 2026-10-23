@@ -4518,6 +4518,14 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0fb07794f511b12bfeb891c361abc33e575a23f6/sdc/examples/ds005134-sub-01-slab/sub-01_dir-AP_dwi.bvec",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0fb07794f511b12bfeb891c361abc33e575a23f6/sdc/examples/ds005134-sub-01-slab/sub-01_dir-PA_epi.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0fb07794f511b12bfeb891c361abc33e575a23f6/sdc/examples/ds005134-sub-01-slab/sub-01_dir-PA_epi.json"
+    ],
+    "dwicorrect": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dwi.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dwi.bval",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dwi.bvec",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dwi.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dir-reverse_epi.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/UPLOAD_PENDING/dwicorrect/examples/synthetic-phantom/sub-phantom_dir-reverse_epi.json"
     ]
   }
 }

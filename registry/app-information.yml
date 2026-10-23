@@ -1799,3 +1799,89 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  dwicorrect:
+    packages:
+      - name: shoreline (Rust and WebAssembly)
+        url: https://github.com/neurodesk/webapps/tree/main/exes/dwi/shoreline
+        role: motion, eddy-current, susceptibility and outlier correction, implemented from the eddy papers without FSL code
+      - name: QSIPrep 26.1.1 3dSHORE (Rust port)
+        url: https://github.com/PennLINC/qsiprep
+        role: prediction of each volume from the others in series with 72 or more diffusion-weighted volumes
+      - name: PyHySCO 0.0.4 (Rust and WebAssembly port, as in the SDC app)
+        url: https://github.com/EmoryMLIP/PyHySCO
+        role: susceptibility field from a reverse phase-encoding b0, ported under the GPL-3.0
+      - name: MindGrab (brainchop)
+        url: https://github.com/neuroneural/brainchop
+        role: brain mask from the mean b0 on the GPU or CPU
+      - name: dcm2niix (WebAssembly)
+        url: https://github.com/rordenlab/dcm2niix
+        role: DICOM to NIfTI conversion
+      - name: NiiVue
+        url: https://github.com/niivue/niivue
+        role: image viewer
+    citations:
+      - group: Motion and distortion correction
+        title: Off-resonance and movement correction (eddy)
+        reference: "Andersson JLR, Sotiropoulos SN. An integrated approach to correction for off-resonance
+          effects and subject movement in diffusion MR imaging. NeuroImage. 2016;125:1063–1078."
+        doi: 10.1016/j.neuroimage.2015.10.019
+      - group: Motion and distortion correction
+        title: Outlier detection and replacement
+        reference: "Andersson JLR, Graham MS, Zsoldos E, Sotiropoulos SN. Incorporating outlier detection
+          and replacement into a non-parametric framework for movement and distortion correction of
+          diffusion MR images. NeuroImage. 2016;141:556–572."
+        doi: 10.1016/j.neuroimage.2016.06.058
+      - group: Motion and distortion correction
+        title: Slice-to-volume motion
+        reference: "Andersson JLR, Graham MS, Drobnjak I, Zhang H, Filippini N, Bastiani M. Towards a
+          comprehensive framework for movement and distortion correction of diffusion MR images: within
+          volume movement. NeuroImage. 2017;152:450–466."
+        doi: 10.1016/j.neuroimage.2017.02.085
+      - group: Signal prediction
+        title: Gaussian process prediction
+        reference: "Andersson JLR, Sotiropoulos SN. Non-parametric representation and prediction of single-
+          and multi-shell diffusion-weighted MRI data using Gaussian processes. NeuroImage.
+          2015;122:166–176."
+        doi: 10.1016/j.neuroimage.2015.07.067
+      - group: Signal prediction
+        title: 3dSHORE
+        reference: "Merlet SL, Deriche R. Continuous diffusion signal, EAP and ODF estimation via compressive
+          sensing in diffusion MRI. Medical Image Analysis. 2013;17(5):556–572."
+        doi: 10.1016/j.media.2013.02.010
+      - group: Signal prediction
+        title: QSIPrep (SHORELine)
+        reference: "Cieslak M, Cook PA, He X, et al. QSIPrep: an integrative platform for preprocessing and
+          reconstructing diffusion MRI data. Nature Methods. 2021;18(7):775–778."
+        doi: 10.1038/s41592-021-01185-5
+      - group: Susceptibility field
+        title: PyHySCO
+        reference: "Julian A, Ruthotto L. PyHySCO: GPU-enabled susceptibility artifact distortion
+          correction in seconds. arXiv:2403.10706. 2024."
+        url: https://arxiv.org/abs/2403.10706
+        code: https://github.com/EmoryMLIP/PyHySCO
+      - group: Susceptibility field
+        title: Hyperelastic susceptibility artifact correction
+        reference: "Ruthotto L, Kugel H, Olesch J, Fischer B, Modersitzki J, Burger M, Wolters CH.
+          Diffeomorphic susceptibility artifact correction of diffusion-weighted magnetic resonance
+          images. Physics in Medicine and Biology. 2012;57(18):5715–5731."
+        doi: 10.1088/0031-9155/57/18/5715
+      - group: Brain extraction
+        title: MindGrab
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        url: https://arxiv.org/abs/2506.11860
+      - group: Brain extraction
+        title: Brainchop
+        reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. Journal of Open Source Software. 2023;8(83):5098."
+        doi: 10.21105/joss.05098
+        code: https://github.com/neuroneural/brainchop
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for
+          neuroimaging data analysis: DICOM to NIfTI conversion. Journal of
+          Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

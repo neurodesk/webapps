@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DWI Correct — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Diffusion series</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a DWI series with its bval, bvec and JSON sidecar, and optionally a reverse phase-encoding b0 or a field map" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a DWI series with bval, bvec and sidecar, or a BIDS folder</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <p id="seriesInfo" class="nd-file-info" hidden></p>
+          <p id="fieldInfo" class="nd-file-info" hidden></p>
+          <div class="nd-row" id="acquisitionFields" hidden>
+            <div class="nd-field">
+              <label for="phaseEncoding">Phase encoding
+                <span class="nd-info-icon" tabindex="0" aria-label="About the phase encoding">i<span class="nd-info-tooltip">The sidecar has no PhaseEncodingDirection. Give the series' direction in voxel axes, as BIDS does: j- is posterior to anterior for an axial RAS series.</span></span>
+              </label>
+              <select id="phaseEncoding">
+                <option value="j-">j-</option>
+                <option value="j">j</option>
+                <option value="i">i</option>
+                <option value="i-">i-</option>
+              </select>
+            </div>
+            <div class="nd-field">
+              <label for="readoutTime">Readout <small>s</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About the readout time">i<span class="nd-info-tooltip">The sidecar has no TotalReadoutTime. It scales the eddy-current and susceptibility displacements; 0.05 s is typical.</span></span>
+              </label>
+              <input id="readoutTime" type="number" min="0.001" max="1" step="0.001" value="0.05" />
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Correction</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="fieldSource">Susceptibility field
+              <span class="nd-info-icon" tabindex="0" aria-label="About the susceptibility field">i<span class="nd-info-tooltip">A b0 with the opposite phase encoding (an AP/PA pair) gives the field through the SDC app's PyHySCO port. A topup _fieldcoef image or a field map in Hz on the series' grid can be loaded instead. Without one, only motion and eddy currents are corrected.</span></span>
+            </label>
+            <select id="fieldSource" disabled>
+              <option value="reverse">Estimate from reverse-PE b0</option>
+              <option value="upload">Loaded field map</option>
+              <option value="none">None</option>
+            </select>
+            <p id="fieldRule" class="nd-hint"></p>
+          </div>
+          <label class="nd-check"><input id="replaceOutliers" type="checkbox" checked disabled /> Replace outlier slices</label>
+          <p class="nd-hint">The brain mask is MindGrab's, from the mean b0.</p>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="model">Prediction model
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the prediction model">i<span class="nd-info-tooltip">Each volume is registered to a prediction from the others. 3dSHORE needs one diffusion-weighted volume per coefficient (72); smaller series use a Gaussian process, as eddy does.</span></span>
+                </label>
+                <select id="model" disabled>
+                  <option value="shore">3dSHORE</option>
+                  <option value="gp">Gaussian process</option>
+                </select>
+                <p id="modelRule" class="nd-hint"></p>
+              </div>
+              <p id="shellRule" class="nd-hint"></p>
+              <div class="nd-field">
+                <label for="outlierType">Outliers
+                  <span class="nd-info-icon" tabindex="0" aria-label="About outlier groups">i<span class="nd-info-tooltip">A slice whose signal is more than 4 standard deviations below its prediction is replaced by the prediction. With multiband, the slices excited together are also tested as one group.</span></span>
+                </label>
+                <select id="outlierType" disabled>
+                  <option value="both">Slices and multiband groups</option>
+                  <option value="sw">Single slices</option>
+                  <option value="gw">Multiband groups</option>
+                </select>
+                <p id="outlierRule" class="nd-hint"></p>
+              </div>
+              <label class="nd-check"><input id="sliceToVolume" type="checkbox" disabled /> Slice-to-volume motion</label>
+              <p id="sliceRule" class="nd-hint"></p>
+              <div class="nd-field">
+                <label for="eddyCurrents">Eddy currents
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the eddy-current model">i<span class="nd-info-tooltip">The eddy-current field of each volume is a polynomial in the scanner frame, tied to the gradient by a second-level model. Movement only corrects motion.</span></span>
+                </label>
+                <select id="eddyCurrents" disabled>
+                  <option value="quadratic">Quadratic</option>
+                  <option value="linear">Linear</option>
+                  <option value="movement">Movement only</option>
+                </select>
+                <p id="eddyRule" class="nd-hint"></p>
+              </div>
+              <div class="nd-field">
+                <label for="iterations">Iterations</label>
+                <input id="iterations" type="number" min="1" max="20" step="1" value="5" disabled />
+                <p id="iterationRule" class="nd-hint"></p>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Correct series</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+          <div class="nd-field" id="volumeField" hidden>
+            <label for="volume">Volume <small id="volumeLabel"></small></label>
+            <input id="volume" type="range" min="0" max="0" step="1" value="0" />
+          </div>
+          <button id="zipButton" class="nd-btn nd-btn-secondary" type="button" disabled>Download all outputs (.zip)</button>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a diffusion series anywhere, or choose an example.</p>
+        <section id="motionReport" class="nd-viewer-report" aria-label="Motion and outliers" hidden></section>
+      </div>
+      <div class="nd-viewer-info"><span id="imageLabel" class="nd-viewer-info-label"></span><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Correction progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel correction" aria-label="Cancel correction" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>DWI Correct corrects a diffusion MRI series in this browser, as FSL eddy does: head motion, eddy-current distortion, susceptibility distortion and slices that lost signal are estimated together, and every volume is resampled once with Jacobian modulation. Each volume is registered to a prediction from the others (3dSHORE for 72 or more diffusion-weighted volumes, else a Gaussian process); slices far below their prediction are replaced by it. It runs the shoreline command line (exes/dwi/shoreline), implemented from the eddy papers without FSL code: on synthetic phantoms with known truth it had lower error than FSL eddy 6.0.7.7 in every scheme tested, and on 30 ADNI sessions its corrected images correlated 0.98-0.99 with eddy's. The susceptibility field comes from a reverse phase-encoding b0 (the SDC app's PyHySCO port), a topup _fieldcoef image or a field map in Hz. The brain mask is MindGrab's, from the mean b0. Outputs use BIDS derivative names: the corrected series with its bval, bvec and sidecar, the movement and outliers per volume, the mask and the field. Series that need more than WebAssembly's 4 GB (HCP-sized data) are refused; the native command line handles them. The synthetic example is a small phantom with simulated motion, eddy currents, a field and dropped slices; it demonstrates the software, not the accuracy on real data.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "dwicorrect",
+  "version": "0.0.20261023",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @neurodesk/shoreline build:wasm && node scripts/copy-runtime.mjs && vite --force",
+    "build": "pnpm --filter @neurodesk/shoreline build:wasm && node scripts/copy-runtime.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app dwicorrect",
+    "preview": "vite preview",
+    "test": "pnpm --filter @neurodesk/shoreline build:wasm && node --test test/*.test.js ../../packages/shoreline/test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "node ../../scripts/lint.mjs --workspace"
+  },
+  "dependencies": {
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/sdc": "workspace:*",
+    "@neurodesk/shoreline": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.14",
+    "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "vite": "^5.0.0"
+  }
+}

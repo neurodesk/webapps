@@ -1598,6 +1598,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "dwicorrect": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

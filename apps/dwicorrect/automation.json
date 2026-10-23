@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 2,
+  "app": "dwicorrect",
+  "title": "DWI Correct",
+  "description": "Eddy-like correction of a diffusion series: head motion, eddy currents, susceptibility field and slice outliers.",
+  "defaultOperation": "correct",
+  "operations": {
+    "correct": {
+      "title": "Correct series",
+      "description": "Estimate motion, eddy-current fields and outlier slices against model predictions, apply the susceptibility field and resample once.",
+      "mode": "batch",
+      "inputs": {
+        "images": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "The DWI series with its JSON sidecar, and optionally a reverse phase-encoding b0 or a field map (topup _fieldcoef or Hz)",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "gradients": {
+          "source": "files",
+          "type": "neuro:gradients",
+          "formats": [
+            "bval",
+            "bvec"
+          ],
+          "description": "The series' b-values and b-vectors (FSL layout)",
+          "minimum": 0,
+          "maximum": 2
+        }
+      },
+      "parameters": {},
+      "artifacts": {
+        "dwi": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "bval": {
+          "type": "neuro:gradients",
+          "mediaType": "text/plain",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "bvec": {
+          "type": "neuro:gradients",
+          "mediaType": "text/plain",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "sidecar": {
+          "type": "neuro:metadata",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "confounds": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "outliers": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "mask": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "field": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "log": {
+          "type": "neuro:metadata",
+          "mediaType": "text/plain",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}
