@@ -1,11 +1,12 @@
 // Browser tests against `vite preview` of the production build: boot and the shared shell,
 // cross-origin isolation for the threaded module, the defaults the synthetic phantom sets, the
 // hosted ds006676 example through the whole correction (MindGrab mask, field from the PA b0,
-// shoreline) to its downloads, and cancellation and retry.
+// shoreline) to its downloads, a failed example download and its retry, and cancellation and
+// retry of a correction.
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { exampleFiles } from "./fixtures.mjs";
+import { exampleFiles, phantomDir } from "./fixtures.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 // The example's outliers with the MindGrab mask from the threaded CPU module, which headless
@@ -18,6 +19,12 @@ async function download(page, label) {
   await page.locator("#resultList .nd-volume-toggle").filter({ hasText: label }).getByRole("button", { name: "Download" }).click();
   return readFileSync(await (await event).path());
 }
+
+// The phantom is built by cargo on first use, which takes longer than one test may.
+test.beforeAll(() => {
+  test.setTimeout(600_000);
+  phantomDir();
+});
 
 async function loadPhantom(page, options) {
   await page.goto("/");
@@ -131,6 +138,26 @@ test("without the reverse b0 the series is corrected without a field", async ({ 
 
 });
 
+test("a full series with the opposite phase encoding is the reverse, whichever file comes first", async ({ page }) => {
+  const files = exampleFiles({ skip: ["sub-phantom_dir-reverse_epi.nii.gz", "sub-phantom_dir-reverse_epi.json"] });
+  const sidecar = JSON.parse(files.find((file) => file.name.endsWith(".json")).buffer);
+  const pe = sidecar.PhaseEncodingDirection;
+  const opposite = { ...sidecar, PhaseEncodingDirection: pe.endsWith("-") ? pe.slice(0, -1) : `${pe}-` };
+  const second = files.map((file) => ({
+    ...file,
+    name: file.name.replace("sub-phantom_dwi", "sub-phantom_run-2_dwi"),
+    buffer: file.name.endsWith(".json") ? Buffer.from(JSON.stringify(opposite)) : file.buffer,
+  }));
+  await page.goto("/");
+  await page.locator("select[data-neurodesk-example]").waitFor();
+  // The same number of volumes: the series is the first by name, the other its reverse.
+  await page.locator("#imageInput").setInputFiles([...second, ...files]);
+  await expect(page.locator("#runButton")).toBeEnabled({ timeout: 60_000 });
+  await expect(page.locator("#fileInfo")).toHaveText("sub-phantom_dwi.nii.gz");
+  await expect(page.locator("#fieldInfo")).toHaveText("Reverse-PE b0: sub-phantom_run-2_dwi.nii.gz");
+  await expect(page.locator("#fieldSource")).toHaveValue("reverse");
+});
+
 test("a sidecar without phase encoding asks for it", async ({ page }) => {
   await loadPhantom(page, { skip: ["sub-phantom_dwi.json", "sub-phantom_dir-reverse_epi.nii.gz", "sub-phantom_dir-reverse_epi.json"] });
   await expect(page.locator("#acquisitionFields")).toBeVisible();
@@ -150,6 +177,31 @@ test("a correction can be cancelled and run again", { tag: "@slow" }, async ({ p
   await expect(page.locator("#statusText")).toContainText("Corrected in", { timeout: 840_000 });
   await expect(page.locator("#statusText")).toContainText(OUTLIER_STATUS);
 });
+
+for (const failure of ["download", "empty image"]) {
+  test(`a failed ${failure} can retry the same example`, async ({ page }) => {
+    test.setTimeout(400_000);
+    const image = example.files.find((file) => file.role === "image");
+    let attempts = 0;
+    await page.context().route(image.url, (route) => {
+      attempts++;
+      if (attempts > 1) return route.fallback();
+      return route.fulfill({ status: failure === "download" ? 503 : 200, body: "" });
+    });
+    await page.goto("/");
+    const picker = page.getByRole("combobox", { name: "Input", exact: true });
+    await picker.selectOption(example.id);
+    await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "error", { timeout: 120_000 });
+    await expect(page.locator("#runButton")).toBeDisabled();
+    await expect(page.locator("#inputInfo")).toBeHidden();
+    await expect(picker).toBeEnabled();
+    await picker.selectOption(example.id);
+    await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 300_000 });
+    await expect(page.locator("#runButton")).toBeEnabled();
+    await expect(page.locator("#fileInfo")).toHaveText(image.name);
+    expect(attempts).toBe(2);
+  });
+}
 
 test("the example selector lists the examples", async ({ page }) => {
   await page.goto("/");
