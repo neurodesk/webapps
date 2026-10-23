@@ -1,0 +1,29 @@
+{
+  "name": "@neurodesk/shoreline",
+  "version": "0.1.0",
+  "description": "Eddy-like correction of diffusion MRI (motion, eddy currents, susceptibility, slice outliers) in WebAssembly",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/index.js && node --check scripts/build-wasm.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/shoreline"
+  }
+}
