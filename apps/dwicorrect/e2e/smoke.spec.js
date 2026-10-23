@@ -1,7 +1,8 @@
 // Browser tests against `vite preview` of the production build: boot and the shared shell,
 // cross-origin isolation for the threaded module, the defaults the synthetic phantom sets, the
 // hosted ds006676 example through the whole correction (MindGrab mask, field from the PA b0,
-// shoreline) to its downloads, and cancellation and retry.
+// shoreline) to its downloads, a failed example download and a cancelled example load with
+// their retries, and cancellation and retry of a correction.
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
@@ -149,6 +150,68 @@ test("a correction can be cancelled and run again", { tag: "@slow" }, async ({ p
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Corrected in", { timeout: 840_000 });
   await expect(page.locator("#statusText")).toContainText(OUTLIER_STATUS);
+});
+
+test("a failed example download shows the error and the same example can load again", async ({ page }) => {
+  test.setTimeout(300_000);
+  const bval = example.files.find((file) => file.role === "bval");
+  let attempts = 0;
+  await page.context().route(bval.url, (route) => {
+    attempts++;
+    if (attempts > 1) return route.fallback();
+    return route.fulfill({ status: 503, body: "" });
+  });
+  await page.goto("/");
+  const picker = page.getByRole("combobox", { name: "Input", exact: true });
+  const selector = page.locator("[data-neurodesk-examples]");
+  await picker.selectOption(example.id);
+  await expect(selector).toHaveAttribute("data-example-state", "error");
+  await expect(page.locator("#statusText")).toHaveText(`Could not download ${bval.name} (HTTP 503). Load the example again to retry.`);
+  await expect(page.locator("#inputInfo")).toBeHidden();
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect(picker).toBeEnabled();
+  await picker.selectOption(example.id);
+  await expect(selector).toHaveAttribute("data-example-state", "ready", { timeout: 240_000 });
+  await expect(page.locator("#fileInfo")).toHaveText(example.files[0].name);
+  await expect(page.locator("#runButton")).toBeEnabled();
+  expect(attempts).toBe(2);
+});
+
+test("cancelling an example load commits nothing and the example can load again", async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.goto("/");
+  // Hold the first read of a downloaded file until the load is cancelled, so the files arrive
+  // after the cancel.
+  await page.evaluate(() => {
+    const read = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = function () {
+      const file = this;
+      return new Promise((resolve, reject) => {
+        window.finishExampleRead = () => {
+          File.prototype.arrayBuffer = read;
+          read.call(file).then(resolve, reject);
+        };
+      });
+    };
+  });
+  const picker = page.getByRole("combobox", { name: "Input", exact: true });
+  const selector = page.locator("[data-neurodesk-examples]");
+  await picker.selectOption(example.id);
+  await expect(selector).toHaveAttribute("data-example-state", "loading");
+  await page.waitForFunction(() => typeof window.finishExampleRead === "function", null, { timeout: 120_000 });
+  await page.getByRole("button", { name: "Cancel example download", exact: true }).click();
+  await expect(selector).toHaveAttribute("data-example-state", "cancelled");
+  await page.evaluate(() => window.finishExampleRead());
+  // Give the released read time to reach the page; it must not load the series.
+  await page.waitForTimeout(2_000);
+  await expect(selector).toHaveAttribute("data-example-state", "cancelled");
+  await expect(page.locator("#inputInfo")).toBeHidden();
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect(picker).toBeEnabled();
+  await picker.selectOption(example.id);
+  await expect(selector).toHaveAttribute("data-example-state", "ready", { timeout: 240_000 });
+  await expect(page.locator("#fileInfo")).toHaveText(example.files[0].name);
+  await expect(page.locator("#runButton")).toBeEnabled();
 });
 
 test("the example selector lists the examples", async ({ page }) => {
