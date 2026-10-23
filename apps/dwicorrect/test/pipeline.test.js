@@ -229,3 +229,66 @@ test("the input summary: file, volumes and shells, acquisition, field source", a
   assert.equal(inputSummary({ name: "x", series: clinical, entered: { multiband: 3 } })[2], "PE j-, 50 ms readout · multiband 3 (set below)");
   assert.equal(inputSummary({ name: "x", series: adni, entered: { multiband: 2 } })[2], "PE j, 63 ms readout · multiband 3 · slice timing");
 });
+
+test("the DWI series is the same for the grid check and the classification, whatever the read order", async () => {
+  const { chooseDwi } = await import("../src/pipeline.js");
+  const ap = { image: file("sub-01_dir-AP_dwi.nii.gz"), sidecar: { PhaseEncodingDirection: "j-" }, bval: file("a.bval"), bvec: file("a.bvec"), frames: 100 };
+  const pa = { image: file("sub-01_dir-PA_dwi.nii.gz"), sidecar: { PhaseEncodingDirection: "j" }, bval: file("b.bval"), bvec: file("b.bvec"), frames: 100 };
+  // Both series on one grid: each is on the other's grid, not on its own.
+  const sameGrid = (entry, dwi) => entry !== dwi;
+  for (const order of [[ap, pa], [pa, ap]]) {
+    assert.equal(chooseDwi(order), ap);
+    const found = classifyInputs(order, { sameGrid });
+    assert.equal(found.dwi, ap);
+    assert.equal(found.reverse, pa);
+  }
+  assert.equal(chooseDwi([{ ...ap, image: file("x_fieldmap.nii.gz") }]), null);
+});
+
+test("a field map is in Hz or rad/s, on the series' grid", () => {
+  const dwi = { image: file("sub-01_dwi.nii.gz"), sidecar: { PhaseEncodingDirection: "j-" }, bval: file("a.bval"), bvec: file("a.bvec"), frames: 30, sameGrid: false };
+  const map = (sidecar, sameGrid = true) => ({ image: file("sub-01_fieldmap.nii.gz"), sidecar, bval: null, bvec: null, frames: 1, sameGrid });
+  assert.deepEqual(
+    (({ kind, scale, units }) => ({ kind, scale, units }))(classifyInputs([dwi, map({ Units: "Hz" })]).field),
+    { kind: "hz", scale: 1, units: "Hz" },
+  );
+  assert.equal(classifyInputs([dwi, map(null)]).field.units, "Hz");
+  const radians = classifyInputs([dwi, map({ Units: "rad/s" })]).field;
+  assert.equal(radians.units, "rad/s");
+  assert.ok(Math.abs(radians.scale * 2 * Math.PI - 1) < 1e-15);
+  // A rad/s map found by its sidecar alone.
+  assert.equal(classifyInputs([dwi, { ...map({ Units: "rad/s" }), image: file("b0map.nii.gz") }]).field.kind, "hz");
+  assert.throws(() => classifyInputs([dwi, map({ Units: "T" })]), /is in T; give a field map in Hz or rad\/s/);
+  assert.throws(() => classifyInputs([dwi, map({ Units: "Hz" }, false)]), /not on the series' grid/);
+});
+
+test("a declared multiband factor that does not divide the slices can be entered instead", async () => {
+  const { withMultiband } = await import("../src/pipeline.js");
+  const bad = describeSeries({ bvals: [0, ...Array(30).fill(1000)], sidecar: { MultibandAccelerationFactor: 3 }, dims: [96, 96, 64] });
+  assert.equal(bad.multibandKnown, false);
+  assert.equal(bad.multiband, 1);
+  assert.equal(withMultiband(bad, 4).multiband, 4);
+  assert.throws(() => withMultiband(bad, 3), /The multiband factor 3 does not divide the 64 slices/);
+  const timed = describeSeries({ bvals: [0, 1000], sidecar: { MultibandAccelerationFactor: 3, SliceTiming: [0, 0.5, 0, 0.5] }, dims: [96, 96, 4] });
+  assert.equal(timed.multibandKnown, true);
+  assert.equal(timed.multiband, 2);
+});
+
+test("an unsupported phase-encoding direction is refused when the series is read", () => {
+  assert.throws(() => describeSeries({ bvals: [0, 1000], sidecar: { PhaseEncodingDirection: "k" }, dims: [96, 96, 60] }), /PhaseEncodingDirection is "k"; DWI Correct needs i, i-, j or j-/);
+  assert.equal(describeSeries({ bvals: [0, 1000], sidecar: { PhaseEncodingDirection: "i-" }, dims: [96, 96, 60] }).phaseEncodingDirection, "i-");
+});
+
+test("the estimated field's sidecar gives Units Hz and the sign convention", async () => {
+  const { fieldmapSidecar, preprocSidecar } = await import("../src/pipeline.js");
+  const sidecar = fieldmapSidecar({ pe: "j-", readout: 0.05, reverse: "sub-01_dir-PA_epi.nii.gz", version: "0.0.1" });
+  assert.equal(sidecar.Units, "Hz");
+  assert.equal(sidecar.PhaseEncodingDirection, "j-");
+  assert.equal(sidecar.TotalReadoutTime, 0.05);
+  assert.match(sidecar.Description, /topup's sign convention/);
+  assert.equal(outputNames("sub-01_dwi.nii.gz").fieldSidecar, "sub-01_fieldmap.json");
+  const settings = { model: "gp", eddyCurrents: "quadratic", outliers: "sw", iterations: 5 };
+  const converted = preprocSidecar({ input: {}, settings, args: [], field: "hz", fieldUnits: "rad/s, divided by 2π to Hz", threads: 1, seconds: 1, mask: "m", version: "v" });
+  assert.equal(converted.DwicorrectSettings.SusceptibilityFieldUnits, "rad/s, divided by 2π to Hz");
+  assert.equal("SusceptibilityFieldUnits" in preprocSidecar({ input: {}, settings, args: [], field: "none", threads: 1, seconds: 1, mask: "m", version: "v" }).DwicorrectSettings, false);
+});

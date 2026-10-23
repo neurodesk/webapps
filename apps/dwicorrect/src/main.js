@@ -13,7 +13,7 @@ import {
   bindInfoTooltips,
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
-import { createNiftiFromData, decodeNiftiBuffer, downloadFile, parseNiftiHeader, readNiftiFrames, sameNiftiGrid } from "@neurodesk/webapp-components/file-io";
+import { assertImageValues, createNiftiFromData, decodeNiftiBuffer, downloadFile, parseNiftiHeader, readNiftiFrames, sameNiftiGrid } from "@neurodesk/webapp-components/file-io";
 import { readBidsDiffusion } from "@neurodesk/webapp-components/file-io/bids";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { readDiffusionSeries, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
@@ -30,7 +30,9 @@ import {
   withMultiband,
   inputSummary,
   describeSeries,
+  fieldmapSidecar,
   motionSummary,
+  numbers,
   outliersTsv,
   outputNames,
   preprocSidecar,
@@ -40,7 +42,6 @@ import {
 import { renderMotionReport } from "./report.js";
 import { axialSlices, previewSlice } from "./frames.js";
 import { beforeAfterGif, previewVolumes } from "./before-after-gif.js";
-import "./style.css";
 import { correctSeries, estimateField } from "./workers.js";
 import examples from "../examples.json";
 
@@ -197,11 +198,12 @@ function setBusy(busy) {
   $("imageInput").disabled = busy;
   $("resultList").inert = busy;
   exampleControl?.setDisabled(busy);
-  for (const id of ["fieldSource", "replaceOutliers", "model", "outlierType", "eddyCurrents", "iterations", "phaseEncoding", "readoutTime", "multiband"]) {
+  for (const id of ["fieldSource", "replaceOutliers", "model", "eddyCurrents", "iterations", "phaseEncoding", "readoutTime", "multiband"]) {
     $(id).disabled = busy || !input;
   }
+  $("outlierType").disabled = busy || !input || !$("replaceOutliers").checked;
   $("sliceToVolume").disabled = busy || !input?.series.sliceTiming;
-  $("runButton").disabled = busy || !input;
+  $("runButton").disabled = busy || !input || !multibandValid();
   $("zipButton").disabled = busy || !outputs;
   if (input) {
     for (const option of $("fieldSource").options) {
@@ -225,12 +227,6 @@ function meanOf(data, voxels, frames, bvals) {
 
 function voxelSizes(affine) {
   return [0, 1, 2].map((j) => Math.hypot(affine[0][j], affine[1][j], affine[2][j]));
-}
-
-function intentCode(buffer) {
-  const view = new DataView(buffer);
-  const little = view.getInt32(0, true) === 348;
-  return view.getInt16(68, little);
 }
 
 /** The selection's series: from a BIDS folder (one DWI run and its fieldmaps), else loose files. */
@@ -270,11 +266,10 @@ async function loadFiles(filesPromise, signal) {
       const header = parseNiftiHeader(buffer);
       let frames = 1;
       for (let d = 4; d <= header.dims[0]; d++) frames *= Math.max(1, header.dims[d]);
-      read.push({ ...entry, buffer, frames, intent: intentCode(buffer) });
+      read.push({ ...entry, buffer, frames, intent: header.intentCode });
     }
-    const dwiGuess = [...read].filter((e) => e.bval && e.bvec).sort((a, b) => b.frames - a.frames)[0];
-    for (const entry of read) entry.sameGrid = Boolean(dwiGuess) && entry !== dwiGuess && sameNiftiGrid(entry.buffer, dwiGuess.buffer, 0.01);
-    const found = classifyInputs(read);
+    // Every check before anything is committed: a refused selection leaves the loaded series as it was.
+    const found = classifyInputs(read, { sameGrid: (entry, dwi) => entry !== dwi && sameNiftiGrid(entry.buffer, dwi.buffer, 0.01) });
     const dwi = found.dwi;
     const frames = readNiftiFrames(dwi.buffer);
     const voxels = frames.dims[0] * frames.dims[1] * frames.dims[2];
@@ -288,6 +283,7 @@ async function loadFiles(filesPromise, signal) {
       const gb = (bytes) => (bytes / 1024 ** 3).toFixed(1);
       throw new Error(`This series needs about ${gb(estimateMemory(size))} GB, more than WebAssembly's ${gb(MEMORY_LIMIT)} GB. Use the native shoreline command line (exes/dwi/shoreline).`);
     }
+    assertImageValues(frames.data, { subject: dwi.image.name });
     const meanB0 = meanOf(frames.data, voxels, frames.frames, bvals);
     const sliceZ = previewSlice(meanB0, frames.dims);
     const beforeSlices = axialSlices(frames.data, frames.dims, frames.frames, sliceZ);
@@ -296,12 +292,32 @@ async function loadFiles(filesPromise, signal) {
     let reverse = null;
     if (found.reverse) {
       const r = readNiftiFrames(found.reverse.buffer);
-      const rBvals = found.reverse.bval ? readGradients(await found.reverse.bval.text(), await found.reverse.bvec.text(), r.frames).bvals : null;
-      reverse = { name: found.reverse.image.name, sidecar: found.reverse.sidecar, mean: meanOf(r.data, voxels, r.frames, rBvals) };
+      const name = found.reverse.image.name;
+      // Only the b-values matter here (the b = 0 mean); a bvec is not needed.
+      const rBvals = found.reverse.bval ? numbers(await found.reverse.bval.text()) : null;
+      if (rBvals && (rBvals.length !== r.frames || rBvals.some((b) => !Number.isFinite(b)))) {
+        throw new Error(`The bval of ${name} has ${rBvals.length} values for ${r.frames} volumes.`);
+      }
+      assertImageValues(r.data, { subject: name });
+      reverse = { name, sidecar: found.reverse.sidecar, mean: meanOf(r.data, voxels, r.frames, rBvals) };
+    }
+    let field = null;
+    if (found.field) {
+      const { entry, kind, scale, units } = found.field;
+      field = { kind, name: entry.image.name, file: entry.image, units };
+      if (kind === "hz") {
+        const values = readNiftiFrames(entry.buffer).data;
+        // A constant field is a uniform shift along the phase encoding: valid.
+        assertImageValues(values, { subject: entry.image.name, allowConstant: true });
+        if (scale !== 1) {
+          const hz = Float32Array.from(values, (value) => value * scale);
+          field.file = new File([await gzipBytes(createNiftiFromData(hz, entry.buffer, { dims: frames.dims }))], entry.image.name.replace(/(\.nii)?(\.gz)?$/i, "_hz.nii.gz"), { type: "application/gzip" });
+        }
+      }
     }
     const firstFile = new File([await gzipBytes(createNiftiFromData(Float32Array.from(first), dwi.buffer, { dims: frames.dims }))], "first_volume.nii.gz");
     controller.signal.throwIfAborted();
-    input = {
+    const loaded = {
       name: dwi.image.name,
       file: dwi.image,
       buffer: dwi.buffer,
@@ -318,9 +334,9 @@ async function loadFiles(filesPromise, signal) {
       series,
       meanB0,
       reverse,
-      field: found.field && { kind: found.field.kind, name: found.field.entry.image.name, file: found.field.entry.image, sameGrid: found.field.entry.sameGrid },
+      field,
     };
-    if (input.field?.kind === "hz" && !input.field.sameGrid) throw new Error(`${input.field.name} is not on the series' grid; give a field map in Hz on the DWI grid, or topup's _fieldcoef image.`);
+    input = loaded;
     clearOutputs();
     $("multiband").value = "1";
     applyDefaults();
@@ -333,6 +349,7 @@ async function loadFiles(filesPromise, signal) {
     status(`${input.name} loaded: ${series.volumes} volumes`);
   } catch (error) {
     if (!input) $("emptyState").hidden = false;
+    progress.reset();
     throw error;
   } finally {
     signal?.removeEventListener("abort", abort);
@@ -345,6 +362,16 @@ async function loadFiles(filesPromise, signal) {
 
 /** The series as corrected: the sidecar's description, with the multiband factor entered if it has none. */
 const effectiveSeries = () => withMultiband(input.series, $("multiband").value);
+
+/** Whether the multiband factor entered divides the slices. */
+function multibandValid() {
+  try {
+    effectiveSeries();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function applyDefaults() {
   const fieldSource = input.field ? "upload" : input.reverse ? "reverse" : "none";
@@ -367,6 +394,7 @@ function applyDefaults() {
 
 /** The outlier groups that suit the multiband factor, and the choices it allows. */
 function applyOutlierDefault() {
+  if (!multibandValid()) return;
   const series = effectiveSeries();
   $("outlierType").value = defaultSettings(series, "none").outliers.value;
   $("outlierType").options[0].disabled = series.multiband < 2;
@@ -423,6 +451,8 @@ async function correct(signal) {
   try {
     const settings = chosenSettings();
     const { pe, readout } = acquisition();
+    // Before the brain mask and the field: a multiband factor that does not divide the slices fails here.
+    const series = effectiveSeries();
     const names = outputNames(input.name);
     const voxels = input.dims[0] * input.dims[1] * input.dims[2];
 
@@ -449,6 +479,7 @@ async function correct(signal) {
     };
     let field = "none";
     let fieldFile = null;
+    let fieldSidecarFile = null;
     const source = $("fieldSource").value;
     if (source === "reverse" && input.reverse) {
       progress.begin("Estimating the susceptibility field from the reverse-PE b0…");
@@ -466,6 +497,7 @@ async function correct(signal) {
       const fieldNifti = createNiftiFromData(Float32Array.from(out.field), input.buffer, { dims: input.dims });
       files[SESSION.field] = fieldNifti.slice(0);
       fieldFile = new File([await gzipBytes(fieldNifti)], names.field, { type: "application/gzip" });
+      fieldSidecarFile = textFile(`${JSON.stringify(fieldmapSidecar({ pe, readout, reverse: input.reverse.name, version: APP.version }), null, 2)}\n`, names.fieldSidecar, "application/json");
       field = "estimated";
     } else if (source === "upload" && input.field) {
       const bytes = await input.field.file.arrayBuffer();
@@ -475,8 +507,6 @@ async function correct(signal) {
     }
     controller.signal.throwIfAborted();
 
-    const series = effectiveSeries();
-    if (input.dims[2] % series.multiband) throw new Error(`The multiband factor ${series.multiband} does not divide the ${input.dims[2]} slices.`);
     const args = shorelineArgs({ settings, series, field });
     const plan = { done: 0, total: 2 + settings.iterations + (settings.sliceToVolume && input.series.sliceTiming ? 5 : 0) + 1 };
     let threads = 1;
@@ -503,7 +533,8 @@ async function correct(signal) {
     const parameters = text("parameters");
     const movementRms = text("movement_rms");
     const outlierMap = text("outlier_map");
-    const sidecar = preprocSidecar({ input: input.sidecar, settings, args, field, threads, seconds, mask: maskSource, version: APP.version });
+    const fieldUnits = field === "hz" && input.field.units !== "Hz" ? `${input.field.units}, divided by 2π to Hz` : null;
+    const sidecar = preprocSidecar({ input: input.sidecar, settings, args, field, fieldUnits, threads, seconds, mask: maskSource, version: APP.version });
     const rows = {
       dwi: { description: "Corrected series", file: new File([run.outputs[`${SESSION.out}.nii.gz`]], names.dwi, { type: "application/gzip" }) },
       bval: { description: "b-values", file: textFile(text("bvals"), names.bval), viewable: false },
@@ -513,12 +544,14 @@ async function correct(signal) {
       ...(outlierMap ? { outliers: { description: "Outlier slices", file: textFile(outliersTsv(outlierMap, input.dims[2]), names.outliers, "text/tab-separated-values"), viewable: false } } : {}),
       mask: { description: "Brain mask (MindGrab)", file: new File([await gzipBytes(maskNifti)], names.mask, { type: "application/gzip" }) },
       ...(fieldFile ? { field: { description: "Field map (Hz)", file: fieldFile } } : {}),
+      ...(fieldSidecarFile ? { fieldSidecar: { description: "Field map sidecar", file: fieldSidecarFile, viewable: false } } : {}),
       log: { description: "Log", file: textFile(text("log") ?? "", names.log), viewable: false },
     };
     const summary = motionSummary({ parameters, movementRms, outlierMap });
     outputs = { rows, summary, names };
     results.render(rows);
-    progress.begin("Making the before/after preview…");
+    // Not cancellable: the run is done, and the preview takes a moment.
+    progress.begin("Making the before/after preview…", { cancellable: false });
     const corrected = readNiftiFrames(await decodeNiftiBuffer(await rows.dwi.file.arrayBuffer()));
     const gif = beforeAfterGif({
       before: input.beforeSlices,
@@ -589,6 +622,15 @@ for (const id of ["phaseEncoding", "readoutTime"]) {
 $("multiband").addEventListener("input", () => {
   clearOutputs();
   if (!input) return;
+  $("runButton").disabled = Boolean(loading || running) || !multibandValid();
+  if (!multibandValid()) {
+    try {
+      effectiveSeries();
+    } catch (error) {
+      status(error.message, true);
+    }
+    return;
+  }
   applyOutlierDefault();
   renderInput();
 });
