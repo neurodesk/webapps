@@ -27,6 +27,7 @@
 //! Finally each diffusion shell's mean is aligned to the b0 mean by mutual information, and
 //! every volume is resampled once (cubic B-spline, Jacobian modulation).
 
+pub mod cli;
 mod gp;
 pub mod lsr;
 pub mod mbs;
@@ -41,6 +42,37 @@ use dwi_slice_outliers::{OutlierMap, Params as OutlierParams, SliceGrid};
 use rayon::prelude::*;
 use rigid::{Mat3, Rigid};
 use volume::Grid;
+
+/// The progress log's clock, in seconds. WebAssembly in a browser has no `Instant`, so the
+/// caller there gives one with `set_clock`.
+static CLOCK: std::sync::OnceLock<fn() -> f64> = std::sync::OnceLock::new();
+
+/// Sets the clock of the progress log (once; later calls change nothing).
+pub fn set_clock(now: fn() -> f64) {
+    let _ = CLOCK.set(now);
+}
+
+/// Seconds on the progress log's clock.
+pub fn now() -> f64 {
+    match CLOCK.get() {
+        Some(clock) => clock(),
+        None => default_now(),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn default_now() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn default_now() -> f64 {
+    0.0
+}
 
 /// The phase encoding of one volume.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1565,8 +1597,8 @@ pub fn run(
             "Gaussian process"
         }
     ));
-    let start = std::time::Instant::now();
-    let elapsed = || start.elapsed().as_secs_f64();
+    let start = now();
+    let elapsed = || now() - start;
     log(format!(
         "{} volumes ({} b0), {} mask voxels, {} domain voxels",
         nv,

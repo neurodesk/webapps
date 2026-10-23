@@ -1016,3 +1016,166 @@ fn field_changing_with_rotation() {
         "no change: with {with:.4}, without {without:.4}"
     );
 }
+
+/// Writes the standard phantom with dropouts as the command line's inputs (NIfTI series,
+/// mask and field map, acqp, index, bvals, bvecs) to `$SHORELINE_CLI_PHANTOM_DIR`, for
+/// `packages/shoreline/test/agreement.test.js`, which runs the native binary and the
+/// WebAssembly module on them. The affine has a negative determinant, so FSL's voxel axes
+/// are NIfTI's and the vectors are written as they are.
+#[test]
+#[ignore]
+fn export_command_line_phantom() {
+    let Ok(dir) = std::env::var("SHORELINE_CLI_PHANTOM_DIR") else {
+        return;
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = phantom(true, 1.0, 1.0);
+    let g = grid();
+    let mut header = vec![0u8; 348];
+    header[0..4].copy_from_slice(&348i32.to_le_bytes());
+    for (i, v) in [-1.0f32, VOXEL as f32, VOXEL as f32, VOXEL as f32]
+        .iter()
+        .enumerate()
+    {
+        header[76 + 4 * i..80 + 4 * i].copy_from_slice(&v.to_le_bytes());
+    }
+    header[254..256].copy_from_slice(&1i16.to_le_bytes());
+    for (r, row) in [
+        [-VOXEL as f32, 0.0, 0.0, 25.0],
+        [0.0, VOXEL as f32, 0.0, -35.0],
+        [0.0, 0.0, VOXEL as f32, -17.0],
+    ]
+    .iter()
+    .enumerate()
+    {
+        for (c, v) in row.iter().enumerate() {
+            header[280 + 16 * r + 4 * c..284 + 16 * r + 4 * c].copy_from_slice(&v.to_le_bytes());
+        }
+    }
+    header[344..348].copy_from_slice(b"n+1\0");
+    let like = dwi_shoreline::nifti::Image {
+        header,
+        dims: g.dims.to_vec(),
+        pixdim: [VOXEL; 3],
+        affine: [[0.0; 4]; 4],
+        intent_code: 0,
+        data: Vec::new(),
+    };
+    let [nx, ny, nz] = g.dims;
+    let write = |name: &str, volumes: &[&[f32]]| {
+        let path = format!("{dir}/{name}");
+        let mut dims = vec![nx, ny, nz];
+        if volumes.len() > 1 {
+            dims.push(volumes.len());
+        }
+        dwi_shoreline::nifti::write_series(&path, &like, &dims, volumes).unwrap();
+    };
+    let series: Vec<&[f32]> = p.input.volumes.iter().map(|v| v.as_slice()).collect();
+    write("dwi.nii.gz", &series);
+    let mask: Vec<f32> = p.input.mask.iter().map(|&m| f32::from(m)).collect();
+    write("mask.nii.gz", &[&mask]);
+    write("field.nii.gz", &[p.input.field_hz.as_ref().unwrap()]);
+    let mut acqp = String::new();
+    let mut index = Vec::new();
+    for a in &p.input.acquisitions {
+        let mut v = [0.0; 3];
+        v[a.pe_axis] = a.pe_sign;
+        let row = format!("{} {} {} {}\n", v[0], v[1], v[2], a.readout_time);
+        let at = match acqp.lines().position(|l| format!("{l}\n") == row) {
+            Some(i) => i,
+            None => {
+                acqp += &row;
+                acqp.lines().count() - 1
+            }
+        };
+        index.push((at + 1).to_string());
+    }
+    std::fs::write(format!("{dir}/acqp"), acqp).unwrap();
+    std::fs::write(format!("{dir}/index"), index.join(" ") + "\n").unwrap();
+    let bvals: Vec<String> = p.input.bvals.iter().map(|b| b.to_string()).collect();
+    std::fs::write(format!("{dir}/bvals"), bvals.join(" ") + "\n").unwrap();
+    let rows: Vec<String> = (0..3)
+        .map(|c| {
+            p.input
+                .bvecs
+                .iter()
+                .map(|g| g[c].to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+    std::fs::write(format!("{dir}/bvecs"), rows.join("\n") + "\n").unwrap();
+    // The true movement, laid out as the command line's `.parameters` (without the
+    // eddy-current terms).
+    let truth: String = p
+        .truth
+        .iter()
+        .map(|t| {
+            let row: Vec<String> = t
+                .rigid
+                .translation
+                .iter()
+                .chain(&t.rigid.rotation)
+                .map(|x| format!("{x:.6}"))
+                .collect();
+            row.join(" ") + "\n"
+        })
+        .collect();
+    std::fs::write(format!("{dir}/truth.parameters"), truth).unwrap();
+
+    // The app's example (BIDS names): the series with its sidecar, and a b0 acquired with the
+    // opposite phase encoding, without motion (the first b0's position), from the same field.
+    let example = format!("{dir}/example");
+    std::fs::create_dir_all(&example).unwrap();
+    let a = &p.input.acquisitions[0];
+    let code = |sign: f64| {
+        format!(
+            "{}{}",
+            ["i", "j", "k"][a.pe_axis],
+            if sign < 0.0 { "-" } else { "" }
+        )
+    };
+    let sidecar = |sign: f64| {
+        format!(
+            "{{\n  \"PhaseEncodingDirection\": \"{}\",\n  \"TotalReadoutTime\": {}\n}}\n",
+            code(sign),
+            a.readout_time
+        )
+    };
+    let mut rng = Rng(20261023);
+    let k = -a.readout_time * a.pe_sign;
+    let reverse: Vec<f32> = (0..g.voxels())
+        .map(|i| {
+            let x = g.ijk(i).map(|c| c as f64);
+            let d = |q: [f64; 3]| -> f64 { k * field_hz(mm(q)) };
+            let mut q = x;
+            for _ in 0..30 {
+                q[a.pe_axis] = x[a.pe_axis] - d(q);
+            }
+            let mut qh = q;
+            qh[a.pe_axis] += 1e-4;
+            let jacobian = 1.0 + (d(qh) - d(q)) / 1e-4;
+            (signal(mm(q), 0.0, [0.0; 3]) / jacobian + 3.0 * rng.gaussian()) as f32
+        })
+        .collect();
+    let series_path = format!("{dir}/dwi.nii.gz");
+    std::fs::copy(&series_path, format!("{example}/sub-phantom_dwi.nii.gz")).unwrap();
+    for (from, to) in [
+        ("bvals", "sub-phantom_dwi.bval"),
+        ("bvecs", "sub-phantom_dwi.bvec"),
+    ] {
+        std::fs::copy(format!("{dir}/{from}"), format!("{example}/{to}")).unwrap();
+    }
+    std::fs::write(
+        format!("{example}/sub-phantom_dwi.json"),
+        sidecar(a.pe_sign),
+    )
+    .unwrap();
+    let path = format!("{example}/sub-phantom_dir-reverse_epi.nii.gz");
+    dwi_shoreline::nifti::write_series(&path, &like, &[nx, ny, nz], &[&reverse]).unwrap();
+    std::fs::write(
+        format!("{example}/sub-phantom_dir-reverse_epi.json"),
+        sidecar(-a.pe_sign),
+    )
+    .unwrap();
+}

@@ -27,13 +27,13 @@ fn f32_at(h: &[u8], o: usize) -> f32 {
     f32::from_le_bytes([h[o], h[o + 1], h[o + 2], h[o + 3]])
 }
 
-fn read_bytes(path: &str) -> Result<Vec<u8>, String> {
-    let raw = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+/// The bytes of a file, decompressed when they are gzipped.
+fn gunzip(raw: Vec<u8>, name: &str) -> Result<Vec<u8>, String> {
     if raw.starts_with(&[0x1f, 0x8b]) {
         let mut out = Vec::with_capacity(raw.len() * 3);
         flate2::read::MultiGzDecoder::new(&raw[..])
             .read_to_end(&mut out)
-            .map_err(|e| format!("{path}: {e}"))?;
+            .map_err(|e| format!("{name}: {e}"))?;
         Ok(out)
     } else {
         Ok(raw)
@@ -112,15 +112,31 @@ fn nifti2_as_nifti1(h2: &[u8], big_endian: bool) -> Result<Vec<u8>, String> {
 
 /// Reads a NIfTI-1 image.
 pub fn read(path: &str) -> Result<Image, String> {
-    let (mut image, volumes) = read_series(path)?;
-    image.data = volumes.concat();
-    Ok(image)
+    decode(
+        std::fs::read(path).map_err(|e| format!("{path}: {e}"))?,
+        path,
+    )
 }
 
 /// Reads a NIfTI-1 image as one array per 3D volume (`Image::data` is left empty), without
 /// holding the whole series twice.
 pub fn read_series(path: &str) -> Result<(Image, Vec<Vec<f32>>), String> {
-    let bytes = read_bytes(path)?;
+    decode_series(
+        std::fs::read(path).map_err(|e| format!("{path}: {e}"))?,
+        path,
+    )
+}
+
+/// A NIfTI-1 image from the bytes of a file (gzipped or not) named `path` in messages.
+pub fn decode(raw: Vec<u8>, path: &str) -> Result<Image, String> {
+    let (mut image, volumes) = decode_series(raw, path)?;
+    image.data = volumes.concat();
+    Ok(image)
+}
+
+/// As `read_series`, from the bytes of a file (gzipped or not) named `path` in messages.
+pub fn decode_series(raw: Vec<u8>, path: &str) -> Result<(Image, Vec<Vec<f32>>), String> {
+    let bytes = gunzip(raw, path)?;
     if bytes.len() < 348 {
         return Err(format!("{path} is not a NIfTI file."));
     }
@@ -274,6 +290,31 @@ pub fn write_series(
     dims: &[usize],
     volumes: &[&[f32]],
 ) -> Result<(), String> {
+    let file = std::fs::File::create(path).map_err(|e| format!("{path}: {e}"))?;
+    let mut out = std::io::BufWriter::new(file);
+    encode_series_into(&mut out, path, like, dims, volumes)?;
+    out.flush().map_err(|e| format!("{path}: {e}"))
+}
+
+/// The bytes of the file that `write_series` writes to `path`.
+pub fn encode_series(
+    path: &str,
+    like: &Image,
+    dims: &[usize],
+    volumes: &[&[f32]],
+) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    encode_series_into(&mut out, path, like, dims, volumes)?;
+    Ok(out)
+}
+
+fn encode_series_into(
+    out: &mut impl Write,
+    path: &str,
+    like: &Image,
+    dims: &[usize],
+    volumes: &[&[f32]],
+) -> Result<(), String> {
     let mut h = like.header.clone();
     h[40..42].copy_from_slice(&(dims.len() as i16).to_le_bytes());
     for i in 0..7 {
@@ -289,30 +330,66 @@ pub fn write_series(
     let mut head = h;
     head.extend_from_slice(&[0, 0, 0, 0]);
     let bytes = |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|x| x.to_le_bytes()).collect() };
-    let file = std::fs::File::create(path).map_err(|e| format!("{path}: {e}"))?;
-    let mut out = std::io::BufWriter::new(file);
     let fail = |e: std::io::Error| format!("{path}: {e}");
     if path.ends_with(".gz") {
-        let gz = |raw: &[u8]| -> Vec<u8> {
-            let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(4));
-            e.write_all(raw).unwrap();
-            e.finish().unwrap()
-        };
-        out.write_all(&gz(&head)).map_err(fail)?;
+        // One gzip member, as browsers' DecompressionStream reads only the first: raw deflate
+        // segments compressed in parallel (each ends with a sync flush on a byte boundary and
+        // refers to no earlier one), the last finished, and one CRC over all the bytes.
+        out.write_all(&[0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff])
+            .map_err(fail)?;
+        let mut crc = flate2::Crc::new();
+        crc.update(&head);
+        out.write_all(&deflate_segment(&head, volumes.is_empty()))
+            .map_err(fail)?;
         // Compress a batch of volumes at a time, so that memory holds one batch.
-        for batch in volumes.chunks(rayon::current_num_threads().max(1) * 2) {
-            let members: Vec<Vec<u8>> = batch.par_iter().map(|v| gz(&bytes(v))).collect();
-            for m in members {
+        let batch_size = rayon::current_num_threads().max(1) * 2;
+        for (b, batch) in volumes.chunks(batch_size).enumerate() {
+            let last_batch = (b + 1) * batch_size >= volumes.len();
+            let raw: Vec<Vec<u8>> = batch.par_iter().map(|v| bytes(v)).collect();
+            let members: Vec<Vec<u8>> = raw
+                .par_iter()
+                .enumerate()
+                .map(|(i, r)| deflate_segment(r, last_batch && i + 1 == raw.len()))
+                .collect();
+            for (r, m) in raw.iter().zip(members) {
+                crc.update(r);
                 out.write_all(&m).map_err(fail)?;
             }
         }
+        out.write_all(&crc.sum().to_le_bytes()).map_err(fail)?;
+        out.write_all(&crc.amount().to_le_bytes()).map_err(fail)?;
     } else {
         out.write_all(&head).map_err(fail)?;
         for v in volumes {
             out.write_all(&bytes(v)).map_err(fail)?;
         }
     }
-    out.flush().map_err(fail)
+    Ok(())
+}
+
+/// Raw deflate of `data` at level 4, ended with a sync flush, or finished when `last`.
+fn deflate_segment(data: &[u8], last: bool) -> Vec<u8> {
+    let mut c = flate2::Compress::new(flate2::Compression::new(4), false);
+    let mut out = Vec::with_capacity(data.len() / 2 + 64);
+    let flush = if last {
+        flate2::FlushCompress::Finish
+    } else {
+        flate2::FlushCompress::Sync
+    };
+    loop {
+        let consumed = c.total_in() as usize;
+        if out.capacity() - out.len() < 64 {
+            out.reserve(data.len() / 4 + 64);
+        }
+        let status = c.compress_vec(&data[consumed..], &mut out, flush).unwrap();
+        let done = c.total_in() as usize == data.len();
+        match status {
+            flate2::Status::StreamEnd => break,
+            _ if done && !last && out.capacity() > out.len() => break,
+            _ => {}
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -355,6 +432,41 @@ mod tests {
         assert_eq!(image.dims, vec![2, 3, 2]);
         assert_eq!(image.pixdim, [2.0, 2.0, 2.5]);
         assert_eq!(image.data, values);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn gzipped_series_are_one_member() {
+        // A decoder that reads only the first gzip member (as browsers' DecompressionStream)
+        // must see the whole file: the header and every volume.
+        let dir = std::env::temp_dir().join(format!("shoreline-gzip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut header = vec![0u8; 348];
+        header[0..4].copy_from_slice(&348i32.to_le_bytes());
+        header[344..348].copy_from_slice(b"n+1\0");
+        let like = Image {
+            header,
+            dims: vec![5, 4, 3],
+            pixdim: [1.0; 3],
+            affine: [[0.0; 4]; 4],
+            intent_code: 0,
+            data: Vec::new(),
+        };
+        let volumes: Vec<Vec<f32>> = (0..37)
+            .map(|v| (0..60).map(|i| (v * 60 + i) as f32 * 0.25).collect())
+            .collect();
+        let refs: Vec<&[f32]> = volumes.iter().map(|v| v.as_slice()).collect();
+        let plain = dir.join("plain.nii");
+        let packed = dir.join("packed.nii.gz");
+        write_series(plain.to_str().unwrap(), &like, &[5, 4, 3, 37], &refs).unwrap();
+        write_series(packed.to_str().unwrap(), &like, &[5, 4, 3, 37], &refs).unwrap();
+        let mut first_member = Vec::new();
+        flate2::read::GzDecoder::new(&std::fs::read(&packed).unwrap()[..])
+            .read_to_end(&mut first_member)
+            .unwrap();
+        assert_eq!(first_member, std::fs::read(&plain).unwrap());
+        let (_, read) = read_series(packed.to_str().unwrap()).unwrap();
+        assert_eq!(read, volumes);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

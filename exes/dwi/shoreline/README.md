@@ -131,6 +131,12 @@ Where they differ, a reference-free check (each volume's correlation with its sh
 
 One ADNI session (127 volumes, 116 × 116 × 82 voxels of 2 mm) on a cluster login node, including reading and writing the gzipped files: about 3 minutes with 1 thread (186 s), 30 s with 8; sessions with 7 to 66 volumes take 3-35 s with 8 threads and 13-80 s with 1. The output does not depend on the number of threads. Peak memory is about 1.5 GB for an ADNI session. The ANTs-based SHORELine harness took 2345 s with 8 threads on the same session.
 
+In a browser (headless Chromium 156, the `shoreline-wasm` module), a 141-volume multiband series of 112 × 112 × 72 voxels (OpenNeuro ds006676, with a topup field) took 224 s single-threaded and 42 s with 8 threads, against 214 s and 32 s natively; the motion parameters were identical to the native ones.
+
+## WebAssembly
+
+`cli::run` is the command line as a library function: the arguments, a `cli::Files` for reading and writing, and a sink for the progress lines. The binary passes the file system; `shoreline-wasm` passes files held in memory, so the browser runs the same code as the native binary (on the phantoms and on ds006676 the outputs are bit-identical). The progress log's clock is `set_clock`, because WebAssembly in a browser has no `Instant`. `shoreline-wasm` builds two modules: one threaded (feature `threads`, wasm-bindgen-rayon, as greedy's; it needs cross-origin isolation) and one single-threaded.
+
 ## Tests
 
 `tests/synthetic.rs` builds the phantoms above and checks that the correction recovers the motion, the eddy-current displacement and the image (relative error below 0.04, and well below the uncorrected one), for the standard scheme, phase encoding along x with both polarities, 15 directions starting with a diffusion-weighted volume, a half sphere, a single b0 volume, a DSI grid and b-values spread over a range; that dropped slices are found and replaced; that least-squares restoration of pairs beats Jacobian resampling (with a field twice as strong: 0.018 against 0.021), that slice-to-volume correction beats volume-to-volume with movement within volumes (0.050 against 0.057), and that estimating a field that changes with rotation helps when it does (600 Hz per radian: 0.053 against 0.058) and costs nothing when it does not. `cargo test` runs them in about 25 s; the export for the eddy comparison is an ignored test.
