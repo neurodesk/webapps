@@ -172,13 +172,20 @@ fn correct(
     let bvecs_path = get("bvecs")?;
     let bvecs = directions(&numbers(&*files, &bvecs_path)?, nv, &bvecs_path)?;
     let flip = dwi_pe_field::fsl_flips_x(&image.affine);
-    let acqp = text(&*files, &get("acqp")?)?;
-    let acqp: Vec<&str> = acqp.lines().filter(|l| !l.trim().is_empty()).collect();
-    let index: Vec<usize> = numbers(&*files, &get("index")?)?
+    let acqp_path = get("acqp")?;
+    let acqp = numbers(&*files, &acqp_path)?;
+    let index_path = get("index")?;
+    let index: Vec<usize> = numbers(&*files, &index_path)?
         .concat()
         .iter()
-        .map(|&i| i as usize)
-        .collect();
+        .map(|&i| {
+            if i >= 1.0 && i.fract() == 0.0 {
+                Ok(i as usize)
+            } else {
+                Err(format!("{index_path}: '{i}' is not an acqp row number"))
+            }
+        })
+        .collect::<Result<_, String>>()?;
     let index = if index.len() == 1 {
         vec![index[0]; nv]
     } else {
@@ -187,15 +194,20 @@ fn correct(
     let acquisitions = index
         .iter()
         .map(|&i| {
-            let line = acqp
-                .get(i.wrapping_sub(1))
+            let values = acqp
+                .get(i - 1)
                 .ok_or_else(|| format!("--index refers to acqp row {i}"))?;
-            let values: Vec<f64> = line
-                .split_whitespace()
-                .filter_map(|v| v.parse().ok())
-                .collect();
             if values.len() != 4 {
-                return Err(format!("acqp row '{line}' does not have four numbers"));
+                return Err(format!(
+                    "{acqp_path}: row {i} has {} values, not four",
+                    values.len()
+                ));
+            }
+            if values[3] <= 0.0 {
+                return Err(format!(
+                    "{acqp_path}: row {i} has readout time {}, which is not positive",
+                    values[3]
+                ));
             }
             let pe = PhaseEncoding::from_datain(&format!(
                 "{} {} {} 1",
@@ -929,6 +941,61 @@ mod tests {
             let error = run(&argv, &mut files, &mut |_| {}).unwrap_err();
             assert!(error.starts_with(expected), "{bvecs:?}: {error}");
             assert!(files.0.contains_key("out.log"), "{bvecs:?}: no log");
+        }
+    }
+
+    #[test]
+    fn malformed_acquisition_files_are_input_errors() {
+        // A non-finite or non-positive readout time once gave a "successful" all-zero series.
+        let bvals = "0 1000 1000 1000\n";
+        let fsl = "0 1 0 0\n0 0 1 0\n0 0 0 1\n";
+        for (acqp, index, expected) in [
+            ("0 1 0 nan\n", "1 1 1 1\n", "acqp: 'nan' is not a number"),
+            ("0 1 0 inf\n", "1 1 1 1\n", "acqp: 'inf' is not a number"),
+            ("0 1 0 0\n", "1 1 1 1\n", "acqp: row 1 has readout time 0"),
+            (
+                "0 1 0 -0.05\n",
+                "1 1 1 1\n",
+                "acqp: row 1 has readout time -0.05",
+            ),
+            ("0 1 0 0.05 x\n", "1 1 1 1\n", "acqp: 'x' is not a number"),
+            (
+                "0 1 0.05\n",
+                "1 1 1 1\n",
+                "acqp: row 1 has 3 values, not four",
+            ),
+            (
+                "0 1 0 0.05\n",
+                "1 1 1 1.5\n",
+                "index: '1.5' is not an acqp row number",
+            ),
+            (
+                "0 1 0 0.05\n",
+                "1 1 1 0\n",
+                "index: '0' is not an acqp row number",
+            ),
+            ("0 1 0 0.05\n", "1 1 1 2\n", "--index refers to acqp row 2"),
+        ] {
+            let mut files = inputs(bvals, fsl);
+            files.0.insert("acqp".into(), acqp.as_bytes().to_vec());
+            files.0.insert("index".into(), index.as_bytes().to_vec());
+            let argv: Vec<String> = [
+                "--imain=dwi.nii",
+                "--mask=mask.nii",
+                "--acqp=acqp",
+                "--index=index",
+                "--bvecs=bvecs",
+                "--bvals=bvals",
+                "--out=out",
+            ]
+            .map(String::from)
+            .to_vec();
+            let error = run(&argv, &mut files, &mut |_| {}).unwrap_err();
+            assert!(error.starts_with(expected), "{acqp:?} {index:?}: {error}");
+            assert!(
+                !files.0.contains_key("out.nii.gz"),
+                "{acqp:?}: wrote a series"
+            );
         }
     }
 }
