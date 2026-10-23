@@ -109,7 +109,7 @@ test("a correction can be cancelled and run again", async ({ page }) => {
   await expect(page.locator("#statusText")).toContainText("Corrected in", { timeout: 540_000 });
 });
 
-test("the example selector lists the synthetic phantom", async ({ page }) => {
+test("the example selector lists the examples", async ({ page }) => {
   await page.goto("/");
   const options = await page.locator("select[data-neurodesk-example] option").evaluateAll((list) => list.map((o) => o.value).filter(Boolean));
   expect(options).toEqual(examples.map((example) => example.id));

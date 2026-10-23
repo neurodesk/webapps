@@ -75,6 +75,8 @@ export function describeSeries({ bvals, sidecar, dims }) {
     shells: [...counts].sort((a, b) => a[0] - b[0]).map(([b, count]) => ({ b, count })),
     shelled: counts.size <= SHELLED_AT_MOST,
     multiband: multibandFactor(sidecar, slices),
+    // Whether the sidecar gives the multiband factor (or SliceTiming shows it); else the user can.
+    multibandKnown: Number(sidecar?.MultibandAccelerationFactor) >= 1 || sliceTiming(sidecar, slices) !== null,
     sliceTiming: sliceTiming(sidecar, slices) !== null,
     phaseEncodingDirection: pe,
     totalReadoutTime: Number.isFinite(readout) && readout > 0 ? readout : null,
@@ -87,7 +89,8 @@ const shownB = (b) => Math.round(b / 50) * 50;
 /**
  * The lines that describe the input under the file picker: the file, the volumes and shells,
  * the acquisition (multiband and slice timing only when present), and the field source.
- * `entered` holds the phase encoding and readout given in the fields when the sidecar lacks them.
+ * `entered` holds the phase encoding, readout and multiband factor given in the fields when the
+ * sidecar lacks them.
  */
 export function inputSummary({ name, series, reverse = null, field = null, entered = {} }) {
   // Non-breaking spaces inside an item, so that a narrow sidebar wraps only between items.
@@ -101,6 +104,7 @@ export function inputSummary({ name, series, reverse = null, field = null, enter
   const acquisition = [
     pe ? `PE ${pe}${readout > 0 ? `, ${Math.round(readout * 1000)} ms readout` : ""}${given}` : "PE: not in sidecar",
     ...(series.multiband > 1 ? [`multiband ${series.multiband}`] : []),
+    ...(!series.multibandKnown && entered.multiband > 1 ? [`multiband ${entered.multiband} (set below)`] : []),
     ...(series.sliceTiming ? ["slice timing"] : []),
   ];
   return [
@@ -143,6 +147,13 @@ export function defaultSettings(series, field) {
     eddyCurrents: { value: "quadratic", rule: "Quadratic field, linear in the gradient (eddy's defaults)" },
     iterations: { value: 5, rule: "5 iterations (eddy's default)" },
   };
+}
+
+/** The series with the multiband factor given in the field when the sidecar has none. */
+export function withMultiband(series, entered) {
+  if (series.multibandKnown) return series;
+  const factor = Math.round(Number(entered));
+  return { ...series, multiband: Number.isInteger(factor) && factor > 1 ? factor : 1 };
 }
 
 /** The acqp row of a BIDS phase-encoding direction, in FSL's voxel axes (x reversed when det > 0). */

@@ -158,6 +158,17 @@ test("animation frames: one slice per volume, one grey scale per pair, anterior 
   assert.equal(pixels[3], 255);
 });
 
+test("a multiband factor entered for a sidecar without one", async () => {
+  const { withMultiband } = await import("../src/pipeline.js");
+  const bare = describeSeries({ bvals: [0, ...Array(30).fill(1000)], sidecar: {}, dims: [96, 96, 72] });
+  assert.equal(bare.multibandKnown, false);
+  assert.equal(withMultiband(bare, "3").multiband, 3);
+  assert.equal(withMultiband(bare, "").multiband, 1);
+  assert.ok(shorelineArgs({ settings: { iterations: 5, eddyCurrents: "quadratic", model: "gp", outliers: "both" }, series: withMultiband(bare, 3), field: "none" }).includes("--mb=3"));
+  const declared = describeSeries({ bvals: [0, 1000], sidecar: { MultibandAccelerationFactor: 1 }, dims: [96, 96, 72] });
+  assert.equal(withMultiband(declared, 3).multiband, 1);
+});
+
 test("the preview slice is 60 % of the way up the head, not the middle of the field of view", async () => {
   const { previewSlice } = await import("../src/frames.js");
   // A 4 × 4 × 20 b0 with the head in slices 6 to 14; slices 5 and 15 have too little area.
@@ -215,4 +226,6 @@ test("the input summary: file, volumes and shells, acquisition, field source", a
   const noReadout = describeSeries({ bvals: [0, ...Array(30).fill(1000)], sidecar: { PhaseEncodingDirection: "j" }, dims: [96, 96, 60] });
   assert.equal(inputSummary({ name: "x", series: noReadout, entered: { pe: "j-", readout: 0.05 } })[2], "PE j, 50 ms readout (set below)");
   assert.equal(inputSummary({ name: "x", series: dsi, entered: { pe: "j-", readout: 0.05 } })[2], "PE j-, 50 ms readout (set below)");
+  assert.equal(inputSummary({ name: "x", series: clinical, entered: { multiband: 3 } })[2], "PE j-, 50 ms readout · multiband 3 (set below)");
+  assert.equal(inputSummary({ name: "x", series: adni, entered: { multiband: 2 } })[2], "PE j, 63 ms readout · multiband 3 · slice timing");
 });

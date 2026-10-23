@@ -27,6 +27,7 @@ import {
   classifyInputs,
   confoundsTsv,
   defaultSettings,
+  withMultiband,
   inputSummary,
   describeSeries,
   motionSummary,
@@ -196,7 +197,7 @@ function setBusy(busy) {
   $("imageInput").disabled = busy;
   $("resultList").inert = busy;
   exampleControl?.setDisabled(busy);
-  for (const id of ["fieldSource", "replaceOutliers", "model", "outlierType", "eddyCurrents", "iterations", "phaseEncoding", "readoutTime"]) {
+  for (const id of ["fieldSource", "replaceOutliers", "model", "outlierType", "eddyCurrents", "iterations", "phaseEncoding", "readoutTime", "multiband"]) {
     $(id).disabled = busy || !input;
   }
   $("sliceToVolume").disabled = busy || !input?.series.sliceTiming;
@@ -321,6 +322,7 @@ async function loadFiles(filesPromise, signal) {
     };
     if (input.field?.kind === "hz" && !input.field.sameGrid) throw new Error(`${input.field.name} is not on the series' grid; give a field map in Hz on the DWI grid, or topup's _fieldcoef image.`);
     clearOutputs();
+    $("multiband").value = "1";
     applyDefaults();
     renderInput();
     await show(firstFile, "Input, volume 1");
@@ -341,16 +343,17 @@ async function loadFiles(filesPromise, signal) {
   }
 }
 
+/** The series as corrected: the sidecar's description, with the multiband factor entered if it has none. */
+const effectiveSeries = () => withMultiband(input.series, $("multiband").value);
+
 function applyDefaults() {
   const fieldSource = input.field ? "upload" : input.reverse ? "reverse" : "none";
-  const settings = defaultSettings(input.series, fieldSource);
+  const settings = defaultSettings(effectiveSeries(), fieldSource);
   $("fieldSource").value = settings.field.value;
   $("model").value = settings.model.value;
   $("model").options[0].disabled = input.series.dwi < 72;
   $("replaceOutliers").checked = true;
-  $("outlierType").value = settings.outliers.value;
-  $("outlierType").options[0].disabled = input.series.multiband < 2;
-  $("outlierType").options[2].disabled = input.series.multiband < 2;
+  applyOutlierDefault();
   $("sliceToVolume").checked = settings.sliceToVolume.value;
   $("eddyCurrents").value = settings.eddyCurrents.value;
   $("iterations").value = String(settings.iterations.value);
@@ -358,11 +361,20 @@ function applyDefaults() {
   const missingReadout = input.series.totalReadoutTime === null;
   $("phaseEncodingField").hidden = !missingPe;
   $("readoutField").hidden = !missingReadout;
-  $("acquisitionFields").hidden = !missingPe && !missingReadout;
+  $("multibandField").hidden = input.series.multibandKnown;
+  $("acquisitionFields").hidden = !missingPe && !missingReadout && input.series.multibandKnown;
+}
+
+/** The outlier groups that suit the multiband factor, and the choices it allows. */
+function applyOutlierDefault() {
+  const series = effectiveSeries();
+  $("outlierType").value = defaultSettings(series, "none").outliers.value;
+  $("outlierType").options[0].disabled = series.multiband < 2;
+  $("outlierType").options[2].disabled = series.multiband < 2;
 }
 
 function renderInput() {
-  const entered = { pe: $("phaseEncoding").value, readout: Number($("readoutTime").value) };
+  const entered = { pe: $("phaseEncoding").value, readout: Number($("readoutTime").value), multiband: Number($("multiband").value) };
   const lines = inputSummary({ name: input.name, series: input.series, reverse: input.reverse?.name, field: input.field?.name, entered });
   $("inputInfo").hidden = false;
   ["fileInfo", "seriesInfo", "acquisitionInfo", "fieldInfo"].forEach((id, k) => {
@@ -463,7 +475,9 @@ async function correct(signal) {
     }
     controller.signal.throwIfAborted();
 
-    const args = shorelineArgs({ settings, series: input.series, field });
+    const series = effectiveSeries();
+    if (input.dims[2] % series.multiband) throw new Error(`The multiband factor ${series.multiband} does not divide the ${input.dims[2]} slices.`);
+    const args = shorelineArgs({ settings, series, field });
     const plan = { done: 0, total: 2 + settings.iterations + (settings.sliceToVolume && input.series.sliceTiming ? 5 : 0) + 1 };
     let threads = 1;
     progress.begin("Correcting the series…");
@@ -572,6 +586,12 @@ for (const id of ["phaseEncoding", "readoutTime"]) {
     if (input) renderInput();
   });
 }
+$("multiband").addEventListener("input", () => {
+  clearOutputs();
+  if (!input) return;
+  applyOutlierDefault();
+  renderInput();
+});
 $("replaceOutliers").addEventListener("change", () => {
   $("outlierType").disabled = !$("replaceOutliers").checked || !input;
 });

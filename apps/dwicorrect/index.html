@@ -35,6 +35,12 @@
               </label>
               <input id="readoutTime" type="number" min="0.001" max="1" step="0.001" value="0.05" />
             </div>
+            <div class="nd-field" id="multibandField">
+              <label for="multiband">Multiband
+                <span class="nd-info-icon" tabindex="0" aria-label="About the multiband factor">i<span class="nd-info-tooltip">The sidecar has neither MultibandAccelerationFactor nor SliceTiming. Give the number of slices excited together (the scanner protocol's slice acceleration) so that outliers are also tested by group.<br />Default: 1 (single band).</span></span>
+              </label>
+              <input id="multiband" type="number" min="1" max="16" step="1" value="1" />
+            </div>
           </div>
         </div>
       </details>
@@ -133,7 +139,7 @@
     </footer>
 
     <template id="aboutContent">
-      <p>DWI Correct corrects a diffusion MRI series in this browser, as FSL eddy does: head motion, eddy-current distortion, susceptibility distortion and slices that lost signal are estimated together, and every volume is resampled once with Jacobian modulation. Each volume is registered to a prediction from the others (3dSHORE for 72 or more diffusion-weighted volumes, else a Gaussian process); slices far below their prediction are replaced by it. It runs the shoreline command line (exes/dwi/shoreline), implemented from the eddy papers without FSL code: on synthetic phantoms with known truth it had lower error than FSL eddy 6.0.7.7 in every scheme tested, and on 30 ADNI sessions its corrected images correlated 0.98-0.99 with eddy's. The susceptibility field comes from a reverse phase-encoding b0 (the SDC app's PyHySCO port), a topup _fieldcoef image or a field map in Hz. The brain mask is MindGrab's, from the mean b0. Outputs use BIDS derivative names: the corrected series with its bval, bvec and sidecar, the movement and outliers per volume, the mask and the field. Series that need more than WebAssembly's 4 GB (HCP-sized data) are refused; the native command line handles them. The synthetic example is a small phantom with simulated motion, eddy currents, a field and dropped slices; it demonstrates the software, not the accuracy on real data.</p>
+      <p>DWI Correct corrects a diffusion MRI series in this browser, as FSL eddy does: head motion, eddy-current distortion, susceptibility distortion and slices that lost signal are estimated together, and every volume is resampled once with Jacobian modulation. Each volume is registered to a prediction from the others (3dSHORE for 72 or more diffusion-weighted volumes, else a Gaussian process); slices far below their prediction are replaced by it. It runs the shoreline command line (exes/dwi/shoreline), implemented from the eddy papers without FSL code: on synthetic phantoms with known truth it had lower error than FSL eddy 6.0.7.7 in every scheme tested, and on 30 ADNI sessions its corrected images correlated 0.98-0.99 with eddy's. The susceptibility field comes from a reverse phase-encoding b0 (the SDC app's PyHySCO port), a topup _fieldcoef image or a field map in Hz. The brain mask is MindGrab's, from the mean b0. Outputs use BIDS derivative names: the corrected series with its bval, bvec and sidecar, the movement and outliers per volume, the mask and the field. Series that need more than WebAssembly's 4 GB (HCP-sized data) are refused; the native command line handles them. The example is OpenNeuro ds006676 sub-001 (CC0; Zhang et al., Human Brain Mapping 2025), a multiband 3 series of 141 volumes with a PA b0; its sidecar lacks the multiband factor, so it was added.</p>
     </template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
 
