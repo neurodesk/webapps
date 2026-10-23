@@ -66,6 +66,42 @@ modules through browser `Worker`s. It mirrors the wrapper's argv construction
 (`buildArgs`, not exported upstream) and validates options against the
 package's own `MODELS`.
 
+### brainchop-mindgrab command line
+
+`bin/brainchop-mindgrab.js` is the native `brainchop-mindgrab` command line
+(brainchopC) on the CPU driver, for Linux machines without that build. ME-ICA's
+`meica --moco` (niivue/meica-rs) and fastprep run it as a subprocess:
+
+```sh
+brainchop-mindgrab ref.nii.gz -o stripped.nii.gz --mask mask.nii.gz --border 2
+```
+
+It reads `.nii` and `.nii.gz`, gzips each output whose name ends in `.gz`, and
+writes the mask as uint8 on the input grid. The output defaults to
+`output.nii.gz`; a bare `--mask` writes `mask.nii.gz`. It accepts `-o`/`--output`,
+`--mask [PATH]`, `--border MM`, `--ct`, `--comply` and `-backend auto|cpu`.
+`--crop`, `--export-classes` and `-cpu N` exit with status 2, as usage errors
+do; a failed run exits with status 1. `-h` prints the MindGrab package version.
+The tests fail when a MindGrab release adds an option the command line neither
+accepts nor refuses.
+
+The command line imports `@brainchop/mindgrab` from its own directory through
+Node's resolution, or from the directory `BRAINCHOP_MINDGRAB_PACKAGE` names.
+To install it without the monorepo, copy `bin/brainchop-mindgrab.js` and
+`src/mindgrab.js`, `src/mindgrab-worker.js` and `src/mindgrab-cli.js` into one
+directory, keeping `bin/` and `src/`, and install the MindGrab version this
+package pins beside them with Node 22 or later:
+
+```sh
+cd /opt/brainchop-mindgrab
+echo '{ "private": true, "type": "module" }' > package.json
+npm install --no-audit --no-fund @brainchop/mindgrab@0.1.20260925
+ln -s /opt/brainchop-mindgrab/bin/brainchop-mindgrab.js /usr/local/bin/brainchop-mindgrab
+```
+
+A run on a 2 mm, 83 x 105 x 80 volume takes about 40 s and peaks at 2.4 GB on
+eight cores.
+
 ### Parity
 
 `validation/reference.json` pins the outputs of the browser path: MindGrab's

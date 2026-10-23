@@ -293,6 +293,10 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - One MindGrab call peaks at 2.6 GB (mindgrab) to 3.9 GB (mindmap tissues) and uses one thread per core.
   The driver runs each call in its own worker thread, so memory is freed when it ends, and queues calls
   within a process; do not start MindGrab in two processes at once.
+- `packages/node-drivers/bin/brainchop-mindgrab.js` is the native brainchopC command line on the CPU
+  driver, for Linux containers (meica-rs `--moco`, fastprep). Its parser (`src/mindgrab-cli.js`) mirrors
+  the native one, which the CPU module prints with `--help`; a MindGrab bump that adds a native option
+  fails its tests until the option is accepted or refused.
 - `packages/node-drivers/validation/reference.json` pins the browser outputs both drivers reproduce byte
   for byte. After bumping either devDependency there, rerun `pnpm --filter @neurodesk/node-drivers
   exec node validation/browser-reference.mjs` and commit the new references; `node-drivers.yml` checks
