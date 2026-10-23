@@ -193,7 +193,7 @@ test("the example is corrected: field from the PA b0, motion, outliers, download
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Corrected in", { timeout: 840_000 });
   await expect(page.locator("#statusText")).toContainText("outlier slices replaced");
-  for (const label of ["Corrected series", "b-values", "Rotated b-vectors", "Sidecar", "Movement per volume", "Outlier slices", "Brain mask (MindGrab)", "Field map (Hz)", "Field map sidecar", "Log"]) {
+  for (const label of ["Corrected series", "b-values", "Rotated b-vectors", "Sidecar", "Movement per volume", "Outlier slices", "Brain mask (MindGrab)", "Field map (Hz)", "Field map JSON", "Log"]) {
     await expect(page.locator("#resultList .nd-volume-toggle").filter({ hasText: label })).toHaveCount(1);
   }
   expect(niftiShape(gunzipSync(await download(page, "Corrected series")))).toEqual({ dims: [112, 112, 72], frames: 141 });
@@ -214,7 +214,7 @@ test("the example is corrected: field from the PA b0, motion, outliers, download
   expect(sidecar.DwicorrectSettings.CommandLine).toContain("--ol_type=both");
   expect(sidecar.DwicorrectSettings.CommandLine).toContain("--mb=3");
   expect(sidecar.PhaseEncodingDirection).toBe("j-");
-  const fieldSidecar = JSON.parse((await download(page, "Field map sidecar")).toString());
+  const fieldSidecar = JSON.parse((await download(page, "Field map JSON")).toString());
   expect(fieldSidecar.Units).toBe("Hz");
   expect(fieldSidecar.PhaseEncodingDirection).toBe("j-");
   const mask = sidecar.DwicorrectSettings.BrainMask;

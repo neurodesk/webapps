@@ -544,7 +544,7 @@ async function correct(signal) {
       ...(outlierMap ? { outliers: { description: "Outlier slices", file: textFile(outliersTsv(outlierMap, input.dims[2]), names.outliers, "text/tab-separated-values"), viewable: false } } : {}),
       mask: { description: "Brain mask (MindGrab)", file: new File([await gzipBytes(maskNifti)], names.mask, { type: "application/gzip" }) },
       ...(fieldFile ? { field: { description: "Field map (Hz)", file: fieldFile } } : {}),
-      ...(fieldSidecarFile ? { fieldSidecar: { description: "Field map sidecar", file: fieldSidecarFile, viewable: false } } : {}),
+      ...(fieldSidecarFile ? { fieldSidecar: { description: "Field map JSON", file: fieldSidecarFile, viewable: false } } : {}),
       log: { description: "Log", file: textFile(text("log") ?? "", names.log), viewable: false },
     };
     const summary = motionSummary({ parameters, movementRms, outlierMap });
