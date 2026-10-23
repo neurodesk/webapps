@@ -106,6 +106,25 @@ fn numbers(files: &dyn Files, path: &str) -> Result<Vec<Vec<f64>>, String> {
         .collect()
 }
 
+/// The gradient directions of `nv` volumes from the rows of a bvecs file: FSL's 3 × N, or
+/// N × 3. With 3 volumes the two are the same shape, and the file is read as FSL's.
+fn directions(rows: &[Vec<f64>], nv: usize, path: &str) -> Result<Vec<[f64; 3]>, String> {
+    if rows.len() == 3 && rows.iter().all(|r| r.len() == nv) {
+        Ok((0..nv)
+            .map(|i| [rows[0][i], rows[1][i], rows[2][i]])
+            .collect())
+    } else if rows.len() == nv && rows.iter().all(|r| r.len() == 3) {
+        Ok(rows.iter().map(|r| [r[0], r[1], r[2]]).collect())
+    } else {
+        let lengths: Vec<String> = rows.iter().map(|r| r.len().to_string()).collect();
+        Err(format!(
+            "{path}: expected 3 rows of {nv} directions (or {nv} rows of 3), found {} rows of {} values.",
+            rows.len(),
+            lengths.join(", ")
+        ))
+    }
+}
+
 fn correct(
     args: &HashMap<String, String>,
     out: &str,
@@ -148,14 +167,8 @@ fn correct(
     let mask: Vec<bool> = mask_image.data.iter().map(|&m| m > 0.0).collect();
     let bvals: Vec<f64> = numbers(&*files, &get("bvals")?)?.concat();
     let bvals_in = bvals.clone();
-    let rows = numbers(&*files, &get("bvecs")?)?;
-    let bvecs: Vec<[f64; 3]> = if rows.len() == 3 {
-        (0..rows[0].len())
-            .map(|i| [rows[0][i], rows[1][i], rows[2][i]])
-            .collect()
-    } else {
-        rows.iter().map(|r| [r[0], r[1], r[2]]).collect()
-    };
+    let bvecs_path = get("bvecs")?;
+    let bvecs = directions(&numbers(&*files, &bvecs_path)?, nv, &bvecs_path)?;
     let flip = dwi_pe_field::fsl_flips_x(&image.affine);
     let acqp = text(&*files, &get("acqp")?)?;
     let acqp: Vec<&str> = acqp.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -217,7 +230,19 @@ fn correct(
         let hz = c.evaluate(dims, flip)?;
         Some(hz.into_iter().map(|h| h as f32).collect())
     } else if let Some(path) = args.get("field") {
-        let f = nifti::decode(files.read(path)?, path)?;
+        let mut f = nifti::decode(files.read(path)?, path)?;
+        // As in --imain, a voxel without a value is taken as outside the field: 0 Hz.
+        let missing = f
+            .data
+            .iter_mut()
+            .filter(|x| !x.is_finite())
+            .map(|x| *x = 0.0)
+            .count();
+        if missing > 0 {
+            log(format!(
+                "--field: {missing} voxels without a value set to 0 Hz"
+            ));
+        }
         let matrix = match args.get("field_mat") {
             Some(m) => {
                 let rows = numbers(&*files, m)?;
@@ -787,4 +812,30 @@ fn slice_times(
 
 fn write(files: &mut dyn Files, path: &str, s: &str) -> Result<(), String> {
     files.write(path, s.as_bytes().to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::directions;
+
+    #[test]
+    fn bvecs_in_either_orientation() {
+        let fsl = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![0.0, 0.0]];
+        let rows = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]];
+        let expected = vec![[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        assert_eq!(directions(&fsl, 2, "bvecs").unwrap(), expected);
+        assert_eq!(directions(&rows, 2, "bvecs").unwrap(), expected);
+    }
+
+    #[test]
+    fn malformed_bvecs_are_refused() {
+        // Three rows of unequal length, and N rows of two values: an error, not a panic.
+        let short = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0], vec![0.0, 0.0, 1.0]];
+        let error = directions(&short, 3, "bvecs").unwrap_err();
+        assert!(error.contains("expected 3 rows of 3"), "{error}");
+        let pairs = vec![vec![1.0, 0.0]; 20];
+        let error = directions(&pairs, 20, "bvecs").unwrap_err();
+        assert!(error.contains("20 rows of 2"), "{error}");
+        assert!(directions(&[], 4, "bvecs").is_err());
+    }
 }

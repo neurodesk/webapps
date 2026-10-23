@@ -1538,6 +1538,9 @@ pub fn run(
     if input.mask.len() != grid.voxels() || input.volumes.iter().any(|v| v.len() != grid.voxels()) {
         return Err("The mask and every volume must match the grid.".into());
     }
+    if !input.mask.iter().any(|&m| m) {
+        return Err("The mask has no voxel: there is no brain to correct.".into());
+    }
     let b0: Vec<usize> = (0..nv)
         .filter(|&v| input.bvals[v] <= options.b0_threshold)
         .collect();

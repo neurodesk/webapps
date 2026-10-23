@@ -1179,3 +1179,11 @@ fn export_command_line_phantom() {
     )
     .unwrap();
 }
+
+#[test]
+fn an_empty_mask_is_refused() {
+    let mut p = phantom(false, 1.0, 1.0);
+    p.input.mask.iter_mut().for_each(|m| *m = false);
+    let error = run(&p.input, &options(false), &mut |_| {}).err().unwrap();
+    assert!(error.contains("mask has no voxel"), "{error}");
+}
