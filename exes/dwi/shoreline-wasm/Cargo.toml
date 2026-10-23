@@ -1,0 +1,26 @@
+# The dwicorrect app's WebAssembly module: the `shoreline` command line on files held in
+# memory. wasm-bindgen, as greedy's, because threads need wasm-bindgen-rayon.
+# packages/shoreline/scripts/build-wasm.mjs builds a threaded module (feature `threads`,
+# nightly with atomics) and a single-threaded one.
+[package]
+name = "shoreline-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+threads = ["dep:wasm-bindgen-rayon"]
+
+[dependencies]
+dwi-shoreline = { path = "../shoreline" }
+js-sys = "0.3"
+rayon = "1"
+wasm-bindgen = "0.2"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-rayon = { version = "1.3", features = ["no-bundler"], optional = true }
