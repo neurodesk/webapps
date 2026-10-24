@@ -10,26 +10,69 @@
       "description": "Average each input's b = 0 volumes and estimate the field in Hz on the first image's grid.",
       "mode": "batch",
       "inputs": {
-        "images": {
+        "image1": {
           "source": "files",
           "type": "neuro:volume",
           "formats": [
             "nifti",
             "dicom"
           ],
-          "description": "Two images with opposite phase-encoding directions, in one space, with JSON sidecars giving PhaseEncodingDirection and TotalReadoutTime",
-          "minimum": 2
+          "minimum": 1,
+          "maximum": 1,
+          "description": "Image 1 of the opposite phase-encoding pair; image 1 defines the field reference"
         },
-        "bval": {
+        "sidecar1": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "json"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Acquisition JSON for image 1; required unless DICOM supplies it"
+        },
+        "bval1": {
           "source": "files",
           "type": "neuro:gradients",
           "formats": [
             "bval",
             "bvals"
           ],
-          "description": "Optional b-values of a DWI series; only volumes with b ≤ 50 are used",
           "minimum": 0,
-          "maximum": 2
+          "maximum": 1,
+          "description": "Optional b-values for image 1; average only b \u2264 50 volumes"
+        },
+        "image2": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "minimum": 1,
+          "maximum": 1,
+          "description": "Image 2 of the opposite phase-encoding pair; image 1 defines the field reference"
+        },
+        "sidecar2": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "json"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Acquisition JSON for image 2; required unless DICOM supplies it"
+        },
+        "bval2": {
+          "source": "files",
+          "type": "neuro:gradients",
+          "formats": [
+            "bval",
+            "bvals"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Optional b-values for image 2; average only b \u2264 50 volumes"
         }
       },
       "parameters": {},

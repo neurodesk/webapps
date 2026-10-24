@@ -421,19 +421,22 @@ async function main() {
 }
 
 const initialized = main()
+async function runAutomationImage({ inputs, signal, progress }, command, artifact = {}) {
+  await initialized;
+  if (!imageProcessingReady || imageBusy) throw new Error('NiiMath is not ready for a new image operation.');
+  return runImageTask(async () => {
+    progress('Loading input');
+    await loadImage(inputs.image[0], signal);
+    progress('Running NiiMath');
+    const result = await processImage(false, { command, signal, throwOnError: true });
+    return { artifacts: [{ role: 'result', file: result.file, type: result.type, ...artifact }],
+      provenance: { engine: 'niimath-wasm', commands: result.commands } };
+  });
+}
+
 const automation = registerAppAutomation({ app: 'niimath', convertDicom: runDcm2niix, operations: {
-  process: async ({ inputs, parameters, signal, progress }) => {
-    await initialized;
-    if (!imageProcessingReady || imageBusy) throw new Error('NiiMath is not ready for a new image operation.');
-    return runImageTask(async () => {
-      progress('Loading input');
-      await loadImage(inputs.image[0], signal);
-      progress('Running NiiMath');
-      const result = await processImage(false, { command: parameters.command, signal, throwOnError: true });
-      return { artifacts: [{ role: 'result', file: result.file, type: result.type }],
-        provenance: { engine: 'niimath-wasm', commands: result.commands } };
-    });
-  },
+  process: (request) => runAutomationImage(request, request.parameters.command),
+  binarize: (request) => runAutomationImage(request, '-bin', { role: 'mask', type: 'neuro:mask' }),
 } });
 automation.registerViewer('main', {
   state: () => ({ tabs: Object.keys(layouts).map(id => ({ id, label: id, active: currentLayout === id })),

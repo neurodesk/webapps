@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HMC — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Diffusion image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose NIfTI or DICOM files" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop NIfTI or DICOM files or folder</span>
+          </label>
+          <div class="nd-field" id="runField" hidden>
+            <label for="runSelect">DWI run</label>
+            <select id="runSelect"></select>
+          </div>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Head-motion correction</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="method">Method</label>
+            <select id="method">
+              <option value="gp">Gaussian process</option>
+              <option value="trivial">Mean b0 template</option>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="seed">Seed</label>
+                <input id="seed" type="number" min="1" max="2147483647" step="1" value="1234" />
+              </div>
+              <div class="nd-field">
+                <label for="workers">Registration workers</label>
+                <input id="workers" type="number" min="1" max="4" step="1" value="1" />
+              </div>
+              <div id="maskField"></div>
+              <button id="clearMask" class="nd-btn nd-btn-secondary" type="button" hidden>Use automatic mask</button>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Correct motion</button>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent"><p>HMC corrects diffusion MRI head motion using Gaussian-process or b0-template targets from NiFreeze 3bcfb00, float ANTs registration and one B-spline resampling per weighted volume. The b0 volumes remain unchanged. Output is float32, with rotated gradients, motion parameters and ITK transforms. A supplied brain mask must match the image grid; otherwise MindGrab masks the mean b0. Registration uses one worker by default. Denoise and remove Gibbs ringing before motion correction. Spatial slabs cannot establish full-volume through-plane motion accuracy. The validated native-float scope and measured differences from native-double ANTs are documented in the HMC package.</p></template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

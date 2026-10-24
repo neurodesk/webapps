@@ -12,7 +12,21 @@ const spatialTypes = new Set(['neuro:volume', 'neuro:mask', 'neuro:label-map', '
 const griddedTypes = new Set(['neuro:volume', 'neuro:mask', 'neuro:label-map']);
 const contractSpatialTypes = new Set(['neuro:volume', 'neuro:mask', 'neuro:label-map', 'neuro:surface', 'neuro:tractogram']);
 
-function promoteFormats(field, mapped) {
+function artifactFormats(field, { role }) {
+  const mediaFormats = {
+    'application/json': 'json',
+    'text/tab-separated-values': 'tsv',
+    'text/csv': 'csv',
+    'application/nifti': 'nii',
+    'application/x-nifti': 'nii',
+  };
+  if (Object.hasOwn(mediaFormats, field.mediaType)) return [mediaFormats[field.mediaType]];
+  if (field.mediaType === 'application/gzip' && griddedTypes.has(field.type)) return ['nii-gz'];
+  if (field.type === 'neuro:gradients' && field.mediaType === 'text/plain' && ['bval', 'bvec'].includes(role)) return [role];
+  return [];
+}
+
+function promoteFormats(field, mapped, kind, context) {
   if (mapped.formats) {
     // Formats are alternatives. Adding a broad NIfTI token would permit scalar
     // images where the alias promises a vector displacement field.
@@ -22,11 +36,16 @@ function promoteFormats(field, mapped) {
     }
     return [...mapped.formats];
   }
+  if (kind === 'artifacts' && !field.formats) return artifactFormats(field, context);
   return [...new Set((field.formats ?? []).map(token => {
     if (formatTokens.has(token)) return token;
     if (Object.hasOwn(formatSpellings, token)) return formatSpellings[token];
     return `neurodesk:${token}`;
-  }).filter(Boolean))];
+  }).filter(token => {
+    // NeuroFlow 0.2.0 has no gradient inspectors. Restore input qualifiers when
+    // cdrake/neuroflow#26 ships; the original formats remain in neurodesk/data.
+    return token && !(kind === 'inputs' && ['bval', 'bvec', 'bval-bvec'].includes(token));
+  }))];
 }
 
 function spatialInput(operation) {
@@ -48,6 +67,8 @@ function promoteSpace(field, kind, operation, { app, operationId }) {
     app === 'disconnectome' && operationId === 'analyze'
   )) return 'MNI152NLin6Asym';
   if (kind !== 'artifacts') return undefined;
+  if (field.space === 'input' && app === 'dwicorrect') return inputReference(operation, 'dwi');
+  if (field.space === 'input' && app === 'sdc') return inputReference(operation, 'image1');
   if (app === 'syncro' && operationId === 'normalize' && field.space === 'native') {
     return inputReference(operation, 'primary');
   }
@@ -71,7 +92,7 @@ function promoteSpace(field, kind, operation, { app, operationId }) {
 // would incorrectly make unrelated subjects or selected atlases share a frame.
 export function qualifiers(field, kind, operation, mapped, context = {}) {
   const result = {};
-  const formats = promoteFormats(field, mapped);
+  const formats = promoteFormats(field, mapped, kind, context);
   if (formats.length) result.formats = formats;
   if (spatialTypes.has(mapped.type)) {
     const space = promoteSpace(field, kind, operation, context);

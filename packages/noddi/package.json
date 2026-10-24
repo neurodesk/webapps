@@ -1,10 +1,10 @@
 {
   "name": "@neurodesk/noddi",
-  "version": "0.5.20261024",
+  "version": "0.6.20261024",
   "description": "Diffusion tensor and NODDI fitting for browsers and the command line",
   "type": "module",
   "private": true,
-  "license": "Apache-2.0 AND BSD-3-Clause",
+  "license": "Apache-2.0 AND BSD-3-Clause AND MIT",
   "engines": {
     "node": ">=22"
   },
@@ -24,6 +24,9 @@
     "bin",
     "src",
     "LICENSE",
+    "LICENSE-DMIPY",
+    "LICENSE-DIPY",
+    "LICENSE-LBFGSB",
     "NOTICE",
     "README.md"
   ],

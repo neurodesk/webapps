@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.21.1
+
+### Patch Changes
+
+- Retain the HMC workspace controls, diffusion workflow artifact metadata and selected-button hover contrast alongside the reviewed agent connection support.
+
 ## 0.21.0
 
 ### Minor Changes
@@ -17,12 +23,42 @@
 
 - 941884c: A BIDS diffusion dataset (a folder with a `sub-*/[ses-*/]dwi/*_dwi.nii[.gz]` image) dropped on the page now stays together at the primary input. Before, its DWI runs filled the empty image slots, so a second run went to an app's mask input. Other drops, BIDS anatomical pairs included, fill the image slots as before.
 
+## 0.20.1
+
+### Patch Changes
+
+- 328cb77: Add a browser workspace and Node command line for GP and trivial diffusion head-motion correction, with pinned CPU brain masking, explicit worker controls, BIDS derivatives and effective-mask provenance. Verify the hosts against actual production-browser reference outputs.
+
 ## 0.20.0
 
 ### Minor Changes
 
 - 3a7e5bb: The desktop MCP server also offers NiiVue's own agent tools (`@niivue/nv-mcp`): each retained NiiVue viewer is a tab, so `list_tabs`, `where_am_i`, `go_to_point`, `set_view`, `screenshot` and the rest act on it through its session. Viewers register a `niivue` capability and answer the new `viewers.niivue` command. Loading tools can also load a local file or another URL once a person approves it in a dialog, or when it is listed in `NEURODESK_APPROVED_SOURCES`, for that viewer only; `NEURODESK_SOURCE_APPROVAL=deny` refuses without asking. An address with a user name or password is refused before anyone is asked, however it is written. The new `sessions_grant` tool approves a file or any http(s) URL ahead of time, and each approval or refusal is recorded under `sources` in the run record.
 - 72cbb8d: Hosted apps can hand their NiiVue viewer to an AI agent on the same computer. `automation.agentConnection()` and `createAgentControl()` connect the page to a local nv-mcp server only after the person chooses **Connect an agent**, and report the connection in the app's status bar. The new `neurodesk-mcp` command (`@neurodesk/agent-server`) is that server for Node, accepting pages from `https://webapps.neurodesk.org` and localhost. It refuses a malformed request or frame without stopping, keeps serving when a client resets its socket, and closes a refused socket once it has answered. Brain Extraction shows the control as a preview when opened with `?agent` (or `?agent=<port>`). Its Privacy text says what a connected agent can read: screenshots of the viewer, and the names, dimensions, intensity statistics and display settings of the loaded images. An agent that runs on a cloud model sends what it reads to its provider. Chrome asks to allow local network access, and Safari cannot connect. Firefox connected without a prompt in one test on macOS. App builds bundle nv-mcp's browser client, which loads only when an agent connects or calls it. The components list nv-mcp as a devDependency, so command-line installs of the components carry neither nv-mcp nor the MCP server stack, and the components' type declarations compile without it.
+- 14a8b29: Add `bidsDiffusionSeries`, `chosenBidsRun` and `chooseBidsRun` to `file-io/bids`. `bidsDiffusionSeries` gives each DWI run of a dropped BIDS folder as a diffusion series (image, bval, bvec and the merged JSON sidecar), in the shape of `readDiffusionSeries`. The `require` option names the gradient tables that the app needs; a run without one of them lists it in `missing`. It returns null for loose files, so an app reads them as before. `chooseBidsRun` remembers the loaded run, so the same files (for example on Undo) load that run again. `readBidsDiffusion` now orders runs by number, so run-2 comes before run-10.
+- a028e96: Add `@neurodesk/webapp-components/file-io/bids-derivatives`: one module for the BIDS-derivative names (`splitName`, `sourceStem`, `outputNames(fileName, desc)`, `maskName`), the derivative sidecar (`derivativeSidecar(sidecar, description)`, `sidecarText`) and `gzipFile` of the DWI apps. degibbs, dwidenoise, n4, noddi and hmc use it in place of their own copies. Every output name and every file byte stays the same.
+- 650ce5f: Share the DWI apps' input helpers. `@neurodesk/webapp-components/file-io/brain-mask` reads a user's brain mask (`readBrainMask`: decode, same grid as the image, one 3D volume, binarised) for noddi, n4 and the noddi command line, and `@neurodesk/webapp-components/volume/mean` holds `meanVolumes`. `@neurodesk/dwi2trx/gradients` adds `parseBval` (the bval half of `parseBvalBvec`, with an optional volume-count check), `B0_THRESHOLD`, `isB0` and `b0Volumes` (b < 50 s/mm², the rule of the `exes/dwi/gradients` crate, which a shared test case file now checks on both sides). dwidenoise and n4 parse their b-values with it, and dwidenoise's own `parseBvals` is removed. Outputs are unchanged; some bval error messages now use the shared wording.
+- 343c256: Dwidenoise solves each Patch2Self volume in a worker. The page no longer runs a group solve, the NIfTI writer or gzip on its own thread, so it stays responsive and the footer × stops a run between two volumes. The status bar shows the Gram, solve and prediction passes, weighted by their cost. The workers write the result straight into the output NIfTI and find its `cal_max`, and a worker compresses the file without a copy. On the full-brain ds005134 DWI (509 MB as Float32), the renderer's peak memory went from about 3040 MB to about 2610 MB and the longest main-thread task from about 15 s to less than 0.5 s (packages/dwidenoise README). The output is the same, bit for bit, on the e2e fixtures, the slab and the full brain. Dwidenoise also refuses a DWI above the shared 2 GB input limit before decoding it.
+
+  `@neurodesk/dwidenoise` adds `solveVolume` (one row of `solve`, from the new `solve_volume` WebAssembly export), `denoiseChunks` (the app's worker schedule in one thread) and `CHUNK_VOXELS`. `solve` and `solveVolume` refuse a group of fewer than 2 volumes with a message that says so. `scripts/check-slab.mjs --app OUTPUT.nii.gz` requires app outputs to equal `denoiseChunks` bit for bit.
+
+  `@neurodesk/webapp-components/file-io` adds `allocateNifti`, the file `createNiftiFromData` writes with a typed view of its voxels to fill in place, so a page that writes a large image holds one copy of it. Its declaration types `ArrayType` as a view constructor (`NiftiViewConstructor`), as the function calls it.
+
+### Patch Changes
+
+- 941884c: A BIDS diffusion dataset (a folder with a `sub-*/[ses-*/]dwi/*_dwi.nii[.gz]` image) dropped on the page now stays together at the primary input. Before, its DWI runs filled the empty image slots, so a second run went to an app's mask input. Other drops, BIDS anatomical pairs included, fill the image slots as before.
+
+## 0.19.3
+
+### Patch Changes
+
+- Keep selected secondary buttons readable when hovered in light and dark themes.
+
+## 0.19.2
+
+### Patch Changes
+
+- Pair acquisition JSON and gradient inputs by automation role so metadata survives diffusion pipelines. Split DWI Correct and SDC inputs into single-image roles, require explicit acquisition values for automated correction, and expose correction settings. Export a corrected mean-b0 image for downstream brain masks. Use a generic single-volume error for shared image readers.
 
 ## 0.19.1
 
@@ -128,8 +164,6 @@
   inputs; dicompare opens the files as reference acquisitions, and White matter lesions
   keeps its own receiver.
 
-- 4b40da1: The input size limit moves from dwi2trx to `@neurodesk/webapp-components/file-io/input-limits` (`MAX_INPUT_BYTES`, `InputTooLargeError`, `formatBytes`, `assertInputSize`). It adds `decodedFloat32Bytes`, the size of the Float32 array an image decodes to (voxels × frames × 4), and `assertNiftiDecodedSize`, which refuses a NIfTI above the 2 GB limit from its header alone; `readNiftiHeader` stops gzip streaming after the header when supported. dwi2trx imports the shared module. NODDI and Degibbs refuse a DWI whose decoded image is above the limit before reading it, and the status bar names the size and the limit.
-
 - a36fde4: `@neurodesk/webapp-components/file-io` reads diffusion inputs from a BIDS folder. `readBidsDiffusion(files)` takes the files of a folder input or a dropped folder (each with its `webkitRelativePath`) and returns one record per `dwi/*_dwi.nii[.gz]` run: its `.bval`, `.bvec` and JSON sidecar, merged by BIDS inheritance from the dataset root down; the `fmap/*_epi` images whose `IntendedFor` names it, as a `bids::` URI or a subject-relative path; and the subject's `anat/*_T1w` image, from the same session first. Sessions and several runs are supported, and the dataset may sit below the dropped folder. A run without a `.bval` or `.bvec` carries an `error` that names the missing file. Files the reader cannot pair are listed with the reason. Types are at `@neurodesk/webapp-components/file-io/bids`.
 
 - DICOM View's "Open in White matter lesions" button is now an "Open in another webapp"
@@ -144,8 +178,6 @@
 ### Patch Changes
 
 - Cancel a pending shell handoff when the user chooses files, drops another input or starts an example. Stop the stored-file copy and input wait so an older handoff cannot replace the newer choice or its status.
-
-- 03261d0: Cancel a pending shell handoff when the user chooses files, drops another input or starts an example. Stop the stored-file copy and input wait so an older handoff cannot replace the newer choice or its status.
 
 - c865c0c: Serialize ME-ICA previews and restore the previous image, overlay, frame and display window when an import fails or is cancelled. Replacement echoes clear stale echo times, superseded imports cannot replace newer inputs, and automation cancellation stops the processing worker. The shared queue retains the existing single-volume preview adapter.
 
@@ -162,12 +194,6 @@
   agents Playwright's engines report.
 
 - b3404ec: Read only the NIfTI header when loading a White matter lesions image, avoiding a full-image allocation just to display and check its dimensions.
-
-- 3f1d770: `takeHandoff` takes a `signal`: an abort stops the copy out of storage instead of
-  letting it run on in the background, and rejects with the signal's reason. White
-  matter lesions passes its load job's signal, so the footer × ends the copy of an
-  image sent from another app. `copiesInPieces` is exported and pinned to the user
-  agents Playwright's engines report.
 
 - d9718cd: White matter lesions reads only the NIfTI header when an image is chosen. It used to copy the whole image into memory to read its dimensions, which added a second copy of a 1 GB FLAIR to the load. The shared `readNiftiHeader(file)` reads the first bytes of a plain or gzipped file, and `describeNiftiFile` is built on it.
 

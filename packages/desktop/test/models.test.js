@@ -47,6 +47,30 @@ test('the smaller package omits models and verifies their first download and cac
   await assert.rejects(offline.asset('https://unlisted.example/'), /not listed/);
 });
 
+for (const kind of ['example', 'runtime']) {
+  test(`the smaller package retains bytes shared by a model and an offline ${kind}`, async t => {
+    const { root, full, data, url, record } = await fixture(t);
+    const sharedUrl = `https://assets.example/shared-${kind}`;
+    const manifest = await loadBundle(full);
+    manifest.assets[sharedUrl] = { ...record, kind };
+    await writeFile(join(full, 'manifest.json'), JSON.stringify(manifest));
+    const light = join(root, 'light');
+    await withoutModels(full, light);
+    await verifyBundle(light);
+    const bundle = await loadBundle(light);
+    assert.equal(bundle.assets[url].remote, undefined);
+    assert.equal(bundle.assets[sharedUrl].remote, undefined);
+    assert.equal(bundle.files['site/demo/model.onnx'].remote, undefined);
+    const resolver = createModelResolver(light, bundle, join(root, 'cache'), {
+      fetchModel: () => { throw new Error('Shared assets must stay available offline'); },
+    });
+    for (const address of [url, sharedUrl]) {
+      assert.deepEqual(await readFile(await resolver.asset(address)), data);
+    }
+    assert.deepEqual(await readFile(await resolver.file('site/demo/model.onnx')), data);
+  });
+}
+
 test('corrupt downloaded models are rejected and can be retried', async t => {
   const { root, full, data, url } = await fixture(t);
   const light = join(root, 'light');

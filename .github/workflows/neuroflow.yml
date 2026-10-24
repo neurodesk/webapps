@@ -1,0 +1,126 @@
+name: neuroflow
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/neuroflow.yml'
+      - 'apps/pipeline-builder/**'
+      - 'apps/n4/**'
+      - 'apps/brain-extraction/**'
+      - 'apps/synthseg/**'
+      - 'apps/dwidenoise/**'
+      - 'apps/degibbs/**'
+      - 'apps/dwicorrect/**'
+      - 'apps/noddi/**'
+      - 'apps/dwi2trx/**'
+      - 'apps/calmar/tests/fixtures/synthstrip-mini/**'
+      - 'packages/**'
+      - 'exes/**'
+      - 'test-utils/**'
+      - 'test/**'
+      - 'scripts/**'
+      - 'registry/**'
+      - 'models/**'
+      - 'test/neuroflow*'
+      - 'test/pipeline-builder*'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '43 3 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neuroflow-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  exported-template:
+    runs-on: macos-15
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - template: t1
+            timeout: 150
+            apps: --filter pipeline-builder --filter n4 --filter brain-extraction --filter synthseg
+          - template: dwi
+            timeout: 360
+            apps: --filter pipeline-builder --filter dwidenoise --filter degibbs --filter dwicorrect --filter brain-extraction --filter noddi --filter dwi2trx
+    env:
+      NEURODESK_HARDWARE_GPU: '1'
+      NEURODESK_HARDWARE_GPU_VENDOR: apple
+      ONNXRUNTIME_NODE_INSTALL: skip
+      # v0.2.0, the first released runtime with scalar-to-array bindings.
+      NEUROFLOW_COMMIT: fc6ec6075108306a588d48e2c1b66ffb924284a6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: cdrake/neuroflow
+          ref: fc6ec6075108306a588d48e2c1b66ffb924284a6 # v0.2.0
+          path: .audit/neuroflow-runtime
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .audit/neuroflow-runtime/target
+          key: neuroflow-${{ runner.os }}-${{ runner.arch }}-${{ env.NEUROFLOW_COMMIT }}-${{ hashFiles('.audit/neuroflow-runtime/Cargo.lock') }}
+      - name: Build the pinned upstream runtime
+        working-directory: .audit/neuroflow-runtime
+        run: |
+          cargo test --locked -p neuroflow-mcp orders_steps_by_dependency
+          cargo build --release --locked -p neuroflow-mcp
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node packages/desktop/node_modules/electron/install.js
+      - name: Install Chromium and prove hardware GPU access
+        run: |
+          node node_modules/@playwright/test/cli.js install chromium
+          node scripts/probe-hardware-gpu.mjs
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/neurodesk-neuroflow-assets
+          key: neuroflow-assets-${{ hashFiles('registry/offline-assets.lock.json') }}
+      - name: Install the pinned DWI WebAssembly build toolchain
+        if: matrix.template == 'dwi'
+        run: |
+          rustup toolchain install nightly-2025-11-15 --profile minimal --component rust-src --target wasm32-unknown-unknown
+          cargo install wasm-pack --version 0.13.1 --locked
+      - name: Build the exported workflow's applications
+        run: pnpm ${{ matrix.apps }} build
+      - name: Run the exported ${{ matrix.template }} workflow through the desktop suite
+        shell: bash
+        run: |
+          export NEUROFLOW_MCP_BIN="$GITHUB_WORKSPACE/.audit/neuroflow-runtime/target/release/neuroflow-mcp"
+          export NEURODESK_ASSET_CACHE="$HOME/.cache/neurodesk-neuroflow-assets"
+          export NEUROFLOW_EVIDENCE_DIR="$RUNNER_TEMP/neuroflow-evidence"
+          node scripts/desktop/neuroflow-smoke.mjs --${{ matrix.template }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: neuroflow-exported-${{ matrix.template }}
+          path: |
+            ${{ runner.temp }}/neuroflow-evidence/**/evidence.json
+            ${{ runner.temp }}/neuroflow-evidence/**/exported.workflow.json
+            ${{ runner.temp }}/neuroflow-evidence/**/run.json
+            ${{ runner.temp }}/neuroflow-evidence/**/run.provenance.json
+            ${{ runner.temp }}/neuroflow-evidence/**/report.json
+            ${{ runner.temp }}/neuroflow-evidence/**/logs/*
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,0 +1,56 @@
+{
+  "type": "done",
+  "elapsedMs": 98545.97500038147,
+  "heapBytes": 1784676352,
+  "outputs": [
+    {
+      "name": "up",
+      "bytes": 21960544
+    },
+    {
+      "name": "down",
+      "bytes": 21960544
+    }
+  ],
+  "schedule": [
+    "[learning_rate={0.5},cfs={10:4:2},field_smoothing={5:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={20:2:1},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={20:1:0},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]"
+  ],
+  "browser": "156.0.8078.4",
+  "wasmSha256": "278b6f0f036c5682f819cc43be574adbbd335ba955df5ca7ad1548804bdf8f32",
+  "measurement": "Contended-host correctness preflight; elapsed time is not a benchmark. heapBytes is the final monotonic WASM heap allocation, not process RSS.",
+  "date": "2026-10-24",
+  "inputSha256": {
+    "blip_up_b0.nii": "fb7312ad67d59a5a1a88ff4fb678e51fe330517e1cce5fb3cad64ddffe84d26d",
+    "blip_down_b0.nii": "6c643e7b528fdd2d24c336018348e5d06392681bbf84c76a4db73fd4efd2e396"
+  },
+  "outputSha256": {
+    "up.nii": "92c9e44e18fe390f3f692b7dc08b8bd56ea2e12be3b9be17b96bf61e86dc871d",
+    "down.nii": "a7e47a34865b29afd7b3214f7accc76fac03e23ec4fb8fc1a1f7d40f5a34e4ec"
+  },
+  "metrics": {
+    "method": "drbuddi",
+    "voxels": 199566,
+    "appa_mad": 0.07721660197678189,
+    "appa_1mncc": 0.06165694343766015,
+    "uncorrected_appa_mad": 0.17773661587527848,
+    "field_median_abs_hz": 10.1744704246521,
+    "appa_mad_nojac": 0.1430367994444078,
+    "field_vs_topup_mad_hz": 3.7387445271015167,
+    "field_vs_topup_r": 0.9477501947919876,
+    "field_vs_topup_offset_hz": 3.0776742100715637,
+    "field_vs_topup_mad_demeaned_hz": 2.2432945370674133,
+    "field_vs_gre_mad_hz": 4.011121536048671,
+    "field_vs_gre_r": 0.9213142282455135,
+    "field_vs_gre_offset_hz": -2.6360808219471634,
+    "field_vs_gre_mad_demeaned_hz": 3.015993412979674
+  },
+  "acceptance": "AP/PA threshold passes; newly initialized paired BBR fails. Archived BBR reproduction and native/WASM parity remain unverified.",
+  "pairedBbr": {
+    "topup": 0.251092,
+    "drbuddi": 0.252793,
+    "pass": false,
+    "initialization": "New shared rigid initialization from reconstructed topup mean; not the missing archived initialization."
+  }
+}

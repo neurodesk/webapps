@@ -1,0 +1,187 @@
+{
+  "neuroflow": "0.1.1",
+  "kind": "workflow",
+  "id": "neurodesk.pipelines/dwi-preprocessing",
+  "version": "0.1.0",
+  "description": "Preprocess a multi-shell diffusion series with at least two nonzero b-value shells, then fit DTI and NODDI and track streamlines inside a mask of the corrected mean b0. A multi-shell input is required for the published ICVF output.",
+  "inputs": {
+    "dwi": {
+      "type": "neuro:volume",
+      "formats": [
+        "nifti"
+      ],
+      "description": "Multi-shell diffusion series with at least two nonzero b-value shells"
+    },
+    "bval": {
+      "type": "neuro:gradient-table",
+      "description": "FSL b-values with at least two nonzero diffusion shells"
+    },
+    "bvec": {
+      "type": "neuro:gradient-table",
+      "description": "FSL gradient directions"
+    },
+    "sidecar": {
+      "type": "neurodesk:metadata",
+      "formats": [
+        "json"
+      ],
+      "description": "Diffusion acquisition JSON, including phase encoding and total readout time"
+    },
+    "reverse": {
+      "type": "neuro:volume",
+      "formats": [
+        "nifti"
+      ],
+      "description": "Reverse phase-encoding b0 on the diffusion grid"
+    },
+    "reverseSidecar": {
+      "type": "neurodesk:metadata",
+      "formats": [
+        "json"
+      ],
+      "description": "Reverse b0 acquisition JSON"
+    }
+  },
+  "steps": {
+    "denoise": {
+      "tool": "neurodesk.webapps/dwidenoise/denoise",
+      "inputs": {
+        "input_image": {
+          "ref": "inputs.dwi"
+        },
+        "input_bval": {
+          "ref": "inputs.bval"
+        },
+        "input_bvec": {
+          "ref": "inputs.bvec"
+        },
+        "input_sidecar": {
+          "ref": "inputs.sidecar"
+        }
+      }
+    },
+    "degibbs": {
+      "tool": "neurodesk.webapps/degibbs/degibbs",
+      "inputs": {
+        "input_image": {
+          "ref": "steps.denoise.outputs.output_image"
+        },
+        "input_bval": {
+          "ref": "steps.denoise.outputs.output_bval"
+        },
+        "input_bvec": {
+          "ref": "steps.denoise.outputs.output_bvec"
+        },
+        "input_sidecar": {
+          "ref": "steps.denoise.outputs.output_sidecar"
+        }
+      }
+    },
+    "correct": {
+      "tool": "neurodesk.webapps/dwicorrect/correct",
+      "inputs": {
+        "input_dwi": {
+          "ref": "steps.degibbs.outputs.output_image"
+        },
+        "input_bval": {
+          "ref": "steps.degibbs.outputs.output_bval"
+        },
+        "input_bvec": {
+          "ref": "steps.degibbs.outputs.output_bvec"
+        },
+        "input_sidecar": {
+          "ref": "steps.degibbs.outputs.output_sidecar"
+        },
+        "input_reverse": {
+          "ref": "inputs.reverse"
+        },
+        "input_reverseSidecar": {
+          "ref": "inputs.reverseSidecar"
+        }
+      }
+    },
+    "brain": {
+      "tool": "neurodesk.webapps/brain-extraction/extract",
+      "inputs": {
+        "input_image": {
+          "ref": "steps.correct.outputs.output_mean-b0"
+        }
+      }
+    },
+    "models": {
+      "tool": "neurodesk.webapps/noddi/fit",
+      "inputs": {
+        "input_image": {
+          "ref": "steps.correct.outputs.output_dwi"
+        },
+        "input_bval": {
+          "ref": "steps.correct.outputs.output_bval"
+        },
+        "input_bvec": {
+          "ref": "steps.correct.outputs.output_bvec"
+        },
+        "input_mask": {
+          "ref": "steps.brain.outputs.output_mask"
+        }
+      }
+    },
+    "tractography": {
+      "tool": "neurodesk.webapps/dwi2trx/tractography",
+      "inputs": {
+        "input_image": {
+          "ref": "steps.correct.outputs.output_dwi"
+        },
+        "input_bval": {
+          "ref": "steps.correct.outputs.output_bval"
+        },
+        "input_bvec": {
+          "ref": "steps.correct.outputs.output_bvec"
+        },
+        "input_mask": {
+          "ref": "steps.brain.outputs.output_mask"
+        },
+        "input_metadata": {
+          "ref": "steps.correct.outputs.output_sidecar"
+        }
+      }
+    }
+  },
+  "outputs": {
+    "corrected": {
+      "type": "neuro:volume",
+      "ref": "steps.correct.outputs.output_dwi"
+    },
+    "meanB0": {
+      "type": "neuro:volume",
+      "ref": "steps.correct.outputs.output_mean-b0"
+    },
+    "bval": {
+      "type": "neuro:gradient-table",
+      "ref": "steps.correct.outputs.output_bval"
+    },
+    "bvec": {
+      "type": "neuro:gradient-table",
+      "ref": "steps.correct.outputs.output_bvec"
+    },
+    "sidecar": {
+      "type": "neurodesk:metadata",
+      "ref": "steps.correct.outputs.output_sidecar"
+    },
+    "mask": {
+      "type": "neuro:mask",
+      "ref": "steps.brain.outputs.output_mask"
+    },
+    "fa": {
+      "type": "neuro:volume",
+      "ref": "steps.models.outputs.output_tensor-fa"
+    },
+    "icvf": {
+      "type": "neuro:volume",
+      "ref": "steps.models.outputs.output_noddi-icvf"
+    },
+    "tracts": {
+      "type": "neuro:tract",
+      "ref": "steps.tractography.outputs.output_tracts"
+    }
+  }
+}

@@ -9,6 +9,7 @@ import { cpus, tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import createNiimath from '@niivue/niimath/niimath.js';
 import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
+import { loadSdc } from '@neurodesk/sdc';
 import { loadMeica } from '@niivue/meica';
 import { runFastprep } from '../src/index.js';
 
@@ -63,6 +64,7 @@ const files = await runFastprep({
     mindgrabOptions: { backend: 'cpu' },
     greedy,
     synthsr,
+    sdc: () => loadSdc(readFileSync(new URL(import.meta.resolve('@neurodesk/sdc/wasm')))),
     meica: await loadMeica({ threads: 1 }),
     wasm: { core: wasm('fastprep'), glm: wasm('glm') },
   },

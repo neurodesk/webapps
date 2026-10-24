@@ -17,6 +17,25 @@ const { corrected, bias } = await n4.correct({ image: meanB0Nifti, weight: maskN
 For a DWI series, `rescaleBias` keeps the brain integral as `dwibiascorrect` does, and `divideVolumes` corrects every volume.
 Run it in a worker: N4 is synchronous.
 
+## EPI-reference profile (SyN-SDC foundation)
+
+The independent EPI-reference builder uses niworkflows 1.15.3's convergence schedule
+`50x50x50x50x50` with tolerance `1e-7` and shrink factor 4, without a weight image
+or the MRtrix B-spline override. It requests a bias output as well as the corrected
+image to preserve this runtime's result contract:
+
+```js
+import { createN4, epiReferenceArguments } from '@neurodesk/n4';
+const n4 = await createN4({ createModule, wasmBinary, buildArguments: epiReferenceArguments });
+const { corrected, bias } = await n4.correct({ image: clippedMeanB0Nifti });
+```
+
+The default `createN4` profile is unchanged. Both profiles use the same committed
+WASM bytes. A Node test executes the EPI-reference argv on that real module and
+checks the corrected-image/bias product against its input. This is entry-point
+wiring for #462; the complete SyN-SDC native replay and grid/precision gates remain
+pending. It does not establish full-pipeline parity.
+
 ## Parity
 
 On the mean b0 of the ds005134 sub-01 example slab, weighted by the app's default MindGrab mask (45 965 voxels), the module's bias field and corrected image equal native ANTs 2.6.5 `N4BiasFieldCorrection` (Neurodesk container `ants_2.6.5_20261012`, one thread, dwibiascorrect's options) byte for byte. It takes about 3 s in Node.

@@ -2,6 +2,10 @@
 
 ## 0.6.20261024
 
+### Patch Changes
+
+- Pair acquisition JSON and gradient inputs by automation role so metadata survives diffusion pipelines. Split DWI Correct and SDC inputs into single-image roles, require explicit acquisition values for automated correction, and expose correction settings. Export a corrected mean-b0 image for downstream brain masks. Use a generic single-volume error for shared image readers.
+
 ## 0.6.20261022
 
 ## 0.6.20261020

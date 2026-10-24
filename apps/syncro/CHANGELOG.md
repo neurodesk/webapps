@@ -4,6 +4,14 @@
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
+  - @neurodesk/runtime-support@0.9.14
+  - @neurodesk/synthsr@0.6.20261024
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/brain-extraction@0.5.20261024
+  - @neurodesk/greedy@0.6.20261024
+  - @neurodesk/syncro@0.7.20261024
 - Updated dependencies [941884c]
 - Updated dependencies [a028e96]
 - Updated dependencies [650ce5f]
@@ -33,6 +41,41 @@
   - @neurodesk/brain-extraction@0.5.20261024
   - @neurodesk/greedy@0.6.20261024
   - @neurodesk/syncro@0.7.20261024
+- Updated dependencies [328cb77]
+  - @neurodesk/webapp-components@0.20.1
+  - @neurodesk/runtime-support@0.9.13
+  - @neurodesk/synthsr@0.6.20261024
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/brain-extraction@0.5.20261024
+  - @neurodesk/greedy@0.6.20261024
+  - @neurodesk/syncro@0.7.20261024
+- Updated dependencies [14a8b29]
+- Updated dependencies [941884c]
+  - @neurodesk/webapp-components@0.20.0
+  - @neurodesk/runtime-support@0.9.12
+  - @neurodesk/synthsr@0.6.20261024
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/brain-extraction@0.5.20261024
+  - @neurodesk/greedy@0.6.20261024
+  - @neurodesk/syncro@0.7.20261024
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.3
+  - @neurodesk/runtime-support@0.9.11
+  - @neurodesk/synthsr@0.6.20261024
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/brain-extraction@0.5.20261024
+  - @neurodesk/greedy@0.6.20261024
+  - @neurodesk/syncro@0.7.20261024
+- Updated dependencies
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.2
+  - @neurodesk/synthsr@0.6.20261024
+  - @neurodesk/registration@0.1.2
+  - @neurodesk/runtime-support@0.9.10
+  - @neurodesk/brain-extraction@0.5.20261024
+  - @neurodesk/syncro@0.7.20261024
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/greedy@0.6.20261024
 
 ## 0.7.20261022
 
@@ -90,8 +133,6 @@
   - @neurodesk/syncro@0.7.20261020
 - Record the injected MindGrab runtime's actual version in brain extraction provenance, including SYNcro's separately pinned build.
 - Updated dependencies [a36fde4]
-- Updated dependencies
-- Updated dependencies
 - Updated dependencies
 - Updated dependencies
   - @neurodesk/webapp-components@0.17.0
@@ -174,32 +215,12 @@
 
 - Updated dependencies [d1fa022]
 
-  - @neurodesk/webapp-components@0.16.0
-  - @neurodesk/runtime-support@0.8.0
-  - @neurodesk/syncro@0.7.20261020
-  - @neurodesk/synthsr@0.6.20261020
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261020
-  - @neurodesk/greedy@0.6.20261020
-
-- Updated dependencies [d1fa022]
-
   - @neurodesk/webapp-components@0.16.3
   - @neurodesk/runtime-support@0.9.3
   - @neurodesk/synthsr@0.6.20261020
   - @neurodesk/synthstrip@0.1.5
   - @neurodesk/brain-extraction@0.4.20261020
   - @neurodesk/syncro@0.7.20261020
-  - @neurodesk/greedy@0.6.20261020
-
-- Updated dependencies [d1fa022]
-
-  - @neurodesk/webapp-components@0.16.0
-  - @neurodesk/runtime-support@0.8.0
-  - @neurodesk/syncro@0.7.20261020
-  - @neurodesk/synthsr@0.6.20261020
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261020
   - @neurodesk/greedy@0.6.20261020
 
 - Updated dependencies [657c330]
@@ -229,8 +250,6 @@
   - @neurodesk/brain-extraction@0.4.20261020
   - @neurodesk/syncro@0.7.20261020
   - @neurodesk/greedy@0.6.20261020
-
-- Record the injected MindGrab runtime's actual version in brain extraction provenance, including SYNcro's separately pinned build.
 
 - Updated dependencies
 
@@ -287,8 +306,6 @@
   - @neurodesk/brain-extraction@0.4.20261020
   - @neurodesk/greedy@0.6.20261020
   - @neurodesk/syncro@0.7.20261020
-- Updated dependencies [14db080]
-
 - Updated dependencies [4b40da1]
 
 - NiiVue moves to 1.0.0-rc.26 in Brain Extraction, Carotid Flow, SYNcro, SynthSeg, White Matter Lesions, and, through the shared FreeBrowse viewer, Spinal Cord Toolbox, DICOM View and TopoFit. From rc.25, NiiVue places a loaded drawing on the right voxels of a sagittal or otherwise permuted image (niivue/mono#251), so the mask editor no longer probes and reverses NiiVue's load on opening a mask. Opening a mask for editing now takes one load instead of up to five on such images. MuscleMap, SeedSeg and VesselBoost run NiiVue 0.68, which already loaded drawings correctly; they pick up the simpler editor.
@@ -408,26 +425,6 @@
   - @neurodesk/brain-extraction@0.4.20261018
   - @neurodesk/greedy@0.6.20261018
 
-- Updated dependencies [7c0d201]
-
-  - @neurodesk/webapp-components@0.16.2
-  - @neurodesk/runtime-support@0.9.1
-  - @neurodesk/synthsr@0.6.20261018
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261018
-  - @neurodesk/greedy@0.6.20261018
-  - @neurodesk/syncro@0.7.20261018
-
-- Updated dependencies [46935f7]
-
-  - @neurodesk/runtime-support@0.9.0
-  - @neurodesk/webapp-components@0.16.1
-  - @neurodesk/synthsr@0.6.20261018
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261018
-  - @neurodesk/greedy@0.6.20261018
-  - @neurodesk/syncro@0.7.20261018
-
 - Updated dependencies [3329c39]
 
   - @neurodesk/webapp-components@0.16.0
@@ -500,26 +497,6 @@
   - @neurodesk/greedy@0.5.20261018
   - @neurodesk/syncro@0.6.20261018
 
-- Updated dependencies [b68209b]
-
-  - @neurodesk/webapp-components@0.15.0
-  - @neurodesk/runtime-support@0.7.1
-  - @neurodesk/synthsr@0.6.20261018
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261018
-  - @neurodesk/greedy@0.5.20261018
-  - @neurodesk/syncro@0.6.20261018
-
-- Updated dependencies [67a5a8f]
-
-  - @neurodesk/runtime-support@0.7.0
-  - @neurodesk/webapp-components@0.14.4
-  - @neurodesk/synthsr@0.6.20261018
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261018
-  - @neurodesk/greedy@0.5.20261018
-  - @neurodesk/syncro@0.6.20261018
-
 - Updated dependencies [b67e4e9]
   - @neurodesk/runtime-support@0.7.2
   - @neurodesk/webapp-components@0.15.1
@@ -566,26 +543,6 @@
   - @neurodesk/syncro@0.6.20261016
 
 - Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
-
-- Updated dependencies
-
-  - @neurodesk/webapp-components@0.14.2
-  - @neurodesk/runtime-support@0.6.3
-  - @neurodesk/synthsr@0.6.20261016
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261016
-  - @neurodesk/greedy@0.5.20261016
-  - @neurodesk/syncro@0.6.20261016
-
-- Updated dependencies [7443048]
-
-  - @neurodesk/webapp-components@0.14.1
-  - @neurodesk/runtime-support@0.6.2
-  - @neurodesk/synthsr@0.6.20261016
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261016
-  - @neurodesk/greedy@0.5.20261016
-  - @neurodesk/syncro@0.6.20261016
 
 - Updated dependencies
 
@@ -680,31 +637,6 @@
   - @neurodesk/syncro@0.6.20261015
 
 - Updated dependencies [84d192a]
-
-  - @neurodesk/synthsr@0.6.20261015
-  - @neurodesk/brain-extraction@0.4.20261015
-  - @neurodesk/syncro@0.6.20261015
-
-- Updated dependencies [dcc74e7]
-
-  - @neurodesk/runtime-support@0.6.0
-  - @neurodesk/webapp-components@0.14.0
-  - @neurodesk/synthsr@0.6.20261015
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261015
-  - @neurodesk/greedy@0.5.20261015
-  - @neurodesk/syncro@0.6.20261015
-
-- Updated dependencies [c74b26f]
-
-  - @neurodesk/runtime-support@0.6.1
-  - @neurodesk/synthsr@0.6.20261015
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261015
-  - @neurodesk/greedy@0.5.20261015
-  - @neurodesk/syncro@0.6.20261015
-
-- Updated dependencies [84d192a]
   - @neurodesk/synthsr@0.6.20261015
   - @neurodesk/brain-extraction@0.4.20261015
   - @neurodesk/syncro@0.6.20261015
@@ -765,17 +697,6 @@
 
 - @neurodesk/greedy@0.5.20261012
 
-- @neurodesk/syncro@0.6.20261012
-
-- Updated dependencies
-  - @neurodesk/webapp-components@0.12.3
-  - @neurodesk/runtime-support@0.4.3
-  - @neurodesk/synthsr@0.6.20261012
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261012
-  - @neurodesk/greedy@0.5.20261012
-  - @neurodesk/syncro@0.6.20261012
-
 ## 0.6.20261010
 
 ### Patch Changes
@@ -827,16 +748,6 @@
 - Updated dependencies
 
   - @neurodesk/syncro@0.6.20261010
-
-- Updated dependencies
-
-  - @neurodesk/webapp-components@0.12.2
-  - @neurodesk/registration@0.1.1
-  - @neurodesk/runtime-support@0.4.2
-  - @neurodesk/synthsr@0.6.20261010
-  - @neurodesk/synthstrip@0.1.5
-  - @neurodesk/brain-extraction@0.4.20261010
-  - @neurodesk/greedy@0.4.20261010
 
 - Updated dependencies
   - @neurodesk/runtime-support@0.4.1
@@ -930,31 +841,6 @@
 - 6be20aa: Add the `topofit` command line: CPU reconstruction with ONNX Runtime Node, offline model installation with SHA-256 checks on every load, portable Linux x64 and Windows x64 archives, and a Developer ID signed, notarized macOS arm64 installer package that installs `/usr/local/bin/topofit`. Each bundles Node and the T1-weighted models, and each must match the OpenRecon end-to-end reference before release. SYNcro's portable archives are now built by the shared `exes/node-cli` packager; their contents and behaviour are unchanged apart from the launcher binary.
 
 - Updated dependencies [70f2770]
-
-  - @neurodesk/webapp-components@0.10.2
-  - @neurodesk/greedy@0.4.20261007
-  - @neurodesk/synthsr@0.6.20261007
-  - @neurodesk/brain-extraction@0.1.21
-
-- Updated dependencies
-
-  - @neurodesk/webapp-components@0.11.0
-  - @neurodesk/runtime-support@0.2.0
-  - @neurodesk/synthsr@0.6.20261007
-  - @neurodesk/synthstrip@0.1.2
-  - @neurodesk/brain-extraction@0.1.22
-  - @neurodesk/greedy@0.4.20261007
-
-- Updated dependencies [22aa4bf]
-
-  - @neurodesk/webapp-components@0.11.1
-  - @neurodesk/runtime-support@0.2.1
-  - @neurodesk/synthsr@0.6.20261007
-  - @neurodesk/synthstrip@0.1.3
-  - @neurodesk/brain-extraction@0.1.23
-  - @neurodesk/greedy@0.4.20261007
-
-- Updated dependencies [70f2770]
   - @neurodesk/webapp-components@0.10.2
   - @neurodesk/greedy@0.4.20261007
   - @neurodesk/synthsr@0.6.20261007
@@ -1012,21 +898,6 @@
 - 979d2e9: Correct the normalized lesion in the viewer before downloading it. When a run includes a lesion map, Results offers Edit lesion, which opens the shared mask editor on the normalized primary scan with the normalized lesion as the drawing. Apply replaces the lesion in the result archive with the edited uint8 NIfTI under the same name and labels the viewer `(edited)`; Cancel discards the strokes. A new run, new input or removed input closes an open edit. Automation results stay as the pipeline computed them.
 
 - Updated dependencies [0204fe1]
-
-- Updated dependencies [ec85a09]
-
-  - @neurodesk/webapp-components@0.10.0
-  - @neurodesk/greedy@0.4.20261004
-  - @neurodesk/synthsr@0.6.20261004
-  - @neurodesk/brain-extraction@0.1.17
-
-- Updated dependencies [257192b]
-
-  - @neurodesk/synthsr@0.6.20261004
-  - @neurodesk/synthstrip@0.1.1
-  - @neurodesk/runtime-support@0.1.3
-  - @neurodesk/brain-extraction@0.1.16
-  - @neurodesk/greedy@0.4.20261004
 
 - Updated dependencies [ec85a09]
 
@@ -1095,13 +966,6 @@
 
 - Updated dependencies
 
-  - @neurodesk/webapp-components@0.6.2
-  - @neurodesk/greedy@0.4.20260930
-  - @neurodesk/synthsr@0.5.20260930
-  - @neurodesk/brain-extraction@0.1.12
-
-- Updated dependencies
-
   - @neurodesk/webapp-components@0.7.0
   - @neurodesk/greedy@0.4.20260930
   - @neurodesk/synthsr@0.5.20260930
@@ -1137,13 +1001,6 @@
   - @neurodesk/brain-extraction@0.1.10
 
 - Updated dependencies
-
-- Updated dependencies [93381e8]
-
-  - @neurodesk/webapp-components@0.6.0
-  - @neurodesk/greedy@0.4.20260928
-  - @neurodesk/synthsr@0.5.20260928
-  - @neurodesk/brain-extraction@0.1.10
 
 - Updated dependencies [93381e8]
 
@@ -1224,13 +1081,6 @@
   - @neurodesk/brain-extraction@0.1.4
 
 - @neurodesk/greedy@0.3.20260920
-
-- Updated dependencies [4959500]
-
-  - @neurodesk/webapp-components@0.4.4
-  - @neurodesk/greedy@0.3.20260920
-  - @neurodesk/synthsr@0.4.20260920
-  - @neurodesk/brain-extraction@0.1.6
 
 - Updated dependencies
 
@@ -1374,13 +1224,6 @@
 - 3cd773f: Greedy and EdgeReg show all three viewer panels on phones. TopoFit conforms axis-aligned and oblique scans through the pinned npm niimath WebAssembly worker. SYNcro now matches the native three-input workflow, offers four checksum-pinned tutorials, defaults to MindGrab and Greedy with SynthStrip and ANTs alternatives, uses niimath for lesion and masking operations, and switches one NiiVue viewer between images with automatic lesion overlays. SynthSR lets adapter limits govern its largest activation buffer, so validated 256×256×192 scans and larger volumes on capable GPUs are attempted while other shared U-Net callers retain their existing limit. Add the standalone ANTS registration demo.
 
 - Updated dependencies [3cd773f]
-
-- Updated dependencies [4add8da]
-
-  - @neurodesk/greedy@0.1.20260914
-  - @neurodesk/webapp-components@0.1.5
-  - @neurodesk/runtime-support@0.1.2
-  - @neurodesk/synthsr@0.3.20260914
 
 - Updated dependencies [4add8da]
 

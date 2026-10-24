@@ -29,6 +29,42 @@ shared:
     code: https://www.neurodesk.org
 
 apps:
+  hmc:
+    packages:
+      - { name: NiFreeze, url: https://github.com/nipreps/nifreeze, role: Gaussian-process and b0-template estimator reference at commit 3bcfb00 }
+      - { name: ANTs WebAssembly, url: https://github.com/ANTsX/ANTs, role: float rigid registration and B-spline resampling }
+      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/mindgrab, role: CPU brain mask of the mean b0 }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Motion correction
+        title: NiFreeze
+        reference: "Legarreta JH, Savary E, Markiewicz CJ, Rokem A, Norgaard M, Esteban O. An open implementation of FSL's eddy with volume-to-volume artifact estimation for neuroimaging beyond diffusion MRI. ISMRM. 2025;3252."
+        doi: 10.58530/2025/3252
+        code: https://github.com/nipreps/nifreeze
+      - group: Signal prediction
+        title: Gaussian process prediction
+        reference: "Andersson JLR, Sotiropoulos SN. Non-parametric representation and prediction of single- and multi-shell diffusion-weighted MRI data using Gaussian processes. NeuroImage. 2015;122:166–176."
+        doi: 10.1016/j.neuroimage.2015.07.067
+      - group: Registration
+        title: ANTs
+        reference: "Avants BB, Tustison NJ, Song G, Cook PA, Klein A, Gee JC. A reproducible evaluation of ANTs similarity metric performance in brain image registration. NeuroImage. 2011;54(3):2033–2044."
+        doi: 10.1016/j.neuroimage.2010.09.025
+      - group: Brain extraction
+        title: MindGrab
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        url: https://arxiv.org/abs/2506.11860
+      - group: Brain extraction
+        title: Brainchop
+        reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. Journal of Open Source Software. 2023;8(83):5098."
+        doi: 10.21105/joss.05098
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
   musclemap:
     packages:
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the segmentation model in the browser }
@@ -1453,6 +1489,9 @@ apps:
         url: https://pyodide.org
 
   fastprep:
+    about:
+      - "fastprep follows the fMRIPrep workflow with: niimath, MindGrab, Greedy, SynthSR and glm. Reverse phase-encoding field estimation uses the GPL-3.0-or-later PyHySCO solver; the bundled app is distributed under GPL-3.0-or-later and the orchestration source retains Apache-2.0. Runs with three or more echoes are also denoised with ME-ICA by meica, an LGPL-2.1 port of tedana; the report compares the original and denoised task maps. The Rust orchestration is the same as the native fastprep command, so this page writes the same derivatives and HTML report."
+      - "Input: one subject of a BIDS dataset with a T1w and BOLD runs, each with its JSON sidecar. An events.tsv with left/right trial types adds a task analysis. Runs are limited to 1 GB of float32 BOLD here; cortical surfaces (TopoFit) are native-only. Opposite-PE EPI references support PyHySCO field estimation in this browser. Larger studies: use the native fastprep."
     packages:
       - { name: fastprep Rust core (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/fastprep, role: pipeline orchestration }
       - { name: glm Rust core (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/glm, role: first-level GLM with AR(1) Prais-Winsten prewhitening }
@@ -1462,7 +1501,16 @@ apps:
       - { name: SynthSR, url: https://github.com/BBillot/SynthSR, role: fieldmap-less distortion correction }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: SynthSR inference }
       - { name: meica, url: https://github.com/niivue/meica-rs, role: multi-echo ICA denoising (a Rust port of tedana) }
+      - { name: sdc / PyHySCO, url: https://github.com/neurodesk/webapps/tree/main/exes/sdc, role: reverse phase-encoding field estimation }
     citations:
+      - group: Distortion correction
+        title: PyHySCO
+        reference: "Julian A, Ruthotto L. PyHySCO: GPU-enabled susceptibility artifact distortion correction in seconds. 2024."
+        url: https://arxiv.org/abs/2403.10706
+      - group: Distortion correction
+        title: HySCO
+        reference: "Ruthotto L, Kugel H, Olesch J, et al. Diffeomorphic susceptibility artifact correction of diffusion-weighted magnetic resonance images. Phys Med Biol. 2012;57(18):5715-5731."
+        url: https://doi.org/10.1088/0031-9155/57/18/5715
       - group: Method
         title: fMRIPrep
         reference: "Esteban O, Markiewicz CJ, Blair RW, et al. fMRIPrep: a robust preprocessing pipeline for functional MRI. Nat Methods. 2019;16(1):111-116."
@@ -1514,7 +1562,12 @@ apps:
         doi: 10.1002/hbm.20359
 
   noddi:
+    about:
+      - "NODDI fits diffusion tensor and NODDI maps to diffusion MRI in this browser. The tensor fit gives FA, MD, AD, RD, S0 and the principal direction from the b0 volumes and the shells up to b = 1200 s/mm² (the lowest shell when none is that low). The tensor fit is weighted least squares (the default), ordinary least squares, or niimath dtifit, which is FSL dtifit's default linear fit as DWI2TRX runs it. niimath dtifit writes no AD or RD map: AD is its first eigenvalue and RD is the mean of the second and third. Where a fit has a negative eigenvalue, niimath sets FA and MD to zero, and the app also sets AD and RD to zero. The app gives niimath unit bvecs, and the direction map has the same axes and sign as the other two fits. A sample of zero or less takes the lowest positive sample of its voxel in the other two fits; niimath uses its own lower limit, so these voxels can have different values. NODDI, fitted with AMICO (the default) or the nonlinear dmipy model, gives the intra-cellular volume fraction (ICVF), the isotropic volume fraction (ISOVF) and the orientation dispersion index (ODI). It needs two or more shells. The default fit is a port of AMICO 1.5.4 and agrees with it to a median of 1e-4 in white matter; AMICO 1.5.4 rounds each fibre direction to its 1° lookup table and this port does not. Outputs use the BIDS diffusion derivative names. Fit corrected data: this app does not denoise or correct motion, eddy currents or distortion. A dropped BIDS folder gives each DWI run with its bval and bvec; choose the run when there is more than one. The nonlinear fit ports dmipy's ball, Watson-distributed stick and zeppelin model with the NODDI tortuosity constraints and fixed diffusivities. It reports fitted, skipped, nonconverged and failed voxel counts in the technical log and automation provenance. Nonconverged voxels keep the optimizer's returned fit; inspect these counts before using a map. It is validated against dmipy in the pinned white-matter mask; full-brain validation outside that mask remains pending."
     packages:
+      - name: dmipy nonlinear NODDI (Rust and WebAssembly port)
+        url: https://github.com/AthenaEPI/dmipy
+        role: constrained nonlinear NODDI fit, ported under MIT and BSD-3-Clause
       - name: AMICO 1.5.4 (Rust and WebAssembly port)
         url: https://github.com/daducci/AMICO
         role: NODDI fit, ported from the last BSD-licensed release
@@ -1531,6 +1584,11 @@ apps:
         url: https://github.com/rordenlab/dcm2niix
         role: DICOM to NIfTI conversion
     citations:
+      - group: Nonlinear NODDI fitting
+        title: dmipy
+        reference: "Fick RHJ, Wassermann D, Deriche R. The Dmipy Toolbox: Diffusion MRI Multi-Compartment Modeling and Microstructure Recovery Made Easy. Frontiers in Neuroinformatics. 2019;13:64."
+        doi: 10.3389/fninf.2019.00064
+        code: https://github.com/AthenaEPI/dmipy
       - group: Brain extraction
         title: MindGrab
         reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
@@ -1617,6 +1675,8 @@ apps:
         url: https://github.com/niivue/niivue
 
   sdc:
+    about:
+      - "SDC estimates the susceptibility field of an EPI acquisition from two b = 0 images with opposite phase-encoding directions, such as AP and PA, in this browser. It is a port of PyHySCO 0.0.4 (Julian and Ruthotto 2024), the hyperelastic susceptibility correction of Ruthotto et al. 2012, and its field differs from PyHySCO's by a median of 5e-6 Hz (at most 0.03 Hz). In a comparison on six subjects it was the closest fast method to FSL topup; DR-BUDDI was closer but takes about 40 minutes. Each input's volumes with b ≤ 50 are averaged, without motion correction, and the two images must be in one space. The field is in Hz, with topup's sign, on the grid of the field reference; a constant offset against another tool is a translation along the phase-encoding axis. The corrected images are for quality control: the app does not resample the DWI series. The example is a 10-slice slab of OpenNeuro ds005134 (CC0); because the regularization is 3D, a slab's field is not identical to the field of the full volume. The solver is GPL-3.0-or-later, as PyHySCO is. ANTs restricted SyN is not offered for reverse-PE pairs: its tested schedule failed the image gate on all six subjects. Single-PE ANTs SyN-SDC is still under development and is not available in this app."
     packages:
       - name: PyHySCO 0.0.4 (Rust and WebAssembly port)
         url: https://github.com/EmoryMLIP/PyHySCO
@@ -1894,6 +1954,11 @@ apps:
         url: https://github.com/niivue/niivue
 
   pipeline-builder:
+    about:
+      - Build and export a NeuroFlow workflow that connects Neurodesk app operations. Image data stays outside the workflow file.
+      - To run an export, install the Neurodesk desktop suite and Node.js, then build neuroflow-mcp v0.2.0 from https://github.com/cdrake/neuroflow at commit fc6ec6075108306a588d48e2c1b66ffb924284a6 with cargo build --release --locked -p neuroflow-mcp. This release has no downloadable binaries.
+      - Generate a matching tool registry with node scripts/generate-neuroflow.mjs --out /absolute/path/to/registry from the Webapps source checkout. Set NEURODESK_WEBAPPS to the desktop executable, then configure your MCP client to start neuroflow-mcp --registry /absolute/path/to/registry --data-root /absolute/path/to/data. Call neuroflow_run with the exported document as workflow and absolute image paths under inputs, keyed by the workflow input names. The T1 example uses the input name t1 and requires hardware WebGPU for SynthSeg.
+      - Execution happens in the desktop suite on your computer. NeuroFlow v0.2.0 runs synchronously and cannot cancel a workflow while keeping the server alive. Release binaries and cancellation are tracked at https://github.com/cdrake/neuroflow/issues/30 and https://github.com/cdrake/neuroflow/issues/31.
     privacy: Workflow files you open are read on this page and never uploaded. The tool catalog is fetched from this site, and the example workflow from the Neurodesk dataset on Hugging Face. Exported workflows name tools and bindings only, never image data.
     packages:
       - { name: NeuroFlow Rust core (WebAssembly), url: https://github.com/cdrake/neuroflow, role: workflow validation against the tool catalog }

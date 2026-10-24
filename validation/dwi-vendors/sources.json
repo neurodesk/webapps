@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "philips",
+      "dataset": "ds007522",
+      "commit": "cf13f9c73a5488a0796dcb0588e75066538f9363",
+      "files": {
+        "image": {
+          "name": "sub-HML0001_ses-01_dwi.nii.gz",
+          "url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0001/ses-01/dwi/sub-HML0001_ses-01_dwi.nii.gz?versionId=WDaZskBnk.MSQyJPUK6vKduj9QP1hbYt",
+          "bytes": 88419786,
+          "sha256": "c173b2e1e0c180b49547a6dd247073e97c6a2e507230e544094b6676c0901004"
+        },
+        "sidecar": {
+          "name": "sub-HML0001_ses-01_dwi.json",
+          "url": "https://raw.githubusercontent.com/OpenNeuroDatasets/ds007522/cf13f9c73a5488a0796dcb0588e75066538f9363/sub-HML0001/ses-01/dwi/sub-HML0001_ses-01_dwi.json",
+          "bytes": 2796,
+          "sha256": "93f9fe96d55aba5576892faaa1dbec885149d697c761b23e03253f91b6623fd4"
+        },
+        "bval": {
+          "name": "sub-HML0001_ses-01_dwi.bval",
+          "url": "https://raw.githubusercontent.com/OpenNeuroDatasets/ds007522/cf13f9c73a5488a0796dcb0588e75066538f9363/sub-HML0001/ses-01/dwi/sub-HML0001_ses-01_dwi.bval",
+          "bytes": 632,
+          "sha256": "7420fe8604bf57dcf35cf489ebf30220167ac4125ee10e1ca55cb24cb6b2815e"
+        },
+        "bvec": {
+          "name": "sub-HML0001_ses-01_dwi.bvec",
+          "url": "https://raw.githubusercontent.com/OpenNeuroDatasets/ds007522/cf13f9c73a5488a0796dcb0588e75066538f9363/sub-HML0001/ses-01/dwi/sub-HML0001_ses-01_dwi.bvec",
+          "bytes": 3729,
+          "sha256": "9f0007176a72af689f6d4f57d22c68ce06d1415b04422092e6831202d7f5199f"
+        }
+      }
+    },
+    {
+      "id": "ge-hb",
+      "dataset": "ds006837",
+      "commit": "83f5405ab25ee103bf3da06ae9c3ccfdef0d9626",
+      "files": {
+        "image": {
+          "name": "sub-15464_acq-hb_dwi.nii.gz",
+          "url": "https://s3.amazonaws.com/openneuro.org/ds006837/sub-15464/dwi/sub-15464_acq-hb_dwi.nii.gz?versionId=sgne3FbRi5.Jgi5.9fHIifSC.Y_1FwFK",
+          "bytes": 146070816,
+          "sha256": "050fb9bc697508a57dfe53b5adcb2155be52e2d32c8c72f16b8583995ed29969"
+        },
+        "sidecar": {
+          "name": "sub-15464_acq-hb_dwi.json",
+          "url": "https://raw.githubusercontent.com/OpenNeuroDatasets/ds006837/83f5405ab25ee103bf3da06ae9c3ccfdef0d9626/sub-15464/dwi/sub-15464_acq-hb_dwi.json",
+          "bytes": 3385,
+          "sha256": "a3fa05243aaf5c1bff3b6763218e14a239bf72fdc4ccc1cd6e7d9b61b9f876e2"
+        },
+        "bval": {
+          "name": "sub-15464_acq-hb_dwi.bval",
+          "url": "https://raw.githubusercontent.com/OpenNeuroDatasets/ds006837/83f5405ab25ee103bf3da06ae9c3ccfdef0d9626/sub-15464/dwi/sub-15464_acq-hb_dwi.bval",
+          "bytes": 567,
+          "sha256": "1bdbc0dd8e48059ce0b8f596b93e282e674d2937fa7e3442ef6ceb5536b9aee8"
+        },
+        "bvec": {
+          "name": "sub-15464_acq-hb_dwi.bvec",
+          "url": "https://raw.githubusercontent.com/OpenNeuroDatasets/ds006837/83f5405ab25ee103bf3da06ae9c3ccfdef0d9626/sub-15464/dwi/sub-15464_acq-hb_dwi.bvec",
+          "bytes": 3234,
+          "sha256": "f67ae1868c7182368444fed6cc1fa967034ba0356cd146040245b6f804710d68"
+        }
+      }
+    },
+    {
+      "id": "ge-muse",
+      "dataset": "ds006837",
+      "commit": "83f5405ab25ee103bf3da06ae9c3ccfdef0d9626",
+      "files": {
+        "image": {
+          "name": "sub-15464_acq-muse_dwi.nii.gz",
+          "url": "https://s3.amazonaws.com/openneuro.org/ds006837/sub-15464/dwi/sub-15464_acq-muse_dwi.nii.gz?versionId=ldTgsHTkeCgNZARPeYidR.vny59Pl2lh",
+          "bytes": 268489170,
+          "sha256": "215941a2f801cd5ba5a7d72bdf9a38beb817a9206a83f77c30302428f32fc791"
+        },
+        "sidecar": {
+          "name": "sub-15464_acq-muse_dwi.json",
+          "url": "https://raw.githubusercontent.com/OpenNeuroDatasets/ds006837/83f5405ab25ee103bf3da06ae9c3ccfdef0d9626/sub-15464/dwi/sub-15464_acq-muse_dwi.json",
+          "bytes": 2748,
+          "sha256": "a325812b247b15ee0ff271a8c06b92226d490a68c16ddffda749249592c013f0"
+        },
+        "bval": {
+          "name": "sub-15464_acq-muse_dwi.bval",
+          "url": "https://raw.githubusercontent.com/OpenNeuroDatasets/ds006837/83f5405ab25ee103bf3da06ae9c3ccfdef0d9626/sub-15464/dwi/sub-15464_acq-muse_dwi.bval",
+          "bytes": 567,
+          "sha256": "1bdbc0dd8e48059ce0b8f596b93e282e674d2937fa7e3442ef6ceb5536b9aee8"
+        },
+        "bvec": {
+          "name": "sub-15464_acq-muse_dwi.bvec",
+          "url": "https://raw.githubusercontent.com/OpenNeuroDatasets/ds006837/83f5405ab25ee103bf3da06ae9c3ccfdef0d9626/sub-15464/dwi/sub-15464_acq-muse_dwi.bvec",
+          "bytes": 3234,
+          "sha256": "f67ae1868c7182368444fed6cc1fa967034ba0356cd146040245b6f804710d68"
+        }
+      }
+    }
+  ]
+}

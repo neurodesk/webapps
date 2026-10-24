@@ -710,6 +710,9 @@ importers:
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
+      '@neurodesk/sdc':
+        specifier: workspace:*
+        version: link:../../packages/sdc
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../../packages/synthsr
@@ -784,6 +787,37 @@ importers:
       '@niivue/niivue':
         specifier: 1.0.0-rc.13
         version: 1.0.0-rc.13
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
+  apps/hmc:
+    dependencies:
+      '@neurodesk/dwi2trx':
+        specifier: workspace:*
+        version: link:../../packages/dwi2trx
+      '@neurodesk/hmc':
+        specifier: workspace:*
+        version: link:../../packages/hmc
+      '@neurodesk/hmc-registration':
+        specifier: workspace:*
+        version: link:../../packages/hmc-registration
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.14
+        version: 1.0.0-rc.14
+      fflate:
+        specifier: 0.8.2
+        version: 0.8.2
     devDependencies:
       '@playwright/test':
         specifier: 1.64.0
@@ -1557,6 +1591,12 @@ importers:
 
   packages/fastprep:
     dependencies:
+      '@neurodesk/sdc':
+        specifier: workspace:*
+        version: link:../sdc
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       '@niivue/meica':
         specifier: 0.1.20261021
         version: 0.1.20261021
@@ -1581,12 +1621,25 @@ importers:
 
   packages/hmc:
     dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/dwi2trx':
+        specifier: workspace:*
+        version: link:../dwi2trx
       '@neurodesk/hmc-registration':
         specifier: workspace:*
         version: link:../hmc-registration
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
 
   packages/hmc-registration:
     devDependencies:

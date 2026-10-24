@@ -112,7 +112,7 @@ export function generateTools(value) {
     for (const [role, field] of Object.entries(operation.inputs)) {
       const name = `input_${role}`;
       bindings.inputs[role] = name;
-      inputs[name] = dataDeclaration(field, field.description, 'inputs', operation, { app: contract.app, operationId: id });
+      inputs[name] = dataDeclaration(field, field.description, 'inputs', operation, { app: contract.app, operationId: id, role });
     }
     for (const [key, field] of Object.entries(operation.parameters)) {
       const name = `param_${key}`;
@@ -135,7 +135,7 @@ export function generateTools(value) {
     for (const [role, field] of Object.entries(operation.artifacts)) {
       const name = `output_${role}`;
       bindings.artifacts[role] = name;
-      outputs[name] = dataDeclaration(field, `${operation.title}: ${role}`, 'artifacts', operation, { app: contract.app, operationId: id });
+      outputs[name] = dataDeclaration(field, `${operation.title}: ${role}`, 'artifacts', operation, { app: contract.app, operationId: id, role });
     }
     outputs.report = { type: 'neuro:report', description: 'Verified Neurodesk run report, including provenance, measurements and artifact hashes.' };
     const tool = {

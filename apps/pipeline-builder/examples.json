@@ -13,5 +13,20 @@
         "bytes": 1007
       }
     ]
+  },
+  {
+    "id": "dwi-preprocessing",
+    "label": "Multi-shell DWI preprocessing pipeline",
+    "description": "For diffusion data with at least two nonzero b-value shells: denoising, Gibbs removal, motion and distortion correction, brain masking, DTI, NODDI and tractography.",
+    "expectedResult": "The six-step workflow validates without errors and exports as dwi-preprocessing.workflow.json. Run it on a Neurodesk desktop with hardware WebGPU and subgroups support.",
+    "files": [
+      {
+        "role": "workflow",
+        "name": "dwi-preprocessing.workflow.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5fefd28435b9dde73b63629ee4de1381a962de8a/pipeline-builder/examples/dwi-preprocessing.workflow.json",
+        "sha256": "c47a4024d6fb542ae719cdda6de08474b34a683d00c269dfbbc79a66fc161c88",
+        "bytes": 4986
+      }
+    ]
   }
 ]

@@ -41,6 +41,16 @@
           "description": "Optional gradient directions, passed through under the output's name",
           "minimum": 0,
           "maximum": 1
+        },
+        "sidecar": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "json"
+          ],
+          "description": "Optional acquisition JSON for the image",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "parameters": {

@@ -1,10 +1,10 @@
 {
   "name": "@neurodesk/hmc",
-  "version": "0.2.3",
+  "version": "0.4.20261024",
   "description": "DWI head-motion correction for browsers and the command line: a pool of ANTs registration workers, one resampling and BIDS-derivative outputs",
   "type": "module",
   "private": true,
-  "license": "Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause",
+  "license": "Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause AND MIT",
   "engines": {
     "node": ">=22"
   },
@@ -15,9 +15,11 @@
     "./pool": "./src/pool.js",
     "./outputs": "./src/outputs.js",
     "./node": "./src/node.js",
-    "./browser": "./src/browser.js"
+    "./browser": "./src/browser.js",
+    "./nifreeze": "./src/nifreeze.js"
   },
   "files": [
+    "bin",
     "src",
     "LICENSE",
     "NOTICE",
@@ -27,15 +29,24 @@
     "build:wasm": "bash scripts/build-wasm.sh",
     "check:wasm": "bash scripts/build-wasm.sh --check",
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/wasm.js && node --check src/pool.js && node --check src/outputs.js && node --check src/pipeline.js && node --check src/node.js && node --check src/node-worker.js && node --check src/browser.js"
+    "lint": "node --check src/wasm.js && node --check src/pool.js && node --check src/outputs.js && node --check src/pipeline.js && node --check src/node.js && node --check src/node-worker.js && node --check src/browser.js && node --check src/nifreeze.js && node --check src/node-files.js && node --check bin/hmc.js && node --check src/node-runtime.js"
   },
   "dependencies": {
     "@neurodesk/hmc-registration": "workspace:*",
-    "@neurodesk/webapp-components": "workspace:*"
+    "@neurodesk/webapp-components": "workspace:*",
+    "@brainchop/mindgrab": "0.1.20260925",
+    "@neurodesk/dwi2trx": "workspace:*",
+    "@neurodesk/node-drivers": "workspace:*"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/neurodesk/webapps.git",
     "directory": "packages/hmc"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  },
+  "bin": {
+    "hmc": "./bin/hmc.js"
   }
 }

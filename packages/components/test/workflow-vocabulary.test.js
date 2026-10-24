@@ -264,7 +264,7 @@ test('raster panels, slice controls and file tables fit the shared workspace', a
 test('primary and selected buttons retain their shared visual priority', async () => {
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
   assert.match(css, /\.nd-imaging-controls \.nd-section-content \.nd-btn-primary\s*\{[^}]*background:\s*var\(--nd-color-primary\)/);
-  assert.match(css, /\.nd-btn-secondary\[aria-pressed="true"\]\s*\{[^}]*background:\s*var\(--nd-color-primary\)/);
+  assert.match(css, /\.nd-btn-secondary\[aria-pressed="true"\],\s*\.nd-btn-secondary\[aria-pressed="true"\]:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--nd-color-primary\)/);
 });
 
 test('dialog fields share sidebar styling and touch sizing', async () => {

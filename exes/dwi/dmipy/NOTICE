@@ -1,0 +1,15 @@
+dwi-dmipy ports the NODDI-Watson model and brute2fine procedure from
+AthenaEPI/dmipy commit 2d6073218eb4ebc97645ac6e275270c36834e33d (1.0.5).
+Copyright (c) 2017 Rutger Fick & Demian Wassermann. MIT; see LICENSE-DMIPY.
+source.manifest.json identifies every consulted source file by SHA-256.
+
+src/sampling.rs contains the source's 30 starting directions and the 362
+hemisphere vertices from DIPY1.7.0's symmetric724 sphere. The DIPY-derived
+vertices retain DIPY's BSD-3-Clause terms; see LICENSE-DIPY.
+
+The L-BFGS-B implementation is reused from dwi-gp, whose source and notices
+identify its SciPy/L-BFGS-B BSD-3-Clause and MIT origins. This crate does not
+copy SciPy's Fortran optimizer or the unlicensed NODDI toolbox erfi function.
+
+The hyp1f1(1/2,3/2,kappa) normalizer is evaluated by its convergent positive
+power series. No AMICO implementation supplies expected values in the tests.

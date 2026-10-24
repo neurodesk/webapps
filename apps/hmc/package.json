@@ -1,0 +1,27 @@
+{
+  "name": "hmc",
+  "version": "0.4.20261024",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/clean-runtime.mjs && vite",
+    "build": "node scripts/clean-runtime.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app hmc",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "node ../../scripts/lint.mjs --workspace"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "@neurodesk/hmc": "workspace:*",
+    "@neurodesk/hmc-registration": "workspace:*",
+    "@neurodesk/dwi2trx": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.14",
+    "fflate": "0.8.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "vite": "^5.0.0"
+  }
+}

@@ -1,5 +1,7 @@
-// Generated from fastprep.py REFS (verified against PubMed / arXiv, 2026-10-11).
+// Based on fastprep.py REFS (verified against PubMed / arXiv, 2026-10-11).
 pub const REFS: &[(&str, &str)] = &[
+    ("pyhysco", "Julian A, Ruthotto L. PyHySCO: GPU-enabled susceptibility artifact distortion correction in seconds. arXiv:2403.10706. 2024."),
+    ("hysco", "Ruthotto L, Kugel H, Olesch J, et al. Diffeomorphic susceptibility artifact correction of diffusion-weighted magnetic resonance images. Phys Med Biol. 2012;57(18):5715-5731. doi:10.1088/0031-9155/57/18/5715"),
     ("fmriprep", "Esteban O, Markiewicz CJ, Blair RW, et al. fMRIPrep: a robust preprocessing pipeline for functional MRI. Nat Methods. 2019;16(1):111-116. doi:10.1038/s41592-018-0235-4"),
     ("niimath", "Rorden C, Webster M, Drake C, et al. niimath and fslmaths: replication as a method to enhance popular neuroimaging tools. Aperture Neuro. 2024;4. doi:10.52294/001c.94384"),
     ("n4", "Tustison NJ, Avants BB, Cook PA, et al. N4ITK: improved N3 bias correction. IEEE Trans Med Imaging. 2010;29(6):1310-1320. doi:10.1109/TMI.2010.2046908"),

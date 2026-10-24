@@ -10,16 +10,17 @@ FASTPREP_HOME=/path/to/home target/release/fastprep bids_dir out_dir participant
 ```
 
 `$FASTPREP_HOME` (default: the executable's directory) holds `bin/` (niimath, brainchop-mindgrab,
-brainchop-mindmap, greedy-rs, synthsr, topofit, glm, meica; searched before `PATH`) and
+brainchop-mindmap, greedy-rs, synthsr, topofit, glm, meica, sdc; searched before `PATH`) and
 `templates/tpl-MNI152NLin2009cAsym/`. The bids_dir is the folder that holds `sub-*`.
 
+Build the optional PEPOLAR solver with `cargo build --release --manifest-path exes/sdc/Cargo.toml -p sdc`.
 A development home can link the release builds, so rebuilding updates it:
 
 ```bash
 mkdir -p ~/fastprep/bin && cd ~/fastprep/bin
 E=~/src/webapps/exes
 ln -sfn $E/fastprep/target/release/fastprep $E/glm/target/release/glm $E/greedy/target/release/greedy-rs \
-  $E/synthsr/target/release/synthsr .
+  $E/synthsr/target/release/synthsr $E/sdc/target/release/sdc .
 ln -sfn ~/src/niimath/src/niimath ~/src/brainchopC/src/brainchop-mind{grab,map} .
 ln -sfn ~/src/topofit/node/topofit.mjs topofit
 ln -sfn ~/src/meica-rs/target/release/meica .
@@ -32,7 +33,7 @@ Differences from fastprep.py:
 - Resume uses completion records in `work/steps/` (argv, settings and input/output size and mtime), not output
   existence. Work directories from fastprep.py rerun.
 - Steps run sequentially. Peak RAM is not sampled.
-- Opposite-PE (PEPOLAR) fieldmaps are reported as unusable (sucor is deferred); those runs get SynthSR SDC when
+- Opposite-PE (PEPOLAR) EPI pairs use the existing sdc PyHySCO solver instead of Python's SuCor. Invalid pairs get SynthSR SDC when
   `--synthsr` allows it.
 - Only single-file NIfTI-1 (`.nii`, `.nii.gz`) inputs are accepted.
 - BOLD `RepetitionTime` must be a positive finite JSON number. Discovery rejects strings, nulls and
@@ -50,8 +51,7 @@ Fixed here; fastprep.py still has these:
 - A SliceTiming list with non-numbers is treated as absent (no STC), instead of writing it through.
 - The events file is found for an uncompressed `_bold.nii` as well as `.nii.gz`.
 - Report text follows what ran: Methods claims STC only along a k slice axis and names runs that fell back to the
-  rigid coreg; "other temporal filtering" when FRISGO ran; tSNR scope for short runs; a PEPOLAR pair is "acquired
-  but not supported", not "failed validation"; `--frisgo off` is named as the reason; Dataset comes from a BOLD
+  rigid coreg; "other temporal filtering" when FRISGO ran; tSNR scope for short runs; acquired PEPOLAR is named as PyHySCO only when it ran; `--frisgo off` is named as the reason; Dataset comes from a BOLD
   run (a synthetic T1w is in the output folder); the surfaces figure needs surfaces to have run. The browser
   report shows a Runtime fact in place of the CLI's Threads/GPU facts.
 - The browser BOLD size check counts phase echoes (MEDIC).
@@ -86,5 +86,25 @@ No bundled release yet (`WITHOUT_COMMAND_LINE` in `test/standalone.test.mjs`): i
 brainchop, greedy-rs, synthsr, topofit and glm, and on TopoFit's licence. The browser host is
 `packages/fastprep`; the demo is `apps/fastprep`.
 
-Open: PEPOLAR fieldmaps and sucor deferred; TopoFit licence; native release packaging; per-tool browser
+Open: SuCor parity; TopoFit licence; native release packaging; per-tool browser
 peak-memory measurement.
+
+### PEPOLAR implementation and deliberate divergence
+
+PEPOLAR uses `sdc pyhysco` (the existing PyHySCO 0.0.4 Rust/WASM port), not the Python
+reference's SuCor. Each reference is temporally averaged without motion correction.
+The pair must have opposite i/i- or j/j- directions, equal finite positive readout
+times, matching spatial grids, orthogonal voxel axes and at least three voxels per
+spatial axis. Through-plane k encoding and sheared or mismatched grids are refused.
+The corrected pair's mean is brain-extracted and used to register the Hz field to
+BOLD. As in the solver's pinned fixtures, shifts are `Hz * TotalReadoutTime * PE sign`
+voxels; Jacobian intensity modulation is enabled when applying them. Corrected solver
+references have jointly normalized intensities and are used for registration only.
+
+The native host needs the `sdc` binary from `exes/sdc` in `<home>/bin` or PATH. The
+browser loads `@neurodesk/sdc` lazily when this command first runs. Browser NIfTI
+headers preserve the reference metadata through the shared writer; native sdc uses
+its own minimal header, so compressed bytes are not claimed identical across hosts.
+No pinned Python reference checkout was available for issue #509: Python parity is
+unverified, and SuCor/PyHySCO field estimates intentionally differ. Existing phasediff
+commands remain unchanged.

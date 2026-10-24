@@ -153,6 +153,25 @@ test('self-check fits the phantom in this runtime', async () => {
   assert.equal(report.phantomIcvfError < 0.15, true);
 });
 
+test('the command line selects the nonlinear method and reports fit diagnostics', async (t) => {
+  const directory = await scratch(t);
+  const input = await phantomFiles(directory, 4);
+  const baseline = await fit({ ...input, output: join(directory, 'amico'), noMask: true, threads: 1 });
+  const output = join(directory, 'dmipy');
+  const run = spawnSync(process.execPath, [BIN, input.dwi, input.bval, input.bvec, output, '--no-mask', '--method', 'dmipy', '--threads', '1'], { encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(run.stdout.trim().split('\n'), NAMES.map(name => join(output, name)));
+  const provenance = JSON.parse(run.stderr.trim().split('\n').at(-1));
+  assert.equal(provenance.method, 'dti+noddi-dmipy');
+  assert.equal(provenance.noddiSource, 'AthenaEPI/dmipy@2d6073218eb4ebc97645ac6e275270c36834e33d');
+  assert.ok(provenance.noddiDiagnostics.fitted > 0);
+  assert.equal(provenance.noddiDiagnostics.fitted + provenance.noddiDiagnostics.skipped, 64);
+  assert.equal(provenance.noddiDiagnostics.failed, 0);
+  const image = readNiftiFrames(gunzipSync(await readFile(join(output, NAMES[6]))));
+  assert.ok(image.data.every(value => Number.isFinite(value) && value >= 0 && value <= 1));
+  assert.notDeepEqual(gunzipSync(await readFile(join(output, NAMES[6]))), gunzipSync(await readFile(join(baseline.output, NAMES[6]))));
+});
+
 test('download-models installs nothing and takes the packager\'s --cache-dir', () => {
   const run = spawnSync(process.execPath, [BIN, 'download-models', '--cache-dir', tmpdir()], { encoding: 'utf8' });
   assert.equal(run.status, 0, run.stderr);

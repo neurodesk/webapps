@@ -10,30 +10,144 @@
       "description": "Estimate motion, eddy-current fields and outlier slices against model predictions, apply the susceptibility field and resample once.",
       "mode": "batch",
       "inputs": {
-        "images": {
+        "dwi": {
           "source": "files",
           "type": "neuro:volume",
           "formats": [
             "nifti",
             "dicom"
           ],
-          "description": "The DWI series with its JSON sidecar, and optionally a reverse phase-encoding b0 or a field map (topup _fieldcoef or Hz)",
           "minimum": 1,
-          "maximum": 3
+          "maximum": 1,
+          "description": "One diffusion series; DICOM conversion can supply its gradients and acquisition JSON"
         },
-        "gradients": {
+        "bval": {
           "source": "files",
           "type": "neuro:gradients",
           "formats": [
             "bval",
-            "bvec"
+            "bvals"
           ],
-          "description": "The series' b-values and b-vectors (FSL layout)",
           "minimum": 0,
-          "maximum": 2
+          "maximum": 1,
+          "description": "FSL b-values; required unless DICOM supplies them"
+        },
+        "bvec": {
+          "source": "files",
+          "type": "neuro:gradients",
+          "formats": [
+            "bvec",
+            "bvecs"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "FSL gradient directions; required unless DICOM supplies them"
+        },
+        "sidecar": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "json"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Acquisition JSON for the diffusion series"
+        },
+        "reverse": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Optional reverse phase-encoding b0 image on the diffusion grid"
+        },
+        "reverseSidecar": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "json"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Acquisition JSON for the reverse phase-encoding image"
+        },
+        "fieldmap": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Optional topup _fieldcoef image or field map in Hz on the diffusion grid"
         }
       },
-      "parameters": {},
+      "parameters": {
+        "phaseEncodingDirection": {
+          "type": "string",
+          "description": "BIDS phase encoding direction; overrides the sidecar",
+          "enum": [
+            "i",
+            "i-",
+            "j",
+            "j-"
+          ]
+        },
+        "totalReadoutTime": {
+          "type": "number",
+          "description": "Total readout time in seconds; overrides the sidecar",
+          "minimum": 1e-06
+        },
+        "multiband": {
+          "type": "integer",
+          "description": "Multiband acceleration factor; overrides the sidecar",
+          "minimum": 1
+        },
+        "model": {
+          "type": "string",
+          "description": "Diffusion signal prediction model",
+          "enum": [
+            "gp",
+            "shore"
+          ]
+        },
+        "eddyCurrents": {
+          "type": "string",
+          "description": "Eddy-current field model",
+          "enum": [
+            "movement",
+            "linear",
+            "quadratic",
+            "cubic"
+          ]
+        },
+        "iterations": {
+          "type": "integer",
+          "description": "Number of correction iterations",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "replaceOutliers": {
+          "type": "boolean",
+          "description": "Replace outlier slices with model predictions"
+        },
+        "outliers": {
+          "type": "string",
+          "description": "Outlier grouping",
+          "enum": [
+            "sw",
+            "gw",
+            "both"
+          ]
+        },
+        "sliceToVolume": {
+          "type": "boolean",
+          "description": "Enable slice-to-volume correction; requires SliceTiming"
+        }
+      },
       "artifacts": {
         "dwi": {
           "type": "neuro:volume",
@@ -73,7 +187,7 @@
           "maximum": 1
         },
         "mask": {
-          "type": "neuro:volume",
+          "type": "neuro:mask",
           "mediaType": "application/gzip",
           "space": "input",
           "minimum": 1,
@@ -95,6 +209,13 @@
         "log": {
           "type": "neuro:metadata",
           "mediaType": "text/plain",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "mean-b0": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
           "minimum": 1,
           "maximum": 1
         }

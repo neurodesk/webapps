@@ -198,7 +198,56 @@ export async function loadHmc(source) {
     });
   }
 
-  return { readMat, writeMat, motionParams, motionTsv, b0Flags, rotateGradients, advancedClipInPlace, advancedClip };
+  /** NiFreeze's model data, with the Rust split, float64 median, GP fit and data-mask rule. */
+  function createNifreezeModel({ data, dims, frames, bvals, bvecs, mask, model = "gp" }) {
+    const voxels = dims[0] * dims[1] * dims[2];
+    if (!["gp", "trivial"].includes(model)) throw new Error("Use gp or trivial for NiFreeze.");
+    if (dims.length !== 3 || !dims.every(n => Number.isInteger(n) && n > 0) || data.length !== voxels * frames || bvals.length !== frames) {
+      throw new Error("NiFreeze data and gradients must fill the series grid.");
+    }
+    if (mask && mask.length !== voxels) throw new Error("The NiFreeze mask is not on the image grid.");
+    const gradients = gradientArrays(bvals.map(Math.fround), bvecs.map(row => row.map(Math.fround)));
+    const input = copyIn(data instanceof Float32Array ? data : Float32Array.from(data));
+    const brain = copyIn(mask ? Uint8Array.from(mask, value => value ? 1 : 0) : new Uint8Array(voxels).fill(1));
+    const metadata = withMemory([input, brain, gradients.bvals, gradients.bvecs], () => {
+      if (wasm.nifreeze_init(input.ptr, ...dims, frames, gradients.bvals.ptr, gradients.bvecs.ptr, brain.ptr, model === "gp" ? 1 : 0) !== 0) throw new Error(text());
+      return JSON.parse(text());
+    });
+    const bzero = reserve(8 * voxels);
+    const registrationMask = reserve(voxels);
+    const arrays = withMemory([bzero, registrationMask], () => {
+      wasm.nifreeze_arrays(bzero.ptr, registrationMask.ptr);
+      return {
+        bzero: metadata.hasBzero ? new Float64Array(wasm.memory.buffer, bzero.ptr, voxels).slice() : null,
+        mask: new Uint8Array(wasm.memory.buffer, registrationMask.ptr, voxels).slice(),
+      };
+    });
+    let released = false;
+    return {
+      ...metadata, ...arrays,
+      predict(index) {
+        if (released) throw new Error("The NiFreeze model has been released.");
+        if (!Number.isInteger(index) || index < 0 || index >= metadata.dwiVolumes.length) throw new Error("The prediction index is not a DWI volume.");
+        const output = reserve(8 * voxels);
+        return withMemory([output], () => {
+          if (wasm.nifreeze_predict(index, output.ptr) !== 0) throw new Error(text());
+          return { volume: new Float64Array(wasm.memory.buffer, output.ptr, voxels).slice(), fit: JSON.parse(text()) };
+        });
+      },
+      release() {
+        if (!released) wasm.nifreeze_release();
+        released = true;
+      },
+    };
+  }
+
+  function nifreezeArguments(seed = 1234) {
+    if (!Number.isInteger(seed) || seed < 1 || seed > 0x7fffffff) throw new Error("The NiFreeze seed must be a positive 32-bit signed integer.");
+    wasm.nifreeze_registration_args(seed);
+    return JSON.parse(text());
+  }
+
+  return { readMat, writeMat, motionParams, motionTsv, b0Flags, rotateGradients, advancedClipInPlace, advancedClip, createNifreezeModel, nifreezeArguments };
 }
 
 /** The identity transform about the origin. */

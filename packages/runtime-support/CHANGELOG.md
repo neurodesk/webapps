@@ -1,5 +1,30 @@
 # @neurodesk/runtime-support
 
+## 0.9.14
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
+
+## 0.9.13
+
+### Patch Changes
+
+- Updated dependencies [328cb77]
+  - @neurodesk/webapp-components@0.20.1
+
+## 0.9.12
+
+### Patch Changes
+
+- Updated dependencies [14a8b29]
+- Updated dependencies [a028e96]
+- Updated dependencies [650ce5f]
+- Updated dependencies [343c256]
+- Updated dependencies [941884c]
+  - @neurodesk/webapp-components@0.20.0
+
 ## 0.9.11
 
 ### Patch Changes
@@ -10,6 +35,8 @@
 - Updated dependencies [343c256]
 - Updated dependencies [941884c]
   - @neurodesk/webapp-components@0.21.0
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.3
 
 ## 0.9.10
 
@@ -18,6 +45,8 @@
 - Updated dependencies [3a7e5bb]
 - Updated dependencies [72cbb8d]
   - @neurodesk/webapp-components@0.20.0
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.2
 
 ## 0.9.9
 
@@ -147,7 +176,6 @@
 - Updated dependencies [a36fde4]
 - Updated dependencies
 - Updated dependencies
-- Updated dependencies
 
   - @neurodesk/webapp-components@0.17.0
 
@@ -201,8 +229,6 @@
 
 - 14b8248: MindGrab's automatic backend no longer runs WebGL2 on a software renderer (SwiftShader, llvmpipe), which returned a blank brain mask without WebGPU; the threaded CPU module runs instead. The choice and MindGrab's own output appear in the technical log.
 
-- 1f4aecd: Cancelling NODDI input preparation, mask reading or map compression now prevents late results and permits retry. Mask reading blocks fitting and requires a single 3D mask. Model choices survive replacement imports and examples, including when single-shell data temporarily prevents NODDI. Its AMICO fit uses the shared strict b0 cutoff, so a volume with b = 50 s/mm² remains diffusion weighted rather than entering the mean b0. The committed WebAssembly module includes this correction.
-
 - d1fa022: SynthSR no longer runs on a software WebGPU adapter. fastprep chooses WebAssembly when the adapter is a fallback (SwiftShader on a VM or a hosted runner) or cannot bind the volume's largest buffer, and the SynthSR app starts on CPU there. The GPU buffer-limit message gives both sizes in MiB, so a need just above the limit no longer reads as "1.0 GiB but this device allows 1.0 GiB".
 
 - Updated dependencies [3f1d770]
@@ -212,10 +238,6 @@
 - Updated dependencies [c1a4dda]
 
 - Updated dependencies [46935f7]
-
-- Updated dependencies [3329c39]
-
-  - @neurodesk/webapp-components@0.16.0
 
 - Updated dependencies [46935f7]
   - @neurodesk/webapp-components@0.16.0

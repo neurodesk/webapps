@@ -15,8 +15,8 @@ import wasmUrl from "../vendor/neuroflow/neuroflow_wasm_bg.wasm?url";
 import { APP } from "./config.js";
 import { createValidator, loadCatalog } from "./validator.js";
 import {
-  addStep, bindInput, bindNewWorkflowInput, compatibleSources, emptyWorkflow, issuesByStep,
-  outputKey, parseWorkflow, preferredSource, removeStep, serializeWorkflow, setParameter, setWorkflowOutput,
+  addStep, autoBind, bindInput, bindNewWorkflowInput, compatibleSources, emptyWorkflow, issuesByStep,
+  moveStep, outputKey, parseWorkflow, removeStep, serializeWorkflow, setParameter, setWorkflowOutput,
   toolCatalog, toolFields, toolLabel,
 } from "./model.js";
 import examples from "../examples.json";
@@ -65,7 +65,7 @@ let doc = emptyWorkflow();
 let selected = null;
 let validation = { ok: true, issues: [] };
 let editorKey = null;
-let reported = new Set();
+let reported = new Map();
 
 function setDoc(next, { select = selected } = {}) {
   doc = next;
@@ -114,6 +114,12 @@ function render() {
   const summary = steps.length === 0
     ? "Add a step to start a workflow."
     : validation.ok ? `Valid · ${steps.length} step${steps.length === 1 ? "" : "s"}.` : [count, ...general].join(" ");
+  const warnings = validation.issues.filter(issue => issue.severity === "warning");
+  $("workflowWarnings").hidden = warnings.length === 0;
+  $("warningSummary").textContent = `Warnings (${warnings.length})`;
+  $("warningMessages").replaceChildren(...warnings.map(issue => el("p", {
+    className: "nd-file-info", textContent: `${issue.path || "workflow"}: ${issue.message}`,
+  })));
   $("validationSummary").textContent = summary;
   $("validationSummary").classList.toggle("error", !validation.ok);
   $("runButton").disabled = steps.length === 0 || !validation.ok;
@@ -125,9 +131,11 @@ function render() {
 // Each problem goes to the console once, when an edit introduces it. An unfinished
 // workflow is not a failure, so problems log as warnings, which leave the console closed.
 function logDiagnostics(issues, summary) {
-  const lines = new Set(issues.map(issue => `${issue.path || "workflow"}: ${issue.message}`));
-  for (const line of lines) if (!reported.has(line)) log.log(line, "warning");
-  if (reported.size && !lines.size && Object.keys(doc.steps).length) log.log(summary, "success");
+  const lines = new Map(issues.map(issue => [`${issue.path || "workflow"}: ${issue.message}`, issue.severity]));
+  for (const line of lines.keys()) if (!reported.has(line)) log.log(line, "warning");
+  const hadErrors = [...reported.values()].includes("error");
+  const hasErrors = [...lines.values()].includes("error");
+  if (reported.size && !hasErrors && (hadErrors || !lines.size) && Object.keys(doc.steps).length) log.log(summary, "success");
   reported = lines;
 }
 
@@ -212,28 +220,30 @@ function renderStep() {
     box.onchange = () => setDoc(setWorkflowOutput(doc, id, name, box.checked, tool));
     parts.push(el("label", { className: "nd-check" }, box, ` Workflow output: ${name.replace(/^output_/, "")}`));
   }
+  const position = Object.keys(doc.steps).indexOf(id);
+  const moves = [["Move up", -1], ["Move down", 1]].map(([label, direction]) => {
+    const button = el("button", {
+      type: "button", className: "nd-btn nd-btn-secondary", textContent: label,
+      disabled: direction < 0 ? position === 0 : position === Object.keys(doc.steps).length - 1,
+    });
+    button.onclick = () => {
+      setDoc(moveStep(doc, id, direction));
+      status(`Moved ${id} ${direction < 0 ? "up" : "down"}`);
+    };
+    return button;
+  });
+  parts.push(el("div", { className: "nd-row" }, ...moves));
   const remove = el("button", { type: "button", className: "nd-btn nd-btn-secondary", textContent: "Remove step" });
   remove.onclick = () => { setDoc(removeStep(doc, id)); status(`Removed ${id}`); };
   parts.push(remove);
   editor.replaceChildren(...parts);
 }
 
-/** Bind each required input to its preferred compatible source, else a new workflow input. */
-function autoBind(next, id) {
-  const tool = toolsById.get(next.steps[id].tool);
-  for (const [name, decl] of toolFields(tool).data) {
-    if (decl.optional) continue;
-    const source = preferredSource(compatibleSources(next, id, name, tools, validate), name, decl);
-    next = source ? bindInput(next, id, name, source.ref) : bindNewWorkflowInput(next, id, name, tool);
-  }
-  return next;
-}
-
 $("addStepButton").onclick = () => {
   const tool = toolsById.get($("toolSelect").value);
   if (!tool) return;
   const added = addStep(doc, tool);
-  setDoc(autoBind(added.doc, added.stepId), { select: added.stepId });
+  setDoc(autoBind(added.doc, added.stepId, tools, validate), { select: added.stepId });
   $("stepSection").open = true;
   status(`Added ${added.stepId}: ${toolLabel(tool)}`);
 };
@@ -247,7 +257,7 @@ $("newButton").onclick = () => {
 };
 
 function openWorkflow(next, label) {
-  reported = new Set();
+  reported = new Map();
   setDoc(next, { select: null });
   $("fileInfo").hidden = false;
   $("fileInfo").textContent = label;

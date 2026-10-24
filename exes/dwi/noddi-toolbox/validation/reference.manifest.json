@@ -1,0 +1,124 @@
+{
+  "base": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/8b1220274f297646b2d3366ef6836290a1d0a830/noddi/validation/noddi-toolbox/",
+  "sourceArchive": {
+    "name": "NODDI_toolbox_v1.05.zip",
+    "sha256": "d4f8a1fe5c5e038a29174c40c4f6de0c868728e4d4cdf59c1d7f6dd399ca8143",
+    "status": "requires authenticated NITRC access; not included in this reference"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 13131,
+      "sha256": "2d44f43ea3c490c9d51900cf8257852fb63afa6e79af562ddd80dd38138365b0"
+    },
+    {
+      "path": "SHA256SUMS",
+      "bytes": 2006,
+      "sha256": "019d835e9a66a98815cd9c5dcfeda01243d71d2022e8919aa476f2b8c20a54e2"
+    },
+    {
+      "path": "compare_app.py",
+      "bytes": 2086,
+      "sha256": "f45873310b1569ff7cb34d261cd07b76e01e0a75fd6ff49a8dffd2b86aafbaaa"
+    },
+    {
+      "path": "compare_erfi.m",
+      "bytes": 609,
+      "sha256": "32698ad8ea284cb733315be86257fbd5b86b50c0968245ccbee35612abd24664"
+    },
+    {
+      "path": "fit_chunk.m",
+      "bytes": 410,
+      "sha256": "078080f81245bf5de048251078bfd01d85ce5d0df75888acd2a65a373ab6c440"
+    },
+    {
+      "path": "make_roi.py",
+      "bytes": 1895,
+      "sha256": "1ec29dbfc8a90c519e35c49b76094e772c1d6aee8e76640cef23acae37503936"
+    },
+    {
+      "path": "prepare.sh",
+      "bytes": 2334,
+      "sha256": "8595d3af6d618a82d4c5ed8c559d880ae34e027c28689b8a2cb0a41daf26b0cc"
+    },
+    {
+      "path": "run_all.sh",
+      "bytes": 3194,
+      "sha256": "86c369832258638f3312bf2c38f57b86519e77a5fb0e01d821d5bcd90d8a47f9"
+    },
+    {
+      "path": "run_fit.sh",
+      "bytes": 1021,
+      "sha256": "bc9a36999e2ce4746d78b9b9f01d4a00f5b6d5b72c448316f2416ea1e7be7897"
+    },
+    {
+      "path": "save_maps.m",
+      "bytes": 1665,
+      "sha256": "b7608abb7bff05c250c0d6d31ea299595738661b454d9ac9cd70637d5877c8fa"
+    },
+    {
+      "path": "setup_noddi.m",
+      "bytes": 1049,
+      "sha256": "2fdc3cc9c7771fd0c8bf5b7f53d9aaec5bf80ee0ebdf0459b28d70b87b96de08"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_desc-brain_mask.nii.gz",
+      "bytes": 1840,
+      "sha256": "18781033cb63ac5f3637f43f1faaf76ea3eb6fe72d4b3c03153bf0df871c66aa"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_desc-toolbox_parameters.mat",
+      "bytes": 3321643,
+      "sha256": "55ababf964536f5ad8e27570e790e154090455bcdd63cc8d6a567c3ab0288520"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-direction_dwimap.nii.gz",
+      "bytes": 518793,
+      "sha256": "db5dbab08092200f62cae481c9315ed461f5649fc4ed75f0fe26b6f61065bbd0"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-errorcode_dwimap.nii.gz",
+      "bytes": 449,
+      "sha256": "abddfa7429f944797cad00cea0b1d39b9f546638d5278332d24b01addf9c98c5"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-fmin_dwimap.nii.gz",
+      "bytes": 166604,
+      "sha256": "19acbd33369651e8340acc1d17e4b68c484d4f18c67ad9d170ec1606d9684fea"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-icvf_dwimap.nii.gz",
+      "bytes": 142367,
+      "sha256": "b3b4822292f7bcb173edb81b28488331302853b183dea236b65ebe80948a7628"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-isovf_dwimap.nii.gz",
+      "bytes": 140006,
+      "sha256": "1c09d9a51f8b2c33b5c9d2b2da828b0bfbb745e8b19289a04717db018decadbe"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-kappa_dwimap.nii.gz",
+      "bytes": 165686,
+      "sha256": "7706ec919dc0e3c55f2d67e8b5263e61ffdd8e8d2e2f929ec5dd58790b1521e4"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-odi_dwimap.nii.gz",
+      "bytes": 164723,
+      "sha256": "1257a7b589b47c7dc87b7ef7330df55fccae18c952ce8b4e4971274aa524a592"
+    },
+    {
+      "path": "write_maps.py",
+      "bytes": 2333,
+      "sha256": "25dcd2002e7742bf1881636192d48431340361f98cb0b4d7e3727591f0a93846"
+    }
+  ],
+  "wmSelection": {
+    "role": "wm",
+    "path": "wm-mask.nii.gz",
+    "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/295e32650e9e28397909caff4b9741ee95a422c0/noddi/wm-mask/sub-01_dir-AP_desc-slab_desc-fa04wm_mask.nii.gz",
+    "bytes": 9278,
+    "sha256": "81dc930221f88dbea1b9717673576c154d62ce62cf78f025e7d72097837bf44b",
+    "rule": "MindGrab brain mask AND published float32 FA >= 0.4, excluding14 error_code2 reference fits",
+    "expectedGateVoxels": 13327
+  }
+}

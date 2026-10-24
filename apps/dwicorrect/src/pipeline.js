@@ -248,6 +248,7 @@ export function outputNames(seriesName) {
   const stem = bidsStem(seriesName);
   return {
     dwi: `${stem}_desc-preproc_dwi.nii.gz`,
+    meanB0: `${stem}_desc-preproc_b0.nii.gz`,
     bval: `${stem}_desc-preproc_dwi.bval`,
     bvec: `${stem}_desc-preproc_dwi.bvec`,
     sidecar: `${stem}_desc-preproc_dwi.json`,
@@ -343,6 +344,7 @@ export function preprocSidecar({ input, settings, args, field, fieldUnits = null
     SusceptibilityField: field,
     ...(fieldUnits ? { SusceptibilityFieldUnits: fieldUnits } : {}),
     BrainMask: mask,
+    MeanB0Threshold: B0_MAX,
     Threads: threads,
     Seconds: Math.round(seconds),
     CommandLine: `shoreline ${args.join(" ")}`,
@@ -405,4 +407,17 @@ export function classifyInputs(series, { sameGrid = (entry) => Boolean(entry.sam
     field,
     ignored: images.filter((entry) => entry !== dwi && entry !== reverse[0]).map((entry) => entry.image.name),
   };
+}
+
+/** The b = 0 mean of a series' frames (Float64), or of every frame without b-values. */
+export function meanB0Data(data, voxels, frames, bvals) {
+  const keep = Array.from({ length: frames }, (_, k) => k).filter((k) => !bvals || bvals[k] <= B0_MAX);
+  if (!keep.length) throw new Error(`The series has no volume with b ≤ ${B0_MAX}.`);
+  const out = new Float64Array(voxels);
+  for (const k of keep) {
+    const offset = k * voxels;
+    for (let i = 0; i < voxels; i++) out[i] += data[offset + i];
+  }
+  for (let i = 0; i < voxels; i++) out[i] /= keep.length;
+  return out;
 }

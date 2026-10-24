@@ -82,9 +82,16 @@ export function createRegistrationPool({ spawn, workers, signal, kernel }) {
       try {
         inputs = typeof job.task.inputs === "function" ? job.task.inputs() : job.task.inputs;
       } catch (error) {
-        idle.push(worker);
-        job.reject(error);
+        if (!stopped) idle.push(worker);
+        job.reject(stopped ?? error);
         continue;
+      }
+      // Input factories may cancel through an observer such as onPrediction.
+      // This job is between queues, so stop() could not reject it itself.
+      if (signal?.aborted && !stopped) onAbort();
+      if (stopped) {
+        job.reject(stopped);
+        return;
       }
       job.id = ++ids;
       busy.set(worker, job);

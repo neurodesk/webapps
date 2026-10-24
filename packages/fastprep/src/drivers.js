@@ -1,6 +1,8 @@
 // Tool drivers: each accepts exactly the command line the fastprep core emits (as in work/commands.sh) and runs it
 // on the matching browser runtime over in-memory files. Unknown options fail rather than being ignored.
 
+import { createNiftiFromData, decodeNiftiBuffer, readNiftiFrames, sameNiftiGrid } from '@neurodesk/webapp-components/file-io/nifti';
+import { isReversePair } from '@neurodesk/sdc';
 import { denoiseMeica, runMeica } from '@niivue/meica';
 import { encodeFor, gunzip, parent } from './files.js';
 
@@ -230,8 +232,57 @@ export function meicaDriver(meica) {
   };
 }
 
+/** The core emits temporal means and explicit BIDS acquisition metadata for this solver. */
+export function sdcDriver(runtime) {
+  let loaded;
+  return async (argv, { files }) => {
+    const { pos, one } = parse(argv, { '--pe1': 1, '--pe2': 1, '--trt': 1 });
+    if (pos.length !== 4 || pos[0] !== 'pyhysco') {
+      throw new Error('sdc: expected pyhysco IMAGE1 IMAGE2 PREFIX');
+    }
+    const [, image1, image2, prefix] = pos;
+    const pe1 = one('--pe1')?.[0];
+    const pe2 = one('--pe2')?.[0];
+    if (!isReversePair(pe1, pe2)) throw new Error('sdc: images require opposite phase-encoding directions');
+    const trt = Number(one('--trt')?.[0]);
+    if (!Number.isFinite(trt) || trt <= 0) throw new Error('sdc: TotalReadoutTime must be finite and positive');
+    const buffers = await Promise.all([image1, image2].map(async (path) => decodeNiftiBuffer(await files.bytes(path))));
+    if (!sameNiftiGrid(...buffers)) throw new Error('sdc: EPI images must share a spatial grid');
+    const images = buffers.map((buffer) => readNiftiFrames(buffer, Float64Array));
+    if (images.some(({ frames, header }) => frames !== 1 || header.dims[0] > 4)) {
+      throw new Error('sdc: the fastprep driver requires one temporal mean per EPI image');
+    }
+    const { dims, header } = images[0];
+    const voxel = dims.map((_, axis) => Math.hypot(...header.affine.slice(0, 3).map((row) => row[axis])));
+    for (let a = 0; a < 3; a++) {
+      for (let b = a + 1; b < 3; b++) {
+        const cosine = header.affine.slice(0, 3).reduce((sum, row) => sum + row[a] * row[b], 0) / (voxel[a] * voxel[b]);
+        if (!Number.isFinite(cosine) || Math.abs(cosine) > 1e-5) throw new Error('sdc: sheared EPI grids are unsupported');
+      }
+    }
+    loaded ??= Promise.resolve(typeof runtime === 'function' ? runtime() : runtime);
+    const api = await loaded;
+    const result = api.pyhysco(images[0].data, images[1].data, dims, voxel, {
+      phaseEncodingDirection: pe1,
+      totalReadoutTime: trt,
+    });
+    for (const [suffix, values] of [['fieldmap', result.field], ['corrected1', result.corrected1], ['corrected2', result.corrected2]]) {
+      const path = `${prefix}_${suffix}.nii.gz`;
+      const bytes = createNiftiFromData(Float32Array.from(values), buffers[0], { dims });
+      files.put(path, await encodeFor(path, new Uint8Array(bytes)));
+    }
+    files.put(`${prefix}_fieldmap.json`, text(`${JSON.stringify({
+      Units: 'Hz',
+      PhaseEncodingDirection: pe1,
+      TotalReadoutTime: trt,
+      Description: 'Susceptibility field from a reverse phase-encoding pair, PyHySCO 0.0.4 defaults, sdc. Sign as FSL topup: image 1 corrected is image1(x + field * TotalReadoutTime * PE sign) voxels.',
+    }, null, 2)}\n`));
+    return { code: 0, stdout: `PyHySCO: ${result.iterations} iterations`, stderr: '' };
+  };
+}
+
 /** Driver table keyed by the tool names in the core's commands. */
-export function drivers({ niimath, mindgrab, mindgrabOptions, greedy, synthsr, glm, meica }) {
+export function drivers({ niimath, mindgrab, mindgrabOptions, greedy, synthsr, glm, meica, sdc }) {
   const brainchop = mindgrabDriver(mindgrab, mindgrabOptions);
   return {
     niimath: niimathDriver(niimath),
@@ -240,6 +291,7 @@ export function drivers({ niimath, mindgrab, mindgrabOptions, greedy, synthsr, g
     'greedy-rs': greedyDriver(greedy),
     synthsr: synthsrDriver(synthsr),
     glm: glmDriver(glm),
+    ...(sdc && { sdc: sdcDriver(sdc) }),
     ...(meica && { meica: meicaDriver(meica) }),
   };
 }

@@ -28,6 +28,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/elastix': 'elastix',
   '@neurodesk/fireants': 'fireants',
   '@neurodesk/greedy': 'greedy',
+  '@neurodesk/hmc': 'hmc',
   '@neurodesk/lcmodel': 'lcmodel',
   '@neurodesk/musclemap': 'musclemap',
   '@neurodesk/n4': 'n4',
@@ -187,6 +188,9 @@ export function mergeSameVersionSections(text, version) {
  * version registers a site here; test/app-versions.test.mjs checks they agree.
  */
 export const EMBEDDED_VERSION_SITES = Object.freeze({
+  hmc: [
+    { file: 'apps/hmc/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
   brain2print: [
     { file: 'apps/brain2print/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],

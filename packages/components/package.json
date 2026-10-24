@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/webapp-components",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "Framework-free ESM components for static Neurodesk neuroimaging webapps.",
   "type": "module",
   "types": "./src/index.d.ts",
@@ -114,7 +114,8 @@
     "./elements/compute-connection": {
       "types": "./src/elements/compute-connection.d.ts",
       "default": "./src/elements/compute-connection.js"
-    }
+    },
+    "./file-io/hash": "./src/file-io/hash.js"
   },
   "scripts": {
     "build:showcase": "node scripts/build-showcase.mjs",

@@ -12,6 +12,10 @@
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
+  - @neurodesk/runtime-support@0.9.14
+  - @neurodesk/sdc@0.2.20261024
 - Updated dependencies [941884c]
 - Updated dependencies [a028e96]
 - Updated dependencies [650ce5f]
@@ -29,4 +33,26 @@
   - @neurodesk/shoreline@0.2.0
   - @neurodesk/webapp-components@0.19.1
   - @neurodesk/runtime-support@0.9.9
+  - @neurodesk/sdc@0.2.20261024
+- Updated dependencies [328cb77]
+  - @neurodesk/webapp-components@0.20.1
+  - @neurodesk/runtime-support@0.9.13
+  - @neurodesk/sdc@0.2.20261024
+- @neurodesk/sdc@0.2.20261024
+- Updated dependencies
+  - @neurodesk/sdc@0.2.20261024
+- Updated dependencies [14a8b29]
+- Updated dependencies [941884c]
+  - @neurodesk/webapp-components@0.20.0
+  - @neurodesk/runtime-support@0.9.12
+  - @neurodesk/sdc@0.2.20261024
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.3
+  - @neurodesk/runtime-support@0.9.11
+  - @neurodesk/sdc@0.2.20261024
+- Pair acquisition JSON and gradient inputs by automation role so metadata survives diffusion pipelines. Split DWI Correct and SDC inputs into single-image roles, require explicit acquisition values for automated correction, and expose correction settings. Export a corrected mean-b0 image for downstream brain masks. Use a generic single-volume error for shared image readers.
+- Generate artifact format qualifiers from MIME types and gradient roles, and preserve explicit artifact encodings. Keep gradient input formats in contract metadata until NeuroFlow gains inspectors. Type DWI brain masks as masks so pipeline bindings reject scalar images.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.2
+  - @neurodesk/runtime-support@0.9.10
   - @neurodesk/sdc@0.2.20261024

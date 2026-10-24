@@ -44,6 +44,36 @@
       "engines": [
         "browser"
       ]
+    },
+    "binarize": {
+      "title": "Create binary mask",
+      "description": "Convert positive labels into a binary mask on the input grid.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:label-map",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Label map to convert to a binary mask.",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {},
+      "artifacts": {
+        "mask": {
+          "type": "neuro:mask",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
     }
   }
 }

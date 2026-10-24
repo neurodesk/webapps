@@ -1,0 +1,36 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "hmc-v",
+  "displayName": "HMC",
+  "app": "hmc",
+  "run": "sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results",
+  "readme": {
+    "run": "Correct head motion with the shared NiFreeze-style estimator",
+    "notes": [
+      "GP is the default; --method trivial selects the b0-template estimator.",
+      "The default mask is pinned MindGrab CPU applied to the mean b0.",
+      "Use --mask FILE for a mask on the DWI grid. --seed defaults to 1234;",
+      "--workers defaults to 1. Inputs are NIfTI plus FSL gradient tables.",
+      "This implementation resamples once and writes float32 BIDS derivatives.",
+      "Scientific scope and deliberate differences are documented in the package README."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "hmc"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "hmc.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "hmc"
+    }
+  }
+}

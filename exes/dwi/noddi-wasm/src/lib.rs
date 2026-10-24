@@ -236,6 +236,100 @@ pub unsafe extern "C" fn noddi_fit(
     0
 }
 
+/// Builds dmipy's nonlinear NODDI model; the AMICO entry points stay unchanged.
+/// # Safety
+/// See `gradients`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dmipy_new(
+    bvals: *const f64,
+    bvecs: *const f64,
+    n: usize,
+) -> *mut dwi_dmipy::Model {
+    let made = unsafe { gradients(bvals, bvecs, n) }
+        .and_then(|g| g.check_noddi())
+        .and_then(|_| {
+            let b = unsafe { std::slice::from_raw_parts(bvals, n) };
+            let directions: Vec<[f64; 3]> = unsafe { std::slice::from_raw_parts(bvecs, n * 3) }
+                .chunks_exact(3)
+                .map(|v| [v[0], v[1], v[2]])
+                .collect();
+            dwi_dmipy::Model::new(b, &directions).map_err(|error| error.to_string())
+        });
+    match made {
+        Ok(model) => Box::into_raw(Box::new(model)),
+        Err(error) => {
+            set_text(error);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// # Safety
+/// `model` must come from `dmipy_new` and not be freed already.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dmipy_free(model: *mut dwi_dmipy::Model) {
+    if !model.is_null() {
+        drop(unsafe { Box::from_raw(model) });
+    }
+}
+
+/// Fits dmipy's maps in the same layout as `noddi_fit`. The success text contains
+/// fitted/skipped/nonconverged counts. Voxels with a nonpositive first sample are
+/// zero, as in the pinned dmipy reference; numerical failures reject the chunk.
+/// # Safety
+/// The pointers address the lengths stated by `noddi_fit`, with this model's volume count.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dmipy_fit(
+    model: *const dwi_dmipy::Model,
+    data: *const f32,
+    voxels: usize,
+    mask: *const u8,
+    out: *mut f32,
+) -> u32 {
+    let model = unsafe { &*model };
+    let volumes = model.volumes();
+    let data = unsafe { std::slice::from_raw_parts(data, voxels * volumes) };
+    let mask = (!mask.is_null()).then(|| unsafe { std::slice::from_raw_parts(mask, voxels) });
+    let out = unsafe { std::slice::from_raw_parts_mut(out, NODDI_OUTPUTS * voxels) };
+    out.fill(0.0);
+    let mut signal = vec![0.0; volumes];
+    let (mut fitted, mut skipped, mut nonconverged) = (0, 0, 0);
+    for voxel in 0..voxels {
+        if mask.is_some_and(|m| m[voxel] == 0) || data[voxel] <= 0.0 {
+            skipped += 1;
+            continue;
+        }
+        for (frame, value) in signal.iter_mut().enumerate() {
+            *value = f64::from(data[frame * voxels + voxel]);
+        }
+        let fit = match model.fit(&signal) {
+            Ok(fit) => fit,
+            Err(error) => {
+                set_text(format!("dmipy voxel {voxel}: {error}"));
+                return 1;
+            }
+        };
+        fitted += 1;
+        nonconverged += usize::from(!fit.converged);
+        let [theta, phi, odi, intra, iso] = fit.parameters;
+        let maps = [
+            intra,
+            iso,
+            odi,
+            theta.sin() * phi.cos(),
+            theta.sin() * phi.sin(),
+            theta.cos(),
+        ];
+        for (index, value) in maps.iter().enumerate() {
+            out[index * voxels + voxel] = *value as f32;
+        }
+    }
+    set_text(format!(
+        "{{\"fitted\":{fitted},\"skipped\":{skipped},\"nonconverged\":{nonconverged},\"failed\":0}}"
+    ));
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

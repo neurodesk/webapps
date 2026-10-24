@@ -111,6 +111,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dwi-dmipy"
+version = "0.1.0"
+dependencies = [
+ "dwi-gp",
+ "serde_json",
+]
+
+[[package]]
 name = "dwi-ec-distortion"
 version = "0.1.0"
 dependencies = [
@@ -141,6 +149,13 @@ dependencies = [
 
 [[package]]
 name = "dwi-pe-field"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "dwi-sdc"
 version = "0.1.0"
 dependencies = [
  "serde_json",
@@ -272,6 +287,7 @@ name = "noddi-wasm"
 version = "0.1.0"
 dependencies = [
  "dwi-amico",
+ "dwi-dmipy",
  "dwi-gradients",
  "dwi-tensor",
 ]
@@ -383,6 +399,13 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "sdc-wasm"
+version = "0.1.0"
+dependencies = [
+ "dwi-sdc",
+]
 
 [[package]]
 name = "serde"

@@ -18,3 +18,16 @@ distortion correction in seconds. arXiv:2403.10706.
 Ruthotto L, Kugel H, Olesch J, Fischer B, Modersitzki J, Burger M, Wolters CH
 (2012). Diffeomorphic susceptibility artifact correction of diffusion-weighted
 magnetic resonance images. Phys Med Biol 57(18):5715-5731.
+
+The separate ./field-fit entry point and sdc-field-fit.wasm contain the deterministic
+sdcflows 2.17.1 field conversion and B-spline fit, Apache-2.0, with a portable
+OpenBLAS SkylakeX dot reduction, BSD-3-Clause. These files do not contain the
+PyHySCO implementation. See LICENSE-SDCFLOW and LICENSE-OPENBLAS. Existing
+PyHySCO files retain their GPL-3.0-or-later notices and licensing.
+
+sdcflows field conversion and tensor-product B-spline fitting:
+Copyright 2021 The NiPreps Developers <nipreps@gmail.com>.
+Source commit 96a4e1425923d180569dcccd6ca688e9fa54874d, Apache-2.0.
+Portable OpenBLAS reduction:
+Copyright (c) 2014, The OpenBLAS Project. All rights reserved.
+Source commit af560c1935c357e314f1f03cbbedf53f88345d38, BSD-3-Clause.

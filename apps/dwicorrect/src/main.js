@@ -20,8 +20,9 @@ import { readDiffusionSeries, runDcm2niix } from "@neurodesk/runtime-support/dcm
 import { brainMask, mindgrab } from "@neurodesk/runtime-support/mindgrab";
 import { estimateMemory, fitsInMemory, MEMORY_LIMIT } from "@neurodesk/shoreline";
 import { APP } from "./config.js";
+import { correctionFiles } from "./automation.js";
 import {
-  B0_MAX,
+  meanB0Data,
   SESSION,
   acqpRow,
   classifyInputs,
@@ -212,18 +213,6 @@ function setBusy(busy) {
   }
 }
 
-/** The b = 0 mean of a series' frames (Float64), or of every frame without b-values. */
-function meanOf(data, voxels, frames, bvals) {
-  const keep = Array.from({ length: frames }, (_, k) => k).filter((k) => !bvals || bvals[k] <= B0_MAX);
-  if (!keep.length) throw new Error(`The series has no volume with b ≤ ${B0_MAX}.`);
-  const out = new Float64Array(voxels);
-  for (const k of keep) {
-    const offset = k * voxels;
-    for (let i = 0; i < voxels; i++) out[i] += data[offset + i];
-  }
-  for (let i = 0; i < voxels; i++) out[i] /= keep.length;
-  return out;
-}
 
 function voxelSizes(affine) {
   return [0, 1, 2].map((j) => Math.hypot(affine[0][j], affine[1][j], affine[2][j]));
@@ -284,7 +273,7 @@ async function loadFiles(filesPromise, signal) {
       throw new Error(`This series needs about ${gb(estimateMemory(size))} GB, more than WebAssembly's ${gb(MEMORY_LIMIT)} GB. Use the native shoreline command line (exes/dwi/shoreline).`);
     }
     assertImageValues(frames.data, { subject: dwi.image.name });
-    const meanB0 = meanOf(frames.data, voxels, frames.frames, bvals);
+    const meanB0 = meanB0Data(frames.data, voxels, frames.frames, bvals);
     const sliceZ = previewSlice(meanB0, frames.dims);
     const beforeSlices = axialSlices(frames.data, frames.dims, frames.frames, sliceZ);
     const sizes = voxelSizes(frames.header.affine);
@@ -299,7 +288,7 @@ async function loadFiles(filesPromise, signal) {
         throw new Error(`The bval of ${name} has ${rBvals.length} values for ${r.frames} volumes.`);
       }
       assertImageValues(r.data, { subject: name });
-      reverse = { name, sidecar: found.reverse.sidecar, mean: meanOf(r.data, voxels, r.frames, rBvals) };
+      reverse = { name, sidecar: found.reverse.sidecar, mean: meanB0Data(r.data, voxels, r.frames, rBvals) };
     }
     let field = null;
     if (found.field) {
@@ -534,7 +523,7 @@ async function correct(signal) {
     const movementRms = text("movement_rms");
     const outlierMap = text("outlier_map");
     const fieldUnits = field === "hz" && input.field.units !== "Hz" ? `${input.field.units}, divided by 2π to Hz` : null;
-    const sidecar = preprocSidecar({ input: input.sidecar, settings, args, field, fieldUnits, threads, seconds, mask: maskSource, version: APP.version });
+    const sidecar = preprocSidecar({ input: { ...input.sidecar, PhaseEncodingDirection: pe, TotalReadoutTime: readout, MultibandAccelerationFactor: series.multiband }, settings, args, field, fieldUnits, threads, seconds, mask: maskSource, version: APP.version });
     const rows = {
       dwi: { description: "Corrected series", file: new File([run.outputs[`${SESSION.out}.nii.gz`]], names.dwi, { type: "application/gzip" }) },
       bval: { description: "b-values", file: textFile(text("bvals"), names.bval), viewable: false },
@@ -547,12 +536,18 @@ async function correct(signal) {
       ...(fieldSidecarFile ? { fieldSidecar: { description: "Field map JSON", file: fieldSidecarFile, viewable: false } } : {}),
       log: { description: "Log", file: textFile(text("log") ?? "", names.log), viewable: false },
     };
+    const corrected = readNiftiFrames(await decodeNiftiBuffer(await rows.dwi.file.arrayBuffer()));
+    const correctedB0 = meanB0Data(corrected.data, voxels, corrected.frames, input.bvals);
+    rows["mean-b0"] = {
+      description: "Corrected mean b0",
+      file: new File([await gzipBytes(createNiftiFromData(Float32Array.from(correctedB0), input.headerBytes, { dims: corrected.dims }))], names.meanB0, { type: "application/gzip" }),
+    };
+    controller.signal.throwIfAborted();
     const summary = motionSummary({ parameters, movementRms, outlierMap });
     outputs = { rows, summary, names };
     results.render(rows);
     // Not cancellable: the run is done, and the preview takes a moment.
     progress.begin("Making the before/after preview…", { cancellable: false });
-    const corrected = readNiftiFrames(await decodeNiftiBuffer(await rows.dwi.file.arrayBuffer()));
     const gif = beforeAfterGif({
       before: input.beforeSlices,
       after: axialSlices(corrected.data, corrected.dims, corrected.frames, input.sliceZ),
@@ -662,9 +657,17 @@ registerAppAutomation({
   app: APP.id,
   convertDicom: runDcm2niix,
   operations: {
-    correct: async ({ inputs, inputDetails, signal }) => {
-      const sidecars = inputDetails.images?.sidecars ?? [];
-      await loadFiles(Promise.resolve([...inputs.images, ...sidecars, ...(inputs.gradients ?? [])]), signal);
+    correct: async ({ inputs, inputDetails, parameters, signal }) => {
+      await loadFiles(correctionFiles(inputs, inputDetails, parameters), signal);
+      if (inputs.reverse?.length && !input.reverse) throw new Error("The reverse image must have opposite phase encoding and share the diffusion grid.");
+      if (parameters.multiband !== undefined && input.dims[2] % parameters.multiband) throw new Error(`The multiband factor ${parameters.multiband} does not divide the ${input.dims[2]} slices.`);
+      if (parameters.sliceToVolume && !input.series.sliceTiming) throw new Error("Slice-to-volume correction requires valid SliceTiming for every slice.");
+      for (const [key, id] of Object.entries({ model: "model", eddyCurrents: "eddyCurrents", iterations: "iterations", outliers: "outlierType" })) {
+        if (parameters[key] !== undefined) $(id).value = String(parameters[key]);
+      }
+      for (const key of ["replaceOutliers", "sliceToVolume"]) {
+        if (parameters[key] !== undefined) $(key).checked = parameters[key];
+      }
       return correct(signal);
     },
   },

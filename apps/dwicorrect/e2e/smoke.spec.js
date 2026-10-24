@@ -187,15 +187,23 @@ function niftiShape(bytes) {
 
 test("the example is corrected: field from the PA b0, motion, outliers, downloads", async ({ page }) => {
   test.setTimeout(900_000);
-  await loadExample(page);
-  await expect(page.locator("#fileInfo")).toHaveText(example.files[0].name);
-  await expect(page.locator("#fieldSource")).toHaveValue("reverse");
-  await expect(page.locator("#multibandField")).toBeHidden();
-  await expect(page.locator("#outlierType")).toHaveValue("both");
-  await page.locator("#runButton").click();
+  await page.goto("/");
+  await page.locator("#neurodesk-input-transfer").waitFor({ state: "attached" });
+  await page.evaluate(async files => {
+    for (const [role, index] of [["dwi", 0], ["bval", 1], ["bvec", 2], ["sidecar", 3], ["reverse", 4], ["reverseSidecar", 7]]) {
+      const descriptor = files[index];
+      const response = await fetch(descriptor.url);
+      if (!response.ok) throw new Error(`${descriptor.url}: ${response.status}`);
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([await response.blob()], role === "sidecar" ? "upstream_acquisition.json" : descriptor.name));
+      document.getElementById("neurodesk-input-transfer").files = transfer.files;
+      await globalThis.neurodeskAutomation.dispatch("adopt", { role });
+    }
+    await globalThis.neurodeskAutomation.dispatch("start", {});
+  }, example.files);
   await expect(page.locator("#statusText")).toContainText("Corrected in", { timeout: 840_000 });
   await expect(page.locator("#statusText")).toContainText("outlier slices replaced");
-  for (const label of ["Corrected series", "b-values", "Rotated b-vectors", "Sidecar", "Movement per volume", "Outlier slices", "Brain mask (MindGrab)", "Field map (Hz)", "Field map JSON", "Log"]) {
+  for (const label of ["Corrected series", "Corrected mean b0", "b-values", "Rotated b-vectors", "Sidecar", "Movement per volume", "Outlier slices", "Brain mask (MindGrab)", "Field map (Hz)", "Field map JSON", "Log"]) {
     await expect(page.locator("#resultList .nd-volume-toggle").filter({ hasText: label })).toHaveCount(1);
   }
   expect(niftiShape(gunzipSync(await download(page, "Corrected series")))).toEqual({ dims: [112, 112, 72], frames: 141 });
@@ -216,6 +224,12 @@ test("the example is corrected: field from the PA b0, motion, outliers, download
   expect(sidecar.DwicorrectSettings.CommandLine).toContain("--ol_type=both");
   expect(sidecar.DwicorrectSettings.CommandLine).toContain("--mb=3");
   expect(sidecar.PhaseEncodingDirection).toBe("j-");
+  expect(sidecar.TotalReadoutTime).toBeGreaterThan(0);
+  expect(sidecar.DwicorrectSettings.MeanB0Threshold).toBe(50);
+  expect(niftiShape(gunzipSync(await download(page, "Corrected mean b0")))).toEqual({ dims: [112, 112, 72], frames: 1 });
+  await expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state)).toBe("succeeded");
+  const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
+  expect(report.artifacts["mean-b0"].type).toBe("neuro:volume");
   const fieldSidecar = JSON.parse((await download(page, "Field map JSON")).toString());
   expect(fieldSidecar.Units).toBe("Hz");
   expect(fieldSidecar.PhaseEncodingDirection).toBe("j-");
@@ -344,4 +358,19 @@ test("the example selector lists the examples", async ({ page }) => {
   await page.goto("/");
   const options = await page.locator("select[data-neurodesk-example] option").evaluateAll((list) => list.map((o) => o.value).filter(Boolean));
   expect(options).toEqual(examples.map((example) => example.id));
+});
+
+
+test("automation refuses missing acquisition metadata before launching correction", async ({ page }) => {
+  await page.goto("/");
+  const files = exampleFiles();
+  for (const [role, extension] of [["dwi", ".nii.gz"], ["bval", ".bval"], ["bvec", ".bvec"]]) {
+    await page.locator("#neurodesk-input-transfer").setInputFiles(files.find(file => file.name === `sub-phantom_dwi${extension}`));
+    await page.evaluate(role => globalThis.neurodeskAutomation.dispatch("adopt", { role }), role);
+  }
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("start", {}));
+  await expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state)).toBe("failed");
+  const snapshot = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("snapshot"));
+  expect(snapshot.error.message).toContain("phaseEncodingDirection parameter");
+  await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
 });

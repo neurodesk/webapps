@@ -1,0 +1,81 @@
+Copyright (c) 2001-2002 Enthought, Inc. 2003, SciPy Developers.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above
+   copyright notice, this list of conditions and the following
+   disclaimer in the documentation and/or other materials provided
+   with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived
+   from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+----
+
+src/lbfgsb.rs ports scipy 1.18.1 scipy/optimize/src/lbfgsb.c, the C translation
+of L-BFGS-B 3.0 that scipy ships under the licence above. L-BFGS-B 3.0 is by
+Ciyou Zhu in collaboration with R. H. Byrd, P. Lu-Chen and J. Nocedal, with the
+3.0 changes by Jose Luis Morales and Jorge Nocedal. It was released under the
+BSD licence; its authors ask users to cite the papers. The references, as
+lbfgsb.c gives them:
+
+  [1] R. H. Byrd, P. Lu, J. Nocedal and C. Zhu, "A limited memory algorithm
+      for bound constrained optimization", SIAM J. Scientific Computing 16
+      (1995), no. 5, pp. 1190-1208.
+
+  [2] C. Zhu, R. H. Byrd, P. Lu, J. Nocedal, "L-BFGS-B: FORTRAN Subroutines for
+      Large Scale Bound Constrained Optimization", Tech. Report, NAM-11, EECS
+      Department, Northwestern University, 1994.
+
+  [3] J. L. Morales, J. Nocedal, "Remark On Algorithm 788: L-BFGS-B: Fortran
+      Subroutines for Large-Scale Bound Constrained Optimization", 2011.
+
+The line search routines dcsrch and dcstep come from MINPACK-1 and MINPACK-2
+(Jorge J. More and David J. Thuente; Brett M. Averick, Richard G. Carter and
+Jorge J. More), as scipy includes them under its licence.
+
+----
+
+src/lbfgsb.rs also ports the _minimize_lbfgsb driver from scipy 1.18.1
+scipy/optimize/_lbfgsb_py.py. Its Python wrapper carries this MIT notice:
+
+Copyright (c) 2004 David M. Cooke <cookedm@physics.mcmaster.ca>
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+Modifications by Travis Oliphant and Enthought, Inc. for inclusion in SciPy

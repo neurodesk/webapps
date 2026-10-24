@@ -111,7 +111,7 @@ test('displacement-field encodings do not widen to every NIfTI image through for
 
 test('registered encoding aliases preserve vendor formats without treating categories as encodings', () => {
   assert.deepEqual(qualifiers({ formats: ['gii', 'gifti', 'surface', 'bvals', 'bvecs', 'custom', 'constructor'] }, 'inputs', { inputs: {} }, { type: 'core:file' }), {
-    formats: ['gifti', 'bval', 'bvec', 'neurodesk:custom', 'neurodesk:constructor'],
+    formats: ['gifti', 'neurodesk:custom', 'neurodesk:constructor'],
   });
 });
 
@@ -159,4 +159,53 @@ test('output inheritance may obtain an absent input qualifier by runtime inspect
   assert.doesNotThrow(() => validateTool(generated));
   generated.outputs.output_inherited.type = 'core:array<neuro:label-map>';
   assert.doesNotThrow(() => validateTool(generated));
+});
+
+
+test('DWI artifact encodings are specific while gradient inputs retain their desktop constraints', async () => {
+  for (const [app, operation] of [['dwidenoise', 'denoise'], ['degibbs', 'degibbs'], ['dwicorrect', 'correct'], ['n4', 'correct']]) {
+    const generated = await tool(app, operation);
+    assert.ok(generated, app);
+    for (const role of ['bval', 'bvec']) {
+      assert.deepEqual(generated.outputs[`output_${role}`].formats, [role], `${app}: ${role}`);
+    }
+    assert.deepEqual(generated.outputs[app === 'dwicorrect' ? 'output_dwi' : 'output_image'].formats, ['nii-gz'], app);
+    assert.deepEqual(generated.outputs.output_sidecar.formats, ['json'], app);
+  }
+  const noddi = await tool('noddi', 'fit');
+  assert.equal(noddi.inputs.input_bval.type, 'neuro:gradient-table');
+  assert.equal(noddi.inputs.input_bval.formats, undefined);
+  assert.equal(noddi.inputs.input_bvec.formats, undefined);
+  assert.deepEqual(noddi.inputs.input_bval.extensions['neurodesk/data'].formats, ['bval', 'bvals']);
+  assert.deepEqual(noddi.inputs.input_bvec.extensions['neurodesk/data'].formats, ['bvec', 'bvecs']);
+  const correction = await tool('dwicorrect', 'correct');
+  assert.deepEqual(correction.outputs.output_confounds.formats, ['tsv']);
+});
+
+test('artifact inference preserves ambiguity and explicit encoding declarations', () => {
+  const operation = { inputs: {} };
+  for (const [field, expected] of [
+    [{ type: 'neuro:volume', mediaType: 'application/x-nifti' }, ['nii']],
+    [{ type: 'neuro:volume', mediaType: 'application/gzip' }, ['nii-gz']],
+    [{ type: 'file:json', mediaType: 'application/json' }, ['json']],
+    [{ type: 'neuro:volume', mediaType: 'application/octet-stream', formats: ['nii'] }, ['nii']],
+    [{ type: 'file:archive', mediaType: 'application/gzip' }, undefined],
+    [{ type: ['neuro:volume', 'neuro:surface'], mediaType: 'application/octet-stream' }, undefined],
+  ]) {
+    assert.deepEqual(qualifiers(field, 'artifacts', operation, { type: 'core:file' }).formats, expected);
+  }
+});
+
+test('brain mask roles retain mask semantics through desktop parsing and NeuroFlow generation', async () => {
+  const brain = await tool('brain-extraction', 'extract');
+  assert.equal(brain.outputs.output_mask.type, 'neuro:mask');
+  for (const [app, operation] of [['n4', 'correct'], ['noddi', 'fit'], ['dwi2trx', 'fit'], ['dwi2trx', 'tractography']]) {
+    const generated = await tool(app, operation);
+    assert.ok(generated, `${app}: ${operation}`);
+    assert.equal(generated.inputs.input_mask.type, 'neuro:mask', app);
+    assert.equal(generated.inputs.input_mask.extensions['neurodesk/data'].type, 'neuro:mask', app);
+    if (generated.outputs.output_mask) assert.equal(generated.outputs.output_mask.type, 'neuro:mask', app);
+  }
+  assert.equal((await tool('dwicorrect', 'correct')).outputs.output_mask.type, 'neuro:mask');
+  assert.equal((await tool('n4', 'correct')).outputs.output_bias.type, 'neuro:volume');
 });

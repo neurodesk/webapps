@@ -1,5 +1,22 @@
 # n4
 
+## 0.6.20261024
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
+  - @neurodesk/n4@0.6.20261024
+  - @neurodesk/runtime-support@0.9.14
+- Updated dependencies [328cb77]
+- Updated dependencies [25f296e]
+  - @neurodesk/webapp-components@0.20.1
+  - @neurodesk/dwi2trx@0.8.20261024
+  - @neurodesk/runtime-support@0.9.13
+  - @neurodesk/n4@0.6.20261024
+- Updated dependencies
+  - @neurodesk/n4@0.6.20261024
+
 ## 0.5.20261024
 
 ### Minor Changes
@@ -22,6 +39,12 @@
   - @neurodesk/webapp-components@0.21.0
   - @neurodesk/n4@0.5.20261024
   - @neurodesk/runtime-support@0.9.11
+- Updated dependencies [14a8b29]
+- Updated dependencies [941884c]
+  - @neurodesk/webapp-components@0.20.0
+  - @neurodesk/dwi2trx@0.7.20261024
+  - @neurodesk/n4@0.5.20261024
+  - @neurodesk/runtime-support@0.9.12
 
 ## 0.4.20261024
 
@@ -38,6 +61,19 @@
   - @neurodesk/dwi2trx@0.6.20261024
   - @neurodesk/runtime-support@0.9.9
   - @neurodesk/n4@0.4.20261024
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.3
+  - @neurodesk/dwi2trx@0.6.20261024
+  - @neurodesk/runtime-support@0.9.11
+  - @neurodesk/n4@0.4.20261024
+- Pair acquisition JSON and gradient inputs by automation role so metadata survives diffusion pipelines. Split DWI Correct and SDC inputs into single-image roles, require explicit acquisition values for automated correction, and expose correction settings. Export a corrected mean-b0 image for downstream brain masks. Use a generic single-volume error for shared image readers.
+- Generate artifact format qualifiers from MIME types and gradient roles, and preserve explicit artifact encodings. Keep gradient input formats in contract metadata until NeuroFlow gains inspectors. Type DWI brain masks as masks so pipeline bindings reject scalar images.
+- Updated dependencies
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.2
+  - @neurodesk/n4@0.4.20261024
+  - @neurodesk/dwi2trx@0.6.20261024
+  - @neurodesk/runtime-support@0.9.10
 
 ## 0.4.20261022
 
@@ -123,8 +159,6 @@
   - @neurodesk/webapp-components@0.17.1
   - @neurodesk/dwi2trx@0.5.20261020
   - @neurodesk/n4@0.3.20261020
-- Updated dependencies [14db080]
-
 - Updated dependencies [4b40da1]
 
 - Updated dependencies
@@ -132,13 +166,6 @@
   - @neurodesk/runtime-support@0.9.6
   - @neurodesk/dwi2trx@0.5.20261020
   - @neurodesk/n4@0.3.20261020
-- Updated dependencies
-  - @neurodesk/runtime-support@0.9.5
-  - @neurodesk/webapp-components@0.17.1
-  - @neurodesk/dwi2trx@0.5.20261020
-  - @neurodesk/n4@0.3.20261020
-- Updated dependencies [14db080]
-
 - Updated dependencies [d1fa022]
 
   - @neurodesk/webapp-components@0.16.3
@@ -224,20 +251,6 @@
   - @neurodesk/n4@0.2.20261018
   - @neurodesk/runtime-support@0.8.0
   - @neurodesk/dwi2trx@0.5.20261018
-
-- Updated dependencies [7c0d201]
-
-  - @neurodesk/webapp-components@0.16.2
-  - @neurodesk/dwi2trx@0.5.20261018
-  - @neurodesk/runtime-support@0.9.1
-  - @neurodesk/n4@0.2.20261018
-
-- Updated dependencies [46935f7]
-
-  - @neurodesk/runtime-support@0.9.0
-  - @neurodesk/webapp-components@0.16.1
-  - @neurodesk/dwi2trx@0.5.20261018
-  - @neurodesk/n4@0.2.20261018
 
 - Updated dependencies [3329c39]
 

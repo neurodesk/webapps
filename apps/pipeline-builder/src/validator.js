@@ -1,13 +1,16 @@
 // The NeuroFlow core, vendored as WebAssembly, checks workflows against the tool
 // catalog. DOM-independent: tests pass the .wasm bytes, the page passes its URL.
 import init, { validate_workflow_with_tools_json } from "../vendor/neuroflow/neuroflow_wasm.js";
+import { workflowIssues } from "./model.js";
 
 export async function createValidator(tools, wasm) {
   await init({ module_or_path: wasm });
   const catalog = JSON.stringify(tools);
   return doc => {
     try {
-      return JSON.parse(validate_workflow_with_tools_json(JSON.stringify(doc), catalog));
+      const core = JSON.parse(validate_workflow_with_tools_json(JSON.stringify(doc), catalog));
+      const issues = [...(core.issues ?? []), ...workflowIssues(doc, tools)];
+      return { ...core, issues, ok: core.ok && !issues.some(issue => issue.severity === "error") };
     } catch (error) {
       return { ok: false, issues: [{ severity: "error", message: String(error?.message ?? error), path: "" }] };
     }

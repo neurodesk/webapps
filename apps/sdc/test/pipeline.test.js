@@ -64,3 +64,10 @@ test("outputs are named from image 1's BIDS stem", () => {
   assert.equal(meta.Units, "Hz");
   assert.deepEqual(meta.Sources, ["a.nii.gz", "b.nii.gz"]);
 });
+
+
+test("explicit image roles preserve image1 as the field reference despite sorting and b-values", () => {
+  const first = entry("z.nii.gz", "j-");
+  const second = entry("a.nii.gz", "j", {});
+  assert.deepEqual(selectPair([first, second], { ordered: true }).map(value => value.image.name), ["z.nii.gz", "a.nii.gz"]);
+});

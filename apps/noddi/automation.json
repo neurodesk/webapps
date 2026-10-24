@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "app": "noddi",
   "title": "NODDI",
-  "description": "Diffusion tensor and NODDI (AMICO) maps from a DWI series.",
+  "description": "Diffusion tensor and NODDI maps from a DWI series.",
   "defaultOperation": "fit",
   "operations": {
     "fit": {
@@ -44,7 +44,7 @@
         },
         "mask": {
           "source": "files",
-          "type": "neuro:volume",
+          "type": "neuro:mask",
           "formats": [
             "nifti"
           ],
@@ -58,6 +58,12 @@
           "type": "boolean",
           "default": true,
           "description": "Fit NODDI when the data has two or more shells"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["amico", "dmipy"],
+          "default": "amico",
+          "description": "NODDI fit: accelerated AMICO or full nonlinear dmipy model"
         },
         "tensorFit": {
           "type": "string",
@@ -81,7 +87,7 @@
         "noddi-isovf": { "type": "neuro:volume", "mediaType": "application/gzip", "space": "input", "minimum": 0, "maximum": 1 },
         "noddi-odi": { "type": "neuro:volume", "mediaType": "application/gzip", "space": "input", "minimum": 0, "maximum": 1 },
         "noddi-direction": { "type": "neuro:volume", "mediaType": "application/gzip", "space": "input", "minimum": 0, "maximum": 1 },
-        "mask": { "type": "neuro:volume", "mediaType": "application/gzip", "space": "input", "minimum": 1, "maximum": 1 }
+        "mask": { "type": "neuro:mask", "mediaType": "application/gzip", "space": "input", "minimum": 1, "maximum": 1 }
       },
       "engines": [
         "browser"

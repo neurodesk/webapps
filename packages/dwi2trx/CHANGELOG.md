@@ -1,5 +1,18 @@
 # @neurodesk/dwi2trx
 
+## 0.8.20261024
+
+### Minor Changes
+
+- 25f296e: NODDI names the niimath build in its provenance when it fits the tensor with niimath dtifit, in the app and in the `noddi` command line. `@neurodesk/dwi2trx/niimath-version` gives the version of the pinned niimath build; DWI2TRX and the `dwi2trx` command line now read it from there.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
+- Updated dependencies [328cb77]
+  - @neurodesk/webapp-components@0.20.1
+
 ## 0.7.20261024
 
 ### Minor Changes
@@ -17,6 +30,9 @@
 - Updated dependencies [941884c]
   - @neurodesk/webapp-components@0.21.0
   - @neurodesk/node-drivers@0.3.0
+- Updated dependencies [14a8b29]
+- Updated dependencies [941884c]
+  - @neurodesk/webapp-components@0.20.0
 
 ## 0.6.20261024
 
@@ -27,6 +43,12 @@
   - @neurodesk/webapp-components@0.20.0
 - Updated dependencies [3fc9cf2]
   - @neurodesk/webapp-components@0.19.1
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.3
+- Updated dependencies
+- Updated dependencies [5b5ff35]
+  - @neurodesk/webapp-components@0.19.2
+  - @neurodesk/node-drivers@0.3.0
 
 ## 0.6.20261022
 
@@ -69,7 +91,6 @@
 - Updated dependencies [a36fde4]
 - Updated dependencies
 - Updated dependencies
-- Updated dependencies
   - @neurodesk/webapp-components@0.17.0
 - Updated dependencies [ea2a6d2]
 - Updated dependencies [3f1d770]
@@ -98,17 +119,9 @@
 
 - Updated dependencies [3329c39]
 
-- Updated dependencies [46935f7]
-
-  - @neurodesk/webapp-components@0.16.0
-
 - Updated dependencies [d9718cd]
 
   - @neurodesk/webapp-components@0.16.3
-
-- Updated dependencies [46935f7]
-
-  - @neurodesk/webapp-components@0.16.0
 
 - Updated dependencies [4b40da1]
 
@@ -130,14 +143,10 @@
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.17.1
-- Updated dependencies [14db080]
-
 - Updated dependencies [4b40da1]
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.17.2
-- Updated dependencies
-  - @neurodesk/webapp-components@0.17.1
 - Updated dependencies [14db080]
 
 ## 0.5.20261019
@@ -189,30 +198,6 @@
 
 - Updated dependencies [ccb2970]
 
-- Updated dependencies [67a5a8f]
-
-  - @neurodesk/webapp-components@0.14.4
-
-- Updated dependencies [b68209b]
-
-  - @neurodesk/webapp-components@0.15.0
-
-- Updated dependencies [67a5a8f]
-
-  - @neurodesk/webapp-components@0.14.4
-
-- Updated dependencies [7c0d201]
-
-  - @neurodesk/webapp-components@0.16.2
-
-- Updated dependencies [46935f7]
-
-  - @neurodesk/webapp-components@0.16.1
-
-- Updated dependencies [3329c39]
-
-  - @neurodesk/webapp-components@0.16.0
-
 - Updated dependencies [b67e4e9]
   - @neurodesk/webapp-components@0.15.1
 
@@ -229,14 +214,6 @@
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.14.2
-- Updated dependencies [7443048]
-
-  - @neurodesk/webapp-components@0.14.1
-
-- Updated dependencies
-
-  - @neurodesk/webapp-components@0.14.2
-
 - Updated dependencies [7443048]
 
   - @neurodesk/webapp-components@0.14.1
@@ -306,10 +283,6 @@
 
   - @neurodesk/node-drivers@0.2.0
   - @neurodesk/webapp-components@0.12.1
-
-- Updated dependencies
-
-  - @neurodesk/webapp-components@0.12.2
 
 - Updated dependencies
   - @neurodesk/node-drivers@0.2.0

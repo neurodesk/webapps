@@ -15,9 +15,11 @@ on:
       - 'packages/n4/**'
       - 'packages/hmc/**'
       - 'packages/hmc-registration/**'
+      - 'packages/sdc/**'
       - 'packages/components/src/file-io/NiftiUtils.js'
       - 'packages/components/src/file-io/bids-derivatives.js'
       - 'packages/components/src/file-io/brain-mask.js'
+      - 'packages/components/src/file-io/hash.js'
       - 'packages/components/src/volume/mean.js'
       - 'packages/components/src/file-io/gradients.js'
       - 'packages/dwi2trx/src/gradients.js'
@@ -43,9 +45,11 @@ on:
       - 'packages/n4/**'
       - 'packages/hmc/**'
       - 'packages/hmc-registration/**'
+      - 'packages/sdc/**'
       - 'packages/components/src/file-io/NiftiUtils.js'
       - 'packages/components/src/file-io/bids-derivatives.js'
       - 'packages/components/src/file-io/brain-mask.js'
+      - 'packages/components/src/file-io/hash.js'
       - 'packages/components/src/volume/mean.js'
       - 'packages/components/src/file-io/gradients.js'
       - 'packages/dwi2trx/src/gradients.js'
@@ -94,7 +98,7 @@ jobs:
   hmc-reference:
     name: exes/dwi tests on the pinned hmc reference data
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -120,6 +124,59 @@ jobs:
         env:
           HMC_REQUIRE_REFERENCE: '1'
         run: cargo +1.98.0 test --release --workspace --locked -- --nocapture
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Install the complete estimator dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter @neurodesk/hmc...
+      - name: Run the complete GP estimator and require the native-float world-centre gate
+        run: node packages/hmc/validation/nifreeze-loop.mjs "$HMC_REFERENCE" "$RUNNER_TEMP/hmc-gp" gp 2
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Compare image quality with native float and double
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m pip install nitransforms==25.1.0 nibabel==5.3.3 numpy==2.3.5 scipy==1.16.3 h5py==3.15.1
+          python packages/hmc/validation/nifreeze-native-quality.py "$HMC_REFERENCE" "$RUNNER_TEMP/hmc-gp" "$RUNNER_TEMP/hmc-gp/native-quality.json"
+      - name: Preserve motion and image-quality reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: hmc-native-float-gate
+          path: ${{ runner.temp }}/hmc-gp/*.json
+          if-no-files-found: warn
+
+  sdc-field-fit-reference:
+    name: deterministic SDC field fitting on the pinned native reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Cache the reference downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/sdc-reference
+          key: sdc-field-fit-${{ hashFiles('exes/dwi/sdc/validation/reference.manifest.json') }}
+      - name: Fetch the field-fit subset and stage arrays with shared NIfTI IO
+        run: |
+          python3 exes/dwi/sdc/validation/fetch_reference.py "$HOME/sdc-reference" field-fit >> "$GITHUB_ENV"
+          node exes/dwi/sdc/validation/prepare-reference.mjs "$HOME/sdc-reference" "$RUNNER_TEMP/sdc-field-fit"
+          echo "SDC_FIELD_FIT_REFERENCE=$RUNNER_TEMP/sdc-field-fit" >> "$GITHUB_ENV"
+      - name: Require the native field conversion and coefficient parity gates
+        working-directory: exes/dwi
+        env:
+          SDC_REQUIRE_REFERENCE: '1'
+        run: cargo +1.98.0 test --release --locked -p dwi-sdc --test reference -- --nocapture
+      - name: Verify the committed WebAssembly field fit against the same native outputs
+        run: node exes/dwi/sdc/validation/wasm-reference.mjs
 
   wasm-source:
     name: committed WASM modules equal a rebuild from source
@@ -140,13 +197,15 @@ jobs:
         run: bash packages/dwidenoise/scripts/build-wasm.sh --check
       - name: Rebuild and compare hmc
         run: bash packages/hmc/scripts/build-wasm.sh --check
+      - name: Rebuild and compare SDC field fitting
+        run: bash packages/sdc/scripts/build-field-fit.sh --check
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: pnpm
       - name: Install package test dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts --filter @neurodesk/noddi... --filter @neurodesk/degibbs... --filter @neurodesk/dwidenoise... --filter @neurodesk/hmc... --filter @neurodesk/dwi2trx... --filter @neurodesk/n4...
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter @neurodesk/noddi... --filter @neurodesk/degibbs... --filter @neurodesk/dwidenoise... --filter @neurodesk/hmc... --filter @neurodesk/dwi2trx... --filter @neurodesk/sdc... --filter @neurodesk/n4...
       - name: noddi package tests on the committed module
         working-directory: packages/noddi
         run: node --test test/*.test.js
@@ -179,6 +238,46 @@ jobs:
   # The AMICO 1.5.4, DIPY Patch2Self and MRtrix 3.0.8 mrdegibbs oracle tests on the pinned Hugging Face data
   # (exes/dwi/validation/oracle.manifest.json). The fetch checks the size and sha256 of every
   # file, also on a cache hit, and DWI_REQUIRE_ORACLE turns each missing-data skip into a failure.
+      - name: SDC field-fit tests on the committed module
+        working-directory: packages/sdc
+        run: node --test test/field-fit.test.js
+
+  dmipy-reference:
+    name: nonlinear NODDI native and WASM maps on the pinned WM reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.11'
+      - name: Install NIfTI reference staging dependencies
+        run: python -m pip install numpy==1.26.4 nibabel==5.3.2
+      - name: Cache pinned reference downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/dmipy-reference
+          key: dmipy-reference-${{ hashFiles('exes/dwi/dmipy/validation/reference.manifest.json') }}
+      - name: Verify source maps, DWI and WM selection; stage all fitted voxels
+        run: |
+          python exes/dwi/dmipy/validation/fetch_reference.py "$HOME/dmipy-reference" >> "$GITHUB_ENV"
+          python exes/dwi/dmipy/validation/prepare_reference.py "$HOME/dmipy-reference" "$RUNNER_TEMP/dmipy-prepared"
+          echo "NODDI_DMIPY_PREPARED=$RUNNER_TEMP/dmipy-prepared" >> "$GITHUB_ENV"
+      - name: Require the native nonlinear NODDI WM gate
+        working-directory: exes/dwi
+        env:
+          DMIPY_REQUIRE_REFERENCE: '1'
+        run: cargo +1.98.0 test --release --locked -p dwi-dmipy --test reference -- --nocapture
+      - name: Require the committed WebAssembly nonlinear NODDI WM gate
+        run: node exes/dwi/dmipy/validation/wasm-reference.mjs "$RUNNER_TEMP/dmipy-wasm-report.json"
+
   oracle:
     name: exes/dwi oracle tests on the pinned AMICO, Patch2Self and mrdegibbs data
     runs-on: ubuntu-24.04

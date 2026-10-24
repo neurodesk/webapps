@@ -65,8 +65,8 @@ test("shared app bar owns information actions and theme", async ({ page }) => {
   await expect(bar).toHaveCount(1);
   await expect(page.locator("#controls > #aboutBtn")).toBeHidden();
   await bar.getByRole("button", { name: "About", exact: true }).click();
-  await expect(page.locator("#infoDialog")).toBeVisible();
-  await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await bar.locator("[data-neurodesk-theme-toggle]").click();
   await expect(page.locator("html")).toHaveAttribute("data-neurodesk-theme", "light");
 });
@@ -546,4 +546,47 @@ test("a BIDS run without its gradient tables shows as a disabled choice", async 
   await expect(runs.locator("option")).toHaveText(["sub-01_run-1_dwi (no .bval, .bvec)", "sub-01_run-2_dwi"]);
   await expect(runs.locator("option:disabled")).toHaveText(["sub-01_run-1_dwi (no .bval, .bvec)"]);
   await expect(runs).toHaveValue("1");
+});
+
+
+test("the nonlinear dmipy option fits in workers and downloads bounded NODDI fractions", async ({ page }) => {
+  test.setTimeout(120000);
+  const dwi = syntheticDwi({ size: 4, directions: 12 });
+  await page.goto("/");
+  await loadWithMask(page, dwi, 4);
+  await expect(page.locator("#noddiMethod")).toHaveValue("amico");
+  await page.locator("#noddiMethod").selectOption("dmipy");
+  await page.locator("#fitNoddi").uncheck();
+  await expect(page.locator("#noddiMethod")).toBeDisabled();
+  await expect(page.locator("#noddiMethod")).toHaveValue("dmipy");
+  await page.locator("#fitNoddi").check();
+  await expect(page.locator("#noddiMethod")).toBeEnabled();
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("11 maps", { timeout: 90000 });
+  await expect(page.locator("#technicalLog")).toContainText(/Nonlinear NODDI: \d+ fitted, \d+ skipped, \d+ nonconverged, \d+ failed/);
+  const event = page.waitForEvent("download");
+  await page.locator("#resultList .nd-volume-toggle").filter({ hasText: "ICVF" }).getByRole("button", { name: "Download" }).click();
+  const volume = await readDownload(await event);
+  expect(volume.dims).toEqual([4, 4, 4]);
+  expect(Array.from(volume.data).every((value) => Number.isFinite(value) && value >= 0 && value <= 1)).toBe(true);
+  expect(Array.from(volume.data).some((value) => value > 0)).toBe(true);
+});
+
+test("automation selects nonlinear dmipy and records voxel diagnostics", async ({ page }) => {
+  test.setTimeout(120000);
+  const dwi = syntheticDwi({ size: 4, directions: 12 });
+  await page.goto("/");
+  await page.locator("#neurodesk-input-transfer").setInputFiles(dwi.files);
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" }));
+  await page.locator("#neurodesk-input-transfer").setInputFiles(syntheticMask({ size: 4, value: 1 }));
+  await page.evaluate(async () => {
+    await globalThis.neurodeskAutomation.dispatch("adopt", { role: "mask" });
+    await globalThis.neurodeskAutomation.dispatch("start", { parameters: { method: "dmipy" } });
+  });
+  await expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state), { timeout: 90000 }).toBe("succeeded");
+  const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
+  expect(report.provenance.method).toBe("dti+noddi-dmipy");
+  expect(report.provenance.noddiDiagnostics.fitted).toBeGreaterThan(0);
+  for (const name of ["skipped", "nonconverged", "failed"]) expect(report.provenance.noddiDiagnostics[name]).toBeGreaterThanOrEqual(0);
+  expect(Object.keys(report.artifacts)).toEqual(expect.arrayContaining(["tensor-fa", "noddi-icvf", "noddi-isovf", "noddi-odi"]));
 });

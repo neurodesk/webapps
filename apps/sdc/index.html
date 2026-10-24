@@ -48,7 +48,6 @@
         </div>
       </details>
 
-      <button id="aboutBtn" type="button" hidden>About</button>
       <button id="privacyBtn" type="button" hidden>Privacy</button>
     </header>
 
@@ -68,9 +67,6 @@
       <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel estimation" aria-label="Cancel estimation" hidden>×</button>
     </footer>
 
-    <template id="aboutContent">
-      <p>SDC estimates the susceptibility field of an EPI acquisition from two b = 0 images with opposite phase-encoding directions, such as AP and PA, in this browser. It is a port of PyHySCO 0.0.4 (Julian and Ruthotto 2024), the hyperelastic susceptibility correction of Ruthotto et al. 2012, and its field differs from PyHySCO's by a median of 5e-6 Hz (at most 0.03 Hz). In a comparison on six subjects it was the closest fast method to FSL topup; DR-BUDDI was closer but takes about 40 minutes. Each input's volumes with b ≤ 50 are averaged, without motion correction, and the two images must be in one space. The field is in Hz, with topup's sign, on the grid of the field reference; a constant offset against another tool is a translation along the phase-encoding axis. The corrected images are for quality control: the app does not resample the DWI series. The example is a 10-slice slab of OpenNeuro ds005134 (CC0); because the regularization is 3D, a slab's field is not identical to the field of the full volume. The solver is GPL-3.0-or-later, as PyHySCO is.</p>
-    </template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
 
     <script type="module" src="/src/main.js"></script>

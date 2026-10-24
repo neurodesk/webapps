@@ -90,7 +90,7 @@ async function checkLayout(page, label) {
   });
   const failed = result.pageOverflow || result.dialogOverflow.length || result.overflow.length || result.smallNavigation.length || result.distortedInfoIcons.length || result.smallInputs.length;
   if (failed) failures.push(`${label}: ${JSON.stringify(result)}`);
-  if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `${label.replaceAll('/', '-')}.png`) });
+  if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `${label.replaceAll('/', '-')}.png`), timeout: 30000 });
   console.log(`${failed ? 'FAIL' : 'PASS'} ${label}${failed ? ' ' + JSON.stringify(result) : ''}`);
 }
 

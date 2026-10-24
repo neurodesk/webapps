@@ -1,0 +1,54 @@
+{
+  "commit": "2d6073218eb4ebc97645ac6e275270c36834e33d",
+  "repository": "https://github.com/AthenaEPI/dmipy",
+  "files": [
+    {
+      "path": "dmipy/optimizers/brute2fine.py",
+      "sha256": "5a47c62e1b654e7f10bb4e151d2d0c0d6d8b56b78de87c35f402ab40e3b97b4e"
+    },
+    {
+      "path": "dmipy/distributions/distributions.py",
+      "sha256": "9914247ce6b8ed18335e871589c55dcb1279e2ff4c56db4f3ef14d3916930d18"
+    },
+    {
+      "path": "dmipy/distributions/distribute_models.py",
+      "sha256": "65d5e12bf7d190defee8005c57c512d75dcffa875262bc3eaccb609ab6d771ff"
+    },
+    {
+      "path": "dmipy/core/acquisition_scheme.py",
+      "sha256": "bbac7dd1ca2cdb69bdd67f177e6a7c16a02e6665a0c86ede0fbaf306ac9263cb"
+    },
+    {
+      "path": "dmipy/core/signal_model_properties.py",
+      "sha256": "19dbc920dec9f1506a22f2d5364369e705e0b95ce202005cf4a60608b365f8ed"
+    },
+    {
+      "path": "dmipy/signal_models/gaussian_models.py",
+      "sha256": "4a15504dd83650a2e91f558a0a0b96744d077bfbbf408ae72d9cdd740e3be213"
+    },
+    {
+      "path": "dmipy/signal_models/cylinder_models.py",
+      "sha256": "a5b8fd8b118ae98e0f7af8745feb93672c44b48701dde591b0dd542783dbfa00"
+    },
+    {
+      "path": "dmipy/utils/spherical_convolution.py",
+      "sha256": "3d68d859b9b0f4579e0ffca241d52a650dfe68c0b16f9e0ad117d2f1f3fb567a"
+    },
+    {
+      "path": "dmipy/data/spheres/01-shells-30.txt",
+      "sha256": "6e15b9b1913dc58e63f9cfe9a8737dcb90c3a51757a08c10df2a54cddea1a285"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "d6dc16b943b104407dcb827296297a1e9fd1e3f1091e38daa8470ffb70125835"
+    },
+    {
+      "path": "dmipy/core/modeling_framework.py",
+      "sha256": "35594f41f28d43d4d75499f19bda1b92a1af08da232a6795c236fcf2a3ced229"
+    },
+    {
+      "path": "dmipy/utils/utils.py",
+      "sha256": "4f14a0fbe9a2478566af1dc4b3df00e2df4da4a65f82913d58b010be9c22be09"
+    }
+  ]
+}

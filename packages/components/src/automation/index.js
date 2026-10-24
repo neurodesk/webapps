@@ -6,3 +6,4 @@ export { agentServerPort } from './agent-connection.js';
 export { createDicomConverter } from './dicom-converter.js';
 export { awaitPipelineStep } from './await-pipeline-step.js';
 export { runAbortable } from './abort.js';
+export { imageFiles } from './image-files.js';

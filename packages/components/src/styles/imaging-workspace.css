@@ -952,7 +952,8 @@ nd-result-list {
   .nd-slice-controls input { min-height: 44px; }
 }
 
-.nd-btn-secondary[aria-pressed="true"] {
+.nd-btn-secondary[aria-pressed="true"],
+.nd-btn-secondary[aria-pressed="true"]:hover:not(:disabled) {
   border-color: var(--nd-color-primary);
   background: var(--nd-color-primary);
   color: var(--nd-color-bg);

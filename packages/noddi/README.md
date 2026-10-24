@@ -25,7 +25,7 @@ model.free();
 
 `data` is a Float32Array with the volumes one after the other, as `readNiftiFrames` returns them.
 `model.fit` takes the same layout for a chunk of voxels, so a caller can report progress or spread chunks over workers.
-NODDI is a port of AMICO 1.5.4; [exes/dwi/amico](../../exes/dwi/amico/README.md) describes it and its parity with AMICO.
+AMICO 1.5.4 remains the default; [exes/dwi/amico](../../exes/dwi/amico/README.md) describes its reference parity. Select the optional nonlinear Watson fit with `noddiModel(bvals, bvecs, { method: 'dmipy' })`. It ports dmipy at `2d6073218eb4ebc97645ac6e275270c36834e33d`; [exes/dwi/dmipy](../../exes/dwi/dmipy/README.md) documents the model, source and independent reference gates. After a nonlinear chunk, `model.diagnostics` reports fitted, skipped and nonconverged voxel counts. Nonpositive first measurements are skipped, as in dmipy; numerical failures reject the chunk.
 `bvecs` is three rows (x, y, z) with one value per volume, as in an FSL `.bvec` file.
 
 ## Shared code
@@ -37,7 +37,7 @@ The web app and the command line run one fit from this package:
 | `src/pipeline.js` | Mean b0, mask indices, BIDS output names and maps |
 | `src/fit-pool.js` | Selects the tensor backend and spreads masked voxels over fitting workers |
 | `src/dtifit.js` | Shared niimath inputs, selected volumes and output conversion |
-| `src/fit-worker.js` | The worker handler: tensor and AMICO on one chunk |
+| `src/fit-worker.js` | The worker handler: tensor and the selected NODDI method on one chunk |
 | `src/node.js`, `src/node-worker.js` | The command line: files, MindGrab on the CPU, `worker_threads` |
 
 The app's Web Workers and the command line's worker threads take the same chunks through the same `noddi.wasm`, so the maps do not depend on the runtime or the number of workers.
@@ -68,8 +68,13 @@ noddi dwi.nii.gz dwi.bval dwi.bvec results --mask brain_mask.nii.gz
 noddi dwi.nii.gz dwi.bval dwi.bvec results --no-mask --threads 8
 noddi dwi.nii.gz dwi.bval dwi.bvec results --no-noddi --tensor-fit ols
 noddi dwi.nii.gz dwi.bval dwi.bvec results --tensor-fit niimath-dtifit
+noddi dwi.nii.gz dwi.bval dwi.bvec results --method dmipy
 noddi self-check
 ```
+
+`--method dmipy` selects the nonlinear fit; omitting it keeps AMICO. The final provenance JSON records the method, pinned dmipy source and aggregate optimizer diagnostics. The same method and diagnostics travel through the app's shared fitting pool.
+
+The actual WASM fits all 13,324 eligible voxels of the maintainer's pinned FA ≥ 0.4 WM mask against the independent dmipy reference. Maximum ICVF, ISOVF and ODI differences are 0.001775, 0.001627 and 0.002245, each below 0.02. Four WASM fits stop without optimizer convergence; their returned maps remain in the comparison. This WM gate does not erase the separate whole-brain optimizer tails documented in the Rust port's report.
 
 By default the brain mask is MindGrab's of the mean b0, as in the web app.
 The command line runs MindGrab's CPU modules through `@neurodesk/node-drivers/mindgrab` (about 2.6 GB of memory); do not run two at once.

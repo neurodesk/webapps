@@ -11,7 +11,9 @@ if [ ! -f "$syncro_build/ants-$syncro_commit/Examples/antsRegistration.cxx" ]; t
   mkdir -p "$syncro_build/ants-$syncro_commit"
   tar -xzf "$syncro_build/ants.tar.gz" --strip-components=1 -C "$syncro_build/ants-$syncro_commit"
 fi
+# Keep the original ANTs build timestamp stable across rebuilds.
 docker run --rm --network none --entrypoint bash \
+  -e SOURCE_DATE_EPOCH=1788904777 \
   -v "$syncro_build:/build" -v "$syncro_root/packages/registration:/source:ro" \
   "$syncro_toolchain" -c "emcmake cmake -S /source -B /build/wasm -DITK_DIR=/ITK-build -DANTS_SOURCE_DIR=/build/ants-$syncro_commit -DCMAKE_BUILD_TYPE=Release && cmake --build /build/wasm -j 1"
 cp "$syncro_build/wasm/syncro-registration.mjs" "$syncro_build/wasm/syncro-registration.wasm" "$syncro_root/packages/registration/wasm/"

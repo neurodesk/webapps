@@ -112,7 +112,9 @@ test('RFC 0010 qualifiers are promoted by the migration mapping and the document
   assert.deepEqual(tool.inputs.input_image.formats, ['nifti', 'gifti', 'neurodesk:custom']);
   assert.equal(tool.inputs.input_image.space, undefined);
   assert.equal(tool.inputs.input_fixed.space, undefined);
-  assert.deepEqual(tool.inputs.input_bval, { ...tool.inputs.input_bval, type: 'neuro:gradient-table', formats: ['bval'] });
+  assert.equal(tool.inputs.input_bval.type, 'neuro:gradient-table');
+  assert.equal(tool.inputs.input_bval.formats, undefined);
+  assert.deepEqual(tool.inputs.input_bval.extensions['neurodesk/data'].formats, ['bval', 'bvals']);
   assert.equal(tool.inputs.input_store.type, 'core:string');
   assert.equal(tool.inputs.input_store.formats, undefined);
   // Two spatial inputs: `subject-1mm` cannot name which one it follows, so it stays in the extension.
@@ -133,7 +135,7 @@ test('RFC 0010 qualifiers are promoted by the migration mapping and the document
   assert.equal(single.outputs.output_labels.resolution, 1);
   const [plain] = generateTools({ ...fixture, operations: { run: { ...fixture.operations.run,
     inputs: { doc: { source: 'url', type: 'neuro:metadata', formats: ['json'], maximum: 1, description: 'Doc' } } } } });
-  assert.equal(plain.neuroflow, '0.1.0');
+  assert.equal(plain.neuroflow, '0.1.1');
 });
 
 test('URL and directory values map to source objects; nested arrays retain their full constraint', () => {
@@ -258,4 +260,15 @@ test('a deadline cancels scientific execution and removes partial outputs', { ti
     NEURODESK_FIXTURE_MODE: 'wait', NEURODESK_TIMEOUT_MS: '2500' }, timeout: 15000 }), /timeout|timed out/i);
   assert.match(await readFile(data.env.NEURODESK_FIXTURE_TRACE, 'utf8'), /cancelled/);
   assert.deepEqual(await readdir(data.output), []);
+});
+
+
+test('explicit artifact encodings survive contract parsing and override MIME inference', () => {
+  const value = structuredClone(fixture);
+  value.operations.run.artifacts.items = {
+    type: 'neuro:volume', mediaType: 'application/octet-stream', formats: ['nii-gz'], minimum: 1, maximum: 1,
+  };
+  const [tool] = generateTools(value);
+  assert.deepEqual(tool.outputs.output_items.formats, ['nii-gz']);
+  assert.deepEqual(tool.outputs.output_items.extensions['neurodesk/data'].formats, ['nii-gz']);
 });

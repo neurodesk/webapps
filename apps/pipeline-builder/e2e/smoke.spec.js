@@ -47,7 +47,7 @@ test("the page publishes a NeuroFlow registry beside itself", async ({ page }) =
   await page.goto("/");
   const index = await page.evaluate(async () => (await fetch("neuroflow/neuroflow-registry.json")).json());
   expect(index.kind).toBe("neuroflow/registry-index");
-  expect(index.workflows).toEqual(["workflows/t1-segmentation.workflow.json"]);
+  expect(index.workflows).toEqual(["workflows/dwi-preprocessing.workflow.json", "workflows/t1-segmentation.workflow.json"]);
   const statuses = await page.evaluate(paths => Promise.all(paths.map(async path => (await fetch(`neuroflow/${path}`)).status)), [...index.tools.slice(0, 3), "scripts/neurodesk.mjs"]);
   expect(statuses).toEqual([200, 200, 200, 200]);
 });
@@ -145,6 +145,29 @@ test("steps chain by compatible outputs and the export validates", async ({ page
   expect(Object.keys(doc.steps)).toEqual(["n4", "brain-extraction"]);
   expect(doc.steps.n4.inputs.input_image).toEqual({ ref: "inputs.image" });
   expect(doc.outputs.brain).toEqual({ type: "neuro:volume", ref: "steps.brain-extraction.outputs.output_brain" });
+});
+
+test("a DWI chain keeps corrected images and matching optional gradients", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#toolSelect")).toBeEnabled();
+  for (const operation of ["dwidenoise/denoise", "degibbs/degibbs", "dwicorrect/correct", "n4/correct", "brain-extraction/extract", "noddi/fit", "dwi2trx/tractography"]) {
+    await page.locator("#toolSelect").selectOption(`neurodesk.webapps/${operation}`);
+    await page.locator("#addStepButton").click();
+  }
+  await expect(page.locator("#bind-input_image")).toHaveValue("steps.n4.outputs.output_image");
+  await expect(page.locator("#bind-input_bval")).toHaveValue("steps.n4.outputs.output_bval");
+  await expect(page.locator("#bind-input_bvec")).toHaveValue("steps.n4.outputs.output_bvec");
+  await expect(page.locator("#bind-input_mask")).toHaveValue("steps.noddi.outputs.output_mask");
+  await expect(page.locator("#bind-input_bval option[value$='output_bvec']")).toHaveCount(0);
+  await expect(page.locator("#bind-input_mask option[value='steps.n4.outputs.output_bias']")).toHaveCount(0);
+  await page.getByRole("button", { name: "n4", exact: true }).click();
+  await expect(page.locator("#bind-input_image")).toHaveValue("steps.dwicorrect.outputs.output_dwi");
+  await page.locator("#workflowDescription").fill("Process diffusion MRI and track streamlines.");
+  await page.locator("#workflowDescription").press("Tab");
+  const doc = await exported(page);
+  expect(doc.steps.dwicorrect.inputs.input_bvec).toEqual({ ref: "steps.degibbs.outputs.output_bvec" });
+  expect(doc.steps.noddi.inputs.input_image).toEqual({ ref: "steps.n4.outputs.output_image" });
+  expect(doc.steps.dwi2trx.inputs.input_bval).toEqual({ ref: "steps.n4.outputs.output_bval" });
 });
 
 test("editing a step keeps its sections as the user left them and keeps focus", async ({ page }) => {

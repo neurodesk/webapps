@@ -419,11 +419,9 @@ pub fn readout_time(img: &Image) -> Option<f64> {
 
 pub const FMAP_FORMS: &str = "supported fieldmaps: phasediff + magnitude1/2 (BIDS case 1, as FSL fsl_prepare_fieldmap/FUGUE), \
 or an opposite-PE epi pair (case 4); see https://fsl.fmrib.ox.ac.uk/fsl/docs/registration/fugue.html";
-pub const PEPOLAR_DEFERRED: &str =
-    "opposite-PE epi (PEPOLAR) correction is not supported in this version";
 
 /// Why a fieldmap group can't be used (None if fine). Only forms seen in test data pass, so unusual preparations
-/// fail loudly instead of silently mis-correcting. A valid PEPOLAR pair is reported as deferred.
+/// fail loudly instead of silently mis-correcting.
 pub fn fieldmap_problem(fmaps: &[Image]) -> Option<String> {
     let by = |s: &str| fmaps.iter().rev().find(|f| f.suffix == s);
     if let Some(pd) = by("phasediff") {
@@ -477,7 +475,11 @@ pub fn fieldmap_problem(fmaps: &[Image]) -> Option<String> {
         .filter_map(|f| f.str("PhaseEncodingDirection"))
         .collect();
     pes.sort();
-    if pes.len() != 2 || pes[0].get(..1) != pes[1].get(..1) || pes[0] == pes[1] {
+    if fmaps.iter().filter(|f| f.suffix == "epi").count() != 2
+        || pes.len() != 2
+        || pes[0].get(..1) != pes[1].get(..1)
+        || pes[0] == pes[1]
+    {
         let got = if pes.is_empty() {
             let mut seen: Vec<&str> = vec![];
             for f in fmaps {
@@ -509,7 +511,83 @@ pub fn fieldmap_problem(fmaps: &[Image]) -> Option<String> {
             set.join(", ")
         ));
     }
-    Some(PEPOLAR_DEFERRED.into())
+    if !matches!(pes[0], "i" | "i-" | "j" | "j-") || !matches!(pes[1], "i" | "i-" | "j" | "j-") {
+        return Some(
+            "PyHySCO PEPOLAR requires i/i- or j/j- phase encoding; k is unsupported".into(),
+        );
+    }
+    if !tros[0].is_some_and(|t| t.is_finite() && t > 0.0) {
+        return Some("PEPOLAR requires a finite positive TotalReadoutTime".into());
+    }
+    let epis: Vec<&Image> = fmaps.iter().filter(|f| f.suffix == "epi").collect();
+    let first = epis[0];
+    for image in &epis {
+        if !(3..=4).contains(&image.hdr.ndim()) || image.hdr.shape[..3].iter().any(|&n| n < 3) {
+            return Some(
+                "PEPOLAR requires 3D or 4D EPI images with at least 3 voxels per spatial axis"
+                    .into(),
+            );
+        }
+        if image.hdr.shape[..3] != first.hdr.shape[..3] {
+            return Some("PEPOLAR EPI images must share a spatial grid".into());
+        }
+        for a in 0..3 {
+            for b in (a + 1)..3 {
+                let norm = |axis: usize| {
+                    image
+                        .hdr
+                        .affine
+                        .iter()
+                        .map(|row| row[axis].powi(2))
+                        .sum::<f64>()
+                        .sqrt()
+                };
+                let cosine = image
+                    .hdr
+                    .affine
+                    .iter()
+                    .map(|row| row[a] * row[b])
+                    .sum::<f64>()
+                    / (norm(a) * norm(b));
+                if !cosine.is_finite() || cosine.abs() > 1e-5 {
+                    return Some("PEPOLAR sheared EPI grids are unsupported".into());
+                }
+            }
+        }
+        for corner in 0..8 {
+            let point = [
+                if corner & 1 == 0 {
+                    0.0
+                } else {
+                    (first.hdr.shape[0] - 1) as f64
+                },
+                if corner & 2 == 0 {
+                    0.0
+                } else {
+                    (first.hdr.shape[1] - 1) as f64
+                },
+                if corner & 4 == 0 {
+                    0.0
+                } else {
+                    (first.hdr.shape[2] - 1) as f64
+                },
+                1.0,
+            ];
+            for row in 0..3 {
+                let delta: f64 = (0..4)
+                    .map(|col| {
+                        point[col] * (image.hdr.affine[row][col] - first.hdr.affine[row][col])
+                    })
+                    .sum();
+                if !delta.is_finite() || delta.abs() > 0.001 {
+                    return Some(
+                        "PEPOLAR EPI images must share a spatial grid (affines differ)".into(),
+                    );
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Group key for a BOLD run: its B0FieldSource, else the group whose IntendedFor names it, else (older datasets)
@@ -921,12 +999,49 @@ mod tests {
         };
         assert_eq!(
             fieldmap_problem(&[epi("AP", "j-"), epi("PA", "j")]).as_deref(),
-            Some(PEPOLAR_DEFERRED)
+            None
         );
         assert!(
             fieldmap_problem(&[epi("AP", "j"), epi("PA", "j")])
                 .unwrap()
                 .contains("one image per polarity")
+        );
+        assert!(
+            fieldmap_problem(&[epi("AP", "k-"), epi("PA", "k")])
+                .unwrap()
+                .contains("k is unsupported")
+        );
+        for readout in [0.0, -0.04] {
+            let make = |pe: &str| {
+                img(
+                    "sub-x/fmap/sub-x_epi.nii.gz",
+                    json!({"PhaseEncodingDirection": pe, "TotalReadoutTime": readout}),
+                )
+            };
+            assert!(
+                fieldmap_problem(&[make("j"), make("j-")])
+                    .unwrap()
+                    .contains("positive")
+            );
+        }
+        let missing = img(
+            "sub-x/fmap/sub-x_epi.nii.gz",
+            json!({"PhaseEncodingDirection": "j-"}),
+        );
+        assert!(
+            fieldmap_problem(&[epi("AP", "j"), missing])
+                .unwrap()
+                .contains("TotalReadoutTime")
+        );
+        let mismatch = img_on(
+            "sub-x/fmap/sub-x_epi.nii.gz",
+            &[4, 5, 6],
+            json!({"PhaseEncodingDirection": "j-", "TotalReadoutTime": 0.04}),
+        );
+        assert!(
+            fieldmap_problem(&[epi("AP", "j"), mismatch])
+                .unwrap()
+                .contains("spatial grid")
         );
         let bold = img_on(
             "sub-x/func/sub-x_bold.nii.gz",

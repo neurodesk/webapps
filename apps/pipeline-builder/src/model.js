@@ -87,11 +87,14 @@ function withStep(doc, stepId, change) {
 
 /**
  * Drop the workflow inputs among `refs` that no step reads any more; an input nobody
- * read before the edit stays. NeuroFlow outputs reference step outputs only, so step
- * bindings are the only readers.
+ * read before the edit stays. Step input bindings and conditions can read workflow
+ * inputs; NeuroFlow outputs reference step outputs only.
  */
 function dropUnread(doc, refs) {
-  const read = new Set(Object.values(doc.steps).flatMap(step => Object.values(step.inputs ?? {}).map(binding => binding.ref)));
+  const read = new Set(Object.values(doc.steps).flatMap(step => [
+    ...Object.values(step.inputs ?? {}).map(binding => binding.ref),
+    step.condition,
+  ]));
   const inputs = Object.fromEntries(Object.entries(doc.inputs ?? {})
     .filter(([name]) => !refs.has(`inputs.${name}`) || read.has(`inputs.${name}`)));
   return { ...doc, inputs };
@@ -109,14 +112,22 @@ function withBinding(doc, stepId, name, binding) {
 /** Workflow inputs, then outputs of the steps before `stepId`, as candidate refs. */
 export function candidateSources(doc, stepId, tools) {
   const byId = new Map(tools.map(tool => [tool.id, tool]));
-  const sources = Object.entries(doc.inputs ?? {}).map(([name, decl]) => ({ ref: `inputs.${name}`, label: `Workflow input ${name}`, type: decl.type }));
+  const sources = Object.entries(doc.inputs ?? {}).map(([name, decl]) => ({ ref: `inputs.${name}`, label: `Workflow input ${name}`, type: decl.type, formats: decl.formats, order: -1 }));
+  let order = 0;
   for (const [id, step] of Object.entries(doc.steps)) {
     if (id === stepId) break;
     for (const [name, decl] of Object.entries(byId.get(step.tool)?.outputs ?? {})) {
-      sources.push({ ref: `steps.${id}.outputs.${name}`, label: `${id} → ${name}`, type: decl.type });
+      sources.push({ ref: `steps.${id}.outputs.${name}`, label: `${id} → ${name}`, type: decl.type, formats: decl.formats, order });
     }
+    order++;
   }
   return sources;
+}
+
+function gradientFormats(decl) {
+  if (!["neuro:gradients", "neuro:gradient-table"].includes(elementType(decl?.type))) return [];
+  return (decl.extensions?.["neurodesk/data"]?.formats ?? decl.formats ?? [])
+    .map(format => format.replace(/^(bval|bvec)s$/, "$1"));
 }
 
 /**
@@ -125,26 +136,46 @@ export function candidateSources(doc, stepId, tools) {
  */
 export function compatibleSources(doc, stepId, name, tools, validate) {
   const path = `steps.${stepId}.inputs.${name}`;
-  return candidateSources(doc, stepId, tools).filter(source => {
+  const decl = tools.find(tool => tool.id === doc.steps[stepId].tool)?.inputs?.[name];
+  const formats = gradientFormats(decl);
+  return candidateSources(doc, stepId, tools).flatMap(source => {
     const { issues = [] } = validate(withBinding(doc, stepId, name, { ref: source.ref }));
-    return !issues.some(issue => issue.severity === "error" && issue.path === path);
-  });
+    if (issues.some(issue => issue.severity === "error" && issue.path === path)) return [];
+    const requiresRuntimeCheck = issues.some(issue => issue.path === path && issue.outcome === "requires-runtime-check")
+      || Boolean(formats.length && !source.formats?.length);
+    return [{ ...source, requiresRuntimeCheck, label: source.label + (requiresRuntimeCheck ? " (needs a run-time check)" : "") }];
+  }).sort((a, b) => Number(a.requiresRuntimeCheck) - Number(b.requiresRuntimeCheck));
 }
 
 /**
- * The source a new step's input starts from: the latest step (or the workflow inputs)
- * offering any compatible source, then a matching name (output_image for input_image),
- * then an exact element type.
+ * Prefer matching roles across all steps, then proximity and an exact element
+ * type. Primary DWI ports use image, images or dwi. SynthSeg accepts an extracted
+ * brain as its primary structural image, as in the shipped T1 workflow.
  */
-export function preferredSource(sources, name, decl) {
+export function preferredSource(sources, name, decl, tool) {
   const origin = source => /^steps\.([^.]+)/.exec(source.ref)?.[1] ?? "";
-  const last = sources.at(-1);
-  if (!last) return undefined;
   const suffix = name.replace(/^input_/, "");
-  const score = source => (source.ref.split(".").pop().replace(/^output_/, "") === suffix ? 2 : 0)
-    + (source.type === elementType(decl.type) ? 1 : 0);
-  return sources.filter(source => origin(source) === origin(last))
-    .reduce((best, source) => (score(source) > score(best) ? source : best));
+  const imageRoles = ["image", "images", "dwi"];
+  const structural = automation(tool ?? {})?.contract.app === "synthseg";
+  const role = source => source.ref.split(".").pop().replace(/^output_/, "");
+  const matches = source => role(source) === suffix
+    || imageRoles.includes(suffix) && (imageRoles.includes(role(source)) || structural && role(source) === "brain");
+  const origins = [...new Set(sources.map(origin))];
+  const eligible = sources.filter(source => {
+    if (decl.optional) return Boolean(origin(source)) && matches(source);
+    if (!imageRoles.includes(suffix)) return true;
+    if (["neuro:mask", "neuro:label-map"].includes(elementType(source.type))) return false;
+    if (origin(source)) return imageRoles.includes(role(source)) || structural && role(source) === "brain";
+    return !/(?:^|[-_])(?:b0|mask|bias|field|fieldmap|sidecar|log|reverse|brain)(?:$|[-_])/.test(role(source));
+  });
+  const rank = source => [Number(matches(source)), source.order ?? origins.indexOf(origin(source)), Number(source.type === elementType(decl.type))];
+  return eligible.reduce((best, source) => {
+    if (!best) return source;
+    const a = rank(source);
+    const b = rank(best);
+    const difference = a.findIndex((value, index) => value !== b[index]);
+    return difference >= 0 && a[difference] > b[difference] ? source : best;
+  }, undefined);
 }
 
 export function bindInput(doc, stepId, name, ref) {
@@ -155,10 +186,21 @@ export function bindInput(doc, stepId, name, ref) {
 export function bindNewWorkflowInput(doc, stepId, name, tool) {
   const decl = tool.inputs[name];
   const inputName = uniqueId(name.replace(/^input_/, ""), new Set(Object.keys(doc.inputs ?? {})));
-  const input = { type: elementType(decl.type) };
+  const input = { type: decl.type };
   if (decl.formats) input.formats = [...decl.formats];
   if (decl.description) input.description = decl.description;
   return bindInput({ ...doc, inputs: { ...doc.inputs, [inputName]: input } }, stepId, name, `inputs.${inputName}`);
+}
+
+/** Bind required inputs and optional inputs with an earlier matching output role. */
+export function autoBind(doc, stepId, tools, validate) {
+  const tool = tools.find(entry => entry.id === doc.steps[stepId].tool);
+  for (const [name, decl] of toolFields(tool).data) {
+    const source = preferredSource(compatibleSources(doc, stepId, name, tools, validate), name, decl, tool);
+    if (source) doc = bindInput(doc, stepId, name, source.ref);
+    else if (!decl.optional) doc = bindNewWorkflowInput(doc, stepId, name, tool);
+  }
+  return doc;
 }
 
 /** A parameter is written only when it differs from the tool default. */
@@ -195,6 +237,73 @@ export function removeStep(doc, stepId) {
   }]));
   const outputs = Object.fromEntries(Object.entries(doc.outputs ?? {}).filter(([, output]) => !output.ref?.startsWith(prefix)));
   return dropUnread({ ...doc, steps, outputs }, new Set(Object.values(removed.inputs ?? {}).map(binding => binding.ref)));
+}
+
+/** Reorder a step without discarding its bindings or the workflow's inputs and outputs. */
+export function moveStep(doc, stepId, direction) {
+  const entries = Object.entries(doc.steps);
+  const index = entries.findIndex(([id]) => id === stepId);
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= entries.length) return doc;
+  [entries[index], entries[next]] = [entries[next], entries[index]];
+  return { ...doc, steps: Object.fromEntries(entries) };
+}
+
+/** Checks the app contract constraints not yet enforced by NeuroFlow's validator. */
+export function workflowIssues(doc, tools) {
+  const byId = new Map(tools.map(tool => [tool.id, tool]));
+  const issues = [];
+  const warn = (code, path, message) => issues.push({ severity: "warning", code, path, message });
+  const declaration = ref => {
+    const input = /^inputs\.([^.]+)$/.exec(ref ?? "");
+    if (input) return doc.inputs?.[input[1]];
+    const output = /^steps\.([^.]+)\.outputs\.([^.]+)$/.exec(ref ?? "");
+    return output && byId.get(doc.steps[output[1]]?.tool)?.outputs?.[output[2]];
+  };
+  for (const [id, step] of Object.entries(doc.steps)) {
+    const tool = byId.get(step.tool);
+    for (const [name, input] of Object.entries(tool?.inputs ?? {})) {
+      const path = `steps.${id}.inputs.${name}`;
+      const binding = step.inputs?.[name];
+      const source = declaration(binding?.ref);
+      // Gradient input formats stay in metadata until the runtime has inspectors.
+      // Known bindings still need the same checks when imported or edited.
+      const expected = gradientFormats(input);
+      const provided = gradientFormats(source);
+      if (expected.length && provided.length && !provided.some(format => expected.includes(format))) {
+        issues.push({
+          severity: "error", code: "formats-incompatible", path,
+          message: `Formats are incompatible: expected ${expected.join(" or ")}, got ${provided.join(" or ")}.`,
+        });
+      }
+      const limits = input.extensions?.["neurodesk/data"];
+      if (limits) {
+        const minimum = limits.minimum ?? 0;
+        const maximum = limits.maximum;
+        const bounded = minimum > 0 || Number.isInteger(maximum);
+        let count;
+        if (!binding) count = 0;
+        else if ("constant" in binding) count = Array.isArray(binding.constant) ? binding.constant.length : 1;
+        else if (source && elementType(source.type) === source.type) count = 1;
+        if (count !== undefined) {
+          if (count < minimum) warn("input-count", path, `Expected at least ${minimum} items; this binding supplies ${count}.`);
+          if (Number.isInteger(maximum) && count > maximum) warn("input-count", path, `Expected at most ${maximum} items; this binding supplies ${count}.`);
+        } else if (source && bounded) {
+          const bounds = [`minimum ${minimum}`, ...(Number.isInteger(maximum) ? [`maximum ${maximum}`] : [])];
+          warn("input-count", path, `Item count needs a run-time check (${bounds.join(", ")}).`);
+        }
+      }
+      if (source?.optional && !input.optional && binding.ref.startsWith("steps.")) {
+        warn("optional-output", path, `${binding.ref} is optional and may be absent when this required input runs.`);
+      }
+    }
+  }
+  for (const [name, output] of Object.entries(doc.outputs ?? {})) {
+    if (declaration(output.ref)?.optional && !output.optional) {
+      warn("optional-output", `outputs.${name}`, `${output.ref} is optional and may not produce this workflow output.`);
+    }
+  }
+  return issues;
 }
 
 /** Issues keyed by step id; workflow-level issues are under "". */

@@ -4,6 +4,9 @@
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
+  - @neurodesk/vesselboost@0.6.20261024
 - Updated dependencies [941884c]
 - Updated dependencies [a028e96]
 - Updated dependencies [650ce5f]
@@ -17,6 +20,19 @@
   - @neurodesk/vesselboost@0.6.20261024
 - Updated dependencies [3fc9cf2]
   - @neurodesk/webapp-components@0.19.1
+  - @neurodesk/vesselboost@0.6.20261024
+- Updated dependencies [328cb77]
+  - @neurodesk/webapp-components@0.20.1
+  - @neurodesk/vesselboost@0.6.20261024
+- Updated dependencies [14a8b29]
+- Updated dependencies [941884c]
+  - @neurodesk/webapp-components@0.20.0
+  - @neurodesk/vesselboost@0.6.20261024
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.3
+  - @neurodesk/vesselboost@0.6.20261024
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.2
   - @neurodesk/vesselboost@0.6.20261024
 
 ## 0.6.20261022
@@ -68,11 +84,6 @@
   - @neurodesk/webapp-components@0.16.3
   - @neurodesk/vesselboost@0.6.20261020
 
-- Updated dependencies [46935f7]
-
-  - @neurodesk/webapp-components@0.16.0
-  - @neurodesk/vesselboost@0.6.20261020
-
 - Updated dependencies [4b40da1]
 
   - @neurodesk/webapp-components@0.17.0
@@ -98,8 +109,6 @@
 - Updated dependencies
   - @neurodesk/webapp-components@0.17.1
   - @neurodesk/vesselboost@0.6.20261020
-- Updated dependencies [14db080]
-
 - Updated dependencies [4b40da1]
 
 - NiiVue moves to 1.0.0-rc.26 in Brain Extraction, Carotid Flow, SYNcro, SynthSeg, White Matter Lesions, and, through the shared FreeBrowse viewer, Spinal Cord Toolbox, DICOM View and TopoFit. From rc.25, NiiVue places a loaded drawing on the right voxels of a sagittal or otherwise permuted image (niivue/mono#251), so the mask editor no longer probes and reverses NiiVue's load on opening a mask. Opening a mask for editing now takes one load instead of up to five on such images. MuscleMap, SeedSeg and VesselBoost run NiiVue 0.68, which already loaded drawings correctly; they pick up the simpler editor.
@@ -108,9 +117,6 @@
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.17.2
-  - @neurodesk/vesselboost@0.6.20261020
-- Updated dependencies
-  - @neurodesk/webapp-components@0.17.1
   - @neurodesk/vesselboost@0.6.20261020
 - Updated dependencies [14db080]
 
@@ -165,30 +171,6 @@
   - @neurodesk/webapp-components@0.14.4
   - @neurodesk/vesselboost@0.6.20261018
 
-- Updated dependencies [b68209b]
-
-  - @neurodesk/webapp-components@0.15.0
-  - @neurodesk/vesselboost@0.6.20261018
-
-- Updated dependencies [67a5a8f]
-
-  - @neurodesk/webapp-components@0.14.4
-  - @neurodesk/vesselboost@0.6.20261018
-
-- Updated dependencies [7c0d201]
-
-  - @neurodesk/webapp-components@0.16.2
-  - @neurodesk/vesselboost@0.6.20261018
-
-- Updated dependencies [46935f7]
-
-  - @neurodesk/webapp-components@0.16.1
-  - @neurodesk/vesselboost@0.6.20261018
-
-- Updated dependencies [3329c39]
-
-  - @neurodesk/webapp-components@0.16.0
-
 - Updated dependencies [b67e4e9]
   - @neurodesk/webapp-components@0.15.1
   - @neurodesk/vesselboost@0.6.20261018
@@ -215,11 +197,6 @@
 - Updated dependencies [7443048]
 
   - @neurodesk/webapp-components@0.14.1
-  - @neurodesk/vesselboost@0.6.20261016
-
-- Updated dependencies
-
-  - @neurodesk/webapp-components@0.14.2
   - @neurodesk/vesselboost@0.6.20261016
 
 - Updated dependencies [7443048]
@@ -338,14 +315,6 @@
 
   - @neurodesk/webapp-components@0.10.2
 
-- Updated dependencies
-
-  - @neurodesk/webapp-components@0.11.0
-
-- Updated dependencies [22aa4bf]
-
-  - @neurodesk/webapp-components@0.11.1
-
 - Updated dependencies [70f2770]
   - @neurodesk/webapp-components@0.10.2
 
@@ -370,10 +339,6 @@
 - Updated dependencies [ec85a09]
 
   - @neurodesk/webapp-components@0.10.0
-
-- Updated dependencies
-
-  - @neurodesk/webapp-components@0.10.1
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.9.0
@@ -498,10 +463,6 @@
 
   - @neurodesk/webapp-components@0.4.3
 
-- Updated dependencies [4959500]
-
-  - @neurodesk/webapp-components@0.4.4
-
 - Updated dependencies
 
   - @neurodesk/webapp-components@0.4.2
@@ -588,10 +549,6 @@
 - Updated dependencies [4add8da]
 
   - @neurodesk/webapp-components@0.1.5
-
-- Updated dependencies
-
-  - @neurodesk/webapp-components@0.1.4
 
 - Updated dependencies [4add8da]
 

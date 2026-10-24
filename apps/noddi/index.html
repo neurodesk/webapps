@@ -27,10 +27,19 @@
       <details class="nd-sidebar-section" id="taskSection" open>
         <summary class="nd-section-title">Models</summary>
         <div class="nd-section-content">
-          <label class="nd-check"><input id="fitNoddi" type="checkbox" checked disabled /> NODDI (AMICO)
+          <label class="nd-check"><input id="fitNoddi" type="checkbox" checked disabled /> NODDI
             <span class="nd-info-icon" tabindex="0" aria-label="About NODDI">i<span class="nd-info-tooltip">NODDI needs two or more non-zero b-value shells. The tensor maps are always made.</span></span>
           </label>
           <p id="noddiNote" class="nd-hint" hidden></p>
+          <div class="nd-field">
+            <label for="noddiMethod">NODDI fit
+              <span class="nd-info-icon" tabindex="0" aria-label="About the NODDI fit">i<span class="nd-info-tooltip">AMICO is the default accelerated fit. Nonlinear dmipy fits the full model and can take longer. Both need at least two non-zero shells.</span></span>
+            </label>
+            <select id="noddiMethod" disabled>
+              <option value="amico" selected>AMICO</option>
+              <option value="dmipy">Nonlinear (dmipy)</option>
+            </select>
+          </div>
           <details class="nd-sidebar-section" id="advancedSettings">
             <summary class="nd-section-title">Advanced settings</summary>
             <div class="nd-section-content">
@@ -68,7 +77,6 @@
         </div>
       </details>
 
-      <button id="aboutBtn" type="button" hidden>About</button>
       <button id="privacyBtn" type="button" hidden>Privacy</button>
     </header>
 
@@ -88,9 +96,6 @@
       <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel fitting" aria-label="Cancel fitting" hidden>×</button>
     </footer>
 
-    <template id="aboutContent">
-      <p>NODDI fits diffusion tensor and NODDI maps to diffusion MRI in this browser. The tensor fit gives FA, MD, AD, RD, S0 and the principal direction from the b0 volumes and the shells up to b = 1200 s/mm² (the lowest shell when none is that low). The tensor fit is weighted least squares (the default), ordinary least squares, or niimath dtifit, which is FSL dtifit's default linear fit as DWI2TRX runs it. niimath dtifit writes no AD or RD map: AD is its first eigenvalue and RD is the mean of the second and third. Where a fit has a negative eigenvalue, niimath sets FA and MD to zero, and the app also sets AD and RD to zero. The app gives niimath unit bvecs, and the direction map has the same axes and sign as the other two fits. A sample of zero or less takes the lowest positive sample of its voxel in the other two fits; niimath uses its own lower limit, so these voxels can have different values. NODDI, fitted with AMICO, gives the intra-cellular volume fraction (ICVF), the isotropic volume fraction (ISOVF) and the orientation dispersion index (ODI). It needs two or more shells. The NODDI fit is a port of AMICO 1.5.4 and agrees with it to a median of 1e-4 in white matter; AMICO 1.5.4 rounds each fibre direction to its 1° lookup table and this port does not. Outputs use the BIDS diffusion derivative names. Fit corrected data: this app does not denoise or correct motion, eddy currents or distortion. A dropped BIDS folder gives each DWI run with its bval and bvec; choose the run when there is more than one.</p>
-    </template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
 
     <script type="module" src="/src/main.js"></script>

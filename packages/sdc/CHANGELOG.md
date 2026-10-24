@@ -2,6 +2,10 @@
 
 ## 0.2.20261024
 
+### Patch Changes
+
+- Add a separately licensed SyN-SDC field-fitting entry point shared by native Rust and WebAssembly. Convert PE displacements to Hz and fit the sdcflows cubic B-spline grid with deterministic reference arithmetic. Require full-brain native coefficient and field parity in CI and verify committed WASM rebuilds byte for byte.
+
 ## 0.2.20261022
 
 ## 0.2.20261020

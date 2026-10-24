@@ -1,5 +1,33 @@
 # @neurodesk/fastprep
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
+  - @neurodesk/sdc@0.2.20261024
+
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [328cb77]
+  - @neurodesk/webapp-components@0.20.1
+  - @neurodesk/sdc@0.2.20261024
+
+## 0.2.1
+
+### Patch Changes
+
+- @neurodesk/sdc@0.2.20261024
+
+## 0.2.0
+
+### Minor Changes
+
+- Estimate PEPOLAR fields from validated reverse phase-encoding EPI references using the existing PyHySCO solver, with a lazy browser runtime and Jacobian-modulated BOLD correction. Preserve phasediff processing and document the deliberate difference from Python's SuCor method.
+
 ## 0.1.20261018
 
 ### Patch Changes

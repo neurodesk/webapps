@@ -11,14 +11,14 @@ export const B0_MAX = 50;
  * series (the one with a bval) when exactly one has a bval, otherwise the first by name.
  * @param series [{ image: File, sidecar, bval: File|null }]
  */
-export function selectPair(series) {
+export function selectPair(series, { ordered = false } = {}) {
   const candidates = series.filter((entry) => entry.sidecar?.PhaseEncodingDirection);
   const missing = series.filter((entry) => !entry.sidecar?.PhaseEncodingDirection).map((entry) => entry.image.name);
   if (candidates.length !== 2) {
     const without = missing.length ? ` ${missing.join(", ")} ${missing.length === 1 ? "has" : "have"} no sidecar with PhaseEncodingDirection.` : "";
     throw new Error(`Choose two images with opposite phase-encoding directions, each with its JSON sidecar; this selection has ${candidates.length}.${without}`);
   }
-  const [a, b] = [...candidates].sort((x, y) => x.image.name.localeCompare(y.image.name));
+  const [a, b] = ordered ? candidates : [...candidates].sort((x, y) => x.image.name.localeCompare(y.image.name));
   const subjects = new Set([a, b].map((entry) => parseBidsName(entry.image.name).entities.sub).filter(Boolean));
   if (subjects.size > 1) throw new Error("The images must belong to the same subject.");
   for (const entry of [a, b]) phaseEncoding(entry.sidecar.PhaseEncodingDirection);
@@ -34,7 +34,7 @@ export function selectPair(series) {
   if (a.sidecar.TotalReadoutTime !== b.sidecar.TotalReadoutTime) {
     throw new Error("The images need the same TotalReadoutTime: PyHySCO assumes equal and opposite displacements.");
   }
-  return a.bval || !b.bval ? [a, b] : [b, a];
+  return ordered || a.bval || !b.bval ? [a, b] : [b, a];
 }
 
 /** Give flat BIDS-named files their declared subject/session layout for the shared reader. */

@@ -1,0 +1,13 @@
+[package]
+name = "dwi-dmipy"
+version.workspace = true
+edition.workspace = true
+license = "MIT AND BSD-3-Clause"
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+dwi-gp = { path = "../gp" }
+
+[dev-dependencies]
+serde_json = { version = "1", features = ["float_roundtrip"] }

@@ -22,7 +22,7 @@ export function fitWorkerHandler(wasm, post) {
       if (message.type === "init") {
         api = await loadNoddi(wasm());
         settings = message;
-        model = message.noddi ? api.noddiModel(message.bvals, message.bvecs) : null;
+        model = message.noddi ? api.noddiModel(message.bvals, message.bvecs, { method: message.method }) : null;
         post({ type: "ready" });
         return;
       }
@@ -30,7 +30,7 @@ export function fitWorkerHandler(wasm, post) {
         const { bvals, bvecs, weighted } = settings;
         const tensor = settings.tensor === false ? null : api.dtiFit(message.data, message.voxels, bvals, bvecs, { weighted });
         const noddi = model ? model.fit(message.data, message.voxels) : null;
-        post({ type: "done", id: message.id, tensor, noddi }, [...transferables(tensor), ...transferables(noddi)]);
+        post({ type: "done", id: message.id, tensor, noddi, noddiDiagnostics: model?.diagnostics }, [...transferables(tensor), ...transferables(noddi)]);
       }
     } catch (error) {
       post({ type: "error", message: error?.message ?? String(error) });

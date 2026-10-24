@@ -27,7 +27,7 @@ const workspace = mountImagingWorkspace({
   status: "#status",
   title: APP.id,
   subtitle: "fMRI preprocessing in your browser",
-  controlsContract: { about: "#aboutBtn", privacy: "#privacyBtn" },
+  controlsContract: { privacy: "#privacyBtn" },
 });
 $("viewer").prepend(createViewerToolbar({ window: false, overlay: false, colormap: false, download: false, screenshot: false }));
 const log = createConsole({ id: "technicalLog", resizable: true });
@@ -35,7 +35,6 @@ $("viewer").append(log);
 const progress = new ProgressManager();
 bindInfoTooltips(document);
 const info = createInfoDialog();
-$("aboutBtn").onclick = () => info.open(`About ${APP.id}`, $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 
 let dataset = null; // [[relative path, File]]

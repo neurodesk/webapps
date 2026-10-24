@@ -10,6 +10,11 @@ import { inventoryFiles, verifyBundle } from '../../packages/desktop/src/bundle.
 import { openDesktop } from '../../packages/desktop/neuroflow/runtime/stdio.mjs';
 import { readVolume } from '../../packages/synthsr/src/volume.js';
 
+if (process.argv.includes('--t1') || process.argv.includes('--dwi')) {
+  await import('./neuroflow-template-smoke.mjs');
+  process.exit(0);
+}
+
 const executable = process.env.NEUROFLOW_MCP_BIN;
 assert.ok(executable, 'Set NEUROFLOW_MCP_BIN to the upstream neuroflow-mcp executable');
 const root = resolve(import.meta.dirname, '../..');

@@ -4,12 +4,12 @@
     "t1_brain.nii.gz": "553e242f330381aa7a5bdac5db27e971d9ee8001e63375d3b01fb00ec0e31bff",
     "MNI152_T1_1mm_brain.nii.gz": "32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212"
   },
-  "registrationWasmSha256": "23cb91e0a9363cce16581d459ee52dabbf35538a2ad4ed565d2d83cd4a116348",
+  "registrationWasmSha256": "0583607d257eb0913bc7b7bef5c4846f99e802a4766c2c3558b6373909e78c72",
   "browser": {
     "path": "apps/ants/e2e/reference.spec.js: the app's register automation, registration worker, built assets",
-    "app": "ants 0.3.20261007",
-    "browser": "Chromium 153.0.8010.12",
-    "seconds": 125,
+    "app": "ants 0.5.20261024",
+    "browser": "Chromium 156.0.8078.4",
+    "seconds": 258,
     "artifacts": {
       "registered": {
         "geometry": {

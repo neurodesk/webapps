@@ -1,0 +1,113 @@
+{
+  "base": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/7597121ce25529f9a819c0635da88fee6f2ac73c/noddi/validation/dmipy/",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 7399,
+      "sha256": "2b2ac764917c69b4af25835c80b5728895114d185a5b0404aab93be3197ffb4c"
+    },
+    {
+      "path": "SHA256SUMS",
+      "bytes": 1537,
+      "sha256": "b67e1af1a68f84774cfec8d7ff2362bd09d5cd50ef4be71f38f1c34b56b7e14d"
+    },
+    {
+      "path": "compare_app.py",
+      "bytes": 1865,
+      "sha256": "0b3eca167d0584b4fa84a77d2880f77894f72a9607001035881e878a51979f45"
+    },
+    {
+      "path": "fit_dmipy_noddi.py",
+      "bytes": 6249,
+      "sha256": "68e8599832c0312995eefb3b92f619d1b056b441edf2f21aa919efe286ad9bb6"
+    },
+    {
+      "path": "requirements.lock.txt",
+      "bytes": 487,
+      "sha256": "7d44b32799bb59a8bf1b70bd7af995c88d01ca610199b8215ec248b95839d588"
+    },
+    {
+      "path": "run.sh",
+      "bytes": 1626,
+      "sha256": "6ecf38e34425b7e5203441456e401b9901f3ee2222943d819aed447800768f93"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_desc-brain_mask.nii.gz",
+      "bytes": 1840,
+      "sha256": "18781033cb63ac5f3637f43f1faaf76ea3eb6fe72d4b3c03153bf0df871c66aa"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_desc-dmipy_parameters.npz",
+      "bytes": 2551936,
+      "sha256": "ee3dc33ce6ffc1319ab42cfc13e0cf37d2f7b8dbc2168c33516ebb3e919c9264"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_desc-dmipy_provenance.json",
+      "bytes": 637,
+      "sha256": "750f26a536ca27af680f3ab4a91e086dcf1d92b8ae7248394b1b323149a5eeda"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-direction_dwimap.nii.gz",
+      "bytes": 525911,
+      "sha256": "dfb5f3c76d58938de76085e75a2b3cd79bcc23aaf7d51ba6786a8a978c73e1d8"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-icvf_dwimap.nii.gz",
+      "bytes": 156476,
+      "sha256": "e8ec2b988edd5ceaa34b36e711a95bad994f1b91e1a9afee918f33bcb4cdbd9e"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-isovf_dwimap.nii.gz",
+      "bytes": 138150,
+      "sha256": "11b73a02a5aee48abb82c891cdef14f6bd8553be55931fb41534cb5a80f46799"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-mse_dwimap.nii.gz",
+      "bytes": 170783,
+      "sha256": "54b909ce2d48949b826f78ff7877eb8d39128e90055191f0d948e2537a30e555"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-odi_dwimap.nii.gz",
+      "bytes": 168948,
+      "sha256": "f1ba47e6cc82f8d624e325a51ed54c0317cea0f1c7d3a4c4136c1915e39a5c2d"
+    },
+    {
+      "path": "sub-01_dir-AP_desc-slab_model-noddi_param-r2_dwimap.nii.gz",
+      "bytes": 160911,
+      "sha256": "57b3eefe2b0556e11f3005da7e8c50029a33855a9cbee6a32507c3aef005ae61"
+    }
+  ],
+  "inputs": [
+    {
+      "role": "image",
+      "name": "sub-01_dir-AP_desc-slab_dwi.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.nii.gz",
+      "sha256": "1e7c8461d9bfc3c80633f930dc1df16d892a6bfd5e15db4c5a2be9d021e48d00",
+      "bytes": 8353126,
+      "path": "input/sub-01_dir-AP_desc-slab_dwi.nii.gz"
+    },
+    {
+      "role": "bval",
+      "name": "sub-01_dir-AP_desc-slab_dwi.bval",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.bval",
+      "sha256": "5f990dc6bfeb61653df62e49437d1e71c1a4e4d487c478c7dd7571307566ff19",
+      "bytes": 634,
+      "path": "input/sub-01_dir-AP_desc-slab_dwi.bval"
+    },
+    {
+      "role": "bvec",
+      "name": "sub-01_dir-AP_desc-slab_dwi.bvec",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.bvec",
+      "sha256": "7141cc17a90f78c29dbdc1218755081d51c93988d139886fcb9871d9e3fdfd6d",
+      "bytes": 3619,
+      "path": "input/sub-01_dir-AP_desc-slab_dwi.bvec"
+    },
+    {
+      "role": "wm",
+      "path": "wm-mask.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/295e32650e9e28397909caff4b9741ee95a422c0/noddi/wm-mask/sub-01_dir-AP_desc-slab_desc-fa04wm_mask.nii.gz",
+      "bytes": 9278,
+      "sha256": "81dc930221f88dbea1b9717673576c154d62ce62cf78f025e7d72097837bf44b"
+    }
+  ]
+}

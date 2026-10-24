@@ -102,3 +102,17 @@ test("kernel URLs travel with each message", async () => {
   assert.deepEqual(workers[0].received[0].message.kernel, kernel);
   await pool.close();
 });
+
+test("an abort during input preparation rejects the task before posting to the terminated worker", { timeout: 1000 }, async () => {
+  const { spawn, workers } = fakeSpawner();
+  const controller = new AbortController();
+  const pool = createRegistrationPool({ spawn, workers: 1, signal: controller.signal });
+  await assert.rejects(pool.run({ argv: ["x"], inputs: () => {
+    controller.abort();
+    return { "a.nii": new Uint8Array([1]) };
+  } }), { name: "AbortError" });
+  assert.equal(workers.length, 1);
+  assert.equal(workers[0].terminated, true);
+  assert.deepEqual(workers[0].received, []);
+  await pool.close();
+});

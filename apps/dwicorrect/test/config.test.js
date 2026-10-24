@@ -25,6 +25,8 @@ test("automation declares every artifact role the run returns", () => {
   const declared = Object.keys(automation.operations.correct.artifacts).sort();
   const block = main.slice(main.indexOf("const rows = {"), main.indexOf("const summary = motionSummary"));
   const returned = [...block.matchAll(/(\w+): \{ description:/g)].map((match) => match[1]).sort();
+  returned.push(...[...block.matchAll(/rows\["([a-z0-9-]+)"\] = \{/g)].map(match => match[1]));
+  returned.sort();
   assert.ok(returned.includes("fieldSidecar"), returned.join(", "));
   assert.deepEqual(returned, declared);
 });

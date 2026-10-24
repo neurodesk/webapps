@@ -1,0 +1,113 @@
+diff --git a/src/main/compute_metrics_ccjacs.h b/src/main/compute_metrics_ccjacs.h
+index 1b6943d..3322ced 100755
+--- a/src/main/compute_metrics_ccjacs.h
++++ b/src/main/compute_metrics_ccjacs.h
+@@ -416,7 +416,7 @@ float ComputeMetric_CCJacS(const ImageType3D::Pointer up_img, const ImageType3D:
+                                                    def_FINV,
+                                                    current_Gaussian_operator,
+                                                    updateF,
+-                                                   phase,phase_xyz,new_phase_vector);
++                                                   phase,phase_xyz,new_phase_vector.as_vector());
+ 
+                     float mv2= ComputeUpdateCCJacS(index,
+                                                    down_img,  downgrad_img,
+@@ -424,7 +424,7 @@ float ComputeMetric_CCJacS(const ImageType3D::Pointer up_img, const ImageType3D:
+                                                    def_MINV,
+                                                    current_Gaussian_operator,
+                                                    updateM,
+-                                                   phase,phase_xyz,new_phase_vector);
++                                                   phase,phase_xyz,new_phase_vector.as_vector());
+ 
+                     updateFieldF->SetPixel(index,updateF);
+                     updateFieldM->SetPixel(index,updateM);
+@@ -803,7 +803,7 @@ float ComputeMetric_CCJacSSingle(const ImageType3D::Pointer up_img, const ImageT
+                                                    def_FINV,
+                                                    current_Gaussian_operator,
+                                                    updateFINV,
+-                                                   phase,phase_xyz,new_phase_vector);
++                                                   phase,phase_xyz,new_phase_vector.as_vector());
+ 
+                     float mv2= ComputeUpdateCCJacSSingle(index,
+                                                    down_img,  down_img_gradient,
+@@ -811,7 +811,7 @@ float ComputeMetric_CCJacSSingle(const ImageType3D::Pointer up_img, const ImageT
+                                                    def_MINV,
+                                                    current_Gaussian_operator,
+                                                    updateMINV,
+-                                                   phase,phase_xyz,new_phase_vector);
++                                                   phase,phase_xyz,new_phase_vector.as_vector());
+ 
+                     updateFieldINV->SetPixel(index,updateFINV-updateMINV);
+                     m_MetricImage->SetPixel(index,mv1+mv2);
+diff --git a/src/main/compute_metrics_msjac.h b/src/main/compute_metrics_msjac.h
+index db551ac..fc77c9b 100755
+--- a/src/main/compute_metrics_msjac.h
++++ b/src/main/compute_metrics_msjac.h
+@@ -273,7 +273,7 @@ float ComputeMetric_MSJac(const ImageType3D::Pointer up_img, const ImageType3D::
+                                              def_FINV,def_MINV,
+                                              current_Gaussian_operator,
+                                              updateF,updateM,
+-                                             phase,phase_xyz, new_phase_vector);
++                                             phase,phase_xyz, new_phase_vector.as_vector());
+ 
+                 updateFieldF->SetPixel(index,updateF);
+                 updateFieldM->SetPixel(index,updateM);
+@@ -599,7 +599,7 @@ float ComputeMetric_MSJacSingle(const ImageType3D::Pointer up_img, const ImageTy
+                                              def_FINV,
+                                              current_Gaussian_operator,
+                                              update,
+-                                             phase,phase_xyz, new_phase_vector);
++                                             phase,phase_xyz, new_phase_vector.as_vector());
+ 
+                 updateFieldFINV->SetPixel(index,update);
+                 m_MetricImage->SetPixel(index,mv);
+diff --git a/src/main/run_drbuddi_stage.cxx b/src/main/run_drbuddi_stage.cxx
+index f2365e0..0bc1f22 100755
+--- a/src/main/run_drbuddi_stage.cxx
++++ b/src/main/run_drbuddi_stage.cxx
+@@ -621,7 +621,7 @@ void DRBUDDIStage::RunDRBUDDIStage()
+                     metric_value = ComputeMetric_CCJacS(warped_up_img,warped_down_img,this->resampled_smoothed_str_images[met],
+                                                               tot_finv, tot_minv,
+                                                               updateFieldF_temp,  updateFieldM_temp,
+-                                                              this->up_phase_vector,
++                                                              this->up_phase_vector.as_vector(),
+                                                               Goper );
+                 }
+ 
+@@ -633,7 +633,7 @@ void DRBUDDIStage::RunDRBUDDIStage()
+                     metric_value = ComputeMetric_MSJac(warped_up_img,warped_down_img,
+                                                    tot_finv , tot_minv ,
+                                                    updateFieldF_temp,  updateFieldM_temp,
+-                                                   this->up_phase_vector,
++                                                   this->up_phase_vector.as_vector(),
+                                                    Goper );
+             }
+             if(this->settings->metrics[met].MetricType== DRBUDDIMetricEnumeration::CC)
+@@ -663,8 +663,8 @@ void DRBUDDIStage::RunDRBUDDIStage()
+ 
+         if(this->settings->restrct)
+         {            
+-            RestrictPhase(updateFieldF,phase_xyz);
+-            RestrictPhase(updateFieldM,phase_xyz);
++            RestrictPhase(updateFieldF,phase_xyz.as_vector());
++            RestrictPhase(updateFieldM,phase_xyz.as_vector());
+         }
+ 
+         float best_lr=this->settings->learning_rate;
+@@ -807,7 +807,7 @@ void DRBUDDIStage::RunDRBUDDIStage()
+                         mv2 = ComputeMetric_CCJacS(warped_up_temp,warped_down_temp,str_img,
+                                                    f2midtotal_inv , m2midtotal_inv ,
+                                                    dummyf,  dummym,
+-                                                   this->up_phase_vector,
++                                                   this->up_phase_vector.as_vector(),
+                                                    Goper );
+ 
+                         if(mv2<best_mv2)
+@@ -821,7 +821,7 @@ void DRBUDDIStage::RunDRBUDDIStage()
+                         mv1 = ComputeMetric_MSJac(warped_up_temp,warped_down_temp,
+                                                        f2midtotal_inv , m2midtotal_inv ,
+                                                        dummyf,  dummym,
+-                                                       this->up_phase_vector,
++                                                       this->up_phase_vector.as_vector(),
+                                                        Goper );
+                         if(mv1<best_mv1)
+                         {

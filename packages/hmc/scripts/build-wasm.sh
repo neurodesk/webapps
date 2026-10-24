@@ -33,7 +33,7 @@ fi
 repo="$(cd ../.. && pwd)"
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN"
-# --max-memory: one 3D volume at a time; 1 GiB holds a 256 x 256 x 256 float64 clip with room.
+# --max-memory bounds the model heap. The full ds005577 GP series and one fit are validated at 1 GiB.
 export RUSTFLAGS="--remap-path-prefix=$repo=/webapps --remap-path-prefix=$cargo_home=/cargo -C link-arg=--max-memory=1073741824"
 
 scratch="$(mktemp -d -t hmc-wasm.XXXXXX)"

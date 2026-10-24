@@ -180,3 +180,29 @@ fn glm_resume_tracks_bold_sidecar() {
         assert!(!ctx.run(argv, &outs, None, None).await.unwrap());
     });
 }
+
+#[test]
+fn pepolar_solver_resolves_from_fastprep_home_bin_and_receives_argv() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::new("pepolar-tool");
+    let bin = fixture.0.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let solver = bin.join("sdc");
+    fs::write(&solver, "#!/bin/sh\nprintf '%s\\n' \"$@\"\n").unwrap();
+    fs::set_permissions(&solver, fs::Permissions::from_mode(0o755)).unwrap();
+    let mut host = fixture.host();
+    host.bin = bin;
+    let step = Step {
+        argv: [
+            "sdc", "pyhysco", "a.nii.gz", "b.nii.gz", "pair", "--pe1", "j-", "--pe2", "j", "--trt",
+            "0.04",
+        ]
+        .map(String::from)
+        .to_vec(),
+        fsl_out: None,
+        gpu: false,
+    };
+    let result = block_on(host.run(&step)).unwrap();
+    assert_eq!(result.code, 0);
+    assert_eq!(result.stdout.lines().collect::<Vec<_>>(), step.argv[1..]);
+}

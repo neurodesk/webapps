@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createRegistration } from './index.js';
 
-export const REGISTRATION_WASM_SHA256 = '23cb91e0a9363cce16581d459ee52dabbf35538a2ad4ed565d2d83cd4a116348';
+export const REGISTRATION_WASM_SHA256 = '0583607d257eb0913bc7b7bef5c4846f99e802a4766c2c3558b6373909e78c72';
 
 // Bundlers that copy the kernel elsewhere (SYNcro's dist/) pass their own locations.
 export const KERNEL = Object.freeze({

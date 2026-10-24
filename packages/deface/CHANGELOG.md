@@ -4,11 +4,18 @@
 
 ### Patch Changes
 
+- @neurodesk/runtime-support@0.9.14
 - Updated dependencies [5b5ff35]
   - @neurodesk/node-drivers@0.3.0
   - @neurodesk/runtime-support@0.9.11
 - @neurodesk/runtime-support@0.9.10
 - @neurodesk/runtime-support@0.9.9
+- @neurodesk/runtime-support@0.9.13
+- @neurodesk/runtime-support@0.9.12
+- @neurodesk/runtime-support@0.9.11
+- Updated dependencies [5b5ff35]
+  - @neurodesk/node-drivers@0.3.0
+  - @neurodesk/runtime-support@0.9.10
 
 ## 1.4.20261022
 
@@ -43,10 +50,6 @@
 
 - Updated dependencies [d1fa022]
 
-  - @neurodesk/runtime-support@0.8.0
-
-- Updated dependencies [d1fa022]
-
   - @neurodesk/runtime-support@0.9.3
 
 - Updated dependencies [d1fa022]
@@ -61,12 +64,8 @@
 
 - Updated dependencies
   - @neurodesk/runtime-support@0.9.5
-- @neurodesk/runtime-support@0.9.4
-
 - Updated dependencies
   - @neurodesk/runtime-support@0.9.6
-- Updated dependencies
-  - @neurodesk/runtime-support@0.9.5
 - @neurodesk/runtime-support@0.9.4
 
 ## 1.4.20261019
@@ -114,26 +113,6 @@
 
 - Updated dependencies [67a5a8f]
 
-- Updated dependencies [b8b37d6]
-
-  - @neurodesk/runtime-support@0.7.0
-
-- Updated dependencies [b68209b]
-
-  - @neurodesk/runtime-support@0.7.1
-
-- Updated dependencies [b8b37d6]
-
-  - @neurodesk/runtime-support@0.7.0
-
-- Updated dependencies
-
-  - @neurodesk/runtime-support@0.9.0
-
-- Updated dependencies [a07f659]
-
-  - @neurodesk/runtime-support@0.8.0
-
 - Updated dependencies [b67e4e9]
   - @neurodesk/runtime-support@0.7.2
 
@@ -153,11 +132,6 @@
 
 - Updated dependencies
 
-  - @neurodesk/runtime-support@0.6.3
-
-- @neurodesk/runtime-support@0.6.2
-
-- Updated dependencies
   - @neurodesk/runtime-support@0.6.3
 
 ## 1.4.20261015
@@ -190,14 +164,6 @@
 - a1a9b25: Let Deface archive validation use the launcher's bundled model directory instead
   of supplying an empty temporary override. Source validation retains its temporary
   template cache, and explicit model-directory overrides remain respected.
-
-- Updated dependencies [0569da8]
-
-  - @neurodesk/runtime-support@0.6.0
-
-- Updated dependencies [c74b26f]
-
-  - @neurodesk/runtime-support@0.6.1
 
 - Updated dependencies [0569da8]
   - @neurodesk/runtime-support@0.6.0

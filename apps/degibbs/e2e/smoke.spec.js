@@ -210,15 +210,17 @@ test("cancelling during image reading prevents a late commit and permits retry",
 
 test("the automation operation returns the image, gradients and acquisition sidecar", async ({ page }) => {
   const series = squareSeries();
-  series.files.push({
-    name: "sub-01_dwi.json",
+  const acquisition = {
+    name: "upstream_acquisition.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify({ SliceEncodingDirection: "k", PhaseEncodingDirection: "j-", TotalReadoutTime: 0.05 })),
-  });
+  };
   await page.goto("/");
   await page.locator("#neurodesk-input-transfer").setInputFiles(series.files);
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" }));
+  await page.locator("#neurodesk-input-transfer").setInputFiles(acquisition);
   await page.evaluate(async () => {
-    await globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" });
+    await globalThis.neurodeskAutomation.dispatch("adopt", { role: "sidecar" });
     await globalThis.neurodeskAutomation.dispatch("start", {});
   });
   await expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state), { timeout: 60000 }).toBe("succeeded");

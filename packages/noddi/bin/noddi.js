@@ -8,7 +8,7 @@ const HELP = `Usage: noddi DWI.nii[.gz] BVAL BVEC OUTPUT_DIR [options]
        noddi download-models [--cache-dir DIR]
 
 Fits the diffusion tensor and, when the data has two or more b-value shells,
-NODDI (a port of AMICO 1.5.4), as the NODDI web app does: the same
+NODDI (AMICO 1.5.4 by default, or dmipy nonlinear), as the NODDI web app does: the same
 WebAssembly module, inside a MindGrab brain mask of the mean b0. MindGrab runs
 on the CPU here (about 2.6 GB of memory); the web app prefers the GPU.
 
@@ -27,6 +27,7 @@ Options:
   --mask FILE         Use this brain mask (on the diffusion grid) instead of MindGrab
   --no-mask           Fit every voxel, without a brain mask
   --no-noddi          Fit the tensor only
+  --method TYPE       amico (default) or dmipy (nonlinear Watson NODDI)
   --tensor-fit TYPE   wls (weighted least squares, default), ols or niimath-dtifit
   --threads N         Worker threads for the fit (default: one per core)
   -h, --help          Show this help
@@ -45,6 +46,7 @@ try {
       mask: { type: 'string' },
       'no-mask': { type: 'boolean' },
       'no-noddi': { type: 'boolean' },
+      method: { type: 'string' },
       'tensor-fit': { type: 'string' },
       threads: { type: 'string' },
       'cache-dir': { type: 'string' },
@@ -73,6 +75,7 @@ try {
       maskFile: values.mask,
       noMask: values['no-mask'] ?? false,
       noddi: !values['no-noddi'],
+      method: values.method ?? 'amico',
       tensorFit: values['tensor-fit'] ?? 'wls',
       threads: values.threads === undefined ? undefined : Number(values.threads),
       onProgress: (line) => process.stderr.write(`${line}\n`),

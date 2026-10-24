@@ -23,7 +23,7 @@ import {
 import { gzipFile, sidecarText } from "@neurodesk/webapp-components/file-io/bids-derivatives";
 import { binaryMask, readBrainMask } from "@neurodesk/webapp-components/file-io/brain-mask";
 import { bidsDiffusionSeries, chooseBidsRun, chosenBidsRun } from "@neurodesk/webapp-components/file-io/bids";
-import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
+import { imageFiles, registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { readDiffusionSeries, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { brainMask, mindgrab } from "@neurodesk/runtime-support/mindgrab";
 import { divideVolumes, rescaleBias } from "@neurodesk/n4";
@@ -374,8 +374,7 @@ registerAppAutomation({
   convertDicom: runDcm2niix,
   operations: {
     correct: async ({ inputs, inputDetails, signal }) => {
-      const sidecars = inputDetails.image?.sidecars ?? [];
-      await loadFiles(Promise.resolve([...inputs.image, ...sidecars, ...(inputs.bval ?? []), ...(inputs.bvec ?? [])]), signal);
+      await loadFiles(Promise.resolve(imageFiles(inputs, inputDetails)), signal);
       if (inputs.mask?.length) await loadMask(inputs.mask[0], signal);
       return correct(signal);
     },

@@ -33,6 +33,17 @@ SUBSETS = {
         # #463: the deterministic ports against the double seed-1234 2 mm run, and the
         # DWI unwarp with jacobian=True from its coefficients.
         "reference-run": ["input/*", "mask/*", "std2anat/affine/*", REF + "*"],
+        "field-fit": [
+            "input/sub-01_dir-AP_run-001_dwi.json",
+            "mask/sub-01_dir-AP_run-001_desc-meanb0_dwiref.nii",
+            "mask/sub-01_dir-AP_run-001_desc-mindgrab_mask.nii.gz",
+            REF + "work/sdc_ref/syn_preprocessing_wf/sampling_ref/clipped_reference.nii.gz",
+            REF + "work/sdc_ref/syn_sdc_wf/syn/fmap_syn0Warp.nii.gz",
+            REF + "work/sdc_ref/syn_sdc_wf/extract_field/fmap_syn0Warp_Hz.nii.gz",
+            REF + "work/sdc_ref/syn_sdc_wf/zooms_field/fmap_syn0Warp_Hz_trans.nii.gz",
+            REF + "work/sdc_ref/syn_sdc_wf/bs_filter/fmap_syn0Warp_Hz_trans_coeff000.nii.gz",
+            REF + "work/sdc_ref/syn_sdc_wf/bs_filter/fmap_syn0Warp_Hz_trans_field.nii.gz",
+        ],
         # #462: the seed spread and the native float run of the Q66 gate, end to end and
         # SyN-only (the replays on the seed-1234 preprocessing outputs).
         "gate": [

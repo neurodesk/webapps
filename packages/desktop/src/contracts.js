@@ -84,6 +84,7 @@ const operationSchema = z.strictObject({
   artifacts: z.record(fieldName, z.strictObject({
     type: z.union([semanticType, z.array(semanticType).min(1)]),
     mediaType: z.string().min(1),
+    formats: z.array(z.string().regex(/^[a-z0-9-]+$/)).min(1).optional(),
     space: z.string().optional(),
     labelSystem: z.string().optional(),
     minimum: z.number().int().nonnegative().default(1),

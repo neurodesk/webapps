@@ -86,6 +86,31 @@ test('an extracted pack resolves every model of the package without models, offl
   assert.deepEqual((await readdir(join(root, 'cache'))).sort(), [hash(head), hash(tail)].sort());
 });
 
+test('the pack omits models whose shared bytes must remain in the smaller package', async t => {
+  const { root, full, light, muscle, solo } = await fixture(t);
+  const bundle = await loadBundle(full);
+  bundle.assets['https://examples.example/weights'] = { ...bundle.assets[soloUrl], kind: 'example' };
+  bundle.assets['https://runtime.example/weights'] = { ...bundle.assets[muscleUrl], kind: 'runtime' };
+  const separate = Buffer.from('a model used only for inference');
+  const separateHash = hash(separate);
+  bundle.assets['https://models.example/separate.onnx'] = {
+    sha256: separateHash, bytes: separate.length, kind: 'model', path: `assets/${separateHash}`,
+  };
+  await writeFile(join(full, `assets/${separateHash}`), separate);
+  await writeFile(join(full, 'manifest.json'), JSON.stringify(bundle));
+  await withoutModels(full, light);
+  const archive = join(root, 'release/models.tar.gz');
+  const { models } = await modelsPack(full, light, archive, join(root, 'release/github'), { version: '0.1.20260915' });
+  assert.deepEqual(models, [separateHash]);
+  assert.deepEqual(execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' }).trim().split('\n'), [separateHash]);
+  assert.deepEqual(await readFile(join(light, `assets/${hash(solo)}`)), solo);
+  assert.deepEqual(await readFile(join(light, `assets/${hash(muscle)}`)), muscle);
+  const resolver = createModelResolver(light, await loadBundle(light), join(root, 'cache'), {
+    fetchModel: () => { throw new Error('Shared models must not require a download'); },
+  });
+  assert.deepEqual(await readFile(await resolver.file('site/demo/musclemap-wholebody-v1.4-fp32.part-00')), muscle.subarray(0, 20));
+});
+
 test('a model whose bytes drifted from the pinned hash stops the pack', async t => {
   const { root, full, light } = await fixture(t);
   const bundle = await loadBundle(full);

@@ -51,3 +51,14 @@ human brain. NeuroImage 61(4):1000-1016.
 Daducci A, Canales-Rodriguez EJ, Zhang H, Dyrby TB, Alexander DC, Thiran JP
 (2015). Accelerated Microstructure Imaging via Convex Optimization (AMICO)
 from diffusion MRI data. NeuroImage 105:32-44.
+
+The optional nonlinear fit (exes/dwi/dmipy) ports NODDI-Watson and brute2fine
+from AthenaEPI/dmipy@2d6073218eb4ebc97645ac6e275270c36834e33d (1.0.5).
+Copyright (c) 2017 Rutger Fick & Demian Wassermann. See LICENSE-DMIPY (MIT).
+The sampled hemisphere vertices come from DIPY1.7.0; see LICENSE-DIPY.
+The shared dwi-gp L-BFGS-B solver carries SciPy's BSD-3-Clause and MIT
+notices; see LICENSE-LBFGSB. No bundled NODDI toolbox erfi code is included.
+
+Fick RHJ, Wassermann D, Deriche R (2019). The Dmipy Toolbox: Diffusion MRI
+Multi-Compartment Modeling and Microstructure Recovery Made Easy.
+Frontiers in Neuroinformatics 13:64. doi:10.3389/fninf.2019.00064.

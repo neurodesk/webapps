@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "app": "hmc",
+  "title": "HMC",
+  "description": "DWI head-motion correction with GP or b0-template targets.",
+  "defaultOperation": "correct",
+  "operations": {
+    "correct": {
+      "title": "Correct head motion",
+      "description": "Register weighted volumes with NiFreeze-style targets, resample once and rotate gradients.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "A 4D diffusion-weighted image, as NIfTI or DICOM",
+          "minimum": 1
+        },
+        "bval": {
+          "source": "files",
+          "type": "neuro:gradients",
+          "formats": [
+            "bval",
+            "bvals"
+          ],
+          "description": "FSL b-values; required for NIfTI input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bvec": {
+          "source": "files",
+          "type": "neuro:gradients",
+          "formats": [
+            "bvec",
+            "bvecs"
+          ],
+          "description": "FSL gradient directions; required for NIfTI input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "sidecar": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "json"
+          ],
+          "description": "Optional acquisition JSON for the image",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "mask": {
+          "source": "files",
+          "type": "neuro:mask",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Optional brain mask on the DWI grid",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "gp",
+            "trivial"
+          ],
+          "default": "gp",
+          "description": "GP prediction or b0-template targets"
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "default": 1234,
+          "description": "Registration and visit-order seed"
+        },
+        "workers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 1,
+          "description": "Concurrent registration workers"
+        }
+      },
+      "artifacts": {
+        "image": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "bval": {
+          "type": "neuro:gradients",
+          "mediaType": "text/plain",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "bvec": {
+          "type": "neuro:gradients",
+          "mediaType": "text/plain",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "sidecar": {
+          "type": "neuro:metadata",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "motion": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "transforms": {
+          "type": "neuro:transform",
+          "mediaType": "application/zip",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

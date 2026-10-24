@@ -9,7 +9,7 @@ export function readVolume(buffer, { maxVoxels = 128 * 1024 * 1024 } = {}) {
   if (nifti.isCompressed(buffer)) buffer = nifti.decompress(buffer);
   if (!nifti.isNIFTI(buffer)) throw new Error('Choose a NIfTI image (.nii or .nii.gz).');
   const h = nifti.readHeader(buffer);
-  if (h.dims.slice(4, h.dims[0] + 1).some((d) => d > 1)) throw new Error('SynthSR needs a single 3D image. Extract a volume from this 4D image first.');
+  if (h.dims.slice(4, h.dims[0] + 1).some((d) => d > 1)) throw new Error('This operation needs a single 3D image. Extract a volume from this 4D image first.');
   const dims = h.dims.slice(1, 4);
   if (dims.some((d) => !Number.isInteger(d) || d < 2) || product(dims) > maxVoxels) throw new Error('Unsupported image dimensions.');
   const raw = nifti.readImage(h, buffer);

@@ -117,10 +117,11 @@ async function mindgrabMask(input) {
  * @param options.tensorFit "wls" (default), "ols" or "niimath-dtifit"
  * @param options.threads worker threads, default one per core
  */
-export async function fit({ dwi, bval, bvec, output, maskFile, noMask = false, noddi = true, tensorFit = 'wls', threads, onProgress = () => {} } = {}) {
+export async function fit({ dwi, bval, bvec, output, maskFile, noMask = false, noddi = true, method = 'amico', tensorFit = 'wls', threads, onProgress = () => {} } = {}) {
   if (!dwi || !bval || !bvec || !output) throw new Error('A diffusion image, its bval and bvec files and an output directory are required.');
   if (maskFile !== undefined && noMask) throw new Error('Give a mask file or no mask, not both.');
   if (!TENSOR_FITS.includes(tensorFit)) throw new Error('--tensor-fit is wls, ols or niimath-dtifit.');
+  if (!['amico', 'dmipy'].includes(method)) throw new Error('--method is amico or dmipy.');
   const workers = threadCount(threads);
   const destination = resolve(output);
   await assertNewOutput(destination);
@@ -158,6 +159,7 @@ export async function fit({ dwi, bval, bvec, output, maskFile, noMask = false, n
     tensorFit,
     dtifit: (selected) => fitDtifit(runNiimath, selected),
     noddi: withNoddi,
+    method,
     spawn: spawnThread,
     workers,
     onProgress: (fraction) => {
@@ -178,7 +180,11 @@ export async function fit({ dwi, bval, bvec, output, maskFile, noMask = false, n
     files: entries.map((entry) => entry.name),
     provenance: {
       app: `noddi command line ${packageJson.version}`,
-      method: withNoddi ? 'dti+noddi-amico' : 'dti',
+      method: withNoddi ? `dti+noddi-${method}` : 'dti',
+      ...(withNoddi && method === 'dmipy' ? {
+        noddiSource: 'AthenaEPI/dmipy@2d6073218eb4ebc97645ac6e275270c36834e33d',
+        noddiDiagnostics: maps.noddiDiagnostics,
+      } : {}),
       tensorFit,
       niimath: tensorFit === 'niimath-dtifit' ? NIIMATH_VERSION : null,
       maskVoxels: indices.length,

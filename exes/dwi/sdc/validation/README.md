@@ -10,6 +10,7 @@ Each folder's `README.md` gives each file's purpose, the software and the licenc
 | Subset | Files | Size | For |
 | --- | ---: | ---: | --- |
 | `inputs` | 44 | 277 MB | the full-brain input, the masks and the Q59 transforms |
+| `field-fit` | 9 | 32.8 MB | #463: displacement conversion, fitting input, coefficients, field and mask |
 | `reference-run` | 95 | 405 MB | #463: every intermediate of the double seed-1234 2 mm run and its DWI unwarp (`jacobian=True`) |
 | `gate` | 430 | 1028 MB | #462: the three seeds, the native `--float 1` run, the SyN-only replays and `compare/` |
 | `determinism` | 126 | 180 MB | the seed-1234 runs repeated (byte-identical) |
@@ -32,7 +33,7 @@ export $(python3 exes/dwi/sdc/validation/fetch_reference.py --folder prior /var/
 
 `fetch_reference.py` downloads only the named subsets (or `all`), checks each file's size and SHA-256, and does not download a verified file again.
 It prints `SDC_REFERENCE` and `SDC_REFERENCE_SUBSETS`, or `SDC_PRIOR` with `--folder prior`.
-No test reads the data yet. #462 and #463 add the tests and the CI job, as `hmc-reference` in `.github/workflows/dwi-native.yml` does for hmc.
+`tests/reference.rs` checks displacement conversion and B-spline fitting on `field-fit`. Run `prepare-reference.mjs` after fetching to stage Float32 arrays through the shared JavaScript NIfTI reader. The `sdc-field-fit-reference` job in `.github/workflows/dwi-native.yml` requires these data and fails when they are missing. #462 still needs the registration gate; `hmc-reference` is its workflow pattern.
 
 ## Re-pin
 

@@ -20,9 +20,11 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   const filters = preservedLintFilters(packages);
   if (filters.length > 0) {
     const args = ['exec', 'turbo', 'run', 'lint', ...filters];
-    // pnpm sets its script entry point, avoiding Windows .cmd shell execution.
-    const command = process.env.npm_execpath ? process.execPath : 'pnpm';
-    const commandArgs = process.env.npm_execpath ? [process.env.npm_execpath, ...args] : args;
+    // pnpm's entry point can be a Node script or a standalone executable.
+    const entry = process.env.npm_execpath;
+    const nodeScript = /\.(?:js|cjs|mjs)$/i.test(entry ?? '');
+    const command = nodeScript ? process.execPath : entry || 'pnpm';
+    const commandArgs = nodeScript ? [entry, ...args] : args;
     const result = spawnSync(command, commandArgs, {
       cwd: root,
       stdio: 'inherit',

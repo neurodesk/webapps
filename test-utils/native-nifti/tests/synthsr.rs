@@ -124,7 +124,7 @@ fn scaling_offset_and_geometry_policy() {
     f.i16(48, 2);
     assert_eq!(
         nifti::read(&f.bytes).err().unwrap(),
-        "SynthSR needs a single 3D image. Extract a volume from this 4D image first."
+        "This operation needs a single 3D image. Extract a volume from this 4D image first."
     );
 }
 
@@ -211,6 +211,6 @@ fn malformed_endian_and_precision_policy() {
         .1;
     assert_eq!(
         nifti::read(&f.bytes).err().unwrap(),
-        "SynthSR needs a single 3D image. Extract a volume from this 4D image first."
+        "This operation needs a single 3D image. Extract a volume from this 4D image first."
     );
 }

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { neurodeskViteConfig } from "../../scripts/lib/vite-app-config.mjs";
 import { loadCatalogContracts, neuroflowBundleFiles, neuroflowRegistryIndex } from "../../scripts/lib/neuroflow-bundle.mjs";
 
-const TEMPLATES = ["t1-segmentation"];
+const TEMPLATES = ["t1-segmentation", "dwi-preprocessing"];
 
 // The page publishes the catalog it edits as a NeuroFlow registry under neuroflow/:
 // generated tools and their runtime, the template workflows, and the registry index.

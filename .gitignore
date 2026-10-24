@@ -112,5 +112,6 @@ apps/*/web/examples.json
 
 quality-artifacts/
 .stryker-tmp/
+**/vite.config.*.timestamp-*.mjs
 apps/fastprep/public/niimath/
 apps/fastprep/public/meica/

@@ -6,7 +6,7 @@
 name = "hmc-wasm"
 version.workspace = true
 edition.workspace = true
-license = "Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause"
+license = "Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause AND MIT"
 rust-version.workspace = true
 publish.workspace = true
 

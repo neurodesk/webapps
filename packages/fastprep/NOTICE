@@ -3,3 +3,7 @@ Copyright 2026 Neurodesk contributors
 
 Browser host for the fastprep Rust core (exes/fastprep) and glm (exes/glm). The tools it drives
 (@niivue/niimath, @brainchop/mindgrab, @neurodesk/greedy, @neurodesk/synthsr) keep their own licenses.
+
+PEPOLAR uses @neurodesk/sdc, the GPL-3.0-or-later Rust/WASM port of PyHySCO 0.0.4.
+Its original copyright, attribution and license are in packages/sdc/NOTICE and LICENSE.
+The fastprep orchestration source retains its Apache-2.0 license.

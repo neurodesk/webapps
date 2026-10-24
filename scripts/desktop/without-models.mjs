@@ -8,7 +8,9 @@ export async function withoutModels(source, destination) {
   await verifyBundle(source);
   const bundle = await loadBundle(source);
   bundle.modelsIncluded = false;
-  const modelAssets = Object.entries(bundle.assets).filter(([, asset]) => asset.kind === 'model');
+  const requiredPaths = new Set(Object.values(bundle.assets).filter(asset => asset.kind !== 'model').map(asset => asset.path));
+  const allModelAssets = Object.entries(bundle.assets).filter(([, asset]) => asset.kind === 'model');
+  const modelAssets = allModelAssets.filter(([, asset]) => !requiredPaths.has(asset.path));
   const modelsByHash = new Map(modelAssets.map(([url, asset]) => [asset.sha256, url]));
   const removed = new Set(modelAssets.map(([, asset]) => asset.path));
   for (const [, asset] of modelAssets) asset.remote = true;
@@ -20,10 +22,10 @@ export async function withoutModels(source, destination) {
   }
   // MuscleMap's browser download is split into hosting-sized pieces. Derive
   // these bytes from the same pinned complete model, never from the live site.
-  const muscle = modelAssets.find(([url]) => url.endsWith('/musclemap-wholebody-v1.4-fp32.onnx'));
+  const muscle = allModelAssets.find(([url]) => url.endsWith('/musclemap-wholebody-v1.4-fp32.onnx'));
   const parts = Object.keys(bundle.files).filter(path => /\/musclemap-wholebody-v1\.4-fp32\.part-\d+$/.test(path)).sort();
-  if (parts.length) {
-    if (!muscle) throw new Error('Split MuscleMap model has no pinned complete source');
+  if (parts.length && !muscle) throw new Error('Split MuscleMap model has no pinned complete source');
+  if (parts.length && muscle[1].remote) {
     let offset = 0;
     for (const path of parts) {
       bundle.files[path].remote = { url: muscle[0], offset };

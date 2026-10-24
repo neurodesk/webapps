@@ -38,7 +38,8 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f32>, String> {
     let dim = header.dim;
     if (4..=ndim.min(7)).any(|a| dim[a] > 1) {
         return Err(
-            "SynthSR needs a single 3D image. Extract a volume from this 4D image first.".into(),
+            "This operation needs a single 3D image. Extract a volume from this 4D image first."
+                .into(),
         );
     }
     let dims = [dim[1], dim[2], dim[3]];

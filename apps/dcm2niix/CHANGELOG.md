@@ -4,12 +4,15 @@
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
+  - @neurodesk/runtime-support@0.9.14
+  - @neurodesk/mri2vid@0.6.20261024
 - Updated dependencies [941884c]
 - Updated dependencies [a028e96]
 - Updated dependencies [650ce5f]
 - Updated dependencies [343c256]
 - Updated dependencies [ba38bd9]
-- Updated dependencies [941884c]
 - Updated dependencies [ef05562]
   - @neurodesk/webapp-components@0.21.0
   - @neurodesk/mri2vid@0.6.20261024
@@ -23,6 +26,24 @@
   - @neurodesk/webapp-components@0.19.1
   - @neurodesk/runtime-support@0.9.9
   - @neurodesk/mri2vid@0.5.20261024
+- Updated dependencies [328cb77]
+  - @neurodesk/webapp-components@0.20.1
+  - @neurodesk/runtime-support@0.9.13
+  - @neurodesk/mri2vid@0.6.20261024
+- Updated dependencies [14a8b29]
+- Updated dependencies [941884c]
+  - @neurodesk/webapp-components@0.20.0
+  - @neurodesk/runtime-support@0.9.12
+  - @neurodesk/mri2vid@0.6.20261024
+- Updated dependencies
+  - @neurodesk/webapp-components@0.19.3
+  - @neurodesk/runtime-support@0.9.11
+  - @neurodesk/mri2vid@0.6.20261024
+- Updated dependencies
+- Updated dependencies [ef05562]
+  - @neurodesk/webapp-components@0.19.2
+  - @neurodesk/mri2vid@0.6.20261024
+  - @neurodesk/runtime-support@0.9.10
 
 ## 0.2.20261022
 
@@ -62,10 +83,6 @@
 - Updated dependencies
   - @neurodesk/webapp-components@0.17.2
   - @neurodesk/runtime-support@0.9.6
-  - @neurodesk/dicom2vid@0.5.20261020
-- Updated dependencies
-  - @neurodesk/runtime-support@0.9.5
-  - @neurodesk/webapp-components@0.17.1
   - @neurodesk/dicom2vid@0.5.20261020
 - Updated dependencies [14db080]
 

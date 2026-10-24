@@ -23,7 +23,7 @@ import {
   readNiftiFrames,
 } from "@neurodesk/webapp-components/file-io";
 import { bidsDiffusionSeries, chooseBidsRun, chosenBidsRun } from "@neurodesk/webapp-components/file-io/bids";
-import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
+import { imageFiles, registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { readDiffusionSeries, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { loadDwidenoise } from "@neurodesk/dwidenoise";
 import wasmUrl from "@neurodesk/dwidenoise/wasm?url";
@@ -297,9 +297,7 @@ registerAppAutomation({
   convertDicom: runDcm2niix,
   operations: {
     denoise: async ({ inputs, inputDetails, signal }) => {
-      // DICOM is converted before this call; its bval and bvec arrive as sidecars of the image.
-      const sidecars = inputDetails.image?.sidecars ?? [];
-      await loadFiles(Promise.resolve([...inputs.image, ...sidecars, ...(inputs.bval ?? []), ...(inputs.bvec ?? [])]), signal);
+      await loadFiles(Promise.resolve(imageFiles(inputs, inputDetails)), signal);
       return denoise(signal);
     },
   },

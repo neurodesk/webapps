@@ -1,0 +1,393 @@
+{
+  "nativeWholeBrain": {
+    "acceptance": "No WM-specific gate claim without the requested selection or a stronger all-voxel bound.",
+    "brainVoxels": 45965,
+    "convergedFits": 45941,
+    "eligibleVoxels": 45951,
+    "evaluatedVoxels": 45951,
+    "everyEvaluatedVoxelBelow002": false,
+    "failedFits": 0,
+    "maps": {
+      "icvf": {
+        "maxAbsoluteDifference": 0.026459641840211656,
+        "medianAbsoluteDifference": 2.2388267462147837e-08,
+        "voxelsAtOrAbove002": 3,
+        "worst": {
+          "actual": 0.8834202690125514,
+          "coordinate": [
+            58,
+            64,
+            5
+          ],
+          "expected": 0.8569606271723398,
+          "index": 42301
+        }
+      },
+      "isovf": {
+        "maxAbsoluteDifference": 0.02760224945458635,
+        "medianAbsoluteDifference": 1.9577903978551525e-08,
+        "voxelsAtOrAbove002": 1,
+        "worst": {
+          "actual": 0.01,
+          "coordinate": [
+            41,
+            20,
+            1
+          ],
+          "expected": 0.03760224945458635,
+          "index": 28498
+        }
+      },
+      "odi": {
+        "maxAbsoluteDifference": 0.97,
+        "medianAbsoluteDifference": 4.518630614125385e-08,
+        "voxelsAtOrAbove002": 39,
+        "worst": {
+          "actual": 0.99,
+          "coordinate": [
+            33,
+            47,
+            2
+          ],
+          "expected": 0.02,
+          "index": 21822
+        }
+      }
+    },
+    "maximumIterations": 44,
+    "maximumMSEDifference": 5.850410507626542e-05,
+    "mode": "correctness under contention; not a benchmark",
+    "nonconvergedFits": 10,
+    "reference": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/7597121ce25529f9a819c0635da88fee6f2ac73c/noddi/validation/dmipy/",
+    "wmSelection": "pending issue427 clarification"
+  },
+  "nativeWM": {
+    "brainVoxels": 45965,
+    "convergedFits": 13317,
+    "eligibleVoxels": 45951,
+    "evaluatedVoxels": 13324,
+    "everyEvaluatedVoxelBelow002": true,
+    "failedFits": 0,
+    "gateSet": "wm",
+    "maps": {
+      "icvf": {
+        "maxAbsoluteDifference": 0.0017760363620915598,
+        "medianAbsoluteDifference": 1.8117630007363772e-08,
+        "voxelsAtOrAbove002": 0,
+        "worst": {
+          "actual": 0.9558167588031885,
+          "actualParameters": [
+            0.9973512111873365,
+            -2.8015413263626368,
+            0.1933732097299169,
+            0.9558167588031885,
+            0.2013744544453562
+          ],
+          "converged": true,
+          "coordinate": [
+            8,
+            15,
+            8
+          ],
+          "expected": 0.9575927951652801,
+          "index": 2492,
+          "mse": 0.07073028157200625,
+          "referenceMSE": 0.07073027177432398,
+          "referenceParameters": [
+            0.9972039136580272,
+            -2.80183278243628,
+            0.19352983315731082,
+            0.9575927951652801,
+            0.20164360108272159
+          ],
+          "start": [
+            0.816836009347154,
+            -2.6286433517072667,
+            0.2625,
+            0.99,
+            0.25
+          ]
+        }
+      },
+      "isovf": {
+        "maxAbsoluteDifference": 0.0005073417601600318,
+        "medianAbsoluteDifference": 1.8230678903996544e-08,
+        "voxelsAtOrAbove002": 0,
+        "worst": {
+          "actual": 0.010507341760160032,
+          "actualParameters": [
+            1.793614379364783,
+            -2.7225890439917815,
+            0.12156827671458854,
+            0.5406897661114807,
+            0.010507341760160032
+          ],
+          "converged": true,
+          "coordinate": [
+            24,
+            56,
+            1
+          ],
+          "expected": 0.01,
+          "index": 14336,
+          "mse": 0.010803018923576062,
+          "referenceMSE": 0.010801429746636695,
+          "referenceParameters": [
+            1.790201764571881,
+            -2.726842341094957,
+            0.12068046306051991,
+            0.5407582863707885,
+            0.01
+          ],
+          "start": [
+            1.589942495437761,
+            -2.911588290166478,
+            0.2625,
+            0.99,
+            0.25
+          ]
+        }
+      },
+      "odi": {
+        "maxAbsoluteDifference": 0.002329610721913622,
+        "medianAbsoluteDifference": 6.309703662332744e-09,
+        "voxelsAtOrAbove002": 0,
+        "worst": {
+          "actual": 0.656702202269099,
+          "actualParameters": [
+            1.9979158813934117,
+            0.9332755001577451,
+            0.656702202269099,
+            0.99,
+            0.5930345900688014
+          ],
+          "converged": true,
+          "coordinate": [
+            61,
+            59,
+            5
+          ],
+          "expected": 0.6543725915471854,
+          "index": 44145,
+          "mse": 0.025691671841729786,
+          "referenceMSE": 0.02569149012684916,
+          "referenceParameters": [
+            2.0145061755824223,
+            0.9112409952275979,
+            0.6543725915471854,
+            0.99,
+            0.5930624048355255
+          ],
+          "start": [
+            2.167578437935688,
+            1.082766459388492,
+            0.7475,
+            0.745,
+            0.5
+          ]
+        }
+      }
+    },
+    "maximumIterations": 33,
+    "maximumMSEDifference": 1.6700687519022317e-06,
+    "mode": "correctness under contention; not a benchmark",
+    "nonconvergedFits": 7,
+    "reference": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/7597121ce25529f9a819c0635da88fee6f2ac73c/noddi/validation/dmipy/",
+    "wmSelection": "Pinned FA >= 0.4 AND MindGrab brain mask, excluding dmipy-unfitted voxels; HF295e32650e9e28397909caff4b9741ee95a422c0"
+  },
+  "wasmWM": {
+    "reference": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/7597121ce25529f9a819c0635da88fee6f2ac73c/noddi/validation/dmipy/",
+    "wmSelection": "Pinned FA >= 0.4 AND MindGrab brain mask, excluding dmipy-unfitted voxels; HF295e32650e9e28397909caff4b9741ee95a422c0",
+    "voxels": 13324,
+    "wasmSHA256": "0c4583b44bc6406292e5fe8832c1ad22198697e9aaacf3c8dcea7024da328f37",
+    "diagnostics": {
+      "fitted": 13324,
+      "skipped": 0,
+      "nonconverged": 4,
+      "failed": 0
+    },
+    "maps": {
+      "ICVF": {
+        "medianAbsoluteDifference": 2.364565199197699e-08,
+        "maxAbsoluteDifference": 0.001774351079627201,
+        "voxelsAtOrAbove002": 0
+      },
+      "ISOVF": {
+        "medianAbsoluteDifference": 1.932181220229423e-08,
+        "maxAbsoluteDifference": 0.0016265463872149125,
+        "voxelsAtOrAbove002": 0
+      },
+      "ODI": {
+        "medianAbsoluteDifference": 7.706365767745638e-09,
+        "maxAbsoluteDifference": 0.002244513770531309,
+        "voxelsAtOrAbove002": 0
+      }
+    }
+  },
+  "nativeTailSourceTrace": [
+    {
+      "index": 42301,
+      "coordinate": [
+        58,
+        64,
+        5
+      ],
+      "rustParameters": [
+        1.7025388598879156,
+        -2.1095863635355445,
+        0.3707093169213124,
+        0.8834202690125514,
+        0.8847842482434971
+      ],
+      "referenceParameters": [
+        1.6961841885179736,
+        -2.1317701047363298,
+        0.3681350513905777,
+        0.8569606271723398,
+        0.8834752130919339
+      ],
+      "pythonSameSourceParameters": [
+        1.6961876883068188,
+        -2.1317653856752745,
+        0.3681323241670032,
+        0.8569463511718151,
+        0.8834742979079738,
+        0.11652570209202617
+      ],
+      "sourceStart": [
+        1.8239330537245264,
+        -1.8748647669438663,
+        0.2625,
+        0.255,
+        0.75,
+        0.25
+      ],
+      "rustMSE": 0.0015462480745589596,
+      "sourceMSEAtRustParameters": 0.0015462480745589593,
+      "sourceMSEAtReferenceParameters": 0.001546156888279053,
+      "sourceRefitMSE": 0.0015461568880974106
+    },
+    {
+      "index": 28498,
+      "coordinate": [
+        41,
+        20,
+        1
+      ],
+      "rustParameters": [
+        1.4339300347048898,
+        0.6551166439261007,
+        0.45579842112718766,
+        0.3881603968503811,
+        0.01
+      ],
+      "referenceParameters": [
+        1.372652591568961,
+        0.691333465767348,
+        0.48989151966380967,
+        0.3969272340653261,
+        0.03760224945458635
+      ],
+      "pythonSameSourceParameters": [
+        1.372652603467822,
+        0.6913334879684339,
+        0.4898914913853443,
+        0.3969271705272723,
+        0.03760224090041099,
+        0.962397759099589
+      ],
+      "sourceStart": [
+        1.3593400046125266,
+        0.6960155990155724,
+        0.505,
+        0.5,
+        0.25,
+        0.75
+      ],
+      "rustMSE": 0.004392059627525929,
+      "sourceMSEAtRustParameters": 0.004392059627525922,
+      "sourceMSEAtReferenceParameters": 0.004442420742142877,
+      "sourceRefitMSE": 0.004442420951559639
+    },
+    {
+      "index": 21822,
+      "coordinate": [
+        33,
+        47,
+        2
+      ],
+      "rustParameters": [
+        1.4651996124167788,
+        2.3229822582358035,
+        0.99,
+        0.99,
+        0.9847347603750727
+      ],
+      "referenceParameters": [
+        1.506704233685187,
+        1.3825063278826502,
+        0.02,
+        0.99,
+        0.983720931531193
+      ],
+      "pythonSameSourceParameters": [
+        1.5066892824143978,
+        1.3825501206789932,
+        0.02,
+        0.99,
+        0.9837208697148345,
+        0.016279130285165477
+      ],
+      "sourceStart": [
+        1.4575383651591711,
+        2.3278820496751087,
+        0.02,
+        0.01,
+        1.0,
+        0.0
+      ],
+      "rustMSE": 0.00486840331855904,
+      "sourceMSEAtRustParameters": 0.004868403318559041,
+      "sourceMSEAtReferenceParameters": 0.004842159533443258,
+      "sourceRefitMSE": 0.004842159178865519
+    }
+  ],
+  "implementationSourceSHA256": {
+    "exes/dwi/dmipy/src/lib.rs": "5abe93ed7ba48073b54ec7ad788df3753df4243451a91af21b5401516ba15939",
+    "exes/dwi/dmipy/src/harmonics.rs": "47b90f0c4166ff5cd172dfacfd11b9358e4dcc74ddab8206546f2c0462fdb356",
+    "exes/dwi/dmipy/src/sampling.rs": "ccad2e0c01116a8fede89cbec61e75953a1a3b9b72276d1f202126da08aec177",
+    "exes/dwi/gp/src/lbfgsb.rs": "f3609f2a1c796020b9c7b5fc14616801428ec7176a7232469e51a123e0729f22"
+  },
+  "productionBrowserWM": {
+    "publishedFloat32MapComparisons": {
+      "icvf": {
+        "voxels": 13324,
+        "median": 0,
+        "maximum": 0.0017743706703186035
+      },
+      "isovf": {
+        "voxels": 13324,
+        "median": 1.4901161193847656e-08,
+        "maximum": 0.0016265474259853363
+      },
+      "odi": {
+        "voxels": 13324,
+        "median": 7.450580596923828e-09,
+        "maximum": 0.002244502305984497
+      }
+    },
+    "diagnostics": {
+      "fitted": 13324,
+      "skipped": 8,
+      "nonconverged": 4,
+      "failed": 0
+    },
+    "downloadSHA256": {
+      "icvf": "f57fcb1539e9fafe0657e319fdb61c7577e9298aaedda5f56637bf0abe3459a7",
+      "isovf": "699992e755c1b06bf9b35623347eb264b26a155a85a96c2157de2efd24cee08f",
+      "odi": "c92a0bac749f716f4582cc34c64e4f0c2a029248f76d946d8676dc1b2ed177d1"
+    },
+    "receiptSHA256": "38f6de7ce38ef9c35373065a319ad067ebc682eea2f7aefa846f80a13edbbf74",
+    "mode": "correctness on production browser, not a performance benchmark"
+  }
+}

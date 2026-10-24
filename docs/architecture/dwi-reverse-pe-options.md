@@ -261,6 +261,24 @@ Without it (`appa_mad_nojac`, reported only), ANTs has the best AP-PA agreement 
 But their fields differ from topup's in shape (mean r 0.73 and 0.35), and the modulated images and the BBR cost fail on every subject.
 3dQwarp's own corrected outputs also fail (AP-PA 0.119 against topup's 0.073 on sub-01), so the cause is not our resampler.
 
+## ANTs reverse-PE decision (#507)
+
+ANTs restricted SyN is **not offered for reverse-PE pairs**. The tested SyN-SDC
+schedule failed the required image gate on all six subjects; it also passed zero
+subjects under either proposed relaxed image limit. Its mean field correlation
+with topup was 0.728 and mean demeaned field difference was 4.06 Hz (tables above).
+Better unmodulated AP-PA agreement does not satisfy the modulated-image and BBR
+gates, so it does not justify exposing this schedule as a correction option.
+
+This decision uses the existing six-subject results and pinned native artifacts
+below; no new schedule or successful gate is claimed. A future reverse-PE schedule
+must satisfy the original six-subject gate before it can become an app option.
+No thresholds are relaxed by this decision.
+
+Single-PE, T1w-guided ANTs SyN-SDC remains a separate planned method (#462–#466).
+Its grid/precision experiment and accuracy/memory gates are pending; it is not
+currently available in the app. The app's canonical About text states both limits.
+
 ## Port gate
 
 A port passes when its browser field agrees with the native field of the same method on ds005134 sub-01: median absolute difference < 0.1 Hz in the brain.
@@ -275,7 +293,7 @@ For DR-BUDDI, a port is not started until a WebAssembly build of the solver runs
 1. **Pin the evaluation data on Hugging Face** ([#504](https://github.com/neurodesk/webapps/issues/504)). Done: see "Pinned results".
 2. **DR-BUDDI in WebAssembly** ([#505](https://github.com/neurodesk/webapps/issues/505)). First a feasibility check: build the solver (not the bundled BET library) with the ITK WebAssembly toolchain of `packages/registration`, run sub-01 in a browser, and measure time and memory, also with fewer iterations or a coarser schedule. Port into `apps/sdc` only if that passes and the field still passes the gate.
 3. **WebGPU path for PyHySCO** ([#506](https://github.com/neurodesk/webapps/issues/506)). The Gauss-Newton and PCG steps as WebGPU kernels, held to the CPU field by the port gate.
-4. **ANTs restricted SyN** ([#507](https://github.com/neurodesk/webapps/issues/507)). It failed the gate on every subject with the SyN-SDC schedule. When SyN-SDC (#444, #462) is in `apps/sdc`, either find a reverse-PE schedule that passes the gate or keep ANTs for single-PE data only.
+4. **ANTs restricted SyN** ([#507](https://github.com/neurodesk/webapps/issues/507)). It failed the gate on every subject with the SyN-SDC schedule. Decision: do not offer ANTs for reverse-PE data; see [the recorded decision](#ants-reverse-pe-decision-507). Single-PE SyN-SDC remains pending #462.
 5. **Synb0-DisCo front end** ([#508](https://github.com/neurodesk/webapps/issues/508)). Its `--notopup` output (a synthetic undistorted b0) as the second image for the chosen solver, for data without a reverse-PE b0. Needs its own check against topup with the same synthetic image.
 6. **fastprep PEPOLAR** ([#509](https://github.com/neurodesk/webapps/issues/509)). Use the `sdc` solver package in fastprep for reverse-PE field estimation.
 

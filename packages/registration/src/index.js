@@ -23,8 +23,26 @@ export async function inflateNifti(bytes) {
 
 export async function createRegistration({createModule,wasmBinary,onLog=()=>{}}) {
   const module=await createModule({noInitialRun:true,wasmBinary,print:onLog,printErr:onLog});
+  if (typeof module.stackSave !== 'function' || typeof module.stackRestore !== 'function') {
+    throw new Error('The registration kernel does not export stackSave and stackRestore.');
+  }
   function call(args) {
-    const code=module.callMain(args);
+    const stack = module.stackSave();
+    let code;
+    let trapped = false;
+    let failure;
+    try {
+      code = module.callMain(args);
+    } catch (error) {
+      trapped = true;
+      failure = error;
+    }
+    try {
+      module.stackRestore(stack);
+    } catch (error) {
+      if (!trapped) throw error;
+    }
+    if (trapped) throw failure;
     if(code!==0)throw new Error(`ANTs failed (exit ${code}). See processing log.`);
   }
   let next=0;

@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { fetchPinnedExample } from '../desktop/scientific-evidence.mjs';
+import { cropTrackingDwi } from '../../test-utils/dwi-tracking-crop.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -66,10 +67,32 @@ export const provisioners = {
   fastprep: { env: [], provision: async () => ({}) },
   // The browser reference runs MindGrab on the CPU once, about 2 min and 3 GB.
   dwi2trx: {
-    env: ['DWI2TRX_FIXTURE_DIR', 'DWI2TRX_BROWSER_REFERENCE'],
+    env: ['DWI2TRX_FIXTURE_DIR', 'DWI2TRX_BROWSER_REFERENCE', 'DWI2TRX_REAL_DWI_DIR'],
     provision: async (cache) => {
       await exampleFiles(cache, 'dwi2trx', 'dwi-gradients', ['image', 'bval', 'bvec']);
-      return { DWI2TRX_FIXTURE_DIR: join(cache, 'dwi2trx'), DWI2TRX_BROWSER_REFERENCE: 'check' };
+      const vendors = JSON.parse(await readFile(join(root, 'validation/dwi-vendors/sources.json'), 'utf8'));
+      const { files } = vendors.cases.find(entry => entry.id === 'philips');
+      const source = join(cache, 'dwi2trx-philips-source');
+      const cropped = join(cache, 'dwi2trx-philips-crop');
+      await mkdir(source, { recursive: true });
+      await mkdir(cropped, { recursive: true });
+      for (const role of ['image', 'bval', 'bvec']) {
+        const file = files[role];
+        await fetchChecked(file.url, join(source, file.name), file);
+      }
+      const crop = await cropTrackingDwi(await readFile(join(source, files.image.name)));
+      await writeFile(join(cropped, 'dwi.nii'), crop.bytes);
+      for (const role of ['bval', 'bvec']) await writeFile(join(cropped, `dwi.${role}`), await readFile(join(source, files[role].name)));
+      await writeFile(join(cropped, 'crop.json'), JSON.stringify({
+        source: files.image, origin: crop.origin, shape: crop.shape, frames: crop.frames,
+        affine: crop.affine, resampled: false, representation: 'scaled float32',
+        sha256: createHash('sha256').update(crop.bytes).digest('hex'),
+      }, null, 2));
+      return {
+        DWI2TRX_FIXTURE_DIR: join(cache, 'dwi2trx'),
+        DWI2TRX_BROWSER_REFERENCE: 'check',
+        DWI2TRX_REAL_DWI_DIR: cropped,
+      };
     },
   },
   // The browser reference registers the 1 mm example once, about 30 s.
@@ -105,7 +128,19 @@ export const provisioners = {
   // The browser reference runs the app's three examples, each after the command line's CPU MindGrab, about 4 min.
   n4: { env: ['N4_BROWSER_REFERENCE'], provision: async () => ({ N4_BROWSER_REFERENCE: 'check' }) },
   // The browser reference runs MindGrab on the CPU once and fits the example and the phantom, about 1 min.
-  noddi: { env: ['NODDI_BROWSER_REFERENCE'], provision: async () => ({ NODDI_BROWSER_REFERENCE: 'check' }) },
+  noddi: {
+    env: ['NODDI_BROWSER_REFERENCE', 'NODDI_DMIPY_REFERENCE'],
+    provision: async (cache) => {
+      const directory = join(cache, 'noddi-dmipy');
+      const manifest = JSON.parse(await readFile(join(root, 'exes/dwi/dmipy/validation/reference.manifest.json'), 'utf8'));
+      for (const file of [...manifest.files, ...manifest.inputs]) {
+        const path = join(directory, file.path);
+        await mkdir(join(path, '..'), { recursive: true });
+        await fetchChecked(file.url ?? manifest.base + file.path, path, file);
+      }
+      return { NODDI_BROWSER_REFERENCE: 'check', NODDI_DMIPY_REFERENCE: directory };
+    },
+  },
   syncro: {
     env: ['SYNCRO_SCIENTIFIC_TESTS', 'SYNCRO_AUTOMATION_IMAGE', 'SYNTHSR_MODEL'],
     provision: async (cache) => {

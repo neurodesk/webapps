@@ -13,13 +13,174 @@
 
 use dwi_gradients::B0Rule;
 use dwi_hmc::clip::{ClipReport, InputKind, Sample, advanced_clip, advanced_clip_in_place};
+use dwi_hmc::gp_model::{DwiSeries, GpModel, clip_prediction};
 use dwi_hmc::motion::{Columns, Grid, Motion, motion_tsv, ras_motion_params};
+use dwi_hmc::registration::{RegistrationFiles, nifreeze_argv};
 use dwi_hmc::{BvecRule, ItkAffine, Matrix4, Precision, rotate_gradients};
 use std::cell::RefCell;
 
 thread_local! {
     static TEXT: RefCell<String> = const { RefCell::new(String::new()) };
     static BYTES: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static NIFREEZE: RefCell<Option<NifreezeState>> = const { RefCell::new(None) };
+}
+
+struct NifreezeState {
+    series: DwiSeries<f32>,
+    mask: Vec<bool>,
+}
+
+/// Make NiFreeze's diffusion split, median bzero and model mask from one full series.
+///
+/// # Safety
+/// `data` holds nx·ny·nz·n f32, `bvals` n f64, `bvecs` 3·n f64, and `mask` nx·ny·nz u8.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nifreeze_init(
+    data: *const f32,
+    nx: usize,
+    ny: usize,
+    nz: usize,
+    n: usize,
+    bvals: *const f64,
+    bvecs: *const f64,
+    mask: *const u8,
+    gp: u32,
+) -> u32 {
+    let result = (|| -> Result<NifreezeState, String> {
+        if NIFREEZE.with(|state| state.borrow().is_some()) {
+            return Err(
+                "A NiFreeze model is already active; release it before another run.".into(),
+            );
+        }
+        let nvox = nx
+            .checked_mul(ny)
+            .and_then(|v| v.checked_mul(nz))
+            .ok_or("Invalid NiFreeze grid")?;
+        let len = nvox.checked_mul(n).ok_or("Invalid NiFreeze series size")?;
+        let (b, v) = unsafe { gradient_table(bvals, bvecs, n) };
+        let table = B0Rule::NiFreeze.read(b, v).map_err(|e| e.to_string())?;
+        let series = DwiSeries::split(
+            unsafe { std::slice::from_raw_parts(data, len) },
+            [nx, ny, nz],
+            &table,
+        )
+        .map_err(|e| e.to_string())?;
+        let brain: Vec<bool> = unsafe { std::slice::from_raw_parts(mask, nvox) }
+            .iter()
+            .map(|&v| v != 0)
+            .collect();
+        let mask = if gp == 1 {
+            GpModel::new(&series, Some(&brain))
+                .map_err(|e| e.to_string())?
+                .data_mask()
+                .to_vec()
+        } else {
+            if series.bzero.is_none() {
+                return Err("The trivial model needs at least one b0 volume (b <= 50).".into());
+            }
+            brain
+        };
+        Ok(NifreezeState { series, mask })
+    })();
+    match result {
+        Ok(state) => {
+            set_text(format!(
+                "{{\"dwiVolumes\":{:?},\"b0Volumes\":{:?},\"hasBzero\":{}}}",
+                state.series.dwi_volumes,
+                state.series.b0_volumes,
+                state.series.bzero.is_some()
+            ));
+            NIFREEZE.with(|slot| *slot.borrow_mut() = Some(state));
+            0
+        }
+        Err(error) => {
+            set_text(error);
+            1
+        }
+    }
+}
+
+/// Copy the current model's median bzero and registration mask.
+///
+/// # Safety
+/// `bzero` and `mask` have room for nx·ny·nz f64 and u8 respectively.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nifreeze_arrays(bzero: *mut f64, mask: *mut u8) {
+    NIFREEZE.with(|slot| {
+        let state = slot.borrow();
+        let state = state.as_ref().expect("NiFreeze model is not initialized");
+        if let Some(values) = &state.series.bzero {
+            unsafe { std::ptr::copy_nonoverlapping(values.as_ptr(), bzero, values.len()) };
+        }
+        for (i, &value) in state.mask.iter().enumerate() {
+            unsafe { *mask.add(i) = u8::from(value) };
+        }
+    });
+}
+
+/// Fit and clip one GP leave-one-out target; index counts DWI volumes, not raw frames.
+///
+/// # Safety
+/// `out` has room for nx·ny·nz f64.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nifreeze_predict(index: usize, out: *mut f64) -> u32 {
+    let result = NIFREEZE.with(|slot| {
+        let state = slot.borrow();
+        let state = state
+            .as_ref()
+            .ok_or("NiFreeze model is not initialized".to_string())?;
+        let model = GpModel::new(&state.series, Some(&state.mask)).map_err(|e| e.to_string())?;
+        let mut prediction = model.fit_predict(index).map_err(|e| e.to_string())?;
+        clip_prediction(&mut prediction.volume, state.series.shape).map_err(|e| e.to_string())?;
+        unsafe {
+            std::ptr::copy_nonoverlapping(prediction.volume.as_ptr(), out, prediction.volume.len())
+        };
+        Ok::<_, String>(format!(
+            "{{\"theta\":{:?},\"lml\":{}}}",
+            prediction.fit.theta, prediction.fit.lml
+        ))
+    });
+    match result {
+        Ok(summary) => {
+            set_text(summary);
+            0
+        }
+        Err(error) => {
+            set_text(error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nifreeze_release() {
+    NIFREEZE.with(|state| *state.borrow_mut() = None);
+    // Hosts have copied these results before releasing the model. Keeping their small
+    // allocations can split the freed series arena and prevent the next full-size split
+    // from fitting under the same heap limit, even though the model itself was dropped.
+    TEXT.with(|text| *text.borrow_mut() = String::new());
+    BYTES.with(|bytes| *bytes.borrow_mut() = Vec::new());
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nifreeze_registration_args(seed: u32) {
+    let args = nifreeze_argv(
+        RegistrationFiles {
+            fixed: "fixed.nii",
+            moving: "moving.nii",
+            mask: "mask.nii",
+            output: "out",
+        },
+        Precision::Float,
+        Some(seed),
+    );
+    set_text(format!(
+        "[{}]",
+        args.iter()
+            .map(|arg| json_string(arg))
+            .collect::<Vec<_>>()
+            .join(",")
+    ));
 }
 
 fn set_text(text: String) {

@@ -15,3 +15,4 @@ crate-type = ["cdylib", "rlib"]
 dwi-gradients = { path = "../gradients" }
 dwi-tensor = { path = "../tensor" }
 dwi-amico = { path = "../amico" }
+dwi-dmipy = { path = "../dmipy" }

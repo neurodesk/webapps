@@ -1,5 +1,11 @@
 # @neurodesk/registration
 
+## 0.1.2
+
+### Patch Changes
+
+- Restore the WebAssembly stack after each kernel call so repeated corrections and transform applications do not exhaust the stack. Export the stack functions from the pinned builds and verify 200 runs on one instance.
+
 ## 0.1.1
 
 ### Patch Changes

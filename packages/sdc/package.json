@@ -4,25 +4,31 @@
   "description": "Reverse phase-encoding susceptibility distortion correction (PyHySCO port) for browsers and the command line",
   "type": "module",
   "private": true,
-  "license": "GPL-3.0-or-later",
+  "license": "GPL-3.0-or-later AND Apache-2.0 AND BSD-3-Clause",
   "engines": {
     "node": ">=22"
   },
   "exports": {
     ".": "./src/wasm.js",
-    "./wasm": "./src/sdc.wasm"
+    "./wasm": "./src/sdc.wasm",
+    "./field-fit": "./src/field-fit.js",
+    "./field-fit.wasm": "./src/sdc-field-fit.wasm"
   },
   "files": [
     "src",
     "LICENSE",
     "NOTICE",
-    "README.md"
+    "README.md",
+    "LICENSE-SDCFLOW",
+    "LICENSE-OPENBLAS"
   ],
   "scripts": {
     "build:wasm": "bash scripts/build-wasm.sh",
     "check:wasm": "bash scripts/build-wasm.sh --check",
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/wasm.js"
+    "lint": "node --check src/wasm.js",
+    "build:field-fit": "bash scripts/build-field-fit.sh",
+    "check:field-fit": "bash scripts/build-field-fit.sh --check"
   },
   "repository": {
     "type": "git",

@@ -45,7 +45,7 @@
         },
         "mask": {
           "source": "files",
-          "type": "neuro:volume",
+          "type": "neuro:mask",
           "formats": [
             "nifti"
           ],
@@ -188,7 +188,7 @@
         },
         "mask": {
           "source": "files",
-          "type": "neuro:volume",
+          "type": "neuro:mask",
           "formats": [
             "nifti"
           ],

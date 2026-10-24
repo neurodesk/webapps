@@ -1,0 +1,285 @@
+{
+  "date": "2026-10-24",
+  "referenceRevision": "a4ba04733c316430add7e9f8467887a1a47b6e65",
+  "kernelSha256": {
+    "packages/hmc/src/hmc.wasm": "461b453315c59f9910e8a7e5877611265c42aba9befd3ccc2f8d02d08dc4f473",
+    "packages/hmc-registration/wasm/hmc-registration.wasm": "d552ee295d79cd1722ced2c13c58d9afa0a5008275bbe70593d8caf9243de9ef"
+  },
+  "rule": "2026-10-24 #451: |WASM - native float| <= per-volume, per-axis native-double seed spread, about the world grid centre; QSIPrep convention and double comparison are also reported.",
+  "worldFailingCells": 0,
+  "qsiprepFailingCells": 1,
+  "exactNativeFloatTransforms": 87,
+  "nonidenticalTransforms": {
+    "world": [
+      {
+        "volume": 31,
+        "rawVolume": 35,
+        "difference": [
+          0.00021466077886778123,
+          0.001080348277023191,
+          0.0039203943725993895,
+          0.0008339819687187278,
+          2.90086043938792e-05,
+          0.00012087569939199516
+        ],
+        "spread": [
+          0.07245307340118164,
+          0.09969213071729854,
+          0.04555553478064191,
+          0.13981454356722134,
+          0.027509984433798873,
+          0.0593560706164924
+        ],
+        "doubleDifference": [
+          0.002977372049265084,
+          0.008314144722205208,
+          0.000790374006098174,
+          0.010298013987787333,
+          0.01987681953390892,
+          0.012366687941607012
+        ],
+        "failingAxes": [],
+        "doubleFailingAxes": [],
+        "equalsNativeFloat": false
+      },
+      {
+        "volume": 52,
+        "rawVolume": 58,
+        "difference": [
+          0.029729983302738905,
+          0.028743320044432252,
+          0.02607913525784511,
+          0.041313913116152026,
+          0.007148443549630902,
+          0.0018137511559925545
+        ],
+        "spread": [
+          0.03633671130369778,
+          0.0767057954164215,
+          0.1662848080347854,
+          0.10983612604043701,
+          0.05389206016829622,
+          0.041185924147254964
+        ],
+        "doubleDifference": [
+          0.036015990915620424,
+          0.026097850872403877,
+          0.03580775768603045,
+          0.025167022895985824,
+          0.01207820680735421,
+          0.005517289409283848
+        ],
+        "failingAxes": [],
+        "doubleFailingAxes": [],
+        "equalsNativeFloat": false
+      },
+      {
+        "volume": 88,
+        "rawVolume": 98,
+        "difference": [
+          0.0003954212046428651,
+          0.0009308847667739428,
+          0.0007864980702585456,
+          7.456752751855422e-05,
+          0.0001608554570078774,
+          0.00013729858032345693
+        ],
+        "spread": [
+          0.04469244660764651,
+          0.08557374016035024,
+          0.17329567324964357,
+          0.28402405748382353,
+          0.12479034746645916,
+          0.14058170188760855
+        ],
+        "doubleDifference": [
+          0.010823630950420465,
+          0.018230928358357046,
+          0.01614453641685265,
+          0.019025300297276726,
+          0.005360165246237142,
+          0.0013475028992073548
+        ],
+        "failingAxes": [],
+        "doubleFailingAxes": [],
+        "equalsNativeFloat": false
+      }
+    ],
+    "qsiprep": [
+      {
+        "volume": 31,
+        "rawVolume": 35,
+        "difference": [
+          4.582198560854067e-05,
+          0.00010121697586384926,
+          0.005436036400737976,
+          0.0008339819687187278,
+          2.90086043938792e-05,
+          0.00012087569939199516
+        ],
+        "spread": [
+          0.22318237635022342,
+          0.015871341370512937,
+          0.34664398303219457,
+          0.13981454356722134,
+          0.027509984433798873,
+          0.0593560706164924
+        ],
+        "doubleDifference": [
+          0.01552944100264142,
+          0.051912588553548744,
+          0.05868331420167294,
+          0.010298013987787333,
+          0.01987681953390892,
+          0.012366687941607012
+        ],
+        "failingAxes": [],
+        "doubleFailingAxes": [
+          "ty"
+        ],
+        "equalsNativeFloat": false
+      },
+      {
+        "volume": 52,
+        "rawVolume": 58,
+        "difference": [
+          0.045132796942581876,
+          0.10313452419916302,
+          0.031160775144712716,
+          0.041313913116152026,
+          0.007148443549630902,
+          0.0018137511559925545
+        ],
+        "spread": [
+          0.01613686170303197,
+          0.17821042700695955,
+          0.24546676416152025,
+          0.10983612604043701,
+          0.05389206016829622,
+          0.041185924147254964
+        ],
+        "doubleDifference": [
+          0.04704439528828175,
+          0.05757515348672371,
+          0.017129548169421582,
+          0.025167022895985824,
+          0.01207820680735421,
+          0.005517289409283848
+        ],
+        "failingAxes": [
+          "tx"
+        ],
+        "doubleFailingAxes": [
+          "tx"
+        ],
+        "equalsNativeFloat": false
+      },
+      {
+        "volume": 88,
+        "rawVolume": 98,
+        "difference": [
+          0.0009030539450378683,
+          0.0013401786047211317,
+          0.000987295065726812,
+          7.456752751855422e-05,
+          0.0001608554570078774,
+          0.00013729858032345693
+        ],
+        "spread": [
+          0.07720635811959653,
+          0.275377596358652,
+          0.4081541228317036,
+          0.28402405748382353,
+          0.12479034746645916,
+          0.14058170188760855
+        ],
+        "doubleDifference": [
+          0.0006606710775969304,
+          0.011373529535049443,
+          0.06062730266042138,
+          0.019025300297276726,
+          0.005360165246237142,
+          0.0013475028992073548
+        ],
+        "failingAxes": [],
+        "doubleFailingAxes": [],
+        "equalsNativeFloat": false
+      }
+    ]
+  },
+  "imageQuality": {
+    "definition": "Pearson correlation inside the pinned GP brain mask against the mean of raw same-shell volumes",
+    "nativeResampling": "Pinned native transforms applied to raw float32 frames with nitransforms 25.1.0 cubic spline (order 3)",
+    "linearRegistrationQc": "Separate order-1 reconstructions of all three transform sets, for comparison with the archived QC script's Linear interpolation; these are not the estimator's cubic-spline outputs",
+    "versions": {
+      "nitransforms": "25.1.0",
+      "numpy": "2.3.5",
+      "scipy": "1.16.3",
+      "nibabel": "5.3.3"
+    },
+    "wasmImageSha256": "d7c19457cc978f32f516541da243c3b3342a98370fd4f443b9a4cbfd7afaca3b",
+    "maskVoxels": 161668,
+    "byShell": {
+      "1000": {
+        "before": {
+          "median": 0.8949192724564559,
+          "dropsOver002": 0
+        },
+        "wasm": {
+          "median": 0.9023265927427992,
+          "dropsOver002": 0
+        },
+        "nativeFloat": {
+          "median": 0.9023265919038624,
+          "dropsOver002": 0
+        },
+        "nativeDouble": {
+          "median": 0.9023538340095298,
+          "dropsOver002": 0
+        },
+        "wasmLinear": {
+          "median": 0.9095956337474922,
+          "dropsOver002": 0
+        },
+        "nativeFloatLinear": {
+          "median": 0.9095956337474922,
+          "dropsOver002": 0
+        },
+        "nativeDoubleLinear": {
+          "median": 0.9096256225843444,
+          "dropsOver002": 0
+        }
+      },
+      "3000": {
+        "before": {
+          "median": 0.6268079284135097,
+          "dropsOver002": 0
+        },
+        "wasm": {
+          "median": 0.6359746757876286,
+          "dropsOver002": 0
+        },
+        "nativeFloat": {
+          "median": 0.6359746780930997,
+          "dropsOver002": 0
+        },
+        "nativeDouble": {
+          "median": 0.6346892987578556,
+          "dropsOver002": 0
+        },
+        "wasmLinear": {
+          "median": 0.6726833463094731,
+          "dropsOver002": 0
+        },
+        "nativeFloatLinear": {
+          "median": 0.6726833463094731,
+          "dropsOver002": 0
+        },
+        "nativeDoubleLinear": {
+          "median": 0.6739940070410415,
+          "dropsOver002": 0
+        }
+      }
+    }
+  }
+}

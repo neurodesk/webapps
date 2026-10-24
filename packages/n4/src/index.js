@@ -1,6 +1,8 @@
 // ANTs N4BiasFieldCorrection in WebAssembly, and the DWI procedure of MRtrix
 // `dwibiascorrect ants` (lib/mrtrix3/dwibiascorrect/ants.py, MPL-2.0) around it.
 
+export { epiReferenceArguments } from "./epi-reference.js";
+
 /** MRtrix `dwibiascorrect ants` defaults: -s 4 -b [100,3] -c [1000,0.0]. */
 export const DEFAULTS = Object.freeze({ shrink: 4, bspline: [100, 3], convergence: [1000, 0] });
 
@@ -20,8 +22,12 @@ export async function inflateNifti(bytes) {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-export async function createN4({ createModule, wasmBinary, onLog = () => {} }) {
+/** buildArguments selects a correction profile; the default remains MRtrix dwibiascorrect. */
+export async function createN4({ createModule, wasmBinary, onLog = () => {}, buildArguments = n4Arguments }) {
   const module = await createModule({ noInitialRun: true, wasmBinary, print: onLog, printErr: onLog });
+  if (typeof module.stackSave !== "function" || typeof module.stackRestore !== "function") {
+    throw new Error("The N4 kernel does not export stackSave and stackRestore.");
+  }
   let next = 0;
   return {
     /**
@@ -36,7 +42,22 @@ export async function createN4({ createModule, wasmBinary, onLog = () => {} }) {
       try {
         module.FS.writeFile(paths.input, await inflateNifti(image));
         if (weight) module.FS.writeFile(paths.weight, await inflateNifti(weight));
-        const code = module.callMain(n4Arguments({ ...paths, ...settings }));
+        const stack = module.stackSave();
+        let code;
+        let trapped = false;
+        let failure;
+        try {
+          code = module.callMain(buildArguments({ ...paths, ...settings }));
+        } catch (error) {
+          trapped = true;
+          failure = error;
+        }
+        try {
+          module.stackRestore(stack);
+        } catch (error) {
+          if (!trapped) throw error;
+        }
+        if (trapped) throw failure;
         if (code !== 0) throw new Error(`N4 failed (exit ${code}). See the technical log.`);
         return { corrected: module.FS.readFile(paths.corrected), bias: module.FS.readFile(paths.bias) };
       } finally {

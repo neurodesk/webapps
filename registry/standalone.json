@@ -1612,6 +1612,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "hmc": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

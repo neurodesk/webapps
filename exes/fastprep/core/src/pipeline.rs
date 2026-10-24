@@ -128,7 +128,7 @@ pub async fn run<H: Host>(c: &Ctx<H>, o: &Options) -> Result<(), String> {
                 bad.push((k.clone(), problem));
             }
         }
-        // a supported form with defective data (or a deferred PEPOLAR pair): flagged, not used
+        // a supported form with defective data: flagged, not used
         let unusable: Vec<Option<String>> = fmap_of
             .iter()
             .map(|k| {

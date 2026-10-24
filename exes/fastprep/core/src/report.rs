@@ -1,7 +1,7 @@
 //! HTML report: subject page with niimath -bitmap figures, methods text and the task-analysis page.
 
 use crate::argv;
-use crate::bids::{self, ENTITY_ORDER, Image, PEPOLAR_DEFERRED, axis_zooms, pe_words, slice_order};
+use crate::bids::{self, ENTITY_ORDER, Image, axis_zooms, pe_words, slice_order};
 use crate::host::{Host, join, parent};
 use crate::py::{self, escape as esc, g};
 use crate::run::{Ctx, TEMPLATE};
@@ -527,6 +527,11 @@ pub fn methods(t1: &Image, runs: &[Run], anat: &Anat) -> String {
                 "frame-wise field maps were estimated from the multi-echo phase with MEDIC {} (niimath implementation) and applied as per-volume voxel shifts along the phase-encoding direction",
                 cite(&["medic"])
             )
+        } else if ms_.contains(&"pyhysco") {
+            format!(
+                "temporal means of opposite-phase-encoding EPI references were corrected with PyHySCO {} (sdc Rust port, PyHySCO 0.0.4 defaults); the resulting Hz field was registered to the BOLD reference and applied as signed readout-scaled voxel shifts with Jacobian intensity modulation",
+                cite(&["pyhysco", "hysco"])
+            )
         } else if ms_.contains(&"phasediff") {
             format!(
                 "a phase-difference field map (ΔTE {} ms) was unwrapped with ROMEO {}, converted to a field map as FSL's fsl_prepare_fieldmap {} (niimath implementations), registered to the reference and applied as a voxel-shift map along the phase-encoding direction {}",
@@ -552,9 +557,6 @@ pub fn methods(t1: &Image, runs: &[Run], anat: &Anat) -> String {
                 format!("{t}, followed by a residual correction: {how}")
             } else {
                 let lead = match &unusable {
-                    Some(u) if u == PEPOLAR_DEFERRED => {
-                        "an opposite-phase-encoding (PEPOLAR) field map was acquired but is not supported by this version, so ".into()
-                    }
                     Some(u) => format!("the acquired field map failed validation ({u}), so "),
                     None => "with no field map, ".into(),
                 };
@@ -564,11 +566,9 @@ pub fn methods(t1: &Image, runs: &[Run], anat: &Anat) -> String {
         if t.is_empty() {
             t = format!(
                 "no distortion correction was applied{}",
-                unusable.map_or(String::new(), |u| if u == PEPOLAR_DEFERRED {
-                    " (an opposite-phase-encoding field map was acquired but is not supported by this version)".into()
-                } else {
-                    format!(" (field map failed validation: {u})")
-                })
+                unusable.map_or(String::new(), |u| format!(
+                    " (field map failed validation: {u})"
+                ))
             );
         }
         match sdc_text.iter_mut().find(|(k, _)| *k == t) {

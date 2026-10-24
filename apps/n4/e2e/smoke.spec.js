@@ -221,6 +221,11 @@ test("the automation operation returns the corrected image, field and mask", asy
   await page.goto("/");
   await page.locator("#neurodesk-input-transfer").setInputFiles(series.files);
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" }));
+  await page.locator("#neurodesk-input-transfer").setInputFiles({
+    name: "upstream_acquisition.json", mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ PhaseEncodingDirection: "j-", TotalReadoutTime: 0.05, SliceTiming: [0, 0.02] })),
+  });
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("adopt", { role: "sidecar" }));
   await page.locator("#neurodesk-input-transfer").setInputFiles(tissueMask());
   await page.evaluate(async () => {
     await globalThis.neurodeskAutomation.dispatch("adopt", { role: "mask" });
@@ -229,8 +234,14 @@ test("the automation operation returns the corrected image, field and mask", asy
   await expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state), { timeout: 90000 }).toBe("succeeded");
   const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
   expect(report.provenance.procedure).toBe("mrtrix-dwibiascorrect-ants");
-  expect(Object.keys(report.artifacts).sort()).toEqual(["bias", "bval", "bvec", "image", "mask"]);
+  expect(Object.keys(report.artifacts).sort()).toEqual(["bias", "bval", "bvec", "image", "mask", "sidecar"]);
+  const event = page.waitForEvent("download");
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("download", { artifactId: "sidecar" }));
+  expect(JSON.parse(readFileSync(await (await event).path(), "utf8"))).toMatchObject({
+    PhaseEncodingDirection: "j-", TotalReadoutTime: 0.05, SliceTiming: [0, 0.02],
+  });
 });
+
 
 test("cancelling while results are compressed does not publish downloads", async ({ page }) => {
   test.setTimeout(120000);

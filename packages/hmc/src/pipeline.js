@@ -29,7 +29,7 @@ const COLUMNS = Object.freeze({ nifreeze: "rigid", shoreline: "affine" });
 export async function readSeries(bytes) {
   const buffer = await decodeNiftiBuffer(bytes);
   const { data, header, dims, frames } = readNiftiFrames(buffer);
-  return { data, dims, frames, affine: header.affine.map((row) => Array.from(row)), headerBytes: extractNiftiHeader(buffer) };
+  return { data, dims, frames, affine: header.affine.map((row) => Array.from(row)), headerBytes: extractNiftiHeader(buffer), floating: [16, 64].includes(header.datatype) || header.sclSlope !== 1 || header.sclInter !== 0 };
 }
 
 /**
@@ -41,8 +41,10 @@ export async function readSeries(bytes) {
  * @param {number[]} options.bvals one b-value per volume
  * @param {number[][]} options.bvecs three rows (x, y, z) of one value per volume
  * @param {'nifreeze'|'shoreline'} options.method the b0, b-vector and motion-column rules
- * @param {(volume: number, b0: boolean) => Float32Array | null} options.target the fixed image of a
- *   volume on the series grid, or null to keep the volume as it is (identity transform)
+ * @param {(volume: number, b0: boolean) => Float32Array | (() => Float32Array | Float64Array) | null} options.target the fixed image of a
+ *   volume on the series grid, a lazy target prepared when a worker is free, or null to keep it unchanged
+ * @param {(volume: number, data: Float32Array) => Float32Array} [options.moving] prepare the registration sample
+ * @param {number[]} [options.order] a permutation of all input frame indices
  * @param {(volume: number) => string[]} options.argv the antsRegistration argv of a volume; it reads
  *   INPUT_NAMES and writes `transformFile`
  * @param {Uint8Array | null} [options.mask] one byte per voxel, written as INPUT_NAMES.mask
@@ -62,6 +64,8 @@ export async function correctHeadMotion({
   bvecs,
   method = "nifreeze",
   target,
+  moving,
+  order,
   argv,
   mask = null,
   transformFile = TRANSFORM_FILE,
@@ -86,8 +90,12 @@ export async function correctHeadMotion({
   const nifti3d = (values) => new Uint8Array(createNiftiFromData(values instanceof Float32Array ? values : Float32Array.from(values), headerBytes, { dims: dims.slice(0, 3) }));
   const targets = Array.from({ length: frames }, (_, v) => target(v, b0[v]));
   targets.forEach((image, v) => {
-    if (image && image.length !== voxels) throw new Error(`The target of volume ${v} is not on the image grid.`);
+    if (image && typeof image !== "function" && image.length !== voxels) throw new Error(`The target of volume ${v} is not on the image grid.`);
   });
+  const visitOrder = order ?? Array.from({ length: frames }, (_, v) => v);
+  if (visitOrder.length !== frames || new Set(visitOrder).size !== frames || visitOrder.some(v => !Number.isInteger(v) || v < 0 || v >= frames)) {
+    throw new Error("The visit order must contain every input volume once.");
+  }
   const registered = targets.map((image) => image !== null && image !== undefined);
   const total = registered.filter(Boolean).length;
   const corrected = new Float32Array(data.length);
@@ -99,18 +107,22 @@ export async function correctHeadMotion({
   const pool = createRegistrationPool({ spawn: runtime.spawn, workers: runtime.workers, signal, kernel: runtime.kernel });
   try {
     const work = [];
-    for (let v = 0; v < frames; v++) {
+    for (const v of visitOrder) {
       if (!registered[v]) {
         corrected.set(volume(v), v * voxels);
         transforms[v] = IDENTITY;
         matFiles[v] = hmc.writeMat(IDENTITY);
         continue;
       }
-      const inputs = () => ({
-        [INPUT_NAMES.fixed]: nifti3d(targets[v]),
-        [INPUT_NAMES.moving]: nifti3d(volume(v)),
-        ...(mask ? { [INPUT_NAMES.mask]: new Uint8Array(createNiftiFromData(Uint8Array.from(mask, (m) => (m ? 1 : 0)), headerBytes, { dims: dims.slice(0, 3) })) } : {}),
-      });
+      const inputs = () => {
+        const fixed = typeof targets[v] === "function" ? targets[v]() : targets[v];
+        if (fixed.length !== voxels) throw new Error(`The target of volume ${v} is not on the image grid.`);
+        return {
+          [INPUT_NAMES.fixed]: nifti3d(fixed),
+          [INPUT_NAMES.moving]: nifti3d(moving ? moving(v, volume(v)) : volume(v)),
+          ...(mask ? { [INPUT_NAMES.mask]: new Uint8Array(createNiftiFromData(Uint8Array.from(mask, (m) => (m ? 1 : 0)), headerBytes, { dims: dims.slice(0, 3) })) } : {}),
+        };
+      };
       work.push(
         pool
           .run({ argv: argv(v), inputs, transfer: true })

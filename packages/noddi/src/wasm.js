@@ -87,34 +87,51 @@ export async function loadNoddi(source) {
    * (fewer than two shells, no b0).
    * @returns {{ fit: (data: Float32Array, voxels: number, mask?: Uint8Array|null) => Record<string, Float32Array>, free: () => void }}
    */
-  function noddiModel(bvals, bvecs) {
+  function noddiModel(bvals, bvecs, { method = 'amico' } = {}) {
+    if (!['amico', 'dmipy'].includes(method)) throw new Error('NODDI method is amico or dmipy.');
+    const create = method === 'dmipy' ? wasm.dmipy_new : wasm.noddi_new;
+    const fitModel = method === 'dmipy' ? wasm.dmipy_fit : wasm.noddi_fit;
+    const freeModel = method === 'dmipy' ? wasm.dmipy_free : wasm.noddi_free;
     const g = gradientArrays(bvals, bvecs);
     const b = copyIn(g.bvals);
     const v = copyIn(g.bvecs);
     let dict;
     try {
-      dict = wasm.noddi_new(b.ptr, v.ptr, g.n);
+      dict = create(b.ptr, v.ptr, g.n);
     } finally {
       b.free();
       v.free();
     }
     if (!dict) throw new Error(text());
+    let diagnostics = null;
 
     /**
      * Fits a chunk of voxels. `data` is volume-major for these voxels only.
      * @returns one map per name in NODDI_MAPS
      */
     function fit(data, voxels, mask = null) {
+      if (!dict) throw new Error('The NODDI model has been freed.');
       if (data.length !== voxels * g.n) {
         throw new Error(`The image has ${data.length / voxels} volumes but the gradient table has ${g.n}.`);
       }
       if (mask && mask.length !== voxels) throw new Error('The mask is not on the image grid.');
+      if (method === 'dmipy') {
+        for (let frame = 0; frame < g.n; frame++) {
+          for (let voxel = 0; voxel < voxels; voxel++) {
+            if (mask && !mask[voxel]) continue;
+            if (!Number.isFinite(data[frame * voxels + voxel])) {
+              throw new Error('dmipy signal must contain one finite value per measurement in selected voxels.');
+            }
+          }
+        }
+      }
       const d = copyIn(data);
       const m = mask ? copyIn(mask) : { ptr: 0, free: () => {} };
       const outBytes = NODDI_MAPS.length * voxels * 4;
       const out = wasm.alloc(outBytes);
       try {
-        if (wasm.noddi_fit(dict, d.ptr, voxels, m.ptr, out) !== 0) throw new Error(text());
+        if (fitModel(dict, d.ptr, voxels, m.ptr, out) !== 0) throw new Error(text());
+        diagnostics = method === 'dmipy' ? JSON.parse(text()) : null;
         const all = new Float32Array(wasm.memory.buffer, out, NODDI_MAPS.length * voxels);
         return Object.fromEntries(NODDI_MAPS.map((name, i) => [name, all.slice(i * voxels, (i + 1) * voxels)]));
       } finally {
@@ -126,11 +143,11 @@ export async function loadNoddi(source) {
 
     const free = () => {
       if (dict) {
-        wasm.noddi_free(dict);
+        freeModel(dict);
         dict = 0;
       }
     };
-    return { fit, free };
+    return { fit, free, get diagnostics() { return diagnostics; } };
   }
 
   return { describe, dtiFit, noddiModel };

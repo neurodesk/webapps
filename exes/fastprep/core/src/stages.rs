@@ -73,8 +73,7 @@ pub struct Fmap {
     pub dte_ms: f64,
 }
 
-/// Phase-difference fieldmap in Hz plus a brain-extracted reference to register it to each boldref.
-/// PEPOLAR groups never reach this: `fieldmap_problem` reports them as deferred.
+/// Acquired fieldmap in Hz plus a brain-extracted reference to register it to each boldref.
 pub async fn fieldmap<H: Host>(c: &Ctx<H>, key: &str, fmaps: &[Image]) -> Result<Fmap, String> {
     let safe: String = key
         .chars()
@@ -95,7 +94,87 @@ pub async fn fieldmap<H: Host>(c: &Ctx<H>, key: &str, fmaps: &[Image]) -> Result
         &[("desc", Some("preproc")), ("dir", None)],
     )?;
     let reference = join(&w, "fmapref_brain.nii.gz");
-    let pd = by("phasediff").ok_or("only phasediff fieldmaps are supported")?;
+    if by("phasediff").is_none() {
+        if let Some(problem) = bids::fieldmap_problem(fmaps) {
+            return Err(problem);
+        }
+        let epis: Vec<&Image> = fmaps.iter().filter(|image| image.suffix == "epi").collect();
+        let prefix = join(&w, "pepolar");
+        let mut means = Vec::new();
+        for (index, image) in epis.iter().enumerate() {
+            let mean = join(&w, &format!("pepolar{}.nii.gz", index + 1));
+            c.run(
+                argv!["niimath", image.path, "-Tmean", mean],
+                &[mean.clone()],
+                None,
+                None,
+            )
+            .await?;
+            means.push(mean);
+        }
+        let field = format!("{prefix}_fieldmap.nii.gz");
+        let corrected1 = format!("{prefix}_corrected1.nii.gz");
+        let corrected2 = format!("{prefix}_corrected2.nii.gz");
+        c.run(
+            argv![
+                "sdc",
+                "pyhysco",
+                means[0],
+                means[1],
+                prefix,
+                "--pe1",
+                epis[0].str("PhaseEncodingDirection").unwrap(),
+                "--pe2",
+                epis[1].str("PhaseEncodingDirection").unwrap(),
+                "--trt",
+                bids::readout_time(epis[0]).unwrap()
+            ],
+            &[
+                field.clone(),
+                corrected1.clone(),
+                corrected2.clone(),
+                format!("{prefix}_fieldmap.json"),
+            ],
+            None,
+            None,
+        )
+        .await?;
+        c.run(argv!["niimath", field, hz], &[hz.clone()], None, None)
+            .await?;
+        let mean = join(&w, "pepolar_corrected_mean.nii.gz");
+        c.run(
+            argv![
+                "niimath", corrected1, "-add", corrected2, "-div", 2usize, mean
+            ],
+            &[mean.clone()],
+            None,
+            None,
+        )
+        .await?;
+        c.run(
+            argv![
+                "brainchop-mindgrab",
+                "-o",
+                reference,
+                "--mask",
+                join(&w, "mask.nii.gz"),
+                mean
+            ],
+            &[reference.clone()],
+            None,
+            None,
+        )
+        .await?;
+        return Ok(Fmap {
+            hz,
+            reference,
+            jacobian: true,
+            kind: "pepolar".into(),
+            method: "pyhysco",
+            dte_ms: 0.0,
+        });
+    }
+    let pd = by("phasediff").unwrap();
     let dte_ms = 1000.0 * (pd.f64("EchoTime2").unwrap() - pd.f64("EchoTime1").unwrap());
     // shorter-TE magnitude (more signal) by its EchoTime, not its label: old dcm2niix swapped them (ds001796)
     let mag = ["magnitude1", "magnitude2"]
@@ -755,11 +834,13 @@ pub async fn bold_fit<H: Host>(
     .await?;
     let mut coreg_ref = reference.clone();
     let mut sdc: Vec<String> = vec![];
-    let pe = bold.str("PhaseEncodingDirection").filter(|p| !p.is_empty());
-    let tro = readout_time(bold).filter(|&t| t != 0.0);
+    let pe = bold
+        .str("PhaseEncodingDirection")
+        .filter(|p| matches!(*p, "i" | "i-" | "j" | "j-" | "k" | "k-"));
+    let tro = readout_time(bold).filter(|t| t.is_finite() && *t > 0.0);
     if (!bold.phases.is_empty() || fm.is_some()) && (pe.is_none() || tro.is_none()) {
         return Err(format!(
-            "{}: SDC needs PhaseEncodingDirection and TotalReadoutTime (or EffectiveEchoSpacing)",
+            "{}: SDC needs a valid PhaseEncodingDirection and finite positive TotalReadoutTime (or EffectiveEchoSpacing)",
             bold.name()
         ));
     }
