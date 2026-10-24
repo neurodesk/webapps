@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Updated dependencies [bd5f3a8]
+  - @neurodesk/webapp-components@0.22.0
 - 14d0d50: The example is now the OpenNeuro ds005577 sub-107 AP slab (120 × 120 × 8 × 101, full Fourier, with its bval, bvec and sidecar), pinned to a Hugging Face commit. On it the port equals MRtrix 3.0.8 `mrdegibbs` to NRMSE 5e-20, and a new oracle test in `exes/dwi` holds it to NRMSE < 1e-15 in CI. The browser reference that the command line's release check uses is recorded again on this example.
 - a028e96: Add `@neurodesk/webapp-components/file-io/bids-derivatives`: one module for the BIDS-derivative names (`splitName`, `sourceStem`, `outputNames(fileName, desc)`, `maskName`), the derivative sidecar (`derivativeSidecar(sidecar, description)`, `sidecarText`) and `gzipFile` of the DWI apps. degibbs, dwidenoise, n4, noddi and hmc use it in place of their own copies. Every output name and every file byte stays the same.
 - Updated dependencies [941884c]

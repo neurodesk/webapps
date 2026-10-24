@@ -1,0 +1,17 @@
+ANTs DenoiseImage library
+Copyright 2026 Neurodesk contributors
+
+wasm/ants-denoise.wasm is ANTs DenoiseImage compiled to WebAssembly.
+Advanced Normalization Tools (ANTs), Apache-2.0, ANTsX contributors.
+https://github.com/ANTsX/ANTs
+ANTs source: 52bc0ab588102682587303d31c720de94e6ef6c1 (2.6.2).
+ITK: Insight Software Consortium / NumFOCUS, Apache-2.0.
+ITKAdaptiveDenoising, Apache-2.0, Copyright NumFOCUS. Filter by Jose V. Manjon,
+ITK port by Nick Tustison.
+https://github.com/ntustison/ITKAdaptiveDenoising
+Source: 24825c8d246e941334f47968553f0ae388851f0c.
+Build toolchain: itkwasm/emscripten@sha256:d6c35290a9f1c5cfeb8168c18bbf64d78394cd111b6a19c6091921e98a3aaa1d
+
+Manjon JV, Coupe P, Marti-Bonmati L, Collins DL, Robles M (2010). Adaptive
+non-local means denoising of MR images with spatially varying noise levels.
+J Magn Reson Imaging 31(1):192-203.

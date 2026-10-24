@@ -1907,3 +1907,72 @@ apps:
         title: NeuroFlow specification
         reference: "NeuroFlow Contributors. NeuroFlow 0.1 specification."
         url: https://github.com/cdrake/neuroflow-spec
+
+  bison:
+    about:
+      - "BISON classifies brain tissue into 8 classes from a T1-weighted image: ventricles, CSF, cerebellar grey and white matter, brainstem, deep grey matter, cortical grey matter and white matter. With a FLAIR image as well, BISON-WMH adds a ninth class, white matter hyperintensities. A random forest classifies each voxel from its intensities after denoising, N4 bias correction and registration to the ICBM 2009c template, and from template tissue priors. The labels, one probability map per class and the mask are on the grid of your T1; the class volumes are given in millilitres."
+      - "Everything runs in your browser on the CPU. A run takes several minutes; the nonlinear registration is the slowest step."
+      - "The trained classifiers, tissue priors and intensity histograms are not published yet. They become available when the BISON authors allow their publication; until then the app cannot classify."
+      - "Outputs are research estimates, not a diagnosis. Check them against the image."
+    packages:
+      - { name: "@neurodesk/bison", url: https://github.com/neurodesk/webapps/tree/main/packages/bison, role: BISON preprocessing, features and outputs, shared by the browser worker and the command line }
+      - { name: antsRegistration (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/packages/hmc-registration, role: "rigid, affine and SyN registration to the ICBM 2009c template (@neurodesk/hmc-registration)" }
+      - { name: ANTs DenoiseImage (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/packages/ants-denoise, role: "adaptive non-local means denoising (@neurodesk/ants-denoise)" }
+      - { name: niimath (WebAssembly), url: https://github.com/rordenlab/niimath, role: N4 bias field correction and image maths }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the BISON random forest classifiers on the CPU }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: local DICOM to NIfTI conversion }
+    citations:
+      - group: Tissue segmentation
+        title: BISON
+        reference: "Dadar M, Collins DL. BISON: brain tissue segmentation pipeline using T1-weighted magnetic resonance images and a random forest classifier. Magnetic Resonance in Medicine. 2021;85(4):1881–1894."
+        doi: 10.1002/mrm.28547
+        code: https://github.com/VANDAlab/BISON
+      - group: White matter hyperintensities
+        title: BISON-WMH
+        reference: "Dadar M, Maranzano J, Misquitta K, et al. Performance comparison of 10 different classification techniques in segmenting white matter hyperintensities in aging. NeuroImage. 2017;157:233–249."
+        doi: 10.1016/j.neuroimage.2017.06.009
+        code: https://github.com/VANDAlab/BISON-WMH
+      - group: Template
+        title: ICBM 2009c nonlinear symmetric
+        reference: "Fonov V, Evans AC, Botteron K, Almli CR, McKinstry RC, Collins DL. Unbiased average age-appropriate atlases for pediatric studies. NeuroImage. 2011;54(1):313–327."
+        doi: 10.1016/j.neuroimage.2010.07.033
+      - group: Template
+        title: ICBM 2009 templates
+        reference: "Fonov VS, Evans AC, McKinstry RC, Almli CR, Collins DL. Unbiased nonlinear average age-appropriate brain templates from birth to adulthood. NeuroImage. 2009;47(Suppl 1):S102."
+        doi: 10.1016/S1053-8119(09)70884-5
+      - group: Registration
+        title: ANTs SyN
+        reference: "Avants BB, Epstein CL, Grossman M, Gee JC. Symmetric diffeomorphic image registration with cross-correlation: evaluating automated labeling of elderly and neurodegenerative brain. Medical Image Analysis. 2008;12(1):26–41."
+        doi: 10.1016/j.media.2007.06.004
+        code: https://github.com/ANTsX/ANTs
+      - group: Preprocessing
+        title: N4 bias field correction
+        reference: "Tustison NJ, Avants BB, Cook PA, et al. N4ITK: improved N3 bias correction. IEEE Transactions on Medical Imaging. 2010;29(6):1310–1320."
+        doi: 10.1109/TMI.2010.2046908
+      - group: Preprocessing
+        title: Adaptive non-local means denoising
+        reference: "Manjón JV, Coupé P, Martí-Bonmatí L, Collins DL, Robles M. Adaptive non-local means denoising of MR images with spatially varying noise levels. Journal of Magnetic Resonance Imaging. 2010;31(1):192–203."
+        doi: 10.1002/jmri.22003
+        code: https://github.com/ANTsX/ANTs
+      - group: Image processing
+        title: niimath
+        reference: "Rorden C, Webster M, Drake C, et al. niimath and fslmaths: replication as a method to enhance testing and improve tool quality. Aperture Neuro. 2024;4."
+        doi: 10.52294/001c.94384
+        code: https://github.com/rordenlab/niimath
+      - group: Example data
+        title: Precision Aging Network (OpenNeuro ds007522)
+        reference: "Barnes CA, Huentelman MJ, Chen Z, et al. Precision Aging Network: closing the gap between cognitive healthspan and human lifespan. OpenNeuro. 2026. Dataset ds007522, version 2.0.1."
+        doi: 10.18112/openneuro.ds007522.v2.0.1
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

@@ -1,0 +1,45 @@
+{
+  "name": "@neurodesk/bison",
+  "version": "0.2.0",
+  "description": "BISON brain tissue and white matter hyperintensity segmentation for browsers and the command line",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "bison": "./bin/bison.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./node": "./src/node.js",
+    "./browser": "./src/browser.js",
+    "./manifest": "./model.manifest.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@neurodesk/ants-denoise": "workspace:*",
+    "@neurodesk/hmc-registration": "workspace:*",
+    "@neurodesk/node-drivers": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niimath": "1.4.20261016",
+    "fflate": "0.8.2",
+    "onnxruntime-node": "1.29.0",
+    "onnxruntime-web": "1.29.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/bison"
+  }
+}

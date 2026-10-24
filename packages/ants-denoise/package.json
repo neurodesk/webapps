@@ -1,0 +1,34 @@
+{
+  "name": "@neurodesk/ants-denoise",
+  "version": "0.2.0",
+  "description": "ANTs DenoiseImage (adaptive non-local means) in WebAssembly",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./node": "./src/node.js",
+    "./pin": "./src/pin.js",
+    "./worker": "./src/worker.js",
+    "./module": "./wasm/ants-denoise.mjs",
+    "./wasm": "./wasm/ants-denoise.wasm"
+  },
+  "files": [
+    "src/*.js",
+    "wasm",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/ants-denoise"
+  }
+}

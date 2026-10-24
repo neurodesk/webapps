@@ -4,6 +4,9 @@
 
 ### Patch Changes
 
+- Updated dependencies [bd5f3a8]
+  - @neurodesk/webapp-components@0.22.0
+  - @neurodesk/calmar@0.7.20261024
 - Updated dependencies [941884c]
 - Updated dependencies [a028e96]
 - Updated dependencies [650ce5f]

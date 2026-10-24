@@ -124,6 +124,37 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
 
+  apps/bison:
+    dependencies:
+      '@neurodesk/bison':
+        specifier: workspace:*
+        version: link:../../packages/bison
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niimath':
+        specifier: 1.4.20261016
+        version: 1.4.20261016
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+      fflate:
+        specifier: 0.8.2
+        version: 0.8.2
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
   apps/brain-extraction:
     dependencies:
       '@brainchop/mindgrab':
@@ -1302,6 +1333,35 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
+
+  packages/ants-denoise: {}
+
+  packages/bison:
+    dependencies:
+      '@neurodesk/ants-denoise':
+        specifier: workspace:*
+        version: link:../ants-denoise
+      '@neurodesk/hmc-registration':
+        specifier: workspace:*
+        version: link:../hmc-registration
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      '@niivue/niimath':
+        specifier: 1.4.20261016
+        version: 1.4.20261016
+      fflate:
+        specifier: 0.8.2
+        version: 0.8.2
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
 
   packages/brain-extraction:
     dependencies:
@@ -11388,7 +11448,7 @@ snapshots:
       '@lukeed/uuid': 2.0.1
       '@ungap/structured-clone': 1.3.3
       array-equal: 1.0.2
-      fflate: 0.8.3
+      fflate: 0.8.2
       gl-matrix: 3.4.4
       nifti-reader-js: 0.8.0
       zarrita: 0.5.4
@@ -11400,7 +11460,7 @@ snapshots:
       '@lukeed/uuid': 2.0.1
       '@ungap/structured-clone': 1.3.3
       array-equal: 1.0.2
-      fflate: 0.8.3
+      fflate: 0.8.2
       gl-matrix: 3.4.4
       nifti-reader-js: 0.8.0
       zarrita: 0.5.4
@@ -11412,7 +11472,7 @@ snapshots:
       '@lukeed/uuid': 2.0.1
       '@ungap/structured-clone': 1.3.3
       array-equal: 1.0.2
-      fflate: 0.8.3
+      fflate: 0.8.2
       gl-matrix: 3.4.4
       nifti-reader-js: 0.8.0
       zarrita: 0.5.4
@@ -12653,7 +12713,7 @@ snapshots:
   '@vitest/ui@3.2.7(vitest@3.2.7)':
     dependencies:
       '@vitest/utils': 3.2.7
-      fflate: 0.8.3
+      fflate: 0.8.2
       flatted: 3.4.2
       pathe: 2.0.3
       sirv: 3.0.2
@@ -15816,7 +15876,7 @@ snapshots:
 
   nifti-reader-js@0.8.0:
     dependencies:
-      fflate: 0.8.3
+      fflate: 0.8.2
 
   nifti-reader-js@0.8.1:
     dependencies:
@@ -15871,7 +15931,7 @@ snapshots:
 
   numcodecs@0.3.2:
     dependencies:
-      fflate: 0.8.3
+      fflate: 0.8.2
 
   nwsapi@2.2.24: {}
 

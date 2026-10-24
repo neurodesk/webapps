@@ -1048,6 +1048,13 @@ nd-result-list {
 .nd-chart-legend { display: flex; flex-wrap: wrap; gap: var(--nd-space-xs) var(--nd-space-md); margin: 0; padding: 0; list-style: none; color: var(--nd-color-text-muted); font-size: 0.7rem; }
 .nd-chart-legend svg { width: 18px; height: 10px; margin-right: var(--nd-space-xs); vertical-align: middle; }
 
+/* Label legend (LabelLegend): one row per label, its colour swatch, name and volume. */
+.nd-legend-list { display: grid; gap: var(--nd-space-xs); margin: 0; font-size: 0.75rem; }
+.nd-legend-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--nd-space-sm); }
+.nd-legend-swatch { width: 12px; height: 12px; border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); }
+.nd-legend-name { color: var(--nd-color-text); overflow-wrap: anywhere; }
+.nd-legend-volume { color: var(--nd-color-text-muted); font-variant-numeric: tabular-nums; text-align: right; }
+
 /* Embedded FreeBrowse 2.5: its own stylesheet stays inside an open shadow root. */
 .nd-viewer-embed {
   position: absolute;

@@ -158,6 +158,7 @@ export const unpublished = {
   SCT_E2E_LESION_MS: 'SCT tutorial MS image has no redistribution licence; use a local sct_tutorial_data copy',
   CAROTID_FLOW_EXAMPLE: "the requesting lab's export, not licensed for release",
   TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',
+  BISON_ASSET_DIR: 'BISON classifiers, priors and histograms are held until the BISON authors allow their publication (models/bison.manifest.json held_assets)',
 };
 
 // With `cpu`, only the app's CPU subset; for an app without one, nothing.

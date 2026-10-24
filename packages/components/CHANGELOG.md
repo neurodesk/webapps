@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.22.0
+
+### Minor Changes
+
+- bd5f3a8: Style the `LabelLegend` rows in the shared imaging workspace: a colour swatch, the label name and its volume on one line, from tokens only.
+
 ## 0.21.0
 
 ### Minor Changes

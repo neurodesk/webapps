@@ -1,0 +1,39 @@
+[
+  {
+    "id": "t1",
+    "label": "T1 (BISON, 8 tissue classes)",
+    "description": "A defaced 1 mm T1-weighted head MRI (OpenNeuro ds007522, sub-HML0541, CC0).",
+    "expectedResult": "A label map of 8 tissue classes on the T1 grid, one probability map per class, the classification mask and the volume of each class in mL.",
+    "files": [
+      {
+        "role": "t1",
+        "name": "sub-HML0541_ses-01_rec-defaced_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d7d841013bc7c46caaf6c8c7fc9b9f0323c8e4a9/bison/examples/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_T1w.nii.gz",
+        "sha256": "1831302f79dd00631a17cedda7c3881c0b93411335acc3041d380ec0270f8412",
+        "bytes": 8183320
+      }
+    ]
+  },
+  {
+    "id": "t1-flair",
+    "label": "T1 + FLAIR (BISON-WMH, adds white matter hyperintensities)",
+    "description": "The same participant's defaced T1-weighted and FLAIR head MRI (OpenNeuro ds007522, sub-HML0541, CC0).",
+    "expectedResult": "A label map of 9 classes, white matter hyperintensities included, with one probability map per class, the classification mask and the class volumes in mL.",
+    "files": [
+      {
+        "role": "t1",
+        "name": "sub-HML0541_ses-01_rec-defaced_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d7d841013bc7c46caaf6c8c7fc9b9f0323c8e4a9/bison/examples/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_T1w.nii.gz",
+        "sha256": "1831302f79dd00631a17cedda7c3881c0b93411335acc3041d380ec0270f8412",
+        "bytes": 8183320
+      },
+      {
+        "role": "flair",
+        "name": "sub-HML0541_ses-01_rec-defaced_FLAIR.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d7d841013bc7c46caaf6c8c7fc9b9f0323c8e4a9/bison/examples/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_FLAIR.nii.gz",
+        "sha256": "bc2e9118bd87ce3086adb42516be8efa4af55f7f4be59296b98dc7620de82abf",
+        "bytes": 4321238
+      }
+    ]
+  }
+]

@@ -8,6 +8,7 @@ import { bindFileDrop } from '../src/ui/bindFileDrop.js';
 import { bindInfoTooltips, renderInfoIcon } from '../src/ui/bindInfoTooltips.js';
 import { createViewerToolbar } from '../src/elements/viewer-toolbar.js';
 import { createResultList } from '../src/elements/result-list.js';
+import { LabelLegend } from '../src/ui/LabelLegend.js';
 import { readFile } from 'node:fs/promises';
 
 function dom(html = '<!doctype html><body></body>') {
@@ -337,4 +338,21 @@ test('editable report forms share workflow field styling and phone control sizin
   assert.ok(rules.some(rule => rule.includes('font-size: 16px')));
   assert.ok(rules.some(rule => rule.includes('border-color: var(--nd-color-primary)')));
   assert.match(css, /\.nd-report-form \.nd-section-content\s*\{[^}]*gap:\s*var\(--nd-space-sm\)/);
+});
+
+test('a label legend shows each label with its swatch, name and volume, styled from tokens alone', async () => {
+  const document = dom();
+  const element = document.createElement('div');
+  document.body.append(element);
+  new LabelLegend({ element }).render([{ index: 1, name: 'Ventricles', color: [120, 18, 134, 255] }], { labelVolumes: { 1: 12.345 } });
+  const item = element.querySelector('.nd-legend-list > .nd-legend-item');
+  assert.equal(item.querySelector('.nd-legend-name').textContent, 'Ventricles');
+  assert.equal(item.querySelector('.nd-legend-volume').textContent, '12.35 ml');
+  assert.match(item.querySelector('.nd-legend-swatch').style.backgroundColor, /^rgba?\(120, 18, 134/);
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  const rules = css.split('\n').filter((line) => /^\.nd-legend-/.test(line));
+  for (const selector of ['.nd-legend-list', '.nd-legend-item', '.nd-legend-swatch', '.nd-legend-name', '.nd-legend-volume']) {
+    assert.ok(rules.some((line) => line.startsWith(`${selector} {`)), `imaging-workspace.css must define ${selector}`);
+  }
+  assert.ok(rules.every((line) => !/#[0-9a-f]{3,8}\b|\brgba?\(/i.test(line)), 'no colour literals');
 });

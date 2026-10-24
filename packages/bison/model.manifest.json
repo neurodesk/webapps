@@ -1,0 +1,474 @@
+{
+  "schema_version": 1,
+  "app": "bison",
+  "license": "Mixed; see individual assets",
+  "repository": "neurodeskorg/webapps",
+  "revision": "d7d841013bc7c46caaf6c8c7fc9b9f0323c8e4a9",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d7d841013bc7c46caaf6c8c7fc9b9f0323c8e4a9/bison/",
+  "preprocessing_contract": {
+    "template": "ICBM 2009c nonlinear symmetric, 193x229x193, 1 mm, sform code 4",
+    "classes": {
+      "1": "ventricles",
+      "2": "csf",
+      "3": "cerebellar-gm",
+      "4": "cerebellar-wm",
+      "5": "brainstem",
+      "6": "deep-gm",
+      "7": "cortical-gm",
+      "8": "wm",
+      "9": "wmh"
+    },
+    "features_t1": "SP_1..8, T1c, avT1, T1 histogram 1..8 (18)",
+    "features_t1_flair": "SP_1..9, T1c, avT1, T1 histogram 1..9, FLAIRc, avFLAIR, FLAIRc/T1c, 0, FLAIR histogram 1..9 (33)",
+    "histogram_index": "pdf[round_half_even(clip(x, 1, 255))][class - 1]",
+    "classifier_output": "label = sklearn predict (class 0 may occur); probabilities column c = class c",
+    "source": "packages/bison/src/preprocess.js, packages/bison/docs/preprocessing.md"
+  },
+  "assets": [
+    {
+      "filename": "templates/COPYING",
+      "bytes": 676,
+      "sha256": "5915d16f84d99c3cedc8290b09da72f6f92e5dde1ba1c9859ee186aa952b66a4",
+      "license": "MNI ICBM 2009 terms (COPYING): use and redistribution permitted with the copyright notice",
+      "source_url": "https://packages.bic.mni.mcgill.ca/mni-models/icbm152/mni_icbm152_nlin_sym_09c_nifti.zip (sha256 ed981b4611ddd797a22f539035979723ecb1badebd06dcd85df149b5ef00890d)",
+      "provenance": "verbatim from the zip",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d7d841013bc7c46caaf6c8c7fc9b9f0323c8e4a9/bison/templates/COPYING"
+    },
+    {
+      "filename": "templates/mni_icbm152_t1_tal_nlin_sym_09c.nii.gz",
+      "bytes": 15490723,
+      "sha256": "408ba7ec19675b664e49acb8dad5f411b5549a4b4506d70dfc196795c0030365",
+      "license": "MNI ICBM 2009 terms (COPYING): use and redistribution permitted with the copyright notice",
+      "source_url": "https://packages.bic.mni.mcgill.ca/mni-models/icbm152/mni_icbm152_nlin_sym_09c_nifti.zip (sha256 ed981b4611ddd797a22f539035979723ecb1badebd06dcd85df149b5ef00890d)",
+      "provenance": "mni_icbm152_t1_tal_nlin_sym_09c.nii from the zip, compressed with gzip -9n",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d7d841013bc7c46caaf6c8c7fc9b9f0323c8e4a9/bison/templates/mni_icbm152_t1_tal_nlin_sym_09c.nii.gz"
+    },
+    {
+      "filename": "templates/mni_icbm152_t1_tal_nlin_sym_09c_mask.nii.gz",
+      "bytes": 68001,
+      "sha256": "d80457390e77aec5233c272f25f06ed5a7ac3a15aa13d7ccbee1dbaffccf9d42",
+      "license": "MNI ICBM 2009 terms (COPYING): use and redistribution permitted with the copyright notice",
+      "source_url": "https://packages.bic.mni.mcgill.ca/mni-models/icbm152/mni_icbm152_nlin_sym_09c_nifti.zip (sha256 ed981b4611ddd797a22f539035979723ecb1badebd06dcd85df149b5ef00890d)",
+      "provenance": "mni_icbm152_t1_tal_nlin_sym_09c_mask.nii from the zip, compressed with gzip -9n",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d7d841013bc7c46caaf6c8c7fc9b9f0323c8e4a9/bison/templates/mni_icbm152_t1_tal_nlin_sym_09c_mask.nii.gz"
+    }
+  ],
+  "held_assets": {
+    "status": "PENDING: not uploaded, waiting on the BISON authors' permission",
+    "base_url": "PENDING",
+    "note": "filename is the path under base_url and under a local BISON_ASSET_DIR; no url until uploaded",
+    "classifiers": {
+      "bison-t1.onnx": {
+        "pkl_sha256": "b67fa4650a7c8779605a52545bca6a6ddb076b9172b832e7532984e7f026318b",
+        "n_features_in": 18,
+        "classes": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "n_estimators": 128,
+        "total_nodes": 257616
+      },
+      "bison-t1-flair.onnx": {
+        "pkl_sha256": "f25f222e4d8f3065d2d662e615b6765c664202fd3bc97ad90dc2d882eb761fea",
+        "n_features_in": 33,
+        "classes": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "n_estimators": 128,
+        "total_nodes": 241110
+      }
+    },
+    "assets": [
+      {
+        "filename": "models/LICENCE-BISON.txt",
+        "bytes": 1746,
+        "sha256": "adf409f7bf7dc8b130bcb1db2f519ba538d09b2c7527f0946b1494622f84d9ea",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/LICENCE",
+        "provenance": "verbatim"
+      },
+      {
+        "filename": "models/bison-t1-flair.onnx",
+        "bytes": 20872550,
+        "sha256": "33edeb9a6f5ab5fbd0c9e916cbcf3f7f6499815eab1776e9400f1b311bfaeb9a",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/RF0_T1exists_T2_PD_FLAIRexists.pkl.zip",
+        "provenance": "RF0_T1exists_T2_PD_FLAIRexists.pkl via skl2onnx 1.14.1"
+      },
+      {
+        "filename": "models/bison-t1.onnx",
+        "bytes": 20898443,
+        "sha256": "c39b3a1eaec26ceb873d23934bf9a8195b83188723fd98707d3e5de58bfe0ab5",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/RF0_T1exists_T2_PD_FLAIR.pkl via skl2onnx 1.14.1"
+      },
+      {
+        "filename": "models/t1-flair/Av_FLAIR.nii.gz",
+        "bytes": 6105166,
+        "sha256": "a3abf55f262c584d18525f488102aa8c93e472f49dde617b696910f9a0836a0f",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/Av_FLAIR.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/SP_1.nii.gz",
+        "bytes": 123300,
+        "sha256": "df2a15f1f6ff077698260afd9490ae8149651db3b7fc8e987f4138c6967e8fe3",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/SP_1.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/SP_2.nii.gz",
+        "bytes": 1274552,
+        "sha256": "2c5f8d9ed8cbd56c2d5793b054853d1c00d1db326e11f5babb637ba9aec8f3aa",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/SP_2.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/SP_3.nii.gz",
+        "bytes": 237390,
+        "sha256": "6cb0c091b51d4a65cb26276b896706757ce5582c43dea433cb4206030a1c5a2a",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/SP_3.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/SP_4.nii.gz",
+        "bytes": 160072,
+        "sha256": "56e9e100fef7c878bf419ecf2cd2c3e79fb6be9b07682b2246ed0c2e44afadc3",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/SP_4.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/SP_5.nii.gz",
+        "bytes": 69868,
+        "sha256": "5a592f0d9e39f9116a6f5507166641bf41a7e3f7ca9a2e9dc6872a14549abade",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/SP_5.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/SP_6.nii.gz",
+        "bytes": 128320,
+        "sha256": "72820bc26191d5785148681dfb5a108082cba0bf5a77b5d37045de59e0004901",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/SP_6.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/SP_7.nii.gz",
+        "bytes": 1388263,
+        "sha256": "1a8532bc13e06cb4846ffbbe6e2816a7ba13b636b24d4bb89c8ad0d8a0b86eee",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/SP_7.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/SP_8.nii.gz",
+        "bytes": 1601344,
+        "sha256": "e5935051045fa890dcd4e18982d01bd123e51aa5fc7214a26fcd4c678c6c8db2",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/SP_8.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/SP_9.nii.gz",
+        "bytes": 623876,
+        "sha256": "201de58c78243e92495b7aa8b73e3d5d044616006d2019e8440ee5f2923b72c4",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/SP_9.mnc",
+        "provenance": "float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1-flair/flair-histogram.json",
+        "bytes": 24773,
+        "sha256": "4e884ded21b1d23ba41fa7be2bda6cd9acda9b655587a01fde804f90f07dd86e",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/FLAIR_Label.pkl",
+        "provenance": "FLAIR_Label.pkl as JSON"
+      },
+      {
+        "filename": "models/t1-flair/t1-histogram.json",
+        "bytes": 27339,
+        "sha256": "94130ec0ed078e2fa29b67d98e6a12b34003a91a1dd8b939b3aa536f75f5b4a1",
+        "license": "NOASSERTION: BISON-WMH has no licence file; its CITATION.cff says Apache-2.0",
+        "source_url": "https://github.com/VANDAlab/BISON-WMH/blob/ee973dfefd017edbab3f20a8206cbce0e9d060c2/T1_Label.pkl",
+        "provenance": "T1_Label.pkl as JSON"
+      },
+      {
+        "filename": "models/t1/SP_1.nii.gz",
+        "bytes": 123300,
+        "sha256": "df2a15f1f6ff077698260afd9490ae8149651db3b7fc8e987f4138c6967e8fe3",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/SP_1.mnc as float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1/SP_2.nii.gz",
+        "bytes": 1274552,
+        "sha256": "2c5f8d9ed8cbd56c2d5793b054853d1c00d1db326e11f5babb637ba9aec8f3aa",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/SP_2.mnc as float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1/SP_3.nii.gz",
+        "bytes": 237390,
+        "sha256": "6cb0c091b51d4a65cb26276b896706757ce5582c43dea433cb4206030a1c5a2a",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/SP_3.mnc as float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1/SP_4.nii.gz",
+        "bytes": 160072,
+        "sha256": "56e9e100fef7c878bf419ecf2cd2c3e79fb6be9b07682b2246ed0c2e44afadc3",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/SP_4.mnc as float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1/SP_5.nii.gz",
+        "bytes": 69868,
+        "sha256": "5a592f0d9e39f9116a6f5507166641bf41a7e3f7ca9a2e9dc6872a14549abade",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/SP_5.mnc as float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1/SP_6.nii.gz",
+        "bytes": 128320,
+        "sha256": "72820bc26191d5785148681dfb5a108082cba0bf5a77b5d37045de59e0004901",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/SP_6.mnc as float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1/SP_7.nii.gz",
+        "bytes": 1388263,
+        "sha256": "1a8532bc13e06cb4846ffbbe6e2816a7ba13b636b24d4bb89c8ad0d8a0b86eee",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/SP_7.mnc as float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1/SP_8.nii.gz",
+        "bytes": 995368,
+        "sha256": "68ad1ab388761f966efc2a2bd462874e8f6052f32f62a27d3f069849b4cf1fd9",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/SP_8.mnc as float32 NIfTI, ICBM 2009c sym sform, gzip -9n"
+      },
+      {
+        "filename": "models/t1/t1-histogram.json",
+        "bytes": 29451,
+        "sha256": "68b93afe5f1f654d40434b7b758c075c37867f65d760d6eeb0444dd5d0e3ef64",
+        "license": "BISON licence (LICENCE-BISON.txt, BSD-style, notice required)",
+        "source_url": "https://github.com/VANDAlab/BISON/blob/94dd5f81ad1f0956dc9492195bae050b45a2c6dd/Pretrained_Library.zip",
+        "provenance": "Pretrained_Library/T1_Label.pkl as JSON"
+      }
+    ]
+  },
+  "examples": [
+    {
+      "filename": "examples/ds007522/dataset_description.json",
+      "bytes": 3162,
+      "sha256": "dffe1199759df2163bb99c7fe6acc61767e01ec36d1650fea02b13a83fba823c",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/dataset_description.json?versionId=IPrnAbIz3mcxQNAJx5zQmYMcElChMxpk",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "examples/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_FLAIR.json",
+      "bytes": 2084,
+      "sha256": "9404139f36e0147c0f926a5461a6f592cb1d8cec0df0c9a934f021ba71bb2f23",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_FLAIR.json?versionId=Mn5biCXJv9UpL8IynukQNkeX4Cnc5u7g",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "examples/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_FLAIR.nii.gz",
+      "bytes": 4321238,
+      "sha256": "bc2e9118bd87ce3086adb42516be8efa4af55f7f4be59296b98dc7620de82abf",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_FLAIR.nii.gz?versionId=jSYUEGL13htIXQLAI8_ZKGzy11twMH2k",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "examples/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_T1w.json",
+      "bytes": 2101,
+      "sha256": "2dc7394e2ccfb920f39a17f10668e48eaada48de24b0f52caf7ff4187601cbdd",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_T1w.json?versionId=wa_7PerctNGgN2Kg5.dZxkBQ1yDS2FmI",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "examples/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_T1w.nii.gz",
+      "bytes": 8183320,
+      "sha256": "1831302f79dd00631a17cedda7c3881c0b93411335acc3041d380ec0270f8412",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0541/ses-01/anat/sub-HML0541_ses-01_rec-defaced_T1w.nii.gz?versionId=J1MxXYXCDXo6p0sfysMXfAun6Kv0aGqL",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    }
+  ],
+  "validation": [
+    {
+      "filename": "validation/ds007522/dataset_description.json",
+      "bytes": 3162,
+      "sha256": "dffe1199759df2163bb99c7fe6acc61767e01ec36d1650fea02b13a83fba823c",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/dataset_description.json?versionId=IPrnAbIz3mcxQNAJx5zQmYMcElChMxpk",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0654/ses-01/anat/sub-HML0654_ses-01_rec-defaced_FLAIR.json",
+      "bytes": 2493,
+      "sha256": "19f38a691b3ccc4b461848666849077ae68494d6b03433d61b8fe993fd2d6eae",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0654/ses-01/anat/sub-HML0654_ses-01_rec-defaced_FLAIR.json?versionId=Dif1CMX57siM_xQQC1hm9Z1t8Mb7U2SO",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0654/ses-01/anat/sub-HML0654_ses-01_rec-defaced_FLAIR.nii.gz",
+      "bytes": 5277705,
+      "sha256": "9346734cde49765cc45e67b39446e865dd9c19505552778725131bdde662447c",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0654/ses-01/anat/sub-HML0654_ses-01_rec-defaced_FLAIR.nii.gz?versionId=zfjIlX4KbHY6zuxR0jeHZacmq1hVq8zz",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0654/ses-01/anat/sub-HML0654_ses-01_rec-defaced_T1w.json",
+      "bytes": 2371,
+      "sha256": "844cc8030712698b7ef46c518c458c71ac4d03feeef717146e4d657f94f5bdee",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0654/ses-01/anat/sub-HML0654_ses-01_rec-defaced_T1w.json?versionId=VUhy2rmV3ToHjicAUr9zROYV1eErf3mb",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0654/ses-01/anat/sub-HML0654_ses-01_rec-defaced_T1w.nii.gz",
+      "bytes": 8383298,
+      "sha256": "75a9b89e5c7881abf50369c89cc6f2517a6a5d191ce126b0a93f4d59f93e633c",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0654/ses-01/anat/sub-HML0654_ses-01_rec-defaced_T1w.nii.gz?versionId=6dCpa62ei4e4u7bzYDz.HNDXndcvYlqo",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0689/ses-01/anat/sub-HML0689_ses-01_rec-defaced_FLAIR.json",
+      "bytes": 2042,
+      "sha256": "dcc160ded651a8029eedcf4e1caa738d26f2563c1e597cd5127601a040b90010",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0689/ses-01/anat/sub-HML0689_ses-01_rec-defaced_FLAIR.json?versionId=T0HcH65aTKwO_XMLftBSHuD2Duv0Nqi_",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0689/ses-01/anat/sub-HML0689_ses-01_rec-defaced_FLAIR.nii.gz",
+      "bytes": 6155810,
+      "sha256": "c9feccff4b6dde30423dfd6bfa683dfabba1792a2692310baa79976a77871031",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0689/ses-01/anat/sub-HML0689_ses-01_rec-defaced_FLAIR.nii.gz?versionId=MCRD38e23BXQ8puhDcy6Iwo5HJm8RY6e",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0689/ses-01/anat/sub-HML0689_ses-01_rec-defaced_T1w.json",
+      "bytes": 1986,
+      "sha256": "99827a968a5ef7571b91d6f3958da9a932d2efce7cdbb9f27bdb84455bc89700",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0689/ses-01/anat/sub-HML0689_ses-01_rec-defaced_T1w.json?versionId=CRwGUWS4gXfR9qy0mUF.LcHFAeBPG0db",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0689/ses-01/anat/sub-HML0689_ses-01_rec-defaced_T1w.nii.gz",
+      "bytes": 10691252,
+      "sha256": "4a3a463b20ddb906be0d3cd6ae5020fd7219759dc7d21c0bb7ae8fa1293946e3",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0689/ses-01/anat/sub-HML0689_ses-01_rec-defaced_T1w.nii.gz?versionId=V5baPdOzjVXgKcDQ4a7xuQBq.K1ZI5WK",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0774/ses-01/anat/sub-HML0774_ses-01_rec-defaced_FLAIR.json",
+      "bytes": 1877,
+      "sha256": "5a92de426da009b7acfb2952d06d478ddea823c873e436ee2c2633a53456ee7b",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0774/ses-01/anat/sub-HML0774_ses-01_rec-defaced_FLAIR.json?versionId=xXWwdveAM4FSwuxBPPWBxaYmsQqLeHKT",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0774/ses-01/anat/sub-HML0774_ses-01_rec-defaced_FLAIR.nii.gz",
+      "bytes": 5138711,
+      "sha256": "69683efd29b4d6a3032c2ff41603fed1035f96e6198b27b7a6c24bd3c46831f5",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0774/ses-01/anat/sub-HML0774_ses-01_rec-defaced_FLAIR.nii.gz?versionId=uZ60wJUVbS0Ou4_0RkYKLSxLksWAwyi.",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0774/ses-01/anat/sub-HML0774_ses-01_rec-defaced_T1w.json",
+      "bytes": 1939,
+      "sha256": "798d18bb0f3e587ed11a82cfce0598bdbbe7fe0ffb43c69c9e6e3821dbda527b",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0774/ses-01/anat/sub-HML0774_ses-01_rec-defaced_T1w.json?versionId=s7JWA.Az2MCNSt7GGeSN9Gi_OYqouJuE",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0774/ses-01/anat/sub-HML0774_ses-01_rec-defaced_T1w.nii.gz",
+      "bytes": 8190789,
+      "sha256": "4e3a7d8c2c378f8b94ecc0bb6c5dd55fc0ad19f4a08a865e75204f4869a4b583",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0774/ses-01/anat/sub-HML0774_ses-01_rec-defaced_T1w.nii.gz?versionId=cMYX.Ze126qixYErbFSZPYMq0F6ITx_e",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0962/ses-01/anat/sub-HML0962_ses-01_rec-defaced_FLAIR.json",
+      "bytes": 2518,
+      "sha256": "27cdec2c20d7788802660a9bc3683bc4cb4b5f067dc5ea605063743b4083c25d",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0962/ses-01/anat/sub-HML0962_ses-01_rec-defaced_FLAIR.json?versionId=Kbly.lS3ngUMVYcZuBss0cs25YBsxDP7",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0962/ses-01/anat/sub-HML0962_ses-01_rec-defaced_FLAIR.nii.gz",
+      "bytes": 6100123,
+      "sha256": "ae7b6717647591be6dc6b453896d8068e68509d674e4d06ceb90da5b65ad93fe",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0962/ses-01/anat/sub-HML0962_ses-01_rec-defaced_FLAIR.nii.gz?versionId=AZ6mD5K6Vn.g60sC3kB3C8rN6R5i9c37",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0962/ses-01/anat/sub-HML0962_ses-01_rec-defaced_T1w.json",
+      "bytes": 2394,
+      "sha256": "a8fb69ca210108f75009eade1ce6b4ec6159b2136ed0bdf2c1a623d55d192c19",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0962/ses-01/anat/sub-HML0962_ses-01_rec-defaced_T1w.json?versionId=qJHfuqvELYSIgkQ5umXVbR_AfBPCuBAr",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    },
+    {
+      "filename": "validation/ds007522/sub-HML0962/ses-01/anat/sub-HML0962_ses-01_rec-defaced_T1w.nii.gz",
+      "bytes": 9195684,
+      "sha256": "5e206aa8b6cdd29494cac3bfc901c7e5920849a865a79bc43546a89cc594535a",
+      "license": "CC0",
+      "source_url": "https://s3.amazonaws.com/openneuro.org/ds007522/sub-HML0962/ses-01/anat/sub-HML0962_ses-01_rec-defaced_T1w.nii.gz?versionId=xTy9D7Xg6EOTPlttG4NTuZIBt9xmStTu",
+      "provenance": "verbatim, OpenNeuro snapshot 2.0.1"
+    }
+  ],
+  "source_commit": "VANDAlab/BISON 94dd5f81ad1f0956dc9492195bae050b45a2c6dd; VANDAlab/BISON-WMH ee973dfefd017edbab3f20a8206cbce0e9d060c2",
+  "conversion": "scikit-learn 1.0.2, skl2onnx 1.14.1, onnx 1.14.1 (zipmap off, graph name fixed, ai.onnx.ml 3 tensor attributes); labels equal sklearn predict on 382000 rows (random, threshold boundary, tree paths) in onnxruntime-node and onnxruntime-web 1.29.0"
+}

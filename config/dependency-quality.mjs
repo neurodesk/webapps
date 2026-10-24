@@ -8,6 +8,7 @@ export const generatedSources = {
   'packages/easy-mp2rage/wasm/mp2rage_wasm.js': 'Committed wasm-bindgen glue.',
   'packages/nii2tvx/wasm/nii2tvx.mjs': 'Committed Emscripten glue.',
   'packages/n4/wasm/n4-bias.mjs': 'Committed Emscripten glue.',
+  'packages/ants-denoise/wasm/ants-denoise.mjs': 'Committed Emscripten glue.',
   'packages/hmc-registration/wasm/hmc-registration.mjs': 'Committed Emscripten glue.',
   'packages/registration/wasm/syncro-registration.mjs': 'Committed Emscripten glue.',
   'packages/runtime-support/src/dcm2niix/dcm2niix.js': 'Committed Emscripten glue.',

@@ -364,3 +364,19 @@ the same distinct image as before. Dwidenoise retains its three production
 regressions for initial, replacement and result-preview cancellation. Shared
 unit tests cover queue recovery, rollback ordering, calibrated ranges and visible
 failure when restoration cannot complete.
+
+## BISON review, 24 October 2026
+
+T1 and FLAIR inputs use the shared NIfTI and DICOM importer. Browser tests verify
+extensionless DICOM conversion, downloaded voxel values, multiple-series refusal
+and recovery. The phone workflow check preserves both inputs across disclosures
+and clears the previous FLAIR when T1 is replaced.
+
+The production workspace passed desktop and phone interface audits, mobile
+navigation and disclosure checks. Desktop and phone screenshots were reviewed.
+The shared layout, console and status bar need no app-specific styling.
+
+Publication remains blocked: required BISON model files are unpublished, so the
+public examples cannot complete processing and downloads. Both complete model
+tests remain untagged and data-gated until authorized, pinned assets and CI
+provisioning are available. Keep the app unmerged until those workflows pass.

@@ -156,6 +156,17 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
   Every `flames` archive must pass `validation/cli-check.mjs`: mask Dice >= 0.998 against the worker path
   on ONNX Runtime Web (`validation/web-reference.mjs`).
 
+## bison
+
+- The pipeline (denoise, N4, `volume_pol`, registration to ICBM 2009c, features, random forest, outputs) lives in `packages/bison`, shared by the app's worker (`src/browser.js` drivers) and the Node code (`src/node.js`, `src/node-workers.js`). It is pure: the tools are injected (header of `src/preprocess.js`). Change outputs there so both stay identical.
+- The classifiers, tissue priors, histograms and `Av_FLAIR` are held: `held_assets` in `models/bison.manifest.json` has no URL (`base_url: PENDING`) until the BISON authors allow publication. Only `assets` (the ICBM 2009c files) reach the offline inventories, so the held files need no exclusion. Do not upload them or add a placeholder URL. Tests that need them read a local copy from `BISON_ASSET_DIR` (listed under `unpublished` in `scripts/lib/e2e-test-data.mjs`).
+- The reference is the upstream BISON and BISON-WMH scripts on MINC preprocessing, run on epic with the MINC toolkit (`packages/bison/validation/native`, its `README.md`). Its "Divergences from upstream" section and `docs/preprocessing.md` map every step; add any new divergence there.
+- N4 replaces `nu_correct` with its own four-level schedule (`N4_OPTIONS`), not a one-to-one option translation: the direct translation stops early and brightens deep grey matter ([preprocessing.md#n4](packages/bison/docs/preprocessing.md#n4)). Keep it unless a new comparison against N3 on every validation subject shows better.
+- Each registration group and each denoised image gets a new WebAssembly instance, in its own Worker in the browser and worker thread in Node, so its memory is freed when it ends; one hmc kernel instance also aborts on its 27th run (#537, `REGISTRATION_RUNS_PER_INSTANCE`). Do not reuse an instance across stages.
+- Outputs are on the native T1 grid: uint8 labels, one float32 probability per class and the uint8 mask, gzip level 9 with mtime 0 (`src/outputs.js`), so the bytes are the same in every browser and on the command line.
+- `apps/bison/scripts/copy-runtime.mjs` stages the hmc-registration and ants-denoise workers and kernels (pthread builds, so the page needs cross-origin isolation) in the gitignored `public/bison-runtime/`. With `BISON_ASSET_DIR` set, the dev and preview servers serve that folder at `<base>bison-assets/` and the build writes that URL into `VITE_BISON_ASSET_BASE`; a build without it refuses Run before any download, so rebuild before the `@slow` pipeline e2e test. ONNX Runtime Web starts its threads from `src/worker.js` (named `em-pthread`); the worker must not set its own message handler there.
+- The `bison` command line has no release yet; the app is in `WITHOUT_COMMAND_LINE` (`test/standalone.test.mjs`) until its packaging is done.
+
 ## nesvor and the compute server
 
 - `apps/nesvor` is the first app whose method runs outside the browser: NeSVoR needs CUDA, so the

@@ -78,6 +78,29 @@ async function check(id, workflow) {
   finally { await page.close(); }
 }
 try {
+  await check('bison', async page => {
+    await page.locator('#imageInput').setInputFiles(nifti('t1.nii'));
+    await expect(page.locator('#fileInfo')).toContainText('t1.nii');
+    await page.locator('#flairInput').setInputFiles(nifti('flair.nii', 40));
+    await expect(page.locator('#flairInfo')).toContainText('flair.nii');
+    await expect(page.locator('#modeHint')).toContainText('BISON-WMH: 9 classes');
+    const input = page.locator('#inputSection > summary');
+    await input.tap();
+    await expect(page.locator('#flairInfo')).toBeHidden();
+    await input.tap();
+    await expect(page.locator('#fileInfo')).toContainText('t1.nii');
+    await expect(page.locator('#flairInfo')).toContainText('flair.nii');
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#runButton')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await page.locator('#imageInput').setInputFiles(nifti('replacement-t1.nii'));
+    await expect(page.locator('#fileInfo')).toContainText('replacement-t1.nii');
+    await expect(page.locator('#flairInfo')).toBeHidden();
+    await expect(page.locator('#modeHint')).toContainText('BISON: 8 tissue classes');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(1);
+  });
   await check('me-ica', async page => {
     await page.locator('#advancedSettings > summary').tap();
     await page.locator('#seed').fill('17');

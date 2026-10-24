@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "app": "bison",
+  "title": "BISON tissue segmentation",
+  "description": "Segment brain tissue from a T1 image with BISON, and white matter hyperintensities with a FLAIR (BISON-WMH).",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Segment tissues",
+      "description": "Return the label map, one probability map per class and the classification mask on the T1 grid.",
+      "mode": "batch",
+      "inputs": {
+        "t1": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "space": "native",
+          "description": "One T1-weighted image, 2 mm voxels or finer",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "flair": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "space": "native",
+          "description": "An optional FLAIR image of the same session; with it, BISON-WMH also finds WMH",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {},
+      "artifacts": {
+        "labels": {
+          "type": "neuro:label-map",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "native"
+        },
+        "probabilities": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 8,
+          "maximum": 9,
+          "space": "native"
+        },
+        "mask": {
+          "type": "neuro:mask",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "native"
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

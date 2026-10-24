@@ -1099,3 +1099,29 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+
+  - id: bison
+    path: bison
+    title: BISON tissue segmentation
+    description: Segment brain tissue from a T1, and WMH with a FLAIR.
+    categories: [segmentation, lesion-mapping]
+    keywords: [BISON, BISON-WMH, tissue segmentation, brain volumes, white matter hyperintensities, WMH, T1, FLAIR, random forest, ICBM 2009c]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/bison.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
+      e2e_shards: 2
