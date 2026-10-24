@@ -1,13 +1,13 @@
 # topofit
 
-## 0.15.20261023
+## 0.15.20261024
 
 ### Patch Changes
 
 - Updated dependencies [3fc9cf2]
   - @neurodesk/webapp-components@0.19.1
   - @neurodesk/runtime-support@0.9.9
-  - @neurodesk/topofit@0.15.20261023
+  - @neurodesk/topofit@0.15.20261024
 
 ## 0.15.20261022
 

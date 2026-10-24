@@ -1,6 +1,6 @@
 # @neurodesk/spinalcordtoolbox
 
-## 0.9.20261023
+## 0.9.20261024
 
 ### Patch Changes
 

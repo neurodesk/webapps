@@ -1,6 +1,6 @@
 {
   "name": "dcm2niix",
-  "version": "0.2.20261023",
+  "version": "0.2.20261024",
   "private": true,
   "license": "MIT",
   "type": "module",

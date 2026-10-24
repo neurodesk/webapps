@@ -2,5 +2,5 @@
 // without a browser (see test/config.test.js).
 export const APP = Object.freeze({
   id: "dwicorrect",
-  version: "0.1.20261023",
+  version: "0.1.20261024",
 });

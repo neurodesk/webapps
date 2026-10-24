@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/edgereg",
-  "version": "0.5.20261023",
+  "version": "0.5.20261024",
   "description": "EdgeReg affine registration (niimath allineate) for browsers and the command line",
   "type": "module",
   "license": "BSD-2-Clause",

@@ -1,6 +1,6 @@
 # @neurodesk/synthseg
 
-## 0.11.20261023
+## 0.11.20261024
 
 ### Patch Changes
 

@@ -1,6 +1,6 @@
 # @neurodesk/carotid-flow
 
-## 0.4.20261023
+## 0.4.20261024
 
 ### Patch Changes
 

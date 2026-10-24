@@ -1,6 +1,6 @@
 # dwicorrect
 
-## 0.1.20261023
+## 0.1.20261024
 
 ### Minor Changes
 
@@ -16,4 +16,4 @@
   - @neurodesk/shoreline@0.2.0
   - @neurodesk/webapp-components@0.19.1
   - @neurodesk/runtime-support@0.9.9
-  - @neurodesk/sdc@0.2.20261023
+  - @neurodesk/sdc@0.2.20261024

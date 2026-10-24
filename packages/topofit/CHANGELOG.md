@@ -1,6 +1,6 @@
 # @neurodesk/topofit
 
-## 0.15.20261023
+## 0.15.20261024
 
 ### Patch Changes
 

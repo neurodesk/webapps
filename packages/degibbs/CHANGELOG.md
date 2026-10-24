@@ -1,6 +1,6 @@
 # @neurodesk/degibbs
 
-## 0.3.20261023
+## 0.3.20261024
 
 ### Patch Changes
 

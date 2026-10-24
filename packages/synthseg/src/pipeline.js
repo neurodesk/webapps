@@ -4,7 +4,7 @@
 import { VOLUME_COLUMNS } from './results.js';
 
 const CITATION = 'Billot et al. (2023) SynthSeg: Segmentation of brain MRI scans of any contrast and resolution without retraining. Med Image Anal. PMID: 36857946';
-const VERSION = '0.11.20261023';
+const VERSION = '0.11.20261024';
 
 export async function runSynthseg({ buffer, options = {}, loadModel, createSession, wasm,
   onProgress = () => {}, runtime = {} }) {

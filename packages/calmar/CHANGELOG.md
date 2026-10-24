@@ -1,6 +1,6 @@
 # @neurodesk/calmar
 
-## 0.7.20261023
+## 0.7.20261024
 
 ### Patch Changes
 

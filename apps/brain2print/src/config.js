@@ -2,5 +2,5 @@
 // without a browser (see test/config.test.js).
 export const APP = Object.freeze({
   id: "brain2print",
-  version: "0.5.20261023",
+  version: "0.5.20261024",
 });

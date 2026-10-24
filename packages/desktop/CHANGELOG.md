@@ -1,6 +1,6 @@
 # @neurodesk/desktop
 
-## 0.38.20261023
+## 0.38.20261024
 
 ### Patch Changes
 

@@ -1,6 +1,6 @@
 # @neurodesk/deface
 
-## 1.4.20261023
+## 1.4.20261024
 
 ### Patch Changes
 

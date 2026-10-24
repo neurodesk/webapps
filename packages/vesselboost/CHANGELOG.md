@@ -1,6 +1,6 @@
 # @neurodesk/vesselboost
 
-## 0.6.20261023
+## 0.6.20261024
 
 ### Patch Changes
 

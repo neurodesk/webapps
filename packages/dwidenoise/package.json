@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/dwidenoise",
-  "version": "0.2.20261023",
+  "version": "0.2.20261024",
   "description": "Patch2Self diffusion MRI denoising (DIPY version 1 port) for browsers and the command line",
   "type": "module",
   "private": true,

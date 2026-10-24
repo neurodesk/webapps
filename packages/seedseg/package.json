@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/seedseg",
-  "version": "0.6.20261023",
+  "version": "0.6.20261024",
   "type": "module",
   "license": "MIT",
   "description": "SeedSeg prostate fiducial-marker ensemble for browsers and portable command lines",

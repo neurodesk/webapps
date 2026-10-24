@@ -1,6 +1,6 @@
 # @neurodesk/easy-mp2rage
 
-## 0.8.20261023
+## 0.8.20261024
 
 ### Patch Changes
 

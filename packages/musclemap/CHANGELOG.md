@@ -1,6 +1,6 @@
 # @neurodesk/musclemap
 
-## 1.5.20261023
+## 1.5.20261024
 
 ### Patch Changes
 
