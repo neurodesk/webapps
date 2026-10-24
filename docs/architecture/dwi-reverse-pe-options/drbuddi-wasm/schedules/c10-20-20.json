@@ -1,0 +1,9 @@
+{
+  "name": "c10-20-20",
+  "description": "The #596 coarse schedule",
+  "stages": [
+    "[learning_rate={0.5},cfs={10:4:2},field_smoothing={5:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={20:2:1},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={20:1:0},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]"
+  ]
+}

@@ -270,6 +270,31 @@ The browser run must use the same mean AP and PA pair, so the app's preparation 
 
 For DR-BUDDI, a port is not started until a WebAssembly build of the solver runs sub-01 inside the browser memory limit in an acceptable time.
 
+## DR-BUDDI in WebAssembly (#505)
+
+**Decision: DR-BUDDI is not added to `apps/sdc`.** No schedule passes the strict image gate on all six subjects.
+The work used the solver-only probe of #596 (`exes/drbuddi-probe` at `9d6ca773f`, TORTOISE `1ffb8f3`) without changes.
+The results, receipts and scripts are on Hugging Face under `sdc/reverse-pe-options/drbuddi-wasm/` (see "Pinned results"); its `README.md` has every table.
+
+- **Native and WebAssembly agree exactly.** A native x86-64 build of the same probe (same container, ITK, compiler and patches) gives up and down fields byte-identical to headless Chromium for five schedules on sub-01: 0 Hz maximum and median difference in the brain. With the QSIPrep 26.1.1 inputs and schedule, the native probe also gives voxel data bit-identical to the QSIPrep `DRBUDDI` binary (one thread). Thus the WebAssembly build computes the same solver as the shipped binary.
+- **The probe is not the full method, so the port gate is not met.** The `DRBUDDI` program first resamples the b0 pair to about 0.91 mm with a 16-voxel in-plane pad and aligns the down b0 rigidly; the probe solves on the 2 mm grid. With the same schedule, the two fields differ by a median 2.69 Hz (maximum 29.6 Hz) in the brain on sub-01. Against the pinned reference field of sub-01 (`drbuddi/field_hz.nii.gz`), the probe differs by a median 1.13 Hz (TORTOISE default) to 1.69 Hz (10/20/20), not < 0.1 Hz.
+- **The full method does not fit the browser.** On the 0.91 mm grid, the WebAssembly probe stops at the 4 GiB wasm32 memory limit at the start of the full-resolution stage (heap 4,200,595,456 bytes when it stopped; the abort does not give a reason because the build has no assertions). Natively the peak RSS is 3856 MiB. This applies to a wasm32 build; a memory64 build was not tried.
+- **On the 2 mm grid, no schedule passes the gate.** The heap is 1,784,676,352 bytes for every schedule, and Chromium takes 61 s (10/20/20) to 400 s (100/300/300) on an 8-core host. The BBR cost uses the archived shared start of the #471 runs.
+
+| Schedule (2 mm grid, native probe) | Subjects passing | BBR > topup | AP-PA > 1.1 x topup | Mean demeaned Δfield (Hz) | Chromium, sub-01 (s) |
+| --- | --- | --- | --- | --- | --- |
+| 10/20/20, shrink 4/2/1 (#596) | 1/6 | sub-01, sub-0001, sub-0002, sub-0003, sub-0005 | sub-0005 | 1.81 | 61 |
+| 50/100/100, shrink 4/2/1 | 3/6 | sub-0001, sub-0003, sub-0005 | sub-0005 | 1.44 | 273 |
+| 100 each, shrink 8/4/2/1 | 3/6 | sub-0001, sub-0003, sub-0005 | sub-0005 | 1.43 | 285 |
+| 100/300/300, shrink 4/2/1 | 3/6 | sub-0001, sub-0003, sub-0005 | sub-0005 | 1.41 | 400 |
+| 300 each, shrink 8/6/4/2/1 | 3/6 | sub-0001, sub-0003, sub-0005 | sub-0005 | 1.41 | not run |
+| TORTOISE default (26 stages) | 3/6 | sub-0005 | sub-0001, sub-0003, sub-0005 | 1.40 | 203 |
+| QSIPrep `DRBUDDI` default, 0.91 mm (archived #471 run) | 3/6 | sub-0001, sub-0003, sub-0005 | none | 1.43 | does not fit |
+
+The archived full-method run fails BBR on the same three subjects.
+With the finest schedules (100/300/300, and 300 each on five levels), the BBR ratios on those subjects are 1.005 to 1.010: near the archived run, but above topup.
+A field closer to topup's (1.40 Hz) does not give a better T1w alignment than topup's own.
+
 ## Follow-up issues
 
 1. **Pin the evaluation data on Hugging Face** ([#504](https://github.com/neurodesk/webapps/issues/504)). Done: see "Pinned results".
@@ -306,7 +331,7 @@ A failed optional method does not stop `post.sh` from recording completed method
 A missing or failed topup baseline stops post-processing with an error.
 ### Pinned results
 
-The prepared inputs (AP mean, PA mean and its alignment to the AP mean, b0 mask, T1w white-matter segmentation), every method's field in Hz and every `metrics.json` and `summary.json` are on the Hugging Face dataset `neurodeskorg/webapps`, `sdc/reverse-pe-options/`, at commit `d9f25191` (167 files, 268 MB, CC0 sources).
+The prepared inputs (AP mean, PA mean and its alignment to the AP mean, b0 mask, T1w white-matter segmentation), every method's field in Hz, every `metrics.json` and `summary.json`, the shared BBR start of the #471 runs (`mask/b0_to_t1w_init.mat`, `mask/topup_corrected_mean.nii.gz`) and the #505 DR-BUDDI results (`drbuddi-wasm/`) are on the Hugging Face dataset `neurodeskorg/webapps`, `sdc/reverse-pe-options/`, at commit `6fce3512` (429 files, 509 MB, CC0 sources).
 `results.manifest.json` pins each file's size and SHA-256, and the folder's `README.md` describes each file.
 The tables above come back without OpenNeuro, the containers or `epic`:
 

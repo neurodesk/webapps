@@ -1,0 +1,9 @@
+{
+  "name": "m100-300-300",
+  "description": "c10-20-20 levels, 10-15x iterations",
+  "stages": [
+    "[learning_rate={0.5},cfs={100:4:2},field_smoothing={5:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={300:2:1},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={300:1:0},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "f4-100",
+  "description": "four levels 8/4/2/1, 100 iterations each",
+  "stages": [
+    "[learning_rate={0.5},cfs={100:8:3},field_smoothing={6:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={100:4:2},field_smoothing={5:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={100:2:1},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={100:1:0},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]"
+  ]
+}

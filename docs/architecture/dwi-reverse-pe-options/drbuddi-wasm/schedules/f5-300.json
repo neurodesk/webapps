@@ -1,0 +1,11 @@
+{
+  "name": "f5-300",
+  "description": "five levels 8/6/4/2/1, 300 iterations each",
+  "stages": [
+    "[learning_rate={0.5},cfs={300:8:4},field_smoothing={7:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={300:6:3},field_smoothing={6:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={300:4:2},field_smoothing={5:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={300:2:1},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]",
+    "[learning_rate={0.5},cfs={300:1:0},field_smoothing={3:0.1},metrics={MSJac},restrict_constrain={1:1}]"
+  ]
+}
