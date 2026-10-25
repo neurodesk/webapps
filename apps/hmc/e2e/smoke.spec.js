@@ -89,6 +89,7 @@ test("workspace boots with shared information and GP as default", async ({ page 
   await expect(page.locator("#viewer")).toBeVisible();
   await expect(page.locator("#method")).toHaveValue("gp");
   await expect(page.locator("#workers")).toHaveValue("2");
+  await page.locator("#advancedSettings > summary").click();
   await page.locator("#workers").fill("4");
   await page.locator("#method").selectOption("trivial");
   await expect(page.locator("#workers")).toHaveValue("4");
