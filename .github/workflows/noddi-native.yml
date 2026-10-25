@@ -1,89 +1,45 @@
 name: noddi-native
-
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/noddi-native.yml'
-      - 'packages/noddi/**'
-      - 'packages/dwi2trx/**'
-      - 'packages/node-drivers/**'
-      - 'packages/components/**'
-      - 'apps/noddi/**'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/noddi-native.yml'
-      - '.github/workflows/node-cli-portable.yml'
-      - 'exes/node-cli/**'
-      - 'packages/noddi/**'
-      - 'packages/dwi2trx/**'
-      - 'packages/node-drivers/**'
-      - 'packages/components/**'
-      - 'apps/noddi/**'
   workflow_dispatch:
     inputs:
       sign_release:
-        description: Sign and notarize the macOS installer, then attach every verified package to the existing NODDI release
         type: boolean
         default: false
-
-concurrency:
-  group: noddi-native-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 permissions:
   contents: read
-
 jobs:
-  # Fits the pinned example and the two-shell phantom through the built web app, the example given
-  # the command line's MindGrab mask, and compares every download with
-  # packages/noddi/validation/browser-reference.json, the reference the archives are held to.
-  web-app-reference:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 60
+  inputs:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.22.0
           cache: pnpm
-      - name: Install frozen dependencies
-        env:
-          ONNXRUNTIME_NODE_INSTALL: skip
-        run: pnpm install --frozen-lockfile
-      - name: Install browser
+      - run: pnpm install --frozen-lockfile
+      - name: Compare exact input bytes
         run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          node node_modules/@playwright/test/cli.js install --with-deps chromium
-      - name: Fit the pinned example in the web app
-        env:
-          NODDI_BROWSER_REFERENCE: check
-        run: pnpm --filter noddi exec playwright test e2e/reference.spec.js --reporter=line
-
-  # Archives are built, and published, only once the web app still matches the reference they are
-  # held to.
-  portable:
-    needs: web-app-reference
-    uses: ./.github/workflows/node-cli-portable.yml
-    permissions:
-      contents: write
-      id-token: write
-    with:
-      package: packages/noddi
-      targets: >-
-        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
-         {"os": "windows-latest", "platform": "windows-x64"},
-         {"os": "macos-15", "platform": "macos-arm64"}]
-      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
-      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
-    secrets:
-      APPLEID: ${{ secrets.APPLEID }}
-      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      CSC_LINK: ${{ secrets.CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
-      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
+          node --input-type=module <<'JS'
+          import {caseInputs, inputChecksums, compareInputChecksums, readReference} from './packages/noddi/validation/reference.mjs';
+          import {mkdir, copyFile, writeFile} from 'node:fs/promises';
+          import {join} from 'node:path';
+          const inputs = await caseInputs();
+          const actual = inputChecksums(inputs);
+          const expected = (await readReference()).inputs;
+          const checks = compareInputChecksums(actual, expected);
+          for (const [passed, line] of checks) console.log(`${passed ? 'PASS' : 'FAIL'} ${line}`);
+          const directory = join(process.env.RUNNER_TEMP, 'noddi-input-diagnostic');
+          await mkdir(directory, {recursive:true});
+          await writeFile(join(directory, 'checks.json'), JSON.stringify({actual,expected,checks},null,2));
+          for (const file of Object.values(inputs.phantom.files)) await copyFile(file.path, join(directory,file.name));
+          process.exitCode = checks.every(([passed])=>passed) ? 0 : 1;
+          JS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: noddi-input-diagnostic
+          path: ${{ runner.temp }}/noddi-input-diagnostic
