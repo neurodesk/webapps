@@ -455,7 +455,8 @@ try {
     const advanced = page.locator('#advancedSettings > summary');
     await advanced.tap();
     await page.locator('#seed').fill('17');
-    await expect(page.locator('#workers')).toHaveValue('1');
+    await expect(page.locator('#workers')).toHaveValue('2');
+    await page.locator('#workers').fill('4');
     await page.locator('#maskInput').setInputFiles(nifti('interface-mask.nii', 1));
     await expect(page.locator('#statusText')).toHaveText('Brain mask loaded');
     await expect(page.locator('#maskField .nd-file-text')).toContainText('interface-mask.nii');
@@ -468,7 +469,7 @@ try {
     await expect(page.locator('#method')).toHaveValue('trivial');
     await advanced.tap();
     await expect(page.locator('#seed')).toHaveValue('17');
-    await expect(page.locator('#workers')).toHaveValue('1');
+    await expect(page.locator('#workers')).toHaveValue('4');
     await expect(page.locator('#maskField .nd-file-text')).toContainText('interface-mask.nii');
     await page.locator('#clearMask').tap();
     await expect(page.locator('#maskField .nd-file-text')).toHaveText('Drop a brain mask');
