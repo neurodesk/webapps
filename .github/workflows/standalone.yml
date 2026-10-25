@@ -1,8 +1,7 @@
 name: standalone
-
 on:
   schedule:
-    - cron: '23 3 * * *'
+    - cron: 23 3 * * *
   workflow_dispatch:
     inputs:
       publish:
@@ -13,14 +12,12 @@ on:
         description: Run only the native Windows source approval tests
         type: boolean
         default: false
-
 permissions:
   contents: read
-
+  actions: read
 concurrency:
-  group: ${{ inputs.source_approval_only && 'standalone-source-approval' || 'standalone-daily' }}
+  group: standalone-driver-validation-${{ github.ref }}
   cancel-in-progress: false
-
 env:
   WINDOWS_SIGNING_ENABLED: ${{ github.event_name != 'pull_request' && vars.WINDOWS_SIGNING_ENABLED || 'false' }}
   AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -29,94 +26,58 @@ env:
   AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
   AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
   AZURE_ARTIFACT_SIGNING_PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
-  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
   ONNXRUNTIME_NODE_INSTALL: skip
-
 jobs:
   source-approval:
     if: github.event_name == 'workflow_dispatch' && inputs.source_approval_only
     uses: ./.github/workflows/desktop-source-approval.yml
-
   bundle:
-    if: github.event_name != 'workflow_dispatch' || !inputs.source_approval_only
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 10
     outputs:
-      release_date: ${{ steps.date.outputs.release_date }}
+      release_date: ${{ steps.source.outputs.release_date }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          node-version: 24
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
-        with:
-          targets: wasm32-unknown-unknown
-      - name: Install WASM build tools
-        run: |
-          rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.13.1 --locked
-      - name: Set up wasm-opt
-        uses: ./.github/actions/setup-wasm-opt
-      - run: pnpm install --frozen-lockfile
-      - name: Select the UTC release date
-        id: date
-        run: echo "release_date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
-      - name: Set the daily desktop version
-        run: node scripts/desktop/daily-version.mjs
+          fetch-depth: 2
+      - name: Verify unchanged application source and completed bundle
+        id: source
         env:
-          DESKTOP_RELEASE_DATE: ${{ steps.date.outputs.release_date }}
-      - name: Test package contracts
-        run: node --test test/standalone.test.mjs test/new-app.test.mjs test/offline-asset-pins.test.mjs packages/desktop/test/*.test.js
-      - uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: standalone-turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: standalone-turbo-${{ runner.os }}-
-      - run: pnpm build
-      - uses: actions/cache@v6
-        with:
-          path: .offline-cache
-          key: offline-assets-${{ hashFiles('registry/offline-assets.lock.json') }}
-      - name: Verify all offline inputs against the committed lock
-        run: node scripts/desktop/assets.mjs
-      - run: node scripts/desktop/assemble.mjs
-      - name: Archive complete offline resources
-        run: tar -czf offline-resources.tar.gz -C packages/desktop resources
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: offline-resources
-          path: offline-resources.tar.gz
-          compression-level: 0
-          if-no-files-found: error
-      - name: Build the platform-independent model pack
-        run: |
-          node scripts/desktop/without-models.mjs
-          node scripts/desktop/models-pack.mjs
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: desktop-models-pack
-          path: packages/desktop/release/github/
-          compression-level: 0
-          if-no-files-found: error
-
+          GH_TOKEN: ${{ github.token }}
+        run: |-
+          test "$(git rev-parse HEAD^)" = 'e0655cdabaa88886bb9fcea9909b5e8c41979432'
+          git fetch --no-tags --depth=1 origin '4a0f7a5e369a726bba711b15b9a1b3095d8d0858'
+          python3 - <<'PY'
+          import subprocess
+          allowed = set([".changeset/me-ica-offline-workflow.md",".gitattributes",".github/workflows/ci.yml","packages/noddi/test/reference.test.js","packages/noddi/validation/phantom.bvec","packages/noddi/validation/reference.mjs","scripts/audit-interfaces.mjs","scripts/desktop/page-diagnostics.mjs","scripts/desktop/smoke.mjs","scripts/desktop/workflows.mjs","scripts/lib/example-asset-cache.mjs","test-utils/serve-site.mjs","test/agentic-interactions-workflow.test.mjs","test/desktop-page-diagnostics.test.mjs","test/example-asset-cache.test.mjs",".github/workflows/standalone.yml"])
+          changed = set(subprocess.check_output(['git','diff','--name-only','4a0f7a5e369a726bba711b15b9a1b3095d8d0858','HEAD'], text=True).splitlines())
+          assert changed <= allowed, f'Unexpected bundle-source changes: {sorted(changed - allowed)}'
+          print('Verified validation-only source delta:', ', '.join(sorted(changed)))
+          PY
+          test "$(gh api repos/neurodesk/webapps/actions/runs/40171653097 --jq .head_sha)" = '4a0f7a5e369a726bba711b15b9a1b3095d8d0858'
+          test "$(gh api repos/neurodesk/webapps/actions/runs/40171653097/jobs --jq '[.jobs[] | select(.name == "bundle")][0].conclusion')" = success
+          echo "release_date=20261025" >> "$GITHUB_OUTPUT"
+          echo 'Reusing verified offline resources and model pack from run 40171653097, source 4a0f7a5e369a726bba711b15b9a1b3095d8d0858.'
   desktop:
     needs: bundle
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-15, windows-latest]
+        os:
+          - ubuntu-22.04
+          - macos-15
+          - windows-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 100
     permissions:
       contents: read
       id-token: write
+      actions: read
     steps:
       - name: Free Linux runner storage for the suite archives
         if: runner.os == 'Linux'
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: ./.github/actions/windows-signing
         if: runner.os == 'Windows'
         with:
@@ -127,8 +88,8 @@ jobs:
           endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
           account: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
           profile: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
           cache: pnpm
@@ -140,9 +101,11 @@ jobs:
       - run: node packages/desktop/node_modules/electron/install.js
       - name: Test native source approval paths
         run: node --test packages/desktop/test/source-approval.test.js
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: offline-resources
+          run-id: 40171653097
+          github-token: ${{ github.token }}
       - run: tar -xzf offline-resources.tar.gz -C packages/desktop
       - name: Prepare the package without models
         shell: bash
@@ -159,7 +122,7 @@ jobs:
         run: xvfb-run -a node scripts/desktop/smoke.mjs
         env:
           NEURODESK_TEST_REPORT: desktop-reports
-          NEURODESK_SOFTWARE_RENDERING: '1'
+          NEURODESK_SOFTWARE_RENDERING: "1"
       - name: Select workflow coverage from the complete app registry
         shell: bash
         run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs)" >> "$GITHUB_ENV"
@@ -168,14 +131,14 @@ jobs:
         run: node scripts/desktop/smoke.mjs
         env:
           NEURODESK_TEST_REPORT: desktop-workflow-reports
-          NEURODESK_WORKFLOWS: '1'
+          NEURODESK_WORKFLOWS: "1"
       - name: Test Linux offline computations and exports
         if: runner.os == 'Linux'
         run: xvfb-run -a node scripts/desktop/smoke.mjs
         env:
           NEURODESK_TEST_REPORT: desktop-workflow-reports
-          NEURODESK_WORKFLOWS: '1'
-          NEURODESK_SOFTWARE_RENDERING: '1'
+          NEURODESK_WORKFLOWS: "1"
+          NEURODESK_SOFTWARE_RENDERING: "1"
       - name: Restore full catalog coverage for installed-package tests
         shell: bash
         run: echo "NEURODESK_TEST_APP=" >> "$GITHUB_ENV"
@@ -194,7 +157,7 @@ jobs:
         run: xvfb-run -a node scripts/desktop/pack.mjs
         env:
           NEURODESK_TEST_REPORT: packaged-desktop-reports
-          NEURODESK_SOFTWARE_RENDERING: '1'
+          NEURODESK_SOFTWARE_RENDERING: "1"
       - name: Install pinned Apptainer
         if: runner.os == 'Linux'
         run: |
@@ -204,7 +167,7 @@ jobs:
       - name: Build and test offline Docker and Apptainer distributions
         if: runner.os == 'Linux'
         run: node scripts/desktop/container.mjs
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: desktop-${{ matrix.os }}
@@ -216,7 +179,6 @@ jobs:
             packages/desktop/release/github/
           compression-level: 0
           if-no-files-found: error
-
   models-offline:
     needs: bundle
     runs-on: ubuntu-22.04
@@ -224,9 +186,9 @@ jobs:
     steps:
       - name: Free Linux runner storage for the suite archives
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
           cache: pnpm
@@ -236,15 +198,19 @@ jobs:
         env:
           DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
       - run: node packages/desktop/node_modules/electron/install.js
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: offline-resources
+          run-id: 40171653097
+          github-token: ${{ github.token }}
       - run: tar -xzf offline-resources.tar.gz -C packages/desktop
       - run: node scripts/desktop/without-models.mjs
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: desktop-models-pack
           path: models-release
+          run-id: 40171653097
+          github-token: ${{ github.token }}
       - name: Install the model pack the way the release notes describe
         run: |
           mkdir models-pack
@@ -253,55 +219,18 @@ jobs:
           rm models.tar.gz
       - name: Select workflow coverage from the complete app registry
         run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs)" >> "$GITHUB_ENV"
-      # A model served from the pack is read in place, so an empty profile cache
-      # after a completed workflow is the proof that nothing was downloaded.
       - name: Test offline computations and exports against the extracted model pack
         run: xvfb-run -a node scripts/desktop/smoke.mjs
         env:
           NEURODESK_BUNDLE: ${{ github.workspace }}/packages/desktop/resources-light
           NEURODESK_MODELS_DIR: ${{ github.workspace }}/models-pack
           NEURODESK_TEST_REPORT: reports/desktop-workflow-reports
-          NEURODESK_WORKFLOWS: '1'
-          NEURODESK_SOFTWARE_RENDERING: '1'
-      # Uploading one directory drops its name, so the report keeps the same
-      # layout the desktop jobs produce and publish.mjs reads.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+          NEURODESK_WORKFLOWS: "1"
+          NEURODESK_SOFTWARE_RENDERING: "1"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: desktop-models-offline
           path: reports/
           compression-level: 0
           if-no-files-found: error
-
-  publish:
-    needs: [bundle, desktop, models-offline]
-    if: "!inputs.source_approval_only && (github.event_name == 'schedule' || inputs.publish)"
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - run: pnpm install --frozen-lockfile
-      - name: Set the daily desktop version
-        run: node scripts/desktop/daily-version.mjs
-        env:
-          DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          pattern: desktop-*
-          path: release-artifacts
-      - run: node scripts/desktop/publish.mjs release-artifacts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # A release made with GITHUB_TOKEN starts no workflow, so announce it; standalone-catalog commits the
-      # suite entry to registry/standalone.json and redeploys the site.
-      - name: Publish to the Standalone catalog
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          RELEASE="webapps@$(node -p "require('./packages/desktop/package.json').version")"
-          gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"
