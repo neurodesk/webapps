@@ -137,3 +137,25 @@ test('host rejection after an operation verifies preserves downloads without pub
   assert.equal(await readFile(join(root, 'outputs/registered.nii'), 'utf8'), 'registered-image');
   await assert.rejects(readFile(join(root, 'outputs/job-result.json')), { code: 'ENOENT' });
 });
+
+test('renderer loss rejects an outstanding browser command with its actual exit reason', async () => {
+  const { browserDispatcher, watchRendererExit } = await import('../src/browser-automation.js');
+  const contents = new EventEmitter();
+  contents.executeJavaScript = () => new Promise(() => {});
+  const renderer = watchRendererExit(contents);
+  const page = browserDispatcher(contents, { signal: renderer.signal, timeoutMs: 7200000 });
+  const pending = page.ready();
+  contents.emit('render-process-gone', {}, { reason: 'oom', exitCode: 9 });
+  await assert.rejects(pending, error => error.code === 'RENDERER_EXIT' && /oom \(exit code 9\)/.test(error.message));
+  renderer.dispose();
+  assert.equal(contents.listenerCount('render-process-gone'), 0);
+});
+
+test('disposing a completed renderer watcher leaves intentional destruction successful', async () => {
+  const { watchRendererExit } = await import('../src/browser-automation.js');
+  const contents = new EventEmitter();
+  const renderer = watchRendererExit(contents);
+  renderer.dispose();
+  contents.emit('render-process-gone', {}, { reason: 'clean-exit', exitCode: 0 });
+  assert.equal(renderer.signal.aborted, false);
+});

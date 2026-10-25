@@ -36,7 +36,7 @@ test("b0Volumes agrees with the gradients crate on its shared cases", () => {
   const cases = read("tests/data/b0-rule.tsv")
     .split("\n")
     .filter((line) => line.trim() && !line.startsWith("#"))
-    .map((line) => line.split("\t").map((field) => field.split(/\s+/).filter(Boolean).map(Number)));
+    .map((line) => line.split("\t").map((field) => (field === "none" ? [] : field.split(/\s+/).filter(Boolean).map(Number))));
   assert.ok(cases.length > 0);
   for (const [bvals, b0] of cases) {
     if (b0.length) assert.deepEqual(b0Volumes(bvals, bvals.length), b0, bvals.join(" "));

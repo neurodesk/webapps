@@ -24,6 +24,7 @@ export function sourceStem(fileName) {
  * A name without a suffix keeps none, unless `defaultSuffix` gives one.
  */
 export function outputNames(fileName, desc, { defaultSuffix = "" } = {}) {
+  if (typeof desc !== "string" || !desc) throw new TypeError("outputNames desc must be a non-empty string");
   const [, nameSuffix] = splitName(fileName);
   const suffix = nameSuffix || defaultSuffix;
   const source = sourceStem(fileName);
@@ -38,6 +39,7 @@ export function maskName(stem) {
 
 /** The sidecar of a derivative: the input's fields, with the step recorded as Description. */
 export function derivativeSidecar(sidecar, description) {
+  if (typeof description !== "string" || !description) throw new TypeError("derivativeSidecar description must be a non-empty string");
   return { ...(sidecar ?? {}), Description: description };
 }
 

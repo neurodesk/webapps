@@ -231,7 +231,7 @@ function setBusy(busy) {
   $("runButton").disabled = busy || !input;
 }
 
-async function fitModels(signal) {
+async function fitModels(signal, reportProgress = () => {}) {
   if (!input || loading || fitting) throw new Error("Load diffusion data before fitting.");
   signal?.throwIfAborted();
   const controller = new AbortController();
@@ -248,6 +248,7 @@ async function fitModels(signal) {
     let brain = mask;
     let maskSource = "supplied";
     if (!brain) {
+      reportProgress("Extracting the brain from the mean b0");
       progress.begin("Extracting the brain from the mean b0 with MindGrab…");
       progress.setCancellable(true);
       status("Extracting the brain from the mean b0 with MindGrab");
@@ -271,8 +272,12 @@ async function fitModels(signal) {
         progress.begin(`Fitting ${model}…`);
         progress.setCancellable(true);
         status(`Fitting ${model} to ${indices.length} voxels`);
+        reportProgress({ message: `Fitting ${model} to ${indices.length} voxels`, value: 0 });
       },
-      onProgress: (fraction) => progress.setProgress(fraction),
+      onProgress: (fraction) => {
+        progress.setProgress(fraction);
+        reportProgress({ message: `Fitting models: ${Math.round(fraction * 100)}%`, value: fraction });
+      },
     });
     if (tensorFit === "niimath-dtifit") log.log(`niimath dtifit on ${input.table.dtiVolumes.length} of ${input.bvals.length} volumes`, "info");
     if (fit.noddiDiagnostics) {
@@ -283,6 +288,7 @@ async function fitModels(signal) {
     const dims = input.dims;
     const rows = {};
     const artifacts = [];
+    reportProgress("Writing fitted parameter maps");
     for (const entry of outputEntries(fit, brain, stem)) {
       const nifti = createNiftiFromData(entry.data, input.buffer, { dims: [...dims, entry.frames] });
       const file = await gzipFile(nifti, entry.name);
@@ -292,6 +298,7 @@ async function fitModels(signal) {
       artifacts.push({ role: entry.role, file });
     }
     const first = rows["noddi-icvf"] ?? rows["tensor-fa"];
+    reportProgress("Loading fitted parameter map in the viewer");
     await showVolume({ file: first.file, range: first.range }, { signal: controller.signal });
     controller.signal.throwIfAborted();
     outputs = rows;
@@ -388,16 +395,20 @@ registerAppAutomation({
   app: APP.id,
   convertDicom: runDcm2niix,
   operations: {
-    fit: async ({ inputs, inputDetails, parameters, signal }) => {
+    fit: async ({ inputs, inputDetails, parameters, signal, progress: reportProgress }) => {
+      reportProgress("Loading diffusion inputs");
       // DICOM is converted before this call; its bval and bvec arrive as sidecars of the image.
       const gradients = (inputDetails.image?.sidecars ?? []).filter((file) => /\.(bval|bvec)$/i.test(file.name));
       await loadFiles(Promise.resolve([...inputs.image, ...gradients, ...(inputs.bval ?? []), ...(inputs.bvec ?? [])]), signal);
-      if (inputs.mask?.length) await loadMask(inputs.mask[0], signal);
+      if (inputs.mask?.length) {
+        reportProgress("Loading supplied brain mask");
+        await loadMask(inputs.mask[0], signal);
+      }
       $("tensorFit").value = parameters.tensorFit;
       $("noddiMethod").value = parameters.method;
       noddiRequested = parameters.noddi;
       $("fitNoddi").checked = noddiRequested && !input.table.noddiError;
-      return fitModels(signal);
+      return fitModels(signal, reportProgress);
     },
   },
 });

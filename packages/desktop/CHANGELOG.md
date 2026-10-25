@@ -1,5 +1,13 @@
 # @neurodesk/desktop
 
+## 0.44.20261025
+
+### Patch Changes
+
+- eaf21e9: Fail automation promptly when its browser renderer exits, retaining the exit reason. Preserve independent NeuroFlow comparison snapshots and desktop stderr/shutdown diagnostics, and report NODDI loading, fitting and output stages through automation without changing numerical outputs or timeouts.
+
+  Add an explicitly diagnostic DWI models-only workflow replay with original preprocessing/model settings and exact independent model comparisons. Default full T1/DWI validation remains unchanged.
+
 ## 0.44.20261024
 
 ### Patch Changes
@@ -24,6 +32,8 @@
 
 ### Patch Changes
 
+- Updated dependencies [0066f60]
+  - @neurodesk/webapp-components@0.21.1
 - Updated dependencies [14a8b29]
 - Updated dependencies [a028e96]
 - Updated dependencies [650ce5f]

@@ -19,6 +19,8 @@
 
 ### Patch Changes
 
+- Updated dependencies [0066f60]
+  - @neurodesk/webapp-components@0.21.1
 - 9f46059: Create a fresh N4 kernel for each command-line correction and self-check so repeated API calls cannot exhaust the WebAssembly argument stack. Use the shared b-value parser in the app and command line.
 - 00005df: `scripts/build.sh --check` rebuilds the N4 WebAssembly module and fails unless `n4-bias.wasm` and `n4-bias.mjs` equal the committed files. The build sets `SOURCE_DATE_EPOCH`, so ANTs' compiled-in build date no longer changes the bytes, and the weekly `n4-wasm-source` workflow runs the check. The committed module is unchanged.
 - Updated dependencies [941884c]

@@ -88,7 +88,12 @@ test("workspace boots with shared information and GP as default", async ({ page 
   await page.goto("./");
   await expect(page.locator("#viewer")).toBeVisible();
   await expect(page.locator("#method")).toHaveValue("gp");
-  await expect(page.locator("#workers")).toHaveValue("1");
+  await expect(page.locator("#workers")).toHaveValue("2");
+  await page.locator("#workers").fill("4");
+  await page.locator("#method").selectOption("trivial");
+  await expect(page.locator("#workers")).toHaveValue("4");
+  await page.locator("#method").selectOption("gp");
+  await expect(page.locator("#workers")).toHaveValue("4");
   expect(await page.evaluate(() => self.crossOriginIsolated)).toBe(true);
   await page.locator(".nd-app-bar").getByRole("button", { name: "About", exact: true }).click();
   await expect(page.locator("#infoDialog")).toContainText("NiFreeze");
@@ -112,12 +117,13 @@ for (const model of ["trivial", "gp"]) {
       await page.locator("#neurodesk-input-transfer").setInputFiles({ name: input.name, mimeType: "application/octet-stream", buffer: Buffer.from(input.bytes) });
       await page.evaluate(role => globalThis.neurodeskAutomation.dispatch("adopt", { role }), role);
     }
-    await page.evaluate(method => globalThis.neurodeskAutomation.dispatch("start", { parameters: { method, workers: 1, seed: 1234 } }), model);
+    await page.evaluate(method => globalThis.neurodeskAutomation.dispatch("start", { parameters: { method, seed: 1234 } }), model);
     await expect.poll(() => page.evaluate(async () => {
       const state = await globalThis.neurodeskAutomation.dispatch("snapshot");
       return state.state === "failed" ? JSON.stringify(state) : state.state;
     }), { timeout: 150000 }).toBe("succeeded");
     const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
+    expect(report.provenance.workers).toBe(2);
     const expected = await correctNiFreeze({ series: data.series, bvals: data.bvals, bvecs: data.bvecs, mask: data.mask,
       model, seed: 1234, maskProvenance: { Source: "supplied" }, fileName: name, hmc: await loadHmcNode(), runtime: nodeRuntime({ workers: 1 }),
     });

@@ -9,7 +9,7 @@
 
 ### Patch Changes
 
-- Updated dependencies
+- Updated dependencies [0066f60]
   - @neurodesk/webapp-components@0.21.1
   - @neurodesk/mri2vid@0.6.20261024
 - Updated dependencies [941884c]
@@ -19,6 +19,9 @@
 - Updated dependencies [ba38bd9]
 - Updated dependencies [ef05562]
   - @neurodesk/webapp-components@0.21.0
+  - @neurodesk/mri2vid@0.6.20261024
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
   - @neurodesk/mri2vid@0.6.20261024
 - Updated dependencies [328cb77]
   - @neurodesk/webapp-components@0.20.1

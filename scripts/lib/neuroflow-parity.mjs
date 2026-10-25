@@ -47,25 +47,33 @@ export function resolveStepInputs(step, workflowInputs, results) {
 }
 
 /** Re-run each app directly, outside NeuroFlow, with the chain's exact inputs. */
-export async function compareIndividualApps({ workflow, inputs, results, tools, scratch, env }) {
+export async function compareIndividualApps({ workflow, inputs, results, tools, scratch, env, connect = openDesktop }) {
   const comparisons = [];
   for (const [id, step] of Object.entries(workflow.steps)) {
     console.log(`Comparing ${id} with its independent desktop operation`);
     const tool = tools.find(tool => tool.id === step.tool);
     const request = makeRequest(tool, resolveStepInputs(step, inputs, results), Number(env.NEURODESK_TIMEOUT_MS));
     const output = join(scratch, 'individual', id);
-    const client = openDesktop(env.NEURODESK_WEBAPPS,
+    const client = connect(env.NEURODESK_WEBAPPS,
       [...JSON.parse(env.NEURODESK_WEBAPPS_ARGS), '--mcp', '--output', output], { env });
+    const snapshots = [];
+    const record = snapshot => {
+      const entry = Object.fromEntries(['id', 'state', 'phase', 'message', 'progress', 'error'].filter(key => snapshot[key] !== undefined)
+        .map(key => [key, snapshot[key]]));
+      if (JSON.stringify(snapshots.at(-1)?.snapshot) !== JSON.stringify(entry)) snapshots.push({ at: new Date().toISOString(), snapshot: entry });
+    };
     try {
       await client.initialize();
       await client.tool('apps_validate', request);
       let snapshot = await client.tool('runs_start', request);
+      record(snapshot);
       const runId = snapshot.id;
       const deadline = Date.now() + request.timeoutMs;
       while (snapshot.state === 'running') {
         assert.ok(Date.now() < deadline, `Independent ${id} exceeded its deadline`);
         await delay(1000);
         snapshot = await client.tool('runs_get', { runId });
+        record(snapshot);
       }
       assert.equal(snapshot.state, 'succeeded', JSON.stringify(snapshot.error));
       const resources = await client.resource(`neurodesk://runs/${runId}/report`);
@@ -107,7 +115,12 @@ export async function compareIndividualApps({ workflow, inputs, results, tools, 
       }
       comparisons.push({ step: id, passed: true, runId, artifacts, provenance: scientificProvenance(standalone.provenance) });
     } finally {
-      await client.close();
+      try { await client.close(); }
+      finally {
+        const logs = join(scratch, 'logs');
+        await mkdir(logs, { recursive: true });
+        await writeFile(join(logs, `${id}.desktop-diagnostics.json`), `${JSON.stringify({ snapshots, ...client.diagnostics?.() }, null, 2)}\n`);
+      }
     }
   }
   return comparisons;

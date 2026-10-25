@@ -35,7 +35,7 @@ async function defaultMask(series, buffer, bvals, bvecs, hmc, signal) {
 }
 
 /** Reads files, runs the shared estimator and writes its BIDS derivatives without overwriting. */
-export async function correctFiles({ dwi, bval, bvec, output, maskFile, sidecarFile, method = "gp", seed = 1234, workers = 1, signal, onProgress } = {}) {
+export async function correctFiles({ dwi, bval, bvec, output, maskFile, sidecarFile, method = "gp", seed = 1234, workers = 2, signal, onProgress } = {}) {
   if (!dwi || !bval || !bvec || !output) throw new Error("A DWI, bval, bvec and output directory are required.");
   if (!["gp", "trivial"].includes(method)) throw new Error("--method must be gp or trivial.");
   if (!Number.isInteger(seed) || seed < 1 || seed > 2147483647) throw new Error("--seed must be an integer from 1 to 2147483647.");

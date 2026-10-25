@@ -49,3 +49,60 @@ test('archive evidence distinguishes timestamps from scientific member differenc
   assert.notEqual(a.members['positions.3.float32'].sha256, c.members['positions.3.float32'].sha256);
   assert.match(a.metadata, /20200101/);
 });
+
+test('independent failure retains snapshots and desktop stderr without accepting the failed run', async t => {
+  const { mkdtemp, readFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { compareIndividualApps } = await import('../scripts/lib/neuroflow-parity.mjs');
+  const scratch = await mkdtemp(join(tmpdir(), 'neuroflow-failed-comparison-'));
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  let closed = false;
+  const client = {
+    initialize: async () => {},
+    tool: async name => name === 'apps_validate' ? {} : { id: 'failed-model', state: 'failed', phase: 'complete',
+      message: 'Fitting models: 42%', error: { code: 'RENDERER_EXIT', message: 'Browser renderer exited: oom (exit code 9)' } },
+    close: async () => { closed = true; },
+    diagnostics: () => ({ stderr: 'renderer process terminated\n' }),
+  };
+  const tool = { id: 'noddi-fit', inputs: {}, extensions: {
+    'neurodesk/automation': { contract: { app: 'noddi', operations: { fit: { inputs: {}, engines: ['browser'] } } }, operation: 'fit', inputs: {}, parameters: {}, artifacts: {} },
+  } };
+  await assert.rejects(compareIndividualApps({ workflow: { steps: { models: { tool: tool.id, inputs: {} } } },
+    inputs: {}, results: {}, tools: [tool], scratch, env: { NEURODESK_WEBAPPS_ARGS: '[]', NEURODESK_TIMEOUT_MS: '7200000' },
+    connect: () => client }), /RENDERER_EXIT/);
+  assert.equal(closed, true);
+  const diagnostic = JSON.parse(await readFile(join(scratch, 'logs/models.desktop-diagnostics.json')));
+  assert.equal(diagnostic.stderr, 'renderer process terminated\n');
+  assert.equal(diagnostic.snapshots[0].snapshot.message, 'Fitting models: 42%');
+  assert.equal(diagnostic.snapshots[0].snapshot.error.code, 'RENDERER_EXIT');
+});
+
+test('desktop diagnostics survive clean child shutdown with stderr and joined exit status', async () => {
+  const { openDesktop } = await import('../packages/desktop/neuroflow/runtime/stdio.mjs');
+  const client = openDesktop(process.execPath, ['-e', "process.stderr.write('diagnostic marker\\n');process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"]);
+  await client.close();
+  const diagnostics = client.diagnostics();
+  assert.ok(diagnostics.pid > 0);
+  assert.deepEqual(diagnostics.exit, { code: 0, signal: null });
+  assert.deepEqual(diagnostics.terminationSignals, []);
+  assert.equal(diagnostics.stderr, 'diagnostic marker\n');
+});
+
+test('models diagnostics preserve original scientific settings and cannot weaken default full acceptance', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { validationPlan } = await import('../scripts/lib/neuroflow-validation.mjs');
+  const workflow = JSON.parse(await readFile(new URL('../apps/pipeline-builder/src/workflows/dwi-preprocessing.workflow.json', import.meta.url)));
+  const original = structuredClone(workflow);
+  const full = validationPlan(workflow);
+  assert.deepEqual(full.workflow, original);
+  assert.deepEqual(full.comparisons, original);
+  assert.equal(full.fullWorkflowAcceptance, true);
+  assert.equal(Object.keys(full.workflow.steps).length, 6);
+  const diagnostic = validationPlan(workflow, { diagnosticModels: true });
+  assert.equal(diagnostic.fullWorkflowAcceptance, false);
+  assert.deepEqual(Object.keys(diagnostic.workflow.steps), ['denoise', 'degibbs', 'correct', 'brain', 'models']);
+  for (const [id, step] of Object.entries(diagnostic.workflow.steps)) assert.deepEqual(step, original.steps[id]);
+  assert.deepEqual(Object.keys(diagnostic.comparisons.steps), ['models']);
+  assert.ok(Object.values(diagnostic.workflow.outputs).every(output => !output.ref.includes('tractography')));
+  assert.deepEqual(workflow, original);
+});

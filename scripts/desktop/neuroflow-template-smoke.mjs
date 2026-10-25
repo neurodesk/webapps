@@ -12,11 +12,16 @@ import { inspectScientificImage } from '../lib/scientific-output-checks.mjs';
 import { decodeNiftiBuffer, parseNiftiHeader } from '../../packages/components/src/file-io/NiftiUtils.js';
 import { MAX_BUFFER_BYTES, planInputMemory } from '../../packages/synthseg/src/input-memory.js';
 import { compareIndividualApps } from '../lib/neuroflow-parity.mjs';
+import { validationPlan } from '../lib/neuroflow-validation.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const name = process.argv.includes('--dwi') ? 'dwi' : 't1';
 const template = name === 'dwi' ? 'dwi-preprocessing' : 't1-segmentation';
-const workflow = parseWorkflow(await readFile(join(root, `apps/pipeline-builder/src/workflows/${template}.workflow.json`), 'utf8'));
+const originalWorkflow = parseWorkflow(await readFile(join(root, `apps/pipeline-builder/src/workflows/${template}.workflow.json`), 'utf8'));
+const diagnosticModels = process.argv.includes('--diagnostic-models');
+assert.ok(!diagnosticModels || name === 'dwi', 'Models diagnostics require --dwi');
+const plan = validationPlan(originalWorkflow, { diagnosticModels });
+const { workflow } = plan;
 const executable = process.env.NEUROFLOW_MCP_BIN;
 assert.ok(executable, 'Set NEUROFLOW_MCP_BIN to the pinned upstream neuroflow-mcp executable');
 assert.equal(process.env.NEURODESK_HARDWARE_GPU, '1', 'Exported scientific templates need a hardware WebGPU adapter');
@@ -179,9 +184,9 @@ try {
     if (!['neuro:volume', 'neuro:mask', 'neuro:label-map'].includes(declaration.type)) continue;
     await inspectScientificImage(bytes, declaration.type);
   }
-  const comparisons = name === 'dwi' ? await compareIndividualApps({ workflow, inputs, results, tools, scratch, env }) : undefined;
-  await writeFile(join(scratch, 'evidence.json'), JSON.stringify({ passed: true, workflow, completed, run, comparisons }, null, 2));
-  console.log(`Exported ${template} workflow completed every real scientific operation. Evidence: ${scratch}`);
+  const comparisons = name === 'dwi' ? await compareIndividualApps({ workflow: plan.comparisons, inputs, results, tools, scratch, env }) : undefined;
+  await writeFile(join(scratch, 'evidence.json'), JSON.stringify({ passed: true, diagnosticModels, fullWorkflowAcceptance: plan.fullWorkflowAcceptance, workflow, completed, run, comparisons }, null, 2));
+  console.log(`${diagnosticModels ? 'Diagnostic models replay (not full workflow acceptance)' : `Exported ${template} workflow completed every real scientific operation`}. Evidence: ${scratch}`);
 } finally {
   await client.close();
 }

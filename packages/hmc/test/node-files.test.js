@@ -17,7 +17,9 @@ test("CLI rejects invalid options before loading input files", async () => {
   for (const options of [{ method: "shoreline" }, { workers: 0 }, { seed: 0 }, { seed: 2147483648 }]) {
     await assert.rejects(correctFiles({ dwi: "absent", bval: "absent", bvec: "absent", output: "absent", ...options }), /--method|--workers|--seed/);
   }
-  assert.match(execFileSync(process.execPath, [CLI, "--help"], { encoding: "utf8" }), /default: gp/);
+  const help = execFileSync(process.execPath, [CLI, "--help"], { encoding: "utf8" });
+  assert.match(help, /default: gp/);
+  assert.match(help, /--workers INTEGER\s+Concurrent registration workers \(default: 2\)/);
   assert.throws(() => execFileSync(process.execPath, [CLI, "--unknown"], { stdio: "pipe" }));
   const report = JSON.parse(execFileSync(process.execPath, [CLI, "self-check"], { encoding: "utf8" }));
   assert.equal(report.executable, process.execPath);

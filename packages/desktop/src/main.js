@@ -10,7 +10,7 @@ import { createModelResolver } from './models.js';
 import { createAutomationService, loadAutomationContracts } from './automation.js';
 import { generateJob, operationFor } from './contracts.js';
 import { runNativeSynthseg } from './native.js';
-import { browserDispatcher, runBrowserOperation } from './browser-automation.js';
+import { browserDispatcher, runBrowserOperation, watchRendererExit } from './browser-automation.js';
 import { createSourceGrants } from './source-grants.js';
 import { createSourceGranter, parseApprovedSources } from './source-approval.js';
 import { completeBrowserArtifacts } from './artifact-completion.js';
@@ -148,12 +148,15 @@ try {
     isolate(viewerSession, viewer);
     const target = createWindow(viewerSession, site.origin);
     const windowClosed = new AbortController();
-    const completionSignal = AbortSignal.any([signal, windowClosed.signal]);
+    const renderer = watchRendererExit(target.webContents);
+    const completionSignal = AbortSignal.any([signal, windowClosed.signal, renderer.signal]);
+    renderer.signal.addEventListener('abort', () => windowClosed.abort(renderer.signal.reason), { once: true });
     let retained = false;
     let released = false;
     const close = () => {
       if (released) return;
       released = true;
+      renderer.dispose();
       site.close();
       if (!target.isDestroyed()) target.destroy();
       // The session goes back to the pool only once nothing of this viewer is left in it. Quitting waits for both
@@ -175,7 +178,8 @@ try {
       signal.throwIfAborted();
       viewer.grants.add(Object.values(request.inputs).flatMap(source => source.url ? [source.url] : []));
       const selected = bundle.apps.find(entry => entry.id === contract.app);
-      await target.loadURL(`${site.origin}/${selected.path}/`);
+      const loading = browserDispatcher(target.webContents, { signal: completionSignal, timeoutMs: request.timeoutMs });
+      await loading.bounded(target.loadURL(`${site.origin}/${selected.path}/`));
       if (request.retainViewer) target.showInactive();
       const outcome = await completeBrowserArtifacts(target.webContents, {
         outputDirectory,

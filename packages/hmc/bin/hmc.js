@@ -9,7 +9,7 @@ const HELP = `hmc DWI.nii.gz DWI.bval DWI.bvec OUTPUT [options]
   --mask FILE         Brain mask on the DWI grid (default: MindGrab CPU mean-b0)
   --sidecar FILE      Input JSON metadata to preserve
   --seed INTEGER      Registration and visit-order seed (default: 1234)
-  --workers INTEGER   Concurrent registration workers (default: 1)
+  --workers INTEGER   Concurrent registration workers (default: 2)
   --version           Print package version
   --help              Print this help
 
@@ -22,7 +22,7 @@ Validated scope and known differences: packages/hmc/README.md.
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     method: { type: "string", default: "gp" }, mask: { type: "string" }, sidecar: { type: "string" },
-    seed: { type: "string", default: "1234" }, workers: { type: "string", default: "1" },
+    seed: { type: "string", default: "1234" }, workers: { type: "string", default: "2" },
     help: { type: "boolean" }, version: { type: "boolean" },
     "cache-dir": { type: "string" },
   } });

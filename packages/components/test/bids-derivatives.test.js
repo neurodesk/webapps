@@ -46,6 +46,8 @@ test('derivative names without a suffix, with and without an earlier desc-', () 
   };
   assert.deepEqual(outputNames('data.nii', 'step'), expected);
   assert.deepEqual(outputNames('data.nii.gz', 'step'), expected);
+  assert.deepEqual(outputNames('data_desc-raw.nii', 'step'), expected);
+  assert.deepEqual(outputNames('data_desc-raw.nii.gz', 'step'), expected);
   // A name with no underscore has no suffix, even when it is dwi.
   assert.equal(outputNames('dwi.nii.gz', 'denoised').image, 'dwi_desc-denoised.nii.gz');
   assert.equal(outputNames('scan.nii.gz', 'hmc', { defaultSuffix: 'dwi' }).image, 'scan_desc-hmc_dwi.nii.gz');
@@ -68,6 +70,16 @@ test('the derivative sidecar keeps the input fields and their order, then Descri
   assert.deepEqual(derivativeSidecar(null, 'Step'), { Description: 'Step' });
   assert.deepEqual(derivativeSidecar(undefined, 'Step'), { Description: 'Step' });
   assert.equal(sidecarText(sidecar), '{\n  "PhaseEncodingDirection": "j-",\n  "TotalReadoutTime": 0.05,\n  "Description": "Step"\n}\n');
+});
+
+test('outputNames and derivativeSidecar refuse a missing, empty or non-string label', () => {
+  // The DWI apps export one-argument wrappers named outputNames and derivativeSidecar, so a swapped import drops the label.
+  assert.throws(() => outputNames('sub-01_dwi.nii.gz'), TypeError);
+  assert.throws(() => derivativeSidecar({ PhaseEncodingDirection: 'j-' }), TypeError);
+  for (const label of [null, '', 5]) {
+    assert.throws(() => outputNames('sub-01_dwi.nii.gz', label), TypeError, String(label));
+    assert.throws(() => derivativeSidecar({ PhaseEncodingDirection: 'j-' }, label), TypeError, String(label));
+  }
 });
 
 test('gzipFile writes a gzip File that inflates to the input bytes', async () => {

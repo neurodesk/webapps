@@ -1,6 +1,18 @@
 import { isDeepStrictEqual } from 'node:util';
 import { describeFile, verifyOperationReport } from './reports.js';
 
+/** Fail outstanding browser calls when Electron loses their renderer. */
+export function watchRendererExit(contents) {
+  const controller = new AbortController();
+  const exited = (_event, details) => {
+    const error = new Error(`Browser renderer exited: ${details.reason} (exit code ${details.exitCode})`);
+    error.code = 'RENDERER_EXIT';
+    controller.abort(error);
+  };
+  contents.on('render-process-gone', exited);
+  return { signal: controller.signal, dispose: () => contents.removeListener('render-process-gone', exited) };
+}
+
 export function browserDispatcher(contents, { signal, timeoutMs = 30000 } = {}) {
   const commands = new Set(['describe', 'adopt', 'start', 'snapshot', 'cancel', 'download',
     'viewers.list', 'viewers.state', 'viewers.crosshair', 'viewers.tab', 'viewers.regions',

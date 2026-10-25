@@ -4,10 +4,10 @@
 
 ### Patch Changes
 
-- Updated dependencies
+- Updated dependencies [0066f60]
   - @neurodesk/webapp-components@0.21.1
   - @neurodesk/nesvor@0.3.20261024
-  - @neurodesk/runtime-support@0.9.14
+  - @neurodesk/runtime-support@0.9.12
 - Updated dependencies [941884c]
 - Updated dependencies [a028e96]
 - Updated dependencies [650ce5f]
@@ -25,6 +25,10 @@
   - @neurodesk/webapp-components@0.19.1
   - @neurodesk/nesvor@0.3.20261024
   - @neurodesk/runtime-support@0.9.9
+- Updated dependencies
+  - @neurodesk/webapp-components@0.21.1
+  - @neurodesk/nesvor@0.3.20261024
+  - @neurodesk/runtime-support@0.9.14
 - Updated dependencies [328cb77]
   - @neurodesk/webapp-components@0.20.1
   - @neurodesk/nesvor@0.3.20261024
@@ -335,6 +339,12 @@
 - Updated dependencies [0569da8]
 
 - Updated dependencies [dd65e6a]
+
+- Updated dependencies [dcc74e7]
+
+  - @neurodesk/runtime-support@0.6.0
+  - @neurodesk/webapp-components@0.14.0
+  - @neurodesk/nesvor@0.3.20261015
 
 - Updated dependencies [dcc74e7]
 

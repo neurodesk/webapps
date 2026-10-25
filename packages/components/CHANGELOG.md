@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- 0066f60: Reject missing, empty, or non-string step labels in `outputNames` and `derivativeSidecar` with a `TypeError`. Valid labels keep the same filenames and sidecar content.
 - Retain the HMC workspace controls, diffusion workflow artifact metadata and selected-button hover contrast alongside the reviewed agent connection support.
 
 ## 0.21.0

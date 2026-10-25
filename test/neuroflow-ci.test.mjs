@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { matchesGlob } from 'node:path';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import { parse } from 'yaml';
 import { fileURLToPath } from 'node:url';
 import { loadConservativeWorkspaceGraph, reachableFrom } from '../scripts/lib/workspace-graph.mjs';
 
 const root = new URL('../', import.meta.url);
 const flow = parse(await readFile(new URL('.github/workflows/neuroflow.yml', root), 'utf8'));
+const matrixFor = (event, diagnostic) => runInNewContext(flow.jobs['exported-template'].strategy.matrix.slice(3, -2),
+  { github: { event_name: event }, inputs: { diagnostic_models: diagnostic }, fromJSON: JSON.parse });
 const template = JSON.parse(await readFile(new URL('apps/pipeline-builder/src/workflows/t1-segmentation.workflow.json', root)));
 const dwi = JSON.parse(await readFile(new URL('apps/pipeline-builder/src/workflows/dwi-preprocessing.workflow.json', root)));
 
@@ -39,7 +42,7 @@ test('the workflow builds a fixed real upstream runtime and executes both templa
   assert.ok(job.steps.some(step => step.run?.includes('cargo test --locked -p neuroflow-mcp orders_steps_by_dependency')));
   assert.ok(job.steps.some(step => step.uses?.startsWith('actions/cache@') && step.with.path.includes('.audit/neuroflow-runtime/target')));
   for (const [name, workflow] of [['t1', template], ['dwi', dwi]]) {
-    const build = job.strategy.matrix.include.find(entry => entry.template === name);
+    const build = matrixFor('push', false).include.find(entry => entry.template === name);
     assert.ok(build, `${name} needs an actual CI run`);
     for (const app of new Set(Object.values(workflow.steps).map(step => step.tool.split('/')[1]))) {
       assert.ok(build.apps.includes(`--filter ${app}`), `${app} needs current production bytes`);
@@ -76,4 +79,15 @@ test('the DWI job installs the toolchain that the real shoreline build requires'
   assert.match(steps[install].run, /--component rust-src/);
   assert.match(steps[install].run, /--target wasm32-unknown-unknown/);
   assert.match(steps[install].run, /cargo install wasm-pack --version 0\.13\.1 --locked/);
+});
+
+
+test('only explicit manual diagnostics replace the complete T1/DWI matrix', () => {
+  assert.equal(flow.on.workflow_dispatch.inputs.diagnostic_models.default, false);
+  for (const event of ['pull_request', 'push', 'schedule', 'workflow_dispatch']) {
+    for (const diagnostic of [false, true]) {
+      const selected = matrixFor(event, diagnostic).include;
+      assert.deepEqual(Array.from(selected, entry => entry.template), event === 'workflow_dispatch' && diagnostic ? ['dwi'] : ['t1', 'dwi']);
+    }
+  }
 });

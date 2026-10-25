@@ -4,17 +4,23 @@ use dwi_gradients::{B0Rule, Gradients};
 
 const X: [f64; 3] = [1.0, 0.0, 0.0];
 
-fn cases() -> Vec<(Vec<f64>, Vec<usize>)> {
-    include_str!("data/b0-rule.tsv")
-        .lines()
+const CASES: &str = include_str!("data/b0-rule.tsv");
+
+fn cases(text: &str) -> Vec<(Vec<f64>, Vec<usize>)> {
+    text.lines()
         .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
         .map(|line| {
-            let (bvals, b0) = line.split_once('\t').unwrap();
+            let (bvals, b0) = line
+                .split_once('\t')
+                .expect("a case is b-values, a tab, then the b0 indices or none");
             let bvals = bvals
                 .split_whitespace()
                 .map(|v| v.parse().unwrap())
                 .collect();
-            let b0 = b0.split_whitespace().map(|v| v.parse().unwrap()).collect();
+            let b0 = match b0 {
+                "none" => Vec::new(),
+                b0 => b0.split_whitespace().map(|v| v.parse().unwrap()).collect(),
+            };
             (bvals, b0)
         })
         .collect()
@@ -22,7 +28,7 @@ fn cases() -> Vec<(Vec<f64>, Vec<usize>)> {
 
 #[test]
 fn the_b0_rule_selects_the_shared_cases() {
-    let cases = cases();
+    let cases = cases(CASES);
     assert_eq!(cases.len(), 6);
     for (bvals, b0) in cases {
         let bvecs = vec![X; bvals.len()];
@@ -31,6 +37,15 @@ fn the_b0_rule_selects_the_shared_cases() {
         let ruled = B0Rule::Dtifit.read(bvals.clone(), bvecs).unwrap();
         assert_eq!(ruled.b0_volumes(), b0, "{bvals:?}");
     }
+}
+
+#[test]
+fn the_shared_cases_survive_a_trailing_whitespace_trim() {
+    let trimmed: String = CASES
+        .lines()
+        .map(|line| format!("{}\n", line.trim_end()))
+        .collect();
+    assert_eq!(cases(&trimmed), cases(CASES));
 }
 
 #[test]

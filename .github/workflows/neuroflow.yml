@@ -29,6 +29,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      diagnostic_models:
+        description: Run only DWI through models and independent models comparison (not full acceptance)
+        type: boolean
+        default: false
   schedule:
     - cron: '43 3 * * *'
 
@@ -45,14 +50,10 @@ jobs:
     timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - template: t1
-            timeout: 150
-            apps: --filter pipeline-builder --filter n4 --filter brain-extraction --filter synthseg
-          - template: dwi
-            timeout: 360
-            apps: --filter pipeline-builder --filter dwidenoise --filter degibbs --filter dwicorrect --filter brain-extraction --filter noddi --filter dwi2trx
+      matrix: >-
+        ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.diagnostic_models &&
+          '{"include":[{"template":"dwi","timeout":360,"apps":"--filter pipeline-builder --filter dwidenoise --filter degibbs --filter dwicorrect --filter brain-extraction --filter noddi"}]}' ||
+          '{"include":[{"template":"t1","timeout":150,"apps":"--filter pipeline-builder --filter n4 --filter brain-extraction --filter synthseg"},{"template":"dwi","timeout":360,"apps":"--filter pipeline-builder --filter dwidenoise --filter degibbs --filter dwicorrect --filter brain-extraction --filter noddi --filter dwi2trx"}]}') }}
     env:
       NEURODESK_HARDWARE_GPU: '1'
       NEURODESK_HARDWARE_GPU_VENDOR: apple
@@ -110,7 +111,7 @@ jobs:
           export NEUROFLOW_MCP_BIN="$GITHUB_WORKSPACE/.audit/neuroflow-runtime/target/release/neuroflow-mcp"
           export NEURODESK_ASSET_CACHE="$HOME/.cache/neurodesk-neuroflow-assets"
           export NEUROFLOW_EVIDENCE_DIR="$RUNNER_TEMP/neuroflow-evidence"
-          node scripts/desktop/neuroflow-smoke.mjs --${{ matrix.template }}
+          node scripts/desktop/neuroflow-smoke.mjs --${{ matrix.template }} ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_models && '--diagnostic-models' || '' }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:

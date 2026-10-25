@@ -161,8 +161,10 @@ node packages/hmc/bin/hmc.js sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec r
 ```
 
 `--method gp` is the default; `--method trivial` uses the b0 template. The seed
-defaults to 1234. `--workers` defaults to one until the worker-count benchmark
-establishes a suitable default. Without `--mask`, the pinned MindGrab CPU runtime
+defaults to 1234. The app, automation contract and `--workers` default to two registration
+workers, following the [measured GP scaling](../../docs/architecture/dwi-hmc-plan.md#6-runtime-and-memory).
+Explicit worker counts remain available; four workers improve mean-b0 throughput on the measured host.
+Changing the method does not automatically change the worker count. Without `--mask`, the pinned MindGrab CPU runtime
 extracts the brain from the mean b0, using the shared Float32 averaging helper and
 NiFreeze's b0 classification. `--sidecar FILE` preserves input JSON metadata.
 The output directory must be new or empty. Existing files are never overwritten.

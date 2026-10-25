@@ -8,6 +8,8 @@ export function openDesktop(command, args, { env = process.env } = {}) {
   let failure;
   let stderr = '';
   let closed = false;
+  let outcome;
+  const terminationSignals = [];
   const fail = error => {
     failure ??= error;
     for (const request of pending.values()) request.reject(error);
@@ -18,6 +20,7 @@ export function openDesktop(command, args, { env = process.env } = {}) {
   child.stdin.on('error', fail);
   const exit = new Promise(resolve => child.once('close', (code, signal) => {
     closed = true;
+    outcome = { code, signal };
     fail(new Error(`Desktop exited (${code ?? signal}): ${stderr}`));
     resolve();
   }));
@@ -54,6 +57,7 @@ export function openDesktop(command, args, { env = process.env } = {}) {
     });
   }
   return {
+    diagnostics() { return { pid: child.pid, exit: outcome, terminationSignals: [...terminationSignals], stderr }; },
     async initialize(options) {
       await request('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'neurodesk-neuroflow', version: '1.0.0' } }, options);
       child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
@@ -67,8 +71,14 @@ export function openDesktop(command, args, { env = process.env } = {}) {
     resource(uri, options) { return request('resources/read', { uri }, options); },
     async close() {
       child.stdin.end();
-      const terminate = setTimeout(() => child.kill('SIGTERM'), 3000);
-      const kill = setTimeout(() => child.kill('SIGKILL'), 5000);
+      const terminate = setTimeout(() => {
+        terminationSignals.push('SIGTERM');
+        child.kill('SIGTERM');
+      }, 3000);
+      const kill = setTimeout(() => {
+        terminationSignals.push('SIGKILL');
+        child.kill('SIGKILL');
+      }, 5000);
       try { await exit; }
       finally { clearTimeout(terminate); clearTimeout(kill); lines.close(); }
     },
