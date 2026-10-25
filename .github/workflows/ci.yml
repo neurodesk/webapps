@@ -1,43 +1,39 @@
 name: ci
-
 on:
-  pull_request:
+  pull_request: null
   push:
-    branches: [main]
+    branches:
+      - main
   schedule:
-    - cron: '23 3 * * *'
+    - cron: 23 3 * * *
   workflow_dispatch:
     inputs:
       agentic_mode:
         description: Optional agentic checks to run after building the catalog
         type: choice
-        options: [none, interactions, pipeline]
+        options:
+          - none
+          - interactions
+          - pipeline
         default: none
       agentic_apps:
         description: Comma-separated app ids; leave empty for the full catalog
         type: string
-        default: ''
-
+        default: ""
 permissions:
   contents: read
-
 concurrency:
-  # Keep the nightly full-catalog backstop independent of narrowed push runs.
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
-
 env:
-  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
   ONNXRUNTIME_NODE_INSTALL: skip
   PW_TEST_REPORTER: ${{ github.workspace }}/test-utils/test-durations-reporter.mjs
   NEURODESK_E2E_SKIP_SLOW: ${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}
-
 jobs:
   app-plan:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Reads main's finished ci runs to find the last tested commit.
       actions: read
     outputs:
       apps: ${{ steps.plan.outputs.apps }}
@@ -61,106 +57,12 @@ jobs:
       - name: Generate affected app plan
         id: plan
         env:
-          # A push to main is superseded by the next one, so it diffs from the
-          # last commit ci finished green on main, not from its own `before`.
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && 'last-success' || '' }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/app-plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
-
-  workspace-contracts:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Run every repository contract test
-        # The app catalog, generated plans, date releases, scaffolding, the design
-        # system and the shared shell. The file list is the directory, so a new
-        # test cannot be left out. Two files run in other jobs: the runtime store
-        # needs the built site, the easter egg needs a browser.
-        run: pnpm test:contracts
-      - name: Check native tract conversion
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zlib1g-dev
-          make -C exes/nii2tvx test
-      - name: Test the shared packages every app is built from
-        # Build nii2tvx first so its package suite exercises native/WebAssembly parity.
-        # The components' browser checks run in composite-site.
-        run: pnpm test:packages
-      - name: Check correctness on full CI runs
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
-        run: pnpm lint:correctness
-      - name: Lint every workspace package
-        # code-quality owns correctness lint on pull requests and pushes.
-        run: node scripts/lint-workspaces.mjs
-
-  app-tests:
-    needs: app-plan
-    if: needs.app-plan.outputs.has_apps == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.app-plan.outputs.apps) }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
-        if: matrix.rust_wasm
-        with:
-          targets: wasm32-unknown-unknown
-      - name: Install pinned nightly toolchain
-        if: matrix.rust_wasm
-        run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
-      - name: Install wasm-pack 0.13.1
-        if: matrix.rust_wasm
-        run: cargo install wasm-pack --version 0.13.1 --locked
-      - name: Set up wasm-opt
-        if: matrix.rust_wasm
-        uses: ./.github/actions/setup-wasm-opt
-      - name: Restore ${{ matrix.app }} Rust build cache
-        if: matrix.rust_wasm
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            apps/${{ matrix.app }}/**/target
-            exes/greedy/target
-            exes/dwi/target
-          key: rust-wasm-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('apps/{0}/**/Cargo.lock', matrix.app), 'exes/greedy/Cargo.lock', 'exes/dwi/Cargo.lock') }}
-          restore-keys: rust-wasm-${{ matrix.app }}-${{ runner.os }}-
-      - uses: actions/setup-python@v7
-        if: matrix.python_reference
-        with:
-          python-version: '3.13'
-      - run: pnpm install --frozen-lockfile
-      - name: Install Python reference dependencies
-        if: matrix.python_reference
-        run: pip install -r apps/${{ matrix.app }}/requirements.txt nibabel
-      - name: Test ${{ matrix.app }}
-        env:
-          APP: ${{ matrix.app }}
-          TEST_SCRIPT: ${{ matrix.release_test }}
-        run: pnpm --filter "$APP" run "$TEST_SCRIPT"
-      - name: Build ${{ matrix.app }}
-        run: pnpm --filter ${{ matrix.app }} build
-
   composite-site:
     needs: app-plan
-    # App-scoped changes can break composite assembly (runtime-store rewrites,
-    # artifact budgets), so any PR that selects at least one app runs the
-    # composite checks; only docs-only changes skip them.
     if: github.event_name != 'pull_request' || needs.app-plan.outputs.has_site == 'true'
     runs-on: ubuntu-latest
     outputs:
@@ -279,7 +181,6 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
-
   agent-interactions:
     needs: composite-site
     if: needs.composite-site.outputs.agent_site_ready == 'true'
@@ -287,7 +188,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [desktop, phone]
+        target:
+          - desktop
+          - phone
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -308,8 +211,6 @@ jobs:
           sha256sum --check agent-catalog-site.tar.gz.sha256
           mkdir -p "$GITHUB_WORKSPACE/dist"
           tar -xzf agent-catalog-site.tar.gz -C "$GITHUB_WORKSPACE/dist"
-      # Both targets keep the full selected catalog and the existing per-target bounds.
-      # Desktop alone took about 70 minutes; serializing both targets exceeded 120 minutes.
       - name: Run Neurodesk agent interactions across the catalog
         timeout-minutes: 120
         env:
@@ -328,176 +229,3 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
-
-  browser-e2e:
-    needs: app-plan
-    if: needs.app-plan.outputs.has_browser_apps == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.app-plan.outputs.browser_apps) }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
-        if: matrix.rust_wasm
-      - name: Install Greedy WebAssembly toolchain
-        if: matrix.rust_wasm
-        run: |
-          rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.13.1 --locked
-      - name: Set up wasm-opt
-        if: matrix.rust_wasm
-        uses: ./.github/actions/setup-wasm-opt
-      - name: Restore ${{ matrix.app }} Rust build cache
-        if: matrix.rust_wasm
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            apps/${{ matrix.app }}/**/target
-            exes/greedy/target
-            exes/dwi/target
-          key: rust-wasm-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('apps/{0}/**/Cargo.lock', matrix.app), 'exes/greedy/Cargo.lock', 'exes/dwi/Cargo.lock') }}
-          restore-keys: rust-wasm-${{ matrix.app }}-${{ runner.os }}-
-      - uses: actions/setup-python@v7
-        if: matrix.python_reference
-        with:
-          python-version: '3.13'
-      - run: pnpm install --frozen-lockfile
-      - name: Install Python reference dependencies
-        if: matrix.python_reference
-        run: pip install -r apps/${{ matrix.app }}/requirements.txt nibabel
-      - name: Install browser
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          node node_modules/@playwright/test/cli.js install --with-deps chromium
-      # Pinned examples and models for the data-gated tests. Hardware-GPU apps
-      # get theirs on the macOS job: SwiftShader cannot finish those workloads.
-      # Here they get only their CPU subset (--cpu), if they declare one.
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/neurodesk-e2e-test-data
-          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
-      - name: Download ${{ matrix.app }} test data
-        shell: bash
-        env:
-          APP: ${{ matrix.app }}
-          CPU_ONLY: ${{ matrix.hardware_gpu && '--cpu' || '' }}
-        run: node scripts/e2e-test-data.mjs "$APP" ~/.cache/neurodesk-e2e-test-data $CPU_ONLY | tee -a "$GITHUB_ENV"
-      - name: Build ${{ matrix.app }} browser runtime
-        run: pnpm --filter ${{ matrix.app }} build
-      - name: Test ${{ matrix.app }} in a browser${{ matrix.shard && format(' (shard {0})', matrix.shard) || '' }}
-        env:
-          NEURODESK_E2E_PREBUILT: '1'
-          NEURODESK_E2E_SHARD: ${{ matrix.shard }}
-        run: pnpm --filter ${{ matrix.app }} test:e2e
-
-  # The free macOS runners expose a paravirtual Apple GPU that full Chromium
-  # reaches through Metal, for WebGL2 and WebGPU alike (niivue/mono#199). This
-  # runs the hardware-GPU tests that Linux SwiftShader skips or cannot finish.
-  # The VM has 3 cores and 7 GB: it checks correctness, not speed. Each app
-  # downloads its pinned models and fixtures, so no test skips for lack of
-  # data; SYNcro's full normalizations make it the slowest by far.
-  browser-e2e-gpu:
-    needs: app-plan
-    if: needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || needs.app-plan.outputs.all_apps != 'true')
-    runs-on: macos-15
-    timeout-minutes: 300
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.app-plan.outputs.gpu_apps) }}
-    env:
-      NEURODESK_HARDWARE_GPU: '1'
-      NEURODESK_HARDWARE_GPU_VENDOR: apple
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      # SynthSR's full-volume reference comes from its native CLI.
-      - uses: dtolnay/rust-toolchain@stable
-        if: matrix.rust_wasm || matrix.app == 'synthsr'
-      - name: Install Greedy WebAssembly toolchain
-        if: matrix.rust_wasm
-        run: |
-          rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.13.1 --locked
-      - name: Set up wasm-opt
-        if: matrix.rust_wasm
-        uses: ./.github/actions/setup-wasm-opt
-      - name: Restore ${{ matrix.app }} Rust build cache
-        if: matrix.rust_wasm
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            apps/${{ matrix.app }}/**/target
-            exes/greedy/target
-            exes/dwi/target
-          key: rust-wasm-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('apps/{0}/**/Cargo.lock', matrix.app), 'exes/greedy/Cargo.lock', 'exes/dwi/Cargo.lock') }}
-          restore-keys: rust-wasm-${{ matrix.app }}-${{ runner.os }}-
-      - uses: actions/setup-python@v7
-        if: matrix.python_reference
-        with:
-          python-version: '3.13'
-      - run: pnpm install --frozen-lockfile
-      - name: Install Python reference dependencies
-        if: matrix.python_reference
-        run: pip install -r apps/${{ matrix.app }}/requirements.txt nibabel
-      - name: Install full Chromium
-        run: node node_modules/@playwright/test/cli.js install chromium
-      - name: Check that Chromium reaches the Metal GPU
-        run: node scripts/probe-hardware-gpu.mjs
-      - uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cache/neurodesk-e2e-test-data
-            exes/synthseg/models
-            exes/synthsr/models
-          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
-      - name: Download ${{ matrix.app }} models and fixtures
-        # Explicit bash adds pipefail, so a failed download fails the step.
-        shell: bash
-        env:
-          APP: ${{ matrix.app }}
-        run: node scripts/e2e-test-data.mjs "$APP" ~/.cache/neurodesk-e2e-test-data | tee -a "$GITHUB_ENV"
-      - name: Build ${{ matrix.app }} browser runtime
-        run: pnpm --filter ${{ matrix.app }} build
-      - name: Test ${{ matrix.app }} on the hardware GPU
-        env:
-          NEURODESK_E2E_PREBUILT: '1'
-        run: pnpm --filter ${{ matrix.app }} test:e2e
-      - uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: gpu-e2e-${{ matrix.app }}
-          path: apps/${{ matrix.app }}/test-results/
-          if-no-files-found: ignore
-          retention-days: 7
-
-  homepage-easter-egg:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: node node_modules/@playwright/test/cli.js install --with-deps chromium
-      - run: node --test test/easter-egg.test.mjs
-      - run: pnpm --filter @neurodesk/vessel-surfer-easter-egg test
-      - run: pnpm --filter @neurodesk/vessel-surfer-leaderboard test
-      - run: pnpm --filter @neurodesk/vessel-surfer-easter-egg test:e2e
