@@ -1,5 +1,14 @@
 # bison
 
+## 0.1.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/bison@0.2.2
+  - @neurodesk/runtime-support@0.9.17
+
 ## 0.1.20261025
 
 ### Patch Changes

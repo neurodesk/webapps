@@ -1,5 +1,13 @@
 # mri2vid
 
+## 0.6.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/mri2vid@0.6.20261027
+
 ## 0.6.20261024
 
 ### Minor Changes

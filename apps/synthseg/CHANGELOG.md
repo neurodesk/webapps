@@ -1,5 +1,14 @@
 # synthseg
 
+## 0.11.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/runtime-support@0.9.17
+  - @neurodesk/synthseg@0.11.20261027
+
 ## 0.11.20261025
 
 ### Patch Changes

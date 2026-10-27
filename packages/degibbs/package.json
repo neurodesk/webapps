@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/degibbs",
-  "version": "0.4.20261025",
+  "version": "0.4.20261027",
   "description": "Gibbs-ringing removal (MRtrix mrdegibbs port) for browsers and the command line",
   "type": "module",
   "private": true,

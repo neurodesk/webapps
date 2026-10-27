@@ -24,7 +24,9 @@ test('input hashes compare by exact filename and bytes, regardless of key order'
 
 test('missing and renamed inputs fail with their exact names and expected hashes', () => {
   assert.deepEqual(compareInputChecksums({ phantom: { 'renamed.nii': '123' } }, { example: { 'image.nii': '456' } }), [
+    [false, 'example: input group is missing'],
     [false, 'input example/image.nii: expected 456, actual <missing>'],
+    [false, 'phantom: input group is not in the reference'],
     [false, 'input phantom/renamed.nii: expected <missing>, actual 123'],
   ]);
 });

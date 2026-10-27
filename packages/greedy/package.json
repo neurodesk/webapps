@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/greedy",
-  "version": "0.6.20261025",
+  "version": "0.6.20261027",
   "description": "Greedy MRI registration for browsers and offline command-line workflows",
   "type": "module",
   "license": "Apache-2.0",

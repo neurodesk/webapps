@@ -1,5 +1,12 @@
 # @neurodesk/spinalcordtoolbox
 
+## 0.9.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+
 ## 0.9.20261025
 
 ## 0.9.20261024

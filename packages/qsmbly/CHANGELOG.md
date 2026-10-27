@@ -1,5 +1,11 @@
 # @neurodesk/qsmbly
 
+## 0.31.20261027
+
+### Patch Changes
+
+- Retry bounded transient CI download failures without weakening checksums, handle Windows lockfile line endings, and improve NODDI input mismatch diagnostics. Add early catalog integration checks and register generated app offline workflows and standalone exceptions.
+
 ## 0.31.20261024
 
 ## 0.31.20261022
