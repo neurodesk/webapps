@@ -1,5 +1,17 @@
 # @neurodesk/noddi
 
+## 0.6.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+  - @neurodesk/dwi2trx@0.8.20261027
+- Retry bounded transient CI download failures without weakening checksums, handle Windows lockfile line endings, and improve NODDI input mismatch diagnostics. Add early catalog integration checks and register generated app offline workflows and standalone exceptions.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/dwi2trx@0.8.20261027
+
 ## 0.6.20261025
 
 ### Patch Changes

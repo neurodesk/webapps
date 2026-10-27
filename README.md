@@ -81,6 +81,9 @@ The shared Vite configuration injects the same application bar and theme used by
 standalone and deployed builds. A visual difference between `dev` and `build` is
 a shared-shell bug, not something to compensate for with app-local CSS.
 
+For recurring test failures, see [CI failure triage](docs/quality/ci-failure-triage.md).
+For approval-related CI failures, see [CI approval reporting](docs/quality/ci-approval-reporting.md).
+
 ## Deployment
 
 `.github/workflows/deploy-pages.yml` builds and deploys the single artifact to

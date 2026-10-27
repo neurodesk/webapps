@@ -8,6 +8,8 @@ on:
       - 'apps/white-matter-lesions/**'
       - 'packages/synthsr/**'
       - 'packages/synthstrip/**'
+      - 'packages/components/package.json'
+      - 'packages/components/src/net/fetchWithRetry.js'
   push:
     branches: [main]
     paths:
@@ -18,6 +20,8 @@ on:
       - 'apps/white-matter-lesions/**'
       - 'packages/synthsr/**'
       - 'packages/synthstrip/**'
+      - 'packages/components/package.json'
+      - 'packages/components/src/net/fetchWithRetry.js'
   workflow_dispatch:
     inputs:
       sign_release:

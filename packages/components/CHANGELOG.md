@@ -1,5 +1,17 @@
 # @neurodesk/webapp-components
 
+## 0.22.2
+
+### Patch Changes
+
+- Retry interrupted response bodies when validation downloads opt into transient network recovery, while rejecting permanent HTTP and integrity failures immediately.
+
+## 0.22.1
+
+### Patch Changes
+
+- Retry bounded transient CI download failures without weakening checksums, handle Windows lockfile line endings, and improve NODDI input mismatch diagnostics. Add early catalog integration checks and register generated app offline workflows and standalone exceptions.
+
 ## 0.22.0
 
 ### Minor Changes

@@ -1,5 +1,18 @@
 # elastix
 
+## 0.5.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+  - @neurodesk/elastix@0.5.20261027
+  - @neurodesk/runtime-support@0.9.18
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/elastix@0.5.20261027
+  - @neurodesk/runtime-support@0.9.17
+
 ## 0.5.20261025
 
 ### Patch Changes

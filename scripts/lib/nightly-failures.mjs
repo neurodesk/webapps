@@ -1,5 +1,5 @@
 const BAD_CONCLUSIONS = new Set(['failure', 'timed_out', 'action_required', 'startup_failure', 'stale']);
-export const SCHEDULED_WORKFLOWS = ['ci', 'deploy-github-pages', 'mutation-quality', 'n4-wasm-source', 'neuroflow', 'sct-full-tests', 'standalone', 'standalone-links', 'upstream sync'];
+export const SCHEDULED_WORKFLOWS = ['CI approval report', 'ci', 'deploy-github-pages', 'mutation-quality', 'n4-wasm-source', 'neuroflow', 'sct-full-tests', 'standalone', 'standalone-links', 'upstream sync'];
 const LOG_LIMIT = 2 * 1024 * 1024;
 const BODY_LIMIT = 60000;
 

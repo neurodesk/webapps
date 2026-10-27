@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/n4",
-  "version": "0.6.20261025",
+  "version": "0.6.20261027",
   "description": "ANTs N4 bias-field correction in WebAssembly, with MRtrix dwibiascorrect's DWI procedure, for browsers and the command line",
   "type": "module",
   "private": true,

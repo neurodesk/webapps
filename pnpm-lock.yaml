@@ -1993,6 +1993,9 @@ importers:
       '@neurodesk/synthstrip':
         specifier: workspace:*
         version: link:../synthstrip
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0

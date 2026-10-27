@@ -71,21 +71,9 @@ test('standalone choices are ordered, omit technical clutter and never offer the
 
 
 // An app's Standalone download is its own command line, never the all-apps desktop suite. Every app ships
-// one (packages/<app>/release.json or a Rust release source) unless it is listed here with the reason.
+// one (packages/<app>/release.json or a Rust release source) unless standalone-exceptions.json states why.
 // Remove an entry in the change that adds its command line.
-const WITHOUT_COMMAND_LINE = {
-  dcm2niix: 'interactive BIDS curation: acquisition labels and fieldmap associations are user decisions; upstream dcm2niix supplies the converter command line',
-  surfannotate: 'interactive surface annotation: every result is a manual choice in the viewer',
-  zarro: 'interactive OME-Zarr viewer: it has no batch output',
-  nesvor: 'needs CUDA; its standalone form is the neurodesk-compute server',
-  dicomview: 'interactive DICOM browser: dcm2niix and dicompare already ship as command lines',
-  'pipeline-builder': 'writes NeuroFlow workflows: neuroflow-mcp runs and validates them from the command line',
-  sdc: 'exes/sdc builds the sdc command line on the same core; its release packaging follows the app (#473)',
-  dwicorrect: 'exes/dwi/shoreline builds the shoreline command line on the same core; its release packaging follows the app',
-  fastprep: 'exes/fastprep drives separately installed niimath, brainchop, greedy-rs, synthsr, topofit and glm; a bundled release waits on packaging those (TopoFit licence pending)',
-  'me-ica': 'its meica CLI is released from niivue/meica-rs; no release is tagged yet',
-  bison: 'the bison command line in packages/bison follows the app; its release packaging is not done yet',
-};
+const WITHOUT_COMMAND_LINE = JSON.parse(await readFile(new URL('../registry/standalone-exceptions.json', import.meta.url), 'utf8'));
 
 test('every app ships its own command line or states why it cannot', async () => {
   const registry = await loadAppsRegistry();
@@ -94,6 +82,13 @@ test('every app ships its own command line or states why it cannot', async () =>
     assert.notEqual(natives.has(id), id in WITHOUT_COMMAND_LINE, natives.has(id) ? `${id} has a command line: remove it from WITHOUT_COMMAND_LINE` : `${id}: add packages/${id}/release.json, or list it in WITHOUT_COMMAND_LINE with the reason`);
   }
   assert.deepEqual(Object.keys(WITHOUT_COMMAND_LINE).filter(id => !registry.apps.some(app => app.id === id)), []);
+  for (const [id, reason] of Object.entries(WITHOUT_COMMAND_LINE)) {
+    assert.ok(typeof reason === 'string' && reason.trim(), `${id}: explain why no command line is available`);
+    if (reason.startsWith('template pass-through')) {
+      const contract = JSON.parse(await readFile(new URL(`../apps/${id}/automation.json`, import.meta.url), 'utf8'));
+      assert.deepEqual(Object.keys(contract.operations), ['copy-input'], `${id}: replace the scaffold's standalone reason when implementing the method`);
+    }
+  }
 });
 
 test('future apps automatically receive real offline workflow coverage on hosted CI', () => {

@@ -44,6 +44,12 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
     const context = await browser.newContext({ acceptDownloads: true });
     const origin = `http://127.0.0.1:${server.address().port}`;
     await context.route(/cloudflareinsights\.com|googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
+    // Use the same repository-owned runtime as the offline asset catalog.
+    await context.route('https://dicompare.neurodesk.org/embed/DicompareController.js', route => route.fulfill({
+      path: join(repository, 'apps/dicompare/public/embed/DicompareController.js'),
+      contentType: 'text/javascript',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    }));
     await context.route('**/seedseg-model-*.onnx', route => {
       const asset = MODEL_ASSETS.find(candidate => route.request().url().endsWith(`/${candidate.filename}`));
       assert.ok(asset, 'Only published checkpoint requests are allowed');

@@ -3,6 +3,7 @@ name: scheduled workflow failure reports
 on:
   workflow_run:
     workflows:
+      - CI approval report
       - ci
       - deploy-github-pages
       - mutation-quality

@@ -6,6 +6,12 @@
 
 - Make shared build runtime downloads retry transient connections, interrupted responses, and temporary HTTP failures with bounded exponential backoff and fresh per-attempt deadlines. Respect Retry-After within the wait limit and keep checksum failures immediate.
   - @neurodesk/spinalcordtoolbox@0.9.20261027
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+  - @neurodesk/spinalcordtoolbox@0.9.20261027
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/spinalcordtoolbox@0.9.20261027
 
 ## 0.9.20261025
 

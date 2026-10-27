@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/nesvor",
-  "version": "0.3.20261025",
+  "version": "0.3.20261027",
   "private": true,
   "type": "module",
   "description": "NeSVoR browser numerical port",

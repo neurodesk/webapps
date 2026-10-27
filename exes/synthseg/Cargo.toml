@@ -1,6 +1,6 @@
 [package]
 name = "synthseg"
-version = "0.11.20261025"
+version = "0.11.20261027"
 edition = "2021"
 license = "Apache-2.0"
 description = "SynthSeg 2.0 brain segmentation with ONNX Runtime and native Metal"

@@ -1,5 +1,14 @@
 # @neurodesk/degibbs
 
+## 0.4.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+
 ## 0.4.20261025
 
 ## 0.4.20261024
