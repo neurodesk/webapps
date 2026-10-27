@@ -1,5 +1,12 @@
 # seedseg
 
+## 0.6.20261027
+
+### Patch Changes
+
+- Load optional DICOM reporting only when requested so an unavailable or stalled report host cannot block startup or scan conversion.
+  - @neurodesk/seedseg@0.6.20261027
+
 ## 0.6.20261024
 
 ### Patch Changes
