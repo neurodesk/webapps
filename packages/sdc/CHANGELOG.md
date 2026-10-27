@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- @neurodesk/runtime-support@0.9.18
 - @neurodesk/runtime-support@0.9.17
 
 ## 0.3.20261025

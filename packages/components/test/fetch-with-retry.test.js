@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fetchWithRetry, retryDelay } from '../src/net/fetchWithRetry.js';
+import { fetchBytesWithRetry, fetchWithRetry, retryDelay } from '../src/net/fetchWithRetry.js';
 
 const replies = (statuses) => {
   const seen = [];
@@ -91,4 +91,33 @@ test('404s, programming errors, aborts and POSTs are not transient retries', asy
   const post = replies([503]);
   assert.equal((await fetchWithRetry('https://host/file', { method: 'POST' }, { fetch: post.fetch, retryTransient: true })).status, 503);
   assert.equal(post.seen.length, 1);
+});
+
+test('transient byte downloads retry an interrupted response body', async () => {
+  let calls = 0;
+  const fetch = async () => {
+    if (++calls > 1) return new Response('complete');
+    return new Response(new ReadableStream({
+      start(controller) {
+        controller.error(new TypeError('terminated', { cause: { code: 'UND_ERR_SOCKET' } }));
+      }
+    }));
+  };
+  const bytes = await fetchBytesWithRetry('https://host/file', {}, { fetch, retryTransient: true, baseDelay: 0 });
+  assert.equal(new TextDecoder().decode(bytes), 'complete');
+  assert.equal(calls, 2);
+});
+
+test('byte downloads reject permanent HTTP errors and body errors without transient opt-in', async () => {
+  const missing = replies([404]);
+  await assert.rejects(fetchBytesWithRetry('https://host/file', {}, { fetch: missing.fetch, retryTransient: true }), /404/);
+  assert.equal(missing.seen.length, 1);
+  let calls = 0;
+  await assert.rejects(fetchBytesWithRetry('https://host/file', {}, { fetch: async () => {
+    calls++;
+    return new Response(new ReadableStream({
+      start(controller) { controller.error(Object.assign(new Error('reset'), { code: 'ECONNRESET' })); }
+    }));
+  } }), /reset/);
+  assert.equal(calls, 1);
 });

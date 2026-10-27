@@ -5,6 +5,10 @@
 ### Patch Changes
 
 - Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+  - @neurodesk/bison@0.2.3
+  - @neurodesk/runtime-support@0.9.18
+- Updated dependencies
   - @neurodesk/webapp-components@0.22.1
   - @neurodesk/bison@0.2.2
   - @neurodesk/runtime-support@0.9.17

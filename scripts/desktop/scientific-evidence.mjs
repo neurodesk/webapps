@@ -1,4 +1,4 @@
-import { fetchWithRetry } from '../../packages/components/src/net/fetchWithRetry.js';
+import { fetchBytesWithRetry } from '../../packages/components/src/net/fetchWithRetry.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -93,9 +93,7 @@ export async function fetchPinnedExample(app, exampleId, roles, cache, fetchImpl
     catch (error) {
       if (error.code !== 'ENOENT') throw error;
       console.log(`Downloading ${app}/${file.name}`);
-      const response = await fetchWithRetry(file.url, { signal: AbortSignal.timeout(600_000) }, { fetch: fetchImpl, retryTransient: true, retries: 3 });
-      if (!response.ok) throw new Error(`${response.status}: ${file.url}`);
-      bytes = Buffer.from(await response.arrayBuffer());
+      bytes = Buffer.from(await fetchBytesWithRetry(file.url, { signal: AbortSignal.timeout(600_000) }, { fetch: fetchImpl, retryTransient: true, retries: 3 }));
       assert.equal(checksum(bytes), locked.sha256, `${path}: downloaded checksum mismatch`);
       assert.equal(bytes.length, locked.bytes, `${path}: downloaded size mismatch`);
       const temporary = `${path}.${process.pid}.partial`;

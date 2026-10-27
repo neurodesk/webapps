@@ -1,5 +1,12 @@
 # @neurodesk/bison
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+
 ## 0.2.2
 
 ### Patch Changes

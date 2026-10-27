@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.22.2
+
+### Patch Changes
+
+- Retry interrupted response bodies when validation downloads opt into transient network recovery, while rejecting permanent HTTP and integrity failures immediately.
+
 ## 0.22.1
 
 ### Patch Changes
