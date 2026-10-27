@@ -71,7 +71,7 @@ test('standalone choices are ordered, omit technical clutter and never offer the
 
 
 // An app's Standalone download is its own command line, never the all-apps desktop suite. Every app ships
-// one (packages/<app>/release.json or a Rust release source) unless it is listed here with the reason.
+// one (packages/<app>/release.json or a Rust release source) unless standalone-exceptions.json states why.
 // Remove an entry in the change that adds its command line.
 const WITHOUT_COMMAND_LINE = JSON.parse(await readFile(new URL('../registry/standalone-exceptions.json', import.meta.url), 'utf8'));
 

@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- Use the checked-in Dicompare runtime during native/browser parity validation so an unrelated remote script outage cannot prevent the reference app from starting.
 - Updated dependencies
   - @neurodesk/webapp-components@0.22.1
 

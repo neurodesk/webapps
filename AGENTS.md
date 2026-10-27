@@ -165,7 +165,7 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Each registration group and each denoised image gets a new WebAssembly instance, in its own Worker in the browser and worker thread in Node, so its memory is freed when it ends; one hmc kernel instance also aborts on its 27th run (#537, `REGISTRATION_RUNS_PER_INSTANCE`). Do not reuse an instance across stages.
 - Outputs are on the native T1 grid: uint8 labels, one float32 probability per class and the uint8 mask, gzip level 9 with mtime 0 (`src/outputs.js`), so the bytes are the same in every browser and on the command line.
 - `apps/bison/scripts/copy-runtime.mjs` stages the hmc-registration and ants-denoise workers and kernels (pthread builds, so the page needs cross-origin isolation) in the gitignored `public/bison-runtime/`. ONNX Runtime Web starts its threads from `src/worker.js` (named `em-pthread`); the worker must not set its own message handler there.
-- The `bison` command line has no release yet; the app is in `WITHOUT_COMMAND_LINE` (`test/standalone.test.mjs`) until its packaging is done.
+- The `bison` command line has no release yet; the app is in `registry/standalone-exceptions.json` until its packaging is done.
 
 ## nesvor and the compute server
 
@@ -343,7 +343,7 @@ that generated runtime; it is never committed or npm-published. Greedy's app
 manifest is the release version source; the release tooling keeps its package
 and Rust workspace at the same `MAJOR.MINOR.YYYYMMDD` version.
 
-`exes/fastprep` and `exes/glm` are Cargo workspaces (`make build test lint`) with `cli`, `core` and `wasm` crates. `pnpm --filter @neurodesk/fastprep build:wasm` builds both WASM crates into the gitignored `packages/fastprep/wasm`. There is no bundled CLI release yet: fastprep is in `WITHOUT_COMMAND_LINE` (`test/standalone.test.mjs`) until niimath, brainchop, greedy-rs, synthsr, topofit and glm are packaged and TopoFit's licence allows it.
+`exes/fastprep` and `exes/glm` are Cargo workspaces (`make build test lint`) with `cli`, `core` and `wasm` crates. `pnpm --filter @neurodesk/fastprep build:wasm` builds both WASM crates into the gitignored `packages/fastprep/wasm`. There is no bundled CLI release yet: fastprep is in `registry/standalone-exceptions.json` until niimath, brainchop, greedy-rs, synthsr, topofit and glm are packaged and TopoFit's licence allows it.
 
 `exes/compute-server` is the `neurodesk-compute` server (`make build test lint fmt`,
 `make run-simulated`). It has no GPU or Docker dependency at build or test time; all

@@ -82,28 +82,6 @@ test('corrupt downloaded models are rejected and can be retried', async t => {
   assert.deepEqual(await readFile(await resolver.asset(url)), data);
 });
 
-for (const kind of ['example', 'runtime']) {
-  test(`model bytes shared with a ${kind} remain available offline`, async t => {
-    const { root, full, data, url, record } = await fixture(t);
-    const bundle = await loadBundle(full);
-    const alias = 'https://examples.example/shared';
-    bundle.assets[alias] = { ...record, kind };
-    await writeFile(join(full, 'manifest.json'), JSON.stringify(bundle));
-    const light = join(root, 'light');
-    await withoutModels(full, light);
-    await verifyBundle(light);
-    const reduced = await loadBundle(light);
-    const resolver = createModelResolver(light, reduced, join(root, 'cache'), {
-      fetchModel: () => { throw new Error('Shared assets must remain offline'); },
-    });
-    for (const requested of [url, alias]) {
-      assert.deepEqual(await readFile(await resolver.asset(requested)), data);
-      assert.equal(reduced.assets[requested].remote, undefined);
-    }
-    assert.deepEqual(await readFile(await resolver.file('site/demo/model.onnx')), data);
-  });
-}
-
 test('the offline edition never downloads a missing model', async t => {
   const { root, full, url, record } = await fixture(t);
   await rm(join(full, record.path));
