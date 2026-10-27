@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { createNiftiFromData, readNiftiFrames } from '@neurodesk/webapp-components/file-io/nifti';
 import { multiShellPhantom } from '../src/phantom.js';
-import { fetchWithRetry } from '@neurodesk/webapp-components/fetch';
+import { fetchBytesWithRetry } from '@neurodesk/webapp-components/fetch';
 
 export const REFERENCE = new URL('./browser-reference.json', import.meta.url);
 
@@ -53,9 +53,7 @@ async function pinnedExample() {
     files[file.role] = { name: file.name, path, sha256: file.sha256 };
     const cached = await readFile(path).catch(() => null);
     if (cached && sha256(cached) === file.sha256) continue;
-    const response = await fetchWithRetry(file.url, { signal: AbortSignal.timeout(600_000) }, { retryTransient: true, retries: 3 });
-    if (!response.ok) throw new Error(`${file.url}: HTTP ${response.status}`);
-    const bytes = Buffer.from(await response.arrayBuffer());
+    const bytes = Buffer.from(await fetchBytesWithRetry(file.url, { signal: AbortSignal.timeout(600_000) }, { retryTransient: true, retries: 3 }));
     if (sha256(bytes) !== file.sha256) throw new Error(`${file.url}: SHA-256 differs from its pin in examples.json`);
     await mkdir(join(path, '..'), { recursive: true });
     await writeFile(`${path}.partial`, bytes);

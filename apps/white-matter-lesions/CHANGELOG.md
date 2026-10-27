@@ -5,6 +5,8 @@
 ### Patch Changes
 
 - Updated dependencies
+  - @neurodesk/white-matter-lesions@0.5.20261027
+- Updated dependencies
   - @neurodesk/webapp-components@0.22.2
   - @neurodesk/runtime-support@0.9.18
   - @neurodesk/white-matter-lesions@0.5.20261027

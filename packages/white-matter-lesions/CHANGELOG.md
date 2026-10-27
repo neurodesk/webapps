@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- Retry transient interruptions while reading model downloads and validation inputs, keeping checksum failures immediate and incomplete bytes out of the cache.
 - Updated dependencies
   - @neurodesk/webapp-components@0.22.2
   - @neurodesk/synthsr@0.6.20261027
