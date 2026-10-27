@@ -239,8 +239,10 @@ for (const [filename, value] of [
 
 const rolloutPath = join(root, 'docs/architecture/offline-executables.md');
 const rollout = await readFile(rolloutPath, 'utf8');
-const row = `| \`${name}\` | Template input copy | Replace the pass-through offline test and package the implemented method. |\n`;
-await writeFile(rolloutPath, rollout.replace(/(\| --- \| --- \| --- \|\n)/, `$1${row}`));
+const separator = /(\| --- \| --- \| --- \|)(\r?\n)/;
+if (!separator.test(rollout)) fail('The offline rollout table is missing its header separator.');
+const row = `| \`${name}\` | Template input copy | Replace the pass-through offline test and package the implemented method. |`;
+await writeFile(rolloutPath, rollout.replace(separator, (_, header, newline) => `${header}${newline}${row}${newline}`));
 
 // Register the app so deploy + statistics workflows pick it up.
 await writeFile(registry, nextText);

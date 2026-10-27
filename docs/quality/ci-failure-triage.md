@@ -12,18 +12,8 @@ scientific output check when implementing the method. Remove its exception in
 `registry/standalone-exceptions.json` when adding its command-line release.
 Literal About dialog headings must match the title in `registry/apps.yml`.
 
-The hourly CI approval report maintains one GitHub issue, grouped by commit and
-approval/no-job status. Review the linked contributor changes before approving
-runs through GitHub. The reporter never approves runs and never executes PR
-code. No-job failures require their run annotation to distinguish expired
-approval from workflow validation or startup failures. Successful and cancelled
-runs are excluded from failure counts. The report becomes active after its
-workflow is merged into the default branch; `workflow_dispatch` also uses the
-default branch's code.
-
-To inspect the report without posting an issue, supply `GITHUB_REPOSITORY` and
-an existing authenticated `GH_TOKEN`, then run
-`node scripts/report-ci-approvals.mjs --dry-run`.
+For pending contributor approvals and runs without jobs, see
+[CI approval reporting](ci-approval-reporting.md).
 
 Download and deployment checks retry transient DNS/reset failures and HTTP
 502/503/504, at most three times beyond the initial attempt. Downloads still

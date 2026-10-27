@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
+const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));
 
 test("the automation operation downloads exactly its declared input copy", async ({ page }) => {
   const bytes = Buffer.from("template pass-through example");
@@ -36,6 +37,7 @@ test("shared app bar owns information actions and theme", async ({ page }) => {
   await expect(page.locator("#controls > #aboutBtn")).toBeHidden();
   await bar.getByRole("button", { name: "About", exact: true }).click();
   await expect(page.locator("#infoDialog")).toBeVisible();
+  await expect(page.locator("#infoDialog").getByRole("heading", { name: `About ${automation.title}`, exact: true })).toBeVisible();
   await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
   await bar.locator("[data-neurodesk-theme-toggle]").click();
   await expect(page.locator("html")).toHaveAttribute("data-neurodesk-theme", "light");

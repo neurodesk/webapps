@@ -73,7 +73,7 @@ async function ensureAsset(asset, { cacheDir, offline, onProgress }) {
     throw new Error(`${asset.filename} is missing from the offline model directory ${cacheDir}. Run "flames download-models" while online, or reinstall the complete release.`);
   }
   onProgress(`Downloading ${asset.filename}…`);
-  const response = await fetchWithRetry(asset.url, { signal: AbortSignal.timeout(600_000) }, { retryTransient: true, retries: 3 });
+  const response = await fetchWithRetry(asset.url, {}, { retryTransient: true, retries: 3 });
   if (!response.ok) throw new Error(`Failed to download ${asset.filename}: HTTP ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (!verified(bytes)) throw new Error(`${asset.filename} download failed checksum verification.`);
