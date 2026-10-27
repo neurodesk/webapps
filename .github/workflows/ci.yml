@@ -58,6 +58,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Check catalog integration before starting app jobs
+        run: pnpm check:integration
       - name: Generate affected app plan
         id: plan
         env:

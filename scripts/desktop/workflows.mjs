@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
@@ -12,7 +14,10 @@ import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 import { startReferenceServer } from '../../test-utils/compute-reference-server.mjs';
 
-export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'mri2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview', 'fastprep', 'hmc', 'noddi', 'degibbs', 'n4', 'dcm2niix', 'dwidenoise', 'sdc', 'dwicorrect', 'me-ica', 'pipeline-builder', 'bison'];
+const appRoot = fileURLToPath(new URL('../../apps/', import.meta.url));
+const appWorkflows = readdirSync(appRoot).filter(id => existsSync(join(appRoot, id, 'test/offline.mjs')));
+
+export const workflowApps = [...appWorkflows, 'nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'mri2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview', 'fastprep', 'hmc', 'noddi', 'degibbs', 'n4', 'dcm2niix', 'dwidenoise', 'sdc', 'dwicorrect', 'me-ica', 'pipeline-builder', 'bison'];
 
 /**
  * Anything a workflow needs before the desktop app starts. NeSVoR computes on a
@@ -618,6 +623,10 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     const naa = Number(rows.find(row => row.startsWith('NAA,')).split(',')[1]);
     assert.ok(naa > 5 && naa < 12, `NAA ${naa} mM`);
     return { filename: result.filename, naa };
+  }
+  if (appWorkflows.includes(id)) {
+    const { verifyOffline } = await import(pathToFileURL(join(appRoot, id, 'test/offline.mjs')).href);
+    return verifyOffline(page, { fixture, download });
   }
   throw new Error(`No offline workflow test registered for ${id}`);
 }

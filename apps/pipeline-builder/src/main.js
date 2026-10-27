@@ -42,7 +42,7 @@ const progress = new ProgressManager();
 bindInfoTooltips(document);
 
 const info = createInfoDialog();
-$("aboutBtn").onclick = () => info.open("About Pipeline builder", $("aboutContent"));
+$("aboutBtn").onclick = () => info.open("About Pipeline Builder", $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 
 function status(message, error = false) {

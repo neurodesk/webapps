@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { loadAppsRegistry } from "../../../scripts/lib/apps-registry.mjs";
+
+const appTitle = (await loadAppsRegistry()).apps.find(app => app.id === "pipeline-builder").title;
 
 const [example] = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const exampleUrl = example.files[0].url;
@@ -288,3 +291,20 @@ test("page is cross-origin isolated (COOP/COEP active)", async ({ page }) => {
   await page.goto("/");
   expect(await page.evaluate(() => self.crossOriginIsolated === true)).toBe(true);
 });
+
+
+for (const width of [390, 1440]) {
+  test(`About uses the catalog title at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "About", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: `About ${appTitle}`, exact: true })).toBeVisible();
+    const screenshot = testInfo.outputPath(`about-${width}.png`);
+    await page.screenshot({ path: screenshot });
+    await testInfo.attach("About dialog", { path: screenshot, contentType: "image/png" });
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+  });
+}

@@ -5,6 +5,7 @@ import { availableParallelism, homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { readVolume } from '@neurodesk/synthsr';
 import { runSynthstrip } from '@neurodesk/synthstrip';
+import { fetchWithRetry } from '@neurodesk/webapp-components/fetch';
 import packageJson from '../package.json' with { type: 'json' };
 import { ENSEMBLE_SIZES, FLAMES_FOLDS, SYNTHSTRIP } from './assets.js';
 import { MAX_INPUT_VOXELS, runFolds, toNetworkResolution } from './pipeline.js';
@@ -72,7 +73,7 @@ async function ensureAsset(asset, { cacheDir, offline, onProgress }) {
     throw new Error(`${asset.filename} is missing from the offline model directory ${cacheDir}. Run "flames download-models" while online, or reinstall the complete release.`);
   }
   onProgress(`Downloading ${asset.filename}…`);
-  const response = await fetch(asset.url);
+  const response = await fetchWithRetry(asset.url, { signal: AbortSignal.timeout(600_000) }, { retryTransient: true, retries: 3 });
   if (!response.ok) throw new Error(`Failed to download ${asset.filename}: HTTP ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (!verified(bytes)) throw new Error(`${asset.filename} download failed checksum verification.`);

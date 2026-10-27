@@ -12,6 +12,7 @@ import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { fetchPinnedExample } from '../desktop/scientific-evidence.mjs';
 import { cropTrackingDwi } from '../../test-utils/dwi-tracking-crop.mjs';
+import { fetchWithRetry } from '../../packages/components/src/net/fetchWithRetry.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -24,7 +25,7 @@ async function fetchChecked(url, path, { bytes, sha256 }) {
   const matches = (data) => data.length === bytes && createHash('sha256').update(data).digest('hex') === sha256;
   if (matches(await readFile(path).catch(() => Buffer.alloc(0)))) return;
   console.error(`Downloading ${url}`);
-  const response = await fetch(url, { signal: AbortSignal.timeout(1_200_000) });
+  const response = await fetchWithRetry(url, { signal: AbortSignal.timeout(1_200_000) }, { retryTransient: true, retries: 3 });
   if (!response.ok) throw new Error(`${response.status}: ${url}`);
   const data = Buffer.from(await response.arrayBuffer());
   if (!matches(data)) throw new Error(`${url} does not match its pinned size and SHA-256`);

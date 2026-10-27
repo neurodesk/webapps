@@ -113,6 +113,21 @@ test('a download that fails verification leaves no model file behind', async (t)
   assert.deepEqual(await readdir(cache).catch(() => []), []);
 });
 
+test('a transient model DNS failure retries but corrupt bytes still fail', async (t) => {
+  const { cache } = await workspace(t);
+  let calls = 0;
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) throw new TypeError('fetch failed', { cause: Object.assign(new Error('DNS lookup failed'), { code: 'ENOTFOUND' }) });
+    return new Response('wrong bytes');
+  };
+  await assert.rejects(downloadModels({ cacheDir: cache, offline: false }), /download failed checksum verification/);
+  assert.equal(calls, 2);
+  assert.deepEqual(await readdir(cache).catch(() => []), []);
+});
+
 test('segmentation refuses a non-empty output directory and keeps its contents', async (t) => {
   const { root, input, cache } = await workspace(t);
   const output = join(root, 'existing');

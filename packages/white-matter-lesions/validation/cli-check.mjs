@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { fetchWithRetry } from '@neurodesk/webapp-components/fetch';
 import { readVolume } from '@neurodesk/synthsr';
 import { compareWithBrowser, measure } from '../../../apps/white-matter-lesions/validation/browser-reference.mjs';
 import { FLAMES_FOLDS } from '../src/assets.js';
@@ -49,7 +50,7 @@ async function pinnedExample() {
   const path = join(tmpdir(), 'neurodesk-flames-validation', pin.sha256, file.name);
   const cached = await readFile(path).catch(() => null);
   if (cached && sha256(cached) === pin.sha256) return path;
-  const response = await fetch(file.url);
+  const response = await fetchWithRetry(file.url, { signal: AbortSignal.timeout(600_000) }, { retryTransient: true, retries: 3 });
   if (!response.ok) throw new Error(`${file.url}: HTTP ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (sha256(bytes) !== pin.sha256) throw new Error(`${file.url}: SHA-256 differs from its pin`);

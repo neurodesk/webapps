@@ -56,3 +56,39 @@ test('Retry-After is honoured in seconds and capped; without it the wait backs o
   const backoff = retryDelay(new Response('', { status: 429 }), 2, { baseDelay: 1000 });
   assert.ok(backoff >= 2000 && backoff <= 4000, `backoff ${backoff}`);
 });
+
+for (const status of [502, 503, 504]) {
+  test(`transient downloads recover after HTTP ${status}`, async () => {
+    const { seen, fetch } = replies([status, 200]);
+    const response = await fetchWithRetry('https://host/file', {}, { fetch, retryTransient: true, baseDelay: 0 });
+    assert.equal(await response.text(), 'bytes');
+    assert.equal(seen.length, 2);
+  });
+}
+
+test('transient retries recover from DNS failure and stop at the limit', async () => {
+  let calls = 0;
+  const error = new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } });
+  const fetch = async () => {
+    if (++calls < 3) throw error;
+    return new Response('ok');
+  };
+  assert.equal(await (await fetchWithRetry('https://host/file', {}, { fetch, retryTransient: true, baseDelay: 0 })).text(), 'ok');
+  calls = 0;
+  await assert.rejects(fetchWithRetry('https://host/file', {}, { fetch, retryTransient: true, retries: 1, baseDelay: 0 }), error);
+  assert.equal(calls, 2);
+});
+
+test('404s, programming errors, aborts and POSTs are not transient retries', async () => {
+  const { seen, fetch } = replies([404]);
+  assert.equal((await fetchWithRetry('https://host/file', {}, { fetch, retryTransient: true })).status, 404);
+  assert.equal(seen.length, 1);
+  for (const error of [new TypeError('bad URL'), new DOMException('cancelled', 'AbortError')]) {
+    let calls = 0;
+    await assert.rejects(fetchWithRetry('https://host/file', {}, { retryTransient: true, fetch: async () => { calls++; throw error; } }), error);
+    assert.equal(calls, 1);
+  }
+  const post = replies([503]);
+  assert.equal((await fetchWithRetry('https://host/file', { method: 'POST' }, { fetch: post.fetch, retryTransient: true })).status, 503);
+  assert.equal(post.seen.length, 1);
+});

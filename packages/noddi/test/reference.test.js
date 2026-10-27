@@ -69,3 +69,9 @@ test('the recorded reference covers every case, NODDI included', async () => {
   assert.equal(Object.keys(reference.browser.cases.example.outputs).length, 11);
   assert.ok(Object.keys(reference.inputs.example).includes('sub-01_dir-AP_desc-slab_dwi.nii.gz'));
 });
+
+
+test('input checks reject missing or additional empty groups', () => {
+  assert.equal(compareInputChecksums({ unexpected: {} }, {})[0][0], false);
+  assert.equal(compareInputChecksums({}, { phantom: {} })[0][0], false);
+});

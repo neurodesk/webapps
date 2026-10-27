@@ -121,6 +121,7 @@ const REQUIRED = [
   'examples.json',
   'automation.json',
   'test/config.test.js',
+  'test/offline.mjs',
   'e2e/smoke.spec.js',
 ];
 for (const f of REQUIRED) {
@@ -215,19 +216,31 @@ const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 manifest.version = nextVersion(manifest.version, 'patch', releaseDate());
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
+const automationPath = join(dest, 'automation.json');
+const automation = JSON.parse(await readFile(automationPath, 'utf8'));
+automation.title = title;
+await writeFile(automationPath, `${JSON.stringify(automation, null, 2)}\n`);
+
 const examples = JSON.parse(await readFile(join(dest, 'examples.json'), 'utf8'));
 
 // Every generated app participates in desktop packaging and offline validation.
 for (const [filename, value] of [
+  ['standalone-exceptions.json', 'template pass-through demonstration; implement and package the scientific method before providing a command line'],
   ['standalone.json', { desktop: true, profile: 'interactive', assets: [], downloads: [], containers: [] }],
   ['offline-assets.sources.json', examples.flatMap(example => example.files.map(({ url }) => ({ url, kind: 'example' })))],
   ['offline-assets.lock.json', examples.flatMap(example => example.files.map(({ url }) => url))],
 ]) {
   const path = join(root, 'registry', filename);
   const catalog = JSON.parse(await readFile(path, 'utf8'));
-  catalog.apps[name] = value;
+  if (filename === 'standalone-exceptions.json') catalog[name] = value;
+  else catalog.apps[name] = value;
   await writeFile(path, `${JSON.stringify(catalog, null, 2)}\n`);
 }
+
+const rolloutPath = join(root, 'docs/architecture/offline-executables.md');
+const rollout = await readFile(rolloutPath, 'utf8');
+const row = `| \`${name}\` | Template input copy | Replace the pass-through offline test and package the implemented method. |\n`;
+await writeFile(rolloutPath, rollout.replace(/(\| --- \| --- \| --- \|\n)/, `$1${row}`));
 
 // Register the app so deploy + statistics workflows pick it up.
 await writeFile(registry, nextText);
@@ -256,5 +269,7 @@ try {
 
 console.log(`Created apps/${name} and registered it in registry/apps.yml. Next:`);
 console.log('  pnpm install');
+console.log('  pnpm check:integration');
+console.log('Replace test/offline.mjs and the standalone exception when implementing the scientific method.');
 console.log(`  pnpm --filter ${name} dev`);
 console.log(`CI installs, builds, runs tests, and publishes it at /${name}/ in the composite site.`);

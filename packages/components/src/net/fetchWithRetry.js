@@ -1,6 +1,6 @@
 // Shared hosts such as Hugging Face answer bursts of requests with 429 Too Many Requests.
-// Retry those, honouring Retry-After, instead of failing the whole example or volume. Other
-// errors, including 503, still fail at once so users see them without waiting.
+// Retry those, honouring Retry-After, instead of failing the whole example or volume.
+// CI downloaders can also opt into retrying transient GET/HEAD failures.
 
 export function retryDelay(response, attempt, { baseDelay = 1000, maxDelay = 30000 } = {}) {
   const header = response?.headers?.get?.('Retry-After');
@@ -28,14 +28,24 @@ function wait(ms, signal) {
   });
 }
 
-export async function fetchWithRetry(input, init = {}, { retries = 4, baseDelay, maxDelay, fetch: fetchImpl = globalThis.fetch, onRetry = () => {} } = {}) {
+export async function fetchWithRetry(input, init = {}, { retries = 4, baseDelay, maxDelay, retryTransient = false, fetch: fetchImpl = globalThis.fetch, onRetry = () => {} } = {}) {
   const signal = init.signal ?? (input instanceof Request ? input.signal : undefined);
+  const method = init.method ?? (input instanceof Request ? input.method : 'GET');
+  const transient = retryTransient && ['GET', 'HEAD'].includes(method.toUpperCase());
   for (let attempt = 0; ; attempt++) {
-    const response = await fetchImpl(input instanceof Request ? input.clone() : input, init);
-    if (response.status !== 429 || attempt >= retries) return response;
+    signal?.throwIfAborted();
+    let response;
+    try {
+      response = await fetchImpl(input instanceof Request ? input.clone() : input, init);
+    } catch (error) {
+      const code = error.cause?.code ?? error.code;
+      if (!transient || signal?.aborted || attempt >= retries ||
+        !['ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'].includes(code)) throw error;
+    }
+    if (response && (attempt >= retries || (response.status !== 429 && !(transient && [502, 503, 504].includes(response.status))))) return response;
     const delay = retryDelay(response, attempt, { baseDelay, maxDelay });
-    onRetry({ status: response.status, attempt: attempt + 1, delay });
-    await response.body?.cancel().catch(() => {});
+    onRetry({ status: response?.status ?? 0, attempt: attempt + 1, delay });
+    await response?.body?.cancel().catch(() => {});
     await wait(delay, signal);
   }
 }

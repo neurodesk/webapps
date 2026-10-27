@@ -32,6 +32,7 @@
   "dependencies": {
     "@neurodesk/synthsr": "workspace:*",
     "@neurodesk/synthstrip": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
     "onnxruntime-node": "1.29.0"
   },
   "devDependencies": {
