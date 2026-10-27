@@ -62,6 +62,21 @@ test('dev serving goes through the shared COOP/COEP dev server', () => {
     'dev must use scripts/dev-server.mjs so local serving sends cross-origin isolation headers');
 });
 
+test('optional DICOM reporting ships the unchanged local controller, worker and schema', async () => {
+  const assets = [
+    ['embed/DicompareController.js', 'DicompareController.js'],
+    ['embed/dicompare-worker.js', 'dicompare-worker.js'],
+    ['schemas/SeedSeg_Prostate_T1w_v1.0.json', 'SeedSeg_Prostate_T1w_v1.0.json'],
+  ];
+  for (const [source, output] of assets) {
+    assert.deepEqual(
+      await readFile(join(appRoot, 'web/vendor/dicompare', output)),
+      await readFile(join(repoRoot, 'apps/dicompare/public', source)),
+      `${output} must match the canonical Dicompare embedding kit`,
+    );
+  }
+});
+
 test('fetched runtime assets match their manifest checksums', async (t) => {
   const wasmRoot = join(appRoot, 'web', 'wasm');
   try {
