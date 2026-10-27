@@ -10,7 +10,6 @@ bindSectionDisclosures(document);
 import { registerSeedSegAutomation } from './automation.js';
 import { SeedSegInputSet } from './controllers/SeedSegInputSet.js';
 import { SeedSegDicomInput } from './controllers/SeedSegDicomInput.js';
-import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
 import { DicompareReportRenderer } from '@neurodesk/webapp-components/ui';
 import { ViewerController } from '@neurodesk/webapp-components';
 import { SeedSegPipeline } from './controllers/SeedSegPipeline.js';
@@ -72,11 +71,6 @@ class SeedSegApp {
       onFilesRetained: (files) => this._onDicomFilesRetained(files)
     });
 
-    // dicompare validation
-    this.dicompareController = new DicompareController({
-      schemaUrl: 'https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json',
-      updateOutput: (msg) => this.updateOutput(msg)
-    });
     this.dicompareRenderer = new DicompareReportRenderer();
 
     this.viewerController = new ViewerController({
@@ -920,6 +914,16 @@ class SeedSegApp {
    * Callback when DICOM files are retained for validation.
    */
   async _onDicomFilesRetained(files) {
+    try {
+      const { DicompareController } = await import('https://dicompare.neurodesk.org/embed/DicompareController.js');
+      this.dicompareController ||= new DicompareController({
+        schemaUrl: 'https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json',
+        updateOutput: (msg) => this.updateOutput(msg)
+      });
+    } catch (error) {
+      this.updateOutput(`DICOM report unavailable: ${error.message}`);
+      return;
+    }
     await this.dicompareController.retainDicomFiles(files);
     const btn = document.getElementById('dicompareReportBtn');
     if (btn) {
@@ -931,7 +935,7 @@ class SeedSegApp {
    * Run dicompare validation and display results in modal.
    */
   async runDicompareReport() {
-    if (!this.dicompareController.hasFiles()) {
+    if (!this.dicompareController?.hasFiles()) {
       this.updateOutput('No DICOM files available for validation.');
       return;
     }
@@ -990,7 +994,7 @@ class SeedSegApp {
    * Print the dicompare report in a new window.
    */
   printDicompareReport() {
-    if (!this.dicompareController.complianceResults) return;
+    if (!this.dicompareController?.complianceResults) return;
     const html = this.dicompareRenderer.generatePrintHtml({
       acquisitions: this.dicompareController.acquisitions,
       complianceResults: this.dicompareController.complianceResults,

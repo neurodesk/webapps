@@ -35,6 +35,14 @@ async function downloadRow(page, row) {
   return { name: download.suggestedFilename(), bytes: await readFile(await download.path()) };
 }
 
+test('NIfTI inputs remain usable when the optional DICOM report host is unavailable', async ({ page }) => {
+  await page.route('https://dicompare.neurodesk.org/**', route => route.abort());
+  await page.goto('/');
+  await page.waitForFunction(() => Boolean(globalThis.neurodeskAutomation), undefined, { timeout: 15000 });
+  await page.locator('#unifiedFiles').setInputFiles({ name: 'synthetic-prostate-T1w.nii', mimeType: 'application/x-nifti', buffer: image });
+  await expect(page.locator('#runSegmentation')).toBeEnabled();
+});
+
 test('real SeedSeg ensemble finds the three planted fiducials of the synthetic prostate fixture', async ({ page }) => {
   test.setTimeout(600000);
   const snapshot = await runEnsemble(page);

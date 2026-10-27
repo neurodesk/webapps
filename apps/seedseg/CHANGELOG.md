@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Load optional DICOM reporting on demand so an unavailable report host cannot prevent NIfTI input or segmentation.
+  - @neurodesk/seedseg@0.6.20261027
 - Updated dependencies
   - @neurodesk/webapp-components@0.22.1
   - @neurodesk/seedseg@0.6.20261027
