@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { readNifti } from '../../../packages/components/src/file-io/NiftiUtils.js';
 import { dice, maskVoxels } from '../../../test-utils/dice.mjs';
 import { markerComponents, matchComponentsToSeeds } from '../test/marker-components.mjs';
+import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
 import { createProstateFixture, createProstateSeedMask, PROSTATE_FIXTURE_DIMS, PROSTATE_FIXTURE_SEEDS } from '../test/prostate-fixture.mjs';
 
 const image = createProstateFixture();
@@ -41,6 +42,21 @@ test('NIfTI inputs remain usable when the optional DICOM report host is unavaila
   await page.waitForFunction(() => Boolean(globalThis.neurodeskAutomation), undefined, { timeout: 15000 });
   await page.locator('#unifiedFiles').setInputFiles({ name: 'synthetic-prostate-T1w.nii', mimeType: 'application/x-nifti', buffer: image });
   await expect(page.locator('#runSegmentation')).toBeEnabled();
+});
+
+test('DICOM conversion completes while the optional report host stalls', async ({ page }) => {
+  test.setTimeout(60000);
+  const held = [];
+  await page.route('https://dicompare.neurodesk.org/**', route => { held.push(route); });
+  try {
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(globalThis.neurodeskAutomation));
+    await page.locator('#unifiedFiles').setInputFiles(dicomSeries());
+    await expect(page.locator('#runSegmentation')).toBeEnabled({ timeout: 30000 });
+    await expect(page.locator('#dicompareReportBtn')).toBeEnabled();
+  } finally {
+    await Promise.all(held.map(route => route.abort().catch(() => {})));
+  }
 });
 
 test('real SeedSeg ensemble finds the three planted fiducials of the synthetic prostate fixture', async ({ page }) => {
