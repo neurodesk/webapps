@@ -116,8 +116,18 @@
   },
   {
     "from": "apps/seedseg/web/js/seedseg-app.js",
-    "to": "https://dicompare.neurodesk.org/embed/DicompareController.js",
-    "reason": "Established upstream embed contract. registry/offline-assets.sources.json mirrors it and the composite/offline assembly rewrites the URL."
+    "to": "../vendor/dicompare/DicompareController.js",
+    "reason": "apps/seedseg/scripts/stage-pipeline.mjs stages dicompare's canonical embedding controller in web/vendor/dicompare before vendor, dev, test and build."
+  },
+  {
+    "from": "apps/seedseg/web/js/seedseg-app.js",
+    "to": "../vendor/dicompare/dicompare-worker.js",
+    "reason": "apps/seedseg/scripts/stage-pipeline.mjs stages dicompare's canonical embedding worker in web/vendor/dicompare before vendor, dev, test and build."
+  },
+  {
+    "from": "apps/seedseg/web/js/seedseg-app.js",
+    "to": "../vendor/dicompare/SeedSeg_Prostate_T1w_v1.0.json",
+    "reason": "apps/seedseg/scripts/stage-pipeline.mjs stages dicompare's canonical SeedSeg schema in web/vendor/dicompare before vendor, dev, test and build."
   },
   {
     "from": "apps/spinalcordtoolbox/web/js/analysis-worker.js",
