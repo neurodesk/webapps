@@ -1,5 +1,7 @@
 # @neurodesk/spinalcordtoolbox
 
+## 0.9.20261027
+
 ## 0.9.20261025
 
 ## 0.9.20261024
