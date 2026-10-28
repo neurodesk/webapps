@@ -33,6 +33,24 @@ test('the template rejects a scalar model image substituted for the tractography
   assert.ok(result.issues.some(issue => issue.severity === 'error' && issue.path.includes('input_mask') && issue.message.includes('type is incompatible')));
 });
 
+function withBiasCorrection(maskRef) {
+  const changed = structuredClone(workflow);
+  changed.steps = { n4: { tool: 'neurodesk.webapps/n4/correct', inputs: { input_image: { ref: 'steps.correct.outputs.output_mean-b0' } } }, ...changed.steps };
+  changed.steps.models.inputs.input_mask.ref = maskRef;
+  return changed;
+}
+
+test('the NODDI brain mask refuses the N4 bias field and accepts a mask output', () => {
+  const result = validate(withBiasCorrection('steps.n4.outputs.output_bias'));
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some(issue => issue.severity === 'error'
+    && issue.path === 'steps.models.inputs.input_mask'
+    && issue.message.includes('type is incompatible')), JSON.stringify(result.issues));
+  for (const ref of ['steps.n4.outputs.output_mask', 'steps.brain.outputs.output_mask']) {
+    assert.equal(validate(withBiasCorrection(ref)).ok, true, ref);
+  }
+});
+
 for (const [input, output] of [['bval', 'bvec'], ['bvec', 'bval']]) {
   test(`an imported ${output}-to-${input} binding fails validation`, () => {
     const changed = JSON.parse(JSON.stringify(workflow));
