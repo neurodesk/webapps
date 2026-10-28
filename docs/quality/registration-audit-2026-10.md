@@ -20,7 +20,7 @@ Paths are relative to the repository root. Line numbers are from `main` at
 | EdgeReg (`packages/edgereg`) | niimath `-allineate` (AFNI 3dAllineate fast engine), `@niivue/niimath` 1.4.20260909 WASM, one thread | Affine 12 DOF, fixed schedule | `niimath MOVING -gz 0 [-robustfov] -allineate FIXED OUT -odt input` (`packages/edgereg/src/registration.js:3,16-20`) | No. Only the resliced image | No |
 | elastix (`packages/elastix`) | elastix 5.2 via `@itk-wasm/elastix` 2.1.0, one thread | Rigid, affine (default), B-spline, each a preset chain from translation | elastix `defaultParameterMap` per stage, 3 resolutions, grid 10 (`packages/elastix/src/parameter-maps.js:5-45`) | TOML parameter files, ITK HDF5 (linear only), OME-Zarr | Stages chain internally (`parameter-maps.js:67-74`). The library's `initialTransform` option is never passed (`apps/elastix/src/registration.js`, the `elastix(maps, …)` call) |
 | FireANTs (`packages/fireants`) | `@fireants/fireants` 0.1.20260913, C/WASM, CPU or WebGPU | Moments → rigid → affine → greedy or SyN | Engine defaults; the repo passes no stages (`apps/fireants/src/main.js:277-295`, `packages/fireants/src/node.js:64-73`) | No. Only the warped image | The engine has `--init-affine <file>`; the repo never uses it |
-| niimath `-moco`, `-allineate -savemat` | niimath WASM | Rigid motion; affine or rigid-type allineate | Per call site (fastprep, Deface) | `-savemat` JSON (`fixed_to_moving`, `moving_to_fixed`) | `-applymat` replays a saved matrix; it does not seed a new registration |
+| niimath `-moco`, `-allineate -savemat` | niimath WASM | Rigid motion; affine or rigid-type allineate | Per call site (fastprep, Deface; BrowserQC through `--qc --air`) | `-savemat` JSON (`fixed_to_moving`, `moving_to_fixed`) | `-applymat` replays a saved matrix; it does not seed a new registration |
 
 EdgeReg is in the repository. It is affine only. Its first commit is by Chris
 Rorden (2026-09-10); `packages/edgereg/NOTICE` credits niimath to him and
@@ -72,9 +72,13 @@ A registration change re-records `browser-reference.json`, re-measures the
 Each DWI volume is registered rigidly to its NiFreeze model target inside a
 brain mask. Kernel: hmc-registration through a worker pool
 (`packages/hmc/src/pipeline.js:128`). The argv is built in Rust
-(`exes/dwi/hmc/src/registration.rs:34-97`): Rigid[12.0] GC radius 3, `[20,1e-6,4]`,
-shrink 3, smooth 2.71 vox; then Rigid[1.96] GC radius 4, `[10,1e-7,2]`, shrink 2,
-smooth 0; histogram matching, winsorize 0.063–0.991, seed 1234, identity init.
+(`exes/dwi/hmc/src/registration.rs:34-97`): Rigid[12.0] GC (global
+correlation), random sampling 0.4, `[20,1e-6,4]`, shrink 3, smooth 2.71 vox;
+then Rigid[1.96] GC, random sampling 0.18, `[10,1e-7,2]`, shrink 2, smooth 0
+(`registration.rs:45-50,81-82`). The `3` and `4` in `GC[…,1,3,Random,0.4]` and
+`GC[…,1,4,Random,0.18]` fill the metric's bins/radius slot, which GC does not
+use. Both stages use histogram matching, winsorize 0.063–0.991, seed 1234,
+identity init.
 
 Validation: `packages/hmc/validation/browser-reference.json` (every output
 including all 137 transforms, exact), `validation/native-float-reference.json`
@@ -90,12 +94,15 @@ both JSON files.
 | Synthetic brain → MNI152 1 mm | Normalisation, default engine | Greedy NMI affine, then NMI SVF initialised with it | `worker.js:92-107`, `packages/greedy/src/index.js:20-26` |
 | Synthetic brain → MNI152 1 mm | Normalisation, optional engine; the only engine in the Node CLI | ANTs SyN, fixed ANTsPy argv | `worker.js:125-130`, `packages/syncro/src/node.js:101,107-111` |
 
-Validation: container parity with ANTsPy 0.6.1 for the SynthStrip + ANTs path,
-exact (`packages/syncro/validation/compare.py:23,26`), and full-pipeline Dice >
-0.98 (`compare-complete.py`). The default MindGrab + Greedy path has only browser
-floors: Dice > 0.95 on the example (`apps/syncro/e2e/automation.spec.js:130-133`)
-and a 1 % template overlap guard (`pipeline.js:109-121`).
-`packages/syncro/validation/README.md` says it has no end-to-end parity.
+Validation:
+
+- SynthStrip + ANTs: container parity with ANTsPy 0.6.1, exact (`packages/syncro/validation/compare.py:23,26`), and full-pipeline Dice > 0.98 (`compare-complete.py`).
+- SynthStrip + Greedy: the `@slow` pinned-example test selects `brainExtractor: 'synthstrip'` (`apps/syncro/e2e/automation.spec.js:67-73`). It requires brain Dice > 0.95 against the template, correlation > 0.9 and a correlation gain of 0.2 over the unregistered image (`automation.spec.js:12,128-133`).
+- MindGrab + Greedy, the default: the browser test only requires the registered brain to cover at least 10 % of the template's positive voxels (`apps/syncro/e2e/quality.spec.js:49-62`).
+- Every path: the runtime refuses a result covering less than 1 % of the template (`packages/syncro/src/pipeline.js:109-121`).
+
+`packages/syncro/validation/README.md` says the default path has no end-to-end
+parity.
 
 ### fastprep (`exes/fastprep/core/src/stages.rs`)
 
@@ -125,6 +132,7 @@ and affects parity with `fastprep.py`.
 |---|---|---|
 | Rigid pre-alignment to lnm-mni160 from the brain mask's principal axes | Custom JS, moment based | `src/alignment.js:11-48`, `src/prealign.js:213-311` |
 | Deformable registration to the template | SynthMorph ONNX (48×64×80), one forward pass; SVF integrated in JS with 7 squarings | `src/alignment.js:50-70`, `src/registration.js:114-256` |
+| `mapLesion` with `structural`: native reviewed mask → atlas | Brain extraction, the same PCA pre-alignment and SynthMorph pass on the T1, then the mask is warped (nearest) and resliced to the atlas grid | `src/node.js:249-295,313-329` |
 
 Validation: `packages/calmar/validation/cli-check.mjs:197-209` requires CLI vs
 browser Dice ≥ 0.995 on the atlas bridge mask.
@@ -135,28 +143,63 @@ holds Dice, NCC and drift per model grid, checked by
 ### NeSVoR (`packages/nesvor`)
 
 Slice-to-volume and stack registration before reconstruction
-(`src/registration/index.js:182-247`). SVoRT v2 ONNX models
+(`src/registration/index.js:182-247`), using SVoRT v2 ONNX models
 (`src/registration/svort.js:23-61`) and a custom 6-DOF NCC stack registration,
 3 levels, finite-difference gradient (`src/registration/stack-registration.js:13-77`).
-Initialisation is always the header geometry. The unit test pins one synthetic
+`registerStacks` has four modes (`index.js:182-187`):
+
+- `svort-only`: SVoRT alone. Its input poses are not the header geometry: each slice is recentred in-plane with zero rotation, keeping only its offset along the stack from the mean (`index.js:70-79`).
+- `stack`: stack registration alone, starting from the header geometry (`records[].full`).
+- `svort` (default): both. Stack registration tries two starting points per stack, the SVoRT result and the header geometry, and keeps the lower loss (`index.js:214-216`, `stack-registration.js:91-96`). The SVoRT slice result and the stack result are then scored and the better one is used (`index.js:205-226`).
+- `svort-stack`: as `svort`, but always returns the stack result (`index.js:226`).
+
+The unit test pins one synthetic
 case against upstream PyTorch (`src/registration/pipeline.test.js:62-79`).
 Provenance records `validated: false` (`src/workflow.js:83`). The compute-server
 job runs upstream NeSVoR's registration (`exes/compute-server/src/tools/nesvor.rs`).
 
 ### Deface (`packages/deface`)
 
-Affine registration of avg152T1 to the subject with niimath `-deface`, the fast
-allineate engine, optionally `-robustfov` and `-cost hel`
-(`packages/deface/src/pipeline.js:8-19,67-84`). It runs the frozen niimath build in
-`packages/runtime-support/src/niimath`, not the npm package EdgeReg uses.
-`packages/deface/validation/browser-reference.json` pins the defaced image bytes.
+Affine registration of avg152T1 to the subject with niimath `-deface`, optionally
+after `-robustfov` (`packages/deface/src/pipeline.js:8-19,67-84`). The default
+methods use allineate's fast engine. The `_hel` methods add `-cost hel`, which
+selects the exhaustive Hellinger engine (`pipeline.js:70-76`). It runs the frozen
+niimath build in `packages/runtime-support/src/niimath`, not the npm package EdgeReg
+uses. `packages/deface/validation/browser-reference.json` pins the defaced image
+bytes for `allineate` and `allineate_robustfov` only
+(`validation/cases.mjs:17-21`). The Hellinger variants have no pinned reference.
 
 ### TopoFit (`packages/topofit`)
 
 The affine that places the template surfaces is solved by weighted least
 squares from point correspondences predicted by an ONNX model
 (`src/pipeline.js:76-111`, `src/affine.js:10-37`). It is not an intensity
-registration. `validation/compare.py` pins input and output hashes.
+registration.
+
+TopoFit also learns a spherical registration. Each white-surface stage updates a
+per-vertex registration coordinate alongside the vertices
+(`src/pipeline.js:283-305`). The exported stage predicts its displacement and
+projects it onto a sphere of radius 100 (`scripts/export_models.py:323-340`).
+Surface analysis maps atlas labels through it (`src/surface-analysis.js:39`).
+
+`validation/compare.py` pins input and output hashes.
+
+### BrowserQC (`packages/browserqc`)
+
+niimath's `--qc --air` report registers the subject T1 affinely to the avg152T1
+air template. niimath runs `-allineate` with its default options on a copy of the
+RAS-reoriented T1, keeps only the affine and uses it to place the template's air
+region on the subject (rordenlab/niimath `src/coreFLT.c:7067-7084` at
+`2f71f3dd`). BrowserQC passes the template in the web app
+(`apps/browserqc/src/main.ts:252-256`) and the command line
+(`packages/browserqc/src/node.js:136-140`), both on `@niivue/niimath`
+1.4.20260928.
+
+Validation: `packages/browserqc/validation/reference.json` holds the web app's
+downloads. `validation/reference.mjs:26-32` compares voxel sums and every numeric
+metric of the report exactly. No check targets the affine itself; it shows only
+through the air metrics. The registration lives inside niimath, so changing it
+means a niimath change and re-recording `reference.json`.
 
 ### Susceptibility and eddy correction
 
@@ -171,7 +214,7 @@ for completeness and are out of scope for a default swap.
 These run no registration but rely on one done elsewhere:
 
 - Disconnectome: lesion on the MNI152 1 mm grid, refused otherwise with a pointer to SYNcro (`packages/nii2tvx/src/disconnectome.js:15-21`).
-- CALMaR `mapLesion` and the atlas-space pipelines: atlas-space mask (`packages/calmar/src/node.js:309`).
+- CALMaR `mapLesion` without `structural`, and the atlas-space pipelines: atlas-space mask (`packages/calmar/src/node.js:309`). With `structural`, `mapLesion` takes a native mask and registers it itself (see CALMaR above).
 - ME-ICA: motion-corrected input; the moco example was made offline with `niimath -moco` (`apps/me-ica/examples.json`).
 - LCModel tissue correction, easy-mp2rage: same-session images placed by header geometry only.
 
@@ -196,9 +239,10 @@ input on that tool. Greedy's SVF and hmc-registration already have the input;
 
 BISON's native reference was built with the MINC tools (`bestlinreg_s2`,
 `nlfit_s`). The `pipeline-native` Dice floors measure agreement with those
-registrations. A better registration can lower that Dice. Dice against this
-reference is therefore not a valid check of a registration change. A swap needs
-a separate measure, such as template-to-subject overlap of manual or
+registrations (`test/pipeline-native.test.js:63-75`). A better registration can
+lower that Dice. Dice against this reference is therefore insufficient on its own
+to judge whether a registration change improves accuracy. A swap needs a separate
+measure, such as template-to-subject overlap of manual or
 independent labels, reviewed by hand, before the reference and floors are
 re-recorded.
 
@@ -206,8 +250,8 @@ re-recorded.
 
 These are for the maintainer to decide.
 
-1. Affine initialisation. Test EdgeReg's allineate affine as the shared linear step where an app registers a subject to a template: BISON step 1, SYNcro, fastprep T1w → MNI, and the pathological-modality step in SYNcro. This first needs `-savemat` output from `packages/edgereg` and a converter to Greedy and ITK conventions, with a round-trip test.
+1. Affine initialisation. Test EdgeReg's allineate affine as the shared linear step where an app registers a subject to a template: BISON step 1, SYNcro, fastprep T1w → MNI, and the pathological-modality step in SYNcro. BrowserQC and Deface already use allineate inside niimath. This first needs `-savemat` output from `packages/edgereg` and a converter to Greedy and ITK conventions, with a round-trip test.
 2. Deformable step. Greedy SVF already accepts an initial affine and is the SYNcro default. Comparing it against ANTs SyN (hmc-registration argv) and FireANTs on one subject-to-template case would show whether one deformable default fits every pipeline.
-3. Validation first. Greedy in SYNcro and every fastprep registration have no pinned reference. Add a reference or overlap gate before swapping tools there, so a swap shows a measured difference.
-4. Keep method-specific registrations. HMC, NeSVoR, SDC, dwicorrect, TopoFit and CALMaR's SynthMorph are tied to their methods and parity targets. They are not candidates for a generic default.
+3. Validation first. Greedy in SYNcro and every fastprep registration have no pinned reference; SYNcro's default MindGrab + Greedy path has only a 10 % overlap floor. Add a reference or overlap gate before swapping tools there, so a swap shows a measured difference.
+4. Keep method-specific registrations. HMC, NeSVoR, SDC, dwicorrect, TopoFit (its affine and learned spherical registration) and CALMaR's SynthMorph are tied to their methods and parity targets. They are not candidates for a generic default.
 5. BISON. Decide the acceptance measure for a new registration before changing it, per the caveat above.
