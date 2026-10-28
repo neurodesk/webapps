@@ -17,7 +17,7 @@ import { createNiftiFromData, decodeNiftiBuffer, downloadFile, readNiftiFrames, 
 import { imageFiles, registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { readDiffusionSeries, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { APP } from "./config.js";
-import { b0Frames, fieldSidecar, meanFrames, outputNames, selectBidsPair, selectPair, voxelSizes } from "./pipeline.js";
+import { b0Frames, fieldExecution, fieldProvenance, fieldSidecar, meanFrames, outputNames, selectBidsPair, selectPair, voxelSizes } from "./pipeline.js";
 import { estimateField } from "./estimate.js";
 import examples from "../examples.json";
 
@@ -201,9 +201,7 @@ async function estimate(signal) {
     });
     const seconds = (performance.now() - started) / 1000;
     log.log(`PyHySCO: ${out.iterations} Gauss-Newton iterations in ${seconds.toFixed(1)} s`);
-    const execution = { backend: out.backend };
-    if (out.adapter) execution.adapter = out.adapter;
-    if (out.gpuError) execution.gpuError = out.gpuError;
+    const execution = fieldExecution(out);
     log.log(`PyHySCO backend: ${execution.backend}${execution.adapter ? ` (${execution.adapter})` : ""}`);
     if (execution.gpuError) log.log(`WebGPU failed. CPU fallback: ${execution.gpuError}`, "warning");
     const names = outputNames(first.name, second.name);
@@ -231,7 +229,7 @@ async function estimate(signal) {
     status(`Field estimated in ${out.iterations} iterations`);
     return {
       artifacts: Object.entries(rows).map(([role, row]) => ({ role, file: row.file })),
-      provenance: { method: "pyhysco-0.0.4-port", alpha: 300, beta: 1e-4, maxIterations: 50, iterations: out.iterations, reference: first.name, phaseEncodingDirection, totalReadoutTime, execution },
+      provenance: fieldProvenance({ iterations: out.iterations, reference: first.name, phaseEncodingDirection, totalReadoutTime, execution }),
     };
   } catch (error) {
     progress.reset();
