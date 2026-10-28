@@ -1,17 +1,38 @@
 # CI approval reporting
 
-The hourly report groups contributor runs awaiting approval and failures that
-started no jobs into one GitHub issue. Review linked contributor changes before
-approving them through GitHub. The reporter never approves runs and executes
-only default-branch code. A failed job-data lookup is shown as unavailable,
-so it cannot hide other pending runs or count as a failure without jobs.
+The hourly report lists current workflow approval and startup blockers in one
+GitHub issue. Each open PR has a section with its title, author, current commit,
+affected workflow names, run ages and links to the exact attempts.
+
+PR runs must match an open PR's current head or merge commit. Fork runs can have
+an empty PR association, so matching also checks the source repository and
+branch. Runs from closed or merged PRs and older commits are excluded. For each
+remaining workflow, event, source repository, branch and commit, the reporter
+reads the latest run and attempt. Successful, cancelled or running attempts
+supersede older failures. Exclusion does not establish that checks passed.
+Non-PR startup failures remain visible under Other runs.
+
+A failure without jobs is not a test failure. The report includes GitHub failure
+annotations or check output when the Checks API exposes them. Otherwise, the
+cause stays unknown and the run annotation is the next place to inspect.
+Large reports omit excess details to fit the issue size limit. Their counts
+still include every current blocker, and a link opens the workflow run list.
+A failed job-data lookup is shown as unavailable. A failed PR or current-run
+lookup aborts reporting, so incomplete data cannot silently close the issue.
+
+Issue comments announce newly blocked PRs or a change in the required action.
+Another push to an already blocked PR and routine age updates do not add comments.
+The issue closes when no current approval or startup blockers remain within the
+seven-day window. Failed jobs are outside this report.
+
+Review linked contributor changes before approving workflows through GitHub.
+The reporter never approves runs and executes only default-branch code.
 
 Merging `.github/workflows/ci-approvals.yml` into the default branch activates
 its schedule. Dispatch `ci-approvals.yml` once after merging to verify it
-immediately. The workflow already declares Actions read and issues write access;
-no extra token or approval-policy change is needed.
+immediately. The workflow declares Actions, Checks and pull requests read access,
+plus issues write access. No extra token or approval-policy change is needed.
 
 For a read-only preview, supply `GITHUB_REPOSITORY` and an existing `GH_TOKEN`,
-then run `node scripts/report-ci-approvals.mjs --dry-run`. Successful and
-cancelled runs are excluded. Open a no-job run's annotation to distinguish
-expired approval from workflow validation or startup failures.
+then run `node scripts/report-ci-approvals.mjs --dry-run`. This prints the report
+without editing the GitHub issue or posting comments.

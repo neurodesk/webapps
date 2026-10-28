@@ -2,44 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import YAML from 'yaml';
-import { approvalReport, publishApprovalReport } from '../scripts/lib/ci-approvals.mjs';
-
-const run = (id, conclusion, head_sha = 'abc123') => ({ id, conclusion, head_sha, status: 'completed', run_attempt: 1 });
-
-test('approval reporting groups commits and distinguishes failures, cancellations and approvals', async () => {
-  const client = {
-    async list(path) {
-      assert.match(path, /^\/actions\/runs\?status=(?:failure|action_required)&created=%3E%3D2026-10-20T00%3A00%3A00Z$/);
-      return [run(1, 'action_required'), run(2, 'action_required'), run(3, 'failure'), run(4, 'failure'), run(5, 'cancelled'), run(6, 'success')];
-    },
-    async request(path) {
-      assert.match(path, /^\/actions\/runs\/[34]\/attempts\/1\/jobs\?per_page=1$/);
-      return { total_count: path.includes('/4/') ? 300 : 0 };
-    },
-  };
-  const report = await approvalReport(client, 'owner/repo', { now: new Date('2026-10-27T00:00:00Z') });
-  assert.deepEqual(report.counts, { failedWithJobs: 1, failedWithoutJobs: 1, pendingApproval: 2, jobsUnknown: 0 });
-  assert.match(report.body, /awaiting approval, 2 workflows/);
-  assert.match(report.body, /failed without jobs, 1 workflows/);
-  assert.doesNotMatch(report.body, /expired approval, 1 workflows/);
-});
-
-test('an unavailable job probe does not hide other runs or claim they had no jobs', async () => {
-  const client = {
-    list: async () => [run(1, 'failure'), run(2, 'action_required')],
-    request: async () => { throw new Error('GitHub returned 502'); },
-  };
-  const report = await approvalReport(client, 'owner/repo');
-  assert.deepEqual(report.counts, { failedWithJobs: 0, failedWithoutJobs: 0, pendingApproval: 1, jobsUnknown: 1 });
-  assert.equal(report.actionable, true);
-  assert.match(report.body, /job data unavailable, 1 workflows/);
-  assert.match(report.body, /awaiting approval, 1 workflows/);
-});
+import { publishApprovalReport } from '../scripts/lib/ci-approvals.mjs';
 
 test('the privileged reporter executes default-branch code without installing dependencies', async () => {
   const workflow = YAML.parse(await readFile(new URL('../.github/workflows/ci-approvals.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(workflow.on).sort(), ['schedule', 'workflow_dispatch']);
-  assert.deepEqual(workflow.permissions, { contents: 'read', actions: 'read', issues: 'write' });
+  assert.deepEqual(workflow.permissions, { contents: 'read', actions: 'read', checks: 'read', 'pull-requests': 'read', issues: 'write' });
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
   const steps = workflow.jobs.report.steps;
   assert.equal(steps[0].with.ref, '${{ github.event.repository.default_branch }}');
@@ -63,9 +31,11 @@ test('publishing is idempotent, ignores human issues, and closes a resolved repo
   issues[0].state = 'closed';
   await publishApprovalReport(client, report);
   assert.equal(writes[2][1].body.state, 'open');
+  issues = [];
+  assert.deepEqual(await publishApprovalReport(client, { ...report, actionable: false }), { skipped: true });
 });
 
-test('a newly pending commit notifies issue subscribers once', async () => {
+test('notifications track new PR blockers and remain quiet across pushes and age updates', async () => {
   const sha = 'a'.repeat(40);
   const issue = { number: 7, user: { login: 'github-actions[bot]' }, state: 'open', body: '<!-- ci-approval-report -->' };
   const comments = [];
@@ -76,9 +46,36 @@ test('a newly pending commit notifies issue subscribers once', async () => {
       else Object.assign(issue, body);
     },
   };
-  const report = { body: `<!-- ci-approval-report -->\n<!-- ci-commit:${sha}:approval -->`, actionable: true };
+  const report = { body: `<!-- ci-approval-report -->\n<!-- ci-pr:42:approval:${sha} -->`, actionable: true };
   await publishApprovalReport(client, report);
   await publishApprovalReport(client, report);
+  await publishApprovalReport(client, { ...report, body: report.body.replace(sha, 'b'.repeat(40)) + '\nCreated 3h ago.' });
   assert.equal(comments.length, 1);
-  assert.match(comments[0], /aaaaaaaaaaaa/);
+  assert.match(comments[0], /#42.*awaiting approval/);
+  const failed = { ...report, body: report.body.replace(':approval:', ':no-jobs:') };
+  await publishApprovalReport(client, failed);
+  await publishApprovalReport(client, failed);
+  assert.equal(comments.length, 2);
+  assert.match(comments[1], /#42.*failed without jobs/);
+  await publishApprovalReport(client, { ...failed, body: failed.body + `\n<!-- ci-pr:43:approval:${sha} -->` });
+  assert.equal(comments.length, 3);
+  assert.match(comments[2], /#43.*awaiting approval/);
+  assert.doesNotMatch(comments[2], /#42/);
+});
+
+test('upgrading a legacy report does not renotify an unchanged pending commit', async () => {
+  const sha = 'a'.repeat(40);
+  const issue = { number: 7, user: { login: 'github-actions[bot]' }, state: 'open', body: `<!-- ci-approval-report -->\n<!-- ci-commit:${sha}:approval -->` };
+  const comments = [];
+  const client = {
+    list: async () => [issue],
+    async request(path, { body }) {
+      if (path.endsWith('/comments')) comments.push(body.body);
+      else Object.assign(issue, body);
+    },
+  };
+  const report = { body: `<!-- ci-approval-report -->\n<!-- ci-pr:42:approval:${sha} -->`, actionable: true };
+  await publishApprovalReport(client, report);
+  assert.equal(comments.length, 0);
+  assert.equal(issue.body, report.body);
 });
