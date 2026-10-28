@@ -132,7 +132,7 @@ and affects parity with `fastprep.py`.
 |---|---|---|
 | Rigid pre-alignment to lnm-mni160 from the brain mask's principal axes | Custom JS, moment based | `src/alignment.js:11-48`, `src/prealign.js:213-311` |
 | Deformable registration to the template | SynthMorph ONNX (48×64×80), one forward pass; SVF integrated in JS with 7 squarings | `src/alignment.js:50-70`, `src/registration.js:114-256` |
-| `mapLesion` with `structural`: native reviewed mask → atlas | Brain extraction, the same PCA pre-alignment and SynthMorph pass on the T1, then the mask is warped (nearest) and resliced to the atlas grid | `src/node.js:249-295,313-329` |
+| `mapLesion` with `structural`: native reviewed mask → atlas | Brain extraction and the same PCA pre-alignment on the T1; the mask follows the pre-alignment by nearest-neighbour resampling. After the SynthMorph pass, the deformable warp samples the mask trilinearly and thresholds it at > 0.5 (`warpReviewedMask` → `warpVolume`). A final nearest-neighbour resample puts it on the atlas grid | `src/node.js:249-300,313-329`, `src/alignment.js:72-75`, `src/registration.js:224-249` |
 
 Validation: `packages/calmar/validation/cli-check.mjs:197-209` requires CLI vs
 browser Dice ≥ 0.995 on the atlas bridge mask.
@@ -142,16 +142,26 @@ holds Dice, NCC and drift per model grid, checked by
 
 ### NeSVoR (`packages/nesvor`)
 
-Slice-to-volume and stack registration before reconstruction
-(`src/registration/index.js:182-247`), using SVoRT v2 ONNX models
+Two separate stages align the slices.
+
+Initialisation, before reconstruction: slice-to-volume and stack registration
+(`src/registration/index.js:182-247`), skipped when `registration` is `none`
+(`src/workflow.js:45-49`). It uses SVoRT v2 ONNX models
 (`src/registration/svort.js:23-61`) and a custom 6-DOF NCC stack registration,
 3 levels, finite-difference gradient (`src/registration/stack-registration.js:13-77`).
 `registerStacks` has four modes (`index.js:182-187`):
 
 - `svort-only`: SVoRT alone. Its input poses are not the header geometry: each slice is recentred in-plane with zero rotation, keeping only its offset along the stack from the mean (`index.js:70-79`).
 - `stack`: stack registration alone, starting from the header geometry (`records[].full`).
-- `svort` (default): both. Stack registration tries two starting points per stack, the SVoRT result and the header geometry, and keeps the lower loss (`index.js:214-216`, `stack-registration.js:91-96`). The SVoRT slice result and the stack result are then scored and the better one is used (`index.js:205-226`).
-- `svort-stack`: as `svort`, but always returns the stack result (`index.js:226`).
+- `svort` (default): both. Stack registration keeps the first stack fixed as the reference (`stack-registration.js:86-90`). Each non-reference stack tries two starting points, the SVoRT result and the header geometry, and keeps the lower loss (`index.js:226`, `stack-registration.js:91-98`). The SVoRT slice result and the stack result are then scored and the better one is used (`index.js:219-233`).
+- `svort-stack`: as `svort`, but always returns the stack result (`index.js:233`).
+
+Alignment during reconstruction: training optimises six pose parameters per
+slice together with the implicit volume, with a transformation regulariser,
+whatever the initialisation mode, including `none`
+(`src/training/gpu-fit.js:5-50`). With `deformable` (the fetal body preset,
+`apps/nesvor/src/spec.js:52-59`) a learned per-slice deformation field is
+trained as well (`src/workflow.js:56-59`).
 
 The unit test pins one synthetic
 case against upstream PyTorch (`src/registration/pipeline.test.js:62-79`).
@@ -160,8 +170,14 @@ job runs upstream NeSVoR's registration (`exes/compute-server/src/tools/nesvor.r
 
 ### Deface (`packages/deface`)
 
-Affine registration of avg152T1 to the subject with niimath `-deface`, optionally
-after `-robustfov` (`packages/deface/src/pipeline.js:8-19,67-84`). The default
+niimath `-deface`, optionally after `-robustfov`
+(`packages/deface/src/pipeline.js:8-19,67-84`), registers the subject (moving)
+to avg152T1 (fixed) with an affine. It then inverts that transform to resample
+the template face mask onto the subject grid (linear by default) and zeroes the
+masked voxels. Both engines do this (niimath `src/allineate.c:4743-4823` at
+`cf2ef5bc`, the commit the frozen build names). The comment at
+`pipeline.js:71` says it "Registers the MNI template to the subject"; that
+describes where the mask ends up, not the registration direction. The default
 methods use allineate's fast engine. The `_hel` methods add `-cost hel`, which
 selects the exhaustive Hellinger engine (`pipeline.js:70-76`). It runs the frozen
 niimath build in `packages/runtime-support/src/niimath`, not the npm package EdgeReg
@@ -220,16 +236,18 @@ These run no registration but rely on one done elsewhere:
 
 ## Can registrations be chained?
 
-Partly, and only within one tool.
+Partly. Initial transforms are tool-specific: each tool that accepts one takes
+only its own format. Applying transforms from different tools together already
+exists in one place: fastprep's final niimath resample.
 
 - Greedy affine → Greedy SVF: yes. `registerGreedy` passes the affine matrix to the SVF (`packages/greedy/src/index.js:20-26`); fastprep does the same with `-it` (`stages.rs:394`).
 - ANTs affine → ANTs SyN: yes in BISON, through hmc-registration's `--initial-moving-transform lin.mat` (`packages/bison/src/register.js:87`). `packages/registration` cannot take an initial transform.
 - elastix: its presets chain stages internally. An external initial transform is not wired.
 - FireANTs: `--init-affine` exists in the engine and is not exposed.
-- Across tools: SYNcro's ANTs path reslices the image through the Greedy affine and then through the ANTs warp (`apps/syncro/src/worker.js:131-137`). That is two interpolations, not one composed transform. fastprep's final resample composes Greedy `.mat`/warp and allineate JSON inside niimath (`stages.rs:1375-1445`).
+- Across tools: SYNcro's ANTs path reslices the image through the Greedy affine and then through the ANTs warp (`apps/syncro/src/worker.js:131-137`). That is two interpolations, not one composed transform. fastprep's final resample (`exes/fastprep/core/src/stages.rs:1375-1441`) is one niimath call that applies niimath's motion parameters (`-hmc`), the allineate BOLD → T1w JSON (`-mat`), any SDC shift map (`-vsm`) and, for the template space, the Greedy warp and affine (`-warp`, line 1380), in one interpolation (`exes/fastprep/core/src/report.rs:1137`). This is composition at resampling time; no tool takes another tool's transform as a registration start.
 - EdgeReg: no. It writes only the resliced image, so nothing downstream can use its affine. niimath has `-savemat`, which fastprep uses, but EdgeReg does not call it. No converter exists between allineate JSON, Greedy `.mat`, ITK `.mat` and elastix parameter files. Greedy's matrix reader expects 16 bare numbers (`exes/greedy/core/src/reslice.rs:18-28`) and would not read the JSON.
 
-Chaining EdgeReg's affine into a deformable stage therefore needs three things:
+Chaining EdgeReg's affine into a deformable registration therefore needs three things:
 EdgeReg (or the shared method) to write the `-savemat` matrix, a conversion to
 the target tool's format and direction convention, and an initial-transform
 input on that tool. Greedy's SVF and hmc-registration already have the input;
@@ -250,7 +268,7 @@ re-recorded.
 
 These are for the maintainer to decide.
 
-1. Affine initialisation. Test EdgeReg's allineate affine as the shared linear step where an app registers a subject to a template: BISON step 1, SYNcro, fastprep T1w → MNI, and the pathological-modality step in SYNcro. BrowserQC and Deface already use allineate inside niimath. This first needs `-savemat` output from `packages/edgereg` and a converter to Greedy and ITK conventions, with a round-trip test.
+1. Affine initialisation. Test EdgeReg's allineate affine as the shared linear step where an app registers a subject to a template: BISON step 1, SYNcro, fastprep T1w → MNI, and the pathological-modality step in SYNcro. BrowserQC and Deface already use allineate inside niimath. This first needs `-savemat` output from `packages/edgereg` and a converter to Greedy and ITK conventions, with a round-trip test. niimath can already apply Greedy transforms alongside its own at resampling (fastprep), so only the registration start needs the converter.
 2. Deformable step. Greedy SVF already accepts an initial affine and is the SYNcro default. Comparing it against ANTs SyN (hmc-registration argv) and FireANTs on one subject-to-template case would show whether one deformable default fits every pipeline.
 3. Validation first. Greedy in SYNcro and every fastprep registration have no pinned reference; SYNcro's default MindGrab + Greedy path has only a 10 % overlap floor. Add a reference or overlap gate before swapping tools there, so a swap shows a measured difference.
 4. Keep method-specific registrations. HMC, NeSVoR, SDC, dwicorrect, TopoFit (its affine and learned spherical registration) and CALMaR's SynthMorph are tied to their methods and parity targets. They are not candidates for a generic default.
