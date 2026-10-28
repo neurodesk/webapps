@@ -50,6 +50,13 @@ function fixture({ pulls = [pull()], runs = [], latest = runs, jobs = {}, checks
         }
         return latest.filter(item => item.head_sha === url.searchParams.get('head_sha'));
       }
+      if (path.startsWith('/actions/workflows/')) {
+        const id = Number(url.pathname.split('/')[3]);
+        const since = url.searchParams.get('created')?.replace('>=', '');
+        return latest.filter(item => item.workflow_id === id && item.head_branch === url.searchParams.get('branch')
+          && item.event === url.searchParams.get('event') && (!since || item.created_at >= since))
+          .sort((a, b) => b.id - a.id);
+      }
       const suite = path.match(/^\/check-suites\/(\d+)\/check-runs\?/);
       if (suite) return checks[suite[1]] ?? [];
       const check = path.match(/^\/check-runs\/(\d+)\/annotations$/);
@@ -58,12 +65,6 @@ function fixture({ pulls = [pull()], runs = [], latest = runs, jobs = {}, checks
     },
     async request(path) {
       record(path);
-      if (path.startsWith('/actions/workflows/')) {
-        const url = new URL(path, 'https://api.github.com');
-        const id = Number(url.pathname.split('/')[3]);
-        const matches = latest.filter(item => item.workflow_id === id && item.head_branch === url.searchParams.get('branch') && item.event === url.searchParams.get('event'));
-        return { workflow_runs: matches.sort((a, b) => b.id - a.id).slice(0, 1) };
-      }
       const match = path.match(/^\/actions\/runs\/(\d+)\/attempts\/(\d+)\/jobs\?per_page=1$/);
       assert.ok(match, `Unexpected request: ${path}`);
       return { total_count: jobs[`${match[1]}:${match[2]}`] ?? 0 };
@@ -273,7 +274,8 @@ function issueFixture() {
   return {
     issue,
     comments,
-    list: async () => [issue],
+    list: async path => path.endsWith('/comments')
+      ? comments.map(body => ({ body, user: { login: 'github-actions[bot]' } })) : [issue],
     async request(path, { body }) {
       if (path.endsWith('/comments')) comments.push(body.body);
       else Object.assign(issue, body);
@@ -359,4 +361,172 @@ test('a recent rerun of an older run supersedes a newer failed run at the same c
   const rerun = { ...old, conclusion: 'success', run_attempt: 2, run_started_at: '2026-10-27T10:00:00Z' };
   const report = await approvalReport(fixture({ runs: [old, newer], latest: [rerun, newer] }), 'owner/repo', { now });
   assert.equal(report.actionable, false);
+});
+
+test('a published comment is not duplicated when the subsequent report update fails', async () => {
+  const publisher = issueFixture();
+  const request = publisher.request.bind(publisher);
+  let failPatch = true;
+  publisher.request = async (path, options) => {
+    if (!path.endsWith('/comments') && publisher.comments.length && failPatch) {
+      failPatch = false;
+      throw new Error('Report PATCH unavailable');
+    }
+    return request(path, options);
+  };
+  const report = await approvalReport(fixture({ runs: [run(1, 'action_required')] }), 'owner/repo', { now });
+  await assert.rejects(publishApprovalReport(publisher, report), /Report PATCH unavailable/);
+  await publishApprovalReport(publisher, report);
+  assert.equal(publisher.comments.length, 1);
+  assert.equal(publisher.issue.body, report.body);
+});
+
+test('a non-PR failed rerun stays visible after a newer-created successful run', async () => {
+  const older = run(1, 'failure', { event: 'push', head_branch: 'main', created_at: '2026-10-27T08:00:00Z' });
+  const newer = run(2, 'success', { event: 'push', head_branch: 'main', workflow_id: 1, created_at: '2026-10-27T09:00:00Z' });
+  const rerun = { ...older, run_attempt: 2, run_started_at: '2026-10-27T10:00:00Z' };
+  const report = await approvalReport(fixture({ pulls: [], runs: [rerun], latest: [rerun, newer] }), 'owner/repo', { now });
+  assert.equal(report.actionable, true);
+  assert.equal(report.counts.failedWithoutJobs, 1);
+  assert.ok(report.body.includes('/actions/runs/1/attempts/2'));
+});
+
+test('legacy notification state survives an unknown probe before migration', async () => {
+  const publisher = issueFixture();
+  publisher.issue.state = 'open';
+  publisher.issue.body = `<!-- ci-approval-report -->\n<!-- ci-commit:${sha}:no-jobs -->`;
+  for (const unavailable of [['/jobs?'], []]) {
+    const report = await approvalReport(fixture({ runs: [run(1, 'failure')], unavailable }), 'owner/repo', { now });
+    await publishApprovalReport(publisher, report);
+  }
+  assert.equal(publisher.comments.length, 0);
+});
+
+test('a failed comment request remains deliverable on the next publication', async () => {
+  const publisher = issueFixture();
+  const request = publisher.request.bind(publisher);
+  let fail = true;
+  publisher.request = async (path, options) => {
+    if (path.endsWith('/comments') && fail) { fail = false; throw new Error('Comment unavailable'); }
+    return request(path, options);
+  };
+  const report = await approvalReport(fixture({ runs: [run(1, 'failure')] }), 'owner/repo', { now });
+  await assert.rejects(publishApprovalReport(publisher, report), /Comment unavailable/);
+  assert.equal(publisher.comments.length, 0);
+  await publishApprovalReport(publisher, report);
+  await publishApprovalReport(publisher, report);
+  assert.equal(publisher.comments.length, 1);
+});
+
+test('failure before saving a delivery does not post an orphan comment', async () => {
+  const publisher = issueFixture();
+  const request = publisher.request.bind(publisher);
+  let fail = true;
+  publisher.request = async (path, options) => {
+    if (!path.endsWith('/comments') && fail) { fail = false; throw new Error('Issue unavailable'); }
+    return request(path, options);
+  };
+  const report = await approvalReport(fixture({ runs: [run(1, 'failure')] }), 'owner/repo', { now });
+  await assert.rejects(publishApprovalReport(publisher, report), /Issue unavailable/);
+  assert.equal(publisher.comments.length, 0);
+  await publishApprovalReport(publisher, report);
+  assert.equal(publisher.comments.length, 1);
+});
+
+test('a delivered comment remains deduplicated through an intervening unknown probe', async () => {
+  const publisher = issueFixture();
+  const request = publisher.request.bind(publisher);
+  let fail = true;
+  publisher.request = async (path, options) => {
+    if (!path.endsWith('/comments') && publisher.comments.length && fail) {
+      fail = false;
+      throw new Error('Issue unavailable');
+    }
+    return request(path, options);
+  };
+  const known = await approvalReport(fixture({ runs: [run(1, 'failure')] }), 'owner/repo', { now });
+  await assert.rejects(publishApprovalReport(publisher, known), /Issue unavailable/);
+  const unknown = await approvalReport(fixture({ runs: [run(1, 'failure')], unavailable: ['/jobs?'] }), 'owner/repo', { now });
+  await publishApprovalReport(publisher, unknown);
+  await publishApprovalReport(publisher, known);
+  assert.equal(publisher.comments.length, 1);
+  assert.equal(publisher.issue.body, known.body);
+});
+
+test('pending deliveries wait for known data while another PR can be notified', async () => {
+  const publisher = issueFixture();
+  const request = publisher.request.bind(publisher);
+  let fail = true;
+  publisher.request = async (path, options) => {
+    if (path.endsWith('/comments') && fail) { fail = false; throw new Error('Comment unavailable'); }
+    return request(path, options);
+  };
+  const first = await approvalReport(fixture({ runs: [run(1, 'failure')] }), 'owner/repo', { now });
+  await assert.rejects(publishApprovalReport(publisher, first), /Comment unavailable/);
+  const pulls = [pull(), pull({ number: 43, head: { sha, ref: 'other-feature', repo: source } })];
+  const runs = [run(1, 'failure'), run(2, 'action_required', { head_branch: 'other-feature' })];
+  const unknown = await approvalReport(fixture({ pulls, runs, unavailable: ['/runs/1/attempts/1/jobs'] }), 'owner/repo', { now });
+  await publishApprovalReport(publisher, unknown);
+  assert.equal(publisher.comments.length, 1);
+  assert.match(publisher.comments[0], /#43/);
+  const known = await approvalReport(fixture({ pulls, runs }), 'owner/repo', { now });
+  await publishApprovalReport(publisher, known);
+  assert.equal(publisher.comments.length, 2);
+  assert.match(publisher.comments[1], /#42/);
+  assert.doesNotMatch(publisher.comments[1], /#43/);
+});
+
+test('a resolved blocker discards an undelivered notification', async () => {
+  const publisher = issueFixture();
+  const request = publisher.request.bind(publisher);
+  let fail = true;
+  publisher.request = async (path, options) => {
+    if (path.endsWith('/comments') && fail) { fail = false; throw new Error('Comment unavailable'); }
+    return request(path, options);
+  };
+  const blocked = await approvalReport(fixture({ runs: [run(1, 'failure')] }), 'owner/repo', { now });
+  await assert.rejects(publishApprovalReport(publisher, blocked), /Comment unavailable/);
+  const resolved = await approvalReport(fixture(), 'owner/repo', { now });
+  await publishApprovalReport(publisher, resolved);
+  assert.equal(publisher.comments.length, 0);
+  assert.equal(publisher.issue.state, 'closed');
+  await publishApprovalReport(publisher, blocked);
+  assert.equal(publisher.comments.length, 1);
+});
+
+test('a new blocking episode notifies again even at the same commit and action', async () => {
+  const publisher = issueFixture();
+  const blocked = await approvalReport(fixture({ runs: [run(1, 'failure')] }), 'owner/repo', { now });
+  await publishApprovalReport(publisher, blocked);
+  await publishApprovalReport(publisher, await approvalReport(fixture(), 'owner/repo', { now }));
+  await publishApprovalReport(publisher, blocked);
+  assert.equal(publisher.comments.length, 2);
+});
+
+test('a contributor comment cannot impersonate a delivered bot notification', async () => {
+  const publisher = issueFixture();
+  const request = publisher.request.bind(publisher);
+  const list = publisher.list.bind(publisher);
+  let forged;
+  publisher.request = async (path, options) => {
+    if (path.endsWith('/comments') && !forged) {
+      forged = { body: options.body.body, user: { login: 'contributor' } };
+      throw new Error('Comment unavailable');
+    }
+    return request(path, options);
+  };
+  publisher.list = async path => path.endsWith('/comments') ? [forged].filter(Boolean) : list(path);
+  const report = await approvalReport(fixture({ runs: [run(1, 'failure')] }), 'owner/repo', { now });
+  await assert.rejects(publishApprovalReport(publisher, report), /Comment unavailable/);
+  await publishApprovalReport(publisher, report);
+  assert.equal(publisher.comments.length, 1);
+});
+
+test('a successful non-PR rerun supersedes a newer-created failed run', async () => {
+  const older = run(1, 'success', { event: 'push', head_branch: 'main', created_at: '2026-10-27T08:00:00Z',
+    run_attempt: 2, run_started_at: '2026-10-27T10:00:00Z' });
+  const newer = run(2, 'failure', { event: 'push', head_branch: 'main', workflow_id: 1, created_at: '2026-10-27T09:00:00Z' });
+  const report = await approvalReport(fixture({ pulls: [], runs: [newer], latest: [older, newer] }), 'owner/repo', { now });
+  assert.equal(report.actionable, false);
+  assert.equal(report.counts.superseded, 1);
 });

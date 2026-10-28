@@ -1,4 +1,5 @@
 import { sanitize } from './nightly-failures.mjs';
+import { randomUUID } from 'node:crypto';
 
 const marker = '<!-- ci-approval-report -->';
 const BODY_LIMIT = 60000;
@@ -47,6 +48,16 @@ function limitBody(body) {
 
 function entries(body) {
   return [...body.matchAll(/<!-- ci-pr:(\d+):(approval|no-jobs|unknown):([0-9a-f]{40}) -->/g)];
+}
+
+function notifications(body) {
+  return [...body.matchAll(/<!-- ci-notify:([0-9a-f-]{36}):((?:\d+:(?:approval|no-jobs))(?:,\d+:(?:approval|no-jobs))*) -->/g)]
+    .map(([, id, keys]) => ({ id, keys: keys.split(',') }));
+}
+
+function withNotifications(body, pending) {
+  const markers = pending.map(({ id, keys }) => `<!-- ci-notify:${id}:${keys.join(',')} -->`);
+  return limitBody(body.replace(marker, [marker, ...markers].join('\n')));
 }
 
 async function diagnostics(client, run) {
@@ -124,8 +135,12 @@ export async function approvalReport(client, repository, { now = new Date(), day
     } else {
       const key = workflowKey(candidate);
       if (!otherRuns.has(key)) {
-        const { workflow_runs } = await client.request(`/actions/workflows/${candidate.workflow_id}/runs?branch=${encodeURIComponent(candidate.head_branch)}&event=${encodeURIComponent(candidate.event)}&per_page=1`);
-        otherRuns.set(key, workflow_runs.find(item => workflowKey(item) === key));
+        const matches = await client.list(`/actions/workflows/${candidate.workflow_id}/runs?branch=${encodeURIComponent(candidate.head_branch)}&event=${encodeURIComponent(candidate.event)}&created=${encodeURIComponent(`>=${since}`)}`, 'workflow_runs');
+        let latest;
+        for (const match of matches) {
+          if (workflowKey(match) === key && (!latest || laterRun(match, latest))) latest = match;
+        }
+        otherRuns.set(key, latest);
       }
       run = otherRuns.get(key);
     }
@@ -199,18 +214,42 @@ export async function publishApprovalReport(client, report) {
     const currentKeys = new Set(current.map(([, number, status]) => `${number}:${status}`));
     const prior = entries(issue.body);
     const retained = prior.filter(([, number, status]) => status !== 'unknown' && unknown.has(number) && !currentKeys.has(`${number}:${status}`));
-    const body = limitBody(report.body.replace(marker, [marker, ...retained.map(([entry]) => entry)].join('\n')));
-    if (issue.body === body && issue.state === state) return { unchanged: true };
+    const unknownCommits = new Set(current.filter(([, , status]) => status === 'unknown').map(([, , , sha]) => sha));
+    const legacy = [...issue.body.matchAll(/<!-- ci-commit:([0-9a-f]{40}):(approval|no-jobs) -->/g)]
+      .filter(([, sha]) => unknownCommits.has(sha));
+    const body = limitBody(report.body.replace(marker, [marker, ...retained.map(([entry]) => entry), ...legacy.map(([entry]) => entry)].join('\n')));
+    const queued = notifications(issue.body).map(item => ({ ...item,
+      keys: item.keys.filter(key => currentKeys.has(key) || unknown.has(key.split(':')[0])),
+    })).filter(item => item.keys.length);
+    const scheduled = new Set(queued.flatMap(item => item.keys));
     const previous = new Set(prior.map(([, number, status]) => `${number}:${status}`));
     const pending = current.filter(([, number, status, sha]) => status !== 'unknown' &&
-      !previous.has(`${number}:${status}`) && !issue.body.includes(`<!-- ci-commit:${sha}:${status} -->`));
-    if (pending.length) {
+      !previous.has(`${number}:${status}`) && !scheduled.has(`${number}:${status}`) &&
+      !issue.body.includes(`<!-- ci-commit:${sha}:${status} -->`));
+    if (pending.length) queued.push({ id: randomUUID(), keys: pending.map(([, number, status]) => `${number}:${status}`) });
+    const queuedBody = withNotifications(body, queued);
+    let updated = { unchanged: true };
+    if (issue.body !== queuedBody || issue.state !== state) {
+      updated = await client.request(`/issues/${issue.number}`, { method: 'PATCH', body: { body: queuedBody, state } });
+    }
+    const ready = queued.filter(item => item.keys.every(key => currentKeys.has(key)));
+    if (!ready.length) return updated;
+    const comments = await client.list(`/issues/${issue.number}/comments`);
+    for (const { id, keys } of ready) {
+      const commentMarker = `<!-- ci-notify:${id} -->`;
+      if (comments.some(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.includes(commentMarker))) continue;
       await client.request(`/issues/${issue.number}/comments`, {
         method: 'POST',
-        body: { body: `New CI blockers need review: ${pending.map(([, number, status]) => `#${number} (${labels[status]})`).join(', ')}. Review the PRs and runs linked in this issue. Workflow approval remains manual.` },
+        body: { body: `${commentMarker}\nNew CI blockers need review: ${keys.map(key => {
+          const [number, status] = key.split(':');
+          return `#${number} (${labels[status]})`;
+        }).join(', ')}. Review the PRs and runs linked in this issue. Workflow approval remains manual.` },
       });
     }
-    return client.request(`/issues/${issue.number}`, { method: 'PATCH', body: { body, state } });
+    const delivered = new Set(ready.map(item => item.id));
+    return client.request(`/issues/${issue.number}`, {
+      method: 'PATCH', body: { body: withNotifications(body, queued.filter(item => !delivered.has(item.id))), state },
+    });
   }
   return client.request('/issues', { method: 'POST', body: { title: 'CI approvals and runs without jobs', body: report.body } });
 }
