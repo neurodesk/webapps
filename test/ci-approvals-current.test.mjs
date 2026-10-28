@@ -530,3 +530,54 @@ test('a successful non-PR rerun supersedes a newer-created failed run', async ()
   assert.equal(report.actionable, false);
   assert.equal(report.counts.superseded, 1);
 });
+
+test('one unknown PR does not stall a known blocker from the same interrupted batch', async () => {
+  const publisher = issueFixture();
+  const request = publisher.request.bind(publisher);
+  let fail = true;
+  publisher.request = async (path, options) => {
+    if (path.endsWith('/comments') && fail) { fail = false; throw new Error('Comment unavailable'); }
+    return request(path, options);
+  };
+  const pulls = [pull(), pull({ number: 43, head: { sha, ref: 'other', repo: source } })];
+  const runs = [run(1, 'failure'), run(2, 'action_required', { head_branch: 'other' })];
+  const report = options => approvalReport(fixture({ pulls, runs, ...options }), 'owner/repo', { now });
+  await assert.rejects(publishApprovalReport(publisher, await report()), /Comment unavailable/);
+  await publishApprovalReport(publisher, await report({ unavailable: ['/runs/1/attempts/1/jobs'] }));
+  assert.equal(publisher.comments.length, 1);
+  assert.match(publisher.comments[0], /#43/);
+  assert.doesNotMatch(publisher.comments[0], /#42/);
+  pulls.push(pull({ number: 44, head: { sha, ref: 'third', repo: source } }));
+  runs.push(run(3, 'action_required', { head_branch: 'third' }));
+  await publishApprovalReport(publisher, await report({ unavailable: ['/runs/1/attempts/1/jobs'] }));
+  assert.equal(publisher.comments.length, 2);
+  assert.match(publisher.comments[1], /#44/);
+  assert.doesNotMatch(publisher.comments[1], /#42|#43/);
+  await publishApprovalReport(publisher, await report());
+  assert.equal(publisher.comments.length, 3);
+  assert.match(publisher.comments[2], /#42/);
+  assert.doesNotMatch(publisher.comments[2], /#43|#44/);
+});
+
+test('partial cleanup of a delivered batch does not duplicate its other PR notifications', async () => {
+  const publisher = issueFixture();
+  const request = publisher.request.bind(publisher);
+  let fail = true;
+  publisher.request = async (path, options) => {
+    if (!path.endsWith('/comments') && publisher.comments.length && fail) {
+      fail = false;
+      throw new Error('Issue unavailable');
+    }
+    return request(path, options);
+  };
+  const pulls = [pull(), pull({ number: 43, head: { sha, ref: 'other', repo: source } })];
+  const runs = [run(1, 'failure'), run(2, 'action_required', { head_branch: 'other' })];
+  const known = await approvalReport(fixture({ pulls, runs }), 'owner/repo', { now });
+  await assert.rejects(publishApprovalReport(publisher, known), /Issue unavailable/);
+  const unknown = await approvalReport(fixture({ pulls, runs, unavailable: ['/runs/1/attempts/1/jobs'] }), 'owner/repo', { now });
+  await publishApprovalReport(publisher, unknown);
+  await publishApprovalReport(publisher, known);
+  assert.equal(publisher.comments.length, 1);
+  assert.match(publisher.comments[0], /#42/);
+  assert.match(publisher.comments[0], /#43/);
+});

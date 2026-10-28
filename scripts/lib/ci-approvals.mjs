@@ -51,12 +51,12 @@ function entries(body) {
 }
 
 function notifications(body) {
-  return [...body.matchAll(/<!-- ci-notify:([0-9a-f-]{36}):((?:\d+:(?:approval|no-jobs))(?:,\d+:(?:approval|no-jobs))*) -->/g)]
-    .map(([, id, keys]) => ({ id, keys: keys.split(',') }));
+  return [...body.matchAll(/<!-- ci-notify:([0-9a-f-]{36}):(\d+:(?:approval|no-jobs)) -->/g)]
+    .map(([, id, key]) => ({ id, key }));
 }
 
 function withNotifications(body, pending) {
-  const markers = pending.map(({ id, keys }) => `<!-- ci-notify:${id}:${keys.join(',')} -->`);
+  const markers = pending.map(({ id, key }) => `<!-- ci-notify:${id}:${key} -->`);
   return limitBody(body.replace(marker, [marker, ...markers].join('\n')));
 }
 
@@ -218,29 +218,29 @@ export async function publishApprovalReport(client, report) {
     const legacy = [...issue.body.matchAll(/<!-- ci-commit:([0-9a-f]{40}):(approval|no-jobs) -->/g)]
       .filter(([, sha]) => unknownCommits.has(sha));
     const body = limitBody(report.body.replace(marker, [marker, ...retained.map(([entry]) => entry), ...legacy.map(([entry]) => entry)].join('\n')));
-    const queued = notifications(issue.body).map(item => ({ ...item,
-      keys: item.keys.filter(key => currentKeys.has(key) || unknown.has(key.split(':')[0])),
-    })).filter(item => item.keys.length);
-    const scheduled = new Set(queued.flatMap(item => item.keys));
+    const queued = notifications(issue.body)
+      .filter(({ key }) => currentKeys.has(key) || unknown.has(key.split(':')[0]));
+    const scheduled = new Set(queued.map(item => item.key));
     const previous = new Set(prior.map(([, number, status]) => `${number}:${status}`));
     const pending = current.filter(([, number, status, sha]) => status !== 'unknown' &&
       !previous.has(`${number}:${status}`) && !scheduled.has(`${number}:${status}`) &&
       !issue.body.includes(`<!-- ci-commit:${sha}:${status} -->`));
-    if (pending.length) queued.push({ id: randomUUID(), keys: pending.map(([, number, status]) => `${number}:${status}`) });
+    queued.push(...pending.map(([, number, status]) => ({ id: randomUUID(), key: `${number}:${status}` })));
     const queuedBody = withNotifications(body, queued);
     let updated = { unchanged: true };
     if (issue.body !== queuedBody || issue.state !== state) {
       updated = await client.request(`/issues/${issue.number}`, { method: 'PATCH', body: { body: queuedBody, state } });
     }
-    const ready = queued.filter(item => item.keys.every(key => currentKeys.has(key)));
+    const ready = queued.filter(item => currentKeys.has(item.key));
     if (!ready.length) return updated;
     const comments = await client.list(`/issues/${issue.number}/comments`);
-    for (const { id, keys } of ready) {
-      const commentMarker = `<!-- ci-notify:${id} -->`;
-      if (comments.some(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.includes(commentMarker))) continue;
+    const undelivered = ready.filter(({ id }) => !comments.some(comment =>
+      comment.user?.login === 'github-actions[bot]' && comment.body?.includes(`<!-- ci-notify:${id} -->`)));
+    if (undelivered.length) {
+      const commentMarkers = undelivered.map(({ id }) => `<!-- ci-notify:${id} -->`).join('\n');
       await client.request(`/issues/${issue.number}/comments`, {
         method: 'POST',
-        body: { body: `${commentMarker}\nNew CI blockers need review: ${keys.map(key => {
+        body: { body: `${commentMarkers}\nNew CI blockers need review: ${undelivered.map(({ key }) => {
           const [number, status] = key.split(':');
           return `#${number} (${labels[status]})`;
         }).join(', ')}. Review the PRs and runs linked in this issue. Workflow approval remains manual.` },

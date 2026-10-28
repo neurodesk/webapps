@@ -36,7 +36,9 @@ no current PR blocker or recent non-PR startup blocker remains. Failed jobs are
 outside this report.
 
 Before posting a notification, the reporter saves its pending delivery ID in
-the issue. A retry checks bot-owned comments for that ID before posting again,
+the issue for each PR and required action. Ready deliveries can share one
+comment; an unavailable PR does not delay other confirmed blockers. A retry
+checks bot-owned comments for each ID before posting again,
 then removes completed deliveries. Failed comment requests remain pending;
 an interrupted issue update cannot duplicate a comment that already succeeded.
 Unknown job probes retain pending deliveries and legacy notification markers
