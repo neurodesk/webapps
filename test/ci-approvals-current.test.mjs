@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { approvalReport } from '../scripts/lib/ci-approvals.mjs';
+import { approvalReport, publishApprovalReport } from '../scripts/lib/ci-approvals.mjs';
 
 const now = new Date('2026-10-27T12:00:00Z');
 const sha = 'a'.repeat(40);
@@ -44,7 +44,10 @@ function fixture({ pulls = [pull()], runs = [], latest = runs, jobs = {}, checks
       const url = new URL(path, 'https://api.github.com');
       if (url.pathname === '/actions/runs') {
         const status = url.searchParams.get('status');
-        if (status) return runs.filter(item => item.conclusion === status || item.status === status);
+        if (status) {
+          const since = url.searchParams.get('created')?.replace('>=', '');
+          return runs.filter(item => (item.conclusion === status || item.status === status) && (!since || item.created_at >= since));
+        }
         return latest.filter(item => item.head_sha === url.searchParams.get('head_sha'));
       }
       const suite = path.match(/^\/check-suites\/(\d+)\/check-runs\?/);
@@ -55,6 +58,12 @@ function fixture({ pulls = [pull()], runs = [], latest = runs, jobs = {}, checks
     },
     async request(path) {
       record(path);
+      if (path.startsWith('/actions/workflows/')) {
+        const url = new URL(path, 'https://api.github.com');
+        const id = Number(url.pathname.split('/')[3]);
+        const matches = latest.filter(item => item.workflow_id === id && item.head_branch === url.searchParams.get('branch') && item.event === url.searchParams.get('event'));
+        return { workflow_runs: matches.sort((a, b) => b.id - a.id).slice(0, 1) };
+      }
       const match = path.match(/^\/actions\/runs\/(\d+)\/attempts\/(\d+)\/jobs\?per_page=1$/);
       assert.ok(match, `Unexpected request: ${path}`);
       return { total_count: jobs[`${match[1]}:${match[2]}`] ?? 0 };
@@ -85,7 +94,7 @@ test('approval reporting groups current PR workflows with review links and waiti
 test('closed PRs, merged PRs and older commits are excluded without probing their jobs', async () => {
   const client = fixture({ runs: [
     run(1, 'action_required', { head_sha: 'b'.repeat(40) }),
-    run(2, 'failure', { pull_requests: [{ number: 99 }] }),
+    run(2, 'failure', { pull_requests: [{ number: 99 }], head_branch: 'closed-associated-feature' }),
     run(3, 'failure', { head_branch: 'closed-feature' }),
     run(4, 'failure', { head_branch: 'merged-feature' }),
   ] });
@@ -96,7 +105,7 @@ test('closed PRs, merged PRs and older commits are excluded without probing thei
   assert.equal(report.counts.failedWithoutJobs, 0);
   assert.doesNotMatch(report.body, /### /);
   assert.match(report.body, /Exclusion does not establish that checks passed/);
-  assert.ok(client.calls.every(path => !path.includes('/jobs?') && !path.includes('head_sha=')));
+  assert.ok(client.calls.every(path => !path.includes('/jobs?')));
 });
 
 test('fork runs require matching source repository, branch and commit', async () => {
@@ -256,4 +265,98 @@ test('large reports stay within the issue size limit and identify omitted detail
   assert.ok(report.body.length <= 60000);
   assert.ok(report.body.endsWith('Counts include all current blockers.'));
   assert.ok(report.body.includes('[Inspect all workflow runs](https://github.com/owner/repo/actions)'));
+});
+
+function issueFixture() {
+  const issue = { number: 7, user: { login: 'github-actions[bot]' }, state: 'closed', body: '<!-- ci-approval-report -->' };
+  const comments = [];
+  return {
+    issue,
+    comments,
+    list: async () => [issue],
+    async request(path, { body }) {
+      if (path.endsWith('/comments')) comments.push(body.body);
+      else Object.assign(issue, body);
+    },
+  };
+}
+
+test('current PR blockers remain actionable after the seven-day history window', async () => {
+  const client = fixture({ runs: [
+    run(1, 'action_required', { created_at: '2026-10-01T00:00:00Z' }),
+    run(2, 'failure', { created_at: '2026-10-01T00:00:00Z' }),
+  ] });
+  const report = await approvalReport(client, 'owner/repo', { now });
+  assert.equal(report.actionable, true);
+  assert.equal(report.counts.pendingApproval, 1);
+  assert.equal(report.counts.failedWithoutJobs, 1);
+  assert.match(report.body, /26d 12h/);
+});
+
+test('temporary job-probe errors neither announce unknown blockers nor renotify known ones', async () => {
+  const publisher = issueFixture();
+  for (const unavailable of [[], ['/jobs?'], [], []]) {
+    const report = await approvalReport(fixture({ runs: [run(1, 'failure')], unavailable }), 'owner/repo', { now });
+    await publishApprovalReport(publisher, report);
+  }
+  assert.equal(publisher.comments.length, 1);
+  assert.match(publisher.comments[0], /#42.*failed without jobs/);
+  const ordinary = issueFixture();
+  const report = await approvalReport(fixture({ runs: [run(1, 'failure')], unavailable: ['/jobs?'] }), 'owner/repo', { now });
+  await publishApprovalReport(ordinary, report);
+  assert.equal(ordinary.comments.length, 0);
+  assert.equal(ordinary.issue.state, 'open');
+});
+
+test('truncation preserves every PR notification marker as detail sections move', async () => {
+  const publisher = issueFixture();
+  for (const extra of [false, true, false]) {
+    const pulls = Array.from({ length: extra ? 6 : 5 }, (_, index) => pull({ number: index + 1, head: { sha, ref: `feature-${index + 1}`, repo: source } }));
+    const runs = pulls.flatMap(item => Array.from({ length: 50 }, (_, index) => run(item.number * 100 + index, 'action_required', { head_branch: item.head.ref, name: 'Large workflow '.repeat(30) })));
+    const report = await approvalReport(fixture({ pulls, runs }), 'owner/repo', { now });
+    assert.ok(report.body.length <= 60000);
+    for (const item of pulls) assert.ok(report.body.includes(`<!-- ci-pr:${item.number}:approval:${sha} -->`));
+    await publishApprovalReport(publisher, report);
+  }
+  assert.equal(publisher.comments.length, 2);
+  assert.match(publisher.comments[1], /#6/);
+  assert.doesNotMatch(publisher.comments[1], /#[1-5]/);
+});
+
+test('a newer successful non-PR commit resolves an older startup failure', async () => {
+  const old = run(1, 'failure', { event: 'push', head_branch: 'main' });
+  const client = fixture({ pulls: [], runs: [old], latest: [old, run(2, 'success', { workflow_id: 1, event: 'push', head_branch: 'main', head_sha: 'b'.repeat(40) })] });
+  const report = await approvalReport(client, 'owner/repo', { now });
+  assert.equal(report.actionable, false);
+  assert.equal(report.counts.superseded, 1);
+});
+
+test('non-PR failures outside the history window remain excluded', async () => {
+  const report = await approvalReport(fixture({ pulls: [], runs: [run(1, 'failure', { event: 'schedule', head_branch: 'main', created_at: '2026-10-01T00:00:00Z' })] }), 'owner/repo', { now });
+  assert.equal(report.actionable, false);
+});
+
+test('a failed non-PR workflow lookup aborts instead of resolving a blocker', async () => {
+  const client = fixture({ pulls: [], runs: [run(1, 'failure', { event: 'schedule', head_branch: 'main' })], unavailable: ['/actions/workflows/'] });
+  await assert.rejects(approvalReport(client, 'owner/repo', { now }), /GitHub returned 502/);
+});
+
+test('an unrelated PR association cannot hide an exact source and head match', async () => {
+  const report = await approvalReport(fixture({ runs: [run(1, 'action_required', { pull_requests: [{ number: 99 }] })] }), 'owner/repo', { now });
+  assert.equal(report.counts.pendingApproval, 1);
+  assert.match(report.body, /#42: Improve the pipeline/);
+});
+
+test('startup_failure conclusions remain actionable on current PRs', async () => {
+  const report = await approvalReport(fixture({ runs: [run(1, 'startup_failure')] }), 'owner/repo', { now });
+  assert.equal(report.actionable, true);
+  assert.equal(report.counts.failedWithoutJobs, 1);
+});
+
+test('a recent rerun of an older run supersedes a newer failed run at the same commit', async () => {
+  const old = run(1, 'failure', { created_at: '2026-10-27T08:00:00Z' });
+  const newer = run(2, 'failure', { workflow_id: 1, created_at: '2026-10-27T09:00:00Z' });
+  const rerun = { ...old, conclusion: 'success', run_attempt: 2, run_started_at: '2026-10-27T10:00:00Z' };
+  const report = await approvalReport(fixture({ runs: [old, newer], latest: [rerun, newer] }), 'owner/repo', { now });
+  assert.equal(report.actionable, false);
 });

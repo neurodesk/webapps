@@ -15,10 +15,10 @@ function sameSource(left, right) {
 }
 
 function currentPull(run, pulls) {
-  return pulls.find(pull =>
-    (!run.pull_requests?.length || run.pull_requests.some(item => item.number === pull.number)) &&
+  const matches = pulls.filter(pull =>
     sameSource(run.head_repository, pull.head.repo) && run.head_branch === pull.head.ref &&
     (run.head_sha === pull.head.sha || run.head_sha === pull.merge_commit_sha));
+  return matches.find(pull => run.pull_requests?.some(item => item.number === pull.number)) ?? matches[0];
 }
 
 function workflowKey(run) {
@@ -27,7 +27,26 @@ function workflowKey(run) {
 
 function needsAttention(run) {
   return (run.status === 'completed' || run.status === 'action_required') &&
-    (run.conclusion === 'failure' || run.conclusion === 'action_required' || run.status === 'action_required');
+    (['failure', 'startup_failure', 'action_required'].includes(run.conclusion) || run.status === 'action_required');
+}
+
+function laterRun(left, right) {
+  const difference = Date.parse(left.run_started_at ?? left.created_at) - Date.parse(right.run_started_at ?? right.created_at);
+  return Number.isFinite(difference) && difference !== 0 ? difference > 0 : left.id > right.id;
+}
+
+function limitBody(body) {
+  if (body.length <= BODY_LIMIT) return body;
+  const notice = '\n\nReport truncated. Counts include all current blockers.';
+  if (body.indexOf('\n# CI approvals') >= BODY_LIMIT - notice.length) {
+    throw new Error('Too many PR notification markers to fit the report');
+  }
+  body = body.slice(0, BODY_LIMIT - notice.length);
+  return body.slice(0, body.lastIndexOf('\n')) + notice;
+}
+
+function entries(body) {
+  return [...body.matchAll(/<!-- ci-pr:(\d+):(approval|no-jobs|unknown):([0-9a-f]{40}) -->/g)];
 }
 
 async function diagnostics(client, run) {
@@ -64,12 +83,32 @@ export async function approvalReport(client, repository, { now = new Date(), day
   const since = new Date(now.getTime() - days * 86400000).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const pulls = await client.list('/pulls?state=open');
   const runsById = new Map();
-  for (const status of ['failure', 'action_required']) {
+  for (const status of ['failure', 'startup_failure', 'action_required']) {
     const matches = await client.list(`/actions/runs?status=${status}&created=${encodeURIComponent(`>=${since}`)}`, 'workflow_runs');
     for (const run of matches) runsById.set(run.id, run);
   }
   const groups = new Map();
   const currentRuns = new Map();
+  const otherRuns = new Map();
+  async function runsAtHead(sha) {
+    if (!currentRuns.has(sha)) {
+      const matches = await client.list(`/actions/runs?head_sha=${encodeURIComponent(sha)}`, 'workflow_runs');
+      const latest = new Map();
+      for (const match of matches) {
+        const key = workflowKey(match);
+        if (!latest.has(key) || laterRun(match, latest.get(key))) latest.set(key, match);
+      }
+      currentRuns.set(sha, latest);
+    }
+    return currentRuns.get(sha);
+  }
+  for (const pull of pulls) {
+    for (const sha of new Set([pull.head.sha, pull.merge_commit_sha].filter(Boolean))) {
+      for (const run of (await runsAtHead(sha)).values()) {
+        if (run.event === 'pull_request' && currentPull(run, pulls) && !runsById.has(run.id)) runsById.set(run.id, run);
+      }
+    }
+  }
   const seen = new Set();
   const counts = { failedWithJobs: 0, failedWithoutJobs: 0, pendingApproval: 0, jobsUnknown: 0, obsolete: 0, superseded: 0 };
   for (const candidate of runsById.values()) {
@@ -79,16 +118,17 @@ export async function approvalReport(client, repository, { now = new Date(), day
       counts.obsolete++;
       continue;
     }
-    if (!currentRuns.has(candidate.head_sha)) {
-      const matches = await client.list(`/actions/runs?head_sha=${encodeURIComponent(candidate.head_sha)}`, 'workflow_runs');
-      const latest = new Map();
-      for (const match of matches) {
-        const key = workflowKey(match);
-        if (!latest.has(key) || latest.get(key).id < match.id) latest.set(key, match);
+    let run;
+    if (pull) {
+      run = (await runsAtHead(candidate.head_sha)).get(workflowKey(candidate));
+    } else {
+      const key = workflowKey(candidate);
+      if (!otherRuns.has(key)) {
+        const { workflow_runs } = await client.request(`/actions/workflows/${candidate.workflow_id}/runs?branch=${encodeURIComponent(candidate.head_branch)}&event=${encodeURIComponent(candidate.event)}&per_page=1`);
+        otherRuns.set(key, workflow_runs.find(item => workflowKey(item) === key));
       }
-      currentRuns.set(candidate.head_sha, latest);
+      run = otherRuns.get(key);
     }
-    const run = currentRuns.get(candidate.head_sha).get(workflowKey(candidate));
     if (!run || !needsAttention(run)) {
       counts.superseded++;
       continue;
@@ -118,21 +158,21 @@ export async function approvalReport(client, repository, { now = new Date(), day
     group.runs.push({ run, status, details: status === 'no-jobs' ? await diagnostics(client, run) : [] });
     groups.set(key, group);
   }
-  const lines = [marker, '# CI approvals and runs without jobs', '',
-    `Current runs created in the last ${days} days: ${counts.pendingApproval} awaiting approval, ${counts.failedWithoutJobs} failed without jobs, ${counts.jobsUnknown} with job data unavailable.`,
+  const markers = [...groups.values()].filter(group => group.pull).flatMap(group =>
+    [...new Set(group.runs.map(item => item.status))].map(status => `<!-- ci-pr:${group.pull.number}:${status}:${group.sha} -->`));
+  const lines = [marker, ...markers, '# CI approvals and runs without jobs', '',
+    `Current PR runs and other runs created in the last ${days} days: ${counts.pendingApproval} awaiting approval, ${counts.failedWithoutJobs} failed without jobs, ${counts.jobsUnknown} with job data unavailable.`,
     `${counts.failedWithJobs} failures with jobs are outside this report. Excluded ${counts.obsolete} runs from closed PRs or older commits and ${counts.superseded} superseded workflow runs or attempts.`,
     'Exclusion does not establish that checks passed. Successful, cancelled and running attempts are not blockers in this report.', '',
     'Review contributor changes before approving runs. No approvals are granted by this reporter.',
-    'A failure without jobs is not a test failure. When no diagnostic is available, inspect the run annotation to determine the cause.', ''];
-  if (!groups.size) lines.push('No current approval or startup blockers found in this window.');
+    'A failure without jobs is not a test failure. When no diagnostic is available, inspect the run annotation to determine the cause.',
+    `[Inspect all workflow runs](https://github.com/${repository}/actions).`, ''];
+  if (!groups.size) lines.push('No current approval or startup blockers found.');
   for (const group of groups.values()) {
     if (group.pull) {
       const pull = group.pull;
       lines.push(`### [#${pull.number}: ${plain(pull.title)}](https://github.com/${repository}/pull/${pull.number})`, '',
         `Author: ${plain(pull.user.login)}. Current commit: ${plain(group.sha, 12)}.`, '');
-      for (const status of new Set(group.runs.map(item => item.status))) {
-        lines.push(`<!-- ci-pr:${pull.number}:${status}:${group.sha} -->`);
-      }
     } else {
       lines.push(`### Other runs on ${plain(group.branch)} at ${plain(group.sha, 12)}`, '');
     }
@@ -144,12 +184,7 @@ export async function approvalReport(client, repository, { now = new Date(), day
     }
     lines.push('');
   }
-  let body = lines.join('\n');
-  if (body.length > BODY_LIMIT) {
-    const notice = `\n\nReport truncated. [Inspect all workflow runs](https://github.com/${repository}/actions). Counts include all current blockers.`;
-    body = body.slice(0, BODY_LIMIT - notice.length);
-    body = body.slice(0, body.lastIndexOf('\n')) + notice;
-  }
+  const body = limitBody(lines.join('\n'));
   return { counts, body, actionable: groups.size > 0 };
 }
 
@@ -159,10 +194,15 @@ export async function publishApprovalReport(client, report) {
   if (!report.actionable && !issue) return { skipped: true };
   if (issue) {
     const state = report.actionable ? 'open' : 'closed';
-    if (issue.body === report.body && issue.state === state) return { unchanged: true };
-    const entries = body => [...body.matchAll(/<!-- ci-pr:(\d+):(approval|no-jobs|unknown):([0-9a-f]{40}) -->/g)];
-    const previous = new Set(entries(issue.body).map(([, number, status]) => `${number}:${status}`));
-    const pending = entries(report.body).filter(([, number, status, sha]) =>
+    const current = entries(report.body);
+    const unknown = new Set(current.filter(([, , status]) => status === 'unknown').map(([, number]) => number));
+    const currentKeys = new Set(current.map(([, number, status]) => `${number}:${status}`));
+    const prior = entries(issue.body);
+    const retained = prior.filter(([, number, status]) => status !== 'unknown' && unknown.has(number) && !currentKeys.has(`${number}:${status}`));
+    const body = limitBody(report.body.replace(marker, [marker, ...retained.map(([entry]) => entry)].join('\n')));
+    if (issue.body === body && issue.state === state) return { unchanged: true };
+    const previous = new Set(prior.map(([, number, status]) => `${number}:${status}`));
+    const pending = current.filter(([, number, status, sha]) => status !== 'unknown' &&
       !previous.has(`${number}:${status}`) && !issue.body.includes(`<!-- ci-commit:${sha}:${status} -->`));
     if (pending.length) {
       await client.request(`/issues/${issue.number}/comments`, {
@@ -170,7 +210,7 @@ export async function publishApprovalReport(client, report) {
         body: { body: `New CI blockers need review: ${pending.map(([, number, status]) => `#${number} (${labels[status]})`).join(', ')}. Review the PRs and runs linked in this issue. Workflow approval remains manual.` },
       });
     }
-    return client.request(`/issues/${issue.number}`, { method: 'PATCH', body: { body: report.body, state } });
+    return client.request(`/issues/${issue.number}`, { method: 'PATCH', body: { body, state } });
   }
   return client.request('/issues', { method: 'POST', body: { title: 'CI approvals and runs without jobs', body: report.body } });
 }
