@@ -50,7 +50,7 @@ DENOISE_IMAGE=/var/tmp/hmc-native/stock/DenoiseImage \
 `affine_shift.py` reports how far an `epi2anat` affine maps the EPI brain mask from the double affine.
 The kernel drops `--write-interval-volumes`, which sdcflows' debug path adds to `epi2anat`; native runs with and without it write the same affine.
 
-Without `ANTS_REGISTRATION` and `ANTS_TOOLS`, every program the kernel has runs in it; `DenoiseImage` is the only native one. `check_calls.py` checks that from the run's call logs: it fails unless each `antsRegistration`, `antsApplyTransforms` and `ImageMath` call ran in the given kernel and exited 0, with one kernel record per call. `e2e.sh` starts from an empty work directory, so no node comes from nipype's cache, and the log lists every call.
+Without `ANTS_REGISTRATION` and `ANTS_TOOLS`, every program the kernel has runs in it; `DenoiseImage` is the only native one. `check_calls.py` checks that from the run's call logs: it fails unless each `antsRegistration`, `antsApplyTransforms` and `ImageMath` call ran in the given kernel and exited 0, with one kernel record per call, matched by program and full working directory. The default `--mode e2e` requires all eleven workflow nodes (ten kernel calls and native DenoiseImage); `--mode replay` requires the six SyN-only nodes. Empty, cached/incomplete, duplicated, foreign-directory or failed records exit nonzero. The CI replay checks this inventory as well as the field gate. `e2e.sh` starts from an empty work directory, so no node comes from nipype's cache, and the log lists every call.
 
 ```sh
 python3 -I packages/hmc-registration/validation/sdc-gate/check_calls.py /var/tmp/e2e \
@@ -104,6 +104,15 @@ It records three measures separately: the worker's linear-memory capacity and ea
 ```sh
 HMC_BROWSER_CHANNEL=chromium node packages/hmc-registration/validation/browser-syn.mjs full /var/tmp/replay /var/tmp/browser-syn
 HMC_BROWSER_CHANNEL=chromium node packages/hmc-registration/validation/browser-syn.mjs cancel /var/tmp/replay /var/tmp/browser-cancel
+```
+
+The command exits nonzero on a worker error, missing warp, unequal replay/upload bytes, missing observations, a late cancelled-worker reply, failed native-byte recovery, or browser descendants left after cleanup. It writes `result.json` with the failure before cleanup; an unsuccessful experiment cannot become a passing exit during cleanup.
+
+The cheap checker tests run before the scientific replay in CI:
+
+```sh
+python3 -I packages/hmc-registration/validation/sdc-gate/test_check_calls.py
+node --test packages/hmc-registration/test/browser-syn*.test.js
 ```
 
 None of these measures is the allocator's live bytes or its free space, and none is the memory of a whole app.

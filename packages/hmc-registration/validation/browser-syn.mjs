@@ -36,6 +36,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import { HMC_REGISTRATION_WASM_SHA256 } from "../src/pin.js";
 import { ARGV, NATIVE_MAT_SHA256 } from "../test/expected.mjs";
+import { browserResultProblems } from "./browser-syn-result.mjs";
 
 const [mode, replay, out] = process.argv.slice(2);
 if (!["full", "cancel"].includes(mode) || !out) throw new Error("usage: node validation/browser-syn.mjs full|cancel REPLAY_RUN OUT");
@@ -164,21 +165,9 @@ const rendererRss = () => renderers().reduce((s, p) => s + p.rss_kb, 0);
 let label = "start";
 const sampler = setInterval(() => sample(label), 2000);
 
-const browser = await chromium.launch(process.env.HMC_BROWSER_CHANNEL ? { channel: process.env.HMC_BROWSER_CHANNEL } : {});
-const page = await browser.newPage();
+let browser;
+let page;
 let atReply = null;
-await page.exposeFunction("hmcReplyArrived", () => {
-  atReply = { t: now(), processes: sample("reply") };
-});
-page.on("pageerror", (error) => note({ pageerror: String(error) }));
-page.on("console", (message) => note({ console: message.text().slice(0, 300) }));
-await page.goto(`${origin}/`);
-if ((await page.evaluate(() => self.crossOriginIsolated)) !== true) throw new Error("not cross-origin isolated");
-const exe = (() => {
-  const b = processes().find((p) => p.type === "browser");
-  return b ? readlinkSync(`/proc/${b.pid}/exe`) : null;
-})();
-note({ browser: browser.version(), executable: exe, kernel_sha256: kernelSha, origin });
 
 // A module worker running src/worker.js, with the observation wrappers installed before its first message.
 async function startWorker(name) {
@@ -251,9 +240,25 @@ async function postSyn(name) {
   );
 }
 
-const result = { mode, replay, kernel_sha256: kernelSha, browser: browser.version(), executable: exe, argv: SYN_ARGV, inputs,
+const result = { mode, replay, kernel_sha256: kernelSha, argv: SYN_ARGV, inputs,
   replay_record: { wall_s: recorded.wall_s, wasm_heap_bytes: recorded.wasm_heap_bytes, heap_growth: recorded.heap_growth } };
+let succeeded = false;
 try {
+  browser = await chromium.launch(process.env.HMC_BROWSER_CHANNEL ? { channel: process.env.HMC_BROWSER_CHANNEL } : {});
+  page = await browser.newPage();
+  await page.exposeFunction("hmcReplyArrived", () => {
+    atReply = { t: now(), processes: sample("reply") };
+  });
+  page.on("pageerror", (error) => note({ pageerror: String(error) }));
+  page.on("console", (message) => note({ console: message.text().slice(0, 300) }));
+  await page.goto(`${origin}/`);
+  if ((await page.evaluate(() => self.crossOriginIsolated)) !== true) throw new Error("not cross-origin isolated");
+  const exe = (() => {
+    const b = processes().find((p) => p.type === "browser");
+    return b ? readlinkSync(`/proc/${b.pid}/exe`) : null;
+  })();
+  Object.assign(result, { browser: browser.version(), executable: exe });
+  note({ browser: result.browser, executable: exe, kernel_sha256: kernelSha, origin });
   sample("idle");
   result.idle = { renderer_rss_kb: rendererRss(), processes: last };
   if (mode === "full") {
@@ -263,13 +268,13 @@ try {
     await postSyn("syn");
     const reply = await page.evaluate(() => self.replies.syn);
     sample("syn-done");
-    writeFileSync(join(out, "ants-log.txt"), `${reply.log.join("\n")}\n`);
+    writeFileSync(join(out, "ants-log.txt"), `${(reply.log ?? []).join("\n")}\n`);
     delete reply.log;
     result.ua_memory_at_reply = reply.ua_memory;
     delete reply.ua_memory;
     result.reply = reply;
     result.at_reply = atReply;
-    result.outputs_vs_replay = Object.fromEntries(Object.keys(reply.outputs).map((file) => {
+    result.outputs_vs_replay = Object.fromEntries(Object.keys(reply.outputs ?? {}).map((file) => {
       const mine = readFileSync(join(out, "outputs", file));
       const theirs = readFileSync(join(synCall.cwd, file));
       return [file, { bytes_equal: sha256(mine) === sha256(theirs), decompressed_equal: sha256(gunzipSync(mine)) === sha256(gunzipSync(theirs)), uploaded_sha256_matches_page: sha256(mine) === reply.outputs[file].sha256 }];
@@ -320,6 +325,7 @@ try {
       for (const n of ["fixed.nii", "moving.nii"]) inputs[n] = new Uint8Array(await (await fetch(`/test/data/${n}`)).arrayBuffer());
       const reply = await new Promise((resolve) => {
         self.workers.rigid.onmessage = ({ data }) => resolve(data);
+        self.workers.rigid.onerror = (event) => resolve({ error: `worker error: ${event.message}` });
         self.workers.rigid.postMessage({ id: 2, argv, inputs });
       });
       const hex = (buffer) => Array.from(new Uint8Array(buffer), (b) => b.toString(16).padStart(2, "0")).join("");
@@ -331,17 +337,28 @@ try {
     result.renderer_after_rigid_kb = rendererRss();
     await page.evaluate(() => self.workers.rigid.terminate());
   }
+  result.problems = browserResultProblems(result, NATIVE_MAT_SHA256);
+  if (result.problems.length) throw new Error(result.problems.join("; "));
+  succeeded = true;
+} catch (error) {
+  result.error = String(error);
+  console.error(result.error);
 } finally {
   clearInterval(sampler);
   sample("end");
   result.peaks = peaks;
   result.elapsed_s = now();
   writeFileSync(join(out, "result.json"), `${JSON.stringify(result, null, 1)}\n`);
-  await browser.close();
+  await browser?.close();
   server.close();
   setTimeout(() => {
     const left = processes();
     writeFileSync(join(out, "left-processes.json"), `${JSON.stringify(left)}\n`);
-    process.exit(0);
+    if (left.length) {
+      result.cleanup_error = "Chromium descendants remain after browser.close()";
+      writeFileSync(join(out, "result.json"), `${JSON.stringify(result, null, 1)}\n`);
+      console.error(result.cleanup_error);
+    }
+    process.exit(succeeded && left.length === 0 ? 0 : 1);
   }, 3000);
 }

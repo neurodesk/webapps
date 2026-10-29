@@ -44,6 +44,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
+      - name: Check validation harness failure paths
+        run: |
+          python3 -I packages/hmc-registration/validation/sdc-gate/test_check_calls.py
+          node --test packages/hmc-registration/test/browser-syn*.test.js
       - name: Cache the reference downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
@@ -66,6 +70,10 @@ jobs:
           OMP_NUM_THREADS: '1'
           OPENBLAS_NUM_THREADS: '1'
         run: bash packages/hmc-registration/validation/sdc-gate/replay.sh "$SDC_REFERENCE" "$SDC_GRID" "$RUNNER_TEMP/replay" 1234 --float
+      - name: Require complete and successful replay call provenance
+        run: >-
+          python3 -I packages/hmc-registration/validation/sdc-gate/check_calls.py "$RUNNER_TEMP/replay"
+          "$(sha256sum packages/hmc-registration/wasm/hmc-registration.wasm | cut -d' ' -f1)" --mode replay
       - name: Require the field gate
         run: >-
           "$SDC_PYTHON" -I packages/hmc-registration/validation/sdc-gate/gate.py "$SDC_REFERENCE"
