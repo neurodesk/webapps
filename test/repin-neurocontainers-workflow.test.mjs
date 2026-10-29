@@ -8,9 +8,9 @@ import test from 'node:test';
 test('publication retries create a missing PR and refresh an existing PR when the branch already matches', async () => {
   const workflow = await readFile(new URL('../.github/workflows/standalone-links.yml', import.meta.url), 'utf8');
   const step = workflow.slice(workflow.indexOf('      - name: Open or refresh the pull request\n'));
-  const match = /^        run: \|\n((?:          .*\n|\n)+)/m.exec(step);
+  const match = /^ {8}run: \|\n((?: {10}.*\n|\n)+)/m.exec(step);
   assert.ok(match, 'the publication step has a shell script');
-  const script = match[1].replace(/^          /gm, '');
+  const script = match[1].replace(/^ {10}/gm, '');
   const root = await realpath(await mkdtemp(join(tmpdir(), 'repin-publication-')));
   try {
     const bin = join(root, 'bin');
