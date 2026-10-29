@@ -92,6 +92,7 @@ For these three programs `run` refuses, before the kernel runs, an input that ar
 - For `antsRegistration`, `run` refuses argv without exactly one `--random-seed N`, N an integer from 1 to 2147483647. Without it ANTs seeds from the clock. The seed is never taken from the environment: `ENV` is not in `EXPORTED_RUNTIME_METHODS` (only `FS`, `callMain`, `stackSave` and `stackRestore`), so `ANTS_RANDOM_SEED` cannot reach the kernel.
 - The kernel uses one ITK thread (`src/main.cxx`), so results do not depend on the host.
 - Memory starts at 256 MiB (`INITIAL_MEMORY=268435456`) and grows to at most 4 GiB (`MAXIMUM_MEMORY`), as `packages/registration`: four workers start at about 1 GiB.
+- The allocator is dlmalloc (`-sMALLOC=dlmalloc`), not the mimalloc that the toolchain image's `LDFLAGS` link. mimalloc reserves arenas from emmalloc in growing sizes and never returns them, which took the 1.2 mm SyN-SDC registration of #462 to the 4 GiB maximum (4,294,901,760 bytes of linear memory for 2.12 GB of live allocations). With dlmalloc its linear memory peaks at 2,155,610,112 bytes and it writes the same bytes. `test/memory.test.js` fails if a Laplacian on that grid grows the memory past its initial 256 MiB.
 - Node and the worker refuse a `.wasm` whose SHA-256 is not `HMC_REGISTRATION_WASM_SHA256` (`src/pin.js`).
 
 ## Parity
@@ -138,7 +139,7 @@ bash packages/hmc-registration/scripts/build.sh /var/tmp/hmc-registration-build
 ```
 
 The script downloads ANTs at `52bc0ab588102682587303d31c720de94e6ef6c1` and compiles in `itkwasm/emscripten@sha256:d6c35290a9f1c5cfeb8168c18bbf64d78394cd111b6a19c6091921e98a3aaa1d`, one job, with an 8 GB container limit (`HMC_REGISTRATION_BUILD_MEMORY`).
-`SOURCE_DATE_EPOCH` fixes the `__DATE__` and `__TIME__` that `ANTsVersion.cxx` embeds at the ANTs commit time. The committed SDC entry-point `.wasm` is 15,382,571 bytes, SHA-256 `53779fcd0064a8394aa42ca2e82c5f8b33cf4aebbe98e3a43af6212e558ccf86`.
+`SOURCE_DATE_EPOCH` fixes the `__DATE__` and `__TIME__` that `ANTsVersion.cxx` embeds at the ANTs commit time. The committed `.wasm` is 15,221,669 bytes, SHA-256 `f09b37582d2978c95711fecc1ff3d8a20e00434a2a621cc5bea62495606f6433`.
 A build took about 2.6 minutes.
 When a source or the toolchain changes, put the printed SHA-256 in `src/pin.js`.
 

@@ -41,10 +41,12 @@ if(EMSCRIPTEN)
   # 256 MiB start memory, as packages/registration: four workers need about 1 GiB.
   # callMain puts argv on the 64 KiB stack and never takes it off, so src/index.js restores the
   # stack pointer around each run with stackSave and stackRestore (#537).
+  # The toolchain image's LDFLAGS link mimalloc; -sMALLOC=dlmalloc replaces it (#462, see README).
   target_link_options(hmc-registration PRIVATE
     "-sMODULARIZE=1" "-sEXPORT_ES6=1" "-sEXPORT_NAME=createHmcRegistration"
     "-sPTHREAD_POOL_SIZE=0" "-sERROR_ON_UNDEFINED_SYMBOLS=1"
     "-sALLOW_MEMORY_GROWTH=1" "-sMAXIMUM_MEMORY=4294967296" "-sINITIAL_MEMORY=268435456"
     "-sENVIRONMENT=web,worker,node" "-sFORCE_FILESYSTEM=1"
-    "-sEXPORTED_RUNTIME_METHODS=['FS','callMain','stackSave','stackRestore']" "-sINVOKE_RUN=0" "-sEXIT_RUNTIME=0")
+    "-sEXPORTED_RUNTIME_METHODS=['FS','callMain','stackSave','stackRestore']" "-sINVOKE_RUN=0" "-sEXIT_RUNTIME=0"
+    "-sMALLOC=dlmalloc")
 endif()

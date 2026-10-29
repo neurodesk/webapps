@@ -101,8 +101,8 @@
     },
     {
       "id": "hmc-registration-wasm",
-      "version": "0.3.0",
-      "target": "hmc-registration/0.3.0",
+      "version": "0.3.1",
+      "target": "hmc-registration/0.3.1",
       "deduplicate": true,
       "reason": "Share the checksum-verified ANTs binary used by BISON and HMC while keeping each worker and pthread module inside its app service-worker scope.",
       "files": [
@@ -110,7 +110,7 @@
           "name": "hmc-registration.wasm",
           "source_app": "bison",
           "source": "bison-runtime/hmc-registration/wasm/hmc-registration.wasm",
-          "sha256": "53779fcd0064a8394aa42ca2e82c5f8b33cf4aebbe98e3a43af6212e558ccf86"
+          "sha256": "f09b37582d2978c95711fecc1ff3d8a20e00434a2a621cc5bea62495606f6433"
         }
       ]
     },

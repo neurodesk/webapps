@@ -316,6 +316,8 @@ At the post-measurement main merge `8b9f79a71`, comparison with the measured 72-
 
 The subsequent SDC entry-point addition in `3226bb75b` changes the registration WASM to `53779fcd0064a8394aa42ca2e82c5f8b33cf4aebbe98e3a43af6212e558ccf86` (15,382,571 bytes). It adds Laplacian and the native `antsApplyTransforms` CLI; the existing HMC registration and legacy apply paths pass their native-output regressions unchanged. The 120 timing trials and whole-app memory observations above were not rerun against this expanded binary. They remain measurements of the explicitly identified older kernel, not new performance or memory bounds for the expanded one.
 
+The allocator change for #462 links dlmalloc instead of the toolchain's mimalloc and changes the registration WASM to `f09b37582d2978c95711fecc1ff3d8a20e00434a2a621cc5bea62495606f6433` (15,221,669 bytes). Its registrations write the same bytes: the 90 GP and 11 b0 transforms of the Q53 replay (`packages/hmc-registration/validation/nifreeze-replay.mjs`) and the package's native-output regressions are byte-identical to those of `53779fcd`. The timing trials and whole-app memory observations above were not rerun with it.
+
 ## 7. Milestones
 
 1. M0: reference runs, kept intermediates and masks, pinned on Hugging Face. Status: NiFreeze runs done; QSIPrep r1 and the repeats e1-e3 done; `hmc/reference/` is uploaded at dataset revision `a4ba04733c316430add7e9f8467887a1a47b6e65` and pinned by `exes/dwi/hmc/validation/reference.manifest.json` ([#409](https://github.com/neurodesk/webapps/issues/409), [#438](https://github.com/neurodesk/webapps/issues/438); section 9).
