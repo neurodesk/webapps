@@ -1,0 +1,561 @@
+{
+ "issue": "neurodesk/webapps#462",
+ "date": "2026-10-29",
+ "main": "f1ac9b2a4c6972c52af01f6a201b8aa18cb1e731",
+ "grid": "1.2 mm (193 x 193 x 115)",
+ "reference": "sdc/reference/grid-q68/runs/full-1.2mm-s1234-double-affine at dataset commit e773666df37ccbeec6a6e075313cdfa2caca8f96",
+ "host": "AMD EPYC-Rome, 16 vCPU, 31 GiB, shared with other jobs; one heavy job at a time",
+ "kernels": {
+  "committed": "packages/hmc-registration/wasm/hmc-registration.wasm, SHA-256 f09b37582d2978c95711fecc1ff3d8a20e00434a2a621cc5bea62495606f6433 (dlmalloc)",
+  "deriv64": "validation/sdc-gate/build-wasm.sh deriv64 at f1ac9b2a: SHA-256 fd9ea7845333860b740b7297bf7c83d52dd2177c978abe59423cab21ae0fb3f9, 15,223,841 bytes, dlmalloc (link line -s MALLOC=mimalloc then -sMALLOC=dlmalloc); its .mjs (05041a13) is the committed kernel's",
+  "deriv64_mimalloc": "424777052006b9b6e8807f807266544802b670d24a02bf1e82146e277366a23e (results-1.2mm.json); on the rigid test pair it writes the same transform as the dlmalloc build"
+ },
+ "end_to_end": {
+  "label": "WASM deriv64 (dlmalloc), end to end, every ANTs program of the kernel in WASM",
+  "seed": 1234,
+  "kernel_sha256": "fd9ea7845333860b740b7297bf7c83d52dd2177c978abe59423cab21ae0fb3f9",
+  "fmap_vs_double": {
+   "median": 0.03106,
+   "p95": 0.12809,
+   "max": 0.74485
+  },
+  "pre_vs_double": {
+   "median": 0.03303,
+   "p95": 0.25299,
+   "max": 10.18041
+  },
+  "epi2anat_shift_vs_double": {
+   "median_mm": 0.002571,
+   "p95_mm": 0.003209,
+   "max_mm": 0.003481
+  },
+  "q66": {
+   "d_hz": 0.03106,
+   "cap_hz": 0.5,
+   "floor_hz": 0.05,
+   "d_below_cap": true,
+   "d_within_spread_or_floor": true,
+   "spread_hz": null,
+   "note": "d <= 0.05 Hz, the floor, so d <= max(spread, 0.05 Hz) holds whatever the spread; the end-to-end native double spread over seeds 1234-1236 was not measured and is not needed for this run."
+  },
+  "native_float_vs_double_end_to_end": {
+   "run": "grid-q68/runs/full-1.2mm-s1234-float-affine (pinned)",
+   "fmap": {
+    "median": 0.53856,
+    "p95": 1.82656,
+    "max": 5.26985
+   },
+   "pre": {
+    "median": 0.56142,
+    "p95": 2.08668,
+    "max": 26.72099
+   }
+  },
+  "calls": [
+   {
+    "tool": "DenoiseImage",
+    "node": "ref_anat",
+    "where": "native",
+    "exit": 0,
+    "wall_s": 99.52000000000001,
+    "max_rss_kb": 769796
+   },
+   {
+    "tool": "antsRegistration",
+    "node": "epi2anat",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 1088.25,
+    "max_rss_kb": 886800
+   },
+   {
+    "tool": "ImageMath",
+    "node": "lap_epi",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 0.97,
+    "max_rss_kb": 175756
+   },
+   {
+    "tool": "antsApplyTransforms",
+    "node": "anat2epi",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 2.18,
+    "max_rss_kb": 526816
+   },
+   {
+    "tool": "antsApplyTransforms",
+    "node": "mask2epi",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 33.87,
+    "max_rss_kb": 434208
+   },
+   {
+    "tool": "antsApplyTransforms",
+    "node": "prior2epi",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 2.09,
+    "max_rss_kb": 443624
+   },
+   {
+    "tool": "ImageMath",
+    "node": "lap_anat",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 2.15,
+    "max_rss_kb": 257064
+   },
+   {
+    "tool": "antsApplyTransforms",
+    "node": "amask2epi",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 9.67,
+    "max_rss_kb": 217808
+   },
+   {
+    "tool": "antsRegistration",
+    "node": "syn",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 2940.2,
+    "max_rss_kb": 2567864
+   },
+   {
+    "tool": "antsApplyTransforms",
+    "node": "zooms_field",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 2.24,
+    "max_rss_kb": 266604
+   },
+   {
+    "tool": "antsApplyTransforms",
+    "node": "zooms_bmask",
+    "where": "wasm",
+    "exit": 0,
+    "wall_s": 9.37,
+    "max_rss_kb": 243700
+   }
+  ],
+  "kernel_programs": [
+   "ImageMath",
+   "antsApplyTransforms",
+   "antsRegistration"
+  ],
+  "native_programs": [
+   "DenoiseImage"
+  ],
+  "native_denoise": {
+   "binary_sha256": "6123500be69e59199cf9440a97df4c7ac894cf35efa28ff66bd5f7ef0be2ebe7",
+   "build": "sdc-gate/native DenoiseImage target: ANTs 52bc0ab Examples/DenoiseImage.cxx, ITK 5.4.3 SuperBuild, gcc 11.4 Release -mtune=native -march=corei7 (the stock build of the 29 October runs)",
+   "output_sha256": "7600b99595926e0297d97868ee3686d9d9b4c1e9f646f3534e7333892a877aaf",
+   "equals_pinned_reference_output": true,
+   "pinned_reference_output": "sdc/reference/runs/full-2mm-s1234-double-affine/work/sdc_ref/syn_preprocessing_wf/ref_anat/clipped_noise_corrected.nii.gz at 8520dbca"
+  },
+  "registrations": [
+   {
+    "stage": "epi2anat",
+    "wall_s": 1088.25,
+    "max_rss_GB": 0.908,
+    "exit": 0,
+    "wasm_sha256": "fd9ea7845333860b740b7297bf7c83d52dd2177c978abe59423cab21ae0fb3f9",
+    "wasm_heap_bytes": 732823552,
+    "heap_growth": {
+     "requests": 5,
+     "max_requested_bytes": 632127488
+    }
+   },
+   {
+    "stage": "syn",
+    "wall_s": 2940.2,
+    "max_rss_GB": 2.629,
+    "exit": 0,
+    "wasm_sha256": "fd9ea7845333860b740b7297bf7c83d52dd2177c978abe59423cab21ae0fb3f9",
+    "wasm_heap_bytes": 2258173952,
+    "heap_growth": {
+     "requests": 20,
+     "max_requested_bytes": 2157465600
+    }
+   }
+  ],
+  "nipype_cache": "fresh work directory; no node reused a result",
+  "same_outputs_as_29_oct_mimalloc_deriv64_run": {
+   "files": [
+    "epi2anat/transform0GenericAffine.mat",
+    "anat2epi/clipped_noise_corrected_trans.nii.gz",
+    "mask2epi/sub-01_run-001_desc-mindgrab_mask_trans.nii.gz",
+    "prior2epi/fmap_atlas_trans.nii.gz",
+    "lap_epi/clipped_maths.nii.gz",
+    "lap_anat/clipped_noise_corrected_trans_maths.nii.gz",
+    "amask2epi/sub-01_run-001_desc-mindgrab_mask_trans_uint8_dil_trans.nii.gz",
+    "syn/fmap_syn0Warp.nii.gz",
+    "zooms_field/fmap_syn0Warp_Hz_trans.nii.gz",
+    "unwarp/clipped_field.nii.gz"
+   ],
+   "decompressed_equal": true,
+   "note": "results-1.2mm.json's WASM deriv64 run (kernel 42477705, mimalloc) kept its epi2anat from nipype's cache and ran antsApplyTransforms and the Laplacian natively."
+  },
+  "warp_sha256_decompressed": "a613548e55b70b4ec3cbd26226a2b951e440d68a63bfece120093a9b96eab9d0",
+  "epi2anat_sha256": "a2efb02d634a36b5eebbfa1fbb735ebb4bdca391f3178f2bd088287292046717",
+  "wall_s_whole_run": 4190.5,
+  "provenance": {
+   "main": "f1ac9b2a4c6972c52af01f6a201b8aa18cb1e731",
+   "seed": 1234,
+   "started": "2026-10-29T18:25:43Z",
+   "finished": "2026-10-29T19:37:33Z",
+   "kernel_wasm_sha256": "fd9ea7845333860b740b7297bf7c83d52dd2177c978abe59423cab21ae0fb3f9",
+   "kernel_mjs_sha256": "05041a136152566b5ee6068765b06134916bc1345cf662e34b7992cb3562ab8c",
+   "native_denoise_sha256": "6123500be69e59199cf9440a97df4c7ac894cf35efa28ff66bd5f7ef0be2ebe7",
+   "node": "v24.19.0",
+   "python": "Python 3.12.14",
+   "sdc_reference_revision": "8520dbcafd737b895b9f5eb4f5f8149a82a3bb18 (registration-gate subset)",
+   "grid_revision": "e773666df37ccbeec6a6e075313cdfa2caca8f96 (replay-1.2mm subset)"
+  }
+ },
+ "hmc_with_deriv64": {
+  "why": "NiFreeze's registrations (exes/dwi/hmc/src/registration.rs, the argv that packages/hmc runs) use the GC metric; deriv64 changes only ITK's Mattes metric.",
+  "q53_replay": {
+   "registrations": 101,
+   "same_bytes_as_committed_kernel": {
+    "gp": 90,
+    "b0": 11
+   },
+   "accepted_gate_gp": {
+    "pass": true,
+    "world": {
+     "failingVolumes": 0,
+     "failingCells": 0,
+     "failing": [],
+     "doubleFailingVolumes": 40,
+     "doubleFailingCells": 58
+    },
+    "qsiprep": {
+     "failingVolumes": 1,
+     "failingCells": 1,
+     "failing": [
+      {
+       "volume": 52,
+       "axes": [
+        "tx"
+       ]
+      }
+     ],
+     "doubleFailingVolumes": 48,
+     "doubleFailingCells": 77
+    },
+    "equalsNativeFloat": 87
+   },
+   "b0_supplement": {
+    "pass": true,
+    "world": {
+     "failingVolumes": 0,
+     "failingCells": 0,
+     "failing": [],
+     "doubleFailingVolumes": 10,
+     "doubleFailingCells": 18
+    },
+    "qsiprep": {
+     "failingVolumes": 0,
+     "failingCells": 0,
+     "failing": [],
+     "doubleFailingVolumes": 7,
+     "doubleFailingCells": 21
+    },
+    "equalsNativeFloat": 11
+   },
+   "committed_kernel_control": {
+    "accepted_gate_gp": {
+     "pass": true,
+     "world": {
+      "failingVolumes": 0,
+      "failingCells": 0,
+      "failing": [],
+      "doubleFailingVolumes": 40,
+      "doubleFailingCells": 58
+     },
+     "qsiprep": {
+      "failingVolumes": 1,
+      "failingCells": 1,
+      "failing": [
+       {
+        "volume": 52,
+        "axes": [
+         "tx"
+        ]
+       }
+      ],
+      "doubleFailingVolumes": 48,
+      "doubleFailingCells": 77
+     },
+     "equalsNativeFloat": 87
+    }
+   },
+   "q53_replay_rs_unchanged_table": {
+    "deriv64": [
+     "gp qsiprep: 48 failing volumes, 77 failing cells",
+     "gp world: 40 failing volumes, 58 failing cells",
+     "gp: WebAssembly differs from native float on [31,52,88]",
+     "b0 qsiprep: 7 failing volumes, 21 failing cells",
+     "b0 world: 10 failing volumes, 18 failing cells",
+     "b0: WebAssembly differs from native float on []",
+     "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s"
+    ],
+    "committed": [
+     "gp qsiprep: 48 failing volumes, 77 failing cells",
+     "gp world: 40 failing volumes, 58 failing cells",
+     "gp: WebAssembly differs from native float on [31,52,88]",
+     "b0 qsiprep: 7 failing volumes, 21 failing cells",
+     "b0 world: 10 failing volumes, 18 failing cells",
+     "b0: WebAssembly differs from native float on []",
+     "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s"
+    ]
+   }
+  },
+  "package_tests": {
+   "committed_kernel": "35/35 pass",
+   "deriv64": "29/35 pass",
+   "failing": [
+    "the SHORELine steps write native ANTs's bytes",
+    "run(argv) recovers the known rigid shift and writes native ANTs's bytes",
+    "a .nii.gz input is read as gzipped NIfTI",
+    "output paths cannot escape the private run directory",
+    "one kernel instance completes 200 runs with native ANTs's bytes",
+    "run(argv) leaves the caller's argv as it was, so it can be run again"
+   ],
+   "cause": "each failing test first asserts NATIVE_MAT_SHA256, the native --float 1 bytes of the Mattes rigid test pair; deriv64 writes e70a8ac13558d80cede25caddc77d7c3b74b3e47d64559716a171fa50fecd75b",
+   "goldens": {
+    "wasm_sha256": "fd9ea7845333860b740b7297bf7c83d52dd2177c978abe59423cab21ae0fb3f9",
+    "all": {
+     "nativeBytes": {
+      "seed12340GenericAffine.mat": false,
+      "seed43210GenericAffine.mat": false,
+      "average.mat": false,
+      "apply-Linear.nii": false,
+      "apply-NearestNeighbor.nii": false,
+      "apply-BSpline.nii": false,
+      "apply-BSpline5.nii": false,
+      "apply-HammingWindowedSinc.nii": false,
+      "apply-LanczosWindowedSinc.nii": false,
+      "apply-inverse-HammingWindowedSinc.nii": false,
+      "average-0.nii": false,
+      "average-1.nii": false
+     },
+     "recoversShift": true,
+     "seed1234Sha256": "e70a8ac13558d80cede25caddc77d7c3b74b3e47d64559716a171fa50fecd75b",
+     "maxParameterChange": 0.0058672428131103516
+    },
+    "isolated": {
+     "nativeBytes": {
+      "seed12340GenericAffine.mat": true,
+      "seed43210GenericAffine.mat": true,
+      "average.mat": true,
+      "apply-Linear.nii": true,
+      "apply-NearestNeighbor.nii": true,
+      "apply-BSpline.nii": true,
+      "apply-BSpline5.nii": true,
+      "apply-HammingWindowedSinc.nii": true,
+      "apply-LanczosWindowedSinc.nii": true,
+      "apply-inverse-HammingWindowedSinc.nii": true,
+      "average-0.nii": true,
+      "average-1.nii": true
+     }
+    }
+   },
+   "native_deriv64_rigid_pair_sha256": "e70a8ac13558d80cede25caddc77d7c3b74b3e47d64559716a171fa50fecd75b (native build 7539e661, the WASM bytes)",
+   "native_stock_rigid_pair_sha256": "43d38f061db2fd34668d07f99fe5d8494b1fbdf2a8719ae48de5ea2d14c76509 (= NATIVE_MAT_SHA256)"
+  }
+ },
+ "browser_worker": {
+  "call": "the SyN antsRegistration call of the CI replay (sdc-gate/replay.sh, committed kernel f09b3758): same argv and seven input files, named as ants-cli.mjs names them",
+  "runs": {
+   "headless_shell": {
+    "browser": "156.0.8078.4",
+    "executable": "chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell",
+    "harness": "scratch copy of validation/browser-syn.mjs before the at_reply snapshot; same worker, inputs and observers",
+    "worker": "src/worker.js unchanged, kernel loaded and checksum-checked by the worker",
+    "wall_s": 2877.4,
+    "error": null,
+    "outputs": {
+     "fmap_syn0Warp.nii.gz": {
+      "bytes": 46295800,
+      "sha256": "12899ef17aad9cf3f8317e41fa10c3cbc9b65fba83a80706d70ce76f4e390cb9"
+     },
+     "fmap_syn0InverseWarp.nii.gz": {
+      "bytes": 46293190,
+      "sha256": "807e7663d62210cd971f82cc7d719f5af062f70343076e79a40722110d2b7a73"
+     }
+    },
+    "outputs_vs_ci_replay": {
+     "fmap_syn0Warp.nii.gz": {
+      "bytes_equal": true,
+      "decompressed_equal": true,
+      "uploaded_sha256_matches_page": true
+     },
+     "fmap_syn0InverseWarp.nii.gz": {
+      "bytes_equal": true,
+      "decompressed_equal": true,
+      "uploaded_sha256_matches_page": true
+     }
+    },
+    "ci_replay_gate": {
+     "d_hz": 0.08392,
+     "cap_hz": 0.5,
+     "floor_hz": 0.05,
+     "checks": {
+      "d_below_cap": true,
+      "d_within_spread_or_floor": null
+     },
+     "pass": true
+    },
+    "linear_memory": {
+     "byte_length": 2155610112,
+     "descriptor": {
+      "initial": 4096,
+      "maximum": 65536,
+      "shared": true
+     },
+     "grows": 19,
+     "node_ci_replay_wasm_heap_bytes": 2155610112
+    },
+    "renderer_rss_kib": {
+     "idle": 82568,
+     "max_sampled_before_reply": 2701880,
+     "vmhwm_last_sample_before_reply": 2704624,
+     "last_sample_before_reply_s": 2877.1
+    },
+    "renderer_rss_kib_after_terminate": {
+     "first_sample": 136288,
+     "30_s": 135832
+    },
+    "renderer_vmhwm_whole_run_kib": 3477344,
+    "browser_process_vmhwm_whole_run_kib": 942616,
+    "note": "The whole-run VmHWM values include the harness hashing the 92 MB of warps on the page and posting them to its server after the reply; the values before and at the reply do not.",
+    "ua_memory_at_reply": {
+     "error": "SecurityError: Failed to execute 'measureUserAgentSpecificMemory' on 'Performance': performance.measureUserAgentSpecificMemory is not available."
+    }
+   },
+   "chromium": {
+    "browser": "156.0.8078.4",
+    "executable": "chromium-1248/chrome-linux64/chrome",
+    "harness": "validation/browser-syn.mjs, HMC_BROWSER_CHANNEL=chromium",
+    "worker": "src/worker.js unchanged, kernel loaded and checksum-checked by the worker",
+    "wall_s": 2891.1,
+    "error": null,
+    "outputs": {
+     "fmap_syn0Warp.nii.gz": {
+      "bytes": 46295800,
+      "sha256": "12899ef17aad9cf3f8317e41fa10c3cbc9b65fba83a80706d70ce76f4e390cb9"
+     },
+     "fmap_syn0InverseWarp.nii.gz": {
+      "bytes": 46293190,
+      "sha256": "807e7663d62210cd971f82cc7d719f5af062f70343076e79a40722110d2b7a73"
+     }
+    },
+    "outputs_vs_ci_replay": {
+     "fmap_syn0Warp.nii.gz": {
+      "bytes_equal": true,
+      "decompressed_equal": true,
+      "uploaded_sha256_matches_page": true
+     },
+     "fmap_syn0InverseWarp.nii.gz": {
+      "bytes_equal": true,
+      "decompressed_equal": true,
+      "uploaded_sha256_matches_page": true
+     }
+    },
+    "ci_replay_gate": {
+     "d_hz": 0.08392,
+     "cap_hz": 0.5,
+     "floor_hz": 0.05,
+     "checks": {
+      "d_below_cap": true,
+      "d_within_spread_or_floor": null
+     },
+     "pass": true
+    },
+    "linear_memory": {
+     "byte_length": 2155610112,
+     "descriptor": {
+      "initial": 4096,
+      "maximum": 65536,
+      "shared": true
+     },
+     "grows": 19,
+     "node_ci_replay_wasm_heap_bytes": 2155610112
+    },
+    "renderer_rss_kib": {
+     "idle": 106468,
+     "max_sampled_before_reply": 2727424,
+     "at_reply": 2865108,
+     "vmhwm_at_reply": 2865108,
+     "anon_at_reply": 2760492
+    },
+    "renderer_rss_kib_after_terminate": {
+     "first_sample": 205260,
+     "30_s": 202436
+    },
+    "browser_process_vmhwm_at_reply_kib": 189640,
+    "renderer_vmhwm_whole_run_kib": 3024320,
+    "browser_process_vmhwm_whole_run_kib": 1041524,
+    "note": "The whole-run VmHWM values include the harness hashing the 92 MB of warps on the page and posting them to its server after the reply; the values before and at the reply do not.",
+    "ua_memory_at_reply": {
+     "bytes": 2266556989,
+     "by_scope": [
+      {
+       "scope": "unattributed",
+       "types": [
+        "Shared"
+       ],
+       "bytes": 196588
+      },
+      {
+       "scope": "unattributed",
+       "types": [],
+       "bytes": 0
+      },
+      {
+       "scope": "unattributed",
+       "types": [
+        "DOM"
+       ],
+       "bytes": 25536
+      },
+      {
+       "scope": "Window",
+       "types": [
+        "JavaScript"
+       ],
+       "bytes": 92887212
+      },
+      {
+       "scope": "DedicatedWorkerGlobalScope",
+       "types": [
+        "JavaScript"
+       ],
+       "bytes": 2173447653
+      }
+     ]
+    }
+   }
+  },
+  "cancel": {
+   "browser": "156.0.8078.4",
+   "terminated_after_s": 14.3,
+   "renderer_rss_kib_before_terminate": 1428320,
+   "renderer_rss_kib_3s_after": 365508,
+   "renderer_rss_kib_idle": 298284,
+   "reply_after_terminate": "no reply (terminated)",
+   "new_worker_rigid_pair": {
+    "error": null,
+    "native_bytes": true,
+    "linear_memory_bytes": 268435456
+   },
+   "note": "renderer RSS here is the sum over full Chromium's three renderer processes; the worker's renderer peaked at 1,217,176 KiB"
+  },
+  "not_measured": "the allocator's live bytes and free headroom inside linear memory; whole-app HMC or SDC memory; browsers other than Chromium 156"
+ }
+}

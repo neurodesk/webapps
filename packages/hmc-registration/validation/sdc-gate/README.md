@@ -5,6 +5,7 @@ sdcflows 2.17.1 drives every run through the pinned drivers of `sdc/reference/sc
 `.github/workflows/sdc-registration-gate.yml` runs the SyN-only replay of the committed kernel and requires the gate.
 
 The 29 October 2026 results, with what they do and do not establish, are in [section 6.2 of the plan](../../../../docs/architecture/dwi-sdc-plan.md#62-gates); `results-1.2mm.json` has every number with its kernel.
+`results-dlmalloc.json` holds the recheck with the dlmalloc kernels of #643: the deriv64 end-to-end run with every program in WASM, deriv64 against HMC's gates and goldens, and the committed kernel's SyN call in a Chromium worker.
 
 ## Data
 
@@ -49,6 +50,13 @@ DENOISE_IMAGE=/var/tmp/hmc-native/stock/DenoiseImage \
 `affine_shift.py` reports how far an `epi2anat` affine maps the EPI brain mask from the double affine.
 The kernel drops `--write-interval-volumes`, which sdcflows' debug path adds to `epi2anat`; native runs with and without it write the same affine.
 
+Without `ANTS_REGISTRATION` and `ANTS_TOOLS`, every program the kernel has runs in it; `DenoiseImage` is the only native one. `check_calls.py` checks that from the run's call logs: it fails unless each `antsRegistration`, `antsApplyTransforms` and `ImageMath` call ran in the given kernel and exited 0, with one kernel record per call. `e2e.sh` starts from an empty work directory, so no node comes from nipype's cache, and the log lists every call.
+
+```sh
+python3 -I packages/hmc-registration/validation/sdc-gate/check_calls.py /var/tmp/e2e \
+  "$(sha256sum /var/tmp/hmc-deriv64/wasm/kernel/hmc-registration.wasm | cut -d' ' -f1)"
+```
+
 ## Native builds and the Mattes variants
 
 ```sh
@@ -69,5 +77,35 @@ On the 1.2 mm double replay, `stock` writes the pinned double warp byte for byte
 `build-wasm.sh` builds the kernel with a variant in the kernel's toolchain image and leaves it in the build directory; run it with `HMC_WASM_DIR=/var/tmp/hmc-deriv64/wasm/kernel`.
 On HMC's rigid test pair each variant writes the same transform in WASM and natively, and a different one from the committed kernel.
 The committed kernel does not use them; section 6.2 of the plan gives their results.
+
+## A variant against HMC's gates
+
+HMC's NiFreeze registrations use the `GC` metric, so the Mattes variants should leave them unchanged; these commands check a build against HMC's registration replay and the package's goldens:
+
+```sh
+HMC_WASM_DIR=/var/tmp/hmc-deriv64/wasm/kernel \
+  node packages/hmc-registration/validation/nifreeze-replay.mjs "$HMC_REFERENCE" /var/tmp/q53-deriv64
+node packages/hmc-registration/validation/nifreeze-replay-gate.mjs "$HMC_REFERENCE" /var/tmp/q53-deriv64 /var/tmp/q53-replay
+(cd exes/dwi && HMC_WASM_REPLAY=/var/tmp/q53-deriv64 cargo test --release -p dwi-hmc --test q53_replay -- --nocapture)
+node packages/hmc-registration/validation/variant-goldens.mjs /var/tmp/hmc-deriv64/wasm/kernel
+```
+
+`HMC_REFERENCE` holds the `nifreeze-replay` subset of `exes/dwi/hmc/validation/reference.manifest.json`, and `/var/tmp/q53-replay` is the committed kernel's replay.
+`nifreeze-replay-gate.mjs` applies HMC's accepted native-float gate (`packages/hmc/validation/nifreeze-gate.mjs`) to the 90 GP registrations, the same rule to the 11 b0 pairs as a supplement, and counts the transforms that are the committed kernel's bytes.
+`q53_replay.rs` holds the historical comparison with native double to its recorded table.
+`variant-goldens.mjs` runs the package's native-reference steps (`test/expected.mjs`) with the build, once wholly and once with the committed kernel's registrations, and reports which goldens keep native ANTs's bytes.
+
+## Browser worker
+
+`../browser-syn.mjs` runs the committed kernel's module worker (`src/worker.js`, unchanged) in Playwright's Chromium on the SyN call of a `replay.sh` run, with the same argv and files, and compares the warps with the replay's.
+It records three measures separately: the worker's linear-memory capacity and each growth (it wraps `WebAssembly.Memory` in the worker's scope before the first message), the RSS and VmHWM of each Chromium process (also at the moment the reply reaches the page), and `performance.measureUserAgentSpecificMemory()`, which only the full Chromium provides.
+`cancel` terminates the worker once the renderer has grown by 1 GB, follows the renderer's RSS, and runs the rigid test pair in a new worker.
+
+```sh
+HMC_BROWSER_CHANNEL=chromium node packages/hmc-registration/validation/browser-syn.mjs full /var/tmp/replay /var/tmp/browser-syn
+HMC_BROWSER_CHANNEL=chromium node packages/hmc-registration/validation/browser-syn.mjs cancel /var/tmp/replay /var/tmp/browser-cancel
+```
+
+None of these measures is the allocator's live bytes or its free space, and none is the memory of a whole app.
 
 `HMC_WASM_HEAP_TRACE=1` records the requested sizes passed to `_emscripten_resize_heap` in `wasm-calls.jsonl`. These are targets for linear-memory growth, not individual allocation sizes or the allocator's peak live footprint. The difference between a growth target and the resulting linear-memory capacity does not measure free allocation headroom. Live allocations, fragmentation and available allocator space were not measured.

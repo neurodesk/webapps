@@ -14,9 +14,16 @@
 // prediction with nifreeze-trivial-a1/work/cmd-00000.sh. It writes OUT/b0/float-KKK_0GenericAffine.mat.
 //
 // OUT/timing.json gives the seconds of each run. exes/dwi/hmc/tests/q53_replay.rs reads OUT.
+//
+// HMC_WASM_DIR, a directory with another build's hmc-registration.{mjs,wasm} (for example
+// sdc-gate/build-wasm.sh's), replays that build instead of the committed kernel, as in
+// sdc-gate/ants-cli.mjs; OUT/timing.json then records its SHA-256.
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
+import { createHmcRegistration } from "../src/index.js";
 import { loadHmcRegistration } from "../src/node.js";
 
 const HOST = "/var/tmp/dwi-hmc/runs/";
@@ -24,14 +31,24 @@ const SEED = "1234";
 const GP_VOLUMES = 90;
 const B0_VOLUMES = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
-// One kernel instance runs all 101 registrations (#537).
-async function kernel() {
-  const ants = await loadHmcRegistration();
-  return async (argv, inputs) => {
+// One kernel instance runs all 101 registrations (#537): the committed one, or HMC_WASM_DIR's.
+async function kernel(dir) {
+  let ants = null;
+  let wasmSha256 = null;
+  if (dir) {
+    const wasmBinary = await readFile(join(dir, "hmc-registration.wasm"));
+    const { default: createModule } = await import(pathToFileURL(join(dir, "hmc-registration.mjs")).href);
+    ants = await createHmcRegistration({ createModule, wasmBinary });
+    wasmSha256 = createHash("sha256").update(wasmBinary).digest("hex");
+  } else {
+    ants = await loadHmcRegistration();
+  }
+  const run = async (argv, inputs) => {
     const start = performance.now();
     const { outputs } = ants.run(argv, inputs);
     return { outputs, seconds: (performance.now() - start) / 1000 };
   };
+  return { run, wasmSha256 };
 }
 
 /** The kept command as the shell split it, with host directories removed and the port's flags. */
@@ -94,8 +111,8 @@ export function nibabelInt16Volume(nifti, k) {
 }
 
 async function main(reference, outDir) {
-  const run = await kernel();
-  const timing = { gp: [], b0: [] };
+  const { run, wasmSha256 } = await kernel(process.env.HMC_WASM_DIR);
+  const timing = { ...(wasmSha256 && { wasm_sha256: wasmSha256 }), gp: [], b0: [] };
   const gp = join(reference, "nifreeze-gp/work");
   await mkdir(join(outDir, "gp"), { recursive: true });
   const mask = await readFile(join(gp, "brainmask.nii.gz"));
