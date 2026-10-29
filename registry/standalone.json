@@ -298,7 +298,7 @@
           "label": "musclemap 1.4.0 (20260827)",
           "url": "https://hub.docker.com/r/vnmd/musclemap_1.4.0",
           "dockerImage": "vnmd/musclemap_1.4.0:20260827",
-          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/musclemap_1.4.0_20260827.simg",
+          "apptainerUrl": "https://zenodo.org/records/22168696/files/musclemap_1.4.0_20260827.simg",
           "apptainerName": "musclemap_1.4.0_20260827"
         }
       ],
@@ -917,11 +917,11 @@
       "containers": [
         {
           "id": "synthseg",
-          "label": "synthseg 8.2.0 (20261016)",
+          "label": "synthseg 8.2.0 (20261025)",
           "url": "https://hub.docker.com/r/vnmd/synthseg_8.2.0",
-          "dockerImage": "vnmd/synthseg_8.2.0:20261016",
-          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/synthseg_8.2.0_20261016.simg",
-          "apptainerName": "synthseg_8.2.0_20261016"
+          "dockerImage": "vnmd/synthseg_8.2.0:20261025",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/synthseg_8.2.0_20261025.simg",
+          "apptainerName": "synthseg_8.2.0_20261025"
         }
       ],
       "openrecon": {
