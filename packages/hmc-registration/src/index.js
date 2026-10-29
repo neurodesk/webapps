@@ -77,6 +77,9 @@ function inputNames(program, argv) {
       // nipype renders "[ file.mat, 1 ]", so a native command line splits it over tokens, which
       // ANTs' parser regroups.
       while (transform && argument.startsWith("[") && !argument.endsWith("]") && i < argv.length - 1) argument += argv[++i];
+      if (transform && argument.startsWith("[") && !/^\[[^[\]]+\]$/.test(argument)) {
+        throw new Error("Malformed antsApplyTransforms transform: use a single balanced [file, inverse] group.");
+      }
       const name = transform && argument.startsWith("[") ? argument.slice(1, -1).split(",")[0].trim() : argument;
       if (!transform || name !== "identity") names.push(name);
     }
