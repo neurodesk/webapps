@@ -576,6 +576,41 @@ try {
     await expect(page.locator('#runButton')).toBeEnabled();
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
+  await check('ants-denoise', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t1.nii'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-t1.nii · 16 × 16 × 16 · 1.00 × 1.00 × 1.00 mm');
+    await page.locator('#noiseModel').selectOption('Rician');
+    // The mask and radii chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#patchRadius')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#patchRadius').fill('2');
+    await page.locator('#searchRadius').fill('3');
+    await page.locator('#maskInput').setInputFiles(nifti('interface-mask.nii', 1));
+    await expect(page.locator('#maskField')).toContainText('interface-mask.nii · 4096 voxels');
+    await advanced.tap();
+    await expect(page.locator('#searchRadius')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#patchRadius')).toHaveValue('2');
+    await expect(page.locator('#searchRadius')).toHaveValue('3');
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#noiseModel')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#noiseModel')).toHaveValue('Rician');
+    await expect(page.locator('#maskField')).toContainText('interface-mask.nii · 4096 voxels');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('Image denoised', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Denoised image · Rician, patch 2, search 3');
+    // A new image withdraws the result and the mask of the old one.
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t2.nii', 40));
+    await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+    await expect(page.locator('#maskField')).toContainText('Drop a mask on the image grid');
+  });
   await check('sdc', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);

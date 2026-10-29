@@ -1152,3 +1152,27 @@ apps:
       browser_test: true
       release: true
       e2e_shards: 2
+  - id: ants-denoise
+    path: ants-denoise
+    title: ANTs DenoiseImage
+    description: Reduce noise in 3D MRI with ANTs adaptive non-local means.
+    categories: [image-processing]
+    keywords: [denoising, non-local means, DenoiseImage, ANTs, Rician noise, MRI, preprocessing, WebAssembly]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

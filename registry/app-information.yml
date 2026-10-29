@@ -2051,3 +2051,37 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  ants-denoise:
+    about:
+      - "Choose the noise model by how the image was formed. Gaussian, DenoiseImage's default, suits images with good signal-to-noise ratio and signed (real or phase) images. Rician suits magnitude images with low signal-to-noise ratio, such as diffusion-weighted scans: magnitude noise raises dark tissue, and the Rician model removes that bias. On the example FLAIR the Rician result is 17 % lower than the Gaussian one in the darkest fifth of the head and 0.3 % lower in the brightest tissue."
+      - "With a mask, only its nonzero voxels are denoised and voxels farther than the patch radius from it keep their values. The mask must be on the image grid. On a whole-head image a brain mask shortens the run: the filter spends most of its time in the noisy background."
+      - "The app takes one 3D volume and refuses 4D series; for diffusion series use dwidenoise. DenoiseImage's shrink factor stays 1: its source notes that a larger one does not seem to work. The filter runs on one CPU thread: the example takes about a minute, and a whole-head 1 mm T1 (166 × 210 × 160 voxels) took 6.5 minutes in Node. Larger patch or search radii take several times longer."
+      - "For batch processing, run native DenoiseImage from the Neurodesk ANTs container listed under Standalone. Native ANTs splits the image between threads and then gives slightly different voxels; with ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1 and the same options it gives the app's voxels exactly. The technical log and the automation report give that command for each run."
+    packages:
+      - { name: ANTs DenoiseImage (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/packages/ants-denoise, role: "adaptive non-local means denoising (@neurodesk/ants-denoise), the build BISON runs" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+    citations:
+      - group: Denoising
+        title: Adaptive non-local means denoising
+        reference: "Manjón JV, Coupé P, Martí-Bonmatí L, Collins DL, Robles M. Adaptive non-local means denoising of MR images with spatially varying noise levels. Journal of Magnetic Resonance Imaging. 2010;31(1):192–203."
+        doi: 10.1002/jmri.22003
+        code: https://github.com/ntustison/ITKAdaptiveDenoising
+      - group: Denoising
+        title: ANTsX ecosystem
+        reference: "Tustison NJ, Cook PA, Holbrook AJ, et al. The ANTsX ecosystem for quantitative biological and medical imaging. Scientific Reports. 2021;11:9068."
+        doi: 10.1038/s41598-021-87564-6
+        code: https://github.com/ANTsX/ANTs
+      - group: Example data
+        title: MSLesSeg
+        reference: 'Guarnera F, Rondinella A, Crispino E, et al. MSLesSeg: baseline and benchmarking of a new multiple sclerosis lesion segmentation dataset. Scientific Data. 2025;12:920.'
+        doi: 10.1038/s41597-025-05250-y
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

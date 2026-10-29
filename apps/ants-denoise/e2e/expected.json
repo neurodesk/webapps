@@ -1,0 +1,30 @@
+{
+  "note": "SHA-256 of the uncompressed NIfTI that native ANTs 2.6.5 DenoiseImage writes on the example with one ITK thread; recorded by scripts/native-reference.mjs.",
+  "container": "vnmd/ants_2.6.5@sha256:4f303bfd2be37a9514614d71065bfc11052e299f3a9cab52df28114d96061807",
+  "example": {
+    "name": "MSLesSeg_P57_T1_FLAIR.nii.gz",
+    "sha256": "179472456b8591364c0a1d4912d95c69e2b5743c87a9397aa9409fb58436f70c"
+  },
+  "cases": [
+    {
+      "id": "default",
+      "settings": {
+        "noiseModel": "Gaussian",
+        "patchRadius": 1,
+        "searchRadius": 2
+      },
+      "mask": null,
+      "sha256": "89083654c48274b52450974c2c07696f7e197d03ef48380f1874788f1d503af2"
+    },
+    {
+      "id": "rician-nonzero-mask",
+      "settings": {
+        "noiseModel": "Rician",
+        "patchRadius": 1,
+        "searchRadius": 2
+      },
+      "mask": "nonzero",
+      "sha256": "7bd1ffeb8514001a229a81946bd6e28950440a2666cf793df444d11e62c56bf0"
+    }
+  ]
+}

@@ -30,6 +30,7 @@ Paths in this table are relative to the repository root. Existing implementation
 
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
+| `ants-denoise` | Adaptive non-local means denoising of one 3D image | Native ANTs ships `DenoiseImage`. The Standalone dialog lists the Neurodesk ANTs container, whose `DenoiseImage` gives the app's voxels with one ITK thread and the same options, so no separate command line is packaged. |
 | `greedy` | Affine/deformable registration and reslicing | `exes/greedy` has the Rust CLI. This change adds native release CI and the bundled npm command. macOS signing and target-runner verification remain release gates. |
 | `me-ica` | Multi-echo fMRI denoising (tedana's workflow) | The engine and its `meica` CLI live in [niivue/meica-rs](https://github.com/niivue/meica-rs), which builds native release archives; list them as the Standalone download once the first release is tagged. |
 | `easy-mp2rage` | T1 mapping, B1 correction, UNI denoising | `apps/easy-mp2rage/crates/mp2rage-cli` and `mp2rage_t1/cli.py` already provide CLIs. Package the Rust binary and synchronize its version. |

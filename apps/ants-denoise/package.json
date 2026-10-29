@@ -1,0 +1,26 @@
+{
+  "name": "ants-denoise",
+  "version": "0.0.20261029",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app ants-denoise",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "node ../../scripts/lint.mjs --workspace"
+  },
+  "dependencies": {
+    "@neurodesk/ants-denoise": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.33"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "jsdom": "24.1.3",
+    "vite": "^5.0.0"
+  },
+  "license": "Apache-2.0"
+}
