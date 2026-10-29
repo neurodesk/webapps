@@ -1,0 +1,548 @@
+{
+  "issue": "neurodesk/webapps#462",
+  "grid": "1.2 mm (193 x 193 x 115)",
+  "reference": "sdc/reference/grid-q68/runs/full-1.2mm-s1234-double-affine at dataset commit e773666df37ccbeec6a6e075313cdfa2caca8f96",
+  "statistic": "median, p95 and max over the MindGrab mask of the mean b0 of |f_run - f_double| in Hz (pinned compare_fields.py)",
+  "kernels": {
+    "wasm stock": "packages/hmc-registration/wasm/hmc-registration.wasm, SHA-256 53779fcd0064a8394aa42ca2e82c5f8b33cf4aebbe98e3a43af6212e558ccf86",
+    "wasm pdf64": "SHA-256 0df47b31e472ad8af6679cea47ed0a702f83ea6528ba84871d9081cd084fb7b3 (the kernel's CMakeLists with the PDF edit); build-wasm.sh pdf64 writes the same transform on the rigid test pair",
+    "wasm deriv64": "build-wasm.sh deriv64, SHA-256 424777052006b9b6e8807f807266544802b670d24a02bf1e82146e277366a23e",
+    "native": "ANTs 52bc0ab on ITK 5.4.3 (SuperBuild), gcc 11.4, -O3 -mtune=native -march=corei7 (fma: -march=native), Ubuntu 22.04, AMD EPYC-Rome"
+  },
+  "syn_only": [
+    {
+      "label": "native double, this build",
+      "kind": "syn-only",
+      "kernel": "native stock",
+      "fmap_vs_double": {
+        "median": 0.00014,
+        "p95": 0.00043,
+        "max": 0.00055
+      },
+      "pre_vs_double": {
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "warp_sha256_decompressed": "d8a83bf90fbc3074bef066086cbc425c11222efbf49bf4be3dc4a11aa91d1bc6",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 2271.25,
+          "max_rss_GB": 3.962
+        }
+      ]
+    },
+    {
+      "label": "native double, -march=native (FMA)",
+      "kind": "syn-only",
+      "kernel": "native fma",
+      "fmap_vs_double": {
+        "median": 0.00016,
+        "p95": 0.00045,
+        "max": 0.00098
+      },
+      "pre_vs_double": {
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 1e-05
+      },
+      "warp_sha256_decompressed": "95a984a6310e274f777368f11a0f47a529ed268458c61a6157b56a64b6e6d5a9",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 2319.54,
+          "max_rss_GB": 3.995
+        }
+      ]
+    },
+    {
+      "label": "native --float 1",
+      "kind": "syn-only",
+      "kernel": "native stock",
+      "fmap_vs_double": {
+        "median": 0.08392,
+        "p95": 0.34914,
+        "max": 1.38161
+      },
+      "pre_vs_double": {
+        "median": 0.08958,
+        "p95": 0.41283,
+        "max": 12.27146
+      },
+      "warp_sha256_decompressed": "49336ffb1aba14e1b6ff48e7f438dd3a4ecdff537ba96b8db2e200a07876f4fa",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 1963.48,
+          "max_rss_GB": 2.213
+        }
+      ]
+    },
+    {
+      "label": "WASM --float 1, native ANTs tools",
+      "kind": "syn-only",
+      "kernel": "wasm stock",
+      "fmap_vs_double": {
+        "median": 0.08392,
+        "p95": 0.34914,
+        "max": 1.38161
+      },
+      "pre_vs_double": {
+        "median": 0.08958,
+        "p95": 0.41283,
+        "max": 12.27146
+      },
+      "warp_sha256_decompressed": "49336ffb1aba14e1b6ff48e7f438dd3a4ecdff537ba96b8db2e200a07876f4fa",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 2761.25,
+          "max_rss_GB": 3.242,
+          "wasm_sha256": "53779fcd0064a8394aa42ca2e82c5f8b33cf4aebbe98e3a43af6212e558ccf86",
+          "wasm_heap_bytes": 4294901760
+        }
+      ]
+    },
+    {
+      "label": "WASM --float 1, every ANTs program in the kernel (the CI job)",
+      "kind": "syn-only",
+      "kernel": "wasm stock",
+      "fmap_vs_double": {
+        "median": 0.08392,
+        "p95": 0.34914,
+        "max": 1.38161
+      },
+      "pre_vs_double": {
+        "median": 0.08958,
+        "p95": 0.41283,
+        "max": 12.27146
+      },
+      "warp_sha256_decompressed": "49336ffb1aba14e1b6ff48e7f438dd3a4ecdff537ba96b8db2e200a07876f4fa",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 2826.76,
+          "max_rss_GB": 3.286,
+          "wasm_sha256": "53779fcd0064a8394aa42ca2e82c5f8b33cf4aebbe98e3a43af6212e558ccf86",
+          "wasm_heap_bytes": 4294901760
+        }
+      ]
+    },
+    {
+      "label": "native pdf64",
+      "kind": "syn-only",
+      "kernel": "native pdf64",
+      "fmap_vs_double": {
+        "median": 0.03997,
+        "p95": 0.1418,
+        "max": 0.63263
+      },
+      "pre_vs_double": {
+        "median": 0.04206,
+        "p95": 0.18817,
+        "max": 15.62309
+      },
+      "warp_sha256_decompressed": "dcce999ae5bdaa0742f4be52cc9926b07c81c4775b4ba477a7a6d59c7e32e9e4",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 2020.48,
+          "max_rss_GB": 2.204
+        }
+      ]
+    },
+    {
+      "label": "WASM pdf64",
+      "kind": "syn-only",
+      "kernel": "wasm pdf64",
+      "fmap_vs_double": {
+        "median": 0.03997,
+        "p95": 0.1418,
+        "max": 0.63263
+      },
+      "pre_vs_double": {
+        "median": 0.04206,
+        "p95": 0.18817,
+        "max": 15.62309
+      },
+      "warp_sha256_decompressed": "dcce999ae5bdaa0742f4be52cc9926b07c81c4775b4ba477a7a6d59c7e32e9e4",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 2794.38,
+          "max_rss_GB": 3.216,
+          "wasm_sha256": "0df47b31e472ad8af6679cea47ed0a702f83ea6528ba84871d9081cd084fb7b3",
+          "wasm_heap_bytes": 4294901760
+        }
+      ]
+    },
+    {
+      "label": "native deriv64",
+      "kind": "syn-only",
+      "kernel": "native deriv64",
+      "fmap_vs_double": {
+        "median": 0.03997,
+        "p95": 0.1418,
+        "max": 0.63263
+      },
+      "pre_vs_double": {
+        "median": 0.04206,
+        "p95": 0.18817,
+        "max": 15.62309
+      },
+      "warp_sha256_decompressed": "dcce999ae5bdaa0742f4be52cc9926b07c81c4775b4ba477a7a6d59c7e32e9e4",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 2064.86,
+          "max_rss_GB": 2.186
+        }
+      ]
+    },
+    {
+      "label": "WASM pdf64, heap trace",
+      "kind": "syn-only",
+      "kernel": "wasm pdf64",
+      "fmap_vs_double": {
+        "median": 0.03997,
+        "p95": 0.1418,
+        "max": 0.63263
+      },
+      "pre_vs_double": {
+        "median": 0.04206,
+        "p95": 0.18817,
+        "max": 15.62309
+      },
+      "warp_sha256_decompressed": "dcce999ae5bdaa0742f4be52cc9926b07c81c4775b4ba477a7a6d59c7e32e9e4",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 2803.45,
+          "max_rss_GB": 3.12,
+          "wasm_sha256": "0df47b31e472ad8af6679cea47ed0a702f83ea6528ba84871d9081cd084fb7b3",
+          "wasm_heap_bytes": 4294901760,
+          "heap_growth": {
+            "requests": 24,
+            "max_requested_bytes": 4234933440
+          }
+        }
+      ]
+    },
+    {
+      "label": "WASM --float 1, heap trace",
+      "kind": "syn-only",
+      "kernel": "wasm stock",
+      "fmap_vs_double": {
+        "median": 0.08392,
+        "p95": 0.34914,
+        "max": 1.38161
+      },
+      "pre_vs_double": {
+        "median": 0.08958,
+        "p95": 0.41283,
+        "max": 12.27146
+      },
+      "warp_sha256_decompressed": "49336ffb1aba14e1b6ff48e7f438dd3a4ecdff537ba96b8db2e200a07876f4fa",
+      "registrations": [
+        {
+          "stage": "syn",
+          "wall_s": 2769.55,
+          "max_rss_GB": 3.287,
+          "wasm_sha256": "53779fcd0064a8394aa42ca2e82c5f8b33cf4aebbe98e3a43af6212e558ccf86",
+          "wasm_heap_bytes": 4294901760,
+          "heap_growth": {
+            "requests": 24,
+            "max_requested_bytes": 4234933440
+          }
+        }
+      ]
+    }
+  ],
+  "end_to_end": [
+    {
+      "label": "native --float 1",
+      "kind": "end-to-end",
+      "kernel": "native stock",
+      "fmap_vs_double": {
+        "median": 0.31833,
+        "p95": 0.77858,
+        "max": 1.43256
+      },
+      "pre_vs_double": {
+        "median": 0.33082,
+        "p95": 0.88788,
+        "max": 21.04471
+      },
+      "warp_sha256_decompressed": "e0d380ce40c0e1aaf901ddd807b99bef2ae482a61f13d71c28b7da431d90dfe1",
+      "registrations": [
+        {
+          "stage": "epi2anat",
+          "wall_s": 761.3,
+          "max_rss_GB": 0.66
+        },
+        {
+          "stage": "syn",
+          "wall_s": 2075.57,
+          "max_rss_GB": 2.129
+        }
+      ],
+      "epi2anat_shift_vs_double": {
+        "median_mm": 0.04706,
+        "p95_mm": 0.0774,
+        "max_mm": 0.09659
+      }
+    },
+    {
+      "label": "WASM --float 1",
+      "kind": "end-to-end",
+      "kernel": "wasm stock",
+      "fmap_vs_double": {
+        "median": 0.53848,
+        "p95": 1.82627,
+        "max": 5.2697
+      },
+      "pre_vs_double": {
+        "median": 0.56142,
+        "p95": 2.08668,
+        "max": 26.72099
+      },
+      "warp_sha256_decompressed": "22a71c9e0f5bd015694a8da008be375708dabfb8a391671b261378b5d338ae16",
+      "registrations": [
+        {
+          "stage": "epi2anat",
+          "wall_s": 1041.4,
+          "max_rss_GB": 1.149,
+          "wasm_sha256": "53779fcd0064a8394aa42ca2e82c5f8b33cf4aebbe98e3a43af6212e558ccf86",
+          "wasm_heap_bytes": 1362886656
+        },
+        {
+          "stage": "syn",
+          "wall_s": 3315.67,
+          "max_rss_GB": 3.299,
+          "wasm_sha256": "53779fcd0064a8394aa42ca2e82c5f8b33cf4aebbe98e3a43af6212e558ccf86",
+          "wasm_heap_bytes": 4294901760,
+          "heap_growth": {
+            "requests": 0,
+            "max_requested_bytes": 0
+          }
+        }
+      ],
+      "epi2anat_shift_vs_double": {
+        "median_mm": 0.0404,
+        "p95_mm": 0.06222,
+        "max_mm": 0.07622
+      }
+    },
+    {
+      "label": "native pdf64",
+      "kind": "end-to-end",
+      "kernel": "native pdf64",
+      "fmap_vs_double": {
+        "median": 0.59766,
+        "p95": 2.1685,
+        "max": 6.49446
+      },
+      "pre_vs_double": {
+        "median": 0.646,
+        "p95": 2.28407,
+        "max": 15.98122
+      },
+      "warp_sha256_decompressed": "463e4be5ea178648226d780c5b86415684384dd506cad44919d39bd3cc81c2e2",
+      "registrations": [
+        {
+          "stage": "epi2anat",
+          "wall_s": 728.12,
+          "max_rss_GB": 0.662
+        },
+        {
+          "stage": "syn",
+          "wall_s": 1737.98,
+          "max_rss_GB": 2.126
+        }
+      ],
+      "epi2anat_shift_vs_double": {
+        "median_mm": 0.03964,
+        "p95_mm": 0.06347,
+        "max_mm": 0.07944
+      }
+    },
+    {
+      "label": "WASM pdf64",
+      "kind": "end-to-end",
+      "kernel": "wasm pdf64",
+      "fmap_vs_double": {
+        "median": 0.10172,
+        "p95": 0.31782,
+        "max": 1.12138
+      },
+      "pre_vs_double": {
+        "median": 0.10796,
+        "p95": 0.39901,
+        "max": 12.50845
+      },
+      "warp_sha256_decompressed": "61bbf7d3677efd94cb320ae3369da5d411b6b8fb9992d5fc6ba86485cc4fc8b9",
+      "registrations": [
+        {
+          "stage": "epi2anat",
+          "wall_s": 1071.03,
+          "max_rss_GB": 1.148,
+          "wasm_sha256": "0df47b31e472ad8af6679cea47ed0a702f83ea6528ba84871d9081cd084fb7b3",
+          "wasm_heap_bytes": 1362886656
+        },
+        {
+          "stage": "syn",
+          "wall_s": 2827.82,
+          "max_rss_GB": 3.069,
+          "wasm_sha256": "0df47b31e472ad8af6679cea47ed0a702f83ea6528ba84871d9081cd084fb7b3",
+          "wasm_heap_bytes": 4294901760,
+          "heap_growth": {
+            "requests": 0,
+            "max_requested_bytes": 0
+          }
+        }
+      ],
+      "epi2anat_shift_vs_double": {
+        "median_mm": 0.00439,
+        "p95_mm": 0.00661,
+        "max_mm": 0.00746
+      }
+    },
+    {
+      "label": "native deriv64",
+      "kind": "end-to-end",
+      "kernel": "native deriv64",
+      "fmap_vs_double": {
+        "median": 0.15385,
+        "p95": 0.54383,
+        "max": 1.52664
+      },
+      "pre_vs_double": {
+        "median": 0.16952,
+        "p95": 0.65477,
+        "max": 27.16622
+      },
+      "warp_sha256_decompressed": "ea3db45b92b31b9d63d9b2029887354f47c8d3d682d6f55cae8ce8b3a99e853a",
+      "registrations": [
+        {
+          "stage": "epi2anat",
+          "wall_s": 761.54,
+          "max_rss_GB": 0.656
+        },
+        {
+          "stage": "syn",
+          "wall_s": 2117.15,
+          "max_rss_GB": 2.204
+        }
+      ],
+      "epi2anat_shift_vs_double": {
+        "median_mm": 0.00968,
+        "p95_mm": 0.01291,
+        "max_mm": 0.01419
+      }
+    },
+    {
+      "label": "WASM deriv64",
+      "kind": "end-to-end",
+      "kernel": "wasm deriv64",
+      "fmap_vs_double": {
+        "median": 0.03106,
+        "p95": 0.12809,
+        "max": 0.74485
+      },
+      "pre_vs_double": {
+        "median": 0.03303,
+        "p95": 0.25299,
+        "max": 10.18041
+      },
+      "warp_sha256_decompressed": "a613548e55b70b4ec3cbd26226a2b951e440d68a63bfece120093a9b96eab9d0",
+      "registrations": [
+        {
+          "stage": "epi2anat",
+          "wall_s": 998.0,
+          "max_rss_GB": 1.148,
+          "wasm_sha256": "424777052006b9b6e8807f807266544802b670d24a02bf1e82146e277366a23e",
+          "wasm_heap_bytes": 1362886656,
+          "heap_growth": {
+            "requests": 10,
+            "max_requested_bytes": 1262219376
+          }
+        },
+        {
+          "stage": "syn",
+          "wall_s": 2851.9,
+          "max_rss_GB": 3.236,
+          "wasm_sha256": "424777052006b9b6e8807f807266544802b670d24a02bf1e82146e277366a23e",
+          "wasm_heap_bytes": 4294901760,
+          "heap_growth": {
+            "requests": 24,
+            "max_requested_bytes": 4234933440
+          }
+        }
+      ],
+      "epi2anat_shift_vs_double": {
+        "median_mm": 0.00257,
+        "p95_mm": 0.00321,
+        "max_mm": 0.00348
+      }
+    }
+  ],
+  "seed_spread_syn_only_double": {
+    "runs": [
+      "full-1.2mm-s1234-double-affine",
+      "native-double-s1235",
+      "native-double-s1236"
+    ],
+    "pairs": {
+      "full-1.2mm-s1234-double-affine|native-double-s1235": {
+        "median": 0.99511,
+        "p95": 3.44874,
+        "max": 8.38126
+      },
+      "full-1.2mm-s1234-double-affine|native-double-s1236": {
+        "median": 0.86022,
+        "p95": 2.77037,
+        "max": 7.1908
+      },
+      "native-double-s1235|native-double-s1236": {
+        "median": 0.56068,
+        "p95": 2.22389,
+        "max": 7.30717
+      }
+    },
+    "median_max": 0.99511
+  },
+  "affine_controls": {
+    "double-stock": {
+      "median_mm": 2e-05,
+      "p95_mm": 3e-05,
+      "max_mm": 4e-05
+    },
+    "double-fma": {
+      "median_mm": 2e-05,
+      "p95_mm": 3e-05,
+      "max_mm": 4e-05
+    },
+    "v-float-stock": {
+      "median_mm": 0.04706,
+      "p95_mm": 0.0774,
+      "max_mm": 0.09659
+    },
+    "v-float-pdf64": {
+      "median_mm": 0.03964,
+      "p95_mm": 0.06347,
+      "max_mm": 0.07944
+    },
+    "v-float-deriv64": {
+      "median_mm": 0.00968,
+      "p95_mm": 0.01291,
+      "max_mm": 0.01419
+    }
+  },
+  "notes": [
+    "Measured on 29 October 2026 with the scripts beside this file; the run outputs are not on the dataset.",
+    "End-to-end WASM runs: antsRegistration in the kernel, antsApplyTransforms and the Laplacian native (the kernel writes the same voxels for those calls). The WASM deriv64 run kept its kernel epi2anat from nipype's cache after the kernel's argv check refused nipype's split '[ file, 1 ]' transform, the bug this change fixes.",
+    "seed_spread_syn_only_double: native double SyN-only replays at seeds 1235 and 1236 with the pinned seed-1234 run.",
+    "epi2anat_shift_vs_double and affine_controls: affine_shift.py over the MindGrab mask of the mean b0, against the pinned double affine."
+  ]
+}

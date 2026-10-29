@@ -1,0 +1,83 @@
+name: sdc-registration-gate
+
+# The registration gate of #462 (plan docs/architecture/dwi-sdc-plan.md, section 6.2) on the 1.2 mm
+# SyN grid that the maintainer chose: sdcflows 2.17.1 replays SyN on the kept inputs of the pinned
+# native double seed-1234 run, with every ANTs program in the committed hmc-registration
+# WebAssembly kernel, and gate.py holds the field to d < 0.5 Hz. The data are fetched with their
+# SHA-256, so a missing input fails the job. SyN takes about 50 minutes on one core. The replay
+# reads no packages/sdc code; the pipeline of #464 adds it when it runs in this gate.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/sdc-registration-gate.yml'
+      - 'packages/hmc-registration/**'
+      - 'exes/dwi/sdc/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sdc-registration-gate.yml'
+      - 'packages/hmc-registration/**'
+      - 'exes/dwi/sdc/**'
+  schedule:
+    - cron: '41 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sdc-registration-gate-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  syn-replay:
+    name: SyN-only replay on the 1.2 mm grid in the WebAssembly kernel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Cache the reference downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/sdc-reference
+            ~/sdc-grid
+          key: sdc-registration-gate-${{ hashFiles('exes/dwi/sdc/validation/reference.manifest.json', 'exes/dwi/sdc/validation/grid.manifest.json') }}
+      - name: Fetch the replay inputs and the native reference (sha256-checked)
+        run: |
+          python3 exes/dwi/sdc/validation/fetch_reference.py "$HOME/sdc-reference" registration-gate >> "$GITHUB_ENV"
+          python3 exes/dwi/sdc/validation/fetch_reference.py --folder grid "$HOME/sdc-grid" replay-1.2mm >> "$GITHUB_ENV"
+      - name: Install the reference's Python environment (sdcflows 2.17.1) and GNU time
+        run: |
+          python -m venv "$RUNNER_TEMP/sdc-venv"
+          "$RUNNER_TEMP/sdc-venv/bin/python" -m pip install --no-deps -r "$SDC_REFERENCE/env/uv-pip-freeze.txt"
+          echo "SDC_PYTHON=$RUNNER_TEMP/sdc-venv/bin/python" >> "$GITHUB_ENV"
+          [ -x /usr/bin/time ] || { sudo apt-get update && sudo apt-get install -y --no-install-recommends time; }
+      - name: Replay SyN through the WebAssembly kernel
+        env:
+          OMP_NUM_THREADS: '1'
+          OPENBLAS_NUM_THREADS: '1'
+        run: bash packages/hmc-registration/validation/sdc-gate/replay.sh "$SDC_REFERENCE" "$SDC_GRID" "$RUNNER_TEMP/replay" 1234 --float
+      - name: Require the field gate
+        run: >-
+          "$SDC_PYTHON" -I packages/hmc-registration/validation/sdc-gate/gate.py "$SDC_REFERENCE"
+          "$SDC_GRID/runs/full-1.2mm-s1234-double-affine" "$RUNNER_TEMP/replay" --require --out "$RUNNER_TEMP/replay/gate.json"
+      - name: Preserve the gate, call and kernel records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sdc-registration-gate
+          path: |
+            ${{ runner.temp }}/replay/gate.json
+            ${{ runner.temp }}/replay/ants-calls.jsonl
+            ${{ runner.temp }}/replay/wasm-calls.jsonl
+            ${{ runner.temp }}/replay/driver.log
+          if-no-files-found: warn

@@ -36,6 +36,23 @@
       "files": 430,
       "bytes": 1027932366
     },
+    "registration-gate": {
+      "patterns": [
+        "input/sub-01_dir-AP_run-001_dwi.json",
+        "input/sub-01_run-001_T1w.nii.gz",
+        "mask/sub-01_dir-AP_run-001_desc-meanb0_dwiref.nii",
+        "mask/sub-01_dir-AP_run-001_desc-mindgrab_mask.nii.gz",
+        "mask/sub-01_run-001_desc-mindgrab_mask.nii.gz",
+        "std2anat/affine/std2anat_affine.mat",
+        "runs/full-2mm-s1234-double-affine/work/sdc_ref/syn_preprocessing_wf/epi_reference_wf/clip_bg_noise/*",
+        "scripts/replay_syn.py",
+        "scripts/sdc_driver.py",
+        "scripts/compare_fields.py",
+        "env/uv-pip-freeze.txt"
+      ],
+      "files": 11,
+      "bytes": 21746999
+    },
     "determinism": {
       "patterns": [
         "runs/*-repeat/*"

@@ -249,6 +249,32 @@ Measured by #461 (`sdc/reference/` at dataset commit `8520dbca`, `README.md` the
 - The end-to-end spread also holds the `epi2anat` affine: the seed drives its Random 0.4 sampling, and between seeds it moves the mask voxels by 0.16-0.29 mm (median). The SyN-only replays fix it.
 - **Risk:** the native `--float 1` run differs from the native double run by 0.656 Hz in the SyN-only replay, the input set of the first gate of #462. That is above the 0.5 Hz cap. A WASM `--float 1` run is likely to differ by about as much. This measurement does not change Q66; the maintainer decides if #462 needs a different cap for the replay.
 
+Measured by #462 on the 1.2 mm grid (29 October 2026). The maintainer chose 1.2 mm and kept the cap (section 9, Q68). The reference is the native double seed-1234 run on that grid (`sdc/reference/grid-q68/` at dataset commit `e773666d`). `packages/hmc-registration/validation/sdc-gate/` runs every replay through the pinned drivers and computes each number with the pinned `compare_fields.py`. The native builds are ANTs 52bc0ab on ITK 5.4.3 with the reference's flags (gcc 11.4, `-O3 -march=corei7`); WASM is the hmc-registration kernel in Node 24. In the end-to-end WASM runs the kernel runs `antsRegistration`, and native builds run `antsApplyTransforms` and the Laplacian; the kernel writes the same voxels for those calls. The precision variants change only ITK's Mattes metric, through build-tree copies of its header and `.hxx` (`mattes-pdf-double.cmake` there):
+
+- stock: the committed kernel (SHA-256 `53779fcd…`), `--float 1`;
+- pdf64: `PDFValueType = double`, so the joint and marginal PDFs, their sums and the metric value accumulate in double; images, fields and transforms stay float;
+- deriv64: pdf64, and the derivative of a transform with global support (the `epi2anat` affine) also accumulates in double. SyN's dense field has local support, so its replays are those of pdf64.
+
+| Run, seed 1234, against native double | `fmap` median | p95 | max | `epi2anat` shift |
+| --- | ---: | ---: | ---: | ---: |
+| SyN only: native double (this build) | 0.0001 | 0.0004 | 0.0006 | - |
+| SyN only: native double, `-march=native` (FMA) | 0.0002 | 0.0005 | 0.0010 | - |
+| SyN only: stock, WASM and native | 0.084 | 0.349 | 1.38 | - |
+| SyN only: pdf64 (WASM and native) and deriv64 (native; the same warp) | 0.040 | 0.142 | 0.63 | - |
+| end to end: stock, WASM | 0.538 | 1.83 | 5.27 | 0.040 mm |
+| end to end: stock, native | 0.318 | 0.78 | 1.43 | 0.047 mm |
+| end to end: pdf64, WASM | 0.102 | 0.32 | 1.12 | 0.004 mm |
+| end to end: pdf64, native | 0.598 | 2.17 | 6.49 | 0.040 mm |
+| end to end: deriv64, WASM | 0.031 | 0.13 | 0.74 | 0.003 mm |
+| end to end: deriv64, native | 0.154 | 0.54 | 1.53 | 0.010 mm |
+
+The `epi2anat` shift is the median distance, over the EPI brain mask, between the points that the run's affine and the double affine map; the double affine of this build, with or without FMA, is within 4e-5 mm of the pinned one. Native double SyN-only replays at seeds 1235 and 1236 give a spread of 0.995 Hz (pairs 0.995, 0.860 and 0.561 Hz), so the cap decides the SyN-only gate; these two replays are not on the dataset. The end-to-end double runs at seeds 1235 and 1236 on this grid were not run.
+
+- The replays are exact. The native double replay writes the pinned double warp byte for byte (its `fmap` differs by 1e-4 Hz through the B-spline fit), and WASM writes the native `--float 1` warp and `fmap` byte for byte, for stock and for pdf64. With every ANTs program in the kernel (`antsApplyTransforms`, the Laplacian), the SyN-only `fmap` is the same file. A rounding-only change of the double run (FMA) moves the field before `BSplineApprox` by at most 1e-5 Hz, so the float differences above are precision, not run-to-run noise.
+- SyN only, the committed kernel is at 0.084 Hz: under the cap and under the spread, so it passes the whole rule; pdf64 halves it to 0.040 Hz, under the 0.05 Hz floor. On the 2 mm grid the same replay was 0.656 Hz.
+- End to end, the float `epi2anat` affine decides the result. In float it lands 0.04-0.05 mm from the double affine, and SyN turns that into 0.3-0.6 Hz: the same precision gives 0.318 Hz in the native build and 0.538 Hz in WASM, whose affine is the pinned native `--float 1` affine byte for byte (gcc 13). pdf64 does not reduce the affine error natively (0.040 mm, 0.598 Hz); its WASM affine happened to land 0.004 mm from double (0.102 Hz). deriv64 brings the affine to 0.010 mm from double natively and 0.003 mm in WASM, and the end-to-end field to 0.154 Hz natively and 0.031 Hz in WASM: under the cap in both builds, and in WASM under the 0.05 Hz floor.
+- **So the committed kernel passes the SyN-only replay (0.084 Hz) and fails end to end (0.538 Hz) on the 1.2 mm grid.** With deriv64 the kernel passes both, at 0.040 Hz (the SyN warp of pdf64, which deriv64 leaves byte for byte unchanged natively) and 0.031 Hz, without `antsRegistration3DDouble`. deriv64 is not in the committed kernel: it changes the Mattes rigid and affine registrations that HMC runs in this module, so shipping it needs a decision (an SDC build of the kernel, or HMC validated with it).
+
 The idea is the same as Q53: the WASM result must be within the native repeat spread. The rule is different in two ways:
 
 - Q53 uses one seed pair and compares per volume and per axis. Q66 takes the maximum over three pairs. That is closer to the shell-maximum alternative of the HMC plan, which is not accepted.
@@ -260,6 +286,7 @@ CI:
 
 - The gate tests of #462 and #464 are Node tests, not Playwright tests. The `@slow` tag of AGENTS.md does not apply to them.
 - The full-brain gate runs in a native workflow job, as the `fida-reference` job in `lcmodel-native.yml` does. The job provisions the pinned `sdc/reference/` data and sets a require variable, so a missing input fails the test and does not skip it (#462). The job runs on pull requests that change `packages/sdc`, `packages/hmc-registration` or `exes/dwi/sdc`, nightly and on manual dispatch.
+  - `.github/workflows/sdc-registration-gate.yml` is that job for the SyN-only replay on the 1.2 mm grid: it fetches the data with their SHA-256, replays SyN with the committed kernel through sdcflows, and requires `d < 0.5 Hz` (`gate.py --require`). The double replays at seeds 1235 and 1236 are not on the dataset, so the job does not evaluate the spread condition. The end-to-end run needs a native `DenoiseImage` and is not in CI. It runs on pull requests that change `packages/hmc-registration` or `exes/dwi/sdc`, nightly and on manual dispatch; `packages/sdc` joins when the pipeline of #464 runs in the gate.
 - The slab e2e test of #465 is a Playwright test. It is untagged and runs on every pull request. It compares the app with the native slab runs of section 6.1, with report-only numbers.
 - If a full-brain Playwright test is added later, AGENTS.md allows `@slow` only when an untagged test completes a run with the same model, method, option and kind of geometry. The maintainer decides then if the slab test satisfies that rule.
 
@@ -281,6 +308,8 @@ Measured by #461 (21-22 October 2026) with native ANTs 52bc0ab on one thread, AM
 - The GRE field map (report-only): 11 s.
 - The B-spline fit: 0.93 M × 4624 sparse matrix with 64 entries for each row, about 0.5 GB in CSR float32 with indices. It runs in the Rust crate. It was not measured alone: it runs in the Python driver process, whose max RSS was 1.70 GB in the 0.8 mm runs and 2.57 GB in the reference run, which also unwarped the 137-volume DWI series (25 s).
 - Anchor kept for the WASM estimate: SYNcro's WASM affine + SyN at 1 mm (7.2 M voxels) took 186 s and grew a 3.16 GB heap (`packages/syncro/validation/README.md:33`). The WASM module has `MAXIMUM_MEMORY` 4 GiB (`packages/registration/CMakeLists.txt:35`; #444 copies it). The command line (#466) runs the same wasm32 module in Node, with the same limit.
+- **Measured in WASM on the 1.2 mm grid (#462, 29 October 2026; the hmc-registration kernel in Node 24, one thread, AMD EPYC-Rome shared with other runs).** SyN (193 × 193 × 115 = 4.28 M voxels) grew the kernel's linear memory to its 4 GiB maximum (4 294 901 760 bytes), with the committed kernel and with pdf64 alike. The allocator's largest heap request was 4 234 933 440 bytes (3.94 GiB) with both, 60 MB under that maximum (`HMC_WASM_HEAP_TRACE=1`); the process's max RSS was 3.22-3.29 GB, against 2.20-2.21 GB for native `--float 1` SyN on the same host. SyN took 2761-2827 s (native 1963-2076 s). `epi2anat` on the 0.8 mm T1w grid grew the heap to 1.36 GB (max RSS 1.10 GB; native 0.66 GB) in 1041-1071 s (native 728-761 s).
+  - **So 1.2 mm is above the about 3.5 GB budget of Q68 in WASM.** It completes in Node, with 60 MB of the 4 GiB heap to spare; a browser may not grant a 4 GiB memory to a worker, and no other worker could run beside it.
 
 ## 8. Milestones
 
@@ -308,7 +337,7 @@ This plan changes these acceptance criteria of the issues. The maintainer confir
 - **#464:** the acceptance names the slab for the gate. With Q67 the gate moves to the full brain, in a native workflow job (section 6.2). The slab test checks the pipeline against the native slab runs, with report-only numbers.
 - **#465:** "the ds005134 slab with its T1w crop" becomes "the slab with the full T1w (Q64)". The issue creates `apps/sdc` only if #473 has not created it (Q71).
 - **#473:** the issue adds its method to `apps/sdc` if #465 created it first (Q71).
-- **#461, #462, #464, #465, #466:** the SyN grid is 2 mm (Q68).
+- **#461, #462, #464, #465, #466:** the SyN grid is 2 mm (Q68). The maintainer changed it to 1.2 mm on 25 October 2026 (Q68).
 
 [#495](https://github.com/neurodesk/webapps/issues/495) (registry niimath) does not affect `sdc`: no step uses niimath.
 
@@ -367,6 +396,9 @@ This plan changes these acceptance criteria of the issues. The maintainer confir
     - `fmap` on the 2 mm grid against the 0.8 mm grid at the same seed: 2.78, 2.81 and 2.68 Hz (median_M; p95 12.6-13.0 Hz). The 0.8 mm seed spread is 1.81 Hz (p95 4.20 Hz). The 2 mm seed spread is 2.71 Hz.
     - Memory: the 0.8 mm `--float 1` SyN had a max RSS of 6.97 GB (double 13.10 GB). Option (a) needs under about 3.5 GB, so it is still not possible in the 4 GiB wasm32 heap. Time: 77 min for that SyN on one thread (section 7).
     - Not decided here. The maintainer decides what to do; for example, keep (b) and state the grid difference, or look for a grid between 0.8 mm and 2 mm that fits.
+    **Measured (24 October 2026, `sdc/reference/grid-q68/` at dataset commit `e773666d`):** native `--float 1` SyN on a 1.2 mm grid peaks at 2.13-2.19 GB (1.6 mm: 0.98-1.01 GB), and its `fmap` differs from the 0.8 mm double run by 1.24-1.95 Hz over the three seeds (1.6 mm: 2.04-2.59 Hz). On the same grid, `--float 1` against double end to end is 0.539 Hz at 1.2 mm and 0.312 Hz at 1.6 mm.
+    **Decided (25 October 2026, #462):** 1.2 mm, and the 0.5 Hz cap stays. The next experiment brings the same-grid float/double difference under 0.5 Hz without `antsRegistration3DDouble` (for example with float64 accumulation in the metric or the field update) and measures the WASM memory at 1.2 mm against the budget. If no change passes the cap, that result is reported before any fallback to 1.6 mm.
+    **Measured (#462, 29 October 2026; section 6.2 and section 7):** on the 1.2 mm grid the committed kernel passes the SyN-only replay (0.084 Hz) and fails end to end (0.538 Hz), because of the float `epi2anat` affine. Float64 accumulation in ITK's Mattes metric (PDFs, metric value and the affine's derivative; deriv64) passes both natively (0.040 and 0.154 Hz) and in WASM (0.031 Hz end to end; its SyN warp is pdf64's, 0.040 Hz), without `antsRegistration3DDouble`. In WASM, SyN on this grid needs a 3.94 GiB heap: above the about 3.5 GB budget, 60 MB under the 4 GiB maximum. Not decided here: whether SDC ships deriv64 (it changes HMC's registrations in the shared module), and what to do about memory at 1.2 mm; 1.6 mm is not chosen.
 13. **Q69. `sd_syn_sloppy.json` (new; the issue asks if the app offers it).**
     **Decided (20 October 2026):** no, not in the first version. It has 10 times fewer iterations in stage 1 and 5 times fewer in stage 2, and it changes the B-spline fit (`zooms_min` 4.0). It would need its own reference and gate. Revisit after #461 if the full schedule is too slow.
     **Measured (#461):** on the 2 mm grid `sloppy=True` differs from the full schedule by 1.44 Hz (median_M; p95 8.80 Hz), and its SyN took 53 s against 83 s. The full 2 mm SyN is not the slow step (section 7). This measurement does not change the decision.
