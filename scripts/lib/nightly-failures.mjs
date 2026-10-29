@@ -2,6 +2,11 @@ const BAD_CONCLUSIONS = new Set(['failure', 'timed_out', 'action_required', 'sta
 export const SCHEDULED_WORKFLOWS = ['CI approval report', 'ci', 'deploy-github-pages', 'mutation-quality', 'n4-wasm-source', 'neuroflow', 'sct-full-tests', 'standalone', 'standalone-links', 'upstream sync'];
 const LOG_LIMIT = 2 * 1024 * 1024;
 const BODY_LIMIT = 60000;
+// A dropped, reset or unresolvable connection and a gateway error say nothing
+// about the repository, so a read retries them. Writes and other errors do not.
+const TRANSIENT_CODES = new Set(['UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'ENOTFOUND']);
+const TRANSIENT_STATUSES = new Set([502, 503, 504]);
+const READ_RETRY_DELAYS = [1000, 4000];
 
 function numeric(value) {
   if (!/^\d+$/.test(String(value))) throw new Error('Expected a numeric GitHub identifier');
@@ -34,11 +39,30 @@ function plain(value, limit = 250) {
   return sanitize(value, limit).replace(/[\r\n]/g, ' ').replace(/[\\`*_{}[\]()!|#]/g, '\\$&');
 }
 
-export function createGitHubClient({ token, repository, fetchImpl = fetch }) {
+function transientFailure(error) {
+  if (TRANSIENT_STATUSES.has(error.status)) return `HTTP ${error.status}`;
+  const code = error.cause?.code ?? error.code;
+  return TRANSIENT_CODES.has(code) ? code : undefined;
+}
+
+export function createGitHubClient({ token, repository, fetchImpl = fetch, sleep = delay => new Promise(resolve => setTimeout(resolve, delay)) }) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Invalid repository');
   const base = `https://api.github.com/repos/${repository}`;
-  async function request(path, { method = 'GET', body, logs = false } = {}) {
+  async function request(path, options = {}) {
     if (path !== '' && (!path.startsWith('/') || path.startsWith('//'))) throw new Error('Expected a repository API path');
+    for (let retry = 0; ; retry++) {
+      try {
+        return await send(path, options);
+      } catch (error) {
+        const failure = transientFailure(error);
+        if ((options.method ?? 'GET') !== 'GET' || !failure || retry >= READ_RETRY_DELAYS.length) throw error;
+        const delay = READ_RETRY_DELAYS[retry];
+        console.warn(`GitHub API GET ${path.split('?')[0]} failed (${failure}); retry ${retry + 1} of ${READ_RETRY_DELAYS.length} in ${delay / 1000} s`);
+        await sleep(delay);
+      }
+    }
+  }
+  async function send(path, { method = 'GET', body, logs = false }) {
     let response = await fetchImpl(`${base}${path}`, {
       method,
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
@@ -54,7 +78,7 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch }) {
       }
       response = await fetchImpl(location.href, { redirect: 'error', signal: AbortSignal.timeout(30000) });
     }
-    if (!response.ok) throw new Error(`GitHub API ${method} ${path.split('?')[0]} returned ${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`GitHub API ${method} ${path.split('?')[0]} returned ${response.status}`), { status: response.status });
     if (!logs) return response.status === 204 ? null : response.json();
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

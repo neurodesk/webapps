@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { approvalReport, publishApprovalReport } from '../scripts/lib/ci-approvals.mjs';
+import { createGitHubClient } from '../scripts/lib/nightly-failures.mjs';
 
 const now = new Date('2026-10-27T12:00:00Z');
 const sha = 'a'.repeat(40);
@@ -580,4 +581,53 @@ test('partial cleanup of a delivered batch does not duplicate its other PR notif
   assert.equal(publisher.comments.length, 1);
   assert.match(publisher.comments[0], /#42/);
   assert.match(publisher.comments[0], /#43/);
+});
+
+// GitHub's REST API as the reporter's real client sees it. `drops` head-commit
+// lookups fail first with the dropped keep-alive connection of #632.
+function githubApi({ approval, latest, drops }) {
+  const paths = [];
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    const path = url.pathname.replace('/repos/owner/repo', '');
+    paths.push(`${path}?${url.searchParams.get('head_sha') ? 'head_sha' : url.searchParams.get('status') ?? url.searchParams.get('state')}`);
+    if (url.searchParams.has('head_sha') && drops-- > 0) {
+      throw new TypeError('fetch failed', { cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }) });
+    }
+    if (path === '/pulls') return Response.json([pull()]);
+    if (path === '/actions/runs' && url.searchParams.has('status')) {
+      return Response.json({ workflow_runs: url.searchParams.get('status') === 'action_required' ? [approval] : [] });
+    }
+    if (path === '/actions/runs') return Response.json({ workflow_runs: [latest] });
+    throw new Error(`Unexpected request: ${path}`);
+  };
+  return { paths, client: createGitHubClient({ token: 'token', repository: 'owner/repo', fetchImpl, sleep: async () => {} }) };
+}
+
+test('a dropped connection is retried and the report shows the attempt current at that read', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const approval = run(1, 'action_required');
+  await t.test('still awaiting approval', async () => {
+    const api = githubApi({ approval, latest: approval, drops: 1 });
+    const report = await approvalReport(api.client, 'owner/repo', { now });
+    assert.equal(report.counts.pendingApproval, 1);
+    assert.ok(report.body.includes('[Workflow 1](https://github.com/owner/repo/actions/runs/1/attempts/1): awaiting approval'));
+    assert.deepEqual(api.paths.filter(path => path.endsWith('?head_sha')).length, 2);
+  });
+  await t.test('approved and rerunning', async () => {
+    const api = githubApi({ approval, latest: { ...approval, run_attempt: 2, status: 'in_progress', conclusion: null }, drops: 1 });
+    const report = await approvalReport(api.client, 'owner/repo', { now });
+    assert.equal(report.actionable, false);
+    assert.equal(report.counts.pendingApproval, 0);
+    assert.equal(report.counts.superseded, 1);
+    assert.match(report.body, /No current approval or startup blockers found/);
+  });
+});
+
+test('a connection that keeps dropping aborts the report instead of resolving it', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const approval = run(1, 'action_required');
+  const api = githubApi({ approval, latest: { ...approval, run_attempt: 2, status: 'in_progress', conclusion: null }, drops: 3 });
+  await assert.rejects(approvalReport(api.client, 'owner/repo', { now }), error => error.cause?.code === 'UND_ERR_SOCKET');
+  assert.equal(api.paths.filter(path => path.endsWith('?head_sha')).length, 3);
 });

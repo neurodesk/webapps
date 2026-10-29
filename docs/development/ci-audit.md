@@ -66,6 +66,10 @@ and a rerun command. Cancelled nightlies report incomplete coverage. Superseded
 Pages deployments are excluded unless they also have a failed job. The reporter
 checks out trusted default-branch code and never downloads or executes artifacts.
 Skipped reports for PR/push completions cannot replace a pending nightly report.
+It shares the approval report's GitHub client, which retries a read after a
+dropped connection or a gateway error
+([CI approval reporting](../quality/ci-approval-reporting.md)); writes are not
+retried, and a failure that persists still fails the run.
 
 For read-only verification, set `GH_TOKEN` or `GITHUB_TOKEN` and
 `GITHUB_REPOSITORY`, then run

@@ -24,8 +24,12 @@ annotations or check output when the Checks API exposes them. Otherwise, the
 cause stays unknown and the run annotation is the next place to inspect.
 Large reports omit excess details to fit the issue size limit. Their counts
 still include every current blocker, and a link opens the workflow run list.
-A failed job-data lookup is shown as unavailable. A failed PR or current-run
-lookup aborts reporting, so incomplete data cannot silently close the issue.
+GitHub API reads retry twice, after 1 s and 4 s, when the connection drops,
+resets or cannot be opened, or GitHub answers 502, 503 or 504. Each retry is
+logged. Writes, other statuses (401, 403 and 429 among them) and other errors
+are not retried. A failed job-data lookup is shown as unavailable. A PR or
+current-run lookup that still fails aborts reporting, so incomplete data cannot
+silently close the issue.
 
 Issue comments announce newly blocked PRs or a change in the required action.
 Unavailable job data does not trigger a comment and retains the PR's previous
