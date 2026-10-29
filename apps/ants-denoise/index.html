@@ -25,7 +25,7 @@
         <div class="nd-section-content">
           <div class="nd-field">
             <label for="noiseModel">Noise model
-              <span class="nd-info-icon" tabindex="0" aria-label="About the noise model">i<span class="nd-info-tooltip">Gaussian, DenoiseImage's default, suits images with good signal-to-noise ratio and signed (real or phase) images. Rician suits low-SNR magnitude images, such as diffusion-weighted scans: it removes the upward bias that magnitude noise gives dark tissue.</span></span>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the noise model">i<span class="nd-info-tooltip">Use nonnegative magnitude images. Gaussian, DenoiseImage's default, suits a good signal-to-noise ratio. Signed and phase images are outside the validated scope. Rician suits low-SNR magnitude images, such as diffusion-weighted scans: it removes the upward bias that magnitude noise gives dark tissue.</span></span>
             </label>
             <select id="noiseModel">
               <option value="Gaussian" selected>Gaussian</option>
@@ -69,7 +69,6 @@
         </div>
       </details>
 
-      <button id="aboutBtn" type="button" hidden>About</button>
       <button id="privacyBtn" type="button" hidden>Privacy</button>
     </header>
 
@@ -89,9 +88,6 @@
       <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel denoising" aria-label="Cancel denoising" hidden>×</button>
     </footer>
 
-    <template id="aboutContent">
-      <p>ANTs DenoiseImage reduces noise in one 3D MR image, in this browser, with ANTs DenoiseImage compiled to WebAssembly: the adaptive non-local means filter of Manjón et al. (2010). Each voxel becomes a weighted mean of the voxels in its search region whose surrounding patches look alike, with weights adapted to the local noise level, so edges are kept while flat tissue is smoothed. The output is a float32 image on the input grid; nothing else changes. The module runs ANTs on one thread, so it gives the same voxels in every browser as native ANTs 2.6.5 DenoiseImage run with one thread and the same options. It is the denoising step BISON runs before tissue classification.</p>
-    </template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
 
     <script type="module" src="/src/main.js"></script>

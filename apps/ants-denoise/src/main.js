@@ -15,14 +15,14 @@ import {
   bindInfoTooltips,
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
-import { createNiftiFromData, decodeNiftiBuffer, downloadFile } from "@neurodesk/webapp-components/file-io";
+import { createNiftiFromData, decodeNiftiBuffer, downloadFile, readNiftiFrames } from "@neurodesk/webapp-components/file-io";
 import { describeNiftiFile } from "@neurodesk/webapp-components/file-io/nifti";
 import { gzipFile } from "@neurodesk/webapp-components/file-io/bids-derivatives";
 import { readBrainMask } from "@neurodesk/webapp-components/file-io/brain-mask";
 import { imageFiles, registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import denoiseWorkerUrl from "@neurodesk/ants-denoise/worker?worker&url";
-import { APP, denoiseSettings, denoisedName, provenance, volumeRefusal } from "./config.js";
+import { APP, denoiseSettings, denoisedName, provenance, volumeRefusal, maskValueRefusal } from "./config.js";
 import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
@@ -33,7 +33,7 @@ const workspace = mountImagingWorkspace({
   status: "#status",
   title: APP.title,
   subtitle: "Adaptive non-local means denoising",
-  controlsContract: { about: "#aboutBtn", privacy: "#privacyBtn" },
+  controlsContract: { privacy: "#privacyBtn" },
 });
 
 const SLICE_TYPES = {
@@ -69,7 +69,6 @@ const progress = new ProgressManager();
 bindInfoTooltips(document);
 
 const info = createInfoDialog();
-$("aboutBtn").onclick = () => info.open(`About ${APP.title}`, $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 
 const maskField = createFileField({ id: "maskInput", label: "Mask", kind: "image", text: "Drop a mask on the image grid" });
@@ -166,6 +165,7 @@ async function loadFiles(filesPromise, signal) {
     const refusal = volumeRefusal(description);
     if (refusal) throw new Error(refusal);
     const buffer = await decodeNiftiBuffer(await file.arrayBuffer());
+    readNiftiFrames(buffer); // Validate the complete voxel payload before admitting it.
     current.throwIfAborted();
     await showVolume({ file }, { signal: current });
     current.throwIfAborted();
@@ -193,7 +193,11 @@ async function loadMask(filesPromise, signal) {
     const images = await readImageFiles(await filesPromise, { signal: current });
     if (images.length !== 1) throw new Error("Choose one NIfTI mask.");
     const [file] = images;
-    const data = await readBrainMask(await file.arrayBuffer(), input.buffer, { name: file.name, grid: "image", signal: current });
+    const buffer = await decodeNiftiBuffer(await file.arrayBuffer());
+    const { data: values } = readNiftiFrames(buffer, Float64Array);
+    const refusal = maskValueRefusal(values);
+    if (refusal) throw new Error(refusal);
+    const data = await readBrainMask(buffer, input.buffer, { name: file.name, grid: "image", signal: current });
     current.throwIfAborted();
     const voxels = data.reduce((sum, value) => sum + value, 0);
     if (!voxels) throw new Error(`${file.name} has no nonzero voxels.`);

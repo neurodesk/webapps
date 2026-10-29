@@ -7,28 +7,36 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 const dist = join(repoRoot, 'dist');
 
-test('BISON and HMC share the pinned ANTs binary while their worker modules remain local', async () => {
-  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
-  const family = manifest.families.find(({ id }) => id === 'hmc-registration-wasm');
-  const { HMC_REGISTRATION_WASM_SHA256 } = await import('../packages/hmc-registration/src/pin.js');
-  assert.equal(family.deduplicate, true);
-  assert.equal(family.files.length, 1);
-  assert.equal(family.files[0].sha256, HMC_REGISTRATION_WASM_SHA256);
-  const runtime = `_runtime/${family.target}/${family.files[0].name}`;
-  assert.equal(createHash('sha256').update(await readFile(join(dist, runtime))).digest('hex'), HMC_REGISTRATION_WASM_SHA256);
-  for (const app of ['bison', 'hmc']) {
-    const files = await readdir(join(dist, app), { recursive: true });
-    assert.ok(!files.some(file => /^hmc-registration(?:-[\w-]{8})?\.wasm$/.test(file.split('/').at(-1))), `${app}: app copy remains`);
-    const modules = files.filter(file => /\.(?:m?js)$/.test(file));
-    const references = [];
-    for (const module of modules) {
-      const source = await readFile(join(dist, app, module), 'utf8');
-      if (source.includes(runtime)) references.push(module);
+for (const { familyId, packageName, pinName, consumers } of [
+  { familyId: 'hmc-registration-wasm', packageName: 'hmc-registration', pinName: 'HMC_REGISTRATION_WASM_SHA256', consumers: ['bison', 'hmc'] },
+  { familyId: 'ants-denoise-wasm', packageName: 'ants-denoise', pinName: 'DENOISE_WASM_SHA256', consumers: ['bison', 'ants-denoise'] },
+]) {
+  test(`${consumers.join(' and ')} share the pinned ${packageName} binary while worker modules remain local`, async () => {
+    const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+    const family = manifest.families.find(({ id }) => id === familyId);
+    const pin = await import(`../packages/${packageName}/src/pin.js`);
+    const checksum = pin[pinName];
+    assert.equal(family?.deduplicate, true);
+    assert.equal(family.files.length, 1);
+    assert.equal(family.files[0].sha256, checksum);
+    const runtime = `_runtime/${family.target}/${family.files[0].name}`;
+    assert.equal(createHash('sha256').update(await readFile(join(dist, runtime))).digest('hex'), checksum);
+    for (const app of consumers) {
+      const files = await readdir(join(dist, app), { recursive: true });
+      const binaryName = new RegExp(`^${packageName}(?:-[\\w-]{8})?\\.wasm$`);
+      const moduleName = new RegExp(`^${packageName}(?:-[\\w-]{8})?\\.mjs$`);
+      assert.ok(!files.some(file => binaryName.test(file.split('/').at(-1))), `${app}: app copy remains`);
+      assert.ok(files.some(file => moduleName.test(file.split('/').at(-1))), `${app}: pthread module must remain app-local`);
+      const modules = files.filter(file => /\.(?:m?js)$/.test(file));
+      const references = [];
+      for (const module of modules) {
+        const source = await readFile(join(dist, app, module), 'utf8');
+        if (source.includes(runtime)) references.push(module);
+      }
+      assert.ok(references.some(file => /worker.*\.js$/.test(file)), `${app}: local worker must reference the shared binary`);
     }
-    assert.ok(references.some(file => /worker.*\.js$/.test(file)), `${app}: local worker must reference the shared binary`);
-    if (app === 'bison') assert.ok(files.includes('bison-runtime/hmc-registration/wasm/hmc-registration.mjs'), 'BISON pthread module stays local');
-  }
-});
+  });
+}
 
 test('composite site contains one checksum-verified runtime store', async () => {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));

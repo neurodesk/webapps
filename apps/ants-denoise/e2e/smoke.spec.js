@@ -44,10 +44,13 @@ test("shared app bar owns information actions and theme", async ({ page }) => {
   await expect(bar).toHaveCount(1);
   await expect(page.locator("#controls > #aboutBtn")).toBeHidden();
   await bar.getByRole("button", { name: "About", exact: true }).click();
-  await expect(page.locator("#infoDialog")).toBeVisible();
-  await expect(page.locator("#infoDialog").getByRole("heading", { name: `About ${automation.title}`, exact: true })).toBeVisible();
-  await expect(page.locator("#infoDialog")).toContainText("Manjón");
-  await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
+  const about = page.locator('dialog[data-dialog="about"]');
+  await expect(about).toBeVisible();
+  await expect(about.getByRole("heading", { name: `About ${automation.title}`, exact: true })).toBeVisible();
+  for (const guidance of ["Manjón", "17 % lower", "integer label mask", "shrink factor stays 1", "batch processing", "signed real or phase"]) {
+    await expect(about).toContainText(guidance);
+  }
+  await about.getByRole("button", { name: "Close" }).click();
   await bar.locator("[data-neurodesk-theme-toggle]").click();
   await expect(page.locator("html")).toHaveAttribute("data-neurodesk-theme", "light");
 });
@@ -268,4 +271,28 @@ test("cancelling during image reading prevents a late commit and permits retry",
   await picker.selectOption(example.id);
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120000 });
   await expect(page.locator("#runButton")).toBeEnabled();
+});
+
+test("truncated voxel data is refused before an image can be run", async ({ page }) => {
+  await page.goto("/");
+  const image = Buffer.from(phantom(12));
+  const offset = image.readFloatLE(108);
+  await page.locator("#imageInput").setInputFiles(nifti("truncated.nii", image.subarray(0, offset + 12 * 4)));
+  await expect(page.locator("#statusText")).toContainText("Invalid image size");
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
+  await loadImage(page, nifti("valid.nii", image));
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
+
+test("a fractional mask is refused instead of changing native mask selection", async ({ page }) => {
+  await page.goto("/");
+  const image = Buffer.from(phantom(12));
+  await loadImage(page, nifti("image.nii", image));
+  const mask = Buffer.from(image);
+  for (let offset = mask.readFloatLE(108); offset < mask.length; offset += 4) mask.writeFloatLE(0.2, offset);
+  await page.locator("#maskInput").setInputFiles(nifti("probability.nii", mask));
+  await expect(page.locator("#statusText")).toContainText("whole-number values from 0 to 255");
+  await expect(page.locator("#clearMask")).toBeHidden();
+  await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
 });

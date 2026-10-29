@@ -57,6 +57,17 @@ export function denoisedName(inputName) {
   return outputNames(inputName, "denoised").image;
 }
 
+/** Integer label masks retain native ANTs' unsigned-char mask selection. */
+export function maskValueRefusal(values) {
+  return values.some((value) => !Number.isInteger(value) || value < 0 || value > 255)
+    ? "Use a mask with whole-number values from 0 to 255. Convert probability maps to a binary mask first."
+    : null;
+}
+
+function shellArgument(value) {
+  return /^[A-Za-z0-9_./=-]+$/.test(value) ? value : "'" + value.replaceAll("'", "'\\''") + "'";
+}
+
 /**
  * The run's provenance: the settings, the mask and the native command that writes the same voxels.
  * DenoiseImage's adaptive filter depends on how ITK splits the image between threads, so the
@@ -69,6 +80,8 @@ export function provenance({ input, settings, mask = null }) {
     module: { package: "@neurodesk/ants-denoise", wasmSha256: DENOISE_WASM_SHA256, threads: 1 },
     settings: { ...settings, shrinkFactor: 1 },
     mask: mask ? { name: mask.name, voxels: mask.voxels } : null,
-    nativeCommand: `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1 DenoiseImage ${argv.join(" ")}`,
+    nativeArgv: ["DenoiseImage", ...argv],
+    nativeEnvironment: { ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: "1" },
+    nativeCommand: `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1 DenoiseImage ${argv.map(shellArgument).join(" ")}`,
   };
 }

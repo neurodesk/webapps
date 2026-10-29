@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
 import { DENOISE_WASM_SHA256 } from "@neurodesk/ants-denoise/pin";
-import { APP, SETTINGS, denoiseSettings, denoisedName, provenance, volumeRefusal } from "../src/config.js";
+import { APP, SETTINGS, denoiseSettings, denoisedName, provenance, volumeRefusal, maskValueRefusal } from "../src/config.js";
 
 test("app id is lowercase kebab-case", () => {
   assert.match(APP.id, /^[a-z][a-z0-9-]*$/);
@@ -58,4 +58,22 @@ test("the provenance names the module build and the one-thread native command fo
   assert.deepEqual(record.mask, { name: "sub-01_mask.nii.gz", voxels: 42 });
   assert.equal(record.nativeCommand, "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1 DenoiseImage -d 3 -i sub-01_T1w.nii.gz -x sub-01_mask.nii.gz -n Rician -s 1 -p 2 -r 3 -o sub-01_desc-denoised_T1w.nii.gz -v 0");
   assert.equal(provenance({ input: "T1.nii", settings: denoiseSettings() }).mask, null);
+});
+
+test("native provenance retains argument boundaries for spaces and apostrophes", () => {
+  const input = "subject 1's_T1w.nii.gz";
+  const mask = { name: "brain mask.nii.gz", voxels: 42 };
+  const record = provenance({ input, settings: denoiseSettings(), mask });
+  assert.deepEqual(record.nativeArgv, ["DenoiseImage", "-d", "3", "-i", input, "-x", mask.name,
+    "-n", "Gaussian", "-s", "1", "-p", "1", "-r", "2", "-o", denoisedName(input), "-v", "0"]);
+  assert.deepEqual(record.nativeEnvironment, { ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: "1" });
+  assert.ok(record.nativeCommand.includes("'brain mask.nii.gz'"));
+  assert.ok(record.nativeCommand.includes("'subject 1'\\''s_T1w.nii.gz'"));
+});
+
+test("native-compatible masks use whole-number labels in the unsigned-char range", () => {
+  assert.equal(maskValueRefusal(new Uint8Array([0, 1, 2, 255])), null);
+  for (const value of [0.2, 0.999999999, -1, 256, NaN, Infinity]) {
+    assert.match(maskValueRefusal(new Float64Array([0, value])), /whole-number values from 0 to 255/);
+  }
 });
