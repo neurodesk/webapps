@@ -76,3 +76,14 @@ logical cores bounded its fitting pool to two workers. No fallback mask inferenc
 substitute was used. This establishes the requested full GE tensor behavior with those fixed masks;
 it is not a new independent microstructure reference, clinical validation, performance result, or a
 general bound for other acquisitions.
+## Recheck on main, 29 October 2026
+
+The `noddi` command line at main 435c2bc8f (NODDI 0.6.20261027, WASM c50a0f7f…, equal to a rebuild
+with Rust 1.98.0 and binaryen version_117) refitted the four cases with the same inputs and masks
+(hashes above). For every case and every output, the decompressed bytes equal the 25 October fixed
+CLI and browser downloads. FA ranges from 0 to the maximum in the table above, with no value above 1,
+below 0 or nonfinite. The FA voxels that differ from the old kernel are all exactly zero.
+MD, AD, RD, S0 and the direction map equal the old kernel's output. `validation/cli-check.mjs` passed all 50 checks against
+`browser-reference.json`. `fa_boundary_is_a_strictly_negative_eigenvalue` in `exes/dwi/tensor` covers the rule's
+boundary on `TensorFit` directly: zero and signed-zero eigenvalues stay valid ([1, 0, 0] gives 1), the smallest positive
+third eigenvalue gives 1/√2 and the smallest negative gives 0.
