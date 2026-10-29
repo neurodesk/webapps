@@ -166,7 +166,7 @@
       "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt",
       "url": "https://hub.docker.com/r/vnmd/topofit_0.5.1",
       "dockerImage": "vnmd/topofit_0.5.1:candidate-1c960cec82947541d270e06099ab415933c9ea07",
-      "dockerLabel": "Docker Hub \u00b7 candidate build"
+      "dockerLabel": "Docker Hub · candidate build"
     },
     "nesvor": {
       "id": "nesvor",
