@@ -24,7 +24,7 @@ import {
   planBatchError,
 } from './backoff'
 import { BLOCK_Y, divUp, MAX_SLINE_LEN, REAL_SIZE } from './globals'
-import { dispatchBootWindows } from './dispatch'
+import { dispatchBootWindows, MAX_WORKGROUPS_PER_DISPATCH } from './dispatch'
 import { BOOT_ENTRY_GEN, BOOT_ENTRY_GETNUM, bootShaderSource } from './shaders'
 
 // Re-exported so the UI (main.ts) can classify a render OOM the same way.
@@ -63,6 +63,7 @@ export interface TrackingParams {
   chunkSize: number // seeds per GPU batch (default 10000)
   minPts: number // discard streamlines shorter than this
   maxPts: number // discard streamlines longer than this
+  maxWorkgroupsPerDispatch: number // physical GPU command size; output does not depend on it
 }
 
 export const DEFAULT_PARAMS: Omit<TrackingParams, 'tcThreshold'> = {
@@ -80,6 +81,7 @@ export const DEFAULT_PARAMS: Omit<TrackingParams, 'tcThreshold'> = {
   chunkSize: 10000,
   minPts: 0,
   maxPts: Number.POSITIVE_INFINITY,
+  maxWorkgroupsPerDispatch: MAX_WORKGROUPS_PER_DISPATCH,
 }
 
 /** The repacked Boot kernel binds 10 storage buffers across 3 groups (down
@@ -325,11 +327,13 @@ function storageFromParts(
 }
 
 /** Result of trackStreamlines. `truncated` is true when the run stopped early
- *  (host/GPU memory) so the streamlines are only partial; `processedSeeds` is how
- *  many of `totalSeeds` were actually tracked (equal on a complete run). */
+ *  (host/GPU memory, or `deviceLost`) so the streamlines are only partial;
+ *  `processedSeeds` is how many of `totalSeeds` were actually tracked (equal on
+ *  a complete run). */
 export interface TrackResult {
   lines: Float32Array[]
   truncated: boolean
+  deviceLost: boolean
   processedSeeds: number
   totalSeeds: number
 }
@@ -375,6 +379,7 @@ export async function trackStreamlines(
   }
   const out: Float32Array[] = []
   let truncated = false
+  let deviceLost = false
   let rngOffset = 0
   let processedSeeds = 0
   const maxBinding = device.limits.maxStorageBufferBindingSize
@@ -484,7 +489,7 @@ export async function trackStreamlines(
           ),
           bindGroup1(device, getnumPipe, modelBuf),
           bindGroup2(device, getnumPipe, offsBuf, shDirBuf, null),
-        ], paramsGetnum, shouldStop)
+        ], paramsGetnum, shouldStop, params.maxWorkgroupsPerDispatch)
         if (!counted) break
 
         // Exclusive prefix sum of per-seed counts (CPU), written back.
@@ -560,7 +565,7 @@ export async function trackStreamlines(
               slineMetaBuf,
               slineBuf,
             ),
-          ], paramsGen, shouldStop)
+          ], paramsGen, shouldStop, params.maxWorkgroupsPerDispatch)
           if (!generated) break
 
           // Read positions back in fixed-size windows so peak host (and staging)
@@ -619,6 +624,7 @@ export async function trackStreamlines(
         }
         if (plan === 'salvage') {
           truncated = true // at the floor / device lost — keep what we have
+          deviceLost = isDeviceLost(err)
           break
         }
         throw err
@@ -629,7 +635,7 @@ export async function trackStreamlines(
   } finally {
     for (const b of staticBuffers) b.destroy()
   }
-  return { lines: out, truncated, processedSeeds, totalSeeds: nSeedsTotal }
+  return { lines: out, truncated, deviceLost, processedSeeds, totalSeeds: nSeedsTotal }
 }
 
 function paramsBuffer(device: GPUDevice, bytes: ArrayBuffer): GPUBuffer {

@@ -18,6 +18,10 @@ Local changes:
   Completion is awaited before the offset is changed, and the host yields to
   UI/abort tasks. Cancellation is checked between commands; a cancelled logical batch is not
   committed. GPU command failures still reject through the existing host logic.
+- `src/tracker.ts`: `TrackingParams.maxWorkgroupsPerDispatch` (default 16) sets the
+  physical command size, and `TrackResult.deviceLost` tells a lost device apart from
+  out-of-memory salvage. The app's hardware test runs the example with one command
+  per pass and with the default, and requires the same TRX bytes.
 - `src/trx.ts`: fixed local DOS timestamp (1980-01-01) for deterministic ZIP bytes;
   geometry, member order and uncompressed payload are unchanged.
 - `package.json`: include the new dispatcher and this provenance, and pin the

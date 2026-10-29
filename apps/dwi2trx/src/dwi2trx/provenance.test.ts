@@ -14,6 +14,7 @@ const parameters: TrackingParams = {
   chunkSize: 10000,
   minPts: 10,
   maxPts: Infinity,
+  maxWorkgroupsPerDispatch: 16,
 }
 
 await test('unbounded tracking provenance survives the snapshot and downloaded report round trip', () => {

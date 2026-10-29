@@ -218,6 +218,14 @@ function num(
   return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def
 }
 
+/** Physical GPU command size set by e2e/dispatch.spec.js, which compares one command
+ *  per pass with the bounded default; results must not depend on it (#598). */
+function dispatchWindowOverride(): number | undefined {
+  const value = (globalThis as { neurodeskTrackingDispatchWorkgroups?: unknown })
+    .neurodeskTrackingDispatchWorkgroups
+  return Number.isSafeInteger(value) && (value as number) > 0 ? (value as number) : undefined
+}
+
 /** Keep later workflow sections unavailable until their scientific inputs exist. */
 function render(): void {
   maskFitBtn.disabled = !state.input
@@ -1117,9 +1125,10 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       // Drop sub-streamline stubs: keep only tracts ≳ 5 voxels long (a 1-2 point
       // fragment is noise that bloats the TRX and clutters the render).
       minPts: Math.max(2, Math.ceil(5 / stepSize)),
+      maxWorkgroupsPerDispatch: dispatchWindowOverride() ?? DEFAULT_PARAMS.maxWorkgroupsPerDispatch,
     }
     const parameterReport = trackingParametersReport(params)
-    const { lines, truncated, processedSeeds } = await trackStreamlines(
+    const { lines, truncated, deviceLost, processedSeeds } = await trackStreamlines(
       device,
       tInputs,
       seeds,
@@ -1153,7 +1162,9 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
     // Free the voxel-space lines now that the TRX is serialized — the 3D preview
     // below allocates a large cylinder mesh, and there is no need to hold both.
     lines.length = 0
-    const note = truncated
+    const note = deviceLost
+      ? 'The GPU stopped responding; run tracking again for the full set.'
+      : truncated
       ? 'Out of memory: raise the Seed/Stop FA thresholds or lower Density for the full set.'
       : capped
         ? 'Seeds capped at 100,000 — lower Density for full coverage.'
@@ -1162,7 +1173,7 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       ? `${processedSeeds.toLocaleString()} of ${nSeeds.toLocaleString()} seeds`
       : `${nSeeds.toLocaleString()} seeds`
     const summary = truncated
-      ? `Partial: ${count} streamlines from ${seedNote} (out of memory).`
+      ? `Partial: ${count} streamlines from ${seedNote} (${deviceLost ? 'GPU device lost' : 'out of memory'}).`
       : `${count} streamlines from ${seedNote} — saved as TRX.`
     const detail = `Mean ${meanLen} points per streamline. ${note}`.trim()
     gotoTab(3)

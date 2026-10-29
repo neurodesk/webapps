@@ -76,3 +76,75 @@ test('physical dispatch windows preserve the actual Boot Philox seed and lane st
   expect(new Set(results[0]).size).toBeGreaterThan(100);
   for (const result of results.slice(1)) expect(result).toEqual(results[0]);
 });
+
+async function trackExample(browser, baseURL, maxWorkgroups) {
+  const context = await browser.newContext({ baseURL });
+  try {
+    const page = await context.newPage();
+    await page.addInitScript(maxWorkgroups => {
+      if (maxWorkgroups) globalThis.neurodeskTrackingDispatchWorkgroups = maxWorkgroups;
+      window.trackingDispatches = [];
+      const pipelines = new WeakMap();
+      const passes = new WeakMap();
+      const createPipeline = GPUDevice.prototype.createComputePipeline;
+      GPUDevice.prototype.createComputePipeline = function (descriptor) {
+        const pipeline = createPipeline.call(this, descriptor);
+        pipelines.set(pipeline, descriptor.compute.entryPoint);
+        return pipeline;
+      };
+      const setPipeline = GPUComputePassEncoder.prototype.setPipeline;
+      GPUComputePassEncoder.prototype.setPipeline = function (pipeline) {
+        passes.set(this, pipelines.get(pipeline));
+        return setPipeline.call(this, pipeline);
+      };
+      const dispatch = GPUComputePassEncoder.prototype.dispatchWorkgroups;
+      GPUComputePassEncoder.prototype.dispatchWorkgroups = function (...counts) {
+        window.trackingDispatches.push({ entryPoint: passes.get(this), x: counts[0] });
+        return dispatch.apply(this, counts);
+      };
+    }, maxWorkgroups);
+    await page.goto('/');
+    assertHardwareAdapter(await readAdapterInfo(page));
+    for (const [role, extension] of [['image', 'nii.gz'], ['bval', 'bval'], ['bvec', 'bvec']]) {
+      await page.locator('#neurodesk-input-transfer').setInputFiles(`${process.env.DWI2TRX_FIXTURE_DIR}/dwi.${extension}`);
+      await page.evaluate(role => globalThis.neurodeskAutomation.dispatch('adopt', { role }), role);
+    }
+    await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'tractography' }));
+    await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state, { timeout: 540_000 }).not.toBe('running');
+    const snapshot = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'));
+    expect(snapshot.state, snapshot.error?.message).toBe('succeeded');
+    const passes = await page.evaluate(() => window.trackingDispatches.filter(({ entryPoint }) =>
+      ['getNumStreamlinesBoot_k', 'genStreamlinesMergeBoot_k'].includes(entryPoint)));
+    const tracts = Object.values(snapshot.report.artifacts).find(({ role }) => role === 'tracts');
+    return { measurements: snapshot.report.measurements, parameters: snapshot.report.provenance.tracking.parameters, tracts: tracts.sha256, passes };
+  } finally {
+    await context.close();
+  }
+}
+
+test('bounded dispatch windows write the same TRX as one command per pass', async ({ browser, baseURL }) => {
+  test.skip(!hardwareGpu || !process.env.DWI2TRX_FIXTURE_DIR, 'Requires hardware WebGPU with subgroups and DWI2TRX_FIXTURE_DIR.');
+  test.setTimeout(1_200_000);
+  // One command per pass is the pre-#598 dispatch; the example is small enough to finish that way.
+  const single = await trackExample(browser, baseURL, 1_000_000);
+  const bounded = await trackExample(browser, baseURL, undefined);
+  expect(single.parameters.maxWorkgroupsPerDispatch).toBe(1_000_000);
+  expect(bounded.parameters.maxWorkgroupsPerDispatch).toBe(16);
+  const largest = run => Math.max(...run.passes.map(({ x }) => x));
+  expect(largest(single), 'the example must need more than one 16-workgroup window').toBeGreaterThan(16);
+  expect(largest(bounded)).toBeLessThanOrEqual(16);
+  const total = run => run.passes.reduce((sum, { x }) => sum + x, 0);
+  expect(total(bounded)).toBe(total(single));
+  expect(bounded.passes.length).toBeGreaterThan(single.passes.length);
+  for (const run of [single, bounded]) {
+    expect(run.measurements.processedSeeds).toBe(run.measurements.seeds);
+    expect(run.measurements.partial).toBe(false);
+  }
+  expect(bounded.measurements).toEqual(single.measurements);
+  expect(bounded.tracts).toBe(single.tracts);
+  await test.info().attach('dispatch-equivalence.json', {
+    body: JSON.stringify({ tracts: single.tracts, measurements: single.measurements,
+      commands: { single: single.passes.length, bounded: bounded.passes.length }, workgroups: total(single) }, null, 2),
+    contentType: 'application/json',
+  });
+});
