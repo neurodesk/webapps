@@ -74,6 +74,9 @@ async function currentRelease(recipe, version, repository) {
   const build = metadata.apps?.[`${recipe} ${version}`]?.version;
   if (!/^\d{8}$/.test(build ?? '')) throw new Error(`${path} names no build for ${recipe} ${version}`);
   const tag = await json(`https://hub.docker.com/v2/repositories/${repository}/tags/${build}`);
+  if (typeof tag?.digest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(tag.digest)) {
+    throw new Error(`${repository}:${build} has no valid SHA-256 digest`);
+  }
   return { build, digest: tag.digest, releaseSha: commit.sha };
 }
 
@@ -104,8 +107,9 @@ async function main() {
       const next = repinnedEntry(entry, release);
       const simg = await checkLink(next.apptainerUrl);
       if (!simg.ok) throw new Error(`${next.apptainerUrl}: ${simg.status}`);
+      const row = `| ${key} | \`${entry.apptainerName}\` | \`${next.apptainerName}\` | \`${release.digest.slice(0, 19)}…\` | [release](https://github.com/${REPO}/blob/${release.releaseSha}/releases/${parsed.recipe}/${parsed.version}.json) |`;
       repins[key] = next;
-      rows.push(`| ${key} | \`${entry.apptainerName}\` | \`${next.apptainerName}\` | \`${release.digest.slice(0, 19)}…\` | [release](https://github.com/${REPO}/blob/${release.releaseSha}/releases/${parsed.recipe}/${parsed.version}.json) |`);
+      rows.push(row);
     } catch (error) {
       unresolved.push({ key, apptainerName: entry.apptainerName, reason: error.message });
     }
