@@ -85,5 +85,5 @@ CLI and browser downloads. FA ranges from 0 to the maximum in the table above, w
 below 0 or nonfinite. The FA voxels that differ from the old kernel are all exactly zero.
 MD, AD, RD, S0 and the direction map equal the old kernel's output. `validation/cli-check.mjs` passed all 50 checks against
 `browser-reference.json`. `fa_boundary_is_a_strictly_negative_eigenvalue` in `exes/dwi/tensor` covers the rule's
-boundary on `TensorFit` directly: zero and signed-zero eigenvalues stay valid ([1, 0, 0] gives 1), the smallest positive
-third eigenvalue gives 1/√2 and the smallest negative gives 0.
+boundary on `TensorFit` directly: zero and signed-zero eigenvalues stay valid ([1, 0, 0] gives 1). For the nonzero
+`f64` values adjacent to zero, a positive third eigenvalue gives 1/√2 and a negative one gives 0.
