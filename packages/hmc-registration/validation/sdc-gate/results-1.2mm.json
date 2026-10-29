@@ -541,6 +541,8 @@
   },
   "notes": [
     "Measured on 29 October 2026 with the scripts beside this file; the run outputs are not on the dataset.",
+    "heap_growth.max_requested_bytes records the largest _emscripten_resize_heap target, not an individual allocation size, peak live allocator footprint or free allocation headroom. wasm_heap_bytes is linear-memory capacity; max_rss_GB is process RSS.",
+    "The native deriv64 end-to-end median meets the 0.5 Hz cap. Its full Q66 acceptance is undetermined because the end-to-end native double seed spread was not measured.",
     "End-to-end WASM runs: antsRegistration in the kernel, antsApplyTransforms and the Laplacian native (the kernel writes the same voxels for those calls). The WASM deriv64 run kept its kernel epi2anat from nipype's cache after the kernel's argv check refused nipype's split '[ file, 1 ]' transform, the bug this change fixes.",
     "seed_spread_syn_only_double: native double SyN-only replays at seeds 1235 and 1236 with the pinned seed-1234 run.",
     "epi2anat_shift_vs_double and affine_controls: affine_shift.py over the MindGrab mask of the mean b0, against the pinned double affine."

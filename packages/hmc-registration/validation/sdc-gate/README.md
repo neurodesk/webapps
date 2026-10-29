@@ -70,4 +70,4 @@ On the 1.2 mm double replay, `stock` writes the pinned double warp byte for byte
 On HMC's rigid test pair each variant writes the same transform in WASM and natively, and a different one from the committed kernel.
 The committed kernel does not use them; section 6.2 of the plan gives their results.
 
-`HMC_WASM_HEAP_TRACE=1` records every heap growth request of the kernel in `wasm-calls.jsonl`; the largest is the allocator's peak footprint.
+`HMC_WASM_HEAP_TRACE=1` records the requested sizes passed to `_emscripten_resize_heap` in `wasm-calls.jsonl`. These are targets for linear-memory growth, not individual allocation sizes or the allocator's peak live footprint. The difference between a growth target and the resulting linear-memory capacity does not measure free allocation headroom. Live allocations, fragmentation and available allocator space were not measured.
