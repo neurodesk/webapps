@@ -7,6 +7,7 @@
 // build's .simg, Docker tag and digest, and the recipe at the release commit.
 // Copies the change into registry/standalone.json. The standalone-links
 // workflow runs this after its nightly check fails and opens a pull request.
+// NeSVoR and Spinal Cord Toolbox need coordinated compute-server pin updates.
 //
 //   node scripts/repin-neurocontainers.mjs [--write] [--body body.md]
 import { readFile, writeFile } from 'node:fs/promises';
@@ -94,6 +95,9 @@ async function main() {
     const parsed = parseApptainerName(entry.apptainerName);
     try {
       if (!parsed) throw new Error(`cannot read recipe and version from ${entry.apptainerName}`);
+      if (['nesvor', 'spinalcordtoolbox'].includes(parsed.recipe)) {
+        throw new Error(`${parsed.recipe} needs a coordinated update of its catalog, compute server, reference server, and documentation pins`);
+      }
       const repository = entry.dockerImage.slice(0, entry.dockerImage.lastIndexOf(':'));
       const release = await currentRelease(parsed.recipe, parsed.version, repository);
       if (release.build === parsed.build) throw new Error(`release metadata still names the deleted build ${parsed.build}`);
@@ -128,3 +132,4 @@ async function main() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
+
