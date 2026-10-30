@@ -288,7 +288,9 @@ for (const settings of [
   test(`hardware WebGPU and WASM agree for the ${settings.name}`, async ({ page }) => {
     test.skip(!hardwareGpu, 'Requires a hardware WebGPU adapter.');
     test.skip(virtualGpu, "GitHub's virtual Metal GPU cannot run nnU-Net v2; run on a real Mac.");
-    test.setTimeout(1200000);
+    // On an M1 Max one network pass takes about 2.5 minutes on WebGPU and 3 on WASM.
+    const runTimeout = settings.folds.length * (settings.mirror ? 2 : 1) * 360000;
+    test.setTimeout(2 * runTimeout + 120000);
     await page.goto('/');
     await page.waitForFunction(() => Boolean(globalThis.neurodeskAutomation));
     assertHardwareAdapter(await readAdapterInfo(page));
@@ -299,7 +301,7 @@ for (const settings of [
       await page.evaluate(parameters => neurodeskAutomation.dispatch('start', { operation: 'segment', parameters }), {
         folds: settings.folds, mirror: settings.mirror, backend,
       });
-      await expect.poll(() => page.evaluate(async () => (await neurodeskAutomation.dispatch('snapshot')).state), { timeout: 540000 }).toMatch(/succeeded|failed/);
+      await expect.poll(() => page.evaluate(async () => (await neurodeskAutomation.dispatch('snapshot')).state), { timeout: runTimeout }).toMatch(/succeeded|failed/);
       const snapshot = await page.evaluate(() => neurodeskAutomation.dispatch('snapshot'));
       expect(snapshot.state, JSON.stringify(snapshot.error)).toBe('succeeded');
       expect(snapshot.report.provenance.executionProvider).toBe(backend === 'auto' ? 'webgpu' : 'wasm');
