@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import fs, { readdirSync, readFileSync } from 'node:fs';
+import fs, { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { registerHooks, syncBuiltinESMExports } from 'node:module';
 import { matchesGlob, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,6 +55,7 @@ test('the Pipeline builder build hash covers every file its tool catalog reads',
   // Turbo hashes the app's own files and those of its workspace dependencies.
   const manifest = JSON.parse(readFileSync(new URL('package.json', app), 'utf8'));
   const packageDirs = new Map(readdirSync(new URL('../packages/', import.meta.url))
+    .filter((dir) => existsSync(new URL(`../packages/${dir}/package.json`, import.meta.url)))
     .map((dir) => [JSON.parse(readFileSync(new URL(`../packages/${dir}/package.json`, import.meta.url), 'utf8')).name, `packages/${dir}/`]));
   const workspaces = Object.entries({ ...manifest.dependencies, ...manifest.devDependencies })
     .filter(([, spec]) => spec.startsWith('workspace:'))

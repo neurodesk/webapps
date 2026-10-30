@@ -1872,6 +1872,67 @@
           "dockerImage": "garciaml/brainqcnetcpu:1.0.1"
         }
       ]
+    },
+    "reproin": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261030",
+          "url": "https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/reproinx-0.1.20261030-linux-x64.tar.gz",
+          "sha256": "010781812c759750e51f99afd021420ec21ffe7d9e07a2753f659cdb522b6849",
+          "bytes": 724393,
+          "command": "tar -xzf reproinx-0.1.20261030-linux-x64.tar.gz\n./reproinx-0.1.20261030-linux-x64/reproinx dicom_dir bids_dir"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261030",
+          "url": "https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/reproinx-0.1.20261030-macos-arm64.tar.gz",
+          "sha256": "8815874daf770f6e46d10ecd01b2d37e1d18641a4aec7ef5ae22df2d1ef8d1b6",
+          "bytes": 639388,
+          "command": "tar -xzf reproinx-0.1.20261030-macos-arm64.tar.gz\nxattr -dr com.apple.quarantine reproinx-0.1.20261030-macos-arm64\n./reproinx-0.1.20261030-macos-arm64/reproinx dicom_dir bids_dir"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-x64",
+          "version": "0.1.20261030",
+          "url": "https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/reproinx-0.1.20261030-macos-x64.tar.gz",
+          "sha256": "9f44ffb6eb31980732533c3bc9bf1701870a3d0211a675bf96ddfc58a1d7280e",
+          "bytes": 700669,
+          "command": "tar -xzf reproinx-0.1.20261030-macos-x64.tar.gz\nxattr -dr com.apple.quarantine reproinx-0.1.20261030-macos-x64\n./reproinx-0.1.20261030-macos-x64/reproinx dicom_dir bids_dir"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261030",
+          "url": "https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/reproinx-0.1.20261030-windows-x64.zip",
+          "sha256": "5f406bb9c552061593d080164f5e105fc73fb08b3897a09e133fbe960badf8c1",
+          "bytes": 674433,
+          "command": "Expand-Archive -Path .\\reproinx-0.1.20261030-windows-x64.zip -DestinationPath .\n.\\reproinx-0.1.20261030-windows-x64\\reproinx.exe dicom_dir bids_dir"
+        }
+      ],
+      "containers": [],
+      "commandLine": {
+        "notes": [
+          "Requires dcm2niix v1.0.20261011 or later on PATH, or named by $DCM2NIIX.",
+          "Optional subject and session labels follow the output folder; add --help for options.",
+          "macOS builds are not yet signed or notarized, so clear the quarantine flag before the first run."
+        ],
+        "links": [
+          {
+            "label": "reproinx v0.1.20261030 release",
+            "url": "https://github.com/rordenlab/reproin-rs/releases/tag/v0.1.20261030"
+          },
+          {
+            "label": "rordenlab/reproin-rs",
+            "url": "https://github.com/rordenlab/reproin-rs"
+          }
+        ]
+      }
     }
   }
 }

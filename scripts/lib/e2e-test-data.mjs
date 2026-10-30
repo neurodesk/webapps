@@ -156,6 +156,20 @@ export const provisioners = {
   dwidenoise: { env: ['DWIDENOISE_BROWSER_REFERENCE'], provision: async () => ({ DWIDENOISE_BROWSER_REFERENCE: 'check' }) },
   // The browser reference runs the app's 14 commands on both examples, about 3 min.
   niimath: { env: ['NIIMATH_BROWSER_REFERENCE'], provision: async () => ({ NIIMATH_BROWSER_REFERENCE: 'check' }) },
+  // The XA60 example's 68 files, flat: dcm2niix groups by DICOM UID, not folder.
+  reproin: {
+    env: ['REPROIN_E2E_DICOM_DIR'],
+    provision: async (cache) => {
+      const directory = join(cache, 'reproin', 'xa60');
+      await mkdir(directory, { recursive: true });
+      const lock = JSON.parse(await readFile(join(root, 'registry/offline-assets.lock.json'), 'utf8'));
+      const examples = JSON.parse(await readFile(join(root, 'apps/reproin/examples.json'), 'utf8'));
+      for (const { url, name } of examples.find(({ id }) => id === 'xa60-reproin').files) {
+        await fetchChecked(url, join(directory, name), lock.assets[url]);
+      }
+      return { REPROIN_E2E_DICOM_DIR: directory };
+    },
+  },
   // The browser reference runs the app's three examples, each after the command line's CPU MindGrab, about 4 min.
   n4: { env: ['N4_BROWSER_REFERENCE'], provision: async () => ({ N4_BROWSER_REFERENCE: 'check' }) },
   // The browser reference runs MindGrab on the CPU once and fits the example and the phantom, about 1 min.

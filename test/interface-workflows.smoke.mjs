@@ -717,5 +717,18 @@ try {
     template.steps.brain.inputs.param_threshold = { constant: 0.3 };
     expect(JSON.parse(await readFile(await download.path(), 'utf8'))).toEqual(template);
   });
+  await check('reproin', async page => {
+    await page.locator('#dicomInput').setInputFiles({ name:'slice.dcm', mimeType:'application/dicom', buffer:Buffer.from('dicom') });
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await page.locator('#optionsSection > summary').tap();
+    await page.locator('#subject').fill('01');
+    await page.locator('#shiftDates').check();
+    await page.locator('#optionsSection > summary').tap();
+    await expect(page.locator('#subject')).toBeHidden();
+    await page.locator('#optionsSection > summary').tap();
+    await expect(page.locator('#subject')).toHaveValue('01');
+    await expect(page.locator('#shiftDates')).toBeChecked();
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+  });
 } finally { await browser.close(); await site.close(); }
 if (failures.length) throw new Error(failures.join('\n'));
