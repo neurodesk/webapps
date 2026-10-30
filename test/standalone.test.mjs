@@ -10,7 +10,7 @@ import { ciWorkflowApps, cpuWorkflowApps, hardwareWorkflowApps } from '../script
 import { prepareWorkflow, workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 import { portableCommand, releasePlatform } from '../scripts/lib/portable-command.mjs';
-import { nativeReleases, portableSpecs } from '../scripts/lib/native-releases.mjs';
+import { externalCatalog, nativeReleases, portableSpecs } from '../scripts/lib/native-releases.mjs';
 
 test('scanner packages link the supported apps to their OpenRecon recipes', async () => {
   const catalog = await loadStandalone(await loadAppsRegistry());
@@ -204,3 +204,20 @@ test('portable command-line rows show extraction and the release spec run comman
   assert.ok(lines.every(line => line.length <= 90), 'visible commands stay within 90 characters');
   dom.window.close();
 });
+
+// Never guess URLs: a command-line download is either imported from a webapps release or is exactly the
+// external release its release.json pins.
+test('external command lines are the pinned release assets', async () => {
+  const catalog = await loadStandalone(await loadAppsRegistry());
+  const natives = nativeReleases(await portableSpecs());
+  for (const [id, app] of Object.entries(catalog.apps)) {
+    const external = natives.get(id)?.find(source => source.external);
+    if (external) {
+      assert.deepEqual({ downloads: app.downloads, commandLine: app.commandLine }, externalCatalog(external.spec), `${id}: regenerate its catalog entry from ${external.packageDir}/release.json`);
+      continue;
+    }
+    assert.equal(app.commandLine, undefined, id);
+    for (const download of app.downloads) assert.match(download.url, /^https:\/\/github\.com\/neurodesk\/webapps\/releases\/download\//, id);
+  }
+});
+

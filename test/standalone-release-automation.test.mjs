@@ -387,7 +387,8 @@ test('an app release starts every native command line build, Rust or portable, w
   assert.ok(install >= 0 && install < steps.indexOf(start), 'the dispatch script needs installed dependencies (yaml)');
   const natives = nativeReleases(await portableSpecs());
   assert.deepEqual(['greedy', 'synthseg', 'synthsr'].filter((app) => natives.get(app)?.some((source) => !source.portable)), ['greedy', 'synthseg', 'synthsr']);
-  for (const [app, sources] of natives) {
+  for (const [app, all] of natives) {
+    const sources = all.filter((source) => !source.external);
     const tag = `${app}-v0.1.20261014`;
     assert.deepEqual(await dispatchedBy(app, tag), sources.map((source) => `workflow run ${source.workflow} --ref ${tag} -f ${source.publishInput}=true`), `${app}: the app release starts each of its sources at its tag`);
     for (const native of sources) {
@@ -462,4 +463,15 @@ test('the scripts release jobs run without installing dependencies import only N
     }
   }
   assert.ok(seen.size >= 6);
+});
+
+test('an external release is linked from its pins, never imported or dispatched here', async () => {
+  const external = { app: 'tool', repository: 'owner/tool', tag: 'v1.0.20261030', version: '1.0.20261030', targets: { 'linux-x64': { archive: 'tar.gz', executable: 'tool' } } };
+  const natives = nativeReleases(new Map([['tool', { packageDir: 'packages/tool', spec: external }]]));
+  assert.deepEqual(natives.get('tool').map((source) => [source.external, source.workflow]), [[true, null]]);
+  const catalog = { apps: { tool: { downloads: [{ kind: 'cli', platform: 'linux-x64', version: '1.0.20261030' }] } } };
+  assert.deepEqual(catalogReleases(catalog, natives), [], 'a catalog refresh fetches nothing for it');
+  await assert.rejects(update(catalog, verifiedRelease(['tool-1.0.20261030-linux-x64.tar.gz'], 'tool-v1.0.20261030'), natives, 'tool@1.0.20261030'), /ships no native command line built here/);
+  const greedy = new Map([['greedy', { packageDir: 'packages/tool', spec: { ...external, app: 'greedy' } }]]);
+  assert.throws(() => nativeReleases(greedy), /linux-x64 claimed by both greedy-native\.yml and owner\/tool/);
 });
