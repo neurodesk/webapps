@@ -57,6 +57,57 @@ test(`example ${example.id} converts to BIDS and downloads the dataset`, async (
   await expect(page.locator("#emptyState")).toBeHidden();
 });
 
+test("Undo restores an example after a replacement page drop", async ({ page }) => {
+  test.setTimeout(180000);
+  await page.goto("/");
+  await page.locator("select[data-neurodesk-example]").selectOption(example.id);
+  await expect(page.locator("#fileInfo")).toHaveText(`${example.files.length} DICOM files`, { timeout: 120000 });
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["replacement"], "replacement.dcm", { type: "application/dicom" }));
+    window.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(page.locator("#fileInfo")).toHaveText("1 DICOM file");
+  await page.locator(".nd-status-undo").click();
+  await expect(page.locator("#fileInfo")).toHaveText(`${example.files.length} DICOM files`);
+});
+
+test("cancelling archive creation never publishes the dataset", async ({ page }) => {
+  test.setTimeout(300000);
+  await page.goto("/");
+  await page.locator("select[data-neurodesk-example]").selectOption(example.id);
+  await expect(page.locator("#fileInfo")).toHaveText(`${example.files.length} DICOM files`, { timeout: 240000 });
+  await page.evaluate(() => {
+    const stream = Blob.prototype.stream;
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    window.releaseArchive = () => { Blob.prototype.stream = stream; release(); };
+    Blob.prototype.stream = function () {
+      const output = stream.call(this);
+      const getReader = output.getReader.bind(output);
+      output.getReader = (...args) => {
+        const reader = getReader(...args);
+        const read = reader.read.bind(reader);
+        reader.read = async () => {
+          window.archiveStarted = true;
+          await gate;
+          return read();
+        };
+        return reader;
+      };
+      return output;
+    };
+  });
+  await page.locator("#runButton").click();
+  await page.waitForFunction(() => window.archiveStarted === true, null, { timeout: 120000 });
+  await page.locator("#cancelButton").click();
+  await page.evaluate(() => window.releaseArchive());
+  await expect(page.locator("#statusText")).toHaveText("Conversion cancelled", { timeout: 120000 });
+  await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
+  await expect(page.locator("#outputSection")).not.toHaveAttribute("open");
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
+
 test("a failed example download can retry", async ({ page }) => {
   test.setTimeout(150000);
   let attempts = 0;

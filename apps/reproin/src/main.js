@@ -87,6 +87,7 @@ let running = null;
 
 function setInputs(files) {
   dicom = files;
+  $("dicomInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
   running?.abort();
   results.render();
   $("outputSection").open = false;
@@ -116,8 +117,9 @@ function formOptions() {
 
 async function convertSession(files, options, signal) {
   if (!files.length) throw new Error("Choose a DICOM session first.");
+  signal?.throwIfAborted();
   const controller = new AbortController();
-  const abort = () => controller.abort();
+  const abort = () => controller.abort(signal.reason);
   signal?.addEventListener("abort", abort, { once: true });
   running = controller;
   setBusy(true);
@@ -134,7 +136,9 @@ async function convertSession(files, options, signal) {
     for (const line of out.log ?? []) log.log(line);
     for (const failure of out.failures ?? []) log.log(JSON.stringify(failure), "warning");
     if (out.fatal) throw new Error(`Post-pass failed: ${typeof out.fatal === "string" ? out.fatal : JSON.stringify(out.fatal)}`);
-    const dataset = new File([await zip(out.files, `${DATASET}/`)], `${DATASET}.zip`, { type: "application/zip" });
+    const archive = await zip(out.files, `${DATASET}/`);
+    controller.signal.throwIfAborted();
+    const dataset = new File([archive], `${DATASET}.zip`, { type: "application/zip" });
     const rows = resultRows(out.files, dataset);
     results.render(rows);
     $("outputSection").open = true;
