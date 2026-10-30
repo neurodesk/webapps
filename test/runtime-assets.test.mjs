@@ -143,24 +143,30 @@ test('threaded modules stay in app scope and shared ORT references name only the
 test('composite JPEG DICOM workers use one pinned WASM without moving the workers', async () => {
   const registry = await loadAppsRegistry();
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
-  const family = manifest.families.find(family => family.id === 'dcm2niix-jpeg');
-  assert.ok(family?.deduplicate, 'JPEG DICOM WASM must declare physical deduplication');
-  const asset = family.files[0];
-  const runtime = join(dist, '_runtime', family.target, asset.name);
-  assert.equal(createHash('sha256').update(await readFile(runtime)).digest('hex'), asset.sha256);
+  // One family per pinned dcm2niix version; each app's copy loads the family with its bytes.
+  const families = manifest.families.filter(family => family.files.some(file => file.name === 'dcm2niix.jpeg.wasm'));
+  assert.ok(families.some(family => family.id === 'dcm2niix-jpeg'));
+  for (const family of families) {
+    assert.ok(family.deduplicate, `${family.id}: JPEG DICOM WASM must declare physical deduplication`);
+    const runtime = join(dist, '_runtime', family.target, family.files[0].name);
+    assert.equal(createHash('sha256').update(await readFile(runtime)).digest('hex'), family.files[0].sha256);
+  }
   let consumers = 0;
   for (const app of registry.apps) {
     const standalone = await readdir(join(repoRoot, 'apps', app.id, 'dist'), { recursive: true });
     const copies = standalone.filter(file => /(?:^|\/)dcm2niix\.jpeg[^/]*\.wasm$/.test(file));
     if (!copies.length) continue;
-    consumers++;
+    const digest = createHash('sha256').update(await readFile(join(repoRoot, 'apps', app.id, 'dist', copies[0]))).digest('hex');
+    const family = families.find(candidate => candidate.files[0].sha256 === digest);
+    assert.ok(family, `${app.id}: its JPEG WASM matches no pinned runtime family`);
+    if (family.id === 'dcm2niix-jpeg') consumers++;
     for (const copy of copies) await assert.rejects(access(join(dist, app.path, copy)), { code: 'ENOENT' });
     const workers = standalone.filter(file => /(?:^|\/)worker\.jpeg[^/]*\.js$/.test(file));
     assert.ok(workers.length, `${app.id}: JPEG worker must remain app-local`);
     // A bundled worker inlines the Emscripten glue; a static app keeps it beside the worker.
     const modules = standalone.filter(file => /(?:^|\/)(?:worker|dcm2niix)\.jpeg[^/]*\.js$/.test(file));
     const sources = await Promise.all(modules.map(file => readFile(join(dist, app.path, file), 'utf8')));
-    assert.ok(sources.some(source => /_runtime\/dcm2niix-jpeg\/1\.2\.0\/dcm2niix\.jpeg\.wasm/.test(source)),
+    assert.ok(sources.some(source => source.includes(`_runtime/${family.target}/dcm2niix.jpeg.wasm`)),
       `${app.id}: JPEG worker must load the shared WASM`);
   }
   assert.ok(consumers > 1, 'multiple app consumers must share the JPEG runtime');

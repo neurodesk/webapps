@@ -291,6 +291,22 @@ test('a declared WASM runtime is shared across app-relative and root-relative wo
   await resetCopies();
   apps[1].app_scoped_runtime_families.push('dcm2niix-jpeg');
   await assert.rejects(assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } }), /Cannot deduplicate scoped runtime dcm2niix-jpeg/);
+
+  // A second pinned version of the same runtime claims only the copies with its bytes.
+  apps[1].app_scoped_runtime_families.pop();
+  await resetCopies();
+  const newer = Buffer.from('newer runtime bytes');
+  await writeFile(join(siteDist, 'synthseg/assets', name), newer);
+  const manifest = JSON.parse(await readFile(join(root, 'runtime-assets/manifest.json'), 'utf8'));
+  manifest.families.push({
+    id: 'dcm2niix-jpeg-1.4', version: '1.4.0', target: 'dcm2niix-jpeg/1.4.0', deduplicate: true,
+    files: [{ name: 'dcm2niix.jpeg.wasm', source_app: 'synthseg', source: `assets/${name}`, sha256: createHash('sha256').update(newer).digest('hex') }],
+  });
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify(manifest));
+  await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  assert.deepEqual(await readFile(join(siteDist, '_runtime/dcm2niix-jpeg/1.4.0/dcm2niix.jpeg.wasm')), newer);
+  assert.match(await readFile(join(siteDist, 'ants/assets/worker.jpeg.js'), 'utf8'), /_runtime\/dcm2niix-jpeg\/1\.2\.0\//);
+  assert.match(await readFile(join(siteDist, 'synthseg/assets/worker.jpeg.js'), 'utf8'), /_runtime\/dcm2niix-jpeg\/1\.4\.0\//);
 });
 
 test('asyncify shares its binary while keeping each pthread module in its app scope', async t => {

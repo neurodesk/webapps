@@ -135,18 +135,22 @@ function unhashedName(file) {
 // Runtime binaries can move to the shared store independently of their worker
 // modules. Worker families retain their app scope policy and cannot opt in.
 async function deduplicateSources({ manifest, files, siteDist, registry }) {
-  for (const family of manifest.families.filter(family => family.deduplicate)) {
+  const families = manifest.families.filter(family => family.deduplicate);
+  const claimed = new Set();
+  for (const family of families) {
     for (const asset of family.files) {
       const targetPath = join(siteDist, '_runtime', family.target, asset.name);
       for (const app of registry.apps) {
         // An app's vendored components are not its own copies: removeAppCopies replaces them with the shared store.
         const vendored = join(siteDist, app.path, 'vendor', 'webapp-components') + sep;
         const appFiles = files.filter(file => file.startsWith(join(siteDist, app.path) + sep) && !file.startsWith(vendored));
-        const copies = appFiles.filter(file => unhashedName(file) === unhashedName(asset.source));
+        const copies = appFiles.filter(file => !claimed.has(file) && unhashedName(file) === unhashedName(asset.source));
         if (!copies.length) continue;
         if (app.app_scoped_runtime_families?.includes(family.id)) throw new Error(`Cannot deduplicate scoped runtime ${family.id}`);
         for (const sourcePath of copies) {
           const actual = await sha256(sourcePath);
+          // Another pinned version of the same runtime claims this copy; any other bytes are drift.
+          if (actual !== asset.sha256 && families.some(other => other.files.some(file => file.name === asset.name && file.sha256 === actual))) continue;
           if (actual !== asset.sha256) {
             throw new Error(`Runtime asset checksum mismatch for ${sourcePath}: expected ${asset.sha256}, got ${actual}`);
           }
@@ -168,6 +172,7 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
           }
           if (!references) throw new Error(`No static references found for deduplicated runtime ${sourcePath}`);
           await rm(sourcePath);
+          claimed.add(sourcePath);
         }
       }
     }
