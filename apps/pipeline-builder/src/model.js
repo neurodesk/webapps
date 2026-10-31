@@ -399,11 +399,16 @@ export function workflowIssues(doc, tools) {
   return issues;
 }
 
-/** Issues keyed by step id; workflow-level issues are under "". */
-export function issuesByStep(issues) {
+/**
+ * Issues keyed by step id; workflow-level issues, and any that name no step, are under "".
+ * Step ids are matched whole, longest first, because an imported id may contain a dot.
+ */
+export function issuesByStep(issues, stepIds) {
+  const ids = [...stepIds].sort((a, b) => b.length - a.length);
   const grouped = new Map();
   for (const issue of issues) {
-    const key = /^steps\.([^.]+)/.exec(issue.path ?? "")?.[1] ?? "";
+    const path = issue.path ?? "";
+    const key = ids.find(id => path === `steps.${id}` || path.startsWith(`steps.${id}.`)) ?? "";
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(issue);
   }

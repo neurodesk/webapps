@@ -207,8 +207,17 @@ test("imports whose maps hold non-objects are refused before the editor walks th
 });
 
 test("issues group by step and tools group by app", () => {
-  const grouped = issuesByStep([{ path: "steps.n4.inputs.x" }, { path: "outputs.y" }]);
+  const grouped = issuesByStep([{ path: "steps.n4.inputs.x" }, { path: "outputs.y" }], ["n4"]);
   assert.deepEqual([...grouped.keys()], ["n4", ""]);
+  // An imported id may contain a dot; it must not be cut at the dot or lost.
+  const dotted = issuesByStep([
+    { path: "steps.bad.name" }, { path: "steps.bad.name.inputs.x" }, { path: "steps.bad.inputs.y" }, { path: "steps.gone.inputs.z" },
+  ], ["bad", "bad.name"]);
+  assert.deepEqual([...dotted].map(([id, list]) => [id, list.map(issue => issue.path)]), [
+    ["bad.name", ["steps.bad.name", "steps.bad.name.inputs.x"]],
+    ["bad", ["steps.bad.inputs.y"]],
+    ["", ["steps.gone.inputs.z"]],
+  ]);
   assert.deepEqual(toolCatalog(tools).map(group => group.title), ["BET", "N4"]);
   assert.equal(toolLabel(n4), "N4 · correct");
 });

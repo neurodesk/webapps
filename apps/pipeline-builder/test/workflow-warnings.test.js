@@ -130,11 +130,11 @@ test("names outside the localId grammar and non-step output refs are core errors
   doc.steps["Bad id!"] = doc.steps.source;
   doc.inputs["Bad name"] = { type: "neuro:volume" };
   doc.outputs = { stray: { type: "neuro:volume", ref: "inputs.image" } };
-  const issues = validate(doc).issues.filter(issue => ["local-id-invalid", "output-ref-not-step"].includes(issue.code)).map(issue => [issue.code, issue.path]);
+  const issues = validate(doc).issues.filter(issue => ["local-id-invalid", "output-ref-not-step"].includes(issue.code)).map(issue => [issue.code, issue.path, issue.severity]);
   assert.deepEqual(issues.sort(), [
-    ["local-id-invalid", "inputs.Bad name"],
-    ["local-id-invalid", "steps.Bad id!"],
-    ["output-ref-not-step", "outputs.stray.ref"],
+    ["local-id-invalid", "inputs.Bad name", "error"],
+    ["local-id-invalid", "steps.Bad id!", "error"],
+    ["output-ref-not-step", "outputs.stray.ref", "error"],
   ]);
 });
 
