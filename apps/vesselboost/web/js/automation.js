@@ -8,7 +8,7 @@ export function registerVesselBoostAutomation(app) {
   const automation = registerAppAutomation({
     app: 'vesselboost',
     contractUrl: 'vendor/automation.json',
-    convertDicom: createDicomConverter({ moduleUrl: new URL('dcm2niix/index.js', document.baseURI).href }),
+    convertDicom: createDicomConverter({ moduleUrl: new URL('dcm2niix/index.jpeg.js', document.baseURI).href }),
     operations: {
       segment: async ({ inputs, parameters, signal, progress }) => {
         const executor = app.inferenceExecutor;

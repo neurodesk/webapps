@@ -49,7 +49,7 @@
     "@brainchop/mindgrab": "0.1.20260925",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
-    "@niivue/dcm2niix": "1.2.0"
+    "@niivue/dcm2niix": "1.4.20261029"
   },
   "devDependencies": {
     "jsdom": "24.1.3"

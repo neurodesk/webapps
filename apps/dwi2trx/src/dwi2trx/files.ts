@@ -1,8 +1,7 @@
 /**
  * Generic drag-and-drop file collection — walks a DataTransfer, recursing into
- * dropped folders. Lives here (not in the dcm2niix wrapper) so the DICOM WASM
- * stays lazily imported: every drop walks files, but only DICOM drops pull in
- * dcm2niix.
+ * dropped folders. Kept instead of @niivue/dcm2niix's walker because it stops
+ * at a file limit during the walk, not after collecting every file.
  *
  * Each file is stamped with `_webkitRelativePath` so dcm2niix can group by
  * series. `webkitGetAsEntry` is non-standard (Chromium/WebKit); callers fall

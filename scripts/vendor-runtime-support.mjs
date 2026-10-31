@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { cp, mkdir, readFile, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeCoiServiceWorker } from './lib/runtime-support.mjs';
@@ -12,12 +13,18 @@ const staticRoot = destinationArgument === -1 ? 'web' : process.argv[destination
 if (!staticRoot) throw new Error('--dest requires a directory');
 const destinationRoot = join(appDir, staticRoot);
 
-for (const family of ['dcm2niix', 'nifti-js']) {
-  const source = join(repoRoot, 'packages', 'runtime-support', 'src', family);
-  const destination = join(destinationRoot, family);
-  await rm(destination, { recursive: true, force: true });
-  await mkdir(destination, { recursive: true });
-  await cp(source, destination, { recursive: true });
+const runtimeSupport = join(repoRoot, 'packages', 'runtime-support');
+const niftiJs = join(destinationRoot, 'nifti-js');
+await rm(niftiJs, { recursive: true, force: true });
+await cp(join(runtimeSupport, 'src', 'nifti-js'), niftiJs, { recursive: true });
+
+// The JPEG build of @niivue/dcm2niix, pinned by runtime-support: worker, glue and WebAssembly side by side.
+const dcm2niixDist = join(dirname(createRequire(join(runtimeSupport, 'package.json')).resolve('@niivue/dcm2niix/package.json')), 'dist');
+const dcm2niix = join(destinationRoot, 'dcm2niix');
+await rm(dcm2niix, { recursive: true, force: true });
+await mkdir(dcm2niix, { recursive: true });
+for (const name of ['index.jpeg.js', 'worker.jpeg.js', 'dcm2niix.jpeg.js', 'dcm2niix.jpeg.wasm']) {
+  await cp(join(dcm2niixDist, name), join(dcm2niix, name));
 }
 
 if (manifest.neurodeskWebapp?.static?.coiServiceWorker) {

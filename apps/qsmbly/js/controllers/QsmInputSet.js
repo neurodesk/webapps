@@ -366,7 +366,7 @@ export class QsmInputSet {
     let file;
     try {
       file = await readSingleImage(event.target.files, {
-        moduleUrl: new URL('../../dcm2niix/index.js', import.meta.url).href,
+        moduleUrl: new URL('../../dcm2niix/index.jpeg.js', import.meta.url).href,
         updateOutput: message => this.updateOutput(message)
       });
     } catch (error) { this.updateOutput(error.message); return; }

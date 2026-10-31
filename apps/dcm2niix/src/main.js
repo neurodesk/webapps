@@ -136,7 +136,7 @@ async function loadFiles(inputs, signal) {
       const outputs = await runDcm2niix(examination.files, {
         signal,
         niftiOnly: false,
-        anonymizeSidecar: false,
+        args: ["-ba", "n"],
         timeoutMs: 10 * 60 * 1000,
       });
       const converted = await seriesFromOutputs(outputs, { signal });

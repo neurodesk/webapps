@@ -1,5 +1,16 @@
 import { isNiftiFile, filesFromDataTransferItems } from './detectFiles.js';
 
+// dcm2niix's default name starts with the input folder (%f), which can hold a patient name.
+const DICOM_NAMING = ['-f', '%p_%t_%s'];
+
+export function createDicomConverter({ moduleUrl, timeoutMs = 120000 }) {
+  if (typeof moduleUrl !== 'string' || !moduleUrl) throw new Error('A DICOM converter module URL is required');
+  return async (files, { signal } = {}) => {
+    const { runDcm2niix } = await import(/* @vite-ignore */ moduleUrl);
+    return runDcm2niix(files, { niftiOnly: false, signal, timeoutMs, args: DICOM_NAMING });
+  };
+}
+
 export async function readSingleImage(files, options = {}) {
   const list = Array.from(files || []).filter(file => !/\.(json|bval|bvec)$/i.test(file.name));
   if (!list.length) return null;
@@ -10,13 +21,12 @@ export async function readSingleImage(files, options = {}) {
 
 export class DicomController {
   constructor(options = {}) {
-    this.moduleUrl = options.moduleUrl || '../../dcm2niix/index.js';
+    this.convert = createDicomConverter({ moduleUrl: options.moduleUrl || new URL('../../dcm2niix/index.jpeg.js', import.meta.url).href });
     this.updateOutput = options.updateOutput || (() => {});
     this.onConversionComplete = options.onConversionComplete || (() => {});
     this.onDicomFiles = options.onDicomFiles || null;
     this.throwOnError = options.throwOnError ?? true;
     this.requireSingle = options.requireSingle ?? false;
-    this.dcm2niixModule = null;
     this.converting = false;
   }
 
@@ -25,11 +35,9 @@ export class DicomController {
     if (!inputFiles.length) return null;
     this.converting = true;
     this.updateOutput(`Converting ${inputFiles.length} DICOM files...`);
-    let dcm2niix;
     try {
       if (this.onDicomFiles) await this.onDicomFiles(inputFiles);
-      dcm2niix = await this._createInstance();
-      const result = await dcm2niix.input(inputFiles).run();
+      const result = await this.convert(inputFiles);
       const output = this._selectNifti(result);
       await this.onConversionComplete(output, result);
       return output;
@@ -38,7 +46,6 @@ export class DicomController {
       if (this.throwOnError) throw error;
       return null;
     } finally {
-      dcm2niix?.worker?.terminate();
       this.converting = false;
     }
   }
@@ -50,13 +57,6 @@ export class DicomController {
       return null;
     }
     return this.convertFiles(files);
-  }
-
-  async _createInstance() {
-    if (!this.dcm2niixModule) this.dcm2niixModule = await import(/* @vite-ignore */ this.moduleUrl);
-    const dcm2niix = new this.dcm2niixModule.Dcm2niix();
-    await dcm2niix.init();
-    return dcm2niix;
   }
 
   _selectNifti(resultFiles) {

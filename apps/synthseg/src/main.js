@@ -725,7 +725,7 @@ for (const id of ['robustFov', 'voxelSizeMm']) {
 }
 const automation = registerAppAutomation({
   app: 'synthseg',
-  convertDicom: (files, options) => runDcm2niix(files, { ...options, anonymizeSidecar: false }),
+  convertDicom: (files, options) => runDcm2niix(files, { ...options, args: ["-ba", "n"] }),
   operations: {
     segment: async ({ inputs, inputDetails, parameters, signal, progress }) => {
       exampleControl.cancel();

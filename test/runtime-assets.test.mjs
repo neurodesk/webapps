@@ -59,12 +59,6 @@ test('only declared app-scoped runtime families remain in composite app copies',
     const appDist = join(dist, app.path);
     const ortFamily = manifest.families.find(family => app.app_scoped_runtime_families.includes(family.id) && family.files.some(file => file.name === 'ort.webgpu.bundle.min.mjs'));
     const ortHashes = new Map((ortFamily?.files ?? []).map(file => [file.name, file.sha256]));
-    if (app.app_scoped_runtime_families.includes('dcm2niix')) {
-      for (const file of ['index.js', 'worker.js', 'dcm2niix.js', 'dcm2niix.wasm']) {
-        assert.deepEqual(await readFile(join(appDist, 'dcm2niix', file)),
-          await readFile(join(dist, '_runtime', 'dcm2niix', '1.3.20260724', file)), `${app.id}: scoped ${file}`);
-      }
-    } else await assert.rejects(access(join(appDist, 'dcm2niix')));
     await assert.rejects(access(join(appDist, 'nifti-js')));
     await assert.rejects(access(join(appDist, 'vendor', 'webapp-components')));
     try {

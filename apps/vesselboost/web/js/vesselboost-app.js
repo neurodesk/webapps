@@ -86,7 +86,7 @@ class VesselBoostApp {
 
     // Controllers
     this.fileIOController = new SimpleFileIOController({
-      dcm2niixModuleUrl: new URL('../dcm2niix/index.js', import.meta.url).href,
+      dcm2niixModuleUrl: new URL('../dcm2niix/index.jpeg.js', import.meta.url).href,
       updateOutput: (msg) => this.updateOutput(msg),
       onFileLoaded: (file) => this.onFileLoaded(file)
     });

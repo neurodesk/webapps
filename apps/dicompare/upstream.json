@@ -17,6 +17,7 @@
     "Keep `@playwright/test` declared as exact devDependencies for the monorepo e2e suite; the dependency checker rejects tooling resolved through another workspace's or the root's node_modules.",
     "Keep server.open out of vite.config.mts: vite preview inherits it, so every smoke and e2e run opened a tab in the developer's default browser.",
     "Keep the handoff receiver in ExampleInput.tsx and data-neurodesk-handoff-receiver on index.html's body: DICOM files another app of the site sends open as reference acquisitions, claimed once per page.",
+    "Convert DICOM with `runDcm2niix` from @niivue/dcm2niix 1.4 (printReportGenerator.ts, ImageManagerModal.tsx, NiivueViewer.tsx) with `-f %p_%t_%s` (no input folder, which can name a patient, in volume names) instead of `new Dcm2niix()`: it terminates each worker, which upstream's builder calls leaked, and the package ships its own types (no vendor.d.ts shim).",
     "Load dicompare's embed, worker and schemas from https://webapps.neurodesk.org/dicompare/ (this repository's deployment of apps/dicompare/public), not dicompare.neurodesk.org, whose GitHub Pages site stopped serving in October 2026; the rewrite keeps upstream's URLs pointed there."
   ],
   "rewrite": {
