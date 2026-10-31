@@ -15,7 +15,7 @@ Paths are relative to the repository root. Line numbers are from `main` at
 | App | Step | Engine now | Transform | Pinned by | Verdict |
 | --- | --- | --- | --- | --- | --- |
 | BISON | T1 → ICBM 2009c affine (`packages/bison/src/preprocess.js` `greedyRegistration`) | Greedy NMI, image-centres start | affine | MINC agreement gates, CLI/browser byte equality | Done: Greedy (WP1) |
-| BISON | T1_VP → template affine + SyN (`nonlinearArguments`) | ANTs, GC + CC r2 | affine + SyN to 2 mm | same; prior correlation r 0.85 | Keep: Greedy failed the gates (WP1) |
+| BISON | T1_VP → template (`preprocess.js` `GREEDY_NONLINEAR`) | Greedy NCC r2, unmasked, from the inverse affine | SVF to 1 mm | same; prior correlation r 0.85 | Done: Greedy (WP1b) |
 | BISON | FLAIR → T1 (`greedyRegistration`) | Greedy NMI, identity start | rigid | same | Done: Greedy (WP1) |
 | SYNcro app | normalisation to MNI152 (`apps/syncro/src/worker.js`) | Greedy by default, ANTs SyN on request | affine + NMI SVF | ANTs path: container parity | Keep: Greedy is already the default |
 | SYNcro app | pathological → primary (`worker.js`) | Greedy NMI affine | affine | none | Keep |
@@ -78,7 +78,7 @@ Template: ICBM 2009c nlin sym (`src/assets.js:12-13`). Shared settings: seed
 | Step | Purpose | Transform and settings | Source |
 |---|---|---|---|
 | T1 → template | Brain mask and priors | Greedy `-a -m NMI -ia-image-centers -n 100x50x10` (single-threaded WASM), converted to ITK `.mat` (`greedyMatrixToMat`) | `preprocess.js` `greedyRegistration`, `register.js` |
-| T1_VP → template | Non-linear priors, Av_T1, Av_FLAIR | Init from the step above (`lin.mat`); Affine[0.1] GC `500x250x50`; SyN[0.1,3,0] CC radius 2, `100x70x50`, shrink `8x4x2`, smooth `3x2x1vox` | `register.js:84-92`, `preprocess.js:220` |
+| T1_VP → template | Non-linear priors, Av_T1, Av_FLAIR | Greedy `-sv -m NCC 2x2x2 -n 100x70x50`, T1_VP fixed, `-it` the inverse of the step above, no mask; `--apply` through the warp then the inverse affine | `register.js` `GREEDY_NONLINEAR`, `preprocess.js` |
 | FLAIR → T1 | FLAIR features | Greedy `-a -dof 6 -m NMI -n 100x50x10`, identity start, converted to ITK `.mat` | `preprocess.js` `greedyRegistration` |
 
 The mapping to the upstream MINC steps is in `packages/bison/docs/preprocessing.md`.
@@ -88,7 +88,7 @@ Validation:
 - `packages/bison/validation/browser-reference.json`, checked by `validation/cli-check.mjs`: labels and mask byte-identical, probability means within 1e-6.
 - `test/pipeline-native.test.js:35-46` (opt-in, `BISON_FULL_PIPELINE=1`): mask Dice ≥ 0.95 and per-class Dice floors against the native reference, set at the five-subject minimum minus 0.02.
 - `validation/preprocess-reference.mjs`: linear T1 mask Dice ≥ 0.97 against native.
-- `test/register.test.js` pins the SyN argv structure and checks that `--apply` through a converted Greedy matrix resamples as Greedy does.
+- `test/register.test.js` checks that `--apply` through a converted Greedy matrix, and through the Greedy warp and the inverse affine, resamples as Greedy does.
 
 The native reference (`packages/bison/validation/native`) runs upstream BISON on
 MINC: `bestlinreg_s2` for the linear steps and `nlfit_s -level 2` for the
@@ -273,7 +273,7 @@ only its own format. Applying transforms from different tools together already
 exists in one place: fastprep's final niimath resample.
 
 - Greedy affine → Greedy SVF: yes. `registerGreedy` passes the affine matrix to the SVF (`packages/greedy/src/index.js:20-26`); fastprep does the same with `-it` (`stages.rs:394`).
-- ANTs affine → ANTs SyN: yes in BISON, through hmc-registration's `--initial-moving-transform lin.mat` (`packages/bison/src/register.js:87`). `packages/registration` cannot take an initial transform.
+- ANTs affine → ANTs SyN: BISON did, through hmc-registration's `--initial-moving-transform lin.mat`, until its nonlinear step moved to Greedy (WP1b). `packages/registration` cannot take an initial transform.
 - elastix: its presets chain stages internally. An external initial transform is not wired.
 - FireANTs: `--init-affine` exists in the engine and is not exposed.
 - Across tools: SYNcro's ANTs path reslices the image through the Greedy affine and then through the ANTs warp (`apps/syncro/src/worker.js:131-137`). That is two interpolations, not one composed transform. fastprep's final resample (`exes/fastprep/core/src/stages.rs:1375-1441`) is one niimath call that applies niimath's motion parameters (`-hmc`), the allineate BOLD → T1w JSON (`-mat`), any SDC shift map (`-vsm`) and, for the template space, the Greedy warp and affine (`-warp`, line 1380), in one interpolation (`exes/fastprep/core/src/report.rs:1137`). This is composition at resampling time; no tool takes another tool's transform as a registration start.
@@ -299,7 +299,7 @@ re-recorded.
 ## Outcome of #612
 
 Three apps ran ANTs implicitly: BISON, SYNcro's command line and HMC. SYNcro's command line and
-BISON's two linear registrations changed.
+BISON's three registrations changed.
 
 ### WP1: BISON's linear registrations run on Greedy
 
@@ -324,6 +324,19 @@ The browser worker and the command line both run Greedy's committed single-threa
 `greedy-rs` differs from the WebAssembly build in the twelfth digit of the matrix. The WebAssembly
 build gained a rigid (`-dof 6`) export. [`packages/bison/docs/preprocessing.md#greedy`](../../packages/bison/docs/preprocessing.md#greedy)
 has the per-subject tables.
+
+### WP1b: BISON's nonlinear registration runs on Greedy NCC
+
+greedy-rs gained upstream Greedy's NCC metric (`-m NCC 2x2x2`, the unweighted
+`MultiComponentWeightedNCCImageMetric` and its exact gradient). On the five subjects it gave the
+same correlation as Greedy 1.4 to within 0.004. With it, Greedy replaced ANTs SyN for T1_VP →
+template: `-sv -m NCC 2x2x2 -n 100x70x50`, unmasked, from the inverse T1 affine. Every subject passed
+all ten label gates, agreement was 0.936-0.946, and the step took 567-667 s against 1372-1615 s for
+SyN on the same shared host, with a 1.46 GB WebAssembly heap against 2.2 GB. The masked 2 mm warps
+correlated better (r 0.88-0.89) and took 92-198 s, but failed sub-HML0774's CSF gate: the
+classification mask fell short at the brain edge. BISON now runs no `antsRegistration`; hmc
+`--apply` still resamples. [`packages/bison/docs/preprocessing.md#nonlinear-step`](../../packages/bison/docs/preprocessing.md#nonlinear-step)
+has the tables.
 
 ### WP2: SYNcro's command line follows the app
 
@@ -355,4 +368,4 @@ These are for the maintainer to decide.
 2. Deformable step. Greedy SVF already accepts an initial affine and is the SYNcro default. Compare it against ANTs SyN (hmc-registration argv) and FireANTs on one subject-to-template case as an initial screen. One case cannot show that a default fits every pipeline: SYNcro registers an extracted synthetic brain (`packages/syncro/src/pipeline.js:215-225`), fastprep whole-head images with a template mask (`exes/fastprep/core/src/stages.rs:386-398`), and SYNcro's validation notes limit conclusions from one T1 scan (`packages/syncro/validation/README.md:37`). Evaluate the candidates on representative data for each pipeline before choosing a shared default.
 3. Validation first. Every fastprep registration has no pinned reference, and SYNcro's default MindGrab + Greedy path in the app has only a 10 % overlap floor (the command line's SynthStrip + Greedy path is now compared with the container). Add a reference or overlap gate before swapping tools there, so a swap shows a measured difference.
 4. Keep method-specific registrations. HMC, NeSVoR, SDC, dwicorrect, TopoFit (its affine and learned spherical registration) and CALMaR's SynthMorph are tied to their methods and parity targets. They are not candidates for a generic default.
-5. BISON. Decide the acceptance measure for a new registration before changing it, per the caveat above. Greedy's linear steps passed the native-agreement gates and are in use; its nonlinear registration failed them (Outcome, WP1). Retry the nonlinear step only with a cross-correlation metric or another engine.
+5. BISON. Decide the acceptance measure for a new registration before changing it, per the caveat above. Every BISON registration now runs on Greedy and passes the native-agreement gates (WP1, WP1b).

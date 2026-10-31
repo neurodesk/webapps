@@ -80,7 +80,7 @@ test("progress moves through the stages in pipeline order and the classifier fil
     "Denoising T1",
     "Correcting T1 intensity non-uniformity",
     "Normalising T1 intensities",
-    "Registering T1 to the template (affine + SyN)",
+    "Registering T1 to the template (nonlinear)",
     "Resampling t1/sp_1 to the T1",
     "Registering FLAIR to T1 (rigid)",
     "Denoising FLAIR",
@@ -92,7 +92,7 @@ test("progress moves through the stages in pipeline order and the classifier fil
   const fractions = order.map(stageFraction);
   assert.ok(fractions.every((value) => typeof value === "number"), "every stage message is known");
   for (let k = 1; k < fractions.length; k++) assert.ok(fractions[k] > fractions[k - 1], `${order[k]} starts after ${order[k - 1]}`);
-  assert.equal(stageFraction("Registering T1 to the template (affine)"), 0.04, "the affine stage is not taken for the SyN one");
+  assert.equal(stageFraction("Registering T1 to the template (affine)"), 0.05, "the affine stage is not taken for the nonlinear one");
   assert.equal(stageFraction("Something else"), null);
   assert.equal(classifyFraction(0), stageFraction("Classifying tissues"));
   assert.ok(classifyFraction(1) <= stageFraction("Writing results"));

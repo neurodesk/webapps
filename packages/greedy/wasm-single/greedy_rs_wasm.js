@@ -191,6 +191,39 @@ export function register_rigid_masked_wasm(fixed, moving, mask, metric, iteratio
 }
 
 /**
+ * `greedy -sv -m METRIC [-gm MASK] [-it aff.mat]` with `metric` `NMI` or `NCC 2x2x2` (the
+ * box-window radius in voxels): raw `.nii` displacement field, as the CLI writes `-o`.
+ * @param {Uint8Array} fixed
+ * @param {Uint8Array} moving
+ * @param {Uint8Array | null | undefined} mask
+ * @param {string | null | undefined} matrix
+ * @param {string} metric
+ * @param {string} iterations
+ * @returns {Uint8Array}
+ */
+export function register_svf_masked_wasm(fixed, moving, mask, matrix, metric, iterations) {
+    const ptr0 = passArray8ToWasm0(fixed, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(moving, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(mask) ? 0 : passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    var len2 = WASM_VECTOR_LEN;
+    var ptr3 = isLikeNone(matrix) ? 0 : passStringToWasm0(matrix, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len3 = WASM_VECTOR_LEN;
+    const ptr4 = passStringToWasm0(metric, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len4 = WASM_VECTOR_LEN;
+    const ptr5 = passStringToWasm0(iterations, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len5 = WASM_VECTOR_LEN;
+    const ret = wasm.register_svf_masked_wasm(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v7 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v7;
+}
+
+/**
  * Reslice a NIfTI moving image into the fixed image's grid through one RAS affine.
  * @param {Uint8Array} fixed
  * @param {Uint8Array} moving

@@ -61,11 +61,15 @@ test('createGreedy starts a module Worker per instance and follows the Greedy wo
   const fixed = new Uint8Array([1, 2]);
   const affine = greedy.affine({ fixed, moving: new Uint8Array([3]) });
   assert.deepEqual(workers[0].sent[0], { method: 'affine', fixed, moving: new Uint8Array([3]), wasm: 'https://app.test/k/greedy.wasm', id: 0 });
-  workers[0].reply({ matrix: '1 0 0 0', heapBytes: 4096 });
+  workers[0].reply({ result: '1 0 0 0', heapBytes: 4096 });
   assert.equal(await affine, '1 0 0 0');
   assert.equal(greedy.memoryBytes(), 4096);
+  const svf = greedy.svf({ fixed, moving: fixed, matrix: '1 0 0 0', metric: 'NCC 2x2x2', iterations: '1x0x0' });
+  assert.deepEqual(workers[0].sent[1], { method: 'svf', fixed, moving: fixed, matrix: '1 0 0 0', metric: 'NCC 2x2x2', iterations: '1x0x0', wasm: 'https://app.test/k/greedy.wasm', id: 1 });
+  workers[0].reply({ result: new Uint8Array([7]), heapBytes: 8192 });
+  assert.deepEqual(await svf, new Uint8Array([7]));
   const rigid = greedy.rigid({ fixed, moving: fixed });
-  assert.equal(workers[0].sent[1].method, 'rigid');
+  assert.equal(workers[0].sent[2].method, 'rigid');
   workers[0].reply({ error: 'unreachable' });
   await assert.rejects(rigid, /Greedy rigid registration failed: unreachable/);
   await greedy.dispose();

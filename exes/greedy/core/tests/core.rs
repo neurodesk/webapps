@@ -1,10 +1,10 @@
 use greedy_rs_core::{
     AffineMetric, AffineStart, DEFAULT_AFFINE_JITTER, Grid, Interpolation, Mat4, NiftiImage,
-    NiftiSeries, ScalarType, Transform, VectorField, affine_matrix, affine_parameters,
+    NiftiSeries, ScalarType, SvfMetric, Transform, VectorField, affine_matrix, affine_parameters,
     decode_image, decode_series, decode_vector_field, downsample_grid, encode_image, encode_series,
     encode_vector_field, gaussian_smooth, grids_match, image_centers, nmi_score_gradient_affine,
     register_affine, register_affine_masked, register_nmi_svf, register_nmi_svf_masked,
-    register_rigid, register_rigid_masked, reslice, reslice_with_background,
+    register_rigid, register_rigid_masked, register_svf, reslice, reslice_with_background,
     reslice_with_interpolation, score_affine, ssd_score_gradient,
 };
 
@@ -756,6 +756,46 @@ fn full_fixed_mask_reproduces_unmasked_svf() {
     let masked =
         register_nmi_svf_masked(fixed, moving, Some(all), [5, 5, 2], false, |_, _| {}).unwrap();
     assert_eq!(plain.data, masked.data);
+}
+
+#[test]
+fn ncc_svf_follows_a_shifted_blob_whatever_its_contrast() {
+    // NCC is invariant to a linear change of intensity, so the moving blob is
+    // brighter and offset; the warp must still carry the fixed centre towards
+    // it. A 5-voxel window sees a shifted smooth ramp only as an offset, so the
+    // field stops short of the 2-voxel shift: upstream Greedy 1.4 (-m NCC
+    // 2x2x2 -n 50x50x50) gives 0.8 voxels here, greedy-rs 0.89.
+    let n = 24;
+    let fixed = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n)
+            .map(blob(n, [11.0, 12.0, 12.0], 4.0))
+            .collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let moving = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n)
+            .map(|i| 3.0 * blob(n, [13.0, 12.0, 12.0], 4.0)(i) + 50.0)
+            .collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let warp = register_svf(
+        fixed,
+        moving,
+        None,
+        SvfMetric::Ncc([2; 3]),
+        [50, 50, 50],
+        false,
+        |_, _| {},
+    )
+    .unwrap();
+    let centre = warp.data[11 + n * (12 + n * 12)];
+    assert!((0.6..1.2).contains(&centre[0]), "{centre:?}");
+    assert!(
+        centre[1].abs() < 0.15 && centre[2].abs() < 0.15,
+        "{centre:?}"
+    );
 }
 
 #[test]

@@ -41,6 +41,14 @@ export function registerRigidGreedy({ api, fixed, moving, iterations = "100x50x1
   return api.register_rigid_masked_wasm(bytes(fixed), bytes(moving), null, "NMI", iterations, false, null);
 }
 
+// `greedy -sv -m METRIC [-gm MASK] -it MATRIX`: the stationary-velocity warp (raw .nii, physical
+// LPS displacement on the fixed grid) that acts before `matrix`, Greedy's RAS text mapping fixed
+// points to moving points. `mask`, raw .nii bytes on the fixed grid, limits where the metric counts.
+export function registerSvfGreedy({ api, fixed, moving, matrix, mask = null, metric = "NCC 2x2x2", iterations = "100x50x0" }) {
+  if (!api) throw new Error("Greedy WebAssembly is not initialized.");
+  return api.register_svf_masked_wasm(bytes(fixed), bytes(moving), mask === null ? null : bytes(mask), matrix, metric, iterations);
+}
+
 export function resliceGreedy({ api, fixed, moving, registration, precedingMatrix = null, interpolation = "linear", fill = 0 }) {
   if (!api) throw new Error("Greedy WebAssembly is not initialized.");
   if (!registration?.matrix || !registration?.warp) throw new Error("Greedy deformable transforms are required.");

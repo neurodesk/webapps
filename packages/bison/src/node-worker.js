@@ -48,11 +48,12 @@ try {
     instance = await loadDenoise({ ...locations, onLog });
   } else if (kind === 'greedy') {
     const { loadGreedySingleThread } = await import('@neurodesk/greedy/single');
-    const { registerAffineGreedy, registerRigidGreedy } = await import('@neurodesk/greedy');
+    const { registerAffineGreedy, registerRigidGreedy, registerSvfGreedy } = await import('@neurodesk/greedy');
     const api = await loadGreedySingleThread();
     instance = {
       affine: ({ fixed, moving }) => registerAffineGreedy({ api, fixed, moving }),
       rigid: ({ fixed, moving }) => registerRigidGreedy({ api, fixed, moving }),
+      svf: (args) => registerSvfGreedy({ api, ...args }),
       memoryBytes: api.memoryBytes,
     };
   } else {
@@ -77,6 +78,8 @@ if (instance) {
         result = transferable(await instance.denoise(...args), transfer);
       } else if (kind === 'greedy' && (method === 'affine' || method === 'rigid')) {
         result = instance[method](...args);
+      } else if (kind === 'greedy' && method === 'svf') {
+        result = transferable(instance.svf(...args), transfer);
       } else {
         throw new Error(`Unknown method ${method}.`);
       }

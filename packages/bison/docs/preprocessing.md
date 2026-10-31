@@ -1,15 +1,15 @@
 # Preprocessing
 
 `src/preprocess.js` runs the steps of `validation/native/run_native.sh` (masked order-1
-`volume_pol` variant) with tools that run in a browser. `src/register.js` builds the ANTs argv and
-converts Greedy's matrices to ITK `.mat` files.
+`volume_pol` variant) with tools that run in a browser. `src/register.js` builds the `--apply` argv
+and converts Greedy's matrices to ITK `.mat` files.
 The tools are injected, so the browser worker and the command line run the same code:
 
 | Driver | Node (`src/node.js`) | Use |
 | --- | --- | --- |
-| `createRegistration()` | `@neurodesk/hmc-registration` `loadHmcRegistration` | `antsRegistration` and `--apply` |
+| `createRegistration()` | `@neurodesk/hmc-registration` `loadHmcRegistration` | `--apply` |
 | `createDenoiser()` | `@neurodesk/ants-denoise` `loadDenoise` | `DenoiseImage` |
-| `createGreedy()` | `@neurodesk/greedy/single` `loadGreedySingleThread` | the T1 affine and the FLAIR rigid |
+| `createGreedy()` | `@neurodesk/greedy/single` `loadGreedySingleThread` | the T1 affine, the nonlinear warp and the FLAIR rigid |
 | `niimath(args, files)` | `@neurodesk/node-drivers/niimath` with `@niivue/niimath` 1.4.20261016 | `-n4` |
 | `ort`, `sessionOptions` | `onnxruntime-node` 1.29.0, CPU | the forest (`src/classify.js`), used by `src/pipeline.js` |
 
@@ -29,51 +29,50 @@ from the official MNI release. `fitVolumePol` with them reproduces the native ex
 | `mincnlm -beta 0.7` | `DenoiseImage` defaults: Gaussian, patch 1, search 2, shrink 1; mask = linear mask | `T1_NLM.nii` |
 | `nu_correct -mask -iter 200 -distance 50` | `niimath -n4` with a four-level schedule, see [N4](#n4) | `T1_N4.nii.gz` |
 | `volume_pol --order 1 --noclamp --source_mask <lin mask> --target_mask Mask` | `fitVolumePol` + `applyVolumePol` | `T1_norm`, `T1_VP.nii` |
-| `bestlinreg_s2 T1_VP Av_T1` + `nlfit_s -level 2` | one `antsRegistration`: Affine (shrink 4x2x1) started from the first affine, then `SyN[0.1,3,0]` with CC radius 2, shrink 8x4x2, smoothing 3x2x1 vox (affine stage GC) | `T1toTemplate_pp0GenericAffine.mat`, `..1Warp.nii.gz`, `..1InverseWarp.nii.gz` |
-| `mincresample Mask -invert_transformation -nearest` | `--apply` on the T1 grid, `NearestNeighbor`, inverse full transform | `Mask_nl.nii` |
-| BISON `itk_resample` of `SP_k`, `Av_T1`, `Av_FLAIR` | `--apply` on the T1 grid, `BSpline[2]`, inverse full transform | `<mode>/sp_<k>.nii`, `av_t1.nii`, `av_flair.nii` |
+| `bestlinreg_s2 T1_VP Av_T1` + `nlfit_s -level 2` | Greedy `-sv -m NCC 2x2x2 -n 100x70x50`, T1_VP fixed, template moving, `-it` the inverse first affine, no mask, see [Nonlinear step](#nonlinear-step) | `T1toTemplate_ppWarp.nii` |
+| `mincresample Mask -invert_transformation -nearest` | `--apply` on the T1 grid, `NearestNeighbor`, warp then inverse affine | `Mask_nl.nii` |
+| BISON `itk_resample` of `SP_k`, `Av_T1`, `Av_FLAIR` | `--apply` on the T1 grid, `BSpline[2]`, warp then inverse affine | `<mode>/sp_<k>.nii`, `av_t1.nii`, `av_flair.nii` |
 | `bestlinreg_s2 -lsq6 FLAIR T1 -mi -close` | Greedy `-a -dof 6 -m NMI -n 100x50x10`, T1 fixed, identity start (`-close`) | `FLAIRtoT10GenericAffine.mat` |
 | FLAIR mask (`xfmconcat`, inverted, `-nearest`) | `--apply` on the FLAIR grid, `NearestNeighbor`, inverse rigid then inverse T1 affine | `FLAIR_Mask.nii` |
 | FLAIR `mincnlm`, `nu_correct`, `volume_pol` to `Av_FLAIR` | as for T1, with the FLAIR mask | `FLAIR_NLM.nii`, `FLAIR_N4.nii.gz`, `FLAIR_norm`, `FLAIR_VP.nii` |
 | `mincresample FLAIR_VP -transform FLAIRtoT1.xfm -like T1_VP` | `--apply` on the T1 grid, `Linear`, rigid | `FLAIR_CR.nii` |
 
-The second T1 registration starts from the first affine instead of starting again as
+The nonlinear registration starts from the first affine instead of starting again as
 `bestlinreg_s2` does: the normalised T1 has the raw T1's grid, so the first affine is already
-close. SyN stops at shrink 2 on the 1 mm template because `nlfit_s -level 2` stops at a 2 mm step;
-a full-resolution SyN level would multiply the single-threaded run time.
+close. It runs to the 1 mm level although `nlfit_s -level 2` stops at a 2 mm step: stopping at 2 mm
+failed a CSF gate ([Nonlinear step](#nonlinear-step)).
 
 ## Metric choice
 
-The `antsRegistration` of T1_VP to the template uses correlation metrics, as the native tools do
-(`bestlinreg_s2` optimises minctracc's xcorr). This table chose them, when ANTs ran the first T1
-affine too. Measured on sub-HML0541 (`validation/preprocess-reference.mjs` and single-stage
-runs from the same checkpoints), against the native reference:
+The nonlinear registration uses neighbourhood cross-correlation, the metric closest to
+`bestlinreg_s2`'s minctracc xcorr. This table chose it, when ANTs ran every registration. Measured on
+sub-HML0541 (`validation/preprocess-reference.mjs` and single-stage runs from the same
+checkpoints), against the native reference:
 
 | Variant | Result | Seconds |
 | --- | --- | ---: |
-| T1 affine, Mattes | linear mask Dice 0.968, 1154 mL (native 1208 mL) | 131 |
-| T1 affine, GC | linear mask Dice 0.975, 1211 mL | 94 |
-| SyN, Mattes, 100x70x50 | r(warped Av_T1, native warped Av_T1) 0.63 | 223 |
-| SyN, Mattes, 200x200x100, step 0.2 | r 0.69 | 354 |
-| SyN, CC radius 2, 100x70x50 | r 0.85 | 689 |
+| ANTs T1 affine, Mattes | linear mask Dice 0.968, 1154 mL (native 1208 mL) | 131 |
+| ANTs T1 affine, GC | linear mask Dice 0.975, 1211 mL | 94 |
+| ANTs SyN, Mattes, 100x70x50 | r(warped Av_T1, native warped Av_T1) 0.63 | 223 |
+| ANTs SyN, Mattes, 200x200x100, step 0.2 | r 0.69 | 354 |
+| ANTs SyN, CC radius 2, 100x70x50 | r 0.85 | 689 |
 
 r is Pearson's correlation inside the native classification mask. The native warped Av_T1 itself
 correlates 0.82 with the native T1_VP; the priors are classifier inputs, so the warp must match.
-`nonlinearArguments({ affineMetric, synMetric })` takes another metric name from `METRICS`.
-
-Every `antsRegistration` has `--float 1`, `--random-seed 1234` (`DEFAULT_SEED`),
-`--collapse-output-transforms 1`, `--winsorize-image-intensities [0.005,0.995]` and no histogram
-matching. Identical template images (BISON and BISON-WMH share `SP_1..7`) are resampled once.
+Greedy's NMI fell short in the same way as Mattes ([Nonlinear step](#nonlinear-step)); its NCC
+reaches the CC result. Identical template images (BISON and BISON-WMH share `SP_1..7`) are
+resampled once.
 
 ## Greedy
 
-Greedy (`@neurodesk/greedy`, NMI) runs the two linear registrations; ANTs keeps the nonlinear one.
-Both the browser worker and Node run Greedy's committed single-threaded WebAssembly
-(`wasm-single`), so their matrices are the same bytes; the native `greedy-rs` rounds differently
-(the T1 affine differed in the twelfth digit). `greedyMatrixToMat` turns Greedy's RAS matrix
-(fixed point to moving point) into the LPS `.mat` that `antsRegistration` would write, so
-`--apply` and the SyN start (`--initial-moving-transform`) read it unchanged;
-`test/register.test.js` checks that `--apply` through it resamples as Greedy does.
+Greedy (`@neurodesk/greedy`) runs every registration: the T1 affine and FLAIR rigid with NMI, the
+nonlinear warp with NCC. Both the browser worker and Node run Greedy's committed single-threaded
+WebAssembly (`wasm-single`), so their transforms are the same bytes; the native `greedy-rs` rounds
+differently (the T1 affine differed in the twelfth digit). `greedyMatrixToMat` turns Greedy's RAS
+matrix (fixed point to moving point) into the LPS `.mat` that `antsRegistration` would write, so
+`--apply` reads it unchanged, and it reads Greedy's warp (LPS displacements on the fixed grid) as a
+displacement field. `test/register.test.js` checks that `--apply` through the matrix, and through the
+warp and the inverse affine, resamples as Greedy does.
 
 On 2026-10-27 the native reference was rebuilt on five ds007522 subjects with the MINC 1.9.18 and
 ANTs 2.6.0 containers from Neurodesk's CVMFS (`--volpol masked-order1 --flair-reg ants`). The ANTs
@@ -117,32 +116,50 @@ The masked affine converges (determinants 0.64-0.73, #623) but fits the template
 the head, so it is not used. The longer schedule gains nothing on sub-HML0541 for 2.7 times the time.
 The FLAIR rigid from the identity and from image centres gave the same mask Dice.
 
-### Nonlinear step (stays on ANTs)
+### Nonlinear step
 
-Greedy writes no inverse warp, so a Greedy SVF can bring the template to the T1 grid only with
-T1_VP fixed and the template moving (`-it` the inverse Greedy affine). Mean r over the five subjects:
+Greedy writes no inverse warp, so a Greedy SVF brings the template to the T1 grid only with T1_VP
+fixed and the template moving (`-it` the inverse Greedy affine). greedy-rs ports upstream Greedy's
+NCC (`-m NCC 2x2x2`, the unweighted `MultiComponentWeightedNCCImageMetric`, with its exact gradient)
+for this step; on the five subjects it gave the same r as upstream Greedy 1.4 to within 0.004.
+Measured on 2026-10-30 and 2026-10-31 with the whole pipeline in Node, as for the linear steps; r
+columns are means over the five subjects (Av_T1, then the CSF and cerebellar priors):
 
 | Nonlinear registration | r Av_T1 | r CSF | r cerebellar GM / WM | Label gates passed | Seconds |
 | --- | --- | --- | --- | --- | ---: |
-| ANTs SyN, CC (current) | 0.867 | 0.794 | 0.985 / 0.977 | 10 of 10 | 1372-1615 |
+| ANTs SyN, CC radius 2 (before) | 0.867 | 0.793 | 0.986 / 0.978 | 10 of 10 | 1372-1615 |
+| Greedy NCC 2x2x2, 100x70x50, no mask (used) | 0.873 | 0.797 | 0.990 / 0.985 | 10 of 10 | 567-667 |
+| Greedy NCC 2x2x2, 200x100x0, linear mask | 0.891 | 0.829 | 0.985 / 0.980 | 8 of 10 | 173-198 |
+| Greedy NCC 2x2x2, 100x50x0, linear mask | 0.883 | 0.817 | 0.985 / 0.979 | 8 of 10 | 92-98 |
+| Greedy NMI 400x200x100, mask dilated 4 voxels (#626) | 0.884 | 0.819 | 0.975 / 0.955 | 6 of 10 | 936-1011 |
+| Greedy NMI 100x50x0, linear mask | 0.783 | | | | 87-95 |
 | none (the Greedy affine only) | 0.525 | | | | |
-| Greedy 100x50x0 (stops at 2 mm), unmasked | 0.693 | | | | 94-108 |
-| Greedy 100x50x0, linear mask | 0.783 | | | | 87-95 |
-| Greedy 100x50x0, linear mask, ANTs affine start (#626) | 0.817 | 0.727 | 0.944 / 0.918 | 0 of 10 | 103-123 |
-| Greedy 400x200x100, linear mask (#626) | 0.864 | 0.798 | 0.960 / 0.953 | 4 of 10 | 979-1039 |
-| Greedy 400x200x100, mask dilated 4 voxels (#626) | 0.884 | 0.819 | 0.975 / 0.955 | 6 of 10 | 936-1011 |
 
-The 2 mm schedule misses r 0.85 on every subject (unmasked 0.389 on sub-HML0962). The longer
-schedules reach it, but failed the label gates: the best still failed sub-HML0774 (CSF Dice 0.69,
-cerebellar WM 0.85; gates 0.77 and 0.88) and sub-HML0689 narrowly. Greedy has no cross-correlation
-metric, and the metric table above shows that CC is what brings SyN close to `nlfit_s`.
+With the warp used, by subject:
+
+| Subject | r Av_T1 | Classification mask Dice | Agreement | CSF Dice (t1) | WMH mL (native) |
+| --- | --- | --- | --- | --- | --- |
+| sub-HML0541 | 0.902 | 0.983 | 0.946 / 0.945 | 0.822 | 15.3 (16.3) |
+| sub-HML0654 | 0.875 | 0.978 | 0.941 / 0.941 | 0.814 | 7.1 (8.3) |
+| sub-HML0689 | 0.872 | 0.978 | 0.943 / 0.943 | 0.794 | 11.6 (12.6) |
+| sub-HML0774 | 0.881 | 0.978 | 0.938 / 0.936 | 0.787 | 8.2 (11.1) |
+| sub-HML0962 | 0.834 | 0.970 | 0.943 / 0.944 | 0.801 | 9.7 (9.7) |
+
+The masked 2 mm warps correlate better but fail sub-HML0774's CSF gate (0.729-0.737, gate 0.768):
+with the metric counted only inside the linear mask, nothing pulls the template's brain edge out to
+the T1's, and the classification mask (0.973) left out 42,832 native CSF voxels where ANTs' (0.979)
+left out 27,145. Inside both masks CSF Dice was 0.905 against ANTs' 0.913. A mask dilated by 4 or 8
+voxels, an NMI or NCC affine refinement on T1_VP, and less field smoothing did not raise that mask;
+registering the whole head to 1 mm did. Agreement, 0.936-0.946, is within or above the ANTs range of
+0.933-0.944. The single-threaded WebAssembly heap of this step is 1.46 GB, against 2.2 GB for SyN.
 
 ## Transform direction and order
 
-An `antsRegistration` or Greedy transform maps fixed points to moving points. The template is the fixed
-image of both T1 registrations, the T1 the fixed image of the FLAIR registration. So
-`0GenericAffine.mat` and `1Warp` map template to T1, and the rigid maps T1 to FLAIR.
-`1InverseWarp` holds the inverse field: `--apply` refuses `inverse:` on a displacement field.
+A Greedy transform maps fixed points to moving points. The template is the fixed image of the T1
+affine, the T1 the fixed image of the FLAIR rigid, and T1_VP the fixed image of the warp, which
+Greedy registered from the inverse affine. So the affine maps template to T1, the rigid T1 to FLAIR,
+and the warp a T1 point to where the inverse affine then takes it into the template. `--apply`
+refuses `inverse:` on a displacement field, and needs none.
 
 `hmc --apply` applies the **last** listed transform first to an output point: `apply.cxx` adds the
 transforms to an ITK composite in command-line order, and ITK applies the queue from the back.
@@ -155,7 +172,7 @@ same file list therefore means different mappings in the two programs. The lists
 | Output grid | Point mapping | hmc list |
 | --- | --- | --- |
 | T1, linear | T1 to template: inverse affine | `inverse:lin.mat` |
-| T1, full | T1 to template: inverse affine, then inverse warp | `nl_inverse.nii.gz inverse:nl.mat` |
+| T1, full | T1 to template: warp, then inverse affine | `inverse:lin.mat warp.nii` |
 | FLAIR | FLAIR to T1 (inverse rigid), then T1 to template (inverse affine) | `inverse:lin.mat inverse:rigid.mat` |
 | T1, FLAIR image | T1 to FLAIR: rigid | `rigid.mat` |
 
@@ -238,15 +255,16 @@ removes any global scale.
 
 ## Kernel instances
 
-`registrationSession` loads a new hmc kernel instance for each group of runs (T1 affine and linear
-mask; nonlinear, `Mask_nl` and the template images; FLAIR), so each group's heap is freed when it
+`registrationSession` loads a new hmc kernel instance for each group of `--apply` runs (linear
+mask; `Mask_nl`; the template images; FLAIR), so each group's heap is freed when it
 ends, and after an abort. A new denoiser is loaded for each image. One instance can run every
 command of a group: the kernel restores its stack after each run, and its tests run 200 times on
 one instance (#537, #592).
 
 ## Measured on sub-HML0541
 
-`validation/preprocess-reference.mjs`, T1 + FLAIR, Node 22, one thread per tool, against the native
+Recorded when ANTs ran every registration, before Greedy replaced them ([Greedy](#greedy) has the
+current numbers). `validation/preprocess-reference.mjs`, T1 + FLAIR, Node 22, one thread per tool, against the native
 reference (`validation/native/preproc_nifti.py` and the ref-masked export checkpoints). Dice for
 masks; for images Pearson's r inside the native classification mask (N4: inside the native linear
 mask).

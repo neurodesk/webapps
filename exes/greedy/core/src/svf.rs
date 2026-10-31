@@ -1,9 +1,19 @@
+use crate::ncc::ncc_gradient;
 use crate::nmi::{
     check_mask_grid, corner_gradient, histogram_sample, joint_histogram, mask_bins, masked_pyramid,
     score_gradient_from_histogram,
 };
 use crate::par::for_each_z;
 use crate::{Error, Grid, NiftiImage, Result, VectorField, bin_image, build_pyramid, grids_match};
+
+/// The similarity metric of a stationary-velocity registration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SvfMetric {
+    /// Greedy's `-m NMI`.
+    Nmi,
+    /// Greedy's `-m NCC rxryrz`: the box-window radius in voxels.
+    Ncc([usize; 3]),
+}
 
 fn sample_voxel(field: &VectorField, voxel: [f64; 3]) -> [f32; 3] {
     let base = voxel.map(f64::floor);
@@ -213,7 +223,15 @@ pub fn register_nmi_svf(
     verbose: bool,
     dump: impl FnMut(&str, &VectorField),
 ) -> Result<VectorField> {
-    register_nmi_svf_masked(fixed, moving, None, iterations, verbose, dump)
+    register_svf(
+        fixed,
+        moving,
+        None,
+        SvfMetric::Nmi,
+        iterations,
+        verbose,
+        dump,
+    )
 }
 
 /// `register_nmi_svf` with Greedy's `-gm`: the NMI metric and its gradient only
@@ -222,6 +240,32 @@ pub fn register_nmi_svf_masked(
     fixed: NiftiImage,
     moving: NiftiImage,
     mask: Option<NiftiImage>,
+    iterations: [usize; 3],
+    verbose: bool,
+    dump: impl FnMut(&str, &VectorField),
+) -> Result<VectorField> {
+    register_svf(
+        fixed,
+        moving,
+        mask,
+        SvfMetric::Nmi,
+        iterations,
+        verbose,
+        dump,
+    )
+}
+
+/// A stationary-velocity registration with either metric. With `-gm`, NMI
+/// downsamples the fixed image inside the mask (Greedy's masked downsampling);
+/// NCC does not, as in Greedy, and scores only the windows centred where the
+/// level's mask is at least 0.5. Greedy scores where it is 1 and keeps the
+/// weights, so at coarse levels it drops boundary voxels this keeps
+/// (README, `-m NCC`).
+pub fn register_svf(
+    fixed: NiftiImage,
+    moving: NiftiImage,
+    mask: Option<NiftiImage>,
+    metric: SvfMetric,
     iterations: [usize; 3],
     verbose: bool,
     mut dump: impl FnMut(&str, &VectorField),
@@ -234,7 +278,19 @@ pub fn register_nmi_svf_masked(
             "SV registration requires moving resampled onto the fixed grid".into(),
         ));
     }
-    let (fixed_levels, masks) = masked_pyramid(fixed, mask)?;
+    let (fixed_levels, masks) = match metric {
+        SvfMetric::Nmi => masked_pyramid(fixed, mask)?,
+        SvfMetric::Ncc(_) => {
+            let masks = match mask {
+                Some(mask) => Some(
+                    build_pyramid(mask)?
+                        .map(|level| level.data.iter().map(|&weight| weight >= 0.5).collect()),
+                ),
+                None => None,
+            };
+            (build_pyramid(fixed)?, masks)
+        }
+    };
     let moving_levels = build_pyramid(moving)?;
     let mut velocity = VectorField {
         grid: fixed_levels[0].grid.clone(),
@@ -252,19 +308,33 @@ pub fn register_nmi_svf_masked(
         if iterations[level] == 0 {
             continue;
         }
-        let fixed_bins = mask_bins(
-            bin_image(&fixed_levels[level])?,
-            masks.as_ref().map(|m| m[level].as_slice()),
-        );
-        let moving_bins = bin_image(&moving_levels[level])?;
+        let mask = masks.as_ref().map(|m| m[level].as_slice());
+        let bins = match metric {
+            SvfMetric::Nmi => Some((
+                mask_bins(bin_image(&fixed_levels[level])?, mask),
+                bin_image(&moving_levels[level])?,
+            )),
+            SvfMetric::Ncc(_) => None,
+        };
         for iteration in 0..iterations[level] {
-            let (score, mut gradient) = nmi_gradient(
-                &fixed_levels[level],
-                &fixed_bins,
-                &moving_levels[level],
-                &moving_bins,
-                &exp(&velocity, 6)?,
-            )?;
+            let displacement = exp(&velocity, 6)?;
+            let (score, mut gradient) = match (metric, &bins) {
+                (SvfMetric::Nmi, Some((fixed_bins, moving_bins))) => nmi_gradient(
+                    &fixed_levels[level],
+                    fixed_bins,
+                    &moving_levels[level],
+                    moving_bins,
+                    &displacement,
+                )?,
+                (SvfMetric::Ncc(radius), _) => ncc_gradient(
+                    &fixed_levels[level],
+                    &moving_levels[level],
+                    mask,
+                    radius,
+                    &displacement,
+                )?,
+                (SvfMetric::Nmi, None) => unreachable!("NMI bins are computed per level"),
+            };
             if verbose {
                 println!("Level {level:03}  Iter {iteration:05}    Energy = {score:.6}");
             }
