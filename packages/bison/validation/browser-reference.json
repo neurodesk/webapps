@@ -1,102 +1,102 @@
 {
   "t1": {
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-labels.nii.gz": {
-      "sha256": "225b3af67b3f527f16f16a1cbf673cb9e51e257b00f8c05f10637778195e6cd4"
+      "sha256": "2629143b39538599d2faf35d0e8699a361041783030d892825c47b0fd421447c"
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-mask.nii.gz": {
-      "sha256": "fcc14384299f14c97bc3e7d72ba3502b51ba89b1cff1fb833b9ecc7e417d5c06"
+      "sha256": "d740e53f5442b9263b160e5cd5b44b1c15882b9689fb6b1bc9630f184696104c"
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-brainstem.nii.gz": {
-      "sha256": "2957ae0b85b647be7963feee3538a4c5811b8e7c4d221b2ee01c0b3863f6e5a9",
-      "sum": 19769.954213238183,
+      "sha256": "52b424382647b32b68aef78db351325c96fecedd15410b6a86c57b55dbf54b2c",
+      "sum": 20143.0554038904,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-cerebellar-gm.nii.gz": {
-      "sha256": "b7d605938af9d9147908faed67a369295829d60d6a629684749af3b98d95edbb",
-      "sum": 103778.13468984052,
+      "sha256": "2bca5efe0df46ede7eaaed580eabfbc449624225a8bc7b61614f5f0f634e2f3c",
+      "sum": 106335.16900292356,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-cerebellar-wm.nii.gz": {
-      "sha256": "04f2746be418da3541840406341703218796271b1fd8d98f6db6203d71532892",
-      "sum": 27579.41550942994,
+      "sha256": "9532b49ef19c675157254d32f627a1dfaa3b515b12696811b8604aa54202ae36",
+      "sum": 28227.938279533002,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-cortical-gm.nii.gz": {
-      "sha256": "3f2b540f4217841932d644e8d1262d4bfe31dfbfd128410a6ed4f54bf1ed76e6",
-      "sum": 484202.9691454877,
+      "sha256": "bc1783a2af0de9a6afa2030ee459f3bdfdfc882ac0120536ebaaf53434ae21c4",
+      "sum": 488395.6528403212,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-csf.nii.gz": {
-      "sha256": "cc7e2b44c4aaae76ee7fe37e2675628c36ca4a2075715a14906b3bd1c9961837",
-      "sum": 122443.46630490846,
+      "sha256": "c9ec51ba4aa8902df434c43e87c17c7659912f25289db371a3a29dcbfb68b3b5",
+      "sum": 127001.37085676809,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-deep-gm.nii.gz": {
-      "sha256": "9861295d0e86237a2dd1346a4b77da5e3220084f3085ce586a8aeae44f64f4c7",
-      "sum": 41612.18293358602,
+      "sha256": "e3011495b5bc5d3580c84fc9c8ab8a39ceab626281f9c9cb7a07930bdbbbb352",
+      "sum": 41982.64377274425,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-ventricles.nii.gz": {
-      "sha256": "29cc50655699bb2bdf263a9717308b86b6ae7486c0600513352cbe1ac077d0a1",
-      "sum": 64879.43943722913,
+      "sha256": "87ed8b8e3e0f0e25b549a8b803a688d26107ecd0123d1d2d3c1f535fd27bab93",
+      "sum": 67429.7195319267,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-wm.nii.gz": {
-      "sha256": "1045f5a3e0d023067e1544fd19cdc6a59d6a56b6258c60e8ff03954588eb1382",
-      "sum": 341098.8104298791,
+      "sha256": "1a7d43e0252b6adaceebeed38253f1e7051daafb06db451b120277c71a425d42",
+      "sum": 347277.7422636014,
       "voxels": 12779520
     }
   },
   "t1-flair": {
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-labels.nii.gz": {
-      "sha256": "06fbcb89160950700e64def6d0a116825975719c51a6ac2572e1ddee171c1a30"
+      "sha256": "12e6b42b40e947befe85e766d5b26cd336fcde11cb78cb4967bbf18ea4a77cda"
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-mask.nii.gz": {
-      "sha256": "fcc14384299f14c97bc3e7d72ba3502b51ba89b1cff1fb833b9ecc7e417d5c06"
+      "sha256": "d740e53f5442b9263b160e5cd5b44b1c15882b9689fb6b1bc9630f184696104c"
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-brainstem.nii.gz": {
-      "sha256": "569b25573e654142fe307a1a99a15db1966702752780b452e62ea26a3a2bdab7",
-      "sum": 19714.94970064028,
+      "sha256": "11e1d22ff6741b5cea8d9dd436599060f2c1a51f4d8e13c7e049691daf2d2bb0",
+      "sum": 19990.52043172948,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-cerebellar-gm.nii.gz": {
-      "sha256": "f778b61356de274149d38f7c3275ee5535e258f5228d526b1d2c553a47756239",
-      "sum": 116651.09141336278,
+      "sha256": "7b9393104aa7362570058248a5ab7ce2ce43d474d8f5e9bbf14f82ee3c2b6fe4",
+      "sum": 118963.66117192697,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-cerebellar-wm.nii.gz": {
-      "sha256": "ce69ea3fd83ba58d0e3e2f766808e048e764b968b125ad6a989af6b0094608d4",
-      "sum": 24035.121502069807,
+      "sha256": "517b9715466b43c299bf1f927def41ecfe0a6894b8440ac2f6bc19dcfd8b05e6",
+      "sum": 24513.161645113767,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-cortical-gm.nii.gz": {
-      "sha256": "58aa397e326469c2db07b52656861b153c69e83658559569422ec8accae5d5bc",
-      "sum": 491383.7866466072,
+      "sha256": "36fb696be3993667d62360d7842dcc995e25574a631cc334fb7911d59eac36b0",
+      "sum": 497360.6412021535,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-csf.nii.gz": {
-      "sha256": "e506497429092ac19dbcc28d0c9a01ef23fb821f3f2156d87d38d64301459b58",
-      "sum": 92836.71435463036,
+      "sha256": "7b50673a273c63d59ed47c359865a2388e2c52d2ddb1ef489cf2d00538814485",
+      "sum": 98454.22168391233,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-deep-gm.nii.gz": {
-      "sha256": "c94dd53b14e6592d6a390b98120a6e525bf1b15422a631a51095bfcd5593d0ce",
-      "sum": 40917.34377312907,
+      "sha256": "030f2d12e7482098245736ce87ec8ed8abe69edeaedb05fa1f7bfff5249d93c5",
+      "sum": 41229.081231667,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-ventricles.nii.gz": {
-      "sha256": "0744bd4b8668a258fad10a25e17a02bfbed9f7aa778c6ff6049bd9845d9fac08",
-      "sum": 67805.37010330496,
+      "sha256": "06d3d5aeb88f25d153ed0ab0bec86a0092e9a4fc3a5aeaad9da4461f6fc8088c",
+      "sum": 69658.39184335443,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-wm.nii.gz": {
-      "sha256": "1e96d6c8944de2e87a9d78835dfed17aa46b5d0e5168653b98a17257f870591d",
-      "sum": 327034.958422171,
+      "sha256": "b90107c5c07965f305ddf51ee852b1cacf2238e151da4c1b234872d97654ec21",
+      "sum": 331120.18252924853,
       "voxels": 12779520
     },
     "sub-HML0541_ses-01_rec-defaced_T1w_bison-prob-wmh.nii.gz": {
-      "sha256": "ff28728d8e97b6e4d529e89eac7ef81fb20b619f297f044de4d422336ac12966",
-      "sum": 17941.12665222699,
+      "sha256": "a7b6b5efb1f56fa16b9a544355b34d2adaf6d556dcab1fb74496ccebe7602a36",
+      "sum": 18137.24098199202,
       "voxels": 12779520
     }
   }
