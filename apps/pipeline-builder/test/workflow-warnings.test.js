@@ -104,6 +104,23 @@ test("optional outputs are reported once, by the NeuroFlow core", async () => {
   assert.deepEqual(optional(), ["steps.target.inputs.input_images"]);
 });
 
+test("an optional output feeding a required input with a default is not a warning", async () => {
+  const counter = { id: "lab/counter", inputs: {}, outputs: { count: { type: "core:number", optional: true } } };
+  const consumer = (input) => ({ id: "lab/consumer", inputs: { count: input }, outputs: {} });
+  const doc = {
+    ...model.emptyWorkflow(),
+    steps: {
+      counter: { tool: counter.id, inputs: {} },
+      consumer: { tool: "lab/consumer", inputs: { count: { ref: "steps.counter.outputs.count" } } },
+    },
+  };
+  const wasm = await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url));
+  const optional = async input => (await createValidator([counter, consumer(input)], wasm))(doc).issues
+    .filter(issue => issue.code === "optional-output").map(issue => issue.path);
+  assert.deepEqual(await optional({ type: "core:number" }), ["steps.consumer.inputs.count"]);
+  assert.deepEqual(await optional({ type: "core:number", default: 2 }), []);
+});
+
 test("undeclared inputs and invalid constants are reported once per path", async () => {
   const param = { ...target, inputs: { ...target.inputs, param_echoTimesMs: {
     type: "core:array<core:number>", optional: true,
