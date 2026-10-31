@@ -109,14 +109,18 @@ test("an optional output feeding a required input with a default is not a warnin
   const consumer = (input) => ({ id: "lab/consumer", inputs: { count: input }, outputs: {} });
   const doc = {
     ...model.emptyWorkflow(),
+    description: "Count, then consume the count.",
     steps: {
       counter: { tool: counter.id, inputs: {} },
       consumer: { tool: "lab/consumer", inputs: { count: { ref: "steps.counter.outputs.count" } } },
     },
   };
   const wasm = await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url));
-  const optional = async input => (await createValidator([counter, consumer(input)], wasm))(doc).issues
-    .filter(issue => issue.code === "optional-output").map(issue => issue.path);
+  const optional = async input => {
+    const report = (await createValidator([counter, consumer(input)], wasm))(doc);
+    assert.ok(report.ok, JSON.stringify(report.issues));
+    return report.issues.filter(issue => issue.code === "optional-output").map(issue => issue.path);
+  };
   assert.deepEqual(await optional({ type: "core:number" }), ["steps.consumer.inputs.count"]);
   assert.deepEqual(await optional({ type: "core:number", default: 2 }), []);
 });
