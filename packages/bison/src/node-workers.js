@@ -5,7 +5,7 @@
 //
 //   createRegistration() -> { run(argv, inputs), memoryBytes(), dispose() }   (run is async here)
 //   createDenoiser()     -> { denoise({ image, mask, ... }), memoryBytes(), dispose() }
-//   createGreedy()       -> { affine({ fixed, moving }), rigid({ fixed, moving }), memoryBytes(), dispose() }
+//   createGreedy()       -> { affine({ fixed, moving }), rigid({ fixed, moving }), svf({ fixed, moving, matrix, mask }), memoryBytes(), dispose() }
 //
 // Errors keep their name, message, `log` and `aborted`. After an abort the worker is ended and the
 // instance refuses further work with the package's own message. Inputs are copied (callers reuse
@@ -171,13 +171,15 @@ export async function createDenoiser(options) {
 
 /**
  * Greedy's single-threaded WebAssembly (@neurodesk/greedy/single) in a worker thread: affine() and
- * rigid() take raw .nii bytes and resolve to Greedy's RAS matrix text.
+ * rigid() take raw .nii bytes and resolve to Greedy's RAS matrix text; svf() takes
+ * registerSvfGreedy's arguments and resolves to the raw .nii warp.
  */
 export async function createGreedy() {
   const worker = await start('greedy');
-  const register = (method) => ({ fixed, moving }) => {
+  const register = (method) => (args) => {
     const transfer = [];
-    return worker.call(method, [{ fixed: copied(fixed, transfer), moving: copied(moving, transfer) }], transfer);
+    const copies = Object.fromEntries(Object.entries(args).map(([key, value]) => [key, copied(value, transfer)]));
+    return worker.call(method, [copies], transfer);
   };
-  return { affine: register('affine'), rigid: register('rigid'), memoryBytes: worker.memoryBytes, dispose: worker.dispose };
+  return { affine: register('affine'), rigid: register('rigid'), svf: register('svf'), memoryBytes: worker.memoryBytes, dispose: worker.dispose };
 }

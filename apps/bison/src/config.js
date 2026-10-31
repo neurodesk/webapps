@@ -71,19 +71,20 @@ export function legendOf(mode, volumes = []) {
   return { labels, metrics: { labelVolumes } };
 }
 
-// Where each stage starts, as a part of the whole run. From a 1 mm T1 + FLAIR run in Node on
-// 8 threads: the affine registration takes about 16 % and the SyN registration about 72 %.
+// Where each stage starts, as a part of the whole run: DOWNLOAD_SHARE, then each stage's share of
+// a 1 mm T1 + FLAIR run in Node on one thread (sub-HML0541 and sub-HML0774), where the Greedy
+// nonlinear registration takes about 60 %.
 const STAGES = [
-  ["Registering T1 to the template (affine)", 0.04],
-  ["Denoising T1", 0.2],
-  ["Correcting T1 intensity non-uniformity", 0.23],
-  ["Normalising T1 intensities", 0.24],
-  ["Registering T1 to the template (affine + SyN)", 0.25],
-  ["Resampling", 0.9],
-  ["Registering FLAIR to T1 (rigid)", 0.92],
-  ["Denoising FLAIR", 0.94],
-  ["Correcting FLAIR intensity non-uniformity", 0.95],
-  ["Normalising FLAIR intensities", 0.955],
+  ["Registering T1 to the template (affine)", 0.05],
+  ["Denoising T1", 0.08],
+  ["Correcting T1 intensity non-uniformity", 0.16],
+  ["Normalising T1 intensities", 0.165],
+  ["Registering T1 to the template (nonlinear)", 0.17],
+  ["Resampling", 0.75],
+  ["Registering FLAIR to T1 (rigid)", 0.82],
+  ["Denoising FLAIR", 0.86],
+  ["Correcting FLAIR intensity non-uniformity", 0.93],
+  ["Normalising FLAIR intensities", 0.94],
   ["Classifying tissues", 0.96],
   ["Writing results", 0.99],
 ];

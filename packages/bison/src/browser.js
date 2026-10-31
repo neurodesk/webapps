@@ -6,7 +6,7 @@
 //
 //   createRegistration() -> { run(argv, inputs), memoryBytes(), dispose() }   @neurodesk/hmc-registration/worker
 //   createDenoiser()     -> { denoise({ image, mask, ... }), memoryBytes(), dispose() }   @neurodesk/ants-denoise/worker
-//   createGreedy()       -> { affine({ fixed, moving }), rigid({ fixed, moving }), memoryBytes(), dispose() }
+//   createGreedy()       -> { affine({ fixed, moving }), rigid({ fixed, moving }), svf({ fixed, moving, matrix, mask }), memoryBytes(), dispose() }
 //                           @neurodesk/greedy src/worker.js, the single-threaded build Node runs too
 //   niimath(args, { inputs, outputs }) -> { outputs, log }
 //
@@ -164,18 +164,19 @@ export async function createDenoiser({ runtime, onLog, WorkerClass } = {}) {
 
 /**
  * Greedy in a new module Worker. affine() and rigid() take raw .nii bytes and resolve to Greedy's
- * RAS matrix text; memoryBytes() is the heap the worker last reported.
+ * RAS matrix text; svf() takes registerSvfGreedy's arguments and resolves to the raw .nii warp.
+ * memoryBytes() is the heap the worker last reported.
  */
 export async function createGreedy({ runtime, WorkerClass } = {}) {
   const url = workerUrl(runtime, 'greedy');
   const wasm = runtime.greedy.wasm ? String(runtime.greedy.wasm) : undefined;
   const worker = start('greedy', url, { WorkerClass });
-  const register = (method) => async ({ fixed, moving }) => {
-    const reply = await worker.request(wasm ? { method, fixed, moving, wasm } : { method, fixed, moving });
+  const register = (method) => async (args) => {
+    const reply = await worker.request(wasm ? { method, ...args, wasm } : { method, ...args });
     if (reply.error !== undefined) throw new Error(`Greedy ${method} registration failed: ${reply.error}`);
-    return reply.matrix;
+    return reply.result;
   };
-  return { affine: register('affine'), rigid: register('rigid'), memoryBytes: worker.memoryBytes, dispose: worker.dispose };
+  return { affine: register('affine'), rigid: register('rigid'), svf: register('svf'), memoryBytes: worker.memoryBytes, dispose: worker.dispose };
 }
 
 export class NiimathError extends Error {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createFloat32Nifti, createNiftiHeaderFromVolume } from '@neurodesk/webapp-components/file-io/nifti';
 import { AV_FLAIR, MODE_ASSETS, TEMPLATE_MASK, TEMPLATE_T1 } from '../src/assets.js';
 import { N4_OPTIONS, n4Arguments, normalise, preprocess, readVolume, registrationSession } from '../src/preprocess.js';
+import { GREEDY_NONLINEAR } from '../src/register.js';
 import { fitVolumePol } from '../src/volume-pol.js';
 
 const DIMS = [12, 10, 8];
@@ -93,18 +94,19 @@ test('normalise fits inside the masks and scales every voxel', async () => {
   assert.deepEqual(written, result.data);
 });
 
-// Fake tools on one shared grid: registration writes placeholder transforms, Greedy returns the
-// identity, --apply returns the moving image, denoise and N4 return their input. Checks the wiring,
-// not the numbers.
+// Fake tools on one shared grid: Greedy returns the identity and a placeholder warp, --apply returns
+// the moving image, denoise and N4 return their input. Checks the wiring, not the numbers.
 const IDENTITY = '1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1\n';
 
 function fakeDrivers() {
-  const calls = { registration: [], greedy: [], apply: [], denoise: 0, niimath: [], loads: 0, disposed: 0 };
-  const greedyMethod = (method) => async ({ fixed, moving }) => {
+  const calls = { greedy: [], svf: [], apply: [], denoise: 0, niimath: [], loads: 0, disposed: 0 };
+  const greedyMethod = (method) => async ({ fixed, moving, ...options }) => {
     // Raw .nii bytes: decompressed before they reach the module.
     assert.ok(fixed[0] !== 0x1f && moving[0] !== 0x1f);
     calls.greedy.push(method);
-    return IDENTITY;
+    if (method !== 'svf') return IDENTITY;
+    calls.svf.push(options);
+    return new Uint8Array([2]);
   };
   const drivers = {
     createGreedy: async () => ({
@@ -112,6 +114,7 @@ function fakeDrivers() {
       dispose: async () => { calls.disposed++; },
       affine: greedyMethod('affine'),
       rigid: greedyMethod('rigid'),
+      svf: greedyMethod('svf'),
     }),
     createRegistration: async () => {
       calls.loads++;
@@ -123,18 +126,9 @@ function fakeDrivers() {
             const name = token.replace(/^inverse:/, '');
             if (/\.(mat|nii|nii\.gz)$/.test(name) && argv[0] === '--apply' && argv.indexOf(token) > 5) assert.ok(inputs[name], `${name} is an input`);
           }
-          if (argv[0] === '--apply') {
-            calls.apply.push(argv.slice(4));
-            return { outputs: { [argv[3]]: inputs[argv[2]] }, log: [] };
-          }
-          calls.registration.push(argv);
-          const prefix = argv[argv.indexOf('--output') + 1].slice(1, -1);
-          const outputs = { [`${prefix}0GenericAffine.mat`]: new Uint8Array([1]) };
-          if (argv.some((token) => token.startsWith('SyN'))) {
-            outputs[`${prefix}1Warp.nii.gz`] = new Uint8Array([2]);
-            outputs[`${prefix}1InverseWarp.nii.gz`] = new Uint8Array([3]);
-          }
-          return { outputs, log: ['ran'] };
+          assert.equal(argv[0], '--apply', 'the registration kernel only resamples');
+          calls.apply.push(argv.slice(4));
+          return { outputs: { [argv[3]]: inputs[argv[2]] }, log: [] };
         },
       };
     },
@@ -179,15 +173,15 @@ test('preprocess runs every step in the native order and returns T1-grid images'
     onProgress: (message) => progress.push(message),
     checkpoint: async (name) => checkpoints.push(name),
   });
-  assert.equal(calls.registration.length, 1, 'antsRegistration runs only the nonlinear step');
-  assert.ok(calls.registration[0].includes('--initial-moving-transform'));
-  assert.deepEqual(calls.greedy, ['affine', 'rigid']);
+  assert.deepEqual(calls.greedy, ['affine', 'svf', 'rigid']);
+  // The warp starts from the inverse of the first affine, here the identity, unmasked.
+  assert.deepEqual(calls.svf, [{ matrix: IDENTITY, ...GREEDY_NONLINEAR }]);
   assert.equal(calls.denoise, 2);
   assert.equal(calls.niimath.length, 2);
   assert.ok(calls.loads >= 3, 'a fresh kernel per stage group');
   assert.equal(calls.disposed, calls.loads + calls.denoise + calls.greedy.length, 'every instance ends with its stage');
-  assert.deepEqual(Object.keys(result.memory).sort(), ['flair_denoise', 'flair_linear', 'flair_resample', 'flair_rigid', 't1_affine', 't1_denoise', 't1_linear', 't1_nonlinear', 'warp']);
-  assert.equal(result.memory.t1_nonlinear, 1000);
+  assert.deepEqual(Object.keys(result.memory).sort(), ['flair_denoise', 'flair_linear', 'flair_resample', 'flair_rigid', 'mask_nl', 't1_affine', 't1_denoise', 't1_linear', 't1_nonlinear', 'warp']);
+  assert.equal(result.memory.t1_nonlinear, 300);
   assert.equal(result.memory.t1_affine, 300);
   assert.equal(result.memory.t1_denoise, 500);
   // Linear mask, Mask_nl, the distinct priors and averages, FLAIR mask, FLAIR on the T1 grid.
@@ -195,8 +189,8 @@ test('preprocess runs every step in the native order and returns T1-grid images'
   assert.equal(interpolations.filter((value) => value === 'NearestNeighbor').length, 3);
   assert.equal(interpolations.filter((value) => value === 'Linear').length, 1);
   assert.equal(calls.apply.find((argv) => argv[0] === 'Linear').slice(2).join(' '), 'rigid.mat');
-  assert.ok(calls.apply.filter((argv) => argv[0] === 'BSpline[2]').every((argv) => argv.slice(2).join(' ') === 'nl_inverse.nii.gz inverse:nl.mat'));
-  assert.deepEqual(checkpoints.slice(0, 7), ['T1toTemplate0GenericAffine.mat', 'T1_Mask.nii', 'T1_NLM.nii', 'T1_N4.nii.gz', 'T1_norm', 'T1_VP.nii', 'T1toTemplate_pp0GenericAffine.mat']);
+  assert.ok(calls.apply.filter((argv) => argv[0] === 'BSpline[2]').every((argv) => argv.slice(2).join(' ') === 'inverse:lin.mat warp.nii'));
+  assert.deepEqual(checkpoints.slice(0, 7), ['T1toTemplate0GenericAffine.mat', 'T1_Mask.nii', 'T1_NLM.nii', 'T1_N4.nii.gz', 'T1_norm', 'T1_VP.nii', 'T1toTemplate_ppWarp.nii']);
   for (const name of ['Mask_nl.nii', 'av_t1.nii', 'av_flair.nii', 't1/sp_1.nii', 't1-flair/sp_9.nii', 'FLAIR_Mask.nii', 'FLAIR_VP.nii', 'FLAIR_CR.nii']) assert.ok(checkpoints.includes(name), name);
   assert.equal(result.priors.t1.length, 8);
   assert.equal(result.priors['t1-flair'].length, 9);

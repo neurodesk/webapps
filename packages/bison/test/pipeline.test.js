@@ -85,20 +85,18 @@ test('classVolumes counts each class in millilitres', () => {
 const IDENTITY = '1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1\n';
 
 function fakeDrivers() {
-  const calls = { registration: 0, sessions: 0, released: 0 };
+  const calls = { svf: 0, sessions: 0, released: 0 };
   return {
     calls,
     drivers: {
       createRegistration: async () => ({
         run(argv, inputs) {
-          if (argv[0] === '--apply') return { outputs: { [argv[3]]: inputs[argv[2]] }, log: [] };
-          calls.registration++;
-          const prefix = argv[argv.indexOf('--output') + 1].slice(1, -1);
-          return { outputs: { [`${prefix}0GenericAffine.mat`]: new Uint8Array([1]), [`${prefix}1Warp.nii.gz`]: new Uint8Array([2]), [`${prefix}1InverseWarp.nii.gz`]: new Uint8Array([3]) }, log: [] };
+          assert.equal(argv[0], '--apply', 'the registration kernel only resamples');
+          return { outputs: { [argv[3]]: inputs[argv[2]] }, log: [] };
         },
       }),
       createDenoiser: async () => ({ denoise: async ({ image }) => image }),
-      createGreedy: async () => ({ affine: async () => IDENTITY, rigid: async () => IDENTITY }),
+      createGreedy: async () => ({ affine: async () => IDENTITY, rigid: async () => IDENTITY, svf: async () => { calls.svf++; return new Uint8Array([2]); } }),
       niimath: async (args, { inputs, outputs }) => ({ outputs: { [outputs[0]]: inputs['input.nii'] }, log: [] }),
       ort: {
         Tensor: class {
@@ -164,7 +162,7 @@ for (const mode of ['t1', 't1-flair']) {
     assert.equal(result.files.length, classes + 2);
     assert.equal(result.files[0].name, 'sub-01_T1w_bison-labels.nii.gz');
     assert.equal(result.files.at(-1).name, 'sub-01_T1w_bison-mask.nii.gz');
-    assert.equal(calls.registration, 1, 'antsRegistration runs only the nonlinear step');
+    assert.equal(calls.svf, 1, 'one Greedy warp per run');
     assert.equal(calls.sessions, 1);
     assert.equal(calls.released, 1);
     const labels = await readNifti(gunzipSync(result.files[0].bytes), Uint8Array);
@@ -189,7 +187,7 @@ test('runBison refuses missing assets, a missing runtime and bad inputs before a
   await assert.rejects(runBison({ t1 }, { ...drivers, ort: undefined }, assets), /ONNX Runtime/);
   await assert.rejects(runBison({ t1: nifti((i) => i, { mm: 3 }) }, drivers, assets), /2 mm or finer/);
   await assert.rejects(runBison({ t1: null, flair: t1 }, drivers, assets), /FLAIR alone/);
-  assert.equal(calls.registration, 0);
+  assert.equal(calls.svf, 0);
 });
 
 test('runBison stops at the next step when aborted', async () => {
@@ -197,5 +195,5 @@ test('runBison stops at the next step when aborted', async () => {
   const controller = new AbortController();
   const hooks = { signal: controller.signal, onProgress: () => controller.abort() };
   await assert.rejects(runBison({ t1: nifti((i) => intensity(i, 3)) }, drivers, fakeAssets(['t1']), hooks), { name: 'AbortError' });
-  assert.equal(calls.registration, 0);
+  assert.equal(calls.svf, 0);
 });

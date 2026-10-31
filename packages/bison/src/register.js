@@ -1,12 +1,12 @@
-// antsRegistration and --apply argv for BISON, in place of the MINC tools run_native.sh calls
-// (bestlinreg_s2 + nlfit_s, mincresample, itk_resample), and Greedy's linear transforms as ITK .mat
-// files: Greedy replaces the linear bestlinreg_s2 runs (docs/preprocessing.md#greedy). The argv run in @neurodesk/hmc-registration:
-// one 3D float kernel that needs exactly one `--float 1` and one `--random-seed`. Callers load a new
-// instance for each group of runs, so each group's heap is freed when it ends.
+// Greedy's transforms for BISON's registrations (docs/preprocessing.md#greedy), and the hmc
+// --apply argv that resamples through them in place of mincresample and itk_resample. --apply runs
+// in @neurodesk/hmc-registration; callers load a new instance for each group of runs, so each
+// group's heap is freed when it ends.
 //
-// Transform direction: an antsRegistration or Greedy transform maps fixed points to moving points.
-// The template is the fixed image of the T1 registrations and the T1 is the fixed image of the FLAIR
-// registration, so the T1 affines map template to T1 and the FLAIR rigid maps T1 to FLAIR.
+// Transform direction: a Greedy transform maps fixed points to moving points. The template is the
+// fixed image of the T1 affine, the T1 the fixed image of the FLAIR rigid and T1_VP the fixed image
+// of the nonlinear warp, so the T1 affine maps template to T1, the rigid T1 to FLAIR, and the warp
+// T1_VP to the template's affine frame.
 //
 // Transform order: hmc's --apply applies the LAST listed transform first to an output point
 // (ITK composite queue in command-line order). antsApplyTransforms is the other way round: its
@@ -15,71 +15,19 @@
 
 import { writeMatTransform } from '@neurodesk/hmc-registration';
 
-export const DEFAULT_SEED = 1234;
-
-const MATTES_BINS = 32;
-const SAMPLING = 'Regular,0.25';
-
-function seedArgument(seed) {
-  if (!Number.isSafeInteger(seed) || seed < 1 || seed > 2147483647) throw new Error('The registration seed must be an integer from 1 to 2147483647.');
-  return String(seed);
-}
-
-function common(seed) {
-  return [
-    '--dimensionality', '3',
-    '--float', '1',
-    '--random-seed', seedArgument(seed),
-    '--collapse-output-transforms', '1',
-    '--interpolation', 'Linear',
-    '--use-histogram-matching', '0',
-    '--winsorize-image-intensities', '[0.005,0.995]',
-  ];
-}
-
-// Metrics by name: GC is minctracc's xcorr (bestlinreg_s2), CC with radius 2 the same-modality SyN
-// metric, Mattes the cross-modality one (docs/preprocessing.md#metric-choice).
-export const METRICS = Object.freeze({
-  GC: (fixed, moving) => `GC[${fixed},${moving},1,1,${SAMPLING}]`,
-  CC: (fixed, moving) => `CC[${fixed},${moving},1,2]`,
-  Mattes: (fixed, moving) => `Mattes[${fixed},${moving},1,${MATTES_BINS},${SAMPLING}]`,
-});
-
-function metricOf(name, fixed, moving) {
-  const build = METRICS[name];
-  if (!build) throw new Error(`Unknown registration metric ${name}.`);
-  return build(fixed, moving);
-}
-
-function stage({ transform, metric, fixed, moving, convergence, shrink, smoothing }) {
-  return [
-    '--transform', transform,
-    '--metric', metricOf(metric, fixed, moving),
-    '--convergence', `[${convergence},1e-6,10]`,
-    '--shrink-factors', shrink,
-    '--smoothing-sigmas', `${smoothing}vox`,
-  ];
-}
-
-/**
- * Normalised T1 to template, as bestlinreg_s2 + nlfit_s -level 2: an affine refinement started
- * from the first affine, then SyN whose finest level is shrink 2 on the 1 mm template (2 mm, as
- * nlfit_s level 2 stops at a 2 mm step). Global correlation for the affine, neighbourhood
- * cross-correlation (radius 2) for SyN: both images are T1, and docs/preprocessing.md shows that
- * Mattes leaves the warped template far from the native one.
- * Writes `<output>0GenericAffine.mat`, `<output>1Warp.nii.gz` and `<output>1InverseWarp.nii.gz`.
- */
-export function nonlinearArguments({ fixed, moving, initial, output, seed = DEFAULT_SEED, affineMetric = 'GC', synMetric = 'CC' }) {
-  return [
-    ...common(seed),
-    '--initial-moving-transform', initial,
-    ...stage({ transform: 'Affine[0.1]', metric: affineMetric, fixed, moving, convergence: '500x250x50', shrink: '4x2x1', smoothing: '2x1x0' }),
-    ...stage({ transform: 'SyN[0.1,3,0]', metric: synMetric, fixed, moving, convergence: '100x70x50', shrink: '8x4x2', smoothing: '3x2x1' }),
-    '--output', `[${output}]`,
-  ];
-}
+// bestlinreg_s2 T1_VP + nlfit_s -level 2 on Greedy: a stationary-velocity warp of the whole head with
+// neighbourhood cross-correlation (radius 2) down to 1 mm. Masking the metric to the brain, or
+// stopping at 2 mm as nlfit_s does, left the brain edge short and failed sub-HML0774's CSF gate
+// (docs/preprocessing.md#nonlinear-step).
+export const GREEDY_NONLINEAR = Object.freeze({ metric: 'NCC 2x2x2', iterations: '100x70x50' });
 
 const LPS = [-1, -1, 1];
+
+function greedyMatrixRows(text) {
+  const rows = text.trim().split('\n').map((line) => line.trim().split(/\s+/).map(Number));
+  if (rows.length !== 4 || rows.some((row) => row.length !== 4 || !row.every(Number.isFinite))) throw new Error('A Greedy matrix has four rows of four numbers.');
+  return rows;
+}
 
 /**
  * Greedy's matrix text (RAS, fixed point to moving point) as an ITK .mat: the same map in LPS, with
@@ -87,12 +35,28 @@ const LPS = [-1, -1, 1];
  * the origin, so the offset is the translation.
  */
 export function greedyMatrixToMat(text) {
-  const rows = text.trim().split('\n').map((line) => line.trim().split(/\s+/).map(Number));
-  if (rows.length !== 4 || rows.some((row) => row.length !== 4 || !row.every(Number.isFinite))) throw new Error('A Greedy matrix has four rows of four numbers.');
+  const rows = greedyMatrixRows(text);
   const flip = (r, c) => LPS[r] * rows[r][c] * (c < 3 ? LPS[c] : 1);
   const matrix = [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => flip(r, c)));
   const translation = [0, 1, 2].map((r) => flip(r, 3));
   return writeMatTransform({ transform: 'AffineTransform_double_3_3', parameters: [...matrix, ...translation], fixed: [0, 0, 0] });
+}
+
+/** The inverse of Greedy's RAS matrix text, in the same text form: a `-it` start for the reverse direction. */
+export function invertGreedyMatrix(text) {
+  const rows = greedyMatrixRows(text);
+  const linear = rows.slice(0, 3).map((row) => row.slice(0, 3));
+  const [[a, b, c], [d, e, f], [g, h, i]] = linear;
+  const cofactors = [
+    [e * i - f * h, c * h - b * i, b * f - c * e],
+    [f * g - d * i, a * i - c * g, c * d - a * f],
+    [d * h - e * g, b * g - a * h, a * e - b * d],
+  ];
+  const determinant = a * cofactors[0][0] + b * cofactors[1][0] + c * cofactors[2][0];
+  if (!determinant) throw new Error('A Greedy matrix must be invertible.');
+  const inverse = cofactors.map((row) => row.map((value) => value / determinant));
+  const translation = inverse.map((row) => -row.reduce((sum, value, k) => sum + value * rows[k][3], 0));
+  return `${inverse.map((row, r) => [...row, translation[r]].join(' ')).join('\n')}\n0 0 0 1\n`;
 }
 
 const INTERPOLATIONS = ['Linear', 'NearestNeighbor', 'BSpline[2]'];
@@ -109,9 +73,12 @@ export function templateToT1Linear({ affine }) {
   return [`inverse:${affine}`];
 }
 
-/** T1 point to template point through the full transform: inverse affine first, then the inverse warp. */
-export function templateToT1({ affine, inverseWarp }) {
-  return [inverseWarp, `inverse:${affine}`];
+/**
+ * T1 point to template point through the full transform: Greedy's warp (fixed T1_VP, moving
+ * template) first, then the inverse T1 affine, whose inverse is the warp's `-it` start.
+ */
+export function templateToT1({ affine, warp }) {
+  return [`inverse:${affine}`, warp];
 }
 
 /** FLAIR point to template point: inverse rigid (FLAIR to T1) first, then the inverse T1 affine. */
