@@ -8,6 +8,7 @@ import { expect } from '@playwright/test';
 export async function verifyOffline(page, { fixture, download }) {
   await page.locator('#imageInput').setInputFiles(fixture);
   await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60000 });
+  await page.locator('#advancedSettings').evaluate((section) => { section.open = true; });
   await page.locator('#backend').selectOption('wasm');
   await page.locator('#runButton').click();
   await expect(page.locator('#statusText')).toHaveText(/^(No artifact|Artifact) detected · slices flagged \d+ %$/, { timeout: 900000 });
