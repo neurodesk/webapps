@@ -3,7 +3,7 @@ import { logError } from '../../utils/technicalLog';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, AlertTriangle, Camera, Download, RotateCcw } from 'lucide-react';
 import { Niivue, SLICE_TYPE, MULTIPLANAR_TYPE, SHOW_RENDER, DRAG_MODE } from '@niivue/niivue';
-import { Dcm2niix } from '@niivue/dcm2niix';
+import { runDcm2niix } from '@niivue/dcm2niix';
 import { registerViewer } from '@neurodesk/webapp-components/automation';
 
 let nextViewerId = 0;
@@ -230,15 +230,7 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
         } else {
           setLoadingMessage('Converting DICOM to viewable format...');
 
-          const dcm2niix = new Dcm2niix();
-          await dcm2niix.init();
-
-          if (cancelled) return;
-
-          const resultFiles: File[] = await dcm2niix.input(files!).run();
-          const niftiFiles = resultFiles.filter(
-            (f: File) => f.name.endsWith('.nii') || f.name.endsWith('.nii.gz')
-          );
+          const niftiFiles = await runDcm2niix(files!, { args: ['-f', '%p_%t_%s'] });
 
           if (cancelled) return;
 

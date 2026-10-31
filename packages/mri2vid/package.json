@@ -28,7 +28,7 @@
   "dependencies": {
     "@libav.js/variant-vp9-opus": "6.10.9",
     "@neurodesk/node-drivers": "workspace:*",
-    "@niivue/dcm2niix": "1.2.0"
+    "@niivue/dcm2niix": "1.4.20261029"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0"

@@ -16,7 +16,7 @@ export class QsmDicomInput extends SharedDicomController {
   constructor(options = {}) {
     super({
       ...options,
-      moduleUrl: new URL('../../dcm2niix/index.js', import.meta.url).href,
+      moduleUrl: new URL('../../dcm2niix/index.jpeg.js', import.meta.url).href,
       onDicomFiles: options.onDicomFiles || options.onFilesRetained,
       throwOnError: false,
     });
@@ -37,8 +37,7 @@ export class QsmDicomInput extends SharedDicomController {
     if (this.onDicomFiles) this.onDicomFiles(files);
 
     try {
-      const dcm2niix = await this._createInstance();
-      const result = await dcm2niix.input(files).run();
+      const result = await this.convert(files);
       await this._processResults(result);
     } catch (error) {
       console.error('DICOM conversion error:', error);

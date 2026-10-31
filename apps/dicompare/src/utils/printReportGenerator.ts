@@ -13,7 +13,7 @@ import { isAnalysisTag } from './tagUtils';
 import { getParameterDefinitions, getEffectiveParams, formatParamValue, interpolateRuleName } from './validationParams';
 import { isFlatImageUrl, isVolumeUrl } from './imageHelpers';
 import { getVolumeThumbnail, getVolumeThumbnailFromFile } from './niivueThumbnail';
-import { Dcm2niix } from '@niivue/dcm2niix';
+import { runDcm2niix } from '@niivue/dcm2niix';
 import { formatFieldDisplay, buildValidationRuleFromField } from './fieldFormatters';
 
 /**
@@ -949,12 +949,7 @@ async function buildDicomThumbnailsHtml(files: File[] | undefined, label: string
   if (!files || files.length === 0) return '';
 
   try {
-    const dcm2niix = new Dcm2niix();
-    await dcm2niix.init();
-    const resultFiles: File[] = await dcm2niix.input(files).run();
-    const niftiFiles = resultFiles.filter(
-      (f: File) => f.name.endsWith('.nii') || f.name.endsWith('.nii.gz')
-    );
+    const niftiFiles = await runDcm2niix(files, { args: ['-f', '%p_%t_%s'] });
 
     if (niftiFiles.length === 0) return '';
 

@@ -308,6 +308,15 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
   `apps/dicompare/public`, not from dicompare.neurodesk.org (`path` entries in
   `registry/offline-assets.sources.json`).
 
+## dcm2niix
+
+- Every app converts with the one `@niivue/dcm2niix` version pinned exactly in `packages/runtime-support` (also `packages/lcmodel`, `packages/mri2vid`, `apps/dicompare`; bump them together). Bundled apps import `@neurodesk/runtime-support/dcm2niix-client` (`readImageFiles`, `readImageSeries`, `readDiffusionSeries`, `runDcm2niix`); bundler-less apps use the shared `DicomController`/`createDicomConverter` on `dcm2niix/index.jpeg.js`, which `scripts/vendor-runtime-support.mjs` stages from npm in each such app's `prebuild` (`test/shared-imaging-refactor.test.mjs` enforces it). Never commit a dcm2niix build or write app-local conversion glue.
+- Every path passes `-f %p_%t_%s`: dcm2niix 1.4's default name starts with the input folder, which can name a patient, and downloads derive from output names. Upstream has no default deadline; the shared paths set 120 s.
+- The `read*` functions keep partial output (some series failed) and throw only when no image is produced; `runDcm2niix` rejects any exit code but 0 or 3.
+- The 1.4 glue is browser-only: Node passes the sibling `.wasm` as `wasmBinary` (`@neurodesk/node-drivers/dcm2niix` takes the glue URL and does this).
+- The composite site shares one `dcm2niix-jpeg` WASM family (`runtime-assets/manifest.json`); each app keeps its worker and glue in its own service-worker scope. A version bump changes its sha256 there.
+- dwi2trx keeps its own drop walker (`src/dwi2trx/files.ts`) because it stops at 20 000 files during the walk; upstream's walker has no limit.
+
 ## Node drivers for command lines (MindGrab, niimath)
 
 - A portable command line that needs MindGrab or niimath uses `@neurodesk/node-drivers/mindgrab`

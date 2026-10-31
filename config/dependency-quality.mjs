@@ -11,7 +11,6 @@ export const generatedSources = {
   'packages/ants-denoise/wasm/ants-denoise.mjs': 'Committed Emscripten glue.',
   'packages/hmc-registration/wasm/hmc-registration.mjs': 'Committed Emscripten glue.',
   'packages/registration/wasm/syncro-registration.mjs': 'Committed Emscripten glue.',
-  'packages/runtime-support/src/dcm2niix/dcm2niix.js': 'Committed Emscripten glue.',
   'packages/runtime-support/src/niimath/niimath.js': 'Committed Emscripten glue.',
   'packages/vesselboost/preprocessing/preprocessing.js': 'Committed wasm-bindgen glue.',
   'packages/runtime-support/src/nifti-js/index.js': 'Self-contained bundled NIfTI parser with embedded CommonJS modules.',

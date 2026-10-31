@@ -55,7 +55,6 @@ function hasScopedOrt(app) {
 
 async function rewriteFile(file, runtimeRoot, app, relativePath) {
   const ortDir = join(runtimeRoot, 'ort-web', '1.21.0');
-  const dcm2niix = join(runtimeRoot, 'dcm2niix', '1.3.20260724', 'index.js');
   const niftiReader = join(runtimeRoot, 'nifti-reader', '0.8.0', 'index.js');
   const sharedSource = join(runtimeRoot, 'webapp-components', '0.1.2', 'src');
   let source = await readFile(file, 'utf8');
@@ -92,10 +91,6 @@ async function rewriteFile(file, runtimeRoot, app, relativePath) {
     source = source.replace(/(['"])(?:\.\.?\/)*wasm\/\1/g, (_match, quote) =>
       `${quote}${moduleReference(file, ortDir)}/${quote}`);
   }
-  if (!app?.app_scoped_runtime_families?.includes('dcm2niix')) {
-    source = source.replace(/(['"])(?:\.\.?\/)*dcm2niix\/index\.js\1/g, (_match, quote) =>
-      `${quote}${moduleReference(file, dcm2niix)}${quote}`);
-  }
   source = source.replace(/(['"])(?:\.\.?\/)*nifti-js\/index\.js\1/g, (_match, quote) =>
     `${quote}${moduleReference(file, niftiReader)}${quote}`);
   source = source.replace(
@@ -109,9 +104,6 @@ async function rewriteFile(file, runtimeRoot, app, relativePath) {
 async function removeAppCopies(siteDist, registry) {
   for (const app of registry.apps) {
     const appDist = join(siteDist, app.path);
-    if (!app.app_scoped_runtime_families?.includes('dcm2niix')) {
-      await rm(join(appDist, 'dcm2niix'), { recursive: true, force: true });
-    }
     await rm(join(appDist, 'nifti-js'), { recursive: true, force: true });
     await rm(join(appDist, 'vendor', 'webapp-components'), { recursive: true, force: true });
     if (hasScopedOrt(app)) continue;
@@ -187,11 +179,6 @@ export async function assembleRuntimeAssetStore({ repoRoot, siteDist, registry }
 
   for (const family of manifest.families) {
     await copyVerifiedFamily({ family, repoRoot, siteDist, registry });
-    if (family.id === 'dcm2niix') {
-      for (const app of registry.apps.filter(app => app.app_scoped_runtime_families.includes(family.id))) {
-        await cp(join(runtimeRoot, family.target), join(siteDist, app.path, family.id), { recursive: true });
-      }
-    }
   }
 
   const sharedSource = join(runtimeRoot, 'webapp-components', '0.1.2', 'src');

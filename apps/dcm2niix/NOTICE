@@ -4,8 +4,8 @@ The Neurodesk dcm2niix application runs dcm2niix to convert images and curates
 the result as BIDS. It uses the dcm2niix name with the permission of its author,
 Chris Rorden (https://github.com/neurodesk/webapps/pull/382).
 
-@niivue/dcm2niix 1.2.0 — BSD-2-Clause — https://github.com/niivue/niivue-dcm2niix
-  WebAssembly build of dcm2niix v1.0.20241231 with OpenJPEG and CharLS.
+@niivue/dcm2niix 1.4.20261029 — BSD-2-Clause — https://github.com/niivue/niivue-dcm2niix
+  WebAssembly build of dcm2niix v1.0.20261029 with OpenJPEG and CharLS.
 dcm2niix — BSD licence below — https://github.com/rordenlab/dcm2niix
 OpenJPEG — BSD-2-Clause, text below — https://github.com/uclouvain/openjpeg
 CharLS — BSD-3-Clause, text below — https://github.com/team-charls/charls

@@ -105,8 +105,7 @@ const readBytes = async (record) => arrayBuffer(await readFile(record.path));
 
 // The JPEG build of dcm2niix, which also decodes JPEG 2000 and JPEG-LS.
 export async function convertDicom(files) {
-  const { default: factory } = await import(new URL('dcm2niix.jpeg.js', import.meta.resolve('@niivue/dcm2niix')).href);
-  return runDcm2niix(files, factory);
+  return runDcm2niix(files, new URL('dcm2niix.jpeg.js', import.meta.resolve('@niivue/dcm2niix')));
 }
 
 function describe(source) {

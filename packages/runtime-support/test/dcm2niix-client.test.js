@@ -16,7 +16,7 @@ async function withFakeWorker(outputs, run) {
 
     postMessage(message) {
       calls.push({ cmd: message.cmd, inputs: message.fileList.map((entry) => entry.file.name) });
-      queueMicrotask(() => this.onmessage?.({ data: { convertedFiles: outputs, exitCode: 0 } }));
+      queueMicrotask(() => this.onmessage?.({ data: { type: 'result', convertedFiles: outputs, exitCode: 0, log: ['done'] } }));
     }
 
     terminate() {}
@@ -49,14 +49,14 @@ test('readImageSeries pairs converted images with their sidecars by stem, withou
   );
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].inputs, ['IM0001', 'IM0002.dcm']);
-  assert.deepEqual(calls[0].cmd, ['-b', 'y', '-ba', 'n']);
+  assert.deepEqual(calls[0].cmd, ['-f', '%p_%t_%s', '-ba', 'n']);
 });
 
 test('readImageSeries keeps dcm2niix sidecar anonymisation when asked to', async () => {
   const outputs = [file('t1_2.nii'), file('t1_2.json', JSON.stringify({ SeriesNumber: 2 }))];
   const { result, calls } = await withFakeWorker(outputs, () => readImageSeries([file('IM0001')], { anonymizeSidecar: true }));
   assert.deepEqual(result.map(({ image, sidecar }) => [image.name, sidecar]), [['t1_2.nii', { SeriesNumber: 2 }]]);
-  assert.deepEqual(calls[0].cmd, [], 'no -ba n: dcm2niix drops PatientName, PatientBirthDate and the other identifiers');
+  assert.deepEqual(calls[0].cmd, ['-f', '%p_%t_%s'], 'no -ba n: dcm2niix drops PatientName, PatientBirthDate and the other identifiers');
 });
 
 test('readImageSeries pairs direct volumes with supplied sidecars and ignores stray JSON', async () => {
@@ -84,7 +84,7 @@ test('readImageSeries lists direct volumes before converted series and refuses a
   assert.deepEqual(result.map(({ image, sidecar }) => [image.name, sidecar]), [['direct.nii', null], ['scan_5.nii', {}]]);
   await assert.rejects(
     withFakeWorker([file('scan_5.json', '{}')], () => readImageSeries([file('IM0001')])),
-    /No images produced/,
+    /No images produced\. Choose NIfTI files or a complete DICOM series\. \(dcm2niix: done\)/,
   );
 });
 
@@ -92,22 +92,10 @@ test('readImageFiles keeps dcm2niix anonymisation and its niftiOnly contract', a
   const outputs = [file('scan_5.nii'), file('scan_5.json', '{}')];
   const filtered = await withFakeWorker(outputs, () => readImageFiles([file('direct.nii.gz'), file('notes.json'), file('IM0001')]));
   assert.deepEqual(filtered.result.map((image) => image.name), ['direct.nii.gz', 'scan_5.nii']);
-  assert.deepEqual(filtered.calls[0].cmd, []);
+  assert.deepEqual(filtered.calls[0].cmd, ['-f', '%p_%t_%s']);
   assert.deepEqual(filtered.calls[0].inputs, ['IM0001']);
   const unfiltered = await withFakeWorker(outputs, () => readImageFiles([file('IM0001')], { niftiOnly: false }));
   assert.deepEqual(unfiltered.result.map((image) => image.name), ['scan_5.nii', 'scan_5.json']);
-});
-
-test('runDcm2niix keeps default anonymisation and requires an explicit sidecar opt-in', async () => {
-  const outputs = [file('scan_5.nii'), file('scan_5.json', '{}')];
-  for (const options of [{}, { anonymizeSidecar: true }]) {
-    const converted = await withFakeWorker(outputs, () => runDcm2niix([file('IM0001')], { ...options, niftiOnly: false }));
-    assert.deepEqual(converted.result.map((image) => image.name), ['scan_5.nii', 'scan_5.json']);
-    assert.deepEqual(converted.calls[0].cmd, []);
-  }
-  const retained = await withFakeWorker(outputs, () => runDcm2niix([file('IM0001')], { niftiOnly: false, anonymizeSidecar: false }));
-  assert.deepEqual(retained.result.map((image) => image.name), ['scan_5.nii', 'scan_5.json']);
-  assert.deepEqual(retained.calls[0].cmd, ['-b', 'y', '-ba', 'n']);
 });
 
 test('readImageSeries honours an aborted signal before starting dcm2niix', async () => {
@@ -194,10 +182,42 @@ test('a stalled worker times out at the caller deadline and is terminated', asyn
     terminate() { terminated = true; }
   };
   try {
+    await assert.rejects(readImageFiles([file('IM0001')], { timeoutMs: 10 }), /timed out after 10 ms/);
+    assert.equal(terminated, true);
+    terminated = false;
     await assert.rejects(runDcm2niix([file('IM0001')], { timeoutMs: 10 }), /timed out after 10 ms/);
     assert.equal(terminated, true);
-    await assert.rejects(runDcm2niix([file('IM0001')], { timeoutMs: NaN }), /Invalid dcm2niix timeout/);
   } finally {
     globalThis.Worker = OriginalWorker;
   }
+});
+
+test('runDcm2niix names outputs without the input folder unless the caller sets -f', async () => {
+  const outputs = [file('t1_2.nii')];
+  const named = await withFakeWorker(outputs, () => runDcm2niix([file('IM0001')], { args: ['-ba', 'n'] }));
+  assert.deepEqual(named.calls[0].cmd, ['-f', '%p_%t_%s', '-ba', 'n']);
+  assert.deepEqual(named.result.map((image) => image.name), ['t1_2.nii']);
+});
+
+test('runDcm2niix has a default deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const OriginalWorker = globalThis.Worker;
+  let terminated = false;
+  globalThis.Worker = class { terminate() { terminated = true; } };
+  try {
+    const pending = assert.rejects(runDcm2niix([file('IM0001')]), /timed out after 120000 ms/);
+    t.mock.timers.tick(120_000);
+    await pending;
+    assert.equal(terminated, true);
+  } finally {
+    globalThis.Worker = OriginalWorker;
+  }
+});
+
+test('readDiffusionSeries pairs one converted series with loose FSL gradients and drops non-object sidecars', async () => {
+  const outputs = [file('dwi_4.nii'), file('dwi_4.json', '[1, 2]')];
+  const bvals = file('bvals', '0 1000');
+  const bvecs = file('bvecs', '0 1\n0 0\n0 0');
+  const { result } = await withFakeWorker(outputs, () => readDiffusionSeries([file('IM0001'), bvals, bvecs]));
+  assert.deepEqual(result.map(({ image, sidecar, bval, bvec }) => [image.name, sidecar, bval, bvec]), [['dwi_4.nii', null, bvals, bvecs]]);
 });

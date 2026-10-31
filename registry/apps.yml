@@ -61,7 +61,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: static-html
-    app_scoped_runtime_families: [ort-web, dcm2niix]
+    app_scoped_runtime_families: [ort-web]
     ci:
       toolchains: [node]
       shared_runtime: true
@@ -86,7 +86,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: static-html
-    app_scoped_runtime_families: [ort-web, dcm2niix]
+    app_scoped_runtime_families: [ort-web]
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: true
@@ -112,7 +112,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: static-html
-    app_scoped_runtime_families: [ort-web, dcm2niix]
+    app_scoped_runtime_families: [ort-web]
     ci:
       toolchains: [node]
       shared_runtime: true
@@ -138,7 +138,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: static-html
-    app_scoped_runtime_families: [ort-web, dcm2niix]
+    app_scoped_runtime_families: [ort-web]
     ci:
       toolchains: [node]
       shared_runtime: true
@@ -164,7 +164,6 @@ apps:
     support_status: active
     handoff: dicom
     shell: static-html
-    app_scoped_runtime_families: [dcm2niix]
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: true
@@ -189,7 +188,7 @@ apps:
     maintainers: [astewartau]
     support_status: active
     shell: static-html
-    app_scoped_runtime_families: [ort-web-seedseg, dcm2niix]
+    app_scoped_runtime_families: [ort-web-seedseg]
     ci:
       toolchains: [node]
       shared_runtime: true
@@ -258,7 +257,6 @@ apps:
     hardware: cpu
     legacy_domain: thomshaw92.github.io/Easy-MP2RAGE-T1-Map
     runtime: rust-wasm
-    app_scoped_runtime_families: [dcm2niix]
     model_manifest: null
     asset_manifest_schema: null
     source: thomshaw92/Easy-MP2RAGE-T1-Map@f421f4a946523ad88a936b939d3bc4c967df9ea5
@@ -642,7 +640,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: imaging-workspace
-    app_scoped_runtime_families: [ort-web-asyncify, dcm2niix]
+    app_scoped_runtime_families: [ort-web-asyncify]
     ci:
       toolchains: [node]
       shared_runtime: false
@@ -692,7 +690,7 @@ apps:
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace
-    app_scoped_runtime_families: [ort-web-asyncify, dcm2niix, mindgrab-cpu]
+    app_scoped_runtime_families: [ort-web-asyncify, mindgrab-cpu]
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: false
@@ -767,7 +765,7 @@ apps:
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace
-    app_scoped_runtime_families: [ort-web-asyncify, dcm2niix]
+    app_scoped_runtime_families: [ort-web-asyncify]
     ci:
       toolchains: [node]
       shared_runtime: false
@@ -793,7 +791,6 @@ apps:
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace
-    app_scoped_runtime_families: [dcm2niix]
     ci:
       toolchains: [node]
       shared_runtime: false
@@ -1195,7 +1192,7 @@ apps:
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace
-    app_scoped_runtime_families: [ort-web-asyncify, dcm2niix]
+    app_scoped_runtime_families: [ort-web-asyncify]
     ci:
       toolchains: [node]
       shared_runtime: false

@@ -116,9 +116,10 @@ macOS.
 
 ### dcm2niix
 
-`convertDicom(files, factory, { onLog })` writes an in-memory DICOM series to
+`convertDicom(files, glue, { onLog })` writes an in-memory DICOM series to
 one fresh raw Emscripten dcm2niix instance and returns its NIfTI files as
-`{ name, bytes }`. The caller supplies its pinned factory, for example the
-`dcm2niix.jpeg.js` beside `import.meta.resolve('@niivue/dcm2niix')`.
+`{ name, bytes }`. The caller supplies the URL of its pinned glue, for example
+`new URL('dcm2niix.jpeg.js', import.meta.resolve('@niivue/dcm2niix'))`; the
+driver reads the `.wasm` beside it.
 It runs without browser globals or network downloads. Conversion exit codes
 0 and 3 are accepted, as in the browser wrapper; other codes throw.
