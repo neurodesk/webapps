@@ -257,7 +257,10 @@ pub fn register_nmi_svf_masked(
 
 /// A stationary-velocity registration with either metric. With `-gm`, NMI
 /// downsamples the fixed image inside the mask (Greedy's masked downsampling);
-/// NCC does not, as in Greedy, and scores only the windows centred in the mask.
+/// NCC does not, as in Greedy, and scores only the windows centred where the
+/// level's mask is at least 0.5. Greedy scores where it is 1 and keeps the
+/// weights, so at coarse levels it drops boundary voxels this keeps
+/// (README, `-m NCC`).
 pub fn register_svf(
     fixed: NiftiImage,
     moving: NiftiImage,

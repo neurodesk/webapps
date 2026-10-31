@@ -189,8 +189,8 @@ async function templateVolumes(assets) {
 }
 
 /**
- * The T1 steps: affine to the template, linear mask, denoise, N4, volume_pol, affine + SyN of the
- * normalised T1, and the classification mask.
+ * The T1 steps: affine to the template, linear mask, denoise, N4, volume_pol, the nonlinear warp of
+ * the normalised T1, and the classification mask.
  */
 export async function preprocessT1({ t1, assets, drivers, timings = {}, memory = {}, ...options }) {
   const { onProgress, onLog, checkpoint } = hooksOf(options);
@@ -238,7 +238,7 @@ export async function preprocessT1({ t1, assets, drivers, timings = {}, memory =
   return { raw, affine, linearMask, linearMaskBytes, vp, transforms, mask, maskBytes: maskNlBytes, timings, memory };
 }
 
-/** A template-space image on the T1 grid through the full (affine + SyN) transform. */
+/** A template-space image on the T1 grid through the full transform: the warp, then the inverse affine. */
 export function warpTemplateImage(session, { grid, image, transforms, interpolation = 'BSpline[2]', onLog }) {
   return applyTransforms(session, {
     fixed: grid, moving: image, interpolation,
