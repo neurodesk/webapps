@@ -1,5 +1,10 @@
 [
   {
+    "from": "packages/components/src/file-io/DicomController.js",
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "Static app staging supplies the JPEG module; application callers pass their staged module URL."
+  },
+  {
     "from": "apps/calmar/web/js/inference-worker.js",
     "to": "../nifti-js/index.js",
     "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."

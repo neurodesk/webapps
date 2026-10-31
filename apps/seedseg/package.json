@@ -1,6 +1,6 @@
 {
   "name": "seedseg",
-  "version": "0.7.20261027",
+  "version": "0.7.20261031",
   "private": true,
   "type": "module",
   "description": "Browser-based prostate fiducial marker segmentation.",

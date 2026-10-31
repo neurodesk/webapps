@@ -906,6 +906,9 @@ importers:
         specifier: 0.8.2
         version: 0.8.2
     devDependencies:
+      '@niivue/dcm2niix':
+        specifier: 1.4.20261029
+        version: 1.4.20261029
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0

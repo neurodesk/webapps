@@ -1,5 +1,13 @@
 # @neurodesk/deface
 
+## 1.4.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+  - @neurodesk/runtime-support@0.9.19
+  - @neurodesk/node-drivers@0.3.1
+
 ## 1.4.20261027
 
 ### Patch Changes

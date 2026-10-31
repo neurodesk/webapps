@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/spinalcordtoolbox",
-  "version": "0.9.20261027",
+  "version": "0.9.20261031",
   "description": "Spinal Cord Toolbox web app segmentation for browsers and the portable sct-webapp command line",
   "type": "module",
   "license": "UNLICENSED",

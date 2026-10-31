@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/mri2vid",
-  "version": "0.6.20261027",
+  "version": "0.6.20261031",
   "description": "DICOM, NIfTI and MGZ slice videos for the mri2vid web app and its portable command line",
   "type": "module",
   "license": "BSD-3-Clause",

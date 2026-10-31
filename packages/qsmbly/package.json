@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/qsmbly",
-  "version": "0.31.20261027",
+  "version": "0.31.20261031",
   "description": "QSMbly's portable QSMxT command line, validated against the browser workflow",
   "type": "module",
   "license": "GPL-3.0-only",

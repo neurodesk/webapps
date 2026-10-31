@@ -1,10 +1,12 @@
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { test, expect } from "@playwright/test";
 import { readFile, readdir } from "node:fs/promises";
 import { fetchPinnedExample } from "../../../test-utils/registration-similarity.mjs";
 import { bidsTree, dropFolder } from "../../../test-utils/bids-folder-drop.mjs";
 import { dicomSeries } from "../../../test-utils/dicom-fixture.mjs";
 import { convertDicom } from "../../../packages/node-drivers/src/dcm2niix.js";
-const dcm2niixGlue = new URL("../../../packages/runtime-support/node_modules/@niivue/dcm2niix/dist/dcm2niix.jpeg.js", import.meta.url);
+const dcm2niixGlue = new URL("./dist/dcm2niix.jpeg.js", pathToFileURL(createRequire(import.meta.url).resolve("@niivue/dcm2niix/package.json")));
 import { createNiftiFromData, decodeNiftiBuffer, readNiftiFrames } from "@neurodesk/webapp-components/file-io/nifti";
 import { fixture } from "./fixtures.mjs";
 

@@ -1,5 +1,17 @@
 # pipeline-builder
 
+## 0.2.20261031
+
+### Patch Changes
+
+- a77947a: Validate with the NeuroFlow v0.3.1 core, which tags its optional-output warnings with an issue code, and recognize the core's warning by that code rather than its wording when dropping the builder's duplicate.
+- 32292e4: Validate with the NeuroFlow v0.3.2 core, which reads spec 0.1.3 workflow documents, accepts an absent value for a workflow output marked optional, and does not warn when an optional output feeds an input with a default. The builder no longer keeps its own copy of the optional-output warning: the core reports it once, with the same paths.
+- 45f9b81: Validate with the NeuroFlow v0.6.0 core. It reports an `unknown-field` error for any key a workflow declaration does not allow, an `input-undeclared` error for a reference to an undeclared workflow input, and a `constant-invalid` error for a constant that does not match its input. The builder's own undeclared-input check is removed. Its constant check now reports only what the core does not (per-item array limits), so each problem is reported once.
+- 29370a4: Validate with the NeuroFlow v0.7.0 core. It reports a `local-id-invalid` error for an input, context field, step or output name that does not match the spec's local identifier pattern, and tags the error for a workflow output that does not reference a step output with `output-ref-not-step`. Point the run instructions at the v0.7.0 release, where a run fails when a workflow output not marked `optional` is not produced.
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/webapp-components@0.22.3
+
 ## 0.2.20261030
 
 ### Patch Changes

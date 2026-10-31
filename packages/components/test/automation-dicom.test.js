@@ -16,3 +16,16 @@ test('static converter keeps every generated File and passes signal and deadline
   assert.deepEqual(await createDicomConverter({ moduleUrl, timeoutMs: 5 })(input, { signal }), outputs);
   assert.deepEqual(received, { files: input, options: { niftiOnly: false, signal, timeoutMs: 5, args: ['-f', '%p_%t_%s'] } });
 });
+
+const stalledModule = 'data:text/javascript,await new Promise(() => {});';
+
+test('static converter cancels a pending module load', async () => {
+  const controller = new AbortController();
+  const result = createDicomConverter({ moduleUrl: stalledModule })([], { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(result, { name: 'AbortError' });
+});
+
+test('static converter times out a pending module load', async () => {
+  await assert.rejects(createDicomConverter({ moduleUrl: stalledModule, timeoutMs: 5 })([]), /timed out/);
+});

@@ -1,5 +1,18 @@
 # dwi2trx
 
+## 0.8.20261031
+
+### Patch Changes
+
+- d8ac48c: Convert DICOM with @niivue/dcm2niix 1.4.20261029 in every app and command line. The shared client is a thin layer over its `convert`, which pairs sidecars and gradients, times out and terminates its worker; bundler-less apps stage the same JPEG build (JPEG-LS and JPEG 2000) from npm instead of a committed 1.3 copy, and all apps share one WASM. A conversion that yields some images now keeps them; dcm2niix's last log line is reported when none are produced. Output names drop the `input_` prefix and never include the input folder, whose name can identify a patient.
+- 61bb705: Give every seed its own random stream across the whole run. Each 10,000-seed batch used to reuse the first batch's bootstrap random streams, and a retry after running out of GPU memory, which uses smaller batches, changed which stream each seed got. Streams now follow a seed's position in the run, so the batch size no longer changes the streamlines. Runs of up to 10,000 seeds give the same output as before; larger runs change from the 10,001st seed on.
+- f99682c: Refuse streamline tracking on a GPU whose subgroups are not 32 lanes. The tracker's shader assumes 32-lane subgroups; on other sizes (some Intel and AMD GPUs) it computed wrong streamlines or lost the GPU device. The tracker now checks the adapter's subgroup range and the layout each kernel actually runs with, and stops with "tracking needs 32-lane GPU subgroups" instead. Output on 32-lane GPUs is unchanged.
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/runtime-support@0.9.19
+  - @neurodesk/webapp-components@0.22.3
+  - @neurodesk/dwi2trx@0.8.20261031
+
 ## 0.8.20261029
 
 ### Patch Changes

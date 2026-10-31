@@ -1,3 +1,4 @@
+import { runAbortable } from '../automation/abort.js';
 import { isNiftiFile, filesFromDataTransferItems } from './detectFiles.js';
 
 // dcm2niix's default name starts with the input folder (%f), which can hold a patient name.
@@ -6,7 +7,16 @@ const DICOM_NAMING = ['-f', '%p_%t_%s'];
 export function createDicomConverter({ moduleUrl, timeoutMs = 120000 }) {
   if (typeof moduleUrl !== 'string' || !moduleUrl) throw new Error('A DICOM converter module URL is required');
   return async (files, { signal } = {}) => {
-    const { runDcm2niix } = await import(/* @vite-ignore */ moduleUrl);
+    const loading = new AbortController();
+    const loadingSignal = signal ? AbortSignal.any([signal, loading.signal]) : loading.signal;
+    const timer = setTimeout(() => loading.abort(new Error('DICOM converter loading timed out')), timeoutMs);
+    let converter;
+    try {
+      converter = await runAbortable(loadingSignal, () => import(/* @vite-ignore */ moduleUrl));
+    } finally {
+      clearTimeout(timer);
+    }
+    const { runDcm2niix } = converter;
     return runDcm2niix(files, { niftiOnly: false, signal, timeoutMs, args: DICOM_NAMING });
   };
 }
