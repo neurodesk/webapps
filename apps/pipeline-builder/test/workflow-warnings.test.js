@@ -124,6 +124,20 @@ test("undeclared inputs and invalid constants are reported once per path", async
   }
 });
 
+test("names outside the localId grammar and non-step output refs are core errors", async () => {
+  const validate = await createValidator(tools, await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url)));
+  const doc = workflow({ ref: "inputs.images" });
+  doc.steps["Bad id!"] = doc.steps.source;
+  doc.inputs["Bad name"] = { type: "neuro:volume" };
+  doc.outputs = { stray: { type: "neuro:volume", ref: "inputs.image" } };
+  const issues = validate(doc).issues.filter(issue => ["local-id-invalid", "output-ref-not-step"].includes(issue.code)).map(issue => [issue.code, issue.path]);
+  assert.deepEqual(issues.sort(), [
+    ["local-id-invalid", "inputs.Bad name"],
+    ["local-id-invalid", "steps.Bad id!"],
+    ["output-ref-not-step", "outputs.stray.ref"],
+  ]);
+});
+
 test("the core's issues survive a builder check that throws", async () => {
   const validate = await createValidator(tools, await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url)));
   const result = validate({ ...model.emptyWorkflow(), steps: { broken: null } });

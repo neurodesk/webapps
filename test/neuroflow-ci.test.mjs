@@ -36,7 +36,7 @@ test('the workflow builds a fixed real upstream runtime and executes both templa
   assert.equal(job['runs-on'], 'macos-15');
   assert.equal(job.env.NEURODESK_HARDWARE_GPU, '1');
   const upstream = job.steps.find(step => step.with?.repository === 'cdrake/neuroflow');
-  assert.equal(upstream.with.ref, 'c83106a95102adf85685000635814b492049fb20');
+  assert.equal(upstream.with.ref, 'fe6550c85d1e1f3548417d6bd0af69de37d2d256');
   assert.equal(upstream.with.ref, job.env.NEUROFLOW_COMMIT);
   assert.ok(job.steps.some(step => step.run?.includes('cargo build --release --locked -p neuroflow-mcp')));
   assert.ok(job.steps.some(step => step.run?.includes('cargo test --locked -p neuroflow-mcp orders_steps_by_dependency')));
