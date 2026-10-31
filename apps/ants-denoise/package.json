@@ -1,6 +1,6 @@
 {
   "name": "ants-denoise",
-  "version": "0.1.20261029",
+  "version": "0.1.20261031",
   "private": true,
   "type": "module",
   "scripts": {

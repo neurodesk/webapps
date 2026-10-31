@@ -1,10 +1,12 @@
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { test, expect } from "@playwright/test";
 import { readFile, readdir } from "node:fs/promises";
 import { fetchPinnedExample } from "../../../test-utils/registration-similarity.mjs";
 import { bidsTree, dropFolder } from "../../../test-utils/bids-folder-drop.mjs";
 import { dicomSeries } from "../../../test-utils/dicom-fixture.mjs";
 import { convertDicom } from "../../../packages/node-drivers/src/dcm2niix.js";
-import createDcm2niix from "../../../packages/runtime-support/src/dcm2niix/dcm2niix.js";
+const dcm2niixGlue = new URL("./dist/dcm2niix.jpeg.js", pathToFileURL(createRequire(import.meta.url).resolve("@niivue/dcm2niix/package.json")));
 import { createNiftiFromData, decodeNiftiBuffer, readNiftiFrames } from "@neurodesk/webapp-components/file-io/nifti";
 import { fixture } from "./fixtures.mjs";
 
@@ -114,7 +116,7 @@ test("a failed BIDS run selection restores the previous input, mask and complete
 
 test("the mask picker accepts one extensionless DICOM series and rejects independent masks", async ({ page }) => {
   const dicom = dicomSeries({ extension: "" });
-  const [converted] = await convertDicom(dicom.map(file => ({ name: file.name, bytes: file.buffer })), createDcm2niix);
+  const [converted] = await convertDicom(dicom.map(file => ({ name: file.name, bytes: file.buffer })), dcm2niixGlue);
   const header = await decodeNiftiBuffer(converted.bytes);
   const image = readNiftiFrames(header);
   const frames = new Float32Array(image.data.length * 2).fill(100);

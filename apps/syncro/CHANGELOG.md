@@ -1,5 +1,21 @@
 # syncro
 
+## 0.8.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+- Updated dependencies [1a4882c]
+- Updated dependencies [b84a269]
+- Updated dependencies [cc094b4]
+  - @neurodesk/runtime-support@0.9.19
+  - @neurodesk/webapp-components@0.22.3
+  - @neurodesk/greedy@0.8.20261031
+  - @neurodesk/syncro@0.8.20261031
+  - @neurodesk/synthsr@0.6.20261031
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/brain-extraction@0.5.20261031
+
 ## 0.7.20261029
 
 ### Patch Changes

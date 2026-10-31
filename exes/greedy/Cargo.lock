@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "greedy-rs"
-version = "0.7.20261029"
+version = "0.8.20261031"
 dependencies = [
  "flate2",
  "greedy-rs-core",

@@ -1,5 +1,12 @@
 # @neurodesk/browserqc
 
+## 1.6.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+  - @neurodesk/node-drivers@0.3.1
+
 ## 1.6.20261027
 
 ## 1.6.20261025

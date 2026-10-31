@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/fastprep",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "description": "fastprep fMRI preprocessing in the browser: the Rust orchestration core (WASM) driving niimath, MindGrab, Greedy, SynthSR and glm workers",
   "type": "module",

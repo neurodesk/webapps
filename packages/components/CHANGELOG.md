@@ -1,5 +1,12 @@
 # @neurodesk/webapp-components
 
+## 0.22.3
+
+### Patch Changes
+
+- d8ac48c: Convert DICOM with @niivue/dcm2niix 1.4.20261029 in every app and command line. The shared client is a thin layer over its `convert`, which pairs sidecars and gradients, times out and terminates its worker; bundler-less apps stage the same JPEG build (JPEG-LS and JPEG 2000) from npm instead of a committed 1.3 copy, and all apps share one WASM. A conversion that yields some images now keeps them; dcm2niix's last log line is reported when none are produced. Output names drop the `input_` prefix and never include the input folder, whose name can identify a patient.
+- b84a269: The Standalone dialog lists macOS Intel archives and, for a command line released by another repository, its prerequisite notes and release links instead of the models note.
+
 ## 0.22.2
 
 ### Patch Changes

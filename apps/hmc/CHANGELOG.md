@@ -1,5 +1,18 @@
 # hmc
 
+## 0.4.20261031
+
+### Patch Changes
+
+- Updated dependencies [f860d91]
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/hmc-registration@0.4.0
+  - @neurodesk/runtime-support@0.9.19
+  - @neurodesk/webapp-components@0.22.3
+  - @neurodesk/hmc@0.4.20261031
+  - @neurodesk/dwi2trx@0.8.20261031
+
 ## 0.4.20261029
 
 ### Patch Changes

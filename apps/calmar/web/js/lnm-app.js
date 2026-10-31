@@ -304,12 +304,12 @@ export class LesionNetworkMappingApp {
 
   async init() {
     this.structuralFileIO = new SimpleFileIOController({
-      dcm2niixModuleUrl: new URL('../dcm2niix/index.js', import.meta.url).href,
+      dcm2niixModuleUrl: new URL('../dcm2niix/index.jpeg.js', import.meta.url).href,
       updateOutput: (msg) => this.updateOutput(msg),
       onFileLoaded: (file) => this.setStructural(file)
     });
     this.lesionFileIO = new SimpleFileIOController({
-      dcm2niixModuleUrl: new URL('../dcm2niix/index.js', import.meta.url).href,
+      dcm2niixModuleUrl: new URL('../dcm2niix/index.jpeg.js', import.meta.url).href,
       updateOutput: (msg) => this.updateOutput(msg),
       onFileLoaded: (file) => this.setLesion(file)
     });
@@ -348,7 +348,7 @@ export class LesionNetworkMappingApp {
 
   readScanInput(files) {
     return readSingleImage(files, {
-      moduleUrl: new URL('../dcm2niix/index.js', import.meta.url).href,
+      moduleUrl: new URL('../dcm2niix/index.jpeg.js', import.meta.url).href,
       updateOutput: message => this.updateOutput(message)
     });
   }

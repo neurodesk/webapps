@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/brainqcnet",
-  "version": "0.1.20261030",
+  "version": "0.1.20261031",
   "private": true,
   "description": "BrainQCNet artifact detection on T1-weighted MRI for browsers",
   "type": "module",

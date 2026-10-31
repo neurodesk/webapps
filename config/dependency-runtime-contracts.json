@@ -1,5 +1,10 @@
 [
   {
+    "from": "packages/components/src/file-io/DicomController.js",
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "Static app staging supplies the JPEG module; application callers pass their staged module URL."
+  },
+  {
     "from": "apps/calmar/web/js/inference-worker.js",
     "to": "../nifti-js/index.js",
     "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
@@ -11,8 +16,8 @@
   },
   {
     "from": "apps/calmar/web/js/lnm-app.js",
-    "to": "../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/calmar/web/js/modules/atlas-loader.js",
@@ -61,8 +66,8 @@
   },
   {
     "from": "apps/musclemap/web/js/controllers/MuscleMapDicomInput.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/musclemap/web/js/inference-worker.js",
@@ -76,13 +81,13 @@
   },
   {
     "from": "apps/qsmbly/js/controllers/QsmDicomInput.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/qsmbly/js/controllers/QsmInputSet.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/qsmbly/js/qsm-app-romeo.js",
@@ -91,8 +96,8 @@
   },
   {
     "from": "apps/seedseg/web/js/controllers/SeedSegDicomInput.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/seedseg/web/js/inference-worker.js",
@@ -141,8 +146,8 @@
   },
   {
     "from": "apps/spinalcordtoolbox/web/js/controllers/SctInputSessions.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/spinalcordtoolbox/web/js/inference-worker.js",
@@ -176,8 +181,8 @@
   },
   {
     "from": "apps/vesselboost/web/js/vesselboost-app.js",
-    "to": "../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "packages/dicompare/src/node.js",

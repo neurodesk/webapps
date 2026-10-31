@@ -7,7 +7,7 @@ import { isVolumeUrl, isFlatImageUrl } from '../../utils/imageHelpers';
 import NiivueViewer, { VolumeInfo, ViewMode, VIEW_MODES } from '../viewer/NiivueViewer';
 import VolumeThumbnail from '../common/VolumeThumbnail';
 import { Niivue } from '@niivue/niivue';
-import { Dcm2niix } from '@niivue/dcm2niix';
+import { runDcm2niix } from '@niivue/dcm2niix';
 
 type SectionId = 'reference' | 'schema' | 'test';
 
@@ -154,12 +154,8 @@ const ImageManagerModal: React.FC<ImageManagerModalProps> = ({
     let cancelled = false;
     (async () => {
       try {
-        const dcm = new Dcm2niix();
-        await dcm.init();
+        const [nifti] = await runDcm2niix(initialMatchFiles, { args: ['-f', '%p_%t_%s'] });
         if (cancelled) return;
-        const result: File[] = await dcm.input(initialMatchFiles).run();
-        if (cancelled) return;
-        const nifti = result.find(f => f.name.endsWith('.nii') || f.name.endsWith('.nii.gz'));
         if (nifti && !cancelled) {
           setMatchVolumeName(nifti.name.toLowerCase());
         }

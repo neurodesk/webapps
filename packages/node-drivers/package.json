@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/node-drivers",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "Dependency-free Node drivers for caller-pinned MindGrab and niimath builds.",

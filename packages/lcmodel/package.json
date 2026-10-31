@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/lcmodel",
-  "version": "0.8.20261027",
+  "version": "0.8.20261031",
   "description": "FID-A preprocessing and LCModel fitting of MR spectroscopy for browsers and the command line (Rust ports compiled to WebAssembly)",
   "type": "module",
   "license": "BSD-3-Clause",
@@ -49,7 +49,7 @@
     "@brainchop/mindgrab": "0.1.20260925",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
-    "@niivue/dcm2niix": "1.2.0"
+    "@niivue/dcm2niix": "1.4.20261029"
   },
   "devDependencies": {
     "jsdom": "24.1.3"
