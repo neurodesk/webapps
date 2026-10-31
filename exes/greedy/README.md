@@ -1,7 +1,7 @@
 # Greedy Rust
 
 Rust implementation of the three production Greedy workflows (`-d 3`):
-SSD/NMI affine or rigid registration, nonlinear NMI stationary-velocity, and reslice. Native CLI
+SSD/NMI affine or rigid registration, nonlinear NMI or NCC stationary-velocity, and reslice. Native CLI
 plus a `wasm-bindgen` API. The core has two dependencies (`flate2`, and
 `rayon` behind the default `parallel` feature) and no unsafe code.
 
@@ -94,6 +94,7 @@ the JavaScript package, Cargo workspace, and lockfile.
 greedy-rs -d 3 -a -m SSD -i fixed.nii.gz moving.nii.gz -o aff.mat -ia-image-centers -n 100x50x10
 greedy-rs -d 3 -a -dof 6 -m NMI -i fixed.nii.gz moving.nii.gz -o rigid.mat -ia-image-centers
 greedy-rs -d 3 -m NMI -i fixed.nii.gz moving.nii.gz -it aff.mat -o warp.nii.gz -sv -n 100x50x10
+greedy-rs -d 3 -m NCC 2x2x2 -i fixed.nii.gz moving.nii.gz -it aff.mat -o warp.nii.gz -sv -n 100x70x50
 greedy-rs -d 3 -rf fixed.nii.gz -rm moving.nii.gz out.nii.gz -r warp.nii.gz aff.mat
 greedy-rs -d 3 -rf fixed.nii.gz -rm mask.nii.gz warped-mask.nii.gz -ri NN -r warp.nii.gz aff.mat
 greedy-rs -d 3 -rf fixed.nii.gz -rm ct.nii.gz warped-ct.nii.gz -rb auto -r warp.nii.gz aff.mat
@@ -101,7 +102,14 @@ greedy-rs -d 3 -rf fixed.nii.gz -rm ct.nii.gz warped-ct.nii.gz -rb auto -r warp.
 
 - `-V 0` silences the Greedy-style optimizer trace; `-threads N` limits the
   rayon pool (results are identical for any thread count).
-- `-gm MASK` (affine and `-sv`, NMI only) is Greedy's fixed-image mask. It must be on the fixed grid. At every pyramid level the mask is smoothed and resampled like an image; at the coarse levels the fixed image is divided by it where it is at least 0.5 and zeroed elsewhere (Greedy's masked downsampling), and fixed voxels outside it are excluded from the joint histogram and the gradient. Use it with whole-head images, rather than registering two skull-stripped images whose mask boundaries differ (for example, at the brainstem cut-off).
+- `-m NCC RxRxR` (`-sv` only) is Greedy's neighbourhood cross-correlation over a box of radius R
+  voxels, the unweighted `MultiComponentWeightedNCCImageMetric` with its exact gradient. As in
+  Greedy, the radius shrinks where a level is too small for the window, and the fixed image is
+  downsampled without the mask. Greedy also adds noise of 0.001 interquartile ranges to NCC's
+  inputs; greedy-rs does not, so it stays deterministic, and regularises the variances only with
+  Greedy's 0.01. On five T1-to-ICBM 2009c registrations (`-n 100x50x0 -gm`) it gave the same
+  correlation with the native warped template as Greedy 1.4 to within 0.004.
+- `-gm MASK` (affine and `-sv`) is Greedy's fixed-image mask. It must be on the fixed grid. At every pyramid level the mask is smoothed and resampled like an image; with NMI, at the coarse levels the fixed image is divided by it where it is at least 0.5 and zeroed elsewhere (Greedy's masked downsampling), and fixed voxels outside it are excluded from the joint histogram and the gradient. With NCC, only the windows centred inside it (at least 0.5) count. Use it with whole-head images, rather than registering two skull-stripped images whose mask boundaries differ (for example, at the brainstem cut-off).
 - Affine registration uses 12 degrees of freedom by default. `-dof 6` limits
   the result to rigid-body translation and rotation.
 - The affine starts from the physical identity, as Greedy does; `-ia-image-centers`

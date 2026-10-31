@@ -3,6 +3,7 @@
 mod affine;
 mod gaussian;
 mod grid;
+mod ncc;
 mod nifti;
 mod nmi;
 mod par;
@@ -31,7 +32,7 @@ pub use reslice::{
     Interpolation, Transform, grids_match, read_matrix, reslice, reslice_with_background,
     reslice_with_interpolation,
 };
-pub use svf::{register_nmi_svf, register_nmi_svf_masked};
+pub use svf::{SvfMetric, register_nmi_svf, register_nmi_svf_masked, register_svf};
 
 use std::{error::Error as StdError, fmt};
 

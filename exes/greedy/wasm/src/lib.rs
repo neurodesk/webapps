@@ -1,7 +1,7 @@
 use greedy_rs_core::{
-    AffineMetric, AffineStart, DEFAULT_AFFINE_JITTER, Interpolation, Transform, decode_image,
-    decode_vector_field, encode_image, encode_vector_field, read_matrix, register_affine,
-    register_affine_masked, register_nmi_svf, register_nmi_svf_masked, register_rigid_masked,
+    AffineMetric, AffineStart, DEFAULT_AFFINE_JITTER, Interpolation, SvfMetric, Transform,
+    decode_image, decode_vector_field, encode_image, encode_vector_field, read_matrix,
+    register_affine, register_affine_masked, register_nmi_svf, register_rigid_masked, register_svf,
     reslice, reslice_with_background,
 };
 use wasm_bindgen::prelude::*;
@@ -216,6 +216,21 @@ pub fn register_nmi_svf_masked_wasm(
     matrix: Option<String>,
     iterations: &str,
 ) -> Result<Vec<u8>, JsValue> {
+    register_svf_masked_wasm(fixed, moving, mask, matrix, "NMI", iterations)
+}
+
+/// `greedy -sv -m METRIC [-gm MASK] [-it aff.mat]` with `metric` `NMI` or `NCC 2x2x2` (the
+/// box-window radius in voxels): raw `.nii` displacement field, as the CLI writes `-o`.
+#[wasm_bindgen]
+pub fn register_svf_masked_wasm(
+    fixed: &[u8],
+    moving: &[u8],
+    mask: Option<Vec<u8>>,
+    matrix: Option<String>,
+    metric: &str,
+    iterations: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let metric = parse_svf_metric(metric)?;
     let fixed = decode_image(fixed).map_err(wasm_error)?;
     let mut moving = decode_image(moving).map_err(wasm_error)?;
     if let Some(m) = matrix {
@@ -227,16 +242,43 @@ pub fn register_nmi_svf_masked_wasm(
         .map(|m| decode_image(&m))
         .transpose()
         .map_err(wasm_error)?;
-    let warp = register_nmi_svf_masked(
+    let warp = register_svf(
         fixed,
         moving,
         mask,
+        metric,
         parse_iterations(iterations)?,
         false,
         |_, _| {},
     )
     .map_err(wasm_error)?;
     encode_vector_field(&warp, false).map_err(wasm_error)
+}
+
+fn parse_svf_metric(value: &str) -> Result<SvfMetric, JsValue> {
+    let invalid =
+        || JsValue::from_str("metric must be NMI or NCC with a radius, such as NCC 2x2x2");
+    let mut words = value.split_whitespace();
+    match (
+        words.next().map(str::to_ascii_uppercase).as_deref(),
+        words.next(),
+        words.next(),
+    ) {
+        (Some("NMI"), None, None) => Ok(SvfMetric::Nmi),
+        (Some("NCC"), Some(radius), None) => {
+            let values = radius
+                .split('x')
+                .map(str::parse::<usize>)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| invalid())?;
+            match values[..] {
+                [r] => Ok(SvfMetric::Ncc([r; 3])),
+                [x, y, z] => Ok(SvfMetric::Ncc([x, y, z])),
+                _ => Err(invalid()),
+            }
+        }
+        _ => Err(invalid()),
+    }
 }
 
 /// Reslice a NIfTI moving image into the fixed image's grid through one RAS affine.
