@@ -63,6 +63,21 @@
       ]
     },
     {
+      "id": "dcm2niix-jpeg-1.4",
+      "version": "1.4.20261029",
+      "target": "dcm2niix-jpeg/1.4.20261029",
+      "deduplicate": true,
+      "reason": "The JPEG WASM of the dcm2niix 1.4.20261029 that @niivue/reproin bundles; ReproIn's worker keeps its app scope.",
+      "files": [
+        {
+          "name": "dcm2niix.jpeg.wasm",
+          "source_app": "reproin",
+          "source": "assets/dcm2niix.jpeg-BkENe6nT.wasm",
+          "sha256": "782c20d8e213c0ae14e0de9ae7164ac1e23a13bb8450528d36d8f832201ce178"
+        }
+      ]
+    },
+    {
       "id": "nifti-reader",
       "version": "0.8.0",
       "target": "nifti-reader/0.8.0",

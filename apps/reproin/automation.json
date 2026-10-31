@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "app": "reproin",
+  "title": "ReproIn",
+  "description": "Convert a ReproIn DICOM session to a BIDS dataset with dcm2niix and the reproin-rs post-pass.",
+  "defaultOperation": "convert-to-bids",
+  "operations": {
+    "convert-to-bids": {
+      "title": "Convert to BIDS",
+      "description": "Run dcm2niix in ReproIn mode and the BIDS post-pass; return the dataset as a ZIP.",
+      "mode": "batch",
+      "inputs": {
+        "dicom": {
+          "source": "files",
+          "type": "neuro:dicom-series",
+          "formats": [
+            "dicom"
+          ],
+          "description": "DICOM files of one or more sessions.",
+          "minimum": 1
+        }
+      },
+      "parameters": {
+        "subject": {
+          "type": "string",
+          "description": "BIDS subject label (default: from PatientID)."
+        },
+        "session": {
+          "type": "string",
+          "description": "BIDS session label (default: from ProtocolName)."
+        },
+        "anonymize": {
+          "type": "boolean",
+          "default": false,
+          "description": "dcm2niix BIDS anonymisation (-ba y)."
+        },
+        "shiftDates": {
+          "type": "boolean",
+          "default": false,
+          "description": "Shift acquisition dates so each subject's earliest scan is 1925-01-01."
+        },
+        "keepDerivatives": {
+          "type": "boolean",
+          "default": false,
+          "description": "Keep derivatives/scanner/."
+        }
+      },
+      "artifacts": {
+        "dataset": {
+          "type": "file:zip",
+          "mediaType": "application/zip",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

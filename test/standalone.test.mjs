@@ -10,7 +10,9 @@ import { ciWorkflowApps, cpuWorkflowApps, hardwareWorkflowApps } from '../script
 import { prepareWorkflow, workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 import { portableCommand, releasePlatform } from '../scripts/lib/portable-command.mjs';
-import { nativeReleases, portableSpecs } from '../scripts/lib/native-releases.mjs';
+import { externalCatalog, nativeReleases, portableSpecs } from '../scripts/lib/native-releases.mjs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 test('scanner packages link the supported apps to their OpenRecon recipes', async () => {
   const catalog = await loadStandalone(await loadAppsRegistry());
@@ -203,4 +205,56 @@ test('portable command-line rows show extraction and the release spec run comman
   assert.ok(lines.includes(`sudo installer -pkg topofit-${version}-macos-arm64.pkg -target /`));
   assert.ok(lines.every(line => line.length <= 90), 'visible commands stay within 90 characters');
   dom.window.close();
+});
+
+// Never guess URLs: a command-line download is either imported from a webapps release or is exactly the
+// external release its release.json pins.
+test('external command lines are the pinned release assets, linked with their prerequisite and source', async () => {
+  const catalog = await loadStandalone(await loadAppsRegistry());
+  const natives = nativeReleases(await portableSpecs());
+  for (const [id, app] of Object.entries(catalog.apps)) {
+    const external = natives.get(id)?.find(source => source.external);
+    if (external) {
+      assert.deepEqual({ downloads: app.downloads, commandLine: app.commandLine }, externalCatalog(external.spec), `${id}: regenerate its catalog entry from ${external.packageDir}/release.json`);
+      continue;
+    }
+    assert.equal(app.commandLine, undefined, id);
+    for (const download of app.downloads) assert.match(download.url, /^https:\/\/github\.com\/neurodesk\/webapps\/releases\/download\//, id);
+  }
+  const reproin = natives.get('reproin');
+  assert.deepEqual(reproin.map(source => [source.external, source.workflow]), [[true, null]], 'reproin is built by reproin-rs, never by a webapps workflow');
+  const dom = new JSDOM('<html><body></body></html>');
+  const dialog = openStandalone({ title: 'ReproIn', app: catalog.apps.reproin }, dom.window.document);
+  const section = dialog.root.querySelector('section[aria-labelledby="standalone-downloads"]');
+  const links = [...section.querySelectorAll('a')].map(node => node.href);
+  assert.deepEqual(links, [
+    'https://github.com/rordenlab/reproin-rs/releases/tag/v0.1.20261030',
+    'https://github.com/rordenlab/reproin-rs',
+    ...catalog.apps.reproin.downloads.map(download => download.url),
+  ]);
+  assert.deepEqual([...section.querySelectorAll('h4')].map(node => node.textContent.replace(/ · \d+ MB$/, '')), [
+    'ReproIn command line · Linux · x64',
+    'ReproIn command line · macOS · Apple silicon',
+    'ReproIn command line · macOS · Intel',
+    'ReproIn command line · Windows · x64',
+  ]);
+  assert.match(section.textContent, /dcm2niix v1\.0\.20261011 or later/);
+  assert.doesNotMatch(section.textContent, /Models/);
+  assert.match(section.textContent, /xattr -dr com\.apple\.quarantine reproinx-0\.1\.20261030-macos-arm64\n\.\/reproinx-0\.1\.20261030-macos-arm64\/reproinx dicom_dir bids_dir/);
+  assert.match(section.textContent, /\.\\reproinx-0\.1\.20261030-windows-x64\\reproinx\.exe dicom_dir bids_dir/);
+  dom.window.close();
+});
+
+// REPROIN_RELEASE_DIR: a folder holding the downloaded release assets, to check the pins offline.
+test('local copies of the external release match their pins and layout', { skip: !process.env.REPROIN_RELEASE_DIR && 'set REPROIN_RELEASE_DIR' }, async () => {
+  const [{ spec }] = nativeReleases(await portableSpecs()).get('reproin');
+  for (const target of Object.values(spec.targets)) {
+    const path = join(process.env.REPROIN_RELEASE_DIR, target.asset);
+    const bytes = await readFile(path);
+    assert.equal(bytes.length, target.bytes, target.asset);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), target.sha256, target.asset);
+    // bsdtar lists zip and tar.gz alike.
+    const entries = execFileSync('tar', ['-tf', path], { encoding: 'utf8' }).split(/\r?\n/);
+    assert.ok(entries.includes(`${target.asset.replace(/\.(?:zip|tar\.gz)$/, '')}/${target.executable}`), target.asset);
+  }
 });

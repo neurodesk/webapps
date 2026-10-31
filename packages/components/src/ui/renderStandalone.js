@@ -3,6 +3,7 @@ import { createInfoDialog, renderCommand } from './renderInfoDialog.js';
 
 const platforms = {
   'macos-arm64': 'macOS · Apple silicon',
+  'macos-x64': 'macOS · Intel',
   'windows-x64': 'Windows · x64',
   'linux-x64': 'Linux · x64',
 };
@@ -121,8 +122,18 @@ export function openStandalone({ title, app, installed = false }, doc = globalTh
   // Only this app's own command line: the all-apps desktop suite is linked from the catalog page.
   const downloads = app.downloads;
   if (downloads.length) {
-    const models = downloads.every(download => download.modelsIncluded) ? 'Models are included.' : 'Models download when first used.';
-    const root = section('standalone-downloads', 'Command line', `Download the archive for your platform. ${models}`);
+    // An external command line states its own prerequisites instead of a model note.
+    const models = app.commandLine ? '' : downloads.every(download => download.modelsIncluded) ? ' Models are included.' : ' Models download when first used.';
+    const root = section('standalone-downloads', 'Command line', `Download the archive for your platform.${models}`);
+    if (app.commandLine) {
+      for (const note of app.commandLine.notes) root.append(element('p', note));
+      const links = element('p');
+      for (const [index, link] of app.commandLine.links.entries()) {
+        if (index) links.append(doc.createTextNode(' · '));
+        links.append(element('a', link.label, { href: link.url }));
+      }
+      root.append(links);
+    }
     for (const [index, download] of downloads.entries()) addDownload(root, download, `platform-${index}`);
   }
   if (!downloads.length && !installed) content.append(element('p', 'Standalone downloads have not been published yet.'));

@@ -18,6 +18,8 @@ export function portableCommand(spec, platform, filename) {
   }
   return [
     `tar -xzf ${filename}`,
+    // A macOS archive is not notarized (signed releases ship a .pkg), so Gatekeeper blocks it until the flag is cleared.
+    ...(platform.startsWith('macos-') ? [`xattr -dr com.apple.quarantine ${directory}`] : []),
     `./${directory}/${target.executable} ${spec.run}`,
   ].join('\n');
 }
@@ -25,7 +27,7 @@ export function portableCommand(spec, platform, filename) {
 // The platform a release asset installs on, or null. Ad hoc test installers end in -adhoc.pkg and never
 // match; with a release spec only the kind it names counts, so a macOS .pkg replaces an older archive.
 export function releasePlatform(spec, filename) {
-  const match = filename.match(/-(macos-arm64|linux-x64|windows-x64)\.(pkg|tar\.gz|zip)$/);
+  const match = filename.match(/-(macos-arm64|macos-x64|linux-x64|windows-x64)\.(pkg|tar\.gz|zip)$/);
   if (!match) return null;
   const [, platform, extension] = match;
   if (spec && spec.targets[platform]?.archive !== extension) return null;

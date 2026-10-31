@@ -1201,3 +1201,28 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: reproin
+    path: reproin
+    title: ReproIn
+    description: ReproIn DICOM to BIDS, on-device.
+    categories: [image-processing]
+    keywords: [dicom, bids, reproin, heudiconv, dcm2niix]
+    anatomy: [any]
+    modalities: [mri]
+    inputs: [dicom]
+    hardware: cpu
+    handoff: dicom
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: NOASSERTION
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

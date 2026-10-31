@@ -61,6 +61,7 @@ const REQUIRED_METHODS = {
   'me-ica': ['10.21105/joss.03669', '10.1016/j.neuroimage.2011.12.028', '10.1073/pnas.1301725110', '10.1002/hbm.20359', '10.1016/j.neuroimage.2015.02.052', '10.1109/72.761722'],
   fireants: ['10.1038/s41467-026-72508-3', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001'],
   nesvor: ['10.1016/j.jneumeth.2016.03.001', '10.1109/TMI.2023.3236216', '10.1007/978-3-031-16446-0_1', 'arxiv.org/abs/2103.13314', '10.1109/TMI.2010.2046908', 'github.com/niivue/niivue'],
+  reproin: ['10.1016/j.jneumeth.2016.03.001', '10.5281/zenodo.3625000', 'npacore.github.io/reproin-namer', '10.21105/joss.05839', 'github.com/niivue/niivue'],
   fastprep: ['arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', '10.1038/s41592-018-0235-4', '10.52294/001c.94384', '10.1016/j.neuroimage.2026.122074', '10.1126/sciadv.add3607', '10.1016/j.neuroimage.2010.07.033', 'sites.google.com/view/greedyreg/cite', 'github.com/pyushkevich/greedy', '10.1016/j.neuroimage.2004.07.068', '10.1002/hbm.460020402', 'cowles.yale.edu/sites/default/files/2023-05/s-0383.pdf', '10.21105/joss.03669', '10.1016/j.neuroimage.2011.12.028', '10.1002/hbm.20359'],
   elastix: ['10.1109/TMI.2009.2035616', '10.3389/fninf.2013.00050', '10.1038/s41592-021-01326-w', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   brainqcnet: ['10.1162/imag_a_00300', 'github.com/cfchen-duke/ProtoPNet', '10.1109/CVPR.2016.90', '10.1038/s41597-022-01694-8', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],

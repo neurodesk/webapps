@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, posix } from 'node:path';
 import test from 'node:test';
@@ -43,7 +43,9 @@ function productionClosure(lock, importer) {
 
 test('command-line releases install no MCP code, while the desktop and neurodesk-mcp keep it', async () => {
   const lock = parse(await readFile(join(repoRoot, 'pnpm-lock.yaml'), 'utf8'));
-  const releases = (await readdir(join(repoRoot, 'packages'))).filter(id => existsSync(join(repoRoot, 'packages', id, 'release.json')));
+  // An external release (release.json with a tag) is built elsewhere and installs nothing from here.
+  const releases = (await readdir(join(repoRoot, 'packages'))).filter(id => existsSync(join(repoRoot, 'packages', id, 'release.json'))
+    && !JSON.parse(readFileSync(join(repoRoot, 'packages', id, 'release.json'), 'utf8')).tag);
   assert.ok(releases.length > 0, 'command-line release targets were found');
   let withComponents = 0;
   for (const id of releases) {

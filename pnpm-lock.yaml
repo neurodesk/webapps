@@ -1124,6 +1124,25 @@ importers:
         specifier: 2.9.0
         version: 2.9.0
 
+  apps/reproin:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.13
+        version: 1.0.0-rc.13
+      '@niivue/reproin':
+        specifier: https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/niivue-reproin-0.1.20261030.tgz
+        version: https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/niivue-reproin-0.1.20261030.tgz
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
   apps/sdc:
     dependencies:
       '@neurodesk/runtime-support':
@@ -4070,6 +4089,10 @@ packages:
         optional: true
       '@niivue/uikit':
         optional: true
+
+  '@niivue/reproin@https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/niivue-reproin-0.1.20261030.tgz':
+    resolution: {integrity: sha512-3700ZuQL424Fg2ICZ0gAY5XOxlSrKscu3qlM+tl3iNAL0y4RzLpq7TKpfsYwEyi8G6qK35qX++Cv8W/ent33jQ==, tarball: https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/niivue-reproin-0.1.20261030.tgz}
+    version: 0.1.20261030
 
   '@noble/hashes@1.4.0':
     resolution: {integrity: sha512-V1JJ1WTRUqHHrOSh597hURcMqVKVGL/ea3kv0gSnEdsEZ0/+VyPghM1lMNGc00z7CIQorSvbKpuJkxvuHbvdbg==}
@@ -11692,6 +11715,8 @@ snapshots:
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
+
+  '@niivue/reproin@https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/niivue-reproin-0.1.20261030.tgz': {}
 
   '@noble/hashes@1.4.0': {}
 

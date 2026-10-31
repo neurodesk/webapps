@@ -2130,3 +2130,36 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  reproin:
+    about:
+      - ReproIn turns a scanner session whose protocols follow the ReproIn naming convention into a BIDS dataset. dcm2niix converts each series and the reproin-rs post-pass applies the HeuDiConv ReproIn rules.
+      - Name protocols at the scanner with the ReproIn Namer (npacore.github.io/reproin-namer). BIDSvue (bidsvue.org) has demos, descriptions and a desktop app that runs the same conversion.
+    packages:
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion with ReproIn naming }
+      - { name: reproin-rs (Rust, WebAssembly), url: https://github.com/rordenlab/reproin-rs, role: BIDS post-pass }
+      - { name: ReproIn, url: https://github.com/ReproNim/reproin, role: naming convention and HeuDiConv heuristic }
+      - { name: ReproIn Namer, url: https://npacore.github.io/reproin-namer/, role: builds ReproIn protocol names }
+      - { name: BIDSvue, url: https://bidsvue.org, role: demos, descriptions and desktop app }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: BIDS conversion
+        title: ReproIn
+        reference: "Visconti di Oleggio Castello M, Dobson JE, Sackett T, Kodiweera C, Haxby JV, Goncalves M, Ghosh S, Halchenko YO. ReproNim/reproin 0.6.0 [Computer software]. Zenodo. 2020. https://github.com/ReproNim/reproin"
+        doi: 10.5281/zenodo.3625000
+      - group: BIDS conversion
+        title: ReproIn and BIDS name builder
+        reference: "NPACore. ReproIn and BIDS name builder (reproin-namer) [web application]. https://github.com/NPACore/reproin-namer"
+        url: https://npacore.github.io/reproin-namer/
+      - group: BIDS conversion
+        title: HeuDiConv
+        reference: "Halchenko YO, Goncalves M, Ghosh S, et al. HeuDiConv — flexible DICOM conversion into structured directory layouts. Journal of Open Source Software. 2024;9(99):5839."
+        doi: 10.21105/joss.05839
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

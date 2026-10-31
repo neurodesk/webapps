@@ -347,6 +347,8 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 
 ## Native executables (exes/)
 
+A `packages/<app>/release.json` with a `tag` is an external release: another repository builds and releases it, and `externalCatalog` (`scripts/lib/native-releases.mjs`) turns its pinned assets into the app's `registry/standalone.json` entry, which `test/standalone.test.mjs` holds equal. Nothing here builds, dispatches or imports it. To move to a new release, update the pins and run `node scripts/desktop/import-native-releases.mjs`, which rewrites external entries from their pins without fetching them.
+
 `exes/<app>` holds native Rust executables, not pnpm packages. `exes/synthsr`
 builds with `make` inside that directory (`check-model`, `build`, `test`,
 `test-real`, `macos-release`), not `pnpm`. Model assets come from the Hugging
