@@ -166,7 +166,7 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Each registration group and each denoised image gets a new WebAssembly instance, in its own Worker in the browser and worker thread in Node, so its memory is freed when it ends. Do not reuse an instance across stages.
 - Outputs are on the native T1 grid: uint8 labels, one float32 probability per class and the uint8 mask, gzip level 9 with mtime 0 (`src/outputs.js`), so the bytes are the same in every browser and on the command line.
 - `apps/bison/scripts/copy-runtime.mjs` stages the hmc-registration and ants-denoise workers and kernels (pthread builds, so the page needs cross-origin isolation) and Greedy's worker and single-threaded build in the gitignored `public/bison-runtime/`. ONNX Runtime Web starts its threads from `src/worker.js` (named `em-pthread`); the worker must not set its own message handler there.
-- The `bison` command line has no release yet; the app is in `registry/standalone-exceptions.json` until its packaging is done.
+- The `bison` command line ships through `exes/node-cli` (`packages/bison/release.json`, `bison-native.yml`). Its archives bundle the model files and must pass `validation/cli-check.mjs` against `validation/browser-reference.json`, which `bison-native.yml` also checks the built web app against; rerecord it when the pipeline, its tools or the models change.
 
 ## ants-denoise
 
@@ -337,6 +337,13 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - The component "stat-z" maps are tedana's standardized regression weights (mostly within ±0.7), not z statistics; the viewer overlays them on S0 from |0.3| to 0.7.
 - Needs 3+ echoes (`MIN_ECHOES`; tedana's PCA fails with 2).
 - The regressors TSV comes from the dropped files (`*_desc-confounds_timeseries.tsv`, else a single non-events TSV; `src/inputs.js`) and is sent only for trees in the "Needs a confounds TSV" menu group. The moco example ships its confounds; e2e checks motion_aroma against native hashes.
+
+## pipeline-builder
+
+- Validation is NeuroFlow's core, vendored as WASM (`vendor/neuroflow/README.md`, `provenance.json`). Import/export keeps the workflow's `neuroflow` version; 0.1.0 or missing becomes 0.1.1.
+- NeuroFlow core v0.6.0 reports undeclared `inputs.<name>` refs (`input-undeclared`) and invalid constants (`constant-invalid`: type, integer, enum, min/max). It ignores the `localId` grammar (cdrake/neuroflow#51). The builder's `constant-invalid` check in `workflowIssues` stays for the per-item limits in `neurodesk/parameter`; `validator.js` drops it where the core already reported that path. PR #648 also adds typed array parameters and import shape checks in `parseWorkflow`.
+- Optional-output warnings come only from the core (v0.3.2 matches the removed builder check on every catalog binding).
+- Open: `bindNewWorkflowInput` drops item bounds; carrying `minItems`/`maxItems` needs the generator to emit them and a 0.1.2 document. If it does, the core's item-count issue will duplicate the builder's `input-count` warning.
 
 ## Native executables (exes/)
 

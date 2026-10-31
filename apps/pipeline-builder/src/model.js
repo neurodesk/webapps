@@ -356,21 +356,14 @@ export function workflowIssues(doc, tools) {
     const output = /^steps\.([^.]+)\.outputs\.([^.]+)$/.exec(ref ?? "");
     return output && byId.get(doc.steps[output[1]]?.tool)?.outputs?.[output[2]];
   };
-  // NeuroFlow 0.3.2 checks only the shape of an inputs.<name> reference.
-  const undeclared = (path, ref) => {
-    const input = /^inputs\.([^.]+)$/.exec(ref ?? "");
-    if (input && !Object.hasOwn(doc.inputs ?? {}, input[1])) {
-      issues.push({ severity: "error", code: "input-undeclared", path, message: `${ref} is not a declared workflow input.` });
-    }
-  };
   for (const [id, step] of Object.entries(doc.steps)) {
-    for (const [name, binding] of Object.entries(step.inputs ?? {})) undeclared(`steps.${id}.inputs.${name}`, binding?.ref);
     const tool = byId.get(step.tool);
     for (const [name, input] of Object.entries(tool?.inputs ?? {})) {
       const path = `steps.${id}.inputs.${name}`;
       const binding = step.inputs?.[name];
       const source = declaration(binding?.ref);
-      // NeuroFlow does not type-check constants; the desktop request validator does.
+      // NeuroFlow 0.6.0 checks type, enum, min and max; this also covers the
+      // per-item limits in neurodesk/parameter. validator.js keeps one issue per path.
       const invalid = binding && "constant" in binding && (name.startsWith("param_") || name === "engine")
         && parameterError(binding.constant, input);
       if (invalid) issues.push({ severity: "error", code: "constant-invalid", path, message: invalid });
@@ -401,15 +394,6 @@ export function workflowIssues(doc, tools) {
           warn("input-count", path, `Item count needs a run-time check (${bounds.join(", ")}).`);
         }
       }
-      if (source?.optional && !input.optional && binding.ref.startsWith("steps.")) {
-        warn("optional-output", path, `${binding.ref} is optional and may be absent when this required input runs.`);
-      }
-    }
-  }
-  for (const [name, output] of Object.entries(doc.outputs ?? {})) {
-    undeclared(`outputs.${name}`, output?.ref);
-    if (declaration(output.ref)?.optional && !output.optional) {
-      warn("optional-output", `outputs.${name}`, `${output.ref} is optional and may not produce this workflow output.`);
     }
   }
   return issues;

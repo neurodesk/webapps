@@ -42,7 +42,11 @@ means agree within 8e-10, and the labels and mask are identical. Rerecord the re
 `apps/bison/e2e/pipeline.spec.js` (`BISON_BROWSER_OUTPUT=DIR`), then
 `node validation/browser-reference.mjs --from DIR`.
 
-There is no release archive yet.
+Release archives for Linux, Windows and macOS are built by `exes/node-cli` in
+`.github/workflows/bison-native.yml`. They bundle the model files and a private Node runtime, so a
+run needs no network. Each archive must pass `validation/cli-check.mjs` before it is published.
+The workflow first runs both examples in the built web app and fails unless the downloads still
+have the bytes in `browser-reference.json` (`browser-reference.mjs --check`).
 
 ## Validation
 

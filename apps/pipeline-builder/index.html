@@ -100,7 +100,7 @@
     <template id="aboutContent">
       <p>Pipeline builder chains Neurodesk webapp operations into a <a href="https://github.com/cdrake/neuroflow" target="_blank" rel="noopener">NeuroFlow</a> workflow. Each step is one app operation; its inputs read workflow inputs or the outputs of earlier steps.</p>
       <p>Only bindings the NeuroFlow core accepts are offered: the same WebAssembly validator that <code>neuroflow-mcp</code> runs checks every edit against the tool catalog this page publishes under <code>neuroflow/</code>.</p>
-      <p>The builder writes workflows; it does not run them. Run an exported workflow with the Neurodesk desktop app and <code>neuroflow-mcp</code> from NeuroFlow 0.2.1 or later.</p>
+      <p>The builder writes workflows; it does not run them. Run an exported workflow with the Neurodesk desktop app and <code>neuroflow-mcp</code> from NeuroFlow 0.2.1 or later. An imported workflow keeps its spec version: 0.1.2 needs NeuroFlow 0.3.0 or later, and 0.1.3 needs 0.3.2 or later.</p>
     </template>
     <template id="privacyContent"><p>Workflow files you open are read on this page and never uploaded. The tool catalog is fetched from this site and the example workflow from Hugging Face.</p></template>
 

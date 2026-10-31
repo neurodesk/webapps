@@ -1,0 +1,104 @@
+name: bison-native
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bison-native.yml'
+      - 'packages/bison/**'
+      - 'packages/greedy/**'
+      - 'packages/hmc-registration/**'
+      - 'packages/ants-denoise/**'
+      - 'packages/node-drivers/**'
+      - 'packages/components/**'
+      - 'packages/runtime-support/**'
+      - 'apps/bison/**'
+      - 'models/bison.manifest.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bison-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'packages/bison/**'
+      - 'packages/greedy/**'
+      - 'packages/hmc-registration/**'
+      - 'packages/ants-denoise/**'
+      - 'packages/node-drivers/**'
+      - 'packages/components/**'
+      - 'packages/runtime-support/**'
+      - 'apps/bison/**'
+      - 'models/bison.manifest.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing BISON release
+        type: boolean
+        default: false
+
+concurrency:
+  group: bison-native-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # Segments both pinned examples in the built web app and compares every download with
+  # packages/bison/validation/browser-reference.json, the reference the archives are held to.
+  web-app-reference:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - name: Install frozen dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Segment the pinned examples in the web app
+        env:
+          BISON_BROWSER_OUTPUT: ${{ runner.temp }}/bison-browser
+        run: pnpm --filter bison exec playwright test e2e/pipeline.spec.js --reporter=line
+      - name: Compare the downloads with the reference
+        run: node packages/bison/validation/browser-reference.mjs --from "$RUNNER_TEMP/bison-browser" --check
+
+  # Archives are built, and published, only once the web app still matches the reference they are
+  # held to.
+  portable:
+    needs: web-app-reference
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      package: packages/bison
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}

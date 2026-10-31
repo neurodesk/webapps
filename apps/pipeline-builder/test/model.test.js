@@ -206,17 +206,6 @@ test("imports whose maps hold non-objects are refused before the editor walks th
   assert.doesNotThrow(() => parseWorkflow(JSON.stringify({ ...base, steps: { a: { tool: "x" } } })));
 });
 
-test("references to undeclared workflow inputs are errors", () => {
-  let doc = addStep(emptyWorkflow(), bet).doc;
-  doc = bindInput(doc, "bet", "input_image", "inputs.missing");
-  doc = { ...doc, inputs: {}, outputs: { stray: { ref: "inputs.constructor" } } };
-  const undeclared = workflowIssues(doc, tools).filter(issue => issue.code === "input-undeclared");
-  assert.deepEqual(undeclared.map(issue => [issue.severity, issue.path]),
-    [["error", "steps.bet.inputs.input_image"], ["error", "outputs.stray"]]);
-  doc = { ...doc, inputs: { missing: { type: "neuro:volume" } }, outputs: {} };
-  assert.deepEqual(workflowIssues(doc, tools).filter(issue => issue.code === "input-undeclared"), []);
-});
-
 test("issues group by step and tools group by app", () => {
   const grouped = issuesByStep([{ path: "steps.n4.inputs.x" }, { path: "outputs.y" }]);
   assert.deepEqual([...grouped.keys()], ["n4", ""]);

@@ -1,0 +1,30 @@
+BISON brain tissue segmentation library and command line
+Copyright 2026 Neurodesk contributors
+
+This package ports the BISON (https://github.com/VANDAlab/BISON, 94dd5f8) and
+BISON-WMH (https://github.com/VANDAlab/BISON-WMH, ee973df) pipelines by Mahsa
+Dadar and D. Louis Collins.
+
+The model files (models/ in a release, or the download cache) are listed with
+their licences in model.manifest.json:
+- The BISON classifiers, priors and histograms: the BISON licence, a BSD-style
+  licence that requires its notice, in models/LICENCE-BISON.txt.
+- The BISON-WMH classifier, priors, histograms and average FLAIR: redistributed
+  with the permission of Mahsa Dadar (2026-10-24); BISON-WMH's CITATION.cff
+  names Apache-2.0.
+- The ICBM 2009c nonlinear symmetric template and mask: Copyright (C) 1993-2009
+  Louis Collins, McConnell Brain Imaging Centre, Montreal Neurological
+  Institute, McGill University. Use and redistribution are permitted with the
+  notice in templates/COPYING.
+
+Registration and denoising run in WebAssembly: greedy-rs (exes/greedy, Apache-2.0,
+a port of Greedy by Paul Yushkevich), antsRegistration and DenoiseImage from
+ANTs (Apache-2.0, ANTsX contributors) with ITK (Apache-2.0), and niimath
+(BSD-2-Clause, Chris Rorden). The classifiers run on ONNX Runtime (MIT).
+
+Dadar M, Collins DL (2021). BISON: Brain tissue segmentation pipeline using T1-
+weighted magnetic resonance images and a random forest classifier. Magn Reson
+Med 85(4):1881-1894.
+Dadar M, Maranzano J, Misquitta K, et al. (2017). Performance comparison of 10
+different classification techniques in segmenting white matter hyperintensities
+in aging. NeuroImage 157:233-249.

@@ -81,7 +81,7 @@ export async function segment({ t1, flair = null, output, assetDir, cacheDir, of
  * Verifies every asset of both modes: from the asset directory, else from the cache, downloading
  * what is missing unless offline.
  */
-export async function downloadModels({ assetDir, cacheDir = defaultCacheDir(), offline = false, onProgress } = {}) {
+export async function downloadModels({ assetDir, cacheDir = defaultCacheDir(), offline = process.env.NEURODESK_OFFLINE === '1', onProgress } = {}) {
   const dir = assetDirectory(assetDir);
   const assets = await loadNodeAssets({ modes: Object.keys(MODES), assetDir: dir, cacheDir, offline, onProgress });
   return { directory: resolve(dir ?? cacheDir), count: assets.size };

@@ -5,8 +5,10 @@
 // subfolder per example id.
 //
 //   node validation/browser-reference.mjs --from DIR [--out validation/browser-reference.json]
+//   node validation/browser-reference.mjs --from DIR --check
 //
-// Rerecord after a change to the pipeline, its WebAssembly tools, ONNX Runtime or the model files.
+// --check fails unless every file in DIR has the recorded bytes: the web app still writes what the
+// command line is held to. Rerecord after a change to the pipeline, its WebAssembly tools, ONNX Runtime or the model files.
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -34,11 +36,23 @@ export async function measureOutputs(directory) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values } = parseArgs({ options: { from: { type: 'string' }, out: { type: 'string' } } });
+  const { values } = parseArgs({ options: { from: { type: 'string' }, out: { type: 'string' }, check: { type: 'boolean' } } });
   if (!values.from) throw new Error('Give --from, the BISON_BROWSER_OUTPUT folder.');
   const reference = {};
   for (const example of (await readdir(values.from)).sort()) reference[example] = await measureOutputs(join(values.from, example));
   const out = values.out ?? fileURLToPath(new URL('./browser-reference.json', import.meta.url));
-  await writeFile(out, `${JSON.stringify(reference, null, 2)}\n`);
-  console.log(`Wrote ${out}: ${Object.keys(reference).join(', ')}`);
+  if (values.check) {
+    const recorded = JSON.parse(await readFile(out, 'utf8'));
+    const drift = [];
+    for (const example of new Set([...Object.keys(recorded), ...Object.keys(reference)])) {
+      for (const name of new Set([...Object.keys(recorded[example] ?? {}), ...Object.keys(reference[example] ?? {})])) {
+        if (recorded[example]?.[name]?.sha256 !== reference[example]?.[name]?.sha256) drift.push(`${example}/${name}`);
+      }
+    }
+    if (drift.length) throw new Error(`The web app's downloads differ from ${out}; rerecord it:\n${drift.join('\n')}`);
+    console.log(`The web app's downloads match ${out}: ${Object.keys(reference).join(', ')}`);
+  } else {
+    await writeFile(out, `${JSON.stringify(reference, null, 2)}\n`);
+    console.log(`Wrote ${out}: ${Object.keys(reference).join(', ')}`);
+  }
 }

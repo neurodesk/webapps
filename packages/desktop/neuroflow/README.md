@@ -36,7 +36,8 @@ files, and publishes a new bundle only after all documents are valid.
 
 Use `neuroflow-mcp` from NeuroFlow 0.2.1 or later. Releases before 0.2.0 reject a
 single artifact bound to an array input, which workflows exported by Pipeline
-builder use.
+builder use. Pipeline builder keeps an imported workflow's `neuroflow` version on
+export: spec 0.1.2 needs NeuroFlow 0.3.0 or later, and 0.1.3 needs 0.3.2 or later.
 
 Install the Neurodesk desktop suite containing the same contracts. Set
 `NEURODESK_WEBAPPS` to its executable path if it is not named
@@ -227,9 +228,9 @@ NEUROFLOW_MCP_BIN=/absolute/path/to/neuroflow-mcp \
   NEURODESK_HARDWARE_GPU=1 node scripts/desktop/neuroflow-smoke.mjs --t1
 ```
 
-The `neuroflow` CI workflow builds v0.3.1 at commit
-`18bf82246a0689c875b37ebfdc0742f9b64b1bb1` and runs this check on `macos-15`.
-That release's [step_order implementation](https://github.com/cdrake/neuroflow/blob/18bf82246a0689c875b37ebfdc0742f9b64b1bb1/crates/neuroflow-core/src/lib.rs#L481-L534)
+The `neuroflow` CI workflow builds v0.6.0 at commit
+`c83106a95102adf85685000635814b492049fb20` and runs this check on `macos-15`.
+That release's [step_order implementation](https://github.com/cdrake/neuroflow/blob/c83106a95102adf85685000635814b492049fb20/crates/neuroflow-core/src/lib.rs#L536-L589)
 executes dependencies before their consumers, using document order only to
 break ties. Reordering a step in the builder retains its bindings; it does
 not force the runtime to launch a consumer before its inputs exist. CI also
@@ -242,7 +243,7 @@ Models and dependencies come from the checksummed offline inventory. Set
 `NEURODESK_ASSET_CACHE` to reuse those downloads and
 `NEUROFLOW_EVIDENCE_DIR` to choose where the run record and outputs are kept.
 
-The [v0.3.1 release](https://github.com/cdrake/neuroflow/releases/tag/v0.3.1) provides
+The [v0.6.0 release](https://github.com/cdrake/neuroflow/releases/tag/v0.6.0) provides
 `neuroflow-mcp` binaries for Linux x86-64 (musl), macOS arm64 and Windows x86-64.
 Verify the archive against the release's `SHA256SUMS`, extract it, and set
 `NEUROFLOW_MCP_BIN` to the executable for the checks above.

@@ -9,12 +9,8 @@ export async function createValidator(tools, wasm) {
   return doc => {
     try {
       const core = JSON.parse(validate_workflow_with_tools_json(JSON.stringify(doc), catalog));
-      // NeuroFlow reports optional outputs itself (code since 0.3.1); keep the builder's copy only where core did not.
-      const coreOptional = new Set((core.issues ?? [])
-        .filter(issue => issue.code === "optional-output")
-        .map(issue => issue.path?.replace(/\.ref$/, "")));
-      const builder = builderIssues(doc, tools)
-        .filter(issue => issue.code !== "optional-output" || !coreOptional.has(issue.path));
+      const checked = new Set((core.issues ?? []).filter(issue => issue.code === "constant-invalid").map(issue => issue.path));
+      const builder = builderIssues(doc, tools).filter(issue => !(issue.code === "constant-invalid" && checked.has(issue.path)));
       const issues = [...(core.issues ?? []), ...builder];
       return { ...core, issues, ok: core.ok && !issues.some(issue => issue.severity === "error") };
     } catch (error) {

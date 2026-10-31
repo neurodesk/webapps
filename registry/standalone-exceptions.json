@@ -9,7 +9,6 @@
   "dwicorrect": "exes/dwi/shoreline builds the shoreline command line on the same core; its release packaging follows the app",
   "fastprep": "exes/fastprep drives separately installed niimath, brainchop, greedy-rs, synthsr, topofit and glm; a bundled release waits on packaging those (TopoFit licence pending)",
   "me-ica": "its meica CLI is released from niivue/meica-rs; no release is tagged yet",
-  "bison": "the bison command line in packages/bison follows the app; its release packaging is not done yet",
   "ants-denoise": "ANTs ships DenoiseImage as its own command line: the Standalone dialog lists the Neurodesk ANTs container, whose DenoiseImage gives the app's voxels with one thread and the same options",
   "brainqcnet": "the authors publish BrainQCNet as a BIDS app container: the Standalone dialog lists garciaml/brainqcnetcpu 1.0.1, whose tables the app reproduces byte for byte (packages/brainqcnet/validation)"
 }
