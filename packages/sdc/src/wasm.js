@@ -78,6 +78,7 @@ export async function loadSdc(source) {
   async function runGpu(solver, image1, image2, dims, voxel, options) {
     let instance = null;
     const run = solver.imports(() => instance.exports.memory);
+    globalThis.sdcStage = "instantiate";
     instance = await WebAssembly.instantiate(module, { sdc_gpu: run.imports });
     const { device } = solver;
     device.pushErrorScope("validation");
@@ -90,8 +91,10 @@ export async function loadSdc(source) {
       failure = error;
     }
     run.dispose();
+    globalThis.sdcStage = "popErrorScope";
     const memoryError = await device.popErrorScope();
     const validationError = await device.popErrorScope();
+    globalThis.sdcStage = "popErrorScope done";
     // A WebGPU error explains a failure better than the error it caused in the WebAssembly.
     const error = memoryError ?? validationError;
     if (error) throw new Error(`WebGPU failed: ${error.message}`);
@@ -112,14 +115,19 @@ async function openGpu(backend, device) {
   let lost = false;
   if (!device) {
     const gpu = globalThis.navigator?.gpu;
+    globalThis.sdcStage = `requestAdapter ${backend}`;
     const adapter = backend === "webgpu" ? await gpu?.requestAdapter() : await requestHardwareAdapter(gpu);
+    globalThis.sdcStage = `requestAdapter ${backend} done`;
     if (!adapter) {
       if (backend === "webgpu") throw new Error("No WebGPU adapter is available.");
       return null;
     }
     adapterInfo = [adapter.info?.vendor, adapter.info?.architecture].filter(Boolean).join(" ");
+    globalThis.sdcStage = "requestDevice";
     device = await requestSdcDevice(adapter);
-    device.lost?.then(() => {
+    globalThis.sdcStage = "requestDevice done";
+    device.lost?.then((info) => {
+      globalThis.sdcStage = `device lost: ${info?.reason} ${info?.message} (was ${globalThis.sdcStage})`;
       lost = true;
     });
   }

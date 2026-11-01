@@ -71,16 +71,21 @@ async function serve(volumes) {
 function runBackends(page, { dims, voxel, options, backends }) {
   return page.evaluate(
     async ({ dims, voxel, options, backends }) => {
+      globalThis.sdcStage = "import";
       const { loadSdc } = await import(`${location.origin}/src/wasm.js`);
+      globalThis.sdcStage = "loadSdc";
       const sdc = await loadSdc(fetch("/src/sdc.wasm"));
       const get = async (name) => new Float64Array(await (await fetch(`/data/${name}`)).arrayBuffer());
       const [image1, image2] = await Promise.all([get("image1"), get("image2")]);
       const runs = {};
       for (const [label, backend] of backends) {
         const start = performance.now();
+        globalThis.sdcStage = `estimate ${label}`;
         const out = await sdc.estimate(image1, image2, dims, voxel, { ...options, backend });
         const seconds = (performance.now() - start) / 1000;
+        globalThis.sdcStage = `post ${label}`;
         await fetch(`/out/${label}`, { method: "POST", body: out.field });
+        globalThis.sdcStage = `posted ${label}`;
         runs[label] = { backend: out.backend, adapter: out.adapter ?? null, gpuError: out.gpuError ?? null, iterations: out.iterations, seconds };
       }
       return runs;
@@ -118,14 +123,26 @@ test("WebGPU agrees with the CPU path, and auto keeps the CPU path on a software
   test.setTimeout(300000);
   const dims = [24, 48, 6];
   const site = await serve({ image1: bumps(dims, 3), image2: bumps(dims, -3) });
+  const t0 = Date.now();
+  const log = (m) => console.error(`[stress ${test.info().repeatEachIndex} +${((Date.now() - t0) / 1000).toFixed(1)}s] ${m}`);
+  page.on("console", (msg) => log(`console: ${msg.text()}`));
+  page.on("crash", () => log("PAGE CRASH"));
+  page.on("pageerror", (error) => log(`pageerror: ${error.message}`));
+  const watchdog = setInterval(async () => {
+    const stage = await Promise.race([page.evaluate(() => globalThis.sdcStage).catch((e) => `evaluate failed: ${e.message}`), new Promise((r) => setTimeout(() => r("evaluate hung 5s"), 5000))]);
+    log(`stage: ${stage}`);
+  }, 15000);
   try {
     await page.goto(site.url);
+    log("goto done");
     const runs = await runBackends(page, {
       dims,
       voxel: [2, 2, 2],
       options: { phaseEncodingDirection: "j", totalReadoutTime: 0.05 },
       backends: [["cpu", "cpu"], ["webgpu", "webgpu"], ["auto", "auto"]],
     });
+    clearInterval(watchdog);
+    log(`runs done ${JSON.stringify(runs)}`);
     expect(runs.webgpu.backend).toBe("webgpu");
     expect(runs.webgpu.iterations).toBe(runs.cpu.iterations);
     const cpu = asF64(site.posted.cpu);
@@ -141,7 +158,10 @@ test("WebGPU agrees with the CPU path, and auto keeps the CPU path on a software
       expect(asF64(site.posted.auto)).toEqual(cpu);
     }
   } finally {
+    clearInterval(watchdog);
+    log("closing site");
     await site.close();
+    log("site closed");
   }
 });
 

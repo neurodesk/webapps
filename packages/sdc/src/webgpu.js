@@ -347,7 +347,9 @@ export const shaders = SHADERS;
  */
 export async function requestHardwareAdapter(gpu = globalThis.navigator?.gpu) {
   if (!gpu) return null;
+  globalThis.sdcStage = "requestHardwareAdapter";
   const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
+  globalThis.sdcStage = "requestHardwareAdapter done";
   if (!adapter) return null;
   const info = adapter.info ?? {};
   if (isSoftwareAdapter({
@@ -380,6 +382,7 @@ export async function requestSdcDevice(adapter) {
  * `memory()` must return the instance's WebAssembly.Memory once the instance exists.
  */
 export async function createGpuSolver(device) {
+  globalThis.sdcStage = "createGpuSolver";
   const pipelines = {};
   await Promise.all(
     Object.entries(SHADERS).map(async ([name, code]) => {
@@ -479,7 +482,9 @@ function runImports(device, pipelines, memory) {
 
   // Runs `names` and returns the float64 sums of `slots` (each over `counts[i]` groups) and,
   // when asked, a copy of `extra` ({ buffer, floats }).
+  let runCount = 0;
   async function run(names, slots, counts, extra) {
+    globalThis.sdcStage = `run ${++runCount} ${names.join(",")} submit`;
     const { buffers, groups } = state;
     const encoder = device.createCommandEncoder();
     encode(encoder, names);
@@ -495,7 +500,9 @@ function runImports(device, pipelines, memory) {
     device.queue.submit([encoder.finish()]);
     const bytes = extraOffset + (extra ? extra.floats * 4 : 0);
     if (bytes === 0) return { sums: [] };
+    globalThis.sdcStage = `run ${runCount} mapAsync`;
     await buffers.read.mapAsync(GPUMapMode.READ, 0, bytes);
+    globalThis.sdcStage = `run ${runCount} mapped`;
     try {
       const mapped = buffers.read.getMappedRange(0, bytes);
       const sums = slots.map((_, i) => {

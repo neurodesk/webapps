@@ -9,7 +9,7 @@
     "build": "vite build && node ../../scripts/theme-app-dist.mjs --app sdc",
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --repeat-each 15 e2e/webgpu.spec.js e2e/smoke.spec.js",
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
