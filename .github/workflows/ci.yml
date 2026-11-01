@@ -407,6 +407,15 @@ jobs:
           NEURODESK_E2E_PREBUILT: '1'
           NEURODESK_E2E_SHARD: ${{ matrix.shard }}
         run: pnpm --filter ${{ matrix.app }} test:e2e
+      # A failed test's error-context.md holds the page's accessibility snapshot, so
+      # the status text behind a wrong example state or empty file info survives the run.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: browser-e2e-${{ matrix.app }}-${{ strategy.job-index }}
+          path: apps/${{ matrix.app }}/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # The free macOS runners expose a paravirtual Apple GPU that full Chromium
   # reaches through Metal, for WebGL2 and WebGPU alike (niivue/mono#199). This
