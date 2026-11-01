@@ -3,6 +3,8 @@ export interface RetryOptions {
   baseDelay?: number;
   maxDelay?: number;
   retryTransient?: boolean;
+  /** Milliseconds without headers before an attempt fails with a TimeoutError; null disables. */
+  stallTimeout?: number | null;
   fetch?: typeof globalThis.fetch;
   onRetry?(event: { status: number; attempt: number; delay: number }): void;
 }

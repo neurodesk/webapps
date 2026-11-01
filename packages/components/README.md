@@ -50,7 +50,11 @@ model defaults remain app-owned.
 
 `fetchModel` from `@neurodesk/webapp-components/worker` downloads model and example bytes,
 checks their declared size and SHA-256, and reuses verified downloads across apps on the
-same origin. `nd-example-selector` uses the same downloader and keeps HTTP 429 retries.
+same origin. `nd-example-selector` uses the same downloader with `retries: 4`, so its
+HTTP 429 retries continue. A download whose headers or next body chunk do not arrive
+within `stallTimeout` (30 s, `STALL_TIMEOUT` in `net/stallGuard.js`) fails with a
+`TimeoutError`: the window is one of inactivity, not a total deadline, so a large model
+still has minutes to arrive. The waits between retries are not counted.
 
 ```js
 const bytes = await fetchModel({

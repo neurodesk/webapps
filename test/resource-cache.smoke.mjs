@@ -32,13 +32,14 @@ const resources = new Map([
   ['/models/cancel.onnx', failureModel],
   ['/models/broken.onnx', failureModel],
 ]);
-const loaderSource = await readFile(join(repoRoot, 'packages/components/src/worker/fetchModel.js'), 'utf8');
-const selectorBundle = await build({
-  entryPoints: [join(repoRoot, 'packages/components/src/elements/example-selector.js')],
+const bundle = async entry => (await build({
+  entryPoints: [join(repoRoot, entry)],
   bundle: true,
   format: 'esm',
   write: false,
-});
+})).outputFiles[0].text;
+const loaderSource = await bundle('packages/components/src/worker/fetchModel.js');
+const selectorSource = await bundle('packages/components/src/elements/example-selector.js');
 const slowResponses = new Set();
 let deployOnRuntimeNavigation;
 let cacheRuntimeHttp = false;
@@ -70,7 +71,7 @@ const server = createServer(async (request, response) => {
   };
   if (pathname === '/') return send('<!doctype html><title>Resource cache regression</title>', 'text/html');
   if (pathname === '/fetchModel.js') return send(loaderSource, 'text/javascript');
-  if (pathname === '/example-selector.js') return send(selectorBundle.outputFiles[0].text, 'text/javascript');
+  if (pathname === '/example-selector.js') return send(selectorSource, 'text/javascript');
   if (pathname.startsWith('/runtime/')) {
     try {
       const relative = pathname.slice('/runtime/'.length) || 'index.html';

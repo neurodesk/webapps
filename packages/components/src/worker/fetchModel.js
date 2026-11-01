@@ -5,7 +5,13 @@
  * Cache Storage opening and writes are optional. Cache writes publish only verified bytes.
  * options.requestFailureMessage replaces the error message after all request URLs fail,
  * retaining the last error as cause. AbortError and errors reading or verifying bytes are unchanged.
+ * A download whose headers or next body chunk do not arrive within options.stallTimeout
+ * (STALL_TIMEOUT by default) fails with a TimeoutError. options.retries and options.onRetry
+ * pass to fetchWithRetry; downloads are not retried unless asked.
  */
+import { fetchWithRetry } from '../net/fetchWithRetry.js';
+import { stallGuard } from '../net/stallGuard.js';
+
 export const VERIFIED_ASSET_CACHE = 'neurodesk-verified-assets-v1';
 
 const persistenceRequested = Symbol.for('neurodesk.storage.persistenceRequested');
@@ -16,6 +22,9 @@ export async function fetchModel(asset, options = {}) {
     cache,
     signal,
     onProgress = () => {},
+    retries = 0,
+    onRetry,
+    stallTimeout,
   } = options;
   const normalized = typeof asset === 'string' ? { url: asset, cacheKey: asset } : asset;
   if (!normalized?.url) throw new Error('fetchModel requires an asset URL');
@@ -47,7 +56,7 @@ export async function fetchModel(asset, options = {}) {
     let invalidCacheError;
     try {
       bytes = namedCache
-        ? await readResponse(cached, normalized.integrity, onProgress, signal)
+        ? await readResponse(cached, normalized.integrity, onProgress, signal, null)
         : toArrayBuffer(cached);
     } catch (error) {
       signal?.throwIfAborted();
@@ -82,7 +91,7 @@ export async function fetchModel(asset, options = {}) {
   for (const url of urls) {
     signal?.throwIfAborted();
     try {
-      const candidate = await fetchImpl(url, { signal, cache: options.requestCache });
+      const candidate = await fetchWithRetry(url, { signal, cache: options.requestCache }, { fetch: fetchImpl, retries, onRetry, stallTimeout });
       if (!candidate.ok || candidate.headers?.get?.('content-type')?.toLowerCase().includes('text/html')) {
         try {
           await candidate.body?.cancel();
@@ -105,7 +114,7 @@ export async function fetchModel(asset, options = {}) {
     }
     throw error;
   }
-  const bytes = await readResponse(response, normalized.integrity, onProgress, signal);
+  const bytes = await readResponse(response, normalized.integrity, onProgress, signal, stallTimeout);
 
   await verifyModel(bytes, normalized.integrity);
   signal?.throwIfAborted();
@@ -167,15 +176,20 @@ function requestPersistence(reportError) {
   Promise.resolve().then(() => storage.persist()).catch(reportError);
 }
 
-async function readResponse(response, integrity = {}, onProgress, signal) {
-  signal?.throwIfAborted();
+async function readResponse(response, integrity = {}, onProgress, parentSignal, stallTimeout) {
+  parentSignal?.throwIfAborted();
   if (!response.body?.getReader) {
     const bytes = await response.arrayBuffer();
-    signal?.throwIfAborted();
+    parentSignal?.throwIfAborted();
     return bytes;
   }
   const total = integrity.bytes || Number(response.headers?.get?.('content-length')) || 0;
   const reader = response.body.getReader();
+  // The body belongs to the request's signal, so a stall cancels the reader itself.
+  const guard = stallGuard(parentSignal, stallTimeout);
+  const { signal } = guard;
+  const cancelReader = () => { reader.cancel(signal.reason).catch(() => {}); };
+  signal?.addEventListener('abort', cancelReader, { once: true });
   const chunks = [];
   let received = 0;
   let lastProgress = -1;
@@ -185,6 +199,7 @@ async function readResponse(response, integrity = {}, onProgress, signal) {
       const { done, value } = await reader.read();
       signal?.throwIfAborted();
       if (done) break;
+      guard.touch();
       received += value.byteLength;
       if (integrity.bytes && received > integrity.bytes) {
         throw new InvalidModelBytes(`Model size mismatch: expected ${integrity.bytes} bytes, received ${received}`);
@@ -202,6 +217,8 @@ async function readResponse(response, integrity = {}, onProgress, signal) {
     } catch { /* Cancelling an unusable body must not replace the download or integrity failure. */ }
     throw error;
   } finally {
+    guard.stop();
+    signal?.removeEventListener('abort', cancelReader);
     try {
       reader.releaseLock?.();
     } catch { /* Releasing a failed reader's lock must not replace its download or integrity error. */ }

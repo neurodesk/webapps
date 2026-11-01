@@ -353,7 +353,11 @@ for (const failure of ["download", "empty image"]) {
     await expect(page.locator("#runButton")).toBeDisabled();
     await expect(picker).toBeEnabled();
     await picker.selectOption(example.id);
-    await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120000 });
+    // Wait for either outcome, then check the status text: a failed retry names its cause.
+    const selector = page.locator("[data-neurodesk-examples]");
+    await expect(selector).toHaveAttribute("data-example-state", /^(ready|error)$/, { timeout: 120000 });
+    await expect(selector.locator(".nd-hint")).toHaveText(`${example.label} loaded.`);
+    await expect(selector).toHaveAttribute("data-example-state", "ready");
     await expect(page.locator("#runButton")).toBeEnabled();
     expect(attempts).toBe(2);
   });

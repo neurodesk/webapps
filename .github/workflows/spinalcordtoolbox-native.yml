@@ -11,6 +11,8 @@ on:
       - 'packages/components/src/file-io/**'
       - 'apps/spinalcordtoolbox/**'
       - 'packages/components/src/inference/workerProtocol.js'
+      - 'packages/components/src/net/fetchWithRetry.js'
+      - 'packages/components/src/net/stallGuard.js'
   push:
     branches: [main]
     paths:
@@ -24,6 +26,8 @@ on:
       - 'packages/components/src/file-io/**'
       - 'apps/spinalcordtoolbox/**'
       - 'packages/components/src/inference/workerProtocol.js'
+      - 'packages/components/src/net/fetchWithRetry.js'
+      - 'packages/components/src/net/stallGuard.js'
   workflow_dispatch:
     inputs:
       sign_release:

@@ -121,3 +121,32 @@ test('byte downloads reject permanent HTTP errors and body errors without transi
   } }), /reset/);
   assert.equal(calls, 1);
 });
+
+test('an attempt whose headers never arrive fails with a TimeoutError within the stall window', async () => {
+  const fetch = (_url, { signal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+  const started = Date.now();
+  await assert.rejects(fetchWithRetry('https://host/a', {}, { fetch, stallTimeout: 50 }), { name: 'TimeoutError' });
+  assert.ok(Date.now() - started < 2000);
+});
+
+test('the wait before a retry does not count as a stall', async () => {
+  let calls = 0;
+  const fetch = async () => (++calls === 1
+    ? new Response('', { status: 429, headers: { 'Retry-After': '0.2' } })
+    : new Response('bytes'));
+  const response = await fetchWithRetry('https://host/a', {}, { fetch, stallTimeout: 50 });
+  assert.equal(await response.text(), 'bytes');
+  assert.equal(calls, 2);
+});
+
+test("a caller's abort reaches the stalled attempt as its own reason", async () => {
+  const fetch = (_url, { signal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+  const controller = new AbortController();
+  const pending = fetchWithRetry('https://host/a', { signal: controller.signal }, { fetch, stallTimeout: 5000 });
+  controller.abort(new DOMException('stop', 'AbortError'));
+  await assert.rejects(pending, { name: 'AbortError', message: 'stop' });
+});
