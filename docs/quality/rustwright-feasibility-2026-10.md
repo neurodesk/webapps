@@ -1,5 +1,7 @@
 # Rustwright feasibility for webapps, 25 October 2026
 
+Superseded by [rustwright-evaluation-2026-11.md](rustwright-evaluation-2026-11.md), which runs the package.
+
 Investigation for [#605](https://github.com/neurodesk/webapps/issues/605). Retain the existing
 Playwright scientific/UI suites. The inspected Rustwright Node binding lacks APIs these suites
 require, and its context shim does not promise their storage/cookie isolation. A separate bounded
