@@ -2,10 +2,10 @@
 
 These scripts run the registration gate of the [SDC plan](../../../../docs/architecture/dwi-sdc-plan.md#62-gates) on the 1.2 mm SyN grid that the maintainer chose in [#462](https://github.com/neurodesk/webapps/issues/462#issuecomment-6399511502), and the precision and memory tests of that decision.
 sdcflows 2.17.1 drives every run through the pinned drivers of `sdc/reference/scripts/`, so the argv, the post-registration steps and the statistic are the reference's.
-`.github/workflows/sdc-registration-gate.yml` runs the SyN-only replay of the committed kernel and requires the gate.
+`.github/workflows/sdc-registration-gate.yml` runs the SyN-only replay of the committed kernel and requires the whole gate.
 
-The 29 October 2026 results, with what they do and do not establish, are in [section 6.2 of the plan](../../../../docs/architecture/dwi-sdc-plan.md#62-gates); `results-1.2mm.json` has every number with its kernel.
-`results-dlmalloc.json` holds the recheck with the dlmalloc kernels of #643: the deriv64 end-to-end run with every program in WASM, deriv64 against HMC's gates and goldens, and the committed kernel's SyN call in a Chromium worker.
+The committed kernel accumulates ITK's Mattes metric in double ("deriv64", `../../cmake/mattes-pdf-double.cmake`). `results-kernel.json` holds its 1 November 2026 results: the SyN-only replay, the end-to-end run with every kernel program in WASM, and its SyN call in a Chromium worker.
+The earlier results, with what they do and do not establish, are in [section 6.2 of the plan](../../../../docs/architecture/dwi-sdc-plan.md#62-gates): `results-1.2mm.json` has every number of the 29 October 2026 precision test with its kernel, and `results-dlmalloc.json` the recheck with the dlmalloc kernels of #643 (an experimental deriv64 build, `fd9ea784…`, and the previous float kernel, `f09b3758…`).
 
 ## Data
 
@@ -36,7 +36,8 @@ Paths must not contain spaces.
 
 `gate.py` reads `fmap` (node `syn_sdc_wf/unwarp`) and the field before `BSplineApprox` (`syn_sdc_wf/zooms_field`) with the pinned `compare_fields.py` and reports the median, 95th percentile and maximum of the difference over the MindGrab mask of the mean b0.
 The gate is `d <= max(spread, 0.05 Hz)` and `d < 0.5 Hz`.
-The spread needs native double replays at seeds 1235 and 1236 (`--spread RUN RUN`); they are not on the dataset, so the workflow checks the cap and records that the spread condition was not evaluated. Run locally, they give a spread of 0.995 Hz.
+The spread needs native double replays at seeds 1235 and 1236 (`--spread RUN RUN`); they are not on the dataset. Run locally, they give a spread of 0.995 Hz.
+Without them the first condition holds when d <= 0.05 Hz, whatever the spread; otherwise it is undecided, and `--require` fails. The committed kernel's replay gives d = 0.040 Hz, so the workflow decides both conditions.
 
 ## End-to-end run
 
@@ -54,40 +55,38 @@ Without `ANTS_REGISTRATION` and `ANTS_TOOLS`, every program the kernel has runs 
 
 ```sh
 python3 -I packages/hmc-registration/validation/sdc-gate/check_calls.py /var/tmp/e2e \
-  "$(sha256sum /var/tmp/hmc-deriv64/wasm/kernel/hmc-registration.wasm | cut -d' ' -f1)"
+  "$(sha256sum packages/hmc-registration/wasm/hmc-registration.wasm | cut -d' ' -f1)"
 ```
 
 ## Native builds and the Mattes variants
 
 ```sh
 bash packages/hmc-registration/validation/sdc-gate/native/build.sh /var/tmp/hmc-native
-bash packages/hmc-registration/validation/sdc-gate/build-wasm.sh /var/tmp/hmc-deriv64 deriv64
 ```
 
 `native/build.sh` builds ITK 5.4.3 through ANTs 52bc0ab's SuperBuild and four native builds of the kernel's programs with the reference's flags (`-O3 -mtune=native -march=corei7`): `stock` (3D float and double), `pdf64`, `deriv64` and `fma` (`stock` with `-march=native`, a rounding-only perturbation of the double run).
 Run them with `ANTS_REGISTRATION=/var/tmp/hmc-native/stock/hmc-native` and `ANTS_TOOLS=/var/tmp/hmc-native/stock/hmc-native`; drop `--float` for double.
 On the 1.2 mm double replay, `stock` writes the pinned double warp byte for byte, and its `DenoiseImage` writes the pinned `ref_anat` output.
 
-`mattes-pdf-double.cmake` changes ITK's `MattesMutualInformationImageToImageMetricv4` through build-tree copies of its header and `.hxx`, with images, fields and transforms still float:
+`../../cmake/mattes-pdf-double.cmake` changes ITK's `MattesMutualInformationImageToImageMetricv4` through build-tree copies of its header and `.hxx`, with images, fields and transforms still float:
 
 - `pdf64`: `PDFValueType = double`, so the joint and marginal PDFs, their sums and the metric value accumulate in double;
 - `deriv64`: `pdf64`, and the derivative of a transform with global support (an affine) also accumulates in double and is rounded to float once. A displacement field has local support, so SyN is the same as with `pdf64`.
 
-`mattes-pdf-double-check.cxx` fails the build if antsRegistration's include chain misses a copy.
-`build-wasm.sh` builds the kernel with a variant in the kernel's toolchain image and leaves it in the build directory; run it with `HMC_WASM_DIR=/var/tmp/hmc-deriv64/wasm/kernel`.
-On HMC's rigid test pair each variant writes the same transform in WASM and natively, and a different one from the committed kernel.
-The committed kernel does not use them; section 6.2 of the plan gives their results.
+`../../src/mattes-pdf-double-check.cxx` fails the build if antsRegistration's include chain misses a copy.
+The committed kernel is built with `deriv64`; native `deriv64` writes the same transform on HMC's rigid test pair, and `../native-reference.sh` on it writes the package's goldens.
+Section 6.2's pdf64 and experimental deriv64 WebAssembly kernels came from `build-wasm.sh` and `wasm/` in this folder, removed when deriv64 became the committed kernel (they are at main `0418026c`); the stock kernel is `scripts/build.sh` at that commit.
 
 ## A variant against HMC's gates
 
-HMC's NiFreeze registrations use the `GC` metric, so the Mattes variants should leave them unchanged; these commands check a build against HMC's registration replay and the package's goldens:
+HMC's NiFreeze registrations use the `GC` metric, so a change to the Mattes metric should leave them unchanged; these commands check another kernel build (`BUILD_DIR/wasm` of `scripts/build.sh`) against HMC's registration replay and the package's goldens:
 
 ```sh
-HMC_WASM_DIR=/var/tmp/hmc-deriv64/wasm/kernel \
-  node packages/hmc-registration/validation/nifreeze-replay.mjs "$HMC_REFERENCE" /var/tmp/q53-deriv64
-node packages/hmc-registration/validation/nifreeze-replay-gate.mjs "$HMC_REFERENCE" /var/tmp/q53-deriv64 /var/tmp/q53-replay
-(cd exes/dwi && HMC_WASM_REPLAY=/var/tmp/q53-deriv64 cargo test --release -p dwi-hmc --test q53_replay -- --nocapture)
-node packages/hmc-registration/validation/variant-goldens.mjs /var/tmp/hmc-deriv64/wasm/kernel
+HMC_WASM_DIR=/var/tmp/hmc-build/wasm \
+  node packages/hmc-registration/validation/nifreeze-replay.mjs "$HMC_REFERENCE" /var/tmp/q53-variant
+node packages/hmc-registration/validation/nifreeze-replay-gate.mjs "$HMC_REFERENCE" /var/tmp/q53-variant /var/tmp/q53-replay
+(cd exes/dwi && HMC_WASM_REPLAY=/var/tmp/q53-variant cargo test --release -p dwi-hmc --test q53_replay -- --nocapture)
+node packages/hmc-registration/validation/variant-goldens.mjs /var/tmp/hmc-build/wasm
 ```
 
 `HMC_REFERENCE` holds the `nifreeze-replay` subset of `exes/dwi/hmc/validation/reference.manifest.json`, and `/var/tmp/q53-replay` is the committed kernel's replay.

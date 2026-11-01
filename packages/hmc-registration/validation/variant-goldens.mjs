@@ -1,7 +1,7 @@
 // Which of the package's native-ANTs goldens a kernel build keeps, and why (#462). It runs the steps of
 // test/expected.mjs (runNativeReferenceSteps: two Mattes rigid registrations of the test pair,
 // AverageAffineTransform, --apply with each interpolator and AverageImages) twice with the build in
-// KERNEL_DIR, for example sdc-gate/build-wasm.sh's deriv64:
+// KERNEL_DIR, for example BUILD_DIR/wasm of another scripts/build.sh build:
 //
 //   all:          every step in the build;
 //   isolated:     the two registrations in the committed kernel, every other step in the build, so a

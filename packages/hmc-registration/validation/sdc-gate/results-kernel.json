@@ -1,0 +1,125 @@
+{
+  "issue": "neurodesk/webapps#462",
+  "date": "2026-11-01",
+  "kernel": {
+    "sha256": "d45192154b599244d96c0ad54e44f6aaca785db1792238680707e87fe8de19d1",
+    "bytes": 15223841,
+    "build": "scripts/build.sh (the kernel's CMakeLists.txt includes cmake/mattes-pdf-double.cmake with HMC_MATTES_DERIVATIVE_DOUBLE ON); a second build wrote the same bytes",
+    "mjs_sha256": "05041a136152566b5ee6068765b06134916bc1345cf662e34b7992cb3562ab8c"
+  },
+  "grid": "1.2 mm (193 x 193 x 115)",
+  "reference": "sdc/reference/grid-q68/runs/full-1.2mm-s1234-double-affine at dataset commit e773666df37ccbeec6a6e075313cdfa2caca8f96",
+  "host": "AMD EPYC-Rome, 16 vCPU, 31 GiB, shared; Node v24.19.0",
+  "q66_rule": "d <= max(spread, 0.05 Hz) and d < 0.5 Hz; with d <= 0.05 Hz the first condition holds for any spread, so neither run needs the native double seed spread",
+  "syn_replay": {
+    "fmap": {
+      "median": 0.03997,
+      "p95": 0.1418,
+      "max": 0.63263
+    },
+    "pre": {
+      "median": 0.04206,
+      "p95": 0.18817,
+      "max": 15.62309
+    },
+    "gate": {
+      "d_hz": 0.03997,
+      "cap_hz": 0.5,
+      "floor_hz": 0.05,
+      "checks": {
+        "d_below_cap": true,
+        "d_within_spread_or_floor": true
+      },
+      "pass": true
+    },
+    "registrations": [
+      {
+        "stage": "syn",
+        "wall_s": 3472.16,
+        "max_rss_GB": 2.503,
+        "exit": 0,
+        "wasm_sha256": "d45192154b599244d96c0ad54e44f6aaca785db1792238680707e87fe8de19d1",
+        "wasm_heap_bytes": 2258173952,
+        "heap_growth": {
+          "requests": 20,
+          "max_requested_bytes": 2157461504
+        }
+      }
+    ]
+  },
+  "end_to_end": {
+    "fmap": {
+      "median": 0.03106,
+      "p95": 0.12809,
+      "max": 0.74485
+    },
+    "pre": {
+      "median": 0.03303,
+      "p95": 0.25299,
+      "max": 10.18041
+    },
+    "gate": {
+      "d_hz": 0.03106,
+      "cap_hz": 0.5,
+      "floor_hz": 0.05,
+      "checks": {
+        "d_below_cap": true,
+        "d_within_spread_or_floor": true
+      },
+      "pass": true
+    },
+    "registrations": [
+      {
+        "stage": "epi2anat",
+        "wall_s": 1033.37,
+        "max_rss_GB": 0.906,
+        "exit": 0,
+        "wasm_sha256": "d45192154b599244d96c0ad54e44f6aaca785db1792238680707e87fe8de19d1",
+        "wasm_heap_bytes": 732823552,
+        "heap_growth": {
+          "requests": 5,
+          "max_requested_bytes": 632127488
+        }
+      },
+      {
+        "stage": "syn",
+        "wall_s": 2703.3,
+        "max_rss_GB": 2.616,
+        "exit": 0,
+        "wasm_sha256": "d45192154b599244d96c0ad54e44f6aaca785db1792238680707e87fe8de19d1",
+        "wasm_heap_bytes": 2258173952,
+        "heap_growth": {
+          "requests": 20,
+          "max_requested_bytes": 2157461504
+        }
+      }
+    ],
+    "calls": "check_calls.py --mode e2e: ten kernel calls (epi2anat, SyN, six antsApplyTransforms, two ImageMath) and native DenoiseImage, all exit 0, fresh work directory",
+    "epi2anat_shift_vs_double_mm": {
+      "median": 0.002571,
+      "p95": 0.003209,
+      "max": 0.003481
+    },
+    "epi2anat_sha256": "a2efb02d634a36b5eebbfa1fbb735ebb4bdca391f3178f2bd088287292046717",
+    "warp_sha256_decompressed": "a613548e55b70b4ec3cbd26226a2b951e440d68a63bfece120093a9b96eab9d0",
+    "native_denoise_output_sha256": "7600b99595926e0297d97868ee3686d9d9b4c1e9f646f3534e7333892a877aaf (the pinned ref_anat output)",
+    "same_files_as": "results-dlmalloc.json end_to_end (experimental deriv64 kernel fd9ea784)"
+  },
+  "chromium_syn_call": {
+    "browser": "156.0.8078.4",
+    "mode": "full Chromium (HMC_BROWSER_CHANNEL=chromium), validation/browser-syn.mjs full",
+    "wall_s": 2761.9,
+    "linear_memory_bytes": 2258173952,
+    "linear_memory_grows": 20,
+    "warps_equal_node_replay": true,
+    "renderer_rss_kb_at_reply": 3157196,
+    "renderer_vmhwm_kb_peak": 3163952,
+    "ua_memory_worker_bytes": 2276014605,
+    "problems": []
+  },
+  "hmc_package": {
+    "tests": "packages/hmc-registration 60/60, packages/hmc 74/74, packages/bison 76/76 (7 data-gated skips), test:browser 6/6",
+    "goldens": "test/expected.mjs now pins native-reference.sh on the native deriv64 build (validation/sdc-gate/native); the stock native build on this host reproduces every previous golden byte for byte",
+    "not_rerun": "HMC's Q53 NiFreeze replay (GC metric, unchanged by the Mattes edit; results-dlmalloc.json: 101/101 registrations byte-identical with the experimental deriv64 kernel)"
+  }
+}

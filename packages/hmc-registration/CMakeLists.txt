@@ -7,6 +7,11 @@ if(NOT EXISTS "${ANTS_SOURCE_DIR}/Examples/antsRegistration.cxx")
 endif()
 find_package(ITK REQUIRED)
 include(${ITK_USE_FILE})
+# ITK's Mattes metric accumulates its PDFs, metric value and an affine's derivative in float64 while
+# images, fields and transforms stay float (#462, "deriv64"; cmake/mattes-pdf-double.cmake). With
+# --float 1 alone the epi2anat affine of SyN-SDC moved the 1.2 mm field 0.538 Hz from native double.
+set(HMC_MATTES_DERIVATIVE_DOUBLE ON)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/mattes-pdf-double.cmake)
 # The same pinned ANTs commit and version label as packages/registration and packages/n4.
 set(ANTS_VERSION_MAJOR 2)
 set(ANTS_VERSION_MINOR 6)
@@ -23,6 +28,7 @@ include_directories(${ANTS_SOURCE_DIR}/Examples ${ANTS_SOURCE_DIR}/Examples/incl
 # src/apply.cxx keeps the legacy --apply resampler; the full antsApplyTransforms CLI is
 # linked unchanged. The small Laplacian entry avoids compiling all of ImageMath.
 add_executable(hmc-registration src/main.cxx src/unsupported.cxx src/apply.cxx src/laplacian.cxx
+  src/mattes-pdf-double-check.cxx
   ${ANTS_SOURCE_DIR}/Examples/antsApplyTransforms.cxx
   ${ANTS_SOURCE_DIR}/Examples/AverageImages.cxx
   ${ANTS_SOURCE_DIR}/Examples/AverageAffineTransform.cxx
@@ -34,6 +40,9 @@ add_executable(hmc-registration src/main.cxx src/unsupported.cxx src/apply.cxx s
   ${ANTS_SOURCE_DIR}/Utilities/ReadWriteData.cxx
   ${ANTS_SOURCE_DIR}/Utilities/antsCommandLineParser.cxx
   ${ANTS_SOURCE_DIR}/Utilities/antsCommandLineOption.cxx)
+# include(${ITK_USE_FILE}) above puts ITK's directories first in this directory again, so the
+# Mattes copies go before them on the target too; src/mattes-pdf-double-check.cxx checks it.
+target_include_directories(hmc-registration BEFORE PRIVATE ${HMC_MATTES_DIR})
 target_link_libraries(hmc-registration PRIVATE ${ITK_LIBRARIES})
 if(EMSCRIPTEN)
   set_target_properties(hmc-registration PROPERTIES SUFFIX ".mjs")

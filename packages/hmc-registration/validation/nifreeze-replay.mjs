@@ -16,7 +16,7 @@
 // OUT/timing.json gives the seconds of each run. exes/dwi/hmc/tests/q53_replay.rs reads OUT.
 //
 // HMC_WASM_DIR, a directory with another build's hmc-registration.{mjs,wasm} (for example
-// sdc-gate/build-wasm.sh's), replays that build instead of the committed kernel, as in
+// BUILD_DIR/wasm of another scripts/build.sh build), replays that build instead of the committed kernel, as in
 // sdc-gate/ants-cli.mjs; OUT/timing.json then records its SHA-256.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
