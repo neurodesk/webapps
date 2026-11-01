@@ -216,31 +216,32 @@ export async function correctSusceptibility({
 
     // epi2anat and, with the prior, the T1w-to-MNI affine of Q59 (two kernels at once).
     progress('affine');
-    const epi2anat = ants(
-      affineArguments({ fixed: 'anat.nii', moving: 'epi.nii', output: 'epi2anat', seed, fixedMask: 'anat_dil.nii', movingMask: 'epi_dil.nii' }),
-      { 'anat.nii': anatRef, 'epi.nii': epiRef, 'anat_dil.nii': anatDil, 'epi_dil.nii': epiDil },
-      ['epi2anat0GenericAffine.mat'],
-    );
-    let anat2std = null;
+    // The prior's inputs are ready before either registration starts, and both are awaited
+    // together, so a cancelled run leaves no rejection unhandled.
+    let anat2stdInputs = null;
     if (prior) {
       const template = await readImage(prior[PRIOR_FILES.template]);
       const templateMask = await readImage(prior[PRIOR_FILES.templateMask]);
-      const t1wBrain = writeLike(anat, Float32Array.from(anat.data, (value, i) => value * (anatMaskImage.data[i] > 0 ? 1 : 0)), anat.dims);
-      const templateBrain = writeLike(template, Float32Array.from(template.data, (value, i) => value * (templateMask.data[i] > 0 ? 1 : 0)), template.dims);
-      anat2std = ants(
-        affineArguments({ fixed: 'template.nii', moving: 't1w.nii', output: 'anat2std', seed }),
-        { 'template.nii': templateBrain, 't1w.nii': t1wBrain },
-        ['anat2std0GenericAffine.mat'],
-      );
+      anat2stdInputs = {
+        'template.nii': writeLike(template, Float32Array.from(template.data, (value, i) => value * (templateMask.data[i] > 0 ? 1 : 0)), template.dims),
+        't1w.nii': writeLike(anat, Float32Array.from(anat.data, (value, i) => value * (anatMaskImage.data[i] > 0 ? 1 : 0)), anat.dims),
+      };
     }
-    const epi2anatMat = (await epi2anat)['epi2anat0GenericAffine.mat'];
-    const anat2stdMat = anat2std ? (await anat2std)['anat2std0GenericAffine.mat'] : null;
+    const [epi2anatOutputs, anat2stdOutputs] = await Promise.all([
+      ants(
+        affineArguments({ fixed: 'anat.nii', moving: 'epi.nii', output: 'epi2anat', seed, fixedMask: 'anat_dil.nii', movingMask: 'epi_dil.nii' }),
+        { 'anat.nii': anatRef, 'epi.nii': epiRef, 'anat_dil.nii': anatDil, 'epi_dil.nii': epiDil },
+        ['epi2anat0GenericAffine.mat'],
+      ),
+      anat2stdInputs && ants(affineArguments({ fixed: 'template.nii', moving: 't1w.nii', output: 'anat2std', seed }), anat2stdInputs, ['anat2std0GenericAffine.mat']),
+    ]);
+    const epi2anatMat = epi2anatOutputs['epi2anat0GenericAffine.mat'];
+    const anat2stdMat = anat2stdOutputs ? anat2stdOutputs['anat2std0GenericAffine.mat'] : null;
 
     // The anatomical images on the SyN grid: the EPI field of view at 1.2 mm (Q68).
     progress('resample');
     const grid = samplingReference(dims, epi.affine, [SYN_GRID_MM, SYN_GRID_MM, SYN_GRID_MM]);
-    const epiSformCode = new DataView(epi.header).getInt16(254, true);
-    const samplingHeader = gridHeader(epi, grid.dims, grid.affine, epiSformCode === 1 || epiSformCode === 0 ? 2 : epiSformCode);
+    const samplingHeader = gridHeader(epi, grid.dims, grid.affine, epi.sformCode === 1 || epi.sformCode === 0 ? 2 : epi.sformCode);
     const sampling = writeLike(samplingHeader, new Int16Array(grid.dims[0] * grid.dims[1] * grid.dims[2]), grid.dims);
     const toSyn = (input, interpolation, transforms, extra = {}) =>
       ants(applyArguments({ input, reference: 'sampling.nii', output: 'out.nii', interpolation, transforms }), { 'sampling.nii': sampling, 'epi2anat.mat': epi2anatMat, ...extra }, ['out.nii']).then(
@@ -314,7 +315,7 @@ export async function correctSusceptibility({
     const fmapPositive = runtime.fieldFit.evaluate(fit.coefficients, fit.grid, { shape: dims, affine: positive.affine });
     const field = flipVolume(fmapPositive, dims, positive.flips);
     progress('unwarp');
-    const corrected = unwarpSeries({
+    const corrected = await unwarpSeries({
       data: series.data,
       dims,
       frames,
@@ -322,10 +323,8 @@ export async function correctSusceptibility({
       field: fmapPositive,
       phaseEncodingDirection: acq.phaseEncodingDirection,
       totalReadoutTime: acq.totalReadoutTime,
-      onVolume: (volume) => {
-        signal?.throwIfAborted();
-        onProgress?.({ stage: 'unwarp', done: volume + 1, total: frames });
-      },
+      signal,
+      onVolume: (volume) => onProgress?.({ stage: 'unwarp', done: volume + 1, total: frames }),
     });
 
     progress('write');

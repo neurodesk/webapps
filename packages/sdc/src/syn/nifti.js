@@ -15,6 +15,7 @@ export async function readImage(bytes, OutputCtor = Float32Array) {
     affine: header.affine.map((row) => Array.from(row)),
     header: extractNiftiHeader(buffer),
     datatype: header.datatype,
+    sformCode: header.sformCode,
     scaled: header.sclSlope !== 1 || header.sclInter !== 0,
     bytes: new Uint8Array(buffer),
   };
@@ -25,17 +26,29 @@ export function writeLike(like, data, dims) {
   return new Uint8Array(createNiftiFromData(data, like.header ?? like, { dims: dims ?? like.dims }));
 }
 
-// pixdim[0..3], then qform_code to srow_z: the fields nibabel's set_qform and set_sform write.
+// The fields nibabel's set_qform and set_sform write: pixdim[0..3], qform_code, sform_code,
+// the quaternion and its offsets, and the sform rows, as [offset, 'Int16' | 'Float32'].
 const GEOMETRY = [
-  [76, 92],
-  [252, 328],
+  ...[76, 80, 84, 88].map((offset) => [offset, 'Float32']),
+  [252, 'Int16'],
+  [254, 'Int16'],
+  ...Array.from({ length: 18 }, (_, i) => [256 + 4 * i, 'Float32']),
 ];
 
-/** `bytes` with the qform, sform and voxel sizes of the header `from` (nipype's _copyxform). */
+const littleEndian = (view) => view.getInt32(0, true) === 348;
+
+/**
+ * `bytes` with the qform, sform and voxel sizes of the header `from` (nipype's _copyxform).
+ * Each value is read and written in its own header's byte order.
+ */
 export function copyGeometry(bytes, from) {
   const out = new Uint8Array(bytes);
   const source = new Uint8Array(from.header ?? from);
-  for (const [start, end] of GEOMETRY) out.set(source.subarray(start, end), start);
+  const read = new DataView(source.buffer, source.byteOffset, source.byteLength);
+  const write = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const sourceLittle = littleEndian(read);
+  const outLittle = littleEndian(write);
+  for (const [offset, type] of GEOMETRY) write[`set${type}`](offset, read[`get${type}`](offset, sourceLittle), outLittle);
   return out;
 }
 

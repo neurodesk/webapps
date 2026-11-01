@@ -23,9 +23,10 @@ export function signedReadout(affine, phaseEncodingDirection, totalReadoutTime) 
  * Unwarps a series. `data` is volume-major float32 (frame t at t * voxels) on `dims` and
  * `affine`; `field` is the field in Hz on the positive-cosine grid (`positiveCosines`).
  * Returns the corrected series in the input orientation, as float32.
- * `onVolume(t)` runs after each volume and may throw to stop.
+ * The series is resampled one volume at a time, yielding to the event loop between volumes so
+ * that `signal` can stop it; `onVolume(t)` reports each finished volume.
  */
-export function unwarpSeries({ data, dims, frames, affine, field, phaseEncodingDirection, totalReadoutTime, jacobian = true, onVolume }) {
+export async function unwarpSeries({ data, dims, frames, affine, field, phaseEncodingDirection, totalReadoutTime, jacobian = true, signal, onVolume }) {
   const voxels = dims[0] * dims[1] * dims[2];
   if (field.length !== voxels) throw new Error('The field is not on the image grid.');
   const { flips } = positiveCosines(dims, affine);
@@ -56,6 +57,8 @@ export function unwarpSeries({ data, dims, frames, affine, field, phaseEncodingD
     for (let i = 0; i < voxels; i++) if (sample[i] < 0) sample[i] = 0;
     out.set(flipVolume(sample, dims, flips), t * voxels);
     onVolume?.(t);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    signal?.throwIfAborted();
   }
   return out;
 }

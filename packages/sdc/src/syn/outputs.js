@@ -28,9 +28,17 @@ export function outputNames(fileName) {
   };
 }
 
-/** The corrected series' sidecar: the input's fields and a provenance block. No time or host. */
+/**
+ * The corrected series' sidecar: the input's fields, the PE direction and readout time the run
+ * used (an option overrides the input's), and a provenance block. No time or host.
+ */
 export function dwiSidecar(sidecar, provenance) {
-  return { ...derivativeSidecar(sidecar, DESCRIPTION), SusceptibilityDistortionCorrection: provenance };
+  return {
+    ...derivativeSidecar(sidecar, DESCRIPTION),
+    PhaseEncodingDirection: provenance.PhaseEncodingDirection,
+    TotalReadoutTime: provenance.TotalReadoutTime,
+    SusceptibilityDistortionCorrection: provenance,
+  };
 }
 
 /** The field map's sidecar, as sdcflows writes it: Hz, and what it was estimated from. */

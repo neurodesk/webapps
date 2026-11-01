@@ -12,11 +12,13 @@ import { loadNoddi } from '@neurodesk/noddi';
 import { readDwi } from '@neurodesk/noddi/node';
 import { acquisition } from '../src/syn/acquisition.js';
 import { restrictDeformation, samplingReference, synParameters } from '../src/syn/grid.js';
-import { readImage } from '../src/syn/nifti.js';
+import { copyGeometry, readImage } from '../src/syn/nifti.js';
 import { advancedClip, dilateBall, gradient, medianFilterBall, normalizeLaplacian, sampleCubic, splineFilter3 } from '../src/syn/numerics.js';
 import { nodeRuntime } from '../src/syn/node.js';
-import { correctSusceptibility, outputNames } from '../src/syn/pipeline.js';
-import { synthetic } from './syn-fixture.js';
+import { dwiSidecar } from '../src/syn/outputs.js';
+import { correctSusceptibility, outputNames, PRIOR_FILES } from '../src/syn/pipeline.js';
+import { unwarpSeries } from '../src/syn/unwarp.js';
+import { nifti, synthetic } from './syn-fixture.js';
 
 const scipy = JSON.parse(await readFile(new URL('./fixtures/syn-scipy.json', import.meta.url), 'utf8'));
 
@@ -89,7 +91,8 @@ test('a synthetic subject gives BIDS outputs that the n4 and noddi input paths a
   const subject = synthetic();
   const { runtime, threads } = await countedRuntime();
   const stages = [];
-  const result = await correctSusceptibility({ ...subject, fileName: 'sub-01_dir-AP_dwi.nii.gz', prior: null, runtime, onProgress: ({ stage }) => stages.push(stage) });
+  // The readout time option overrides the sidecar's 0.03 s.
+  const result = await correctSusceptibility({ ...subject, fileName: 'sub-01_dir-AP_dwi.nii.gz', prior: null, totalReadoutTime: 0.031, runtime, onProgress: ({ stage }) => stages.push(stage) });
   const names = outputNames('sub-01_dir-AP_dwi.nii.gz');
   assert.deepEqual(Object.keys(result.files).sort(), [
     'sub-01_dir-AP_desc-brain_mask.nii.gz',
@@ -115,7 +118,9 @@ test('a synthetic subject gives BIDS outputs that the n4 and noddi input paths a
   assert.equal(new TextDecoder().decode(result.files[names.bvec]), subject.bvec);
   const sidecar = JSON.parse(new TextDecoder().decode(result.files[names.sidecar]));
   assert.equal(sidecar.PhaseEncodingDirection, 'j-');
-  assert.equal(sidecar.SusceptibilityDistortionCorrection.TotalReadoutTime, 0.03);
+  assert.equal(sidecar.TotalReadoutTime, 0.031);
+  assert.equal(sidecar.SusceptibilityDistortionCorrection.TotalReadoutTime, 0.031);
+  assert.equal(sidecar.SusceptibilityDistortionCorrection.TotalReadoutTimeSource, 'option');
   assert.equal(sidecar.SusceptibilityDistortionCorrection.Seed, 1234);
   assert.equal(JSON.parse(new TextDecoder().decode(result.files[names.fieldSidecar])).Units, 'Hz');
   const field = await readImage(result.files[names.field]);
@@ -156,4 +161,95 @@ test('an AbortSignal stops the run and ends its worker threads', { timeout: 600_
   assert.ok(threads.length >= 1, 'a kernel thread was running');
   const codes = await Promise.race([Promise.all(threads.map((worker) => worker.exited)), new Promise((resolve) => setTimeout(() => resolve(null), 10_000))]);
   assert.ok(codes, 'every kernel thread ended');
+});
+
+test('the corrected series\' sidecar states the PE direction and readout time the run used', () => {
+  const dims = [26, 30, 22];
+  for (const [sidecar, options] of [
+    [{ PhaseEncodingDirection: 'j', TotalReadoutTime: 0.1, EchoTime: 0.09 }, { phaseEncodingDirection: 'j-', totalReadoutTime: 0.05 }],
+    [null, { phaseEncodingDirection: 'i', totalReadoutTime: 0.05 }],
+  ]) {
+    const acq = acquisition(sidecar, dims, options);
+    const written = dwiSidecar(sidecar, { PhaseEncodingDirection: acq.phaseEncodingDirection, TotalReadoutTime: acq.totalReadoutTime });
+    assert.equal(written.PhaseEncodingDirection, options.phaseEncodingDirection);
+    assert.equal(written.TotalReadoutTime, options.totalReadoutTime);
+    if (sidecar) assert.equal(written.EchoTime, 0.09);
+  }
+});
+
+test('header geometry is copied between big- and little-endian headers', async () => {
+  const affine = [[0.8, 0, 0, -80.1], [0, 0.8, 0, -132.6], [0, 0, 0.8, -127.2], [0, 0, 0, 1]];
+  const other = [[2, 0, 0, 0], [0, 2, 0, 0], [0, 0, 2, 0], [0, 0, 0, 1]];
+  const values = new Uint8Array(4 * 5 * 6);
+  const big = await readImage(nifti({ dims: [4, 5, 6], affine, datatype: 2, values, little: false }));
+  assert.deepEqual(big.affine, affine.map((row) => row.map(Math.fround)));
+  for (const little of [true, false]) {
+    const copied = await readImage(copyGeometry(nifti({ dims: [4, 5, 6], affine: other, datatype: 4, values, little }), big));
+    assert.deepEqual(copied.affine, big.affine);
+    assert.equal(copied.sformCode, 1);
+    assert.deepEqual(Array.from(copied.data), Array.from(values));
+  }
+  const back = await readImage(copyGeometry(nifti({ dims: [4, 5, 6], affine: other, datatype: 2, values, little: false }), await readImage(nifti({ dims: [4, 5, 6], affine, datatype: 2, values }))));
+  assert.deepEqual(back.affine, big.affine);
+});
+
+test('an abort during the two affine registrations (with the prior) rejects once and ends the threads', { timeout: 600_000 }, async () => {
+  const subject = synthetic();
+  const { runtime, threads } = await countedRuntime();
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  const controller = new AbortController();
+  // The synthetic head stands in for the template; the run is cancelled before the atlas is read.
+  const prior = {
+    [PRIOR_FILES.atlas]: subject.t1wMask,
+    [PRIOR_FILES.atlasToTemplate]: new Uint8Array(1),
+    [PRIOR_FILES.template]: subject.t1w,
+    [PRIOR_FILES.templateMask]: subject.t1wMask,
+  };
+  try {
+    const run = correctSusceptibility({
+      ...subject,
+      fileName: 'sub-01_dwi.nii.gz',
+      prior,
+      runtime,
+      signal: controller.signal,
+      onProgress: ({ stage }) => {
+        if (stage === 'affine') setTimeout(() => controller.abort(), 1000);
+      },
+    });
+    await assert.rejects(run, { name: 'AbortError' });
+    assert.equal(threads.length, 2, 'epi2anat and the MNI affine ran in two kernels');
+    const codes = await Promise.race([Promise.all(threads.map((worker) => worker.exited)), new Promise((resolve) => setTimeout(() => resolve(null), 10_000))]);
+    assert.ok(codes, 'every kernel thread ended');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+});
+
+test('an abort during the unwarp stops it between volumes', async () => {
+  const dims = [48, 48, 32];
+  const frames = 40;
+  const voxels = dims[0] * dims[1] * dims[2];
+  const data = Float32Array.from({ length: voxels * frames }, (_, i) => (i % 97) + 1);
+  const controller = new AbortController();
+  let done = 0;
+  setTimeout(() => controller.abort(), 0);
+  await assert.rejects(
+    unwarpSeries({
+      data,
+      dims,
+      frames,
+      affine: [[-2, 0, 0, 48], [0, 2, 0, -48], [0, 0, 2, -32], [0, 0, 0, 1]],
+      field: new Float32Array(voxels).fill(5),
+      phaseEncodingDirection: 'j-',
+      totalReadoutTime: 0.03,
+      signal: controller.signal,
+      onVolume: () => done++,
+    }),
+    { name: 'AbortError' },
+  );
+  assert.ok(done < frames, `stopped after ${done} of ${frames} volumes`);
 });

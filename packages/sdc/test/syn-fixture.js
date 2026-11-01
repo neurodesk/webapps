@@ -3,29 +3,30 @@
 // b0 volumes stretched along j as a susceptibility field would, with brain masks on both grids.
 import { gzipSync } from 'node:zlib';
 
-function nifti({ dims, frames = 1, affine, datatype, values }) {
+/** A NIfTI-1 image; `little` false writes it big-endian, as some scanners' converters do. */
+export function nifti({ dims, frames = 1, affine, datatype, values, little = true }) {
   const bytesPer = { 2: 1, 4: 2, 16: 4 }[datatype];
   const voxels = dims[0] * dims[1] * dims[2] * frames;
   const bytes = new Uint8Array(352 + voxels * bytesPer);
   const view = new DataView(bytes.buffer);
-  view.setInt32(0, 348, true);
-  view.setInt16(40, frames > 1 ? 4 : 3, true);
-  [...dims, frames].forEach((n, i) => view.setInt16(42 + 2 * i, n, true));
-  view.setInt16(70, datatype, true);
-  view.setInt16(72, bytesPer * 8, true);
-  view.setFloat32(76, 1, true);
-  for (let i = 0; i < 3; i++) view.setFloat32(80 + 4 * i, Math.abs(affine[i][i]), true);
-  view.setFloat32(108, 352, true);
-  view.setFloat32(112, 1, true);
+  view.setInt32(0, 348, little);
+  view.setInt16(40, frames > 1 ? 4 : 3, little);
+  [...dims, frames].forEach((n, i) => view.setInt16(42 + 2 * i, n, little));
+  view.setInt16(70, datatype, little);
+  view.setInt16(72, bytesPer * 8, little);
+  view.setFloat32(76, 1, little);
+  for (let i = 0; i < 3; i++) view.setFloat32(80 + 4 * i, Math.abs(affine[i][i]), little);
+  view.setFloat32(108, 352, little);
+  view.setFloat32(112, 1, little);
   view.setUint8(123, 10);
   // sform only (qform_code 0), as sdcflows writes its own images.
-  view.setInt16(254, 1, true);
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 4; j++) view.setFloat32(280 + 16 * i + 4 * j, affine[i][j], true);
+  view.setInt16(254, 1, little);
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 4; j++) view.setFloat32(280 + 16 * i + 4 * j, affine[i][j], little);
   bytes.set([0x6e, 0x2b, 0x31, 0], 344);
   for (let i = 0; i < voxels; i++) {
     if (datatype === 2) view.setUint8(352 + i, values[i]);
-    else if (datatype === 4) view.setInt16(352 + 2 * i, values[i], true);
-    else view.setFloat32(352 + 4 * i, values[i], true);
+    else if (datatype === 4) view.setInt16(352 + 2 * i, values[i], little);
+    else view.setFloat32(352 + 4 * i, values[i], little);
   }
   return bytes;
 }

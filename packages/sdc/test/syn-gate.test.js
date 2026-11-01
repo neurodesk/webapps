@@ -85,7 +85,7 @@ test('the DWI unwarp reproduces sdcflows ApplyCoeffsField(jacobian=True) from th
   const field = fieldFit.evaluate(coefficients.data, { shape: coefficients.dims, affine: coefficients.affine }, { shape: dwi.dims, affine: positive.affine });
   const expectedField = await readImage(await readFile(join(reference, REFERENCE_2MM, 'unwarp_dwi/sub-01_dir-AP_run-001_dwi_field.nii.gz')));
   assert.ok(equalVoxels(field, expectedField.data), 'the field on the positive-cosine grid is sdcflows\' field');
-  const corrected = unwarpSeries({ data: dwi.data, dims: dwi.dims, frames: dwi.frames, affine: dwi.affine, field, phaseEncodingDirection: sidecar.PhaseEncodingDirection, totalReadoutTime: sidecar.TotalReadoutTime });
+  const corrected = await unwarpSeries({ data: dwi.data, dims: dwi.dims, frames: dwi.frames, affine: dwi.affine, field, phaseEncodingDirection: sidecar.PhaseEncodingDirection, totalReadoutTime: sidecar.TotalReadoutTime });
   const expected = await readImage(await readFile(join(reference, REFERENCE_2MM, 'unwarp_dwi/sub-01_dir-AP_run-001_dwi_sdc.nii.gz')));
   // sdcflows writes the series as int16 with a slope: its voxels are within half a step of the truth.
   const view = new DataView(expected.header);
