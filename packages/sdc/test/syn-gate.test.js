@@ -17,7 +17,7 @@ import { loadFieldFit } from '../src/field-fit.js';
 import { flipVolume, positiveCosines } from '../src/syn/grid.js';
 import { readImage } from '../src/syn/nifti.js';
 import { percentileSorted } from '../src/syn/numerics.js';
-import { correctFiles } from '../src/syn/node.js';
+import { correctFiles, nodeRuntime } from '../src/syn/node.js';
 import { unwarpSeries } from '../src/syn/unwarp.js';
 
 const { SDC_REFERENCE: reference, SDC_GRID: grid, SDC_PRIOR: prior, SDC_SLAB: slab, SDC_SYN_GATE_OUTPUT: keep } = process.env;
@@ -27,6 +27,11 @@ const HOURS = 3600_000;
 const INPUT = 'input/sub-01_dir-AP_run-001_dwi';
 const REFERENCE_2MM = 'runs/full-2mm-s1234-double-affine/work';
 const REFERENCE_12 = 'runs/full-1.2mm-s1234-double-affine/work/sdc_ref';
+// Native N4's output for the full-brain mean b0, pinned in sdc/reference/ (reference-run subset).
+// The gate swaps it in for the WebAssembly N4, whose float rounding changes one EPI-reference
+// voxel by 1/255 and so the field by 0.55 Hz (plan section 6.2); N4 has its own native gate in
+// packages/n4. This is a test hook only: the pipeline's runtimes take no such option.
+const NATIVE_N4 = `${REFERENCE_2MM}/sdc_ref/syn_preprocessing_wf/epi_reference_wf/n4_avgs/mapflow/_n4_avgs0/clipped_corrected.nii.gz`;
 
 function requireData(...variables) {
   for (const [name, value] of variables) assert.ok(value, `${name} is required (SDC_REQUIRE_SYN_GATE=1)`);
@@ -91,11 +96,14 @@ test('the DWI unwarp reproduces sdcflows ApplyCoeffsField(jacobian=True) from th
   assert.ok(largest <= halfStep * 1.01, `largest difference ${largest} exceeds the reference's half quantisation step ${halfStep}`);
 });
 
-test('the full-brain pipeline meets the Q66 gate against native sdcflows on the 1.2 mm grid', { skip: gate([reference, grid, prior]), timeout: 6 * HOURS }, async () => {
+test('the full-brain pipeline, with native N4\'s output, meets the Q66 gate against native sdcflows on the 1.2 mm grid', { skip: gate([reference, grid, prior]), timeout: 6 * HOURS }, async () => {
   requireData(['SDC_REFERENCE', reference], ['SDC_GRID', grid], ['SDC_PRIOR', prior]);
   const directory = await output('full-brain');
   const started = performance.now();
   const stages = {};
+  const runtime = await nodeRuntime();
+  const nativeN4 = new Uint8Array(await readFile(join(reference, NATIVE_N4)));
+  runtime.n4 = async () => nativeN4;
   const result = await correctFiles({
     dwi: join(reference, `${INPUT}.nii.gz`),
     bval: join(reference, `${INPUT}.bval`),
@@ -105,6 +113,7 @@ test('the full-brain pipeline meets the Q66 gate against native sdcflows on the 
     prior,
     output: join(directory, 'derivatives'),
     seed: 1234,
+    runtime,
     onProgress: ({ stage }) => {
       if (!(stage in stages)) stages[stage] = Math.round((performance.now() - started) / 1000);
     },
@@ -128,6 +137,7 @@ test('the full-brain pipeline meets the Q66 gate against native sdcflows on the 
   const anat2std = await readFile(join(reference, 'std2anat/affine/anat2std_affine_0GenericAffine.mat'));
   const report = {
     reference: 'native sdcflows 2.17.1, double, seed 1234, 1.2 mm grid (sdc/reference/grid-q68 at e773666d)',
+    n4: `native N4 output swapped in (${NATIVE_N4} at sdc/reference 8520dbca); every other step in WebAssembly and JavaScript`,
     fmap,
     pre,
     epi2anatShiftMm: affineShift(rasMatrix(intermediate.epi2anat), rasMatrix(epi2anat), epiMask.data, epiMask.affine, dims),

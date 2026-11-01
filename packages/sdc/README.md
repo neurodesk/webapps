@@ -93,7 +93,11 @@ An `AbortSignal` rejects the run and terminates its kernel, DenoiseImage, N4 and
 
 ### Gate
 
-`test/syn-gate.test.js` runs the whole pipeline in Node on the full-brain ds005134 sub-01 and compares the field with the native double seed-1234 run on the 1.2 mm grid (`sdc/reference/grid-q68` at `e773666d`): the gate of Q66 is d ≤ max(spread, 0.05 Hz) and d < 0.5 Hz over the MindGrab mask of the mean b0, and without the 1.2 mm end-to-end spread only d ≤ 0.05 Hz decides the first condition. It also checks the unwarp against sdcflows' and reports the slab run against the native 2 mm slab runs. `.github/workflows/sdc-registration-gate.yml` (job `pipeline`) fetches the data with their SHA-256 and sets `SDC_REQUIRE_SYN_GATE=1`:
+`test/syn-gate.test.js` runs the whole pipeline in Node on the full-brain ds005134 sub-01 and compares the field with the native double seed-1234 run on the 1.2 mm grid (`sdc/reference/grid-q68` at `e773666d`). The gate is the rule of Q66, unchanged: d ≤ max(spread, 0.05 Hz) and d < 0.5 Hz over the MindGrab mask of the mean b0. Without the 1.2 mm end-to-end spread, only d ≤ 0.05 Hz decides the first condition.
+
+The gate run takes N4's output from native N4: the pinned `n4_avgs` output of the 2 mm reference run in `sdc/reference/`, made from the same mean b0. Every other step runs in this repository's WebAssembly and JavaScript. The swap is a test hook in `syn-gate.test.js`, not an option of the pipeline. The maintainer chose it on PR #673. One voxel changed by 1/255 moves the field by 0.55 Hz, so a single-seed comparison under the cap would test N4's float rounding, not the port. N4 keeps its own native gate in `packages/n4`.
+
+The test also checks the unwarp against sdcflows' and reports the slab run against the native 2 mm slab runs. `.github/workflows/sdc-registration-gate.yml` (job `pipeline`) fetches the data with their SHA-256 and sets `SDC_REQUIRE_SYN_GATE=1`:
 
 ```sh
 export $(python3 exes/dwi/sdc/validation/fetch_reference.py "$TMPDIR/sdc-reference" reference-run slab)
@@ -109,11 +113,15 @@ Measured on 1 November 2026 (seed 1234, Node 24, 16-core AMD EPYC shared with ot
 
 | Run | d median (Hz) | p95 | max | epi2anat shift from double |
 | --- | ---: | ---: | ---: | ---: |
-| whole pipeline in this repository's WebAssembly and JavaScript | **0.546** (fails the 0.5 Hz cap) | 1.26 | 4.80 | 0.074 mm |
-| the same, with native N4's output in place of the WebAssembly N4's (control) | 0.036 (passes) | 0.198 | 0.963 | - |
+| the gate: native N4's output, every other step in WebAssembly and JavaScript | 0.036 (passes Q66) | 0.198 | 0.963 | - |
+| report only: every step in WebAssembly and JavaScript, including the WebAssembly N4 | 0.546 | 1.26 | 4.80 | 0.074 mm |
 
 - The mean b0 and both MindGrab masks equal the reference's voxel for voxel. With the reference's EPI reference, the pipeline's epi2anat writes #462's end-to-end transform byte for byte.
-- The whole difference starts in N4. The WebAssembly N4 differs from native N4 by float rounding, which changes 1 of 928,464 voxels of the EPI reference by 1/255 after the clip. That voxel moves the float epi2anat affine 0.074 mm, and SyN turns it into 0.55 Hz. The T1w-to-MNI affine (0.073 mm from the pinned double one) does not matter: the control run computes it in WebAssembly as well.
+- In the all-WebAssembly run the difference starts in N4:
+  - The WebAssembly N4 differs from native N4 by float rounding. After the clip, that changes 1 of 928,464 voxels of the EPI reference by 1/255.
+  - That one voxel moves the float epi2anat affine 0.074 mm, and SyN turns the shift into 0.55 Hz.
+  - A hosted CI runner gives the same 0.5457 Hz to the last digit.
+- The T1w-to-MNI affine (0.073 mm from the pinned double one) does not change the result: the gate run also computes it in WebAssembly.
 - Wall time 101 min: DenoiseImage 4 min, epi2anat and the MNI affine together 47 min, SyN 41 min, the unwarp of 137 volumes 3 min. Max RSS of the Node process 6.4 GB (MindGrab, then the kernels).
 - The unwarp from the reference coefficients is within 0.01172 of sdcflows' series, whose int16 half step is 0.01167.
 - Slab with the full T1w, 1.2 mm against the native 2 mm slab runs (report only): median 1.59 Hz against double seed 1234 (p95 6.05 Hz), 1.95 and 2.00 Hz against seeds 1235 and 1236, 1.51 Hz against `--float 1`. The pipeline took 52 min.

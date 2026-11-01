@@ -9,9 +9,10 @@ name: sdc-registration-gate
 # SyN takes about 50 minutes on one core.
 #
 # Job `pipeline` runs the SyN-SDC pipeline of packages/sdc (#464) end to end on the full-brain
-# ds005134 sub-01 in Node, every step in this repository's WebAssembly and JavaScript (MindGrab
-# masks, N4, DenoiseImage, the epi2anat and MNI affines, SyN, the field fit, the DWI unwarp), and
-# requires the same rule against the same native run, with SDC_REQUIRE_SYN_GATE=1 turning missing
+# ds005134 sub-01 in Node (MindGrab masks, DenoiseImage, the epi2anat and MNI affines, SyN, the
+# field fit, the DWI unwarp in this repository's WebAssembly and JavaScript; N4's output is native
+# N4's, pinned in sdc/reference/, as the plan's section 6.2 decides), and requires the same rule
+# against the same native run, with SDC_REQUIRE_SYN_GATE=1 turning missing
 # data into a failure. It also checks the DWI unwarp against sdcflows' and reports the slab run.
 on:
   pull_request:
