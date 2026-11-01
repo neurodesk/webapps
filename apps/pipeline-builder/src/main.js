@@ -82,7 +82,7 @@ function render() {
   const focused = document.activeElement?.id;
   validation = validate(doc);
   const steps = Object.entries(doc.steps);
-  const byStep = issuesByStep(validation.issues ?? []);
+  const byStep = issuesByStep(validation.issues ?? [], steps.map(([id]) => id));
   const errors = (validation.issues ?? []).filter(issue => issue.severity === "error");
   $("workflowId").value = doc.id ?? "";
   $("workflowDescription").value = doc.description ?? "";
