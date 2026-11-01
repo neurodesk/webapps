@@ -411,6 +411,12 @@
         "sha256": "460d447286c7ecd70942b4144030388ae767928fc53f27ec66a39c5fe86d0e10",
         "bytes": 78302,
         "kind": "example"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/neurodata/neuroparc/5a5e7469671e65cb58087c47b69d0edb71dc2966/atlases/label/Human/HarvardOxfordsub-maxprob-thr25_space-MNI152NLin6_label_all_res-2x2x2.nii.gz",
+        "sha256": "fd1b030b75afa1b1c22ce0f1314399065f60c90eb656d1bcea0eb3513bad4a5a",
+        "bytes": 49491,
+        "kind": "model"
       }
     ],
     "qsmbly": [

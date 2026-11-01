@@ -265,8 +265,12 @@ for (const pipeline of manifest.pipelines) {
 for (const option of manifest.atlasOptions) {
   assert.ok(knownIds.has(option.overlapAtlasAssetId),
     `atlas option ${option.id} overlapAtlasAssetId must reference a known asset`);
-  assert.ok(knownIds.has(option.connectomeAssetId),
+  assert.ok(!option.connectomeAssetId || knownIds.has(option.connectomeAssetId),
     `atlas option ${option.id} connectomeAssetId must reference a known asset`);
+  if (option.subcorticalAtlasAssetId) {
+    assert.ok(knownIds.has(option.subcorticalAtlasAssetId));
+    assert.equal(option.connectomeAssetId, undefined, 'do not invent Harvard–Oxford connectivity maps');
+  }
   if (option.affectedAtlasAssetId) {
     assert.ok(knownIds.has(option.affectedAtlasAssetId),
       `atlas option ${option.id} affectedAtlasAssetId must reference a known asset`);

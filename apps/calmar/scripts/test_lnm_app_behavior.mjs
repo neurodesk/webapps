@@ -3380,6 +3380,26 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   await app.handleKbEvidenceChange('approved');
   assert.equal(reruns, 1, 'choosing the current level does nothing');
 
+  await app.handleKbEvidenceChange('off');
+  assert.equal(app.kbEvidence, 'off');
+  assert.equal(reruns, 1, 'disabling evidence does not compute it');
+  await app.handleKbEvidenceChange('approved');
+  assert.equal(reruns, 2, 'enabling evidence restores the report');
+  const skipped = makeApp();
+  skipped.kbEvidence = 'off';
+  skipped.ensureManifest = () => { throw new Error('disabled KB must not fetch assets'); };
+  await skipped.runKbReport();
+
+  const pending = makeApp();
+  pending.lesionFile = { arrayBuffer: () => { throw new Error('disabled KB must stop before decoding'); } };
+  let finishManifest;
+  pending.ensureManifest = () => new Promise(resolve => { finishManifest = resolve; });
+  const loading = pending.runKbReport();
+  await pending.handleKbEvidenceChange('off');
+  finishManifest(withDrafts);
+  await loading;
+  assert.equal(pending.kbReport, null, 'disabling an in-flight report prevents publication');
+
   const select = { value: 'drafts', querySelector: () => option };
   const option = { disabled: false };
   const restore = useMockElements({ kbEvidenceSelect: select });
@@ -3397,3 +3417,54 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
 }
 
 console.log('lnm-app behavior OK: dispatch + precondition + explicit-start + split-log routing + worker-wait + manual mask review/upload/approval-banner/download/confirm/native-overlay/resume + threshold-preview/projection + selectable atlas + subject-atlas QC + advanced atlas-QC button + registration QC modes/blend + affected-network labels + functional profiles + layer-toggle + min-cluster input/table-filter + top-percent + auto-promote + coverage-note + version-label + kb-evidence + MNI160 threshold-resample/header cases.');
+
+// Explicit preparation/acceptance/reporting boundaries.
+{
+  const app = makeApp();
+  app.structuralFile = { name: 'anatomy.nii' };
+  app.ensureStructuralForDiffusion = async () => {};
+  const runs = [];
+  app._runPipelineWithStatus = async pipeline => {
+    runs.push(pipeline.stages.map(stage => stage.module));
+    app._pendingMaskResume = { pipeline, nextStageIndex: 3 };
+    return 'paused';
+  };
+  await app.runLesionPreparation();
+  assert.deepEqual(runs[0], ['brain-extraction', 'prealign', 'inference-pipeline']);
+  assert.equal(app._pendingMaskResume, null, 'mask acceptance cannot start reporting');
+  await app.runReportingAnalysis();
+  assert.equal(runs.length, 1, 'unaccepted masks cannot be reported');
+  app.lesionMaskConfirmed = true;
+  await app.runReportingAnalysis();
+  assert.deepEqual(runs[1], ['registration', 'parcel-overlap', 'fc-weighted-sum', 'threshold', 'kb-report']);
+  app.confirmedNativeLesionFile = {};
+  let loaded = false;
+  app.renderConfirmedNativeLesionOverlay = async () => { loaded = true; };
+  app.viewerLayerVisibility.lesion = false;
+  app.refreshViewerLayerControls = () => {};
+  app.centerCrosshairOnLesion = () => {};
+  app.setViewerView = view => { app.viewerView = view; };
+  await app.showScanConfirmation();
+  assert.equal(loaded, true, 'confirmation reloads the real native mask');
+  assert.equal(app.viewerLayerVisibility.lesion, true);
+  assert.equal(app.viewerView, 'multiplanar', 'confirmation uses the interactive canvas');
+}
+
+// NiiVue exposes native dimensions on hdr, and no vox2mm instance method.
+{
+  const app = makeApp();
+  let draws = 0;
+  app.nv = {
+    volumes: [null, {
+      img: new Uint8Array([1, 0, 0, 1]),
+      hdr: { dims: [3, 4, 1, 1], affine: [[2, 0, 0, 10], [0, 2, 0, 0], [0, 0, 2, 0], [0, 0, 0, 1]] }
+    }],
+    scene: {},
+    mm2frac: mm => mm,
+    drawScene: () => { draws++; }
+  };
+  app.viewerController = { getVolumeIndexForStage: stage => stage === 'segmentation' ? 1 : null };
+  assert.equal(app.centerCrosshairOnLesion(), true);
+  assert.deepEqual(app.nv.scene.crosshairPos, [10, 0, 0], 'center on foreground, not the empty midpoint');
+  assert.equal(draws, 1, 'centering redraws the visible scan');
+}

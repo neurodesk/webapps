@@ -65,7 +65,7 @@ other filesystem errors must remain visible rather than trigger a download.
 - There is no start page: the workspace is the first screen. The one-sentence intro and the note that background execution is possible when the site is added under `"Always keep these sites active"` in browser settings live in the About modal; the local-data statement lives in the Privacy modal.
 - Status lives in the shared `<footer id="status" class="nd-imaging-status">` spanning the `.app-container` grid: `#statusText`, `#elapsed`, native `<progress id="progress">` and the hidden `#cancelButton` ×, all driven by the shared `ProgressManager`. Before input it reads `Drag and drop files`; `scripts/test_index_html.mjs` checks this boot state. `runFullPipeline()` and the mask-confirmation resume call `begin()` / `end('Complete')`; worker failures call `end(msg, { success: false })` and add `error` to `#statusText`; cancel resets to `Cancelled`. The cancel is shown only while a worker step reports progress.
 - The workspace header must include a VesselBoost-style `More Apps` header link to the composite site root (`../`) with title `More Neurodesk web apps`, the shared 2x2 grid icon, and the same `.header-link` styling as the other header actions. Keep it in the current tab so it behaves as a return to the webapps start page.
-- The sidebar has one primary action, `Run analysis`; every other sidebar button (including `Download overlap CSV`) is secondary.
+- The sidebar has one primary action, `Run lesion segmentation` in Input; reporting in panel 2 is secondary; every other sidebar button (including `Download overlap CSV`) is secondary.
 - User-facing CALMaR source links must target `https://github.com/neurodesk/webapps/tree/main/apps/calmar`; the pre-monorepo repositories are import provenance only.
 - Cache Storage (Atlas + connectome assets) requires URL-shaped keys. Bare strings like `'yeo7-fc-pack-adhd200-n30-v1'` parse as URL schemes and the put fails. Fold the manifest's `cacheKey` into the URL fragment: `${url}#${encodeURIComponent(cacheKey)}`. See `atlas-loader.js fetchCacheFirst`.
 - The visible atlas control is a select field labelled exactly `Atlas`. Keep both `Schaefer 400 parcels` and `Yeo 7 networks` available. Schaefer400 is the default now that direct overlap, the 4 mm companion label atlas, and the lazy development-fMRI FC shards are supported; Yeo remains selectable for compatibility and comparison.
@@ -220,3 +220,23 @@ each extracted portable release offline; immutable assets and checksums live in
 `packages/calmar/assets.lock.json`, derived from the browser model manifest and
 pinned connectome indexes. Releases follow root date-version instructions and
 the shared signed macOS packager with the root monorepo release tooling.
+
+## Optional evidence and overlap interpretation
+- The evidence selector supports `off`: skip KB processing and hide all evidence sections and the Stroke Aphasia Knowledge Base heading; retained results may be recomputed when evidence is enabled again. Turning it off while a report is loading must prevent publication.
+- Method is folded by default. Direct overlap includes ROI covered % (overlap divided by the whole atlas label size), alongside Lesion %. Harvard–Oxford combined cortical and subcortical 25% maximum-probability 2 mm labels support direct overlap only; do not invent matching FC maps or functional profiles.
+- Region-level KB evidence is a folded detail beneath symptom summaries. Retain finding direction and source passages. Explanatory figures distinguish lesion overlap, normative connectivity and exploratory term association. Scan confirmation opens the live viewer with its lesion overlay.
+- The combined atlas merges at load time on identical grids, subcortical labels offset by 48 and taking precedence; excludes labels 1–3 and 12–14 (broad tissues and ventricles). FSL hemisphere names follow world x; the pinned neuroparc CSV incorrectly reverses the sides. The original KB cortical atlas remains unchanged.
+- Connectivity explanatory figures use inline SVG with currentColor, labelled as illustrative; percentage definitions remain in tooltip help. The report export includes the KB heading with its measures section.
+- CSV export quotes atlas labels containing commas, quotes or newlines so Harvard–Oxford region names remain one field.
+- `e2e/report-options.spec.js` loads checksummed real Harvard–Oxford atlases, creates a synthetic 20-subcortical/10-cortical voxel lesion, and checks both denominators, CSV download, folded Method, explanatory figure, scan capture and disabled KB on desktop and phone.
+- Scan confirmation captions distinguish a mask-only view from an anatomical image; a mask-only upload must never be labelled as a structural scan.
+- Hide connectivity threshold controls for the direct-only Harvard–Oxford option; retain the minimum label-size control because it also filters direct overlap. Method uses a plain native summary to keep its disclosure arrow and title on one line.
+- Scan capture temporarily hides atlas, brain-mask and connectivity overlays, restores their visibility afterwards, and captions the actual viewer base filename so a template is not presented as the patient scan. Switching KB off during loading stops the report at the next async boundary.
+- The report-options browser check captures result screenshots in both themes at desktop and phone widths.
+
+## Separate segmentation and reporting
+- Panel 1's primary Run lesion segmentation stops at mask review; acceptance does not resume reporting. Panel 2's secondary Run reporting analysis requires acceptance for structural-image workflows and runs only registration and reporting stages. The compatibility runFullPipeline API remains available to automation.
+- Scan confirmation is a separate report section that opens the existing interactive viewer, explicitly loading the confirmed native mask over native anatomy (or the atlas-grid mask on its matching base). It is not a stale screenshot. Percentage tutorial disclosure is removed; denominator help remains in tooltips.
+- All heading help uses shared nd-heading-inline; report tables use shared nd-table-right. Region coverage is named Damaged, never Destroyed.
+- Scan confirmation centers on a real foreground voxel nearest the lesion centroid, using the NIfTI affine, rather than relying on an absent NVImage instance transform or centering between disconnected components.
+- Centering explicitly redraws the NiiVue scene so the lesion-containing slice is visible immediately.

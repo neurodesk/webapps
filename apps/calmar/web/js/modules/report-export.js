@@ -16,7 +16,7 @@ export const REPORT_PARTS = Object.freeze([
   { id: 'image', label: 'Lesion image (3-plane crosshair)', selectors: [], default: true },
   { id: 'overlap', label: 'Direct lesion overlap', selectors: ['#outsideAtlasWarning', 'section[aria-label="Direct lesion overlap"]', '#directFunctionProfileResults'], requires: '#networkOverlapTable tbody tr', default: true },
   { id: 'network', label: 'Connectivity-map effects', selectors: ['#networkThresholdSummary', '#affectedNetworkResults'], requires: '#affectedNetworkResults:not(.hidden)', default: true },
-  { id: 'measures', label: 'Lesion size: what the evidence says', selectors: ['#kbMeasuresResults'], default: true },
+  { id: 'measures', label: 'Lesion size: what the evidence says', selectors: ['#kbReportHeading', '#kbMeasuresResults'], default: true },
   { id: 'location', label: 'Lesion location: what the evidence says', selectors: ['#kbLocationResults'], default: true },
   { id: 'whiteMatter', label: 'White-matter disconnection', selectors: ['#kbWhiteMatterResults'], default: true },
   { id: 'therapy', label: 'Therapy evidence', selectors: ['#kbTherapyResults'], default: true },

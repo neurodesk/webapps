@@ -1141,3 +1141,15 @@ nd-result-list {
     font-size: 16px !important;
   }
 }
+
+/* Keep help adjacent to its title, including legacy disclosure buttons. */
+.nd-heading-inline > :is(h2, h3, label, button) {
+  flex: 0 1 auto;
+  width: auto;
+}
+.nd-heading-inline > .nd-info-icon {
+  margin-inline: 0;
+}
+.nd-table-right :is(th, td) {
+  text-align: right;
+}

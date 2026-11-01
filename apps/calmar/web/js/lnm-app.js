@@ -169,7 +169,7 @@ function summarizeParcelLabelOverlap(parcelResult, parcelLabels) {
 
 function labelMapForAtlas(atlas, atlasOption) {
   if (atlasOption?.weightSource === 'parcel') {
-    return atlas.parcelLabels || atlas.manifestEntry?.parcelLabels || {};
+    return atlas.parcelLabels || atlas.manifestEntry?.parcelLabels || atlas.manifestEntry?.labels || {};
   }
   return atlas.networkLabels || atlas.manifestEntry?.networkLabels || {};
 }
@@ -435,6 +435,12 @@ export class LesionNetworkMappingApp {
       atlasSelect.addEventListener('change', () => this.handleAtlasSelectionChange(atlasSelect.value));
     }
 
+    document.getElementById('captureReportScan')?.addEventListener('click', () => {
+      this.showScanConfirmation().catch(error => this.updateOutput(error.message, { level: 'error' }));
+    });
+    document.getElementById('runLesionPreparationButton')?.addEventListener('click', () => {
+      this.runLesionPreparation().catch(error => this.updateOutput(error.message, { level: 'error' }));
+    });
     const kbEvidenceSelect = document.getElementById('kbEvidenceSelect');
     if (kbEvidenceSelect) {
       kbEvidenceSelect.value = this.kbEvidence;
@@ -585,7 +591,7 @@ export class LesionNetworkMappingApp {
     const runFullBtn = document.getElementById('runFullPipelineButton');
     if (runFullBtn) {
       runFullBtn.addEventListener('click', () => {
-        this.runFullPipeline().catch(
+        this.runReportingAnalysis().catch(
           err => this.updateOutput(`Full pipeline failed: ${err.message}`)
         );
       });
@@ -1117,6 +1123,7 @@ export class LesionNetworkMappingApp {
 
   // The report also gives way during mask review: the drawing tools need the canvas.
   refreshResultsView() {
+    document.getElementById('thresholdControls')?.classList.toggle('hidden', !this.getAtlasOption()?.connectomeAssetId);
     const available = this.resultsViewAvailable();
     const tab = document.querySelector('.view-tab[data-view="results"]');
     if (tab) tab.disabled = !available;
@@ -1136,7 +1143,21 @@ export class LesionNetworkMappingApp {
     const text = document.getElementById('resultsMethodText');
     if (!section || !text) return;
     const summary = this.overlapResult ? this.describeMethod() : '';
-    text.textContent = summary;
+    text.replaceChildren();
+    if (summary) {
+      const intro = summary.indexOf(': ');
+      const caution = summary.indexOf('. Every result');
+      const steps = summary.slice(intro + 2, caution < 0 ? undefined : caution).split(/; (?=\d+\))/);
+      text.appendChild(document.createTextNode(summary.slice(0, intro + 2)));
+      const list = document.createElement('ol');
+      for (const step of steps) {
+        const item = document.createElement('li');
+        item.textContent = step.replace(/^\d+\) /, '');
+        list.appendChild(item);
+      }
+      text.appendChild(list);
+      if (caution >= 0) text.appendChild(document.createTextNode(summary.slice(caution + 2)));
+    }
     section.classList.toggle('hidden', !summary);
   }
 
@@ -1177,7 +1198,7 @@ export class LesionNetworkMappingApp {
     }
     const kb = this.knowledgeBase?.kb?.version;
     const context = this.kbReport?.context;
-    if (this.kbReport && kb) {
+    if (this.kbEvidence !== 'off' && this.kbReport && kb) {
       const atlases = context?.measured?.length ? context.measured.join(' and ') : 'the hosted label atlases';
       steps.push(`the knowledge-base report: the warped mask measured on ${atlases} through the aphasia knowledge base's curated atlas mapping`
         + (context?.missingAtlases?.length ? ` (${context.missingAtlases.join(', ')} not hosted in this build)` : '')
@@ -1204,16 +1225,23 @@ export class LesionNetworkMappingApp {
     const images = [];
     const previousSliceType = nv.opts?.sliceType;
     const lesionVisible = this.viewerLayerVisibility?.lesion !== false;
+    const otherLayers = ['brainmask', 'network-map', 'threshold-preview', 'atlas-qc'].map(stage => [stage, this.viewerController?.isStageVisible?.(stage) !== false]);
     try {
+      for (const [stage] of otherLayers) this.viewerController?.setStageVisible?.(stage, false);
       if (typeof nv.setSliceType === 'function' && nv.sliceTypeMultiplanar !== undefined) nv.setSliceType(nv.sliceTypeMultiplanar);
       this.centerCrosshairOnLesion();
       for (const variant of wanted) {
         const show = variant === 'with-mask';
         for (const stage of ['segmentation', 'lesion']) this.viewerController?.setStageVisible?.(stage, show);
         nv.drawScene?.();
-        images.push({ label: show ? 'Lesion mask over the structural image, crosshair on the lesion' : 'Structural image without the mask, crosshair on the lesion', dataUrl: canvas.toDataURL('image/png') });
+        const baseName = this.viewerBaseFile?.name || this.structuralFile?.name;
+        const label = baseName && this.viewerBaseFile !== this.lesionFile
+          ? `${show ? 'Lesion mask over' : 'Without the mask:'} ${baseName}; crosshair on the lesion`
+          : 'Lesion mask only; no anatomical scan is shown';
+        images.push({ label, dataUrl: canvas.toDataURL('image/png') });
       }
     } finally {
+      for (const [stage, visible] of otherLayers) this.viewerController?.setStageVisible?.(stage, visible);
       for (const stage of ['segmentation', 'lesion']) this.viewerController?.setStageVisible?.(stage, lesionVisible);
       if (previousSliceType !== undefined && typeof nv.setSliceType === 'function') nv.setSliceType(previousSliceType);
       nv.drawScene?.();
@@ -1226,8 +1254,9 @@ export class LesionNetworkMappingApp {
     const nv = this.nv;
     const index = ['lesion', 'segmentation'].map((stage) => this.viewerController?.getVolumeIndexForStage?.(stage)).find((i) => i !== null && i !== undefined);
     const volume = index !== undefined ? nv?.volumes?.[index] : null;
-    if (!volume?.img || !volume.dims || typeof nv.mm2frac !== 'function' || !volume.mm2vox) return false;
-    const [nx, ny, nz] = [volume.dims[1], volume.dims[2], volume.dims[3]];
+    const dims = volume?.hdr?.dims || volume?.dims;
+    if (!volume?.img || !dims || typeof nv.mm2frac !== 'function') return false;
+    const [nx, ny, nz] = [dims[1], dims[2], dims[3]];
     let sx = 0; let sy = 0; let sz = 0; let n = 0;
     const img = volume.img;
     for (let k = 0; k < nz; k += 1) for (let j = 0; j < ny; j += 1) for (let i = 0; i < nx; i += 1) {
@@ -1235,9 +1264,23 @@ export class LesionNetworkMappingApp {
     }
     if (!n) return false;
     try {
-      const mm = volume.vox2mm ? volume.vox2mm([sx / n, sy / n, sz / n], volume.matRAS) : null;
-      if (!mm) return false;
+      // A multi-component lesion's centroid can be outside every component.
+      // Choose a real foreground voxel nearest that centroid so slices show it.
+      const centroid = [sx / n, sy / n, sz / n];
+      let nearest = null;
+      let distance = Infinity;
+      for (let index = 0; index < nx * ny * nz; index++) {
+        if (!(img[index] > 0)) continue;
+        const voxel = [index % nx, Math.floor(index / nx) % ny, Math.floor(index / (nx * ny))];
+        const squared = voxel.reduce((sum, value, axis) => sum + (value - centroid[axis]) ** 2, 0);
+        if (squared < distance) {
+          distance = squared;
+          nearest = voxel;
+        }
+      }
+      const mm = applyAffineToVoxel(affineFromHeader(volume.hdr), nearest);
       nv.scene.crosshairPos = nv.mm2frac(mm);
+      nv.drawScene?.();
       return true;
     } catch (err) {
       this.updateOutput(`Crosshair not centred on the lesion: ${err.message}`, { level: 'warning' });
@@ -1631,7 +1674,7 @@ export class LesionNetworkMappingApp {
     const generation = this._resultsGeneration;
     const atlasOption = this.getAtlasOption();
     this.updateOutput(`Loading ${atlasSpaceName(atlasOption)} atlas...`);
-    const atlas = await loadAtlasFromManifest(atlasOption.overlapAtlasAssetId);
+    const atlas = await loadAtlasFromManifest(atlasOption.overlapAtlasAssetId, { subcorticalAssetId: atlasOption.subcorticalAtlasAssetId });
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Overlap');
     const overlapSpace = atlasOptionSpace(atlasOption, 'overlap');
     assertSpace(this.lesionFile, overlapSpace, 'Direct lesion overlap');
@@ -1693,6 +1736,12 @@ export class LesionNetworkMappingApp {
    * report is already shown it is recomputed for the same lesion.
    */
   async handleKbEvidenceChange(value) {
+    if (value === 'off') {
+      this.kbEvidence = 'off';
+      clearKbReport(document);
+      this.renderMethodSummary();
+      return;
+    }
     const evidence = KB_EVIDENCE.includes(value) ? value : 'approved';
     if (evidence === this.kbEvidence) return;
     if (evidence === 'drafts') {
@@ -1713,7 +1762,7 @@ export class LesionNetworkMappingApp {
     this.updateOutput(evidence === 'drafts'
       ? 'Knowledge-base evidence: approved findings plus unreviewed drafts (each draft is marked in the report).'
       : 'Knowledge-base evidence: approved findings only.');
-    if (this.kbReport) {
+    if (this.overlapResult || this.kbReport) {
       try {
         await this.runKbReport();
       } catch (error) {
@@ -1723,6 +1772,8 @@ export class LesionNetworkMappingApp {
   }
 
   async runKbReport() {
+    if (this.kbEvidence === 'off') return;
+    const requestedEvidence = this.kbEvidence;
     const sourceFile = this.mniLesionFile || this.lesionFile;
     if (!sourceFile) {
       this.updateOutput('Knowledge-base report skipped: no MNI-space lesion mask is available yet.', { level: 'warning' });
@@ -1730,6 +1781,7 @@ export class LesionNetworkMappingApp {
     }
     const generation = this._resultsGeneration;
     const manifest = await this.ensureManifest();
+    if (this.kbEvidence !== requestedEvidence) return;
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
     if (!manifest.kbReport) {
       this.updateOutput('Knowledge-base report skipped: the manifest declares no kbReport block.', { level: 'warning' });
@@ -1741,11 +1793,13 @@ export class LesionNetworkMappingApp {
       const { kb, entry } = await loadKnowledgeBase(manifest, { evidence });
       this.knowledgeBase = { kb, entry, evidence };
     }
+    if (this.kbEvidence !== requestedEvidence) return;
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
     const { kb } = this.knowledgeBase;
 
     this.updateOutput('Decoding the MNI-space lesion for the knowledge-base report...');
     const decoded = await decodeNiftiBuffer(await sourceFile.arrayBuffer());
+    if (this.kbEvidence !== requestedEvidence) return;
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
     const lesion = { data: binarise(decoded.data), dims: decoded.dims, affine: affineFromHeader(decoded.header) };
     // Lesion size first (Huygelier et al. 2025): the volume of the MNI-space mask, as the Python report measures it.
@@ -1761,6 +1815,7 @@ export class LesionNetworkMappingApp {
       }
       this.updateOutput(`Loading the ${name} atlas for the knowledge-base report...`);
       const atlas = await loadAtlasFromManifest(entry.id, { manifest });
+      if (this.kbEvidence !== requestedEvidence) return;
       if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
       atlases.push({ name, atlas });
     }
@@ -1796,6 +1851,7 @@ export class LesionNetworkMappingApp {
             });
           }
         });
+        if (this.kbEvidence !== requestedEvidence) return;
         if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
         fractions = fractionsByBundle(tracts, values);
         const hit = Object.values(fractions).filter((v) => Number.isFinite(v) && v >= 0.5).length;
@@ -1805,6 +1861,7 @@ export class LesionNetworkMappingApp {
         context.disconnectomeNote = `Disconnectome: ${context.disconnectomeLabel} (${disco.entry.bundles} bundles, nii2tvx), ` +
           'fraction of each bundle\'s streamlines passing through the lesion resampled onto the FSL MNI152 1 mm grid.';
       } catch (err) {
+        if (this.kbEvidence !== requestedEvidence) return;
         if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
         context.disconnectomeError = err.message;
         context.disconnectomeNote = `Disconnectome: not computed (${err.message}).`;
@@ -1815,6 +1872,7 @@ export class LesionNetworkMappingApp {
     }
 
     const result = evaluateDamage(kb, damage.rowsByAtlas, { fractions, lesionVolumeMl: volumeMl });
+    if (this.kbEvidence !== requestedEvidence) return;
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
     this.kbReport = { result, context, rowsByAtlas: damage.rowsByAtlas, fractions };
     renderKbReport(document, result, { kb, context });
@@ -1883,11 +1941,14 @@ export class LesionNetworkMappingApp {
     if (!this.overlapResult) return null;
     const tableEl = document.getElementById('networkOverlapTable');
     const atlasOption = this.overlapResult.atlasOption || this.getAtlasOption();
+    const help = document.getElementById('directOverlapHelp');
+    if (help) help.textContent = `${atlasSpaceName(atlasOption)}: lesion and atlas are compared on the atlas grid. Lesion % = overlapping voxels / all lesion voxels × 100. ROI covered % = overlapping voxels / all voxels in that atlas region × 100. ROI means region of interest. Cortical labels combine both hemispheres; subcortical labels are sided. Named subcortical structures take precedence; broad tissue and ventricular labels are excluded.`;
     const displaySummary = this.getDisplayOverlapSummary();
     if (tableEl) {
       renderOverlapTable(tableEl, displaySummary, {
         colormap: this.getAtlasColormap(atlasOption),
         percentHeader: 'Lesion %',
+        networkSizes: this.overlapResult.networkSizes,
         emptyLabel: this.minClusterEmptyLabel('No overlap')
       });
     }
@@ -2852,6 +2913,10 @@ export class LesionNetworkMappingApp {
       return;
     }
     const atlasOption = overlap.atlasOption || this.getAtlasOption();
+    if (!atlasOption.connectomeAssetId) {
+      document.getElementById('networkThresholdSummary').textContent = 'This atlas supports direct overlap only; no matching normative connectivity maps are available.';
+      return;
+    }
     if (!overlap.parcelResult.parcels.length) {
       this.updateOutput(`No labelled ${atlasSpaceName(atlasOption)} parcels overlap the lesion; network map skipped.`);
       return;
@@ -3339,7 +3404,7 @@ export class LesionNetworkMappingApp {
   async projectAtlasToMni160Grid() {
     const atlasOption = this.getAtlasOption();
     const [atlas, mni160] = await Promise.all([
-      loadAtlasFromManifest(atlasOption.overlapAtlasAssetId),
+      loadAtlasFromManifest(atlasOption.overlapAtlasAssetId, { subcorticalAssetId: atlasOption.subcorticalAtlasAssetId }),
       loadAtlasFromManifest('lnm-mni160')
     ]);
     const atlasAffine = affineFromHeader(atlas.header);
@@ -4000,7 +4065,7 @@ export class LesionNetworkMappingApp {
       });
     }
     const warpedAffine = affineFromHeader(warped.header);
-    const atlas = await loadAtlasFromManifest(atlasOption.overlapAtlasAssetId);
+    const atlas = await loadAtlasFromManifest(atlasOption.overlapAtlasAssetId, { subcorticalAssetId: atlasOption.subcorticalAtlasAssetId });
     const atlasAffine = affineFromHeader(atlas.header);
     const warpedU8 = warped.data instanceof Uint8Array
       ? warped.data
@@ -4045,6 +4110,57 @@ export class LesionNetworkMappingApp {
   // Stages declared as required:false are still run when their module is
   // implemented (e.g. threshold runs with the pipeline's `defaults` if
   // present, falling back to whatever the UI has set).
+  async runLesionPreparation() {
+    await this.ensureStructuralForDiffusion();
+    if (!this.structuralFile) {
+      this.updateOutput('Load a structural or supported diffusion image first.');
+      return;
+    }
+    const source = getPipelineById('lnm-yeo-auto');
+    const pipeline = { ...source, stages: source.stages.filter(stage => ['brain-extraction', 'prealign', 'inference-pipeline'].includes(stage.module)) };
+    this._perfStats = [];
+    this._perfRunStart = this._now();
+    await this._runPipelineWithStatus(pipeline, 0, 'Running lesion segmentation…');
+    // Acceptance ends preparation; reporting always requires its own button.
+    this._pendingMaskResume = null;
+  }
+
+  async runReportingAnalysis() {
+    if (this.maskReviewActive || ((this.structuralFile || this.diffusionSeedReady()) && !this.lesionMaskConfirmed)) {
+      this.updateOutput('Review and accept the lesion mask before running reporting analysis.', { level: 'warning' });
+      if (this.maskReviewActive) this.setViewerView('multiplanar');
+      return;
+    }
+    if (!this.structuralFile) return this.runFullPipeline();
+    const source = getPipelineById('lnm-yeo-auto');
+    const pipeline = { ...source, stages: source.stages.filter(stage => ['registration', 'parcel-overlap', 'fc-weighted-sum', 'threshold', 'kb-report'].includes(stage.module)) };
+    this._perfStats = [];
+    this._perfRunStart = this._now();
+    await this._runPipelineWithStatus(pipeline, 0, 'Running reporting analysis…');
+  }
+
+  async showScanConfirmation() {
+    this.viewerLayerVisibility.lesion = true;
+    if (this.confirmedNativeLesionFile && (this.nativeStructuralFile || this.structuralFile)) {
+      await this.renderConfirmedNativeLesionOverlay();
+    } else if (this.lesionFile) {
+      const base = this.networkMapBaseFile || this.structuralFile;
+      if (base) {
+        this.assertViewerStackSpaces([{ file: base }, { file: this.lesionFile }], 'Scan confirmation');
+        await this.loadViewerVolumeStack([
+          { file: base, stage: 'structural', colormap: 'gray', visible: true },
+          { file: this.lesionFile, stage: 'lesion', colormap: LESION_MASK_COLORMAP_ID, opacity: 0.5, visible: true }
+        ]);
+      } else {
+        await this.loadViewerBaseVolume(this.lesionFile, { stage: 'lesion', visible: true });
+      }
+    }
+    for (const stage of ['segmentation', 'lesion']) this.viewerController?.setStageVisible?.(stage, true);
+    this.setViewerView('multiplanar');
+    this.centerCrosshairOnLesion();
+    this.refreshViewerLayerControls();
+  }
+
   async runFullPipeline() {
     try {
       await this.ensureStructuralForDiffusion();

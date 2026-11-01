@@ -255,7 +255,7 @@ export async function fetchCacheFirst(url, cacheKey, cache, options = {}) {
   return response.arrayBuffer();
 }
 
-export async function loadAtlasFromManifest(atlasAssetId, { manifest } = {}) {
+export async function loadAtlasFromManifest(atlasAssetId, { manifest, subcorticalAssetId } = {}) {
   const assetManifest = manifest || await loadManifest();
   const manifestEntry = assetManifest.atlasAssets?.find(asset => asset.id === atlasAssetId);
   if (!manifestEntry) {
@@ -273,6 +273,14 @@ export async function loadAtlasFromManifest(atlasAssetId, { manifest } = {}) {
     );
   }
 
+  if (subcorticalAssetId) {
+    const sub = await loadAtlasFromManifest(subcorticalAssetId, { manifest: assetManifest });
+    if (!dimsEqual(decoded.dims, sub.dims) || JSON.stringify(decoded.header.affine) !== JSON.stringify(sub.header.affine)) {
+      throw new Error('Harvard–Oxford components must share the same grid and affine');
+    }
+    const { data, labels } = mergeHarvardOxford(decoded.data, sub.data, manifestEntry.labels, sub.manifestEntry.labels);
+    return { data, dims: decoded.dims, header: decoded.header, parcelLabels: labels, manifestEntry: { ...manifestEntry, parcelLabels: labels } };
+  }
   return {
     data: decoded.data,
     dims: decoded.dims,
@@ -283,4 +291,20 @@ export async function loadAtlasFromManifest(atlasAssetId, { manifest } = {}) {
     networkLabels: manifestEntry.networkLabels,
     parcelLabels: manifestEntry.parcelLabels
   };
+}
+
+// A disjoint label map: retain named subcortical structures before cortical parcels.
+export function mergeHarvardOxford(cortical, subcortical, corticalLabels, subcorticalLabels) {
+  if (cortical.length !== subcortical.length) throw new Error('Atlas lengths differ');
+  const excluded = new Set([0, 1, 2, 3, 12, 13, 14]);
+  const labels = { ...corticalLabels };
+  for (const [key, name] of Object.entries(subcorticalLabels)) {
+    if (!excluded.has(Number(key))) labels[48 + Number(key)] = name;
+  }
+  const data = new Uint16Array(cortical.length);
+  for (let i = 0; i < data.length; i++) {
+    const label = subcortical[i];
+    data[i] = excluded.has(label) ? cortical[i] : 48 + label;
+  }
+  return { data, labels };
 }

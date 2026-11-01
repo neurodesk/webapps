@@ -3880,6 +3880,13 @@
       "contentType": "application/json",
       "kind": "example",
       "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neurodata/neuroparc/5a5e7469671e65cb58087c47b69d0edb71dc2966/atlases/label/Human/HarvardOxfordsub-maxprob-thr25_space-MNI152NLin6_label_all_res-2x2x2.nii.gz": {
+      "sha256": "fd1b030b75afa1b1c22ce0f1314399065f60c90eb656d1bcea0eb3513bad4a5a",
+      "bytes": 49491,
+      "kind": "model",
+      "contentType": "application/octet-stream",
+      "dependencies": []
     }
   },
   "apps": {
@@ -3956,7 +3963,8 @@
       "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_T1.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_lesion_mask.nii.gz",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2375f48afe069ac4018917e8a4bee3f24920dee/calmar/models/lnm-deepisles-seals-fold0-128-fp16.onnx"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2375f48afe069ac4018917e8a4bee3f24920dee/calmar/models/lnm-deepisles-seals-fold0-128-fp16.onnx",
+      "https://raw.githubusercontent.com/neurodata/neuroparc/5a5e7469671e65cb58087c47b69d0edb71dc2966/atlases/label/Human/HarvardOxfordsub-maxprob-thr25_space-MNI152NLin6_label_all_res-2x2x2.nii.gz"
     ],
     "qsmbly": [
       "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/attrs-23.2.0-py3-none-any.whl",

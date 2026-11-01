@@ -125,11 +125,13 @@ const { evaluateDamage, renderKbReport } = await import('../web/js/modules/kb-re
   assert.equal(button.disabled, false, 'a result enables Download report');
   const text = document.getElementById('resultsMethodText').textContent;
   assert.ok(!method.classList.contains('hidden'));
-  assert.match(text, /^This run performed, in this browser and without uploading any data: 1\) brain extraction .*SynthStrip \(SynthStrip-Hoopes2022-Apache-2\.0\)/);
-  assert.match(text, /2\) an automatic lesion seed from SynthStroke \(SynthStroke-baseline-MELBA2025-MIT, 8-axis test-time augmentation\) on the T1, reviewed and confirmed by the user/);
-  assert.match(text, /3\) registration to MNI space .*SynthMorph/);
-  assert.match(text, /4\) direct overlap of the warped mask with the Schaefer 400 parcels atlas/);
-  assert.match(text, /5\) a lesion-network map .*development_fmri-N155.*thresholded to the strongest 5% of voxels by \|t\| with clusters below 30 voxels removed/);
+  assert.equal(method.querySelector('details').open, false);
+  assert.equal(method.querySelectorAll('ol > li').length, 5);
+  assert.match(text, /^This run performed, in this browser and without uploading any data: brain extraction .*SynthStrip \(SynthStrip-Hoopes2022-Apache-2\.0\)/);
+  assert.match(text, /an automatic lesion seed from SynthStroke \(SynthStroke-baseline-MELBA2025-MIT, 8-axis test-time augmentation\) on the T1, reviewed and confirmed by the user/);
+  assert.match(text, /registration to MNI space .*SynthMorph/);
+  assert.match(text, /direct overlap of the warped mask with the Schaefer 400 parcels atlas/);
+  assert.match(text, /a lesion-network map .*development_fmri-N155.*thresholded to the strongest 5% of voxels by \|t\| with clusters below 30 voxels removed/);
   assert.match(text, /not a diagnosis or a prediction for this person/);
   assert.ok(!text.includes('knowledge-base report'), 'no KB step before the KB stage ran');
 
@@ -146,7 +148,7 @@ const { evaluateDamage, renderKbReport } = await import('../web/js/modules/kb-re
   app.mniLesionFile = null;
   app.brainmaskFile = null;
   app.renderMethodSummary();
-  assert.match(document.getElementById('resultsMethodText').textContent, /^This run performed, [^:]+: 1\) a lesion mask supplied already on the atlas grid/);
+  assert.match(document.getElementById('resultsMethodText').textContent, /^This run performed, [^:]+: a lesion mask supplied already on the atlas grid/);
 
   // exportReport: ticked boxes decide the parts; the image is captured only when ticked; HTML download goes through the app's download path.
   const downloads = [];

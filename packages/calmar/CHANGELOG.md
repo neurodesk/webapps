@@ -1,5 +1,15 @@
 # @neurodesk/calmar
 
+## 0.8.20261030
+
+### Minor Changes
+
+- c97bb7e: CALMaR Results view gains the knowledge-base report: cited literature findings for the regions the warped lesion damages (HarvardOxford and AAL label atlases through the aphasia knowledge base's curated atlas mapping; JHU and XTRACT when hosted), white-matter disconnection from the ENIGMA tractography atlas scored with nii2tvx, and the therapies whose evidence targets the implicated impairments. The evidence logic is a JavaScript port of the Python participant report, checked against fixtures the Python code writes.
+
+### Patch Changes
+
+- Make knowledge-base findings optional, fold method and region-level evidence, explain overlap denominators and normative connectivity with figures, expose finding directions and scan confirmation, and add combined Harvard–Oxford cortical/subcortical direct overlap with ROI coverage percentages.
+
 ## 0.7.20261024
 
 ### Patch Changes

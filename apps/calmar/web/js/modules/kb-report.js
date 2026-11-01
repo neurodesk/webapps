@@ -257,7 +257,7 @@ function el(doc, tag, attrs = {}, children = []) {
 const pct = (value, digits = 0) => (typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(digits)}%` : '—');
 const plural = (n, word, words = `${word}s`) => `${n} ${n === 1 ? word : words}`;
 const SHORT_COUNTS = {
-  'Associations': 'assoc.', 'Inverse associations': 'inverse', 'Null findings': 'null', 'Mixed results': 'mixed', 'Other / unclassified': 'other',
+  'Associations': 'association with symptom', 'Inverse associations': 'inverse association with symptom', 'Null findings': 'no association', 'Mixed results': 'mixed directions', 'Other / unclassified': 'direction unclassified',
 };
 
 /** "4 assoc., 1 null": the relationship breakdown of distinct findings. */
@@ -295,7 +295,7 @@ function stars(doc, n, label, score) {
 }
 
 function table(doc, className, headers, rows) {
-  return el(doc, 'div', { class: 'nd-table-scroll' }, [el(doc, 'table', { class: `nd-data-table ${className}` }, [
+  return el(doc, 'div', { class: 'nd-table-scroll' }, [el(doc, 'table', { class: `nd-data-table nd-table-right ${className}` }, [
     el(doc, 'thead', {}, [el(doc, 'tr', {}, headers.map(([text, numeric]) => el(doc, 'th', { class: numeric ? 'nd-numeric' : null, text })))]),
     el(doc, 'tbody', {}, rows),
   ])]);
@@ -360,7 +360,7 @@ function findingArticle(doc, kb, finding) {
       finding.citation ? citationNode(doc, kb, finding.citation) : el(doc, 'code', { text: citation }), ' · ', String(finding.claim || ''),
     ]),
     el(doc, 'p', { class: 'nd-report-notes' }, [
-      `${DIRECTION_TEXT[finding.direction] || finding.direction || 'relationship not reported'} · ${methodName} · `
+      `Direction: ${DIRECTION_TEXT[finding.direction] || finding.direction || 'not reported'} (as stated in the claim above) · ${methodName} · `
       + `${finding.strength || 'strength not reported'} evidence · ${finding.confidence || 'confidence not reported'} extraction confidence · ${stages} · ${review}`
       + (finding.cohort ? ` · cohort: ${finding.cohort}` : ''),
     ]),
@@ -465,7 +465,7 @@ function locationSection(doc, kb, report) {
     `${report.shown} symptom-level findings concern regions this lesion damages (${report.matchedBeforeFilter} before excluding aphasia types and other non-symptom targets).`,
   ]));
   nodes.push(method(doc, 'How regions are matched and ranked', [
-    [`A region counts as damaged when it holds ≥${settings.minOverlapPct}% of the lesion or ≥${settings.minRegionPct}% of it is destroyed; regions are matched to the knowledge base `,
+    [`A region counts as damaged when it holds ≥${settings.minOverlapPct}% of the lesion or ≥${settings.minRegionPct}% of it is damaged; regions are matched to the knowledge base `,
       `through its curated atlas mapping, never by name. Of the knowledge base's ${coverage.findings} location findings, ${coverage.undamaged} concern regions this lesion does not damage `,
       `and ${coverage.unmappable} concern regions no label atlas represents.`],
     ['The display signal (★) only orders the symptom summaries: it combines the share of each matched region damaged with the stored finding strength, study evidence class, ',
@@ -491,7 +491,7 @@ function locationSection(doc, kb, report) {
   nodes.push(table(doc, 'kb-symptom-table', [['Signal'], ['Symptom'], ['Findings', true], ['Relationships'], ['Damaged regions with findings'], ['Sources']],
     foldRows(doc, summaryRows, Math.max(primary.length, 1), `${plural(summaryRows.length, 'symptom')} (${secondary.length} below the display criterion)`, 6)));
 
-  nodes.push(el(doc, 'h4', { text: 'Damaged regions and their findings' }));
+  const regionDetailsStart = nodes.length;
   const columns = 5;
   const regionRows = [];
   for (const r of report.regions) {
@@ -508,11 +508,13 @@ function locationSection(doc, kb, report) {
     ]));
     regionRows.push(findingsRow(doc, kb, r.outcomes, columns, r.name));
   }
-  nodes.push(table(doc, 'kb-region-table', [['Lesion %', true], ['Region'], ['Destroyed', true], ['Findings', true], ['Symptom targets']],
+  nodes.push(table(doc, 'kb-region-table', [['Lesion %', true], ['Region'], ['Damaged', true], ['Findings', true], ['Symptom targets']],
     foldRows(doc, regionRows, Math.max(1, settings.maxEvidenceRegions) * 2, `${plural(report.regions.length, 'region')}`, columns)));
   nodes.push(el(doc, 'p', { class: 'nd-report-notes', text:
-    `Ranked by the share of the lesion each region holds, then by the share destroyed. * limited citation base (${settings.thinStudies} citation keys or fewer), not a certainty rating. `
+    `Ranked by the share of the lesion each region holds, then by the share damaged. * limited citation base (${settings.thinStudies} citation keys or fewer), not a certainty rating. `
     + 'Open a row\'s findings to read each claim with its citation, method, relationship and source passages.' }));
+  const regionDetails = el(doc, 'details', {}, [el(doc, 'summary', { text: 'Region-level evidence details' }), ...nodes.splice(regionDetailsStart)]);
+  nodes.push(regionDetails);
   return nodes;
 }
 
@@ -559,7 +561,7 @@ function whiteMatterSection(doc, kb, report, { disconnectomeLabel, bundles }) {
     ]));
   }
   if (rows.length) {
-    nodes.push(table(doc, 'kb-tract-table', [['Streamlines through lesion', true], ['Tract'], ['Directly destroyed', true], ['Findings', true], ['Symptom targets']], rows));
+    nodes.push(table(doc, 'kb-tract-table', [['Streamlines through lesion', true], ['Tract'], ['Directly damaged', true], ['Findings', true], ['Symptom targets']], rows));
     if (report.anatomyOnly.length) {
       nodes.push(el(doc, 'p', { class: 'nd-report-notes', text: 'A tract without a linked finding is anatomical context only; the absence of a finding is not evidence that it has no functional importance.' }));
     }
@@ -622,6 +624,7 @@ function provenanceNode(doc, kb, context) {
 
 /** Render the three sections (and the provenance line) into the Results report. */
 export function renderKbReport(doc, result, { kb, context = {} }) {
+  doc.getElementById('kbReportHeading')?.classList.remove('hidden');
   const body = (key) => doc.getElementById(BODY_IDS[key]);
   const section = (key) => doc.getElementById(SECTION_IDS[key]);
   const fill = (key, nodes) => {
@@ -652,6 +655,7 @@ export function renderKbReport(doc, result, { kb, context = {} }) {
 }
 
 export function clearKbReport(doc) {
+  doc.getElementById('kbReportHeading')?.classList.add('hidden');
   for (const key of Object.keys(BODY_IDS)) {
     doc.getElementById(BODY_IDS[key])?.replaceChildren();
     doc.getElementById(SECTION_IDS[key])?.classList.add('hidden');

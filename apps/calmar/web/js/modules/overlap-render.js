@@ -57,13 +57,14 @@ export function renderOverlapTable(tableEl, summary, {
   labelHeader = 'Atlas label',
   percentHeader = 'Lesion %',
   emptyLabel = 'No overlap',
+  networkSizes = null,
   maxRows = 12
 } = {}) {
   tableEl.innerHTML = '';
 
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
-  for (const [label, className] of [[labelHeader, ''], ['Voxels', 'nd-numeric'], [percentHeader, 'nd-numeric']]) {
+  for (const [label, className] of [[labelHeader, ''], ['Voxels', 'nd-numeric'], [percentHeader, 'nd-numeric'], ...(networkSizes ? [['ROI covered %', 'nd-numeric']] : [])]) {
     const th = document.createElement('th');
     if (className) th.className = className;
     th.textContent = label;
@@ -77,7 +78,7 @@ export function renderOverlapTable(tableEl, summary, {
   if (networks.length === 0) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 3;
+    cell.colSpan = networkSizes ? 4 : 3;
     cell.textContent = emptyLabel;
     row.appendChild(cell);
     tbody.appendChild(row);
@@ -92,6 +93,10 @@ export function renderOverlapTable(tableEl, summary, {
     appendTextCell(row, network.network);
     appendTextCell(row, `${Number(network.voxelsInLesion) || 0}`, 'nd-numeric');
     appendPctCell(row, pct, colorForNetwork(network.network, colormap));
+    if (networkSizes) {
+      const size = networkSizes[network.network];
+      appendTextCell(row, size > 0 ? `${(100 * network.voxelsInLesion / size).toFixed(1)}%` : '—', 'nd-numeric');
+    }
     if (maxRows > 0 && index >= maxRows) {
       row.hidden = true;
       row.className = 'overlap-row-extra';
@@ -103,7 +108,7 @@ export function renderOverlapTable(tableEl, summary, {
     const row = document.createElement('tr');
     row.className = 'overlap-fold-row';
     const cell = document.createElement('td');
-    cell.colSpan = 3;
+    cell.colSpan = networkSizes ? 4 : 3;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'nd-btn nd-btn-secondary nd-btn-sm overlap-fold';

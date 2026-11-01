@@ -278,7 +278,7 @@ apps:
         reference: "Yarkoni T, Poldrack RA, Nichols TE, Van Essen DC, Wager TD. Large-scale automated synthesis of human functional neuroimaging data. Nature Methods. 2011;8(8):665–670."
         doi: 10.1038/nmeth.1635
       - group: Knowledge-base report atlases
-        title: Harvard-Oxford cortical atlas
+        title: Harvard-Oxford cortical and subcortical atlases
         reference: "Desikan RS, Ségonne F, Fischl B, et al. An automated labeling system for subdividing the human cerebral cortex on MRI scans into gyral based regions of interest. NeuroImage. 2006;31(3):968–980."
         doi: 10.1016/j.neuroimage.2006.01.021
       - group: Knowledge-base report atlases

@@ -351,6 +351,16 @@ const { decodeNiftiBuffer } = await import('../web/js/modules/atlas-loader.js');
   assert.equal(fold.textContent, 'Show first 12 of 20 labels');
   renderOverlapTable(tableEl, { networks: summary.networks.slice(0, 5) }, { colormap: null });
   assert.equal(tableEl.querySelector('.overlap-fold'), null, 'short tables have no fold row');
+  renderOverlapTable(tableEl, { networks: [{ network: 'ROI', voxelsInLesion: 20, fractionOfLesion: 0.2 }] }, { networkSizes: { ROI: 200 } });
+  assert.deepEqual([...tableEl.querySelectorAll('tbody td')].map(cell => cell.textContent), ['ROI', '20', '20.0%', '10.0%']);
+  assert.equal(tableEl.querySelectorAll('thead th').length, 4);
+  assert.ok(document.getElementById('kbReportHeading').classList.contains('hidden'));
+  const { mergeHarvardOxford } = await import('../web/js/modules/atlas-loader.js');
+  const merged = mergeHarvardOxford(new Uint8Array([1, 1, 2, 0, 2]), new Uint8Array([0, 4, 2, 15, 14]), { 1: 'Cortex A', 2: 'Cortex B' }, { 2: 'Broad cortex', 4: 'Left Thalamus', 14: 'Ventricle', 15: 'Right Thalamus' });
+  assert.deepEqual([...merged.data], [1, 52, 2, 63, 2]);
+  assert.equal(merged.labels[52], 'Left Thalamus');
+  assert.equal(merged.labels[50], undefined, 'broad cortex labels are excluded');
+  assert.throws(() => mergeHarvardOxford([1], [], {}, {}), /lengths differ/);
   delete globalThis.document;
 }
 
