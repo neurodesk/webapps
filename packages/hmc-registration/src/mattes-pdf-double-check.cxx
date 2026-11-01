@@ -1,5 +1,5 @@
 // Fails the build unless antsRegistration's own include chain reaches the build-tree copies of ITK's
-// Mattes metric header and, with HMC_MATTES_DERIVATIVE_DOUBLE, its .hxx (mattes-pdf-double.cmake).
+// Mattes metric header and, with HMC_MATTES_DERIVATIVE_DOUBLE, its .hxx (cmake/mattes-pdf-double.cmake).
 #include <type_traits>
 #include "itkantsRegistrationHelper.h"
 

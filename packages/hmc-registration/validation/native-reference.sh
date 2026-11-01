@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Writes the native ANTs outputs that test/expected.mjs pins, from test/data, with native ANTs
-# built at 52bc0ab (SuperBuild, Release, static).
+# built at 52bc0ab (SuperBuild, Release, static) with the kernel's float64 accumulation in the Mattes
+# metric: the deriv64 build of validation/sdc-gate/native/build.sh.
 #
 #   bash packages/hmc-registration/validation/native-reference.sh <ants-bin-dir> <out-dir>
 #
 # <ants-bin-dir> must hold antsRegistration, antsApplyTransforms, AverageImages and
-# AverageAffineTransform. Every program runs with one ITK thread.
+# AverageAffineTransform; for hmc-native, wrappers that run `hmc-native "$@"` and
+# `hmc-native <program> "$@"`. Every program runs with one ITK thread. The stock build writes the
+# goldens of the kernel before #462's Mattes change.
 set -euo pipefail
 bin=${1:?Pass the directory that holds the native ANTs programs}
 out=${2:?Pass an output directory}

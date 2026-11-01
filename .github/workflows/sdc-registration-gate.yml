@@ -3,9 +3,11 @@ name: sdc-registration-gate
 # The registration gate of #462 (plan docs/architecture/dwi-sdc-plan.md, section 6.2) on the 1.2 mm
 # SyN grid that the maintainer chose: sdcflows 2.17.1 replays SyN on the kept inputs of the pinned
 # native double seed-1234 run, with every ANTs program in the committed hmc-registration
-# WebAssembly kernel, and gate.py holds the field to d < 0.5 Hz. The data are fetched with their
-# SHA-256, so a missing input fails the job. SyN takes about 50 minutes on one core. The replay
-# reads no packages/sdc code; the pipeline of #464 adds it when it runs in this gate.
+# WebAssembly kernel, and gate.py requires the whole rule of Q66: d < 0.5 Hz, and
+# d <= max(spread, 0.05 Hz), which the kernel's d of about 0.040 Hz meets through the floor without
+# the seed spread. The data are fetched with their SHA-256, so a missing input fails the job.
+# SyN takes about 50 minutes on one core. The replay reads no packages/sdc code; the pipeline of
+# #464 adds it when it runs in this gate.
 on:
   pull_request:
     paths:

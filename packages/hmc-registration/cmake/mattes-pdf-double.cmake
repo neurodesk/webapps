@@ -11,9 +11,10 @@
 # Images, fields and transforms stay float. Each edit fails the build unless its pinned text is
 # in the source exactly once.
 #
-# Include after find_package(ITK) and include(${ITK_USE_FILE}); wasm/ and native/ do. Every
+# Include after find_package(ITK) and include(${ITK_USE_FILE}), as the kernel's CMakeLists.txt (with
+# HMC_MATTES_DERIVATIVE_DOUBLE on) and validation/sdc-gate/native/ do. Every
 # translation unit must find the copies first, so they are added with include_directories(BEFORE),
-# and mattes-pdf-double-check.cxx fails the build if antsRegistration's include chain misses them.
+# and src/mattes-pdf-double-check.cxx fails the build if antsRegistration's include chain misses them.
 option(HMC_MATTES_DERIVATIVE_DOUBLE "Also accumulate the Mattes global-support derivative in double" OFF)
 set(HMC_MATTES_DIR ${CMAKE_CURRENT_BINARY_DIR}/mattes-pdf-double)
 

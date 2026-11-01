@@ -11,8 +11,9 @@ REFERENCE_RUN is the native double seed-1234 run (SDC_GRID/runs/full-1.2mm-s1234
 RUN a replay (replay.sh) or end-to-end run (e2e.sh) folder. d = median_M |f_RUN - f_REFERENCE|.
 Each --spread RUN is a native double run at another seed on the same inputs; with them,
 spread = the largest median_M over all pairs of {REFERENCE_RUN, spread runs}. The gate is
-d <= max(spread, 0.05 Hz) and d < 0.5 Hz. Without --spread the first condition is not
-evaluated and the result says so. --require exits 1 unless every evaluated condition holds.
+d <= max(spread, 0.05 Hz) and d < 0.5 Hz. Without --spread the first condition holds when
+d <= 0.05 Hz, whatever the spread; otherwise it is undecided and the result says so.
+--require exits 1 unless both conditions are decided and hold.
 """
 
 import argparse
@@ -106,13 +107,14 @@ def main():
         checks["d_within_spread_or_floor"] = d <= max(spread, FLOOR_HZ)
     else:
         result["spread"] = None
-        checks["d_within_spread_or_floor"] = None
+        # d <= floor implies d <= max(spread, floor) for any spread.
+        checks["d_within_spread_or_floor"] = True if d <= FLOOR_HZ else None
     result["gate"] = {
         "d_hz": d,
         "cap_hz": CAP_HZ,
         "floor_hz": FLOOR_HZ,
         "checks": checks,
-        "pass": all(v for v in checks.values() if v is not None),
+        "pass": all(v is True for v in checks.values()),
     }
     text = json.dumps(result, indent=2)
     if args.out:
