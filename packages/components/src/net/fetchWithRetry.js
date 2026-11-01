@@ -1,6 +1,8 @@
 // Shared hosts such as Hugging Face answer bursts of requests with 429 Too Many Requests.
 // Retry those, honouring Retry-After, instead of failing the whole example or volume.
-// CI downloaders can also opt into retrying transient GET/HEAD failures.
+// CI downloaders can also opt into retrying transient GET/HEAD failures. Each attempt waits
+// for its headers under the stall guard; the waits between attempts are not counted.
+import { stallGuard } from './stallGuard.js';
 
 export function retryDelay(response, attempt, { baseDelay = 1000, maxDelay = 30000 } = {}) {
   const header = response?.headers?.get?.('Retry-After');
@@ -28,7 +30,7 @@ function wait(ms, signal) {
   });
 }
 
-async function requestWithRetry(input, init, { retries = 4, baseDelay, maxDelay, retryTransient = false, fetch: fetchImpl = globalThis.fetch, onRetry = () => {} }, read) {
+async function requestWithRetry(input, init, { retries = 4, baseDelay, maxDelay, retryTransient = false, stallTimeout, fetch: fetchImpl = globalThis.fetch, onRetry = () => {} }, read) {
   const signal = init.signal ?? (input instanceof Request ? input.signal : undefined);
   const method = init.method ?? (input instanceof Request ? input.method : 'GET');
   const transient = retryTransient && ['GET', 'HEAD'].includes(method.toUpperCase());
@@ -36,7 +38,12 @@ async function requestWithRetry(input, init, { retries = 4, baseDelay, maxDelay,
     signal?.throwIfAborted();
     let response;
     try {
-      response = await fetchImpl(input instanceof Request ? input.clone() : input, init);
+      const guard = stallGuard(signal, stallTimeout);
+      try {
+        response = await fetchImpl(input instanceof Request ? input.clone() : input, { ...init, signal: guard.signal });
+      } finally {
+        guard.stop();
+      }
       if (attempt >= retries || (response.status !== 429 && !(transient && [502, 503, 504].includes(response.status)))) return await read(response);
     } catch (error) {
       const code = error.cause?.code ?? error.code;
