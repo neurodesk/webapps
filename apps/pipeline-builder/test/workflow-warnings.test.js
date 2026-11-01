@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import * as model from "../src/model.js";
+import { createValidator } from "../src/validator.js";
 
 const source = {
   id: "lab/source",
@@ -88,22 +90,81 @@ test("array refs defer item count checks to execution", () => {
   }
 });
 
-test("optional outputs warn on required consumers and workflow outputs", () => {
+test("optional outputs are reported once, by the NeuroFlow core", async () => {
+  const validate = await createValidator(tools, await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url)));
   const doc = workflow({ ref: "steps.source.outputs.conditional" });
   doc.steps.target.inputs.input_optional = { ref: "steps.source.outputs.conditional" };
   doc.outputs.result = { type: "neuro:volume", ref: "steps.source.outputs.conditional" };
-  assert.deepEqual(model.workflowIssues(doc, tools).filter(issue => issue.code === "optional-output"), [
-    {
-      severity: "warning", code: "optional-output", path: "steps.target.inputs.input_images",
-      message: "steps.source.outputs.conditional is optional and may be absent when this required input runs.",
-    },
-    {
-      severity: "warning", code: "optional-output", path: "outputs.result",
-      message: "steps.source.outputs.conditional is optional and may not produce this workflow output.",
-    },
-  ]);
+  assert.deepEqual(model.workflowIssues(doc, tools).filter(issue => issue.code === "optional-output"), []);
+  const optional = () => validate(doc).issues.filter(issue => issue.code === "optional-output").map(issue => issue.path);
+  assert.deepEqual(optional(), ["steps.target.inputs.input_images", "outputs.result.ref"]);
+  // An optional workflow output (spec 0.1.3) accepts an absent value.
+  doc.neuroflow = "0.1.3";
   doc.outputs.result.optional = true;
-  assert.equal(model.workflowIssues(doc, tools).filter(issue => issue.code === "optional-output").length, 1);
+  assert.deepEqual(optional(), ["steps.target.inputs.input_images"]);
+});
+
+test("an optional output feeding a required input with a default is not a warning", async () => {
+  const counter = { id: "lab/counter", inputs: {}, outputs: { count: { type: "core:number", optional: true } } };
+  const consumer = (input) => ({ id: "lab/consumer", inputs: { count: input }, outputs: {} });
+  const doc = {
+    ...model.emptyWorkflow(),
+    description: "Count, then consume the count.",
+    steps: {
+      counter: { tool: counter.id, inputs: {} },
+      consumer: { tool: "lab/consumer", inputs: { count: { ref: "steps.counter.outputs.count" } } },
+    },
+  };
+  const wasm = await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url));
+  const optional = async input => {
+    const report = (await createValidator([counter, consumer(input)], wasm))(doc);
+    assert.ok(report.ok, JSON.stringify(report.issues));
+    return report.issues.filter(issue => issue.code === "optional-output").map(issue => issue.path);
+  };
+  assert.deepEqual(await optional({ type: "core:number" }), ["steps.consumer.inputs.count"]);
+  assert.deepEqual(await optional({ type: "core:number", default: 2 }), []);
+});
+
+test("undeclared inputs and invalid constants are reported once per path", async () => {
+  const param = { ...target, inputs: { ...target.inputs, param_echoTimesMs: {
+    type: "core:array<core:number>", optional: true,
+    extensions: { "neurodesk/parameter": { type: "array", items: { type: "number", minimum: 0.001 } } },
+  } } };
+  const validate = await createValidator([source, param], await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url)));
+  const doc = workflow({ ref: "inputs.missing" });
+  const issues = constant => {
+    doc.steps.target.inputs.param_echoTimesMs = { constant };
+    return validate(doc).issues.filter(issue => ["input-undeclared", "constant-invalid"].includes(issue.code)).map(issue => [issue.code, issue.path]);
+  };
+  // The core checks the element type; the builder alone checks the per-item minimum.
+  for (const constant of ["[10,20]", [0]]) {
+    assert.deepEqual(issues(constant), [
+      ["input-undeclared", "steps.target.inputs.input_images"],
+      ["constant-invalid", "steps.target.inputs.param_echoTimesMs"],
+    ]);
+  }
+});
+
+test("names outside the localId grammar and non-step output refs are core errors", async () => {
+  const validate = await createValidator(tools, await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url)));
+  const doc = workflow({ ref: "inputs.images" });
+  doc.steps["Bad id!"] = doc.steps.source;
+  doc.inputs["Bad name"] = { type: "neuro:volume" };
+  doc.outputs = { stray: { type: "neuro:volume", ref: "inputs.image" } };
+  const issues = validate(doc).issues.filter(issue => ["local-id-invalid", "output-ref-not-step"].includes(issue.code)).map(issue => [issue.code, issue.path, issue.severity]);
+  assert.deepEqual(issues.sort(), [
+    ["local-id-invalid", "inputs.Bad name", "error"],
+    ["local-id-invalid", "steps.Bad id!", "error"],
+    ["output-ref-not-step", "outputs.stray.ref", "error"],
+  ]);
+});
+
+test("the core's issues survive a builder check that throws", async () => {
+  const validate = await createValidator(tools, await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url)));
+  const result = validate({ ...model.emptyWorkflow(), steps: { broken: null } });
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some(issue => issue.path === "steps.broken" && !/Builder checks failed/.test(issue.message)));
+  assert.ok(result.issues.some(issue => /Builder checks failed/.test(issue.message)));
 });
 
 test("required outputs and unbounded inputs need no additional warnings", () => {
@@ -111,4 +172,48 @@ test("required outputs and unbounded inputs need no additional warnings", () => 
   const doc = workflow({ ref: "steps.source.outputs.images" });
   doc.outputs.result = { type: "neuro:volume", ref: "steps.source.outputs.image" };
   assert.deepEqual(model.workflowIssues(doc, [source, unbounded]), []);
+});
+
+test("bounded 0.1.2 workflows remain valid through import, export and their round trip", async () => {
+  const bounded = { ...target, neuroflow: "0.1.2", inputs: { input_images: { type: "core:array<neuro:volume>", minItems: 2, maxItems: 3 } } };
+  const validate = await createValidator([source, bounded], await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url)));
+  const doc = { ...workflow({ constant: ["one", "two"] }), neuroflow: "0.1.2", description: "A bounded collection" };
+  doc.inputs.images.minItems = 2;
+  doc.inputs.images.maxItems = 3;
+  assert.equal(validate(doc).ok, true);
+  const imported = model.parseWorkflow(JSON.stringify(doc));
+  const exported = JSON.parse(model.serializeWorkflow(doc));
+  const roundTrip = JSON.parse(model.serializeWorkflow(imported));
+  for (const edited of [imported, exported, roundTrip]) {
+    assert.equal(edited.neuroflow, "0.1.2");
+    assert.deepEqual(edited.inputs.images, doc.inputs.images);
+    assert.equal(validate(edited).ok, true, JSON.stringify(validate(edited).issues));
+    for (const constant of [["one"], ["one", "two", "three", "four"]]) {
+      const invalid = structuredClone(edited);
+      invalid.steps.target.inputs.input_images = { constant };
+      assert.equal(validate(invalid).ok, false, "item bounds still apply after editing");
+    }
+  }
+});
+
+test("explicit spec versions survive editing so the core can reject unsupported versions", async () => {
+  const validate = await createValidator(tools, await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url)));
+  for (const version of ["0.1.1", "0.1.2", "9.9.9"]) {
+    const doc = { ...workflow({ constant: ["one", "two"] }), neuroflow: version, description: "Version preservation" };
+    const roundTrip = JSON.parse(model.serializeWorkflow(model.parseWorkflow(JSON.stringify(doc))));
+    assert.equal(roundTrip.neuroflow, version);
+    assert.equal(validate(roundTrip).ok, version !== "9.9.9");
+  }
+});
+
+test("the core rejects a misspelled key, including after an import round trip", async () => {
+  const validate = await createValidator(tools, await readFile(new URL("../vendor/neuroflow/neuroflow_wasm_bg.wasm", import.meta.url)));
+  const doc = workflow({ constant: ["one", "two"] });
+  doc.steps.target.optinal = true;
+  const roundTrip = JSON.parse(model.serializeWorkflow(model.parseWorkflow(JSON.stringify(doc))));
+  for (const candidate of [doc, roundTrip]) {
+    const result = validate(candidate);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.issues.filter(issue => issue.code === "unknown-field").map(issue => issue.path), ["steps.target.optinal"]);
+  }
 });

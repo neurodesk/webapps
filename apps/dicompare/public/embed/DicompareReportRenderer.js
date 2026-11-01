@@ -5,7 +5,7 @@
  * This is the source of truth for the renderer that dicompare publishes for
  * third-party embedding. `apps/dicompare/public/embed/DicompareReportRenderer.js`
  * is a byte-identical, import-free mirror of this file so it can be served
- * verbatim from https://dicompare.neurodesk.org/embed/; keep this module free
+ * verbatim from https://webapps.neurodesk.org/dicompare/embed/; keep this module free
  * of imports and sync the mirror when it changes (a package test enforces it).
  *
  * Usage:

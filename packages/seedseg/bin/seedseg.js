@@ -3,15 +3,20 @@ import { parseArgs } from 'node:util';
 process.env.ORT_DISABLE_TELEMETRY ??= '1';
 const { checkInstallation, downloadModels, segment, MODEL_SEEDS } = await import('../src/node.js');
 const HELP = `Usage: seedseg INPUT.nii[.gz] OUTPUT_DIR [options]
-       seedseg download-models [--cache-dir DIR] [--offline]
+       seedseg download-models [--model web|fp32] [--cache-dir DIR] [--offline]
        seedseg self-check
 
 Runs the prostate fiducial-marker ensemble on a single 3D image, on the CPU.
-Writes model1.nii through modelN.nii, avgProb.nii and consensus.nii, as in the web app.
+Writes probability.nii, markers.nii (rank labels) and detections.json by default.
 
 Options:
-  --ensemble N       First N published models, 1 through 4 (default 4)
-  --models SEEDS     Distinct comma-separated seeds: ${MODEL_SEEDS.join(', ')}
+  --pipeline METHOD  nnunet-v2 (default) or legacy-v1
+  --folds FOLDS      Distinct comma-separated v2 folds 0,1,2,3,4 (default 0)
+  --model VARIANT    web (default, fp16-stored/fp32 compute) or fp32
+                     v1 and v2 are aliases for --pipeline legacy-v1 and nnunet-v2
+  --mirror           Average all eight mirrorings of each v2 patch
+  --ensemble N       Legacy v1: first N published models, 1 through 4
+  --models SEEDS     Legacy v1: distinct comma-separated seeds: ${MODEL_SEEDS.join(', ')}
                      Use either --models or --ensemble
   --threshold VALUE  Marker probability in [0, 1] (default 0.1)
   --top-n N          Maximum retained components, 1 through 10 (default 3)
@@ -35,7 +40,7 @@ function reportProgress() {
 }
 try {
   const { values, positionals, tokens } = parseArgs({ allowPositionals: true, tokens: true, options: {
-    help: { type: 'boolean', short: 'h' }, ensemble: { type: 'string' }, models: { type: 'string' },
+    help: { type: 'boolean', short: 'h' }, pipeline: { type: 'string' }, folds: { type: 'string' }, model: { type: 'string' }, mirror: { type: 'boolean' }, ensemble: { type: 'string' }, models: { type: 'string' },
     threshold: { type: 'string' }, 'top-n': { type: 'string' }, markers: { type: 'string' },
     threads: { type: 'string' }, 'cache-dir': { type: 'string' }, offline: { type: 'boolean' },
   } });
@@ -51,16 +56,17 @@ try {
     if (positionals.length !== 1 || seen.size) throw new Error('self-check accepts no arguments or options');
     console.log(JSON.stringify(await checkInstallation()));
   } else if (positionals[0] === 'download-models') {
-    if (positionals.length !== 1 || [...seen].some(key => !['cache-dir', 'offline'].includes(key))) {
-      throw new Error('download-models accepts only --cache-dir and --offline');
+    if (positionals.length !== 1 || [...seen].some(key => !['cache-dir', 'offline', 'model'].includes(key))) {
+      throw new Error('download-models accepts only --model, --cache-dir and --offline');
     }
     const progress = reportProgress();
-    console.log(JSON.stringify(await downloadModels({ cacheDir: values['cache-dir'], offline: values.offline,
+    console.log(JSON.stringify(await downloadModels({ model: values.model, cacheDir: values['cache-dir'], offline: values.offline,
       onProgress: message => progress(undefined, message) })));
   } else {
     if (positionals.length !== 2) throw new Error('Provide an input image and a new output directory; use --help for options');
     if (seen.has('markers') && seen.has('top-n')) throw new Error('Choose one of --markers and --top-n.');
     console.log(JSON.stringify(await segment({ input: positionals[0], output: positionals[1],
+      pipeline: values.pipeline, folds: values.folds?.split(',').map(fold => fold.trim()), model: values.model, mirror: values.mirror,
       models: values.models?.split(',').map(seed => seed.trim()), ensemble: values.ensemble,
       threshold: values.threshold, nMarkers: values['top-n'] ?? values.markers,
       threads: values.threads, cacheDir: values['cache-dir'], offline: values.offline,

@@ -25,3 +25,4 @@ for (const name of ['index', 'node']) {
   if (values.metafile) await writeFile(`${values.metafile}-${name}.json`, JSON.stringify(result.metafile));
 }
 await cp(new URL('../../registration/wasm', import.meta.url), join(outdir, 'registration'), { recursive: true });
+await cp(new URL('../../greedy/wasm-single', import.meta.url), join(outdir, 'greedy'), { recursive: true });

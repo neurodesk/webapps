@@ -42,6 +42,12 @@ test('Philips real-data crop completes tractography without losing the hardware 
       record({ kind: 'dispatch', entryPoint: passes.get(this), counts });
       return dispatch.apply(this, counts);
     };
+    // Completion times show how long the command that loses the device actually ran.
+    const workDone = GPUQueue.prototype.onSubmittedWorkDone;
+    GPUQueue.prototype.onSubmittedWorkDone = async function (...args) {
+      await workDone.apply(this, args);
+      record({ kind: 'work-done' });
+    };
     const copy = GPUCommandEncoder.prototype.copyBufferToBuffer;
     GPUCommandEncoder.prototype.copyBufferToBuffer = function (source, sourceOffset, destination, ...rest) {
       copies.set(destination, source.label);
@@ -63,7 +69,7 @@ test('Philips real-data crop completes tractography without losing the hardware 
     GPUAdapter.prototype.requestDevice = async function (...args) {
       const device = await request.apply(this, args);
       device.lost.then(info => {
-        if (info.reason !== 'destroyed') window.trackingDeviceLosses.push({ reason: info.reason, message: info.message });
+        if (info.reason !== 'destroyed') window.trackingDeviceLosses.push({ reason: info.reason, message: info.message, at: performance.now() });
       });
       return device;
     };

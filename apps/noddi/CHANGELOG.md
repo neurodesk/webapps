@@ -1,5 +1,38 @@
 # noddi
 
+## 0.6.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/runtime-support@0.9.19
+  - @neurodesk/webapp-components@0.22.3
+  - @neurodesk/dwi2trx@0.8.20261031
+  - @neurodesk/noddi@0.6.20261031
+
+## 0.6.20261029
+
+### Patch Changes
+
+- @neurodesk/dwi2trx@0.8.20261029
+- @neurodesk/noddi@0.6.20261029
+
+## 0.6.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+  - @neurodesk/dwi2trx@0.8.20261027
+  - @neurodesk/noddi@0.6.20261027
+  - @neurodesk/runtime-support@0.9.18
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/noddi@0.6.20261027
+  - @neurodesk/dwi2trx@0.8.20261027
+  - @neurodesk/runtime-support@0.9.17
+
 ## 0.6.20261025
 
 ### Patch Changes

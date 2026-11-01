@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Worker } from "node:worker_threads";
-import { readMatTransform } from "../src/index.js";
+import { readMatTransform, writeMatTransform } from "../src/index.js";
 
 const fixtures = new URL("../../../exes/dwi/hmc/tests/fixtures/", import.meta.url);
 const expected = JSON.parse(await readFile(new URL("expected.json", fixtures), "utf8"));
@@ -19,6 +19,12 @@ test("native float and double transforms read exactly from byte-offset views", a
       fixed: want.fixed,
     });
   }
+});
+
+test("writeMatTransform writes an ITK double transform byte for byte", async () => {
+  const bytes = new Uint8Array(await readFile(new URL("ants-double.mat", fixtures)));
+  assert.deepEqual(writeMatTransform(readMatTransform(bytes)), bytes);
+  assert.throws(() => writeMatTransform({ transform: "AffineTransform_double_3_3", parameters: [NaN], fixed: [] }), /not finite/);
 });
 
 test("zero-size fixed matrices remain supported in both precisions", async () => {

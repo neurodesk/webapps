@@ -8,7 +8,7 @@ https://github.com/QSMxT/QSMxT/releases/tag/v10.0.0
 Source: https://github.com/QSMxT/QSMxT/tree/v10.0.0
 QSMxT is GPL-3.0-only (LICENSE). It is built on qsm-core v0.39.0
 (https://github.com/astewartau/QSM.rs/tree/v0.39.0). The browser instead pins
-qsm-core commit 8a3afda3716a859d93f1d41f1c8993335cc80c57 through qsmxt-engine;
+qsm-core commit 95be94b83b43e80329b4ecfe8a74cf8114ea927a through qsmxt-engine;
 its compatibility with the published native release is measured, not inferred
 from an identical core version.
 The browser's exact engine/core commits and the native compatibility measurement

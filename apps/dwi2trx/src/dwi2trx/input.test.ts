@@ -50,3 +50,24 @@ const explicit = await resolveExplicitInput({
 assert.equal(explicit.directions, 21)
 assert.equal(explicit.bvec.name, 'unrelated-directions.bvec')
 await assert.rejects(resolveExplicitInput({ ...explicit, bval: new File(['0'], 'bad.bval') }), /bval|mismatch|bvec/i)
+
+// The drop walker stops reading directory batches once its file limit is reached.
+{
+  const { traverseDataTransferItems } = await import('./files.ts')
+  let batches = 0
+  const fileEntry = (name: string) => ({ isFile: true, isDirectory: false, name, file: (ok: (f: File) => void) => ok(new File([''], name)) })
+  const directory = {
+    isFile: false,
+    isDirectory: true,
+    name: 'study',
+    createReader: () => ({
+      readEntries: (ok: (batch: unknown[]) => void) => {
+        batches++
+        ok(batches > 250 ? [] : Array.from({ length: 100 }, (_, i) => fileEntry(`${batches}_${i}.dcm`)))
+      },
+    }),
+  }
+  const items = [{ webkitGetAsEntry: () => directory }] as unknown as DataTransferItemList
+  await assert.rejects(traverseDataTransferItems(items, 1000), /Too many files \(limit 1000\)/)
+  assert.ok(batches <= 11, `read ${batches} batches past a 1000-file limit`)
+}

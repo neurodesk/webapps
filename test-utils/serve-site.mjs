@@ -82,5 +82,11 @@ export async function serveSite(dist, { isolationHeaders = true, port = 0, files
   });
   const address = server.address();
   const origin = `http://127.0.0.1:${address.port}`;
-  return { origin, close: () => new Promise(resolve => server.close(resolve)) };
+  // Chromium keeps a spare keep-alive socket that never carried a request; Node counts it as active,
+  // so server.close() alone waits until the browser exits (issue #347).
+  const close = () => new Promise(resolve => {
+    server.closeAllConnections();
+    server.close(resolve);
+  });
+  return { origin, close };
 }

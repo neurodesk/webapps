@@ -9,9 +9,7 @@ export async function readT1(files, log = () => {}) {
   const images = files.filter(file => /\.nii(\.gz)?$/i.test(file.name));
   const dicom = files.filter(file => !/\.(nii(\.gz)?|json|bval|bvec)$/i.test(file.name));
   if (dicom.length) {
-    const url = new URL("dcm2niix.jpeg.js", import.meta.resolve("@niivue/dcm2niix"));
-    const { default: factory } = await import(url.href);
-    const converted = await convertDicom(dicom, factory, { onLog: log });
+    const converted = await convertDicom(dicom, new URL("dcm2niix.jpeg.js", import.meta.resolve("@niivue/dcm2niix")), { onLog: log });
     if (!converted.length) throw new Error("No images produced. Choose NIfTI files or a complete DICOM series.");
     images.push(...converted);
   }

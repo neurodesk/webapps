@@ -1,187 +1,50 @@
-/// <reference path="./dcm2niix.d.ts" />
-
 /**
- * @niivue/nv-ext-dcm2niix
+ * Mixed NIfTI/DICOM input for Neurodesk apps, on top of `@niivue/dcm2niix`.
  *
- * Browser-side DICOM-to-NIfTI conversion for NiiVue, wrapping the
- * `@niivue/dcm2niix` WebAssembly build of Chris Rorden's dcm2niix.
- *
- * Two pieces of glue cover the common integration paths:
- *
- *   - {@link runDcm2niix}              — `<input webkitdirectory>` → File[]
- *   - {@link traverseDataTransferItems} — drop-event folders → File[]
- *
- * The underlying `Dcm2niix` class is re-exported for callers that need
- * full control over the command-line flags exposed by dcm2niix.
- *
- * Usage:
- * ```ts
- * import NiiVueGPU from '@niivue/niivue'
- * import { runDcm2niix } from '@niivue/nv-ext-dcm2niix'
- *
- * const nv = new NiiVueGPU()
- * await nv.attachTo('gl1')
- *
- * input.addEventListener('change', async () => {
- *   const niftiFiles = await runDcm2niix(input.files)
- *   await nv.loadVolumes([{ url: niftiFiles[0] }])
- * })
- * ```
+ * `@niivue/dcm2niix` converts and pairs dcm2niix's outputs; this module adds what
+ * it leaves to applications: NIfTI passed through beside DICOM, sidecars and
+ * gradients supplied with those volumes, output names without the input folder,
+ * and the empty-output error.
  */
 
-import { Dcm2niix, type Dcm2niixProcessor } from '@niivue/dcm2niix'
+import { convert, runDcm2niix as convertFiles, type ConvertOptions } from '@niivue/dcm2niix'
 
-// Re-export so callers can drop down to the raw API when they need flags
-// like compression level, BIDS sidecars, etc.
-export { Dcm2niix }
+export { traverseDataTransferItems } from '@niivue/dcm2niix'
 
-/**
- * Drop items expose a non-standard `_webkitRelativePath` that dcm2niix
- * uses to group images by series. Standard `webkitRelativePath` is
- * read-only on `File`, so we attach our own and dcm2niix reads either.
- */
-type FileWithRelativePath = File & { _webkitRelativePath?: string }
+// dcm2niix's default name starts with the input folder (%f), which can hold a patient name;
+// downloads derive from these names. Callers' own `-f` comes later and wins.
+const NAMING = ['-f', '%p_%t_%s']
+// Upstream has no default deadline; a stalled WASM fetch would hold its worker forever.
+const TIMEOUT_MS = 120_000
 
-/** Options for {@link runDcm2niix}. */
-export interface RunDcm2niixOptions {
+/** `runDcm2niix` from @niivue/dcm2niix, naming outputs without the input folder, with a deadline. */
+export const runDcm2niix: typeof convertFiles = (files, options = {}) => convertFiles(files, withDefaults(options))
+
+function withDefaults<T extends ConvertOptions>({ timeoutMs = TIMEOUT_MS, args = [], ...options }: T) {
+  return { ...options, timeoutMs, args: [...NAMING, ...args] }
+}
+
+export interface ReadImageFilesOptions {
   signal?: AbortSignal
-  /** Maximum init + conversion time. Large scanner exports can opt into a longer run. */
+  /** Maximum conversion time. Large scanner exports can opt into a longer run. */
   timeoutMs?: number
+  /** Files that skip dcm2niix. Default: NIfTI. */
+  directVolume?: RegExp
+}
+
+export interface ReadSeriesOptions extends ReadImageFilesOptions {
   /**
-   * Filter the result list down to NIfTI outputs (`.nii` and `.nii.gz`).
-   * BIDS sidecars and other dcm2niix outputs are dropped. Default: `true`.
-   */
-  niftiOnly?: boolean
-  /**
-   * Use dcm2niix's default BIDS anonymisation. Set `false` to use `-b y -ba n`:
-   * sidecars then retain identifying fields. Keep them in memory; never persist them.
-   * Default: `true`.
+   * `false` (the default) passes `-ba n`: converted sidecars keep identifying fields
+   * (patient name, birth date, acquisition time). Keep them in memory; never persist
+   * them. Pass `true` for sidecars a user can save.
    */
   anonymizeSidecar?: boolean
 }
-
-/**
- * Convert DICOM files to NIfTI by spinning up a fresh dcm2niix worker,
- * feeding it the files, waiting for the result, then terminating the
- * worker so the WASM heap is released.
- *
- * Each call boots its own worker — fine for one-off conversions; for
- * batch workflows, instantiate `Dcm2niix` once and reuse it (and call
- * `worker?.terminate()` yourself when finished).
- *
- * @param files       FileList from `<input webkitdirectory>` or File[]
- *                    from a drop event (see {@link traverseDataTransferItems}).
- * @param options     See {@link RunDcm2niixOptions}.
- * @returns           Converted output files (NIfTI by default).
- */
-export async function runDcm2niix(
-  files: FileList | File[] | null | undefined,
-  options: RunDcm2niixOptions = {},
-): Promise<File[]> {
-  return convertDicom(files, options, (processor) => options.anonymizeSidecar === false
-    ? processor.bids('y').bidsAnonymize('n')
-    : processor)
-}
-
-async function convertDicom(
-  files: FileList | File[] | null | undefined,
-  options: RunDcm2niixOptions,
-  configure: (processor: Dcm2niixProcessor) => Dcm2niixProcessor,
-): Promise<File[]> {
-  const { niftiOnly = true, signal } = options
-  const timeoutMs = options.timeoutMs ?? RUN_TIMEOUT_MS
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid dcm2niix timeout')
-  signal?.throwIfAborted()
-  if (!files || files.length === 0) return []
-
-  const dcm2niix = new Dcm2niix()
-  try {
-    // Bound init + run as one operation. @niivue/dcm2niix's init() only settles on a
-    // {type:'ready'} message, so a failed WASM fetch/instantiate leaves it pending
-    // forever; and a worker crash during run() never settles run() (onerror stays
-    // bound to the settled init()). Either way the caller's queue would wedge — on
-    // expiry we reject and the finally terminates the worker (init() creates it
-    // synchronously, so `dcm2niix.worker` is set even if init never resolves).
-    const result = (await withTimeout(
-      (async () => {
-        await dcm2niix.init()
-        return configure(dcm2niix.input(files)).run()
-      })(),
-      timeoutMs,
-      'dcm2niix',
-      signal,
-    )) as File[]
-    return niftiOnly
-      ? result.filter(isNifti)
-      : result
-  } finally {
-    dcm2niix.worker?.terminate()
-  }
-}
-
-const RUN_TIMEOUT_MS = 120_000
-function withTimeout<T>(p: Promise<T>, ms: number, label: string, signal?: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const abort = () => { cleanup(); reject(signal?.reason ?? new DOMException('Cancelled', 'AbortError')) }
-    const timer = setTimeout(() => { cleanup(); reject(new Error(`${label} timed out after ${ms} ms`)) }, ms)
-    const cleanup = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
-    signal?.addEventListener('abort', abort, { once: true })
-    p.then(
-      (v) => { cleanup(); resolve(v) },
-      (e) => { cleanup(); reject(e) },
-    )
-  })
-}
-
-/** Options for {@link readImageFiles}: `directVolume` names the files that skip dcm2niix. */
-export type ReadImageFilesOptions = Omit<RunDcm2niixOptions, 'anonymizeSidecar'> & { directVolume?: RegExp }
 
 /** One image and its parsed BIDS sidecar (`null` when absent or unparsable). */
 export interface ImageSeries {
   image: File
   sidecar: Record<string, unknown> | null
-}
-
-/** Keep direct volumes and convert all DICOM slices together, including extensionless files. */
-export async function readImageFiles(
-  files: FileList | File[],
-  options: ReadImageFilesOptions = {},
-): Promise<File[]> {
-  const { direct, dicom } = splitInputs(files, options.directVolume)
-  if (!dicom.length) return direct
-  const converted = await convertDicom(dicom, options, (processor) => processor)
-  return [...direct, ...requireImages(converted)]
-}
-
-/**
- * Like {@link readImageFiles}, but pairs each image with its BIDS sidecar by file stem.
- * dcm2niix runs with `-b y -ba n` unless `anonymizeSidecar` is `true`, so converted
- * sidecars keep identifying fields (patient name, birth date, acquisition time). Keep
- * those in memory; never persist them. Pass `anonymizeSidecar: true` for sidecars a
- * user can save. A direct volume pairs with a supplied `.json` of the same stem.
- */
-export async function readImageSeries(
-  files: FileList | File[],
-  options: Omit<ReadImageFilesOptions, 'niftiOnly'> & { anonymizeSidecar?: boolean } = {},
-): Promise<ImageSeries[]> {
-  return (await readSeriesAndOutputs(files, options)).series
-}
-
-/** readImageSeries, also returning every dcm2niix output (empty without DICOM input). */
-async function readSeriesAndOutputs(
-  files: FileList | File[],
-  options: Omit<ReadImageFilesOptions, 'niftiOnly'> & { anonymizeSidecar?: boolean },
-): Promise<{ series: ImageSeries[], outputs: File[] }> {
-  const { direct, sidecars, dicom } = splitInputs(files, options.directVolume)
-  const directSeries = await pairSidecars(direct, sidecars)
-  if (!dicom.length) return { series: directSeries, outputs: [] }
-  const outputs = await convertDicom(
-    dicom,
-    { ...options, niftiOnly: false },
-    (processor) => options.anonymizeSidecar ? processor : processor.bids('y').bidsAnonymize('n'),
-  )
-  const images = requireImages(outputs.filter(isNifti))
-  return { series: [...directSeries, ...(await pairSidecars(images, outputs))], outputs }
 }
 
 /** One image with its FSL gradient files and parsed sidecar; each is `null` when absent. */
@@ -190,37 +53,78 @@ export interface DiffusionSeries extends ImageSeries {
   bvec: File | null
 }
 
+/** Keep direct volumes and convert all other files together, including extensionless DICOM. */
+export async function readImageFiles(
+  files: FileList | File[],
+  { niftiOnly = true, ...options }: ReadImageFilesOptions & { niftiOnly?: boolean } = {},
+): Promise<File[]> {
+  const { direct, dicom } = splitInputs(files, options.directVolume)
+  if (!dicom.length) return direct
+  const { series, files: outputs } = await convertDicom(dicom, { anonymizeSidecar: true, ...options })
+  return [...direct, ...(niftiOnly ? series.map((entry) => entry.image) : outputs)]
+}
+
+/** Like {@link readImageFiles}, but pairs each image with its BIDS sidecar. */
+export async function readImageSeries(
+  files: FileList | File[],
+  options: ReadSeriesOptions = {},
+): Promise<ImageSeries[]> {
+  return (await readDiffusionSeries(files, options)).map(({ image, sidecar }) => ({ image, sidecar }))
+}
+
 /**
- * Like {@link readImageSeries}, but also pairs each image with the `.bval` and `.bvec` of the
- * same stem: those dcm2niix writes for a diffusion series, or those supplied with a direct
- * volume. When the selection holds one image, each sole gradient file pairs whatever its
- * name (FSL `data.nii.gz` with `bvals` or `bvecs`); with several images an unmatched
- * gradient file stays unpaired rather than guessed.
+ * Like {@link readImageSeries}, but also pairs each image with its `.bval` and `.bvec`:
+ * those dcm2niix writes, or those of the same stem supplied with a direct volume. When the
+ * selection holds one image, each sole gradient file pairs whatever its name (FSL
+ * `data.nii.gz` with `bvals`, `bvecs`); with several, an unmatched gradient file stays unpaired.
  */
 export async function readDiffusionSeries(
   files: FileList | File[],
-  options: Omit<ReadImageFilesOptions, 'niftiOnly'> & { anonymizeSidecar?: boolean } = {},
+  options: ReadSeriesOptions = {},
 ): Promise<DiffusionSeries[]> {
   const list = Array.from(files)
-  const { series, outputs } = await readSeriesAndOutputs(list, options)
-  const gradients = [...list, ...outputs].filter((file) => GRADIENT_FILE.test(file.name))
-  const byStem = (pattern: RegExp) => new Map(
-    gradients.filter((file) => pattern.test(file.name)).map((file) => [stem(file.name), file]),
-  )
-  const bvals = byStem(BVAL_FILE)
-  const bvecs = byStem(BVEC_FILE)
-  const singleImage = series.length === 1
+  const { direct, sidecars, dicom } = splitInputs(list, options.directVolume)
+  const converted = dicom.length ? (await convertDicom(dicom, options)).series : []
+  const jsons = byStem(sidecars)
+  const series = [
+    ...await Promise.all(direct.map(async (image) => {
+      const sidecar = jsons.get(stem(image.name))
+      return { image, sidecar: sidecar ? asObject(await parseJson(sidecar)) : null, bval: null, bvec: null }
+    })),
+    ...converted.map((entry) => ({
+      image: entry.image,
+      sidecar: asObject(entry.json),
+      bval: entry.bval ?? null,
+      bvec: entry.bvec ?? null,
+    })),
+  ]
+  const bvals = byStem(list.filter((file) => BVAL_FILE.test(file.name)))
+  const bvecs = byStem(list.filter((file) => BVEC_FILE.test(file.name)))
+  const sole = (files: Map<string, File>) => series.length === 1 && files.size === 1 ? [...files.values()][0] : null
   return series.map((entry) => ({
     ...entry,
-    bval: bvals.get(stem(entry.image.name)) ?? (singleImage && bvals.size === 1 ? [...bvals.values()][0] : null),
-    bvec: bvecs.get(stem(entry.image.name)) ?? (singleImage && bvecs.size === 1 ? [...bvecs.values()][0] : null),
+    bval: entry.bval ?? bvals.get(stem(entry.image.name)) ?? sole(bvals),
+    bvec: entry.bvec ?? bvecs.get(stem(entry.image.name)) ?? sole(bvecs),
   }))
+}
+
+// Partial output is accepted, as dcm2niix's own exit codes allow (e.g. someOkSomeBad):
+// only a conversion that yields no image is an error.
+async function convertDicom(
+  files: File[],
+  { signal, timeoutMs, anonymizeSidecar = false }: ReadSeriesOptions,
+) {
+  const result = await convert(files, withDefaults({ signal, timeoutMs, args: anonymizeSidecar ? [] : ['-ba', 'n'] }))
+  if (!result.series.length) {
+    const detail = result.log.at(-1)
+    throw new Error(`No images produced. Choose NIfTI files or a complete DICOM series.${detail ? ` (dcm2niix: ${detail})` : ''}`)
+  }
+  return result
 }
 
 // FSL gradient files: dwi.bval and dwi.bvec as dcm2niix writes them, or FSL's bvals and bvecs.
 const BVAL_FILE = /(^|\.)bvals?$/i
 const BVEC_FILE = /(^|\.)bvecs?$/i
-const GRADIENT_FILE = /(^|\.)(bvals?|bvecs?)$/i
 
 function splitInputs(files: FileList | File[], directVolume = /\.nii(\.gz)?$/i) {
   const direct: File[] = []
@@ -229,109 +133,27 @@ function splitInputs(files: FileList | File[], directVolume = /\.nii(\.gz)?$/i) 
   for (const file of Array.from(files)) {
     if (directVolume.test(file.name)) direct.push(file)
     else if (/\.json$/i.test(file.name)) sidecars.push(file)
-    else if (!GRADIENT_FILE.test(file.name)) dicom.push(file)
+    else if (!BVAL_FILE.test(file.name) && !BVEC_FILE.test(file.name)) dicom.push(file)
   }
   return { direct, sidecars, dicom }
-}
-
-function requireImages(images: File[]): File[] {
-  if (!images.length) throw new Error('No images produced. Choose NIfTI files or a complete DICOM series.')
-  return images
-}
-
-function isNifti(file: File): boolean {
-  return /\.nii(\.gz)?$/i.test(file.name)
 }
 
 function stem(name: string): string {
   return name.replace(/\.(nii\.gz|[^.]*)$/i, '')
 }
 
-async function pairSidecars(images: File[], candidates: File[]): Promise<ImageSeries[]> {
-  const sidecars = new Map(
-    candidates
-      .filter((file) => /\.json$/i.test(file.name))
-      .map((file) => [stem(file.name), file]),
-  )
-  return Promise.all(images.map(async (image) => {
-    const sidecar = sidecars.get(stem(image.name))
-    return { image, sidecar: sidecar ? await parseSidecar(sidecar) : null }
-  }))
+function byStem(files: File[]): Map<string, File> {
+  return new Map(files.map((file) => [stem(file.name), file]))
 }
 
-async function parseSidecar(file: File): Promise<Record<string, unknown> | null> {
+async function parseJson(file: File): Promise<unknown> {
   try {
-    const value: unknown = JSON.parse(await file.text())
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null
+    return JSON.parse(await file.text())
   } catch {
     return null
   }
 }
 
-/**
- * Walk a drop event's `DataTransferItemList`, recurse into directories,
- * and stamp `_webkitRelativePath` on each file so dcm2niix can group by
- * series.
- *
- * The browser exposes folder structure on drop only via the
- * `webkitGetAsEntry()` API; this helper runs that traversal for you.
- *
- * @example
- * ```ts
- * dropTarget.addEventListener('drop', async (e) => {
- *   e.preventDefault()
- *   const files = await traverseDataTransferItems(e.dataTransfer!.items)
- *   const niftiFiles = await runDcm2niix(files)
- * })
- * ```
- */
-export async function traverseDataTransferItems(
-  items: DataTransferItemList,
-): Promise<File[]> {
-  const files: File[] = []
-  const entries: FileSystemEntry[] = []
-  for (let i = 0; i < items.length; i++) {
-    const entry = items[i].webkitGetAsEntry()
-    if (entry) entries.push(entry)
-  }
-  await Promise.all(entries.map((entry) => walkEntry(entry, '', files)))
-  return files
-}
-
-function walkEntry(
-  entry: FileSystemEntry,
-  path: string,
-  out: File[],
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (entry.isFile) {
-      ;(entry as FileSystemFileEntry).file((file) => {
-        const tagged = file as FileWithRelativePath
-        tagged._webkitRelativePath = path + file.name
-        out.push(tagged)
-        resolve()
-      }, reject)
-      return
-    }
-    if (entry.isDirectory) {
-      const reader = (entry as FileSystemDirectoryEntry).createReader()
-      const childPath = `${path}${entry.name}/`
-      const readBatch = () => {
-        reader.readEntries((batch) => {
-          if (batch.length === 0) {
-            resolve()
-            return
-          }
-          Promise.all(batch.map((child) => walkEntry(child, childPath, out)))
-            .then(readBatch)
-            .catch(reject)
-        }, reject)
-      }
-      readBatch()
-      return
-    }
-    resolve()
-  })
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 }

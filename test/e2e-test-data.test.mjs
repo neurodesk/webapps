@@ -86,6 +86,15 @@ test('both browser jobs download the data their apps need', async () => {
   assert.doesNotMatch(macos.run, /--cpu|CPU_ONLY/);
 });
 
+test('release verification downloads the same test data before its browser tests', async () => {
+  const steps = parse(await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8')).jobs.verify.steps;
+  const download = steps.findIndex((step) => step.run?.includes('scripts/e2e-test-data.mjs'));
+  const tests = steps.findIndex((step) => step.run?.includes('test:e2e'));
+  assert.ok(download >= 0 && download < tests, 'release.yml verify downloads test data before its tests');
+  assert.equal(steps[download].env.CPU_ONLY, "${{ matrix.hardware_gpu && '--cpu' || '' }}");
+  assert.match(steps[download].run, /\$CPU_ONLY/);
+});
+
 test('a CPU subset provisions only variables its full provisioner declares', async () => {
   const registry = await loadAppsRegistry();
   for (const [app, { env, cpu }] of Object.entries(provisioners)) {

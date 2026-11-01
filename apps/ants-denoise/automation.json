@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 2,
+  "app": "ants-denoise",
+  "title": "ANTs DenoiseImage",
+  "description": "Adaptive non-local means denoising of one 3D MRI volume with ANTs DenoiseImage.",
+  "defaultOperation": "denoise",
+  "operations": {
+    "denoise": {
+      "title": "Denoise image",
+      "description": "Run ANTs DenoiseImage on one 3D volume, optionally only inside a mask, and return the denoised float32 image on the input grid.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "One 3D MRI volume, as NIfTI or a DICOM series",
+          "minimum": 1
+        },
+        "mask": {
+          "source": "files",
+          "type": "neuro:mask",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Optional mask on the image grid; only its nonzero voxels are denoised",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "noiseModel": {
+          "type": "string",
+          "enum": [
+            "Gaussian",
+            "Rician"
+          ],
+          "default": "Gaussian",
+          "description": "Noise model: Gaussian (DenoiseImage's default) or Rician for low-SNR magnitude images"
+        },
+        "patchRadius": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2,
+          "default": 1,
+          "description": "Patch radius in voxels"
+        },
+        "searchRadius": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3,
+          "default": 2,
+          "description": "Search radius in voxels"
+        }
+      },
+      "artifacts": {
+        "image": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

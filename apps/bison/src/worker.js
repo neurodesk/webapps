@@ -1,5 +1,5 @@
 // The BISON worker: downloads and checks the model files, then runs runBison with the browser
-// drivers. antsRegistration and DenoiseImage start nested module workers from the kernels that
+// drivers. antsRegistration, DenoiseImage and Greedy start nested module workers from the kernels that
 // scripts/copy-runtime.mjs stages in public/bison-runtime/; terminating this worker ends them too.
 //   in:  { type: 'run', t1, flair, t1Name }
 //   out: { type: 'progress', message, fraction } | { type: 'log', line }
@@ -14,6 +14,7 @@ const runtimeUrl = (path) => new URL(`${import.meta.env.BASE_URL}bison-runtime/$
 const RUNTIME = {
   registration: { worker: runtimeUrl("hmc-registration/src/worker.js") },
   denoise: { worker: runtimeUrl("ants-denoise/src/worker.js") },
+  greedy: { worker: runtimeUrl("greedy/src/worker.js") },
   ort: { wasm: new URL(ortWasmUrl, self.location.href).href },
 };
 

@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { loadAppsRegistry } from "../../../scripts/lib/apps-registry.mjs";
+
+const appTitle = (await loadAppsRegistry()).apps.find(app => app.id === "pipeline-builder").title;
 
 const [example] = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const exampleUrl = example.files[0].url;
@@ -206,6 +209,63 @@ test("editing a step keeps its sections as the user left them and keeps focus", 
   expect(doc.steps["brain-extraction"].inputs).toMatchObject({ param_threshold: { constant: 0.4 }, param_method: { constant: "bet" } });
 });
 
+test("an incomplete number preserves the saved parameter and can be corrected or cleared", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#toolSelect")).toBeEnabled();
+  await page.locator("#toolSelect").selectOption("neurodesk.webapps/brain-extraction/extract");
+  await page.locator("#addStepButton").click();
+  await page.locator("#stepEditor details summary").click();
+  const threshold = page.locator("#param-param_threshold");
+  const error = page.locator("#param-param_threshold-error");
+  await threshold.fill("0.4");
+  await threshold.press("Tab");
+  await page.locator("#output-output_brain").check();
+  await page.locator("#workflowDescription").fill("Skull-strip a head MRI.");
+  await page.locator("#workflowDescription").press("Tab");
+  await threshold.fill("");
+  await threshold.pressSequentially("1e");
+  await threshold.press("Tab");
+  await expect(error).toHaveText("Enter a valid number.");
+  await expect(threshold).toHaveAttribute("aria-invalid", "true");
+  expect((await exported(page)).steps["brain-extraction"].inputs.param_threshold).toEqual({ constant: 0.4 });
+  await threshold.fill("0.3");
+  await threshold.press("Tab");
+  await expect(error).toBeHidden();
+  await expect(threshold).not.toHaveAttribute("aria-invalid");
+  expect((await exported(page)).steps["brain-extraction"].inputs.param_threshold).toEqual({ constant: 0.3 });
+  await threshold.fill("");
+  await threshold.press("Tab");
+  await expect(error).toBeHidden();
+  expect((await exported(page)).steps["brain-extraction"].inputs).not.toHaveProperty("param_threshold");
+});
+
+test("array parameters export as typed arrays and reject invalid entries in place", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#toolSelect")).toBeEnabled();
+  await page.locator("#toolSelect").selectOption("neurodesk.webapps/qsmbly/reconstruct");
+  await page.locator("#addStepButton").click();
+  await page.locator("#stepEditor details summary").click();
+  const echoes = page.locator("#param-param_echoTimesMs");
+  const error = page.locator("#param-param_echoTimesMs-error");
+  await echoes.fill("10, 20");
+  await echoes.press("Tab");
+  await expect(error).toBeHidden();
+  await echoes.fill("10, abc");
+  await echoes.press("Tab");
+  await expect(error).toHaveText('Expected a number, got "abc".');
+  await expect(echoes).toHaveAttribute("aria-invalid", "true");
+  await page.locator("#workflowDescription").fill("Reconstruct susceptibility from multi-echo phase.");
+  await page.locator("#workflowDescription").press("Tab");
+  await expect(echoes).toHaveValue("10, abc");
+  const doc = await exported(page);
+  expect(doc.steps.qsmbly.inputs.param_echoTimesMs).toEqual({ constant: [10, 20] });
+  await echoes.fill("[10, 20, 30]");
+  await echoes.press("Tab");
+  await expect(error).toBeHidden();
+  await expect(echoes).not.toHaveAttribute("aria-invalid");
+  expect((await exported(page)).steps.qsmbly.inputs.param_echoTimesMs).toEqual({ constant: [10, 20, 30] });
+});
+
 test("validation diagnostics reach the console as the workflow is edited", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#toolSelect")).toBeEnabled();
@@ -288,3 +348,20 @@ test("page is cross-origin isolated (COOP/COEP active)", async ({ page }) => {
   await page.goto("/");
   expect(await page.evaluate(() => self.crossOriginIsolated === true)).toBe(true);
 });
+
+
+for (const width of [390, 1440]) {
+  test(`About uses the catalog title at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "About", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: `About ${appTitle}`, exact: true })).toBeVisible();
+    const screenshot = testInfo.outputPath(`about-${width}.png`);
+    await page.screenshot({ path: screenshot });
+    await testInfo.attach("About dialog", { path: screenshot, contentType: "image/png" });
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+  });
+}

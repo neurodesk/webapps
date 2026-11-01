@@ -51,8 +51,9 @@ test('a partial tractogram is incomplete even when its browser test passes', () 
 test('the shell stops on a preparation failure, saves incomplete status and restores the previous native report', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'neurodesk-macos-runner-test-'));
   const bin = join(directory, 'bin');
-  for (const path of ['scripts/desktop','packages/synthseg','packages/topofit','exes/synthseg/validation','scratch','bin']) await mkdir(join(directory, path), { recursive: true });
+  for (const path of ['packages/components/src/net','scripts/desktop','packages/synthseg','packages/topofit','exes/synthseg/validation','scratch','bin']) await mkdir(join(directory, path), { recursive: true });
   for (const file of ['verify-scientific-macos.sh','scientific-evidence.mjs']) await copyFile(new URL(file, import.meta.url), join(directory, 'scripts/desktop', file));
+  await copyFile(new URL('../../packages/components/src/net/fetchWithRetry.js', import.meta.url), join(directory, 'packages/components/src/net/fetchWithRetry.js'));
   for (const path of ['packages/synthseg/model.manifest.json','packages/topofit/model.manifest.json']) await writeFile(join(directory, path), '{}');
   await writeFile(join(directory, 'pnpm-lock.yaml'), 'fixture: true\n');
   const original = '{"previous":"hardware evidence"}\n';

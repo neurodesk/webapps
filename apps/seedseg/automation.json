@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "app": "seedseg",
   "title": "SeedSeg",
-  "description": "Segment prostate fiducial markers using the existing SeedSeg model ensemble.",
+  "description": "Segment prostate fiducial markers with nnU-Net v2 or legacy v1.",
   "defaultOperation": "segment",
   "operations": {
     "segment": {
@@ -24,9 +24,46 @@
         }
       },
       "parameters": {
+        "pipeline": {
+          "type": "string",
+          "description": "Scientific pipeline (defaults to v2, or legacy v1 when models is supplied)",
+          "enum": [
+            "nnunet-v2",
+            "legacy-v1"
+          ]
+        },
+        "folds": {
+          "type": "array",
+          "description": "Distinct nnU-Net v2 folds in published order",
+          "items": {
+            "type": "integer",
+            "description": "Cross-validation fold",
+            "enum": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ]
+          }
+        },
+        "mirror": {
+          "type": "boolean",
+          "description": "Average all eight mirrored predictions per v2 patch",
+          "default": false
+        },
+        "backend": {
+          "type": "string",
+          "description": "WebGPU first with WebAssembly fallback, or WebAssembly",
+          "enum": [
+            "auto",
+            "wasm"
+          ],
+          "default": "auto"
+        },
         "models": {
           "type": "array",
-          "description": "One or more distinct model seeds",
+          "description": "Legacy v1 model seeds; supplying models without a pipeline retains legacy behavior",
           "items": {
             "type": "integer",
             "description": "Model seed",
@@ -36,13 +73,7 @@
               456,
               789
             ]
-          },
-          "default": [
-            42,
-            123,
-            456,
-            789
-          ]
+          }
         },
         "threshold": {
           "type": "number",
@@ -57,6 +88,16 @@
           "minimum": 1,
           "maximum": 10,
           "default": 3
+        },
+        "model": {
+          "type": "string",
+          "description": "Weight variant web or fp32; v1 and v2 are pipeline aliases",
+          "enum": [
+            "web",
+            "fp32",
+            "v1",
+            "v2"
+          ]
         }
       },
       "artifacts": {
@@ -71,8 +112,14 @@
           "type": "neuro:volume",
           "mediaType": "application/x-nifti",
           "space": "native",
-          "minimum": 2,
+          "minimum": 1,
           "maximum": 5
+        },
+        "detections": {
+          "type": "neuro:table",
+          "mediaType": "application/json",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "engines": [

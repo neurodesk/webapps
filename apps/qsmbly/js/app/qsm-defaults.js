@@ -176,7 +176,6 @@ export const MEDI_DEFAULTS = {
 export const TFI_DEFAULTS = {
   "lambda": 0.000075,
   "precond": 30,
-  "merit": false,
   "data_weighting": 1,
   "percentage": 0.9,
   "cg_tol": 0.01,
@@ -189,7 +188,6 @@ export const QSMART_DEFAULTS = {
   "ilsqr_max_iter": 50,
   "ilsqr_pad_mm": 6,
   "vasc_sphere_radius": 8,
-  "sdf_spatial_radius": 8,
   "inversion": "ilsqr",
   "sdf_sigma1_stage1": 10,
   "sdf_sigma2_stage1": 10,

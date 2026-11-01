@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ANTs DenoiseImage — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a 3D NIfTI image or DICOM series" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop NIfTI or DICOM files or folder</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Denoising</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="noiseModel">Noise model
+              <span class="nd-info-icon" tabindex="0" aria-label="About the noise model">i<span class="nd-info-tooltip">Use nonnegative magnitude images. Gaussian, DenoiseImage's default, suits a good signal-to-noise ratio. Signed and phase images are outside the validated scope. Rician suits low-SNR magnitude images, such as diffusion-weighted scans: it removes the upward bias that magnitude noise gives dark tissue.</span></span>
+            </label>
+            <select id="noiseModel">
+              <option value="Gaussian" selected>Gaussian</option>
+              <option value="Rician">Rician</option>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="maskInput">Mask <small>optional</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the mask">i<span class="nd-info-tooltip">DenoiseImage then denoises only the nonzero voxels of the mask; voxels farther than the patch radius from it keep their values. The mask must be on the image grid. A brain mask shortens the run on a whole-head image.</span></span>
+                </label>
+                <div id="maskField"></div>
+              </div>
+              <button id="clearMask" class="nd-btn nd-btn-secondary" type="button" hidden>Denoise the whole image</button>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="patchRadius">Patch radius <small>voxels</small>
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the patch radius">i<span class="nd-info-tooltip">Half the width of the patches compared around each voxel. DenoiseImage's default is 1 (3 × 3 × 3). Radius 2 compares more of each neighbourhood; on the example it took 3 times as long.</span></span>
+                  </label>
+                  <input id="patchRadius" type="number" min="1" max="2" step="1" value="1" />
+                </div>
+                <div class="nd-field">
+                  <label for="searchRadius">Search radius <small>voxels</small>
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the search radius">i<span class="nd-info-tooltip">Half the width of the region searched for similar patches. DenoiseImage's default is 2 (5 × 5 × 5). Radius 3 finds more similar patches; on the example it took twice as long.</span></span>
+                  </label>
+                  <input id="searchRadius" type="number" min="1" max="3" step="1" value="2" />
+                </div>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Denoise image</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Denoising progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel denoising" aria-label="Cancel denoising" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

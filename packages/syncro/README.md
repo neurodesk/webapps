@@ -1,10 +1,10 @@
 # SYNcro
 
-Normalize a primary NIfTI scan to the MNI152 1 mm brain template. The shared browser pipeline follows native SYNcro: SynthSR, configurable MindGrab/SynthStrip brain extraction, configurable Greedy/ANTs normalization, pathological-modality alignment, lesion propagation and niimath masking. The packaged Node fallback retains SynthStrip and ANTs for portable CPU execution.
+Normalize a primary NIfTI scan to the MNI152 1 mm brain template. The shared browser pipeline follows native SYNcro: SynthSR, configurable MindGrab/SynthStrip brain extraction, configurable Greedy/ANTs normalization, pathological-modality alignment, lesion propagation and niimath masking. The packaged Node fallback uses SynthStrip and, like the browser, Greedy by default; `--normalization ants` selects ANTs SyN.
 
 ## Portable macOS, Windows and Linux builds
 
-Download the macOS installer, the Windows x64 archive or the Linux x64 archive from the **Standalone** action in the webapp's bar. Each contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the ANTs WebAssembly kernel, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
+Download the macOS installer, the Windows x64 archive or the Linux x64 archive from the **Standalone** action in the webapp's bar. Each contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the Greedy and ANTs WebAssembly modules, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
 
 On Linux, download, verify, extract, and check the current release:
 
@@ -67,7 +67,7 @@ set -euo pipefail
   --threads "$SLURM_CPUS_PER_TASK" --offline
 ```
 
-The CLI uses native ONNX Runtime CPU for synthesis and extraction. Registration uses the same single-threaded ANTs WebAssembly kernel as the webapp. `--threads` controls neural-network inference, not registration. The kernel has a 4 GiB linear-memory ceiling; the validated registration grew to 3.16 GB. Process memory also includes model sessions, image buffers and outputs. Start with 32 GB per job; this is a conservative request, not a measured peak-RSS guarantee. Use a separate process/output directory for each subject.
+The CLI uses native ONNX Runtime CPU for synthesis and extraction. Registration runs single-threaded WebAssembly: by default Greedy's single-threaded build, whose registrations match the webapp's threaded Greedy build byte for byte on the same inputs, or with `--normalization ants` the webapp's ANTs kernel, whose validated registration grew to 3.16 GB of its 4 GiB linear-memory ceiling. `--threads` controls neural-network inference, not registration. Process memory also includes model sessions, image buffers and outputs. Start with 32 GB per job; this is a conservative request, not a measured peak-RSS guarantee. Use a separate process/output directory for each subject.
 
 An output directory must be new. After interruption, `--resume` verifies input, software, models and stored checkpoint hashes, reuses completed SynthSR/SynthStrip stages, and reruns registration. It is not a resume within the optimizer. Changed input/options/software require a new output directory. Accompanying-image choices can change on resume because they do not affect synthesis or extraction.
 

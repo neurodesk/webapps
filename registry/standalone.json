@@ -2,254 +2,264 @@
   "schema_version": 1,
   "repository": "neurodesk/webapps",
   "suite": {
-    "version": "0.46.20261026",
-    "revision": "7bc4fa20cbf49cf8d7b125d713147ed2e528a670",
+    "version": "0.47.20261030",
+    "revision": "c38af7b1d5b36b9d041242e45d6afb20b5b61ebf",
     "apps": [
       {
         "id": "musclemap",
-        "version": "1.5.20261024"
+        "version": "1.5.20261027"
       },
       {
         "id": "vesselboost",
-        "version": "0.6.20261024"
+        "version": "0.6.20261027"
       },
       {
         "id": "spinalcordtoolbox",
-        "version": "0.9.20261025"
+        "version": "0.9.20261027"
       },
       {
         "id": "calmar",
-        "version": "0.7.20261024"
+        "version": "0.7.20261027"
       },
       {
         "id": "qsmbly",
-        "version": "0.31.20261024"
+        "version": "0.31.20261027"
       },
       {
         "id": "seedseg",
-        "version": "0.6.20261024"
+        "version": "0.7.20261027"
       },
       {
         "id": "dicompare",
-        "version": "0.15.20261024"
+        "version": "0.15.20261027"
       },
       {
         "id": "deface",
-        "version": "1.4.20261025"
+        "version": "1.4.20261027"
       },
       {
         "id": "easy-mp2rage",
-        "version": "0.8.20261024"
+        "version": "0.8.20261027"
       },
       {
         "id": "niimath",
-        "version": "1.3.20261025"
+        "version": "1.3.20261027"
       },
       {
         "id": "mri2vid",
-        "version": "0.6.20261024"
+        "version": "0.6.20261027"
       },
       {
         "id": "browserqc",
-        "version": "1.6.20261025"
+        "version": "1.6.20261027"
       },
       {
         "id": "surfannotate",
-        "version": "0.6.20261024"
+        "version": "0.6.20261027"
       },
       {
         "id": "zarro",
-        "version": "0.4.20261024"
+        "version": "0.4.20261027"
       },
       {
         "id": "synthsr",
-        "version": "0.6.20261025"
+        "version": "0.6.20261027"
       },
       {
         "id": "synthseg",
-        "version": "0.11.20261025"
+        "version": "0.11.20261027"
       },
       {
         "id": "syncro",
-        "version": "0.7.20261025"
+        "version": "0.7.20261029"
       },
       {
         "id": "dwi2trx",
-        "version": "0.8.20261025"
+        "version": "0.8.20261029"
       },
       {
         "id": "edgereg",
-        "version": "0.5.20261025"
+        "version": "0.5.20261027"
       },
       {
         "id": "disconnectome",
-        "version": "0.3.20261025"
+        "version": "0.3.20261027"
       },
       {
         "id": "greedy",
-        "version": "0.6.20261025"
+        "version": "0.7.20261029"
       },
       {
         "id": "ants",
-        "version": "0.5.20261025"
+        "version": "0.5.20261027"
       },
       {
         "id": "brain2print",
-        "version": "0.5.20261025"
+        "version": "0.5.20261027"
       },
       {
         "id": "topofit",
-        "version": "0.15.20261025"
+        "version": "0.15.20261027"
       },
       {
         "id": "fireants",
-        "version": "0.4.20261025"
+        "version": "0.4.20261027"
       },
       {
         "id": "brain-extraction",
-        "version": "0.5.20261025"
+        "version": "0.5.20261027"
       },
       {
         "id": "carotid-flow",
-        "version": "0.4.20261025"
+        "version": "0.4.20261027"
       },
       {
         "id": "lcmodel",
-        "version": "0.8.20261025"
+        "version": "0.8.20261027"
       },
       {
         "id": "white-matter-lesions",
-        "version": "0.5.20261025"
+        "version": "0.5.20261027"
       },
       {
         "id": "nesvor",
-        "version": "0.3.20261025"
+        "version": "0.3.20261027"
       },
       {
         "id": "elastix",
-        "version": "0.5.20261025"
+        "version": "0.5.20261027"
       },
       {
         "id": "dicomview",
-        "version": "0.4.20261025"
+        "version": "0.4.20261027"
       },
       {
         "id": "fastprep",
-        "version": "0.2.20261025"
+        "version": "0.2.20261029"
       },
       {
         "id": "noddi",
-        "version": "0.6.20261025"
+        "version": "0.6.20261029"
       },
       {
         "id": "degibbs",
-        "version": "0.4.20261025"
+        "version": "0.4.20261027"
       },
       {
         "id": "n4",
-        "version": "0.6.20261025"
+        "version": "0.6.20261027"
       },
       {
         "id": "dcm2niix",
-        "version": "0.2.20261025"
+        "version": "0.2.20261027"
       },
       {
         "id": "dwidenoise",
-        "version": "0.4.20261025"
+        "version": "0.4.20261027"
       },
       {
         "id": "sdc",
-        "version": "0.3.20261025"
+        "version": "0.3.20261029"
       },
       {
         "id": "me-ica",
-        "version": "0.1.20261024"
+        "version": "0.1.20261027"
       },
       {
         "id": "dwicorrect",
-        "version": "0.1.20261025"
+        "version": "0.1.20261029"
       },
       {
         "id": "pipeline-builder",
-        "version": "0.2.20261024"
+        "version": "0.2.20261029"
       },
       {
         "id": "hmc",
-        "version": "0.4.20261025"
+        "version": "0.4.20261029"
       },
       {
         "id": "bison",
-        "version": "0.1.20261025"
+        "version": "0.1.20261029"
+      },
+      {
+        "id": "ants-denoise",
+        "version": "0.1.20261029"
       }
     ],
     "downloads": [
       {
         "kind": "desktop",
         "platform": "macos-arm64",
-        "version": "0.46.20261026",
-        "bytes": 1644877197,
-        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.46.20261026/webapps-0.46.20261026-mac-arm64.zip",
-        "sha256": "5c4ad9e64855d0809de00c279726f596c0bcf9209f0840b06dcb063b33892a9b",
-        "command": "unzip webapps-0.46.20261026-mac-arm64.zip"
+        "version": "0.47.20261030",
+        "bytes": 1646704061,
+        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.47.20261030/webapps-0.47.20261030-mac-arm64.zip",
+        "sha256": "75eada6dbb136f7c1a9bb101d85d75068b062f93fe930e18cc188ed8511b7869",
+        "command": "unzip webapps-0.47.20261030-mac-arm64.zip"
       },
       {
         "kind": "desktop",
         "platform": "linux-x64",
-        "version": "0.46.20261026",
-        "bytes": 1659090654,
-        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.46.20261026/webapps-0.46.20261026-linux-x64.tar.gz",
-        "sha256": "d0a835381f26c9155776c6057822dd41aaa56763aed3029c09065914f68c91c0",
-        "command": "tar -xzf webapps-0.46.20261026-linux-x64.tar.gz"
+        "version": "0.47.20261030",
+        "bytes": 1660979736,
+        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.47.20261030/webapps-0.47.20261030-linux-x64.tar.gz",
+        "sha256": "30a235ae7b3e168d2b3bfcffaace7a2a8b1f0058c8811c643002285b0909d39a",
+        "command": "tar -xzf webapps-0.47.20261030-linux-x64.tar.gz"
       },
       {
         "kind": "desktop",
         "platform": "windows-x64",
-        "version": "0.46.20261026",
-        "bytes": 1683234714,
-        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.46.20261026/webapps-0.46.20261026-win-x64.zip",
-        "sha256": "1b6577d0daa96b6b15e4dc969bdcce49e259e49dbc4d931dbf473f0e2bcdaf3c",
-        "command": "Expand-Archive webapps-0.46.20261026-win-x64.zip -DestinationPath NeurodeskWebapps"
+        "version": "0.47.20261030",
+        "bytes": 1685141991,
+        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.47.20261030/webapps-0.47.20261030-win-x64.zip",
+        "sha256": "fc0144adab0e7190cf4b8b459285b6a73d05621c48c887138be3e4221eeaafd3",
+        "command": "Expand-Archive webapps-0.47.20261030-win-x64.zip -DestinationPath NeurodeskWebapps"
       },
       {
         "kind": "container",
         "platform": "linux-x64-apptainer",
-        "version": "0.46.20261026",
-        "bytes": 1634721792,
-        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.46.20261026/webapps-0.46.20261026-linux-x64.sif",
-        "sha256": "aac74119bc2f65e1bdff9a13e27eb3502eee77146faa54d8731216622be55d20",
-        "command": "apptainer run webapps-0.46.20261026-linux-x64.sif --verify"
+        "version": "0.47.20261030",
+        "bytes": 1642340352,
+        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.47.20261030/webapps-0.47.20261030-linux-x64.sif",
+        "sha256": "fdab0b98db48799c0db0033efa3c2c57930b985f051f825543529dd8e209435c",
+        "command": "apptainer run webapps-0.47.20261030-linux-x64.sif --verify"
       }
     ],
     "models": {
       "kind": "models",
       "platform": "any",
-      "version": "0.46.20261026",
-      "bytes": 4526196497,
-      "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.46.20261026/webapps-0.46.20261026-models.tar.gz.install.txt",
-      "sha256": "0c629311304ba90ad5a67ca110706df29be07abc1e8345bfc759495004953a69",
+      "version": "0.47.20261030",
+      "bytes": 7363059362,
+      "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.47.20261030/webapps-0.47.20261030-models.tar.gz.install.txt",
+      "sha256": "a86be9317d94d6a341caaef72139e07c8c4110cd11eae364d006ed62bf0f09cd",
       "parts": [
         {
-          "filename": "webapps-0.46.20261026-models.tar.gz.part01",
-          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.46.20261026/webapps-0.46.20261026-models.tar.gz.part01",
+          "filename": "webapps-0.47.20261030-models.tar.gz.part01",
+          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.47.20261030/webapps-0.47.20261030-models.tar.gz.part01",
           "bytes": 1900000000,
-          "sha256": "9e34aa795052c1a0e31ffbb1619598a806403b577b9144970a9b64e262e18dff"
+          "sha256": "001af505f95ec4240a328ee3929a095737beb247f71fa3fdd2b845295166f2ad"
         },
         {
-          "filename": "webapps-0.46.20261026-models.tar.gz.part02",
-          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.46.20261026/webapps-0.46.20261026-models.tar.gz.part02",
+          "filename": "webapps-0.47.20261030-models.tar.gz.part02",
+          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.47.20261030/webapps-0.47.20261030-models.tar.gz.part02",
           "bytes": 1900000000,
-          "sha256": "922121feab9086c9784b20b37ccb815a776aee732d17216a09e0a31963df6f96"
+          "sha256": "1382b997c69c2c046183be5c54d892bd6e16ad382d443e954deb41a14a90c8da"
         },
         {
-          "filename": "webapps-0.46.20261026-models.tar.gz.part03",
-          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.46.20261026/webapps-0.46.20261026-models.tar.gz.part03",
-          "bytes": 726196497,
-          "sha256": "b46cd329ee5198a7092a502e785edaf31aaeef2b2637769cd75ee11a0c2fb64e"
+          "filename": "webapps-0.47.20261030-models.tar.gz.part03",
+          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.47.20261030/webapps-0.47.20261030-models.tar.gz.part03",
+          "bytes": 1900000000,
+          "sha256": "695f74ad5b2e8bc4b3bb0ce57a6dbb98f6b70817cb560f9c37a9d91671e70e75"
+        },
+        {
+          "filename": "webapps-0.47.20261030-models.tar.gz.part04",
+          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.47.20261030/webapps-0.47.20261030-models.tar.gz.part04",
+          "bytes": 1663059362,
+          "sha256": "6df65194736ffed792df5aa8d0ec3c8378ae6626d9ff6e476f9dbfbe0cae7e26"
         }
       ],
-      "archiveSha256": "92a963d055def2c38ce86e29061c675817a155b0d126beac614dfe99c6f5883d",
-      "archiveFilename": "webapps-0.46.20261026-models.tar.gz",
-      "command": "cat webapps-0.46.20261026-models.tar.gz.part01 webapps-0.46.20261026-models.tar.gz.part02 webapps-0.46.20261026-models.tar.gz.part03 > webapps-0.46.20261026-models.tar.gz\nmkdir models\ntar -xzf webapps-0.46.20261026-models.tar.gz -C models"
+      "archiveSha256": "e912306a1048a9d14f5c48a1c00c319ebb58a9052653c1d068ac79b9b408a3b8",
+      "archiveFilename": "webapps-0.47.20261030-models.tar.gz",
+      "command": "cat webapps-0.47.20261030-models.tar.gz.part01 webapps-0.47.20261030-models.tar.gz.part02 webapps-0.47.20261030-models.tar.gz.part03 webapps-0.47.20261030-models.tar.gz.part04 > webapps-0.47.20261030-models.tar.gz\nmkdir models\ntar -xzf webapps-0.47.20261030-models.tar.gz -C models"
     }
   },
   "apps": {
@@ -298,7 +308,7 @@
           "label": "musclemap 1.4.0 (20260827)",
           "url": "https://hub.docker.com/r/vnmd/musclemap_1.4.0",
           "dockerImage": "vnmd/musclemap_1.4.0:20260827",
-          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/musclemap_1.4.0_20260827.simg",
+          "apptainerUrl": "https://zenodo.org/records/22168696/files/musclemap_1.4.0_20260827.simg",
           "apptainerName": "musclemap_1.4.0_20260827"
         }
       ],
@@ -917,11 +927,11 @@
       "containers": [
         {
           "id": "synthseg",
-          "label": "synthseg 8.2.0 (20261016)",
+          "label": "synthseg 8.2.0 (20261025)",
           "url": "https://hub.docker.com/r/vnmd/synthseg_8.2.0",
-          "dockerImage": "vnmd/synthseg_8.2.0:20261016",
-          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/synthseg_8.2.0_20261016.simg",
-          "apptainerName": "synthseg_8.2.0_20261016"
+          "dockerImage": "vnmd/synthseg_8.2.0:20261025",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/synthseg_8.2.0_20261025.simg",
+          "apptainerName": "synthseg_8.2.0_20261025"
         }
       ],
       "openrecon": {
@@ -1590,21 +1600,123 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.6.20261029",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261029/noddi-0.6.20261029-linux-x64.tar.gz",
+          "sha256": "4f5a54e768513c5a02aa936bdd7f104e107869a1eb88994dce4cec08a350afb8",
+          "bytes": 52980671,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261029/noddi-0.6.20261029-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf noddi-0.6.20261029-linux-x64.tar.gz\n./noddi-0.6.20261029-linux-x64/noddi dwi.nii.gz dwi.bval dwi.bvec results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.6.20261029",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261029/noddi-0.6.20261029-macos-arm64.pkg",
+          "sha256": "8f1ecd0a37fde96a0b811e8836676425214059a52340b016ada20878ffb3137f",
+          "bytes": 46598207,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261029/noddi-0.6.20261029-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg noddi-0.6.20261029-macos-arm64.pkg -target /\nnoddi self-check\nnoddi dwi.nii.gz dwi.bval dwi.bvec results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.6.20261029",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261029/noddi-0.6.20261029-windows-x64.zip",
+          "sha256": "88e991d7f214269f495007ed5893edf97ba27b822fbb631ba7f52c15d3dd5867",
+          "bytes": 43326279,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261029/noddi-0.6.20261029-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\noddi-0.6.20261029-windows-x64.zip -DestinationPath .\n.\\noddi-0.6.20261029-windows-x64\\noddi.exe dwi.nii.gz dwi.bval dwi.bvec results"
+        }
+      ],
       "containers": []
     },
     "degibbs": {
       "desktop": true,
       "profile": "interactive",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.4.20261027",
+          "url": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261027/degibbs-0.4.20261027-linux-x64.tar.gz",
+          "sha256": "96b4d5284ba9e2e04d2124d31788ebcb6476cb05d1379ceec4f13dd8458d97e3",
+          "bytes": 44610296,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261027/degibbs-0.4.20261027-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf degibbs-0.4.20261027-linux-x64.tar.gz\n./degibbs-0.4.20261027-linux-x64/degibbs sub-01_dwi.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.4.20261027",
+          "url": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261027/degibbs-0.4.20261027-macos-arm64.pkg",
+          "sha256": "b484b73ad0c1cbe0c022b0970898b31af0b807529dd3e5f4b5636dbc6d9e654a",
+          "bytes": 38229325,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261027/degibbs-0.4.20261027-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg degibbs-0.4.20261027-macos-arm64.pkg -target /\ndegibbs self-check\ndegibbs sub-01_dwi.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.4.20261027",
+          "url": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261027/degibbs-0.4.20261027-windows-x64.zip",
+          "sha256": "58c8974db09af2b8c1565c4162ce839142966f9c75d27bf6f7d4d628349f224d",
+          "bytes": 34929681,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261027/degibbs-0.4.20261027-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\degibbs-0.4.20261027-windows-x64.zip -DestinationPath .\n.\\degibbs-0.4.20261027-windows-x64\\degibbs.exe sub-01_dwi.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "n4": {
       "desktop": true,
       "profile": "interactive",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.6.20261027",
+          "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261027/n4-0.6.20261027-linux-x64.tar.gz",
+          "sha256": "12debbd7c75b776ac1d617b5ad6b117030a0859eb38649886f572ca98a86dd41",
+          "bytes": 55127358,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261027/n4-0.6.20261027-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf n4-0.6.20261027-linux-x64.tar.gz\n./n4-0.6.20261027-linux-x64/n4 sub-01_dwi.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.6.20261027",
+          "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261027/n4-0.6.20261027-macos-arm64.pkg",
+          "sha256": "f544fbb7a10863092feea765adc9e1d718f76f61eafcfd4f7ebfd8e06fab6f9b",
+          "bytes": 48754353,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261027/n4-0.6.20261027-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg n4-0.6.20261027-macos-arm64.pkg -target /\nn4 self-check\nn4 sub-01_dwi.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.6.20261027",
+          "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261027/n4-0.6.20261027-windows-x64.zip",
+          "sha256": "327c72cc4c631e8df7e6c2073978543cdd6da07eb165a1305befe9c8650e0586",
+          "bytes": 45461307,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261027/n4-0.6.20261027-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\n4-0.6.20261027-windows-x64.zip -DestinationPath .\n.\\n4-0.6.20261027-windows-x64\\n4.exe sub-01_dwi.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "dcm2niix": {
@@ -1618,7 +1730,41 @@
       "desktop": true,
       "profile": "interactive",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.4.20261027",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-linux-x64.tar.gz",
+          "sha256": "8c974f88532b4103be54a8fbbb222bf15af69f19976d3797785dd559d9026e97",
+          "bytes": 44554885,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf dwidenoise-0.4.20261027-linux-x64.tar.gz\n./dwidenoise-0.4.20261027-linux-x64/dwidenoise sub-01_dwi.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.4.20261027",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-macos-arm64.pkg",
+          "sha256": "7161e268866aedb19591b2ed893a120ce5850cd3bdb195806eebad2c15c966d5",
+          "bytes": 38159117,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg dwidenoise-0.4.20261027-macos-arm64.pkg -target /\ndwidenoise self-check\ndwidenoise sub-01_dwi.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.4.20261027",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-windows-x64.zip",
+          "sha256": "ba2946959cc909c4188660d86e7b783eb5316d8178974e86ec179dd0dda8d72b",
+          "bytes": 34872675,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\dwidenoise-0.4.20261027-windows-x64.zip -DestinationPath .\n.\\dwidenoise-0.4.20261027-windows-x64\\dwidenoise.exe sub-01_dwi.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "me-ica": {
@@ -1660,8 +1806,133 @@
       "desktop": true,
       "profile": "interactive",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.4.20261029",
+          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261029/hmc-0.4.20261029-linux-x64.tar.gz",
+          "sha256": "b6e295b1f937c851618f4fd4d1da5be2d091a185c110d08369eba31e2053172c",
+          "bytes": 56832776,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261029/hmc-0.4.20261029-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf hmc-0.4.20261029-linux-x64.tar.gz\n./hmc-0.4.20261029-linux-x64/hmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.4.20261029",
+          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261029/hmc-0.4.20261029-macos-arm64.pkg",
+          "sha256": "60287dade6974e472f7f22c27b890f007de9fa534db5f0a0a72a3aafb730c8bf",
+          "bytes": 50486576,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261029/hmc-0.4.20261029-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg hmc-0.4.20261029-macos-arm64.pkg -target /\nhmc self-check\nhmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.4.20261029",
+          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261029/hmc-0.4.20261029-windows-x64.zip",
+          "sha256": "93e4d7cdb2fe8e69c4622ee7ac535849c40c433d3f89b745bef77b0903749d97",
+          "bytes": 47214939,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261029/hmc-0.4.20261029-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\hmc-0.4.20261029-windows-x64.zip -DestinationPath .\n.\\hmc-0.4.20261029-windows-x64\\hmc.exe sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
+        }
+      ],
       "containers": []
+    },
+    "ants-denoise": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "ants",
+          "label": "ants 2.6.5 (20261012)",
+          "url": "https://hub.docker.com/r/vnmd/ants_2.6.5",
+          "dockerImage": "vnmd/ants_2.6.5:20261012",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/ants_2.6.5_20261012.simg",
+          "apptainerName": "ants_2.6.5_20261012"
+        }
+      ]
+    },
+    "brainqcnet": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "brainqcnetcpu",
+          "label": "BrainQCNet CPU 1.0.1 (the authors' BIDS app)",
+          "url": "https://hub.docker.com/r/garciaml/brainqcnetcpu",
+          "dockerImage": "garciaml/brainqcnetcpu:1.0.1"
+        }
+      ]
+    },
+    "reproin": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261030",
+          "url": "https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/reproinx-0.1.20261030-linux-x64.tar.gz",
+          "sha256": "010781812c759750e51f99afd021420ec21ffe7d9e07a2753f659cdb522b6849",
+          "bytes": 724393,
+          "command": "tar -xzf reproinx-0.1.20261030-linux-x64.tar.gz\n./reproinx-0.1.20261030-linux-x64/reproinx dicom_dir bids_dir"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261030",
+          "url": "https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/reproinx-0.1.20261030-macos-arm64.tar.gz",
+          "sha256": "8815874daf770f6e46d10ecd01b2d37e1d18641a4aec7ef5ae22df2d1ef8d1b6",
+          "bytes": 639388,
+          "command": "tar -xzf reproinx-0.1.20261030-macos-arm64.tar.gz\nxattr -dr com.apple.quarantine reproinx-0.1.20261030-macos-arm64\n./reproinx-0.1.20261030-macos-arm64/reproinx dicom_dir bids_dir"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-x64",
+          "version": "0.1.20261030",
+          "url": "https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/reproinx-0.1.20261030-macos-x64.tar.gz",
+          "sha256": "9f44ffb6eb31980732533c3bc9bf1701870a3d0211a675bf96ddfc58a1d7280e",
+          "bytes": 700669,
+          "command": "tar -xzf reproinx-0.1.20261030-macos-x64.tar.gz\nxattr -dr com.apple.quarantine reproinx-0.1.20261030-macos-x64\n./reproinx-0.1.20261030-macos-x64/reproinx dicom_dir bids_dir"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261030",
+          "url": "https://github.com/rordenlab/reproin-rs/releases/download/v0.1.20261030/reproinx-0.1.20261030-windows-x64.zip",
+          "sha256": "5f406bb9c552061593d080164f5e105fc73fb08b3897a09e133fbe960badf8c1",
+          "bytes": 674433,
+          "command": "Expand-Archive -Path .\\reproinx-0.1.20261030-windows-x64.zip -DestinationPath .\n.\\reproinx-0.1.20261030-windows-x64\\reproinx.exe dicom_dir bids_dir"
+        }
+      ],
+      "containers": [],
+      "commandLine": {
+        "notes": [
+          "Requires dcm2niix v1.0.20261011 or later on PATH, or named by $DCM2NIIX.",
+          "Optional subject and session labels follow the output folder; add --help for options.",
+          "macOS builds are not yet signed or notarized, so clear the quarantine flag before the first run."
+        ],
+        "links": [
+          {
+            "label": "reproinx v0.1.20261030 release",
+            "url": "https://github.com/rordenlab/reproin-rs/releases/tag/v0.1.20261030"
+          },
+          {
+            "label": "rordenlab/reproin-rs",
+            "url": "https://github.com/rordenlab/reproin-rs"
+          }
+        ]
+      }
     }
   }
 }

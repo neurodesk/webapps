@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 2,
+  "app": "brainqcnet",
+  "title": "BrainQCNet",
+  "description": "Detect motion and other artifacts in a T1-weighted MRI with BrainQCNet.",
+  "defaultOperation": "check-quality",
+  "operations": {
+    "check-quality": {
+      "title": "Check quality",
+      "description": "Classify every x, y and z slice and return BrainQCNet's tables and a map of the flagged slices.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "space": "native",
+          "description": "One T1-weighted image",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "percentage",
+            "mean",
+            "median"
+          ],
+          "default": "percentage",
+          "description": "How slice predictions are combined (BrainQCNet --pred_method)"
+        },
+        "areas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3,
+          "description": "Areas per axis in the local results (BrainQCNet --n_areas)"
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "webgpu",
+            "wasm"
+          ],
+          "default": "auto",
+          "description": "Requested inference backend; WebGPU failures fall back to WASM CPU."
+        }
+      },
+      "artifacts": {
+        "table": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "summary": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "xAreas": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "yAreas": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "zAreas": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "map": {
+          "type": "neuro:volume",
+          "mediaType": "application/x-nifti",
+          "space": "native",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

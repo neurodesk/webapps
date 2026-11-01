@@ -10,6 +10,23 @@
 
 - Make knowledge-base findings optional, fold method and region-level evidence, explain overlap denominators and normative connectivity with figures, expose finding directions and scan confirmation, and add combined Harvard–Oxford cortical/subcortical direct overlap with ROI coverage percentages.
 
+## 0.7.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/webapp-components@0.22.3
+
+## 0.7.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+
 ## 0.7.20261024
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @neurodesk/syncro
 
+## 0.8.20261031
+
+### Minor Changes
+
+- cc094b4: The command line normalises with Greedy by default, as the web app does. `--normalization ants` keeps the ANTs SyN path that matches the SYNcro 0.1.1 container.
+
+## 0.7.20261029
+
+## 0.7.20261027
+
 ## 0.7.20261025
 
 ## 0.7.20261024

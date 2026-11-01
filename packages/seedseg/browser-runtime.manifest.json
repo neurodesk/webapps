@@ -1,0 +1,8 @@
+{
+  "id": "ort-web-seedseg-wasm",
+  "version": "1.30.0",
+  "filename": "ort-wasm-simd-threaded.asyncify.wasm",
+  "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort-wasm-simd-threaded.asyncify.wasm",
+  "bytes": 26781914,
+  "sha256": "39f9f0894d478800487ed9f7dbe92618498db320cf55c8e3d89adff8dce658da"
+}

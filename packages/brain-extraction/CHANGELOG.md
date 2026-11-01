@@ -1,5 +1,24 @@
 # @neurodesk/brain-extraction
 
+## 0.5.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+  - @neurodesk/node-drivers@0.3.1
+  - @neurodesk/synthsr@0.6.20261031
+  - @neurodesk/synthstrip@0.2.0
+
+## 0.5.20261027
+
+### Patch Changes
+
+- c85586a: Rebuild the BET kernel from QSM.rs 95be94b, the commit QSMbly's browser bundle now locks. BET's source is unchanged between the two commits and the mask on the test image is identical. The module stays 84,345 bytes, with different embedded source paths and code layout.
+- @neurodesk/synthsr@0.6.20261027
+- @neurodesk/synthstrip@0.2.0
+- @neurodesk/synthsr@0.6.20261027
+- @neurodesk/synthstrip@0.2.0
+
 ## 0.5.20261025
 
 ### Patch Changes

@@ -1,71 +1,43 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkArguments } from '@neurodesk/hmc-registration';
+import { checkArguments, writeMatTransform } from '@neurodesk/hmc-registration';
+import { loadGreedySingleThread } from '@neurodesk/greedy/single';
 import { loadHmcRegistration } from '@neurodesk/hmc-registration/node';
 import { createFloat32Nifti, createNiftiHeaderFromVolume, readNiftiImageData } from '@neurodesk/webapp-components/file-io/nifti';
 import {
-  affineArguments,
   applyArguments,
   flairToT1,
+  GREEDY_NONLINEAR,
+  greedyMatrixToMat,
+  invertGreedyMatrix,
   niftiName,
-  nonlinearArguments,
-  rigidArguments,
   templateToFlair,
   templateToT1,
   templateToT1Linear,
 } from '../src/register.js';
 
-const count = (argv, token) => argv.filter((value) => value === token).length;
-const valueAfter = (argv, flag) => argv[argv.indexOf(flag) + 1];
+test('the nonlinear warp is NCC with radius 2 down to the 1 mm level', () => {
+  assert.equal(GREEDY_NONLINEAR.metric, 'NCC 2x2x2');
+  assert.ok(GREEDY_NONLINEAR.iterations.split('x').map(Number).every((iterations) => iterations > 0));
+});
 
-const REGISTRATIONS = {
-  affine: affineArguments({ fixed: 'template.nii.gz', moving: 't1.nii.gz', output: 'lin_', seed: 7 }),
-  nonlinear: nonlinearArguments({ fixed: 'template.nii.gz', moving: 't1_vp.nii', initial: 'lin.mat', output: 'nl_', seed: 7 }),
-  rigid: rigidArguments({ fixed: 't1.nii.gz', moving: 'flair.nii.gz', output: 'rigid_', seed: 7 }),
-};
-
-test('every antsRegistration argv has one --float 1 and one --random-seed', () => {
-  for (const [name, argv] of Object.entries(REGISTRATIONS)) {
-    assert.equal(count(argv, '--float'), 1, name);
-    assert.equal(valueAfter(argv, '--float'), '1', name);
-    assert.equal(count(argv, '--random-seed'), 1, name);
-    assert.equal(valueAfter(argv, '--random-seed'), '7', name);
-    assert.doesNotThrow(() => checkArguments(argv), name);
+test('invertGreedyMatrix gives the matrix that undoes it, in the same text form', () => {
+  const [c, s] = [Math.cos(0.3), Math.sin(0.3)];
+  const text = `${1.1 * c} ${-s} 0.05 3\n${s} ${0.9 * c} 0 -5\n0 0.03 1.2 2\n0 0 0 1\n`;
+  const rows = (value) => value.trim().split('\n').map((line) => line.split(' ').map(Number));
+  const [m, inverse] = [rows(text), rows(invertGreedyMatrix(text))];
+  for (let r = 0; r < 4; r++) {
+    for (let k = 0; k < 4; k++) {
+      const product = [0, 1, 2, 3].reduce((sum, j) => sum + m[r][j] * inverse[j][k], 0);
+      assert.ok(Math.abs(product - (r === k ? 1 : 0)) < 1e-12, `${r},${k}: ${product}`);
+    }
   }
-});
-
-test('same-modality stages use correlation, the FLAIR rigid mutual information', () => {
-  const metrics = (argv) => argv.filter((_, i) => argv[i - 1] === '--metric').map((metric) => metric.slice(0, metric.indexOf('[')));
-  assert.deepEqual(metrics(REGISTRATIONS.affine), ['GC', 'GC']);
-  assert.deepEqual(metrics(REGISTRATIONS.nonlinear), ['GC', 'CC']);
-  assert.deepEqual(metrics(REGISTRATIONS.rigid), ['Mattes']);
-  assert.deepEqual(metrics(affineArguments({ fixed: 'f.nii', moving: 'm.nii', output: 'o_', metric: 'Mattes' })), ['Mattes', 'Mattes']);
-  assert.throws(() => affineArguments({ fixed: 'f.nii', moving: 'm.nii', output: 'o_', metric: 'MI' }), /Unknown registration metric/);
-});
-
-test('the registration stages follow the native tools', () => {
-  const transforms = (argv) => argv.filter((_, i) => argv[i - 1] === '--transform');
-  assert.deepEqual(transforms(REGISTRATIONS.affine), ['Rigid[0.1]', 'Affine[0.1]']);
-  assert.equal(valueAfter(REGISTRATIONS.affine, '--initial-moving-transform'), '[template.nii.gz,t1.nii.gz,1]');
-  assert.deepEqual(transforms(REGISTRATIONS.nonlinear), ['Affine[0.1]', 'SyN[0.1,3,0]']);
-  assert.equal(valueAfter(REGISTRATIONS.nonlinear, '--initial-moving-transform'), 'lin.mat');
-  // nlfit_s -level 2: the finest SyN level is shrink 2 on the 1 mm template.
-  const shrinks = REGISTRATIONS.nonlinear.filter((_, i) => REGISTRATIONS.nonlinear[i - 1] === '--shrink-factors');
-  assert.equal(shrinks.at(-1).split('x').at(-1), '2');
-  assert.deepEqual(transforms(REGISTRATIONS.rigid), ['Rigid[0.1]']);
-  // bestlinreg_s2 -close: no centre-of-mass start.
-  assert.equal(count(REGISTRATIONS.rigid, '--initial-moving-transform'), 0);
-});
-
-test('seeds outside the kernel range are refused', () => {
-  for (const seed of [0, -1, 1.5, 2147483648, '3']) {
-    assert.throws(() => affineArguments({ fixed: 'f.nii', moving: 'm.nii', output: 'o_', seed }), /seed/);
-  }
+  assert.throws(() => invertGreedyMatrix('1 0 0 0\n0 0 0 0\n0 0 1 0\n0 0 0 1\n'), /invertible/);
 });
 
 test('transform lists put the transform that acts first on the output point last', () => {
   assert.deepEqual(templateToT1Linear({ affine: 'lin.mat' }), ['inverse:lin.mat']);
-  assert.deepEqual(templateToT1({ affine: 'nl.mat', inverseWarp: 'nl_inverse.nii.gz' }), ['nl_inverse.nii.gz', 'inverse:nl.mat']);
+  assert.deepEqual(templateToT1({ affine: 'lin.mat', warp: 'warp.nii' }), ['inverse:lin.mat', 'warp.nii']);
   assert.deepEqual(templateToFlair({ t1Affine: 'lin.mat', rigid: 'rigid.mat' }), ['inverse:lin.mat', 'inverse:rigid.mat']);
   assert.deepEqual(flairToT1({ rigid: 'rigid.mat' }), ['rigid.mat']);
 });
@@ -85,23 +57,7 @@ test('niftiName keeps .nii.gz for gzipped bytes', () => {
   assert.equal(niftiName('t1', new Uint8Array([92, 1, 0])), 't1.nii');
 });
 
-// An ITK .mat (MATLAB level 4) with one affine and its centre.
-function matFile(parameters) {
-  const parts = [];
-  for (const [name, values] of [['AffineTransform_double_3_3', parameters], ['fixed', [0, 0, 0]]]) {
-    const encoded = new TextEncoder().encode(name);
-    const head = new DataView(new ArrayBuffer(20));
-    [0, values.length, 1, 0, encoded.length + 1].forEach((value, i) => head.setInt32(4 * i, value, true));
-    parts.push(new Uint8Array(head.buffer), encoded, new Uint8Array([0]), new Uint8Array(new Float64Array(values).buffer));
-  }
-  const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-  let offset = 0;
-  for (const part of parts) {
-    bytes.set(part, offset);
-    offset += part.length;
-  }
-  return bytes;
-}
+const matFile = (parameters) => writeMatTransform({ transform: 'AffineTransform_double_3_3', parameters, fixed: [0, 0, 0] });
 
 test('hmc --apply applies the last listed transform first', async () => {
   // A 3-voxel cube at k = 32 on a 1 mm identity grid; T moves +10 mm along z, S doubles z.
@@ -124,4 +80,73 @@ test('hmc --apply applies the last listed transform first', async () => {
   let peak = 0;
   for (let i = 1; i < data.length; i++) if (data[i] > data[peak]) peak = i;
   assert.equal(Math.floor(peak / (n * n)), 11);
+});
+
+test('a Greedy matrix as .mat resamples through --apply as Greedy reslices with it', async () => {
+  // An oblique, flipped 2 mm grid and a smooth image, so a sign or axis error moves the result.
+  const n = 40;
+  const header = createNiftiHeaderFromVolume({ hdr: { dims: [3, n, n, n, 1, 1, 1, 1], pixDims: [1, 2, 2, 2, 1, 1, 1, 1], affine: [[-2, 0.2, 0, 38], [0.1, 2, 0, -41], [0, 0, 2, -37]] } });
+  const image = new Float32Array(n ** 3).map((_, i) => {
+    const [x, y, z] = [i % n, Math.floor(i / n) % n, Math.floor(i / n ** 2)];
+    return 100 * Math.exp(-((x - 18) ** 2 + (y - 22) ** 2 + (z - 20) ** 2) / 60) + x + 2 * y + 3 * z;
+  });
+  const bytes = new Uint8Array(createFloat32Nifti(image, header));
+  // A rotation about z of 0.2 rad, a small shear and a translation, in RAS from fixed to moving.
+  const [c, s] = [Math.cos(0.2), Math.sin(0.2)];
+  const matrix = `${c} ${-s} 0.05 3\n${s} ${c} 0 -5\n0 0.03 1.1 2\n0 0 0 1\n`;
+  const greedy = await loadGreedySingleThread();
+  const expected = readNiftiImageData(greedy.reslice_affine_options(bytes, bytes, matrix, false, 0).buffer).data;
+  const ants = await loadHmcRegistration();
+  const { outputs } = ants.run(['--apply', 'image.nii', 'image.nii', 'out.nii', 'Linear', '0', 'greedy.mat'], { 'image.nii': bytes, 'greedy.mat': greedyMatrixToMat(matrix) });
+  const { data } = readNiftiImageData(outputs['out.nii']);
+  // The two differ only within a voxel of the moving image's edge, where Greedy blends in the
+  // background and ITK does not interpolate: compare voxels whose neighbours both filled.
+  const filled = (i) => data[i] !== 0 && expected[i] !== 0;
+  const inner = (i) => [i % n, Math.floor(i / n) % n, Math.floor(i / n ** 2)].every((k) => k > 0 && k < n - 1);
+  let compared = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (!inner(i) || ![0, 1, -1, n, -n, n * n, -n * n].every((step) => filled(i + step))) continue;
+    assert.ok(Math.abs(data[i] - expected[i]) < 1e-3, `voxel ${i}: ${data[i]} against ${expected[i]}`);
+    compared++;
+  }
+  assert.ok(compared > n ** 3 / 3, `${compared} voxels compared`);
+});
+
+test('a Greedy warp after the inverse T1 affine resamples through --apply as Greedy reslices', async () => {
+  // As in BISON: the affine maps template (here `moving`) points to T1 (`fixed`) points, and the
+  // warp is registered on the fixed grid from its inverse. templateToT1 must list them so --apply
+  // maps a T1 point through the warp, then the inverse affine.
+  const n = 32;
+  const grid = (affine) => createNiftiHeaderFromVolume({ hdr: { dims: [3, n, n, n, 1, 1, 1, 1], pixDims: [1, 2, 2, 2, 1, 1, 1, 1], affine } });
+  const blob = (cx, cy, cz) => new Float32Array(n ** 3).map((_, i) => {
+    const [x, y, z] = [i % n, Math.floor(i / n) % n, Math.floor(i / n ** 2)];
+    return 100 * Math.exp(-((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) / 20) + 0.5 * x + y;
+  });
+  const fixed = new Uint8Array(createFloat32Nifti(blob(15, 16, 16), grid([[-2, 0.1, 0, 30], [0, 2, 0, -31], [0, 0, 2, -29]])));
+  const moving = new Uint8Array(createFloat32Nifti(blob(17, 15, 16), grid([[-2, 0, 0, 32], [0, 2, 0, -30], [0, 0.1, 2, -30]])));
+  const affine = '1.02 0.03 0 1\n-0.02 0.98 0 -2\n0 0 1 0.5\n0 0 0 1\n';
+  const start = invertGreedyMatrix(affine);
+  const greedy = await loadGreedySingleThread();
+  const warp = greedy.register_svf_masked_wasm(fixed, moving, null, start, 'NCC 2x2x2', '5x5x0');
+  const expected = readNiftiImageData(greedy.reslice_warp_affine(fixed, moving, warp, start).buffer).data;
+  const ants = await loadHmcRegistration();
+  const transforms = templateToT1({ affine: 'lin.mat', warp: 'warp.nii' });
+  const { outputs } = ants.run(['--apply', 'fixed.nii', 'moving.nii', 'out.nii', 'Linear', '0', ...transforms], {
+    'fixed.nii': fixed, 'moving.nii': moving, 'lin.mat': greedyMatrixToMat(affine), 'warp.nii': warp,
+  });
+  const { data } = readNiftiImageData(outputs['out.nii']);
+  const filled = (i) => data[i] !== 0 && expected[i] !== 0;
+  const inner = (i) => [i % n, Math.floor(i / n) % n, Math.floor(i / n ** 2)].every((k) => k > 0 && k < n - 1);
+  let compared = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (!inner(i) || ![0, 1, -1, n, -n, n * n, -n * n].every((step) => filled(i + step))) continue;
+    assert.ok(Math.abs(data[i] - expected[i]) < 1e-2, `voxel ${i}: ${data[i]} against ${expected[i]}`);
+    compared++;
+  }
+  assert.ok(compared > n ** 3 / 3, `${compared} voxels compared`);
+});
+
+test('greedyMatrixToMat refuses text that is not a 4 x 4 matrix', () => {
+  assert.throws(() => greedyMatrixToMat('1 0 0\n0 1 0\n0 0 1'), /four rows of four numbers/);
+  assert.throws(() => greedyMatrixToMat('1 0 0 x\n0 1 0 0\n0 0 1 0\n0 0 0 1'), /four rows of four numbers/);
 });

@@ -400,6 +400,29 @@ mod tests {
     }
 
     #[test]
+    fn fa_boundary_is_a_strictly_negative_eigenvalue() {
+        let fa = |evals| {
+            TensorFit {
+                s0: 1.0,
+                evals,
+                evecs: [[1.0, 0.0, 0.0]; 3],
+            }
+            .fa()
+        };
+        // Zero eigenvalues are valid; signed zero is not negative.
+        assert_eq!(fa([1e-3, 0.0, 0.0]), 1.0);
+        assert_eq!(fa([1e-3, 0.0, -0.0]), 1.0);
+        assert_eq!(fa([0.0; 3]), 0.0);
+        // The nonzero f64 values adjacent to zero fall either side of the rule.
+        let adjacent = f64::from_bits(1);
+        assert!((fa([1e-3, 1e-3, adjacent]) - 1.0 / 2f64.sqrt()).abs() < 1e-12);
+        assert_eq!(fa([1e-3, 1e-3, -adjacent]), 0.0);
+        // An indefinite tensor whose unconstrained FA is below one, and one above it.
+        assert_eq!(fa([1.7e-3, 0.4e-3, -0.3e-3]), 0.0);
+        assert_eq!(fa([1e-3, -0.5e-3, -0.5e-3]), 0.0);
+    }
+
+    #[test]
     fn negative_eigenvalues_zero_only_fa_for_ols_and_wls() {
         let gradients = scheme();
         let design = Design::new(&gradients);

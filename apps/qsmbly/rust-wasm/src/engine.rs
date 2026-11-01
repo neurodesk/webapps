@@ -130,12 +130,37 @@ pub fn nifti_geometry_wasm(nifti: &[u8]) -> Result<String, JsValue> {
     serde_json::to_string(&geometry).map_err(js_err)
 }
 
-/// A plan as JSON (`qsmxt_engine::plan::Plan`): each step's `name` (`mask`, `invert-reliable`,
-/// ...: the name its events and cache use), `label`, `algorithm` and `algorithm_label`, and the
-/// items it `reads` and `outputs` by their keys ([`item_key`]); `items` says what each of those
-/// is (`Item::meta`, with its `key`), in the order they first appear.
-pub(crate) fn plan_json(config: &PipelineConfig, facts: &ScanFacts) -> Result<String, String> {
-    let plan = qsmxt_engine::plan::plan(config, facts);
+/// The threads the run worker computes a plan on, of the page's `threads`: a plan with networks
+/// runs on the deep-learning bundle, whose pool has 4 threads (js/next/engine/run-worker.js).
+pub(crate) const DL_THREADS: usize = 4;
+
+/// A run's plan as the browser runs it on `threads` threads: its memory figures are for the WASM
+/// heap, with the volumes kept in the page (`MemoryProfile::browser`), and a step the heap
+/// cannot hold is among its warnings.
+pub(crate) fn browser_plan(
+    config: &PipelineConfig,
+    facts: &ScanFacts,
+    threads: usize,
+) -> qsmxt_engine::plan::Plan {
+    use qsmxt_engine::memory::MemoryProfile;
+    let plan = qsmxt_engine::plan::plan_for(config, facts, &MemoryProfile::browser(threads.max(1)));
+    if plan.models.is_empty() || threads == DL_THREADS {
+        return plan;
+    }
+    qsmxt_engine::plan::plan_for(config, facts, &MemoryProfile::browser(DL_THREADS))
+}
+
+/// A plan as JSON (`qsmxt_engine::plan::Plan`, as [`browser_plan`] makes it on `threads`): each
+/// step's `name` (`mask`, `invert-reliable`, ...: the name its events and cache use), `label`,
+/// `algorithm` and `algorithm_label`, `memory_bytes`, and the items it `reads` and `outputs` by
+/// their keys ([`item_key`]); `items` says what each of those is (`Item::meta`, with its `key`),
+/// in the order they first appear.
+pub(crate) fn plan_json(
+    config: &PipelineConfig,
+    facts: &ScanFacts,
+    threads: usize,
+) -> Result<String, String> {
+    let plan = browser_plan(config, facts, threads);
     let mut json = serde_json::to_value(&plan).map_err(|e| e.to_string())?;
     let mut items: Vec<Item> = Vec::new();
     if let Some(steps) = json.get_mut("steps").and_then(|s| s.as_array_mut()) {
@@ -161,12 +186,22 @@ pub(crate) fn plan_json(config: &PipelineConfig, facts: &ScanFacts) -> Result<St
 
 /// What `qsmxt run` will do with `config` (PipelineConfig JSON) on the scan `facts` (ScanFacts
 /// JSON) describes: its steps in order, the deep-learning models they need (`models`: the
-/// weights to provide before running), its memory estimate, what the data cannot produce
+/// weights to provide before running), each step's memory and the run's peak in the WASM heap on
+/// `threads` threads (4 when not given), what the data cannot produce or the heap cannot hold
 /// (`check`), and notes. Pure: it reads nothing but its arguments.
 #[wasm_bindgen]
-pub fn plan_wasm(config_json: &str, facts_json: &str) -> Result<String, JsValue> {
+pub fn plan_wasm(
+    config_json: &str,
+    facts_json: &str,
+    threads: Option<u32>,
+) -> Result<String, JsValue> {
     let facts = crate::settings::parse_facts(facts_json).map_err(js_err)?;
-    plan_json(&parse_config(config_json)?, &facts).map_err(js_err)
+    plan_json(
+        &parse_config(config_json)?,
+        &facts,
+        threads.map_or(DL_THREADS, |t| t as usize),
+    )
+    .map_err(js_err)
 }
 
 /// Hand over a deep-learning weight file (by its name in the model registry), for every run in
@@ -662,9 +697,11 @@ pub struct Engine {
 
 #[wasm_bindgen]
 impl Engine {
-    /// A scan whose volumes the page keeps in `volumes` ([`PageVolumes`]): echo `n`'s phase under
-    /// `AcquiredPhase(n)` and its magnitude, if there is one, under `AcquiredMagnitude(n)`, from
-    /// `n = 1`, each as its NIfTI file. `inputs_json` is the scan as [`scan_report_wasm`] takes
+    /// A scan whose volumes the page keeps in `volumes` ([`PageVolumes`]), each image as its NIfTI
+    /// file under the item [`scan_report_wasm`]'s `files` names for it: echo `n`'s phase and
+    /// magnitude under `AcquiredPhase(n)` and `AcquiredMagnitude(n)`, a real/imaginary scan's
+    /// parts under `AcquiredReal(n)` and `AcquiredImaginary(n)`, uncombined coil `c`'s under
+    /// `CoilPhase(c, n)` and `CoilMagnitude(c, n)`, and a MESE's echoes under `MeseMagnitude(n)`. `inputs_json` is the scan as [`scan_report_wasm`] takes
     /// it (`ScanInputs` JSON): its echoes, each with its sidecar, and the values the user typed in.
     /// The headers are read from the files here, as the run reads them; the geometry the JSON
     /// gives is not used. Files supplied for the run are read from the volumes too:
@@ -683,27 +720,17 @@ impl Engine {
     ) -> Result<Engine, JsValue> {
         let volumes = PageVolumes::new(&volumes)?;
         let mut inputs = parse_scan_inputs(inputs_json).map_err(js_err)?;
-        for (e, echo) in inputs.echoes.iter_mut().enumerate() {
-            echo.phase = volumes
-                .input_geometry(&Item::AcquiredPhase(e + 1))
-                .map_err(js_err)?;
-            echo.magnitude = volumes
-                .input_geometry(&Item::AcquiredMagnitude(e + 1))
-                .map_err(js_err)?;
-        }
+        // Every image's header as the run reads it, from the file the page keeps under its item.
+        inputs
+            .read_headers(|item| volumes.input_geometry(item))
+            .map_err(js_err)?;
         let report = inputs.facts();
-        let (Some(facts), Some(first), false) = (
+        let (Some(facts), Some(header), false) = (
             report.facts.clone(),
-            inputs.echoes.first().and_then(|e| e.phase.clone()),
+            inputs.header(&report),
             report.has_errors(),
         ) else {
             return Err(input_error(&report));
-        };
-        let header = Header {
-            dims: first.dims,
-            voxel_size: first.voxel_size,
-            affine: first.affine,
-            sidecar: report.sidecars.into_iter().next(),
         };
         let mut facts = facts;
         // Files supplied for this run (a brain mask, χ, R2, R2′, a segmentation), as the run's
@@ -742,6 +769,8 @@ impl Engine {
         facts.custom_r2prime = found(Item::SuppliedR2prime);
         facts.custom_dseg = found(Item::SuppliedSegmentation);
         let mut store = MemoryStore::with_volumes(header, identity.into(), volumes);
+        // A MESE for R2, and the grids of its echoes.
+        inputs.supply(&report, &mut store);
         if let Some(mask) = mask {
             store.supply_mask(mask);
         }
@@ -761,9 +790,15 @@ impl Engine {
         serde_json::to_string(&self.facts).map_err(js_err)
     }
 
-    /// What a run of `config_json` (PipelineConfig JSON) on this scan will do: [`plan_wasm`].
-    pub fn plan(&self, config_json: &str) -> Result<String, JsValue> {
-        plan_json(&parse_config(config_json)?, &self.facts).map_err(js_err)
+    /// What a run of `config_json` (PipelineConfig JSON) on this scan will do, on `threads`
+    /// threads: [`plan_wasm`].
+    pub fn plan(&self, config_json: &str, threads: Option<u32>) -> Result<String, JsValue> {
+        plan_json(
+            &parse_config(config_json)?,
+            &self.facts,
+            threads.map_or(DL_THREADS, |t| t as usize),
+        )
+        .map_err(js_err)
     }
 
     /// The pipeline a run of `config_json` on this scan will take, as a graph

@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "bison-v",
+  "displayName": "BISON",
+  "app": "bison",
+  "run": "--t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results",
+  "readme": {
+    "run": "Segment brain tissue, and white matter hyperintensities with a FLAIR",
+    "notes": [
+      "Runs the web app's BISON pipeline on the CPU: denoising, N4, intensity",
+      "normalisation, registration to ICBM 2009c and the random forest. A T1 alone",
+      "gives 8 tissue classes; adding --flair gives BISON-WMH's 9 with white matter",
+      "hyperintensities. It writes the labels, one probability map per class and the",
+      "brain mask on the T1 grid, the same files as the web app.",
+      "",
+      "A run takes about 15 to 20 minutes and 3 GB of memory. The model files are",
+      "included, so no network connection is required. Input is NIfTI only: convert",
+      "DICOM with dcm2niix first, or use the web app. Add --help for every setting."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "bison"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "bison.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "bison"
+    }
+  }
+}

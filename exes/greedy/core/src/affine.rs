@@ -1,11 +1,13 @@
 use crate::nmi::{
-    corner_gradient, histogram_sample, joint_histogram, score_from_histogram,
-    score_gradient_from_histogram,
+    check_mask_grid, corner_gradient, histogram_sample, joint_histogram, mask_bins, masked_pyramid,
+    score_from_histogram, score_gradient_from_histogram,
 };
-use crate::nmi::{mask_bins, mask_levels};
 use crate::par::map_z;
 use crate::reslice::{trilinear_scalar, trilinear_scalar_gradient};
-use crate::{Error, Grid, Mat4, NiftiImage, Result, bin_image, build_pyramid};
+use crate::{
+    Error, Grid, Mat4, NiftiImage, PYRAMID_FACTORS, Result, bin_image, build_pyramid,
+    downsample_grid,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AffineMetric {
@@ -105,6 +107,20 @@ pub fn matrix(parameters: [f64; 12]) -> Mat4 {
         }
     }
     matrix
+}
+
+/// Greedy's affine initialisation: the physical identity, its default, or
+/// `-ia-image-centers`. On a whole-head T1 to template pair the masked NMI
+/// landscape has a degenerate basin that an image-centres start can fall
+/// into while the identity start converges (#623), so the two are not
+/// interchangeable. Neither converges on every subject; `Matrix` (`-ia FILE`)
+/// starts from a physical RAS matrix as `-o` writes it, such as the unmasked
+/// affine of the same pair.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AffineStart {
+    Identity,
+    ImageCenters,
+    Matrix(Mat4),
 }
 
 /// Greedy's `-ia-image-centers`: voxel coordinates are `dims / 2`, not
@@ -1011,33 +1027,36 @@ fn optimize_rigid_masked(
 pub fn register(
     fixed: NiftiImage,
     moving: NiftiImage,
+    start: AffineStart,
     metric: AffineMetric,
     iterations: [usize; 3],
     verbose: bool,
     jitter: f64,
 ) -> Result<Mat4> {
-    register_masked(fixed, moving, None, metric, iterations, verbose, jitter)
+    register_masked(
+        fixed, moving, None, start, metric, iterations, verbose, jitter,
+    )
 }
 
 /// `register` with Greedy's `-gm`: the NMI metric only counts fixed voxels inside `mask`.
+#[allow(clippy::too_many_arguments)] // one parameter per Greedy flag
 pub fn register_masked(
     fixed: NiftiImage,
     moving: NiftiImage,
     mask: Option<NiftiImage>,
+    start: AffineStart,
     metric: AffineMetric,
     iterations: [usize; 3],
     verbose: bool,
     jitter: f64,
 ) -> Result<Mat4> {
-    let masks = fixed_masks(mask, &fixed.grid, metric)?;
+    let mask = fixed_mask(mask, &fixed.grid, metric)?;
+    let mut transform = start_transform(start, &fixed.grid, &moving.grid);
     if iterations == [0, 0, 0] {
-        return Ok(image_centers(&fixed.grid, &moving.grid));
+        return Ok(transform);
     }
-    let fixed_pyramid = build_pyramid(fixed)?;
+    let (fixed_pyramid, masks) = masked_pyramid(fixed, mask)?;
     let moving_pyramid = build_pyramid(moving)?;
-    // Greedy initializes at the coarsest reference spaces, not the original
-    // input grids. The physical matrix is then carried to finer levels.
-    let mut transform = image_centers(&fixed_pyramid[0].grid, &moving_pyramid[0].grid);
     let scale = affine_scale(&fixed_pyramid[0].grid);
     transform = jitter_identity_start(
         &fixed_pyramid[0].grid,
@@ -1076,31 +1095,36 @@ pub fn register_masked(
 pub fn register_rigid(
     fixed: NiftiImage,
     moving: NiftiImage,
+    start: AffineStart,
     metric: AffineMetric,
     iterations: [usize; 3],
     verbose: bool,
     jitter: f64,
 ) -> Result<Mat4> {
-    register_rigid_masked(fixed, moving, None, metric, iterations, verbose, jitter)
+    register_rigid_masked(
+        fixed, moving, None, start, metric, iterations, verbose, jitter,
+    )
 }
 
 /// `register_rigid` with Greedy's `-gm` fixed-image mask.
+#[allow(clippy::too_many_arguments)] // one parameter per Greedy flag
 pub fn register_rigid_masked(
     fixed: NiftiImage,
     moving: NiftiImage,
     mask: Option<NiftiImage>,
+    start: AffineStart,
     metric: AffineMetric,
     iterations: [usize; 3],
     verbose: bool,
     jitter: f64,
 ) -> Result<Mat4> {
-    let masks = fixed_masks(mask, &fixed.grid, metric)?;
+    let mask = fixed_mask(mask, &fixed.grid, metric)?;
+    let mut transform = rigid_start(start_transform(start, &fixed.grid, &moving.grid))?;
     if iterations == [0, 0, 0] {
-        return Ok(image_centers(&fixed.grid, &moving.grid));
+        return Ok(transform);
     }
-    let fixed_pyramid = build_pyramid(fixed)?;
+    let (fixed_pyramid, masks) = masked_pyramid(fixed, mask)?;
     let moving_pyramid = build_pyramid(moving)?;
-    let mut transform = image_centers(&fixed_pyramid[0].grid, &moving_pyramid[0].grid);
     let scale = rigid_scale(&fixed_pyramid[0].grid);
     transform = jitter_identity_start(
         &fixed_pyramid[0].grid,
@@ -1145,15 +1169,68 @@ pub fn register_rigid_masked(
     Ok(transform)
 }
 
-fn fixed_masks(
+/// Greedy's rigid start keeps the translation and the rotation of the polar
+/// decomposition `A = R S`, dropping the scale and shear of an `-ia` matrix.
+/// `R` is found by Newton's iteration `R <- (R + R^-T) / 2`. Greedy reflects a
+/// negative determinant into a flip parameter that greedy-rs's rigid lacks.
+fn rigid_start(matrix: Mat4) -> Result<Mat4> {
+    let mut rotation = matrix;
+    for row in 0..3 {
+        rotation.0[row][3] = 0.0;
+    }
+    let m = rotation.0;
+    let determinant = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    if determinant <= 0.0 {
+        return Err(Error(
+            "a rigid start needs a matrix with a positive determinant".into(),
+        ));
+    }
+    for _ in 0..100 {
+        let inverse = rotation.inverse()?;
+        let mut next = rotation;
+        let mut change: f64 = 0.0;
+        for row in 0..3 {
+            for column in 0..3 {
+                next.0[row][column] = 0.5 * (rotation.0[row][column] + inverse.0[column][row]);
+                change = change.max((next.0[row][column] - rotation.0[row][column]).abs());
+            }
+        }
+        rotation = next;
+        if change < 1e-15 {
+            break;
+        }
+    }
+    for row in 0..3 {
+        rotation.0[row][3] = matrix.0[row][3];
+    }
+    Ok(rotation)
+}
+
+/// Greedy initializes at the coarsest reference spaces, not the original
+/// input grids; the physical matrix is then carried to finer levels.
+fn start_transform(start: AffineStart, fixed: &Grid, moving: &Grid) -> Mat4 {
+    match start {
+        AffineStart::Identity => Mat4::IDENTITY,
+        AffineStart::ImageCenters => image_centers(
+            &downsample_grid(fixed, PYRAMID_FACTORS[0]),
+            &downsample_grid(moving, PYRAMID_FACTORS[0]),
+        ),
+        AffineStart::Matrix(matrix) => matrix,
+    }
+}
+
+/// Validates the `-gm` mask before any pyramid is built.
+fn fixed_mask(
     mask: Option<NiftiImage>,
     fixed: &Grid,
     metric: AffineMetric,
-) -> Result<Option<[Vec<bool>; 3]>> {
+) -> Result<Option<NiftiImage>> {
     match (mask, metric) {
         (None, _) => Ok(None),
         (Some(_), AffineMetric::Ssd) => Err(Error("-gm is supported with -m NMI only".into())),
-        (Some(mask), AffineMetric::Nmi) => mask_levels(mask, fixed).map(Some),
+        (Some(mask), AffineMetric::Nmi) => check_mask_grid(&mask, fixed).map(|_| Some(mask)),
     }
 }
 

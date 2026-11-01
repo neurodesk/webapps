@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import {
   addStep, autoBind, bindInput, bindNewWorkflowInput, candidateSources, compatibleSources, elementType, emptyWorkflow,
-  issuesByStep, parseWorkflow, preferredSource, removeStep, serializeWorkflow, setParameter, setWorkflowOutput, toolCatalog, toolLabel,
+  issuesByStep, parameterText, parseParameter, parseWorkflow, preferredSource, removeStep, serializeWorkflow, setParameter, setWorkflowOutput,
+  toolCatalog, toolLabel, workflowIssues,
 } from "../src/model.js";
 
 const tool = (app, operation, inputs, outputs) => ({
@@ -55,6 +56,74 @@ test("a parameter equal to its default is not written", () => {
   assert.deepEqual(set.steps.n4.inputs.param_iterations, { constant: 20 });
   assert.equal(setParameter(set, "n4", "param_iterations", 50, n4).steps.n4.inputs.param_iterations, undefined);
   assert.equal(setParameter(set, "n4", "param_iterations", Number.NaN, n4).steps.n4.inputs.param_iterations, undefined);
+});
+
+// Array declarations as generated for QSMbly echoTimesMs and SeedSeg folds.
+const arrayParameter = (type, items, extra = {}) => ({ type, optional: true, extensions: { "neurodesk/parameter": { type: "array", items, ...extra } } });
+const echoTimes = arrayParameter("core:array<core:number>", { type: "number", minimum: 0.001 });
+const folds = arrayParameter("core:array<core:integer>", { type: "integer", enum: [0, 1, 2, 3, 4] });
+
+test("array parameters parse JSON or comma-separated text into typed arrays", () => {
+  assert.deepEqual(parseParameter("[10, 20.5]", echoTimes), { value: [10, 20.5] });
+  assert.deepEqual(parseParameter(" 10 , 20.5 ", echoTimes), { value: [10, 20.5] });
+  assert.deepEqual(parseParameter("7", echoTimes), { value: [7] });
+  assert.deepEqual(parseParameter("0, 4", folds), { value: [0, 4] });
+  assert.deepEqual(parseParameter("true,false", arrayParameter("core:array<core:boolean>", { type: "boolean" })), { value: [true, false] });
+  const names = arrayParameter("core:array<core:string>", { type: "string" });
+  assert.deepEqual(parseParameter("a, b c", names), { value: ["a", "b c"] });
+  assert.deepEqual(parseParameter('["a,b", "10"]', names), { value: ["a,b", "10"] });
+  assert.deepEqual(parseParameter("10, 20", names), { value: ["10", "20"] });
+  for (const text of ["", "  ", "[]"]) assert.deepEqual(parseParameter(text, echoTimes), { value: undefined });
+});
+
+test("invalid array entries return an error instead of a value", () => {
+  const error = (text, decl) => parseParameter(text, decl).error;
+  assert.equal(error("10, abc", echoTimes), 'Expected a number, got "abc".');
+  assert.equal(error('["10"]', echoTimes), 'Expected a number, got "10".');
+  assert.equal(error("10,,20", echoTimes), "A value is missing between commas.");
+  assert.equal(error("[10, 20", echoTimes), "Enter a JSON array or comma-separated values.");
+  assert.equal(error('[{"a": 1}]', echoTimes), 'Expected a number, got {"a":1}.');
+  assert.equal(error("0, 0.0001", echoTimes), "0 is below the minimum 0.001.");
+  assert.equal(error("1.5", folds), "Expected an integer, got 1.5.");
+  assert.equal(error("5", folds), "5 is not one of 0, 1, 2, 3, 4.");
+  assert.equal(error("yes", arrayParameter("core:array<core:boolean>", { type: "boolean" })), 'Expected true or false, got "yes".');
+  assert.equal(error("[1, 2]", arrayParameter("core:array<core:string>", { type: "string" })), "Expected text, got 1.");
+  const bounded = arrayParameter("core:array<core:number>", { type: "number", maximum: 9 }, { minItems: 2, maxItems: 3 });
+  assert.equal(error("1", bounded), "Expected at least 2 values, got 1.");
+  assert.equal(error("1, 2, 3, 4", bounded), "Expected at most 3 values, got 4.");
+  assert.equal(error("1, 10", bounded), "10 is above the maximum 9.");
+});
+
+test("an array constant shows as text that parses back to the same array", () => {
+  for (const [value, decl] of [[[10, 20], echoTimes], [[0, 4], folds], [["a,b", "c"], arrayParameter("core:array<core:string>", { type: "string" })]]) {
+    assert.deepEqual(parseParameter(parameterText(value), decl), { value });
+  }
+  assert.equal(parameterText([10, 20]), "[10, 20]");
+  assert.equal(parameterText(undefined), "");
+  assert.equal(parameterText(0.5), "0.5");
+});
+
+test("number parameters reject text, fractions for integers and values outside min and max", () => {
+  const integer = { type: "core:integer", min: 0, max: 8 };
+  assert.deepEqual(parseParameter("3", integer), { value: 3 });
+  assert.deepEqual(parseParameter("", integer), { value: undefined });
+  assert.equal(parseParameter("1.5", integer).error, "Expected an integer, got 1.5.");
+  assert.equal(parseParameter("9", integer).error, "9 is above the maximum 8.");
+  assert.deepEqual(parseParameter("0.25", { type: "core:number" }), { value: 0.25 });
+  assert.equal(parseParameter("abc", { type: "core:number" }).error, 'Expected a number, got "abc".');
+});
+
+test("array constants are stored as arrays and mistyped constants are workflow errors", () => {
+  const qsm = tool("qsmbly", "reconstruct", { param_echoTimesMs: echoTimes, param_strength: { type: "core:number", min: 0, optional: true } }, {});
+  const { doc } = addStep(emptyWorkflow(), qsm);
+  const set = setParameter(doc, "qsmbly", "param_echoTimesMs", parseParameter("10, 20", echoTimes).value, qsm);
+  assert.deepEqual(set.steps.qsmbly.inputs.param_echoTimesMs, { constant: [10, 20] });
+  assert.deepEqual(workflowIssues(set, [qsm]), []);
+  const imported = { ...doc, steps: { qsmbly: { tool: qsm.id, inputs: { param_echoTimesMs: { constant: "[10,20]" }, param_strength: { constant: "3" } } } } };
+  assert.deepEqual(workflowIssues(imported, [qsm]).map(issue => [issue.code, issue.path, issue.message]), [
+    ["constant-invalid", "steps.qsmbly.inputs.param_echoTimesMs", 'Expected an array, got "[10,20]".'],
+    ["constant-invalid", "steps.qsmbly.inputs.param_strength", 'Expected a number, got "3".'],
+  ]);
 });
 
 test("workflow outputs toggle and removing a step drops what read it", () => {
@@ -122,9 +191,33 @@ test("documents round-trip at NeuroFlow 0.1.1 and non-workflows are refused", ()
   assert.throws(() => parseWorkflow("nope"), /not JSON/);
 });
 
+test("imports whose maps hold non-objects are refused before the editor walks them", () => {
+  const base = { kind: "workflow", id: "a.b/c", steps: {} };
+  const refused = [
+    [{ steps: { a: null } }, "steps.a"],
+    [{ steps: { a: { tool: "x", inputs: [] } } }, "steps.a.inputs"],
+    [{ steps: { a: { tool: "x", inputs: { b: null } } } }, "steps.a.inputs.b"],
+    [{ inputs: { x: null } }, "inputs.x"],
+    [{ outputs: "hello" }, "outputs"],
+  ];
+  for (const [fields, path] of refused) {
+    assert.throws(() => parseWorkflow(JSON.stringify({ ...base, ...fields })), new RegExp(`${path.replaceAll(".", "\\.")} must be an object`));
+  }
+  assert.doesNotThrow(() => parseWorkflow(JSON.stringify({ ...base, steps: { a: { tool: "x" } } })));
+});
+
 test("issues group by step and tools group by app", () => {
-  const grouped = issuesByStep([{ path: "steps.n4.inputs.x" }, { path: "outputs.y" }]);
+  const grouped = issuesByStep([{ path: "steps.n4.inputs.x" }, { path: "outputs.y" }], ["n4"]);
   assert.deepEqual([...grouped.keys()], ["n4", ""]);
+  // An imported id may contain a dot; it must not be cut at the dot or lost.
+  const dotted = issuesByStep([
+    { path: "steps.bad.name" }, { path: "steps.bad.name.inputs.x" }, { path: "steps.bad.inputs.y" }, { path: "steps.gone.inputs.z" },
+  ], ["bad", "bad.name"]);
+  assert.deepEqual([...dotted].map(([id, list]) => [id, list.map(issue => issue.path)]), [
+    ["bad.name", ["steps.bad.name", "steps.bad.name.inputs.x"]],
+    ["bad", ["steps.bad.inputs.y"]],
+    ["", ["steps.gone.inputs.z"]],
+  ]);
   assert.deepEqual(toolCatalog(tools).map(group => group.title), ["BET", "N4"]);
   assert.equal(toolLabel(n4), "N4 · correct");
 });

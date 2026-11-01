@@ -240,3 +240,6 @@ the shared signed macOS packager with the root monorepo release tooling.
 - All heading help uses shared nd-heading-inline; report tables use shared nd-table-right. Region coverage is named Damaged, never Destroyed.
 - Scan confirmation centers on a real foreground voxel nearest the lesion centroid, using the NIfTI affine, rather than relying on an absent NVImage instance transform or centering between disconnected components.
 - Centering explicitly redraws the NiiVue scene so the lesion-containing slice is visible immediately.
+
+## Upstream synchronization
+- The November 2026 merge retains the fork's 0.8 CALMaR series alongside upstream's 0.7 release history and preserves both offline asset inventories. Upstream's JPEG-capable dcm2niix wrapper is used for every scan input.

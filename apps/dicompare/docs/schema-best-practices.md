@@ -1,6 +1,6 @@
 # Schema authoring best practices
 
-Guidance for authoring validation schemas for the [dicompare schema library](https://dicompare.neurodesk.org). Schemas are typically built in the dicompare web interface and submitted via GitHub issue; this document describes what makes a schema accurate, portable, and maintainable. Reviewers use it as a checklist when approving submissions.
+Guidance for authoring validation schemas for the [dicompare schema library](https://webapps.neurodesk.org/dicompare). Schemas are typically built in the dicompare web interface and submitted via GitHub issue; this document describes what makes a schema accurate, portable, and maintainable. Reviewers use it as a checklist when approving submissions.
 
 ## 1. Decide what kind of schema you are writing
 

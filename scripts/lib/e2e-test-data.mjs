@@ -12,6 +12,7 @@ import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { fetchPinnedExample } from '../desktop/scientific-evidence.mjs';
 import { cropTrackingDwi } from '../../test-utils/dwi-tracking-crop.mjs';
+import { fetchBytesWithRetry } from '../../packages/components/src/net/fetchWithRetry.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -24,9 +25,7 @@ async function fetchChecked(url, path, { bytes, sha256 }) {
   const matches = (data) => data.length === bytes && createHash('sha256').update(data).digest('hex') === sha256;
   if (matches(await readFile(path).catch(() => Buffer.alloc(0)))) return;
   console.error(`Downloading ${url}`);
-  const response = await fetch(url, { signal: AbortSignal.timeout(1_200_000) });
-  if (!response.ok) throw new Error(`${response.status}: ${url}`);
-  const data = Buffer.from(await response.arrayBuffer());
+  const data = Buffer.from(await fetchBytesWithRetry(url, { signal: AbortSignal.timeout(1_200_000) }, { retryTransient: true, retries: 3 }));
   if (!matches(data)) throw new Error(`${url} does not match its pinned size and SHA-256`);
   await writeFile(`${path}.partial`, data);
   await rename(`${path}.partial`, path);
@@ -91,6 +90,8 @@ export const provisioners = {
   // on the CPU backend, about 12 min on eight cores.
   browserqc: { env: ['BROWSERQC_BROWSER_REFERENCE'], provision: async () => ({ BROWSERQC_BROWSER_REFERENCE: 'check' }) },
   brain2print: { env: [], provision: async () => ({}) },
+  // Synthetic NIfTI/DICOM fixtures are generated in the suite; the worker verifies pinned models.
+  seedseg: { env: [], provision: async () => ({}) },
   calmar: { env: ['CALMAR_AUTOMATION_IMAGE'], provision: async () => ({ CALMAR_AUTOMATION_IMAGE: 'example' }) },
   disconnectome: flag('DISCONNECTOME_LIVE_DATA'),
   // The full pipeline fetches the pinned example and template itself: about 2.5 min on an M-series GPU.
@@ -155,6 +156,20 @@ export const provisioners = {
   dwidenoise: { env: ['DWIDENOISE_BROWSER_REFERENCE'], provision: async () => ({ DWIDENOISE_BROWSER_REFERENCE: 'check' }) },
   // The browser reference runs the app's 14 commands on both examples, about 3 min.
   niimath: { env: ['NIIMATH_BROWSER_REFERENCE'], provision: async () => ({ NIIMATH_BROWSER_REFERENCE: 'check' }) },
+  // The XA60 example's 68 files, flat: dcm2niix groups by DICOM UID, not folder.
+  reproin: {
+    env: ['REPROIN_E2E_DICOM_DIR'],
+    provision: async (cache) => {
+      const directory = join(cache, 'reproin', 'xa60');
+      await mkdir(directory, { recursive: true });
+      const lock = JSON.parse(await readFile(join(root, 'registry/offline-assets.lock.json'), 'utf8'));
+      const examples = JSON.parse(await readFile(join(root, 'apps/reproin/examples.json'), 'utf8'));
+      for (const { url, name } of examples.find(({ id }) => id === 'xa60-reproin').files) {
+        await fetchChecked(url, join(directory, name), lock.assets[url]);
+      }
+      return { REPROIN_E2E_DICOM_DIR: directory };
+    },
+  },
   // The browser reference runs the app's three examples, each after the command line's CPU MindGrab, about 4 min.
   n4: { env: ['N4_BROWSER_REFERENCE'], provision: async () => ({ N4_BROWSER_REFERENCE: 'check' }) },
   // The browser reference runs MindGrab on the CPU once and fits the example and the phantom, about 1 min.

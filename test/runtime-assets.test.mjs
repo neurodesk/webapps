@@ -7,28 +7,36 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 const dist = join(repoRoot, 'dist');
 
-test('BISON and HMC share the pinned ANTs binary while their worker modules remain local', async () => {
-  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
-  const family = manifest.families.find(({ id }) => id === 'hmc-registration-wasm');
-  const { HMC_REGISTRATION_WASM_SHA256 } = await import('../packages/hmc-registration/src/pin.js');
-  assert.equal(family.deduplicate, true);
-  assert.equal(family.files.length, 1);
-  assert.equal(family.files[0].sha256, HMC_REGISTRATION_WASM_SHA256);
-  const runtime = `_runtime/${family.target}/${family.files[0].name}`;
-  assert.equal(createHash('sha256').update(await readFile(join(dist, runtime))).digest('hex'), HMC_REGISTRATION_WASM_SHA256);
-  for (const app of ['bison', 'hmc']) {
-    const files = await readdir(join(dist, app), { recursive: true });
-    assert.ok(!files.some(file => /^hmc-registration(?:-[\w-]{8})?\.wasm$/.test(file.split('/').at(-1))), `${app}: app copy remains`);
-    const modules = files.filter(file => /\.(?:m?js)$/.test(file));
-    const references = [];
-    for (const module of modules) {
-      const source = await readFile(join(dist, app, module), 'utf8');
-      if (source.includes(runtime)) references.push(module);
+for (const { familyId, packageName, pinName, consumers } of [
+  { familyId: 'hmc-registration-wasm', packageName: 'hmc-registration', pinName: 'HMC_REGISTRATION_WASM_SHA256', consumers: ['bison', 'hmc'] },
+  { familyId: 'ants-denoise-wasm', packageName: 'ants-denoise', pinName: 'DENOISE_WASM_SHA256', consumers: ['bison', 'ants-denoise'] },
+]) {
+  test(`${consumers.join(' and ')} share the pinned ${packageName} binary while worker modules remain local`, async () => {
+    const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+    const family = manifest.families.find(({ id }) => id === familyId);
+    const pin = await import(`../packages/${packageName}/src/pin.js`);
+    const checksum = pin[pinName];
+    assert.equal(family?.deduplicate, true);
+    assert.equal(family.files.length, 1);
+    assert.equal(family.files[0].sha256, checksum);
+    const runtime = `_runtime/${family.target}/${family.files[0].name}`;
+    assert.equal(createHash('sha256').update(await readFile(join(dist, runtime))).digest('hex'), checksum);
+    for (const app of consumers) {
+      const files = await readdir(join(dist, app), { recursive: true });
+      const binaryName = new RegExp(`^${packageName}(?:-[\\w-]{8})?\\.wasm$`);
+      const moduleName = new RegExp(`^${packageName}(?:-[\\w-]{8})?\\.mjs$`);
+      assert.ok(!files.some(file => binaryName.test(file.split('/').at(-1))), `${app}: app copy remains`);
+      assert.ok(files.some(file => moduleName.test(file.split('/').at(-1))), `${app}: pthread module must remain app-local`);
+      const modules = files.filter(file => /\.(?:m?js)$/.test(file));
+      const references = [];
+      for (const module of modules) {
+        const source = await readFile(join(dist, app, module), 'utf8');
+        if (source.includes(runtime)) references.push(module);
+      }
+      assert.ok(references.some(file => /worker.*\.js$/.test(file)), `${app}: local worker must reference the shared binary`);
     }
-    assert.ok(references.some(file => /worker.*\.js$/.test(file)), `${app}: local worker must reference the shared binary`);
-    if (app === 'bison') assert.ok(files.includes('bison-runtime/hmc-registration/wasm/hmc-registration.mjs'), 'BISON pthread module stays local');
-  }
-});
+  });
+}
 
 test('composite site contains one checksum-verified runtime store', async () => {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
@@ -47,22 +55,21 @@ test('composite site contains one checksum-verified runtime store', async () => 
 test('only declared app-scoped runtime families remain in composite app copies', async () => {
   const registry = await loadAppsRegistry();
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
-  const ortHashes = new Map(manifest.families.find(family => family.id === 'ort-web').files.map(file => [file.name, file.sha256]));
   for (const app of registry.apps) {
     const appDist = join(dist, app.path);
-    if (app.app_scoped_runtime_families.includes('dcm2niix')) {
-      for (const file of ['index.js', 'worker.js', 'dcm2niix.js', 'dcm2niix.wasm']) {
-        assert.deepEqual(await readFile(join(appDist, 'dcm2niix', file)),
-          await readFile(join(dist, '_runtime', 'dcm2niix', '1.3.20260724', file)), `${app.id}: scoped ${file}`);
-      }
-    } else await assert.rejects(access(join(appDist, 'dcm2niix')));
+    const ortFamily = manifest.families.find(family => app.app_scoped_runtime_families.includes(family.id) && family.files.some(file => file.name === 'ort.webgpu.bundle.min.mjs'));
+    const ortHashes = new Map((ortFamily?.files ?? []).map(file => [file.name, file.sha256]));
     await assert.rejects(access(join(appDist, 'nifti-js')));
     await assert.rejects(access(join(appDist, 'vendor', 'webapp-components')));
     try {
       const wasm = await readdir(join(appDist, 'wasm'));
       const ortFiles = wasm.filter((name) => name.startsWith('ort')).sort();
-      if (app.app_scoped_runtime_families.includes('ort-web')) {
-        for (const name of ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm', 'ort.webgpu.bundle.min.mjs']) {
+      if (ortFamily) {
+        // The shared 1.21 family also catalogs alternative loaders that not every app ships.
+        const requiredFiles = ortFamily.id === 'ort-web'
+          ? ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm', 'ort.webgpu.bundle.min.mjs']
+          : ortFamily.files.map(({ name }) => name);
+        for (const name of requiredFiles) {
           assert.ok(ortFiles.includes(name), `${app.id}: missing ${name}`);
         }
         const standaloneWasm = await readdir(join(repoRoot, 'apps', app.id, 'dist', 'wasm'));
@@ -78,7 +85,7 @@ test('only declared app-scoped runtime families remain in composite app copies',
         assert.deepEqual(ortFiles, [], `${app.id} retains app-local ORT files`);
       }
     } catch (error) {
-      if (error.code !== 'ENOENT' || app.app_scoped_runtime_families.includes('ort-web')) throw error;
+      if (error.code !== 'ENOENT' || ortFamily) throw error;
     }
   }
 });
@@ -96,7 +103,7 @@ test('composite references shared runtimes from the root store', async () => {
     }
     workers += 1;
     assert.match(source, /_runtime\/(?:ort-web|nifti-reader)\//, `${app.id} worker does not use shared runtime`);
-    if (app.app_scoped_runtime_families.includes('ort-web')) {
+    if (app.app_scoped_runtime_families.some(id => id === 'ort-web' || id.startsWith('ort-web-'))) {
       assert.match(source, /\.\.\/wasm\/ort\.webgpu\.bundle\.min\.mjs/);
       assert.doesNotMatch(source, /_runtime\/ort-web/);
     }
@@ -130,24 +137,30 @@ test('threaded modules stay in app scope and shared ORT references name only the
 test('composite JPEG DICOM workers use one pinned WASM without moving the workers', async () => {
   const registry = await loadAppsRegistry();
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
-  const family = manifest.families.find(family => family.id === 'dcm2niix-jpeg');
-  assert.ok(family?.deduplicate, 'JPEG DICOM WASM must declare physical deduplication');
-  const asset = family.files[0];
-  const runtime = join(dist, '_runtime', family.target, asset.name);
-  assert.equal(createHash('sha256').update(await readFile(runtime)).digest('hex'), asset.sha256);
+  // One family per pinned dcm2niix version; each app's copy loads the family with its bytes.
+  const families = manifest.families.filter(family => family.files.some(file => file.name === 'dcm2niix.jpeg.wasm'));
+  assert.ok(families.some(family => family.id === 'dcm2niix-jpeg'));
+  for (const family of families) {
+    assert.ok(family.deduplicate, `${family.id}: JPEG DICOM WASM must declare physical deduplication`);
+    const runtime = join(dist, '_runtime', family.target, family.files[0].name);
+    assert.equal(createHash('sha256').update(await readFile(runtime)).digest('hex'), family.files[0].sha256);
+  }
   let consumers = 0;
   for (const app of registry.apps) {
     const standalone = await readdir(join(repoRoot, 'apps', app.id, 'dist'), { recursive: true });
     const copies = standalone.filter(file => /(?:^|\/)dcm2niix\.jpeg[^/]*\.wasm$/.test(file));
     if (!copies.length) continue;
-    consumers++;
+    const digest = createHash('sha256').update(await readFile(join(repoRoot, 'apps', app.id, 'dist', copies[0]))).digest('hex');
+    const family = families.find(candidate => candidate.files[0].sha256 === digest);
+    assert.ok(family, `${app.id}: its JPEG WASM matches no pinned runtime family`);
+    if (family.id === 'dcm2niix-jpeg') consumers++;
     for (const copy of copies) await assert.rejects(access(join(dist, app.path, copy)), { code: 'ENOENT' });
     const workers = standalone.filter(file => /(?:^|\/)worker\.jpeg[^/]*\.js$/.test(file));
     assert.ok(workers.length, `${app.id}: JPEG worker must remain app-local`);
     // A bundled worker inlines the Emscripten glue; a static app keeps it beside the worker.
     const modules = standalone.filter(file => /(?:^|\/)(?:worker|dcm2niix)\.jpeg[^/]*\.js$/.test(file));
     const sources = await Promise.all(modules.map(file => readFile(join(dist, app.path, file), 'utf8')));
-    assert.ok(sources.some(source => /_runtime\/dcm2niix-jpeg\/1\.2\.0\/dcm2niix\.jpeg\.wasm/.test(source)),
+    assert.ok(sources.some(source => source.includes(`_runtime/${family.target}/dcm2niix.jpeg.wasm`)),
       `${app.id}: JPEG worker must load the shared WASM`);
   }
   assert.ok(consumers > 1, 'multiple app consumers must share the JPEG runtime');

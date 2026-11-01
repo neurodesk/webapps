@@ -1,0 +1,10 @@
+BrainQCNet artifact detection
+Garcia M, Dosenbach N, Kelly C. BrainQCNet: A Deep Learning attention-based model
+for the automated detection of artifacts in brain structural MRI scans.
+Imaging Neuroscience 2024; 2: 1-16. https://doi.org/10.1162/imag_a_00300
+Code: https://github.com/garciaml/BrainQCNet_CPU, Apache-2.0.
+Model weights: saved_models/resnet152/19112020/10push0.8167.pth from the authors'
+saved_models.zip, converted to ONNX by validation/export_onnx.py and published on
+Hugging Face. model.manifest.json pins the file by size and SHA-256.
+
+JavaScript port by Neurodesk, Apache-2.0.

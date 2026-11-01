@@ -1,5 +1,20 @@
 # @neurodesk/hmc-registration
 
+## 0.4.0
+
+### Minor Changes
+
+- f860d91: BISON registers the T1 to the ICBM 2009c template (affine) and the FLAIR to the T1 (rigid) with Greedy instead of ANTs. On the five native validation subjects every label gate still holds and these two steps take about 30 s each instead of 94 and 130 s. The nonlinear registration stays on ANTs SyN. Greedy's WebAssembly gains a rigid (6 DOF) export and a browser worker for its single-threaded build, which BISON runs in the browser and in Node so that both give the same files. hmc-registration can write ITK `.mat` transforms (`writeMatTransform`).
+
+## 0.3.1
+
+### Patch Changes
+
+- f1ac9b2: Link dlmalloc instead of the ITK-Wasm toolchain's mimalloc. Registrations write the same bytes (the HMC Q53 replay and the 1.2 mm SyN-SDC replay of #462 included), and the 1.2 mm SyN registration now peaks at 2.16 GB of WebAssembly memory instead of the 4 GiB maximum.
+- ac283dd: `run` accepts an `antsApplyTransforms` transform whose brackets are split over argv tokens (`[`, `affine.mat,`, `1`, `]`), as sdcflows' nipype renders native command lines, instead of refusing it as an input named `""`; the kernel writes the same image as for `[affine.mat,1]` (#462).
+
+  Malformed bracketed transforms are rejected before calling WebAssembly, so the instance remains usable for later valid calls.
+
 ## 0.3.0
 
 ### Minor Changes

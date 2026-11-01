@@ -1,10 +1,10 @@
 use greedy_rs_core::{
-    AffineMetric, DEFAULT_AFFINE_JITTER, Grid, Interpolation, Mat4, NiftiImage, NiftiSeries,
-    ScalarType, Transform, VectorField, affine_matrix, affine_parameters, decode_image,
-    decode_series, decode_vector_field, downsample_grid, encode_image, encode_series,
+    AffineMetric, AffineStart, DEFAULT_AFFINE_JITTER, Grid, Interpolation, Mat4, NiftiImage,
+    NiftiSeries, ScalarType, SvfMetric, Transform, VectorField, affine_matrix, affine_parameters,
+    decode_image, decode_series, decode_vector_field, downsample_grid, encode_image, encode_series,
     encode_vector_field, gaussian_smooth, grids_match, image_centers, nmi_score_gradient_affine,
     register_affine, register_affine_masked, register_nmi_svf, register_nmi_svf_masked,
-    register_rigid, register_rigid_masked, reslice, reslice_with_background,
+    register_rigid, register_rigid_masked, register_svf, reslice, reslice_with_background,
     reslice_with_interpolation, score_affine, ssd_score_gradient,
 };
 
@@ -390,6 +390,7 @@ fn affine_ssd_search_reduces_a_shifted_image_cost() {
     let transform = register_affine(
         fixed.clone(),
         moving.clone(),
+        AffineStart::ImageCenters,
         AffineMetric::Ssd,
         [0, 0, 1],
         false,
@@ -429,6 +430,7 @@ fn rigid_search_stays_rigid_and_reduces_cost() {
     let transform = register_rigid(
         fixed.clone(),
         moving.clone(),
+        AffineStart::ImageCenters,
         AffineMetric::Ssd,
         [0, 0, 10],
         false,
@@ -533,6 +535,7 @@ fn nmi_affine_recovers_a_known_rigid_displacement_on_a_shared_grid() {
     let transform = register_affine(
         fixed.clone(),
         moving.clone(),
+        AffineStart::ImageCenters,
         AffineMetric::Nmi,
         [100, 50, 10],
         false,
@@ -756,6 +759,46 @@ fn full_fixed_mask_reproduces_unmasked_svf() {
 }
 
 #[test]
+fn ncc_svf_follows_a_shifted_blob_whatever_its_contrast() {
+    // NCC is invariant to a linear change of intensity, so the moving blob is
+    // brighter and offset; the warp must still carry the fixed centre towards
+    // it. A 5-voxel window sees a shifted smooth ramp only as an offset, so the
+    // field stops short of the 2-voxel shift: upstream Greedy 1.4 (-m NCC
+    // 2x2x2 -n 50x50x50) gives 0.8 voxels here, greedy-rs 0.89.
+    let n = 24;
+    let fixed = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n)
+            .map(blob(n, [11.0, 12.0, 12.0], 4.0))
+            .collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let moving = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n)
+            .map(|i| 3.0 * blob(n, [13.0, 12.0, 12.0], 4.0)(i) + 50.0)
+            .collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let warp = register_svf(
+        fixed,
+        moving,
+        None,
+        SvfMetric::Ncc([2; 3]),
+        [50, 50, 50],
+        false,
+        |_, _| {},
+    )
+    .unwrap();
+    let centre = warp.data[11 + n * (12 + n * 12)];
+    assert!((0.6..1.2).contains(&centre[0]), "{centre:?}");
+    assert!(
+        centre[1].abs() < 0.15 && centre[2].abs() < 0.15,
+        "{centre:?}"
+    );
+}
+
+#[test]
 fn fixed_mask_ignores_structure_outside_it() {
     // Both images share a central blob; only the fixed image has a second blob
     // near the +x edge. Unmasked NMI pulls tissue towards it; masking that
@@ -792,6 +835,57 @@ fn fixed_mask_ignores_structure_outside_it() {
     );
 }
 
+/// Greedy's default start is the physical identity; `-ia-image-centers`
+/// translates the fixed centre onto the moving one.
+#[test]
+fn affine_start_is_the_identity_or_the_image_centres() {
+    let n = 8;
+    let fixed = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n).map(|i| i as f32).collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let mut moving = fixed.clone();
+    for (axis, offset) in [10.0, -6.0, 4.0].into_iter().enumerate() {
+        moving.grid.lps_from_voxel.0[axis][3] = offset;
+    }
+    for register in [register_affine_masked, register_rigid_masked] {
+        let identity = register(
+            fixed.clone(),
+            moving.clone(),
+            None,
+            AffineStart::Identity,
+            AffineMetric::Nmi,
+            [0, 0, 0],
+            false,
+            DEFAULT_AFFINE_JITTER,
+        )
+        .unwrap();
+        assert_eq!(identity, Mat4::IDENTITY);
+        let centres = register(
+            fixed.clone(),
+            moving.clone(),
+            None,
+            AffineStart::ImageCenters,
+            AffineMetric::Nmi,
+            [0, 0, 0],
+            false,
+            DEFAULT_AFFINE_JITTER,
+        )
+        .unwrap();
+        // RAS negates the first two LPS offsets.
+        for (row, expected) in centres.0.iter().zip([-10.0, 6.0, 4.0]) {
+            assert!((row[3] - expected).abs() < 1e-9, "{centres:?}");
+        }
+        for row in 0..3 {
+            for column in 0..3 {
+                let expected = (row == column) as u8 as f64;
+                assert!((centres.0[row][column] - expected).abs() < 1e-12);
+            }
+        }
+    }
+}
+
 #[test]
 fn fixed_mask_requires_nmi_and_the_fixed_grid() {
     let n = 8;
@@ -804,6 +898,7 @@ fn fixed_mask_requires_nmi_and_the_fixed_grid() {
         image.clone(),
         image.clone(),
         Some(mask_image(n, |_| true)),
+        AffineStart::ImageCenters,
         AffineMetric::Ssd,
         [1, 1, 1],
         false,
@@ -837,6 +932,7 @@ fn zero_iteration_registration_validates_fixed_masks() {
             image.clone(),
             image.clone(),
             Some(mask_image(n, |_| true)),
+            AffineStart::ImageCenters,
             AffineMetric::Ssd,
             [0, 0, 0],
             false,
@@ -850,6 +946,7 @@ fn zero_iteration_registration_validates_fixed_masks() {
             image.clone(),
             image.clone(),
             Some(mask_image(n + 1, |_| true)),
+            AffineStart::ImageCenters,
             AffineMetric::Nmi,
             [0, 0, 0],
             false,

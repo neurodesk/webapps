@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "app": "brainqcnet",
+  "repository": "neurodeskorg/webapps",
+  "revision": "fa3365f8d94b0926776644e6ad82442e2da1a370",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fa3365f8d94b0926776644e6ad82442e2da1a370/brainqcnet/",
+  "license": "NOASSERTION",
+  "license_note": "The BrainQCNet code (garciaml/BrainQCNet_CPU, BrainQCNet_GPU) is Apache-2.0; the authors distribute the trained weights from Google Drive without a separate licence.",
+  "preprocessing_contract": {
+    "source": "packages/brainqcnet/src/slices.js",
+    "reference": "garciaml/brainqcnetcpu@sha256:d00acfddf4e6d8e594a0c6dff905080e4349250c173736c4248a5be9f697c969",
+    "crop": "bounding box of voxels > 0 (crop_nii.py)",
+    "slices": "every slice along x, y and z, np.rot90, matplotlib 3.3.4 imsave cmap Greys_r normalized per slice (med2image 2.2.10 --reslice)",
+    "resize": "Pillow 10.3 bilinear to 224 x 224",
+    "layout": "NCHW float32, the grey slice in all three channels",
+    "normalization": "x / 255, then (x - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]",
+    "output": "logits [clean, artifact]; a slice is flagged when artifact > clean"
+  },
+  "assets": [
+    {
+      "filename": "brainqcnet-resnet152-19112020.onnx",
+      "bytes": 235537156,
+      "sha256": "e5d469201e0b25a4395117d17be6bb053c8f8491535e38f0168fcf27eeeed67b",
+      "checkpoint": "saved_models/resnet152/19112020/10push0.8167.pth",
+      "checkpoint_sha256": "711ce3f251cc9b56869355319ca0db473f25463f7befcc02ed0adcdcda9e6404",
+      "source_url": "https://drive.google.com/file/d/1Ik44ZiCRA_MeDDG3nXX0ZUk2lSNwak3e/view",
+      "source_sha256": "aa2c7a9dc4fe1ced8b77b81e06e9247cb6b16a7269acfa7e425c5d3f34cba666",
+      "converter": "packages/brainqcnet/validation/export_onnx.py"
+    }
+  ]
+}

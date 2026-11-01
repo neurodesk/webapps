@@ -4,7 +4,7 @@
 // the directory is removed.
 
 export { HMC_REGISTRATION_WASM_SHA256 } from "./pin.js";
-export { readMatTransform } from "./mat.js";
+export { readMatTransform, writeMatTransform } from "./mat.js";
 
 const MAX_SEED = 2147483647;
 
@@ -73,7 +73,13 @@ function inputNames(program, argv) {
     for (let i = 1; i < argv.length - 1; i++) {
       if (!["-i", "--input", "-r", "--reference-image", "-t", "--transform"].includes(argv[i])) continue;
       const transform = argv[i] === "-t" || argv[i] === "--transform";
-      const argument = argv[++i];
+      let argument = argv[++i];
+      // nipype renders "[ file.mat, 1 ]", so a native command line splits it over tokens, which
+      // ANTs' parser regroups.
+      while (transform && argument.startsWith("[") && !argument.endsWith("]") && i < argv.length - 1) argument += argv[++i];
+      if (transform && argument.startsWith("[") && !/^\[[^[\]]+\]$/.test(argument)) {
+        throw new Error("Malformed antsApplyTransforms transform: use a single balanced [file, inverse] group.");
+      }
       const name = transform && argument.startsWith("[") ? argument.slice(1, -1).split(",")[0].trim() : argument;
       if (!transform || name !== "identity") names.push(name);
     }

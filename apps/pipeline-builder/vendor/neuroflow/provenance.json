@@ -1,12 +1,12 @@
 {
   "source": "https://github.com/cdrake/neuroflow",
-  "commit": "cb7a94625543c727e869afaff5b22a7137be6c2b",
-  "pullRequest": "https://github.com/cdrake/neuroflow/pull/21",
+  "commit": "fe6550c85d1e1f3548417d6bd0af69de37d2d256",
+  "release": "https://github.com/cdrake/neuroflow/releases/tag/v0.7.0",
   "build": "npm run wasm:build (wasm-pack 0.13.1, rustc 1.99.0, wasm-bindgen-cli 0.2.121 via cargo install, wasm-opt 120, aarch64-apple-darwin)",
   "license": "MIT OR Apache-2.0",
   "files": {
     "neuroflow_wasm.js": "6c274ea4f312511db945e8cd32be38c378dbf36da4aeeb9cdca83272aeeedef1",
-    "neuroflow_wasm_bg.wasm": "6f01e4701ccaa9e1c80ce953c4fdee03eadd41f0594c172e3644f97f7d78eed8",
+    "neuroflow_wasm_bg.wasm": "37d9322c322b58457b718a4dc66407b02eea901ddbc64afa8aab8b997b715798",
     "neuroflow_wasm.d.ts": "3bd88f78fc95228687560248abc08652ac728183c68c217b36fb4e56b0da10ab"
   }
 }

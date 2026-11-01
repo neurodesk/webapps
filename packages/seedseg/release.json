@@ -7,9 +7,11 @@
   "readme": {
     "run": "Segment prostate fiducial markers",
     "notes": [
-      "All four pinned ensemble checkpoints are included and verified locally.",
-      "No network connection or populated cache is required.",
-      "Use --ensemble 1 through 4, or --models 42,123,456,789.",
+      "All five v2 browser-format checkpoints and four legacy checkpoints are included and verified locally.",
+      "The default is v2 fold 0, without mirroring, using the same web weights as the browser.",
+      "Use --folds 0,1,2,3,4 for the full v2 ensemble, and --mirror for test-time mirroring.",
+      "Use --pipeline legacy-v1 for the previous four-network consensus.",
+      "The optional --model fp32 weights need a separate download before offline use.",
       "Use --top-n and --threshold to match the browser automation settings.",
       "DICOM input and manual mask editing use the web app.",
       "Software parity uses a synthetic fixture; a representative clinical reference is pending."

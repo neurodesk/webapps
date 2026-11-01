@@ -42,7 +42,7 @@ async function outputs(directory, roles) {
 const reference = await readReference();
 const inputs = await caseInputs();
 for (const [passed, line] of compareInputChecksums(inputChecksums(inputs), reference.inputs)) check(passed, line);
-if (failures.length) throw new Error('Reference input checksums differ; fitting was not started.');
+if (failures.length) throw new Error(`Reference input checksums differ on ${process.platform}/${process.arch}, ${process.version}; fitting was not started.`);
 
 const self = spawnSync(command[0], [...command.slice(1), 'self-check'], { encoding: 'utf8' });
 check(self.status === 0, `self-check passes: ${(self.stdout || self.stderr).trim().slice(0, 300)}`);

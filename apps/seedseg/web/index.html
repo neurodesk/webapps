@@ -104,24 +104,37 @@
         <div class="section-content" data-disclosure-panel>
           <!-- Model selection -->
           <div class="param-group">
-            <label class="param-label">Models <span class="info-icon">i<span class="info-tooltip">Select which trained models to run. Using multiple models improves accuracy through consensus averaging.</span></span></label>
-            <div class="model-checkbox-group">
-              <label class="checkbox-label"><input type="checkbox" id="model0" checked> Seed 42</label>
-              <label class="checkbox-label"><input type="checkbox" id="model1" checked> Seed 123</label>
-              <label class="checkbox-label"><input type="checkbox" id="model2" checked> Seed 456</label>
-              <label class="checkbox-label"><input type="checkbox" id="model3" checked> Seed 789</label>
+            <label class="param-label">Networks <span class="nd-info-icon" tabindex="0" aria-label="About networks">i<span class="nd-info-tooltip">The model consists of 5 networks from 5-fold cross-validation. Select one network, or several to average their probability maps. The 5-network ensemble is the configuration that was evaluated on independent patients; a single network is faster. Each network is downloaded once (about 200 MB) and cached by the browser.</span></span></label>
+            <div class="model-checkbox-group" id="foldCheckboxes">
+              <label class="checkbox-label"><input type="checkbox" id="fold0" checked> Network 1 of 5 (default)</label>
+              <label class="checkbox-label"><input type="checkbox" id="fold1"> Network 2 of 5</label>
+              <label class="checkbox-label"><input type="checkbox" id="fold2"> Network 3 of 5</label>
+              <label class="checkbox-label"><input type="checkbox" id="fold3"> Network 4 of 5</label>
+              <label class="checkbox-label"><input type="checkbox" id="fold4"> Network 5 of 5</label>
             </div>
+            <button class="btn btn-secondary btn-sm" id="selectAllFolds" type="button">Use all 5 (evaluated ensemble)</button>
           </div>
+
+          <!-- Mirroring -->
+          <div class="param-group">
+            <label class="checkbox-label"><input type="checkbox" id="mirrorTTA"> Test-time mirroring <span class="nd-info-icon" tabindex="0" aria-label="About test-time mirroring">i<span class="nd-info-tooltip">Also predicts the 7 mirrored copies of each patch and averages them, as nnU-Net does by default. About 8 times slower.</span></span></label>
+          </div>
+
+          <!-- Advanced -->
+          <details class="nd-sidebar-section">
+            <summary class="nd-section-title">Advanced</summary>
+            <label class="checkbox-label"><input type="checkbox" id="legacyModel"> Legacy model (v1, 4-network U-Net) <span class="nd-info-icon" tabindex="0" aria-label="About the legacy model">i<span class="nd-info-tooltip">The previously released model: a consensus of four 3D U-Nets. Kept for comparison; the network and mirroring settings above do not apply to it.</span></span></label>
+          </details>
 
           <!-- Threshold -->
           <div class="param-group">
-            <label class="param-label" for="probThreshold">Probability Threshold <span class="info-icon">i<span class="info-tooltip">Minimum probability for a voxel to be considered a marker. Lower values detect more but may include false positives.</span></span></label>
+            <label class="param-label" for="probThreshold">Probability Threshold <span class="nd-info-icon" tabindex="0" aria-label="About the probability threshold">i<span class="nd-info-tooltip">Minimum probability for a voxel to be considered a marker. Lower values detect more but may include false positives.</span></span></label>
             <input type="number" id="probThreshold" value="0.1" step="0.05" min="0" max="1">
           </div>
 
           <!-- Number of markers -->
           <div class="param-group">
-            <label class="param-label" for="nMarkers">Number of Markers <span class="info-icon">i<span class="info-tooltip">Keeps the top N detected regions ranked by confidence. If fewer regions are found, all are kept.</span></span></label>
+            <label class="param-label" for="nMarkers">Implanted markers (K) <span class="nd-info-icon" tabindex="0" aria-label="About the implanted marker count">i<span class="nd-info-tooltip">Number of implanted markers. The K candidates with the highest mean probability are reported. If fewer than K candidates are found, the result is flagged for review.</span></span></label>
             <input type="number" id="nMarkers" value="3" min="1" max="10">
           </div>
 
@@ -149,6 +162,7 @@
           Results
         </button></h2>
         <div class="section-content" data-disclosure-panel>
+          <div id="detectionsPanel" class="hidden"></div>
           <div class="stage-buttons-grid" id="stageButtons"></div>
           <button class="btn btn-secondary btn-sm" id="clearResults" style="width: 100%; margin-top: var(--nd-space-sm);">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -301,7 +315,7 @@
       </div>
 
       <p>SeedSeg is a browser-based tool for automatic segmentation of gold fiducial markers in T1-weighted prostate MRI.</p>
-      <p>It uses a consensus of four 3D UNet models to detect three gold seed markers used in prostate radiotherapy treatment planning.</p>
+      <p>It uses an nnU-Net (residual encoder) model, trained with 5-fold cross-validation, to detect the gold seed markers used in prostate radiotherapy treatment planning. Each marker is reported with its mean probability; cases with fewer candidates than the implant count are flagged for review.</p>
       <p>All computation runs locally in your browser using ONNX Runtime Web. No data is uploaded to any server.</p>
 
       <h4>Version</h4>
@@ -337,16 +351,16 @@
       <h4>What this means</h4>
       <ul class="privacy-list">
         <li>No data is uploaded to any server or cloud service</li>
-        <li>No internet connection is required after the page loads</li>
+        <li>Runtime and model downloads are cached for reuse</li>
         <li>Sensitive patient data remains on your computer at all times</li>
         <li>There is no need to anonymise or de-identify your data before use</li>
       </ul>
 
       <h4>How it works</h4>
-      <p>SeedSeg uses ONNX Runtime Web to run deep learning models directly in the browser via WebAssembly. Your NIfTI or DICOM files are read into browser memory, processed locally, and results are displayed without any network transfer.</p>
+      <p>SeedSeg uses ONNX Runtime Web to run deep learning models directly in the browser via WebGPU or WebAssembly. Your NIfTI or DICOM files are read into browser memory, processed locally, and results are displayed without any network transfer.</p>
 
       <h4>Third-party services</h4>
-      <p>SeedSeg does not use analytics, tracking, cookies, or any external services. The only network requests are loading the application itself and downloading model files (which are cached locally).</p>
+      <p>The website downloads NiiVue from unpkg, pinned model weights from Hugging Face and other runtime assets, and counts page views using shared site analytics. The optional dicompare report uses bundled controller, worker and schema assets. When requested on the website, it downloads Pyodide and Python packages from jsDelivr and PyPI. These requests contain no input images or DICOM metadata.</p>
     </div>
   </div>
 </div>

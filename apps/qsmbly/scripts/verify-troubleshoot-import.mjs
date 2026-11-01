@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import Module from '../../../packages/runtime-support/src/dcm2niix/dcm2niix.js';
+import Module from '../dcm2niix/dcm2niix.jpeg.js'; // staged by pnpm runtime-support
 import { parseNiftiHeader, readNiftiImageData, sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
 import { QsmDicomInput } from '../js/controllers/QsmDicomInput.js';
 import { MaskController } from '../js/controllers/MaskController.js';
@@ -26,7 +26,8 @@ globalThis.document = { getElementById: () => null };
 io.populateEchoTimeInputs = times => assert.deepEqual(times.map(t => +t.toFixed(2)), expectedTimes);
 await io.processJsonFiles(sidecars);
 
-const mod = await Module({ noInitialRun: true });
+// The JPEG build fetches its WASM in a browser; Node supplies the staged bytes.
+const mod = await Module({ noInitialRun: true, wasmBinary: await readFile(new URL('../dcm2niix/dcm2niix.jpeg.wasm', import.meta.url)) });
 mod.FS.mkdir('/input');
 mod.FS.mkdir('/output');
 for (const file of files.filter(f => f.name.endsWith('.dcm'))) {

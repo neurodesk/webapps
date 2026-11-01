@@ -16,7 +16,7 @@ import {
   manifest,
   sha256Hex,
 } from '../src/assets.js';
-import { directoryReader, loadNodeAssets } from '../src/node-assets.js';
+import { defaultCacheDir, directoryReader, loadNodeAssets } from '../src/node-assets.js';
 
 const PINNED = /^https:\/\/huggingface\.co\/datasets\/neurodeskorg\/webapps\/resolve\/[0-9a-f]{40}\/bison\//;
 
@@ -81,6 +81,23 @@ test('a local asset directory is read by manifest filename', async () => {
   assert.equal(new TextDecoder().decode(await read({ filename: 'x.txt' })), 'bison');
   await assert.rejects(read({ filename: 'models/missing.onnx' }), /missing from the BISON asset directory/);
   await assert.rejects(loadNodeAssets({ modes: ['t1'], assetDir: dir }), /missing from the BISON asset directory/);
+});
+
+test('the portable release reads its bundled models offline from NEURODESK_BISON_MODEL_DIR', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'bison-models-'));
+  const saved = Object.fromEntries(['BISON_ASSET_DIR', 'NEURODESK_BISON_MODEL_DIR', 'NEURODESK_OFFLINE'].map((name) => [name, process.env[name]]));
+  t.after(() => {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+  delete process.env.BISON_ASSET_DIR;
+  process.env.NEURODESK_BISON_MODEL_DIR = dir;
+  process.env.NEURODESK_OFFLINE = '1';
+  assert.equal(defaultCacheDir(), dir);
+  const fetch = () => assert.fail('an offline run must not download');
+  await assert.rejects(loadNodeAssets({ modes: ['t1'], fetch }), (error) => error.message.includes(`missing from the offline asset cache ${dir}`));
 });
 
 test('BISON_ASSET_DIR holds every asset with the pinned bytes', { skip: !process.env.BISON_ASSET_DIR && 'set BISON_ASSET_DIR' }, async () => {

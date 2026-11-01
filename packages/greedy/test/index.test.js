@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { gzip, gunzip, isGzip, registerAffineGreedy, registerGreedy, resliceAffineGreedy, resliceGreedy } from "../src/index.js";
 
 const api = {
-  register_affine_wasm: () => "matrix",
+  register_affine_wasm: (_fixed, _moving, _metric, _iterations, imageCenters) => (imageCenters ? "matrix" : "identity-start"),
   register_nmi_svf_wasm: () => Uint8Array.of(7),
   reslice_affine: () => Uint8Array.of(1),
   reslice_warp_affine: (_fixed, _moving, warp) => Uint8Array.of(warp[0], 2),

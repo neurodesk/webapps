@@ -7,7 +7,6 @@ import { promiseRules, typedProjectFor } from './typed-projects.mjs';
 // Scientific ports and imported app sources still receive the correctness rules.
 export const exclusions = {
   'apps/qsmbly/niivue/index.js': 'Bundled third-party NiiVue distribution.',
-  'packages/runtime-support/src/dcm2niix/dcm2niix.js': 'Generated Emscripten glue.',
   'packages/runtime-support/src/niimath/niimath.js': 'Generated Emscripten glue.',
   'packages/runtime-support/src/nifti-js/index.js': 'Vendored third-party UMD distribution.',
   'packages/mri2vid/src/vendor/mp4-muxer.js': 'Third-party muxer distribution.',

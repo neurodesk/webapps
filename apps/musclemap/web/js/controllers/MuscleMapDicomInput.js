@@ -25,7 +25,7 @@ function formatBytes(bytes) {
 
 export class MuscleMapDicomInput extends SharedDicomController {
   constructor(options = {}) {
-    super({ ...options, moduleUrl: new URL('../../dcm2niix/index.js', import.meta.url).href, throwOnError: false });
+    super({ ...options, moduleUrl: new URL('../../dcm2niix/index.jpeg.js', import.meta.url).href, throwOnError: false });
   }
 
   async convertFiles(files) {

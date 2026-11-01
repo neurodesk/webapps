@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ReproIn — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">DICOM session</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="dicomInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose DICOM files" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop DICOM files or folder</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Conversion</summary>
+        <div class="nd-section-content">
+          <details class="nd-sidebar-section" id="optionsSection">
+            <summary class="nd-section-title">Options</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="subject">Subject</label>
+                  <input id="subject" type="text" pattern="[A-Za-z0-9]*" title="Letters and digits only" placeholder="from PatientID" autocomplete="off" />
+                </div>
+                <div class="nd-field">
+                  <label for="session">Session</label>
+                  <input id="session" type="text" pattern="[A-Za-z0-9]*" title="Letters and digits only" placeholder="from protocol" autocomplete="off" />
+                </div>
+              </div>
+              <label class="nd-check"><input id="anonymize" type="checkbox" /> Anonymize sidecars
+                <span class="nd-info-icon" tabindex="0" aria-label="About anonymize">i<span class="nd-info-tooltip">dcm2niix BIDS anonymisation (-ba y): AcquisitionDateTime is stripped and fieldmap matching falls back to the first compatible scan. Not a guarantee of complete de-identification.</span></span>
+              </label>
+              <label class="nd-check"><input id="shiftDates" type="checkbox" /> Shift dates
+                <span class="nd-info-icon" tabindex="0" aria-label="About shift dates">i<span class="nd-info-tooltip">Per subject, shift acq_time and AcquisitionDateTime by whole days so the earliest scan lands on 1925-01-01. Timestamp-based ses- labels are not renamed.</span></span>
+              </label>
+              <label class="nd-check"><input id="keepDerivatives" type="checkbox" /> Keep derivatives
+                <span class="nd-info-icon" tabindex="0" aria-label="About keep derivatives">i<span class="nd-info-tooltip">Keep derivatives/scanner/ (scouts, DERIVED images, physio) in the dataset.</span></span>
+              </label>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Convert to BIDS</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a DICOM folder anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Converts a DICOM session acquired with <a href="https://github.com/ReproNim/reproin" target="_blank" rel="noopener">ReproIn</a> protocol names into a BIDS dataset: dcm2niix (-f %H) names each series, then the reproin-rs post-pass collapses the hierarchy, rescues unnamed series, pairs fieldmaps, writes scans.tsv and dataset metadata, and removes derivatives. It reproduces the native reproinx command line; series without ReproIn names are placed by their acquisition type where possible.</p>
+    </template>
+    <template id="privacyContent"><p>DICOM files are converted in this browser and are never uploaded. The BIDS dataset is assembled in memory and saved only when you download it.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

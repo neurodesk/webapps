@@ -15,9 +15,9 @@ import wasmUrl from "../vendor/neuroflow/neuroflow_wasm_bg.wasm?url";
 import { APP } from "./config.js";
 import { createValidator, loadCatalog } from "./validator.js";
 import {
-  addStep, autoBind, bindInput, bindNewWorkflowInput, compatibleSources, emptyWorkflow, issuesByStep,
-  moveStep, outputKey, parseWorkflow, removeStep, serializeWorkflow, setParameter, setWorkflowOutput,
-  toolCatalog, toolFields, toolLabel,
+  addStep, autoBind, bindInput, bindNewWorkflowInput, compatibleSources, elementType, emptyWorkflow, issuesByStep,
+  moveStep, outputKey, parameterText, parseParameter, parseWorkflow, removeStep, serializeWorkflow, setParameter,
+  setWorkflowOutput, toolCatalog, toolFields, toolLabel,
 } from "./model.js";
 import examples from "../examples.json";
 
@@ -82,7 +82,7 @@ function render() {
   const focused = document.activeElement?.id;
   validation = validate(doc);
   const steps = Object.entries(doc.steps);
-  const byStep = issuesByStep(validation.issues ?? []);
+  const byStep = issuesByStep(validation.issues ?? [], steps.map(([id]) => id));
   const errors = (validation.issues ?? []).filter(issue => issue.severity === "error");
   $("workflowId").value = doc.id ?? "";
   $("workflowDescription").value = doc.description ?? "";
@@ -161,6 +161,7 @@ function parameterField(id, name, decl, tool) {
   const current = doc.steps[id].inputs?.[name]?.constant ?? decl.default;
   const label = name.replace(/^param_/, "");
   let control;
+  let error;
   if (decl.enum) {
     control = el("select", {}, ...decl.enum.map(value => el("option", { value: String(value), textContent: String(value) })));
     control.value = String(current ?? "");
@@ -169,11 +170,24 @@ function parameterField(id, name, decl, tool) {
     control = el("input", { type: "checkbox", checked: Boolean(current) });
     control.onchange = () => setDoc(setParameter(doc, id, name, control.checked, tool));
     return el("label", { className: "nd-check" }, control, ` ${label}`);
-  } else if (decl.type === "core:number" || decl.type === "core:integer") {
-    control = el("input", { type: "number", value: current ?? "" });
-    if (decl.min !== undefined) control.min = decl.min;
-    if (decl.max !== undefined) control.max = decl.max;
-    control.onchange = () => setDoc(setParameter(doc, id, name, control.value === "" ? undefined : Number(control.value), tool));
+  } else if (decl.type === "core:number" || decl.type === "core:integer" || elementType(decl.type) !== decl.type) {
+    const array = elementType(decl.type) !== decl.type;
+    control = el("input", { type: array ? "text" : "number", value: parameterText(current) });
+    if (!array && decl.min !== undefined) control.min = decl.min;
+    if (!array && decl.max !== undefined) control.max = decl.max;
+    // An invalid entry stays in the control with its error and leaves the saved constant.
+    error = el("p", { id: `param-${name}-error`, className: "nd-message error", hidden: true });
+    control.setAttribute("aria-describedby", error.id);
+    control.onchange = () => {
+      const parsed = control.validity.badInput
+        ? { error: "Enter a valid number." }
+        : parseParameter(control.value, decl);
+      error.textContent = parsed.error ?? "";
+      error.hidden = !parsed.error;
+      if (parsed.error) return control.setAttribute("aria-invalid", "true");
+      control.removeAttribute("aria-invalid");
+      setDoc(setParameter(doc, id, name, parsed.value, tool));
+    };
   } else {
     control = el("input", { type: "text", value: current ?? "" });
     control.onchange = () => setDoc(setParameter(doc, id, name, control.value, tool));
@@ -181,7 +195,7 @@ function parameterField(id, name, decl, tool) {
   control.id = `param-${name}`;
   const text = el("label", { htmlFor: control.id }, label);
   if (decl.description) text.title = decl.description;
-  return el("div", { className: "nd-field" }, text, control);
+  return el("div", { className: "nd-field" }, text, control, error);
 }
 
 // Parameter values are left out: their controls already show them, and rebuilding

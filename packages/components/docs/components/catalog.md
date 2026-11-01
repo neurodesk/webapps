@@ -65,7 +65,7 @@ Renders dicompare compliance results (`{ acquisitions, complianceResults, schema
 container — schema header, pass/fail/warning badges, per-acquisition field and rule tables,
 and a collapsible list of unchecked fields — and generates a standalone printable report via
 `generatePrintHtml(data)`. This module is the source of the embed file dicompare serves at
-`https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js`; the two are kept
+`https://webapps.neurodesk.org/dicompare/embed/DicompareReportRenderer.js`; the two are kept
 byte-identical by a package test.
 
 ### Workflow vocabulary builders

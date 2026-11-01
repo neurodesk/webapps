@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Write a manifest of the sdc data on Hugging Face (sdc/reference/ or sdc/prior/).
+"""Write a manifest of the sdc data on Hugging Face (sdc/reference/, its grid-q68/, or sdc/prior/).
 
-    python3 exes/dwi/sdc/validation/make_manifest.py reference|prior REVISION
+    python3 exes/dwi/sdc/validation/make_manifest.py reference|prior|grid REVISION
 
 REVISION is the 40-hex commit of neurodeskorg/webapps that holds the folder. The output is
-reference.manifest.json or prior.manifest.json beside this script. Each file's sha256 comes
-from the folder's own SHA256SUMS at that commit (and, for SHA256SUMS itself, from the
+reference.manifest.json, prior.manifest.json or grid.manifest.json beside this script; `grid`
+is sdc/reference/grid-q68/, the Q68 runs on the 1.2 mm and 1.6 mm SyN grids. Each file's
+sha256 comes from the folder's own SHA256SUMS at that commit (and, for SHA256SUMS itself, from the
 downloaded bytes). Each file's size comes from the Hugging Face tree API at the same commit.
 The subsets are SUBSETS below; a pattern is an fnmatch glob relative to the folder in which
 `*` also crosses `/`. A pattern that matches no file is an error, so a typo or a re-pin
@@ -23,6 +24,8 @@ import urllib.request
 REPOSITORY = "neurodeskorg/webapps"
 HERE = os.path.dirname(os.path.abspath(__file__))
 REF = "runs/full-2mm-s1234-double-affine/"
+GRID_REF = "runs/full-1.2mm-s1234-double-affine/"
+FOLDERS = {"reference": "reference", "prior": "prior", "grid": "reference/grid-q68"}
 
 # What each later issue needs (plan docs/architecture/dwi-sdc-plan.md, section 6). Keep
 # the patterns to `*` only.
@@ -55,6 +58,21 @@ SUBSETS = {
             "runs/full-2mm-synreplay-*/*",
             "compare/*",
         ],
+        # #462 on the 1.2 mm grid (with grid.manifest.json): the replay's EPI reference, sidecar
+        # and mask, the end-to-end inputs, and the pinned drivers, comparison and environment.
+        "registration-gate": [
+            "input/sub-01_dir-AP_run-001_dwi.json",
+            "input/sub-01_run-001_T1w.nii.gz",
+            "mask/sub-01_dir-AP_run-001_desc-meanb0_dwiref.nii",
+            "mask/sub-01_dir-AP_run-001_desc-mindgrab_mask.nii.gz",
+            "mask/sub-01_run-001_desc-mindgrab_mask.nii.gz",
+            "std2anat/affine/std2anat_affine.mat",
+            REF + "work/sdc_ref/syn_preprocessing_wf/epi_reference_wf/clip_bg_noise/*",
+            "scripts/replay_syn.py",
+            "scripts/sdc_driver.py",
+            "scripts/compare_fields.py",
+            "env/uv-pip-freeze.txt",
+        ],
         # The same seed run twice (byte-identical outputs).
         "determinism": ["runs/*-repeat/*"],
         # Q68: the stock 0.8 mm grid.
@@ -79,6 +97,19 @@ SUBSETS = {
     },
     "prior": {
         "prior": ["*"],
+    },
+    "grid": {
+        # #462: the 1.2 mm double seed-1234 run, whose kept preprocessing outputs the SyN-only
+        # replay reads and whose `fmap` is the reference, and the 1.2 mm --float 1 runs.
+        "replay-1.2mm": [
+            GRID_REF + "node-outputs.json",
+            GRID_REF + "work/*",
+            "runs/full-1.2mm-s123*-float-affine/work/sdc_ref/syn_sdc_wf/unwarp/clipped_field.nii.gz",
+            "runs/full-1.2mm-s1234-float-affine/work/sdc_ref/syn_sdc_wf/zooms_field/*",
+            "runs/full-1.2mm-s1234-float-affine/work/sdc_ref/syn_preprocessing_wf/epi2anat/*",
+        ],
+        "grid-1.6mm": ["runs/full-1.6mm-*/*"],
+        "docs": ["README.md", "compare/*", "scripts/*"],
     },
 }
 
@@ -113,10 +144,10 @@ def matches(pattern, paths):
 
 def main(folder, revision):
     if folder not in SUBSETS:
-        sys.exit("folder is reference or prior")
+        sys.exit("folder is reference, prior or grid")
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         sys.exit("REVISION must be a full 40-hex commit")
-    root = f"sdc/{folder}"
+    root = f"sdc/{FOLDERS[folder]}"
     base = f"https://huggingface.co/datasets/{REPOSITORY}/resolve/{revision}/{root}/"
     sums_bytes, _ = get(base + "SHA256SUMS")
     sums = {}
@@ -145,6 +176,9 @@ def main(folder, revision):
         "prior": "The SyN-SDC prior (sdc/prior/, README.md there): sdcflows' distortion atlas, its "
         "affine to MNI152NLin2009cAsym and the 1 mm template T1w and brain mask, with their notices. "
         "Fetch with fetch_reference.py --folder prior; regenerate with make_manifest.py.",
+        "grid": "The Q68 middle-grid runs (sdc/reference/grid-q68/, README.md there): native SyN-SDC on "
+        "the 1.2 mm and 1.6 mm SyN grids, the inputs and reference of #462's 1.2 mm precision test. "
+        "Fetch with fetch_reference.py --folder grid; regenerate with make_manifest.py.",
     }[folder]
     manifest = {
         "description": description,

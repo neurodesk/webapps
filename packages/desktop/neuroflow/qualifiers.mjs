@@ -42,9 +42,9 @@ function promoteFormats(field, mapped, kind, context) {
     if (Object.hasOwn(formatSpellings, token)) return formatSpellings[token];
     return `neurodesk:${token}`;
   }).filter(token => {
-    // NeuroFlow 0.2.0 has no gradient inspectors. Restore input qualifiers when
-    // cdrake/neuroflow#26 ships; the original formats remain in neurodesk/data.
-    return token && !(kind === 'inputs' && ['bval', 'bvec', 'bval-bvec'].includes(token));
+    // NeuroFlow 0.2.1 inspects bval and bvec but has no inspector for the
+    // bval-bvec pair token; the original formats remain in neurodesk/data.
+    return token && !(kind === 'inputs' && token === 'bval-bvec');
   }))];
 }
 

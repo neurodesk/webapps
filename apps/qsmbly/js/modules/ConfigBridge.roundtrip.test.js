@@ -295,6 +295,20 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
     });
   });
 
+  // The browser made its mask with this recipe; the engine replaces an unchosen general default
+  // with QSMART's BET mask, so exports must mark it chosen to describe what was run.
+  test('a QSMART export keeps the mask recipe the browser used', () => {
+    const json = buildConfigJson(userSettings({ combined_method: 'qsmart' }));
+    const mask = maskSectionString(['threshold:otsu', 'dilate:1', 'fill-holes:0', 'erode:1'], 'phase_quality');
+    const command = wasm.generate_command_wasm(json, mask);
+    expect(command).toContain('--qsm-algorithm qsmart');
+    expect(command).not.toContain('--mask-preset bet');
+    expect(command).toContain('--mask-preset robust-threshold');
+    expect(wasm.generate_methods_wasm(json, 'QSMbly', mask)).not.toMatch(/\bBET\b/);
+    const toml = parseToml(wasm.config_json_to_toml_selected_wasm(json, mask));
+    expect(toml.masking.recipe_chosen).toBe(true);
+  });
+
   test('section toggles survive', () => {
     const off = roundTrip(userSettings({ reference_mean: false, dl_tiling: { enabled: false } }), {}).back;
     expect(off.qsm.reference).toBe('none');

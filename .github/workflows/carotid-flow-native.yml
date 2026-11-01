@@ -9,6 +9,7 @@ on:
       - 'packages/components/src/file-io/**'
       - 'packages/components/src/volume/**'
       - 'packages/components/src/automation/parameters.js'
+      - 'packages/components/src/automation/abort.js'
       - 'apps/carotid-flow/**'
   push:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - 'packages/components/src/file-io/**'
       - 'packages/components/src/volume/**'
       - 'packages/components/src/automation/parameters.js'
+      - 'packages/components/src/automation/abort.js'
       - 'apps/carotid-flow/**'
   workflow_dispatch:
     inputs:

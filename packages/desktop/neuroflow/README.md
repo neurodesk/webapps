@@ -34,9 +34,10 @@ files, and publishes a new bundle only after all documents are valid.
 
 ## Run through NeuroFlow
 
-Use `neuroflow-mcp` from NeuroFlow 0.2.0 or later. Earlier releases reject a
+Use `neuroflow-mcp` from NeuroFlow 0.2.1 or later. Releases before 0.2.0 reject a
 single artifact bound to an array input, which workflows exported by Pipeline
-builder use.
+builder use. Pipeline builder keeps an imported workflow's `neuroflow` version on
+export: spec 0.1.2 needs NeuroFlow 0.3.0 or later, and 0.1.3 needs 0.3.2 or later.
 
 Install the Neurodesk desktop suite containing the same contracts. Set
 `NEURODESK_WEBAPPS` to its executable path if it is not named
@@ -149,7 +150,7 @@ may report as checked.
 | `formats` spellings | RFC tokens as they are (`nifti`, `dicom`, `json`, ...); `gii` becomes `gifti`, `bvals`/`bvecs` become `bval`/`bvec`; `surface` is a category, not a token, and is dropped; any other spelling keeps a `neurodesk:` prefix |
 | Artifact MIME types | JSON becomes `json`, tab-separated values become `tsv`, CSV becomes `csv`, NIfTI becomes `nii`; gzip becomes `nii-gz` only for volume, mask and label-map types. Ambiguous MIME types need explicit artifact `formats`. |
 | Gradient artifact roles | Plain-text `neuro:gradients` artifacts named `bval` and `bvec` receive those format tokens. |
-| Gradient input formats | `bval`, `bvec` and `bval-bvec` stay in `neurodesk/data` until NeuroFlow ships gradient inspectors. See [upstream issue 26](https://github.com/cdrake/neuroflow/issues/26). |
+| Gradient input formats | `bval` and `bvec` are kept. `bval-bvec` stays only in `neurodesk/data`, because NeuroFlow has no inspector for a file pair. |
 | `space: native` on an input | retained as metadata; these apps also accept images in other frames |
 | `space: input` or `subject-1mm` on an artifact | `inputs.input_<role>` of the operation's one spatial file input; two spatial inputs leave it in the extension. `subject-1mm` adds `resolution: 1` |
 | `space: fixed` or `moving` on an artifact | `inputs.input_fixed` / `inputs.input_moving` |
@@ -162,11 +163,11 @@ may report as checked.
 | `labelSystem: FreeSurfer` | `freesurfer` |
 | other `labelSystem` values | `neurodesk:<value>` |
 
-NeuroFlow 0.2.0 cannot inspect gradient formats. Omitting their input qualifiers
-allows gradient inputs to reach the app, but its validator cannot reject a
-bval/bvec swap. The desktop contract retains these constraints for input
-validation and the Pipeline builder. Restore the input qualifiers when a
-NeuroFlow release with the inspectors is adopted.
+NeuroFlow 0.2.1 inspects FSL gradient tables
+([upstream issue 26](https://github.com/cdrake/neuroflow/issues/26)), so a
+bval bound to a bvec input fails before the app launches. NeuroFlow 0.2.0 has
+no gradient inspectors and fails every gradient input before launch. A table
+that fits both layouts gets neither format and also fails.
 
 The generator checks version and inheritance rules beyond JSON Schema, including
 the referenced input's type and cardinality. [Catalog mapping tests](../../../test/neuroflow-qualifiers.test.mjs)
@@ -227,9 +228,9 @@ NEUROFLOW_MCP_BIN=/absolute/path/to/neuroflow-mcp \
   NEURODESK_HARDWARE_GPU=1 node scripts/desktop/neuroflow-smoke.mjs --t1
 ```
 
-The `neuroflow` CI workflow builds v0.2.0 at commit
-`fc6ec6075108306a588d48e2c1b66ffb924284a6` and runs this check on `macos-15`.
-That release's [step_order implementation](https://github.com/cdrake/neuroflow/blob/fc6ec6075108306a588d48e2c1b66ffb924284a6/crates/neuroflow-mcp/src/runtime.rs#L77-L112)
+The `neuroflow` CI workflow builds v0.7.0 at commit
+`fe6550c85d1e1f3548417d6bd0af69de37d2d256` and runs this check on `macos-15`.
+That release's [step_order implementation](https://github.com/cdrake/neuroflow/blob/fe6550c85d1e1f3548417d6bd0af69de37d2d256/crates/neuroflow-core/src/lib.rs#L569-L622)
 executes dependencies before their consumers, using document order only to
 break ties. Reordering a step in the builder retains its bindings; it does
 not force the runtime to launch a consumer before its inputs exist. CI also
@@ -242,10 +243,18 @@ Models and dependencies come from the checksummed offline inventory. Set
 `NEURODESK_ASSET_CACHE` to reuse those downloads and
 `NEUROFLOW_EVIDENCE_DIR` to choose where the run record and outputs are kept.
 
-The pinned release has no binaries and cannot cancel an active workflow while
-keeping its MCP server alive. Upstream requests track
-[release binaries](https://github.com/cdrake/neuroflow/issues/30) and
-[cancellation](https://github.com/cdrake/neuroflow/issues/31).
+The [v0.7.0 release](https://github.com/cdrake/neuroflow/releases/tag/v0.7.0) provides
+`neuroflow-mcp` binaries for Linux x86-64 (musl), macOS arm64 and Windows x86-64.
+Verify the archive against the release's `SHA256SUMS`, extract it, and set
+`NEUROFLOW_MCP_BIN` to the executable for the checks above.
+
+Since v0.3.0, cancel a running `tools/call` by sending the MCP `notifications/cancelled`
+notification with that call's `requestId`. NeuroFlow stops the active step, starts no
+later steps, and records `cancelled` in `run.json`; its MCP server keeps serving
+subsequent requests. On Unix it stops the active process group. On Windows it stops
+only the direct child, so descendant processes may continue. The cancelled call
+receives no response and returns no run ID; inspect the run record in the configured
+sessions directory.
 
 The same CI workflow runs the DWI template with `--dwi`, after building
 dwidenoise, degibbs, dwicorrect, brain-extraction, noddi and dwi2trx. It

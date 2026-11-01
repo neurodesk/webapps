@@ -1,5 +1,10 @@
 [
   {
+    "from": "packages/components/src/file-io/DicomController.js",
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "Static app staging supplies the JPEG module; application callers pass their staged module URL."
+  },
+  {
     "from": "apps/calmar/web/js/inference-worker.js",
     "to": "../nifti-js/index.js",
     "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
@@ -11,8 +16,8 @@
   },
   {
     "from": "apps/calmar/web/js/lnm-app.js",
-    "to": "../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/calmar/web/js/modules/atlas-loader.js",
@@ -61,8 +66,8 @@
   },
   {
     "from": "apps/musclemap/web/js/controllers/MuscleMapDicomInput.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/musclemap/web/js/inference-worker.js",
@@ -76,23 +81,28 @@
   },
   {
     "from": "apps/qsmbly/js/controllers/QsmDicomInput.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/qsmbly/js/controllers/QsmInputSet.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/qsmbly/js/qsm-app-romeo.js",
-    "to": "https://dicompare.neurodesk.org/embed/DicompareController.js",
+    "to": "https://webapps.neurodesk.org/dicompare/embed/DicompareController.js",
     "reason": "Established upstream embed contract. registry/offline-assets.sources.json mirrors it and the composite/offline assembly rewrites the URL."
   },
   {
     "from": "apps/seedseg/web/js/controllers/SeedSegDicomInput.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
+  },
+  {
+    "from": "apps/seedseg/web/js/inference-worker.js",
+    "to": "../vendor/seedseg/browser-runtime.manifest.json",
+    "reason": "apps/seedseg/scripts/stage-pipeline.mjs copies the pinned packages/seedseg/browser-runtime.manifest.json into the generated browser package before dev, build and tests."
   },
   {
     "from": "apps/seedseg/web/js/inference-worker.js",
@@ -116,8 +126,18 @@
   },
   {
     "from": "apps/seedseg/web/js/seedseg-app.js",
-    "to": "https://dicompare.neurodesk.org/embed/DicompareController.js",
-    "reason": "Established upstream embed contract. registry/offline-assets.sources.json mirrors it and the composite/offline assembly rewrites the URL."
+    "to": "../vendor/dicompare/DicompareController.js",
+    "reason": "apps/seedseg/scripts/stage-pipeline.mjs stages dicompare's canonical embedding controller in web/vendor/dicompare before vendor, dev, test and build."
+  },
+  {
+    "from": "apps/seedseg/web/js/seedseg-app.js",
+    "to": "../vendor/dicompare/dicompare-worker.js",
+    "reason": "apps/seedseg/scripts/stage-pipeline.mjs stages dicompare's canonical embedding worker in web/vendor/dicompare before vendor, dev, test and build."
+  },
+  {
+    "from": "apps/seedseg/web/js/seedseg-app.js",
+    "to": "../vendor/dicompare/SeedSeg_Prostate_T1w_v1.0.json",
+    "reason": "apps/seedseg/scripts/stage-pipeline.mjs stages dicompare's canonical SeedSeg schema in web/vendor/dicompare before vendor, dev, test and build."
   },
   {
     "from": "apps/spinalcordtoolbox/web/js/analysis-worker.js",
@@ -126,8 +146,8 @@
   },
   {
     "from": "apps/spinalcordtoolbox/web/js/controllers/SctInputSessions.js",
-    "to": "../../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "apps/spinalcordtoolbox/web/js/inference-worker.js",
@@ -161,8 +181,8 @@
   },
   {
     "from": "apps/vesselboost/web/js/vesselboost-app.js",
-    "to": "../dcm2niix/index.js",
-    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+    "to": "../dcm2niix/index.jpeg.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages the @niivue/dcm2niix JPEG build here; the composite site shares its WASM."
   },
   {
     "from": "packages/dicompare/src/node.js",
@@ -198,6 +218,16 @@
     "from": "packages/syncro/src/node.js",
     "to": "./registration/syncro-registration.wasm",
     "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages registration runtime files relative to the built Node adapter."
+  },
+  {
+    "from": "packages/syncro/src/node.js",
+    "to": "./greedy/greedy_rs_wasm.js",
+    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages @neurodesk/greedy's single-threaded build relative to the built Node adapter."
+  },
+  {
+    "from": "packages/syncro/src/node.js",
+    "to": "./greedy/greedy_rs_wasm_bg.wasm",
+    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages @neurodesk/greedy's single-threaded build relative to the built Node adapter."
   },
   {
     "from": "apps/dicomview/src/protocol-session.js",

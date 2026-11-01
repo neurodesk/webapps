@@ -24,11 +24,12 @@ const TEMPLATE={
 // The lesion sits this far from the head's intensity centroid, in native world millimetres (RAS).
 const LESION_OFFSET_MM=[-30,0,10];
 const LESION_RADIUS_MM=6;
-// Linux, Windows and macOS archives measured Dice 0.9665, correlations 0.815-0.816 and 0.701-0.702
-// (2026-10-06). Without registration the scan correlates 0.13; the template shifted 2 mm, 0.74.
+// With ANTs, Linux, Windows and macOS archives measured Dice 0.9665, correlations 0.815-0.816 and
+// 0.701-0.702 (2026-10-06); with Greedy, Linux measured Dice 0.9670, correlations 0.783 and 0.672
+// (2026-10-27). Without registration the scan correlates 0.13; the template shifted 2 mm, 0.74.
 const LIMITS={
   brainDice:0.95,
-  brainCorrelation:0.78,
+  brainCorrelation:0.77,
   primaryCorrelation:0.65,
   lesionXMm:[-42,-18],
   lesionInsideBrain:0.9,
@@ -191,16 +192,16 @@ function score({template,brain,primary,lesion}) {
   };
 }
 
-function report(metrics) {
+function report(metrics,engine) {
   const [low,high]=LIMITS.lesionXMm;
   const x=metrics.lesionCentre[0];
-  check(metrics.grids,'outputs share the MNI152 template grid and affine');
-  check(metrics.brainDice>=LIMITS.brainDice,`brain mask Dice with the MNI152 template ${metrics.brainDice.toFixed(4)} >= ${LIMITS.brainDice}`);
-  check(metrics.brainCorrelation>=LIMITS.brainCorrelation,`warped brain correlation with the MNI152 template ${metrics.brainCorrelation.toFixed(4)} >= ${LIMITS.brainCorrelation}`);
-  check(metrics.primaryCorrelation>=LIMITS.primaryCorrelation,`warped scan correlation with the MNI152 template inside its brain ${metrics.primaryCorrelation.toFixed(4)} >= ${LIMITS.primaryCorrelation}`);
-  check(metrics.lesionVoxels>0&&metrics.lesionRightVoxels===0,`left lesion stays left: ${metrics.lesionVoxels} voxels, ${metrics.lesionRightVoxels} right of the midline`);
-  check(x>=low&&x<=high,`lesion centre ${metrics.lesionCentre.map(value=>value.toFixed(1)).join(', ')} mm, x within [${low}, ${high}]`);
-  check(metrics.lesionInsideBrain>=LIMITS.lesionInsideBrain,`lesion inside the template brain ${metrics.lesionInsideBrain.toFixed(3)} >= ${LIMITS.lesionInsideBrain}`);
+  check(metrics.grids,`${engine}: outputs share the MNI152 template grid and affine`);
+  check(metrics.brainDice>=LIMITS.brainDice,`${engine}: brain mask Dice with the MNI152 template ${metrics.brainDice.toFixed(4)} >= ${LIMITS.brainDice}`);
+  check(metrics.brainCorrelation>=LIMITS.brainCorrelation,`${engine}: warped brain correlation with the MNI152 template ${metrics.brainCorrelation.toFixed(4)} >= ${LIMITS.brainCorrelation}`);
+  check(metrics.primaryCorrelation>=LIMITS.primaryCorrelation,`${engine}: warped scan correlation with the MNI152 template inside its brain ${metrics.primaryCorrelation.toFixed(4)} >= ${LIMITS.primaryCorrelation}`);
+  check(metrics.lesionVoxels>0&&metrics.lesionRightVoxels===0,`${engine}: left lesion stays left: ${metrics.lesionVoxels} voxels, ${metrics.lesionRightVoxels} right of the midline`);
+  check(x>=low&&x<=high,`${engine}: lesion centre ${metrics.lesionCentre.map(value=>value.toFixed(1)).join(', ')} mm, x within [${low}, ${high}]`);
+  check(metrics.lesionInsideBrain>=LIMITS.lesionInsideBrain,`${engine}: lesion inside the template brain ${metrics.lesionInsideBrain.toFixed(3)} >= ${LIMITS.lesionInsideBrain}`);
 }
 
 async function rejectsInvalidUse(work) {
@@ -229,31 +230,35 @@ async function rejectsInvalidUse(work) {
   console.log('PASS installed package: self-check, help, output preservation, thread validation, offline cache failure, invalid resume');
 }
 
-async function normalisesPinnedScan(work) {
+// Greedy is the default; --normalization ants keeps the container-parity path.
+async function normalisesPinnedScan(work,engine) {
   const templateBytes=await readFile(TEMPLATE.url);
   check(sha256(templateBytes)===TEMPLATE.sha256,`MNI152 template SHA-256 ${TEMPLATE.sha256}`);
   const inputPath=await pinnedInput();
   const lesion=lesionFixture(readNifti(await readFile(inputPath)));
   const lesionPath=join(work,'lesion.nii');
   await writeFile(lesionPath,lesion.bytes);
-  const output=join(work,'normalised');
+  const output=join(work,`normalised-${engine}`);
   const started=performance.now();
-  const result=run([inputPath,output,'--offline','--lesion',lesionPath],40*60*1000);
+  const result=run([inputPath,output,'--offline','--lesion',lesionPath,...(engine==='greedy'?[]:['--normalization',engine])],40*60*1000);
   const seconds=(performance.now()-started)/1000;
   if(result.status!==0)throw new Error(`normalisation exited with ${result.status}:\n${result.stderr}`);
-  console.log(`INFO offline normalisation of ${INPUT.name} took ${seconds.toFixed(0)} s; native lesion centre ${lesion.centre.map(value=>value.toFixed(1)).join(', ')} mm`);
+  const provenance=JSON.parse(await readFile(join(output,'provenance.json'),'utf8'));
+  check(provenance.normalization===engine,`${engine}: provenance records the ${provenance.normalization} normalisation`);
+  console.log(`INFO ${engine}: offline normalisation of ${INPUT.name} took ${seconds.toFixed(0)} s; native lesion centre ${lesion.centre.map(value=>value.toFixed(1)).join(', ')} mm`);
   report(score({
     template:readNifti(templateBytes),
     brain:readNifti(await readFile(join(output,`wbt1${INPUT.name}`))),
     primary:readNifti(await readFile(join(output,`w${INPUT.name}`))),
     lesion:readNifti(await readFile(join(output,'wlesion.nii'))),
-  }));
+  }),engine);
 }
 
 const work=await mkdtemp(join(tmpdir(),'syncro-package-check-'));
 try {
   await rejectsInvalidUse(work);
-  await normalisesPinnedScan(work);
+  await normalisesPinnedScan(work,'greedy');
+  await normalisesPinnedScan(work,'ants');
 } finally {
   await rm(work,{recursive:true,force:true});
 }

@@ -98,7 +98,6 @@ export class PipelineSettingsController {
     this._setEl('qsmartSdfSigma2Stage1', QSMART_DEFAULTS.sdf_sigma2_stage1);
     this._setEl('qsmartSdfSigma1Stage2', QSMART_DEFAULTS.sdf_sigma1_stage2);
     this._setEl('qsmartSdfSigma2Stage2', QSMART_DEFAULTS.sdf_sigma2_stage2);
-    this._setEl('qsmartSdfSpatialRadius', QSMART_DEFAULTS.sdf_spatial_radius);
     this._setEl('qsmartSdfLowerLim', QSMART_DEFAULTS.sdf_lower_lim);
     this._setEl('qsmartSdfCurvConstant', QSMART_DEFAULTS.sdf_curv_constant);
     this._setEl('qsmartVascSphereRadius', QSMART_DEFAULTS.vasc_sphere_radius);
@@ -367,7 +366,6 @@ export class PipelineSettingsController {
         sdf_sigma2_stage1: parseFloat(this._getEl('qsmartSdfSigma2Stage1')),
         sdf_sigma1_stage2: parseFloat(this._getEl('qsmartSdfSigma1Stage2')),
         sdf_sigma2_stage2: parseFloat(this._getEl('qsmartSdfSigma2Stage2')),
-        sdf_spatial_radius: parseInt(this._getEl('qsmartSdfSpatialRadius')),
         sdf_lower_lim: parseFloat(this._getEl('qsmartSdfLowerLim')),
         sdf_curv_constant: parseFloat(this._getEl('qsmartSdfCurvConstant')),
         vasc_sphere_radius: parseFloat(this._getEl('qsmartVascSphereRadius')),
@@ -791,7 +789,6 @@ export class PipelineSettingsController {
     this._setEl('qsmartSdfSigma2Stage1', qsmart.sdf_sigma2_stage1);
     this._setEl('qsmartSdfSigma1Stage2', qsmart.sdf_sigma1_stage2);
     this._setEl('qsmartSdfSigma2Stage2', qsmart.sdf_sigma2_stage2);
-    this._setEl('qsmartSdfSpatialRadius', qsmart.sdf_spatial_radius);
     this._setEl('qsmartSdfLowerLim', qsmart.sdf_lower_lim);
     this._setEl('qsmartSdfCurvConstant', qsmart.sdf_curv_constant);
     this._setEl('qsmartVascSphereRadius', qsmart.vasc_sphere_radius);

@@ -1,5 +1,61 @@
 # seedseg
 
+## 0.7.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/webapp-components@0.22.3
+  - @neurodesk/seedseg@0.7.20261031
+
+## 0.7.20261027
+
+### Minor Changes
+
+- 7019541: Integrate upstream nnU-Net v2 through the shared browser and command-line pipeline.
+  Use pinned fold models, nonzero cropping, normalization, Gaussian sliding windows,
+  optional mirroring, per-fold probability averaging and ranked marker detections.
+  Default to network 1 without mirroring, with WebGPU first and WebAssembly fallback.
+  Retain the legacy v1 consensus under Advanced and through explicit CLI options.
+  Update ONNX Runtime to 1.30.0 and keep its loaders within the app service-worker scope.
+  Keep the shared shell, model downloader, NIfTI helpers, progress and mask editing.
+  Load the optional acquisition report on demand so an unavailable report host does
+  not block segmentation. Add detection reports and browser/CLI parity coverage.
+
+### Patch Changes
+
+- Record the ONNX WebGPU device limits, uncaptured errors and unexpected device-loss reason in the technical log without blocking inference or changing backend fallback.
+  - @neurodesk/seedseg@0.7.20261027
+- Preserve WebAssembly fallback when a failed WebGPU session also rejects cleanup. Validate the five-fold ensemble and mirroring against WebAssembly on a verified hardware adapter in full Chromium.
+- Updated dependencies
+  - @neurodesk/seedseg@0.7.20261027
+- Use the registered report worker so optional DICOM reporting resolves from the SeedSeg offline inventory.
+  - @neurodesk/seedseg@0.7.20261027
+- Updated dependencies [7019541]
+  - @neurodesk/seedseg@0.7.20261027
+
+## 0.6.20261027
+
+### Patch Changes
+
+- fd54995: Load the dicompare protocol checker, its worker and schemas from webapps.neurodesk.org/dicompare instead of the unavailable dicompare.neurodesk.org deployment. Keep QSMbly's worker in single-app offline bundles and preserve the URL adaptations during upstream sync. SeedSeg continues to use its locally staged report assets.
+  - @neurodesk/seedseg@0.6.20261027
+- Stage the canonical Dicompare controller, worker and SeedSeg schema locally. Keep optional reporting lazy while removing the remote report host from its code and schema loading path. Bound browser-test startup waits independently of scientific processing.
+  - @neurodesk/seedseg@0.6.20261027
+- Load optional DICOM reporting only when requested so an unavailable or stalled report host cannot block startup or scan conversion.
+  - @neurodesk/seedseg@0.6.20261027
+- Wait until the Report button is pressed before loading optional DICOM reporting, so a stalled report host cannot delay scan conversion.
+  - @neurodesk/seedseg@0.6.20261027
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+  - @neurodesk/seedseg@0.6.20261027
+- Load optional DICOM reporting on demand so an unavailable report host cannot prevent NIfTI input or segmentation.
+  - @neurodesk/seedseg@0.6.20261027
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/seedseg@0.6.20261027
+
 ## 0.6.20261024
 
 ### Patch Changes

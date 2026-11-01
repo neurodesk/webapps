@@ -111,8 +111,11 @@ test('displacement-field encodings do not widen to every NIfTI image through for
 
 test('registered encoding aliases preserve vendor formats without treating categories as encodings', () => {
   assert.deepEqual(qualifiers({ formats: ['gii', 'gifti', 'surface', 'bvals', 'bvecs', 'custom', 'constructor'] }, 'inputs', { inputs: {} }, { type: 'core:file' }), {
-    formats: ['gifti', 'neurodesk:custom', 'neurodesk:constructor'],
+    formats: ['gifti', 'bval', 'bvec', 'neurodesk:custom', 'neurodesk:constructor'],
   });
+  // No NeuroFlow inspector reads a bval/bvec pair, so the pair token is dropped from inputs only.
+  assert.deepEqual(qualifiers({ formats: ['bval-bvec', 'bval'] }, 'inputs', { inputs: {} }, { type: 'core:file' }), { formats: ['bval'] });
+  assert.deepEqual(qualifiers({ formats: ['bval-bvec'] }, 'outputs', { inputs: {} }, { type: 'core:file' }), { formats: ['bval-bvec'] });
 });
 
 test('all five qualifiers reject inheritance on an input declaration', async () => {
@@ -162,7 +165,7 @@ test('output inheritance may obtain an absent input qualifier by runtime inspect
 });
 
 
-test('DWI artifact encodings are specific while gradient inputs retain their desktop constraints', async () => {
+test('DWI artifact encodings are specific and gradient inputs keep inspectable formats', async () => {
   for (const [app, operation] of [['dwidenoise', 'denoise'], ['degibbs', 'degibbs'], ['dwicorrect', 'correct'], ['n4', 'correct']]) {
     const generated = await tool(app, operation);
     assert.ok(generated, app);
@@ -174,8 +177,8 @@ test('DWI artifact encodings are specific while gradient inputs retain their des
   }
   const noddi = await tool('noddi', 'fit');
   assert.equal(noddi.inputs.input_bval.type, 'neuro:gradient-table');
-  assert.equal(noddi.inputs.input_bval.formats, undefined);
-  assert.equal(noddi.inputs.input_bvec.formats, undefined);
+  assert.deepEqual(noddi.inputs.input_bval.formats, ['bval']);
+  assert.deepEqual(noddi.inputs.input_bvec.formats, ['bvec']);
   assert.deepEqual(noddi.inputs.input_bval.extensions['neurodesk/data'].formats, ['bval', 'bvals']);
   assert.deepEqual(noddi.inputs.input_bvec.extensions['neurodesk/data'].formats, ['bvec', 'bvecs']);
   const correction = await tool('dwicorrect', 'correct');

@@ -113,6 +113,20 @@ var<workgroup> wg_new_dir: array<f32, 6>;
 // Step counts per tidy row
 var<workgroup> wg_stepsB: array<i32, 2>;
 var<workgroup> wg_stepsF: array<i32, 2>;
+// Set when the compiled subgroup layout differs from the one the kernel assumes
+var<workgroup> wg_lane_mismatch: atomic<u32>;
+
+// The reductions, ballots and removed subgroupBarrier() calls assume that each
+// tidy row is one 32-lane subgroup whose lane IDs equal tid.x. WGSL allows other
+// sizes (Intel 8/16/32, AMD 64), where the kernel would compute wrong results or
+// write outside its row; such a workgroup reports -1 instead (SUBGROUP_LAYOUT_ERROR).
+fn subgroupLayoutMismatch(tidx: u32, sg_size: u32, sg_lane: u32) -> bool {
+    if (sg_size != THR_X_SL || sg_lane != tidx) {
+        atomicStore(&wg_lane_mismatch, 1u);
+    }
+    workgroupBarrier();
+    return atomicLoad(&wg_lane_mismatch) != 0u;
+}
 
 // ── matrix access dispatch ──────────────────────────────────────────
 // Replaces device pointer parameters; boot functions specify which
@@ -682,16 +696,24 @@ fn tracker_boot(
 @compute @workgroup_size(32, 2, 1)
 fn getNumStreamlinesBoot_k(
     @builtin(local_invocation_id) tid: vec3<u32>,
-    @builtin(workgroup_id) gid: vec3<u32>
+    @builtin(workgroup_id) gid: vec3<u32>,
+    @builtin(subgroup_size) sg_size: u32,
+    @builtin(subgroup_invocation_id) sg_lane: u32
 ) {
+    let layout_mismatch = subgroupLayoutMismatch(tid.x, sg_size, sg_lane);
     let tidx = tid.x;
     let tidy = tid.y;
     let logical_group = gid.x + u32(params.workgroup_offset);
     let slid = logical_group * BLOCK_Y + tidy;
 
     if (i32(slid) >= params.nseed) { return; }
+    if (layout_mismatch) {
+        if (tidx == 0u) { slineOutOff[slid] = -1; }
+        return;
+    }
 
-    let global_id = logical_group * BLOCK_Y * THR_X_SL + THR_X_SL * tidy + tidx;
+    // Philox stream per (seed index in the whole run, lane), whatever the batch size (#598).
+    let global_id = (u32(params.rng_offset) + logical_group * BLOCK_Y + tidy) * THR_X_SL + tidx;
     var st = philox_init(
         u32(params.rng_seed_lo), u32(params.rng_seed_hi), global_id, 0u);
 
@@ -749,8 +771,11 @@ fn getNumStreamlinesBoot_k(
 @compute @workgroup_size(32, 2, 1)
 fn genStreamlinesMergeBoot_k(
     @builtin(local_invocation_id) tid: vec3<u32>,
-    @builtin(workgroup_id) gid: vec3<u32>
+    @builtin(workgroup_id) gid: vec3<u32>,
+    @builtin(subgroup_size) sg_size: u32,
+    @builtin(subgroup_invocation_id) sg_lane: u32
 ) {
+    let layout_mismatch = subgroupLayoutMismatch(tid.x, sg_size, sg_lane);
     let tidx = tid.x;
     let tidy = tid.y;
     let logical_group = gid.x + u32(params.workgroup_offset);
@@ -758,13 +783,22 @@ fn genStreamlinesMergeBoot_k(
 
     if (i32(slid) >= params.nseed) { return; }
 
-    let global_id = logical_group * BLOCK_Y * THR_X_SL + THR_X_SL * tidy + tidx;
+    // Philox stream per (seed index in the whole run, lane), whatever the batch size (#598).
+    let global_id = (u32(params.rng_offset) + logical_group * BLOCK_Y + tidy) * THR_X_SL + tidx;
     var st = philox_init(
         u32(params.rng_seed_lo), u32(params.rng_seed_hi), global_id + 1u, 0u);
 
     let seed = load_seeds_f3(slid);
 
     let ndir = slineOutOff[slid + 1u] - slineOutOff[slid];
+    if (layout_mismatch) {
+        if (tidx == 0u) {
+            for (var i = 0; i < ndir; i++) {
+                slineMeta[2 * (slineOutOff[slid] + i) + 1] = -1;
+            }
+        }
+        return;
+    }
 
     subgroupBarrier();
 

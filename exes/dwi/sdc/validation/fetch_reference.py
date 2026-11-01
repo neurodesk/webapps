@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """Fetch named subsets of the pinned sdc reference data or the sdc prior.
 
-    python3 exes/dwi/sdc/validation/fetch_reference.py [--folder prior] DEST SUBSET [SUBSET ...]
+    python3 exes/dwi/sdc/validation/fetch_reference.py [--folder prior|grid] DEST SUBSET [SUBSET ...]
 
 The default folder is `reference` (sdc/reference/, reference.manifest.json beside this
 script). SUBSET is a name under "subsets" in that manifest, or `all`. With
-`--folder prior` the manifest is prior.manifest.json and the subset is `prior` (or `all`).
+`--folder prior` the manifest is prior.manifest.json and the subset is `prior` (or `all`);
+with `--folder grid` it is grid.manifest.json (sdc/reference/grid-q68/).
 The files go to DEST in the folder's own layout (DEST/input/..., DEST/runs/...), so DEST
 can hold several subsets and later runs add to it. A file already in DEST with the
 manifest's size and sha256 is not downloaded again; every download is checked the same way.
 
 Progress goes to stderr. stdout gets the variables for the tests, one KEY=VALUE per line,
 for `>> "$GITHUB_ENV"` in CI or `export $(...)` in a shell: SDC_REFERENCE and
-SDC_REFERENCE_SUBSETS, or SDC_PRIOR for the prior.
+SDC_REFERENCE_SUBSETS, SDC_PRIOR for the prior, or SDC_GRID for the grid runs.
 
 Patterns are fnmatch globs in which `*` also crosses `/`. Standard library only.
 """
@@ -103,7 +104,7 @@ def main(argv):
     folder = "reference"
     if argv[:1] == ["--folder"]:
         folder, argv = argv[1], argv[2:]
-    if folder not in ("reference", "prior") or len(argv) < 2:
+    if folder not in ("reference", "prior", "grid") or len(argv) < 2:
         sys.exit(__doc__)
     dest, names = argv[0], argv[1:]
     with open(os.path.join(HERE, f"{folder}.manifest.json")) as f:
@@ -125,6 +126,8 @@ def main(argv):
     )
     if folder == "prior":
         print(f"SDC_PRIOR={dest}")
+    elif folder == "grid":
+        print(f"SDC_GRID={dest}")
     else:
         print(f"SDC_REFERENCE={dest}")
         print(f"SDC_REFERENCE_SUBSETS={','.join(names)}")

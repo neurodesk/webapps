@@ -131,6 +131,11 @@ export class QsmPipelineController {
           if (this.workerInitializing) {
             this._failInit(new Error(data.message));
           } else {
+            if (data.fatal) {
+              this.workerSession.terminate();
+              this.workerSession = null;
+              this.workerReady = false;
+            }
             this._handleError(data.message);
           }
           break;

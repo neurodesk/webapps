@@ -1,10 +1,11 @@
-// BISON's Node drivers for antsRegistration and DenoiseImage with each instance in its own worker
-// thread, as @neurodesk/node-drivers/mindgrab runs MindGrab. Emscripten memories grow and never
-// shrink, so an instance that stays in the main thread holds its largest heap until the process
-// ends; dispose() ends the thread and frees it at once.
+// BISON's Node drivers for antsRegistration, DenoiseImage and Greedy with each instance in its own
+// worker thread, as @neurodesk/node-drivers/mindgrab runs MindGrab. WebAssembly memories grow and
+// never shrink, so an instance that stays in the main thread holds its largest heap until the
+// process ends; dispose() ends the thread and frees it at once.
 //
 //   createRegistration() -> { run(argv, inputs), memoryBytes(), dispose() }   (run is async here)
 //   createDenoiser()     -> { denoise({ image, mask, ... }), memoryBytes(), dispose() }
+//   createGreedy()       -> { affine({ fixed, moving }), rigid({ fixed, moving }), svf({ fixed, moving, matrix, mask }), memoryBytes(), dispose() }
 //
 // Errors keep their name, message, `log` and `aborted`. After an abort the worker is ended and the
 // instance refuses further work with the package's own message. Inputs are copied (callers reuse
@@ -14,7 +15,7 @@ import { Worker } from 'node:worker_threads';
 
 const ENTRY = new URL('./node-worker.js', import.meta.url);
 
-const LABELS = { registration: 'registration kernel', denoiser: 'denoise module' };
+const LABELS = { registration: 'registration kernel', denoiser: 'denoise module', greedy: 'Greedy module' };
 
 function rebuild(plain) {
   const Type = { TypeError, RangeError }[plain.name] ?? Error;
@@ -28,6 +29,7 @@ function rebuild(plain) {
 
 // The refusal each package gives after an abort (hmc-registration index.js, ants-denoise index.js).
 function refusal(kind, reason) {
+  if (kind === 'greedy') return new Error(`The Greedy module stopped (${reason}); create a new one.`);
   if (kind === 'registration') return Object.assign(new Error(`The registration kernel stopped (${reason}); load a new one.`), { log: [], aborted: true });
   return new Error(`The denoise module aborted earlier (${reason}). Create a new denoiser.`);
 }
@@ -165,4 +167,19 @@ export async function createDenoiser(options) {
     memoryBytes: worker.memoryBytes,
     dispose: worker.dispose,
   };
+}
+
+/**
+ * Greedy's single-threaded WebAssembly (@neurodesk/greedy/single) in a worker thread: affine() and
+ * rigid() take raw .nii bytes and resolve to Greedy's RAS matrix text; svf() takes
+ * registerSvfGreedy's arguments and resolves to the raw .nii warp.
+ */
+export async function createGreedy() {
+  const worker = await start('greedy');
+  const register = (method) => (args) => {
+    const transfer = [];
+    const copies = Object.fromEntries(Object.entries(args).map(([key, value]) => [key, copied(value, transfer)]));
+    return worker.call(method, [copies], transfer);
+  };
+  return { affine: register('affine'), rigid: register('rigid'), svf: register('svf'), memoryBytes: worker.memoryBytes, dispose: worker.dispose };
 }

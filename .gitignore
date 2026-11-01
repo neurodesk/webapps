@@ -115,3 +115,6 @@ quality-artifacts/
 **/vite.config.*.timestamp-*.mjs
 apps/fastprep/public/niimath/
 apps/fastprep/public/meica/
+
+# scripts/dev-server.mjs records the server it started; never commit it
+.dev-server-*.pid

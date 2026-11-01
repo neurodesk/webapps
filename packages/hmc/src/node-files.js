@@ -6,7 +6,7 @@ import { createNiftiFromData, createNiftiHeaderFromVolume, decodeNiftiBuffer, re
 import { readBrainMask } from "@neurodesk/webapp-components/file-io/brain-mask";
 import { meanVolumes } from "@neurodesk/webapp-components/volume/mean";
 import { readSeries, IDENTITY } from "./pipeline.js";
-import { correctNiFreeze } from "./nifreeze.js";
+import { assertNifreezeInput, correctNiFreeze } from "./nifreeze.js";
 import { loadHmcNode, nodeRuntime } from "./node-runtime.js";
 import { loadHmcRegistration } from "@neurodesk/hmc-registration/node";
 
@@ -50,6 +50,9 @@ export async function correctFiles({ dwi, bval, bvec, output, maskFile, sidecarF
   const sidecar = sidecarFile ? JSON.parse(await readFile(sidecarFile, "utf8")) : null;
   if (sidecarFile && (!sidecar || typeof sidecar !== "object" || Array.isArray(sidecar))) throw new Error("The sidecar must be a JSON object.");
   const hmc = await loadHmcNode();
+  // Refuse before masking what no mask could fit: a mask of 0 voxels is a lower bound.
+  // correctNiFreeze checks again with the mask's own voxel count.
+  assertNifreezeInput({ series, bvals, bvecs, hmc, model: method, maskVoxels: 0 });
   const brain = maskFile
     ? { mask: await readBrainMask(new Uint8Array(await readFile(maskFile)), buffer, { name: basename(maskFile), grid: "DWI", signal }), provenance: { Source: "supplied" } }
     : await defaultMask(series, buffer, bvals, bvecs, hmc, signal);

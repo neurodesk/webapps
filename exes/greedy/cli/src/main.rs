@@ -7,11 +7,11 @@ use std::{
 use flate2::{Compression, write::GzEncoder};
 
 use greedy_rs_core::{
-    AffineMetric, DEFAULT_AFFINE_JITTER, Error, Grid, Interpolation, Mat4, NiftiImage, NiftiSeries,
-    ScalarType, Transform, build_pyramid, decode_image, decode_series, decode_vector_field,
-    encode_image, encode_series_header, encode_vector_field, image_centers,
-    nmi_score_gradient_affine, read_matrix, register_affine_masked, register_nmi_svf_masked,
-    register_rigid_masked, reslice, reslice_with_background, score_affine, ssd_score_gradient,
+    AffineMetric, AffineStart, DEFAULT_AFFINE_JITTER, Error, Grid, Interpolation, Mat4, NiftiImage,
+    NiftiSeries, ScalarType, SvfMetric, Transform, build_pyramid, decode_image, decode_series,
+    decode_vector_field, encode_image, encode_series_header, encode_vector_field, image_centers,
+    nmi_score_gradient_affine, read_matrix, register_affine_masked, register_rigid_masked,
+    register_svf, reslice, reslice_with_background, score_affine, ssd_score_gradient,
     write_scalars,
 };
 
@@ -150,14 +150,16 @@ fn print_help() {
          \n\
          Usage:\n\
            greedy-rs -d 3 -a -m SSD|NMI -i FIXED MOVING -o AFFINE.mat [OPTIONS]\n\
-           greedy-rs -d 3 -m NMI -i FIXED MOVING [-it AFFINE.mat] -o WARP.nii.gz -sv [OPTIONS]\n\
+           greedy-rs -d 3 -m NMI|NCC RxRxR -i FIXED MOVING [-it AFFINE.mat] -o WARP.nii.gz -sv [OPTIONS]\n\
            greedy-rs -d 3 -rf FIXED -rm MOVING OUTPUT -r TRANSFORM...\n\
          \n\
          Common options:\n\
            -n LEVELS       Iterations at each pyramid level (default: 100x50x10)\n\
            -dof 6|12       Rigid or affine registration (default: 12)\n\
+           -ia-image-centers  Start from aligned image centres (default: the identity)\n\
+           -ia FILE        Start from an affine matrix, such as an unmasked -o result\n\
            -jitter SIGMA   Affine sample jitter in moving voxels (default: 0.5)\n\
-           -gm MASK        Fixed-image mask: NMI is scored only inside it (fixed grid)\n\
+           -gm MASK        Fixed-image mask: the metric is scored only inside it (fixed grid)\n\
            -threads N      Limit the Rayon worker pool\n\
            -ri LINEAR|NN   Reslice interpolation (default: LINEAR)\n\
            -rb VALUE|AUTO  Reslice outside value (default: 0)\n\
@@ -204,6 +206,20 @@ fn iterations(value: &str) -> [usize; 3] {
         .unwrap_or_else(|_| fail("-n must contain exactly three levels"))
 }
 
+/// Greedy's NCC radius: `2x2x2`, or one value for every axis.
+fn radius(value: &str) -> [usize; 3] {
+    let values = value
+        .split('x')
+        .map(str::parse::<usize>)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|_| fail("-m NCC takes a radius such as 2x2x2"));
+    match values[..] {
+        [r] => [r; 3],
+        [x, y, z] => [x, y, z],
+        _ => fail("-m NCC takes a radius such as 2x2x2"),
+    }
+}
+
 fn run_affine(args: &[String], jitter: f64) {
     let mut fixed = None;
     let mut moving = None;
@@ -215,10 +231,22 @@ fn run_affine(args: &[String], jitter: f64) {
     let mut verbose = true;
     let mut dof = 12;
     let mut mask = None;
+    let mut start = AffineStart::Identity;
     let mut at = 0;
     while at < args.len() {
         match args[at].as_str() {
-            "-a" | "-ia-image-centers" | "-float" => {}
+            "-a" | "-float" => {}
+            "-ia-image-centers" => start = AffineStart::ImageCenters,
+            "-ia-identity" => start = AffineStart::Identity,
+            "-ia" => {
+                let path = take(args, &mut at, "-ia");
+                start = AffineStart::Matrix(
+                    read_matrix(
+                        &fs::read_to_string(&path).unwrap_or_else(|e| fail(format!("{path}: {e}"))),
+                    )
+                    .unwrap_or_else(|e| fail(e)),
+                );
+            }
             "-dump-pyramid" => dump_pyramid = true,
             "-dump-prefix" => dump_prefix = take(args, &mut at, "-dump-prefix"),
             "-d" => {
@@ -283,8 +311,8 @@ fn run_affine(args: &[String], jitter: f64) {
     }
     let mask = mask.map(|path| decode_image(&read(&path)).unwrap_or_else(|e| fail(e)));
     let matrix = match dof {
-        6 => register_rigid_masked(fixed, moving, mask, metric, levels, verbose, jitter),
-        _ => register_affine_masked(fixed, moving, mask, metric, levels, verbose, jitter),
+        6 => register_rigid_masked(fixed, moving, mask, start, metric, levels, verbose, jitter),
+        _ => register_affine_masked(fixed, moving, mask, start, metric, levels, verbose, jitter),
     }
     .unwrap_or_else(|e| fail(e));
     let mut text = String::new();
@@ -306,6 +334,7 @@ fn run_deform(args: &[String]) {
     let mut mask = None;
     let mut dump_moving = false;
     let mut dump_prefix = String::new();
+    let mut metric = SvfMetric::Nmi;
     let mut at = 0;
     while at < args.len() {
         match args[at].as_str() {
@@ -323,8 +352,12 @@ fn run_deform(args: &[String]) {
             }
             "-V" => verbose = take(args, &mut at, "-V") != "0",
             "-m" => {
-                if !take(args, &mut at, "-m").eq_ignore_ascii_case("NMI") {
-                    fail("SV registration currently supports -m NMI only");
+                metric = match take(args, &mut at, "-m").to_ascii_uppercase().as_str() {
+                    "NMI" => SvfMetric::Nmi,
+                    "NCC" => SvfMetric::Ncc(radius(&take(args, &mut at, "-m NCC"))),
+                    value => fail(format!(
+                        "unsupported SV registration metric {value}; expected NMI or NCC"
+                    )),
                 }
             }
             "-i" => {
@@ -376,7 +409,7 @@ fn run_deform(args: &[String]) {
         }
     };
     let mask = mask.map(|path| decode_image(&read(&path)).unwrap_or_else(|e| fail(e)));
-    let warp = register_nmi_svf_masked(fixed, moving, mask, levels, verbose, dump)
+    let warp = register_svf(fixed, moving, mask, metric, levels, verbose, dump)
         .unwrap_or_else(|e| fail(e));
     let output = output.unwrap_or_else(|| fail("SV registration requires -o OUTPUT.nii.gz"));
     fs::write(

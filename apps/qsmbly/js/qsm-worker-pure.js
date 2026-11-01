@@ -7,6 +7,7 @@
 
 // Import utilities - no fallbacks
 import { ppmFieldToPhase } from './worker/utils/PhaseUtils.js';
+import { withEngine } from './worker/utils/EngineFailure.js';
 import { createThresholdMask } from './worker/utils/MaskUtils.js';
 import { resolveTgvParams } from './worker/utils/TgvParams.js';
 import { clampTileConfig, MAX_WASM_PATCH_EDGE } from './worker/utils/DlTiling.js';
@@ -41,7 +42,7 @@ function weightBaseUrl() {
   return /^https?:\/\//i.test(base) ? base : `${wasmBaseUrl}/${base.replace(/^\//, '')}`;
 }
 
-/** Fetch a DL model's weight files (IndexedDB-cached) with progress reported to the UI. */
+/** Fetch verified DL weights through the shared cache with progress reported to the UI. */
 async function downloadWeights(model) {
   const totalBytes = model.files.reduce((a, f) => a + (Number(f.bytes) || 0), 0);
   postLog(`Preparing ${model.name} weights (~${(totalBytes / 1e6).toFixed(0)} MB, cached after first download)...`);
@@ -58,7 +59,7 @@ async function downloadWeights(model) {
 
 // Track which wasm modules already have a rayon pool (each bundle is a separate module/memory
 // with its own threadpool, so each is initialized independently and at most once).
-const _rayonReady = new WeakSet();
+const _rayonReady = new WeakMap();
 
 /** Boot a wasm-bindgen-rayon threadpool for `mod`, if this is a threaded build on a
  *  cross-origin-isolated page. No-op (stays single-threaded) otherwise. `threads` bounds the
@@ -75,7 +76,7 @@ async function initRayon(mod, label, threads) {
     const hw = Math.max(1, self.navigator?.hardwareConcurrency || 4);
     const n = Math.max(1, Math.min(threads || hw, hw));
     await mod.initThreadPool(n);
-    _rayonReady.add(mod);
+    _rayonReady.set(mod, n);
     // Let qsm-core use the pool for deep-learning inference too (tract dispatches on rayon's
     // global pool on wasm). Per module instance: the DL bundle reports separately from the base.
     mod.set_threads_ready_wasm?.(true);
@@ -285,7 +286,7 @@ let engineLoads = 0;
 
 /**
  * Provide the weights of the plan's deep-learning models to `mod` (fetched, or from the
- * IndexedDB cache).
+ * shared verified cache).
  */
 async function provideWeights(mod, models) {
   for (const id of models) {
@@ -330,7 +331,7 @@ async function runEnginePipeline(data, outputs = { qsm: true }) {
   // The plan says which models the run needs; the deep-learning bundle is loaded only for those.
   const facts = JSON.parse(wasmModule.scan_facts_wasm(new Uint32Array(grid.dims), sidecarsJson, hasMagnitude));
   facts.custom_mask = suppliedMask;
-  const plan = JSON.parse(wasmModule.plan_wasm(configJson, JSON.stringify(facts)));
+  const plan = JSON.parse(wasmModule.plan_wasm(configJson, JSON.stringify(facts), _rayonReady.get(wasmModule) || 1));
   self.postMessage({ type: 'plan', plan });
   postLog(`Plan: ${plan.steps.map(s => s.name).join(' → ')}`);
   // A plan with errors fails at the start of the run, in the engine's words: nothing to fetch.
@@ -345,7 +346,7 @@ async function runEnginePipeline(data, outputs = { qsm: true }) {
   // The scan as the engine builds its facts: each echo's sidecar (the headers are the files').
   const inputsJson = JSON.stringify({ echoes: JSON.parse(sidecarsJson).map((sidecar) => ({ sidecar })) });
   const engine = new mod.Engine(volumes, inputsJson, `load-${++engineLoads}`);
-  try {
+  withEngine(engine, () => {
     if (suppliedMask) engine.supplyMask(new Uint8Array(customMaskBuffer), 'the masking panel');
     const progress = createPlanProgress(plan);
     let doing = '';
@@ -381,9 +382,7 @@ async function runEnginePipeline(data, outputs = { qsm: true }) {
       const geometry = engine.geometry(key);
       if (geometry) show(key, JSON.parse(geometry));
     }
-  } finally {
-    engine.free();
-  }
+  }, mod);
   postLog(`Volumes held during the run: ${(volumes.bytes() / 1e6).toFixed(0)} MB`);
 
   postProgress(1.0, 'Pipeline complete!');
@@ -605,7 +604,6 @@ async function runQsmartCore({
   const sdf_sigma2_stage1 = qsmartSettings.sdf_sigma2_stage1;
   const sdf_sigma1_stage2 = qsmartSettings.sdf_sigma1_stage2;
   const sdf_sigma2_stage2 = qsmartSettings.sdf_sigma2_stage2;
-  const sdf_spatial_radius = qsmartSettings.sdf_spatial_radius;
   const sdf_lower_lim = qsmartSettings.sdf_lower_lim;
   const sdf_curv_constant = qsmartSettings.sdf_curv_constant;
   const useCurvature = qsmartSettings.useCurvature !== false;
@@ -715,7 +713,6 @@ async function runQsmartCore({
       fieldPpm, weightedMask, onesArray,
       nx, ny, nz,
       sdf_sigma1_stage1, sdf_sigma2_stage1,
-      sdf_spatial_radius,
       sdf_lower_lim, sdf_curv_constant,
       useCurvature,
       sdfProgress1
@@ -764,7 +761,6 @@ async function runQsmartCore({
       tfsWeighted, weightedMask, vascOnly,
       nx, ny, nz,
       sdf_sigma1_stage2, sdf_sigma2_stage2,
-      sdf_spatial_radius,
       sdf_lower_lim, sdf_curv_constant,
       useCurvature,
       sdfProgress2
@@ -1440,7 +1436,7 @@ installWorkerRouter({
         postError(`Unknown message type: ${type}`);
     }
   } catch (error) {
-    postError(error.message);
+    emitMessage({ type: 'error', message: error.message, fatal: error.fatal === true || error instanceof WebAssembly.RuntimeError });
     console.error(error);
   }
   },

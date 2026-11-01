@@ -161,11 +161,24 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - The pipeline (denoise, N4, `volume_pol`, registration to ICBM 2009c, features, random forest, outputs) lives in `packages/bison`, shared by the app's worker (`src/browser.js` drivers) and the Node code (`src/node.js`, `src/node-workers.js`). It is pure: the tools are injected (header of `src/preprocess.js`). Change outputs there so both stay identical.
 - The classifiers, tissue priors, histograms and `Av_FLAIR` are published under `bison/models/` with the permission of Mahsa Dadar (2026-10-24, `models_permission` in `models/bison.manifest.json`). They are at a later dataset revision than the templates, so each has its own pinned `url`. Node tests and `bin/bison.js` can read a local copy from `BISON_ASSET_DIR` (`--asset-dir`).
 - The reference is the upstream BISON and BISON-WMH scripts on MINC preprocessing, run on epic with the MINC toolkit (`packages/bison/validation/native`, its `README.md`). Its "Divergences from upstream" section and `docs/preprocessing.md` map every step; add any new divergence there.
+- Every registration runs on Greedy: the T1 affine and FLAIR rigid with NMI, the T1_VP warp with NCC (`GREEDY_NONLINEAR`: radius 2, unmasked, to 1 mm). Masking it or stopping at 2 mm failed sub-HML0774's CSF gate (`docs/preprocessing.md#nonlinear-step`); rerun all ten gates before changing it. hmc `--apply` still resamples, through the warp and then the inverse affine. Both the browser and Node run Greedy's committed single-threaded WebAssembly (`@neurodesk/greedy/single`, its `src/worker.js` in the browser); the native `greedy-rs` gives different matrix digits, so it would break the byte equality.
 - N4 replaces `nu_correct` with its own four-level schedule (`N4_OPTIONS`), not a one-to-one option translation: the direct translation stops early and brightens deep grey matter ([preprocessing.md#n4](packages/bison/docs/preprocessing.md#n4)). Keep it unless a new comparison against N3 on every validation subject shows better.
-- Each registration group and each denoised image gets a new WebAssembly instance, in its own Worker in the browser and worker thread in Node, so its memory is freed when it ends; one hmc kernel instance also aborts on its 27th run (#537, `REGISTRATION_RUNS_PER_INSTANCE`). Do not reuse an instance across stages.
+- Each registration group and each denoised image gets a new WebAssembly instance, in its own Worker in the browser and worker thread in Node, so its memory is freed when it ends. Do not reuse an instance across stages.
 - Outputs are on the native T1 grid: uint8 labels, one float32 probability per class and the uint8 mask, gzip level 9 with mtime 0 (`src/outputs.js`), so the bytes are the same in every browser and on the command line.
-- `apps/bison/scripts/copy-runtime.mjs` stages the hmc-registration and ants-denoise workers and kernels (pthread builds, so the page needs cross-origin isolation) in the gitignored `public/bison-runtime/`. ONNX Runtime Web starts its threads from `src/worker.js` (named `em-pthread`); the worker must not set its own message handler there.
-- The `bison` command line has no release yet; the app is in `WITHOUT_COMMAND_LINE` (`test/standalone.test.mjs`) until its packaging is done.
+- `apps/bison/scripts/copy-runtime.mjs` stages the hmc-registration and ants-denoise workers and kernels (pthread builds, so the page needs cross-origin isolation) and Greedy's worker and single-threaded build in the gitignored `public/bison-runtime/`. ONNX Runtime Web starts its threads from `src/worker.js` (named `em-pthread`); the worker must not set its own message handler there.
+- The `bison` command line ships through `exes/node-cli` (`packages/bison/release.json`, `bison-native.yml`). Its archives bundle the model files and must pass `validation/cli-check.mjs` against `validation/browser-reference.json`, which `bison-native.yml` also checks the built web app against; rerecord it when the pipeline, its tools or the models change.
+
+## ants-denoise
+
+- The app runs `@neurodesk/ants-denoise`'s own module worker (`?worker&url`; Vite emits the kernel beside it), one worker per run, terminated on cancel. Change the filter in the package, so the app and BISON stay identical.
+- `e2e/expected.json` pins native ANTs 2.6.5 `DenoiseImage` on the example with one ITK thread (`scripts/native-reference.mjs`, Docker), and the browser tests must reproduce it byte for byte. Rerecord it after a module rebuild or an example change.
+- The radii stop at the largest pair checked against native (patch 2, search 3), and the shrink factor stays 1. The app has no command line of its own: the Standalone dialog lists the ANTs container (`registry/standalone-exceptions.json`).
+
+## brainqcnet
+
+- The preprocessing, slice classification loop, summaries and CSV writers live in `packages/brainqcnet`; the app adds the UI, the ONNX Runtime Web worker (one per run, terminated on cancel) and the file names. Change numerics in the package only.
+- `e2e/workflow.spec.js` runs each example on WebAssembly and requires every table to equal the original container's (`packages/brainqcnet/validation/references`) byte for byte, except tot_df.csv's `t`, the processing time. The still example is the untagged run (3.4 minutes on 8 cores, longer on hosted runners); the motion example is `@slow`.
+- The app has no command line of its own: the Standalone dialog lists the authors' `garciaml/brainqcnetcpu` image at tag 1.0.1 (`registry/standalone-exceptions.json`); the validation pins its digest. The deployed-site check rejects a digest in the dialog.
 
 ## nesvor and the compute server
 
@@ -295,6 +308,15 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
   `apps/dicompare/public`, not from dicompare.neurodesk.org (`path` entries in
   `registry/offline-assets.sources.json`).
 
+## dcm2niix
+
+- Every app converts with the one `@niivue/dcm2niix` version pinned exactly in `packages/runtime-support` (also `packages/lcmodel`, `packages/mri2vid`, `apps/dicompare`; bump them together). Bundled apps import `@neurodesk/runtime-support/dcm2niix-client` (`readImageFiles`, `readImageSeries`, `readDiffusionSeries`, `runDcm2niix`); bundler-less apps use the shared `DicomController`/`createDicomConverter` on `dcm2niix/index.jpeg.js`, which `scripts/vendor-runtime-support.mjs` stages from npm in each such app's `prebuild` (`test/shared-imaging-refactor.test.mjs` enforces it). Never commit a dcm2niix build or write app-local conversion glue.
+- Every path passes `-f %p_%t_%s`: dcm2niix 1.4's default name starts with the input folder, which can name a patient, and downloads derive from output names. Upstream has no default deadline; the shared paths set 120 s.
+- The `read*` functions keep partial output (some series failed) and throw only when no image is produced; `runDcm2niix` rejects any exit code but 0 or 3.
+- The 1.4 glue is browser-only: Node passes the sibling `.wasm` as `wasmBinary` (`@neurodesk/node-drivers/dcm2niix` takes the glue URL and does this).
+- The composite site shares one `dcm2niix-jpeg` WASM family (`runtime-assets/manifest.json`); each app keeps its worker and glue in its own service-worker scope. A version bump changes its sha256 there.
+- dwi2trx keeps its own drop walker (`src/dwi2trx/files.ts`) because it stops at 20 000 files during the walk; upstream's walker has no limit.
+
 ## Node drivers for command lines (MindGrab, niimath)
 
 - A portable command line that needs MindGrab or niimath uses `@neurodesk/node-drivers/mindgrab`
@@ -325,7 +347,16 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Needs 3+ echoes (`MIN_ECHOES`; tedana's PCA fails with 2).
 - The regressors TSV comes from the dropped files (`*_desc-confounds_timeseries.tsv`, else a single non-events TSV; `src/inputs.js`) and is sent only for trees in the "Needs a confounds TSV" menu group. The moco example ships its confounds; e2e checks motion_aroma against native hashes.
 
+## pipeline-builder
+
+- Validation is NeuroFlow's core, vendored as WASM (`vendor/neuroflow/README.md`, `provenance.json`). Import/export keeps the workflow's `neuroflow` version; 0.1.0 or missing becomes 0.1.1.
+- NeuroFlow core v0.6.0 reports undeclared `inputs.<name>` refs (`input-undeclared`) and invalid constants (`constant-invalid`: type, integer, enum, min/max). v0.7.0 adds `local-id-invalid` for input, context field, step and output names outside the spec's `localId` grammar, and `output-ref-not-step`; the builder has no copy of either. The builder's `constant-invalid` check in `workflowIssues` stays for the per-item limits in `neurodesk/parameter`; `validator.js` drops it where the core already reported that path. PR #648 also adds typed array parameters and import shape checks in `parseWorkflow`.
+- Optional-output warnings come only from the core (v0.3.2 matches the removed builder check on every catalog binding).
+- Open: `bindNewWorkflowInput` drops item bounds; carrying `minItems`/`maxItems` needs the generator to emit them and a 0.1.2 document. If it does, the core's item-count issue will duplicate the builder's `input-count` warning.
+
 ## Native executables (exes/)
+
+A `packages/<app>/release.json` with a `tag` is an external release: another repository builds and releases it, and `externalCatalog` (`scripts/lib/native-releases.mjs`) turns its pinned assets into the app's `registry/standalone.json` entry, which `test/standalone.test.mjs` holds equal. Nothing here builds, dispatches or imports it. To move to a new release, update the pins and run `node scripts/desktop/import-native-releases.mjs`, which rewrites external entries from their pins without fetching them.
 
 `exes/<app>` holds native Rust executables, not pnpm packages. `exes/synthsr`
 builds with `make` inside that directory (`check-model`, `build`, `test`,
@@ -341,9 +372,18 @@ directory because its Rayon worker helper, JavaScript glue and WASM binary use
 relative URLs and must remain adjacent. The versioned Greedy web release carries
 that generated runtime; it is never committed or npm-published. Greedy's app
 manifest is the release version source; the release tooling keeps its package
-and Rust workspace at the same `MAJOR.MINOR.YYYYMMDD` version.
+and Rust workspace at the same `MAJOR.MINOR.YYYYMMDD` version, except the `greedy-rs-core` and
+`greedy-rs-wasm` crates, which stay at `0.0.0` because their versions end up in the committed
+`wasm-single` bytes.
 
-`exes/fastprep` and `exes/glm` are Cargo workspaces (`make build test lint`) with `cli`, `core` and `wasm` crates. `pnpm --filter @neurodesk/fastprep build:wasm` builds both WASM crates into the gitignored `packages/fastprep/wasm`. There is no bundled CLI release yet: fastprep is in `WITHOUT_COMMAND_LINE` (`test/standalone.test.mjs`) until niimath, brainchop, greedy-rs, synthsr, topofit and glm are packaged and TopoFit's licence allows it.
+`packages/greedy/wasm-single` is a single-threaded build of the same crate, which SYNcro's command
+line runs in Node (`@neurodesk/greedy/single`). It gives the threaded browser build's results byte
+for byte (checked in Chromium on a BISON pair), and it is committed so that every platform runs the
+same bytes. After changing `exes/greedy/core` or `exes/greedy/wasm`, run
+`pnpm --filter @neurodesk/greedy build:wasm-single` on Linux (binaryen `version_117` wasm-opt on `PATH`) and commit the result; the
+`wasm-single` job in `greedy-native.yml` fails when a rebuild differs.
+
+`exes/fastprep` and `exes/glm` are Cargo workspaces (`make build test lint`) with `cli`, `core` and `wasm` crates. `pnpm --filter @neurodesk/fastprep build:wasm` builds both WASM crates into the gitignored `packages/fastprep/wasm`. There is no bundled CLI release yet: fastprep is in `registry/standalone-exceptions.json` until niimath, brainchop, greedy-rs, synthsr, topofit and glm are packaged and TopoFit's licence allows it.
 
 `exes/compute-server` is the `neurodesk-compute` server (`make build test lint fmt`,
 `make run-simulated`). It has no GPU or Docker dependency at build or test time; all

@@ -11,6 +11,7 @@ import { repoRoot } from './apps-registry.mjs';
 export const DATE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(\d{8})$/;
 export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/ants': 'ants',
+  '@neurodesk/bison': 'bison',
   '@neurodesk/brain-extraction': 'brain-extraction',
   '@neurodesk/brain2print': 'brain2print',
   '@neurodesk/browserqc': 'browserqc',
@@ -235,8 +236,6 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
   greedy: [
     { file: 'exes/greedy/Cargo.toml', pattern: /(^\[workspace\.package\][\s\S]*?^version = ")[^"]+(")/m, replace: '$1{version}$2' },
     { file: 'exes/greedy/Cargo.lock', pattern: /(name = "greedy-rs"\nversion = ")[^"]+(")/, replace: '$1{version}$2' },
-    { file: 'exes/greedy/Cargo.lock', pattern: /(name = "greedy-rs-core"\nversion = ")[^"]+(")/, replace: '$1{version}$2' },
-    { file: 'exes/greedy/Cargo.lock', pattern: /(name = "greedy-rs-wasm"\nversion = ")[^"]+(")/, replace: '$1{version}$2' },
   ],
   musclemap: [
     { file: 'apps/musclemap/model-sources/release.json', pattern: /("appVersion":\s*")[^"]+(")/, replace: '$1{version}$2' },

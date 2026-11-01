@@ -185,6 +185,25 @@ describe('QsmPipelineController initialization', () => {
     expect(progress).toContain('Failed');
   });
 
+  test('a fatal engine error discards the trapped WASM and the next run initializes a fresh worker', async () => {
+    const errors = [];
+    const ex = makeExecutor({ onPipelineError: message => errors.push(message) });
+    const initialized = ex.initialize();
+    workers[0].reply({ type: 'initialized' });
+    await initialized;
+    ex.pipelineRunning = true;
+    workers[0].reply({ type: 'error', message: 'The engine panicked: out of bounds', fatal: true });
+    expect(errors).toEqual(['The engine panicked: out of bounds']);
+    expect(workers[0].terminated).toBe(true);
+    expect(ex.isReady()).toBe(false);
+    expect(ex.isRunning()).toBe(false);
+    const retry = ex.initialize();
+    expect(workers).toHaveLength(2);
+    workers[1].reply({ type: 'initialized' });
+    await retry;
+    expect(ex.isReady()).toBe(true);
+  });
+
   test('a successful init clears the timeout', async () => {
     jest.useFakeTimers();
     const ex = makeExecutor({ initTimeoutMs: 5000 });

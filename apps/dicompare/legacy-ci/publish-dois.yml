@@ -83,7 +83,7 @@ jobs:
             --zenodo-token "$ZENODO_TOKEN" \
             --zenodo-base-url "${{ steps.target.outputs.base_url }}" \
             --mapping "${{ steps.target.outputs.mapping }}" \
-            --site-base-url "https://dicompare.neurodesk.org"
+            --site-base-url "https://webapps.neurodesk.org/dicompare"
 
       - name: Commit updated DOI mapping
         id: commit

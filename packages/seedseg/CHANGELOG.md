@@ -1,5 +1,41 @@
 # @neurodesk/seedseg
 
+## 0.7.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/webapp-components@0.22.3
+
+## 0.7.20261027
+
+### Minor Changes
+
+- 7019541: Integrate upstream nnU-Net v2 through the shared browser and command-line pipeline.
+  Use pinned fold models, nonzero cropping, normalization, Gaussian sliding windows,
+  optional mirroring, per-fold probability averaging and ranked marker detections.
+  Default to network 1 without mirroring, with WebGPU first and WebAssembly fallback.
+  Retain the legacy v1 consensus under Advanced and through explicit CLI options.
+  Update ONNX Runtime to 1.30.0 and keep its loaders within the app service-worker scope.
+  Keep the shared shell, model downloader, NIfTI helpers, progress and mask editing.
+  Load the optional acquisition report on demand so an unavailable report host does
+  not block segmentation. Add detection reports and browser/CLI parity coverage.
+
+### Patch Changes
+
+- Preserve WebAssembly fallback when a failed WebGPU session also rejects cleanup. Validate the five-fold ensemble and mirroring against WebAssembly on a verified hardware adapter in full Chromium.
+
+## 0.6.20261027
+
+### Patch Changes
+
+- Use the checked-in Dicompare runtime during native/browser parity validation so an unrelated remote script outage cannot prevent the reference app from starting.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+
 ## 0.6.20261024
 
 ### Patch Changes

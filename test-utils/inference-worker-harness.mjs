@@ -36,6 +36,7 @@ export async function inferenceWorker(app, globals = {}) {
   });
   const context = vm.createContext({
     ArrayBuffer, Uint8Array, File, Blob, Response, Headers, crypto: webcrypto,
+    Request, setTimeout, clearTimeout, AbortController, AbortSignal, DOMException,
     navigator: { hardwareConcurrency: 1, gpu: { async requestAdapter() {
       return { limits: { maxBufferSize: 2 ** 31, maxStorageBufferBindingSize: 2 ** 31 } };
     } } },

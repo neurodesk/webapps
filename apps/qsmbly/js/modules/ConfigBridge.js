@@ -115,7 +115,7 @@ export function buildConfig(settings, options = {}) {
   if (settings.msmv) config.bg_removal.msmv = settings.msmv;
   if (settings.medi) config.inversion.medi = settings.medi;
   if (settings.tfi) config.inversion.tfi = {
-    lambda: settings.tfi.lambda, precond: settings.tfi.precond, merit: settings.tfi.merit,
+    lambda: settings.tfi.lambda, precond: settings.tfi.precond,
     data_weighting: settings.tfi.data_weighting, percentage: settings.tfi.percentage,
     cg_tol: settings.tfi.cg_tol, cg_max_iter: settings.tfi.cg_max_iter,
     max_iter: settings.tfi.max_iter, tol: settings.tfi.tol,
@@ -130,7 +130,7 @@ export function buildConfig(settings, options = {}) {
   };
   if (settings.qsmart) config.inversion.qsmart = {
     ilsqr_max_iter: settings.qsmart.ilsqr_max_iter,
-    vasc_sphere_radius: settings.qsmart.vasc_sphere_radius, sdf_spatial_radius: settings.qsmart.sdf_spatial_radius,
+    vasc_sphere_radius: settings.qsmart.vasc_sphere_radius,
     inversion: settings.qsmart.inversion_algorithm || 'ilsqr',
     sdf_sigma1_stage1: settings.qsmart.sdf_sigma1_stage1, sdf_sigma2_stage1: settings.qsmart.sdf_sigma2_stage1,
     sdf_sigma1_stage2: settings.qsmart.sdf_sigma1_stage2, sdf_sigma2_stage2: settings.qsmart.sdf_sigma2_stage2,

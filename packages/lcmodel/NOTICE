@@ -22,5 +22,5 @@ the constants of Osprey (MIT, https://github.com/schorschinho/osprey).
 MindMap (@brainchop/mindgrab 0.1.20260925), CPU partial-volume segmentation.
 Source and license: https://www.npmjs.com/package/@brainchop/mindgrab
 
-dcm2niix (@niivue/dcm2niix 1.2.0), BSD-2-Clause, DICOM conversion.
+dcm2niix (@niivue/dcm2niix 1.4.20261029), BSD-2-Clause, DICOM conversion.
 Source: https://github.com/rordenlab/dcm2niix

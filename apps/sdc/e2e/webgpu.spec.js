@@ -63,7 +63,13 @@ async function serve(volumes) {
     response.end(`<!doctype html><title>sdc webgpu</title><script type="importmap">${importMap}</script>`);
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return { url: `http://127.0.0.1:${server.address().port}/`, posted, close: () => new Promise((resolve) => server.close(resolve)) };
+  // Chromium keeps a spare keep-alive socket that never carried a request; Node counts such a
+  // socket as active, so server.close() alone waits for the browser to drop it (issue #347).
+  const close = () => new Promise((resolve) => {
+    server.closeAllConnections();
+    server.close(resolve);
+  });
+  return { url: `http://127.0.0.1:${server.address().port}/`, posted, close };
 }
 
 // Runs each backend in the page on /data/image1 and /data/image2 and posts each field to

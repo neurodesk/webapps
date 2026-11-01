@@ -6,7 +6,7 @@
  */
 
 // Application version. `pnpm release` writes the date version (scripts/lib/app-versions.mjs).
-export const VERSION = '0.31.20261024';
+export const VERSION = '0.31.20261031';
 
 // Where deep-learning model weights are fetched from in the browser. The qsm-core model
 // registry points at OSF, which does NOT send CORS headers, so a browser fetch from it
@@ -192,7 +192,6 @@ export const QSMART_DEFAULTS = {
   sdf_sigma2_stage1: _QSMART.sdf_sigma2_stage1,
   sdf_sigma1_stage2: _QSMART.sdf_sigma1_stage2,
   sdf_sigma2_stage2: _QSMART.sdf_sigma2_stage2,
-  sdf_spatial_radius: _QSMART.sdf_spatial_radius,
   sdf_lower_lim: _QSMART.sdf_lower_lim,
   sdf_curv_constant: _QSMART.sdf_curv_constant,
   vasc_sphere_radius: _QSMART.vasc_sphere_radius,
@@ -341,7 +340,6 @@ export const MEDI_DEFAULTS = {
 export const TFI_DEFAULTS = {
   lambda: _TFI.lambda,
   precond: _TFI.precond,
-  merit: _TFI.merit,
   data_weighting: _TFI.data_weighting,
   percentage: _TFI.percentage,
   cg_tol: _TFI.cg_tol,

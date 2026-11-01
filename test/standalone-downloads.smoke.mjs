@@ -3,6 +3,7 @@ import { chromium, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { DIALOG_FORBIDDEN } from '../scripts/lib/standalone.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
 const registry = await loadAppsRegistry();
@@ -49,7 +50,7 @@ try {
         }
       }
       await expect(dialog).toBeVisible();
-      await expect(dialog).not.toContainText(/cargo build|compile from source|make macos-release|sha-256|sha256|shasum|Prepare this upstream/i);
+      await expect(dialog).not.toContainText(DIALOG_FORBIDDEN);
       const sections = await dialog.locator('section > h3').allTextContents();
       const downloads = catalog.apps[app.id].downloads;
       assert.equal(sections.includes('Command line'), downloads.length > 0, `${app.id}: lists a command line exactly when it has released one`);

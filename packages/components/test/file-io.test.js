@@ -139,18 +139,13 @@ test('resets source scaling when writing newly derived voxel data', () => {
   assert.deepEqual(Array.from(readNiftiImageData(output, Float64Array).data), [3]);
 });
 
-test('single-image conversion rejects ambiguous series and frees its worker', async () => {
+test('single-image conversion rejects ambiguous series', async () => {
   const { DicomController, readSingleImage } = await import('../src/file-io/index.js');
   await assert.rejects(readSingleImage([fakeFile('one.nii'), fakeFile('two.nii')]), /one NIfTI/);
-  let terminated = false;
-  const controller = new DicomController({ requireSingle: true });
-  controller._createInstance = async () => ({
-    input() { return this; },
-    async run() { return [fakeFile('series1.nii'), fakeFile('series2.nii')]; },
-    worker: { terminate() { terminated = true; } }
-  });
+  const moduleUrl = `data:text/javascript,${encodeURIComponent(
+    "export const runDcm2niix = async () => [new File([''], 'series1.nii'), new File([''], 'series2.nii')];")}`;
+  const controller = new DicomController({ requireSingle: true, moduleUrl });
   await assert.rejects(controller.convertFiles([fakeFile('slice.IMA')]), /one series at a time/);
-  assert.equal(terminated, true);
   assert.equal(controller.converting, false);
 });
 
