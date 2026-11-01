@@ -4,7 +4,7 @@ BET: Smith SM. Fast robust automated brain extraction. Human Brain Mapping
 17(3):143-155, 2002. https://doi.org/10.1002/hbm.10062
 The BET implementation is qsm-core (QSM.rs) by Ashley Stewart, MIT license:
 https://github.com/astewartau/QSM.rs
-wasm/bet.wasm is compiled from commit 8a3afda3716a859d93f1d41f1c8993335cc80c57
+wasm/bet.wasm is compiled from commit 95be94b83b43e80329b4ecfe8a74cf8114ea927a
 by bet-wasm/ and scripts/build-bet-wasm.sh, shared by the browser and command line.
 Its MIT license is in wasm/LICENSE.
 

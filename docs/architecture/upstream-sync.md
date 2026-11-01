@@ -47,6 +47,10 @@ would never run on it.
    rm ~/Downloads/neurodesk-webapps-upstream-sync.*.private-key.pem
    ```
 
+The `standalone-links` workflow uses the same App to open its
+`bot/repin-neurocontainers` pull request when Neurocontainers deletes a pinned
+`.simg` (`scripts/repin-neurocontainers.mjs`).
+
 To rotate the key, generate a new one on the App's page, run the `gh secret set`
 command again, and delete the old key there.
 

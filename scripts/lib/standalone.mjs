@@ -20,6 +20,7 @@ export function validateStandalone(value, registry) {
       if (!Array.isArray(app[key])) throw new Error(`${id}: missing ${key}`);
     }
     validateDownloads(app.downloads, id);
+    if (app.commandLine && (!Array.isArray(app.commandLine.notes) || !app.commandLine.links?.every(link => link.label && /^https:\/\//.test(link.url)))) throw new Error(`${id}: commandLine needs notes and https links`);
     if (app.computeServer) validateComputeServer(app.computeServer, id);
     if (app.openrecon && (typeof app.openrecon.label !== 'string' || !app.openrecon.label.trim() || typeof app.openrecon.recipe !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/.test(app.openrecon.recipe))) {
       throw new Error(`${id}: OpenRecon requires a package label and recipe name`);
@@ -36,7 +37,8 @@ function validateDownloads(downloads, id) {
   if (!Array.isArray(downloads)) throw new Error(`${id}: missing downloads`);
   for (const download of downloads) {
     for (const file of [download, ...(download.parts || [])]) {
-      if (!/^https:\/\/github\.com\/neurodesk\/webapps\/releases\/download\//.test(file.url)) throw new Error(`${id}: invalid download URL`);
+      // A GitHub release asset: this repository's, or an external release pinned in release.json.
+      if (!/^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+$/.test(file.url)) throw new Error(`${id}: invalid download URL`);
       if (!/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error(`${id}: download must have a checksum`);
     }
     if (!download.platform || !download.version || !['desktop', 'cli', 'container', 'models'].includes(download.kind)) throw new Error(`${id}: incomplete release metadata`);
@@ -44,6 +46,9 @@ function validateDownloads(downloads, id) {
 }
 
 // Shared modules the app shell imports at run time (Standalone dialog, page-wide drop, handoff sweep).
+/** Build or checksum instructions the Standalone dialog must never show users. */
+export const DIALOG_FORBIDDEN = /cargo build|compile from source|make macos-release|sha-256|sha256|shasum|Prepare this upstream/i;
+
 export const SHELL_COMPONENTS = ['core/dom.js', 'ui/renderInfoDialog.js', 'ui/renderStandalone.js', 'ui/pageDrop.js', 'file-io/detectFiles.js', 'handoff/index.js', 'handoff/receive.js', 'styles/imaging-workspace.css', 'styles/base.css'];
 
 export async function stageStandaloneAssets(destination) {

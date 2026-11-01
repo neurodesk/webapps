@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BrainQCNet — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a T1-weighted NIfTI image or DICOM series" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop NIfTI or DICOM files or folder</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Quality check</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="method">Method
+              <span class="nd-info-icon" tabindex="0" aria-label="About the method">i<span class="nd-info-tooltip">How the slice predictions (0 clean, 1 artifact) are combined, BrainQCNet's --pred_method. Percentage, the default, is the share of slices flagged. Mean and median average the predictions. The image is flagged when the result is above 0.5.</span></span>
+            </label>
+            <select id="method">
+              <option value="percentage" selected>Percentage of slices</option>
+              <option value="mean">Mean</option>
+              <option value="median">Median</option>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="areas">Areas per axis
+                  <span class="nd-info-icon" tabindex="0" aria-label="About areas per axis">i<span class="nd-info-tooltip">BrainQCNet's --n_areas. Each axis is cut into this many runs of slices, and the x, y and z local results tables give one row per run.</span></span>
+                </label>
+                <input id="areas" type="number" min="1" max="10" step="1" value="3" />
+              </div>
+              <div class="nd-field">
+                <label for="backend">Processing</label>
+                <select id="backend">
+                  <option value="auto" selected>Automatic</option>
+                  <option value="wasm">CPU</option>
+                </select>
+                <p class="nd-hint">Automatic uses the GPU through WebGPU when available.</p>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Check quality</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <table id="verdict" class="nd-data-table" aria-label="Quality verdict" hidden><tbody></tbody></table>
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Quality check progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel the quality check" aria-label="Cancel the quality check" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>BrainQCNet (Garcia, Dosenbach and Kelly, 2024) detects motion and other artifacts in a T1-weighted MRI. A prototypical part network (ProtoPNet) on a ResNet152 backbone, trained on scans from ABCD, ABIDE and ADHD-200, classifies every slice along x, y and z of the cropped image as clean or showing artifacts; the image is flagged when more than half of its slices are (with the default percentage method). The map shows, for each voxel, how many of the three slices through it were flagged. It is a research tool for 3D T1-weighted images, trained on 3 T research scans: check flagged images by eye, and expect less reliable results on other contrasts, field strengths or clinical protocols. On the two examples the app writes the original BIDS app's tables byte for byte (packages/brainqcnet/validation/README.md in the source repository). The examples are one participant of the MR-ART dataset (OpenNeuro ds004173), still and with deliberate head motion.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. The BrainQCNet model (235 MB, downloaded once and cached) and the examples are downloaded from Hugging Face.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -113,7 +113,7 @@ test('RFC 0010 qualifiers are promoted by the migration mapping and the document
   assert.equal(tool.inputs.input_image.space, undefined);
   assert.equal(tool.inputs.input_fixed.space, undefined);
   assert.equal(tool.inputs.input_bval.type, 'neuro:gradient-table');
-  assert.equal(tool.inputs.input_bval.formats, undefined);
+  assert.deepEqual(tool.inputs.input_bval.formats, ['bval']);
   assert.deepEqual(tool.inputs.input_bval.extensions['neurodesk/data'].formats, ['bval', 'bvals']);
   assert.equal(tool.inputs.input_store.type, 'core:string');
   assert.equal(tool.inputs.input_store.formats, undefined);

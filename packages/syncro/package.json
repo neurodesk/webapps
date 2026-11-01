@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/syncro",
-  "version": "0.7.20261025",
+  "version": "0.8.20261031",
   "type": "module",
   "description": "SYNcro spatial normalization for browsers and standalone computers",
   "license": "Apache-2.0",
@@ -35,6 +35,7 @@
     "nifti-reader-js": "0.8.0"
   },
   "devDependencies": {
+    "@neurodesk/greedy": "workspace:*",
     "@neurodesk/registration": "workspace:*",
     "@neurodesk/synthsr": "workspace:*",
     "@neurodesk/synthstrip": "workspace:*",

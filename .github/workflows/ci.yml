@@ -58,6 +58,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Check catalog integration before starting app jobs
+        run: pnpm check:integration
       - name: Generate affected app plan
         id: plan
         env:
@@ -155,6 +157,13 @@ jobs:
         run: pnpm --filter "$APP" run "$TEST_SCRIPT"
       - name: Build ${{ matrix.app }}
         run: pnpm --filter ${{ matrix.app }} build
+      # The ConfigBridge round trip skips when rust-wasm/pkg is absent, as it is
+      # before the build; rerun it against the bundle just built.
+      - name: Test qsmbly against its built WASM
+        if: matrix.app == 'qsmbly'
+        env:
+          QSMBLY_REQUIRE_WASM: '1'
+        run: pnpm --filter qsmbly test -- js/modules/ConfigBridge.roundtrip.test.js
 
   composite-site:
     needs: app-plan
@@ -398,6 +407,15 @@ jobs:
           NEURODESK_E2E_PREBUILT: '1'
           NEURODESK_E2E_SHARD: ${{ matrix.shard }}
         run: pnpm --filter ${{ matrix.app }} test:e2e
+      # A failed test's error-context.md holds the page's accessibility snapshot, so
+      # the status text behind a wrong example state or empty file info survives the run.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: browser-e2e-${{ matrix.app }}-${{ strategy.job-index }}
+          path: apps/${{ matrix.app }}/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # The free macOS runners expose a paravirtual Apple GPU that full Chromium
   # reaches through Metal, for WebGL2 and WebGPU alike (niivue/mono#199). This

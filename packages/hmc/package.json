@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/hmc",
-  "version": "0.4.20261025",
+  "version": "0.4.20261031",
   "description": "DWI head-motion correction for browsers and the command line: a pool of ANTs registration workers, one resampling and BIDS-derivative outputs",
   "type": "module",
   "private": true,
@@ -16,7 +16,8 @@
     "./outputs": "./src/outputs.js",
     "./node": "./src/node.js",
     "./browser": "./src/browser.js",
-    "./nifreeze": "./src/nifreeze.js"
+    "./nifreeze": "./src/nifreeze.js",
+    "./limits": "./src/limits.js"
   },
   "files": [
     "bin",
@@ -29,7 +30,7 @@
     "build:wasm": "bash scripts/build-wasm.sh",
     "check:wasm": "bash scripts/build-wasm.sh --check",
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/wasm.js && node --check src/pool.js && node --check src/outputs.js && node --check src/pipeline.js && node --check src/node.js && node --check src/node-worker.js && node --check src/browser.js && node --check src/nifreeze.js && node --check src/node-files.js && node --check bin/hmc.js && node --check src/node-runtime.js"
+    "lint": "node --check src/wasm.js && node --check src/pool.js && node --check src/outputs.js && node --check src/pipeline.js && node --check src/node.js && node --check src/node-worker.js && node --check src/browser.js && node --check src/nifreeze.js && node --check src/limits.js && node --check src/node-files.js && node --check bin/hmc.js && node --check src/node-runtime.js"
   },
   "dependencies": {
     "@neurodesk/hmc-registration": "workspace:*",

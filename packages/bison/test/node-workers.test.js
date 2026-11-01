@@ -5,7 +5,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { gzipSync } from 'node:zlib';
 import { loadDenoise } from '@neurodesk/ants-denoise/node';
 import { loadHmcRegistration } from '@neurodesk/hmc-registration/node';
-import { createDenoiser, createRegistration } from '../src/node-workers.js';
+import { loadGreedySingleThread } from '@neurodesk/greedy/single';
+import { registerAffineGreedy, registerRigidGreedy, registerSvfGreedy } from '@neurodesk/greedy';
+import { createDenoiser, createGreedy, createRegistration } from '../src/node-workers.js';
 
 const N = 20;
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -129,6 +131,22 @@ test('the denoise worker writes the in-thread module bytes; an abort is reported
   assert.match(lines.join('\n'), /not recognized as a supported image format/);
   await assert.rejects(broken.denoise({ image }), /Create a new denoiser/);
   await broken.dispose();
+});
+
+test('the Greedy worker returns the in-thread matrices and reports its heap', async () => {
+  const api = await loadGreedySingleThread();
+  const greedy = await createGreedy();
+  try {
+    assert.equal(await greedy.affine({ fixed, moving }), registerAffineGreedy({ api, fixed, moving }));
+    assert.equal(await greedy.rigid({ fixed, moving }), registerRigidGreedy({ api, fixed, moving }));
+    const svf = { matrix: '1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1\n', metric: 'NCC 2x2x2', iterations: '2x0x0' };
+    assert.deepEqual(await greedy.svf({ fixed, moving, ...svf }), registerSvfGreedy({ api, fixed, moving, ...svf }));
+    assert.ok(greedy.memoryBytes() > 0);
+    assert.equal(fixed[0], 92, 'inputs are copied, not transferred');
+    await assert.rejects(greedy.affine({ fixed: new Uint8Array(8), moving }), /NIfTI|header|short|small/i);
+  } finally {
+    await greedy.dispose();
+  }
 });
 
 test('a load failure rejects the factory and leaves no worker behind', async () => {

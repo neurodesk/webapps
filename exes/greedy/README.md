@@ -1,7 +1,7 @@
 # Greedy Rust
 
 Rust implementation of the three production Greedy workflows (`-d 3`):
-SSD/NMI affine or rigid registration, nonlinear NMI stationary-velocity, and reslice. Native CLI
+SSD/NMI affine or rigid registration, nonlinear NMI or NCC stationary-velocity, and reslice. Native CLI
 plus a `wasm-bindgen` API. The core has two dependencies (`flate2`, and
 `rayon` behind the default `parallel` feature) and no unsafe code.
 
@@ -57,6 +57,18 @@ GREEDY_BENCH_DIR=/path/to/allineate-benchmark \
   cargo test -p greedy-rs --test workflows nmi_affine_2mm_matches_greedy_within_float_double_spread -- --ignored
 ```
 
+The whole-head regression gates for issue #623 are also ignored by default: a
+masked and an unmasked NMI affine of a defaced 1 mm T1 to ICBM 2009c, and the
+masked affine started from the unmasked one (`-ia`) on two T1s where the
+identity start collapses. The `whole-head-reference` job of `greedy-native.yml`
+runs them on every change; locally, fetch the pinned data and run them by name:
+
+```sh
+python3 scripts/fetch_t1_template.py /path/to/greedy-t1-template
+GREEDY_T1_TEMPLATE_DIR=/path/to/greedy-t1-template \
+  cargo test --release -p greedy-rs --test workflows whole_head -- --ignored
+```
+
 Build the threaded browser runtime through the workspace package, which selects
 the pinned nightly and shared-memory flags:
 
@@ -82,6 +94,7 @@ the JavaScript package, Cargo workspace, and lockfile.
 greedy-rs -d 3 -a -m SSD -i fixed.nii.gz moving.nii.gz -o aff.mat -ia-image-centers -n 100x50x10
 greedy-rs -d 3 -a -dof 6 -m NMI -i fixed.nii.gz moving.nii.gz -o rigid.mat -ia-image-centers
 greedy-rs -d 3 -m NMI -i fixed.nii.gz moving.nii.gz -it aff.mat -o warp.nii.gz -sv -n 100x50x10
+greedy-rs -d 3 -m NCC 2x2x2 -i fixed.nii.gz moving.nii.gz -it aff.mat -o warp.nii.gz -sv -n 100x70x50
 greedy-rs -d 3 -rf fixed.nii.gz -rm moving.nii.gz out.nii.gz -r warp.nii.gz aff.mat
 greedy-rs -d 3 -rf fixed.nii.gz -rm mask.nii.gz warped-mask.nii.gz -ri NN -r warp.nii.gz aff.mat
 greedy-rs -d 3 -rf fixed.nii.gz -rm ct.nii.gz warped-ct.nii.gz -rb auto -r warp.nii.gz aff.mat
@@ -89,9 +102,29 @@ greedy-rs -d 3 -rf fixed.nii.gz -rm ct.nii.gz warped-ct.nii.gz -rb auto -r warp.
 
 - `-V 0` silences the Greedy-style optimizer trace; `-threads N` limits the
   rayon pool (results are identical for any thread count).
-- `-gm MASK` (affine and `-sv`, NMI only) is Greedy's fixed-image mask. It must be on the fixed grid. At every pyramid level the mask is smoothed and resampled like an image, then thresholded at > 0.5, and fixed voxels outside it are excluded from the joint histogram and the gradient. Use it with whole-head images, rather than registering two skull-stripped images whose mask boundaries differ (for example, at the brainstem cut-off).
+- `-m NCC RxRxR` (`-sv` only) is Greedy's neighbourhood cross-correlation over a box of radius R
+  voxels, the unweighted `MultiComponentWeightedNCCImageMetric` with its exact gradient. As in
+  Greedy, the radius shrinks where a level is too small for the window, and the fixed image is
+  downsampled without the mask. Greedy also adds noise of 0.001 interquartile ranges to NCC's
+  inputs; greedy-rs does not, so it stays deterministic, and regularises the variances only with
+  Greedy's 0.01. On five T1-to-ICBM 2009c registrations (`-n 100x50x0 -gm`) it gave the same
+  correlation with the native warped template as Greedy 1.4 to within 0.004.
+- `-gm MASK` (affine and `-sv`) is Greedy's fixed-image mask. It must be on the fixed grid. At every pyramid level the mask is smoothed and resampled like an image; with NMI, at the coarse levels the fixed image is divided by it where it is at least 0.5 and zeroed elsewhere (Greedy's masked downsampling), and fixed voxels outside it are excluded from the joint histogram and the gradient. With NCC, only the windows centred inside it count, at a mask value of at least 0.5 on each level. This differs from Greedy, which keeps the mask's weights, scores centres where the mask is 1 and dilates it by the radius for the gradient; at coarse levels Greedy therefore drops boundary voxels that greedy-rs keeps. BISON registers unmasked. Use it with whole-head images, rather than registering two skull-stripped images whose mask boundaries differ (for example, at the brainstem cut-off).
 - Affine registration uses 12 degrees of freedom by default. `-dof 6` limits
   the result to rigid-body translation and rotation.
+- The affine starts from the physical identity, as Greedy does; `-ia-image-centers`
+  starts from aligned image centres. The two are not interchangeable: on a
+  whole-head T1 to template pair with `-gm`, the image-centres start falls into a
+  degenerate NMI basin (determinant 4) in Greedy and greedy-rs alike (#623).
+  `-ia FILE` starts from a matrix as `-o` writes it. The identity start still
+  collapses on some subjects (determinants 30 and 2.2 on two of five BISON T1s,
+  as in Greedy); starting the masked affine from the unmasked one converged on
+  all five:
+
+  ```sh
+  greedy-rs -d 3 -a -m NMI -i template.nii.gz t1.nii.gz -o head.mat
+  greedy-rs -d 3 -a -m NMI -i template.nii.gz t1.nii.gz -gm template_mask.nii.gz -ia head.mat -o aff.mat
+  ```
 - Reslicing is linear by default. Use `-ri NN` for masks and label maps.
   Scalar 4-D inputs are resliced volume by volume with one transform chain;
   their number of time points, temporal spacing, and temporal units are kept.
@@ -114,9 +147,11 @@ greedy-rs -d 3 -rf fixed.nii.gz -rm ct.nii.gz warped-ct.nii.gz -rb auto -r warp.
 
 ## Browser API
 
-`greedy-rs-wasm` exports `register_affine_wasm`, `register_nmi_svf_wasm`,
-`reslice_affine`, `reslice_affine_options`, `reslice_warp_affine`, and
-`reslice_warp_affine_options` over in-memory NIfTI blobs. The option-bearing
+`greedy-rs-wasm` exports `register_affine_wasm`, `register_affine_masked_wasm`,
+`register_rigid_masked_wasm` (`-dof 6`), `register_nmi_svf_wasm`,
+`register_nmi_svf_masked_wasm`, `reslice_affine`, `reslice_affine_options`,
+`reslice_warp_affine`, and `reslice_warp_affine_options` over in-memory NIfTI
+blobs. The option-bearing
 reslicers expose nearest-neighbour interpolation, background fill and SYNcro's
 optional preceding pathological-to-primary affine. The browser host must call
 its async `initThreadPool` export before registration; the WASM build then uses

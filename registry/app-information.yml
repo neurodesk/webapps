@@ -520,7 +520,7 @@ apps:
 
   seedseg:
     packages:
-      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the four 3D UNet models in the browser }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs nnU-Net v2 and legacy 3D U-Net models in the browser }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
       - { name: dicompare, url: https://github.com/astewartau/dicompare, role: acquisition protocol validation report }
@@ -534,6 +534,15 @@ apps:
         title: Homogeneity correction
         reference: "Eckstein K, Trattnig S, Robinson SD. A simple homogeneity correction for neuroimaging at 7T. Proceedings of the ISMRM 27th Annual Meeting. 2019."
         url: https://github.com/korbinian90/MriResearchTools.jl
+      - group: Segmentation networks
+        title: nnU-Net
+        reference: "Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211."
+        doi: 10.1038/s41592-020-01008-z
+        code: https://github.com/MIC-DKFZ/nnUNet
+      - group: Segmentation networks
+        title: nnU-Net residual encoder (v2 model)
+        reference: "Isensee F, Wald T, Ulrich C, Baumgartner M, Roy S, Maier-Hein K, Jaeger PF. nnU-Net revisited: a call for rigorous validation in 3D medical image segmentation. Medical Image Computing and Computer-Assisted Intervention. 2024:488–498."
+        doi: 10.1007/978-3-031-72114-4_47
       - group: Segmentation networks
         title: 3D U-Net
         reference: "Çiçek Ö, Abdulkadir A, Lienkamp SS, Brox T, Ronneberger O. 3D U-Net: learning dense volumetric segmentation from sparse annotation. Medical Image Computing and Computer-Assisted Intervention. 2016:424–432."
@@ -1180,7 +1189,7 @@ apps:
   brain-extraction:
     packages:
     - name: QSM.rs BET
-      url: https://github.com/astewartau/QSM.rs/tree/8a3afda3716a859d93f1d41f1c8993335cc80c57
+      url: https://github.com/astewartau/QSM.rs/tree/95be94b83b43e80329b4ecfe8a74cf8114ea927a
       role: compact brain extraction kernel shared by browser and command line
     - name: MindGrab (brainchop)
       url: https://github.com/neuroneural/brainchop
@@ -1981,9 +1990,9 @@ apps:
   pipeline-builder:
     about:
       - Build and export a NeuroFlow workflow that connects Neurodesk app operations. Image data stays outside the workflow file.
-      - To run an export, install the Neurodesk desktop suite and Node.js, then build neuroflow-mcp v0.2.0 from https://github.com/cdrake/neuroflow at commit fc6ec6075108306a588d48e2c1b66ffb924284a6 with cargo build --release --locked -p neuroflow-mcp. This release has no downloadable binaries.
+      - To run an export, install the Neurodesk desktop suite and Node.js, then download neuroflow-mcp v0.7.0 for your platform from https://github.com/cdrake/neuroflow/releases/tag/v0.7.0 and check it against the release's SHA256SUMS file. To build it instead, run cargo build --release --locked -p neuroflow-mcp at that tag.
       - Generate a matching tool registry with node scripts/generate-neuroflow.mjs --out /absolute/path/to/registry from the Webapps source checkout. Set NEURODESK_WEBAPPS to the desktop executable, then configure your MCP client to start neuroflow-mcp --registry /absolute/path/to/registry --data-root /absolute/path/to/data. Call neuroflow_run with the exported document as workflow and absolute image paths under inputs, keyed by the workflow input names. The T1 example uses the input name t1 and requires hardware WebGPU for SynthSeg.
-      - Execution happens in the desktop suite on your computer. NeuroFlow v0.2.0 runs synchronously and cannot cancel a workflow while keeping the server alive. Release binaries and cancellation are tracked at https://github.com/cdrake/neuroflow/issues/30 and https://github.com/cdrake/neuroflow/issues/31.
+      - Execution happens in the desktop suite on your computer. NeuroFlow v0.7.0 runs synchronously. To cancel, an MCP client sends notifications/cancelled with params.requestId matching the running tools/call. Cancellation stops the active process group on Unix, but only the direct child on Windows, where descendants may continue. Later steps do not start and the server keeps serving. The cancelled call receives no response or run ID; its run.json record remains in the sessions directory with status cancelled.
     privacy: Workflow files you open are read on this page and never uploaded. The tool catalog is fetched from this site, and the example workflow from the Neurodesk dataset on Hugging Face. Exported workflows name tools and bindings only, never image data.
     packages:
       - { name: NeuroFlow Rust core (WebAssembly), url: https://github.com/cdrake/neuroflow, role: workflow validation against the tool catalog }
@@ -2006,7 +2015,8 @@ apps:
       - "Outputs are research estimates, not a diagnosis. Check them against the image."
     packages:
       - { name: "@neurodesk/bison", url: https://github.com/neurodesk/webapps/tree/main/packages/bison, role: BISON preprocessing, features and outputs, shared by the browser worker and the command line }
-      - { name: antsRegistration (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/packages/hmc-registration, role: "rigid, affine and SyN registration to the ICBM 2009c template (@neurodesk/hmc-registration)" }
+      - { name: greedy-rs (Rust/WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: "T1 to template affine, FLAIR to T1 rigid, and NCC deformable registration of the normalised T1 to the ICBM 2009c template (@neurodesk/greedy)" }
+      - { name: antsApplyTransforms (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/packages/hmc-registration, role: "resampling the template, mask and priors through Greedy's transforms (@neurodesk/hmc-registration)" }
       - { name: ANTs DenoiseImage (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/packages/ants-denoise, role: "adaptive non-local means denoising (@neurodesk/ants-denoise)" }
       - { name: niimath (WebAssembly), url: https://github.com/rordenlab/niimath, role: N4 bias field correction and image maths }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the BISON random forest classifiers on the CPU }
@@ -2032,10 +2042,10 @@ apps:
         reference: "Fonov VS, Evans AC, McKinstry RC, Almli CR, Collins DL. Unbiased nonlinear average age-appropriate brain templates from birth to adulthood. NeuroImage. 2009;47(Suppl 1):S102."
         doi: 10.1016/S1053-8119(09)70884-5
       - group: Registration
-        title: ANTs SyN
-        reference: "Avants BB, Epstein CL, Grossman M, Gee JC. Symmetric diffeomorphic image registration with cross-correlation: evaluating automated labeling of elderly and neurodegenerative brain. Medical Image Analysis. 2008;12(1):26–41."
-        doi: 10.1016/j.media.2007.06.004
-        code: https://github.com/ANTsX/ANTs
+        title: Greedy
+        reference: "Greedy was created by Paul Yushkevich at the Penn Image Computing and Science Lab and is maintained by contributors to the Greedy C++ project [Computer software]."
+        url: https://sites.google.com/view/greedyreg/about
+        code: https://github.com/pyushkevich/greedy
       - group: Preprocessing
         title: N4 bias field correction
         reference: "Tustison NJ, Avants BB, Cook PA, et al. N4ITK: improved N3 bias correction. IEEE Transactions on Medical Imaging. 2010;29(6):1310–1320."
@@ -2062,6 +2072,112 @@ apps:
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
         url: https://onnxruntime.ai
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  ants-denoise:
+    about:
+      - "ANTs DenoiseImage reduces noise in one 3D MR image using the adaptive non-local means filter of Manjón et al. (2010), the denoising step BISON runs before tissue classification. The output is a float32 image on the input grid. The validated settings reproduce native ANTs 2.6.5 DenoiseImage on one thread. The filter excludes nonpositive intensities from patch matching, so signed real or phase images are outside the validated scope."
+      - "Choose the noise model by how the image was formed. Gaussian, DenoiseImage's default, suits nonnegative magnitude images with a good signal-to-noise ratio. Rician suits magnitude images with low signal-to-noise ratio, such as diffusion-weighted scans: magnitude noise raises dark tissue, and the Rician model removes that bias. On the example FLAIR the Rician result is 17 % lower than the Gaussian one in the darkest fifth of the head and 0.3 % lower in the brightest tissue."
+      - "Use a binary or integer label mask with values from 0 to 255; probability maps must be binarized first. Only nonzero mask voxels are denoised and voxels farther than the patch radius from them keep their values. The mask must be on the image grid. On a whole-head image a brain mask shortens the run: the filter spends most of its time in the noisy background."
+      - "The app takes one 3D volume and refuses 4D series; for diffusion series use dwidenoise. DenoiseImage's shrink factor stays 1: its source notes that a larger one does not seem to work. The filter runs on one CPU thread: the example takes about a minute, and a whole-head 1 mm T1 (166 × 210 × 160 voxels) took 6.5 minutes in Node. Larger patch or search radii take several times longer."
+      - "For batch processing, run native DenoiseImage from the Neurodesk ANTs container listed under Standalone. Native ANTs splits the image between threads and then gives slightly different voxels; with ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1 and the same options it gives the app's voxels exactly. The technical log and the automation report give that command for each run."
+    packages:
+      - { name: ANTs DenoiseImage (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/packages/ants-denoise, role: "adaptive non-local means denoising (@neurodesk/ants-denoise), the build BISON runs" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+    citations:
+      - group: Denoising
+        title: Adaptive non-local means denoising
+        reference: "Manjón JV, Coupé P, Martí-Bonmatí L, Collins DL, Robles M. Adaptive non-local means denoising of MR images with spatially varying noise levels. Journal of Magnetic Resonance Imaging. 2010;31(1):192–203."
+        doi: 10.1002/jmri.22003
+        code: https://github.com/ntustison/ITKAdaptiveDenoising
+      - group: Denoising
+        title: ANTsX ecosystem
+        reference: "Tustison NJ, Cook PA, Holbrook AJ, et al. The ANTsX ecosystem for quantitative biological and medical imaging. Scientific Reports. 2021;11:9068."
+        doi: 10.1038/s41598-021-87564-6
+        code: https://github.com/ANTsX/ANTs
+      - group: Example data
+        title: MSLesSeg
+        reference: 'Guarnera F, Rondinella A, Crispino E, et al. MSLesSeg: baseline and benchmarking of a new multiple sclerosis lesion segmentation dataset. Scientific Data. 2025;12:920.'
+        doi: 10.1038/s41597-025-05250-y
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  brainqcnet:
+    packages:
+      - { name: BrainQCNet, url: https://github.com/garciaml/BrainQCNet_CPU, role: slice classifier (ResNet152 ProtoPNet checkpoint 19112020) and the BIDS app's preprocessing and summaries, ported in packages/brainqcnet }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: inference on WebGPU or the CPU }
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Artifact detection
+        title: BrainQCNet
+        reference: 'Garcia M, Dosenbach N, Kelly C. BrainQCNet: a deep learning attention-based model for the automated detection of artifacts in brain structural MRI scans. Imaging Neuroscience. 2024;2.'
+        doi: 10.1162/imag_a_00300
+        code: https://github.com/garciaml/BrainQCNet_CPU
+      - group: Artifact detection
+        title: ProtoPNet
+        reference: 'Chen C, Li O, Tao D, Barnett A, Rudin C, Su JK. This looks like that: deep learning for interpretable image recognition. Advances in Neural Information Processing Systems 32 (NeurIPS 2019). 2019:8930–8941.'
+        url: https://proceedings.neurips.cc/paper/2019/hash/adf7ee2dcf142b0e11888e72b43fcb75-Abstract.html
+        code: https://github.com/cfchen-duke/ProtoPNet
+      - group: Artifact detection
+        title: ResNet
+        reference: 'He K, Zhang X, Ren S, Sun J. Deep residual learning for image recognition. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR). 2016:770–778.'
+        doi: 10.1109/CVPR.2016.90
+      - group: Example data
+        title: MR-ART
+        reference: 'Nárai Á, Hermann P, Auer T, et al. Movement-related artefacts (MR-ART) dataset of matched motion-corrupted and clean structural MRI brain scans. Scientific Data. 2022;9:630.'
+        doi: 10.1038/s41597-022-01694-8
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: 'Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56.'
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  reproin:
+    about:
+      - ReproIn turns a scanner session whose protocols follow the ReproIn naming convention into a BIDS dataset. dcm2niix converts each series and the reproin-rs post-pass applies the HeuDiConv ReproIn rules.
+      - Name protocols at the scanner with the ReproIn Namer (npacore.github.io/reproin-namer). BIDSvue (bidsvue.org) has demos, descriptions and a desktop app that runs the same conversion.
+    packages:
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion with ReproIn naming }
+      - { name: reproin-rs (Rust, WebAssembly), url: https://github.com/rordenlab/reproin-rs, role: BIDS post-pass }
+      - { name: ReproIn, url: https://github.com/ReproNim/reproin, role: naming convention and HeuDiConv heuristic }
+      - { name: ReproIn Namer, url: https://npacore.github.io/reproin-namer/, role: builds ReproIn protocol names }
+      - { name: BIDSvue, url: https://bidsvue.org, role: demos, descriptions and desktop app }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: BIDS conversion
+        title: ReproIn
+        reference: "Visconti di Oleggio Castello M, Dobson JE, Sackett T, Kodiweera C, Haxby JV, Goncalves M, Ghosh S, Halchenko YO. ReproNim/reproin 0.6.0 [Computer software]. Zenodo. 2020. https://github.com/ReproNim/reproin"
+        doi: 10.5281/zenodo.3625000
+      - group: BIDS conversion
+        title: ReproIn and BIDS name builder
+        reference: "NPACore. ReproIn and BIDS name builder (reproin-namer) [web application]. https://github.com/NPACore/reproin-namer"
+        url: https://npacore.github.io/reproin-namer/
+      - group: BIDS conversion
+        title: HeuDiConv
+        reference: "Halchenko YO, Goncalves M, Ghosh S, et al. HeuDiConv — flexible DICOM conversion into structured directory layouts. Journal of Open Source Software. 2024;9(99):5839."
+        doi: 10.21105/joss.05839
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

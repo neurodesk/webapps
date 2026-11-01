@@ -40,7 +40,7 @@ export function registerCalmarAutomation(app) {
   const automation = registerAppAutomation({
     app: 'calmar',
     contractUrl: 'vendor/automation.json',
-    convertDicom: createDicomConverter({ moduleUrl: new URL('dcm2niix/index.js', document.baseURI).href }),
+    convertDicom: createDicomConverter({ moduleUrl: new URL('dcm2niix/index.jpeg.js', document.baseURI).href }),
     operations: {
       'map-lesion': context => runOperation(app, context, async ({ inputs, parameters, signal, progress }) => {
         app.handleAtlasSelectionChange(parameters.atlas);

@@ -2701,7 +2701,7 @@ async function runAutomated(task, { inputs, parameters, signal, progress }) {
 registerAppAutomation({
   app: 'easy-mp2rage',
   contractUrl: 'automation.json',
-  convertDicom: createDicomConverter({ moduleUrl: new URL('dcm2niix/index.js', document.baseURI).href }),
+  convertDicom: createDicomConverter({ moduleUrl: new URL('dcm2niix/index.jpeg.js', document.baseURI).href }),
   operations: {
     correct: context => runAutomated('t1', context),
     denoise: context => runAutomated('denoise', context),

@@ -103,6 +103,19 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           node node_modules/@playwright/test/cli.js install --with-deps chromium
+      # The same pinned data ci.yml's browser-e2e job provisions; hardware-GPU apps get their CPU subset.
+      - uses: actions/cache@v6
+        if: matrix.browser_test
+        with:
+          path: ~/.cache/neurodesk-e2e-test-data
+          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
+      - name: Download test data
+        if: matrix.browser_test
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+          CPU_ONLY: ${{ matrix.hardware_gpu && '--cpu' || '' }}
+        run: node scripts/e2e-test-data.mjs "$APP" ~/.cache/neurodesk-e2e-test-data $CPU_ONLY | tee -a "$GITHUB_ENV"
       - name: Test app in a browser
         if: matrix.browser_test
         run: pnpm --filter ${{ matrix.app }} test:e2e

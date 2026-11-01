@@ -47,7 +47,7 @@ const DERIVED = {
   QSMART_DEFAULTS: {
     from: 'QSMART_DEFAULTS',
     keys: ['sdf_sigma1_stage1', 'sdf_sigma2_stage1', 'sdf_sigma1_stage2', 'sdf_sigma2_stage2',
-      'sdf_spatial_radius', 'sdf_lower_lim', 'sdf_curv_constant', 'vasc_sphere_radius',
+      'sdf_lower_lim', 'sdf_curv_constant', 'vasc_sphere_radius',
       'frangi_scale_min', 'frangi_scale_max', 'frangi_scale_ratio', 'frangi_c',
       'ilsqr_max_iter', 'inversion_algorithm:inversion'],
     // QSMART's iLSQR tolerance is iLSQR's (qsmxt-engine has no QSMART field for it).
@@ -78,7 +78,7 @@ const DERIVED = {
   },
   TFI_DEFAULTS: {
     from: 'TFI_DEFAULTS',
-    keys: ['lambda', 'precond', 'merit', 'data_weighting', 'percentage', 'cg_tol', 'cg_max_iter',
+    keys: ['lambda', 'precond', 'data_weighting', 'percentage', 'cg_tol', 'cg_max_iter',
       'max_iter', 'tol'],
   },
 };

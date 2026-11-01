@@ -25,6 +25,9 @@ function makeStubDcm2niix(returnFiles, opts = {}) {
   };
 }
 
+// DicomController converts through `this.convert(files)`; route it to the stub.
+const convertWith = stub => async files => stub.input(files).run();
+
 // Test 1: convertFiles with successful conversion
 {
   const log = [];
@@ -37,7 +40,7 @@ function makeStubDcm2niix(returnFiles, opts = {}) {
     makeNiftiBlob('series_001.nii.gz'),
     makeNiftiBlob('extra.json') // should be filtered out
   ]);
-  ctl._createInstance = async () => stub;
+  ctl.convert = convertWith(stub);
 
   await ctl.convertFiles([{ name: 'a.dcm' }, { name: 'b.dcm' }]);
 
@@ -55,10 +58,10 @@ function makeStubDcm2niix(returnFiles, opts = {}) {
     updateOutput: (m) => log.push(m),
     onConversionComplete: (f) => { completed = f; }
   });
-  ctl._createInstance = async () => makeStubDcm2niix([
+  ctl.convert = convertWith(makeStubDcm2niix([
     { name: 'something.json' },
     { name: 'log.txt' }
-  ]);
+  ]));
 
   await ctl.convertFiles([{ name: 'bad.dcm' }]);
 
@@ -70,7 +73,7 @@ function makeStubDcm2niix(returnFiles, opts = {}) {
 {
   const log = [];
   const ctl = new DicomController({ throwOnError: false, updateOutput: (m) => log.push(m) });
-  ctl._createInstance = async () => makeStubDcm2niix([], { throw: 'wasm exploded' });
+  ctl.convert = convertWith(makeStubDcm2niix([], { throw: 'wasm exploded' }));
 
   await ctl.convertFiles([{ name: 'a.dcm' }]);
 
@@ -97,7 +100,7 @@ function makeStubDcm2niix(returnFiles, opts = {}) {
     onConversionComplete: (f) => { completed = f; }
   });
   const stub = makeStubDcm2niix([makeNiftiBlob('out.nii.gz')]);
-  ctl._createInstance = async () => stub;
+  ctl.convert = convertWith(stub);
 
   // Build a minimal tree: root dir -> 2 files
   const fileA = { name: 'a.dcm' };
@@ -137,7 +140,7 @@ function makeStubDcm2niix(returnFiles, opts = {}) {
 {
   const log = [];
   const ctl = new DicomController({ throwOnError: false, updateOutput: (m) => log.push(m) });
-  ctl._createInstance = async () => makeStubDcm2niix([]);
+  ctl.convert = convertWith(makeStubDcm2niix([]));
   // Entry that turns out to have no files.
   const emptyDir = {
     isFile: false,

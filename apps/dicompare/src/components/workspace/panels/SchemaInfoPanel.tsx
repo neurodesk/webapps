@@ -370,7 +370,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
       '```',
       '',
       '---',
-      '*Submitted via [dicompare](https://dicompare.neurodesk.org)*',
+      '*Submitted via [dicompare](https://webapps.neurodesk.org/dicompare)*',
     ].join('\n');
 
     const url = `https://github.com/neurodesk/webapps/issues/new?` +

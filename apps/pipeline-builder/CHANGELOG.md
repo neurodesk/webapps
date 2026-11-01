@@ -1,5 +1,41 @@
 # pipeline-builder
 
+## 0.2.20261031
+
+### Patch Changes
+
+- a77947a: Validate with the NeuroFlow v0.3.1 core, which tags its optional-output warnings with an issue code, and recognize the core's warning by that code rather than its wording when dropping the builder's duplicate.
+- 32292e4: Validate with the NeuroFlow v0.3.2 core, which reads spec 0.1.3 workflow documents, accepts an absent value for a workflow output marked optional, and does not warn when an optional output feeds an input with a default. The builder no longer keeps its own copy of the optional-output warning: the core reports it once, with the same paths.
+- 45f9b81: Validate with the NeuroFlow v0.6.0 core. It reports an `unknown-field` error for any key a workflow declaration does not allow, an `input-undeclared` error for a reference to an undeclared workflow input, and a `constant-invalid` error for a constant that does not match its input. The builder's own undeclared-input check is removed. Its constant check now reports only what the core does not (per-item array limits), so each problem is reported once.
+- 29370a4: Validate with the NeuroFlow v0.7.0 core. It reports a `local-id-invalid` error for an input, context field, step or output name that does not match the spec's local identifier pattern, and tags the error for a workflow output that does not reference a step output with `output-ref-not-step`. Point the run instructions at the v0.7.0 release, where a run fails when a workflow output not marked `optional` is not produced.
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/webapp-components@0.22.3
+
+## 0.2.20261030
+
+### Patch Changes
+
+- 1e81185: Store array parameters such as QSMbly echo times, Easy MP2RAGE acquisition values and SeedSeg folds and models as typed JSON arrays. Their fields accept a JSON array or comma-separated values, check each value against the declared item type, range and choices, and show an error in place without changing the saved value. Number fields also reject text, fractional integers and values outside their range. Validation reports an imported constant that does not match its parameter type, which the NeuroFlow core does not check.
+- Keep the saved parameter and show an inline error when a numeric field contains an incomplete number such as `1e`.
+- 5b7e5f1: Refuse an imported workflow whose steps, bindings, inputs or outputs are not objects, instead of opening it and breaking every later edit until New. Report a reference to an undeclared workflow input as an error, which the NeuroFlow core does not check. A builder check that fails no longer hides the core's own issues.
+
+## 0.2.20261029
+
+### Patch Changes
+
+- 57d9266: Validate with the NeuroFlow v0.3.0 core, which checks array item counts and warns when an optional tool output feeds a required input or a workflow output. Preserve the document's specification version during import and export so 0.1.2 item bounds remain valid. Point the run instructions at the v0.3.0 release and document cancellation limits.
+
+## 0.2.20261027
+
+### Patch Changes
+
+- 46d4ee1: Adopt NeuroFlow v0.2.1. Its `neuroflow-mcp` inspects FSL gradient tables, so generated tool inputs now declare `bval` and `bvec` formats again and the runtime rejects a swapped pair before launch. `bval-bvec`, which names a pair of files, has no inspector and stays only in `neurodesk/data`. The `neuroflow` CI job builds the v0.2.1 commit, and the docs point to the release's prebuilt binaries and their `SHA256SUMS`. Exported workflows need `neuroflow-mcp` 0.2.1 or later.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+
 ## 0.2.20261024
 
 ### Minor Changes

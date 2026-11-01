@@ -5,10 +5,10 @@
  * See: https://github.com/neurodesk/webapps/tree/main/apps/dicompare
  *
  * Usage:
- *   import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
+ *   import { DicompareController } from 'https://webapps.neurodesk.org/dicompare/embed/DicompareController.js';
  *
  *   const controller = new DicompareController({
- *     schemaUrl: 'https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json',
+ *     schemaUrl: 'https://webapps.neurodesk.org/dicompare/schemas/QSM_Consensus_Guidelines_v1.0.json',
  *     updateOutput: (msg) => console.log(msg)
  *   });
  *
@@ -21,7 +21,7 @@
  *   });
  */
 
-const DEFAULT_WORKER_URL = 'https://dicompare.neurodesk.org/embed/dicompare-worker.js';
+const DEFAULT_WORKER_URL = 'https://webapps.neurodesk.org/dicompare/embed/dicompare-worker.js';
 
 export class DicompareController {
   /**

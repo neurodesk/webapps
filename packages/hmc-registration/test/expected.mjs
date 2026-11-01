@@ -16,8 +16,10 @@ export const ARGV = Object.freeze([
 export const SHIFT_LPS = Object.freeze([-SHIFT_RAS[0], -SHIFT_RAS[1], SHIFT_RAS[2]]);
 
 // SHA-256 of out0GenericAffine.mat from native antsRegistration at ANTs 52bc0ab (SuperBuild,
-// Release, ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1) with ARGV. The WebAssembly kernel writes the same bytes.
-export const NATIVE_MAT_SHA256 = "43d38f061db2fd34668d07f99fe5d8494b1fbdf2a8719ae48de5ea2d14c76509";
+// Release, ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1) with ARGV, built with the kernel's float64
+// accumulation in the Mattes metric (cmake/mattes-pdf-double.cmake; validation/sdc-gate/native,
+// variant deriv64). The WebAssembly kernel writes the same bytes.
+export const NATIVE_MAT_SHA256 = "e70a8ac13558d80cede25caddc77d7c3b74b3e47d64559716a171fa50fecd75b";
 
 /** Asserts that a transform read by readMatTransform is the known rigid shift. */
 export function assertRecoversShift({ transform, parameters, fixed }) {
@@ -31,26 +33,27 @@ export function assertRecoversShift({ transform, parameters, fixed }) {
 }
 
 // SHA-256 of out0GenericAffine.mat from native antsRegistration with ARGV and --random-seed 4321.
-export const NATIVE_MAT_SEED_4321_SHA256 = "733124b497ac7baa3f08d37616ec53e8549c16249496680040975a7561567efe";
+export const NATIVE_MAT_SEED_4321_SHA256 = "0dadfd90f6e1ae1e7b0b9183e31e797014d1170e9c68338af65f65a0c4a1b823";
 
 // The interpolators --apply takes, as antsApplyTransforms names them.
 export const INTERPOLATIONS = Object.freeze(["Linear", "NearestNeighbor", "BSpline", "BSpline[5]", "HammingWindowedSinc", "LanczosWindowedSinc"]);
 
-// SHA-256 of each file that native ANTs at 52bc0ab (validation/native-reference.sh) writes from
+// SHA-256 of each file that native ANTs at 52bc0ab with the same Mattes accumulation
+// (validation/native-reference.sh on the deriv64 build) writes from
 // test/data. The WebAssembly kernel writes the same bytes: a tolerance of 0, inside the 1e-5
 // relative limit of #445. apply-<name>.nii is antsApplyTransforms in its default double precision
 // with -u float; with --float 1 native ANTs differs from it by at most 5.1e-7 of the image maximum.
 export const NATIVE_SHA256 = Object.freeze({
-  "average.mat": "c4240c5c2e3c70bbb6c3c2d4695f4c84649958d7decc224474fcb3b98c86a9a8",
-  "apply-Linear.nii": "3ee934f440d4b70b277d27b4822f2c6ad22ef6b5612b6c326bbb6f6c4771e40d",
-  "apply-NearestNeighbor.nii": "c66dd756445d9594848c7214c1611bc8f9b95bc513a64bcff34975612c75a5ac",
-  "apply-BSpline.nii": "5aa7e94c19da8a9563e274dd8be3aedb162b2733f0a2d0e697d7153e45138d97",
-  "apply-BSpline5.nii": "6b8d23a32b0df66a5eac233d3590f2144c025a5f54245a16f2c7783c50e1cc35",
-  "apply-HammingWindowedSinc.nii": "da6756e9d72461a20b4b77e7ef048c0014498e40a29ecb93de23c7f2f57aaf96",
-  "apply-LanczosWindowedSinc.nii": "7cca5d90ecb01bf7fe709b52fe071c7ae311c31d2ee5a45352a33df40658a826",
-  "apply-inverse-HammingWindowedSinc.nii": "e863aae0bf239b9ee0d9e2818ce945f0af66012d408b2e3eaa61d3f5cc4eebdf",
-  "average-0.nii": "1e55cbfa4d50a5900969aceefe7970c4c638edc15890a237cb9aa72224099902",
-  "average-1.nii": "68d441ac04e10259567666e66887ba3e59459b7b604e639d88f011dce3139846",
+  "average.mat": "268138b70b05e28d1c163faa093076f7ba0752deeb1f793f03a1e878f809af1d",
+  "apply-Linear.nii": "666f3c3d34eadbd1d2f6ef8137864c60d2aab8c39ed0837e835b6e1bf8f65485",
+  "apply-NearestNeighbor.nii": "c449329cd82220ca457d05b12734097fe956e3cbac863e1eac830f1f3eb034ad",
+  "apply-BSpline.nii": "5d1979ed9ceefc873433ac4fbe80672e7d6c5d0b235abc1c0cf74626463dd5dc",
+  "apply-BSpline5.nii": "14d8f42b4ac7f2c20691182d960673e5ee9b8b1ab6c70247b374141caf376f55",
+  "apply-HammingWindowedSinc.nii": "1c339e2c689949cdbb2129d319e2c4d7b0aa60b1b0ea4d5b931166f4ab6a3468",
+  "apply-LanczosWindowedSinc.nii": "ae2515a70a5b1866105fe1542e3c0e24ae8414d55580e1b85d210558bc655d7f",
+  "apply-inverse-HammingWindowedSinc.nii": "a3db344012d1ac7c0f57e984c2ca7d83a54fff606d5453e558b5494dd671140e",
+  "average-0.nii": "c15361d9f53d121e33075e6b6a2f7e608a378857834dc3f1a80db584ca0b02d5",
+  "average-1.nii": "c7820698ca47562362b2ac47dbd679e3b5b1a6c45322088221dd5ce98841da47",
 });
 
 const withSeed = (seed) => ARGV.map((token, i) => (ARGV[i - 1] === "--random-seed" ? seed : token));

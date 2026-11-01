@@ -24,7 +24,7 @@ import {
   planBatchError,
 } from './backoff'
 import { BLOCK_Y, divUp, MAX_SLINE_LEN, REAL_SIZE } from './globals'
-import { dispatchBootWindows } from './dispatch'
+import { dispatchBootWindows, MAX_WORKGROUPS_PER_DISPATCH } from './dispatch'
 import { BOOT_ENTRY_GEN, BOOT_ENTRY_GETNUM, bootShaderSource } from './shaders'
 
 // Re-exported so the UI (main.ts) can classify a render OOM the same way.
@@ -63,6 +63,7 @@ export interface TrackingParams {
   chunkSize: number // seeds per GPU batch (default 10000)
   minPts: number // discard streamlines shorter than this
   maxPts: number // discard streamlines longer than this
+  maxWorkgroupsPerDispatch: number // physical GPU command size; output does not depend on it
 }
 
 export const DEFAULT_PARAMS: Omit<TrackingParams, 'tcThreshold'> = {
@@ -80,6 +81,7 @@ export const DEFAULT_PARAMS: Omit<TrackingParams, 'tcThreshold'> = {
   chunkSize: 10000,
   minPts: 0,
   maxPts: Number.POSITIVE_INFINITY,
+  maxWorkgroupsPerDispatch: MAX_WORKGROUPS_PER_DISPATCH,
 }
 
 /** The repacked Boot kernel binds 10 storage buffers across 3 groups (down
@@ -89,6 +91,14 @@ const REQUIRED_STORAGE_BUFFERS = 10
 /** The Boot kernel's `var<workgroup>` arrays total ~20.8 KB; Dawn defaults the
  *  limit to the 16 KB spec minimum (wgpu-native defaults higher). */
 const REQUIRED_WORKGROUP_STORAGE = 20800
+
+/** Lanes per tidy row in the Boot kernel (THR_X_SL). Its reductions and ballots
+ *  need exactly this subgroup; another size gives wrong streamlines or loses the device. */
+const REQUIRED_SUBGROUP_SIZE = 32
+
+function subgroupSizeError(detail: string): Error {
+  return new Error(`tracking needs ${REQUIRED_SUBGROUP_SIZE}-lane GPU subgroups; this GPU ${detail}.`)
+}
 
 /**
  * Request a WebGPU device able to run the Boot tracker. Throws a *specific*
@@ -126,6 +136,18 @@ export async function getTrackingDevice(): Promise<GPUDevice> {
         `(adapter features: ${features.join(', ') || 'none'}). On Chrome try ` +
         `enabling chrome://flags/#enable-unsafe-webgpu; Safari/Firefox may not ` +
         `support subgroups yet.`,
+    )
+  }
+  // Chromium reports the range its compiler may choose from; the kernel checks the
+  // size it actually got, since the range alone does not guarantee 32.
+  const { subgroupMinSize, subgroupMaxSize } = adapter.info
+  if (
+    subgroupMinSize !== undefined &&
+    subgroupMaxSize !== undefined &&
+    (subgroupMinSize > REQUIRED_SUBGROUP_SIZE || subgroupMaxSize < REQUIRED_SUBGROUP_SIZE)
+  ) {
+    throw subgroupSizeError(
+      `has ${subgroupMinSize === subgroupMaxSize ? subgroupMinSize : `${subgroupMinSize}-${subgroupMaxSize}`}-lane subgroups`,
     )
   }
   if (maxSB < REQUIRED_STORAGE_BUFFERS) {
@@ -240,13 +262,14 @@ function modelOffsets(inputs: TrackingInputs): ModelOffsets {
 // --- params struct (must match BootTrackingParams in boot.wgsl) ---
 // 6 f32 + 18 i32 = 96 bytes, little-endian. Five modelData offsets are followed
 // by the physical dispatch's logical workgroup offset (initially zero).
-// tc_threshold/step_size/rng_offset are zero on the getNum pass.
+// tc_threshold/step_size are zero on the getNum pass. rng_offset is the batch's first
+// seed index in the whole run, so a seed's random stream does not depend on the batch size.
 function packBootParams(
   inputs: TrackingInputs,
   off: ModelOffsets,
   p: TrackingParams,
   nseeds: number,
-  rngOffset: number,
+  firstSeed: number,
   forGen: boolean,
 ): ArrayBuffer {
   const buf = new ArrayBuffer(96)
@@ -270,7 +293,7 @@ function packBootParams(
   f32(p.minSignal)
   i32(seedLo)
   i32(seedHi)
-  i32(forGen ? rngOffset : 0)
+  i32(firstSeed)
   i32(nseeds)
   i32(inputs.dims[0])
   i32(inputs.dims[1])
@@ -325,11 +348,13 @@ function storageFromParts(
 }
 
 /** Result of trackStreamlines. `truncated` is true when the run stopped early
- *  (host/GPU memory) so the streamlines are only partial; `processedSeeds` is how
- *  many of `totalSeeds` were actually tracked (equal on a complete run). */
+ *  (host/GPU memory, or `deviceLost`) so the streamlines are only partial;
+ *  `processedSeeds` is how many of `totalSeeds` were actually tracked (equal on
+ *  a complete run). */
 export interface TrackResult {
   lines: Float32Array[]
   truncated: boolean
+  deviceLost: boolean
   processedSeeds: number
   totalSeeds: number
 }
@@ -375,7 +400,7 @@ export async function trackStreamlines(
   }
   const out: Float32Array[] = []
   let truncated = false
-  let rngOffset = 0
+  let deviceLost = false
   let processedSeeds = 0
   const maxBinding = device.limits.maxStorageBufferBindingSize
   const maxBuffer = device.limits.maxBufferSize
@@ -469,7 +494,7 @@ export async function trackStreamlines(
         const paramsGetnum = track(
           paramsBuffer(
             device,
-            packBootParams(inputs, off, params, nseeds, rngOffset, false),
+            packBootParams(inputs, off, params, nseeds, start, false),
           ),
         )
         const counted = await dispatchBootWindows(device, getnumPipe, gridX, [
@@ -484,13 +509,16 @@ export async function trackStreamlines(
           ),
           bindGroup1(device, getnumPipe, modelBuf),
           bindGroup2(device, getnumPipe, offsBuf, shDirBuf, null),
-        ], paramsGetnum, shouldStop)
+        ], paramsGetnum, shouldStop, params.maxWorkgroupsPerDispatch)
         if (!counted) break
 
         // Exclusive prefix sum of per-seed counts (CPU), written back.
         const counts = new Int32Array(
           await readback(device, offsBuf, (nseeds + 1) * 4),
         )
+        if (counts.subarray(0, nseeds).some(count => count < 0)) {
+          throw subgroupSizeError('ran the seed-count pass with another subgroup layout')
+        }
         const offsets = new Int32Array(nseeds + 1)
         for (let i = 0; i < nseeds; i++) offsets[i + 1] = offsets[i] + counts[i]
         const nSlines = offsets[nseeds]
@@ -538,7 +566,7 @@ export async function trackStreamlines(
           const paramsGen = track(
             paramsBuffer(
               device,
-              packBootParams(inputs, off, params, nseeds, rngOffset, true),
+              packBootParams(inputs, off, params, nseeds, start, true),
             ),
           )
           const generated = await dispatchBootWindows(device, genPipe, gridX, [
@@ -560,7 +588,7 @@ export async function trackStreamlines(
               slineMetaBuf,
               slineBuf,
             ),
-          ], paramsGen, shouldStop)
+          ], paramsGen, shouldStop, params.maxWorkgroupsPerDispatch)
           if (!generated) break
 
           // Read positions back in fixed-size windows so peak host (and staging)
@@ -570,6 +598,11 @@ export async function trackStreamlines(
           const meta = new Int32Array(
             await readback(device, slineMetaBuf, 2 * nSlines * 4),
           )
+          for (let i = 1; i < meta.length; i += 2) {
+            if (meta[i] < 0) {
+              throw subgroupSizeError('ran the streamline pass with another subgroup layout')
+            }
+          }
           const winSlines = Math.max(
             1,
             Math.floor(READBACK_WINDOW_BYTES / (stride * REAL_SIZE)),
@@ -598,7 +631,6 @@ export async function trackStreamlines(
         if (shouldStop?.()) break
         // Batch fully read back — commit it and advance.
         for (const s of batchOut) out.push(s)
-        rngOffset += nseeds
         start += nseeds
         processedSeeds = start
         onProgress?.(start, nSeedsTotal)
@@ -619,6 +651,7 @@ export async function trackStreamlines(
         }
         if (plan === 'salvage') {
           truncated = true // at the floor / device lost — keep what we have
+          deviceLost = isDeviceLost(err)
           break
         }
         throw err
@@ -629,7 +662,7 @@ export async function trackStreamlines(
   } finally {
     for (const b of staticBuffers) b.destroy()
   }
-  return { lines: out, truncated, processedSeeds, totalSeeds: nSeedsTotal }
+  return { lines: out, truncated, deviceLost, processedSeeds, totalSeeds: nSeedsTotal }
 }
 
 function paramsBuffer(device: GPUDevice, bytes: ArrayBuffer): GPUBuffer {

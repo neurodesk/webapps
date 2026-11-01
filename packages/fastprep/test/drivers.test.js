@@ -54,7 +54,7 @@ test('greedy: the core\'s three command forms map onto the WASM exports', async 
   }
   const calls = [];
   const api = {
-    register_affine_masked_wasm: (f, m, mask, metric, it) => (calls.push(['affine', mask, metric, it]), '1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1\n'),
+    register_affine_masked_wasm: (f, m, mask, metric, it, centres) => (calls.push(['affine', mask, metric, it, centres]), '1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1\n'),
     register_nmi_svf_masked_wasm: (f, m, mask, init, it) => (calls.push(['svf', Boolean(mask), init, it]), nifti(2, 0)),
     reslice_warp_affine_options: (f, m, w, mat, pre, nearest) => (calls.push(['reslice', nearest]), nifti(2, 3)),
   };
@@ -64,7 +64,7 @@ test('greedy: the core\'s three command forms map onto the WASM exports', async 
   await greedy([...g, '-i', '/t/t1.nii.gz', '/a/fov.nii.gz', '-gm', '/t/mask.nii.gz', '-it', '/o/aff.mat', '-sv', '-o', '/o/warp.nii.gz'], { files });
   await greedy(['greedy-rs', '-d', '3', '-threads', '8', '-rf', '/t/brain.nii.gz', '-ri', 'NN', '-rm', '/a/preproc.nii.gz', '/o/r.nii.gz', '-r', '/o/warp.nii.gz', '/o/aff.mat'], { files });
   assert.deepEqual(calls, [
-    ['affine', undefined, 'NMI', '100x50x10'],
+    ['affine', undefined, 'NMI', '100x50x10', true],
     ['svf', true, '1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1\n', '100x50x10'],
     ['reslice', true],
   ]);

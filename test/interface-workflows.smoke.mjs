@@ -166,13 +166,17 @@ try {
     await settings.tap();
     await page.locator('#probThreshold').fill('0.25');
     await page.locator('#nMarkers').fill('2');
-    await page.locator('#model3').uncheck();
+    await page.locator('#fold0').uncheck();
+    await page.locator('#fold4').check();
+    await page.locator('#mirrorTTA').check();
     await settings.tap();
     await expect(page.locator('#probThreshold')).toBeHidden();
     await settings.tap();
     await expect(page.locator('#probThreshold')).toHaveValue('0.25');
     await expect(page.locator('#nMarkers')).toHaveValue('2');
-    await expect(page.locator('#model3')).not.toBeChecked();
+    await expect(page.locator('#fold0')).not.toBeChecked();
+    await expect(page.locator('#fold4')).toBeChecked();
+    await expect(page.locator('#mirrorTTA')).toBeChecked();
     await expect(page.locator('#seedseg-log')).toHaveClass(/collapsed/);
   });
   await check('vesselboost', async page => {
@@ -572,6 +576,68 @@ try {
     await expect(page.locator('#runButton')).toBeEnabled();
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
+  await check('ants-denoise', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t1.nii'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-t1.nii · 16 × 16 × 16 · 1.00 × 1.00 × 1.00 mm');
+    await page.locator('#noiseModel').selectOption('Rician');
+    // The mask and radii chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#patchRadius')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#patchRadius').fill('2');
+    await page.locator('#searchRadius').fill('3');
+    await page.locator('#maskInput').setInputFiles(nifti('interface-mask.nii', 1));
+    await expect(page.locator('#maskField')).toContainText('interface-mask.nii · 4096 voxels');
+    await advanced.tap();
+    await expect(page.locator('#searchRadius')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#patchRadius')).toHaveValue('2');
+    await expect(page.locator('#searchRadius')).toHaveValue('3');
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#noiseModel')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#noiseModel')).toHaveValue('Rician');
+    await expect(page.locator('#maskField')).toContainText('interface-mask.nii · 4096 voxels');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('Image denoised', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Denoised image · Rician, patch 2, search 3');
+    // A new image withdraws the result and the mask of the old one.
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t2.nii', 40));
+    await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+    await expect(page.locator('#maskField')).toContainText('Drop a mask on the image grid');
+  });
+  await check('brainqcnet', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t1.nii'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-t1.nii · 16 × 16 × 16 · 1.00 × 1.00 × 1.00 mm');
+    await expect(page.getByRole('button', { name: 'Check quality', exact: true })).toBeEnabled();
+    await page.locator('#method').selectOption('median');
+    // The settings chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#areas')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#areas').fill('5');
+    await page.locator('#backend').selectOption('wasm');
+    await advanced.tap();
+    await expect(page.locator('#areas')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#method')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#method')).toHaveValue('median');
+    await expect(page.locator('#areas')).toHaveValue('5');
+    await expect(page.locator('#backend')).toHaveValue('wasm');
+    await expect(page.locator('#cancelButton')).toBeHidden();
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+  });
   await check('sdc', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
@@ -650,6 +716,19 @@ try {
     const template = JSON.parse(await readFile(join(repoRoot, 'apps/pipeline-builder/src/workflows/t1-segmentation.workflow.json'), 'utf8'));
     template.steps.brain.inputs.param_threshold = { constant: 0.3 };
     expect(JSON.parse(await readFile(await download.path(), 'utf8'))).toEqual(template);
+  });
+  await check('reproin', async page => {
+    await page.locator('#dicomInput').setInputFiles({ name:'slice.dcm', mimeType:'application/dicom', buffer:Buffer.from('dicom') });
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await page.locator('#optionsSection > summary').tap();
+    await page.locator('#subject').fill('01');
+    await page.locator('#shiftDates').check();
+    await page.locator('#optionsSection > summary').tap();
+    await expect(page.locator('#subject')).toBeHidden();
+    await page.locator('#optionsSection > summary').tap();
+    await expect(page.locator('#subject')).toHaveValue('01');
+    await expect(page.locator('#shiftDates')).toBeChecked();
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
 } finally { await browser.close(); await site.close(); }
 if (failures.length) throw new Error(failures.join('\n'));

@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { portableCommand } from './portable-command.mjs';
 
 // The release job runs this without installing dependencies, so only Node built-ins may be imported.
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -57,7 +58,7 @@ function claim(releases, app, source) {
   const sources = releases.get(app) ?? [];
   for (const other of sources) {
     const shared = source.targets.filter((platform) => other.targets.includes(platform));
-    if (shared.length) throw new Error(`${app}: ${shared.join(', ')} claimed by both ${other.workflow} and ${source.workflow}`);
+    if (shared.length) throw new Error(`${app}: ${shared.join(', ')} claimed by both ${other.workflow ?? other.spec.repository} and ${source.workflow ?? source.spec.repository}`);
     if (other.workflow === source.workflow) throw new Error(`${app}: two release sources share ${source.workflow}`);
   }
   releases.set(app, [...sources, source]);
@@ -67,7 +68,8 @@ function claim(releases, app, source) {
 // platform never has two owners. Every source starts with the app release and attaches to its tag. A Rust
 // source builds in its own workflow; a portable source builds in release.json's workflow (default
 // <app>-native.yml) and writes exes/node-cli receipts. A source with a macOS installer publishes only by
-// signing it.
+// signing it. A release.json with a tag is external: another repository builds and releases it, and the
+// catalog links its pinned assets (externalCatalog) without building, dispatching or importing anything.
 export function nativeReleases(specs) {
   const releases = new Map();
   for (const [app, release] of Object.entries(RUST_RELEASES)) {
@@ -75,6 +77,10 @@ export function nativeReleases(specs) {
   }
   for (const [app, { packageDir, spec, legacy }] of specs) {
     const targets = Object.keys(spec.targets);
+    if (spec.tag) {
+      claim(releases, app, { workflow: null, targets, publishInput: null, portable: false, external: true, packageDir, spec });
+      continue;
+    }
     const installer = targets.some((platform) => spec.targets[platform].archive === 'pkg');
     claim(releases, app, {
       workflow: spec.workflow ?? `${app}-native.yml`,
@@ -86,4 +92,27 @@ export function nativeReleases(specs) {
     });
   }
   return releases;
+}
+
+// The Standalone catalog entry for an external release: exact asset URLs with the release.json pins,
+// plus its prerequisite note and links. registry/standalone.json must equal it (test/standalone.test.mjs).
+export function externalCatalog(spec) {
+  const repository = `https://github.com/${spec.repository}`;
+  const downloads = Object.entries(spec.targets).map(([platform, target]) => ({
+    kind: 'cli',
+    platform,
+    version: spec.version,
+    url: `${repository}/releases/download/${spec.tag}/${target.asset}`,
+    sha256: target.sha256,
+    bytes: target.bytes,
+    command: portableCommand(spec, platform, target.asset),
+  }));
+  const commandLine = {
+    notes: spec.readme.notes,
+    links: [
+      { label: `${spec.displayName} ${spec.tag} release`, url: `${repository}/releases/tag/${spec.tag}` },
+      { label: spec.repository, url: repository },
+    ],
+  };
+  return { downloads, commandLine };
 }

@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { createNiftiFromData, readNiftiFrames } from '@neurodesk/webapp-components/file-io/nifti';
 import { multiShellPhantom } from '../src/phantom.js';
+import { fetchBytesWithRetry } from '@neurodesk/webapp-components/fetch';
 
 export const REFERENCE = new URL('./browser-reference.json', import.meta.url);
 
@@ -52,9 +53,7 @@ async function pinnedExample() {
     files[file.role] = { name: file.name, path, sha256: file.sha256 };
     const cached = await readFile(path).catch(() => null);
     if (cached && sha256(cached) === file.sha256) continue;
-    const response = await fetch(file.url);
-    if (!response.ok) throw new Error(`${file.url}: HTTP ${response.status}`);
-    const bytes = Buffer.from(await response.arrayBuffer());
+    const bytes = Buffer.from(await fetchBytesWithRetry(file.url, { signal: AbortSignal.timeout(600_000) }, { retryTransient: true, retries: 3 }));
     if (sha256(bytes) !== file.sha256) throw new Error(`${file.url}: SHA-256 differs from its pin in examples.json`);
     await mkdir(join(path, '..'), { recursive: true });
     await writeFile(`${path}.partial`, bytes);
@@ -106,6 +105,9 @@ export function inputChecksums(inputs) {
 export function compareInputChecksums(actual, expected) {
   const checks = [];
   for (const id of new Set([...Object.keys(expected), ...Object.keys(actual)])) {
+    if (!Object.hasOwn(actual, id) || !Object.hasOwn(expected, id)) {
+      checks.push([false, `${id}: input group ${Object.hasOwn(actual, id) ? 'is not in the reference' : 'is missing'}`]);
+    }
     const names = new Set([...Object.keys(expected[id] ?? {}), ...Object.keys(actual[id] ?? {})]);
     for (const name of names) {
       const is = actual[id]?.[name];

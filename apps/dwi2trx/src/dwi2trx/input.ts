@@ -2,11 +2,12 @@
  * Turn a drop (or the bundled sample) into a validated DWI triple.
  *
  * Impure layer: walks the DataTransfer, reads NIfTI headers + sidecar text, and
- * (only for DICOM) lazily loads dcm2niix. Validation — including the NIfTI
+ * (only for DICOM) runs dcm2niix in its worker. Validation — including the NIfTI
  * volume count vs. bval/bvec direction count — finishes here, BEFORE main.ts
  * displays anything, so an invalid image is never loaded into the viewer.
  */
 
+import { runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client'
 import { traverseDataTransferItems } from './files.ts'
 import {
   assertInputSize,
@@ -82,9 +83,7 @@ export async function resolveInput(
   if (files.some((f) => isNifti(f.name))) {
     return resolveTriple(files, 'nifti')
   }
-  // DICOM path: pull in dcm2niix only now (keeps its worker/glue out of the
-  // initial payload). niftiOnly:false keeps the bval/bvec/json sidecars.
-  const { runDcm2niix } = await import('@neurodesk/runtime-support/dcm2niix-client')
+  // niftiOnly:false keeps the bval/bvec/json sidecars.
   const converted = await runDcm2niix(files, { niftiOnly: false, signal })
   if (converted.length === 0) {
     throw new Error('dcm2niix produced no output — not a valid DICOM set.')

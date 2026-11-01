@@ -1,11 +1,13 @@
 // BISON's browser drivers for runBison, for a module worker of the web app (apps/bison/src/worker.js).
-// antsRegistration and DenoiseImage run in module workers of their own packages, one Worker for each
-// create call: Emscripten memories grow and never shrink, so dispose() terminates the Worker and frees
-// its heap at once, as node-workers.js ends a worker thread. niimath and ONNX Runtime Web run in the
-// calling worker.
+// antsRegistration, DenoiseImage and Greedy run in module workers of their own packages, one Worker
+// for each create call: WebAssembly memories grow and never shrink, so dispose() terminates the
+// Worker and frees its heap at once, as node-workers.js ends a worker thread. niimath and ONNX
+// Runtime Web run in the calling worker.
 //
 //   createRegistration() -> { run(argv, inputs), memoryBytes(), dispose() }   @neurodesk/hmc-registration/worker
 //   createDenoiser()     -> { denoise({ image, mask, ... }), memoryBytes(), dispose() }   @neurodesk/ants-denoise/worker
+//   createGreedy()       -> { affine({ fixed, moving }), rigid({ fixed, moving }), svf({ fixed, moving, matrix, mask }), memoryBytes(), dispose() }
+//                           @neurodesk/greedy src/worker.js, the single-threaded build Node runs too
 //   niimath(args, { inputs, outputs }) -> { outputs, log }
 //
 // Both ANTs kernels are linked with -pthread, so the page must be cross-origin isolated (COOP
@@ -15,6 +17,7 @@
 // runtime: {
 //   registration: { worker, module?, wasm? }   URLs of hmc-registration src/worker.js and its kernel
 //   denoise:      { worker, module?, wasm? }   URLs of ants-denoise src/worker.js and its kernel
+//   greedy:       { worker, wasm? }            URLs of greedy src/worker.js and wasm-single's .wasm
 //   niimath?:     { module?, wasm? }           niimath.js and niimath.wasm (default: the bundled build)
 //   ort?:         { wasm?, mjs?, numThreads? } ort-wasm-simd-threaded.{wasm,mjs} for ort.env.wasm.wasmPaths
 // }
@@ -27,7 +30,7 @@ export { loadBrowserAssets } from './browser-assets.js';
 // ONNX Runtime Web gains little from more threads on the forest; it uses at most 4.
 export const MAX_ORT_THREADS = 4;
 
-const LABELS = { registration: 'registration kernel', denoiser: 'denoise module' };
+const LABELS = { registration: 'registration kernel', denoiser: 'denoise module', greedy: 'Greedy module' };
 
 const lost = (message, cause) => Object.assign(new Error(message, cause === undefined ? undefined : { cause }), { log: [], aborted: true });
 
@@ -159,6 +162,23 @@ export async function createDenoiser({ runtime, onLog, WorkerClass } = {}) {
   };
 }
 
+/**
+ * Greedy in a new module Worker. affine() and rigid() take raw .nii bytes and resolve to Greedy's
+ * RAS matrix text; svf() takes registerSvfGreedy's arguments and resolves to the raw .nii warp.
+ * memoryBytes() is the heap the worker last reported.
+ */
+export async function createGreedy({ runtime, WorkerClass } = {}) {
+  const url = workerUrl(runtime, 'greedy');
+  const wasm = runtime.greedy.wasm ? String(runtime.greedy.wasm) : undefined;
+  const worker = start('greedy', url, { WorkerClass });
+  const register = (method) => async (args) => {
+    const reply = await worker.request(wasm ? { method, ...args, wasm } : { method, ...args });
+    if (reply.error !== undefined) throw new Error(`Greedy ${method} registration failed: ${reply.error}`);
+    return reply.result;
+  };
+  return { affine: register('affine'), rigid: register('rigid'), svf: register('svf'), memoryBytes: worker.memoryBytes, dispose: worker.dispose };
+}
+
 export class NiimathError extends Error {
   constructor(message, { code, log }) {
     super(message);
@@ -253,11 +273,13 @@ export function configureOrt(entry = {}, ortModule = ort) {
 export function createBrowserDrivers({ runtime, onLog, WorkerClass } = {}) {
   workerUrl(runtime, 'registration');
   workerUrl(runtime, 'denoise');
+  workerUrl(runtime, 'greedy');
   let factory = null;
   return {
     // The registration log reaches onLog through run()'s result (preprocess.js), so it is not forwarded here.
     createRegistration: () => createRegistration({ runtime, WorkerClass }),
     createDenoiser: () => createDenoiser({ runtime, onLog, WorkerClass }),
+    createGreedy: () => createGreedy({ runtime, WorkerClass }),
     async niimath(args, files) {
       factory ??= niimathFactory(runtime.niimath).catch((error) => {
         factory = null;

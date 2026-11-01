@@ -4,7 +4,7 @@ export function registerMuscleMapAutomation(app) {
   const automation = registerAppAutomation({
     app: 'musclemap',
     contractUrl: 'vendor/automation.json',
-    convertDicom: createDicomConverter({ moduleUrl: new URL('dcm2niix/index.js', document.baseURI).href }),
+    convertDicom: createDicomConverter({ moduleUrl: new URL('dcm2niix/index.jpeg.js', document.baseURI).href }),
     operations: {
       segment: async ({ inputs, parameters, signal, progress }) => {
         if (app.inferenceExecutor.isRunning()) throw new Error('MuscleMap is already processing an image.');

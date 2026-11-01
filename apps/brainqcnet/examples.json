@@ -1,0 +1,32 @@
+[
+  {
+    "id": "mr-art-standard",
+    "label": "Still T1w (MR-ART)",
+    "description": "3D T1-weighted MPRAGE of an adult who kept still, rated 1 (good) by experts; participant sub-000103 of the MR-ART dataset (OpenNeuro ds004173, CC0).",
+    "expectedResult": "No artifact detected: BrainQCNet flags 31 % of its 682 slices, as the original BIDS app does. About 10 minutes on the CPU.",
+    "files": [
+      {
+        "role": "image",
+        "name": "sub-000103_acq-standard_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9afd0f8eabb2e0348c413530fbff42f7bf7a5134/brainqcnet/examples/sub-000103_acq-standard_T1w.nii.gz",
+        "sha256": "5cbe235acfdccd9b6f406a6f5a6f5bd61483ead7789c8d7ec6167dc64cb3c7bc",
+        "bytes": 11088525
+      }
+    ]
+  },
+  {
+    "id": "mr-art-headmotion",
+    "label": "Head motion T1w (MR-ART)",
+    "description": "The same participant scanned while nodding on cue, rated 3 (severe motion) by experts; MR-ART sub-000103, acq-headmotion2 (OpenNeuro ds004173, CC0).",
+    "expectedResult": "Artifact detected: BrainQCNet flags 67 % of its 679 slices, as the original BIDS app does. About 10 minutes on the CPU.",
+    "files": [
+      {
+        "role": "image",
+        "name": "sub-000103_acq-headmotion2_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9afd0f8eabb2e0348c413530fbff42f7bf7a5134/brainqcnet/examples/sub-000103_acq-headmotion2_T1w.nii.gz",
+        "sha256": "754432d53bf5013ac672f0370b6427fab73a2954e0fdc9e8cb7b380f70978b6d",
+        "bytes": 11626660
+      }
+    ]
+  }
+]

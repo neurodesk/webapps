@@ -1,0 +1,31 @@
+{
+  "name": "@neurodesk/brainqcnet",
+  "version": "0.1.20261031",
+  "private": true,
+  "description": "BrainQCNet artifact detection on T1-weighted MRI for browsers",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./slices": "./src/slices.js",
+    "./summary": "./src/summary.js",
+    "./manifest": "./model.manifest.json"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "devDependencies": {
+    "onnxruntime-node": "1.29.0"
+  },
+  "files": [
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ]
+}

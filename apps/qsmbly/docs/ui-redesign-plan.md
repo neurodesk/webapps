@@ -687,10 +687,11 @@ Sizes: S is one PR, M a short series of PRs, L several series.
 
 Status (2026-10-17): U2 is qsmbly #171 (the Data step: files, roles, the engine's scan facts,
 DICOM) and #172 (runs: the run worker, streamed outputs, the outputs browser, cancel and
-progress, the plan drawer and model downloads). Still open for U2: a per-step memory estimate
-for the browser (E3), requirement problems in neutral words (E4), config normalisation (E6), the
-χ-separation patch sizes (E12), and the plan's models when a supplied mask is unreadable (E13).
-Until E3, the run bar shows the engine's estimate for a disk-backed run.
+progress, the plan drawer and model downloads). Since then, E4 (requirement problems in neutral
+words) has merged as QSMxT #385, E6 (config normalisation) as QSMxT #399, and E12 (the χ-separation
+patch sizes) as QSM.rs #208 and QSMxT #401, for U8 (below). Still open: a per-step memory estimate for the browser (E3);
+until then, the run bar shows the engine's estimate for a disk-backed run. Also still open: the
+plan's models when a supplied mask is unreadable (E13).
 
 U4 is qsmbly `next-rerun`, on QSMxT #388 (E9) and #389 (E2, `run::dry_run`): row statuses and the
 "Re-run n steps" button from the engine's dry run over the page's record and volumes, run history
@@ -715,20 +716,45 @@ Order and parallelism:
 - **U4 and U5 can run in parallel after U2.**
 - **U6 is small.**
 
+Status (2026-10-19): U8 is a stack of five PRs, each on the one before:
+
+1. qsmbly #181: SWI/SMWI and relaxometry, how the viewer draws each kind of output, and the settings the engine turns on.
+2. #182: segmentation, region referencing and the per-structure statistics table.
+3. #183: motion correction and its report.
+4. #184: real/imaginary input (with GE's phase sign), uncombined coils, and a MESE for R2.
+5. #185: χ-separation, classical and deep-learning.
+
+They are pinned to QSMxT main e426923. That commit has QSMxT #399 (E6, config normalisation in the engine), #396 (`ScanInputs` for real/imaginary parts, coils and a MESE), and #401 (the χ-separation patch sizes, E12), on QSM.rs #208. Every feature's settings come from the schema. Every output streams to the viewer and lands in the bundle under QSMxT's name. Tables and reports, which the engine keeps in its record, are outputs too.
+
+The deep-learning steps fit the 4 GB heap on the example data (184×256×128, 5 echoes):
+
+- SynthSeg in its 96³ window peaks at 2.40 GB.
+- R2PRIMEnet at 128×128×64 takes the heap from 1.09 to 1.64 GB.
+- χ-sepnet at 128×128×64 takes the heap from 1.78 to 2.34 GB.
+- SUSEP-Net at 96×96×64 takes the heap from 1.96 to 3.09 GB, in 17 minutes. That is the highest peak of any feature.
+
+Open after U8:
+
+- E3: a per-step memory estimate for an in-memory run. The plan drawer already records each step's heap after a run.
+- E13: the models of a mask recipe when a supplied mask is unreadable. The R2PRIMEnet half is done: the plan now lists it whenever R2′ may be predicted.
+- QSMxT #397: motion correction switched on for a scan it cannot correct says nothing.
+
 ### 5.3 Switch checklist
 
 The new UI must cover what today's UI does:
 
-- [ ] NIfTI/JSON and DICOM loading, with reassignment and the example data.
+- [x] NIfTI/JSON and DICOM loading, with reassignment and the example data (U2). Real/imaginary
+  parts, uncombined coils and MESE echoes take roles too (U8).
 - [ ] dicompare.
-- [ ] Every setting today's UI has (through the schema).
-- [ ] Mask presets, recipe editing and previews.
+- [x] Every setting today's UI has (through the schema) (U3).
+- [x] Mask presets, recipe editing and previews (U3, U5).
 - [ ] BET, HD-BET and RS2-Net.
-- [ ] Mask upload with alignment repair, and hand edits.
-- [ ] Run, cancel and progress.
-- [ ] Streamed outputs and downloads.
-- [ ] SWI and T2*/R2* as engine steps.
-- [ ] Command, methods and TOML.
+- [x] Mask upload with alignment repair, and hand edits (U5).
+- [x] Run, cancel and progress (U2).
+- [x] Streamed outputs and downloads (U2, U6), with tables and reports (U8).
+- [x] SWI and T2*/R2* as engine steps (U8, #181), and the rest of phase 5: SMWI, R2/R2′,
+  χ-separation, segmentation with statistics, motion correction, real/imaginary and coil input.
+- [x] Command, methods and TOML (U3, U6).
 - [ ] Field-map inputs, as Q5 decides.
 - [ ] The mobile layout.
 - [ ] Playwright flows and the parity CI (3.7) green.

@@ -13,6 +13,7 @@ import { n4Arguments, registrationSession } from '../src/preprocess.js';
 const RUNTIME = Object.freeze({
   registration: { worker: 'https://app.test/hmc-registration/src/worker.js' },
   denoise: { worker: 'https://app.test/ants-denoise/src/worker.js', module: 'https://app.test/k/ants-denoise.mjs', wasm: 'https://app.test/k/ants-denoise.wasm' },
+  greedy: { worker: 'https://app.test/greedy/src/worker.js' },
 });
 
 // Records every Worker; the test answers each message with reply(data) or fails it with crash().
@@ -44,9 +45,35 @@ function fakeWorkers() {
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-test('createBrowserDrivers needs both worker URLs', () => {
+test('createBrowserDrivers needs every worker URL', () => {
   assert.throws(() => createBrowserDrivers({}), /runtime\.registration\.worker/);
   assert.throws(() => createBrowserDrivers({ runtime: { registration: RUNTIME.registration } }), /runtime\.denoise\.worker/);
+  assert.throws(() => createBrowserDrivers({ runtime: { registration: RUNTIME.registration, denoise: RUNTIME.denoise } }), /runtime\.greedy\.worker/);
+});
+
+test('createGreedy starts a module Worker per instance and follows the Greedy worker protocol', async () => {
+  const { workers, FakeWorker } = fakeWorkers();
+  const runtime = { ...RUNTIME, greedy: { ...RUNTIME.greedy, wasm: 'https://app.test/k/greedy.wasm' } };
+  const greedy = await createBrowserDrivers({ runtime, WorkerClass: FakeWorker }).createGreedy();
+  assert.equal(workers.length, 1);
+  assert.equal(workers[0].url, RUNTIME.greedy.worker);
+  assert.deepEqual(workers[0].options, { type: 'module' });
+  const fixed = new Uint8Array([1, 2]);
+  const affine = greedy.affine({ fixed, moving: new Uint8Array([3]) });
+  assert.deepEqual(workers[0].sent[0], { method: 'affine', fixed, moving: new Uint8Array([3]), wasm: 'https://app.test/k/greedy.wasm', id: 0 });
+  workers[0].reply({ result: '1 0 0 0', heapBytes: 4096 });
+  assert.equal(await affine, '1 0 0 0');
+  assert.equal(greedy.memoryBytes(), 4096);
+  const svf = greedy.svf({ fixed, moving: fixed, matrix: '1 0 0 0', metric: 'NCC 2x2x2', iterations: '1x0x0' });
+  assert.deepEqual(workers[0].sent[1], { method: 'svf', fixed, moving: fixed, matrix: '1 0 0 0', metric: 'NCC 2x2x2', iterations: '1x0x0', wasm: 'https://app.test/k/greedy.wasm', id: 1 });
+  workers[0].reply({ result: new Uint8Array([7]), heapBytes: 8192 });
+  assert.deepEqual(await svf, new Uint8Array([7]));
+  const rigid = greedy.rigid({ fixed, moving: fixed });
+  assert.equal(workers[0].sent[2].method, 'rigid');
+  workers[0].reply({ error: 'unreachable' });
+  await assert.rejects(rigid, /Greedy rigid registration failed: unreachable/);
+  await greedy.dispose();
+  assert.ok(workers[0].terminated);
 });
 
 test('each createRegistration call starts its own module Worker; run follows the hmc worker protocol', async () => {
@@ -92,10 +119,10 @@ test('a registration error keeps the log and marks kernel aborts', async () => {
   assert.equal(denoiseError({ error: 'ANTs DenoiseImage failed (exit 1). See processing log.' }).aborted, false);
 });
 
-test('registrationSession replaces a Worker after an abort and after its run limit', async () => {
+test('registrationSession replaces a Worker after an abort and keeps it otherwise', async () => {
   const { workers, FakeWorker } = fakeWorkers();
   const drivers = createBrowserDrivers({ runtime: RUNTIME, WorkerClass: FakeWorker });
-  const session = registrationSession(() => drivers.createRegistration(), 2);
+  const session = registrationSession(() => drivers.createRegistration());
   const answer = async (data) => {
     const running = session.run(['--float', '1'], {});
     await tick();
@@ -106,13 +133,11 @@ test('registrationSession replaces a Worker after an abort and after its run lim
   await assert.rejects(answer({ error: 'antsRegistration aborted (unreachable): x', log: [] }));
   assert.equal(workers.length, 1);
   assert.equal(workers[0].terminated, true);
-  await answer({ outputs: {}, log: [] });
-  await answer({ outputs: {}, log: [] });
-  await answer({ outputs: {}, log: [] });
-  assert.equal(workers.length, 3);
-  assert.deepEqual(workers.map((worker) => worker.terminated), [true, true, false]);
+  for (let run = 0; run < 30; run++) await answer({ outputs: {}, log: [] });
+  assert.equal(workers.length, 2);
+  assert.deepEqual(workers.map((worker) => worker.terminated), [true, false]);
   await session.dispose();
-  assert.equal(workers[2].terminated, true);
+  assert.equal(workers[1].terminated, true);
 });
 
 test('a Worker error rejects the pending call as an abort, and the instance refuses later work', async () => {

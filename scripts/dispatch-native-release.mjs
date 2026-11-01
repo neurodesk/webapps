@@ -5,7 +5,8 @@ import { nativeReleases, portableSpecs } from './lib/native-releases.mjs';
 
 const [app, tag] = process.argv.slice(2);
 if (!app || !tag) throw new Error('Usage: dispatch-native-release.mjs APP TAG');
-const sources = nativeReleases(await portableSpecs()).get(app) ?? [];
+// External releases are built and published by their own repository.
+const sources = (nativeReleases(await portableSpecs()).get(app) ?? []).filter((source) => !source.external);
 if (!sources.length) console.log(`${app}: no native command line`);
 for (const source of sources) {
   execFileSync('gh', ['workflow', 'run', source.workflow, '--ref', tag, '-f', `${source.publishInput}=true`], { stdio: 'inherit' });

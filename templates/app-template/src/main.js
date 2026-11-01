@@ -24,7 +24,7 @@ const workspace = mountImagingWorkspace({
   controls: "#controls",
   viewer: "#viewer",
   status: "#status",
-  title: APP.id,
+  title: APP.title,
   subtitle: "Browser-native Neurodesk webapp",
   controlsContract: { about: "#aboutBtn", privacy: "#privacyBtn" },
 });
@@ -40,7 +40,7 @@ bindInfoTooltips(document);
 
 // 3. Information dialog: About and Privacy open from the shared app bar; Cite comes from the registry.
 const info = createInfoDialog();
-$("aboutBtn").onclick = () => info.open(`About ${APP.id}`, $("aboutContent"));
+$("aboutBtn").onclick = () => info.open(`About ${APP.title}`, $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 
 // 4. Workflow: input → run → results. Replace the bodies with the science.

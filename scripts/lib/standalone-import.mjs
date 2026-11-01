@@ -38,7 +38,8 @@ export function catalogReleases(catalog, natives) {
     const sources = natives.get(id) ?? [];
     const unowned = app.downloads.filter((download) => download.kind === 'cli' && !sources.some((source) => source.targets.includes(download.platform)));
     if (unowned.length) throw new Error(`${id}: no release source builds ${unowned.map((download) => download.platform).join(', ')}`);
-    return sources.flatMap((source) => {
+    // External releases are pinned in release.json, not imported from a webapps release.
+    return sources.filter((source) => !source.external).flatMap((source) => {
       const version = listedVersion(id, source.targets, app.downloads);
       return version ? [{ id, version }] : [];
     });
@@ -47,7 +48,7 @@ export function catalogReleases(catalog, natives) {
 
 // The sources whose archives a release carries. Sources can attach to one shared tag or to their own.
 export function releaseSources(sources, release) {
-  return sources.filter((source) => release.assets.some((asset) => source.targets.includes(releasePlatform(source.spec, asset.name))));
+  return sources.filter((source) => !source.external && release.assets.some((asset) => source.targets.includes(releasePlatform(source.spec, asset.name))));
 }
 
 // The archive digests a receipt records: "archive_sha256=DIGEST" (exes/node-cli), "sha256: DIGEST"
@@ -128,8 +129,8 @@ export async function catalogUpdate(catalog, releases, { fetchRelease, fetchText
     }
     if (!catalog.apps[id]) throw new Error(`${id}: not in the Standalone catalog`);
     const tag = `${id}-v${version}`;
-    const sources = nativeAt(tag).get(id) ?? [];
-    if (!sources.length) throw new Error(`${id}: ${tag} ships no native command line`);
+    const sources = (nativeAt(tag).get(id) ?? []).filter((source) => !source.external);
+    if (!sources.length) throw new Error(`${id}: ${tag} ships no native command line built here`);
     const release = await fetchRelease(tag);
     const built = sources.length === 1 ? sources : releaseSources(sources, release);
     if (!built.length) throw new Error(`${id}: release ${tag} has no command-line archives`);

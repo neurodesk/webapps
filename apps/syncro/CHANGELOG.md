@@ -1,5 +1,50 @@
 # syncro
 
+## 0.8.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+- Updated dependencies [1a4882c]
+- Updated dependencies [b84a269]
+- Updated dependencies [cc094b4]
+  - @neurodesk/runtime-support@0.9.19
+  - @neurodesk/webapp-components@0.22.3
+  - @neurodesk/greedy@0.8.20261031
+  - @neurodesk/syncro@0.8.20261031
+  - @neurodesk/synthsr@0.6.20261031
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/brain-extraction@0.5.20261031
+
+## 0.7.20261029
+
+### Patch Changes
+
+- Updated dependencies [4761b2c]
+  - @neurodesk/greedy@0.7.20261029
+  - @neurodesk/syncro@0.7.20261029
+
+## 0.7.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+  - @neurodesk/runtime-support@0.9.18
+  - @neurodesk/synthsr@0.6.20261027
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/brain-extraction@0.5.20261027
+  - @neurodesk/greedy@0.6.20261027
+  - @neurodesk/syncro@0.7.20261027
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/runtime-support@0.9.17
+  - @neurodesk/synthsr@0.6.20261027
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/brain-extraction@0.5.20261027
+  - @neurodesk/greedy@0.6.20261027
+  - @neurodesk/syncro@0.7.20261027
+
 ## 0.7.20261025
 
 ### Patch Changes

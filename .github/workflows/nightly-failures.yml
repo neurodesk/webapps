@@ -3,12 +3,14 @@ name: scheduled workflow failure reports
 on:
   workflow_run:
     workflows:
+      - CI approval report
       - ci
       - deploy-github-pages
       - mutation-quality
       - n4-wasm-source
       - neuroflow
       - sct-full-tests
+      - sdc-registration-gate
       - standalone
       - standalone-links
       - upstream sync
@@ -42,3 +44,4 @@ jobs:
         run: node scripts/report-nightly-failure.mjs
         env:
           GH_TOKEN: ${{ github.token }}
+

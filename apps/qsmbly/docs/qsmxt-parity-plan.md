@@ -220,8 +220,23 @@ The TUI can later render from the schema, which removes its separate copy.
    and in WASM (Node, loading the built bundle) on a small phantom; outputs agree within a
    measured tolerance (NRMSE). Bitwise agreement is not expected: rustfft and tract pick different
    kernels per CPU and SIMD level, and threaded sums reorder.
-3. **End to end.** CI downloads the pinned QSMxT release binary, runs the command qsmbly generates
-   on the phantom, and compares with the WASM run.
+3. **End to end.** CI builds `qsmxt` at the pinned commit, runs the command qsmbly generates on
+   the phantom, and compares with the WASM run.
+
+Built in 3.7 as `.github/workflows/parity.yml` (qsmbly), at the commit or tag
+`rust-wasm/Cargo.toml` pins, on every PR and on the pin-bump PRs:
+
+- **engine**: no algorithm runs. Every listed config and every option of the settings schema
+  (each enum option, each switch, each number changed where it is shown, each mask preset, input
+  and step), asked of the bundle under Node and of `qsmxt-engine` natively: config, settings view,
+  plan, the dry run's step keys (algorithm, parameters and settings read, hashed), published names
+  and sidecars, graph, methods, command and TOML must be equal.
+- **e2e**: a handful of runs with the fastest algorithms (TKD; two-pass, SWI and T2*/R2*, an
+  oblique scan resampled) on a 24×24×20 phantom, through qsmbly's own run and export code, against
+  `qsmxt run` with the bundle's command and with its settings file: the same outputs, sidecars,
+  settings file, graph, methods and run record; masks bitwise, every other output within 2e-6 of
+  `qsmxt run`'s, relative to the volume's largest value (measured: bitwise or ≤ 1.2e-10 ppm on χ).
+  Per-algorithm agreement belongs to QSM.rs's wasm harness.
 
 ## 4. Work plan
 
@@ -301,6 +316,11 @@ from the configuration alone, so it says what was done, including those changes.
 | G4 | QSMxT | TUI "Pipeline" view: the graph as text, with memory and models, updated as settings change; a key writes the SVG and opens it. | G3 |
 | G5 | qsmbly | The graph in the new UI, live during a run (queued, running, done, cached, stale). | the UI redesign |
 
+Status (2026-10-19): G1–G3 are merged (QSMxT #369, #382, #386, #387); G4 is QSMxT #403. G5 is
+qsmbly #188: the Pipeline tab's boxes carry a status strip (icon and word, a progress bar while the
+step runs) from the run's stage events and, between runs, from the engine's dry run; the failed step
+shows the engine's message. The graph itself stays the engine's.
+
 A dataset gets one graph per run and a **dataset graph**: every run's graph merged, each step
 once, labelled with how many runs took it (e.g. "Inversion (iLSQR), 320/320 runs"). A step only
 some runs took is drawn differently (e.g. dashed) with its count ("R2PRIMEnet, 12/320 runs"), and
@@ -355,7 +375,7 @@ Still open:
 - The pipeline graph (§4), defaults in place until decided: formats (Mermaid and SVG; no DOT),
   detail (one box per step), and the methods text describing what ran rather than what was
   configured.
-- The tolerance for native vs WASM parity (measure it in 3.7, then fix it in CI).
+- The tolerance for native vs WASM parity: 2e-6 (relative) in CI since 3.7; masks bitwise.
 - qsmbly's version number for the first engine-based release.
 
 ## 6. Pointers

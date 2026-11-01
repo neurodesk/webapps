@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { downloadBytes } from './lib/download-bytes.mjs';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
@@ -73,20 +74,6 @@ async function existingChecksum(path) {
   }
 }
 
-async function download(url) {
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await fetch(url, { redirect: 'follow' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return Buffer.from(await response.arrayBuffer());
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw new Error(`Failed to download ${url}: ${lastError.message}`);
-}
-
 await mkdir(dest, { recursive: true });
 
 for (const file of requested) {
@@ -96,7 +83,7 @@ for (const file of requested) {
     continue;
   }
   console.log(`  ${file.group}/${file.name} v${file.version} <- ${file.url}`);
-  const data = await download(file.url);
+  const data = await downloadBytes(file.url);
   const actual = sha256(data);
   if (actual !== file.sha256) {
     throw new Error(`Checksum mismatch for ${file.url}: expected ${file.sha256}, got ${actual}`);

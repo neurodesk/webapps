@@ -9,6 +9,9 @@ on:
       - 'models/syncro-tutorials.manifest.json'
       - 'models/syncro.manifest.json'
       - 'packages/registration/**'
+      - 'packages/greedy/src/index.js'
+      - 'packages/greedy/src/single.js'
+      - 'packages/greedy/wasm-single/**'
       - 'packages/synthsr/**'
       - 'packages/synthstrip/**'
   push:
@@ -22,6 +25,9 @@ on:
       - 'models/syncro-tutorials.manifest.json'
       - 'models/syncro.manifest.json'
       - 'packages/registration/**'
+      - 'packages/greedy/src/index.js'
+      - 'packages/greedy/src/single.js'
+      - 'packages/greedy/wasm-single/**'
       - 'packages/synthsr/**'
       - 'packages/synthstrip/**'
   workflow_dispatch:

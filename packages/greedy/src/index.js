@@ -11,13 +11,15 @@ export async function loadGreedy(moduleUrl, threads = Math.min(8, navigator.hard
   return api;
 }
 
+// The apps start the affine from aligned image centres (Greedy's `-ia-image-centers`),
+// as they always have; the command line defaults to Greedy's identity start.
 export function registerGreedy({ api, fixed, moving, mode = "affine", iterations = "100x50x10", onProgress = () => {} }) {
   if (!api) throw new Error("Greedy WebAssembly is not initialized.");
   if (!new Set(["affine", "deformable"]).has(mode)) throw new Error("Registration mode must be affine or deformable.");
   onProgress("Running affine NMI registration");
   const fixedBytes = bytes(fixed);
   const movingBytes = bytes(moving);
-  const matrix = api.register_affine_wasm(fixedBytes, movingBytes, "NMI", iterations);
+  const matrix = api.register_affine_wasm(fixedBytes, movingBytes, "NMI", iterations, true);
   if (mode === "affine") {
     onProgress("Reslicing the moving image");
     return { image: api.reslice_affine(fixedBytes, movingBytes, matrix), matrix, warp: null };
@@ -30,7 +32,21 @@ export function registerGreedy({ api, fixed, moving, mode = "affine", iterations
 
 export function registerAffineGreedy({ api, fixed, moving, iterations = "100x50x10" }) {
   if (!api) throw new Error("Greedy WebAssembly is not initialized.");
-  return api.register_affine_wasm(bytes(fixed), bytes(moving), "NMI", iterations);
+  return api.register_affine_wasm(bytes(fixed), bytes(moving), "NMI", iterations, true);
+}
+
+// A rigid (6 DOF) NMI registration from the identity, so from the scanner alignment.
+export function registerRigidGreedy({ api, fixed, moving, iterations = "100x50x10" }) {
+  if (!api) throw new Error("Greedy WebAssembly is not initialized.");
+  return api.register_rigid_masked_wasm(bytes(fixed), bytes(moving), null, "NMI", iterations, false, null);
+}
+
+// `greedy -sv -m METRIC [-gm MASK] -it MATRIX`: the stationary-velocity warp (raw .nii, physical
+// LPS displacement on the fixed grid) that acts before `matrix`, Greedy's RAS text mapping fixed
+// points to moving points. `mask`, raw .nii bytes on the fixed grid, limits where the metric counts.
+export function registerSvfGreedy({ api, fixed, moving, matrix, mask = null, metric = "NCC 2x2x2", iterations = "100x50x0" }) {
+  if (!api) throw new Error("Greedy WebAssembly is not initialized.");
+  return api.register_svf_masked_wasm(bytes(fixed), bytes(moving), mask === null ? null : bytes(mask), matrix, metric, iterations);
 }
 
 export function resliceGreedy({ api, fixed, moving, registration, precedingMatrix = null, interpolation = "linear", fill = 0 }) {

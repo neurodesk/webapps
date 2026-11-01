@@ -6,7 +6,7 @@ The app provides a visual interface for building, viewing, and validating imagin
 
 dicompare is a collaboration between the [Neurodesk](https://www.neurodesk.org/) and [Brainlife](https://brainlife.io/) groups.
 
-**Live app:** [dicompare.neurodesk.org](https://dicompare.neurodesk.org/) | [brainlife.io/dicompare](https://brainlife.io/dicompare)
+**Live app:** [webapps.neurodesk.org/dicompare](https://webapps.neurodesk.org/dicompare/) | [brainlife.io/dicompare](https://brainlife.io/dicompare)
 
 <img width="1386" height="844" alt="image" src="https://github.com/user-attachments/assets/1fc347ab-4daa-43a8-ab16-6a6013f33dd3" />
 
@@ -50,12 +50,12 @@ dicompare provides reusable JavaScript modules for adding DICOM protocol validat
 ### Quick start
 
 ```js
-import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
-import { DicompareReportRenderer } from 'https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js';
+import { DicompareController } from 'https://webapps.neurodesk.org/dicompare/embed/DicompareController.js';
+import { DicompareReportRenderer } from 'https://webapps.neurodesk.org/dicompare/embed/DicompareReportRenderer.js';
 
 // 1. Create controller with your schema
 const controller = new DicompareController({
-  schemaUrl: 'https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json',
+  schemaUrl: 'https://webapps.neurodesk.org/dicompare/schemas/QSM_Consensus_Guidelines_v1.0.json',
   updateOutput: (msg) => console.log(msg)
 });
 
@@ -83,7 +83,7 @@ printWindow.document.write(printHtml);
 
 ### Embed files
 
-All files are served from `https://dicompare.neurodesk.org/embed/`:
+All files are served from `https://webapps.neurodesk.org/dicompare/embed/`:
 
 | File | Description |
 |------|-------------|
@@ -94,11 +94,11 @@ All files are served from `https://dicompare.neurodesk.org/embed/`:
 
 ### Available schemas
 
-Schemas from the [dicompare schema library](https://dicompare.neurodesk.org) are served at `https://dicompare.neurodesk.org/schemas/`. See [`public/schemas/index.json`](public/schemas/index.json) for the full list. Examples:
+Schemas from the [dicompare schema library](https://webapps.neurodesk.org/dicompare) are served at `https://webapps.neurodesk.org/dicompare/schemas/`. See [`public/schemas/index.json`](public/schemas/index.json) for the full list. Examples:
 
-- `https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json`
-- `https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json`
-- `https://dicompare.neurodesk.org/schemas/hcp_schema.json`
+- `https://webapps.neurodesk.org/dicompare/schemas/QSM_Consensus_Guidelines_v1.0.json`
+- `https://webapps.neurodesk.org/dicompare/schemas/SeedSeg_Prostate_T1w_v1.0.json`
+- `https://webapps.neurodesk.org/dicompare/schemas/hcp_schema.json`
 
 Authoring or reviewing a schema for the library? See the
 [schema authoring best practices](docs/schema-best-practices.md).
@@ -140,7 +140,7 @@ Tools using dicompare embed:
 
 Each library schema can be assigned a citable [Zenodo](https://zenodo.org/) DOI. The DOI
 record hosts the schema's JSON file and links back to its dicompare page
-(e.g. `https://dicompare.neurodesk.org/schema/MS_CMSC_Guidelines_v1.0`). When a DOI exists,
+(e.g. `https://webapps.neurodesk.org/dicompare/schema/MS_CMSC_Guidelines_v1.0`). When a DOI exists,
 the schema viewer shows it with a **Copy DOI** button and a "Cite this schema" entry in the
 citation dialog.
 
@@ -240,6 +240,6 @@ MIT License — see [LICENSE](LICENSE) for details.
 ## Links
 
 - [dicompare Python Package](https://github.com/astewartau/dicompare-pip) — Core engine, CLI, and Python API
-- [Live App (Neurodesk)](https://dicompare.neurodesk.org/)
+- [Live App (Neurodesk)](https://webapps.neurodesk.org/dicompare/)
 - [Live App (Brainlife)](https://brainlife.io/dicompare)
 - [Report Issues](https://github.com/neurodesk/webapps/issues)

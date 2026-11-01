@@ -22,8 +22,10 @@ Options:
   --output DIR      New or empty output directory (required)
   --threads N       ONNX Runtime threads (default SLURM_CPUS_PER_TASK or all cores)
   --asset-dir DIR   Read the model files from DIR (default BISON_ASSET_DIR)
-  --cache-dir DIR   Model cache (default ~/.cache/neurodesk/bison/<model set>)
+  --cache-dir DIR   Model cache (default NEURODESK_BISON_MODEL_DIR, else
+                    ~/.cache/neurodesk/bison/<model set>)
   --offline         Never download; fail if a model file is missing
+                    (default when NEURODESK_OFFLINE=1)
   -h, --help        Show this help
 
 Each run takes about 15 to 20 minutes and 3 GB of memory. Model files are

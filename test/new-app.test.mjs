@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { access, cp, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -21,9 +22,10 @@ async function makeRepo(t) {
   });
   await cp(sourceRegistry, join(root, 'registry', 'apps.yml'));
   await cp(join(repoRoot, 'registry', 'app-information.yml'), join(root, 'registry', 'app-information.yml'));
-  for (const filename of ['standalone.json', 'offline-assets.sources.json', 'offline-assets.lock.json']) {
+  for (const filename of ['standalone-exceptions.json', 'standalone.json', 'offline-assets.sources.json', 'offline-assets.lock.json']) {
     await cp(join(repoRoot, 'registry', filename), join(root, 'registry', filename));
   }
+  await cp(join(repoRoot, 'docs/architecture/offline-executables.md'), join(root, 'docs/architecture/offline-executables.md'));
   return root;
 }
 
@@ -97,6 +99,10 @@ test('default invocation (pnpm new-app <name>) scaffolds and validates', async (
   const { parseContract } = await import('../packages/desktop/src/contracts.js');
   assert.equal(parseContract({ ...contract, appVersion: packageJson.version }).app, 'demo-app');
   assert.equal(contract.defaultOperation, 'copy-input');
+  assert.ok(await exists(join(root, 'apps/demo-app/test/offline.mjs')));
+  const exceptions = JSON.parse(await readFile(join(root, 'registry/standalone-exceptions.json'), 'utf8'));
+  assert.match(exceptions['demo-app'], /pass-through/);
+  assert.match(await readFile(join(root, 'docs/architecture/offline-executables.md'), 'utf8'), /\| `demo-app` \|/);
   assert.match(main, /registerAppAutomation/);
   for (const id of ['aboutBtn', 'privacyBtn']) {
     assert.match(html, new RegExp(`id=["']${id}["']`), id);
@@ -122,8 +128,22 @@ test('flags select runtime, shell, category, and catalog text', async (t) => {
   assert.equal(app.shell, 'react');
   assert.deepEqual(app.categories, ['quality-control']);
   assert.equal(app.title, 'Demo App');
+  const automation = JSON.parse(await readFile(join(root, 'apps/demo-app/automation.json'), 'utf8'));
+  assert.equal(automation.title, app.title);
+  const { APP } = await import(pathToFileURL(join(root, 'apps/demo-app/src/config.js')));
+  assert.equal(APP.title, app.title);
   assert.equal(app.description, 'Demonstrates the scaffolder: flags, validation, and more.');
   assert.deepEqual([...app.keywords], ['demo', 'scaffold', 'test']);
+});
+
+test('the offline rollout row is registered in a CRLF checkout', async t => {
+  const root = await makeRepo(t);
+  const path = join(root, 'docs/architecture/offline-executables.md');
+  const original = (await readFile(path, 'utf8')).replace(/\r?\n/g, '\r\n');
+  await writeFile(path, original);
+  const result = await newApp(root, ['demo-app']);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(await readFile(path, 'utf8'), /\| `demo-app` \|[^\r\n]*\r\n/);
 });
 
 test('Rust runtimes declare the rust-wasm toolchain the loader requires', async (t) => {

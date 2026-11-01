@@ -34,15 +34,17 @@ test('browser reference pins its exact engine and core, with a measured native r
   const reference = JSON.parse(await readFile(new URL('../validation/browser-reference.json', import.meta.url), 'utf8'));
   const engine = /qsmxt-engine = \{[^}]*rev = "([0-9a-f]{40})"/.exec(cargo)?.[1];
   assert.match(engine ?? '', /^[0-9a-f]{40}$/);
-  const lockedCommit = (name) => {
-    const block = lock.split('[[package]]').find(entry => entry.includes(`name = "${name}"\n`));
+  const lockedCommit = (name, text) => {
+    const block = text.replaceAll('\r\n', '\n').split('[[package]]').find(entry => entry.includes(`name = "${name}"\n`));
     const commit = /source = "git\+[^"\n]*#([0-9a-f]{40})"/.exec(block ?? '')?.[1];
     assert.match(commit ?? '', /^[0-9a-f]{40}$/, name);
     return commit;
   };
   assert.equal(reference.qsmxtEngineCommit, engine);
-  assert.equal(lockedCommit('qsmxt-engine'), engine);
-  assert.equal(reference.qsmCoreCommit, lockedCommit('qsm-core'));
+  for (const text of [lock.replaceAll('\r\n', '\n'), lock.replace(/\r?\n/g, '\r\n')]) {
+    assert.equal(lockedCommit('qsmxt-engine', text), engine);
+    assert.equal(reference.qsmCoreCommit, lockedCommit('qsm-core', text));
+  }
   assert.equal(reference.observed.nativeVersion, QSMXT.version);
   assert.equal(reference.observed.nativeCore, QSMXT.qsmCore);
   assert.deepEqual(Object.keys(QSMXT.targets).sort(), ['linux-x64', 'macos-arm64', 'windows-x64']);

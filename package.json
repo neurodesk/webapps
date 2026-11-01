@@ -44,7 +44,9 @@
     "quality:mutations": "node scripts/report-mutations.mjs",
     "quality:mutations:smoke": "node scripts/report-mutations.mjs --smoke",
     "check:dependencies": "node scripts/check-dependencies.mjs",
-    "test:dependencies": "node --test test/dependency-quality.test.mjs"
+    "test:dependencies": "node --test test/dependency-quality.test.mjs",
+    "check:integration": "node --test test/app-information.test.mjs test/standalone.test.mjs test/greedy-distribution.test.mjs test/independent-workflows.test.mjs test/app-examples.test.mjs test/offline-asset-lock.test.mjs test/catalog-titles.test.mjs",
+    "check:ci": "pnpm install --frozen-lockfile && pnpm check:integration && pnpm check:dependencies"
   },
   "devDependencies": {
     "@ai-sdk/openai-compatible": "3.0.62",

@@ -28,12 +28,12 @@ function requestedRuntimeFiles() {
 }
 
 test('SeedSeg pins the current ONNX Runtime Web loader contract', async () => {
-  const ortGroup = groups.find((group) => group.id === 'ort-web');
-  assert.equal(ortGroup.version, '1.21.0');
+  const ortGroup = groups.find((group) => group.id === 'ort-web-seedseg');
+  assert.equal(ortGroup.version, '1.30.0');
 
   const requested = requestedRuntimeFiles();
-  const ortFiles = requested.filter((file) => file.group === 'ort-web').map((file) => file.name).sort();
-  assert.deepEqual(ortFiles, ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm', 'ort.webgpu.bundle.min.mjs']);
+  const ortFiles = requested.filter((file) => file.group === 'ort-web-seedseg').map((file) => file.name).sort();
+  assert.deepEqual(ortFiles, ['ort-wasm-simd-threaded.asyncify.mjs', 'ort.webgpu.bundle.min.mjs']);
 
   const worker = await readFile(join(appRoot, 'web', 'js', 'inference-worker.js'), 'utf8');
   assert.match(worker, /import\s+\*\s+as\s+ort\s+from\s+['"]\.\.\/wasm\/ort\.webgpu\.bundle\.min\.mjs['"]/,
@@ -62,6 +62,21 @@ test('dev serving goes through the shared COOP/COEP dev server', () => {
     'dev must use scripts/dev-server.mjs so local serving sends cross-origin isolation headers');
 });
 
+test('optional DICOM reporting ships the unchanged local controller, worker and schema', async () => {
+  const assets = [
+    ['embed/DicompareController.js', 'DicompareController.js'],
+    ['embed/dicompare-worker.js', 'dicompare-worker.js'],
+    ['schemas/SeedSeg_Prostate_T1w_v1.0.json', 'SeedSeg_Prostate_T1w_v1.0.json'],
+  ];
+  for (const [source, output] of assets) {
+    assert.deepEqual(
+      await readFile(join(appRoot, 'web/vendor/dicompare', output)),
+      await readFile(join(repoRoot, 'apps/dicompare/public', source)),
+      `${output} must match the canonical Dicompare embedding kit`,
+    );
+  }
+});
+
 test('fetched runtime assets match their manifest checksums', async (t) => {
   const wasmRoot = join(appRoot, 'web', 'wasm');
   try {
@@ -82,4 +97,20 @@ test('fetched runtime assets match their manifest checksums', async (t) => {
     const actual = createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual, pinned, `${name} does not match its manifest sha256 pin`);
   }
+});
+
+
+test('large ORT binary stays pinned outside the site bundle and in the offline inventory', async () => {
+  const runtime = JSON.parse(await readFile(join(repoRoot, 'packages/seedseg/browser-runtime.manifest.json')));
+  const group = groups.find(candidate => candidate.id === runtime.id);
+  const file = group.files.find(candidate => candidate.name === runtime.filename);
+  assert.equal(runtime.version, group.version);
+  assert.equal(runtime.url, `${group.download_base}/${file.name}`);
+  assert.equal(runtime.sha256, file.sha256);
+  const sources = JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.sources.json')));
+  const lock = JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.lock.json')));
+  assert.ok(sources.apps.seedseg.some(source => source.url === runtime.url && source.sha256 === runtime.sha256));
+  assert.equal(lock.assets[runtime.url].sha256, runtime.sha256);
+  assert.equal(lock.assets[runtime.url].bytes, runtime.bytes);
+  assert.ok(!requestedRuntimeFiles().some(file => file.name === runtime.filename));
 });

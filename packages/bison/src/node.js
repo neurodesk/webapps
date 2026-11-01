@@ -1,5 +1,5 @@
 // BISON in Node: the pinned WebAssembly builds the web app runs (antsRegistration, DenoiseImage,
-// niimath) and onnxruntime-node for the forest.
+// Greedy, niimath) and onnxruntime-node for the forest.
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { availableParallelism } from 'node:os';
@@ -9,7 +9,7 @@ import createNiimath from '@niivue/niimath/niimath.js';
 import { createFloat32Nifti, createNiftiHeaderFromVolume } from '@neurodesk/webapp-components/file-io/nifti';
 import { MODES } from './features.js';
 import { assetDirectory, defaultCacheDir, loadNodeAssets } from './node-assets.js';
-import { createDenoiser, createRegistration } from './node-workers.js';
+import { createDenoiser, createGreedy, createRegistration } from './node-workers.js';
 import { modeFor, runBison } from './pipeline.js';
 
 // Set before loading the native library, including direct users of the Node API.
@@ -31,6 +31,7 @@ export function nodeDrivers({ onLog, threads } = {}) {
     // The registration log reaches onLog through run()'s result, so the worker does not forward it.
     createRegistration: () => createRegistration(),
     createDenoiser: () => createDenoiser({ onLog }),
+    createGreedy: () => createGreedy(),
     niimath: (args, files) => runNiimath(createNiimath, args, files),
     ort,
     sessionOptions: { executionProviders: ['cpu'], intraOpNumThreads: resolveThreads(threads), interOpNumThreads: 1 },
@@ -80,15 +81,15 @@ export async function segment({ t1, flair = null, output, assetDir, cacheDir, of
  * Verifies every asset of both modes: from the asset directory, else from the cache, downloading
  * what is missing unless offline.
  */
-export async function downloadModels({ assetDir, cacheDir = defaultCacheDir(), offline = false, onProgress } = {}) {
+export async function downloadModels({ assetDir, cacheDir = defaultCacheDir(), offline = process.env.NEURODESK_OFFLINE === '1', onProgress } = {}) {
   const dir = assetDirectory(assetDir);
   const assets = await loadNodeAssets({ modes: Object.keys(MODES), assetDir: dir, cacheDir, offline, onProgress });
   return { directory: resolve(dir ?? cacheDir), count: assets.size };
 }
 
-/** Starts each runtime once: the registration kernel, the denoise module, niimath and ONNX Runtime. */
+/** Starts each runtime once: the registration kernel, the denoise module, Greedy, niimath and ONNX Runtime. */
 export async function checkInstallation() {
-  for (const create of [createRegistration, createDenoiser]) {
+  for (const create of [createRegistration, createDenoiser, createGreedy]) {
     const instance = await create();
     await instance.dispose();
   }

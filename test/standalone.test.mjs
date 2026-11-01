@@ -5,12 +5,14 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
-import { loadStandalone } from '../scripts/lib/standalone.mjs';
+import { DIALOG_FORBIDDEN, loadStandalone } from '../scripts/lib/standalone.mjs';
 import { ciWorkflowApps, cpuWorkflowApps, hardwareWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
 import { prepareWorkflow, workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 import { portableCommand, releasePlatform } from '../scripts/lib/portable-command.mjs';
-import { nativeReleases, portableSpecs } from '../scripts/lib/native-releases.mjs';
+import { externalCatalog, nativeReleases, portableSpecs } from '../scripts/lib/native-releases.mjs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 test('scanner packages link the supported apps to their OpenRecon recipes', async () => {
   const catalog = await loadStandalone(await loadAppsRegistry());
@@ -24,6 +26,17 @@ test('scanner packages link the supported apps to their OpenRecon recipes', asyn
   assert.match(scanner.textContent, /Run the QSMxT container on the MRI scanner console/);
   assert.match(scanner.textContent, /official OpenRecon package/);
   assert.deepEqual([...scanner.querySelectorAll('a')].map(node => node.href), ['https://webclient.us.api.teamplay.siemens-healthineers.com/c2p', 'https://github.com/neurodesk/openrecon/', 'https://github.com/neurodesk/openrecon/tree/main/recipes/qsmxt']);
+  dom.window.close();
+});
+
+test('no Standalone dialog shows build or checksum instructions', async () => {
+  const catalog = await loadStandalone(await loadAppsRegistry());
+  const dom = new JSDOM('<html><body></body></html>');
+  for (const [id, app] of Object.entries(catalog.apps)) {
+    const dialog = openStandalone({ title: id, app }, dom.window.document);
+    assert.doesNotMatch(dialog.root.textContent, DIALOG_FORBIDDEN, id);
+    dialog.root.remove();
+  }
   dom.window.close();
 });
 
@@ -71,21 +84,9 @@ test('standalone choices are ordered, omit technical clutter and never offer the
 
 
 // An app's Standalone download is its own command line, never the all-apps desktop suite. Every app ships
-// one (packages/<app>/release.json or a Rust release source) unless it is listed here with the reason.
+// one (packages/<app>/release.json or a Rust release source) unless standalone-exceptions.json states why.
 // Remove an entry in the change that adds its command line.
-const WITHOUT_COMMAND_LINE = {
-  dcm2niix: 'interactive BIDS curation: acquisition labels and fieldmap associations are user decisions; upstream dcm2niix supplies the converter command line',
-  surfannotate: 'interactive surface annotation: every result is a manual choice in the viewer',
-  zarro: 'interactive OME-Zarr viewer: it has no batch output',
-  nesvor: 'needs CUDA; its standalone form is the neurodesk-compute server',
-  dicomview: 'interactive DICOM browser: dcm2niix and dicompare already ship as command lines',
-  'pipeline-builder': 'writes NeuroFlow workflows: neuroflow-mcp runs and validates them from the command line',
-  sdc: 'exes/sdc builds the sdc command line on the same core; its release packaging follows the app (#473)',
-  dwicorrect: 'exes/dwi/shoreline builds the shoreline command line on the same core; its release packaging follows the app',
-  fastprep: 'exes/fastprep drives separately installed niimath, brainchop, greedy-rs, synthsr, topofit and glm; a bundled release waits on packaging those (TopoFit licence pending)',
-  'me-ica': 'its meica CLI is released from niivue/meica-rs; no release is tagged yet',
-  bison: 'the bison command line in packages/bison follows the app; its release packaging is not done yet',
-};
+const WITHOUT_COMMAND_LINE = JSON.parse(await readFile(new URL('../registry/standalone-exceptions.json', import.meta.url), 'utf8'));
 
 test('every app ships its own command line or states why it cannot', async () => {
   const registry = await loadAppsRegistry();
@@ -94,6 +95,13 @@ test('every app ships its own command line or states why it cannot', async () =>
     assert.notEqual(natives.has(id), id in WITHOUT_COMMAND_LINE, natives.has(id) ? `${id} has a command line: remove it from WITHOUT_COMMAND_LINE` : `${id}: add packages/${id}/release.json, or list it in WITHOUT_COMMAND_LINE with the reason`);
   }
   assert.deepEqual(Object.keys(WITHOUT_COMMAND_LINE).filter(id => !registry.apps.some(app => app.id === id)), []);
+  for (const [id, reason] of Object.entries(WITHOUT_COMMAND_LINE)) {
+    assert.ok(typeof reason === 'string' && reason.trim(), `${id}: explain why no command line is available`);
+    if (reason.startsWith('template pass-through')) {
+      const contract = JSON.parse(await readFile(new URL(`../apps/${id}/automation.json`, import.meta.url), 'utf8'));
+      assert.deepEqual(Object.keys(contract.operations), ['copy-input'], `${id}: replace the scaffold's standalone reason when implementing the method`);
+    }
+  }
 });
 
 test('future apps automatically receive real offline workflow coverage on hosted CI', () => {
@@ -197,4 +205,56 @@ test('portable command-line rows show extraction and the release spec run comman
   assert.ok(lines.includes(`sudo installer -pkg topofit-${version}-macos-arm64.pkg -target /`));
   assert.ok(lines.every(line => line.length <= 90), 'visible commands stay within 90 characters');
   dom.window.close();
+});
+
+// Never guess URLs: a command-line download is either imported from a webapps release or is exactly the
+// external release its release.json pins.
+test('external command lines are the pinned release assets, linked with their prerequisite and source', async () => {
+  const catalog = await loadStandalone(await loadAppsRegistry());
+  const natives = nativeReleases(await portableSpecs());
+  for (const [id, app] of Object.entries(catalog.apps)) {
+    const external = natives.get(id)?.find(source => source.external);
+    if (external) {
+      assert.deepEqual({ downloads: app.downloads, commandLine: app.commandLine }, externalCatalog(external.spec), `${id}: regenerate its catalog entry from ${external.packageDir}/release.json`);
+      continue;
+    }
+    assert.equal(app.commandLine, undefined, id);
+    for (const download of app.downloads) assert.match(download.url, /^https:\/\/github\.com\/neurodesk\/webapps\/releases\/download\//, id);
+  }
+  const reproin = natives.get('reproin');
+  assert.deepEqual(reproin.map(source => [source.external, source.workflow]), [[true, null]], 'reproin is built by reproin-rs, never by a webapps workflow');
+  const dom = new JSDOM('<html><body></body></html>');
+  const dialog = openStandalone({ title: 'ReproIn', app: catalog.apps.reproin }, dom.window.document);
+  const section = dialog.root.querySelector('section[aria-labelledby="standalone-downloads"]');
+  const links = [...section.querySelectorAll('a')].map(node => node.href);
+  assert.deepEqual(links, [
+    'https://github.com/rordenlab/reproin-rs/releases/tag/v0.1.20261030',
+    'https://github.com/rordenlab/reproin-rs',
+    ...catalog.apps.reproin.downloads.map(download => download.url),
+  ]);
+  assert.deepEqual([...section.querySelectorAll('h4')].map(node => node.textContent.replace(/ · \d+ MB$/, '')), [
+    'ReproIn command line · Linux · x64',
+    'ReproIn command line · macOS · Apple silicon',
+    'ReproIn command line · macOS · Intel',
+    'ReproIn command line · Windows · x64',
+  ]);
+  assert.match(section.textContent, /dcm2niix v1\.0\.20261011 or later/);
+  assert.doesNotMatch(section.textContent, /Models/);
+  assert.match(section.textContent, /xattr -dr com\.apple\.quarantine reproinx-0\.1\.20261030-macos-arm64\n\.\/reproinx-0\.1\.20261030-macos-arm64\/reproinx dicom_dir bids_dir/);
+  assert.match(section.textContent, /\.\\reproinx-0\.1\.20261030-windows-x64\\reproinx\.exe dicom_dir bids_dir/);
+  dom.window.close();
+});
+
+// REPROIN_RELEASE_DIR: a folder holding the downloaded release assets, to check the pins offline.
+test('local copies of the external release match their pins and layout', { skip: !process.env.REPROIN_RELEASE_DIR && 'set REPROIN_RELEASE_DIR' }, async () => {
+  const [{ spec }] = nativeReleases(await portableSpecs()).get('reproin');
+  for (const target of Object.values(spec.targets)) {
+    const path = join(process.env.REPROIN_RELEASE_DIR, target.asset);
+    const bytes = await readFile(path);
+    assert.equal(bytes.length, target.bytes, target.asset);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), target.sha256, target.asset);
+    // bsdtar lists zip and tar.gz alike.
+    const entries = execFileSync('tar', ['-tf', path], { encoding: 'utf8' }).split(/\r?\n/);
+    assert.ok(entries.includes(`${target.asset.replace(/\.(?:zip|tar\.gz)$/, '')}/${target.executable}`), target.asset);
+  }
 });

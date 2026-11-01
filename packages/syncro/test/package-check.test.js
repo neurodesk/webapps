@@ -10,7 +10,8 @@ const check=fileURLToPath(new URL('../validation/package-check.mjs',import.meta.
 const template=fileURLToPath(new URL('../data/MNI152_T1_1mm_brain.nii.gz',import.meta.url));
 
 // A stand-in for the installed command. Its normalisation copies the MNI152 template into every
-// output and draws a 6 mm lesion at MNI (-30, -10, 20), then applies FAKE_SYNCRO_DEFECT.
+// output, draws a 6 mm lesion at MNI (-30, -10, 20) and records --normalization (default greedy) in
+// provenance.json, then applies FAKE_SYNCRO_DEFECT.
 const fake=`#!/usr/bin/env node
 import {mkdir,readFile,writeFile,stat} from 'node:fs/promises';
 import {basename,join} from 'node:path';
@@ -48,6 +49,8 @@ const primary=defect==='garbage'?brain.map((value,i)=>(i*7919)%1000):shifted;
 await writeFile(join(output,'wbt1'+name),nifti(shifted));
 await writeFile(join(output,'w'+name),nifti(primary));
 await writeFile(join(output,'wlesion.nii'),nifti(lesion));
+const normalization=defect==='engine'?'greedy':args.includes('--normalization')?args[args.indexOf('--normalization')+1]:'greedy';
+await writeFile(join(output,'provenance.json'),JSON.stringify({normalization}));
 console.log(output);
 `;
 
@@ -75,18 +78,27 @@ test('the release check passes outputs that match the template and the lesion he
 test('the release check fails a lesion propagated into the wrong hemisphere',posix,async()=>{
   const {status,output}=await runCheck('lesion-right');
   assert.equal(status,1,output);
-  assert.match(output,/^FAIL left lesion stays left/m);
-  assert.match(output,/^FAIL lesion centre/m);
+  for (const engine of ['greedy','ants']) {
+    assert.match(output,new RegExp(`^FAIL ${engine}: left lesion stays left`,'m'));
+    assert.match(output,new RegExp(`^FAIL ${engine}: lesion centre`,'m'));
+  }
 });
 
 test('the release check fails a normalisation 2 mm off the template',posix,async()=>{
   const {status,output}=await runCheck('shift');
   assert.equal(status,1,output);
-  assert.match(output,/^FAIL warped brain correlation/m);
+  assert.match(output,/^FAIL greedy: warped brain correlation/m);
 });
 
 test('the release check fails a scan that is not the brain it normalised',posix,async()=>{
   const {status,output}=await runCheck('garbage');
   assert.equal(status,1,output);
-  assert.match(output,/^FAIL warped scan correlation/m);
+  assert.match(output,/^FAIL greedy: warped scan correlation/m);
+});
+
+test('the release check fails a command that ignores --normalization ants',posix,async()=>{
+  const {status,output}=await runCheck('engine');
+  assert.equal(status,1,output);
+  assert.match(output,/^PASS greedy: provenance records the greedy normalisation/m);
+  assert.match(output,/^FAIL ants: provenance records the greedy normalisation/m);
 });

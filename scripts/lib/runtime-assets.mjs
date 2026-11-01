@@ -49,20 +49,23 @@ async function copyVerifiedFamily({ family, repoRoot, siteDist, registry }) {
   }
 }
 
+function hasScopedOrt(app) {
+  return app?.app_scoped_runtime_families?.some(id => id === 'ort-web' || id.startsWith('ort-web-'));
+}
+
 async function rewriteFile(file, runtimeRoot, app, relativePath) {
   const ortDir = join(runtimeRoot, 'ort-web', '1.21.0');
-  const dcm2niix = join(runtimeRoot, 'dcm2niix', '1.3.20260724', 'index.js');
   const niftiReader = join(runtimeRoot, 'nifti-reader', '0.8.0', 'index.js');
   const sharedSource = join(runtimeRoot, 'webapp-components', '0.1.2', 'src');
   let source = await readFile(file, 'utf8');
   const original = source;
 
   if (app && /(['"])(?:\.\.?\/)*wasm\/ort[^'"]+\1/.test(source)
-      && !app.app_scoped_runtime_families?.includes('ort-web')) {
-    throw new Error(`${app.id}: threaded ONNX Runtime requires app_scoped_runtime_families: [ort-web]; shared workers escape the COI service-worker scope`);
+      && !hasScopedOrt(app)) {
+    throw new Error(`${app.id}: threaded ONNX Runtime requires app_scoped_runtime_families to include a pinned ort-web family; shared workers escape the COI service-worker scope`);
   }
 
-  if (app?.app_scoped_runtime_families?.includes('ort-web')) {
+  if (hasScopedOrt(app)) {
     source = source.replace(
       /(ort\.env\.wasm\.wasmPaths\s*=\s*)(['"])((?:\.\.?\/)*wasm\/)\2/g,
       (_match, assignment, _quote, path) => {
@@ -88,10 +91,6 @@ async function rewriteFile(file, runtimeRoot, app, relativePath) {
     source = source.replace(/(['"])(?:\.\.?\/)*wasm\/\1/g, (_match, quote) =>
       `${quote}${moduleReference(file, ortDir)}/${quote}`);
   }
-  if (!app?.app_scoped_runtime_families?.includes('dcm2niix')) {
-    source = source.replace(/(['"])(?:\.\.?\/)*dcm2niix\/index\.js\1/g, (_match, quote) =>
-      `${quote}${moduleReference(file, dcm2niix)}${quote}`);
-  }
   source = source.replace(/(['"])(?:\.\.?\/)*nifti-js\/index\.js\1/g, (_match, quote) =>
     `${quote}${moduleReference(file, niftiReader)}${quote}`);
   source = source.replace(
@@ -105,12 +104,9 @@ async function rewriteFile(file, runtimeRoot, app, relativePath) {
 async function removeAppCopies(siteDist, registry) {
   for (const app of registry.apps) {
     const appDist = join(siteDist, app.path);
-    if (!app.app_scoped_runtime_families?.includes('dcm2niix')) {
-      await rm(join(appDist, 'dcm2niix'), { recursive: true, force: true });
-    }
     await rm(join(appDist, 'nifti-js'), { recursive: true, force: true });
     await rm(join(appDist, 'vendor', 'webapp-components'), { recursive: true, force: true });
-    if (app.app_scoped_runtime_families?.includes('ort-web')) continue;
+    if (hasScopedOrt(app)) continue;
     const wasmDir = join(appDist, 'wasm');
     try {
       for (const entry of await readdir(wasmDir, { withFileTypes: true })) {
@@ -131,18 +127,22 @@ function unhashedName(file) {
 // Runtime binaries can move to the shared store independently of their worker
 // modules. Worker families retain their app scope policy and cannot opt in.
 async function deduplicateSources({ manifest, files, siteDist, registry }) {
-  for (const family of manifest.families.filter(family => family.deduplicate)) {
+  const families = manifest.families.filter(family => family.deduplicate);
+  const claimed = new Set();
+  for (const family of families) {
     for (const asset of family.files) {
       const targetPath = join(siteDist, '_runtime', family.target, asset.name);
       for (const app of registry.apps) {
         // An app's vendored components are not its own copies: removeAppCopies replaces them with the shared store.
         const vendored = join(siteDist, app.path, 'vendor', 'webapp-components') + sep;
         const appFiles = files.filter(file => file.startsWith(join(siteDist, app.path) + sep) && !file.startsWith(vendored));
-        const copies = appFiles.filter(file => unhashedName(file) === unhashedName(asset.source));
+        const copies = appFiles.filter(file => !claimed.has(file) && unhashedName(file) === unhashedName(asset.source));
         if (!copies.length) continue;
         if (app.app_scoped_runtime_families?.includes(family.id)) throw new Error(`Cannot deduplicate scoped runtime ${family.id}`);
         for (const sourcePath of copies) {
           const actual = await sha256(sourcePath);
+          // Another pinned version of the same runtime claims this copy; any other bytes are drift.
+          if (actual !== asset.sha256 && families.some(other => other.files.some(file => file.name === asset.name && file.sha256 === actual))) continue;
           if (actual !== asset.sha256) {
             throw new Error(`Runtime asset checksum mismatch for ${sourcePath}: expected ${asset.sha256}, got ${actual}`);
           }
@@ -164,6 +164,7 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
           }
           if (!references) throw new Error(`No static references found for deduplicated runtime ${sourcePath}`);
           await rm(sourcePath);
+          claimed.add(sourcePath);
         }
       }
     }
@@ -178,11 +179,6 @@ export async function assembleRuntimeAssetStore({ repoRoot, siteDist, registry }
 
   for (const family of manifest.families) {
     await copyVerifiedFamily({ family, repoRoot, siteDist, registry });
-    if (family.id === 'dcm2niix') {
-      for (const app of registry.apps.filter(app => app.app_scoped_runtime_families.includes(family.id))) {
-        await cp(join(runtimeRoot, family.target), join(siteDist, app.path, family.id), { recursive: true });
-      }
-    }
   }
 
   const sharedSource = join(runtimeRoot, 'webapp-components', '0.1.2', 'src');

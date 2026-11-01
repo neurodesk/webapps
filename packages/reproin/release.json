@@ -1,0 +1,50 @@
+{
+  "repository": "rordenlab/reproin-rs",
+  "tag": "v0.1.20261030",
+  "version": "0.1.20261030",
+  "displayName": "reproinx",
+  "app": "reproin",
+  "run": "dicom_dir bids_dir",
+  "readme": {
+    "run": "Convert a ReproIn DICOM session to BIDS with dcm2niix and the reproin-rs post-pass",
+    "notes": [
+      "Requires dcm2niix v1.0.20261011 or later on PATH, or named by $DCM2NIIX.",
+      "Optional subject and session labels follow the output folder; add --help for options.",
+      "macOS builds are not yet signed or notarized, so clear the quarantine flag before the first run."
+    ]
+  },
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "reproinx",
+      "asset": "reproinx-0.1.20261030-linux-x64.tar.gz",
+      "bytes": 724393,
+      "sha256": "010781812c759750e51f99afd021420ec21ffe7d9e07a2753f659cdb522b6849"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "tar.gz",
+      "executable": "reproinx",
+      "asset": "reproinx-0.1.20261030-macos-arm64.tar.gz",
+      "bytes": 639388,
+      "sha256": "8815874daf770f6e46d10ecd01b2d37e1d18641a4aec7ef5ae22df2d1ef8d1b6"
+    },
+    "macos-x64": {
+      "label": "macOS Intel",
+      "archive": "tar.gz",
+      "executable": "reproinx",
+      "asset": "reproinx-0.1.20261030-macos-x64.tar.gz",
+      "bytes": 700669,
+      "sha256": "9f44ffb6eb31980732533c3bc9bf1701870a3d0211a675bf96ddfc58a1d7280e"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "reproinx.exe",
+      "asset": "reproinx-0.1.20261030-windows-x64.zip",
+      "bytes": 674433,
+      "sha256": "5f406bb9c552061593d080164f5e105fc73fb08b3897a09e133fbe960badf8c1"
+    }
+  }
+}

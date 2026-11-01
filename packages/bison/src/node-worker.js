@@ -1,6 +1,6 @@
-// One registration kernel (@neurodesk/hmc-registration) or one denoiser (@neurodesk/ants-denoise),
-// isolated in its own worker thread (node-workers.js). Emscripten memories grow and never shrink;
-// ending the thread frees the instance's heap at once.
+// One registration kernel (@neurodesk/hmc-registration), one denoiser (@neurodesk/ants-denoise) or
+// one Greedy module (@neurodesk/greedy/single), isolated in its own worker thread (node-workers.js).
+// WebAssembly memories grow and never shrink; ending the thread frees the instance's heap at once.
 
 import { parentPort, workerData } from 'node:worker_threads';
 
@@ -23,6 +23,8 @@ function serialise(error) {
 // The reason the instance stopped, or null when it still accepts work. Each package words its
 // later refusal with this reason: hmc-registration flags the error, ants-denoise names the abort.
 function stoppedBy(error) {
+  // A Rust panic traps; the module's state after a trap is undefined.
+  if (kind === 'greedy') return error instanceof WebAssembly.RuntimeError ? error.message : null;
   const aborted = kind === 'registration' ? error?.aborted === true : error?.cause !== undefined && /DenoiseImage aborted/.test(error?.message ?? '');
   if (!aborted) return null;
   return error.cause instanceof Error ? error.cause.message : String(error.cause);
@@ -44,6 +46,16 @@ try {
   } else if (kind === 'denoiser') {
     const { loadDenoise } = await import('@neurodesk/ants-denoise/node');
     instance = await loadDenoise({ ...locations, onLog });
+  } else if (kind === 'greedy') {
+    const { loadGreedySingleThread } = await import('@neurodesk/greedy/single');
+    const { registerAffineGreedy, registerRigidGreedy, registerSvfGreedy } = await import('@neurodesk/greedy');
+    const api = await loadGreedySingleThread();
+    instance = {
+      affine: ({ fixed, moving }) => registerAffineGreedy({ api, fixed, moving }),
+      rigid: ({ fixed, moving }) => registerRigidGreedy({ api, fixed, moving }),
+      svf: (args) => registerSvfGreedy({ api, ...args }),
+      memoryBytes: api.memoryBytes,
+    };
   } else {
     throw new Error(`Unknown worker kind ${kind}.`);
   }
@@ -64,6 +76,10 @@ if (instance) {
         result = { outputs: moved, log };
       } else if (kind === 'denoiser' && method === 'denoise') {
         result = transferable(await instance.denoise(...args), transfer);
+      } else if (kind === 'greedy' && (method === 'affine' || method === 'rigid')) {
+        result = instance[method](...args);
+      } else if (kind === 'greedy' && method === 'svf') {
+        result = transferable(instance.svf(...args), transfer);
       } else {
         throw new Error(`Unknown method ${method}.`);
       }

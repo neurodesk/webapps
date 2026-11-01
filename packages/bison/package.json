@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/bison",
-  "version": "0.2.1",
+  "version": "0.2.20261031",
   "description": "BISON brain tissue and white matter hyperintensity segmentation for browsers and the command line",
   "type": "module",
   "private": true,
@@ -22,6 +22,7 @@
     "src",
     "model.manifest.json",
     "LICENSE",
+    "NOTICE",
     "README.md"
   ],
   "scripts": {
@@ -29,6 +30,7 @@
   },
   "dependencies": {
     "@neurodesk/ants-denoise": "workspace:*",
+    "@neurodesk/greedy": "workspace:*",
     "@neurodesk/hmc-registration": "workspace:*",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",

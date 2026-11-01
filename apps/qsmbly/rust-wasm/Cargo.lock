@@ -902,7 +902,7 @@ dependencies = [
 [[package]]
 name = "qsm-core"
 version = "0.0.0"
-source = "git+https://github.com/astewartau/QSM.rs.git?rev=8a3afda3716a859d93f1d41f1c8993335cc80c57#8a3afda3716a859d93f1d41f1c8993335cc80c57"
+source = "git+https://github.com/astewartau/QSM.rs.git?rev=95be94b83b43e80329b4ecfe8a74cf8114ea927a#95be94b83b43e80329b4ecfe8a74cf8114ea927a"
 dependencies = [
  "bytemuck",
  "delaunator",
@@ -923,7 +923,7 @@ dependencies = [
 
 [[package]]
 name = "qsm_wasm"
-version = "0.31.20261024"
+version = "0.31.20261031"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -938,7 +938,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-engine"
 version = "0.0.0"
-source = "git+https://github.com/QSMxT/QSMxT.git?rev=9fe168be40f67056c198f0df64734c486f137cac#9fe168be40f67056c198f0df64734c486f137cac"
+source = "git+https://github.com/QSMxT/QSMxT.git?rev=1f72772d4ae1ed7264a19c65ce1053ca05a8663d#1f72772d4ae1ed7264a19c65ce1053ca05a8663d"
 dependencies = [
  "getrandom",
  "log",

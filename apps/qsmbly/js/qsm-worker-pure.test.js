@@ -5,7 +5,7 @@ test('base worker initialization uses the exact runtime manifest WASM URL', asyn
   const importedUrls = [];
   const initializedUrls = [];
   const messages = [];
-  const versions = { qsmxt: { version: 'git 9fe168b' }, qsm_rs: { version: 'git 8a3afda' } };
+  const versions = { qsmxt: { version: 'git 1f72772' }, qsm_rs: { version: 'git 95be94b' } };
   let handle;
   const context = createContext({
     self: { location: { href: 'https://example.org/qsmbly/js/qsm-worker-pure.js' } },
@@ -56,4 +56,12 @@ test('base worker initialization uses the exact runtime manifest WASM URL', asyn
   expect(importedUrls).toHaveLength(1);
   expect(importedUrls[0]).toMatch(/^https:\/\/example.org\/qsmbly\/wasm\/qsm_wasm\.js\?v=.+$/);
   expect(initializedUrls).toEqual(['https://example.org/qsmbly/wasm/qsm_wasm_bg.wasm']);
+});
+
+test('every module the worker imports exists', async () => {
+  const { access } = await import('node:fs/promises');
+  const source = await readFile(new URL('./qsm-worker-pure.js', import.meta.url), 'utf8');
+  const specifiers = [...source.matchAll(/^import [^;]* from '(\.[^']+)';$/gm)].map(match => match[1]);
+  expect(specifiers.length).toBeGreaterThan(3);
+  for (const specifier of specifiers) await access(new URL(specifier, import.meta.url));
 });

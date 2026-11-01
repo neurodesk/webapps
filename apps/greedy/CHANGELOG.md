@@ -1,5 +1,47 @@
 # greedy
 
+## 0.8.20261031
+
+### Minor Changes
+
+- f860d91: BISON registers the T1 to the ICBM 2009c template (affine) and the FLAIR to the T1 (rigid) with Greedy instead of ANTs. On the five native validation subjects every label gate still holds and these two steps take about 30 s each instead of 94 and 130 s. The nonlinear registration stays on ANTs SyN. Greedy's WebAssembly gains a rigid (6 DOF) export and a browser worker for its single-threaded build, which BISON runs in the browser and in Node so that both give the same files. hmc-registration can write ITK `.mat` transforms (`writeMatTransform`).
+- 1a4882c: greedy-rs registers with Greedy's neighbourhood cross-correlation for stationary-velocity warps: `-m NCC 2x2x2` (any radius) on the command line, `register_svf_masked_wasm` with metric `NCC 2x2x2` in WebAssembly and `registerSvfGreedy` in JavaScript. Its gradient is the exact one of Greedy's unweighted NCC. On five T1-to-ICBM 2009c registrations it matched Greedy 1.4's correlation to within 0.004. Unlike Greedy, it adds no random noise to the images, so its results stay deterministic.
+- cc094b4: Add a committed single-threaded WebAssembly build for Node (`@neurodesk/greedy/single`), which gives the threaded browser build's results byte for byte.
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+- Updated dependencies [1a4882c]
+- Updated dependencies [b84a269]
+  - @neurodesk/runtime-support@0.9.19
+  - @neurodesk/webapp-components@0.22.3
+  - @neurodesk/greedy@0.8.20261031
+
+## 0.7.20261029
+
+### Minor Changes
+
+- 207df76: `greedy-rs -a` accepts Greedy's `-ia FILE` (start from an affine matrix) and `-ia-identity`; `register_affine_masked_wasm` takes the matrix text as an optional last argument. Starting a masked (`-gm`) NMI affine from the unmasked affine converges on BISON T1s where the identity start still collapses (#623).
+
+### Patch Changes
+
+- 4761b2c: Fix the masked (`-gm`) NMI affine diverging on a whole-head T1 to template pair (#623). The fixed pyramid now applies Greedy's masked downsampling, so the masked objective matches Greedy's, and the command line starts from the physical identity unless `-ia-image-centers` is given, as Greedy does; the WebAssembly affine functions take that choice as an argument and the app wrappers keep starting from image centres.
+- Updated dependencies [4761b2c]
+  - @neurodesk/greedy@0.7.20261029
+
+## 0.6.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+  - @neurodesk/runtime-support@0.9.18
+  - @neurodesk/greedy@0.6.20261027
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/runtime-support@0.9.17
+  - @neurodesk/greedy@0.6.20261027
+
 ## 0.6.20261025
 
 ### Patch Changes

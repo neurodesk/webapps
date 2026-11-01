@@ -109,9 +109,20 @@ The driver writes 120 individual receipts and `matrix.json`, and rejects differe
 The full matrix has not been measured. The Node and Chromium one-worker slab trivial preflights complete 124 registrations and resamplings across 137 frames, with identical hashes for all 142 scientific artifacts. The separate #451 gate determines scientific acceptance; performance measurements do not establish it.
 
 Both datasets use precomputed pinned masks. Automatic MindGrab masking and the application
-viewer are excluded. Their memory must be measured separately before these measurements
-can justify a whole-app input-size limit. The app's dedicated MindGrab worker terminates
-before HMC starts, but its earlier peak still matters. The matrix does not measure it.
+viewer are excluded. The whole-app runs under 16 GB and 8 GB cgroup caps measure them
+([plan, section 6](../../docs/architecture/dwi-hmc-plan.md#whole-app-memory-and-the-input-limit)).
+
+## Input limit
+
+`src/limits.js` estimates what the estimator's 1 GiB WebAssembly heap must hold for
+initialisation and the first GP prediction, measured by `validation/estimator-limits.mjs`,
+`init-limits.mjs` and `gp-quadratic.mjs`. `correctNiFreeze` refuses a series or GP mask over
+the limit before it allocates the model, so the app and the command line show the same message,
+not a bare `unreachable`. The app also checks the series when it loads, and both the app and the
+command line check the selected model with an empty mask, a lower bound, before automatic
+masking. Every tested input the limit accepts passed in `hmc.wasm`; beyond those inputs the
+estimate is not validated. Every whole-app input tested under an 8 GiB cap ran. Host memory has
+no separate limit, and whether 8 GB holds every accepted input is not validated (plan, section 6).
 
 ## Pool
 

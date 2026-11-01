@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { b0Frames, bidsStem, fieldSidecar, meanFrames, outputNames, selectPair, voxelSizes } from "../src/pipeline.js";
+import { b0Frames, bidsStem, fieldExecution, fieldProvenance, fieldSidecar, meanFrames, outputNames, selectPair, voxelSizes } from "../src/pipeline.js";
 
 const entry = (name, pe, bval = null) => ({ image: { name }, sidecar: pe ? { PhaseEncodingDirection: pe, TotalReadoutTime: 0.04 } : null, bval });
 
@@ -73,6 +73,19 @@ test("the downloaded sidecar preserves the actual backend, adapter and fallback 
   ]) {
     const meta = fieldSidecar({ image1: "ap.nii.gz", image2: "pa.nii.gz", phaseEncodingDirection: "j-", totalReadoutTime: 0.05, iterations: 5, execution });
     assert.deepEqual(JSON.parse(JSON.stringify(meta)).Execution, execution);
+  }
+});
+
+test("the report provenance records the worker's backend, adapter and fallback reason", () => {
+  for (const [out, execution] of [
+    [{ backend: "cpu", adapter: null, gpuError: null, iterations: 5 }, { backend: "cpu" }],
+    [{ backend: "webgpu", adapter: "intel xe-2lpg", gpuError: null, iterations: 5 }, { backend: "webgpu", adapter: "intel xe-2lpg" }],
+    [{ backend: "cpu", adapter: null, gpuError: "WebGPU device was lost", iterations: 5 }, { backend: "cpu", gpuError: "WebGPU device was lost" }],
+  ]) {
+    const provenance = fieldProvenance({ iterations: out.iterations, reference: "ap.nii.gz", phaseEncodingDirection: "j-", totalReadoutTime: 0.05, execution: fieldExecution(out) });
+    assert.deepEqual(JSON.parse(JSON.stringify(provenance)).execution, execution);
+    assert.equal(provenance.method, "pyhysco-0.0.4-port");
+    assert.equal(provenance.iterations, 5);
   }
 });
 

@@ -1,13 +1,15 @@
 use greedy_rs_core::{
-    AffineMetric, DEFAULT_AFFINE_JITTER, Interpolation, Transform, decode_image,
-    decode_vector_field, encode_image, encode_vector_field, read_matrix, register_affine,
-    register_affine_masked, register_nmi_svf, register_nmi_svf_masked, reslice,
-    reslice_with_background,
+    AffineMetric, AffineStart, DEFAULT_AFFINE_JITTER, Interpolation, SvfMetric, Transform,
+    decode_image, decode_vector_field, encode_image, encode_vector_field, read_matrix,
+    register_affine, register_affine_masked, register_nmi_svf, register_rigid_masked, register_svf,
+    reslice, reslice_with_background,
 };
 use wasm_bindgen::prelude::*;
 
 // Exposes async `initThreadPool` to the browser glue. It must be called before
-// registration so the core's existing Rayon slab loops use Web Workers.
+// registration so the core's existing Rayon slab loops use Web Workers. Without
+// the `threads` feature the module runs single-threaded, as in Node.
+#[cfg(feature = "threads")]
 pub use wasm_bindgen_rayon::init_thread_pool;
 
 #[wasm_bindgen]
@@ -43,20 +45,31 @@ fn parse_iterations(value: &str) -> Result<[usize; 3], JsValue> {
         .ok_or_else(|| JsValue::from_str("iterations must be three x-separated integers"))
 }
 
+fn affine_start(image_centers: bool) -> AffineStart {
+    if image_centers {
+        AffineStart::ImageCenters
+    } else {
+        AffineStart::Identity
+    }
+}
+
 /// Register moving to fixed using the light 3-D affine interface. `metric` is
-/// `SSD` or `NMI`; `iterations` uses Greedy's `100x50x10` notation.
+/// `SSD` or `NMI`; `iterations` uses Greedy's `100x50x10` notation;
+/// `image_centers` is Greedy's `-ia-image-centers` (otherwise the identity).
 #[wasm_bindgen]
 pub fn register_affine_wasm(
     fixed: &[u8],
     moving: &[u8],
     metric: &str,
     iterations: &str,
+    image_centers: bool,
 ) -> Result<String, JsValue> {
     let fixed = decode_image(fixed).map_err(wasm_error)?;
     let moving = decode_image(moving).map_err(wasm_error)?;
     let matrix = register_affine(
         fixed,
         moving,
+        affine_start(image_centers),
         parse_metric(metric)?,
         parse_iterations(iterations)?,
         false,
@@ -100,8 +113,9 @@ pub fn register_nmi_svf_wasm(
     encode_vector_field(&warp, false).map_err(wasm_error)
 }
 
-/// `greedy -a [-gm MASK]` (12 DOF): the RAS matrix text exactly as the CLI writes `-o aff.mat`.
-/// Inputs are raw `.nii` bytes; `mask` restricts the metric to the fixed image's mask.
+/// `greedy -a [-gm MASK] [-ia-image-centers | -ia FILE]` (12 DOF): the RAS matrix text exactly
+/// as the CLI writes `-o aff.mat`. Inputs are raw `.nii` bytes; `mask` restricts the metric to
+/// the fixed image's mask; `initial`, the text of an `-ia` matrix, overrides `image_centers`.
 #[wasm_bindgen]
 pub fn register_affine_masked_wasm(
     fixed: &[u8],
@@ -109,17 +123,76 @@ pub fn register_affine_masked_wasm(
     mask: Option<Vec<u8>>,
     metric: &str,
     iterations: &str,
+    image_centers: bool,
+    initial: Option<String>,
 ) -> Result<String, JsValue> {
+    register_linear(
+        12,
+        fixed,
+        moving,
+        mask,
+        metric,
+        iterations,
+        image_centers,
+        initial,
+    )
+}
+
+/// `greedy -a -dof 6`, otherwise as `register_affine_masked_wasm`: a rigid RAS matrix as the CLI
+/// writes it.
+#[wasm_bindgen]
+pub fn register_rigid_masked_wasm(
+    fixed: &[u8],
+    moving: &[u8],
+    mask: Option<Vec<u8>>,
+    metric: &str,
+    iterations: &str,
+    image_centers: bool,
+    initial: Option<String>,
+) -> Result<String, JsValue> {
+    register_linear(
+        6,
+        fixed,
+        moving,
+        mask,
+        metric,
+        iterations,
+        image_centers,
+        initial,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn register_linear(
+    dof: u8,
+    fixed: &[u8],
+    moving: &[u8],
+    mask: Option<Vec<u8>>,
+    metric: &str,
+    iterations: &str,
+    image_centers: bool,
+    initial: Option<String>,
+) -> Result<String, JsValue> {
+    let start = match initial {
+        Some(text) => AffineStart::Matrix(read_matrix(&text).map_err(wasm_error)?),
+        None => affine_start(image_centers),
+    };
     let fixed = decode_image(fixed).map_err(wasm_error)?;
     let moving = decode_image(moving).map_err(wasm_error)?;
     let mask = mask
         .map(|m| decode_image(&m))
         .transpose()
         .map_err(wasm_error)?;
-    let matrix = register_affine_masked(
+    let register = if dof == 6 {
+        register_rigid_masked
+    } else {
+        register_affine_masked
+    };
+    let matrix = register(
         fixed,
         moving,
         mask,
+        start,
         parse_metric(metric)?,
         parse_iterations(iterations)?,
         false,
@@ -143,6 +216,21 @@ pub fn register_nmi_svf_masked_wasm(
     matrix: Option<String>,
     iterations: &str,
 ) -> Result<Vec<u8>, JsValue> {
+    register_svf_masked_wasm(fixed, moving, mask, matrix, "NMI", iterations)
+}
+
+/// `greedy -sv -m METRIC [-gm MASK] [-it aff.mat]` with `metric` `NMI` or `NCC 2x2x2` (the
+/// box-window radius in voxels): raw `.nii` displacement field, as the CLI writes `-o`.
+#[wasm_bindgen]
+pub fn register_svf_masked_wasm(
+    fixed: &[u8],
+    moving: &[u8],
+    mask: Option<Vec<u8>>,
+    matrix: Option<String>,
+    metric: &str,
+    iterations: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let metric = parse_svf_metric(metric)?;
     let fixed = decode_image(fixed).map_err(wasm_error)?;
     let mut moving = decode_image(moving).map_err(wasm_error)?;
     if let Some(m) = matrix {
@@ -154,16 +242,43 @@ pub fn register_nmi_svf_masked_wasm(
         .map(|m| decode_image(&m))
         .transpose()
         .map_err(wasm_error)?;
-    let warp = register_nmi_svf_masked(
+    let warp = register_svf(
         fixed,
         moving,
         mask,
+        metric,
         parse_iterations(iterations)?,
         false,
         |_, _| {},
     )
     .map_err(wasm_error)?;
     encode_vector_field(&warp, false).map_err(wasm_error)
+}
+
+fn parse_svf_metric(value: &str) -> Result<SvfMetric, JsValue> {
+    let invalid =
+        || JsValue::from_str("metric must be NMI or NCC with a radius, such as NCC 2x2x2");
+    let mut words = value.split_whitespace();
+    match (
+        words.next().map(str::to_ascii_uppercase).as_deref(),
+        words.next(),
+        words.next(),
+    ) {
+        (Some("NMI"), None, None) => Ok(SvfMetric::Nmi),
+        (Some("NCC"), Some(radius), None) => {
+            let values = radius
+                .split('x')
+                .map(str::parse::<usize>)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| invalid())?;
+            match values[..] {
+                [r] => Ok(SvfMetric::Ncc([r; 3])),
+                [x, y, z] => Ok(SvfMetric::Ncc([x, y, z])),
+                _ => Err(invalid()),
+            }
+        }
+        _ => Err(invalid()),
+    }
 }
 
 /// Reslice a NIfTI moving image into the fixed image's grid through one RAS affine.

@@ -1,6 +1,5 @@
 import { defineElement, upgradeProperties } from './define.js';
 import { bindInfoTooltips, renderInfoIcon } from '../ui/bindInfoTooltips.js';
-import { fetchWithRetry } from '../net/fetchWithRetry.js';
 import { fetchModel } from '../worker/fetchModel.js';
 import { bindPageDrop, deliverFiles, primaryInput } from '../ui/pageDrop.js';
 import { filesFromDirectoryHandle } from '../file-io/detectFiles.js';
@@ -317,15 +316,17 @@ export function defineExampleSelector(view = globalThis.window) {
               try {
                 bytes = await fetchModel({ url: asset.url, integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, {
                   signal: controller.signal,
-                  fetch: async (url, init) => {
-                    const response = await fetchWithRetry(url, init, { onRetry });
-                    if (!response.ok) throw new Error(`Could not download ${asset.name} (HTTP ${response.status}).`);
-                    return response;
-                  },
+                  retries: 4,
+                  onRetry,
                 });
               } catch (error) {
                 if (error.message === 'Model SHA-256 mismatch') {
                   throw new Error(`The checksum for ${asset.name} did not match.`, { cause: error });
+                }
+                const status = /^Model download failed \((\d+)\)/.exec(error.message)?.[1];
+                if (status) throw new Error(`Could not download ${asset.name} (HTTP ${status}).`, { cause: error });
+                if (error.name === 'TimeoutError') {
+                  throw new Error(`The download of ${asset.name} stalled (${error.message}).`, { cause: error });
                 }
                 throw error;
               }

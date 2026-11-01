@@ -196,6 +196,86 @@ test('oversized log downloads stop at the byte budget and identify partial logs'
   assert.equal(cancelled, true);
 });
 
+// Undici's error when GitHub closes a reused keep-alive connection (#632).
+const socketClosed = (message = 'fetch failed') => new TypeError(message, { cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }) });
+
+function scriptedClient(responses) {
+  const calls = [];
+  const delays = [];
+  const client = createGitHubClient({
+    token: 'private', repository: 'owner/repo',
+    sleep: async delay => { delays.push(delay); },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, authorization: options.headers?.Authorization });
+      const next = responses.shift();
+      if (next instanceof Error) throw next;
+      return typeof next === 'function' ? next() : next;
+    },
+  });
+  return { client, calls, delays };
+}
+
+test('API reads retry dropped connections and gateway errors with bounded backoff', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const { client, calls, delays } = scriptedClient([socketClosed(), new Response('unavailable', { status: 503 }), Response.json({ id: 1 })]);
+  assert.deepEqual(await client.request('/actions/runs?head_sha=abc'), { id: 1 });
+  assert.deepEqual(calls.map(call => call.authorization), ['Bearer private', 'Bearer private', 'Bearer private']);
+  assert.deepEqual(delays, [1000, 4000]);
+  assert.deepEqual(warn.mock.calls.map(call => call.arguments[0]), [
+    'GitHub API GET /actions/runs failed (UND_ERR_SOCKET); retry 1 of 2 in 1 s',
+    'GitHub API GET /actions/runs failed (HTTP 503); retry 2 of 2 in 4 s',
+  ]);
+});
+
+test('API reads cut off mid-response retry the whole request, log redirect included', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const truncated = () => new Response(new ReadableStream({ pull(controller) { controller.error(socketClosed('terminated')); } }));
+  const json = scriptedClient([truncated, Response.json({ id: 1 })]);
+  assert.deepEqual(await json.client.request('/actions/runs/1'), { id: 1 });
+  assert.equal(json.calls.length, 2);
+  const redirect = () => new Response(null, { status: 302, headers: { location: 'https://logs.blob.core.windows.net/log?signed=private' } });
+  const logs = scriptedClient([redirect, truncated, redirect, () => new Response('error: failed')]);
+  assert.deepEqual(await logs.client.request('/actions/jobs/1/logs', { logs: true }), { text: 'error: failed', truncated: false });
+  assert.deepEqual(logs.calls.map(call => [new URL(call.url).hostname, call.authorization]), [
+    ['api.github.com', 'Bearer private'], ['logs.blob.core.windows.net', undefined],
+    ['api.github.com', 'Bearer private'], ['logs.blob.core.windows.net', undefined],
+  ]);
+});
+
+test('a read that keeps failing surfaces its error after the retry budget', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const dropped = scriptedClient([socketClosed(), socketClosed(), socketClosed(), Response.json({ id: 1 })]);
+  await assert.rejects(dropped.client.list('/pulls?state=open'), error => error.message === 'fetch failed' && error.cause.code === 'UND_ERR_SOCKET');
+  assert.equal(dropped.calls.length, 3);
+  assert.deepEqual(dropped.delays, [1000, 4000]);
+  const gateway = scriptedClient(Array.from({ length: 4 }, () => new Response('bad gateway', { status: 502 })));
+  await assert.rejects(gateway.client.request('/pulls'), /GitHub API GET \/pulls returned 502/);
+  assert.equal(gateway.calls.length, 3);
+  assert.equal(warn.mock.callCount(), 4);
+});
+
+test('writes, credential, permission, rate-limit and other errors are never retried', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  for (const method of ['POST', 'PATCH']) {
+    const write = scriptedClient([socketClosed(), Response.json({ number: 7 })]);
+    await assert.rejects(write.client.request('/issues/7/comments', { method, body: { body: 'report' } }), /fetch failed/);
+    assert.equal(write.calls.length, 1, method);
+  }
+  for (const status of [401, 403, 404, 422, 429, 500]) {
+    const read = scriptedClient([new Response('{}', { status }), Response.json({ id: 1 })]);
+    await assert.rejects(read.client.request('/pulls'), new RegExp(`returned ${status}`));
+    assert.equal(read.calls.length, 1, String(status));
+  }
+  const certificate = new TypeError('fetch failed', { cause: Object.assign(new Error('certificate mismatch'), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' }) });
+  const tls = scriptedClient([certificate, Response.json({ id: 1 })]);
+  await assert.rejects(tls.client.request('/pulls'), /fetch failed/);
+  assert.equal(tls.calls.length, 1);
+  const unsafe = scriptedClient([new Response(null, { status: 302, headers: { location: 'https://evil.test/log' } }), Response.json({ id: 1 })]);
+  await assert.rejects(unsafe.client.request('/actions/jobs/1/logs', { logs: true }), /Rejected unexpected/);
+  assert.equal(unsafe.calls.length, 1);
+  assert.equal(warn.mock.callCount(), 0);
+});
+
 test('dry-run renders the report without any issue or comment writes', async () => {
   const client = fakeClient();
   const result = await reportNightlyFailure({ run, repository: 'owner/repo', defaultBranch: 'main', client, dryRun: true });

@@ -106,8 +106,8 @@ test("an optional NODDI map warns before exporting it or feeding a required inpu
   };
   await importWorkflow(page, doc);
   await page.locator("#workflowWarnings > summary").click();
-  await expect(page.locator("#warningMessages")).toContainText("is optional and may be absent when this required input runs");
-  await expect(page.locator("#warningMessages")).toContainText("is optional and may not produce this workflow output");
+  await expect(page.locator("#warningMessages")).toContainText("is optional, so required input input_image may have no value");
+  await expect(page.locator("#warningMessages")).toContainText("is optional, so workflow output icvf may have no value");
   await expect(page.locator("#runButton")).toBeEnabled();
   expect(await exportWorkflow(page)).toEqual(doc);
 });

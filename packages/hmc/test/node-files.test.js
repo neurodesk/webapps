@@ -81,3 +81,32 @@ test("GP and trivial CLI outputs equal an independent low-level Node invocation"
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test("the CLI refuses a series no GP fit can hold before it starts MindGrab", async () => {
+  const work = await mkdtemp(join(tmpdir(), "hmc-cli-limit-"));
+  try {
+    // 2 × 2 × 2 voxels and 4,000 DWI volumes: tiny on disk, but the fit's (DWI − 1)² matrices need 1.4 GB.
+    const frames = 4001;
+    const original = await readSeries(makeSeries().nifti);
+    const data = Float32Array.from({ length: 8 * frames }, (_, i) => 100 + i % 7);
+    const bvals = Array.from({ length: frames }, (_, i) => i ? 1000 : 0);
+    const bvecs = [bvals.map((b, i) => b ? Math.cos(i) : 0), bvals.map((b, i) => b ? Math.sin(i) : 0), bvals.map(() => 0)];
+    const options = { dwi: join(work, "dwi.nii"), bval: join(work, "dwi.bval"), bvec: join(work, "dwi.bvec"), output: join(work, "out") };
+    await writeFile(options.dwi, new Uint8Array(createNiftiFromData(data, original.headerBytes, { dims: [2, 2, 2, frames] })));
+    await writeFile(options.bval, `${bvals.join(" ")}\n`);
+    await writeFile(options.bvec, bvecs.map(row => row.join(" ")).join("\n"));
+    // A stub that fails loudly replaces MindGrab, so the message shows which check ran first.
+    const script = `
+      import { mock } from "node:test";
+      mock.module("@neurodesk/node-drivers/mindgrab", { namedExports: { loadMindgrabCpu: () => { throw new Error("MindGrab started"); } } });
+      const { correctFiles } = await import(${JSON.stringify(new URL("../src/node-files.js", import.meta.url).href)});
+      await correctFiles(JSON.parse(process.argv[1])).catch(error => console.log(error.message));
+    `;
+    const message = execFileSync(process.execPath, ["--experimental-test-module-mocks", "--no-warnings", "--input-type=module", "-e", script, JSON.stringify(options)],
+      { cwd: fileURLToPath(new URL("..", import.meta.url)), encoding: "utf8" }).trim();
+    assert.match(message, /^GP model too large \(1\.54 of 1\.06 GB\)/);
+    await assert.rejects(readdir(options.output), { code: "ENOENT" });
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});

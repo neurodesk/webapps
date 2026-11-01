@@ -11,7 +11,7 @@ test('three-class softmax and two-model probability averaging retain the input g
   const released = [];
   const disposed = [];
   const correction = [];
-  const result = await runInference(input, {
+  const result = await runInference(input, { pipeline: 'legacy-v1',
     selectedModels: [42, 123], threshold: 0.6, nMarkers: 3,
     qsm: { makehomogeneous_wasm: (...args) => { correction.push(args.slice(1)); return args[0]; } },
     loadModel: async asset => asset.seed,
@@ -40,7 +40,7 @@ test('failed inference releases the real-session adapter resources and emits no 
   let released = false;
   let disposed = false;
   let stages = 0;
-  await assert.rejects(runInference(input, { selectedModels: [42],
+  await assert.rejects(runInference(input, { pipeline: 'legacy-v1', selectedModels: [42],
     qsm: { makehomogeneous_wasm: data => data }, loadModel: async () => 42,
     Tensor: class { dispose() { disposed = true; } },
     createSession: async () => ({ inputNames: ['input'], outputNames: ['output'],
@@ -51,12 +51,12 @@ test('failed inference releases the real-session adapter resources and emits no 
   assert.equal(stages, 0);
 });
 
-test('public pipeline defaults run all four published checkpoints and produce their consensus', async () => {
+test('legacy pipeline defaults run all four published checkpoints and produce their consensus', async () => {
   const { runInference: runPublicInference } = await import('@neurodesk/seedseg');
   const loaded = [];
   const ran = [];
   const released = [];
-  const result = await runPublicInference(input, {
+  const result = await runPublicInference(input, { pipeline: 'legacy-v1',
     qsm: { makehomogeneous_wasm: data => data },
     loadModel: async asset => {
       loaded.push(asset.seed);

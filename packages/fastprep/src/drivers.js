@@ -120,7 +120,7 @@ export function greedyDriver(api) {
     const out = a.one('-o')?.[0];
     if (a.has('-a')) {
       const [fixed, moving] = a.one('-i');
-      const matrix = await api.register_affine_masked_wasm(await raw(fixed), await raw(moving), mask, a.one('-m')?.[0] ?? 'NMI', iters);
+      const matrix = await api.register_affine_masked_wasm(await raw(fixed), await raw(moving), mask, a.one('-m')?.[0] ?? 'NMI', iters, a.has('-ia-image-centers'));
       files.put(out, text(matrix));
     } else if (a.has('-sv')) {
       const [fixed, moving] = a.one('-i');

@@ -145,3 +145,42 @@ for (const model of ["trivial", "gp"]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("an oversized GP input is refused before MindGrab masking; mean b0 still runs", async ({ page }) => {
+  test.setTimeout(90000);
+  // 2 × 2 × 2 voxels and 4,000 DWI volumes: the GP's 3,999² matrices need 1.41 GB with any mask.
+  const frames = 4001;
+  const { headerBytes } = await readSeries((await fixture()).nifti);
+  const data = Float32Array.from({ length: 8 * frames }, (_, i) => 500 + (i * 7919) % 300);
+  const bvals = Array.from({ length: frames }, (_, i) => i ? 1000 : 0);
+  const directions = bvals.map((b, i) => {
+    const z = b ? -1 + 2 * i / frames : 0, r = Math.sqrt(1 - z * z);
+    return b ? [r * Math.cos(2.399963 * i), r * Math.sin(2.399963 * i), z] : [0, 0, 0];
+  });
+  const inputs = {
+    image: { name: "input.nii", bytes: createNiftiFromData(data, headerBytes, { dims: [2, 2, 2, frames] }) },
+    bval: { name: "input.bval", bytes: bvals.join(" ") },
+    bvec: { name: "input.bvec", bytes: [0, 1, 2].map(axis => directions.map(v => v[axis]).join(" ")).join("\n") },
+  };
+  await page.goto("./");
+  await page.evaluate(() => {
+    window.hmcStatuses = [];
+    new MutationObserver(() => window.hmcStatuses.push(document.querySelector("#statusText").textContent))
+      .observe(document.querySelector("#statusText"), { childList: true, characterData: true, subtree: true });
+  });
+  const start = async method => {
+    for (const [role, input] of Object.entries(inputs)) {
+      await page.locator("#neurodesk-input-transfer").setInputFiles({ name: input.name, mimeType: "application/octet-stream", buffer: Buffer.from(input.bytes) });
+      await page.evaluate(role => globalThis.neurodeskAutomation.dispatch("adopt", { role }), role);
+    }
+    await page.evaluate(method => globalThis.neurodeskAutomation.dispatch("start", { parameters: { method, seed: 1234 } }), method);
+  };
+  await start("gp");
+  const snapshot = () => page.evaluate(() => globalThis.neurodeskAutomation.dispatch("snapshot"));
+  await expect.poll(async () => (await snapshot()).state).toBe("failed");
+  expect((await snapshot()).error.message).toMatch(/^GP model too large \(1\.54 of 1\.06 GB\)/);
+  expect(await page.evaluate(() => window.hmcStatuses)).not.toContain("Extracting the brain from the mean b0");
+  await start("trivial");
+  await expect.poll(() => page.evaluate(() => window.hmcStatuses), { timeout: 30000 }).toContain("Extracting the brain from the mean b0");
+  expect(await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("cancel"))).toEqual({ cancelled: true });
+});

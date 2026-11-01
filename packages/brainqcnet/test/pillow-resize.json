@@ -1,0 +1,37 @@
+[
+  {
+    "rows": 2,
+    "cols": 3,
+    "sha256": "290180dd7b52f76ff6f52812ec2e4efbca4f321a124fd8797b6a9bb3151ecde1"
+  },
+  {
+    "rows": 17,
+    "cols": 300,
+    "sha256": "106a087aa9a725158b4a70dda5a8adcc96c1023655e9e18f9a7e3c3a9dcf7247"
+  },
+  {
+    "rows": 255,
+    "cols": 232,
+    "sha256": "5fd76af8011545576d37a3136ab9159a8ea2ccc9765a8056c2d21d1dc1ee908b"
+  },
+  {
+    "rows": 224,
+    "cols": 100,
+    "sha256": "ca2cac26f214f61e635c601abf2d166d46d22b74984b771a15407f468eac03ac"
+  },
+  {
+    "rows": 400,
+    "cols": 224,
+    "sha256": "38d6073a488d98e20ea189a7e7c8f6e3354f0ee8121c9b0179e3b142634b9577"
+  },
+  {
+    "rows": 224,
+    "cols": 224,
+    "sha256": "77464867b13389f453a342fa7bb6d4f1c31b427b83b619c4e8cf93bf695b595f"
+  },
+  {
+    "rows": 191,
+    "cols": 640,
+    "sha256": "cfa61eaccfadd72f0d62bedfd130aff26a07e71cc0afca7baf94447aeeb04b02"
+  }
+]

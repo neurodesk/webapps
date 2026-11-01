@@ -28,7 +28,8 @@ async function packagesWithReleaseSpec() {
   const packages = [];
   for (const name of (await readdir(new URL('../packages/', import.meta.url))).sort()) {
     const spec = new URL(`../packages/${name}/release.json`, import.meta.url);
-    if (await access(spec).then(() => true, () => false)) packages.push(`packages/${name}`);
+    // A release.json with a tag is an external release, built by another repository.
+    if (await readFile(spec, 'utf8').then((text) => !JSON.parse(text).tag, () => false)) packages.push(`packages/${name}`);
   }
   return packages;
 }

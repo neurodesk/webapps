@@ -2,8 +2,8 @@
 
 QSMbly's portable command line is the published QSMxT 10.0.0 release. Replace
 `qsmxt` with `qsmbly` in the command exported by the browser. The browser uses
-QSMxT's shared engine at commit `9fe168be40f67056c198f0df64734c486f137cac`
-with QSM.rs `8a3afda3716a859d93f1d41f1c8993335cc80c57`; the published native
+QSMxT's shared engine at commit `1f72772d4ae1ed7264a19c65ce1053ca05a8663d`
+with QSM.rs `95be94b83b43e80329b4ecfe8a74cf8114ea927a`; the published native
 release uses QSM.rs v0.39.0. Their real-brain RTS reconstruction is compared
 under the unchanged numerical tolerances in `validation/browser-reference.json`.
 The reference records both browser commits and the native version and measurements.

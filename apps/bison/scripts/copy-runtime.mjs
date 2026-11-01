@@ -1,7 +1,8 @@
-// Stage the two ANTs kernels that the BISON worker starts by URL (Vite never emits them):
-// antsRegistration from packages/hmc-registration and DenoiseImage from packages/ants-denoise.
-// Each keeps its package layout (src/*.js beside ../wasm/), because each worker script imports
-// its siblings and finds its pinned kernel relative to itself. The folder is gitignored.
+// Stage the kernels that the BISON worker starts by URL (Vite never emits them): antsRegistration
+// from packages/hmc-registration, DenoiseImage from packages/ants-denoise and Greedy's
+// single-threaded build from packages/greedy. Each keeps its package layout (src/*.js beside
+// ../wasm/ or ../wasm-single/), because each worker script imports its siblings and finds its
+// pinned kernel relative to itself. The folder is gitignored.
 import { cp, mkdir, rm } from "node:fs/promises";
 
 const target = new URL("../public/bison-runtime/", import.meta.url);
@@ -15,6 +16,10 @@ const KERNELS = {
   "ants-denoise": {
     src: ["worker.js", "index.js", "pin.js"],
     wasm: ["ants-denoise.mjs", "ants-denoise.wasm"],
+  },
+  greedy: {
+    src: ["worker.js", "index.js"],
+    "wasm-single": ["greedy_rs_wasm.js", "greedy_rs_wasm_bg.wasm"],
   },
 };
 

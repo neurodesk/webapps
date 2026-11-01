@@ -7,14 +7,27 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createNiftiFromVolume } from '@neurodesk/webapp-components/file-io/nifti';
 import { MODEL_ASSETS, resolveSettings, segment } from '../src/node.js';
-import { resolveModels } from '../src/assets.js';
+import { resolveModels as selectModels, LEGACY_MODEL_ASSETS } from '../src/assets.js';
+const resolveModels = models => selectModels(models, { pipeline: 'legacy-v1' });
 const cli = fileURLToPath(new URL('../bin/seedseg.js', import.meta.url));
 
 test('model and numeric guards preserve published order and reject invalid selections', () => {
-  assert.equal(MODEL_ASSETS.length, 4);
+  assert.equal(LEGACY_MODEL_ASSETS.length, 4);
+  assert.equal(resolveSettings().pipeline, 'nnunet-v2');
+  assert.deepEqual(resolveSettings().models.map(asset => asset.id), ['fold0-web']);
+  assert.equal(resolveSettings({ models: [42] }).pipeline, 'legacy-v1');
+  assert.deepEqual(resolveSettings({ folds: [4, 0] }).models.map(asset => asset.id), ['fold0-web', 'fold4-web']);
+  assert.throws(() => resolveSettings({ pipeline: 'unknown', ensemble: 1 }), /Unknown/);
+  assert.throws(() => resolveSettings({ pipeline: 'nnunet-v2', models: [42] }), /v1 checkpoints/);
+  assert.deepEqual(resolveSettings({ model: 'v1', models: [123] }).models.map(asset => asset.seed), [123]);
+  assert.equal(resolveSettings({ model: 'v2' }).pipeline, 'nnunet-v2');
+  assert.throws(() => resolveSettings({ models: [42], folds: [0] }), /choose one model/);
+  assert.throws(() => resolveSettings({ ensemble: 2, mirror: true }), /choose one model/);
+  assert.throws(() => resolveSettings({ pipeline: 'legacy-v1', mirror: true }), /apply to v2/);
+  assert.throws(() => resolveSettings({ pipeline: 'legacy-v1', model: 'v2' }), /same method/);
   assert.deepEqual(resolveModels([789, 42]).map(asset => asset.seed), [42, 789]);
   for (const models of [[], [42, 42], [42, 'seed42'], [1], [42, 123, 456, 789, 42]]) {
-    assert.throws(() => resolveSettings({ models }), /distinct|Unknown|four/);
+    assert.throws(() => resolveSettings({ models }), /distinct|Unknown|4/);
   }
   assert.throws(() => resolveSettings({ models: [42], ensemble: 1 }), /Choose/);
   for (const ensemble of [0, 5, 1.5, 'abc']) assert.throws(() => resolveSettings({ ensemble }), /Ensemble/);
@@ -74,7 +87,7 @@ test('source CPU/QSM self-check leaves a fresh HOME and Windows app-data directo
     const report = JSON.parse(run.stdout);
     assert.equal(report.executable, process.execPath);
     assert.equal(report.node, process.version);
-    assert.equal(report.onnxRuntime, '1.29.0');
+    assert.equal(report.onnxRuntime, '1.30.0');
     assert.equal(report.qsmVersion, '0.9.2');
     assert.deepEqual(await readdir(home, { recursive: true }), []);
   } finally {

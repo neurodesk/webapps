@@ -48,13 +48,53 @@ pub fn bin_image(image: &NiftiImage) -> Result<Vec<u8>> {
         .collect())
 }
 
-/// Greedy's `-gm` fixed-image mask as one boolean per voxel of each pyramid
-/// level (the mask is smoothed and resampled like an image, then > 0.5).
-pub(crate) fn mask_levels(mask: NiftiImage, fixed: &Grid) -> Result<[Vec<bool>; 3]> {
+/// Rejects a `-gm` mask that is not on the fixed image grid.
+pub(crate) fn check_mask_grid(mask: &NiftiImage, fixed: &Grid) -> Result<()> {
     if !crate::grids_match(&mask.grid, fixed, 1e-4) {
         return Err(Error("-gm mask must be on the fixed image grid".into()));
     }
-    Ok(crate::build_pyramid(mask)?.map(|level| level.data.iter().map(|&v| v > 0.5).collect()))
+    Ok(())
+}
+
+/// The fixed pyramid and, with a `-gm` mask, one boolean per voxel of each level.
+pub(crate) type MaskedPyramid = ([NiftiImage; 3], Option<[Vec<bool>; 3]>);
+
+/// The fixed pyramid with Greedy's `-gm` mask as one boolean per voxel of
+/// each level. Greedy downsamples the mask like an image and, at the coarse
+/// levels, applies "masked downsampling" to the fixed image: it is divided
+/// by the smoothed mask where that is at least 0.5 and zeroed elsewhere, so
+/// tissue outside the mask does not bleed into the level's intensity bins.
+/// The full-resolution level keeps the image and counts the mask where it
+/// is positive.
+pub(crate) fn masked_pyramid(fixed: NiftiImage, mask: Option<NiftiImage>) -> Result<MaskedPyramid> {
+    let mut levels = crate::build_pyramid(fixed)?;
+    let Some(mask) = mask else {
+        return Ok((levels, None));
+    };
+    check_mask_grid(&mask, &levels[2].grid)?;
+    let mask_levels = crate::build_pyramid(mask)?;
+    let mut inside: [Vec<bool>; 3] = Default::default();
+    for (level, mask) in mask_levels.iter().enumerate() {
+        inside[level] = if crate::PYRAMID_FACTORS[level] > 1 {
+            levels[level]
+                .data
+                .iter_mut()
+                .zip(&mask.data)
+                .map(|(value, &weight)| {
+                    if weight < 0.5 {
+                        *value = 0.0;
+                        false
+                    } else {
+                        *value /= weight;
+                        true
+                    }
+                })
+                .collect()
+        } else {
+            mask.data.iter().map(|&weight| weight > 0.0).collect()
+        };
+    }
+    Ok((levels, Some(inside)))
 }
 
 /// Fixed bin 0 is already excluded from the joint histogram and the gradient,
@@ -294,7 +334,54 @@ fn entropies(joint: &[f64], sum: f64) -> (Vec<f64>, [f64; BINS], [f64; BINS], f6
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Mat4;
+    use crate::{Mat4, ScalarType};
+
+    /// A skull-stripped image is zero outside its mask, so a plain downsample
+    /// darkens the voxels at the mask edge. Dividing by the smoothed mask
+    /// restores them, which Greedy does for every metric but NCC.
+    #[test]
+    fn masked_pyramid_divides_coarse_levels_by_the_smoothed_mask() {
+        let n = 16;
+        let grid = Grid {
+            dims: [n; 3],
+            lps_from_voxel: Mat4::IDENTITY,
+        };
+        let inside = |index: usize| index % n < n / 2;
+        let image = |value: f32| NiftiImage {
+            grid: grid.clone(),
+            data: (0..n * n * n)
+                .map(|index| if inside(index) { value } else { 0.0 })
+                .collect(),
+            scalar_type: ScalarType::F32,
+        };
+        let smoothed_mask = crate::build_pyramid(image(1.0)).unwrap();
+        let (levels, masks) = masked_pyramid(image(10.0), Some(image(1.0))).unwrap();
+        let masks = masks.unwrap();
+        let mut partial = 0;
+        for level in 0..2 {
+            for (index, (&value, &weight)) in levels[level]
+                .data
+                .iter()
+                .zip(&smoothed_mask[level].data)
+                .enumerate()
+            {
+                if weight >= 0.5 {
+                    assert!(masks[level][index]);
+                    assert!(
+                        (value - 10.0).abs() < 1e-3,
+                        "level {level}: {value} at {weight}"
+                    );
+                    partial += (weight < 0.99) as usize;
+                } else {
+                    assert!(!masks[level][index]);
+                    assert_eq!(value, 0.0);
+                }
+            }
+        }
+        assert!(partial > 0, "no partial-volume mask voxel was tested");
+        assert_eq!(levels[2].data, image(10.0).data);
+        assert_eq!(masks[2], (0..n * n * n).map(inside).collect::<Vec<_>>());
+    }
 
     #[test]
     fn extreme_trial_coordinates_have_no_histogram_overlap() {

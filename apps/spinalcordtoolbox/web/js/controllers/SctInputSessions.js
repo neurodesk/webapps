@@ -20,7 +20,7 @@ export class SctInputSessions {
     this.nextSessionId = 1;
 
     this.dicomController = new DicomController({
-      moduleUrl: new URL('../../dcm2niix/index.js', import.meta.url).href,
+      moduleUrl: new URL('../../dcm2niix/index.jpeg.js', import.meta.url).href,
       throwOnError: false,
       updateOutput: (msg) => this.updateOutput(msg),
       onConversionComplete: (niftiFile) => {

@@ -22,8 +22,10 @@ export function directoryReader(dir) {
   };
 }
 
-// Named after the asset set, so a re-pinned asset never meets a stale cached copy.
+// NEURODESK_BISON_MODEL_DIR is the portable release's bundled models. The cache is named after the
+// asset set, so a re-pinned asset never meets a stale cached copy.
 export function defaultCacheDir() {
+  if (process.env.NEURODESK_BISON_MODEL_DIR) return process.env.NEURODESK_BISON_MODEL_DIR;
   const cache = process.env.XDG_CACHE_HOME || join(homedir(), '.cache');
   const pins = ASSETS.map(({ filename, sha256 }) => `${filename} ${sha256}`).sort().join('\n');
   return join(cache, 'neurodesk', 'bison', createHash('sha256').update(pins).digest('hex').slice(0, 16));
@@ -63,7 +65,7 @@ function cacheReader(cacheDir, { offline, fetch }) {
  * @param {{ modes: string[], assetDir?: string, cacheDir?: string, offline?: boolean, onProgress?: Function, fetch?: Function }} options
  * @returns {Promise<Map<string, Uint8Array>>}
  */
-export async function loadNodeAssets({ modes, assetDir, cacheDir = defaultCacheDir(), offline = false, onProgress, fetch = globalThis.fetch }) {
+export async function loadNodeAssets({ modes, assetDir, cacheDir = defaultCacheDir(), offline = process.env.NEURODESK_OFFLINE === '1', onProgress, fetch = globalThis.fetch }) {
   const dir = assetDirectory(assetDir);
   const read = dir ? directoryReader(dir) : cacheReader(cacheDir, { offline, fetch });
   return loadAssets(assetsFor(modes), { read, onProgress });

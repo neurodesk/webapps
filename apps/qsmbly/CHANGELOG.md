@@ -1,5 +1,34 @@
 # qsmbly
 
+## 0.31.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/webapp-components@0.22.3
+
+## 0.31.20261027
+
+### Patch Changes
+
+- fd54995: Load the dicompare protocol checker, its worker and schemas from webapps.neurodesk.org/dicompare instead of the unavailable dicompare.neurodesk.org deployment. Keep QSMbly's worker in single-app offline bundles and preserve the URL adaptations during upstream sync. SeedSeg continues to use its locally staged report assets.
+- Preserve engine panic diagnostics during cleanup and replace a trapped worker before retry. Keep verified model downloads usable when cache writes exceed quota. Verify the updated production browser pipeline and its exported command against the pinned native release under the existing tolerances.
+- 80c3d01: Merge upstream astewartau/qsmbly cf88ee3..0b6e3d3, with qsmxt-engine at QSMxT 1f72772 and QSM.rs 95be94b:
+
+  - A run that dies inside the engine reports the panic's message instead of "attempted to take ownership of Rust value while it was borrowed".
+  - SynthSeg segmentation runs in sliding windows, and BFRnet, iQFM, iQSM and iQSM+ run tiled with the deep-learning tiling setting, so they fit the browser's WASM heap.
+  - QSMART's BET mask is applied as a normalisation rule and a threshold you chose is kept. QSMbly marks its mask recipe as chosen so exported commands and methods describe the mask that ran.
+  - MEDI filters the dipole kernel with the SMV kernel's k-space response; χ-separation (MEDI) weights the R2′ term as Shin et al. 2021 do and its TV weights default to 30 instead of 1000, so χ+ and χ− now separate instead of both following R2′; AutoQSM negates the field into the network's training convention; TGV's oblique stencil uses a fast DST-I (about 10× faster).
+  - χ-sepnet runs in a 192×192×128 sliding-window patch.
+  - TFI's MERIT switch and QSMART's SDF spatial radius are removed: both had no effect on the result.
+  - The default real-brain reconstruction (ROMEO, V-SHARP, RTS) is unchanged: its recorded χ map and mask are identical to the previous release's.
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+
 ## 0.31.20261024
 
 ### Patch Changes

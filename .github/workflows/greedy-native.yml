@@ -13,6 +13,8 @@ on:
       - 'scripts/package-greedy*'
       - 'scripts/greedy-third-party-notices.py'
       - 'test/greedy-distribution.test.mjs'
+      - 'apps/bison/examples.json'
+      - 'models/bison.manifest.json'
   push:
     branches: [main]
     paths:
@@ -26,6 +28,8 @@ on:
       - 'scripts/package-greedy*'
       - 'scripts/greedy-third-party-notices.py'
       - 'test/greedy-distribution.test.mjs'
+      - 'apps/bison/examples.json'
+      - 'models/bison.manifest.json'
   workflow_dispatch:
     inputs:
       sign_release:
@@ -52,6 +56,34 @@ env:
   ONNXRUNTIME_NODE_INSTALL: skip
 
 jobs:
+  wasm-single:
+    name: committed single-threaded WASM equals a rebuild from source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Install the pinned nightly toolchain and wasm-pack 0.13.1
+        run: |
+          rustup toolchain install nightly-2025-11-15 --profile minimal --target wasm32-unknown-unknown
+          cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-opt
+        uses: ./.github/actions/setup-wasm-opt
+      - name: Rebuild and compare
+        env:
+          GREEDY_WASM_SINGLE_REBUILD: ${{ runner.temp }}/wasm-single-rebuild
+        run: node packages/greedy/scripts/build-wasm-single.mjs --check
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: wasm-single-rebuild
+          path: ${{ runner.temp }}/wasm-single-rebuild
+          if-no-files-found: ignore
+
   native:
     strategy:
       fail-fast: false
@@ -114,6 +146,31 @@ jobs:
           name: greedy-native-npm-${{ matrix.platform }}
           path: packages/greedy/native/
           if-no-files-found: error
+
+  # The whole-head regression gates for issue #623 (cli/tests/workflows.rs, the
+  # tests named *whole_head*) are #[ignore] so the matrix job's default run stays
+  # data-free; this job fetches the pinned data and runs them by name, so a
+  # missing download fails rather than skips.
+  whole-head-reference:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      DATA: ${{ github.workspace }}/../greedy-t1-template
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: Cache the reference downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ github.workspace }}/../greedy-t1-template/.download
+          key: greedy-t1-template-${{ hashFiles('apps/bison/examples.json', 'models/bison.manifest.json', 'exes/greedy/scripts/fetch_t1_template.py') }}
+      - name: Fetch the whole-head T1s and ICBM 2009c (sha256-checked)
+        run: python3 exes/greedy/scripts/fetch_t1_template.py "$DATA"
+      - name: Masked NMI affine on the whole-head T1s (identity and -ia starts)
+        working-directory: exes/greedy
+        run: GREEDY_T1_TEMPLATE_DIR="$DATA" cargo test --locked --release -p greedy-rs --test workflows whole_head -- --ignored --nocapture
 
   npm:
     needs: [native, macos-sign]

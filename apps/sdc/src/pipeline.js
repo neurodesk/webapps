@@ -137,6 +137,19 @@ export function outputNames(name1, name2) {
   };
 }
 
+/** The backend that made the field, as the worker reports it: the adapter on WebGPU, the GPU error when `auto` fell back to the CPU. */
+export function fieldExecution({ backend, adapter, gpuError }) {
+  const execution = { backend };
+  if (adapter) execution.adapter = adapter;
+  if (gpuError) execution.gpuError = gpuError;
+  return execution;
+}
+
+/** The automation report's provenance for one field estimate. */
+export function fieldProvenance({ iterations, reference, phaseEncodingDirection, totalReadoutTime, execution }) {
+  return { method: "pyhysco-0.0.4-port", alpha: 300, beta: 1e-4, maxIterations: 50, iterations, reference, phaseEncodingDirection, totalReadoutTime, execution };
+}
+
 /** The field map's sidecar. */
 export function fieldSidecar({ image1, image2, phaseEncodingDirection, totalReadoutTime, iterations, execution }) {
   return {

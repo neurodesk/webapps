@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import runtime from '../browser-runtime.manifest.json' with { type: 'json' };
 import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { chromium } from '@playwright/test';
-import { MODEL_ASSETS } from '../src/assets.js';
+import { MODEL_ASSETS, resolveModels } from '../src/assets.js';
 import { outputNames } from '../src/results.js';
 import { createProstateFixture } from '../../../apps/seedseg/test/prostate-fixture.mjs';
 import { resolveSiteFile } from './site-path.mjs';
@@ -16,13 +19,16 @@ const repository = fileURLToPath(new URL('../../../', import.meta.url));
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.wasm': 'application/wasm' };
 
 // Stream models through HTTP rather than base64-encoding them into CDP frames.
-export async function browserReference({ modelsDirectory, ensemble, threshold, topN, composite = false }) {
+export async function browserReference({ modelsDirectory, pipeline = 'legacy-v1', ensemble = 4, folds = [0], model = 'web', mirror = false, threshold = 0.1, topN = 3, composite = false }) {
+  const selected = pipeline === 'legacy-v1' ? resolveModels(undefined, { pipeline }).slice(0, ensemble) : resolveModels(folds, { pipeline, model });
+  const runtimeDirectory = join(tmpdir(), `seedseg-ort-web-${runtime.version}`);
+  await promisify(execFile)(process.execPath, [join(repository, 'scripts/fetch-app-runtime.mjs'), '--dest', runtimeDirectory, `${runtime.id}:${runtime.filename}`]);
   const root = join(repository, composite ? 'dist' : 'apps/seedseg/dist');
   const prefix = composite ? '/seedseg/' : '/';
   const server = createServer(async (request, response) => {
     try {
       const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
-      const file = path.startsWith('/validation-models/')
+      const file = path === '/validation-runtime.wasm' ? join(runtimeDirectory, runtime.filename) : path.startsWith('/validation-models/')
         ? join(modelsDirectory, path.slice('/validation-models/'.length))
         : resolveSiteFile(root, path);
       const info = await stat(file);
@@ -44,11 +50,19 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
     const context = await browser.newContext({ acceptDownloads: true });
     const origin = `http://127.0.0.1:${server.address().port}`;
     await context.route(/cloudflareinsights\.com|googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
-    await context.route('**/seedseg-model-*.onnx', route => {
+    await context.route('https://webapps.neurodesk.org/dicompare/**', route => route.abort());
+    // Use the same repository-owned runtime as the offline asset catalog.
+    await context.route('https://webapps.neurodesk.org/dicompare/embed/DicompareController.js', route => route.fulfill({
+      path: join(repository, 'apps/dicompare/public/embed/DicompareController.js'),
+      contentType: 'text/javascript',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    }));
+    await context.route('**/*.onnx', route => {
       const asset = MODEL_ASSETS.find(candidate => route.request().url().endsWith(`/${candidate.filename}`));
       assert.ok(asset, 'Only published checkpoint requests are allowed');
       return route.fulfill({ status: 302, headers: { Location: `${origin}/validation-models/${asset.filename}`, 'Access-Control-Allow-Origin': '*' } });
     });
+    await context.route(runtime.url, route => route.fulfill({ status: 302, headers: { Location: `${origin}/validation-runtime.wasm`, 'Access-Control-Allow-Origin': '*' } }));
     const page = await context.newPage();
     let runtimeVersion;
     page.on('worker', worker => {
@@ -67,20 +81,21 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
     await page.locator('#neurodesk-input-transfer').setInputFiles({ name: 'synthetic-prostate-t1.nii', mimeType: 'application/x-nifti', buffer: createProstateFixture() });
     await page.evaluate(() => neurodeskAutomation.dispatch('adopt', { role: 'image' }));
     await page.evaluate(parameters => neurodeskAutomation.dispatch('start', { operation: 'segment', parameters }), {
-      models: MODEL_ASSETS.slice(0, ensemble).map(asset => asset.seed), threshold, markers: topN,
+      pipeline, models: pipeline === 'legacy-v1' ? selected.map(asset => asset.seed) : undefined,
+      folds: pipeline === 'legacy-v1' ? undefined : folds.map(Number), model, mirror, threshold, markers: topN, backend: 'wasm',
     });
     let snapshot;
-    const deadline = performance.now() + 600_000;
+    const deadline = performance.now() + (mirror ? 1_800_000 : 900_000);
     do {
       snapshot = await page.evaluate(() => neurodeskAutomation.dispatch('snapshot'));
       if (/succeeded|failed/.test(snapshot.state)) break;
-      if (performance.now() >= deadline) throw new Error('SeedSeg browser inference exceeded 10 minutes');
+      if (performance.now() >= deadline) throw new Error('SeedSeg browser inference exceeded its validation deadline');
       await new Promise(accept => setTimeout(accept, 250));
     } while (!/succeeded|failed/.test(snapshot.state));
     assert.equal(snapshot.state, 'succeeded', JSON.stringify({ snapshot, errors }));
-    assert.deepEqual(snapshot.report.provenance.models.map(model => model.sha256), MODEL_ASSETS.slice(0, ensemble).map(asset => asset.sha256));
+    assert.deepEqual(snapshot.report.provenance.models.map(model => model.sha256), selected.map(asset => asset.sha256));
     const files = {};
-    const names = outputNames(ensemble);
+    const names = { ...outputNames(ensemble, pipeline), detections: 'detections.json' };
     for (const id of Object.keys(snapshot.report.artifacts)) {
       const waiting = page.waitForEvent('download');
       await page.evaluate(artifactId => neurodeskAutomation.dispatch('download', { artifactId }), id);
@@ -89,16 +104,16 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
       files[id] = await readFile(await download.path());
       assert.equal(createHash('sha256').update(files[id]).digest('hex'), snapshot.report.artifacts[id].sha256);
     }
-    if (process.env.SEEDSEG_VALIDATION_ARTIFACTS && ensemble === 4 && topN === 3 && threshold === 0.1) {
+    if (process.env.SEEDSEG_VALIDATION_ARTIFACTS && topN === 3 && threshold === 0.1) {
       await mkdir(process.env.SEEDSEG_VALIDATION_ARTIFACTS, { recursive: true });
       for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 900 });
-        await page.screenshot({ path: join(process.env.SEEDSEG_VALIDATION_ARTIFACTS, `seedseg-result-${width}.png`), fullPage: true });
+        await page.screenshot({ path: join(process.env.SEEDSEG_VALIDATION_ARTIFACTS, `seedseg-${pipeline}-result-${width}.png`), fullPage: true });
       }
     }
     assert.equal(errors.length, 0, errors.join('\n'));
     const ortWeb = await runtimeVersion;
-    assert.equal(ortWeb, '1.21.0', 'Actual worker runtime agrees with the pinned ORT Web release');
+    assert.equal(ortWeb, '1.30.0', 'Actual worker runtime agrees with the pinned ORT Web release');
     return { files, provenance: snapshot.report.provenance, chromium: browser.version(), ortWeb, composite };
   } finally {
     await browser?.close();

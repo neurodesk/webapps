@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-27",
+  "input": {
+    "file": "OpenNeuro ds000001 sub-01/anat/sub-01_T1w.nii.gz",
+    "sha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98"
+  },
+  "reference": "vnmd/syncro_0.1.1 20251216 (CVMFS syncro_0.1.1_20251216), container-reference.py --threads 4: SynthStrip + ANTsPy SyN",
+  "candidate": "packages/syncro/bin/syncro.js --offline --threads 4: SynthStrip + Greedy (single-threaded WebAssembly), the default",
+  "candidate_against_reference": {
+    "warped_brain": {
+      "dice_nonzero": 0.9895,
+      "correlation": 0.9471,
+      "mean_absolute_difference": 3.761
+    },
+    "warped_original": {
+      "dice_nonzero": 0.99,
+      "correlation": 0.9554,
+      "mean_absolute_difference": 16.715
+    }
+  },
+  "against_mni152_template": {
+    "reference": {
+      "brain_dice": 0.9664,
+      "brain_correlation": 0.8151
+    },
+    "candidate": {
+      "brain_dice": 0.967,
+      "brain_correlation": 0.7831
+    }
+  },
+  "scope": "One real T1 scan on a shared host. Greedy is a different method from ANTs SyN; this measures their agreement, not parity."
+}

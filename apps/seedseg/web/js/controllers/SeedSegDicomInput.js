@@ -4,7 +4,7 @@ export class SeedSegDicomInput extends SharedDicomController {
   constructor(options = {}) {
     super({
       ...options,
-      moduleUrl: new URL('../../dcm2niix/index.js', import.meta.url).href,
+      moduleUrl: new URL('../../dcm2niix/index.jpeg.js', import.meta.url).href,
       throwOnError: false,
       onDicomFiles: options.onFilesRetained,
       // SeedSeg buckets every converted NIfTI (T1w vs other), not just the first.

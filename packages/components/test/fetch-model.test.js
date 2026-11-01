@@ -118,3 +118,55 @@ test('a rejected body cancellation preserves the actionable download error', asy
     } }),
   }), /Model download failed \(503\)/);
 });
+
+// A host that accepts the connection and then goes silent: the stall guard fails the download.
+async function stallingServer() {
+  const { createServer } = await import('node:http');
+  const server = createServer((request, response) => {
+    if (request.url === '/silent') return;
+    response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': '3' });
+    response.write('a');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  return {
+    url: path => `http://127.0.0.1:${server.address().port}${path}`,
+    close: () => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }),
+  };
+}
+
+for (const [name, path] of [['never sends headers', '/silent'], ['sends headers and then stalls', '/stalled']]) {
+  test(`a download from a host that ${name} fails with a TimeoutError within the stall window`, async t => {
+    const server = await stallingServer();
+    t.after(() => server.close());
+    const started = Date.now();
+    await assert.rejects(
+      fetchModel({ url: server.url(path), cacheKey: 'stalled', integrity: { bytes: 3 } }, { cache: null, stallTimeout: 100 }),
+      { name: 'TimeoutError' },
+    );
+    assert.ok(Date.now() - started < 5000);
+  });
+}
+
+test('a cancelled stalled download reports the cancel, not a stall', async t => {
+  const server = await stallingServer();
+  t.after(() => server.close());
+  const controller = new AbortController();
+  const pending = fetchModel({ url: server.url('/stalled'), cacheKey: 'stalled', integrity: { bytes: 3 } }, { cache: null, signal: controller.signal, stallTimeout: 5000 });
+  setTimeout(() => controller.abort(new DOMException('stop', 'AbortError')), 50);
+  await assert.rejects(pending, { name: 'AbortError' });
+});
+
+test('finished downloads leave no abort listeners on a shared caller signal', async t => {
+  const { createServer } = await import('node:http');
+  const { getEventListeners } = await import('node:events');
+  const server = createServer((request, response) => response.end('abc'));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const url = `http://127.0.0.1:${server.address().port}/abc`;
+  const controller = new AbortController();
+  for (let i = 0; i < 6; i++) {
+    const bytes = await fetchModel({ url, cacheKey: `abc-${i}`, integrity: { bytes: 3, sha256: ABC_SHA256 } }, { cache: null, signal: controller.signal, stallTimeout: 5000 });
+    assert.equal(text(bytes), 'abc');
+  }
+  assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+});

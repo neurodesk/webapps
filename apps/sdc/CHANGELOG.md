@@ -1,5 +1,35 @@
 # sdc
 
+## 0.3.20261031
+
+### Patch Changes
+
+- Updated dependencies [d8ac48c]
+- Updated dependencies [b84a269]
+  - @neurodesk/runtime-support@0.9.19
+  - @neurodesk/webapp-components@0.22.3
+  - @neurodesk/sdc@0.3.20261031
+
+## 0.3.20261029
+
+### Patch Changes
+
+- 3eb6bf8: Build the automation report's provenance, including the PyHySCO backend, adapter and any WebGPU fallback error, in the tested pipeline module.
+  - @neurodesk/sdc@0.3.20261029
+
+## 0.3.20261027
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.2
+  - @neurodesk/runtime-support@0.9.18
+  - @neurodesk/sdc@0.3.20261027
+- Updated dependencies
+  - @neurodesk/webapp-components@0.22.1
+  - @neurodesk/runtime-support@0.9.17
+  - @neurodesk/sdc@0.3.20261027
+
 ## 0.3.20261025
 
 ### Minor Changes
