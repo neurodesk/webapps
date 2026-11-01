@@ -13,18 +13,18 @@ export const STALL_TIMEOUT = 30_000;
 export function stallGuard(parent, timeout = STALL_TIMEOUT) {
   if (!timeout || !Number.isFinite(timeout)) return { signal: parent, touch() {}, stop() {} };
   const controller = new AbortController();
-  const follow = () => controller.abort(parent.reason);
-  if (parent?.aborted) follow();
-  else parent?.addEventListener('abort', follow, { once: true });
+  // AbortSignal.any holds no strong listener on `parent`, so finished guards do not pile up on a
+  // long-lived caller signal.
+  const signal = parent ? AbortSignal.any([parent, controller.signal]) : controller.signal;
   let timer;
   const stall = () => controller.abort(new DOMException(`no data for ${Math.round(timeout / 1000)} s`, 'TimeoutError'));
   const touch = () => {
     clearTimeout(timer);
-    if (!controller.signal.aborted) timer = setTimeout(stall, timeout);
+    if (!signal.aborted) timer = setTimeout(stall, timeout);
   };
   touch();
   return {
-    signal: controller.signal,
+    signal,
     touch,
     stop: () => clearTimeout(timer),
   };

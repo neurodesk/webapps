@@ -155,3 +155,18 @@ test('a cancelled stalled download reports the cancel, not a stall', async t => 
   setTimeout(() => controller.abort(new DOMException('stop', 'AbortError')), 50);
   await assert.rejects(pending, { name: 'AbortError' });
 });
+
+test('finished downloads leave no abort listeners on a shared caller signal', async t => {
+  const { createServer } = await import('node:http');
+  const { getEventListeners } = await import('node:events');
+  const server = createServer((request, response) => response.end('abc'));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const url = `http://127.0.0.1:${server.address().port}/abc`;
+  const controller = new AbortController();
+  for (let i = 0; i < 6; i++) {
+    const bytes = await fetchModel({ url, cacheKey: `abc-${i}`, integrity: { bytes: 3, sha256: ABC_SHA256 } }, { cache: null, signal: controller.signal, stallTimeout: 5000 });
+    assert.equal(text(bytes), 'abc');
+  }
+  assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+});

@@ -188,7 +188,8 @@ async function readResponse(response, integrity = {}, onProgress, parentSignal, 
   // The body belongs to the request's signal, so a stall cancels the reader itself.
   const guard = stallGuard(parentSignal, stallTimeout);
   const { signal } = guard;
-  signal?.addEventListener('abort', () => { reader.cancel(signal.reason).catch(() => {}); }, { once: true });
+  const cancelReader = () => { reader.cancel(signal.reason).catch(() => {}); };
+  signal?.addEventListener('abort', cancelReader, { once: true });
   const chunks = [];
   let received = 0;
   let lastProgress = -1;
@@ -217,6 +218,7 @@ async function readResponse(response, integrity = {}, onProgress, parentSignal, 
     throw error;
   } finally {
     guard.stop();
+    signal?.removeEventListener('abort', cancelReader);
     try {
       reader.releaseLock?.();
     } catch { /* Releasing a failed reader's lock must not replace its download or integrity error. */ }
