@@ -36,6 +36,16 @@ test('a run past its time limit is stopped and reported', async () => {
   );
 });
 
+test('an aborted signal stops the run with its reason and frees the queue', async () => {
+  const reason = new DOMException('stop', 'AbortError');
+  await assert.rejects(mindgrab.segment(input, { model: 'mindgrab', signal: AbortSignal.abort(reason) }), error => error === reason);
+  const controller = new AbortController();
+  const running = mindgrab.segment(input, { model: 'mindgrab', signal: controller.signal });
+  setTimeout(() => controller.abort(), 50);
+  await assert.rejects(running, { name: 'AbortError' });
+  await assert.rejects(mindgrab.segment(input, { model: 'mindgrab', timeoutMs: 1 }), /did not finish within 1 ms/);
+});
+
 // Each case needs 2.6-3.9 GB and about a minute on eight cores, so the parity run is opt-in.
 const parity = process.env.MINDGRAB_PARITY === '1';
 for (const item of MINDGRAB_CASES) {

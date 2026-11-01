@@ -1,0 +1,6 @@
+---
+"@neurodesk/sdc": minor
+"@neurodesk/node-drivers": patch
+---
+
+Add the SyN-SDC pipeline (`@neurodesk/sdc/syn`, `/syn/node`, `/syn/browser`): sdcflows 2.17.1's fieldmap-less susceptibility distortion correction for one DWI series and a T1w, in the browser and in Node. The EPI reference is the mean b0 (clipped, N4, clipped), the masks are MindGrab's or uploaded, the T1w is clipped and denoised with `@neurodesk/ants-denoise`, the epi2anat and T1w-to-MNI affines and the restricted SyN on the 1.2 mm grid run `--float 1` in the hmc-registration kernel with a fixed seed, the prior (`models/sdc.manifest.json`) is warped through the MNI affine or left out, and the field-fit module turns the warp into a field in Hz. The whole series is unwarped once with the Jacobian factor, keeping the b0 volumes. The phase-encoding direction and readout time come from options or the sidecar (or EffectiveEchoSpacing); without them the run is refused. Outputs are BIDS derivatives: `desc-sdc_dwi` with its bval, bvec and sidecar, `desc-preproc_fieldmap` (Hz), `desc-coeff_fieldmap`, the `from-orig_to-sdc` displacement field and the brain mask. An `AbortSignal` terminates every worker. MindGrab's Node driver now takes a `signal` too.
