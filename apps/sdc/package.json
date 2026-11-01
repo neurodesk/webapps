@@ -9,7 +9,7 @@
     "build": "vite build && node ../../scripts/theme-app-dist.mjs --app sdc",
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
-    "test:e2e": "playwright test --repeat-each 15 e2e/webgpu.spec.js e2e/smoke.spec.js",
+    "test:e2e": "for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do echo \"=== cold run $i\"; DEBUG=pw:browser playwright test || exit 1; done",
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
