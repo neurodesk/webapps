@@ -24,7 +24,7 @@ Counted over `apps/*/e2e`, `packages/*/e2e`, `test/*.smoke.mjs`, `test-utils/` a
 
 | Playwright feature | Files | Rustwright Node 0.3.0 |
 | --- | --- | --- |
-| `@playwright/test` runner, `expect`, fixtures, `webServer` | 149 importers, 47 configs | None; it is a driver, not a test runner |
+| `@playwright/test` runner, `expect`, fixtures, `webServer` | 171 importers, 47 configs | None; it is a driver, not a test runner |
 | Locators and role queries (`locator`, `getByRole` …) | 161 | No `locator` or `getBy*` |
 | File inputs (`setInputFiles`, file chooser) | 130 | No `setInputFiles` |
 | Downloads (`waitForEvent('download')`) | 107 | No `waitForEvent`; README lists downloads as not bridged |
@@ -40,9 +40,9 @@ Counted over `apps/*/e2e`, `packages/*/e2e`, `test/*.smoke.mjs`, `test-utils/` a
 | macOS Metal runner (`browser-e2e-gpu`) | 1 job | darwin-arm64 binary ships; untested here |
 
 The method list in the right column was checked at run time on a live Rustwright page and context,
-not only from the type declarations. Only the last two rows are supported. Rustwright's
-`LIMITATIONS.md` adds that `newContext()` has no storage or cookie isolation and that behavioural
-parity "is not fully proven".
+not only from the type declarations. Only the last two rows are supported. The Node binding's
+declarations (`node/index.d.ts`) state that `newContext()` has no storage or cookie isolation, and
+`LIMITATIONS.md` says behavioural parity "is not fully proven".
 
 ## Side-by-side proof
 
