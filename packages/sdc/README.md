@@ -104,3 +104,16 @@ export $(node packages/sdc/validation/fetch-slab.mjs "$TMPDIR/sdc-slab")
 ```
 
 `test/fixtures/syn-scipy.json` holds SciPy's outputs for the numeric ports on small random volumes (`validation/syn-scipy-fixture.py`, run in the reference's Python environment).
+
+Measured on 1 November 2026 (seed 1234, Node 24, 16-core AMD EPYC shared with other runs; `report.json` of the gate test):
+
+| Run | d median (Hz) | p95 | max | epi2anat shift from double |
+| --- | ---: | ---: | ---: | ---: |
+| whole pipeline in this repository's WebAssembly and JavaScript | **0.546** (fails the 0.5 Hz cap) | 1.26 | 4.80 | 0.074 mm |
+| the same, with native N4's output in place of the WebAssembly N4's (control) | 0.036 (passes) | 0.198 | 0.963 | - |
+
+- The mean b0 and both MindGrab masks equal the reference's voxel for voxel. With the reference's EPI reference, the pipeline's epi2anat writes #462's end-to-end transform byte for byte.
+- The whole difference starts in N4. The WebAssembly N4 differs from native N4 by float rounding, which changes 1 of 928,464 voxels of the EPI reference by 1/255 after the clip. That voxel moves the float epi2anat affine 0.074 mm, and SyN turns it into 0.55 Hz. The T1w-to-MNI affine (0.073 mm from the pinned double one) does not matter: the control run computes it in WebAssembly as well.
+- Wall time 101 min: DenoiseImage 4 min, epi2anat and the MNI affine together 47 min, SyN 41 min, the unwarp of 137 volumes 3 min. Max RSS of the Node process 6.4 GB (MindGrab, then the kernels).
+- The unwarp from the reference coefficients is within 0.01172 of sdcflows' series, whose int16 half step is 0.01167.
+- Slab with the full T1w, 1.2 mm against the native 2 mm slab runs (report only): median 1.59 Hz against double seed 1234 (p95 6.05 Hz), 1.95 and 2.00 Hz against seeds 1235 and 1236, 1.51 Hz against `--float 1`. The pipeline took 52 min.
