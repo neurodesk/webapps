@@ -1,0 +1,17 @@
+# SamSrf (BSD-3-Clause, https://github.com/samsrf/samsrf) ported to Rust: `core` is the
+# pure port, `wasm` its wasm-bindgen surface for packages/samsrf. Standalone workspace so
+# `cargo build` here never joins a parent one.
+[workspace]
+resolver = "2"
+members = ["core", "wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+repository = "https://github.com/neurodesk/webapps/tree/main/exes/samsrf"
+
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
