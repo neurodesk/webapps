@@ -42,6 +42,25 @@ const { bindPatientBehavior } = await import('../web/js/modules/patient-behavior
   doc.getElementById('kbLocationBody').appendChild(row);
   select.dispatchEvent(new dom.window.Event('change'));
   assert.match(row.textContent, /Observed difficulty/);
+  const age = doc.getElementById('patientAge');
+  const sex = doc.getElementById('patientSex');
+  const tpo = doc.getElementById('patientTpo');
+  age.value = '64';
+  sex.value = 'female';
+  tpo.value = '0';
+  doc.getElementById('patientTpoUnit').value = 'days';
+  const severity = doc.querySelector('#patientSymptomSeverity select');
+  severity.value = 'moderate';
+  severity.dispatchEvent(new dom.window.Event('change'));
+  assert.match(row.textContent, /Observed difficulty \(moderate\)/);
+  assert.match(doc.getElementById('patientBehaviorReportBody').textContent, /Age at stroke: 64 years; Sex: Female; Time post-onset at assessment: 0 days/);
+  behavior.setKnowledgeBase(kb);
+  assert.equal(doc.querySelector('#patientSymptomSeverity select').value, 'moderate');
+  age.value = '-1';
+  behavior.render();
+  assert.equal(age.getAttribute('aria-invalid'), 'true');
+  assert.doesNotMatch(doc.getElementById('patientBehaviorReportBody').textContent, /Age at stroke: -1/);
+
   assert.match(doc.getElementById('patientBehaviorReportBody').textContent, /Matching lesion-based evidence/);
   behavior.render();
   assert.equal(doc.querySelectorAll('[data-observed-symptom]').length, 1);
@@ -51,6 +70,10 @@ const { bindPatientBehavior } = await import('../web/js/modules/patient-behavior
   assert.equal(select.selectedOptions.length, 1);
   behavior.reset();
   assert.equal(select.selectedOptions.length, 0);
+  assert.equal(age.value, '');
+  assert.equal(sex.value, '');
+  assert.equal(tpo.value, '');
+  assert.equal(doc.querySelectorAll('#patientSymptomSeverity select').length, 0);
 }
 
 {

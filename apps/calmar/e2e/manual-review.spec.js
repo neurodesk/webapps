@@ -9,10 +9,21 @@ for (const width of [1440, 390]) {
     await expect(page.locator('#patientObservedSymptoms')).toBeEnabled();
     const symptom = await page.locator('#patientObservedSymptoms option').first().getAttribute('value');
     await page.locator('#patientObservedSymptoms').selectOption(symptom);
+    await page.locator('#patientAge').fill('64');
+    await page.locator('#patientSex').selectOption('female');
+    await page.locator('#patientTpo').fill('3.5');
+    await page.locator('#patientTpoUnit').selectOption('months');
+    await page.locator('#patientSymptomSeverity select').selectOption('moderate');
+    await expect(page.locator('#patientBehaviorReportBody')).toContainText('Age at stroke: 64 years');
+    await expect(page.locator('#patientBehaviorReportBody')).toContainText('3.5 months');
+    await expect(page.locator('#patientBehaviorReportBody')).toContainText('moderate');
+
     await expect(page.locator('#patientBehaviorReportBody')).toContainText('observed (patient-provided)');
     await page.locator('#patientBehaviorOptions summary').click();
     await page.locator('#patientBehaviorOptions summary').click();
     await expect(page.locator('#patientObservedSymptoms')).toHaveValues([symptom]);
+    await expect(page.locator('#patientAge')).toHaveValue('64');
+    await expect(page.locator('#patientSymptomSeverity select')).toHaveValue('moderate');
     await page.screenshot({ path: test.info().outputPath(`behavior-${width}.png`), fullPage: true, animations: 'disabled' });
   });
 

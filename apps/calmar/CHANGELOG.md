@@ -8,6 +8,8 @@
 
 ### Patch Changes
 
+- Add optional age at stroke, sex, time post-onset with units, and per-symptom descriptive severity to behavioural context and report exports. Preserve simple observed ratings and mark severity beside matching KB symptom evidence without reweighting findings.
+  - @neurodesk/calmar@0.10.20261102
 - Constrain magic wand growth to the native brain mask by default when available. Give behavioural information its own sidebar heading and mark KB evidence matching explicitly selected observed difficulties.
   - @neurodesk/calmar@0.10.20261102
 - Fix magic-wand tolerance collapsing around dark, zero or negative lesion seeds. Use the image's robust contrast range for a brightness-independent interval and convert calibrated NIfTI bounds to the raw units used by native flood fill. Keep the native radius, connectivity, preview, Undo and review behavior through an opt-in shared adapter. Add browser comparisons against the old seed-relative rule, including signed and scaled images.

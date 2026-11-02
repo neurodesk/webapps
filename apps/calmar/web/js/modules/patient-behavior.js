@@ -9,7 +9,42 @@ export function bindPatientBehavior(doc) {
   if (!notes || !include || !rows || !report || !body) return null;
   const symptoms = doc.getElementById('patientObservedSymptoms');
   const hint = doc.getElementById('patientSymptomsHint');
+  const age = doc.getElementById('patientAge');
+  const sex = doc.getElementById('patientSex');
+  const tpo = doc.getElementById('patientTpo');
+  const tpoUnit = doc.getElementById('patientTpoUnit');
+  const severityRows = doc.getElementById('patientSymptomSeverity');
+  const severity = new Map();
+  const severityLabels = { observed: 'Observed — severity unspecified', mild: 'Mild', moderate: 'Moderate', severe: 'Severe' };
   let nextId = 0;
+
+  function syncSeverity() {
+    severityRows.replaceChildren();
+    for (const option of symptoms.selectedOptions) {
+      const field = doc.createElement('div');
+      field.className = 'nd-field';
+      const label = doc.createElement('label');
+      const select = doc.createElement('select');
+      select.id = `patient-symptom-severity-${nextId++}`;
+      select.dataset.symptom = option.value;
+      label.htmlFor = select.id;
+      label.textContent = `${option.textContent} — severity`;
+      for (const [value, text] of Object.entries(severityLabels)) {
+        const choice = doc.createElement('option');
+        choice.value = value;
+        choice.textContent = text;
+        select.appendChild(choice);
+      }
+      select.value = severity.get(option.value) || 'observed';
+      select.addEventListener('change', () => {
+        severity.set(option.value, select.value);
+        render();
+      });
+      field.append(label, select);
+      severityRows.appendChild(field);
+    }
+  }
+
 
   function setKnowledgeBase(kb) {
     const selected = new Set([...symptoms.selectedOptions].map(option => option.value));
@@ -24,7 +59,8 @@ export function bindPatientBehavior(doc) {
       symptoms.appendChild(option);
     }
     symptoms.disabled = false;
-    hint.textContent = 'Optional: select observed difficulties to highlight matching KB evidence.';
+    hint.textContent = 'Select symptoms; severity is optional. Unselected symptoms remain unassessed.';
+    syncSeverity();
     render();
   }
 
@@ -32,22 +68,36 @@ export function bindPatientBehavior(doc) {
   function render() {
     body.replaceChildren();
     doc.querySelectorAll('[data-observed-symptom]').forEach(node => node.remove());
+    const invalid = [age, tpo].filter(input => input && !input.validity.valid);
+    for (const input of [age, tpo]) input?.setAttribute('aria-invalid', String(invalid.includes(input)));
+    doc.getElementById('patientContextError')?.classList.toggle('hidden', !invalid.length);
+    const context = [];
+    if (age?.value && age.validity.valid) context.push(`Age at stroke: ${age.value} years`);
+    if (sex?.value) context.push(`Sex: ${sex.selectedOptions[0].textContent}`);
+    if (tpo?.value && tpo.validity.valid) context.push(`Time post-onset at assessment: ${tpo.value} ${tpoUnit.value}`);
+    if (include.checked && context.length) {
+      const paragraph = doc.createElement('p');
+      paragraph.textContent = `${context.join('; ')}. Patient-provided context; these values do not filter KB findings.`;
+      body.appendChild(paragraph);
+    }
     const selected = include.checked ? [...(symptoms?.selectedOptions || [])] : [];
     for (const option of selected) {
       const matches = [...doc.querySelectorAll('#kbLocationBody tr[data-target]')].filter(row => row.dataset.target === option.value);
       for (const row of matches) {
         const mark = doc.createElement('mark');
         mark.dataset.observedSymptom = option.value;
-        mark.textContent = ' · Observed difficulty';
+        const rating = severity.get(option.value) || 'observed';
+        mark.textContent = ` · Observed difficulty${rating === 'observed' ? '' : ` (${severityLabels[rating].toLowerCase()})`}`;
         row.cells[1].appendChild(mark);
       }
       const paragraph = doc.createElement('p');
-      paragraph.textContent = `${option.textContent}: observed (patient-provided). ${matches.length ? 'Matching lesion-based evidence is marked below.' : 'No matching direct-damage summary in the current report; this does not rule out the difficulty.'}`;
+      const rating = severity.get(option.value) || 'observed';
+      paragraph.textContent = `${option.textContent}: observed (patient-provided) — ${rating === 'observed' ? 'severity unspecified' : severityLabels[rating].toLowerCase()}. ${matches.length ? 'Matching lesion-based evidence is marked below.' : 'No matching direct-damage summary in the current report; this does not rule out the difficulty.'}`;
       body.appendChild(paragraph);
     }
     const assessments = [...rows.children].map(row => [...row.querySelectorAll('input')].map(input => input.value.trim()))
       .filter(values => values.some(Boolean));
-    report.hidden = !include.checked || (!notes.value.trim() && !assessments.length && !selected.length);
+    report.hidden = !include.checked || (!notes.value.trim() && !assessments.length && !selected.length && !context.length);
     if (report.hidden) return;
     for (const text of notes.value.trim().split(/\n+/).filter(Boolean)) {
       const paragraph = doc.createElement('p');
@@ -111,10 +161,18 @@ export function bindPatientBehavior(doc) {
   });
   for (const control of [notes, include, rows]) control.addEventListener('input', render);
   include.addEventListener('change', render);
-  symptoms?.addEventListener('change', render);
+  symptoms?.addEventListener('change', () => { syncSeverity(); render(); });
+  for (const input of [age, sex, tpo, tpoUnit]) {
+    input?.addEventListener('input', render);
+    input?.addEventListener('change', render);
+  }
   function reset() {
     notes.value = '';
+    for (const input of [age, sex, tpo]) if (input) input.value = '';
+    if (tpoUnit) tpoUnit.value = 'months';
+    severity.clear();
     if (symptoms) for (const option of symptoms.options) option.selected = false;
+    syncSeverity();
     include.checked = true;
     rows.replaceChildren();
     addAssessment();
