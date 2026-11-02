@@ -14,7 +14,7 @@
           <label class="nd-file" id="dropZone">
             <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose two images with opposite phase-encoding directions, with their JSON sidecars and an optional bval" />
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span>Drop an AP/PA pair with sidecars, NIfTI or DICOM</span>
+            <span id="dropText">Drop an AP/PA pair with sidecars, NIfTI or DICOM</span>
           </label>
           <p id="fileInfo" class="nd-file-info" hidden></p>
           <p id="pairInfo" class="nd-file-info" hidden></p>
@@ -26,17 +26,61 @@
         <div class="nd-section-content">
           <div class="nd-field">
             <label for="method">Method
-              <span class="nd-info-icon" tabindex="0" aria-label="About the method">i<span class="nd-info-tooltip">PyHySCO 0.0.4 with its command-line defaults: a 1D field per phase-encoding line, hyperelastic regularization and Gauss-Newton. It was the closest fast method to FSL topup in the reverse-PE comparison.</span></span>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the methods">i<span class="nd-info-tooltip">PyHySCO 0.0.4 estimates the field from a reverse phase-encoding b = 0 pair. SyN-SDC (sdcflows 2.17.1, fieldmap-less) registers the mean b0 to a T1w along the phase-encoding axis and corrects the DWI series; the example takes about an hour.</span></span>
             </label>
-            <select id="method"><option value="pyhysco" selected>PyHySCO</option></select>
+            <select id="method">
+              <option value="pyhysco" selected>PyHySCO</option>
+              <option value="syn">SyN-SDC</option>
+            </select>
           </div>
-          <div class="nd-field">
-            <label for="reference">Field reference
-              <span class="nd-info-icon" tabindex="0" aria-label="About the field reference">i<span class="nd-info-tooltip">The field is written on this image's grid, with topup's sign for its phase-encoding direction. The DWI series is chosen when one input has a bval.</span></span>
-            </label>
-            <select id="reference" disabled><option value="0">Image 1</option></select>
+          <div id="pyhyscoFields">
+            <div class="nd-field">
+              <label for="reference">Field reference
+                <span class="nd-info-icon" tabindex="0" aria-label="About the field reference">i<span class="nd-info-tooltip">The field is written on this image's grid, with topup's sign for its phase-encoding direction. The DWI series is chosen when one input has a bval.</span></span>
+              </label>
+              <select id="reference" disabled><option value="0">Image 1</option></select>
+            </div>
+            <p class="nd-hint">Both images in one space; their b = 0 volumes are averaged.</p>
           </div>
-          <p class="nd-hint">Both images in one space; their b = 0 volumes are averaged.</p>
+          <div id="synFields" hidden>
+            <div class="nd-field" id="directionField" hidden>
+              <label for="direction">Phase-encoding direction
+                <span class="nd-info-icon" tabindex="0" aria-label="About the phase-encoding direction">i<span class="nd-info-tooltip">No sidecar gives PhaseEncodingDirection. Give it as BIDS does, along the image's voxel axes: j- is AP on most axial scans. SyN-SDC never guesses it.</span></span>
+              </label>
+              <select id="direction">
+                <option value="" selected>Choose</option>
+                <option value="i">i</option>
+                <option value="i-">i-</option>
+                <option value="j">j</option>
+                <option value="j-">j-</option>
+                <option value="k">k</option>
+                <option value="k-">k-</option>
+              </select>
+            </div>
+            <div class="nd-field" id="readoutField" hidden>
+              <label for="readout">Total readout time (s)
+                <span class="nd-info-icon" tabindex="0" aria-label="About the total readout time">i<span class="nd-info-tooltip">No sidecar gives TotalReadoutTime or EffectiveEchoSpacing. It scales the field in Hz; the corrected images do not depend on it.</span></span>
+              </label>
+              <input id="readout" type="number" min="0" step="any" inputmode="decimal" placeholder="0.038" />
+            </div>
+            <details class="nd-sidebar-section" id="advancedSettings">
+              <summary class="nd-section-title">Advanced settings</summary>
+              <div class="nd-section-content">
+                <div class="nd-field">
+                  <label for="prior">Prior
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the prior">i<span class="nd-info-tooltip">sdcflows' distortion atlas (Treiber et al. 2016), brought to the T1w by an affine registration to MNI152NLin2009cAsym, limits the second SyN stage to where distortion is expected. Without it the T1w mask takes its place.</span></span>
+                  </label>
+                  <select id="prior">
+                    <option value="atlas" selected>Distortion atlas</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+                <div id="dwiMaskField"></div>
+                <div id="t1wMaskField"></div>
+                <button id="clearMasks" class="nd-btn nd-btn-secondary" type="button" hidden>Use MindGrab masks</button>
+              </div>
+            </details>
+          </div>
           <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Estimate field</button>
         </div>
       </details>
