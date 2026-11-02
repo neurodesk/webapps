@@ -17,6 +17,39 @@ export function bindPatientBehavior(doc) {
   const severity = new Map();
   const severityLabels = { observed: 'Observed — severity unspecified', mild: 'Mild', moderate: 'Moderate', severe: 'Severe' };
   let nextId = 0;
+  let exampleSource = null;
+
+  function appendSource(target) {
+    target.append('Example source (fields editable): ');
+    const link = doc.createElement('a');
+    link.href = exampleSource.url;
+    link.textContent = exampleSource.label;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    target.appendChild(link);
+  }
+
+  function loadExampleContext(context) {
+    reset();
+    if (!context) return;
+    age.value = context.ageAtStroke ?? '';
+    sex.value = context.sex || '';
+    tpo.value = context.tpo ?? '';
+    tpoUnit.value = context.tpoUnit || 'months';
+    notes.value = context.notes || '';
+    rows.replaceChildren();
+    for (const assessment of context.assessments || []) {
+      const row = addAssessment();
+      const inputs = row.querySelectorAll('input');
+      inputs[0].value = assessment.name || '';
+      inputs[1].value = assessment.result || '';
+      inputs[2].value = assessment.date || '';
+    }
+    if (!rows.children.length) addAssessment();
+    exampleSource = context.source || null;
+    render();
+  }
+
 
   function syncSeverity() {
     severityRows.replaceChildren();
@@ -67,6 +100,17 @@ export function bindPatientBehavior(doc) {
 
   function render() {
     body.replaceChildren();
+    const source = doc.getElementById('patientContextSource');
+    if (source) {
+      source.replaceChildren();
+      source.hidden = !exampleSource;
+      if (exampleSource) appendSource(source);
+    }
+    if (include.checked && exampleSource) {
+      const paragraph = doc.createElement('p');
+      appendSource(paragraph);
+      body.appendChild(paragraph);
+    }
     doc.querySelectorAll('[data-observed-symptom]').forEach(node => node.remove());
     const invalid = [age, tpo].filter(input => input && !input.validity.valid);
     for (const input of [age, tpo]) input?.setAttribute('aria-invalid', String(invalid.includes(input)));
@@ -77,7 +121,7 @@ export function bindPatientBehavior(doc) {
     if (tpo?.value && tpo.validity.valid) context.push(`Time post-onset at assessment: ${tpo.value} ${tpoUnit.value}`);
     if (include.checked && context.length) {
       const paragraph = doc.createElement('p');
-      paragraph.textContent = `${context.join('; ')}. Patient-provided context; these values do not filter KB findings.`;
+      paragraph.textContent = `${context.join('; ')}. ${exampleSource ? 'Example dataset context (editable)' : 'Patient-provided context'}; these values do not filter KB findings.`;
       body.appendChild(paragraph);
     }
     const selected = include.checked ? [...(symptoms?.selectedOptions || [])] : [];
@@ -153,6 +197,7 @@ export function bindPatientBehavior(doc) {
     });
     row.appendChild(remove);
     rows.appendChild(row);
+    return row;
   }
   const add = doc.getElementById('addPatientAssessment');
   add.addEventListener('click', () => {
@@ -167,6 +212,7 @@ export function bindPatientBehavior(doc) {
     input?.addEventListener('change', render);
   }
   function reset() {
+    exampleSource = null;
     notes.value = '';
     for (const input of [age, sex, tpo]) if (input) input.value = '';
     if (tpoUnit) tpoUnit.value = 'months';
@@ -179,5 +225,5 @@ export function bindPatientBehavior(doc) {
     render();
   }
   reset();
-  return { reset, render, setKnowledgeBase };
+  return { reset, render, setKnowledgeBase, loadExampleContext };
 }

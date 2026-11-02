@@ -10,8 +10,11 @@ const examples = JSON.parse(await readFile(new URL('../examples.json', import.me
 async function loadAdapter() {
   let options;
   const loaded = [];
+  const contexts = [];
   const app = {
     updateOutput() {},
+    clearDiffusionInputs() {},
+    patientBehavior: { loadExampleContext(context) { contexts.push(context); } },
     async setStructural(file) { loaded.push(file); },
     async startUploadedLesionMaskReview() {
       assert.fail('The example must compute its lesion mask');
@@ -23,20 +26,21 @@ async function loadAdapter() {
   const document = { baseURI: 'https://example.org/calmar/', getElementById: () => input, querySelector: selector => { assert.equal(selector, '.app-container'); return scope; } };
   await setup(value => { options = value; assert.equal(value.scope, scope); return selector; },
     async () => ({ ok: true, json: async () => examples }), document).call(app);
-  return { app, options, loaded };
+  return { app, options, loaded, contexts };
 }
 
 test('selecting the example imports its complete scientific inputs without running processing', async () => {
-  const { options, loaded } = await loadAdapter();
+  const { options, loaded, contexts } = await loadAdapter();
   assert.deepEqual(examples[0].files.map(file => file.role), ['structural']);
   const files = examples[0].files.map(file => new File(['example'], file.name));
   await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
   assert.equal(loaded.length, 1);
+  assert.deepEqual(contexts, [examples[0].patientContext]);
   assert.deepEqual(loaded.map(file => file.name), examples[0].files.map(file => file.name));
 });
 
 test('cancelled download never replaces the current inputs', async () => {
-  const { options, loaded } = await loadAdapter();
+  const { options, loaded, contexts } = await loadAdapter();
   await assert.rejects(options.onLoad(examples[0], {
     fetchFiles: async () => [],
     assertCurrent() { throw new DOMException('Cancelled', 'AbortError'); },
@@ -45,7 +49,7 @@ test('cancelled download never replaces the current inputs', async () => {
 });
 
 test('failed download leaves inputs untouched and can be retried', async () => {
-  const { options, loaded } = await loadAdapter();
+  const { options, loaded, contexts } = await loadAdapter();
   await assert.rejects(options.onLoad(examples[0], {
     fetchFiles: async () => { throw new Error('Download failed'); }, assertCurrent() {},
   }), /Download failed/);
@@ -54,4 +58,16 @@ test('failed download leaves inputs untouched and can be retried', async () => {
   const files = examples[0].files.map(file => new File(['example'], file.name));
   await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
   assert.equal(loaded.length, 1);
+  assert.deepEqual(contexts, [examples[0].patientContext]);
+});
+
+
+test('example metadata is never applied after a superseded scan import', async () => {
+  const { options, contexts } = await loadAdapter();
+  let checks = 0;
+  await assert.rejects(options.onLoad(examples[0], {
+    fetchFiles: async () => [new File(['example'], 'scan.nii')],
+    assertCurrent() { if (++checks === 2) throw new DOMException('Cancelled', 'AbortError'); },
+  }), { name: 'AbortError' });
+  assert.deepEqual(contexts, []);
 });

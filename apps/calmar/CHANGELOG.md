@@ -8,6 +8,8 @@
 
 ### Patch Changes
 
+- Populate the stroke example with source-verified demographics and WAB-R context, distinguish assessment day 705 from MRI day 284, and retain pinned source attribution in the report. Clear example context when loading another subject.
+  - @neurodesk/calmar@0.10.20261102
 - Add optional age at stroke, sex, time post-onset with units, and per-symptom descriptive severity to behavioural context and report exports. Preserve simple observed ratings and mark severity beside matching KB symptom evidence without reweighting findings.
   - @neurodesk/calmar@0.10.20261102
 - Constrain magic wand growth to the native brain mask by default when available. Give behavioural information its own sidebar heading and mark KB evidence matching explicitly selected observed difficulties.

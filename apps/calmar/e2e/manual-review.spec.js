@@ -1,6 +1,27 @@
 import { expect, test } from '@playwright/test';
 
 for (const width of [1440, 390]) {
+  test(`example demographics follow the loaded participant at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/');
+    await page.waitForFunction(() => globalThis.app?.patientBehavior);
+    await page.locator('select[data-neurodesk-example]').selectOption('stroke-lesion');
+    await expect(page.locator('#patientAge')).toHaveValue('45', { timeout: 60000 });
+    await expect(page.locator('#patientSex')).toHaveValue('male');
+    await expect(page.locator('#patientTpo')).toHaveValue('705');
+    await expect(page.locator('#patientBehaviorReportBody')).toContainText('34.7');
+    await expect(page.locator('#patientBehaviorReportBody')).toContainText('284 days');
+    await page.locator('#patientBehaviorOptions summary').click();
+    await page.screenshot({ path: test.info().outputPath(`example-context-${width}.png`), fullPage: true, animations: 'disabled' });
+    await page.evaluate(async () => {
+      const { writeNifti1 } = await import('/js/modules/nifti-writer.js');
+      const bytes = writeNifti1(new Float32Array(8), { dims: [2, 2, 2], spacing: [1, 1, 1], affine: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] });
+      await app.setStructural(new File([bytes], 'different-subject.nii'));
+    });
+    await expect(page.locator('#patientAge')).toHaveValue('');
+    await expect(page.locator('#patientContextSource')).toBeHidden();
+  });
+
   test(`observed difficulties use KB labels at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/');

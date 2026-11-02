@@ -28,6 +28,26 @@ const { evaluateDamage, renderKbReport } = await import('../web/js/modules/kb-re
 const { bindPatientBehavior } = await import('../web/js/modules/patient-behavior.js');
 
 {
+  const doc = new JSDOM(html).window.document;
+  const behavior = bindPatientBehavior(doc);
+  const [example] = JSON.parse(readFileSync(join(root, 'examples.json'), 'utf8'));
+  behavior.loadExampleContext(example.patientContext);
+  assert.equal(doc.getElementById('patientAge').value, '45');
+  assert.equal(doc.getElementById('patientSex').value, 'male');
+  assert.equal(doc.getElementById('patientTpo').value, '705');
+  assert.equal(doc.getElementById('patientTpoUnit').value, 'days');
+  const report = doc.getElementById('patientBehaviorReportBody');
+  assert.match(report.textContent, /284 days post-stroke/);
+  assert.match(report.textContent, /34.7/);
+  assert.match(report.textContent, /not contemporaneous/);
+  assert.equal(report.querySelector('a').href, example.patientContext.source.url);
+  behavior.reset();
+  assert.equal(doc.getElementById('patientContextSource').hidden, true);
+  assert.equal(doc.getElementById('patientAge').value, '');
+  assert.doesNotMatch(report.textContent, /M2051|34.7/);
+}
+
+{
   const dom = new JSDOM(html);
   const doc = dom.window.document;
   const behavior = bindPatientBehavior(doc);

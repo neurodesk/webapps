@@ -386,6 +386,7 @@ export class LesionNetworkMappingApp {
         this.clearDiffusionInputs();
         await this.setStructural(structural);
         assertCurrent();
+        this.patientBehavior?.loadExampleContext(example.patientContext);
       },
       onStatus: (message) => this.updateOutput(message),
     });
