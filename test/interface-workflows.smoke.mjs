@@ -417,6 +417,29 @@ try {
     await page.locator('#overlayPanel > summary').tap();
     await expect(page.locator('#surfaceList')).toContainText('interface.obj');
   });
+  await check('samsrf', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open','');
+    const file = name => ({ name, mimeType: 'application/octet-stream', buffer: Buffer.from('x') });
+    await page.locator('#runsInput').setInputFiles(['lh_uBars1.gii','aps_Bars.mat','lh.V123.label','lh.inflated'].map(file));
+    await expect(page.locator('#runsInfo')).toHaveText('lh_uBars1.gii');
+    await expect(page.locator('#aperturesDrop')).toContainText('aps_Bars.mat');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await page.locator('#analysis').selectOption('cf');
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await expect(page.locator('#runHint')).toHaveText('Needs a template map, a seed label, a surface area file');
+    await page.locator('#analysis').selectOption('prf');
+    await page.locator('#advancedSettings > summary').tap();
+    await page.locator('#fineFitThreshold').fill('0.2');
+    await page.locator('#fineFitThreshold').dispatchEvent('change');
+    await expect(page.locator('#modelJson')).toHaveValue(/"Fine_Fit_Threshold": 0.2/);
+    const task = page.locator('#analysisSection > summary');
+    await task.tap();
+    await expect(page.locator('#fineFitThreshold')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#fineFitThreshold')).toHaveValue('0.2');
+  });
   await check('dicompare', async page => {
     const toggle = page.locator('button[aria-controls="workflow-compare"]');
     await toggle.focus(); await page.keyboard.press('Enter');

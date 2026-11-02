@@ -31,6 +31,11 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/dwicorrect`: Apache-2.0 AND BSD-3-Clause AND GPL-3.0-or-later: `@neurodesk/shoreline`,
   and the GPL-3.0-or-later PyHySCO port in `@neurodesk/sdc` (`packages/sdc/LICENSE`) for the
   susceptibility field
+- `packages/sdc`: GPL-3.0-or-later AND Apache-2.0 AND BSD-3-Clause (`packages/sdc/LICENSE`,
+  `packages/sdc/NOTICE`): the PyHySCO port (GPL-3.0-or-later), the sdcflows SyN-SDC port and field fit
+  (Apache-2.0, BSD-3-Clause) and the sdc command line. Its archives bundle the SyN-SDC prior with its
+  notices: sdcflows' distortion atlas (CC-BY-4.0, Treiber et al. 2016) and affine (Apache-2.0), and the
+  MNI152NLin2009cAsym template under its own licence
 - `packages/niimath`: BSD-2-Clause (`packages/niimath/LICENSE`); niimath attribution in `packages/niimath/NOTICE`
 - `apps/me-ica`: LGPL-2.1-only, as the `@niivue/meica` package it ships (LGPL-2.1-only, from
   https://github.com/niivue/meica-rs; a port of tedana, LGPL-2.1, and mapca and GIFT, GPL-2.0,
