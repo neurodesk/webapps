@@ -21,6 +21,8 @@ const REFERENCE = join(process.env.SAMSRF_REFERENCE_DIR ?? '/storage/scratch/sam
 const EXAMPLE = process.env.SAMSRF_EXAMPLE_DIR ?? '/storage/scratch/samsrf-work/dl/X001';
 const WEBAPP = process.env.SAMSRF_WEBAPP_EXAMPLE_DIR ?? '/storage/scratch/samsrf-work/example';
 const EXACT = 1e-9;
+/** The template coordinates: single precision, where Octave's cos and sin are not correctly rounded (README). */
+const TEMPLATE = 1e-7;
 /** Fine fits: a vertex "differs" above this relative difference; this many may differ per map. */
 const FINE_FIT_VERTEX = 1e-6;
 const FINE_FIT_ALLOWED = 0.02;
@@ -76,7 +78,7 @@ function matlabRow(matrix, rows, row) {
 const results = [];
 
 /** Compares `actual` and `expected` at `vertices`; `fine` maps count differing vertices. */
-function compare(run, map, actual, expected, vertices, fine) {
+function compare(run, map, actual, expected, vertices, fine, tolerance = EXACT) {
   let maxAbs = 0;
   let maxReference = 0;
   let differing = 0;
@@ -98,14 +100,14 @@ function compare(run, map, actual, expected, vertices, fine) {
     if (Number.isNaN(e) || Number.isNaN(a)) continue;
     const diff = Math.abs(a - e);
     maxAbs = Math.max(maxAbs, diff);
-    if (diff / Math.max(maxReference, 1e-300) > (fine ? FINE_FIT_VERTEX : EXACT)) {
+    if (diff / Math.max(maxReference, 1e-300) > (fine ? FINE_FIT_VERTEX : tolerance)) {
       differing += 1;
       if (examples.length < 3) examples.push(`${vertex}: ${a} vs ${e}`);
     }
   }
   const relative = maxReference > 0 ? maxAbs / maxReference : maxAbs;
   const fraction = differing / vertices.length;
-  const pass = !problem && (fine ? fraction <= FINE_FIT_ALLOWED : relative <= EXACT);
+  const pass = !problem && (fine ? fraction <= FINE_FIT_ALLOWED : relative <= tolerance);
   const name = `${run} ${map}`;
   results.push({ run, map, name, maxAbs, relative, differing, vertices: vertices.length, fine, pass, problem, examples });
   const detail = problem ? `  (${problem})` : examples.length ? `  e.g. ${examples.join('; ')}` : '';
@@ -139,7 +141,7 @@ function templateCheck(inputs) {
   const expected = f64(join(REFERENCE, 'template_data.f64'));
   const all = Array.from({ length: TOTAL_VERTICES }, (_, v) => v);
   for (const [row, name] of ['R^2', 'x0', 'y0'].entries()) {
-    compare('template', name, inputs.template.data.subarray(row * TOTAL_VERTICES), matlabRow(expected, 5, row), all, false);
+    compare('template', name, inputs.template.data.subarray(row * TOTAL_VERTICES), matlabRow(expected, 5, row), all, false, TEMPLATE);
   }
 }
 

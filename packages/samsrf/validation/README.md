@@ -167,6 +167,41 @@ checks pass.
 | errfun vertex 612 [2 1 1.5 6 16 1 1 6] fitted HRF | 4.4e-16 | 4.7e-16 | 1.0e-9 | PASS |
 | errfun vertex 612 [2 1 1.5 2 16 1 1 6] fitted HRF | 0 | 0 | 1.0e-9 | PASS |
 
+## The analyses
+
+`parity-analyses.mjs` compares the three analyses with SamSrf's own
+`samsrf_fit_prf`, `samsrf_revcor_prf` and `samsrf_revcor_cf` run in Octave
+(`octave/analyses.m`, outputs under `analyses/` in the reference directory):
+
+```sh
+node packages/samsrf/validation/parity-analyses.mjs [--only prf_nm,cf_hull] [--json out.json] [--markdown table.md]
+```
+
+| Variable | Default | Content |
+| --- | --- | --- |
+| `SAMSRF_REFERENCE_DIR` | `/storage/scratch/samsrf-work/reference` | `analyses/` inside it: one `<run>.json` and `<run>_data.f64` per run |
+| `SAMSRF_EXAMPLE_DIR` | `/storage/scratch/samsrf-work/dl/X001` | The full runs (`func/lh_uBars1-6.gii`, `prf/aps_Bars.mat`) the Octave run used |
+| `SAMSRF_WEBAPP_EXAMPLE_DIR` | `/storage/scratch/samsrf-work/example` | The web app's example files: the V123 and V1-seed labels, `lh_benson.gii`, `lh.area`, `lh.white` |
+
+The script preprocesses the six full runs once (z-scored, averaged, noise
+ceiling, global signal) for the ROI and seed vertices, then rebuilds each
+reference run's model from `octave/analyses.m` (`RUNS` in the script), runs the
+job on the reference's `mver` in two shards and compares every row of
+`Srf.Data` (and `Srf.Raw_Data`) at those vertices, plus a sample of vertices
+outside the ROI, which must be 0 as `samsrf_expand_srf` leaves them. Coarse
+fits, reverse correlations, convex hulls and summary statistics must agree to
+1e-9 of the map's largest value. Fine fits (`fminsearch`, Hooke-Jeeves,
+`samsrf_fit2dprf`) count the vertices whose value differs by more than 1e-6
+relative: two optimisers that agree to rounding can still part ways after a
+1e-15 difference in one error value, so a map passes when at most 2 % of its
+vertices differ, and the differing vertices are listed. The template
+coordinates pass at 1e-7 (one float32 ulp; see the package README).
+
+`exes/samsrf/core/tests/geometry_reference.rs` checks `samsrf_georoi` on the
+first three seed vertices (`analyses/georoi.json`: vertex sets and step
+distances identical) and the Delaunay cluster, convex hull area and centroid
+on the hand-made point sets of `analyses/convexhull_cases.json` (identical).
+
 ## errfun timing
 
 One `errfun` call evaluates a gaussian pRF on the 10 000 aperture pixels,
@@ -188,3 +223,29 @@ cd exes/samsrf
 SAMSRF_EXAMPLE_DIR=/storage/scratch/samsrf-work/dl/X001 \
   cargo test --release --test errfun_timing -- --ignored --nocapture
 ```
+
+## Analysis timing
+
+`timing.mjs` runs each analysis on the example's whole V123 ROI (6587 vertices)
+in Node 24 on the committed module, one thread, with the example models
+(`example-inputs.mjs`): the Gaussian pRF grid of 36 x 30 x 24 = 25 920
+predictions, the default reverse correlation and the default connective fields.
+
+```sh
+SAMSRF_WEBAPP_EXAMPLE_DIR=/storage/scratch/samsrf-work/example node packages/samsrf/validation/timing.mjs
+```
+
+On the 16-core AMD EPYC (Rome) development host, 2026-11-02:
+
+| Analysis | Prepare | 6587 vertices | Per vertex |
+| --- | ---: | ---: | ---: |
+| `prf`, Nelder-Mead fine fit | 17.6 s (search space) | 545.5 s | 82.8 ms |
+| `prf`, Hooke-Jeeves fine fit | 18.2 s | 282.6 s | 42.9 ms |
+| `prf`, coarse fit only | 12.5 s | 51.7 s | 7.8 ms |
+| `rc`, convex hull | 0.1 s | 15.6 s | 2.4 ms |
+| `cf`, convex hull | 0.1 s | 3.9 s | 0.6 ms |
+
+Reading and preprocessing the six runs took 5.7 s. The browser splits the
+vertices over workers, so a pRF fine fit of the whole ROI takes about a minute
+and a half on eight workers plus each worker's search space.
+
