@@ -280,6 +280,9 @@ impl Fields {
     }
 
     fn prf(&self) -> Result<PrfModel> {
+        if self.has("SeedRoi") {
+            return Err(Error::NotImplemented("pRF-from-CF (SeedRoi in a pRF model)"));
+        }
         let name = self.string("Name", "Analysis name is undefined!")?;
         let prf_function = self.function("Prf_Function", "pRF function is undefined!")?;
         let param_names = self.strings("Param_Names", "Parameter names are undefined!")?;
@@ -869,5 +872,11 @@ mod tests {
         assert_eq!(AnalysisKind::parse("rc"), Some(AnalysisKind::RevCorPrf));
         assert_eq!(AnalysisKind::parse("cf"), Some(AnalysisKind::RevCorCf));
         assert_eq!(AnalysisKind::parse("fit"), None);
+    }
+
+    #[test]
+    fn a_forward_model_with_a_seed_region_is_refused() {
+        let json = r#"{"Name":"pRF","SeedRoi":"V1","Template":"benson"}"#;
+        assert_eq!(parse_model_json(AnalysisKind::Prf, json).unwrap_err(), Error::NotImplemented("pRF-from-CF (SeedRoi in a pRF model)"));
     }
 }

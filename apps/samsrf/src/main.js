@@ -333,7 +333,7 @@ function r2Values() {
 let drawing = Promise.resolve();
 /** Draw a result map on the surface with the current threshold. stage is the map's file name. */
 function showMap(stage = result?.shown) {
-  drawing = drawing.then(async () => {
+  const draw = drawing.then(async () => {
     if (!result || !stage) return;
     const name = result.mapOf.get(stage);
     if (!name) return;
@@ -346,7 +346,9 @@ function showMap(stage = result?.shown) {
     const [low, high] = style.window.map((value) => Number(value.toPrecision(3)));
     $("location").textContent = `${mapLabel(name)} · ${low} to ${high} · ${countShown(r2, level)} vertices with R² > ${level.toFixed(2)}`;
   });
-  return drawing;
+  // A failed draw rejects its own caller but must not block the draws queued after it.
+  drawing = draw.catch(() => {});
+  return draw;
 }
 
 let pendingDraw = 0;

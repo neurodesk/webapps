@@ -113,10 +113,12 @@ impl Prepared {
     }
 
     /// The reverse-correlation rows `[R^2, x0, y0, Fwhm, Beta]` of one time course, and
-    /// the profile they came from.
+    /// the profile they came from, with its sign as computed: the convex hull and the
+    /// model fit flip a negative peak themselves and restore the fitted signs.
     pub fn reverse_correlate(&self, y: &[f64]) -> ([f64; 5], Vec<f64>) {
         let model = &self.model;
-        let mut cm = self.profile(y);
+        let profile = self.profile(y);
+        let mut cm = profile.clone();
         let mut peak_sign = 1.0;
         if model.allow_negative_peaks && crate::fit_prf::nan_max(&cm).abs() < nan_min(&cm).abs() {
             for value in &mut cm {
@@ -126,15 +128,15 @@ impl Prepared {
         }
         let max = crate::fit_prf::nan_max(&cm);
         let Some(m) = cm.iter().position(|value| *value == max) else {
-            return ([0.0; 5], cm);
+            return ([0.0; 5], profile);
         };
         let above = cm.iter().filter(|value| **value > max / 2.0).count() as f64 / self.pixels as f64;
         let r = prf::pearson(y, self.regressor(m));
         if r.is_nan() {
-            return ([0.0; 5], cm);
+            return ([0.0; 5], profile);
         }
         let fwhm = (above * (model.scaling_factor * 2.0).powi(2)).sqrt();
-        ([r * r, self.xc[m], self.yc[m], fwhm, max * peak_sign], cm)
+        ([r * r, self.xc[m], self.yc[m], fwhm, max * peak_sign], profile)
     }
 
     /// The convex hull estimate: `x0`, `y0` and `sqrt(area) / (2 sqrt(2 ln 2))` replace
@@ -308,5 +310,17 @@ mod tests {
         assert_eq!(row[3], 2.0);
         let hull = prepared.convex_hull(&row, &profile);
         assert_eq!(hull, vec![0.0; 5], "one pixel spans no area, so SamSrf zeroes the column");
+    }
+
+    #[test]
+    fn a_negative_peak_keeps_the_sign_of_its_profile() {
+        let mut model = model();
+        model.allow_negative_peaks = true;
+        let prepared = Prepared::new(&model, &apertures(), &ResolvedHrf::None, 8).unwrap();
+        let y = [0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let (row, profile) = prepared.reverse_correlate(&y);
+        assert_eq!(row[4], -1.0);
+        assert_eq!((row[1], row[2]), (2.0, 2.0));
+        assert_eq!(profile[2], -1.0, "the model fit flips it again and restores the fitted signs");
     }
 }

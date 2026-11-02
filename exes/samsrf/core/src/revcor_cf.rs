@@ -225,12 +225,19 @@ impl Prepared {
         let sum_r2: f64 = r.iter().map(|value| value * value).sum();
         let mean = sum_r / n;
         let total: f64 = r.iter().map(|value| (value - mean) * (value - mean)).sum();
+        let smoothed = self.weights.is_some();
         let mut best: Option<(Vec<f64>, f64)> = None;
         for exponent in -2..=2 {
             let sigma = 10f64.powi(exponent);
             let seeds = vec![peak[0], peak[1], sigma, 1.0, 0.0];
             let mut failure: Option<Error> = None;
             let mut errfun = |p: &[f64]| match prf::call("prf_gaussian_rf", &[Value::scalar(p[0]), Value::scalar(p[1]), Value::scalar(p[2]), xy.clone()]) {
+                // Smoothing turns `corr`'s row into a column, so `Rmap - M` is elementwise;
+                // the unsmoothed row minus the column broadcasts to N x N.
+                Ok(profile) if smoothed => profile.data.iter().zip(r).map(|(value, observed)| {
+                    let residual = observed - (value * p[3] + p[4]);
+                    residual * residual
+                }).sum(),
                 Ok(profile) => {
                     // sum over i, j of (R_j - M_i)^2 with M = profile * beta + baseline.
                     let mut sum_m = 0.0;
