@@ -2,6 +2,10 @@
 
 ## 0.8.20261102
 
+### Patch Changes
+
+- Keep T1 lesion-segmentation windows inside the image instead of padding the prealigned scan to 256 cubed. Apply the same manifest-controlled correction in the browser and command line, preserve native-space mask review, and record the padding mode in command-line provenance. Add window-context regression tests and a checksummed nine-scan development comparison.
+
 ## 0.8.20261030
 
 ### Minor Changes

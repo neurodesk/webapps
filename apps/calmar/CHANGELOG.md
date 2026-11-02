@@ -4,6 +4,9 @@
 
 ### Patch Changes
 
+- Keep T1 lesion-segmentation windows inside the image instead of padding the prealigned scan to 256 cubed. Apply the same manifest-controlled correction in the browser and command line, preserve native-space mask review, and record the padding mode in command-line provenance. Add window-context regression tests and a checksummed nine-scan development comparison.
+- Updated dependencies
+  - @neurodesk/calmar@0.8.20261102
 - Keep approved and draft KB snapshots current with an hourly, tested source sync on the fork. Record the exact source commit, invalidate changed exports by checksum, and refresh both snapshots from the latest KB revision.
   - @neurodesk/calmar@0.8.20261102
 

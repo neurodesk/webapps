@@ -179,9 +179,10 @@
       "testTimeAugmentation": true,
       "preprocessing": {
         "normalize": "zscore",
+        "paddingMode": "minimum",
         "channelOrder": "xyz"
       },
-      "_comment": "Phase 2a.2 lesion-segmentation model. Exported from liamchalcroft/synthstroke-baseline (MELBA 2025; MIT) \u2014 the baseline 3D MONAI UNet for T1w input with classes background/stroke. Upstream model card uses 192^3 patches, 1mm spacing, optional TTA; CALMaR exports the same safetensors weights to a browser-bounded static-128^3 ONNX and runs sliding-window overlap 0.25 WITH 8-axis test-time augmentation. TTA was added to suppress reflection-unstable false positives (notably in-brain cerebellum/posterior-fossa clusters); on the prealigned MNI160 input it removes the cerebellar FP while preserving ~95% of the true lesion. Raising overlap (0.5) only costs recall; the upstream 192^3 graph is both worse here and not browser-shippable from the static-128 export. Forward output is 2-channel logits (background, stroke); worker collapses stroke-background logit before sigmoid/thresholding."
+      "_comment": "Phase 2a.2 lesion-segmentation model. Exported from liamchalcroft/synthstroke-baseline (MELBA 2025; MIT) \u2014 the baseline 3D MONAI UNet for T1w input with classes background/stroke. Upstream model card uses 192^3 patches, 1mm spacing, optional TTA; CALMaR exports the same safetensors weights to a browser-bounded static-128^3 ONNX and runs sliding-window overlap 0.25 WITH 8-axis test-time augmentation. TTA was added to suppress reflection-unstable false positives (notably in-brain cerebellum/posterior-fossa clusters); on the prealigned MNI160 input it removes the cerebellar FP while preserving ~95% of the true lesion. Minimum padding keeps windows inside the prealigned image (160x160x192 uses 8 windows rather than 27 on an artificial 256-cubed grid); see packages/calmar/validation/padding-report.md for the ds004884 development comparison. The static-128 export does not support 192-cubed inference. Forward output is 2-channel logits (background, stroke); worker collapses stroke-background logit before sigmoid/thresholding."
     },
     {
       "id": "lnm-deepisles-seals-fold0",

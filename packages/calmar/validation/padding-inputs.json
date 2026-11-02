@@ -1,0 +1,141 @@
+{
+  "dataset": "ds004884",
+  "version": "1.0.2",
+  "commit": "0885e5939abc8f909a175dd782369b7afc3fdd08",
+  "files": [
+    {
+      "subject": "sub-M2012",
+      "kind": "t1",
+      "dataset_path": "sub-M2012/ses-1158/anat/sub-M2012_ses-1158_acq-tfl3p2_run-3_T1w.nii.gz",
+      "sha256": "6061273a62e76398b79d763a66ab55fd90eea2242e8275fd4e6f55f64be86d0c",
+      "bytes": 3735810
+    },
+    {
+      "subject": "sub-M2012",
+      "kind": "mask",
+      "dataset_path": "derivatives/lesion_masks/sub-M2012/ses-1158/anat/sub-M2012_ses-1158_acq-spc3_run-4_T2w_desc-lesion_mask.nii.gz",
+      "sha256": "bc2a7adcd71fcc20dc2f1620da1607782e617f41dbe9ad3143f40cdef11ed86b",
+      "bytes": 18752
+    },
+    {
+      "subject": "sub-M2018",
+      "kind": "t1",
+      "dataset_path": "sub-M2018/ses-341/anat/sub-M2018_ses-341_acq-tfl3p2_run-3_T1w.nii.gz",
+      "sha256": "eb3a4b58e220fe8a62a9060000735fd8fe298a245c7fd0b02df30684f95c3e58",
+      "bytes": 3866749
+    },
+    {
+      "subject": "sub-M2018",
+      "kind": "mask",
+      "dataset_path": "derivatives/lesion_masks/sub-M2018/ses-341/anat/sub-M2018_ses-341_acq-spc3_run-4_T2w_desc-lesion_mask.nii.gz",
+      "sha256": "2efe01443aeeb82c0e4af69991b33c9637f4cf0647f299aa1df5dbf81cbcdd62",
+      "bytes": 17238
+    },
+    {
+      "subject": "sub-M2026",
+      "kind": "t1",
+      "dataset_path": "sub-M2026/ses-3098/anat/sub-M2026_ses-3098_acq-tfl3p2_run-3_T1w.nii.gz",
+      "sha256": "4b49c36abd4113b9834a3af9b6bf4c3df98b349be1f476f14e2fb2b8eaac01fb",
+      "bytes": 3716366
+    },
+    {
+      "subject": "sub-M2026",
+      "kind": "mask",
+      "dataset_path": "derivatives/lesion_masks/sub-M2026/ses-3098/anat/sub-M2026_ses-3098_acq-spc3_run-4_T2w_desc-lesion_mask.nii.gz",
+      "sha256": "e8ad12ae38b962f9c817445ce4b335dbe6f0e157e09ae644b24dcbaf00cd6de1",
+      "bytes": 11914
+    },
+    {
+      "subject": "sub-M2029",
+      "kind": "t1",
+      "dataset_path": "sub-M2029/ses-180/anat/sub-M2029_ses-180_acq-tfl3p2_run-5_T1w.nii.gz",
+      "sha256": "c970fba8e0ea455fe85ad1999d78927e157724620680f687c7f7e5b17cf79424",
+      "bytes": 3923227
+    },
+    {
+      "subject": "sub-M2029",
+      "kind": "mask",
+      "dataset_path": "derivatives/lesion_masks/sub-M2029/ses-180/anat/sub-M2029_ses-180_acq-spc3_run-4_T2w_desc-lesion_mask.nii.gz",
+      "sha256": "3aa8a8d0c9f276c7614fe1896216126f05914d325b5ffd33daa0546294cf19d9",
+      "bytes": 26885
+    },
+    {
+      "subject": "sub-M2034",
+      "kind": "t1",
+      "dataset_path": "sub-M2034/ses-1568/anat/sub-M2034_ses-1568_acq-tfl3p2_run-3_T1w.nii.gz",
+      "sha256": "ad29207bcdc4f72308145450dad7177f087055707c606740ceaf6325ab7986a3",
+      "bytes": 4187965
+    },
+    {
+      "subject": "sub-M2034",
+      "kind": "mask",
+      "dataset_path": "derivatives/lesion_masks/sub-M2034/ses-1568/anat/sub-M2034_ses-1568_acq-spc3_run-2_T2w_desc-lesion_mask.nii.gz",
+      "sha256": "a5cc6e8f5ddcd0d2e76134dd0fef53afb62ea0457fcca473a81c0b31ba3d5a16",
+      "bytes": 41994
+    },
+    {
+      "subject": "sub-M2035",
+      "kind": "t1",
+      "dataset_path": "sub-M2035/ses-4295/anat/sub-M2035_ses-4295_acq-tfl3p2_run-2_T1w.nii.gz",
+      "sha256": "d36ee32f00ab028c01e670217e086ba5d857376f147b84b8e60c8d3c70864234",
+      "bytes": 3621811
+    },
+    {
+      "subject": "sub-M2035",
+      "kind": "mask",
+      "dataset_path": "derivatives/lesion_masks/sub-M2035/ses-4295/anat/sub-M2035_ses-4295_acq-spc3_run-3_T2w_desc-lesion_mask.nii.gz",
+      "sha256": "04b7d75d2e6e11c797195b19c0fd7b2cea70928dd183a1ce73f76f6e02d421d7",
+      "bytes": 29568
+    },
+    {
+      "subject": "sub-M2036",
+      "kind": "t1",
+      "dataset_path": "sub-M2036/ses-695/anat/sub-M2036_ses-695_acq-tfl3p2_run-8_T1w.nii.gz",
+      "sha256": "6e4bc2a16ba4f088e11a83fc9785eeec74459021a72e8dc9d37b578bf586c74d",
+      "bytes": 4342647
+    },
+    {
+      "subject": "sub-M2036",
+      "kind": "mask",
+      "dataset_path": "derivatives/lesion_masks/sub-M2036/ses-695/anat/sub-M2036_ses-695_acq-spc3_run-3_T2w_desc-lesion_mask.nii.gz",
+      "sha256": "5708edd3bb54cd3f0ca8219fb95c22fc198c6f26365e1c2fb6ad61de5537c973",
+      "bytes": 24321
+    },
+    {
+      "subject": "sub-M2037",
+      "kind": "t1",
+      "dataset_path": "sub-M2037/ses-275/anat/sub-M2037_ses-275_acq-tfl3_run-3_T1w.nii.gz",
+      "sha256": "0fef7d1fd8775abe035a285842398891440310d3404e72d5c427d8bde7cba7f9",
+      "bytes": 3321971
+    },
+    {
+      "subject": "sub-M2037",
+      "kind": "mask",
+      "dataset_path": "derivatives/lesion_masks/sub-M2037/ses-275/anat/sub-M2037_ses-275_acq-spc3_run-4_T2w_desc-lesion_mask.nii.gz",
+      "sha256": "72123439c25995bbd9b010b6296dbb1e07e80f25418c267560b6fbc11d49644f",
+      "bytes": 15814
+    },
+    {
+      "subject": "sub-M2042",
+      "kind": "t1",
+      "dataset_path": "sub-M2042/ses-1953/anat/sub-M2042_ses-1953_acq-tfl3p2_run-7_T1w.nii.gz",
+      "sha256": "5a217a74673bdfc770c16ae18f7ed79c35f963cef79b923191af69a1b79cb876",
+      "bytes": 4647163
+    },
+    {
+      "subject": "sub-M2042",
+      "kind": "mask",
+      "dataset_path": "derivatives/lesion_masks/sub-M2042/ses-1953/anat/sub-M2042_ses-1953_acq-spc3_run-8_T2w_desc-lesion_mask.nii.gz",
+      "sha256": "fec38c43027222744e14365388e26fc194a61e7734724fd721fc4d2606571ae1",
+      "bytes": 28883
+    }
+  ],
+  "development_subjects": [
+    "sub-M2012",
+    "sub-M2018",
+    "sub-M2026"
+  ],
+  "selection": "First nine same-session T1/lesion-mask pairs in lexical subject order. First three exploratory; next six follow-up checks. No model-training exclusion established.",
+  "remaining_subjects_reserved": 200,
+  "training_overlap": "Not established; do not claim independence from model training"
+}
