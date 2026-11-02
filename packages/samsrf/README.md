@@ -25,13 +25,12 @@ accumulator.free();
 
 ## Status
 
-This is phase 1 of the port: the file readers and writers, apertures, model
-specifications, the MATLAB expression subset that model files use, the pRF
-profile functions, the fitting error function, HRFs, time-series
-preprocessing and GIFTI export. Phase 2 adds the three analyses
-(`samsrf_fit_prf`, `samsrf_revcor_prf`, `samsrf_revcor_cf`). Their entry
-points, `createJob` and `mergePartials`, already have their final signatures.
-They validate their input and then throw `Error('... is not implemented yet (phase 2)')`.
+The port covers `SamSrfAnalysis` for GIfTI input: the file readers and
+writers, apertures, model specifications, the MATLAB expression subset that
+model files use, the pRF profile functions, HRFs, time-series preprocessing,
+GIFTI export, and the three analyses (`samsrf_fit_prf`, `samsrf_revcor_prf`,
+`samsrf_revcor_cf`) behind `createJob`. The options each analysis does not
+support are listed under [Analyses](#analyses).
 
 ## API
 
@@ -140,15 +139,48 @@ a u32 count, that many u32 pixel indices and that many f64 values.
 | `writeGiftiMap(values) → Uint8Array` | One float32 per-vertex map as SPM's `gifti/save` writes it. |
 | `polarAndEccentricity({ values, vertices, data }) → { polar, eccentricity } \| null` | Polar angle in degrees and eccentricity from rows 2 and 3 (`x0`, `y0`), eccentricity 0 where row 1 (`R^2`) is 0; `null` without an `x0` row. |
 
-### Analyses (phase 2)
+### Analyses
 
 | Signature | Description |
 | --- | --- |
-| `createJob(spec) → Job` | Prepares an analysis. `spec` is `{ kind: 'prf' \| 'rc' \| 'cf', model: string, apertures?: Uint8Array /* Apertures.serialize() */, hrf?: Float64Array \| 'fit' \| 'none', data: { volumes, vertices: Uint32Array, courses: Float64Array /* vertex-major */ }, noiseCeiling?: Float64Array, seed?: { vertices: Uint32Array, template: { values: string[], data: Float64Array } }, surface?: { vertices: Float64Array, faces: Uint32Array }, totalVertices: number }`. |
-| `job.vertexCount` | The number of time courses in `spec.data`. |
-| `job.run(start, end, onProgress?) → Partial` | Analyses courses `[start, end)` and returns a self-describing `Uint8Array` to `postMessage`. |
+| `createJob(spec, onProgress?) → Job` | Prepares an analysis (for `prf`, the search space: `onProgress(done, total)` reports grid points). `spec` is `{ kind: 'prf' \| 'rc' \| 'cf', model: string, apertures?: Uint8Array /* Apertures.serialize() */, hrf?: Float64Array \| 'fit' \| 'none', data: { volumes, vertices: Uint32Array, courses: Float64Array /* vertex-major */ }, roi?: Uint32Array, noiseCeiling?: Float64Array, globalSignal?: Float64Array, seed?: { vertices: Uint32Array, template: { values: string[], vertices, data: Float64Array } }, surface?: { vertices: Float64Array, faces: Uint32Array }, area?: Float64Array, seedFineFit?: { values, data }, totalVertices: number }`. `data.vertices` are the vertices with a time course (0-based, any order); `roi` is `mver` in label order (default: every kept vertex) and must be a subset of them; `noiseCeiling` is per kept vertex; `globalSignal` is per volume (`cf` with `Global_Signal_Correction`); `seed` (cf) is the seed label in file order and the template maps over every vertex (`readBensonTemplate`); `surface` is needed for `Smoothing`; `area` (cf) is `Srf.Area` over every vertex; `seedFineFit` (prf) replaces the coarse fit with `R^2` and parameter rows over every vertex. `hrf` overrides the model's HRF, for file-backed kernels. |
+| `job.vertexCount` | `length(mver)`: the vertices the job analyses. |
+| `job.analysed` | Those vertices, in label order. |
+| `job.values` | `Srf.Values` of the per-vertex rows (before the noise ceiling and `nR^2`). |
+| `job.modelName`, `job.outSuffix` | SamSrf's output name is `${hemisphere}_${modelName}${outSuffix}` (`_CrsFit`, `_Css`, `_Rcp`). |
+| `job.run(start, end, onProgress?) → Uint8Array` | Analyses positions `[start, end)` of `analysed` and returns a self-describing partial result to `postMessage`; `onProgress(done, count)`. |
+| `job.merge(partials) → { maps, raw, analysed }` | Merges partials that cover `[0, vertexCount)` exactly once into `Srf.Data` over every vertex (`maps`), with the `Noise Ceiling` row and, for `prf`, `samsrf_normr2` applied; `raw` is `Srf.Raw_Data` (`rc`) or `null`; `analysed` the sorted analysed vertices (`null` for all). |
+| `mergePartials(job, partials)` | `job.merge(partials)`. |
 | `job.free()` | Releases the job. |
-| `mergePartials(partials) → { maps: { values, vertices, data }, raw, analysed }` | Merges the partials of one job into the maps of every vertex; `raw` holds SamSrf's `Raw_Data` where it keeps one and `analysed` the analysed vertices (`null` for all). |
+| `readBensonTemplate(bytes, hemisphere = 'lh') → { values, vertices, data }` | `samsrf_benson2srf` on a Benson GIFTI (polar angle, eccentricity, ROI arrays): the template maps `R^2`, `x0`, `y0`, `Sigma` (NaN), `ROI`, computed in single precision as MATLAB does on the GIFTI's `single` data; `'rh'` flips `x0`. |
+
+What each analysis implements, and the SamSrf options the job refuses with
+`... is not supported by this port`:
+
+- **`prf`** (`samsrf_fit_prf`): `prf_generate_searchspace` (including its
+  `ndgrid(Param2, Param1, ...)` order and `Polar_Search_Space`), the HRF
+  convolution with `Downsample_Predictions`, the coarse fit (`corr` with
+  `Only_Positive_Coarse_Fits`, `Coarse_Fit_Percentile`, `Coarse_Fit_Only` with
+  its betas), the fine fit with `fminsearch` (`Nelder_Mead_Tolerance`) or
+  `samsrf_hookejeeves` (`Hooke_Jeeves_Steps`, scaled by `Scaling_Factor`),
+  `Hrf = Inf` (the five HRF parameters appended, seeded with SPM's canonical),
+  `Compressive_Nonlinearity`, `Fine_Fit_Threshold`, the bad-fit filter with
+  `Only_Positive` 1 and -1, `Replace_Bad_Fits`, `Aperture_Mean_Response`,
+  `Noise_Ceiling_Threshold`, `Seed_Fine_Fit` (as maps), the betas, the noise
+  ceiling row and `samsrf_normr2`. Not supported: `Smoothed_Coarse_Fit`,
+  vertex-wise HRF files and the pRF-from-CF analysis (`SeedRoi` in a pRF model).
+- **`rc`** (`samsrf_revcor_prf`): the convolved pixel regressors, the profile
+  `[Y 1] \ X`, peak, `Fwhm`, `Beta`, `R^2`, `Allow_Negative_Peaks`, the convex
+  hull (`Prf_Function = 0`, `Convex_Hull_Threshold`) and the 2D model fit
+  (`samsrf_fit2dprf` with `SeedPar_Function`, `R2_Threshold`, Nelder-Mead or
+  Hooke-Jeeves). Not supported: `Micro_Probing`, `Save_Rmaps` (the `Rdim`
+  downsampling only feeds the saved profiles) and a model fit on non-square
+  apertures.
+- **`cf`** (`samsrf_revcor_cf`): `Global_Signal_Correction`, the correlation
+  with the seed courses, `Smoothing` (`samsrf_geomatrix` on the surface),
+  `Fwhm`, `Vx` and `Fit_pRF` 0 (convex hull of the suprathreshold cluster on
+  the Delaunay triangulation of the template coordinates), -1 (summary
+  statistics) and 1 (2D Gaussian fit). Not supported: `Save_Rmaps`.
 
 ## Sharding an analysis in a browser
 
@@ -160,11 +192,12 @@ between them:
    `apertures: apertures.serialize()`.
 2. It starts N workers and posts the same `spec` to each. Typed arrays are
    structured-cloneable, so the message needs no conversion.
-3. Each worker calls `init()`, `createJob(spec)` and `job.run(start, end, onProgress)`
-   on its own disjoint range of `[0, job.vertexCount)`, posts the returned
-   partial back and calls `job.free()`.
-4. The main thread calls `mergePartials` on all partials, then `exportGiis` on
-   the merged maps.
+3. Each worker calls `init()`, `createJob(spec)` (each worker generates the
+   search space itself: about 10 s for the example grid) and
+   `job.run(start, end, onProgress)` on disjoint ranges of
+   `[0, job.vertexCount)`, posting each returned partial back.
+4. One worker calls `job.merge` on all partials, then `exportGiis` on the
+   merged maps with the prefix `${hemisphere}_${job.modelName}${job.outSuffix}`.
 
 ## Node helpers
 
@@ -235,3 +268,32 @@ reference is produced.
 - **Old-school HRF.** An `hrf_*` file is turned into one kernel. Since
   26/08/2026, `samsrf_fit_prf`'s fine fit would mistake that kernel's row
   vector for vertex-wise HRFs.
+- **Correlations and regressions.** `corr` is a dot product of centred,
+  unit-norm courses and `[1 X] \ Y` solves the normal equations; MATLAB
+  uses QR. They agree to rounding. A rank-deficient GLM (a constant
+  prediction) follows MATLAB's pivoting rule: the column with the larger norm
+  keeps its coefficient and the other is 0.
+- **Noise ceiling outside the kept vertices.** SamSrf computes the noise
+  ceiling for every vertex; the job only has it for the vertices with a time
+  course. The `Noise Ceiling` row is 0 elsewhere and `nR^2` is 0 there (SamSrf
+  has `0 / ceiling`, also 0 unless the ceiling is 0 or NaN).
+- **`fminsearch` stop.** SamSrf stops a fine fit when its `OutputFcn` sees a
+  non-finite best value; that can only be the first value (NaN sorts last), and
+  the port does the same. MATLAB's exit flag for that case is not reproduced;
+  SamSrf does not read it.
+- **Degenerate geometry.** Where MATLAB's `delaunay` or `convexHull` would
+  error on fewer than three non-collinear points, the port gives the empty
+  `polyshape` result SamSrf's own `catch` or `polyshape` produces: a zeroed
+  column in `rc`, area 0 and NaN centroid in `cf`. A seed region whose template
+  coordinates are all collinear makes `samsrf_revcor_cf` fail in MATLAB; here
+  the cluster is the peak alone.
+- **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
+  SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
+  vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so
+  sums over every pair of seed vertices; `Vx` is the 1-based MATLAB index of
+  the peak seed vertex. The template coordinates are single precision
+  (MATLAB computes them on the GIFTI's `single` data) and every later step is
+  f64 here where SamSrf stays in `single`.
+- **`samsrf_fit2dprf` seeds.** Only the first `n - 2` seed parameters are
+  divided by the scaling factor, as the MATLAB loop bound (written for a vector
+  that does not yet hold the two betas) does.

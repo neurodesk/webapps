@@ -86,6 +86,109 @@ export class Apertures {
 if (Symbol.dispose) Apertures.prototype[Symbol.dispose] = Apertures.prototype.free;
 
 /**
+ * One prepared analysis; see packages/samsrf/README.md for `createJob`.
+ */
+export class Job {
+    static __wrap(ptr) {
+        const obj = Object.create(Job.prototype);
+        obj.__wbg_ptr = ptr;
+        JobFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        JobFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_job_free(ptr, 0);
+    }
+    /**
+     * The analysed vertices in label order.
+     * @returns {Uint32Array}
+     */
+    analysed() {
+        const ret = wasm.job_analysed(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {Array<any>} partials
+     * @returns {any}
+     */
+    merge(partials) {
+        const ret = wasm.job_merge(this.__wbg_ptr, partials);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {string}
+     */
+    get modelName() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.job_modelName(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * @returns {string}
+     */
+    get outSuffix() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.job_outSuffix(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * @param {number} start
+     * @param {number} end
+     * @param {Function | null} [progress]
+     * @returns {Uint8Array}
+     */
+    run(start, end, progress) {
+        const val1 = +start;
+        const val2 = +end;
+        const ret = wasm.job_run(this.__wbg_ptr, val1, val2, isLikeNone(progress) ? 0 : addToExternrefTable0(progress));
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v3;
+    }
+    /**
+     * @returns {Array<any>}
+     */
+    values() {
+        const ret = wasm.job_values(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get vertexCount() {
+        const ret = wasm.job_vertexCount(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+}
+if (Symbol.dispose) Job.prototype[Symbol.dispose] = Job.prototype.free;
+
+/**
  * A functional run in wasm memory: float32, vertex-major.
  */
 export class Run {
@@ -203,6 +306,99 @@ export class RunAccumulator {
     }
 }
 if (Symbol.dispose) RunAccumulator.prototype[Symbol.dispose] = RunAccumulator.prototype.free;
+
+/**
+ * @param {string} kind
+ * @param {string} model_json
+ * @param {Uint8Array | number[] | null | undefined} apertures
+ * @param {string} hrf_mode
+ * @param {Float64Array | number[] | null | undefined} hrf_kernel
+ * @param {number} volumes
+ * @param {Uint32Array | number[]} kept
+ * @param {Float64Array | number[]} courses
+ * @param {Uint32Array | number[] | null | undefined} roi
+ * @param {Float64Array | number[] | null | undefined} noise_ceiling
+ * @param {Float64Array | number[] | null | undefined} global_signal
+ * @param {Uint32Array | number[] | null | undefined} seed_vertices
+ * @param {string[] | null | undefined} template_values
+ * @param {Float64Array | number[] | null | undefined} template_data
+ * @param {Float64Array | number[] | null | undefined} surface_vertices
+ * @param {Uint32Array | number[] | null | undefined} surface_faces
+ * @param {Float64Array | number[] | null | undefined} area
+ * @param {string[] | null | undefined} seed_fine_fit_values
+ * @param {Float64Array | number[] | null | undefined} seed_fine_fit_data
+ * @param {number} total_vertices
+ * @param {Function | null} [progress]
+ * @returns {Job}
+ */
+export function createJob(kind, model_json, apertures, hrf_mode, hrf_kernel, volumes, kept, courses, roi, noise_ceiling, global_signal, seed_vertices, template_values, template_data, surface_vertices, surface_faces, area, seed_fine_fit_values, seed_fine_fit_data, total_vertices, progress) {
+    const val19 = +volumes;
+    const val20 = +total_vertices;
+    let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, ptr6, len6, ptr7, len7, ptr8, len8, ptr9, len9, ptr10, len10, ptr11, len11, ptr12, len12, ptr13, len13, ptr14, len14, ptr15, len15, ptr16, len16, ptr17, len17;
+    try {
+        ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = passStringToWasm0(model_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len1 = WASM_VECTOR_LEN;
+        ptr2 = isLikeNone(apertures) ? 0 : passArray8ToWasm0(apertures, wasm.__wbindgen_malloc);
+        len2 = WASM_VECTOR_LEN;
+        ptr3 = passStringToWasm0(hrf_mode, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len3 = WASM_VECTOR_LEN;
+        ptr4 = isLikeNone(hrf_kernel) ? 0 : passArrayF64ToWasm0(hrf_kernel, wasm.__wbindgen_malloc);
+        len4 = WASM_VECTOR_LEN;
+        ptr5 = passArray32ToWasm0(kept, wasm.__wbindgen_malloc);
+        len5 = WASM_VECTOR_LEN;
+        ptr6 = passArrayF64ToWasm0(courses, wasm.__wbindgen_malloc);
+        len6 = WASM_VECTOR_LEN;
+        ptr7 = isLikeNone(roi) ? 0 : passArray32ToWasm0(roi, wasm.__wbindgen_malloc);
+        len7 = WASM_VECTOR_LEN;
+        ptr8 = isLikeNone(noise_ceiling) ? 0 : passArrayF64ToWasm0(noise_ceiling, wasm.__wbindgen_malloc);
+        len8 = WASM_VECTOR_LEN;
+        ptr9 = isLikeNone(global_signal) ? 0 : passArrayF64ToWasm0(global_signal, wasm.__wbindgen_malloc);
+        len9 = WASM_VECTOR_LEN;
+        ptr10 = isLikeNone(seed_vertices) ? 0 : passArray32ToWasm0(seed_vertices, wasm.__wbindgen_malloc);
+        len10 = WASM_VECTOR_LEN;
+        ptr11 = isLikeNone(template_values) ? 0 : passArrayJsValueToWasm0(template_values, wasm.__wbindgen_malloc);
+        len11 = WASM_VECTOR_LEN;
+        ptr12 = isLikeNone(template_data) ? 0 : passArrayF64ToWasm0(template_data, wasm.__wbindgen_malloc);
+        len12 = WASM_VECTOR_LEN;
+        ptr13 = isLikeNone(surface_vertices) ? 0 : passArrayF64ToWasm0(surface_vertices, wasm.__wbindgen_malloc);
+        len13 = WASM_VECTOR_LEN;
+        ptr14 = isLikeNone(surface_faces) ? 0 : passArray32ToWasm0(surface_faces, wasm.__wbindgen_malloc);
+        len14 = WASM_VECTOR_LEN;
+        ptr15 = isLikeNone(area) ? 0 : passArrayF64ToWasm0(area, wasm.__wbindgen_malloc);
+        len15 = WASM_VECTOR_LEN;
+        ptr16 = isLikeNone(seed_fine_fit_values) ? 0 : passArrayJsValueToWasm0(seed_fine_fit_values, wasm.__wbindgen_malloc);
+        len16 = WASM_VECTOR_LEN;
+        ptr17 = isLikeNone(seed_fine_fit_data) ? 0 : passArrayF64ToWasm0(seed_fine_fit_data, wasm.__wbindgen_malloc);
+        len17 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr17) { wasm.__wbindgen_free(ptr17, len17 * 8, 8); }
+        if (ptr16) { wasm.__externref_drop_slice(ptr16, len16); wasm.__wbindgen_free(ptr16, len16 * 4, 4); }
+        if (ptr15) { wasm.__wbindgen_free(ptr15, len15 * 8, 8); }
+        if (ptr14) { wasm.__wbindgen_free(ptr14, len14 * 4, 4); }
+        if (ptr13) { wasm.__wbindgen_free(ptr13, len13 * 8, 8); }
+        if (ptr12) { wasm.__wbindgen_free(ptr12, len12 * 8, 8); }
+        if (ptr11) { wasm.__externref_drop_slice(ptr11, len11); wasm.__wbindgen_free(ptr11, len11 * 4, 4); }
+        if (ptr10) { wasm.__wbindgen_free(ptr10, len10 * 4, 4); }
+        if (ptr9) { wasm.__wbindgen_free(ptr9, len9 * 8, 8); }
+        if (ptr8) { wasm.__wbindgen_free(ptr8, len8 * 8, 8); }
+        if (ptr7) { wasm.__wbindgen_free(ptr7, len7 * 4, 4); }
+        if (ptr6) { wasm.__wbindgen_free(ptr6, len6 * 8, 8); }
+        if (ptr5) { wasm.__wbindgen_free(ptr5, len5 * 4, 4); }
+        if (ptr4) { wasm.__wbindgen_free(ptr4, len4 * 8, 8); }
+        if (ptr3) { wasm.__wbindgen_free(ptr3, len3 * 1, 1); }
+        if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
+        if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+        throw e;
+    }
+    const ret = wasm.createJob(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, val19, ptr5, len5, ptr6, len6, ptr7, len7, ptr8, len8, ptr9, len9, ptr10, len10, ptr11, len11, ptr12, len12, ptr13, len13, ptr14, len14, ptr15, len15, ptr16, len16, ptr17, len17, val20, isLikeNone(progress) ? 0 : addToExternrefTable0(progress));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return Job.__wrap(ret[0]);
+}
 
 /**
  * @param {Float64Array | number[]} x
@@ -696,6 +892,22 @@ export function readApertures(bytes, format) {
 
 /**
  * @param {Uint8Array | number[]} bytes
+ * @param {boolean} right_hemisphere
+ * @returns {any}
+ */
+export function readBensonTemplate(bytes, right_hemisphere) {
+    const val2 = +right_hemisphere;
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.readBensonTemplate(ptr0, len0, val2);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {Uint8Array | number[]} bytes
  * @returns {Float64Array}
  */
 export function readFreeSurferCurv(bytes) {
@@ -908,6 +1120,26 @@ function __wbg_get_imports() {
         __wbg___wbindgen_throw_4c88d8bf264fd984: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
+        __wbg_call_fc92fee6137d452d: function() { return handleError(function (arg0, arg1, arg2, arg3) {
+            const ret = arg0.call(arg1, arg2, arg3);
+            return ret;
+        }, arguments); },
+        __wbg_get_unchecked_e6325ad374eff861: function(arg0, arg1) {
+            const ret = arg0[arg1 >>> 0];
+            return ret;
+        },
+        __wbg_length_186163212ffe79c3: function(arg0) {
+            const ret = arg0.length;
+            return ret;
+        },
+        __wbg_length_b03a0fabb109b1e9: function(arg0) {
+            const ret = arg0.length;
+            return ret;
+        },
+        __wbg_new_13de428334042d26: function(arg0) {
+            const ret = new Uint8Array(arg0);
+            return ret;
+        },
         __wbg_new_37eb45aaf5eeb820: function() {
             const ret = new Array();
             return ret;
@@ -931,6 +1163,9 @@ function __wbg_get_imports() {
         __wbg_new_from_slice_b8daf545a41c6aa0: function(arg0, arg1) {
             const ret = new Uint8Array(getArrayU8FromWasm0(arg0, arg1));
             return ret;
+        },
+        __wbg_prototypesetcall_13162965d1fe7aa3: function(arg0, arg1, arg2) {
+            Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
         },
         __wbg_push_c9f4893fc209f768: function(arg0, arg1) {
             const ret = arg0.push(arg1);
@@ -968,6 +1203,9 @@ function __wbg_get_imports() {
 const AperturesFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_apertures_free(ptr, 1));
+const JobFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_job_free(ptr, 1));
 const RunFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_run_free(ptr, 1));

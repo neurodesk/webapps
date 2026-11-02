@@ -199,15 +199,19 @@ function isFloat64(value) {
   return value instanceof Float64Array;
 }
 
+function checkMaps(name, maps, totalVertices) {
+  check(Array.isArray(maps?.values) && maps.values.every((value) => typeof value === 'string'), `${name}.values must be an array of row names`);
+  check(isFloat64(maps.data) && maps.data.length === maps.values.length * totalVertices, `${name}.data must hold values.length x totalVertices values`);
+}
+
 function validateJobSpec(spec) {
-  const { kind, model, apertures, hrf: hrfInput, data, noiseCeiling: ceiling, seed, surface, totalVertices } = spec ?? {};
+  const { kind, model, apertures, hrf: hrfInput, data, roi, noiseCeiling: ceiling, globalSignal, seed, surface, area, seedFineFit, totalVertices } = spec ?? {};
   check(ANALYSES.includes(kind), `kind must be one of ${ANALYSES.join(', ')}`);
   check(typeof model === 'string', 'model must be the model JSON text');
   parseModel(kind, model);
   check(Number.isInteger(totalVertices) && totalVertices > 0, 'totalVertices must be a positive integer');
   if (apertures !== undefined) {
     check(apertures instanceof Uint8Array, 'apertures must be the bytes of Apertures.serialize()');
-    core.Apertures.deserialize(apertures).free();
   }
   if (hrfInput !== undefined) {
     check(isFloat64(hrfInput) || hrfInput === 'fit' || hrfInput === 'none', "hrf must be a Float64Array kernel, 'fit' or 'none'");
@@ -217,29 +221,116 @@ function validateJobSpec(spec) {
   check(isUint32(vertices), 'data.vertices must be a Uint32Array');
   check(isFloat64(courses) && courses.length === volumes * vertices.length, 'data.courses must be a Float64Array of volumes x vertices values');
   check(vertices.every((vertex) => vertex < totalVertices), 'data.vertices must be below totalVertices');
-  if (ceiling !== undefined) {
+  if (roi !== undefined && roi !== null) {
+    check(isUint32(roi), 'roi must be a Uint32Array');
+  }
+  if (ceiling !== undefined && ceiling !== null) {
     check(isFloat64(ceiling) && ceiling.length === vertices.length, 'noiseCeiling must be a Float64Array with one value per vertex');
   }
-  if (seed !== undefined) {
-    const values = seed.template?.values;
-    check(isUint32(seed.vertices), 'seed.vertices must be a Uint32Array');
-    check(Array.isArray(values) && isFloat64(seed.template.data), 'seed.template must be { values: string[], data: Float64Array }');
-    check(seed.template.data.length === values.length * totalVertices, 'seed.template.data must hold values.length x totalVertices values');
+  if (globalSignal !== undefined && globalSignal !== null) {
+    check(isFloat64(globalSignal) && globalSignal.length === volumes, 'globalSignal must be a Float64Array with one value per volume');
   }
-  if (surface !== undefined) {
+  if (seed !== undefined && seed !== null) {
+    check(isUint32(seed.vertices), 'seed.vertices must be a Uint32Array');
+    checkMaps('seed.template', seed.template, totalVertices);
+  }
+  if (surface !== undefined && surface !== null) {
     check(isFloat64(surface.vertices) && surface.vertices.length === 3 * totalVertices, 'surface.vertices must be a Float64Array of 3 x totalVertices values');
     check(isUint32(surface.faces) && surface.faces.length % 3 === 0, 'surface.faces must be a Uint32Array of vertex triples');
   }
-}
-
-export function createJob(spec) {
-  validateJobSpec(spec);
-  throw new Error('createJob is not implemented yet (phase 2)');
-}
-
-export function mergePartials(partials) {
-  if (!Array.isArray(partials) || !partials.every((partial) => partial instanceof Uint8Array)) {
-    throw new Error('mergePartials: partials must be an array of the Uint8Arrays Job.run returns');
+  if (area !== undefined && area !== null) {
+    check(isFloat64(area) && area.length === totalVertices, 'area must be a Float64Array with one value per vertex');
   }
-  throw new Error('mergePartials is not implemented yet (phase 2)');
+  if (seedFineFit !== undefined && seedFineFit !== null) {
+    checkMaps('seedFineFit', seedFineFit, totalVertices);
+  }
+}
+
+/** A prepared analysis; `run` and `merge` are on the handle, `free` releases it. */
+export class Job {
+  #inner;
+
+  constructor(inner) {
+    this.#inner = inner;
+  }
+
+  get vertexCount() {
+    return this.#inner.vertexCount;
+  }
+
+  get analysed() {
+    return this.#inner.analysed();
+  }
+
+  get values() {
+    return this.#inner.values();
+  }
+
+  get outSuffix() {
+    return this.#inner.outSuffix;
+  }
+
+  get modelName() {
+    return this.#inner.modelName;
+  }
+
+  run(start, end, onProgress) {
+    return this.#inner.run(start, end, onProgress ?? undefined);
+  }
+
+  merge(partials) {
+    if (!Array.isArray(partials) || !partials.every((partial) => partial instanceof Uint8Array)) {
+      throw new Error('merge: partials must be an array of the Uint8Arrays Job.run returns');
+    }
+    return this.#inner.merge(partials);
+  }
+
+  free() {
+    this.#inner.free();
+  }
+}
+
+export function createJob(spec, onProgress) {
+  validateJobSpec(spec);
+  const { kind, model, apertures, hrf: hrfInput, data, roi, noiseCeiling: ceiling, globalSignal, seed, surface, area, seedFineFit, totalVertices } = spec;
+  let hrfMode = 'model';
+  let hrfKernel;
+  if (hrfInput === 'fit' || hrfInput === 'none') {
+    hrfMode = hrfInput;
+  } else if (hrfInput !== undefined) {
+    hrfMode = 'kernel';
+    hrfKernel = hrfInput;
+  }
+  const inner = core.createJob(
+    kind,
+    model,
+    apertures ?? undefined,
+    hrfMode,
+    hrfKernel,
+    data.volumes,
+    data.vertices,
+    data.courses,
+    roi ?? undefined,
+    ceiling ?? undefined,
+    globalSignal ?? undefined,
+    seed?.vertices ?? undefined,
+    seed?.template.values ?? undefined,
+    seed?.template.data ?? undefined,
+    surface?.vertices ?? undefined,
+    surface?.faces ?? undefined,
+    area ?? undefined,
+    seedFineFit?.values ?? undefined,
+    seedFineFit?.data ?? undefined,
+    totalVertices,
+    onProgress ?? undefined,
+  );
+  return new Job(inner);
+}
+
+export function mergePartials(job, partials) {
+  return job.merge(partials);
+}
+
+export function readBensonTemplate(bytes, hemisphere = 'lh') {
+  return core.readBensonTemplate(bytes, hemisphere === 'rh');
 }

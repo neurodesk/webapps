@@ -424,17 +424,34 @@ function jobSpec() {
   };
 }
 
-test('createJob validates its spec and then reports phase 2', () => {
-  assert.throws(() => samsrf.createJob(jobSpec()), /^Error: createJob is not implemented yet \(phase 2\)$/);
+test('createJob validates its spec and runs a tiny coarse-only fit', () => {
   assert.throws(() => samsrf.createJob({ ...jobSpec(), kind: 'glm' }), /kind must be one of prf, rc, cf/);
   assert.throws(() => samsrf.createJob({ ...jobSpec(), model: '{}' }), /Analysis name is undefined/);
   assert.throws(() => samsrf.createJob({ ...jobSpec(), apertures: new Uint8Array(8) }), /apertures/);
   const short = jobSpec();
   short.data.courses = new Float64Array(5);
   assert.throws(() => samsrf.createJob(short), /data.courses/);
-});
-
-test('mergePartials reports phase 2', () => {
-  assert.throws(() => samsrf.mergePartials([new Uint8Array(1)]), /^Error: mergePartials is not implemented yet \(phase 2\)$/);
-  assert.throws(() => samsrf.mergePartials('x'), /array of the Uint8Arrays/);
+  const spec = jobSpec();
+  spec.model = JSON.stringify({ ...JSON.parse(spec.model), Coarse_Fit_Only: 1, Param1: [0, 90], Param2: [0.5], Param3: [0.5, 1] });
+  spec.data.courses = Float64Array.of(1, 2, 3, 3, 1, 2);
+  const job = samsrf.createJob(spec);
+  try {
+    assert.equal(job.vertexCount, 2);
+    assert.deepEqual(job.values, ['R^2', 'x0', 'y0', 'Sigma', 'Beta', 'Baseline']);
+    assert.equal(job.outSuffix, '_CrsFit');
+    assert.equal(job.modelName, 'pRF_Gaussian');
+    const first = job.run(0, 1);
+    const second = job.run(1, 2);
+    assert.ok(first instanceof Uint8Array);
+    const { maps, raw, analysed } = samsrf.mergePartials(job, [second, first]);
+    assert.deepEqual(maps.values, ['R^2', 'x0', 'y0', 'Sigma', 'Beta', 'Baseline']);
+    assert.equal(maps.data.length, 6 * 4);
+    assert.equal(raw, null);
+    assert.deepEqual(Array.from(analysed), [0, 2]);
+    assert.throws(() => job.merge([first]), /cover 1 of 2/);
+    assert.throws(() => samsrf.mergePartials(job, 'x'), /array of the Uint8Arrays/);
+    assert.throws(() => job.merge([new Uint8Array(1)]), /not a SamSrf partial/);
+  } finally {
+    job.free();
+  }
 });

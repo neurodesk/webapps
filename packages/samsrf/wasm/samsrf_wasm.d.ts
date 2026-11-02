@@ -18,6 +18,25 @@ export class Apertures {
 }
 
 /**
+ * One prepared analysis; see packages/samsrf/README.md for `createJob`.
+ */
+export class Job {
+    private constructor();
+    free(): void;
+    [Symbol.dispose](): void;
+    /**
+     * The analysed vertices in label order.
+     */
+    analysed(): Uint32Array;
+    merge(partials: Array<any>): any;
+    run(start: number, end: number, progress?: Function | null): Uint8Array;
+    values(): Array<any>;
+    readonly modelName: string;
+    readonly outSuffix: string;
+    readonly vertexCount: number;
+}
+
+/**
  * A functional run in wasm memory: float32, vertex-major.
  */
 export class Run {
@@ -39,6 +58,8 @@ export class RunAccumulator {
     constructor(total_vertices: number, keep: Uint32Array | number[] | null | undefined, normalise: string, combine: string, noise_ceiling: boolean, global_signal: boolean);
     pushRun(run: Run): void;
 }
+
+export function createJob(kind: string, model_json: string, apertures: Uint8Array | number[] | null | undefined, hrf_mode: string, hrf_kernel: Float64Array | number[] | null | undefined, volumes: number, kept: Uint32Array | number[], courses: Float64Array | number[], roi: Uint32Array | number[] | null | undefined, noise_ceiling: Float64Array | number[] | null | undefined, global_signal: Float64Array | number[] | null | undefined, seed_vertices: Uint32Array | number[] | null | undefined, template_values: string[] | null | undefined, template_data: Float64Array | number[] | null | undefined, surface_vertices: Float64Array | number[] | null | undefined, surface_faces: Uint32Array | number[] | null | undefined, area: Float64Array | number[] | null | undefined, seed_fine_fit_values: string[] | null | undefined, seed_fine_fit_data: Float64Array | number[] | null | undefined, total_vertices: number, progress?: Function | null): Job;
 
 export function detrend(x: Float64Array | number[]): Float64Array;
 
@@ -93,6 +114,8 @@ export function readAnatomy(white: Uint8Array | number[], pial: Uint8Array | num
 
 export function readApertures(bytes: Uint8Array | number[], format: string): Apertures;
 
+export function readBensonTemplate(bytes: Uint8Array | number[], right_hemisphere: boolean): any;
+
 export function readFreeSurferCurv(bytes: Uint8Array | number[]): Float64Array;
 
 export function readFreeSurferLabel(bytes: Uint8Array | number[]): any;
@@ -122,6 +145,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_apertures_free: (a: number, b: number) => void;
+    readonly __wbg_job_free: (a: number, b: number) => void;
     readonly __wbg_run_free: (a: number, b: number) => void;
     readonly __wbg_runaccumulator_free: (a: number, b: number) => void;
     readonly apertures_deserialize: (a: number, b: number) => [number, number, number];
@@ -131,6 +155,7 @@ export interface InitOutput {
     readonly apertures_toDense: (a: number) => [number, number];
     readonly apertures_volumes: (a: number) => number;
     readonly apertures_width: (a: number) => number;
+    readonly createJob: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: number, w: number, x: number, y: number, z: number, a1: number, b1: number, c1: number, d1: number, e1: number, f1: number, g1: number, h1: number, i1: number, j1: number, k1: number, l1: number, m1: number) => [number, number, number];
     readonly detrend: (a: number, b: number) => [number, number];
     readonly errfun: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
     readonly evaluateExpression: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
@@ -141,6 +166,13 @@ export interface InitOutput {
     readonly hrfOldSchool: (a: number, b: number, c: number) => [number, number, number, number];
     readonly hrfResolve: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly hrfSpmCanonical: (a: number) => [number, number];
+    readonly job_analysed: (a: number) => any;
+    readonly job_merge: (a: number, b: any) => [number, number, number];
+    readonly job_modelName: (a: number) => [number, number];
+    readonly job_outSuffix: (a: number) => [number, number];
+    readonly job_run: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly job_values: (a: number) => any;
+    readonly job_vertexCount: (a: number) => number;
     readonly noiseCeiling: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly parseModel: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly pearson: (a: number, b: number, c: number, d: number) => number;
@@ -150,6 +182,7 @@ export interface InitOutput {
     readonly prfProfileXy: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly readAnatomy: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number, number];
     readonly readApertures: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly readBensonTemplate: (a: number, b: number, c: number) => [number, number, number];
     readonly readFreeSurferCurv: (a: number, b: number) => [number, number, number, number];
     readonly readFreeSurferLabel: (a: number, b: number) => [number, number, number];
     readonly readFreeSurferSurface: (a: number, b: number) => [number, number, number];

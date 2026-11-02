@@ -11,7 +11,7 @@ use samsrf_core::model::{AnalysisKind, HrfSpec};
 use samsrf_core::preprocess::{self, Combine, Normalise, PreprocessOptions, Preprocessed};
 use samsrf_core::surface::{Faces, Surface};
 use samsrf_core::timeseries::{RawRun, TimeSeries, VertexSelection};
-use samsrf_core::{export, freesurfer, gif_aps, gifti, hrf, mapset, mat, model, nifti_aps, prf, Error};
+use samsrf_core::{export, freesurfer, gif_aps, gifti, hrf, job, mapset, mat, model, nifti_aps, prf, template, Error};
 use wasm_bindgen::prelude::*;
 
 type Result<T> = std::result::Result<T, JsError>;
@@ -664,4 +664,152 @@ pub fn polar_and_eccentricity(values: Vec<String>, vertices: usize, data: Vec<f6
     Ok(export::polar_and_eccentricity(&maps).map_or(JsValue::NULL, |(polar, eccentricity)| {
         object(vec![("polar", f64s(&polar)), ("eccentricity", f64s(&eccentricity))])
     }))
+}
+
+// Analyses
+
+#[wasm_bindgen(js_name = readBensonTemplate)]
+pub fn read_benson_template(bytes: &[u8], right_hemisphere: bool) -> Result<JsValue> {
+    let maps = template::read_benson_gifti(bytes, right_hemisphere).map_err(fail)?;
+    Ok(maps_object(&maps))
+}
+
+fn maps_object(maps: &mapset::Maps) -> JsValue {
+    let values: Array = maps.values.iter().map(|value| JsValue::from_str(value)).collect();
+    object(vec![
+        ("values", values.into()),
+        ("vertices", JsValue::from(maps.vertices as f64)),
+        ("data", f64s(&maps.data)),
+    ])
+}
+
+fn surface_from(vertices: &[f64], faces: &[u32]) -> Result<Surface> {
+    if !vertices.len().is_multiple_of(3) || !faces.len().is_multiple_of(3) {
+        return Err(shape("surface vertices and faces must come in triples".into()));
+    }
+    let vertices = vertices.as_chunks::<3>().0.to_vec();
+    let faces = Faces::Triangles(faces.as_chunks::<3>().0.to_vec());
+    Ok(Surface { vertices, faces })
+}
+
+fn call_progress(progress: &Option<js_sys::Function>, done: usize, total: usize) {
+    if let Some(function) = progress {
+        let _ = function.call2(&JsValue::NULL, &JsValue::from(done as f64), &JsValue::from(total as f64));
+    }
+}
+
+/// One prepared analysis; see packages/samsrf/README.md for `createJob`.
+#[wasm_bindgen]
+pub struct Job {
+    inner: job::Job,
+}
+
+#[wasm_bindgen(js_name = createJob)]
+#[allow(clippy::too_many_arguments)]
+pub fn create_job(
+    kind: &str,
+    model_json: &str,
+    apertures: Option<Vec<u8>>,
+    hrf_mode: &str,
+    hrf_kernel: Option<Vec<f64>>,
+    volumes: usize,
+    kept: Vec<u32>,
+    courses: Vec<f64>,
+    roi: Option<Vec<u32>>,
+    noise_ceiling: Option<Vec<f64>>,
+    global_signal: Option<Vec<f64>>,
+    seed_vertices: Option<Vec<u32>>,
+    template_values: Option<Vec<String>>,
+    template_data: Option<Vec<f64>>,
+    surface_vertices: Option<Vec<f64>>,
+    surface_faces: Option<Vec<u32>>,
+    area: Option<Vec<f64>>,
+    seed_fine_fit_values: Option<Vec<String>>,
+    seed_fine_fit_data: Option<Vec<f64>>,
+    total_vertices: usize,
+    progress: Option<js_sys::Function>,
+) -> Result<Job> {
+    let analysis = AnalysisKind::parse(kind).ok_or_else(|| JsError::new(&format!("analysis kind {kind:?} is not 'prf', 'rc' or 'cf'")))?;
+    let model = model::parse_model_json(analysis, model_json).map_err(fail)?;
+    let apertures = apertures.map(|bytes| Apertures::deserialize(&bytes).map(|apertures| apertures.inner)).transpose()?;
+    let hrf = match hrf_mode {
+        "model" => None,
+        "none" => Some(hrf::ResolvedHrf::None),
+        "fit" => Some(hrf::ResolvedHrf::Fit),
+        "kernel" => Some(hrf::ResolvedHrf::Kernel(hrf_kernel.ok_or_else(|| JsError::new("hrf kernel values are missing"))?)),
+        other => return Err(JsError::new(&format!("hrf mode {other:?} is not 'model', 'none', 'fit' or 'kernel'"))),
+    };
+    if courses.len() != volumes * kept.len() {
+        return Err(shape(format!("{} course values are not {volumes} volumes x {} kept vertices", courses.len(), kept.len())));
+    }
+    let data = TimeSeries { volumes, vertices: kept.len(), data: courses };
+    let seed = match (seed_vertices, template_values, template_data) {
+        (Some(vertices), Some(values), Some(data)) => Some(job::SeedInputs { vertices, template: maps(values, total_vertices, data)? }),
+        (None, _, _) => None,
+        _ => return Err(shape("a seed region needs its vertices and the template maps".into())),
+    };
+    let surface = match (surface_vertices, surface_faces) {
+        (Some(vertices), Some(faces)) => Some(surface_from(&vertices, &faces)?),
+        (None, None) => None,
+        _ => return Err(shape("a surface needs both vertices and faces".into())),
+    };
+    let seed_fine_fit = match (seed_fine_fit_values, seed_fine_fit_data) {
+        (Some(values), Some(data)) => Some(maps(values, total_vertices, data)?),
+        (None, None) => None,
+        _ => return Err(shape("seed fine-fit maps need values and data".into())),
+    };
+    let inputs = job::JobInputs { model, apertures, hrf, data, kept, roi, noise_ceiling, global_signal, seed, surface, area, seed_fine_fit, total_vertices };
+    let inner = job::Job::prepare(inputs, &mut |done, total| call_progress(&progress, done, total)).map_err(fail)?;
+    Ok(Job { inner })
+}
+
+#[wasm_bindgen]
+impl Job {
+    #[wasm_bindgen(getter, js_name = vertexCount)]
+    pub fn vertex_count(&self) -> usize {
+        self.inner.vertex_count()
+    }
+
+    /// The analysed vertices in label order.
+    pub fn analysed(&self) -> Uint32Array {
+        Uint32Array::from(self.inner.analysed())
+    }
+
+    pub fn values(&self) -> Array {
+        self.inner.values().iter().map(|value| JsValue::from_str(value)).collect()
+    }
+
+    #[wasm_bindgen(getter, js_name = outSuffix)]
+    pub fn out_suffix(&self) -> String {
+        self.inner.out_suffix()
+    }
+
+    #[wasm_bindgen(getter, js_name = modelName)]
+    pub fn model_name(&self) -> String {
+        self.inner.model_name().to_string()
+    }
+
+    pub fn run(&self, start: usize, end: usize, progress: Option<js_sys::Function>) -> Result<Vec<u8>> {
+        let total = end.saturating_sub(start);
+        let partial = self.inner.run(start, end, &mut |done| call_progress(&progress, done, total)).map_err(fail)?;
+        Ok(partial.to_bytes())
+    }
+
+    pub fn merge(&self, partials: Array) -> Result<JsValue> {
+        let mut parsed = Vec::with_capacity(partials.length() as usize);
+        for value in partials.iter() {
+            let bytes = Uint8Array::new(&value).to_vec();
+            parsed.push(job::Partial::from_bytes(&bytes).map_err(fail)?);
+        }
+        let set = self.inner.merge(&parsed).map_err(fail)?;
+        let analysed = match &set.analysed {
+            VertexSelection::All => JsValue::NULL,
+            VertexSelection::Indices(indices) => optional_u32s(Some(indices)),
+        };
+        Ok(object(vec![
+            ("maps", maps_object(&set.maps)),
+            ("raw", set.raw.as_ref().map_or(JsValue::NULL, maps_object)),
+            ("analysed", analysed),
+        ]))
+    }
 }
