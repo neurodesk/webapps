@@ -5692,6 +5692,9 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-118.dcm",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-119.dcm",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-120.dcm"
+    ],
+    "samsrf": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz"
     ]
   }
 }

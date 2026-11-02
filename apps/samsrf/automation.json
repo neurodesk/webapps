@@ -1,0 +1,336 @@
+{
+  "schemaVersion": 2,
+  "app": "samsrf",
+  "title": "SamSrf",
+  "description": "Population receptive field and connective field mapping on the cortical surface (SamSrf X).",
+  "defaultOperation": "prf",
+  "operations": {
+    "prf": {
+      "title": "Fit pRF model",
+      "description": "Forward-model pRF fit: coarse grid search, then Nelder-Mead or Hooke-Jeeves fine fit.",
+      "mode": "batch",
+      "inputs": {
+        "runs": {
+          "source": "files",
+          "type": "neuro:surface",
+          "formats": [
+            "gii"
+          ],
+          "description": "GIfTI time series, one file per run",
+          "minimum": 1
+        },
+        "roi": {
+          "source": "files",
+          "type": "neuro:surface-regions",
+          "formats": [
+            "label"
+          ],
+          "description": "Optional FreeSurfer label restricting the analysis",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "surfaces": {
+          "source": "files",
+          "type": "neuro:surface",
+          "formats": [
+            "white",
+            "pial",
+            "inflated",
+            "sphere",
+            "curv",
+            "area",
+            "gii"
+          ],
+          "description": "FreeSurfer surfaces, curvature and area for display and geometry",
+          "minimum": 0
+        },
+        "apertures": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "mat",
+            "nifti",
+            "gif"
+          ],
+          "description": "Stimulus apertures: a SamSrf .mat, NIfTI or animated GIF",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "model": {
+          "source": "files",
+          "type": "neuro:model",
+          "formats": [
+            "json"
+          ],
+          "description": "Optional SamSrf model JSON replacing the preset",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "preset": {
+          "type": "string",
+          "enum": [
+            "example-gaussian",
+            "gaussian",
+            "dog",
+            "oriented",
+            "radial",
+            "sumnorm",
+            "tuning-circular",
+            "tuning-horizontal",
+            "tuning-vertical"
+          ],
+          "description": "Model preset"
+        },
+        "tr": {
+          "type": "number",
+          "minimum": 0.01,
+          "description": "Seconds between apertures (Model.TR)"
+        },
+        "scalingFactor": {
+          "type": "number",
+          "minimum": 0.01,
+          "description": "Stimulus radius in degrees (Model.Scaling_Factor)"
+        },
+        "hrf": {
+          "type": "string",
+          "enum": [
+            "0",
+            "[]",
+            "1",
+            "Inf"
+          ],
+          "description": "HRF: SPM canonical (0), de Haas canonical ([]), none (1) or fitted (Inf)"
+        },
+        "normalise": {
+          "type": "boolean",
+          "description": "Detrend and z-score each run"
+        },
+        "average": {
+          "type": "boolean",
+          "description": "Average runs (true) or concatenate them (false)"
+        }
+      },
+      "artifacts": {
+        "maps": {
+          "type": "neuro:surface",
+          "mediaType": "application/octet-stream",
+          "minimum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    },
+    "rc": {
+      "title": "Reverse-correlation pRF",
+      "description": "Reverse-correlation pRF profiles and the retinotopic maps derived from them.",
+      "mode": "batch",
+      "inputs": {
+        "runs": {
+          "source": "files",
+          "type": "neuro:surface",
+          "formats": [
+            "gii"
+          ],
+          "description": "GIfTI time series, one file per run",
+          "minimum": 1
+        },
+        "roi": {
+          "source": "files",
+          "type": "neuro:surface-regions",
+          "formats": [
+            "label"
+          ],
+          "description": "Optional FreeSurfer label restricting the analysis",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "surfaces": {
+          "source": "files",
+          "type": "neuro:surface",
+          "formats": [
+            "white",
+            "pial",
+            "inflated",
+            "sphere",
+            "curv",
+            "area",
+            "gii"
+          ],
+          "description": "FreeSurfer surfaces, curvature and area for display and geometry",
+          "minimum": 0
+        },
+        "apertures": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "mat",
+            "nifti",
+            "gif"
+          ],
+          "description": "Stimulus apertures: a SamSrf .mat, NIfTI or animated GIF",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "model": {
+          "source": "files",
+          "type": "neuro:model",
+          "formats": [
+            "json"
+          ],
+          "description": "Optional SamSrf model JSON replacing the preset",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "preset": {
+          "type": "string",
+          "enum": [
+            "example-revcor",
+            "revcor-fit"
+          ],
+          "description": "Model preset"
+        },
+        "tr": {
+          "type": "number",
+          "minimum": 0.01,
+          "description": "Seconds between apertures (Model.TR)"
+        },
+        "scalingFactor": {
+          "type": "number",
+          "minimum": 0.01,
+          "description": "Stimulus radius in degrees (Model.Scaling_Factor)"
+        },
+        "hrf": {
+          "type": "string",
+          "enum": [
+            "0",
+            "[]",
+            "1",
+            "Inf"
+          ],
+          "description": "HRF: SPM canonical (0), de Haas canonical ([]), none (1) or fitted (Inf)"
+        },
+        "normalise": {
+          "type": "boolean",
+          "description": "Detrend and z-score each run"
+        },
+        "average": {
+          "type": "boolean",
+          "description": "Average runs (true) or concatenate them (false)"
+        }
+      },
+      "artifacts": {
+        "maps": {
+          "type": "neuro:surface",
+          "mediaType": "application/octet-stream",
+          "minimum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    },
+    "cf": {
+      "title": "Connective fields",
+      "description": "Reverse-correlation connective fields of a seed region, read out on a template map.",
+      "mode": "batch",
+      "inputs": {
+        "runs": {
+          "source": "files",
+          "type": "neuro:surface",
+          "formats": [
+            "gii"
+          ],
+          "description": "GIfTI time series, one file per run",
+          "minimum": 1
+        },
+        "roi": {
+          "source": "files",
+          "type": "neuro:surface-regions",
+          "formats": [
+            "label"
+          ],
+          "description": "Optional FreeSurfer label restricting the analysis",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "surfaces": {
+          "source": "files",
+          "type": "neuro:surface",
+          "formats": [
+            "white",
+            "pial",
+            "inflated",
+            "sphere",
+            "curv",
+            "area",
+            "gii"
+          ],
+          "description": "FreeSurfer surfaces, curvature and area for display and geometry",
+          "minimum": 0
+        },
+        "template": {
+          "source": "files",
+          "type": "neuro:surface",
+          "formats": [
+            "gii"
+          ],
+          "description": "Template map GIfTI (polar angle, eccentricity, ROI), e.g. Benson",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "seed": {
+          "source": "files",
+          "type": "neuro:surface-regions",
+          "formats": [
+            "label"
+          ],
+          "description": "Seed region label (name contains \"seed\")",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "model": {
+          "source": "files",
+          "type": "neuro:model",
+          "formats": [
+            "json"
+          ],
+          "description": "Optional SamSrf model JSON replacing the preset",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "preset": {
+          "type": "string",
+          "enum": [
+            "example-cf"
+          ],
+          "description": "Model preset"
+        },
+        "normalise": {
+          "type": "boolean",
+          "description": "Detrend and z-score each run"
+        },
+        "average": {
+          "type": "boolean",
+          "description": "Average runs (true) or concatenate them (false)"
+        }
+      },
+      "artifacts": {
+        "maps": {
+          "type": "neuro:surface",
+          "mediaType": "application/octet-stream",
+          "minimum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

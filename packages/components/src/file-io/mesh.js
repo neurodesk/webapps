@@ -24,6 +24,20 @@ export function writeMz3(vertices, faces) {
   return buffer;
 }
 
+// A scalar-only mz3 (attribute 8): one float per vertex and no geometry, which NiiVue
+// loads as a layer on a mesh with that many vertices (addMeshLayer).
+export function writeMz3Scalars(values) {
+  const buffer = new ArrayBuffer(16 + values.length * 4);
+  const view = new DataView(buffer);
+  view.setUint16(0, MZ3_SIGNATURE, true);
+  view.setUint16(2, 8, true);
+  view.setUint32(4, 0, true);
+  view.setUint32(8, values.length, true);
+  view.setUint32(12, 0, true);
+  values.forEach((value, index) => view.setFloat32(16 + index * 4, value, true));
+  return buffer;
+}
+
 export async function readMz3(bytes) {
   const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const raw = input[0] === 0x1f && input[1] === 0x8b // niimath gzips the mz3 it writes

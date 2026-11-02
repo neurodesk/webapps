@@ -6646,6 +6646,12 @@
         "bytes": 527994,
         "kind": "example"
       }
+    ],
+    "samsrf": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+        "kind": "example"
+      }
     ]
   },
   "exclusions": [],

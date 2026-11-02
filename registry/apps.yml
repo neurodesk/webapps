@@ -1223,3 +1223,27 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: samsrf
+    path: samsrf
+    title: SamSrf
+    description: Map population receptive fields on the cortex.
+    categories: [surfaces]
+    keywords: [pRF, retinotopy, population receptive field, connective field, visual cortex, reverse correlation, SamSrf, GIfTI]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: NOASSERTION
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

@@ -30,6 +30,7 @@ Paths in this table are relative to the repository root. Existing implementation
 
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
+| `samsrf` | Template input copy | Replace the pass-through offline test and package the implemented method. |
 | `brainqcnet` | Artifact detection on one T1-weighted image (BrainQCNet) | The authors publish the BIDS app container `garciaml/brainqcnetcpu`; the Standalone dialog lists version 1.0.1, pinned by digest, whose tables the app reproduces, so no separate command line is packaged. |
 | `ants-denoise` | Adaptive non-local means denoising of one 3D image | Native ANTs ships `DenoiseImage`. The Standalone dialog lists the Neurodesk ANTs container, whose `DenoiseImage` gives the app's voxels with one ITK thread and the same options, so no separate command line is packaged. |
 | `greedy` | Affine/deformable registration and reslicing | `exes/greedy` has the Rust CLI. This change adds native release CI and the bundled npm command. macOS signing and target-runner verification remain release gates. |
