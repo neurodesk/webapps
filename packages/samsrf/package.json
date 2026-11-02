@@ -1,0 +1,38 @@
+{
+  "name": "@neurodesk/samsrf",
+  "version": "0.0.20261102",
+  "description": "Population receptive field and connective field mapping (a port of SamSrf) for browsers and the command line, one WebAssembly binary for both",
+  "type": "module",
+  "license": "BSD-3-Clause",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "samsrf": "./bin/samsrf.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./node": "./src/node.js",
+    "./wasm": "./wasm/samsrf_wasm.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "wasm",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js && node --check bin/samsrf.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/samsrf"
+  }
+}

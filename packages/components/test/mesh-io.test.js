@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readMz3, writeMz3, writeStl } from '../src/file-io/mesh.js';
+import { readFreeSurferCurv, readMz3, writeMz3, writeMz3Scalars, writeStl } from '../src/file-io/mesh.js';
 
 const vertices = Float32Array.from([0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4]);
 const faces = Int32Array.from([0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2]);
@@ -42,4 +42,30 @@ test('binary STL carries every triangle with an outward unit normal', () => {
     const normal = [0, 1, 2].map((axis) => view.getFloat32(84 + i * 50 + axis * 4, true));
     assert.ok(Math.abs(Math.hypot(...normal) - 1) < 1e-6, `facet ${i} normal is not a unit vector`);
   }
+});
+
+test('scalar-only mz3 carries one float per vertex and no geometry', () => {
+  const values = Float32Array.from([0, 1.5, -2, 3.25]);
+  const bytes = new Uint8Array(writeMz3Scalars(values));
+  const view = new DataView(bytes.buffer);
+  assert.equal(view.getUint16(0, true), 23117);
+  assert.equal(view.getUint16(2, true), 8, 'attribute 8 marks scalars only');
+  assert.equal(view.getUint32(4, true), 0, 'no faces');
+  assert.equal(view.getUint32(8, true), values.length, 'NVERT is the vertex count the layer must match');
+  assert.equal(bytes.length, 16 + values.length * 4);
+  assert.deepEqual([...new Float32Array(bytes.buffer.slice(16))], [...values]);
+});
+
+test('a FreeSurfer curvature file reads one big-endian float per vertex', () => {
+  const values = [-0.25, 0, 0.5];
+  const bytes = new Uint8Array(15 + values.length * 4);
+  const view = new DataView(bytes.buffer);
+  bytes.set([0xff, 0xff, 0xff]);
+  view.setInt32(3, values.length, false);
+  view.setInt32(7, 2, false);
+  view.setInt32(11, 1, false);
+  values.forEach((value, index) => view.setFloat32(15 + index * 4, value, false));
+  assert.deepEqual([...readFreeSurferCurv(bytes)], values);
+  assert.throws(() => readFreeSurferCurv(bytes.subarray(0, 20)), /Truncated/);
+  assert.throws(() => readFreeSurferCurv(new Uint8Array(20)), /Not a FreeSurfer/);
 });
