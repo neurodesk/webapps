@@ -1227,23 +1227,24 @@ apps:
     path: samsrf
     title: SamSrf
     description: Map population receptive fields on the cortex.
-    categories: [surfaces]
+    categories: [surfaces, quantitative-mri]
     keywords: [pRF, retinotopy, population receptive field, connective field, visual cortex, reverse correlation, SamSrf, GIfTI]
     anatomy: [brain]
-    modalities: [mri]
-    inputs: [dicom, nifti]
+    modalities: [mri, surface]
+    inputs: [gifti, freesurfer]
     hardware: cpu
     legacy_domain: null
     runtime: vite-wasm
     model_manifest: null
     asset_manifest_schema: null
     source: neurodesk/webapps@local
-    license: NOASSERTION
+    license: BSD-3-Clause
     maintainers: [neurodesk]
     support_status: experimental
+    handoff: none
     shell: imaging-workspace
     ci:
-      toolchains: [node]
+      toolchains: [node, rust-wasm]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true

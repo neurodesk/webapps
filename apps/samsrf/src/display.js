@@ -102,8 +102,8 @@ export function countShown(r2, threshold) {
 export function cameraFor(view, hemisphere) {
   const left = hemisphere !== "rh";
   const views = {
-    lateral: { azimuth: left ? 270 : 90, elevation: 0 },
-    medial: { azimuth: left ? 90 : 270, elevation: 0 },
+    lateral: { azimuth: left ? 90 : 270, elevation: 0 },
+    medial: { azimuth: left ? 270 : 90, elevation: 0 },
     posterior: { azimuth: 180, elevation: 0 },
     ventral: { azimuth: 180, elevation: -90 },
   };

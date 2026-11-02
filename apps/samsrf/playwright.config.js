@@ -10,5 +10,11 @@ export default defineConfig({
     url: "http://localhost:4173",
     reuseExistingServer: !process.env.CI,
   },
-  use: { baseURL: "http://localhost:4173" },
+  timeout: 600000,
+  use: {
+    baseURL: "http://localhost:4173",
+    // page.route cannot see requests the isolation service worker makes; the preview server
+    // sends COOP/COEP itself, so the worker is not needed.
+    serviceWorkers: "block",
+  },
 });

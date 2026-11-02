@@ -11,6 +11,8 @@ export function createSurfaceViewer(canvasId) {
   const ready = nv.attachTo(canvasId).then(() => {
     nv.sliceType = SLICE_TYPE.RENDER;
     nv.isColorbarVisible = false;
+    nv.isOrientCubeVisible = false;
+    nv.is3DCrosshairVisible = false;
     nv.addColormap(POLAR_COLORMAP, POLAR_COLORMAP_POINTS);
   });
   let surface = null;
