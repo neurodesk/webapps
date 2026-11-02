@@ -329,9 +329,17 @@ reference is produced.
   vector for vertex-wise HRFs.
 - **Correlations and regressions.** `corr` is a dot product of centred,
   unit-norm courses and `[1 X] \ Y` solves the normal equations; MATLAB
-  uses QR. They agree to rounding. A rank-deficient GLM (a constant
-  prediction) follows MATLAB's pivoting rule: the column with the larger norm
-  keeps its coefficient and the other is 0.
+  uses QR. They agree to rounding. A rank-deficient GLM follows MATLAB's
+  pivoting rule and its rank tolerance (`max(m, n) * eps * |R(1,1)|`): a
+  prediction that is constant, or constant to rounding, leaves the column with
+  the larger norm its coefficient and the other 0. Octave's `\` uses no such
+  tolerance, so on the example's coarse fit it reports amplitudes near 1e13 on
+  9 vertices where the port reports 0.
+- **Compressive nonlinearity.** `Yp.^P(cssp)` on a prediction below zero is
+  complex in MATLAB. Apertures that are not binary (X001's are resampled and
+  ring to -0.074) make predictions dip to about -1e-6 in a third of the
+  volumes, so SamSrf's fit then runs on complex numbers. The port takes those
+  volumes as zero, the response the nonlinearity models.
 - **Maps outside the ROI.** `samsrf_compress_srf` keeps the ROI's columns and
   `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside
   the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected

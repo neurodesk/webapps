@@ -284,9 +284,7 @@ impl Prepared {
             let mut fx = self.predict(&fp)?;
             if model.compressive_nonlinearity {
                 let exponent = fp[model.param_names.len()];
-                for value in &mut fx {
-                    *value = value.powf(exponent);
-                }
+                prf::compress(&mut fx, exponent);
             }
             prediction = Some(fx);
         } else if model.replace_bad_fits {
@@ -382,8 +380,10 @@ pub fn prctile(values: &[f64], p: f64) -> f64 {
 }
 
 /// `[ones(n,1) x] \ y` as `(amplitude, intercept)`: the least-squares amplitude and
-/// intercept. A constant `x` makes the system rank deficient; MATLAB's QR with column
-/// pivoting then keeps the column with the larger norm and zeroes the other coefficient.
+/// intercept. MATLAB solves it by QR with column pivoting: the column with the larger
+/// norm comes first, and when the second diagonal of R is within `max(n, 2) * eps` of the
+/// first the system is rank deficient, so only the first column gets a coefficient. A
+/// prediction that is constant, or constant to rounding, takes that path.
 pub fn fit_betas(x: &[f64], y: &[f64]) -> (f64, f64) {
     let n = x.len() as f64;
     if x.is_empty() || x.len() != y.len() {
@@ -391,20 +391,25 @@ pub fn fit_betas(x: &[f64], y: &[f64]) -> (f64, f64) {
     }
     let sx: f64 = x.iter().sum();
     let sy: f64 = y.iter().sum();
-    let mean_y = sy / n;
-    if x.iter().all(|value| *value == x[0]) {
-        let c = x[0];
-        if c.abs() > 1.0 {
-            return (mean_y / c, 0.0);
-        }
-        return (0.0, mean_y);
-    }
+    let sxx_raw: f64 = x.iter().map(|value| value * value).sum();
+    let sxy_raw: f64 = x.iter().zip(y).map(|(a, b)| a * b).sum();
     let mean_x = sx / n;
+    let mean_y = sy / n;
     let mut sxx = 0.0;
     let mut sxy = 0.0;
     for (a, b) in x.iter().zip(y) {
         sxx += (a - mean_x) * (a - mean_x);
         sxy += (a - mean_x) * (b - mean_y);
+    }
+    let tolerance = n.max(2.0) * f64::EPSILON;
+    let ones_first = n >= sxx_raw;
+    let (r11, r22) = if ones_first {
+        (n.sqrt(), sxx.max(0.0).sqrt())
+    } else {
+        (sxx_raw.sqrt(), (n - sx * sx / sxx_raw).max(0.0).sqrt())
+    };
+    if r22 <= tolerance * r11 {
+        return if ones_first { (0.0, mean_y) } else { (sxy_raw / sxx_raw, 0.0) };
     }
     let amplitude = sxy / sxx;
     (amplitude, mean_y - amplitude * mean_x)
@@ -456,6 +461,8 @@ mod tests {
         assert_eq!(fit_betas(&[0.0; 4], &y), (0.0, 6.0));
         assert_eq!(fit_betas(&[2.0; 4], &y), (3.0, 0.0));
         assert_eq!(fit_betas(&[0.5; 4], &y), (0.0, 6.0));
+        // Constant to rounding is rank deficient too, not an amplitude of 1e20.
+        assert_eq!(fit_betas(&[1e-20, -2e-20, 3e-20, 0.0], &y), (0.0, 6.0));
     }
 
     #[test]

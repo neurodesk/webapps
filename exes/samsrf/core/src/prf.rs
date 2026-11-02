@@ -335,6 +335,15 @@ fn hrf_parameters_in_bounds(p: &[f64]) -> bool {
     p.iter().zip(bounds).all(|(value, (low, high))| *value >= low && *value <= high)
 }
 
+/// SamSrf's compressive nonlinearity `Yp.^P(cssp)` on a predicted time course. Apertures
+/// that are not binary ring slightly below zero, where MATLAB's power turns complex; the
+/// port takes those volumes as zero, the response the nonlinearity models.
+pub fn compress(prediction: &mut [f64], exponent: f64) {
+    for value in prediction {
+        *value = if *value > 0.0 { value.powf(exponent) } else { 0.0 };
+    }
+}
+
 /// `prf_errfun`: `1 - corr(prediction, observed)^2` for parameters `p` (the pRF
 /// parameters, then the five HRF parameters when `hrf` is `Fit`), with the HRF
 /// bounds check, compressive nonlinearity and downsampling SamSrf applies.
@@ -381,9 +390,7 @@ pub fn errfun(
         let exponent = *p.get(n - hrf_parameters - 1).ok_or_else(|| {
             Error::Shape("the compressive nonlinearity needs an exponent parameter before the HRF parameters".into())
         })?;
-        for value in &mut yp {
-            *value = value.powf(exponent);
-        }
+        compress(&mut yp, exponent);
     }
     let yp = crate::hrf::convolve(&yp, &kernel, downsampling);
     let r = pearson(&yp, observed);
@@ -394,6 +401,13 @@ pub fn errfun(
 #[allow(clippy::excessive_precision, clippy::approx_constant)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_compressive_power_takes_negative_ringing_as_zero() {
+        let mut prediction = [4.0, 0.0, -1e-7, 9.0];
+        compress(&mut prediction, 0.5);
+        assert_eq!(prediction, [2.0, 0.0, 0.0, 3.0]);
+    }
     use crate::apertures::Frame;
     use crate::expr::AnonymousFunction;
     use crate::hrf::ErrfunHrf;
