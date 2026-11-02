@@ -25,12 +25,43 @@ const manifest = JSON.parse(readFileSync(join(root, 'web/models/manifest.json'),
 
 const { REPORT_PARTS, printableClone, collectReportParts, buildReportDocument, printHtmlDocument } = await import('../web/js/modules/report-export.js');
 const { evaluateDamage, renderKbReport } = await import('../web/js/modules/kb-report.js');
+const { bindPatientBehavior } = await import('../web/js/modules/patient-behavior.js');
+
+{
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+  const context = bindPatientBehavior(doc);
+  const notes = doc.getElementById('patientBehaviorNotes');
+  notes.value = 'Difficulty naming objects. <img src=x onerror=alert(1)>';
+  notes.dispatchEvent(new dom.window.Event('input'));
+  const fields = doc.querySelectorAll('#patientBehaviorAssessments input');
+  fields[0].value = 'Naming assessment';
+  fields[1].value = '12/60';
+  fields[2].value = '2026-11-02';
+  fields[1].dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const report = doc.getElementById('patientBehaviorReport');
+  assert.equal(report.hidden, false);
+  assert.equal(report.querySelector('img'), null, 'clinical text is never parsed as HTML');
+  const parts = collectReportParts(doc, ['behavior']);
+  assert.equal(parts.length, 1);
+  assert.ok(parts[0].html.includes('12/60'));
+  doc.getElementById('includePatientBehavior').checked = false;
+  context.render();
+  assert.deepEqual(collectReportParts(doc, ['behavior']), []);
+  assert.ok(notes.value.includes('Difficulty naming'), 'opting out preserves context');
+  context.reset();
+  assert.equal(notes.value, '');
+  assert.equal(report.hidden, true);
+  const table = doc.createElement('table');
+  table.innerHTML = '<thead><tr><th><button data-column-label="Lesion %">Lesion % ↓</button></th></tr></thead>';
+  assert.equal(printableClone(table).querySelector('th').textContent, 'Lesion %');
+}
 
 // --- Parts, clones and the document ------------------------------------------
 {
   const dom = new JSDOM(html);
   const { document } = dom.window;
-  assert.deepEqual(REPORT_PARTS.map((p) => p.id), ['method', 'image', 'overlap', 'network', 'measures', 'location', 'whiteMatter', 'therapy', 'provenance']);
+  assert.deepEqual(REPORT_PARTS.map((p) => p.id), ['behavior', 'method', 'image', 'overlap', 'network', 'measures', 'location', 'whiteMatter', 'therapy', 'provenance']);
   for (const part of REPORT_PARTS) {
     for (const selector of part.selectors) assert.ok(document.querySelector(selector), `${part.id}: ${selector} exists in index.html`);
   }

@@ -115,10 +115,29 @@ export class MaskDrawingController {
 
   setTool(tool) {
     if (!this.nv) return;
+    if (this.lassoSettings && tool !== 'lasso') {
+      this.nv.opts.penSize = this.lassoSettings.size;
+      this.setPenShape(this.lassoSettings.shape);
+      this.setFilled(this.lassoSettings.filled);
+      this.lassoSettings = null;
+    }
     this.nv.opts.clickToSegment = false;
     this.nv.setDrawingEnabled?.(tool !== 'off');
     if (tool === 'off') return;
-    if (tool === 'erase') {
+    if (tool === 'lasso') {
+      if (!this.lassoSettings) {
+        const type = this.nv.document?.opts?.penType ?? this.nv.opts.penType;
+        const types = this.getPenTypes();
+        this.lassoSettings = {
+          size: this.nv.opts.penSize,
+          filled: !!this.nv.opts.isFilledPen,
+          shape: type === types.RECTANGLE ? 'rectangle' : type === types.ELLIPSE ? 'ellipse' : 'pen',
+        };
+      }
+      this.setPenShape('pen');
+      this.nv.opts.penSize = 1;
+      this.nv.setPenValue?.(1, true);
+    } else if (tool === 'erase') {
       this.nv.setPenValue?.(0, !!this.nv.opts.isFilledPen);
     } else if (tool === 'eraseCluster') {
       this.nv.setPenValue?.(-0, !!this.nv.opts.isFilledPen);

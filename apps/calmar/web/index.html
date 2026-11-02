@@ -150,6 +150,18 @@
               <option value="drafts">Approved + unreviewed drafts</option>
             </select>
           </div>
+          <details class="nd-sidebar-section nd-report-form" id="patientBehaviorOptions">
+            <summary>Behavioural information (optional)</summary>
+            <div class="nd-section-content">
+              <label class="nd-check"><input id="includePatientBehavior" type="checkbox" checked> Include in report</label>
+              <div class="nd-field">
+                <label for="patientBehaviorNotes">Clinical observations</label>
+                <textarea id="patientBehaviorNotes" rows="3" placeholder="Observed language, communication or other behavioural difficulties"></textarea>
+              </div>
+              <div id="patientBehaviorAssessments"></div>
+              <button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" id="addPatientAssessment">Add assessment</button>
+            </div>
+          </details>
           <div class="step-buttons">
             <button class="btn btn-secondary" id="runFullPipelineButton">
               Run reporting analysis
@@ -281,6 +293,7 @@
         <div class="mask-toolbar-group mask-draw-group" role="group" aria-label="Draw lesion mask">
           <div class="segmented-control" role="group" aria-label="Mask drawing mode">
             <button class="tool-button active" id="maskPaintButton" type="button" title="Paint lesion voxels">Paint</button>
+            <button class="tool-button" id="maskLassoButton" type="button" aria-pressed="false" title="Outline the lesion on a 2D slice; release to close and fill">Lasso</button>
             <button class="tool-button" id="maskEraseButton" type="button" title="Erase lesion voxels">Erase</button>
             <button class="tool-button" id="maskEraseClusterButton" type="button" title="Erase the connected lesion cluster under the cursor">Erase cluster</button>
           </div>
@@ -397,6 +410,11 @@
       <canvas id="gl1"></canvas>
       <section id="resultsReport" class="nd-viewer-report" aria-label="Results" hidden>
         <div class="nd-report-stack">
+          <section id="patientBehaviorReport" aria-label="Behavioural information" hidden>
+            <div class="nd-report-heading"><h3>Behavioural information</h3></div>
+            <p class="nd-report-notes">Supplied clinical context; scores are shown as entered and do not change the analysis.</p>
+            <div id="patientBehaviorReportBody"></div>
+          </section>
           <section id="resultsMethod" class="hidden" aria-label="Method">
             <details>
               <summary>Method</summary>
@@ -632,6 +650,7 @@
       <p>Choose what to include. The report is built from the Results view as shown, with every finding expanded, and never leaves this computer.</p>
       <fieldset class="report-parts" id="reportParts">
         <legend>Sections</legend>
+        <label><input type="checkbox" data-report-part="behavior" checked> Behavioural information</label>
         <label><input type="checkbox" data-report-part="method" checked> Method summary</label>
         <label><input type="checkbox" data-report-part="image" checked> Lesion image (3-plane crosshair on the lesion)</label>
         <div class="report-image-options" id="reportImageOptions">
@@ -674,7 +693,7 @@
       </div>
       <h4>What this means</h4>
       <ul class="privacy-list">
-        <li>No patient image data, lesion masks, voxel values, screenshots, or generated outputs are uploaded by the app.</li>
+        <li>No patient image data, lesion masks, behavioural observations, assessment scores, voxel values, screenshots, or generated outputs are uploaded by the app.</li>
         <li>Atlas and model assets may be fetched by the browser when a workflow needs them.</li>
         <li>Downloaded result files are created locally from browser memory.</li>
       </ul>

@@ -491,6 +491,16 @@ function fakeFile(name) {
   assert.equal(calls.setPenValue.at(-1)[1], true,
     'filled toggle must reapply the current pen value with filled mode');
 
+  controller.setFilled(false);
+  controller.setTool('lasso');
+  assert.deepEqual(calls.setPenValue.at(-1), [1, true], 'lasso fills lesion label 1');
+  assert.equal(nv.opts.penSize, 1, 'lasso traces a precise one-voxel outline');
+  assert.equal(nv.document.opts.penType, 0, 'lasso uses the native freehand pen');
+  controller.setTool('erase');
+  assert.equal(nv.opts.penSize, 5, 'leaving lasso restores the brush');
+  assert.equal(nv.document.opts.penType, 1, 'leaving lasso restores the shape');
+  assert.deepEqual(calls.setPenValue.at(-1), [0, false], 'erase resumes without filled lasso mode');
+
   controller.undo();
   assert.equal(calls.drawUndo, 1,
     'undo must delegate to NiiVue drawUndo');

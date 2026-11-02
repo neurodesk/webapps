@@ -1,5 +1,15 @@
 # calmar
 
+## 0.9.20261102
+
+### Minor Changes
+
+- Add a filled freehand Lasso tool for slice-based lesion review, with native Undo and restoration of brush settings. Make overlap tables sortable by label, voxel count, lesion percentage and ROI coverage, preserving folded rows and printable headers. Add optional session-only behavioural observations and assessment results/dates to selectable report exports, clearing them when the subject changes and keeping them separate from lesion-based analysis.
+
+### Patch Changes
+
+- @neurodesk/calmar@0.9.20261102
+
 ## 0.8.20261102
 
 ### Patch Changes

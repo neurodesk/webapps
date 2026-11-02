@@ -356,6 +356,22 @@ const { decodeNiftiBuffer } = await import('../web/js/modules/atlas-loader.js');
   renderOverlapTable(tableEl, { networks: [{ network: 'ROI', voxelsInLesion: 20, fractionOfLesion: 0.2 }] }, { networkSizes: { ROI: 200 } });
   assert.deepEqual([...tableEl.querySelectorAll('tbody td')].map(cell => cell.textContent), ['ROI', '20', '20.0%', '10.0%']);
   assert.equal(tableEl.querySelectorAll('thead th').length, 4);
+  const sortable = { networks: [
+    { network: 'Large ROI', voxelsInLesion: 100, fractionOfLesion: 0.5 },
+    { network: 'Small ROI', voxelsInLesion: 20, fractionOfLesion: 0.1 },
+    { network: 'Unknown ROI', voxelsInLesion: 200, fractionOfLesion: 0.9 },
+  ] };
+  renderOverlapTable(tableEl, sortable, { networkSizes: { 'Large ROI': 1000, 'Small ROI': 25 }, maxRows: 1 });
+  const header = tableEl.querySelectorAll('thead th')[3];
+  header.querySelector('button').click();
+  assert.equal(header.getAttribute('aria-sort'), 'descending');
+  assert.equal(tableEl.querySelector('tbody td').textContent, 'Small ROI', 'sort by ROI denominator, not lesion size');
+  tableEl.querySelector('.overlap-fold').click();
+  header.querySelector('button').click();
+  assert.equal(header.getAttribute('aria-sort'), 'ascending');
+  assert.deepEqual([...tableEl.querySelectorAll('tbody tr:not(.overlap-fold-row)')].map(row => row.cells[0].textContent), ['Large ROI', 'Small ROI', 'Unknown ROI']);
+  assert.equal(tableEl.querySelectorAll('tbody tr[hidden]').length, 0, 'sorting keeps expanded rows visible');
+  assert.equal(sortable.networks[0].network, 'Large ROI', 'sorting does not mutate scientific output');
   assert.ok(document.getElementById('kbReportHeading').classList.contains('hidden'));
   const { mergeHarvardOxford } = await import('../web/js/modules/atlas-loader.js');
   const merged = mergeHarvardOxford(new Uint8Array([1, 1, 2, 0, 2]), new Uint8Array([0, 4, 2, 15, 14]), { 1: 'Cortex A', 2: 'Cortex B' }, { 2: 'Broad cortex', 4: 'Left Thalamus', 14: 'Ventricle', 15: 'Right Thalamus' });

@@ -21,6 +21,7 @@
 //     the user must click Run analysis or an explicit stage button.
 
 import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as niftiModule from 'nifti-reader-js';
@@ -1622,9 +1623,10 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   const app = makeApp();
   const summaryEl = { textContent: '' };
   const affectedResultsEl = { classList: makeClassList(['hidden']) };
-  const affectedTableEl = { innerHTML: '', appendChild: () => {} };
+  const dom = new JSDOM();
+  const affectedTableEl = dom.window.document.createElement('table');
   const mapFunctionResultsEl = { classList: makeClassList(['hidden']) };
-  const mapFunctionTableEl = { innerHTML: '', appendChild: () => {} };
+  const mapFunctionTableEl = dom.window.document.createElement('table');
   const elements = {
     networkThresholdValue: { value: '10' },
     networkThresholdSymmetric: { checked: false },
@@ -1638,23 +1640,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   };
   const restoreDocument = useMockElements(elements);
   const originalCreateElement = globalThis.document.createElement;
-  const renderedText = [];
-  globalThis.document.createElement = (tagName) => {
-    let text = '';
-    return {
-      tagName,
-      children: [],
-      style: {},
-      classList: makeClassList(),
-      appendChild(child) { this.children.push(child); },
-      setAttribute: () => {},
-      set textContent(value) {
-        text = value;
-        renderedText.push(value);
-      },
-      get textContent() { return text; }
-    };
-  };
+  globalThis.document.createElement = tag => dom.window.document.createElement(tag);
   app.viewerController = {
     replaceOverlayForStage: async () => {},
     removeVolumeForStage: () => {}
@@ -1702,15 +1688,15 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     );
     assert.equal(affectedResultsEl.classList.contains('hidden'), false,
       'affected-network table must become visible after thresholding');
-    assert.ok(renderedText.includes('Somatomotor'),
+    assert.ok(affectedTableEl.textContent.includes('Somatomotor'),
       'affected-network table must render the dominant Yeo network name');
-    assert.ok(renderedText.includes('Map %'),
+    assert.ok(affectedTableEl.textContent.includes('Map %'),
       'affected-network table must use map-specific percent copy');
     assert.equal(mapFunctionResultsEl.classList.contains('hidden'), false,
       'connectivity-map functional profile table must become visible after thresholding');
-    assert.ok(renderedText.includes('motor'),
+    assert.ok(mapFunctionTableEl.textContent.includes('motor'),
       'connectivity-map functional profile must rank terms from affected Yeo networks');
-    assert.ok(renderedText.includes('Neurosynth v7 via NiMARE'),
+    assert.ok(mapFunctionTableEl.textContent.includes('Neurosynth v7 via NiMARE'),
       'connectivity-map functional profile must show its source label');
   } finally {
     globalThis.document.createElement = originalCreateElement;
@@ -1753,36 +1739,21 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
 {
   const app = makeApp();
   const directResultsEl = { classList: makeClassList(['hidden']) };
-  const directTableEl = { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } };
+  const dom = new JSDOM();
+  const directTableEl = dom.window.document.createElement('table');
+  const directFunctionTable = dom.window.document.createElement('table');
   const affectedResultsEl = { classList: makeClassList(['hidden']) };
-  const affectedTableEl = { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } };
+  const affectedTableEl = dom.window.document.createElement('table');
   const restoreDocument = useMockElements({
     networkThresholdMinCluster: { value: '30' },
     networkOverlapTable: directTableEl,
     directFunctionProfileResults: directResultsEl,
-    directFunctionProfileTable: { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } },
+    directFunctionProfileTable: directFunctionTable,
     affectedNetworkResults: affectedResultsEl,
     affectedNetworkTable: affectedTableEl
   });
   const originalCreateElement = globalThis.document.createElement;
-  const renderedText = [];
-  globalThis.document.createElement = (tagName) => {
-    let text = '';
-    return {
-      tagName,
-      children: [],
-      style: {},
-      classList: makeClassList(),
-      colSpan: 1,
-      appendChild(child) { this.children.push(child); },
-      setAttribute: () => {},
-      set textContent(value) {
-        text = value;
-        renderedText.push(value);
-      },
-      get textContent() { return text; }
-    };
-  };
+  globalThis.document.createElement = tag => dom.window.document.createElement(tag);
   const atlasOption = app.atlasOptions.find(option => option.id === 'yeo7');
   app.selectedAtlasOptionId = 'yeo7';
   app.overlapResult = {
@@ -1816,21 +1787,21 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
 
   try {
     app.renderDirectOverlapTable();
-    assert.ok(renderedText.includes('Somatomotor'),
+    assert.ok(directTableEl.textContent.includes('Somatomotor'),
       'direct overlap table must keep rows meeting the min-cluster filter');
-    assert.equal(renderedText.includes('Default'), false,
+    assert.equal((directTableEl.textContent + affectedTableEl.textContent).includes('Default'), false,
       'direct overlap table must hide rows below the min-cluster filter');
 
     await app.updateDirectFunctionProfile();
-    assert.ok(renderedText.includes('motor'),
+    assert.ok(directFunctionTable.textContent.includes('motor'),
       'direct functional profile must use the filtered direct-overlap summary');
-    assert.equal(renderedText.includes('memory'), false,
+    assert.equal(directFunctionTable.textContent.includes('memory'), false,
       'direct functional profile must not include terms from hidden rows');
 
     app.renderAffectedNetworkTable();
-    assert.ok(renderedText.includes('Visual'),
+    assert.ok(affectedTableEl.textContent.includes('Visual'),
       'affected-network table must keep rows meeting the min-cluster filter');
-    assert.equal(renderedText.includes('Default'), false,
+    assert.equal((directTableEl.textContent + affectedTableEl.textContent).includes('Default'), false,
       'affected-network table must hide rows below the min-cluster filter');
   } finally {
     globalThis.document.createElement = originalCreateElement;
@@ -3002,13 +2973,14 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       RH_Default_2: [{ term: 'language', score: 0.7, rank: 1 }]
     }
   };
-  const tableEl = { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } };
+  const dom = new JSDOM();
+  const tableEl = dom.window.document.createElement('table');
   const downloadEl = { disabled: true };
   const networkDownloadEl = { disabled: true };
   const coverageEl = { textContent: '', classList: makeClassList(['hidden']) };
   const emptyResultEl = { classList: makeClassList(['hidden']) };
   const emptyTableEl = { innerHTML: '' };
-  const directProfileTableEl = { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } };
+  const directProfileTableEl = dom.window.document.createElement('table');
   const resultsSection = { classList: makeClassList(['collapsed']) };
   const restoreDocument = useMockElements({
     atlasSelect: { value: 'yeo7', options: [], addEventListener: () => {} },
@@ -3025,23 +2997,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     resultsSection
   });
   const originalCreateElement = globalThis.document.createElement;
-  const renderedText = [];
-  globalThis.document.createElement = (tagName) => {
-    let text = '';
-    return {
-      tagName,
-      children: [],
-      style: {},
-      classList: makeClassList(),
-      appendChild(child) { this.children.push(child); },
-      setAttribute: () => {},
-      set textContent(value) {
-        text = value;
-        renderedText.push(value);
-      },
-      get textContent() { return text; }
-    };
-  };
+  globalThis.document.createElement = tag => dom.window.document.createElement(tag);
 
   const originalFetch = globalThis.fetch;
   const originalCaches = globalThis.caches;
@@ -3190,11 +3146,11 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     assert.equal(downloadEl.disabled, false,
       'atlas overlap must enable CSV export after the selected-atlas table is populated');
     await app._functionalProfileRenderPromise;
-    assert.ok(renderedText.includes('Neurosynth v7 via NiMARE (parcel-wise Schaefer ROI decode)'),
+    assert.ok(directProfileTableEl.textContent.includes('Neurosynth v7 via NiMARE (parcel-wise Schaefer ROI decode)'),
       'Schaefer direct overlap must render its functional-profile source label');
-    assert.ok(renderedText.includes('Atlas label drivers'),
-      `Schaefer direct overlap must use atlas-label functional-profile driver copy; got ${renderedText.join(' | ')}`);
-    assert.ok(renderedText.includes('language') || renderedText.includes('visual'),
+    assert.ok(directProfileTableEl.textContent.includes('Atlas label drivers'),
+      `Schaefer direct overlap must use atlas-label functional-profile driver copy; got ${directProfileTableEl.textContent}`);
+    assert.ok(directProfileTableEl.textContent.includes('language') || directProfileTableEl.textContent.includes('visual'),
       'Schaefer direct overlap must rank terms from parcel-label profiles');
     {
       const views = [];

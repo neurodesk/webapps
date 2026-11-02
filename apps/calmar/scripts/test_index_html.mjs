@@ -232,6 +232,7 @@ assert.deepEqual(
     }),
     [
       // What the run did, first; empty until there is a result.
+      'Behavioural information',
       'Scan confirmation',
       'Direct lesion overlap',
       'Functional associations from direct lesion overlap',
@@ -249,6 +250,8 @@ assert.deepEqual(
   assert.deepEqual(
     ids(Array.from(report.querySelectorAll('[id]')).filter(element => !element.parentElement.closest('table'))),
     [
+      'patientBehaviorReport',
+      'patientBehaviorReportBody',
       'resultsMethod',
       'resultsMethodText',
       'scanConfirmation',
@@ -374,7 +377,7 @@ assert.deepEqual(
   assert.deepEqual(
     groups.map(group => [group.getAttribute('aria-label'), controls(group)]),
     [
-      ['Draw lesion mask', ['maskPaintButton', 'maskEraseButton', 'maskEraseClusterButton', 'maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']],
+      ['Draw lesion mask', ['maskPaintButton', 'maskLassoButton', 'maskEraseButton', 'maskEraseClusterButton', 'maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']],
       ['Mask edit actions', ['maskUndoButton', 'maskBlankButton', 'maskSmoothButton']],
       ['Mask slice interpolation', ['maskInterpolateAxis', 'maskInterpolateButton', 'maskInterpolateHelp']],
       ['Mask review actions', ['confirmLesionMaskButton', 'uploadReviewMaskButton', 'downloadEditedLesionMaskButton']]
@@ -384,6 +387,7 @@ assert.deepEqual(
     Array.from(toolbar.querySelectorAll('button')).map(button => [label(button), button.title]),
     [
       ['Paint', 'Paint lesion voxels'],
+      ['Lasso', 'Outline the lesion on a 2D slice; release to close and fill'],
       ['Erase', 'Erase lesion voxels'],
       ['Erase cluster', 'Erase the connected lesion cluster under the cursor'],
       ['Undo', 'Undo mask edit'],
@@ -613,6 +617,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
 
   // Mask review toolbar.
   await expectClick('maskPaintButton', [['setMaskDrawingTool', 'paint']]);
+  await expectClick('maskLassoButton', [['setMaskDrawingTool', 'lasso']]);
   await expectClick('maskEraseButton', [['setMaskDrawingTool', 'erase']]);
   await expectClick('maskEraseClusterButton', [['setMaskDrawingTool', 'eraseCluster']]);
   await expectClick('maskUndoButton', [['undo']]);

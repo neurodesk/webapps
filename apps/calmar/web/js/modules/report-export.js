@@ -12,6 +12,7 @@
 /** The report's selectable parts, in reading order. `selectors` are resolved inside #resultsReport;
  *  a part with `requires` is included only when that selector matches (the stage produced a result). */
 export const REPORT_PARTS = Object.freeze([
+  { id: 'behavior', label: 'Behavioural information', selectors: ['#patientBehaviorReport'], default: true },
   { id: 'method', label: 'Method summary', selectors: ['#resultsMethod'], default: true },
   { id: 'image', label: 'Lesion image (3-plane crosshair)', selectors: [], default: true },
   { id: 'overlap', label: 'Direct lesion overlap', selectors: ['#outsideAtlasWarning', 'section[aria-label="Direct lesion overlap"]', '#directFunctionProfileResults'], requires: '#networkOverlapTable tbody tr', default: true },
@@ -37,6 +38,9 @@ export function printableClone(node) {
   for (const element of clone.querySelectorAll('[hidden]')) element.removeAttribute('hidden');
   for (const element of clone.querySelectorAll('.hidden')) element.classList.remove('hidden');
   for (const element of clone.querySelectorAll('details')) element.setAttribute('open', '');
+  for (const button of clone.querySelectorAll('th button[data-column-label]')) {
+    button.replaceWith(clone.ownerDocument.createTextNode(button.dataset.columnLabel));
+  }
   for (const element of clone.querySelectorAll('.nd-info-icon, button, .kb-fold-row, .overlap-fold-row, .overlap-bar')) element.remove();
   for (const element of clone.querySelectorAll('[tabindex]')) element.removeAttribute('tabindex');
   if (clone.hasAttribute('hidden')) clone.removeAttribute('hidden');
@@ -65,7 +69,7 @@ export function collectReportParts(doc, selected, { root = '#resultsReport' } = 
     if (!selected.includes(part.id) || !part.selectors.length) continue;
     if (part.requires && !report.querySelector(part.requires)) continue;
     const nodes = part.selectors.map((selector) => report.querySelector(selector)).filter(Boolean)
-      .filter((node) => !node.classList.contains('hidden') && hasContent(node));
+      .filter((node) => !node.hidden && !node.classList.contains('hidden') && hasContent(node));
     if (!nodes.length) continue;
     parts.push({ id: part.id, label: part.label, html: nodes.map((node) => printableClone(node).outerHTML).join('\n') });
   }

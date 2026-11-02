@@ -62,67 +62,103 @@ export function renderOverlapTable(tableEl, summary, {
 } = {}) {
   tableEl.innerHTML = '';
 
-  const thead = document.createElement('thead');
-  const headerRow = document.createElement('tr');
-  for (const [label, className] of [[labelHeader, ''], ['Voxels', 'nd-numeric'], [percentHeader, 'nd-numeric'], ...(networkSizes ? [['ROI covered %', 'nd-numeric']] : [])]) {
-    const th = document.createElement('th');
-    if (className) th.className = className;
-    th.textContent = label;
-    headerRow.appendChild(th);
-  }
-  thead.appendChild(headerRow);
-  tableEl.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
+  const columns = [
+    { label: labelHeader, key: 'label', value: row => row.network },
+    { label: 'Voxels', key: 'voxels', value: row => Number(row.voxelsInLesion) || 0 },
+    { label: percentHeader, key: 'lesion', value: row => Number(row.fractionOfLesion) || 0 },
+    ...(networkSizes ? [{ label: 'ROI covered %', key: 'roi', value: row => networkSizes[row.network] > 0 ? row.voxelsInLesion / networkSizes[row.network] : null }] : []),
+  ];
   const networks = orderedNetworks(summary);
-  if (networks.length === 0) {
-    const row = document.createElement('tr');
-    const cell = document.createElement('td');
-    cell.colSpan = networkSizes ? 4 : 3;
-    cell.textContent = emptyLabel;
-    row.appendChild(cell);
-    tbody.appendChild(row);
-    tableEl.appendChild(tbody);
-    return;
-  }
+  const thead = tableEl.createTHead();
+  const headerRow = thead.insertRow();
+  const tbody = tableEl.createTBody();
+  let expanded = false;
+  let sortKey = tableEl.dataset.sortKey;
+  let descending = tableEl.dataset.sortDirection === 'descending';
+  const headers = [];
 
-  const extra = [];
-  networks.forEach((network, index) => {
-    const row = document.createElement('tr');
-    const pct = (Number(network.fractionOfLesion) || 0) * 100;
-    appendTextCell(row, network.network);
-    appendTextCell(row, `${Number(network.voxelsInLesion) || 0}`, 'nd-numeric');
-    appendPctCell(row, pct, colorForNetwork(network.network, colormap));
-    if (networkSizes) {
-      const size = networkSizes[network.network];
-      appendTextCell(row, size > 0 ? `${(100 * network.voxelsInLesion / size).toFixed(1)}%` : '—', 'nd-numeric');
+  function renderRows() {
+    tbody.replaceChildren();
+    let ordered = [...networks];
+    const column = columns.find(item => item.key === sortKey);
+    if (column) {
+      ordered.sort((a, b) => {
+        const av = column.value(a);
+        const bv = column.value(b);
+        if (av == null) return bv == null ? 0 : 1;
+        if (bv == null) return -1;
+        const difference = typeof av === 'string' ? av.localeCompare(bv, undefined, { numeric: true }) : av - bv;
+        return (descending ? -difference : difference) || a.network.localeCompare(b.network);
+      });
     }
-    if (maxRows > 0 && index >= maxRows) {
-      row.hidden = true;
-      row.className = 'overlap-row-extra';
-      extra.push(row);
+    for (const { th, button, column } of headers) {
+      const selected = column.key === sortKey;
+      th.setAttribute('aria-sort', selected ? descending ? 'descending' : 'ascending' : 'none');
+      button.textContent = column.label + (selected ? descending ? ' ↓' : ' ↑' : ' ↕');
     }
-    tbody.appendChild(row);
-  });
-  if (extra.length) {
-    const row = document.createElement('tr');
-    row.className = 'overlap-fold-row';
-    const cell = document.createElement('td');
-    cell.colSpan = networkSizes ? 4 : 3;
+    if (!ordered.length) {
+      const cell = tbody.insertRow().insertCell();
+      cell.colSpan = columns.length;
+      cell.textContent = emptyLabel;
+      return;
+    }
+    const extra = [];
+    ordered.forEach((network, index) => {
+      const row = tbody.insertRow();
+      appendTextCell(row, network.network);
+      appendTextCell(row, `${Number(network.voxelsInLesion) || 0}`, 'nd-numeric');
+      appendPctCell(row, (Number(network.fractionOfLesion) || 0) * 100, colorForNetwork(network.network, colormap));
+      if (networkSizes) {
+        const size = networkSizes[network.network];
+        appendTextCell(row, size > 0 ? `${(100 * network.voxelsInLesion / size).toFixed(1)}%` : '—', 'nd-numeric');
+      }
+      if (maxRows > 0 && index >= maxRows) {
+        row.hidden = !expanded;
+        row.className = 'overlap-row-extra';
+        extra.push(row);
+      }
+    });
+    if (extra.length) {
+      const row = tbody.insertRow();
+      row.className = 'overlap-fold-row';
+      const cell = row.insertCell();
+      cell.colSpan = columns.length;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'nd-btn nd-btn-secondary nd-btn-sm overlap-fold';
+      const label = `${networks.length} labels`;
+      const update = () => {
+        button.textContent = expanded ? `Show first ${maxRows} of ${label}` : `Show all ${label}`;
+        button.setAttribute('aria-expanded', String(expanded));
+      };
+      update();
+      button.addEventListener('click', () => {
+        expanded = !expanded;
+        for (const hidden of extra) hidden.hidden = !expanded;
+        update();
+      });
+      cell.appendChild(button);
+    }
+  }
+  for (const column of columns) {
+    const th = document.createElement('th');
+    th.scope = 'col';
+    if (column.key !== 'label') th.className = 'nd-numeric';
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'nd-btn nd-btn-secondary nd-btn-sm overlap-fold';
-    const label = `${networks.length} labels`;
-    button.textContent = `Show all ${label}`;
+    button.className = 'nd-btn nd-btn-secondary nd-btn-sm';
+    button.dataset.columnLabel = column.label;
+    button.setAttribute('aria-label', `Sort by ${column.label}`);
     button.addEventListener('click', () => {
-      const open = extra[0].hidden;
-      for (const hidden of extra) hidden.hidden = !open;
-      button.textContent = open ? `Show first ${maxRows} of ${label}` : `Show all ${label}`;
+      descending = sortKey === column.key ? !descending : column.key !== 'label';
+      sortKey = column.key;
+      tableEl.dataset.sortKey = sortKey;
+      tableEl.dataset.sortDirection = descending ? 'descending' : 'ascending';
+      renderRows();
     });
-    cell.appendChild(button);
-    row.appendChild(cell);
-    tbody.appendChild(row);
+    th.appendChild(button);
+    headerRow.appendChild(th);
+    headers.push({ th, button, column });
   }
-
-  tableEl.appendChild(tbody);
+  renderRows();
 }

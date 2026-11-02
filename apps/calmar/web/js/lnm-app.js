@@ -9,6 +9,7 @@ import { ViewerController } from '@neurodesk/webapp-components';
 import { registerCalmarAutomation } from './automation.js';
 import { CalmarPipeline } from './controllers/CalmarPipeline.js';
 import { MaskDrawingController } from './controllers/MaskDrawingController.js';
+import { bindPatientBehavior } from './modules/patient-behavior.js';
 import { LNM_PIPELINES, getPipelineById } from './app/lnm-tasks.js';
 import {
   ATLAS_OPTIONS,
@@ -754,6 +755,7 @@ export class LesionNetworkMappingApp {
     }
 
     this.bindMaskDrawingControls();
+    this.patientBehavior = bindPatientBehavior(document);
     this.bindModalButton('aboutButton', this.aboutModal);
     this.bindModalButton('privacyButton', this.privacyModal);
     this.bindCloseButton('closeAbout', this.aboutModal);
@@ -818,6 +820,7 @@ export class LesionNetworkMappingApp {
       if (el) el.addEventListener('click', fn);
     };
     bindClick('maskPaintButton', () => this.setMaskDrawingTool('paint'));
+    bindClick('maskLassoButton', () => this.setMaskDrawingTool('lasso'));
     bindClick('maskEraseButton', () => this.setMaskDrawingTool('erase'));
     bindClick('maskEraseClusterButton', () => this.setMaskDrawingTool('eraseCluster'));
     bindClick('maskUndoButton', () => this.maskDrawingController?.undo());
@@ -871,16 +874,37 @@ export class LesionNetworkMappingApp {
   setMaskDrawingTool(tool) {
     this.maskDrawingController?.ensureDrawing();
     this.maskDrawingController?.setTool(tool);
-    for (const id of ['maskPaintButton', 'maskEraseButton', 'maskEraseClusterButton']) {
+    for (const id of ['maskPaintButton', 'maskLassoButton', 'maskEraseButton', 'maskEraseClusterButton']) {
       const el = document.getElementById(id);
-      if (el) el.classList.remove('active');
+      if (el) {
+        el.classList.remove('active');
+        el.setAttribute('aria-pressed', 'false');
+      }
     }
     const activeId = tool === 'erase'
       ? 'maskEraseButton'
       : tool === 'eraseCluster'
         ? 'maskEraseClusterButton'
-        : 'maskPaintButton';
-    document.getElementById(activeId)?.classList.add('active');
+        : tool === 'lasso' ? 'maskLassoButton' : 'maskPaintButton';
+    const active = document.getElementById(activeId);
+    active?.classList.add('active');
+    active?.setAttribute('aria-pressed', 'true');
+    for (const id of ['maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']) {
+      const control = document.getElementById(id);
+      if (control) control.disabled = tool === 'lasso';
+    }
+    const filled = document.getElementById('maskFilledToggle');
+    if (filled) filled.checked = !!this.nv?.opts?.isFilledPen;
+    const brush = document.getElementById('maskBrushSize');
+    if (brush) brush.value = this.nv?.opts?.penSize || 1;
+    const label = document.getElementById('maskBrushSizeLabel');
+    if (label) label.textContent = `${this.nv?.opts?.penSize || 1} vox`;
+    const shape = document.getElementById('maskShapeSelect');
+    if (shape) {
+      const types = this.maskDrawingController?.getPenTypes?.();
+      const type = this.nv?.document?.opts?.penType ?? this.nv?.opts?.penType;
+      shape.value = types && type === types.RECTANGLE ? 'rectangle' : types && type === types.ELLIPSE ? 'ellipse' : 'pen';
+    }
   }
 
   refreshMaskDrawingControls() {
@@ -1498,6 +1522,9 @@ export class LesionNetworkMappingApp {
 
   async setStructural(file, { fromDiffusion = null } = {}) {
     if (!file) return;
+    if (this.nativeStructuralFile && this.nativeStructuralFile !== file && !this.structuralFromDiffusion) {
+      this.patientBehavior?.reset();
+    }
     // Replacing a structural image the user loaded starts a new subject, so
     // diffusion inputs from the previous one must not seed it. Adding a T1
     // after a diffusion stand-in keeps them.
@@ -1618,6 +1645,7 @@ export class LesionNetworkMappingApp {
 
   async setLesion(file) {
     if (!file) return;
+    if (!this.structuralFile && this.userLesionFile && this.userLesionFile !== file) this.patientBehavior?.reset();
     this.lesionSource = 'other';
     this.maskOrigin = 'atlas-grid';
     if (!this.structuralFile) {
@@ -4423,6 +4451,7 @@ export class LesionNetworkMappingApp {
     this._thresholdProjectionWarningShown = false;
     this.mniLesionFile = null;
     if (full) {
+      this.patientBehavior?.reset();
       this.structuralFile = null;
       this.viewerBaseFile = null;
       this.nativeStructuralFile = null;
