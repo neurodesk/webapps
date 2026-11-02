@@ -7,6 +7,7 @@ bindSectionDisclosures(document);
  * Main application class. Orchestrates controllers, viewer, and inference.
  */
 
+<<<<<<< monorepo
 import { registerSeedSegAutomation } from './automation.js';
 import { SeedSegInputSet } from './controllers/SeedSegInputSet.js';
 import { SeedSegDicomInput } from './controllers/SeedSegDicomInput.js';
@@ -15,6 +16,15 @@ import { ViewerController } from '@neurodesk/webapp-components';
 import { SeedSegPipeline } from './controllers/SeedSegPipeline.js';
 import { ConsoleOutput, ProgressManager, ModalManager, bindWindowControls, createMaskEditor, renderInfoIcon } from '@neurodesk/webapp-components/ui';
 import { createNiftiFromVolume, readNifti } from '@neurodesk/webapp-components/file-io';
+=======
+import { FileIOController } from './controllers/FileIOController.js';
+import { DicomController } from './controllers/DicomController.js';
+import { ViewerController } from './controllers/ViewerController.js';
+import { InferenceExecutor } from './controllers/InferenceExecutor.js';
+import { ConsoleOutput } from './modules/ui/ConsoleOutput.js';
+import { ProgressManager } from './modules/ui/ProgressManager.js';
+import { ModalManager } from './modules/ui/ModalManager.js';
+>>>>>>> upstream
 import * as Config from './app/config.js';
 import { resolveModels, validateSelection } from '../vendor/seedseg/src/assets.js';
 import { summarizeMarkers } from '../vendor/seedseg/src/nnunet.js';
@@ -75,7 +85,13 @@ class SeedSegApp {
       onFilesRetained: (files) => this._onDicomFilesRetained(files)
     });
 
+<<<<<<< monorepo
     this.dicompareRenderer = new DicompareReportRenderer();
+=======
+    // dicompare validation: loaded on first use (_loadDicompare)
+    this.dicompareController = null;
+    this.dicompareRenderer = null;
+>>>>>>> upstream
 
     this.viewerController = new ViewerController({
       nv: this.nv,
@@ -140,6 +156,9 @@ class SeedSegApp {
   setupEventListeners() {
     // Unified file input
     this._setupUnifiedDropZone();
+
+    // Load example data button
+    document.getElementById('loadExampleData')?.addEventListener('click', () => this._loadExampleData());
 
     document.getElementById('selectAllFolds')?.addEventListener('click', () => {
       Config.FOLDS.forEach((f) => { const cb = document.getElementById(`fold${f}`); if (cb) cb.checked = true; });
@@ -318,6 +337,62 @@ class SeedSegApp {
     });
   }
 
+  /**
+   * Fetch the synthetic example case from Hugging Face and load it like a dropped file.
+   */
+  async _loadExampleData() {
+    const btn = document.getElementById('loadExampleData');
+    const { baseUrl, files } = Config.EXAMPLE_DATA;
+    const label = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.textContent = 'Downloading example data...';
+    this.updateOutput('Downloading example data (synthetic, not patient data)...');
+    this.setProgress(0, 'Downloading example data...');
+
+    try {
+      // HEAD requests first, to learn the total size for the progress bar
+      const sizes = await Promise.all(files.map(async (name) => {
+        const resp = await fetch(`${baseUrl}/${name}`, { method: 'HEAD' });
+        return parseInt(resp.headers.get('Content-Length') || '0', 10);
+      }));
+      const totalBytes = sizes.reduce((a, b) => a + b, 0);
+      const perFileBytes = new Array(files.length).fill(0);
+      const updateProgress = () => {
+        const done = perFileBytes.reduce((a, b) => a + b, 0);
+        const frac = totalBytes > 0 ? done / totalBytes : 0;
+        this.setProgress(frac, `Downloaded ${(done / 1e6).toFixed(1)} / ${(totalBytes / 1e6).toFixed(1)} MB`);
+      };
+
+      const fetched = await Promise.all(files.map(async (name, i) => {
+        const resp = await fetch(`${baseUrl}/${name}`);
+        if (!resp.ok) throw new Error(`Failed to fetch ${name}: ${resp.status}`);
+        const reader = resp.body.getReader();
+        const chunks = [];
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          perFileBytes[i] += value.byteLength;
+          updateProgress();
+        }
+        return new File([new Blob(chunks)], name);
+      }));
+
+      this.updateOutput(`Downloaded ${fetched.length} file(s). Loading...`);
+      this._handleUnifiedFiles(fetched);
+      this.setProgress(0, '');
+      this.updateOutput('Example case added (synthetic). Press Run Segmentation to detect the markers.');
+    } catch (err) {
+      this.setProgress(0, '');
+      this.updateOutput(`Error loading example data: ${err.message}`);
+      console.error('Example data load failed:', err);
+      btn.disabled = false;
+    } finally {
+      btn.innerHTML = label;
+    }
+  }
+
   _handleUnifiedFiles(files) {
     const niftiFiles = [];
     const dicomFiles = [];
@@ -410,6 +485,10 @@ class SeedSegApp {
       this.fileIOController.clearFile();
       if (runBtn) runBtn.disabled = true;
     }
+
+    // Example data only makes sense before files are loaded
+    const exampleBtn = document.getElementById('loadExampleData');
+    if (exampleBtn) exampleBtn.disabled = hasFiles;
 
     // Update drop zone label
     const label = document.getElementById('unifiedDrop')?.querySelector('.file-drop-label span');
@@ -951,9 +1030,44 @@ class SeedSegApp {
   /**
    * Callback when DICOM files are retained for validation.
    */
+<<<<<<< monorepo
   _onDicomFilesRetained(files) {
     this.dicompareFiles = Array.from(files);
     this.dicompareController?.clearFiles();
+=======
+  /**
+   * Load dicompare from its host the first time it is needed. A static import would stop the
+   * whole app booting whenever that host is unreachable, so a failure here only disables the report.
+   * @returns {Promise<boolean>} True if the dicompare modules are available
+   */
+  _loadDicompare() {
+    this.dicompareLoad ||= Promise.all([
+      import('https://webapps.neurodesk.org/dicompare/embed/DicompareController.js'),
+      import('https://webapps.neurodesk.org/dicompare/embed/DicompareReportRenderer.js')
+    ]).then(([{ DicompareController }, { DicompareReportRenderer }]) => {
+      this.dicompareController = new DicompareController({
+        schemaUrl: 'https://webapps.neurodesk.org/dicompare/schemas/SeedSeg_Prostate_T1w_v1.0.json',
+        updateOutput: (msg) => this.updateOutput(msg)
+      });
+      this.dicompareRenderer = new DicompareReportRenderer();
+      return true;
+    }).catch((error) => {
+      console.error('Could not load dicompare:', error);
+      const btn = document.getElementById('dicompareReportBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.title = 'dicompare could not be loaded from webapps.neurodesk.org/dicompare';
+      }
+      this.updateOutput('dicompare report unavailable: could not load it from webapps.neurodesk.org/dicompare');
+      return false;
+    });
+    return this.dicompareLoad;
+  }
+
+  async _onDicomFilesRetained(files) {
+    if (!(await this._loadDicompare())) return;
+    await this.dicompareController.retainDicomFiles(files);
+>>>>>>> upstream
     const btn = document.getElementById('dicompareReportBtn');
     if (btn) {
       btn.disabled = files.length === 0;
@@ -964,7 +1078,12 @@ class SeedSegApp {
    * Run dicompare validation and display results in modal.
    */
   async runDicompareReport() {
+<<<<<<< monorepo
     if (!this.dicompareFiles.length) {
+=======
+    if (!(await this._loadDicompare())) return;
+    if (!this.dicompareController.hasFiles()) {
+>>>>>>> upstream
       this.updateOutput('No DICOM files available for validation.');
       return;
     }
