@@ -27,7 +27,7 @@ on:
       - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/**'
       - 'packages/runtime-support/package.json'
-      - 'packages/runtime-support/src/mindgrab/backend.js'
+      - 'packages/runtime-support/src/mindgrab/**'
   push:
     branches: [main]
     paths:
@@ -57,7 +57,7 @@ on:
       - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/**'
       - 'packages/runtime-support/package.json'
-      - 'packages/runtime-support/src/mindgrab/backend.js'
+      - 'packages/runtime-support/src/mindgrab/**'
   workflow_dispatch:
     inputs:
       sign_release:
