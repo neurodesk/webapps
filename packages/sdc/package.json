@@ -1,7 +1,7 @@
 {
   "name": "@neurodesk/sdc",
   "version": "0.3.20261031",
-  "description": "Reverse phase-encoding susceptibility distortion correction (PyHySCO port) for browsers and the command line",
+  "description": "Susceptibility distortion correction for browsers and the command line: reverse phase-encoding (PyHySCO port) and fieldmap-less SyN-SDC (sdcflows port)",
   "type": "module",
   "private": true,
   "license": "GPL-3.0-or-later AND Apache-2.0 AND BSD-3-Clause",
@@ -12,7 +12,11 @@
     ".": "./src/wasm.js",
     "./wasm": "./src/sdc.wasm",
     "./field-fit": "./src/field-fit.js",
-    "./field-fit.wasm": "./src/sdc-field-fit.wasm"
+    "./field-fit.wasm": "./src/sdc-field-fit.wasm",
+    "./syn": "./src/syn/pipeline.js",
+    "./syn/node": "./src/syn/node.js",
+    "./syn/browser": "./src/syn/browser.js",
+    "./syn/n4-worker": "./src/syn/n4-worker.js"
   },
   "files": [
     "src",
@@ -26,7 +30,7 @@
     "build:wasm": "bash scripts/build-wasm.sh",
     "check:wasm": "bash scripts/build-wasm.sh --check",
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/wasm.js",
+    "lint": "node --check src/wasm.js && node --check src/field-fit.js && for f in src/syn/*.js; do node --check $f || exit 1; done",
     "build:field-fit": "bash scripts/build-field-fit.sh",
     "check:field-fit": "bash scripts/build-field-fit.sh --check"
   },
@@ -36,6 +40,16 @@
     "directory": "packages/sdc"
   },
   "dependencies": {
-    "@neurodesk/runtime-support": "workspace:*"
+    "@brainchop/mindgrab": "0.1.20260925",
+    "@neurodesk/ants-denoise": "workspace:*",
+    "@neurodesk/hmc": "workspace:*",
+    "@neurodesk/n4": "workspace:*",
+    "@neurodesk/node-drivers": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "devDependencies": {
+    "@neurodesk/hmc-registration": "workspace:*",
+    "@neurodesk/noddi": "workspace:*"
   }
 }

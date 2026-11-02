@@ -4466,6 +4466,38 @@
       "contentType": "application/octet-stream",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/fmap_atlas.nii.gz": {
+      "sha256": "72b8d2cc7ff3324f3bfaf52712bc191256e795bcff5ee168563b89e584aa40bb",
+      "bytes": 5801500,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "CC-BY-4.0",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/fmap_atlas_2_MNI152NLin2009cAsym_affine.mat": {
+      "sha256": "588820bdaefab4f98c42b3a394c7c975ad9764bc5d8b095718f47419a9ea6ffc",
+      "bytes": 193,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "Apache-2.0",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz": {
+      "sha256": "1f27aabea9f7183dc0c69dafa71e1787b921ca778d655d9c1bf302b273d5627a",
+      "bytes": 13685075,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "LicenseRef-MNI152NLin2009cAsym",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz": {
+      "sha256": "e40bb1816736504d4c25abc243c1c8503df1d308f64c048318aa4b829e09a7ae",
+      "bytes": 159538,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "LicenseRef-MNI152NLin2009cAsym",
+      "dependencies": []
     }
   },
   "apps": {
@@ -5442,7 +5474,11 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0fb07794f511b12bfeb891c361abc33e575a23f6/sdc/examples/ds005134-sub-01-slab/sub-01_dir-AP_dwi.bval",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0fb07794f511b12bfeb891c361abc33e575a23f6/sdc/examples/ds005134-sub-01-slab/sub-01_dir-AP_dwi.bvec",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0fb07794f511b12bfeb891c361abc33e575a23f6/sdc/examples/ds005134-sub-01-slab/sub-01_dir-PA_epi.nii.gz",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0fb07794f511b12bfeb891c361abc33e575a23f6/sdc/examples/ds005134-sub-01-slab/sub-01_dir-PA_epi.json"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0fb07794f511b12bfeb891c361abc33e575a23f6/sdc/examples/ds005134-sub-01-slab/sub-01_dir-PA_epi.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/fmap_atlas.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/fmap_atlas_2_MNI152NLin2009cAsym_affine.mat",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz"
     ],
     "dwicorrect": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ef3e1da9f96a2e79d347333354d8c6bdb68f1f37/dwicorrect/examples/ds006676-sub-001-S3P1/sub-001_ses-001_acq-S3P1_dir-AP_dwi.nii.gz",

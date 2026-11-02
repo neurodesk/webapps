@@ -6,19 +6,53 @@ name: sdc-registration-gate
 # WebAssembly kernel, and gate.py requires the whole rule of Q66: d < 0.5 Hz, and
 # d <= max(spread, 0.05 Hz), which the kernel's d of about 0.040 Hz meets through the floor without
 # the seed spread. The data are fetched with their SHA-256, so a missing input fails the job.
-# SyN takes about 50 minutes on one core. The replay reads no packages/sdc code; the pipeline of
-# #464 adds it when it runs in this gate.
+# SyN takes about 50 minutes on one core.
+#
+# Job `pipeline` runs the SyN-SDC pipeline of packages/sdc (#464) end to end on the full-brain
+# ds005134 sub-01 in Node (MindGrab masks, DenoiseImage, the epi2anat and MNI affines, SyN, the
+# field fit, the DWI unwarp in this repository's WebAssembly and JavaScript; N4's output is native
+# N4's, pinned in sdc/reference/, as the plan's section 6.2 decides), and requires the same rule
+# against the same native run, with SDC_REQUIRE_SYN_GATE=1 turning missing
+# data into a failure. It also checks the DWI unwarp against sdcflows' and reports the slab run.
 on:
   pull_request:
     paths:
       - '.github/workflows/sdc-registration-gate.yml'
       - 'packages/hmc-registration/**'
+      - 'packages/sdc/**'
+      - 'packages/ants-denoise/**'
+      - 'packages/n4/package.json'
+      - 'packages/n4/src/index.js'
+      - 'packages/n4/src/epi-reference.js'
+      - 'packages/n4/wasm/**'
+      - 'packages/runtime-support/package.json'
+      - 'packages/runtime-support/src/mindgrab/backend.js'
+      - 'packages/node-drivers/src/mindgrab*.js'
+      - 'packages/hmc/src/pool.js'
+      - 'packages/hmc/src/node-runtime.js'
+      - 'packages/components/src/file-io/NiftiUtils.js'
+      - 'packages/components/src/volume/mean.js'
+      - 'models/sdc.manifest.json'
       - 'exes/dwi/sdc/**'
   push:
     branches: [main]
     paths:
       - '.github/workflows/sdc-registration-gate.yml'
       - 'packages/hmc-registration/**'
+      - 'packages/sdc/**'
+      - 'packages/ants-denoise/**'
+      - 'packages/n4/package.json'
+      - 'packages/n4/src/index.js'
+      - 'packages/n4/src/epi-reference.js'
+      - 'packages/n4/wasm/**'
+      - 'packages/runtime-support/package.json'
+      - 'packages/runtime-support/src/mindgrab/backend.js'
+      - 'packages/node-drivers/src/mindgrab*.js'
+      - 'packages/hmc/src/pool.js'
+      - 'packages/hmc/src/node-runtime.js'
+      - 'packages/components/src/file-io/NiftiUtils.js'
+      - 'packages/components/src/volume/mean.js'
+      - 'models/sdc.manifest.json'
       - 'exes/dwi/sdc/**'
   schedule:
     - cron: '41 2 * * *'
@@ -90,4 +124,48 @@ jobs:
             ${{ runner.temp }}/replay/ants-calls.jsonl
             ${{ runner.temp }}/replay/wasm-calls.jsonl
             ${{ runner.temp }}/replay/driver.log
+          if-no-files-found: warn
+
+  pipeline:
+    name: SyN-SDC pipeline (packages/sdc) end to end on the full brain, 1.2 mm grid
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install the package and its runtimes
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter @neurodesk/sdc...
+      - name: Cache the reference downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/sdc-pipeline-reference
+            ~/sdc-grid
+            ~/sdc-prior
+            ~/sdc-slab
+          key: sdc-pipeline-gate-${{ hashFiles('exes/dwi/sdc/validation/*.manifest.json', 'apps/noddi/examples.json') }}
+      - name: Fetch the inputs, the prior and the native reference (sha256-checked)
+        run: |
+          python3 exes/dwi/sdc/validation/fetch_reference.py "$HOME/sdc-pipeline-reference" reference-run slab >> "$GITHUB_ENV"
+          python3 exes/dwi/sdc/validation/fetch_reference.py --folder grid "$HOME/sdc-grid" replay-1.2mm >> "$GITHUB_ENV"
+          python3 exes/dwi/sdc/validation/fetch_reference.py --folder prior "$HOME/sdc-prior" prior >> "$GITHUB_ENV"
+          node packages/sdc/validation/fetch-slab.mjs "$HOME/sdc-slab" >> "$GITHUB_ENV"
+      - name: Run the pipeline and require the Q66 gate
+        working-directory: packages/sdc
+        env:
+          SDC_REQUIRE_SYN_GATE: '1'
+          SDC_SYN_GATE_OUTPUT: ${{ runner.temp }}/sdc-pipeline
+        run: node --test --test-concurrency=1 test/syn-gate.test.js
+      - name: Preserve the reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sdc-pipeline-gate
+          path: ${{ runner.temp }}/sdc-pipeline/*/report.json
           if-no-files-found: warn

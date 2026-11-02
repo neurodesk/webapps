@@ -245,6 +245,11 @@ jobs:
       - name: SDC field-fit tests on the committed module
         working-directory: packages/sdc
         run: node --test test/field-fit.test.js
+      # The SyN-SDC ports against SciPy's outputs, the refusals, a synthetic run whose outputs the
+      # n4 and noddi inputs accept, and cancellation. The full-brain gate is sdc-registration-gate.yml.
+      - name: SDC SyN pipeline tests on the committed modules
+        working-directory: packages/sdc
+        run: node --test test/syn.test.js
 
   dmipy-reference:
     name: nonlinear NODDI native and WASM maps on the pinned WM reference

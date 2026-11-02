@@ -1953,9 +1953,34 @@ importers:
 
   packages/sdc:
     dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/ants-denoise':
+        specifier: workspace:*
+        version: link:../ants-denoise
+      '@neurodesk/hmc':
+        specifier: workspace:*
+        version: link:../hmc
+      '@neurodesk/n4':
+        specifier: workspace:*
+        version: link:../n4
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+    devDependencies:
+      '@neurodesk/hmc-registration':
+        specifier: workspace:*
+        version: link:../hmc-registration
+      '@neurodesk/noddi':
+        specifier: workspace:*
+        version: link:../noddi
 
   packages/seedseg:
     dependencies:

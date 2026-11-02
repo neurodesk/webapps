@@ -31,3 +31,12 @@ Source commit 96a4e1425923d180569dcccd6ca688e9fa54874d, Apache-2.0.
 Portable OpenBLAS reduction:
 Copyright (c) 2014, The OpenBLAS Project. All rights reserved.
 Source commit af560c1935c357e314f1f03cbbedf53f88345d38, BSD-3-Clause.
+
+The ./syn entry points (src/syn/) port the SyN-SDC workflows of sdcflows 2.17.1
+(init_syn_preprocessing_wf, init_syn_sdc_wf, B0FieldTransform), the niworkflows
+1.15.3 steps they call (IntensityClip, BinaryDilation, GenerateSamplingReference)
+and the SciPy 1.18.1 cubic spline (spline_filter, map_coordinates) to JavaScript,
+Apache-2.0. sdcflows: Copyright 2021 The NiPreps Developers; niworkflows:
+Copyright The NiPreps Developers, Apache-2.0; SciPy: Copyright 2001-2002
+Enthought, Inc., 2003 SciPy Developers, BSD-3-Clause. They do not contain the
+PyHySCO implementation.
