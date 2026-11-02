@@ -65,8 +65,8 @@ opacityControl.append("Opacity", opacity);
 
 const toolbar = createViewerToolbar({
   views: [
-    { id: "lateral", label: "Lateral", active: true },
-    { id: "medial", label: "Medial" },
+    { id: "medial", label: "Medial", active: true },
+    { id: "lateral", label: "Lateral" },
     { id: "posterior", label: "Posterior" },
     { id: "ventral", label: "Ventral" },
   ],
@@ -88,7 +88,7 @@ $("aboutBtn").onclick = () => info.open(`About ${APP.title}`, $("aboutContent"))
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 
 const viewer = createSurfaceViewer("gl1");
-let view = "lateral";
+let view = "medial";
 toolbar.addEventListener("nd-view-change", ({ detail }) => {
   view = detail.value;
   viewer.setView(view, hemisphere());

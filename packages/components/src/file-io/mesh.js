@@ -38,6 +38,20 @@ export function writeMz3Scalars(values) {
   return buffer;
 }
 
+// A FreeSurfer curvature file (new format: 0xFFFFFF, then big-endian vertex count,
+// face count, values per vertex and one float per vertex).
+export function readFreeSurferCurv(bytes) {
+  const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
+  if (input.byteLength < 15 || input[0] !== 0xff || input[1] !== 0xff || input[2] !== 0xff) throw new Error('Not a FreeSurfer curvature file.');
+  const count = view.getInt32(3, false);
+  if (view.getInt32(11, false) !== 1) throw new Error('The curvature file has more than one value per vertex.');
+  if (input.byteLength < 15 + count * 4) throw new Error('Truncated curvature file.');
+  const values = new Float32Array(count);
+  for (let index = 0; index < count; index++) values[index] = view.getFloat32(15 + index * 4, false);
+  return values;
+}
+
 export async function readMz3(bytes) {
   const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const raw = input[0] === 0x1f && input[1] === 0x8b // niimath gzips the mz3 it writes

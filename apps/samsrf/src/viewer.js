@@ -1,10 +1,19 @@
 // The cortical surface in NiiVue: one mesh, curvature shading as its first layer
 // and the displayed map as its second.
 import NiiVue, { SLICE_TYPE } from "@niivue/niivue";
-import { writeMz3Scalars } from "@neurodesk/webapp-components/file-io/mesh";
+import { readFreeSurferCurv, writeMz3Scalars } from "@neurodesk/webapp-components/file-io/mesh";
 import { POLAR_COLORMAP, POLAR_COLORMAP_POINTS, cameraFor } from "./display.js";
 
-const CURVATURE = { colormap: "gray", calMin: 0.3, calMax: 0.5, opacity: 0.6, isColorbarVisible: false };
+// Gyri (negative curvature) light and sulci (positive) dark, as FreeSurfer shades them,
+// encoded into [1, 2] like the maps because NiiVue's layer lookup starts at zero.
+const CURVATURE_RANGE = 0.15;
+const CURVATURE = { colormap: "gray", calMin: 1, calMax: 2, colormapType: 0, isTransparentBelowCalMin: false, opacity: 0.6, isColorbarVisible: false };
+
+async function curvatureLayer(file) {
+  const curvature = readFreeSurferCurv(new Uint8Array(await file.arrayBuffer()));
+  const shade = curvature.map((value) => 1.5 - Math.max(-CURVATURE_RANGE, Math.min(CURVATURE_RANGE, value)) / (2 * CURVATURE_RANGE));
+  return new File([writeMz3Scalars(shade)], `${file.name}.mz3`);
+}
 
 export function createSurfaceViewer(canvasId) {
   const nv = new NiiVue({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] });
@@ -35,8 +44,8 @@ export function createSurfaceViewer(canvasId) {
         url: mesh,
         name: mesh.name,
         color: [0.7, 0.7, 0.7, 1],
-        layers: curvature ? [{ url: curvature, name: curvature.name, ...CURVATURE }] : [],
       });
+      if (curvature) await nv.addMeshLayer(0, { url: await curvatureLayer(curvature), name: curvature.name, ...CURVATURE });
       surface = mesh;
       mapLayer = curvature ? 1 : 0;
     },

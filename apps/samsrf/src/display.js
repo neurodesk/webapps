@@ -104,7 +104,7 @@ export function cameraFor(view, hemisphere) {
   const views = {
     lateral: { azimuth: left ? 90 : 270, elevation: 0 },
     medial: { azimuth: left ? 270 : 90, elevation: 0 },
-    posterior: { azimuth: 180, elevation: 0 },
+    posterior: { azimuth: 0, elevation: 0 },
     ventral: { azimuth: 180, elevation: -90 },
   };
   return views[view] ?? views.lateral;
