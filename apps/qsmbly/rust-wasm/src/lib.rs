@@ -296,10 +296,10 @@ pub fn tgv_qsm_wasm_with_progress(
     let params = qsm_core::inversion::tgv::TgvParams {
         alpha0: alpha0 as f32,
         alpha1: alpha1 as f32,
-        iterations,
+        iterations: Some(iterations),
         erosions,
         step_size: 3.0,
-        tol: 1e-5,
+        ..Default::default()
     };
 
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
@@ -326,7 +326,7 @@ pub fn tgv_qsm_wasm_with_progress(
 /// Returns [alpha0, alpha1]
 #[wasm_bindgen]
 pub fn tgv_get_default_alpha_wasm(regularization: u8) -> Vec<f64> {
-    let (alpha0, alpha1) = qsm_core::inversion::tgv::get_default_alpha(regularization);
+    let (alpha0, alpha1) = qsm_core::inversion::tgv::get_default_alpha(f32::from(regularization));
     vec![alpha0 as f64, alpha1 as f64]
 }
 
@@ -828,7 +828,8 @@ pub fn makehomogeneous_wasm(
     }
 
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
-    let result = qsm_core::utils::bias_correction::makehomogeneous(mag, &grid, sigma_clamped, nbox);
+    let result = qsm_core::utils::bias_correction::makehomogeneous(mag, &grid, sigma_clamped, nbox)
+        .map_err(js_err)?;
 
     console_log!("WASM makehomogeneous complete");
     Ok(result)
@@ -887,7 +888,8 @@ pub fn vasculature_mask_wasm_with_progress(
         &grid,
         &params,
         js_progress(progress_callback),
-    );
+    )
+    .map_err(js_err)?;
 
     console_log!("WASM vasculature_mask complete");
     Ok(result)
@@ -1056,11 +1058,11 @@ config_defaults!(get_tfi_defaults, qsmxt_engine::config::TfiConfig);
 config_defaults!(get_qsmart_defaults, qsmxt_engine::config::QsmartConfig);
 config_defaults!(get_romeo_defaults, qsmxt_engine::config::RomeoConfig);
 
-/// MCPC-3D-S defaults, `{"sigma": [x, y, z]}`. qsmxt-engine folded its MCPC-3D-S section into
-/// `[field_mapping]` (`phase_offset_sigma`); this keeps the shape the UI reads.
+/// MCPC-3D-S defaults, `{"sigma": [x, y, z]}` in mm. qsmxt-engine folded its MCPC-3D-S section
+/// into `[field_mapping]` (`phase_offset_sigma_mm`); this keeps the shape the UI reads.
 #[wasm_bindgen]
 pub fn get_mcpc3ds_defaults() -> String {
-    let sigma = qsmxt_engine::config::FieldMappingConfig::default().phase_offset_sigma;
+    let sigma = qsmxt_engine::config::FieldMappingConfig::default().phase_offset_sigma_mm;
     serde_json::json!({ "sigma": sigma }).to_string()
 }
 
@@ -1486,7 +1488,9 @@ pub fn validate_config_wasm(toml_string: &str) -> String {
 // Shared pipeline stage functions (guaranteed identical to qsmxt.rs)
 // =========================================================================
 
-/// Run background removal: total field → local field (ppm).
+/// Run background removal: total field → local field (ppm). `echo_times` (s) and `magnitude` are
+/// what a magnitude-weighted method reads (PDF: every echo's magnitude, the echo slowest, at
+/// evenly spaced echo times); either may be empty for the others.
 ///
 /// Returns [local_field_ppm, eroded_mask_f64].
 #[wasm_bindgen]
@@ -1500,6 +1504,8 @@ pub fn run_bg_removal_wasm(
     vsy: f64,
     vsz: f64,
     field_strength: f64,
+    echo_times: &[f64],
+    magnitude: &[f64],
     config_toml: &str,
     progress_callback: &js_sys::Function,
 ) -> Result<Vec<f64>, JsValue> {
@@ -1512,16 +1518,18 @@ pub fn run_bg_removal_wasm(
     let meta = qsmxt_engine::to_scan_metadata(
         (nx, ny, nz),
         (vsx, vsy, vsz),
-        &[],
+        echo_times,
         field_strength,
         (0.0, 0.0, 1.0),
         None,
     );
+    let magnitude = (!magnitude.is_empty()).then_some(magnitude);
     let result = qsm_core::pipeline::run_bg_removal(
         field_ppm,
         mask,
         &meta,
         &bg_config,
+        magnitude,
         &mut js_progress(progress_callback),
     );
 

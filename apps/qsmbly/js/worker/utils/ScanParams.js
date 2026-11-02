@@ -37,6 +37,8 @@ export function echoTimeDependentStep(settings) {
     return (s.qsmart?.inversion_algorithm || 'ilsqr') === 'medi' ? 'MEDI (QSMART inner inversion)' : null;
   }
   if (combined === 'none' && (s.dipole_inversion || 'rts') === 'medi') return 'MEDI';
+  // PDF weights its fit by the field's noise, which it estimates from the magnitude at the echo time.
+  if (combined === 'none' && s.bf_algorithm === 'pdf') return 'PDF';
   return null;
 }
 

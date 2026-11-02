@@ -149,7 +149,6 @@ export const TGV_DEFAULTS = {
   iterations: _TGV.iterations,
   erosions: _TGV.erosions,
   step_size: _TGV.step_size,
-  tol: _TGV.tol,
 };
 
 /** qsm-core's TGV [alpha0, alpha1] for each UI regularization level (generated). */
@@ -275,7 +274,7 @@ export const NLTV_DEFAULTS = {
   mu: _NLTV.mu,
   max_iter: _NLTV.max_iter,
   tol: _NLTV.tol,
-  newton_max_iter: _NLTV.newton_iter,
+  newton_max_iter: _NLTV.max_iter_newton,
 };
 
 export const NDI_DEFAULTS = {

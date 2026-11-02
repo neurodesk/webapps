@@ -13,6 +13,7 @@
 //! which returns its error as a `String` so it can be tested off wasm.
 
 use qsmxt_engine::pipeline_graph::{pipeline_graph, pipeline_graph_after, pipeline_graph_on};
+use qsmxt_engine::recommendations::{self as rec, Facts};
 use qsmxt_engine::record::RunRecord;
 use qsmxt_engine::scan::{RunMetadata, ScanFacts};
 use qsmxt_engine::schema::{self, ViewFacts};
@@ -36,20 +37,32 @@ fn to_json(config: &PipelineConfig) -> Result<String, String> {
     config.to_json().map_err(|e| e.to_string())
 }
 
-/// What `settings_view` needs to know about the scan: its echo count, and whether its coils are
-/// uncombined. Without facts, neither is known.
+/// What `settings_view` needs to know about the scan: its echo count, whether its coils are
+/// uncombined and whether it has magnitude images (motion correction needs them); with `scan` (the facts are a loaded scan's, not the example's the page plans with
+/// before one is loaded), also its field strength, matrix size and, once read, voxel size, which
+/// the pipeline rules that depend on the scan need. Without facts, nothing is known.
 ///
 /// QSMxT has no conversion from `ScanFacts` to `ViewFacts` (its TUI fills `ViewFacts` from its
 /// form), so it is written here; QSMxT/QSMxT#377 asks for it in the engine.
-fn view_facts(facts_json: Option<&str>) -> Result<ViewFacts, String> {
+fn view_facts(facts_json: Option<&str>, scan: bool) -> Result<ViewFacts, String> {
     let Some(json) = facts_json.filter(|j| !j.trim().is_empty() && j.trim() != "null") else {
         return Ok(ViewFacts::default());
     };
     let facts = parse_facts(json)?;
+    let (x, y, z) = facts.dims;
     Ok(ViewFacts {
         num_echoes: Some(facts.n_echoes),
         multi_coil: Some(facts.n_coils > 1),
+        has_magnitude: Some(facts.has_magnitude),
+        field_strength: scan.then_some(facts.field_strength),
+        voxel_size: facts.voxel_size.filter(|_| scan).map(|(a, b, c)| [a, b, c]),
+        dims: scan.then_some([x, y, z]),
     })
+}
+
+/// [`view_facts`], as the pipeline rules take them.
+fn rule_facts(facts_json: Option<&str>, scan: bool) -> Result<Facts, String> {
+    Ok(Facts::of_view(&view_facts(facts_json, scan)?))
 }
 
 /// An item's key ([`Item::key`]) and what it is ([`Item::meta`]).
@@ -146,12 +159,19 @@ pub fn browser_mask_defaults_wasm() -> Result<String, JsValue> {
 // ============================================================================
 
 /// How each setting applies to `config` on the scan `facts` describes, in schema order:
-/// `[{ path, visible, forced_by, error }]` (`schema::settings_view`). `error` says what is wrong
-/// with a setting that applies: out of its range, not a finite number, or refused by its own
-/// rule.
-pub fn settings_view(config_json: &str, facts_json: Option<&str>) -> Result<String, String> {
+/// `[{ path, visible, forced_by, error, warning, reference, recommendations }]`
+/// (`schema::settings_view`). `error` says what is wrong with a setting that applies: out of its
+/// range, not a finite number, or refused by its own rule. `reference` is every pipeline rule of
+/// the chosen methods that covers the setting, and `recommendations` the ones it departs from
+/// (`recommendations::Recommendation`). `scan`: the facts are a loaded scan's (see
+/// [`view_facts`]).
+pub fn settings_view(
+    config_json: &str,
+    facts_json: Option<&str>,
+    scan: bool,
+) -> Result<String, String> {
     let config = parse_config(config_json)?;
-    let view = schema::settings_view(&config, &view_facts(facts_json)?);
+    let view = schema::settings_view(&config, &view_facts(facts_json, scan)?);
     serde_json::to_string(&view).map_err(|e| e.to_string())
 }
 
@@ -160,15 +180,223 @@ pub fn settings_view(config_json: &str, facts_json: Option<&str>) -> Result<Stri
 pub fn settings_view_wasm(
     config_json: &str,
     facts_json: Option<String>,
+    scan: bool,
 ) -> Result<String, JsValue> {
-    settings_view(config_json, facts_json.as_deref()).map_err(js_err)
+    settings_view(config_json, facts_json.as_deref(), scan).map_err(js_err)
+}
+
+// ============================================================================
+// The pipeline rules' findings
+// ============================================================================
+
+/// `config` with the finding of `rule` resolved (`recommendations::apply`): its setting set to the
+/// rule's recommended value, or with `pick_json` to another value the rule allows, and marked the
+/// user's choice; any dismissal of the rule dropped.
+pub fn apply_recommendation(
+    config_json: &str,
+    rule: &str,
+    pick_json: Option<&str>,
+) -> Result<String, String> {
+    let mut config = parse_config(config_json)?;
+    let pick: Option<Value> = pick_json
+        .map(|p| serde_json::from_str(p).map_err(|e| format!("{rule}: not a JSON value: {e}")))
+        .transpose()?;
+    rec::apply(&mut config, rule, pick.as_ref())?;
+    to_json(&config)
+}
+
+/// [`apply_recommendation`].
+#[wasm_bindgen]
+pub fn apply_recommendation_wasm(
+    config_json: &str,
+    rule: &str,
+    pick_json: Option<String>,
+) -> Result<String, JsValue> {
+    apply_recommendation(config_json, rule, pick_json.as_deref()).map_err(js_err)
+}
+
+/// `config` with the finding of `rule` dismissed for its setting's current value
+/// (`recommendations::dismiss`, kept in `dismissed_recommendations`): refused for a rule with no
+/// finding, or a required one.
+pub fn dismiss_recommendation(
+    config_json: &str,
+    rule: &str,
+    facts_json: Option<&str>,
+    scan: bool,
+) -> Result<String, String> {
+    let mut config = parse_config(config_json)?;
+    rec::dismiss(&mut config, rule, &rule_facts(facts_json, scan)?)?;
+    to_json(&config)
+}
+
+/// [`dismiss_recommendation`].
+#[wasm_bindgen]
+pub fn dismiss_recommendation_wasm(
+    config_json: &str,
+    rule: &str,
+    facts_json: Option<String>,
+    scan: bool,
+) -> Result<String, JsValue> {
+    dismiss_recommendation(config_json, rule, facts_json.as_deref(), scan).map_err(js_err)
+}
+
+/// `config` with its dismissal of `rule` taken back (`recommendations::undismiss`).
+pub fn undismiss_recommendation(config_json: &str, rule: &str) -> Result<String, String> {
+    let mut config = parse_config(config_json)?;
+    rec::undismiss(&mut config, rule);
+    to_json(&config)
+}
+
+/// [`undismiss_recommendation`].
+#[wasm_bindgen]
+pub fn undismiss_recommendation_wasm(config_json: &str, rule: &str) -> Result<String, JsValue> {
+    undismiss_recommendation(config_json, rule).map_err(js_err)
+}
+
+/// `config` less the dismissals that no longer match a finding (`recommendations::prune_dismissals`:
+/// the setting changed, or the rule no longer applies), so going back to a value brings its
+/// finding back.
+pub fn prune_dismissals(
+    config_json: &str,
+    facts_json: Option<&str>,
+    scan: bool,
+) -> Result<String, String> {
+    let mut config = parse_config(config_json)?;
+    rec::prune_dismissals(&mut config, &rule_facts(facts_json, scan)?);
+    to_json(&config)
+}
+
+/// [`prune_dismissals`].
+#[wasm_bindgen]
+pub fn prune_dismissals_wasm(
+    config_json: &str,
+    facts_json: Option<String>,
+    scan: bool,
+) -> Result<String, JsValue> {
+    prune_dismissals(config_json, facts_json.as_deref(), scan).map_err(js_err)
+}
+
+fn parse_findings(findings_json: &str) -> Result<Vec<rec::Recommendation>, String> {
+    serde_json::from_str(findings_json).map_err(|e| format!("not a list of findings: {e}"))
+}
+
+fn parse_methods(methods_json: &str) -> Result<Vec<rec::Trigger>, String> {
+    serde_json::from_str(methods_json).map_err(|e| format!("not a list of methods: {e}"))
+}
+
+/// The choices in `config` that have a reference pipeline (`recommendations::chosen_methods`):
+/// `[{ setting, value, name }]`. Compared before and after a change, a choice that appears is a
+/// method just chosen.
+pub fn chosen_methods(
+    config_json: &str,
+    facts_json: Option<&str>,
+    scan: bool,
+) -> Result<String, String> {
+    let config = parse_config(config_json)?;
+    let methods = rec::chosen_methods(&config, &rule_facts(facts_json, scan)?);
+    serde_json::to_string(&methods).map_err(|e| e.to_string())
+}
+
+/// [`chosen_methods`].
+#[wasm_bindgen]
+pub fn chosen_methods_wasm(
+    config_json: &str,
+    facts_json: Option<String>,
+    scan: bool,
+) -> Result<String, JsValue> {
+    chosen_methods(config_json, facts_json.as_deref(), scan).map_err(js_err)
+}
+
+/// What to offer for the methods just chosen (`methods_json`, as [`chosen_methods`] gives them):
+/// for each, `{ method, title, differences }`: its title (`recommendations::reference_title`) and
+/// where `config` differs from its reference pipeline and has not kept its own value
+/// (`recommendations::reference_differences`).
+pub fn reference_offers(
+    config_json: &str,
+    facts_json: Option<&str>,
+    scan: bool,
+    methods_json: &str,
+) -> Result<String, String> {
+    let config = parse_config(config_json)?;
+    let facts = rule_facts(facts_json, scan)?;
+    let offers: Vec<Value> = parse_methods(methods_json)?
+        .iter()
+        .map(|m| {
+            json!({
+                "method": m,
+                "title": rec::reference_title(m),
+                "differences": rec::reference_differences(&config, &facts, m),
+            })
+        })
+        .collect();
+    serde_json::to_string(&offers).map_err(|e| e.to_string())
+}
+
+/// [`reference_offers`].
+#[wasm_bindgen]
+pub fn reference_offers_wasm(
+    config_json: &str,
+    facts_json: Option<String>,
+    scan: bool,
+    methods_json: &str,
+) -> Result<String, JsValue> {
+    reference_offers(config_json, facts_json.as_deref(), scan, methods_json).map_err(js_err)
+}
+
+/// `recommendations::reference_title` of each of `methods_json`: "MEDI's reference pipeline".
+pub fn reference_titles(methods_json: &str) -> Result<String, String> {
+    let titles: Vec<String> = parse_methods(methods_json)?
+        .iter()
+        .map(rec::reference_title)
+        .collect();
+    serde_json::to_string(&titles).map_err(|e| e.to_string())
+}
+
+/// [`reference_titles`].
+#[wasm_bindgen]
+pub fn reference_titles_wasm(methods_json: &str) -> Result<String, JsValue> {
+    reference_titles(methods_json).map_err(js_err)
+}
+
+/// "Keep mine": `config` with each finding kept at its setting's current value
+/// (`recommendations::keep`, as dismissals); a required one is left.
+pub fn keep_findings(config_json: &str, findings_json: &str) -> Result<String, String> {
+    let mut config = parse_config(config_json)?;
+    rec::keep(
+        &mut config.dismissed_recommendations,
+        &parse_findings(findings_json)?,
+    );
+    to_json(&config)
+}
+
+/// [`keep_findings`].
+#[wasm_bindgen]
+pub fn keep_findings_wasm(config_json: &str, findings_json: &str) -> Result<String, JsValue> {
+    keep_findings(config_json, findings_json).map_err(js_err)
+}
+
+/// "Apply all": `config` with each finding's recommended value applied
+/// (`recommendations::apply_all`); refused, with each reason, if any could not be.
+pub fn apply_all(config_json: &str, findings_json: &str) -> Result<String, String> {
+    let mut config = parse_config(config_json)?;
+    rec::apply_all(&mut config, &parse_findings(findings_json)?)?;
+    to_json(&config)
+}
+
+/// [`apply_all`].
+#[wasm_bindgen]
+pub fn apply_all_wasm(config_json: &str, findings_json: &str) -> Result<String, JsValue> {
+    apply_all(config_json, findings_json).map_err(js_err)
 }
 
 /// `config` with every setting that does not apply to it put back to QSMxT's default
 /// (`schema::prune_hidden`).
 pub fn prune_hidden(config_json: &str, facts_json: Option<&str>) -> Result<String, String> {
     let config = parse_config(config_json)?;
-    to_json(&schema::prune_hidden(&config, &view_facts(facts_json)?))
+    to_json(&schema::prune_hidden(
+        &config,
+        &view_facts(facts_json, false)?,
+    ))
 }
 
 /// [`prune_hidden`]; `facts_json` may be `null` (not known).
@@ -277,6 +505,30 @@ pub fn config_from_toml(toml: &str) -> Result<String, String> {
 #[wasm_bindgen]
 pub fn config_from_toml_wasm(toml: &str) -> Result<String, JsValue> {
     config_from_toml(toml).map_err(js_err)
+}
+
+/// A configuration the page saved (PipelineConfig JSON, possibly from an earlier version of the
+/// page), read as QSMxT reads a saved JSON config (`PipelineConfig::from_json_migrating`: one
+/// without `schema_version` is brought up to date as an older settings file is), then given the
+/// browser profile: `{ config, warnings }`, as [`config_from_toml`]. A config QSMxT would refuse
+/// is refused with its reason.
+pub fn config_from_json(json: &str) -> Result<String, String> {
+    let (mut config, migration) =
+        PipelineConfig::from_json_migrating(json).map_err(|e| e.to_string())?;
+    config.apply_browser_profile();
+    let warnings: Vec<String> = migration
+        .warnings
+        .into_iter()
+        .chain(migration.notes)
+        .collect();
+    let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
+    Ok(json!({ "config": config, "warnings": warnings }).to_string())
+}
+
+/// [`config_from_json`].
+#[wasm_bindgen]
+pub fn config_from_json_wasm(json: &str) -> Result<String, JsValue> {
+    config_from_json(json).map_err(js_err)
 }
 
 // ============================================================================
@@ -443,7 +695,173 @@ mod tests {
     }
 
     fn view(config: &str) -> Vec<Value> {
-        serde_json::from_str(&settings_view(config, Some(&example_facts())).unwrap()).unwrap()
+        serde_json::from_str(&settings_view(config, Some(&example_facts()), false).unwrap())
+            .unwrap()
+    }
+
+    fn row<'a>(rows: &'a [Value], path: &str) -> &'a Value {
+        rows.iter().find(|r| r["path"] == path).unwrap()
+    }
+
+    /// The findings on a setting: `[(rule, strength, departs, dismissed)]`.
+    fn findings(config: &str, path: &str) -> Vec<(String, String, bool, bool)> {
+        row(&view(config), path)["recommendations"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .map(|r| {
+                        (
+                            r["rule"].as_str().unwrap().to_string(),
+                            r["strength"].as_str().unwrap().to_string(),
+                            r["departs"] == true,
+                            r["dismissed"] == true,
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// NDI's echo time moved off the first echo: a recommended finding, which Apply resolves,
+    /// Ignore dismisses for that value, and pruning drops once the value changes.
+    #[test]
+    fn the_rules_findings_are_applied_dismissed_and_pruned_by_the_engine() {
+        let ndi = set(&browser(), "inversion.algorithm", json!("ndi"));
+        let last = set(&ndi, "inversion.ndi.te", json!("last"));
+        let rule = "ndi.te-first";
+        assert_eq!(
+            findings(&last, "inversion.ndi.te"),
+            vec![(rule.to_string(), "recommended".into(), true, false)]
+        );
+        // The reference value shows at the default too, departed from or not.
+        let rows = view(&ndi);
+        let reference = &row(&rows, "inversion.ndi.te")["reference"];
+        assert_eq!(reference[0]["rule"], rule);
+        assert_eq!(reference[0]["departs"], false);
+
+        let applied = apply_recommendation(&last, rule, None).unwrap();
+        assert!(findings(&applied, "inversion.ndi.te").is_empty());
+        let picked = apply_recommendation(&last, rule, Some("\"first\"")).unwrap();
+        assert!(findings(&picked, "inversion.ndi.te").is_empty());
+        assert!(apply_recommendation(&last, "no.such-rule", None).is_err());
+
+        let facts = example_facts();
+        let dismissed = dismiss_recommendation(&last, rule, Some(&facts), false).unwrap();
+        assert_eq!(
+            findings(&dismissed, "inversion.ndi.te"),
+            vec![(rule.to_string(), "recommended".into(), true, true)]
+        );
+        let saved: Value = serde_json::from_str(&dismissed).unwrap();
+        assert_eq!(
+            saved["dismissed_recommendations"],
+            json!([{ "rule": rule, "chosen": "last" }])
+        );
+        assert_eq!(
+            prune_dismissals(&dismissed, Some(&facts), false).unwrap(),
+            dismissed,
+            "kept while the setting keeps the value"
+        );
+        // Changed and changed back: the dismissal went with the change, and the finding is back.
+        let moved = prune_dismissals(
+            &set(&dismissed, "inversion.ndi.te", json!("sum")),
+            Some(&facts),
+            false,
+        )
+        .unwrap();
+        let back = set(&moved, "inversion.ndi.te", json!("last"));
+        assert_eq!(
+            findings(&back, "inversion.ndi.te"),
+            vec![(rule.to_string(), "recommended".into(), true, false)]
+        );
+        assert_eq!(
+            undismiss_recommendation(&dismissed, rule).unwrap(),
+            set(&last, "inversion.ndi.te", json!("last"))
+        );
+        // Nothing to dismiss where nothing departs.
+        assert!(dismiss_recommendation(&ndi, rule, Some(&facts), false).is_err());
+    }
+
+    /// Choosing MEDI chooses a method with a reference pipeline: the bindings name it, offer where
+    /// the config differs from it under its title, and Keep mine and Apply all each leave nothing
+    /// to offer. The view's marker says whose rule a setting departs from.
+    #[test]
+    fn a_chosen_methods_reference_pipeline_is_offered_kept_or_applied() {
+        let facts = example_facts();
+        let methods = |c: &str| -> Vec<Value> {
+            serde_json::from_str(&chosen_methods(c, Some(&facts), false).unwrap()).unwrap()
+        };
+        let before = methods(&browser());
+        let medi = set(&browser(), "inversion.algorithm", json!("medi"));
+        let chosen: Vec<Value> = methods(&medi)
+            .into_iter()
+            .filter(|m| !before.contains(m))
+            .collect();
+        assert!(chosen.iter().any(|m| m["name"] == "MEDI"), "{chosen:?}");
+        let chosen = Value::from(chosen).to_string();
+        let offers = |c: &str| -> Vec<Value> {
+            serde_json::from_str(&reference_offers(c, Some(&facts), false, &chosen).unwrap())
+                .unwrap()
+        };
+        let differences = |c: &str| -> Vec<Value> {
+            offers(c)
+                .iter()
+                .flat_map(|o| o["differences"].as_array().unwrap().clone())
+                .collect()
+        };
+        let first = offers(&medi);
+        let titled = first
+            .iter()
+            .find(|o| o["method"]["name"] == "MEDI")
+            .unwrap();
+        assert_eq!(titled["title"], "MEDI's reference pipeline");
+        let found = differences(&medi);
+        assert!(
+            !found.is_empty(),
+            "the browser profile differs from MEDI's reference"
+        );
+        let found = Value::from(found).to_string();
+        assert!(differences(&keep_findings(&medi, &found).unwrap()).is_empty());
+        assert!(differences(&apply_all(&medi, &found).unwrap()).is_empty());
+        assert_eq!(
+            reference_titles(&chosen).unwrap(),
+            Value::from(
+                serde_json::from_str::<Vec<Value>>(&chosen)
+                    .unwrap()
+                    .iter()
+                    .map(|m| format!("{}'s reference pipeline", m["name"].as_str().unwrap()))
+                    .collect::<Vec<_>>()
+            )
+            .to_string()
+        );
+        // The defaults depart from iLSQR's reference unwrapping: an information marker naming it.
+        let unwrap = row(&view(&browser()), "field_mapping.unwrapping_algorithm").clone();
+        assert_eq!(unwrap["marker"]["actionable"], false);
+        assert!(
+            unwrap["marker"]["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("iLSQR: "),
+            "{unwrap}"
+        );
+        assert!(keep_findings(&medi, "not json").is_err());
+    }
+
+    /// The scan's field strength, matrix and voxel size reach the rules only for a loaded scan.
+    #[test]
+    fn a_loaded_scans_facts_reach_the_rules() {
+        let mut facts: Value = serde_json::from_str(&example_facts()).unwrap();
+        facts["voxel_size"] = json!([1.0, 1.0, 2.0]);
+        let facts = facts.to_string();
+        assert_eq!(
+            view_facts(Some(&facts), false).unwrap().field_strength,
+            None
+        );
+        let loaded = view_facts(Some(&facts), true).unwrap();
+        assert_eq!(loaded.field_strength, Some(2.8946));
+        assert_eq!(loaded.dims, Some([184, 256, 128]));
+        assert_eq!(loaded.voxel_size, Some([1.0, 1.0, 2.0]));
+        assert_eq!(loaded.num_echoes, Some(5));
+        assert_eq!(loaded.has_magnitude, Some(true));
     }
 
     #[test]
@@ -501,9 +919,12 @@ mod tests {
             .iter()
             .find(|r| r["path"] == "inversion.tkd.threshold")
             .unwrap();
-        assert_eq!(tkd["error"], "Must be greater than 0");
+        assert!(
+            tkd["error"].as_str().is_some_and(|e| !e.is_empty()),
+            "{tkd}"
+        );
         // Without facts every setting the data could need applies.
-        assert!(settings_view(&browser(), None).is_ok());
+        assert!(settings_view(&browser(), None, false).is_ok());
     }
 
     #[test]
@@ -566,6 +987,31 @@ mod tests {
         )
         .unwrap();
         assert_eq!(old["warnings"].as_array().unwrap().len(), 1);
+    }
+
+    /// A saved config is read back as it was saved; one saved before configs carried
+    /// `schema_version` is brought up to date by the engine, with its notes.
+    #[test]
+    fn a_saved_config_is_read_through_the_engines_migration() {
+        let config = set(&browser(), "inversion.algorithm", json!("rts"));
+        let back: Value = serde_json::from_str(&config_from_json(&config).unwrap()).unwrap();
+        assert_eq!(
+            back["config"],
+            serde_json::from_str::<Value>(&config).unwrap()
+        );
+        assert_eq!(back["warnings"], json!([]));
+        // Saved by an earlier page: no schema_version, and TGV's tolerance (gone since).
+        let mut old: Value = serde_json::from_str(&browser()).unwrap();
+        old.as_object_mut().unwrap().remove("schema_version");
+        old["inversion"]["tgv"]["tol"] = json!(1e-5);
+        let back: Value =
+            serde_json::from_str(&config_from_json(&old.to_string()).unwrap()).unwrap();
+        assert_eq!(
+            back["config"]["schema_version"],
+            json!(qsmxt_engine::migrate::CONFIG_SCHEMA_VERSION)
+        );
+        assert!(back["config"]["inversion"]["tgv"].get("tol").is_none());
+        assert!(config_from_json("{ not json").is_err());
     }
 
     /// The short settings file holds the browser profile's and the user's changes from QSMxT's
@@ -766,8 +1212,27 @@ mod tests {
             "{nodes:?}"
         );
         assert!(after["mermaid"].as_str().unwrap().contains("computed"));
-        let methods = methods_after(&config_json, &facts_json, &record).unwrap();
-        assert_eq!(methods, super::methods(&config_json, &facts_json).unwrap());
+        // The same methods as planned; the run's Note may say more, since the run's own scan
+        // reaches the rules (its echo count, say) where the planned Note has only the config.
+        let after: Value =
+            serde_json::from_str(&methods_after(&config_json, &facts_json, &record).unwrap())
+                .unwrap();
+        let planned: Value =
+            serde_json::from_str(&super::methods(&config_json, &facts_json).unwrap()).unwrap();
+        assert_eq!(after["sentences"], planned["sentences"]);
+        assert_eq!(after["references"], planned["references"]);
+        for line in planned["note"]["differences"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            assert!(
+                after["note"]["differences"]
+                    .as_array()
+                    .is_some_and(|a| a.contains(line)),
+                "{line} is in the planned Note but not the run's"
+            );
+        }
         // The record fits the example's plan too, which the page's tests show it on.
         let example: Vec<Value> = serde_json::from_str::<Value>(
             &super::graph(&browser(), &example_facts(), None).unwrap(),
