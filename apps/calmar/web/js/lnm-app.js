@@ -935,6 +935,7 @@ export class LesionNetworkMappingApp {
   }
 
   refreshMaskDrawingControls() {
+    this.refreshPrimaryAction();
     const toolbar = document.getElementById('maskDrawingToolbar');
     const available = !!(
       this.maskReviewActive &&
@@ -959,6 +960,21 @@ export class LesionNetworkMappingApp {
           : available
             ? 'Mask tools ready'
             : '';
+    }
+  }
+
+  refreshPrimaryAction() {
+    const reportingReady = !this.maskReviewActive && (
+      this.lesionMaskConfirmed || (this.lesionFile && !this.structuralFile && !this.diffusionSeedReady())
+    );
+    for (const [id, primary] of [
+      ['runLesionPreparationButton', !reportingReady],
+      ['runFullPipelineButton', !!reportingReady],
+    ]) {
+      const button = document.getElementById(id);
+      if (!button) continue;
+      button.classList.toggle('btn-primary', primary);
+      button.classList.toggle('btn-secondary', !primary);
     }
   }
 
@@ -1174,6 +1190,7 @@ export class LesionNetworkMappingApp {
 
   // The report also gives way during mask review: the drawing tools need the canvas.
   refreshResultsView() {
+    this.refreshPrimaryAction();
     document.getElementById('thresholdControls')?.classList.toggle('hidden', !this.getAtlasOption()?.connectomeAssetId);
     const available = this.resultsViewAvailable();
     const tab = document.querySelector('.view-tab[data-view="results"]');

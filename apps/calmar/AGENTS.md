@@ -235,6 +235,7 @@ the shared signed macOS packager with the root monorepo release tooling.
 - The report-options browser check captures result screenshots in both themes at desktop and phone widths.
 
 ## Separate segmentation and reporting
+- The sidebar's one primary action follows readiness: segmentation is primary until mask approval, then reporting is primary and segmentation is secondary. A supplied atlas-space lesion without structural/diffusion preparation also makes reporting primary. Re-entering mask review, replacing the subject or clearing approval restores segmentation as primary; use the existing shared button classes, never app-specific colours.
 - Panel 1's primary Run lesion segmentation stops at mask review; acceptance does not resume reporting. Panel 2's secondary Run reporting analysis requires acceptance for structural-image workflows and runs only registration and reporting stages. The compatibility runFullPipeline API remains available to automation.
 - Scan confirmation is a separate report section that opens the existing interactive viewer, explicitly loading the confirmed native mask over native anatomy (or the atlas-grid mask on its matching base). It is not a stale screenshot. Percentage tutorial disclosure is removed; denominator help remains in tooltips.
 - All heading help uses shared nd-heading-inline; report tables use shared nd-table-right. Region coverage is named Damaged, never Destroyed.

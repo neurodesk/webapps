@@ -75,7 +75,7 @@ for (const width of [1440, 390]) {
     expect(await page.evaluate(() => app.nv.opts.clickToSegmentPercent * 100)).toBeCloseTo(Number(tolerance), 1);
     for (const theme of ['light', 'dark']) {
       await page.evaluate(theme => window.NeurodeskTheme.set(theme), theme);
-      await page.screenshot({ path: test.info().outputPath(`wand-${width}-${theme}.png`), fullPage: true });
+      await page.screenshot({ path: test.info().outputPath(`wand-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
     }
     await page.locator('#maskPaintButton').click();
     await expect(page.locator('#maskWandControls')).toBeHidden();
@@ -100,6 +100,8 @@ for (const width of [1440, 390]) {
       await app.startLesionMaskReview({ blank: true });
       app.setViewerView('axial');
     });
+    await expect(page.locator('#runLesionPreparationButton')).toHaveClass(/btn-primary/);
+    await expect(page.locator('#runFullPipelineButton')).toHaveClass(/btn-secondary/);
     await page.locator('#maskLassoButton').click();
     await expect(page.locator('#maskLassoButton')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#maskFilledToggle')).toBeChecked();
@@ -131,7 +133,7 @@ for (const width of [1440, 390]) {
     expect(drawn.confirmed).toBe(false);
     for (const theme of ['light', 'dark']) {
       await page.evaluate(theme => window.NeurodeskTheme.set(theme), theme);
-      await page.screenshot({ path: test.info().outputPath(`lasso-${width}-${theme}.png`), fullPage: true });
+      await page.screenshot({ path: test.info().outputPath(`lasso-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
     }
     await page.locator('#maskUndoButton').click();
     expect(await page.evaluate(() => app.nv.drawBitmap.some(value => value > 0))).toBe(false);
@@ -155,6 +157,9 @@ for (const width of [1440, 390]) {
       app.showResultsView();
     });
     const table = page.locator('#networkOverlapTable');
+    await expect(page.locator('#runFullPipelineButton')).toHaveClass(/btn-primary/);
+    await expect(page.locator('#runLesionPreparationButton')).toHaveClass(/btn-secondary/);
+    await expect(page.locator('.app-sidebar .btn-primary')).toHaveCount(1);
     await table.getByRole('button', { name: 'Sort by Voxels', exact: true }).click();
     await expect(table.locator('tbody tr').first()).toContainText('ROI 20');
     await table.getByRole('button', { name: 'Sort by Voxels', exact: true }).press('Enter');
@@ -173,7 +178,7 @@ for (const width of [1440, 390]) {
     await page.locator('#resultsReport').evaluate(element => element.scrollTop = 0);
     for (const theme of ['light', 'dark']) {
       await page.evaluate(theme => window.NeurodeskTheme.set(theme), theme);
-      await page.screenshot({ path: test.info().outputPath(`results-${width}-${theme}.png`), fullPage: true });
+      await page.screenshot({ path: test.info().outputPath(`results-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
     }
     await page.locator('#patientBehaviorOptions summary').click();
     await page.locator('#includePatientBehavior').uncheck();
@@ -185,5 +190,7 @@ for (const width of [1440, 390]) {
     });
     await expect(page.locator('#patientBehaviorNotes')).toHaveValue('');
     await expect(page.locator('#patientBehaviorReport')).toBeHidden();
+    await expect(page.locator('#runLesionPreparationButton')).toHaveClass(/btn-primary/);
+    await expect(page.locator('#runFullPipelineButton')).toHaveClass(/btn-secondary/);
   });
 }

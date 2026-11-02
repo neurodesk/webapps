@@ -74,7 +74,7 @@ for (const width of [1440, 390]) {
     for (const theme of ['light', 'dark']) {
       await page.evaluate(theme => window.NeurodeskTheme.set(theme), theme);
       await page.locator('.jhu-overlap-table').scrollIntoViewIfNeeded();
-      await page.screenshot({ path: test.info().outputPath(`jhu-${width}-${theme}.png`), fullPage: true });
+      await page.screenshot({ path: test.info().outputPath(`jhu-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
     }
   });
 
@@ -139,9 +139,9 @@ for (const width of [1440, 390]) {
     await expect(page.locator('#directOverlapHelp')).toContainText('ROI covered % =');
     await expect(page.locator('#scanConfirmation')).toBeVisible();
     await expect(page.locator('#resultsReport')).not.toContainText('Understanding the percentages');
-    await page.screenshot({ path: join(directory, `results-${width}.png`), fullPage: true });
+    await page.screenshot({ path: join(directory, `results-${width}.png`), fullPage: true, animations: 'disabled' });
     await page.locator('.nd-app-bar:visible [data-neurodesk-theme-toggle]').first().click();
-    await page.screenshot({ path: join(directory, `results-light-${width}.png`), fullPage: true });
+    await page.screenshot({ path: join(directory, `results-light-${width}.png`), fullPage: true, animations: 'disabled' });
     await page.evaluate(async () => {
       const { writeNifti1 } = await import('/js/modules/nifti-writer.js');
       const atlas = app.overlapResult.atlas;
@@ -167,7 +167,7 @@ for (const width of [1440, 390]) {
     const withoutMask = await page.locator('#gl1').screenshot();
     expect(withMask.equals(withoutMask), 'the lesion overlay must change the rendered scan').toBe(false);
     await page.evaluate(() => app.viewerController.setStageVisible('segmentation', true));
-    await page.screenshot({ path: join(directory, `live-mask-${width}.png`), fullPage: true });
+    await page.screenshot({ path: join(directory, `live-mask-${width}.png`), fullPage: true, animations: 'disabled' });
     await page.locator('.view-tab[data-view="results"]').click();
     const download = page.waitForEvent('download');
     await page.locator('#downloadOverlapCsv').click();

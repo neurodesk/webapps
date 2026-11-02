@@ -8,6 +8,8 @@
 
 ### Patch Changes
 
+- Move the sidebar's primary action from lesion segmentation to reporting once the mask is confirmed, leaving segmentation as a secondary action. Restore segmentation emphasis when review reopens or the subject changes, and emphasize reporting directly for supplied atlas-space lesion masks. Keep exactly one primary action using the shared button styles.
+  - @neurodesk/calmar@0.10.20261102
 - @neurodesk/calmar@0.10.20261102
 
 ## 0.9.20261102
