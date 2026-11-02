@@ -2,7 +2,7 @@
 // Compares the WebAssembly package with the Octave reference that SamSrf's own .m files
 // produced (validation/octave). Prints one line per check and exits non-zero on a failure.
 //
-//   node validation/parity.mjs [--json out.json]
+//   node validation/parity.mjs [--json out.json] [--markdown table.md]
 //
 // SAMSRF_REFERENCE_DIR: the reference outputs (reference.m's out_dir).
 // SAMSRF_EXAMPLE_DIR: SamSrf's example subject X001 (func/, prf/).
@@ -14,7 +14,13 @@ import * as samsrf from '../src/node.js';
 const REFERENCE = process.env.SAMSRF_REFERENCE_DIR ?? '/storage/scratch/samsrf-work/reference';
 const EXAMPLE = process.env.SAMSRF_EXAMPLE_DIR ?? '/storage/scratch/samsrf-work/dl/X001';
 const TOLERANCE = 1e-9;
-const jsonOut = process.argv.includes('--json') ? process.argv[process.argv.indexOf('--json') + 1] : null;
+function option(name) {
+  const index = process.argv.indexOf(name);
+  return index === -1 ? null : process.argv[index + 1];
+}
+
+const jsonOut = option('--json');
+const markdownOut = option('--markdown');
 
 function reference(name) {
   return JSON.parse(readFileSync(join(REFERENCE, name), 'utf8'));
@@ -225,4 +231,9 @@ apertures.free();
 const failures = results.filter(({ pass }) => !pass);
 console.log(`${results.length - failures.length} of ${results.length} checks pass in ${((performance.now() - started) / 1000).toFixed(0)} s`);
 if (jsonOut) writeFileSync(jsonOut, `${JSON.stringify({ version: samsrf.version(), errfunMs, results }, null, 1)}\n`);
+if (markdownOut) {
+  const number = (value) => (value === undefined ? '' : value === 0 ? '0' : value.toExponential(1));
+  const rows = results.map(({ name, maxAbs, relative, tolerance, pass }) => `| ${name.replaceAll('|', '\\|')} | ${number(maxAbs)} | ${number(relative)} | ${number(tolerance)} | ${pass ? 'PASS' : 'FAIL'} |`);
+  writeFileSync(markdownOut, ['| Check | Max abs | Relative | Tolerance | Result |', '| --- | ---: | ---: | ---: | --- |', ...rows, ''].join('\n'));
+}
 process.exitCode = failures.length ? 1 : 0;
