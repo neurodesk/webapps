@@ -1,5 +1,7 @@
 # @neurodesk/seedseg
 
+## 0.7.20261102
+
 ## 0.7.20261031
 
 ### Patch Changes
