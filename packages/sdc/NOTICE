@@ -40,3 +40,12 @@ Apache-2.0. sdcflows: Copyright 2021 The NiPreps Developers; niworkflows:
 Copyright The NiPreps Developers, Apache-2.0; SciPy: Copyright 2001-2002
 Enthought, Inc., 2003 SciPy Developers, BSD-3-Clause. They do not contain the
 PyHySCO implementation.
+
+The sdc command line (bin/sdc.js) runs the SyN-SDC pipeline (src/syn/). Its
+portable archives bundle the SyN-SDC prior from sdc/prior/ on the Hugging Face
+dataset neurodeskorg/webapps, with that folder's README.md, LICENSE-sdcflows and
+LICENSE-MNI152NLin2009cAsym: sdcflows' fmap_atlas.nii.gz (the S2 File of Treiber
+et al. 2016, PLoS ONE 11(3): e0152472, CC-BY-4.0, NaN set to 0), its affine to
+MNI152NLin2009cAsym (sdcflows, Apache-2.0) and the TemplateFlow
+MNI152NLin2009cAsym 1 mm T1w and brain mask (McConnell Brain Imaging Centre
+licence).

@@ -1,0 +1,49 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "sdc-v",
+  "displayName": "SDC",
+  "app": "sdc",
+  "run": "sub-01_dir-AP_dwi.nii.gz results --t1w sub-01_T1w.nii.gz",
+  "readme": {
+    "run": "Correct susceptibility distortion in a DWI series with SyN-SDC",
+    "notes": [
+      "Runs the web app's fieldmap-less SyN-SDC, a port of sdcflows 2.17.1, on the CPU:",
+      "MindGrab brain masks, ANTs registrations to the T1w of the same session in",
+      "WebAssembly, the B-spline field fit and the unwarp of every volume. It writes the",
+      "corrected series with its .bval, .bvec and .json, the field in Hz, its",
+      "coefficients, the displacement field and the brain mask.",
+      "The .bval, .bvec and .json beside the series with the same name are used; the",
+      "sidecar must give PhaseEncodingDirection and a readout time, or use --pe-dir",
+      "and --readout. Add --help for every setting.",
+      "",
+      "A full-brain series takes about 1.5 to 2 hours and up to 6.5 GB of memory. The",
+      "distortion prior and its notices are included, so no network connection is",
+      "required. Input is NIfTI only: convert DICOM with dcm2niix first, or use the",
+      "web app.",
+      "",
+      "It ports sdcflows 2.17.1 (NiPreps, Apache-2.0). The prior is the distortion",
+      "atlas of Treiber JM, White NS, Steed TC, et al. Characterization and correction of",
+      "geometric distortions in 814 diffusion weighted images. PLoS ONE.",
+      "2016;11(3):e0152472.",
+      "2016;11(3):e0152472."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "sdc"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "sdc.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "sdc"
+    }
+  }
+}
