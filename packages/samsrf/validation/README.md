@@ -202,6 +202,138 @@ first three seed vertices (`analyses/georoi.json`: vertex sets and step
 distances identical) and the Delaunay cluster, convex hull area and centroid
 on the hand-made point sets of `analyses/convexhull_cases.json` (identical).
 
+### Results
+
+On X001 (the six full runs) against Octave 9.2 running SamSrf 41ed1e96, 101 of
+111 checks pass. The ten failures are two documented divergences (package
+README, "Divergences from SamSrf"):
+
+- `prf_coarse` Beta and Baseline on 9 of 6587 vertices whose prediction is
+  constant to rounding: the port applies MATLAB's QR rank tolerance and reports
+  0; Octave's `\` has no tolerance and reports amplitudes near 1e13.
+- `prf_css` on 18 of 20 vertices: the resampled apertures ring below zero, so
+  SamSrf's `Yp.^Exponent` turns complex in Octave; the port takes those volumes
+  as zero. Its fits reach a higher R^2 (0.8916 against 0.8910 at vertex 399).
+
+`cf_summary` and `cf_fit` (`Fit_pRF` -1 and 1) have no reference: SamSrf's
+`samsrf_cfparam_loop` reads `fIimg`, which only the convex hull mode creates,
+after its loop, so both fail in Octave. The port writes the single `Sigma` row
+those modes evidently intend.
+
+| Run and map | Max abs | Relative | Differing vertices | Result |
+| --- | ---: | ---: | ---: | --- |
+| template R^2 | 0 | 0 | 0 / 134260 | PASS |
+| template x0 | 3.8e-6 | 4.4e-8 | 0 / 134260 | PASS |
+| template y0 | 3.8e-6 | 4.3e-8 | 0 / 134260 | PASS |
+| georoi cases recorded | 0 | 0 | 0 / 0 | PASS |
+| prf_coarse nR^2 | 1.8e-10 | 4.9e-13 | 0 / 6587 | PASS |
+| prf_coarse x0 | 1.8e-15 | 1.2e-16 | 0 / 6587 | PASS |
+| prf_coarse y0 | 1.8e-15 | 1.2e-16 | 0 / 6587 | PASS |
+| prf_coarse Sigma | 0 | 0 | 0 / 6587 | PASS |
+| prf_coarse Beta | 2.1e+13 | 1.0e+0 | 9 / 6587 | FAIL |
+| prf_coarse Baseline | 1.7e-1 | 2.6e-1 | 9 / 6587 | FAIL |
+| prf_coarse Noise Ceiling | 3.5e-15 | 3.6e-15 | 0 / 6587 | PASS |
+| prf_coarse R^2 | 6.6e-15 | 7.1e-15 | 0 / 6587 | PASS |
+| prf_coarse nR^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| prf_coarse R^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| prf_nm nR^2 | 8.0e-15 | 1.7e-15 | 0 / 200 | PASS |
+| prf_nm x0 | 0 | 0 | 0 / 200 | PASS |
+| prf_nm y0 | 8.9e-16 | 5.8e-17 | 0 / 200 | PASS |
+| prf_nm Sigma | 0 | 0 | 0 / 200 | PASS |
+| prf_nm Beta | 7.2e+13 | 1.0e+0 | 1 / 200 | PASS |
+| prf_nm Baseline | 1.7e-1 | 3.6e-1 | 1 / 200 | PASS |
+| prf_nm Noise Ceiling | 1.3e-15 | 1.4e-15 | 0 / 200 | PASS |
+| prf_nm R^2 | 4.1e-15 | 4.5e-15 | 0 / 200 | PASS |
+| prf_nm nR^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| prf_nm R^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| prf_hj nR^2 | 1.8e-13 | 3.6e-14 | 0 / 200 | PASS |
+| prf_hj x0 | 0 | 0 | 0 / 200 | PASS |
+| prf_hj y0 | 4.4e-16 | 2.8e-17 | 0 / 200 | PASS |
+| prf_hj Sigma | 0 | 0 | 0 / 200 | PASS |
+| prf_hj Beta | 5.7e-5 | 3.2e-15 | 0 / 200 | PASS |
+| prf_hj Baseline | 2.4e-15 | 4.9e-15 | 0 / 200 | PASS |
+| prf_hj Noise Ceiling | 1.3e-15 | 1.4e-15 | 0 / 200 | PASS |
+| prf_hj R^2 | 4.7e-15 | 5.1e-15 | 0 / 200 | PASS |
+| prf_hj nR^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| prf_hj R^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| prf_hrf nR^2 | 5.7e-15 | 5.8e-15 | 0 / 20 | PASS |
+| prf_hrf x0 | 0 | 0 | 0 / 20 | PASS |
+| prf_hrf y0 | 0 | 0 | 0 / 20 | PASS |
+| prf_hrf Sigma | 0 | 0 | 0 / 20 | PASS |
+| prf_hrf RLat | 0 | 0 | 0 / 20 | PASS |
+| prf_hrf ULat | 0 | 0 | 0 / 20 | PASS |
+| prf_hrf RDisp | 0 | 0 | 0 / 20 | PASS |
+| prf_hrf UDisp | 0 | 0 | 0 / 20 | PASS |
+| prf_hrf AmpRat | 0 | 0 | 0 / 20 | PASS |
+| prf_hrf Beta | 3.9e-16 | 1.9e-15 | 0 / 20 | PASS |
+| prf_hrf Baseline | 2.0e-15 | 6.0e-15 | 0 / 20 | PASS |
+| prf_hrf Noise Ceiling | 1.3e-15 | 1.4e-15 | 0 / 20 | PASS |
+| prf_hrf R^2 | 4.8e-15 | 5.2e-15 | 0 / 20 | PASS |
+| prf_hrf nR^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| prf_hrf R^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| prf_css nR^2 | 1.9e-3 | 2.1e-3 | 18 / 20 | FAIL |
+| prf_css x0 | 3.4e-2 | 1.7e-2 | 18 / 20 | FAIL |
+| prf_css y0 | 5.7e-2 | 1.1e-2 | 18 / 20 | FAIL |
+| prf_css Sigma | 1.4e-1 | 2.9e-2 | 18 / 20 | FAIL |
+| prf_css Exponent | 9.1e-2 | 2.0e-2 | 18 / 20 | FAIL |
+| prf_css Beta | 6.6e-1 | 3.5e-1 | 18 / 20 | FAIL |
+| prf_css Baseline | 7.3e-3 | 1.6e-2 | 18 / 20 | FAIL |
+| prf_css Noise Ceiling | 1.3e-15 | 1.4e-15 | 0 / 20 | PASS |
+| prf_css R^2 | 1.8e-3 | 2.1e-3 | 18 / 20 | FAIL |
+| prf_css nR^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| prf_css R^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| rc_hull R^2 | 5.3e-15 | 6.0e-15 | 0 / 6587 | PASS |
+| rc_hull x0 | 1.2e-14 | 1.4e-15 | 0 / 6587 | PASS |
+| rc_hull y0 | 8.9e-15 | 1.1e-15 | 0 / 6587 | PASS |
+| rc_hull Fwhm | 2.7e-15 | 4.1e-16 | 0 / 6587 | PASS |
+| rc_hull Beta | 9.3e-16 | 4.7e-15 | 0 / 6587 | PASS |
+| rc_hull Noise Ceiling | 3.5e-15 | 3.6e-15 | 0 / 6587 | PASS |
+| rc_hull raw R^2 | 5.3e-15 | 6.0e-15 | 0 / 6587 | PASS |
+| rc_hull raw x0 | 1.8e-15 | 1.9e-16 | 0 / 6587 | PASS |
+| rc_hull raw y0 | 1.8e-15 | 1.9e-16 | 0 / 6587 | PASS |
+| rc_hull raw Fwhm | 0 | 0 | 0 / 6587 | PASS |
+| rc_hull raw Beta | 9.3e-16 | 4.7e-15 | 0 / 6587 | PASS |
+| rc_hull R^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| rc_hull Noise Ceiling outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| rc_fit R^2 | 6.1e-9 | 6.3e-9 | 0 / 200 | PASS |
+| rc_fit x0 | 5.7e-8 | 6.1e-9 | 0 / 200 | PASS |
+| rc_fit y0 | 1.3e-7 | 9.1e-9 | 0 / 200 | PASS |
+| rc_fit Sigma | 0 | 0 | 0 / 200 | PASS |
+| rc_fit Beta | 0 | 0 | 0 / 200 | PASS |
+| rc_fit Baseline | 0 | 0 | 0 / 200 | PASS |
+| rc_fit Noise Ceiling | 1.3e-15 | 1.4e-15 | 0 / 200 | PASS |
+| rc_fit raw R^2 | 4.4e-15 | 5.0e-15 | 0 / 200 | PASS |
+| rc_fit raw x0 | 1.8e-15 | 1.9e-16 | 0 / 200 | PASS |
+| rc_fit raw y0 | 1.8e-15 | 2.1e-16 | 0 / 200 | PASS |
+| rc_fit raw Fwhm | 0 | 0 | 0 / 200 | PASS |
+| rc_fit raw Beta | 5.2e-16 | 2.9e-15 | 0 / 200 | PASS |
+| rc_fit R^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| rc_fit Noise Ceiling outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| cf_hull R^2 | 4.4e-15 | 4.4e-15 | 0 / 6587 | PASS |
+| cf_hull x0 | 1.7e-7 | 2.3e-8 | 0 / 6587 | PASS |
+| cf_hull y0 | 1.3e-7 | 1.7e-8 | 0 / 6587 | PASS |
+| cf_hull Centre | 8.4e-8 | 2.1e-8 | 0 / 6587 | PASS |
+| cf_hull Surround | 9.4e-8 | 2.4e-8 | 0 / 6587 | PASS |
+| cf_hull Beta | 2.3e-15 | 2.3e-15 | 0 / 6587 | PASS |
+| cf_hull Suppression | 1.6e-15 | 2.4e-15 | 0 / 6587 | PASS |
+| cf_hull Fwhm | 0 | 0 | 0 / 6587 | PASS |
+| cf_hull Vx | 0 | 0 | 0 / 6587 | PASS |
+| cf_hull Noise Ceiling | 3.5e-15 | 3.6e-15 | 0 / 6587 | PASS |
+| cf_hull R^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| cf_hull Noise Ceiling outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| cf_smooth R^2 | 1.7e-15 | 2.3e-15 | 0 / 200 | PASS |
+| cf_smooth x0 | 2.4e-8 | 3.4e-9 | 0 / 200 | PASS |
+| cf_smooth y0 | 2.6e-8 | 4.6e-9 | 0 / 200 | PASS |
+| cf_smooth Centre | 1.0e-8 | 3.8e-9 | 0 / 200 | PASS |
+| cf_smooth Surround | 5.0e-9 | 1.3e-9 | 0 / 200 | PASS |
+| cf_smooth Beta | 1.0e-15 | 1.2e-15 | 0 / 200 | PASS |
+| cf_smooth Suppression | 6.1e-16 | 1.3e-15 | 0 / 200 | PASS |
+| cf_smooth Fwhm | 0 | 0 | 0 / 200 | PASS |
+| cf_smooth Vx | 0 | 0 | 0 / 200 | PASS |
+| cf_smooth Noise Ceiling | 1.3e-15 | 1.4e-15 | 0 / 200 | PASS |
+| cf_smooth R^2 outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+| cf_smooth Noise Ceiling outside ROI (sampled) | 0 | 0 | 0 / 2000 | PASS |
+
 ## errfun timing
 
 One `errfun` call evaluates a gaussian pRF on the 10 000 aperture pixels,

@@ -155,6 +155,10 @@ function georoiCheck(inputs) {
 
 function runCheck(name, inputs) {
   const info = JSON.parse(readFileSync(join(REFERENCE, `${name}.json`), 'utf8'));
+  if (info.error) {
+    console.log(`INFO  ${name}: SamSrf itself fails in Octave (${info.error}); nothing to compare`);
+    return;
+  }
   const { kind, model, fine } = RUNS[name];
   const mver = Uint32Array.from(info.mver);
   const started = performance.now();
@@ -189,7 +193,9 @@ function runCheck(name, inputs) {
   for (const [row, map] of info.values.entries()) {
     if (row >= merged.maps.values.length) break;
     const fineMap = fine && !['Noise Ceiling'].includes(map);
-    compare(name, map, merged.maps.data.subarray(row * TOTAL_VERTICES, (row + 1) * TOTAL_VERTICES), matlabRow(expected, info.rows, row), vertices, fineMap);
+    // cf coordinates come from the single-precision template, so they inherit its ulp.
+    const tolerance = kind === 'cf' && ['x0', 'y0', 'Centre', 'Surround'].includes(map) ? TEMPLATE : undefined;
+    compare(name, map, merged.maps.data.subarray(row * TOTAL_VERTICES, (row + 1) * TOTAL_VERTICES), matlabRow(expected, info.rows, row), vertices, fineMap, tolerance);
   }
   if (info.raw_file && merged.raw) {
     const raw = f64(join(REFERENCE, info.raw_file.replace(/^analyses\//, '')));
