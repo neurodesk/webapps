@@ -113,7 +113,7 @@ function setBusy(busy) {
   $("resultList").inert = busy;
   exampleControl?.setDisabled(busy);
   for (const id of ["method", "direction", "readout", "prior", "clearMasks"]) $(id).disabled = busy;
-  for (const field of Object.values(maskFields)) field.disabled = busy;
+  for (const field of Object.values(maskFields)) field.disabled = busy || !isSyn();
   $("reference").disabled = busy || !pair;
   $("runButton").disabled = busy || !(isSyn() ? syn : pair);
 }
@@ -264,9 +264,11 @@ async function estimate(signal) {
 
 // ---- SyN-SDC ---------------------------------------------------------------------------------
 
+// Kind `mask`: the shell's page drop never fills these, so a dropped DWI and its T1w stay
+// together at #imageInput. They are disabled while PyHySCO is selected (setBusy, showMethod).
 const maskFields = {
-  dwi: createFileField({ id: "dwiMaskInput", label: "DWI brain mask (optional)", kind: "image", text: "Drop a mask on the DWI grid" }),
-  t1w: createFileField({ id: "t1wMaskInput", label: "T1w brain mask (optional)", kind: "image", text: "Drop a mask on the T1w grid" }),
+  dwi: createFileField({ id: "dwiMaskInput", label: "DWI brain mask (optional)", kind: "mask", text: "Drop a mask on the DWI grid" }),
+  t1w: createFileField({ id: "t1wMaskInput", label: "T1w brain mask (optional)", kind: "mask", text: "Drop a mask on the T1w grid" }),
 };
 $("dwiMaskField").append(maskFields.dwi);
 $("t1wMaskField").append(maskFields.t1w);
@@ -310,6 +312,7 @@ function showMethod() {
   $("runButton").textContent = synMethod ? "Correct distortion" : "Estimate field";
   $("directionField").hidden = !syn?.missing.direction;
   $("readoutField").hidden = !syn?.missing.readout;
+  for (const field of Object.values(maskFields)) field.disabled = Boolean(loading || running) || !synMethod;
 }
 
 function clearInputs() {

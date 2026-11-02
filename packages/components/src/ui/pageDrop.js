@@ -7,7 +7,8 @@ const AUXILIARY_KINDS = [
   ['model', /\.(onnx|basis)$/i],
   ['protocol', /\.(toml|txt)$/i],
 ];
-const AUXILIARY = new Set([...AUXILIARY_KINDS.map(([kind]) => kind), 'metadata']);
+// A `mask` input takes a mask the user chooses for it; a drop never fills it and it never leads.
+const AUXILIARY = new Set([...AUXILIARY_KINDS.map(([kind]) => kind), 'metadata', 'mask']);
 // An app that handles drops itself marks the region; NiiVue canvases elsewhere are taken over.
 const OWNED = '[data-drop-target], .nd-file, .file-upload-zone, .file-drop, .upload-zone';
 const UNDO_MS = 8000;
@@ -29,7 +30,7 @@ export function classifiedInputs(scope) {
 
 /**
  * The input a session starts from: the first classified file input that is not
- * auxiliary (a model, parameters, gradients or metadata), else the first one.
+ * auxiliary (a model, parameters, gradients, metadata or a mask), else the first one.
  */
 export function primaryInput(scope) {
   const inputs = classifiedInputs(scope);
@@ -38,7 +39,8 @@ export function primaryInput(scope) {
 
 /**
  * Pair dropped files with inputs: a file of an auxiliary kind goes to the first
- * input of that kind. Individual scans fill empty image slots in order;
+ * input of that kind. Individual scans fill empty image slots in order (never a
+ * `mask` input, which only its own picker fills);
  * DICOM slices, a BIDS diffusion dataset and other files stay together at the primary input.
  */
 export function routeFiles(files, inputs, primary, occupied = new Set()) {

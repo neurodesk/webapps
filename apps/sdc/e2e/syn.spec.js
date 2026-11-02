@@ -27,6 +27,23 @@ function synFiles(sidecar) {
   ];
 }
 
+/** Drops files on the viewer, as a person does; the shell's page drop routes them. */
+async function dropFiles(page, files) {
+  const box = await page.locator("#gl1").boundingBox();
+  const payload = files.map((entry) => [entry.name, Array.from(entry.buffer)]);
+  await page.locator("#gl1").dispatchEvent("drop", {
+    dataTransfer: await page.evaluateHandle((entries) => {
+      const transfer = new DataTransfer();
+      for (const [name, bytes] of entries) transfer.items.add(new File([new Uint8Array(bytes)], name));
+      return transfer;
+    }, payload),
+    bubbles: true,
+    cancelable: true,
+    clientX: box.x + box.width / 2,
+    clientY: box.y + box.height / 2,
+  });
+}
+
 async function chooseSyn(page) {
   await page.goto("/");
   await page.locator("#method").selectOption("syn");
@@ -55,6 +72,25 @@ test("SyN-SDC asks for a missing phase-encoding direction and readout time and r
   await expect(page.locator("#statusText")).toHaveText("sub-01_dir-AP_dwi.nii.gz and sub-01_T1w.nii.gz loaded");
   await expect(page.locator("#directionField")).toBeHidden();
   await expect(page.locator("#readoutField")).toBeHidden();
+});
+
+test("a page drop keeps a DWI series and its T1w together, and PyHySCO pairs never reach the masks", async ({ page }) => {
+  await chooseSyn(page);
+  await dropFiles(page, synFiles({ PhaseEncodingDirection: "j-", TotalReadoutTime: 0.05 }));
+  await expect(page.locator("#pairInfo")).toHaveText("T1w: sub-01_T1w.nii.gz");
+  await expect(page.locator("#fileInfo")).toContainText("DWI: sub-01_dir-AP_dwi.nii.gz");
+  await expect(page.locator("#clearMasks")).toBeHidden();
+  for (const id of ["dwiMaskInput", "t1wMaskInput"]) {
+    await expect(page.locator(`#${id}`)).toHaveJSProperty("files.length", 0);
+    await expect(page.locator(`#${id}`)).toHaveAttribute("data-neurodesk-input", "mask");
+  }
+
+  await page.locator("#method").selectOption("pyhysco");
+  await expect(page.locator("#dwiMaskInput")).toBeDisabled();
+  await expect(page.locator("#t1wMaskInput")).toBeDisabled();
+  await dropFiles(page, syntheticPair());
+  await expect(page.locator("#fileInfo")).toHaveText("Image 1: sub-01_dir-AP_dwi.nii.gz · j- · b = 0 mean of 2/3");
+  await expect(page.locator("#pairInfo")).toHaveText("Image 2: sub-01_dir-PA_epi.nii.gz · j");
 });
 
 test("SyN-SDC takes uploaded brain masks in place of MindGrab's", async ({ page }) => {

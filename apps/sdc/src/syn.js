@@ -4,17 +4,22 @@ import { parseBidsName, readBidsDiffusion } from "@neurodesk/webapp-components/f
 import { bidsFile } from "./pipeline.js";
 
 /**
- * The DWI run and the T1w of a BIDS selection (flat BIDS names count), or null when the files
- * hold no BIDS DWI run and the NIfTI/DICOM reader must read them instead.
+ * The DWI run and the T1w of a BIDS selection (flat BIDS names count), or null when the
+ * NIfTI/DICOM reader must read the files instead: they hold no BIDS DWI run, or the DWI has flat
+ * BIDS names (not in a dataset's folders) and no T1w matches it by name, as with an
+ * anatomy.nii.gz or a DICOM T1w beside sub-01_dwi.nii.gz.
  */
 export async function selectBidsSyn(files) {
-  const { runs } = await readBidsDiffusion(files.map(bidsFile));
+  const layout = files.map(bidsFile);
+  const placed = new Set(layout.filter((file, i) => file !== files[i]));
+  const { runs } = await readBidsDiffusion(layout);
   if (!runs.length) return null;
   const complete = runs.filter((run) => run.bval && run.bvec);
   if (complete.length !== 1) {
     throw new Error(complete.length ? `Choose one DWI run; this selection has ${complete.length}.` : `${runs[0].path} needs its bval and bvec.`);
   }
   const [run] = complete;
+  if (!run.t1w && placed.has(run.dwi)) return null;
   if (!run.t1w) throw new Error(`No T1w image of sub-${run.subject}: add its anat/*_T1w.nii.gz.`);
   return { image: run.dwi, bval: run.bval, bvec: run.bvec, sidecar: run.sidecar, t1w: run.t1w };
 }

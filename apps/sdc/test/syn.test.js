@@ -42,6 +42,14 @@ test("flat BIDS names are read as a BIDS selection", async () => {
   assert.equal(chosen.t1w.name, "sub-01_run-001_T1w.nii.gz");
 });
 
+test("a flat BIDS-named DWI without a BIDS T1w is left to the loose-file reader", async () => {
+  const dwi = [file("sub-01_dwi.nii.gz"), file("sub-01_dwi.bval"), file("sub-01_dwi.bvec")];
+  assert.equal(await selectBidsSyn([...dwi, file("anatomy.nii.gz")]), null);
+  assert.equal(await selectBidsSyn([...dwi, file("IM_0001"), file("IM_0002")]), null, "a DICOM T1w");
+  const chosen = selectSynSeries([series("sub-01_dwi.nii.gz", true), series("anatomy.nii.gz")]);
+  assert.equal(chosen.t1w.name, "anatomy.nii.gz");
+});
+
 test("the sidebar asks only for what no sidecar gives", () => {
   assert.deepEqual(missingAcquisition(null), { direction: true, readout: true });
   assert.deepEqual(missingAcquisition({ PhaseEncodingDirection: "j-", TotalReadoutTime: 0.04 }), { direction: false, readout: false });
