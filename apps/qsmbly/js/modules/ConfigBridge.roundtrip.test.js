@@ -94,7 +94,8 @@ function same(a, b) {
   if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) <= 1e-12 * Math.abs(a);
   return a === b;
 }
-const closeTo = (obj) => Object.fromEntries(Object.entries(obj).map(
+// A null is a value left for qsm-core to work out from the scan: the engine keeps it unset.
+const closeTo = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null).map(
   ([k, v]) => [k, typeof v === 'number' && !Number.isInteger(v) ? expect.closeTo(v, 15) : v]));
 
 /**
@@ -150,9 +151,9 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
     const s = userSettings();
     const { back } = roundTrip(s);
     // Fields whose UI name differs from the schema name, or that ConfigBridge reshapes.
-    expect(back.inversion.nltv.newton_iter).toBe(s.nltv.newton_max_iter);
+    expect(back.inversion.nltv.max_iter_newton).toBe(s.nltv.newton_max_iter);
     expect(back.inversion.fansi).toMatchObject(closeTo(s.fansi));
-    expect(back.field_mapping.phase_offset_sigma).toEqual(s.mcpc3ds.sigma);
+    expect(back.field_mapping.phase_offset_sigma_mm).toEqual(s.mcpc3ds.sigma);
     expect(back.field_mapping.linear_fit.reliability_threshold_percentile)
       .toBe(s.linearFit.reliability_threshold_percentile);
     expect(back.field_mapping.romeo.template).toBe(s.romeo.template);
@@ -279,7 +280,7 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
       expect(back.bg_removal.ismv).toEqual({ ...defaults.bg_removal.ismv, max_iter: 77 });
       expect(back.inversion.rts.delta).toBe(defaults.inversion.rts.delta);
       expect(back.inversion.rts.mu).toBe(defaults.inversion.rts.mu);
-      expect(back.field_mapping.phase_offset_sigma).toEqual([4, 4, 4]);
+      expect(back.field_mapping.phase_offset_sigma_mm).toEqual(defaults.field_mapping.phase_offset_sigma_mm);
       expect(back.swi.hp_sigma).toEqual(defaults.swi.hp_sigma);
       expect(back.swi.strength).toBe(defaults.swi.strength);
       expect(back.swi.mip_window).toBe(9);

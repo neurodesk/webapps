@@ -19,10 +19,10 @@ function finiteTriple(arr) {
   return Array.isArray(arr) && arr.length === 3 && arr.every(Number.isFinite) ? arr : null;
 }
 
-/** The UI calls NLTV's Newton iteration limit newton_max_iter; qsmxt-engine calls it newton_iter. */
+/** The UI calls NLTV's Newton iteration limit newton_max_iter; qsmxt-engine calls it max_iter_newton. */
 function nltvConfig(nltv) {
   const { newton_max_iter, ...rest } = nltv;
-  return newton_max_iter === undefined ? rest : { ...rest, newton_iter: newton_max_iter };
+  return newton_max_iter === undefined ? rest : { ...rest, max_iter_newton: newton_max_iter };
 }
 
 /**
@@ -49,7 +49,7 @@ export function buildConfig(settings, options = {}) {
     },
     field_mapping: {
       phase_offset_removal: settings.phase_offset_method !== 'none',
-      phase_offset_sigma: finiteTriple(settings.mcpc3ds?.sigma) || [4, 4, 4],
+      ...(finiteTriple(settings.mcpc3ds?.sigma) ? { phase_offset_sigma_mm: settings.mcpc3ds.sigma } : {}),
       bipolar_correction: !!settings.bipolar_correction,
       unwrapping_algorithm: settings.unwrapping_algorithm || 'romeo',
       b0_estimation: (settings.b0_estimation || 'weighted_avg').replace(/_/g, '-'),
@@ -71,8 +71,6 @@ export function buildConfig(settings, options = {}) {
     masking: { inhomogeneity_correction: true },
     bg_removal: {
       algorithm: settings.bf_algorithm || 'vsharp',
-      // mSMV boundary-shadow refinement (Roberts 2024): a post-step on the primary BFR.
-      msmv_refine: !!settings.msmv_refine,
     },
     inversion: {},
     qsm: { reference: settings.reference_mean === false ? 'none' : 'mean' },
@@ -112,7 +110,6 @@ export function buildConfig(settings, options = {}) {
   if (settings.whqsm) config.inversion.whqsm = settings.whqsm;
   if (settings.hdqsm) config.inversion.hdqsm = settings.hdqsm;
   if (settings.amp_pe) config.inversion.amp_pe = settings.amp_pe;
-  if (settings.msmv) config.bg_removal.msmv = settings.msmv;
   if (settings.medi) config.inversion.medi = settings.medi;
   if (settings.tfi) config.inversion.tfi = {
     lambda: settings.tfi.lambda, precond: settings.tfi.precond,
@@ -126,7 +123,7 @@ export function buildConfig(settings, options = {}) {
     // The UI picks alphas by regularization level, which TgvConfig has no field for, so
     // export the pair the run resolves to; left unset, qsmxt-engine would fill in its own.
     ...resolveTgvAlphas(settings.tgv, tgvAlphaPreset),
-    step_size: settings.tgv.step_size, tol: settings.tgv.tol,
+    step_size: settings.tgv.step_size,
   };
   if (settings.qsmart) config.inversion.qsmart = {
     ilsqr_max_iter: settings.qsmart.ilsqr_max_iter,
@@ -137,6 +134,8 @@ export function buildConfig(settings, options = {}) {
     sdf_lower_lim: settings.qsmart.sdf_lower_lim, sdf_curv_constant: settings.qsmart.sdf_curv_constant,
     frangi_scale_min: settings.qsmart.frangi_scale_min, frangi_scale_max: settings.qsmart.frangi_scale_max,
     frangi_scale_ratio: settings.qsmart.frangi_scale_ratio, frangi_c: settings.qsmart.frangi_c,
+    // This interface gives the bottom-hat radius and the Frangi scales in mm.
+    vessel_size_units: 'mm',
   };
   // QSMART's inner inversion reads the top-level per-algorithm section (qsm-core run_qsmart),
   // so the QSMART panel's own values for that algorithm go there.

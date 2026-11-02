@@ -772,8 +772,8 @@
               TFI is single-step: it inverts the <strong>total field</strong> directly (its own background removal). Larger <strong>preconditioner</strong> suits data with strong background fields (e.g. air near sinuses).
             </p>
             <div class="param-group">
-              <label class="param-label" for="tfiLambda">Regularization (lambda)</label>
-              <input type="number" id="tfiLambda" value="0.000075" min="0" max="0.01" step="0.000025">
+              <label class="param-label" for="tfiLambda">Data-fidelity weight (λ)</label>
+              <input type="number" id="tfiLambda" value="1000" min="0" step="any">
             </div>
             <div class="param-group">
               <label class="param-label" for="tfiPrecond">Preconditioner</label>
@@ -992,8 +992,8 @@
             <!-- MEDI -->
             <div id="qsmart_medi_settings" class="method-settings" hidden>
               <div class="param-group">
-                <label class="param-label" for="qsmartMediLambda">Regularization strength</label>
-                <input type="number" id="qsmartMediLambda" value="7.5e-5" min="1e-6" max="0.01" step="1e-5">
+                <label class="param-label" for="qsmartMediLambda">Data-fidelity weight (λ)</label>
+                <input type="number" id="qsmartMediLambda" value="1000" min="0" step="any">
               </div>
               <div class="param-group">
                 <label class="param-label" for="qsmartMediPercentage">Edge reliability threshold</label>
@@ -1057,11 +1057,11 @@
                 <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener" title="Code: MriResearchTools.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
               </div>
               <div class="param-xyz">
-                <span class="param-label">Smoothing Sigma (voxels)</span>
+                <span class="param-label">Smoothing Sigma (mm)</span>
                 <div class="param-xyz-inputs">
-                  <label>X <input type="number" id="mcpc3dsSigmaX" value="10" min="1" max="30" step="1"></label>
-                  <label>Y <input type="number" id="mcpc3dsSigmaY" value="10" min="1" max="30" step="1"></label>
-                  <label>Z <input type="number" id="mcpc3dsSigmaZ" value="5" min="1" max="30" step="1"></label>
+                  <label>X <input type="number" id="mcpc3dsSigmaX" value="7" min="0.5" max="30" step="0.5"></label>
+                  <label>Y <input type="number" id="mcpc3dsSigmaY" value="7" min="0.5" max="30" step="0.5"></label>
+                  <label>Z <input type="number" id="mcpc3dsSigmaZ" value="7" min="0.5" max="30" step="0.5"></label>
                 </div>
               </div>
             </div>
@@ -1709,8 +1709,8 @@
               <a href="https://github.com/huawu02/MEDI_toolbox" target="_blank" rel="noopener" title="Code: MEDI_toolbox"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="mediLambda">Regularization strength</label>
-              <input type="number" id="mediLambda" value="7.5e-5" min="1e-6" max="0.01" step="1e-5">
+              <label class="param-label" for="mediLambda">Data-fidelity weight (λ)</label>
+              <input type="number" id="mediLambda" value="1000" min="0" step="any">
             </div>
             <div class="param-group">
               <label class="param-label" for="mediPercentage">Edge reliability threshold</label>

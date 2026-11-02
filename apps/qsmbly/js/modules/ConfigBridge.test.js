@@ -126,12 +126,12 @@ describe('buildConfigJson fixed-size f64 arrays', () => {
   // element, so the whole config is rejected ("invalid type: null, expected f64")
   // and every pipeline run fails. Unlike a scalar, the element cannot be omitted —
   // the key has to go.
-  test('falls back to the default sigma when an input is blank', () => {
+  test('leaves the sigma to the engine\'s default when an input is blank', () => {
     const fm = JSON.parse(buildConfigJson(
       settingsFixture({ mcpc3ds: { sigma: [NaN, NaN, NaN] } }),
     )).field_mapping;
 
-    expect(fm.phase_offset_sigma).toEqual([4, 4, 4]);
+    expect(fm).not.toHaveProperty('phase_offset_sigma_mm');
   });
 
   test('keeps a user-set sigma', () => {
@@ -139,7 +139,7 @@ describe('buildConfigJson fixed-size f64 arrays', () => {
       settingsFixture({ mcpc3ds: { sigma: [10, 10, 10] } }),
     )).field_mapping;
 
-    expect(fm.phase_offset_sigma).toEqual([10, 10, 10]);
+    expect(fm.phase_offset_sigma_mm).toEqual([10, 10, 10]);
   });
 
   test('omits an unusable SWI hp_sigma instead of sending nulls', () => {
@@ -267,10 +267,10 @@ describe('QSMART inner inversion config', () => {
 });
 
 describe('NLTV export', () => {
-  test('maps the UI\'s newton_max_iter to qsmxt-engine\'s newton_iter', () => {
+  test('maps the UI\'s newton_max_iter to qsmxt-engine\'s max_iter_newton', () => {
     const nltv = { lambda: 0.001, mu: 1, max_iter: 250, tol: 0.001, newton_max_iter: 7 };
     const config = JSON.parse(buildConfigJson({ dipole_inversion: 'nltv', nltv }));
-    expect(config.inversion.nltv.newton_iter).toBe(7);
+    expect(config.inversion.nltv.max_iter_newton).toBe(7);
     expect(config.inversion.nltv).not.toHaveProperty('newton_max_iter');
   });
 });

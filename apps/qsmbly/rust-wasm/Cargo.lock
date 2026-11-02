@@ -902,12 +902,14 @@ dependencies = [
 [[package]]
 name = "qsm-core"
 version = "0.0.0"
-source = "git+https://github.com/astewartau/QSM.rs.git?rev=95be94b83b43e80329b4ecfe8a74cf8114ea927a#95be94b83b43e80329b4ecfe8a74cf8114ea927a"
+source = "git+https://github.com/astewartau/QSM.rs.git?tag=v0.40.0#046e2e3bd21b1f35ce2760c115145c52956645a2"
 dependencies = [
  "bytemuck",
  "delaunator",
  "flate2",
  "getrandom",
+ "half",
+ "libm",
  "ndarray 0.16.1",
  "nifti",
  "num-complex",
@@ -915,6 +917,7 @@ dependencies = [
  "rayon",
  "rustdct",
  "rustfft",
+ "serde",
  "sha2",
  "tract-linalg",
  "tract-onnx",
@@ -938,7 +941,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-engine"
 version = "0.0.0"
-source = "git+https://github.com/QSMxT/QSMxT.git?rev=1f72772d4ae1ed7264a19c65ce1053ca05a8663d#1f72772d4ae1ed7264a19c65ce1053ca05a8663d"
+source = "git+https://github.com/QSMxT/QSMxT.git?rev=999445010a067d9597299f217a9a1165d4b7d62d#999445010a067d9597299f217a9a1165d4b7d62d"
 dependencies = [
  "getrandom",
  "log",
