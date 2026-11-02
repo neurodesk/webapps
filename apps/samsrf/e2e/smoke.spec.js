@@ -1,13 +1,14 @@
 // Browser tests against `vite preview` of the built app (playwright.config.js).
 // SAMSRF_EXAMPLE_DIR serves the example from a local copy instead of Hugging Face.
 //
-// The analyses run whatever engine src/engine.js wires. The checks here hold for the
-// placeholder engine and for SamSrf alike: SamSrf's file names, one value per surface
-// vertex, and a downloadable zip. Numeric parity belongs to @neurodesk/samsrf's own tests.
+// The analyses run @neurodesk/samsrf in the app's workers. The checks here are the app's:
+// SamSrf's file names, one value per surface vertex, fitted R², and a downloadable zip.
+// Numeric parity belongs to @neurodesk/samsrf's own tests.
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
+import { readGifti } from "@neurodesk/samsrf/node";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));
@@ -38,16 +39,64 @@ async function loadExample(page) {
   await expect(page.locator("#runsInfo")).toContainText("lh_uBars6.gii");
 }
 
-function giftiVertices(bytes) {
-  const match = /Dim0="(\d+)"/.exec(Buffer.from(bytes).subarray(0, 4096).toString("utf8"));
-  return match ? Number(match[1]) : null;
+/** The one map a SamSrf GIfTI holds. */
+function giftiMap(bytes) {
+  const { arrays } = readGifti(new Uint8Array(bytes));
+  expect(arrays).toHaveLength(1);
+  return arrays[0].data;
 }
 
 const RUNS = {
-  prf: { outName: "lh_pRF_Gaussian", maps: ["pol", "ecc", "r^2", "x0", "y0", "sigma"] },
-  rc: { outName: "lh_pRF", maps: ["pol", "ecc", "r^2", "x0", "y0"] },
-  cf: { outName: "lh_CF_Rcp", maps: ["pol", "ecc", "r^2", "x0", "y0"] },
+  prf: { outcome: "pRF maps ready", outName: "lh_pRF_Gaussian", maps: ["pol", "ecc", "r^2", "x0", "y0", "sigma", "beta", "noise_ceiling"] },
+  rc: { outcome: "Reverse-correlation maps ready", outName: "lh_pRF_Rcp", maps: ["pol", "ecc", "r^2", "x0", "y0", "fwhm", "beta", "noise_ceiling"] },
+  cf: { outcome: "Connective field maps ready", outName: "lh_CF_Rcp", maps: ["pol", "ecc", "r^2", "x0", "y0", "centre", "fwhm", "noise_ceiling"] },
 };
+
+// The first vertices of the example's V1-V3 label: every analysis path in about a
+// minute, where the pRF fit of the whole label takes several.
+const SMALL_ROI = 150;
+
+async function useSmallRoi(page) {
+  const lines = (await exampleBytes(example.files[7])).toString("utf8").split("\n");
+  const vertices = lines.slice(2, 2 + SMALL_ROI);
+  const label = [lines[0], String(vertices.length), ...vertices, ""].join("\n");
+  await page.locator("#roiInput").setInputFiles({ name: "lh.V123_small.label", mimeType: "application/octet-stream", buffer: Buffer.from(label) });
+  await expect(page.locator("#roiDrop")).toContainText("lh.V123_small.label");
+}
+
+/** Run each analysis on the loaded inputs and check SamSrf's files. */
+async function runEveryAnalysis(page, timeout) {
+  for (const [analysis, expected] of Object.entries(RUNS)) {
+    await page.locator("#analysis").selectOption(analysis);
+    const run = page.locator("#runButton");
+    await expect(run).toBeEnabled();
+    await run.click();
+    // The previous analysis leaves the output section open; its status line names the analysis.
+    await expect(page.locator("#statusText")).toContainText(expected.outcome, { timeout });
+    await expect(page.locator("#outputSection")).toHaveAttribute("open", "");
+    for (const label of ["Polar angle", "Eccentricity", "R²"]) {
+      await expect(page.locator("#resultList")).toContainText(label);
+    }
+    await expect(page.locator("#location")).toContainText("vertices with R²");
+
+    const row = page.locator("#resultList .nd-volume-toggle", { hasText: "Polar angle" });
+    const single = page.waitForEvent("download");
+    await row.getByRole("button", { name: "Download", exact: true }).click();
+    const download = await single;
+    expect(download.suggestedFilename()).toBe(`${expected.outName}_pol.gii`);
+    expect(giftiMap(readFileSync(await download.path()))).toHaveLength(VERTICES);
+
+    const zipped = page.waitForEvent("download");
+    await page.locator("#downloadAll").click();
+    const archive = await zipped;
+    expect(archive.suggestedFilename()).toBe(`${expected.outName}_maps.zip`);
+    const entries = unzipSync(readFileSync(await archive.path()));
+    for (const map of expected.maps) expect(Object.keys(entries)).toContain(`${expected.outName}_${map}.gii`);
+    const r2 = giftiMap(entries[`${expected.outName}_r^2.gii`]);
+    expect(r2).toHaveLength(VERTICES);
+    expect(r2.filter((value) => value > 0).length, `${analysis}: vertices with R² > 0`).toBeGreaterThan(0);
+  }
+}
 
 test("app boots on its workspace with the shared bar", async ({ page }) => {
   await page.goto("/");
@@ -60,36 +109,18 @@ test("app boots on its workspace with the shared bar", async ({ page }) => {
   expect(await page.evaluate(() => self.crossOriginIsolated === true)).toBe(true);
 });
 
-test("the example runs every analysis and downloads SamSrf's maps", async ({ page }) => {
-  test.setTimeout(1800000);
+test("the example runs every analysis on part of V1-V3 and downloads SamSrf's maps", async ({ page }) => {
+  test.setTimeout(900000);
   await loadExample(page);
   await expect(page.locator(".nd-viewer-empty")).toBeHidden();
-  for (const [analysis, expected] of Object.entries(RUNS)) {
-    await page.locator("#analysis").selectOption(analysis);
-    const run = page.locator("#runButton");
-    await expect(run).toBeEnabled();
-    await run.click();
-    await expect(page.locator("#outputSection")).toHaveAttribute("open", "", { timeout: 1500000 });
-    await expect(page.locator("#statusText")).toContainText("maps ready");
-    for (const label of ["Polar angle", "Eccentricity", "R²"]) {
-      await expect(page.locator("#resultList")).toContainText(label);
-    }
-    await expect(page.locator("#location")).toContainText("vertices with R²");
+  await useSmallRoi(page);
+  await runEveryAnalysis(page, 600000);
+});
 
-    const row = page.locator("#resultList .nd-volume-toggle", { hasText: "Polar angle" });
-    const single = page.waitForEvent("download");
-    await row.getByRole("button", { name: "Download", exact: true }).click();
-    const download = await single;
-    expect(download.suggestedFilename()).toBe(`${expected.outName}_pol.gii`);
-    expect(giftiVertices(readFileSync(await download.path()))).toBe(VERTICES);
-
-    const zipped = page.waitForEvent("download");
-    await page.locator("#downloadAll").click();
-    const archive = await zipped;
-    expect(archive.suggestedFilename()).toBe(`${expected.outName}_maps.zip`);
-    const entries = unzipSync(readFileSync(await archive.path()));
-    for (const map of expected.maps) expect(Object.keys(entries)).toContain(`${expected.outName}_${map}.gii`);
-  }
+test("the example runs every analysis on the whole V1-V3 label", { tag: '@slow' }, async ({ page }) => {
+  test.setTimeout(3600000);
+  await loadExample(page);
+  await runEveryAnalysis(page, 3000000);
 });
 
 test("the R² threshold hides vertices without rerunning", async ({ page }) => {
