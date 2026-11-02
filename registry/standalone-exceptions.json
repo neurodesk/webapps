@@ -5,7 +5,6 @@
   "nesvor": "needs CUDA; its standalone form is the neurodesk-compute server",
   "dicomview": "interactive DICOM browser: dcm2niix and dicompare already ship as command lines",
   "pipeline-builder": "writes NeuroFlow workflows: neuroflow-mcp runs and validates them from the command line",
-  "sdc": "exes/sdc builds the sdc command line on the same core; its release packaging follows the app (#473)",
   "dwicorrect": "exes/dwi/shoreline builds the shoreline command line on the same core; its release packaging follows the app",
   "fastprep": "exes/fastprep drives separately installed niimath, brainchop, greedy-rs, synthsr, topofit and glm; a bundled release waits on packaging those (TopoFit licence pending)",
   "me-ica": "its meica CLI is released from niivue/meica-rs; no release is tagged yet",

@@ -125,3 +125,23 @@ Measured on 1 November 2026 (seed 1234, Node 24, 16-core AMD EPYC shared with ot
 - Wall time 101 min: DenoiseImage 4 min, epi2anat and the MNI affine together 47 min, SyN 41 min, the unwarp of 137 volumes 3 min. Max RSS of the Node process 6.4 GB (MindGrab, then the kernels).
 - The unwarp from the reference coefficients is within 0.01172 of sdcflows' series, whose int16 half step is 0.01167.
 - Slab with the full T1w, 1.2 mm against the native 2 mm slab runs (report only): median 1.59 Hz against double seed 1234 (p95 6.05 Hz), 1.95 and 2.00 Hz against seeds 1235 and 1236, 1.51 Hz against `--float 1`. The pipeline took 52 min.
+
+## Command line
+
+`bin/sdc.js` runs the SyN-SDC pipeline through `correctFiles`. `exes/node-cli` packages it (`release.json`, `.github/workflows/sdc-native.yml`) with the prior bundled:
+
+```sh
+sdc sub-01_dir-AP_dwi.nii.gz results --t1w sub-01_T1w.nii.gz
+sdc download-models [--cache-dir DIR]   # the prior files and their notices
+sdc self-check
+```
+
+The `.bval`, `.bvec` and `.json` beside the series with the same name are used unless `--bval`, `--bvec` or `--json` name others. `--pe-dir` and `--readout` override the sidecar; `--epi-mask` and `--t1w-mask` replace MindGrab; `--no-prior` uses the T1w mask in place of the prior. The prior comes from `--prior-dir`, else `NEURODESK_SDC_MODEL_DIR` (the archive's `models/`), else `~/.cache/neurodesk/sdc/prior-<commit>`, downloaded and checked against `PRIOR_SHA256` unless `--offline` or `NEURODESK_OFFLINE=1`.
+
+The command line reverses no phase-encoding pair: PyHySCO stays in the web app and in the Rust `exes/sdc` command line.
+
+### Release check
+
+`validation/cli-check.mjs` runs the pipeline tests' synthetic subject (`test/syn-fixture.js`) with both masks from MindGrab and no prior, and requires every output to equal `validation/browser-reference.json`. `.nii.gz` files are compared decompressed, because Node's zlib and the browser's `CompressionStream` may compress differently; the rest byte for byte. The registrations run single-threaded with a fixed seed in the same kernels, so no tolerance is needed. The case covers every step except the T1w-to-MNI affine, in about 6 minutes; the full-brain example takes 1.5 hours, past a release job's limit, and `sdc-registration-gate.yml` holds that run to sdcflows instead.
+
+`validation/browser-reference.mjs` records the reference: it builds `validation/harness/` with Vite and runs the same case in Chromium on `src/syn/browser.js` (module workers, MindGrab's published wrapper on its CPU backend). `--check` fails when the browser drifts from the pinned files; `sdc-native.yml` runs it before building the archives. Rerecord it when the pipeline, a kernel or MindGrab changes.

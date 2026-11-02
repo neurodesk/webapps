@@ -1021,7 +1021,7 @@ apps:
       shared_runtime: false
       browser_test: true
       hardware_gpu: true
-      release: false
+      release: true
 
   - id: me-ica
     path: me-ica
