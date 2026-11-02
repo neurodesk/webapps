@@ -28,6 +28,7 @@
       "@neurodesk/webapp-components": "./vendor/webapp-components/src/index.js",
       "@neurodesk/webapp-components/automation": "./vendor/webapp-components/src/automation/index.js",
       "@neurodesk/webapp-components/ui": "./vendor/webapp-components/src/ui/index.js",
+      "@neurodesk/webapp-components/viewer": "./vendor/webapp-components/src/viewer/index.js",
       "@neurodesk/webapp-components/file-io": "./vendor/webapp-components/src/file-io/index.js",
       "@neurodesk/webapp-components/volume": "./vendor/webapp-components/src/volume/index.js",
       "@neurodesk/webapp-components/": "./vendor/webapp-components/src/"
@@ -327,7 +328,7 @@
             <span>Single slice only</span>
           </label>
           <span class="nd-info-icon" id="maskWandHelp" tabindex="0" aria-label="Magic wand help">i
-            <span class="nd-info-tooltip" role="tooltip">Click inside the lesion to grow connected voxels within the radius. Growth spans slices unless Single slice only is checked. Tolerance is ±% of the clicked intensity; the mouse wheel also adjusts it. Similar tissue and CSF may be included: this is intensity growing, not stroke detection. Switch to Paint to scroll slices. Review every affected slice; Undo removes a growth.</span>
+            <span class="nd-info-tooltip" role="tooltip">Click inside the lesion to grow connected voxels within the radius. Growth spans slices unless Single slice only is checked. Tolerance is ±% of the image’s robust intensity range, giving dark and bright seeds the same absolute allowance; the mouse wheel also adjusts it. Similar tissue and CSF may be included: this is intensity growing, not stroke detection. Switch to Paint to scroll slices. Review every affected slice; Undo removes a growth.</span>
           </span>
         </div>
         <div class="mask-toolbar-group mask-edit-group" role="group" aria-label="Mask edit actions">

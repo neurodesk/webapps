@@ -1,3 +1,5 @@
+import { installContrastRangeWand } from '@neurodesk/webapp-components/viewer';
+
 export class MaskDrawingController {
   constructor(options) {
     this.nv = options.nv;
@@ -116,6 +118,10 @@ export class MaskDrawingController {
 
   setTool(tool) {
     if (!this.nv) return;
+    if (tool !== 'wand' && this.restoreWandFill) {
+      this.restoreWandFill();
+      this.restoreWandFill = null;
+    }
     if (this.savedDrawingSettings && !['lasso', 'wand'].includes(tool)) {
       this.nv.opts.penSize = this.savedDrawingSettings.size;
       this.setPenShape(this.savedDrawingSettings.shape);
@@ -142,6 +148,7 @@ export class MaskDrawingController {
       this.nv.opts.penSize = 1;
       this.nv.setPenValue?.(1, tool === 'lasso');
       if (tool === 'wand') {
+        if (!this.restoreWandFill) this.restoreWandFill = installContrastRangeWand(this.nv);
         this.setWandOptions(this.wandSettings);
         this.nv.opts.clickToSegment = true;
       }

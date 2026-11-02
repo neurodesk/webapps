@@ -1,6 +1,65 @@
 import { expect, test } from '@playwright/test';
 
 for (const width of [1440, 390]) {
+  test(`contrast-range wand recovers dark, zero and signed regions at ${width}px`, async ({ page }) => {
+    test.setTimeout(120000);
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/');
+    await page.waitForFunction(() => globalThis.app?.nv?.canvas);
+    const measurements = [];
+    for (const encoding of [
+      { name: 'dark', offset: 0, slope: 1, intercept: 0 },
+      { name: 'zero', offset: -20, slope: 1, intercept: 0 },
+      { name: 'negative', offset: -30, slope: 1, intercept: 0 },
+      { name: 'calibrated', offset: 0, slope: 2, intercept: -50 },
+      { name: 'negative-slope', offset: 0, slope: -2, intercept: 50 },
+    ]) {
+      await page.evaluate(async ({ name, offset, slope, intercept }) => {
+        const { writeNifti1 } = await import('/js/modules/nifti-writer.js');
+        const data = new Float32Array(64 ** 3).fill(100 + offset);
+        for (let z = 29; z <= 35; z++) {
+          for (let y = 28; y <= 36; y++) {
+            for (let x = 28; x <= 36; x++) {
+              const center = x >= 31 && x <= 32 && y >= 31 && y <= 32;
+              data[x + y * 64 + z * 4096] = (center ? 20 : (x + y + z) % 2 ? 14 : 26) + offset;
+            }
+          }
+        }
+        const bytes = writeNifti1(data, { dims: [64, 64, 64], spacing: [1, 1, 2], affine: [1, 0, 0, -32, 0, 1, 0, -32, 0, 0, 2, -64, 0, 0, 0, 1] });
+        const header = new DataView(bytes);
+        header.setFloat32(112, slope, true);
+        header.setFloat32(116, intercept, true);
+        await app.setStructural(new File([bytes], `synthetic-${name}-region.nii`));
+        await app.startLesionMaskReview({ blank: true });
+        app.setViewerView('axial');
+      }, encoding);
+      await page.locator('#maskWandButton').click();
+      // Run the previous seed-relative rule on exactly the same image and click.
+      await page.evaluate(() => {
+        app.maskDrawingController.restoreWandFill();
+        app.maskDrawingController.restoreWandFill = null;
+      });
+      async function seedCount() {
+        await page.locator('#gl1').scrollIntoViewIfNeeded();
+        const box = await page.locator('#gl1').boundingBox();
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        return page.evaluate(() => [...app.nv.drawBitmap].reduce((sum, value) => sum + value, 0));
+      }
+      const before = await seedCount();
+      if (before) await page.locator('#maskUndoButton').click();
+      await page.locator('#maskPaintButton').click();
+      await page.locator('#maskWandButton').click();
+      const after = await seedCount();
+      measurements.push({ encoding: encoding.name, before, after });
+      expect(before).toBeLessThan(567);
+      expect(after).toBe(567);
+      expect(await page.evaluate(() => app.lesionMaskConfirmed)).toBe(false);
+      await page.locator('#maskUndoButton').click();
+      expect(await page.evaluate(() => app.nv.drawBitmap.some(value => value > 0))).toBe(false);
+    }
+    await test.info().attach('contrast-comparison', { body: JSON.stringify(measurements, null, 2), contentType: 'application/json' });
+  });
+
   test(`magic wand grows connected tissue across slices at ${width}px`, async ({ page }) => {
     test.setTimeout(120000);
     await page.setViewportSize({ width, height: 1000 });

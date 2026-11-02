@@ -3,6 +3,54 @@ import { createUint8Nifti, decodeNiftiBuffer, extractNiftiHeader, parseNiftiHead
 export const EDIT_TOOLS = Object.freeze(['draw', 'erase', 'fill']);
 export const BRUSH_SIZE = Object.freeze({ min: 1, max: 25 });
 
+/**
+ * Give NiiVue's click-to-segment equal absolute tolerance at dark and bright seeds.
+ * Keep its native connectivity, physical radius, preview, drawing and Undo logic.
+ * The default percent-of-seed interval collapses near zero and inverts below zero.
+ * This opt-in adapter changes only the native flood-fill intensity bounds.
+ */
+export function installContrastRangeWand(nv) {
+  if (typeof nv?.drawFloodFill !== 'function') throw new Error('This viewer does not support contrast-range wand growth.');
+  const original = nv.drawFloodFill;
+  const ranges = new WeakMap();
+  function imageRange(volume) {
+    if (ranges.has(volume)) return ranges.get(volume);
+    let span = 0;
+    for (const [low, high] of [[volume.robust_min, volume.robust_max], [volume.global_min, volume.global_max], [volume.cal_min, volume.cal_max]]) {
+      if (Number.isFinite(low) && Number.isFinite(high) && high !== low) {
+        span = Math.abs(high - low);
+        break;
+      }
+    }
+    ranges.set(volume, span);
+    return span;
+  }
+  function fill(...args) {
+    const volume = this.back;
+    if (this.opts?.clickToSegment && args[1] > 0 && !args[9] && typeof volume?.getValue === 'function') {
+      const intensity = volume.getValue(...args[0]);
+      if (Number.isFinite(intensity)) {
+        const fraction = Math.max(0.01, Math.min(0.5, Number(this.opts.clickToSegmentPercent) || 0.1));
+        const margin = imageRange(volume) * fraction;
+        // NiiVue samples the seed in calibrated units but flood-fills raw img2RAS values.
+        const slope = Number.isFinite(volume.hdr?.scl_slope) && volume.hdr.scl_slope !== 0 ? volume.hdr.scl_slope : 1;
+        const intercept = Number.isFinite(volume.hdr?.scl_inter) ? volume.hdr.scl_inter : 0;
+        const low = (intensity - margin - intercept) / slope;
+        const high = (intensity + margin - intercept) / slope;
+        args[3] = Math.min(low, high);
+        args[4] = Math.max(low, high);
+        this.opts.clickToSegmentIntensityMin = args[3];
+        this.opts.clickToSegmentIntensityMax = args[4];
+      }
+    }
+    return original.apply(this, args);
+  }
+  nv.drawFloodFill = fill;
+  return () => {
+    if (nv.drawFloodFill === fill) nv.drawFloodFill = original;
+  };
+}
+
 export function clampBrushSize(size) {
   return Math.min(BRUSH_SIZE.max, Math.max(BRUSH_SIZE.min, Math.round(Number(size)) || BRUSH_SIZE.min));
 }

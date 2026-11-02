@@ -8,6 +8,8 @@
 
 ### Patch Changes
 
+- Fix magic-wand tolerance collapsing around dark, zero or negative lesion seeds. Use the image's robust contrast range for a brightness-independent interval and convert calibrated NIfTI bounds to the raw units used by native flood fill. Keep the native radius, connectivity, preview, Undo and review behavior through an opt-in shared adapter. Add browser comparisons against the old seed-relative rule, including signed and scaled images.
+  - @neurodesk/calmar@0.10.20261102
 - Move the sidebar's primary action from lesion segmentation to reporting once the mask is confirmed, leaving segmentation as a secondary action. Restore segmentation emphasis when review reopens or the subject changes, and emphasize reporting directly for supplied atlas-space lesion masks. Keep exactly one primary action using the shared button styles.
   - @neurodesk/calmar@0.10.20261102
 - @neurodesk/calmar@0.10.20261102

@@ -9,7 +9,55 @@ import {
   parseNiftiHeader,
   readNiftiImageData,
 } from '../src/file-io/NiftiUtils.js';
-import { createDrawingAdapter, distinctLabels, editedFileName, maskToUint8Nifti } from '../src/viewer/drawing.js';
+import { createDrawingAdapter, distinctLabels, editedFileName, maskToUint8Nifti, installContrastRangeWand } from '../src/viewer/drawing.js';
+
+test('contrast-range wand gives dark, zero and negative seeds the same width and preserves native arguments', () => {
+  const calls = [];
+  let seed = 80;
+  const nv = {
+    opts: { clickToSegment: true, clickToSegmentPercent: 0.1 },
+    back: { robust_min: -20, robust_max: 180, getValue: () => seed },
+    drawFloodFill(...args) { calls.push({ receiver: this, args }); return 42; },
+  };
+  const original = nv.drawFloodFill;
+  const restore = installContrastRangeWand(nv);
+  const bitmap = new Uint8Array(1);
+  for (const center of [80, 20, 0, -10]) {
+    seed = center;
+    assert.equal(nv.drawFloodFill([1, 2, 3], 1, Infinity, 999, 1000, 6, 15, false, bitmap), 42);
+    const call = calls.at(-1);
+    assert.equal(call.receiver, nv);
+    assert.deepEqual(call.args.slice(3, 5), [center - 20, center + 20]);
+    assert.deepEqual(call.args.slice(5), [6, 15, false, bitmap]);
+  }
+  nv.back.cal_min = 0;
+  nv.back.cal_max = 1;
+  nv.drawFloodFill([1, 2, 3], 1, Infinity, 0, 1);
+  assert.deepEqual(calls.at(-1).args.slice(3, 5), [-30, 10], 'windowing does not alter tolerance');
+  nv.opts.clickToSegment = false;
+  nv.drawFloodFill([1, 2, 3], 1, Infinity, 999, 1000);
+  assert.deepEqual(calls.at(-1).args.slice(3, 5), [999, 1000], 'other drawing tools are untouched');
+  nv.opts.clickToSegment = true;
+  nv.drawFloodFill([1, 2, 3], 1, Infinity, 999, 1000, 6, 15, false, bitmap, true);
+  assert.deepEqual(calls.at(-1).args.slice(3, 5), [999, 1000], 'native grow/erase-cluster tools are untouched');
+  restore();
+  assert.equal(nv.drawFloodFill, original);
+});
+
+test('contrast-range wand falls back to global extrema and converts calibrated bounds to raw voxel units', () => {
+  const intervals = [];
+  const nv = {
+    opts: { clickToSegment: true, clickToSegmentPercent: 0.1 },
+    back: { robust_min: 5, robust_max: 5, global_min: -50, global_max: 150, hdr: { scl_slope: 2, scl_inter: -50 }, getValue: () => -10 },
+    drawFloodFill(...args) { intervals.push(args.slice(3, 5)); },
+  };
+  installContrastRangeWand(nv);
+  nv.drawFloodFill([0, 0, 0], 1, Infinity);
+  assert.deepEqual(intervals.at(-1), [10, 30]);
+  nv.back = { robust_min: 150, robust_max: -50, hdr: { scl_slope: -2, scl_inter: 50 }, getValue: () => 10 };
+  nv.drawFloodFill([0, 0, 0], 1, -Infinity);
+  assert.deepEqual(intervals.at(-1), [10, 30], 'negative calibration slopes keep ordered bounds');
+});
 
 const DIMS = [4, 3, 2];
 

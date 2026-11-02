@@ -391,6 +391,7 @@ function fakeFile(name) {
   };
   const nv = {
     back: { dims: [3, 2, 2, 2] },
+    drawFloodFill() {},
     opts: { isFilledPen: false, penSize: 1, penValue: 1 },
     document: { opts: { penType: 0 } },
     drawBitmap: null,

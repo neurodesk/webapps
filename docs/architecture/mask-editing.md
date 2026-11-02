@@ -80,6 +80,16 @@ during cancellation does not allow a new drawing to open before cleanup ends.
   affine kept), and `distinctLabels(source)` lists the non-zero values for the
   Label select. `editedFileName(name)` keeps a NIfTI name and appends `.nii`
   to any other.
+- Viewers exposing native `drawFloodFill` can opt into
+  `installContrastRangeWand(nv)`. It keeps NiiVue's click-to-segment UI,
+  connectivity, radius, previews and Undo, replacing only the intensity bounds.
+  The tolerance fraction uses the base image's robust intensity range, with
+  global/initial-display fallbacks; it has the same absolute width at dark,
+  zero, negative and bright seeds. It converts calibrated bounds back into the
+  raw units the native fill compares and caches the range per image so later
+  windowing cannot change it. The returned function restores the original
+  instance method; call it when leaving the wand. It does not affect other
+  tools or install itself globally.
 - Both generations' save returns the drawing on the base image's native grid,
   uncompressed; 0.x reorients in `toUint8Array`, so the adapter needs no
   `drawBitmap` arithmetic. NiiVue 1.0 before rc.25 `loadDrawing` reordered the
