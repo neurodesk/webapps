@@ -12,7 +12,7 @@ export async function verifyOffline(page, { download }) {
   await page.locator('#runButton').click();
   await expect(page.locator('#statusText')).toContainText('maps ready', { timeout: 1800000 });
   const result = await download('#resultList .nd-volume-toggle:has-text("Polar angle") .nd-download-btn');
-  assert.equal(result.filename, 'lh_pRF_pol.gii');
+  assert.equal(result.filename, 'lh_pRF_Rcp_pol.gii');
   assert.match(result.bytes.subarray(0, 4096).toString('utf8'), /Dim0="134260"/);
   return { filename: result.filename, bytes: result.bytes.length };
 }
