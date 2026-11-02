@@ -78,3 +78,14 @@ for both modes, verifies native geometry and writes counts and scores to
 brain extraction/prealignment for each mode costs more than the cached experiment
 reported above. Exact scores may differ slightly with nearest-neighbor tie
 rounding between this JavaScript scorer and the original nibabel scorer.
+
+
+## Upstream integration check (2026-11-02 UTC)
+
+After synchronization with neurodesk/webapps `a97a3ad0`, the pinned structural
+example (`sub-M2051`, SHA-256 `725a37bf…cad`) completed the full production
+Chromium `prepare-lesion` workflow, including SynthStrip, prealignment,
+SynthStroke and native unconfirmed-mask review, in about 90 seconds. The
+candidate retained the source dimensions and binary labels. This removes the
+example-workflow validation gap for this integration; it does not retest the
+separate M2018 failure above or establish clinical accuracy.
