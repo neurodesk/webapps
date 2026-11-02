@@ -99,6 +99,40 @@ impl NanSum {
     }
 }
 
+/// `nanmean(Data, 2)` built one vertex at a time. Its counts are u32 because a hemisphere
+/// has more vertices than `NanSum`'s u16 run counts hold.
+#[derive(Debug)]
+struct VolumeMean {
+    sum: Vec<f64>,
+    count: Vec<u32>,
+}
+
+impl VolumeMean {
+    fn new(volumes: usize) -> Self {
+        Self {
+            sum: vec![0.0; volumes],
+            count: vec![0; volumes],
+        }
+    }
+
+    fn add(&mut self, course: &[f64]) {
+        for ((sum, count), &value) in self.sum.iter_mut().zip(&mut self.count).zip(course) {
+            if !value.is_nan() {
+                *sum += value;
+                *count += 1;
+            }
+        }
+    }
+
+    fn mean(self) -> Vec<f64> {
+        self.sum
+            .iter()
+            .zip(&self.count)
+            .map(|(sum, count)| sum / f64::from(*count))
+            .collect()
+    }
+}
+
 #[derive(Debug)]
 enum Combined {
     /// One part, or the odd and even runs when the noise ceiling is wanted.
@@ -178,7 +212,7 @@ impl RunAccumulator {
         );
         let half = self.runs % 2;
         let mut concatenated = Vec::new();
-        let mut across = NanSum::new(volumes);
+        let mut across = VolumeMean::new(volumes);
         let mut position = 0;
         for vertex in 0..self.total_vertices {
             let is_kept = position < kept_count && self.kept.vertex(position) == vertex;
@@ -199,7 +233,7 @@ impl RunAccumulator {
             }
             match &mut self.global {
                 GlobalSignal::AllVertices(sums) => sums.add(vertex * volumes, &course),
-                GlobalSignal::PerRun(_) => across.add(0, &course),
+                GlobalSignal::PerRun(_) => across.add(&course),
                 GlobalSignal::Off | GlobalSignal::FromCombined => {}
             }
         }
@@ -207,7 +241,7 @@ impl RunAccumulator {
             runs.push(concatenated);
         }
         if let GlobalSignal::PerRun(signal) = &mut self.global {
-            signal.extend(NanSum::mean(&[across]));
+            signal.extend(across.mean());
         }
         self.runs += 1;
         Ok(())
@@ -354,11 +388,11 @@ fn normalise_course(course: &mut [f64], normalise: Normalise) {
 
 /// `nanmean(Data, 2)`: per volume, the mean of the non-NaN values across vertices.
 fn mean_across_vertices(data: &TimeSeries) -> Vec<f64> {
-    let mut across = NanSum::new(data.volumes);
+    let mut across = VolumeMean::new(data.volumes);
     for vertex in 0..data.vertices {
-        across.add(0, data.course(vertex));
+        across.add(data.course(vertex));
     }
-    NanSum::mean(&[across])
+    across.mean()
 }
 
 fn mean(x: &[f64]) -> f64 {
@@ -1413,6 +1447,30 @@ mod tests {
         assert!(result.data.data[VOLUMES + 3].is_nan());
         assert_eq!(result.data.data[VOLUMES + 4..], raw[VOLUMES + 4..]);
         assert_eq!(result.noise_ceiling, None);
+    }
+
+    #[test]
+    fn the_global_signal_counts_more_vertices_than_a_u16_holds() {
+        let vertices = 70_000;
+        let raw = RawRun {
+            volumes: 2,
+            vertices,
+            data: [1.0, 3.0].repeat(vertices),
+        };
+        for combine in [
+            Combine::Average {
+                noise_ceiling: false,
+            },
+            Combine::Concatenate,
+        ] {
+            for kept in [VertexSelection::All, VertexSelection::Indices(vec![0])] {
+                let mut accumulator =
+                    RunAccumulator::new(vertices, kept, options(Normalise::None, combine, true));
+                accumulator.push_run(&raw).unwrap();
+                let signal = accumulator.finish().unwrap().global_signal.unwrap();
+                assert_eq!(signal, [1.0, 3.0], "{combine:?}");
+            }
+        }
     }
 
     #[test]
