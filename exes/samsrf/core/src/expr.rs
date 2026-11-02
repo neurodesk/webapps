@@ -250,10 +250,11 @@ fn lookup<'a>(scope: &[(&str, &'a Value)], name: &str) -> Result<&'a Value> {
 }
 
 /// `@(P,ApWidth) body`, kept with its source so provenance can quote it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct AnonymousFunction {
     pub source: String,
     pub params: Vec<String>,
+    #[serde(skip)]
     pub body: Expr,
 }
 

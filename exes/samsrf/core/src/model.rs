@@ -15,10 +15,12 @@
 
 use crate::error::{Error, Result};
 use crate::expr::AnonymousFunction;
+use serde::Serialize;
 use serde_json::{Map, Value};
 
 /// `Model.Hrf` as the analyses interpret it (`samsrf_fit_prf.m` "Load or generate HRF").
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum HrfSpec {
     /// `Hrf = 0`: SPM's canonical double gamma at the model TR.
     SpmCanonical,
@@ -37,14 +39,16 @@ pub enum HrfSpec {
 }
 
 /// Fine-fit algorithm choice. SamSrf uses Nelder-Mead unless `Hooke_Jeeves_Steps` is set.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum FineFit {
     NelderMead { tolerance: Option<f64> },
     HookeJeeves { steps: Vec<f64> },
 }
 
 /// `samsrf_fit_prf` model with defaults applied.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrfModel {
     pub name: String,
     pub prf_function: AnonymousFunction,
@@ -76,7 +80,8 @@ pub struct PrfModel {
 }
 
 /// `samsrf_revcor_prf` model with defaults applied.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RevCorPrfModel {
     pub name: String,
     pub scaling_factor: f64,
@@ -99,7 +104,8 @@ pub struct RevCorPrfModel {
 }
 
 /// How `samsrf_revcor_cf` turns a correlation profile into CF parameters (`Fit_pRF`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum CfParameterEstimate {
     /// `Fit_pRF = 1`
     Gaussian,
@@ -110,7 +116,8 @@ pub enum CfParameterEstimate {
 }
 
 /// `samsrf_revcor_cf` model with defaults applied.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CfModel {
     pub name: String,
     pub seed_roi: String,
@@ -126,10 +133,14 @@ pub struct CfModel {
 /// The analysis a model JSON describes. `SamSrfAnalysis` picks the analysis from its
 /// first argument (`prf`, `rc`, `cf`); the same JSON fields mean different things per
 /// analysis, so parsing takes the analysis kind.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind")]
 pub enum Model {
+    #[serde(rename = "prf")]
     Prf(PrfModel),
+    #[serde(rename = "rc")]
     RevCorPrf(RevCorPrfModel),
+    #[serde(rename = "cf")]
     RevCorCf(CfModel),
 }
 
