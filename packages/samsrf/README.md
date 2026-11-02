@@ -211,8 +211,67 @@ re-exports the whole API, plus:
 | `readLabelFile(path)` | `readFreeSurferLabel` on a file. |
 | `readAnatomyFolder(dir, hemisphere)` | `readAnatomy` on `dir/<hemisphere>.white`, `.pial`, `.inflated`, `.sphere`, `.curv`, `.area` and, when present, `.thickness`. `hemisphere` is `'lh'` or `'rh'`. |
 | `preprocessRuns(paths, { keep, ...options }) → result` | Reads the runs one at a time into a `RunAccumulator`, freeing each, and returns `finish()`. |
+| `readAnalysisInputs({ runs, roi?, seed?, apertures?, template?, white?, area?, hemisphere = 'lh', normalise = 'zscore', combine = 'average' }) → inputs` | Reads an analysis's files as the web app does: the runs preprocessed keeping the ROI and seed vertices (every vertex without `roi`), with the noise ceiling and global signal; the serialised apertures; the Benson template (`x0` flipped for `'rh'`); the white surface and areas. Paths left out are `null`. |
+| `analysisSpec(inputs, kind, model, { roi }?) → spec` | The `createJob` spec for `kind` on `readAnalysisInputs` output. `model` is the JSON text or object; `roi` overrides the label's vertices. |
+| `runJob(job, shards = 1, onProgress?) → merged` | `job.run` over `[0, vertexCount)` in `shards` pieces in this thread, then `job.merge`. |
+| `shardRanges(total, shards) → [[start, end], ...]` | The ranges `runJob` and the command line split the vertices into. |
 
 Errors from `readRunFile`, `readAperturesFile` and `readLabelFile` start with the file's path.
+
+## Command line
+
+`bin/samsrf.js` runs one analysis as `SamSrfAnalysis` does, on the same
+WebAssembly module, and writes the files the web app downloads:
+
+```sh
+samsrf rc pRF.json results --runs lh_uBars1.gii lh_uBars2.gii --roi lh.V123.label \
+  --apertures aps_Bars.mat
+samsrf prf pRF_Gaussian.json results --runs lh_uBars*.gii --roi lh.V123.label \
+  --apertures aps_Bars.mat --shards 8
+samsrf cf CF_Rcp.json results --runs lh_uBars*.gii --roi lh.V123.label \
+  --seed lh.V1_seed.label --template lh_benson.gii --surf surf
+```
+
+The first argument is the analysis (`prf`, `rc` or `cf`), then a SamSrf model
+JSON file and an output directory that must be new or empty. Every file name
+after `--runs` up to the next option is a run. The other options:
+
+| Option | Meaning |
+| --- | --- |
+| `--roi FILE` | Label of the vertices to analyse; default every vertex. |
+| `--apertures FILE` | `.mat`, `.nii`, `.nii.gz` or `.gif` apertures; required by `prf` and `rc`. |
+| `--seed FILE`, `--template FILE` | Seed label and Benson template GIfTI; required by `cf`. |
+| `--surf DIR` | Reads `<hemisphere>.white` (for `Smoothing`) and `<hemisphere>.area` (for `cf`) from a FreeSurfer `surf` folder. `--white FILE` and `--area FILE` name them one by one. |
+| `--hemisphere NAME` | Output prefix and template side. Default `lh`, `rh` or `bi` from the start of the first run's file name, else `srf`. |
+| `--no-normalise` | Keeps each run as it is (`samsrf_gii2srf` with normalisation off); default detrend and z-score. |
+| `--concatenate` | Concatenates the runs; default average, with the noise ceiling for two or more runs. |
+| `--shards N` | Splits the vertices over N worker threads, each with its own module. The maps do not depend on N. |
+
+It reads the inputs with `readAnalysisInputs` (the runs keep the ROI and seed
+vertices, so the noise ceiling is 0 outside them), runs the job with a progress
+line on standard error, and writes `exportGiis(maps,
+'<hemisphere>_<Name><suffix>')` (`lh_pRF_Rcp_r^2.gii`, ...) and
+`<prefix>_provenance.json`: the package and core versions, the model, the
+options, each input with its SHA-256, the analysed vertex count, the map names
+and the wall time. Errors print one line on standard error, starting with the
+file they concern, and exit with status 1.
+
+`samsrf self-check` fits a coarse pRF to a course generated from a known
+Gaussian on a 5 x 5 in-memory aperture and prints the runtime as JSON.
+`samsrf download-models` installs nothing (SamSrf has no model files); the
+portable packager calls it.
+
+The portable archives come from `exes/node-cli` (`release.json`,
+`.github/workflows/samsrf-native.yml`). Each must pass
+`validation/cli-check.mjs`: `rc` on the example's whole V1-V3 label in three
+shards, and the Nelder-Mead `prf` fit and `cf` on its first 200 vertices, each
+GIfTI byte-identical to the same job run in-process through `src/node.js`, with
+fixed file names, 134260 values per map and pinned counts of vertices with
+R^2 > 0.1. It downloads the pinned example from `apps/samsrf/examples.json`
+into a cache under the temporary directory, or reads it from
+`SAMSRF_WEBAPP_EXAMPLE_DIR` when the bytes match. `test/cli.test.js` covers the
+argument errors, `self-check` and, with `SAMSRF_WEBAPP_EXAMPLE_DIR`, a short
+sharded `rc` run.
 
 ## Building the WebAssembly module
 
