@@ -84,6 +84,7 @@ def main(argv=None) -> int:
         print("\n".join(f"  {line}" for line in dirty.splitlines()[:12]), file=sys.stderr)
         return 1
 
+    args.source_commit = git(kb, "rev-parse", "HEAD")
     runs = ["approved", DRAFT_STATUSES] if args.both else [args.include]
     written = []
     for include in runs:
@@ -143,11 +144,12 @@ def sync_one(args, kb: Path, export: Path, include: str, dirty) -> int:
         entry.update({
             "sizeBytes": asset.stat().st_size,
             "checksum": f"sha256:{sha}",
-            "cacheKey": f"{asset_id}-{digest}-e{EXPORT_FORMAT}",
+            "cacheKey": f"{asset_id}-{digest}-e{EXPORT_FORMAT}-{sha[:12]}",
             "sourceVersion": f"{asset_id}-{'-'.join(statuses)}-{digest}-export{EXPORT_FORMAT}",
             "kbContentDigest": digest,
             "kbStatuses": statuses,
             "kbCommit": version.get("commit"),
+            "kbSourceCommit": args.source_commit,
             "kbRepository": "https://github.com/micmas/stroke-aphasia-kb",
             "kbExportedOn": version.get("exportedOn"),
             "exportFormat": EXPORT_FORMAT,

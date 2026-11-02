@@ -1,5 +1,12 @@
 # calmar
 
+## 0.8.20261102
+
+### Patch Changes
+
+- Keep approved and draft KB snapshots current with an hourly, tested source sync on the fork. Record the exact source commit, invalidate changed exports by checksum, and refresh both snapshots from the latest KB revision.
+  - @neurodesk/calmar@0.8.20261102
+
 ## 0.8.20261030
 
 ### Minor Changes

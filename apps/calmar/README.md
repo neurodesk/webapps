@@ -843,3 +843,13 @@ Standalone action lists verified releases after publication.
 
 See the [command-line guide](../../packages/calmar/README.md#command-line) for
 atlas-space inputs, offline model preparation, outputs and platform support.
+
+### Automatic KB updates on the fork
+
+The **CALMaR knowledge-base sync** GitHub workflow checks `micmas/stroke-aphasia-kb`
+hourly and can also be run manually. A new revision regenerates both evidence
+levels, validates their checksums and Python/JavaScript parity, and commits a
+dated snapshot update to `main`. Each manifest records the full `kbSourceCommit`;
+reports continue to identify the evidence revision used. A failed check leaves
+the previous snapshot in place. Existing deployments need to pull and rebuild to
+use the updated snapshot; the browser does not silently change evidence mid-run.

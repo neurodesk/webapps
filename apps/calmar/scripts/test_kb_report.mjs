@@ -46,6 +46,8 @@ const { decodeNiftiBuffer } = await import('../web/js/modules/atlas-loader.js');
   });
   assert.ok(entry.cacheKey.startsWith(`aphasia-kb-${loaded.version.contentDigest}`), 'the cache key follows the KB content digest');
   assert.equal(loaded.findings.length, kb.findings.length);
+  assert.match(entry.kbSourceCommit, /^[0-9a-f]{40}$/);
+  assert.ok(entry.cacheKey.endsWith(entry.checksum.replace('sha256:', '').slice(0, 12)), 'changed export bytes invalidate the browser cache');
   await assert.rejects(loadKnowledgeBase({ annotationAssets: [] }), /kbReport is missing/);
 
   // Two evidence levels: approved findings (the default) and approved + unreviewed drafts.

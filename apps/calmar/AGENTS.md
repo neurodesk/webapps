@@ -243,3 +243,8 @@ the shared signed macOS packager with the root monorepo release tooling.
 
 ## Upstream synchronization
 - The November 2026 merge retains the fork's 0.8 CALMaR series alongside upstream's 0.7 release history and preserves both offline asset inventories. Upstream's JPEG-capable dcm2niix wrapper is used for every scan input.
+
+## Automatic KB refresh
+- On micmas/webapps, calmar-kb-sync.yml checks the KB main branch hourly and on manual dispatch. It exports both approved and draft-inclusive snapshots at an exact source commit, records kbSourceCommit, validates checksums and Python/JS parity, and versions/commits the update to main. Unrelated pending changesets are preserved. Failures keep the last validated snapshot.
+- This updates repository snapshots, not an already-running deployment. Pull and rebuild deployments to pick up new snapshots. The evidence selector and optional KB behavior remain unchanged.
+- KB cache keys include the export checksum as well as content digest and format, so exporter/provenance changes cannot reuse stale browser data.
