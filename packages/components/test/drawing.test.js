@@ -9,7 +9,7 @@ import {
   parseNiftiHeader,
   readNiftiImageData,
 } from '../src/file-io/NiftiUtils.js';
-import { createDrawingAdapter, distinctLabels, editedFileName, maskToUint8Nifti, maskToDrawingBitmap, installContrastRangeWand } from '../src/viewer/drawing.js';
+import { createDrawingAdapter, distinctLabels, editedFileName, maskToUint8Nifti, maskToDrawingBitmap, drawingToNativeBitmap, installContrastRangeWand } from '../src/viewer/drawing.js';
 
 test('contrast-range wand gives dark, zero and negative seeds the same width and preserves native arguments', () => {
   const calls = [];
@@ -392,4 +392,30 @@ test('brain mask follows the viewer signed permutation and rejects a displaced g
   nv.volumes[0].hdr = { ...hdr, affine: hdr.affine.map(row => [...row]) };
   nv.volumes[0].hdr.affine[0][3] += 10;
   await assert.rejects(maskToDrawingBitmap(nv, bytes), /must match/);
+});
+
+
+test('drawing export reverses all 48 signed axis permutations on a non-cubic grid', () => {
+  const dims = [4, 3, 2];
+  const native = Uint8Array.from({ length: 24 }, (_, i) => i + 1);
+  const hdr = parseNiftiHeader(sourceHeader());
+  for (const perm of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
+    for (let bits = 0; bits < 8; bits++) {
+      const axes = perm.map((axis, i) => (axis + 1) * ((bits >> i) & 1 ? -1 : 1));
+      const outDims = perm.map(axis => dims[axis]);
+      const ras = new Uint8Array(24);
+      for (let z = 0; z < dims[2]; z++) for (let y = 0; y < dims[1]; y++) for (let x = 0; x < dims[0]; x++) {
+        const source = [x, y, z];
+        const dest = perm.map((axis, i) => axes[i] < 0 ? dims[axis] - 1 - source[axis] : source[axis]);
+        ras[dest[0] + outDims[0] * (dest[1] + outDims[1] * dest[2])] = native[x + dims[0] * (y + dims[1] * z)];
+      }
+      assert.deepEqual(drawingToNativeBitmap({ volumes: [{ hdr, permRAS: axes }], drawBitmap: ras }, hdr), native, String(axes));
+    }
+  }
+  const nv = { volumes: [{ hdr, permRAS: [-1, 2, 3] }], drawBitmap: native };
+  const shifted = { ...hdr, affine: hdr.affine.map(row => [...row]) };
+  shifted.affine[0][3] += 1;
+  assert.throws(() => drawingToNativeBitmap(nv, shifted), /does not match/);
+  nv.volumes[0].permRAS = undefined;
+  assert.throws(() => drawingToNativeBitmap(nv), /orientation/);
 });

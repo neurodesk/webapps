@@ -1149,7 +1149,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   });
   app.maskDrawingController = {
     hasDrawing: true,
-    copyDrawingBitmap: () => new Uint8Array(nativeMask),
+    copyNativeDrawingBitmap: () => new Uint8Array(nativeMask),
     exportDrawingFile: async () => { asyncExportCalls += 1; },
     close: (options) => { closeOptions = options; }
   };
@@ -1256,7 +1256,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   };
   app.maskDrawingController = {
     hasDrawing: true,
-    copyDrawingBitmap: () => new Uint8Array(nativeMask),
+    copyNativeDrawingBitmap: () => new Uint8Array(nativeMask),
     close: (options) => { closeOptions = options; }
   };
   app.nativeStructuralInfo = {
@@ -1354,7 +1354,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   };
   app.maskDrawingController = {
     hasDrawing: true,
-    copyDrawingBitmap: () => {
+    copyNativeDrawingBitmap: () => {
       copyDrawingCalls += 1;
       return new Uint8Array(drawing);
     },

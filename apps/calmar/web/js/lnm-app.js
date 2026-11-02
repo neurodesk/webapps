@@ -2751,7 +2751,7 @@ export class LesionNetworkMappingApp {
     if (!native?.dims || !native?.affine) {
       throw new Error('Native structural geometry is not available for mask download.');
     }
-    const drawing = this.maskDrawingController.copyDrawingBitmap?.();
+    const drawing = this.maskDrawingController.copyNativeDrawingBitmap(native);
     if (!(drawing instanceof Uint8Array)) {
       throw new Error('No editable lesion drawing is available.');
     }

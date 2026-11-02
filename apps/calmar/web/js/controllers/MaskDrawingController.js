@@ -1,4 +1,4 @@
-import { installContrastRangeWand, maskToDrawingBitmap } from '@neurodesk/webapp-components/viewer';
+import { installContrastRangeWand, maskToDrawingBitmap, drawingToNativeBitmap } from '@neurodesk/webapp-components/viewer';
 
 export class MaskDrawingController {
   constructor(options) {
@@ -34,6 +34,10 @@ export class MaskDrawingController {
 
   copyDrawingBitmap() {
     return this.nv?.drawBitmap ? new Uint8Array(this.nv.drawBitmap) : null;
+  }
+
+  copyNativeDrawingBitmap(geometry) {
+    return drawingToNativeBitmap(this.nv, { dims: [3, ...geometry.dims], affine: geometry.affine });
   }
 
   bitmapsEqual(a, b) {

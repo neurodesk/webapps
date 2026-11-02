@@ -1,5 +1,5 @@
 import { createUint8Nifti, decodeNiftiBuffer, extractNiftiHeader, parseNiftiHeader, readNiftiImageData, sameVoxelGrid } from '../file-io/NiftiUtils.js';
-import { orientToRAS } from '../volume/geometry.js';
+import { orientToRAS, inverseOrient } from '../volume/geometry.js';
 
 export const EDIT_TOOLS = Object.freeze(['draw', 'erase', 'fill']);
 export const BRUSH_SIZE = Object.freeze({ min: 1, max: 25 });
@@ -85,16 +85,37 @@ export function installContrastRangeWand(nv, { getMask = () => null } = {}) {
   };
 }
 
+/** Convert NiiVue's RAS drawing back to the base image's native voxel order. */
+export function drawingToNativeBitmap(nv, expectedGrid) {
+  const image = nv.volumes?.[0];
+  if (!image?.hdr || !nv.drawBitmap) throw new Error('No anatomical image and drawing are available.');
+  if (expectedGrid && !sameVoxelGrid(image.hdr, expectedGrid)) {
+    throw new Error('The drawing base does not match the intended native mask geometry.');
+  }
+  const axes = drawingAxes(image);
+  const dims = Array.from(image.hdr.dims.slice(1, 4));
+  if (nv.drawBitmap.length !== dims[0] * dims[1] * dims[2]) {
+    throw new Error('Drawing and anatomical image voxel counts differ.');
+  }
+  const perm = axes.map(axis => Math.abs(axis) - 1);
+  return inverseOrient(nv.drawBitmap, perm.map(axis => dims[axis]), perm, axes.map(axis => axis < 0), dims, Uint8Array);
+}
+
+function drawingAxes(image) {
+  const axes = Array.from(image.permRAS || []);
+  if (axes.length !== 3 || new Set(axes.map(Math.abs)).size !== 3 || axes.some(axis => ![1, 2, 3].includes(Math.abs(axis)))) {
+    throw new Error('The anatomical image drawing orientation is unavailable.');
+  }
+  return axes;
+}
+
 /** Binary native-space NIfTI mask on exactly the viewer's drawing (RAS) grid. */
 export async function maskToDrawingBitmap(nv, source) {
   const image = nv.volumes?.[0];
   const bytes = await maskToUint8Nifti(source);
   const header = parseNiftiHeader(bytes);
   if (!sameVoxelGrid(header, image?.hdr)) throw new Error('Brain mask must match the displayed anatomical image grid.');
-  const axes = Array.from(image.permRAS || []);
-  if (axes.length !== 3 || new Set(axes.map(Math.abs)).size !== 3 || axes.some(axis => ![1, 2, 3].includes(Math.abs(axis)))) {
-    throw new Error('The anatomical image drawing orientation is unavailable.');
-  }
+  const axes = drawingAxes(image);
   const { data } = readNiftiImageData(bytes, Uint8Array);
   return orientToRAS(
     Uint8Array.from(data, value => value > 0 ? 1 : 0), Array.from(header.dims.slice(1, 4)),
