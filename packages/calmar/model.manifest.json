@@ -2291,6 +2291,56 @@
         "21": "Right Accumbens"
       },
       "_comment": "FSL label indices + 1. Neuroparc CSV reverses hemisphere names; use FSL laterality, confirmed by NIfTI sform (label 4 has negative world x; label 15 positive). Combined overlap excludes broad cortex, white matter and ventricular labels; named subcortical structures take precedence over cortical parcels."
+    },
+    {
+      "id": "jhu-icbm-tracts-maxprob-thr50-2mm",
+      "filename": "atlases/JHU-ICBM-tracts-maxprob-thr50-2mm.nii.gz",
+      "sizeBytes": 2787,
+      "checksum": "sha256:dbb06624cdee04660a5b62b400ed704b4b5d6e180d00f03ad73ecb90d619911d",
+      "cacheKey": "jhu-icbm-tracts-maxprob-thr50-2mm-v1",
+      "sourceUrl": "https://raw.githubusercontent.com/fithisux/FSL/7aa2932949129f5c61af912ea677d4dbda843895/data/atlases/JHU/JHU-ICBM-tracts-maxprob-thr50-2mm.nii.gz",
+      "sourceVersion": "JHU-ICBM-tracts-maxprob-thr50-2mm-FSL5.0.9",
+      "resolutionMm": 2,
+      "mniSpace": "MNI152NLin6Asym",
+      "dims": [
+        91,
+        109,
+        91
+      ],
+      "originMm": [
+        90.0,
+        -126.0,
+        -72.0
+      ],
+      "supportStatus": "supported",
+      "role": "report-atlas",
+      "reportAtlas": "JHU",
+      "licence": "FSL atlas licence (non-commercial)",
+      "labelCount": 20,
+      "labelsPresent": 12,
+      "labels": {
+        "1": "Anterior thalamic radiation L",
+        "2": "Anterior thalamic radiation R",
+        "3": "Corticospinal tract L",
+        "4": "Corticospinal tract R",
+        "5": "Cingulum (cingulate gyrus) L",
+        "6": "Cingulum (cingulate gyrus) R",
+        "7": "Cingulum (hippocampus) L",
+        "8": "Cingulum (hippocampus) R",
+        "9": "Forceps major",
+        "10": "Forceps minor",
+        "11": "Inferior fronto-occipital fasciculus L",
+        "12": "Inferior fronto-occipital fasciculus R",
+        "13": "Inferior longitudinal fasciculus L",
+        "14": "Inferior longitudinal fasciculus R",
+        "15": "Superior longitudinal fasciculus L",
+        "16": "Superior longitudinal fasciculus R",
+        "17": "Uncinate fasciculus L",
+        "18": "Uncinate fasciculus R",
+        "19": "Superior longitudinal fasciculus (temporal part) L",
+        "20": "Superior longitudinal fasciculus (temporal part) R"
+      },
+      "_comment": "JHU white-matter tractography atlas, maximum-probability image thresholded at 50%, 2 mm, from FSL 5.0.9 distribution (labels = FSL XML index + 1). The 50% image has no voxels for the cingulum, uncinate or temporal SLF; the mapping uses XTRACT for those tracts."
     }
   ],
   "connectomeAssets": [

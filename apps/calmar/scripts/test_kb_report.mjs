@@ -76,6 +76,7 @@ const { decodeNiftiBuffer } = await import('../web/js/modules/atlas-loader.js');
   const atlases = reportAtlasEntries(manifest);
   assert.deepEqual(atlases.map((a) => a.name), ['HarvardOxford', 'AAL', 'JHU', 'XTRACT']);
   const hosted = atlases.filter((a) => a.entry).map((a) => a.name);
+  assert.ok(hosted.includes('JHU'), 'the matching JHU tractography atlas is hosted');
   assert.ok(hosted.includes('HarvardOxford') && hosted.includes('AAL'), 'the cortical atlases are hosted');
   for (const { entry } of atlases.filter((a) => a.entry)) {
     assert.equal(entry.role, 'report-atlas');
@@ -324,6 +325,19 @@ const { decodeNiftiBuffer } = await import('../web/js/modules/atlas-loader.js');
   assert.match(document.getElementById('kbLocationBody').textContent, /No knowledge-base findings concern the damaged regions/);
   assert.match(document.getElementById('kbMeasuresBody').textContent, /No lesion volume was available/);
   assert.match(document.getElementById('kbWhiteMatterBody').textContent, /could not be computed: offline/);
+  renderKbReport(document, nothing, { kb, context: { disconnectomeError: 'offline', jhuOverlap: [{
+    region: 'Superior longitudinal fasciculus L', region_id: 15,
+    overlap_voxels: 10, total_lesion_voxels: 40, total_region_voxels: 100,
+  }] } });
+  const jhuRow = document.querySelector('.jhu-overlap-table tbody tr');
+  assert.deepEqual([...jhuRow.cells].map(cell => cell.textContent), ['Superior longitudinal fasciculus L', '10', '25.0%', '10.0%']);
+  assert.match(document.getElementById('kbWhiteMatterBody').textContent, /does not measure the patient/);
+  assert.match(document.getElementById('kbWhiteMatterBody').textContent, /could not be computed: offline/);
+  renderKbReport(document, nothing, { kb, context: { jhuOverlap: [] } });
+  assert.match(document.getElementById('kbWhiteMatterBody').textContent, /does not overlap the labelled tract cores/);
+  assert.match(document.getElementById('kbWhiteMatterBody').textContent, /No overlap does not establish/);
+  renderKbReport(document, nothing, { kb, context: { missingAtlases: ['JHU'], disconnectomeError: 'offline' } });
+  assert.equal(document.querySelector('.jhu-overlap-table'), null, 'a new report clears old JHU rows');
   assert.match(document.getElementById('kbTherapyBody').textContent, /No therapy entry matched/);
   assert.match(document.getElementById('kbReportProvenance').textContent, /Not hosted in this build: JHU/);
 

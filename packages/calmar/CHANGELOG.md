@@ -2,6 +2,10 @@
 
 ## 0.9.20261102
 
+### Patch Changes
+
+- Host the commit-pinned JHU white-matter tractography atlas used by the KB mapping. Show direct tract overlap, lesion share and tract-ROI coverage in white-matter evidence even when ENIGMA disconnection is unavailable. Distinguish anatomical overlap from streamline disconnection, explain limited atlas coverage, and include JHU-mapped findings through the existing lesion-location evidence logic.
+
 ## 0.8.20261102
 
 ### Patch Changes

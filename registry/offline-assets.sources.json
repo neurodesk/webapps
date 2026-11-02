@@ -417,6 +417,12 @@
         "sha256": "fd1b030b75afa1b1c22ce0f1314399065f60c90eb656d1bcea0eb3513bad4a5a",
         "bytes": 49491,
         "kind": "model"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/fithisux/FSL/7aa2932949129f5c61af912ea677d4dbda843895/data/atlases/JHU/JHU-ICBM-tracts-maxprob-thr50-2mm.nii.gz",
+        "sha256": "dbb06624cdee04660a5b62b400ed704b4b5d6e180d00f03ad73ecb90d619911d",
+        "bytes": 2787,
+        "kind": "model"
       }
     ],
     "qsmbly": [

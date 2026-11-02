@@ -1859,7 +1859,10 @@ export class LesionNetworkMappingApp {
     }
 
     let fractions = null;
-    const context = { measured: damage.measured, unmeasured: damage.unmeasured, missingAtlases };
+    const context = {
+      measured: damage.measured, unmeasured: damage.unmeasured, missingAtlases,
+      jhuOverlap: atlases.some(({ name }) => name === 'JHU') ? damage.rowsByAtlas.JHU || [] : null,
+    };
     const disco = disconnectomeEntry(manifest);
     if (disco) {
       try {

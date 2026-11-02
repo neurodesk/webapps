@@ -518,6 +518,30 @@ function locationSection(doc, kb, report) {
   return nodes;
 }
 
+function jhuOverlapSection(doc, rows) {
+  if (!rows) return [];
+  const nodes = [
+    el(doc, 'h4', { text: 'Direct tract overlap (JHU)' }),
+    el(doc, 'p', { class: 'nd-report-notes', text: 'Anatomical overlap with a reference atlas; this does not measure the patient’s white-matter connectivity.' }),
+    method(doc, 'How JHU overlap is measured', [
+      'The MNI-space lesion is sampled with nearest-neighbour interpolation onto the JHU white-matter tractography atlas: 2 mm maximum-probability labels, thresholded at 50%. Lesion % is overlapping voxels divided by all lesion voxels on that grid. Tract ROI covered % is overlapping voxels divided by the whole labelled tract region. Neither percentage is the fraction of fibres disconnected.',
+      'This high-confidence map covers only parts of the tracts. Several atlas labels, including uncinate and cingulum, have no voxels at this threshold. No overlap does not establish that a tract is spared. Eligible KB findings for JHU-mapped regions enter the lesion-location evidence above.',
+    ]),
+  ];
+  if (!rows.length) {
+    nodes.push(el(doc, 'p', { text: 'The lesion does not overlap the labelled tract cores in this JHU map.' }));
+    return nodes;
+  }
+  nodes.push(table(doc, 'jhu-overlap-table', [['Tract region'], ['Overlapping voxels', true], ['Lesion %', true], ['Tract ROI covered %', true]],
+    [...rows].sort((a, b) => b.overlap_voxels - a.overlap_voxels).map(row => el(doc, 'tr', { 'data-region-id': row.region_id }, [
+      el(doc, 'td', { text: row.region }),
+      el(doc, 'td', { class: 'nd-numeric', text: String(row.overlap_voxels) }),
+      el(doc, 'td', { class: 'nd-numeric', text: pct(100 * row.overlap_voxels / row.total_lesion_voxels, 1) }),
+      el(doc, 'td', { class: 'nd-numeric', text: pct(100 * row.overlap_voxels / row.total_region_voxels, 1) }),
+    ]))));
+  return nodes;
+}
+
 function whiteMatterSection(doc, kb, report, { disconnectomeLabel, bundles }) {
   const { settings } = report;
   const nodes = [];
@@ -525,7 +549,7 @@ function whiteMatterSection(doc, kb, report, { disconnectomeLabel, bundles }) {
   nodes.push(el(doc, 'p', {}, [
     `${plural(report.qualifying, 'tract')} at or above ${settings.minDisconnectedPct}% of their streamlines through the lesion`
     + (withFindings ? `, ${withFindings} with knowledge-base findings.` : '.')
-    + ' Tracts can be interrupted beyond the visible lesion; direct tract damage (JHU, XTRACT) is reported with the regions above when those atlases are hosted.',
+    + ' This streamline-based estimate is separate from direct anatomical tract overlap.',
   ]));
   nodes.push(method(doc, 'How disconnection is measured', [
     [`The warped lesion is resampled onto the FSL MNI152 1 mm grid and scored against the ${disconnectomeLabel} (${bundles} bundles) with nii2tvx, the Disconnectome webapp's engine: `,
@@ -635,12 +659,13 @@ export function renderKbReport(doc, result, { kb, context = {} }) {
   };
   fill('measures', measuresSection(doc, kb, result.measures || [], result.lesionSize || null));
   fill('location', locationSection(doc, kb, result.location));
+  const whiteMatterIntro = el(doc, 'p', { class: 'nd-report-notes', text: 'Direct tract overlap locates visible lesion damage in an anatomical atlas. Streamline-based disconnection estimates a different property: reference fibres passing through the lesion.' });
   if (result.whiteMatter) {
-    fill('whiteMatter', whiteMatterSection(doc, kb, result.whiteMatter, {
+    fill('whiteMatter', [whiteMatterIntro, ...jhuOverlapSection(doc, context.jhuOverlap), el(doc, 'h4', { text: 'Streamline-based disconnection (ENIGMA)' }), ...whiteMatterSection(doc, kb, result.whiteMatter, {
       disconnectomeLabel: context.disconnectomeLabel || 'ENIGMA Symmetric tractography atlas', bundles: context.bundles ?? 65,
-    }));
+    })]);
   } else {
-    fill('whiteMatter', [el(doc, 'p', { class: 'nd-report-notes' }, [el(doc, 'em', {
+    fill('whiteMatter', [whiteMatterIntro, ...jhuOverlapSection(doc, context.jhuOverlap), el(doc, 'h4', { text: 'Streamline-based disconnection (ENIGMA)' }), el(doc, 'p', { class: 'nd-report-notes' }, [el(doc, 'em', {
       text: context.disconnectomeError
         ? `The disconnectome could not be computed: ${context.disconnectomeError}`
         : 'The disconnectome was not computed for this lesion.',

@@ -4473,6 +4473,13 @@
       "kind": "model",
       "contentType": "application/octet-stream",
       "dependencies": []
+    },
+    "https://raw.githubusercontent.com/fithisux/FSL/7aa2932949129f5c61af912ea677d4dbda843895/data/atlases/JHU/JHU-ICBM-tracts-maxprob-thr50-2mm.nii.gz": {
+      "sha256": "dbb06624cdee04660a5b62b400ed704b4b5d6e180d00f03ad73ecb90d619911d",
+      "bytes": 2787,
+      "kind": "model",
+      "contentType": "application/octet-stream",
+      "dependencies": []
     }
   },
   "apps": {
@@ -4550,7 +4557,8 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_T1.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_lesion_mask.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2375f48afe069ac4018917e8a4bee3f24920dee/calmar/models/lnm-deepisles-seals-fold0-128-fp16.onnx",
-      "https://raw.githubusercontent.com/neurodata/neuroparc/5a5e7469671e65cb58087c47b69d0edb71dc2966/atlases/label/Human/HarvardOxfordsub-maxprob-thr25_space-MNI152NLin6_label_all_res-2x2x2.nii.gz"
+      "https://raw.githubusercontent.com/neurodata/neuroparc/5a5e7469671e65cb58087c47b69d0edb71dc2966/atlases/label/Human/HarvardOxfordsub-maxprob-thr25_space-MNI152NLin6_label_all_res-2x2x2.nii.gz",
+      "https://raw.githubusercontent.com/fithisux/FSL/7aa2932949129f5c61af912ea677d4dbda843895/data/atlases/JHU/JHU-ICBM-tracts-maxprob-thr50-2mm.nii.gz"
     ],
     "qsmbly": [
       "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/attrs-23.2.0-py3-none-any.whl",
