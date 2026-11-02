@@ -1962,6 +1962,9 @@ importers:
       '@neurodesk/hmc':
         specifier: workspace:*
         version: link:../hmc
+      '@neurodesk/hmc-registration':
+        specifier: workspace:*
+        version: link:../hmc-registration
       '@neurodesk/n4':
         specifier: workspace:*
         version: link:../n4
@@ -1975,12 +1978,15 @@ importers:
         specifier: workspace:*
         version: link:../components
     devDependencies:
-      '@neurodesk/hmc-registration':
-        specifier: workspace:*
-        version: link:../hmc-registration
       '@neurodesk/noddi':
         specifier: workspace:*
         version: link:../noddi
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
 
   packages/seedseg:
     dependencies:
