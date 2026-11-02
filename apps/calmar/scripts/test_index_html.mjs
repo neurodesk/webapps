@@ -377,7 +377,8 @@ assert.deepEqual(
   assert.deepEqual(
     groups.map(group => [group.getAttribute('aria-label'), controls(group)]),
     [
-      ['Draw lesion mask', ['maskPaintButton', 'maskLassoButton', 'maskEraseButton', 'maskEraseClusterButton', 'maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']],
+      ['Draw lesion mask', ['maskPaintButton', 'maskLassoButton', 'maskWandButton', 'maskEraseButton', 'maskEraseClusterButton', 'maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']],
+      ['Magic wand settings', ['maskWandTolerance', 'maskWandRadius', 'maskWandSingleSlice', 'maskWandHelp']],
       ['Mask edit actions', ['maskUndoButton', 'maskBlankButton', 'maskSmoothButton']],
       ['Mask slice interpolation', ['maskInterpolateAxis', 'maskInterpolateButton', 'maskInterpolateHelp']],
       ['Mask review actions', ['confirmLesionMaskButton', 'uploadReviewMaskButton', 'downloadEditedLesionMaskButton']]
@@ -388,6 +389,7 @@ assert.deepEqual(
     [
       ['Paint', 'Paint lesion voxels'],
       ['Lasso', 'Outline the lesion on a 2D slice; release to close and fill'],
+      ['Magic wand', 'Click a lesion seed to grow a connected region of similar intensity'],
       ['Erase', 'Erase lesion voxels'],
       ['Erase cluster', 'Erase the connected lesion cluster under the cursor'],
       ['Undo', 'Undo mask edit'],
@@ -618,6 +620,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   // Mask review toolbar.
   await expectClick('maskPaintButton', [['setMaskDrawingTool', 'paint']]);
   await expectClick('maskLassoButton', [['setMaskDrawingTool', 'lasso']]);
+  await expectClick('maskWandButton', [['setMaskDrawingTool', 'wand']]);
   await expectClick('maskEraseButton', [['setMaskDrawingTool', 'erase']]);
   await expectClick('maskEraseClusterButton', [['setMaskDrawingTool', 'eraseCluster']]);
   await expectClick('maskUndoButton', [['undo']]);

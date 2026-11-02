@@ -501,6 +501,30 @@ function fakeFile(name) {
   assert.equal(nv.document.opts.penType, 1, 'leaving lasso restores the shape');
   assert.deepEqual(calls.setPenValue.at(-1), [0, false], 'erase resumes without filled lasso mode');
 
+  controller.setTool('wand');
+  assert.equal(nv.opts.clickToSegment, true);
+  assert.equal(nv.opts.clickToSegmentIs2D, false, 'wand grows across slices by default');
+  assert.equal(nv.opts.clickToSegmentPercent, 0.1);
+  assert.equal(nv.opts.clickToSegmentMaxDistanceMM, 15);
+  assert.equal(nv.opts.clickToSegmentAutoIntensity, true);
+  assert.deepEqual(calls.setPenValue.at(-1), [1, false]);
+  controller.setWandOptions({ tolerance: 0, radius: Infinity, singleSlice: true });
+  assert.equal(nv.opts.clickToSegmentPercent, 0.01, 'zero must not select an unbounded intensity range');
+  assert.equal(nv.opts.clickToSegmentMaxDistanceMM, 15, 'invalid radii keep the bounded default');
+  assert.equal(nv.opts.clickToSegmentIs2D, true);
+  controller.setWandOptions({ tolerance: 99, radius: 999 });
+  assert.equal(nv.opts.clickToSegmentPercent, 0.5);
+  assert.equal(nv.opts.clickToSegmentMaxDistanceMM, 50);
+  nv.clickToSegmentIsGrowing = true;
+  controller.setTool('paint');
+  assert.equal(nv.opts.clickToSegment, false);
+  assert.equal(nv.clickToSegmentIsGrowing, false, 'switching tools clears the hover preview');
+  assert.equal(nv.opts.penSize, 5);
+  assert.equal(nv.document.opts.penType, 1);
+  controller.setTool('wand');
+  controller.close();
+  assert.equal(nv.opts.clickToSegment, false, 'closing review restores slice-wheel navigation');
+
   controller.undo();
   assert.equal(calls.drawUndo, 1,
     'undo must delegate to NiiVue drawUndo');

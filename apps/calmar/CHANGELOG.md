@@ -1,5 +1,15 @@
 # calmar
 
+## 0.10.20261102
+
+### Minor Changes
+
+- Add a native magic-wand tool for lesion-mask review. Grow connected, similar-intensity voxels across slices with adjustable tolerance and a physical radius, or confine growth to one slice. Preserve existing edits, native Undo and explicit mask approval; clear hover previews and restore normal drawing/navigation on leaving the tool. Explain that intensity growth does not identify stroke-specific boundaries.
+
+### Patch Changes
+
+- @neurodesk/calmar@0.10.20261102
+
 ## 0.9.20261102
 
 ### Minor Changes

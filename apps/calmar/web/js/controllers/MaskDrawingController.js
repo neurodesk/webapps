@@ -5,6 +5,7 @@ export class MaskDrawingController {
     this.defaultOpacity = options.defaultOpacity ?? 0.7;
     this.defaultColormap = options.defaultColormap || 'gray';
     this.manualUndoSnapshots = [];
+    this.wandSettings = { tolerance: 10, radius: 15, singleSlice: false };
   }
 
   get hasDrawing() {
@@ -115,20 +116,23 @@ export class MaskDrawingController {
 
   setTool(tool) {
     if (!this.nv) return;
-    if (this.lassoSettings && tool !== 'lasso') {
-      this.nv.opts.penSize = this.lassoSettings.size;
-      this.setPenShape(this.lassoSettings.shape);
-      this.setFilled(this.lassoSettings.filled);
-      this.lassoSettings = null;
+    if (this.savedDrawingSettings && !['lasso', 'wand'].includes(tool)) {
+      this.nv.opts.penSize = this.savedDrawingSettings.size;
+      this.setPenShape(this.savedDrawingSettings.shape);
+      this.setFilled(this.savedDrawingSettings.filled);
+      this.savedDrawingSettings = null;
     }
+    const wasWand = this.nv.opts.clickToSegment;
     this.nv.opts.clickToSegment = false;
+    this.nv.clickToSegmentIsGrowing = false;
+    if (wasWand) this.nv.refreshDrawing?.(true, false);
     this.nv.setDrawingEnabled?.(tool !== 'off');
     if (tool === 'off') return;
-    if (tool === 'lasso') {
-      if (!this.lassoSettings) {
+    if (['lasso', 'wand'].includes(tool)) {
+      if (!this.savedDrawingSettings) {
         const type = this.nv.document?.opts?.penType ?? this.nv.opts.penType;
         const types = this.getPenTypes();
-        this.lassoSettings = {
+        this.savedDrawingSettings = {
           size: this.nv.opts.penSize,
           filled: !!this.nv.opts.isFilledPen,
           shape: type === types.RECTANGLE ? 'rectangle' : type === types.ELLIPSE ? 'ellipse' : 'pen',
@@ -136,7 +140,11 @@ export class MaskDrawingController {
       }
       this.setPenShape('pen');
       this.nv.opts.penSize = 1;
-      this.nv.setPenValue?.(1, true);
+      this.nv.setPenValue?.(1, tool === 'lasso');
+      if (tool === 'wand') {
+        this.setWandOptions(this.wandSettings);
+        this.nv.opts.clickToSegment = true;
+      }
     } else if (tool === 'erase') {
       this.nv.setPenValue?.(0, !!this.nv.opts.isFilledPen);
     } else if (tool === 'eraseCluster') {
@@ -144,6 +152,28 @@ export class MaskDrawingController {
     } else {
       this.nv.setPenValue?.(1, !!this.nv.opts.isFilledPen);
     }
+  }
+
+  setWandOptions({ tolerance = this.wandSettings.tolerance, radius = this.wandSettings.radius, singleSlice = this.wandSettings.singleSlice } = {}) {
+    const bounded = (value, fallback) => Number.isFinite(Number(value)) ? Math.max(1, Math.min(50, Number(value))) : fallback;
+    this.wandSettings = {
+      tolerance: bounded(tolerance, this.wandSettings.tolerance),
+      radius: bounded(radius, this.wandSettings.radius),
+      singleSlice: !!singleSlice,
+    };
+    if (this.nv?.opts) {
+      Object.assign(this.nv.opts, {
+        clickToSegmentAutoIntensity: true,
+        clickToSegmentPercent: this.wandSettings.tolerance / 100,
+        clickToSegmentMaxDistanceMM: this.wandSettings.radius,
+        clickToSegmentIs2D: this.wandSettings.singleSlice,
+        clickToSegmentIntensityMin: NaN,
+        clickToSegmentIntensityMax: NaN,
+      });
+      this.nv.clickToSegmentIsGrowing = false;
+      this.nv.refreshDrawing?.(true, false);
+    }
+    return this.wandSettings;
   }
 
   setPenShape(shape) {
@@ -264,7 +294,7 @@ export class MaskDrawingController {
   }
 
   close(options = {}) {
-    this.nv?.setDrawingEnabled?.(false);
+    this.setTool('off');
     if (options.clearDrawing) {
       if (typeof this.nv?.closeDrawing === 'function') {
         this.nv.closeDrawing();

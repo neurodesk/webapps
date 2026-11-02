@@ -294,6 +294,7 @@
           <div class="segmented-control" role="group" aria-label="Mask drawing mode">
             <button class="tool-button active" id="maskPaintButton" type="button" title="Paint lesion voxels">Paint</button>
             <button class="tool-button" id="maskLassoButton" type="button" aria-pressed="false" title="Outline the lesion on a 2D slice; release to close and fill">Lasso</button>
+            <button class="tool-button" id="maskWandButton" type="button" aria-pressed="false" title="Click a lesion seed to grow a connected region of similar intensity">Magic wand</button>
             <button class="tool-button" id="maskEraseButton" type="button" title="Erase lesion voxels">Erase</button>
             <button class="tool-button" id="maskEraseClusterButton" type="button" title="Erase the connected lesion cluster under the cursor">Erase cluster</button>
           </div>
@@ -311,6 +312,23 @@
             <input type="checkbox" id="maskFilledToggle">
             <span>Fill</span>
           </label>
+        </div>
+        <div class="mask-toolbar-group hidden" id="maskWandControls" role="group" aria-label="Magic wand settings">
+          <label class="compact-control" for="maskWandTolerance">
+            <span>Tolerance %</span>
+            <input id="maskWandTolerance" type="number" min="1" max="50" step="1" value="10" class="tool-select">
+          </label>
+          <label class="compact-control" for="maskWandRadius">
+            <span>Radius mm</span>
+            <input id="maskWandRadius" type="number" min="1" max="50" step="1" value="15" class="tool-select">
+          </label>
+          <label class="viewer-checkbox">
+            <input id="maskWandSingleSlice" type="checkbox">
+            <span>Single slice only</span>
+          </label>
+          <span class="nd-info-icon" id="maskWandHelp" tabindex="0" aria-label="Magic wand help">i
+            <span class="nd-info-tooltip" role="tooltip">Click inside the lesion to grow connected voxels within the radius. Growth spans slices unless Single slice only is checked. Tolerance is ±% of the clicked intensity; the mouse wheel also adjusts it. Similar tissue and CSF may be included: this is intensity growing, not stroke detection. Switch to Paint to scroll slices. Review every affected slice; Undo removes a growth.</span>
+          </span>
         </div>
         <div class="mask-toolbar-group mask-edit-group" role="group" aria-label="Mask edit actions">
           <button class="tool-button" id="maskUndoButton" type="button" title="Undo mask edit">Undo</button>

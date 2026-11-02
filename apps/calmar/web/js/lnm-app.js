@@ -821,6 +821,7 @@ export class LesionNetworkMappingApp {
     };
     bindClick('maskPaintButton', () => this.setMaskDrawingTool('paint'));
     bindClick('maskLassoButton', () => this.setMaskDrawingTool('lasso'));
+    bindClick('maskWandButton', () => this.setMaskDrawingTool('wand'));
     bindClick('maskEraseButton', () => this.setMaskDrawingTool('erase'));
     bindClick('maskEraseClusterButton', () => this.setMaskDrawingTool('eraseCluster'));
     bindClick('maskUndoButton', () => this.maskDrawingController?.undo());
@@ -868,13 +869,38 @@ export class LesionNetworkMappingApp {
         this.maskDrawingController?.setPenShape(shape.value);
       });
     }
+    const tolerance = document.getElementById('maskWandTolerance');
+    const radius = document.getElementById('maskWandRadius');
+    const singleSlice = document.getElementById('maskWandSingleSlice');
+    const updateWand = () => {
+      const settings = this.maskDrawingController?.setWandOptions?.({
+        tolerance: tolerance?.value, radius: radius?.value, singleSlice: singleSlice?.checked,
+      });
+      if (settings) {
+        tolerance.value = settings.tolerance;
+        radius.value = settings.radius;
+      }
+    };
+    for (const control of [tolerance, radius, singleSlice]) control?.addEventListener('change', updateWand);
+    this.nv?.canvas?.addEventListener('wheel', () => queueMicrotask(() => {
+      if (!this.nv.opts.clickToSegment || !tolerance) return;
+      const percent = this.nv.opts.clickToSegmentPercent * 100;
+      const bounded = Math.max(1, Math.min(50, percent));
+      tolerance.value = Number(bounded.toFixed(1));
+      this.maskDrawingController.wandSettings.tolerance = bounded;
+      this.nv.opts.clickToSegmentPercent = bounded / 100;
+      if (bounded !== percent) {
+        this.nv.clickToSegmentIsGrowing = false;
+        this.nv.refreshDrawing?.(true, false);
+      }
+    }));
     this.refreshMaskDrawingControls();
   }
 
   setMaskDrawingTool(tool) {
     this.maskDrawingController?.ensureDrawing();
     this.maskDrawingController?.setTool(tool);
-    for (const id of ['maskPaintButton', 'maskLassoButton', 'maskEraseButton', 'maskEraseClusterButton']) {
+    for (const id of ['maskPaintButton', 'maskLassoButton', 'maskWandButton', 'maskEraseButton', 'maskEraseClusterButton']) {
       const el = document.getElementById(id);
       if (el) {
         el.classList.remove('active');
@@ -885,14 +911,15 @@ export class LesionNetworkMappingApp {
       ? 'maskEraseButton'
       : tool === 'eraseCluster'
         ? 'maskEraseClusterButton'
-        : tool === 'lasso' ? 'maskLassoButton' : 'maskPaintButton';
+        : tool === 'lasso' ? 'maskLassoButton' : tool === 'wand' ? 'maskWandButton' : 'maskPaintButton';
     const active = document.getElementById(activeId);
     active?.classList.add('active');
     active?.setAttribute('aria-pressed', 'true');
     for (const id of ['maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']) {
       const control = document.getElementById(id);
-      if (control) control.disabled = tool === 'lasso';
+      if (control) control.disabled = ['lasso', 'wand'].includes(tool);
     }
+    document.getElementById('maskWandControls')?.classList.toggle('hidden', tool !== 'wand');
     const filled = document.getElementById('maskFilledToggle');
     if (filled) filled.checked = !!this.nv?.opts?.isFilledPen;
     const brush = document.getElementById('maskBrushSize');
