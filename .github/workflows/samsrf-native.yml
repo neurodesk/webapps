@@ -3,6 +3,8 @@ name: samsrf-native
 # The Rust port of SamSrf behind packages/samsrf. The core must pass its unit tests
 # natively, build for wasm32, and the committed WebAssembly module in
 # packages/samsrf/wasm must equal a rebuild from source with the pinned toolchain.
+# The portable job packages the samsrf command line (exes/node-cli) and validates
+# each archive on the web app's example (packages/samsrf/validation/cli-check.mjs).
 on:
   pull_request:
     paths:
@@ -11,15 +13,24 @@ on:
       - 'exes/samsrf/**'
       - 'exes/nifti/**'
       - 'packages/samsrf/**'
+      - 'apps/samsrf/examples.json'
   push:
     branches: [main]
     paths:
       - '.github/workflows/samsrf-native.yml'
       - '.github/actions/setup-wasm-opt/**'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
       - 'exes/samsrf/**'
       - 'exes/nifti/**'
       - 'packages/samsrf/**'
+      - 'apps/samsrf/examples.json'
   workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing SamSrf release
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -68,3 +79,26 @@ jobs:
         uses: ./.github/actions/setup-wasm-opt
       - name: Rebuild and compare
         run: bash packages/samsrf/scripts/build-wasm.sh --check
+
+  portable:
+    needs: [test, wasm-source]
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      package: packages/samsrf
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
