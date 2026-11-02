@@ -391,6 +391,7 @@ pub fn errfun(
 }
 
 #[cfg(test)]
+#[allow(clippy::excessive_precision, clippy::approx_constant)]
 mod tests {
     use super::*;
     use crate::apertures::Frame;

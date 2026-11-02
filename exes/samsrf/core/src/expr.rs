@@ -705,13 +705,13 @@ mod tests {
     #[test]
     fn broadcasting_and_elementwise_operators() {
         let column = Value::column(vec![1.0, 2.0, 3.0]);
-        let result = eval("@(V) 2 .* V .^ 2 ./ V - 1", &[column.clone()]).unwrap();
+        let result = eval("@(V) 2 .* V .^ 2 ./ V - 1", std::slice::from_ref(&column)).unwrap();
         assert_eq!(result.data, vec![1.0, 3.0, 5.0]);
-        let result = eval("@(V) 10 - V", &[column.clone()]).unwrap();
+        let result = eval("@(V) 10 - V", std::slice::from_ref(&column)).unwrap();
         assert_eq!(result.data, vec![9.0, 8.0, 7.0]);
-        let error = eval("@(V) V .* V(1:2)", &[column.clone()]).unwrap_err();
+        let error = eval("@(V) V .* V(1:2)", std::slice::from_ref(&column)).unwrap_err();
         assert!(error.to_string().contains("dimensions must agree"), "{error}");
-        let error = eval("@(V) V ^ 2", &[column.clone()]).unwrap_err();
+        let error = eval("@(V) V ^ 2", std::slice::from_ref(&column)).unwrap_err();
         assert!(error.to_string().contains("matrix power"), "{error}");
         let error = eval("@(V) 1 / V", &[column]).unwrap_err();
         assert!(error.to_string().contains("matrix division"), "{error}");
