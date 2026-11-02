@@ -1,0 +1,8 @@
+SamSrf
+Schwarzkopf DS. SamSrf: a MATLAB toolbox for population receptive field and
+connective field mapping.
+Source: https://github.com/samsrf/samsrf (BSD-3-Clause), commit
+41ed1e96cc4d9b8b750f5594a61845df21ab8984, ported to Rust in exes/samsrf.
+
+Example data used for validation: the SamSrf example dataset X001, OSF h92mr
+(CC-BY 4.0).
