@@ -283,14 +283,26 @@ function setMask(kind, file) {
 
 for (const kind of ["dwi", "t1w"]) {
   maskFields[kind].onFiles(async (files) => {
+    if (loading || running) return;
+    const controller = new AbortController();
+    loading = controller;
+    setBusy(true);
+    progress.begin("Reading brain mask…");
+    progress.setCancellable(true);
     try {
-      const images = await readImageFiles(await files);
+      const images = await readImageFiles(await files, { signal: controller.signal });
+      controller.signal.throwIfAborted();
       if (images.length !== 1) throw new Error("Choose one NIfTI mask or one DICOM mask series.");
       setMask(kind, images[0]);
       status(`${images[0].name} will be the ${kind === "dwi" ? "DWI" : "T1w"} brain mask`);
     } catch (error) {
       setMask(kind, masks[kind]);
       report(error);
+    } finally {
+      loading = null;
+      setBusy(false);
+      progress.stopTimer();
+      progress.setCancellable(false);
     }
   });
 }

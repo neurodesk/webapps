@@ -151,7 +151,10 @@ test("SyN-SDC on the example writes the Node pipeline's outputs", async ({ page 
   const rows = page.locator("#resultList .nd-volume-toggle");
   const downloaded = {};
   for (let i = 0; i < (await rows.count()); i++) {
-    const event = page.waitForEvent("download");
+    // Chromium suppresses the eleventh download in a one-second burst.
+    // Pace these real button clicks so all twelve outputs reach the hash check.
+    if (i) await page.waitForTimeout(1100);
+    const event = page.waitForEvent("download", { timeout: 30000 });
     await rows.nth(i).getByRole("button", { name: "Download" }).click();
     const download = await event;
     const bytes = readFileSync(await download.path());

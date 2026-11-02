@@ -1,5 +1,13 @@
 # @neurodesk/brainqcnet
 
+## 0.1.20261032
+
+### Patch Changes
+
+- Updated dependencies [8e9346d]
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+
 ## 0.1.20261031
 
 ### Patch Changes

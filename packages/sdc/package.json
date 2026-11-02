@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/sdc",
-  "version": "0.3.20261031",
+  "version": "0.4.20261102",
   "description": "Susceptibility distortion correction for browsers and the command line: reverse phase-encoding (PyHySCO port) and fieldmap-less SyN-SDC (sdcflows port)",
   "type": "module",
   "private": true,

@@ -1,5 +1,16 @@
 # dwicorrect
 
+## 0.1.20261102
+
+### Patch Changes
+
+- Updated dependencies [8e9346d]
+- Updated dependencies [71881c8]
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+  - @neurodesk/sdc@0.4.20261102
+  - @neurodesk/runtime-support@0.9.20
+
 ## 0.1.20261031
 
 ### Patch Changes

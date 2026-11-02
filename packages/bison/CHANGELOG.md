@@ -1,5 +1,18 @@
 # @neurodesk/bison
 
+## 0.2.20261102
+
+### Patch Changes
+
+- Updated dependencies [8e9346d]
+- Updated dependencies [1def103]
+- Updated dependencies [71881c8]
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+  - @neurodesk/hmc-registration@0.5.0
+  - @neurodesk/node-drivers@0.3.2
+  - @neurodesk/greedy@0.8.20261102
+
 ## 0.2.20261031
 
 ### Minor Changes
