@@ -1,6 +1,60 @@
 import { expect, test } from '@playwright/test';
 
 for (const width of [1440, 390]) {
+  test(`observed difficulties use KB labels at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/');
+    await page.waitForFunction(() => globalThis.app?.patientBehavior);
+    await page.locator('#patientBehaviorOptions summary').click();
+    await expect(page.locator('#patientObservedSymptoms')).toBeEnabled();
+    const symptom = await page.locator('#patientObservedSymptoms option').first().getAttribute('value');
+    await page.locator('#patientObservedSymptoms').selectOption(symptom);
+    await expect(page.locator('#patientBehaviorReportBody')).toContainText('observed (patient-provided)');
+    await page.locator('#patientBehaviorOptions summary').click();
+    await page.locator('#patientBehaviorOptions summary').click();
+    await expect(page.locator('#patientObservedSymptoms')).toHaveValues([symptom]);
+    await page.screenshot({ path: test.info().outputPath(`behavior-${width}.png`), fullPage: true, animations: 'disabled' });
+  });
+
+  test(`brain mask bounds wand connectivity at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/');
+    await page.waitForFunction(() => globalThis.app?.nv?.canvas);
+    await page.evaluate(async () => {
+      const { writeNifti1 } = await import('/js/modules/nifti-writer.js');
+      const meta = { dims: [64, 64, 64], spacing: [1, 1, 1], affine: [1, 0, 0, -32, 0, 1, 0, -32, 0, 0, 1, -32, 0, 0, 0, 1] };
+      const scan = new Float32Array(64 ** 3).fill(20);
+      const mask = new Float32Array(scan.length);
+      for (let z = 29; z <= 35; z++) for (let y = 29; y <= 35; y++) for (let x = 29; x <= 39; x++) {
+        if (x <= 33 || x >= 36) mask[x + y * 64 + z * 4096] = 1;
+      }
+      await app.setStructural(new File([writeNifti1(scan, meta)], 'scan.nii'));
+      app.nativeBrainmaskFile = new File([writeNifti1(mask, meta)], 'brainmask.nii');
+      await app.startLesionMaskReview({ blank: true });
+      app.setViewerView('axial');
+    });
+    await page.locator('#maskWandButton').click();
+    await expect(page.locator('#maskWandBrainOnly')).toBeChecked();
+    const counts = await page.evaluate(() => {
+      const nv = app.nv;
+      nv.drawBitmap[0] = 1;
+      nv.drawAddUndoBitmap();
+      nv.drawFloodFill([31, 32, 32], 1, Infinity, NaN, NaN, 6, 15, false);
+      const count = nv.drawBitmap.reduce((a, b) => a + b, 0);
+      nv.drawFloodFill([34, 32, 32], 1, Infinity, NaN, NaN, 6, 15, false);
+      return [count, nv.drawBitmap.reduce((a, b) => a + b, 0), nv.drawBitmap[0]];
+    });
+    expect(counts).toEqual([246, 246, 1]);
+    await page.locator('#maskUndoButton').click();
+    expect(await page.evaluate(() => app.nv.drawBitmap.reduce((a, b) => a + b, 0))).toBe(1);
+    await page.screenshot({ path: test.info().outputPath(`brain-wand-${width}.png`), fullPage: true, animations: 'disabled' });
+    await page.locator('#maskWandBrainOnly').uncheck();
+    expect(await page.evaluate(() => {
+      app.nv.drawFloodFill([31, 32, 32], 1, Infinity, NaN, NaN, 6, 15, false);
+      return app.nv.drawBitmap.reduce((a, b) => a + b, 0);
+    })).toBeGreaterThan(246);
+  });
+
   test(`contrast-range wand recovers dark, zero and signed regions at ${width}px`, async ({ page }) => {
     test.setTimeout(120000);
     await page.setViewportSize({ width, height: 1000 });

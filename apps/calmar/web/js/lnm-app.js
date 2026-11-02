@@ -756,6 +756,24 @@ export class LesionNetworkMappingApp {
 
     this.bindMaskDrawingControls();
     this.patientBehavior = bindPatientBehavior(document);
+    const loadSymptoms = async () => {
+      const button = document.getElementById('loadPatientSymptoms');
+      button.disabled = true;
+      try {
+        const evidence = this.kbEvidence === 'off' ? 'approved' : this.kbEvidence;
+        const { kb } = await loadKnowledgeBase(await this.ensureManifest(), { evidence });
+        this.patientBehavior?.setKnowledgeBase(kb);
+      } catch (error) {
+        document.getElementById('patientSymptomsHint').textContent = 'Symptom labels unavailable. Use Load / refresh to retry.';
+        this.updateOutput(`Behavioural KB labels: ${error.message}`);
+      } finally {
+        button.disabled = false;
+      }
+    };
+    document.getElementById('loadPatientSymptoms')?.addEventListener('click', loadSymptoms);
+    document.getElementById('patientBehaviorOptions')?.addEventListener('toggle', event => {
+      if (event.target.open && document.getElementById('patientObservedSymptoms').disabled) void loadSymptoms();
+    });
     this.bindModalButton('aboutButton', this.aboutModal);
     this.bindModalButton('privacyButton', this.privacyModal);
     this.bindCloseButton('closeAbout', this.aboutModal);
@@ -872,16 +890,18 @@ export class LesionNetworkMappingApp {
     const tolerance = document.getElementById('maskWandTolerance');
     const radius = document.getElementById('maskWandRadius');
     const singleSlice = document.getElementById('maskWandSingleSlice');
+    const brainOnly = document.getElementById('maskWandBrainOnly');
     const updateWand = () => {
       const settings = this.maskDrawingController?.setWandOptions?.({
         tolerance: tolerance?.value, radius: radius?.value, singleSlice: singleSlice?.checked,
+        brainOnly: brainOnly?.disabled ? this.maskDrawingController.wandSettings.brainOnly : brainOnly?.checked,
       });
       if (settings) {
         tolerance.value = settings.tolerance;
         radius.value = settings.radius;
       }
     };
-    for (const control of [tolerance, radius, singleSlice]) control?.addEventListener('change', updateWand);
+    for (const control of [tolerance, radius, singleSlice, brainOnly]) control?.addEventListener('change', updateWand);
     this.nv?.canvas?.addEventListener('wheel', () => queueMicrotask(() => {
       if (!this.nv.opts.clickToSegment || !tolerance) return;
       const percent = this.nv.opts.clickToSegmentPercent * 100;
@@ -935,6 +955,14 @@ export class LesionNetworkMappingApp {
   }
 
   refreshMaskDrawingControls() {
+    const brainOnly = document.getElementById('maskWandBrainOnly');
+    const mask = this.maskDrawingController?.brainMask;
+    const hasBrainMask = !!mask && mask.image === this.nv?.volumes?.[0];
+    if (brainOnly) {
+      brainOnly.disabled = !hasBrainMask;
+      brainOnly.checked = hasBrainMask && this.maskDrawingController.wandSettings.brainOnly;
+    }
+    document.getElementById('maskWandBrainHint')?.classList.toggle('hidden', hasBrainMask);
     this.refreshPrimaryAction();
     const toolbar = document.getElementById('maskDrawingToolbar');
     const available = !!(
@@ -1811,6 +1839,7 @@ export class LesionNetworkMappingApp {
     if (value === 'off') {
       this.kbEvidence = 'off';
       clearKbReport(document);
+      this.patientBehavior?.render();
       this.renderMethodSummary();
       return;
     }
@@ -1951,6 +1980,7 @@ export class LesionNetworkMappingApp {
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
     this.kbReport = { result, context, rowsByAtlas: damage.rowsByAtlas, fractions };
     renderKbReport(document, result, { kb, context });
+    this.patientBehavior?.setKnowledgeBase(kb);
     this.renderMethodSummary();
     this.updateOutput(
       `Knowledge-base report: ${result.rows.length} findings for ${result.location.regions.length} damaged anatomies, ` +
@@ -2315,6 +2345,11 @@ export class LesionNetworkMappingApp {
       this.brainmaskFile = file;
       if (this.structuralFile === this.nativeStructuralFile) {
         this.nativeBrainmaskFile = file;
+      }
+      if (this.maskReviewActive) {
+        this.maskDrawingController?.loadBrainMaskFile?.(this.getBrainmaskFileForActiveViewer())
+          ?.catch(err => this.updateOutput(`Wand brain mask: ${err.message}`))
+          .finally(() => this.refreshMaskDrawingControls());
       }
       // Render as a translucent overlay over the structural; if the user
       // dropped a lesion manually before the structural, the lesion stage
@@ -2830,6 +2865,11 @@ export class LesionNetworkMappingApp {
       visible: this.layerVisible('structural')
     });
     const brainmaskFile = this.getBrainmaskFileForActiveViewer();
+    try {
+      await this.maskDrawingController.loadBrainMaskFile?.(brainmaskFile);
+    } catch (err) {
+      this.updateOutput(`Wand brain-mask restriction unavailable: ${err.message}`);
+    }
     if (brainmaskFile && this.layerVisible('brainmask')) {
       try {
         this.assertViewerOverlaySpace(brainmaskFile, 'Mask-review brain-mask overlay');

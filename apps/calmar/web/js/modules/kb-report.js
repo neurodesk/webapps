@@ -447,7 +447,7 @@ function measuresSection(doc, kb, measures, lesionSize) {
     rows.push(findingsRow(doc, kb, m.outcomes, columns, m.name.toLowerCase()));
   }
   nodes.push(table(doc, 'kb-measure-table', [['Value', true], ['Measure'], ['Direction in the literature'], ['Findings', true], ['Relationships']], rows));
-  nodes.push(el(doc, 'p', { class: 'nd-report-notes', text: 'Findings about measures report associations in study groups (for example, larger lesions with more severe aphasia), not predictions for one person. Optional behavioural context is displayed separately and does not enter these literature matches.' }));
+  nodes.push(el(doc, 'p', { class: 'nd-report-notes', text: 'Findings about measures report associations in study groups (for example, larger lesions with more severe aphasia), not predictions for one person. Selected observed difficulties mark matching direct-damage summaries; notes and raw scores do not alter literature matching.' }));
   return nodes;
 }
 
@@ -597,7 +597,7 @@ function therapySection(doc, kb, therapies) {
   const nodes = [];
   nodes.push(el(doc, 'p', {}, [
     `${plural(therapies.length, 'therapy', 'therapies')} with knowledge-base evidence for the symptoms above, ordered by how many of them each addresses. `,
-    'Matched from the lesion alone. Optional behavioural notes and assessment results do not change these matches; clinical assessment is needed to interpret their relevance.',
+    'Matched from the lesion alone. Observed difficulties highlight direct-damage evidence; notes and assessment results do not change therapy rankings; clinical assessment is needed to interpret their relevance.',
   ]));
   if (!therapies.length) {
     nodes.push(el(doc, 'p', { class: 'nd-report-notes' }, [el(doc, 'em', { text: 'No therapy entry matched the impairments the damaged regions point to.' })]));

@@ -151,18 +151,7 @@
               <option value="drafts">Approved + unreviewed drafts</option>
             </select>
           </div>
-          <details class="nd-sidebar-section nd-report-form" id="patientBehaviorOptions">
-            <summary>Behavioural information (optional)</summary>
-            <div class="nd-section-content">
-              <label class="nd-check"><input id="includePatientBehavior" type="checkbox" checked> Include in report</label>
-              <div class="nd-field">
-                <label for="patientBehaviorNotes">Clinical observations</label>
-                <textarea id="patientBehaviorNotes" rows="3" placeholder="Observed language, communication or other behavioural difficulties"></textarea>
-              </div>
-              <div id="patientBehaviorAssessments"></div>
-              <button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" id="addPatientAssessment">Add assessment</button>
-            </div>
-          </details>
+
           <div class="step-buttons">
             <button class="btn btn-secondary" id="runFullPipelineButton">
               Run reporting analysis
@@ -220,6 +209,32 @@
           </details>
         </div>
       </section>
+
+          <details class="sidebar-section nd-report-form" id="patientBehaviorOptions">
+            <summary class="section-title">Behavioural information (optional)</summary>
+            <div class="nd-section-content">
+              <label class="nd-check"><input id="includePatientBehavior" type="checkbox" checked> Include in report</label>
+              <div class="nd-field">
+                <label for="patientBehaviorNotes">Clinical observations</label>
+                <textarea id="patientBehaviorNotes" rows="3" placeholder="Observed language, communication or other behavioural difficulties"></textarea>
+              </div>
+              <div id="patientBehaviorAssessments"></div>
+              <button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" id="addPatientAssessment">Add assessment</button>
+              <div class="nd-field">
+                <div class="nd-heading-inline">
+                <label for="patientObservedSymptoms">Observed difficulties (KB labels)</label>
+                <span class="nd-info-icon" tabindex="0" aria-label="Behavioural evidence matching help">i
+                  <span class="nd-info-tooltip" role="tooltip">Select observed difficulties to mark matching lesion-based KB evidence. Unselected symptoms are unassessed, not absent. Notes and raw scores are not interpreted automatically. Selection does not change anatomical overlap, evidence direction, strength or therapy rankings.</span>
+                </span>
+                </div>
+                <select id="patientObservedSymptoms" multiple size="6" disabled aria-describedby="patientSymptomsHint"></select>
+                <span class="nd-hint" id="patientSymptomsHint">Open this section to load symptom labels.</span>
+
+                <button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" id="loadPatientSymptoms">Load / refresh symptom labels</button>
+              </div>
+
+            </div>
+          </details>
 
       <!-- 3. RESULTS — result filters and downloads; the tables are in the viewer's Results view. -->
       <section class="sidebar-section collapsed" id="resultsSection" data-disclosure>
@@ -327,8 +342,13 @@
             <input id="maskWandSingleSlice" type="checkbox">
             <span>Single slice only</span>
           </label>
+          <label class="viewer-checkbox">
+            <input id="maskWandBrainOnly" type="checkbox" disabled>
+            <span>Brain mask only</span>
+          </label>
+          <span class="nd-hint" id="maskWandBrainHint">No brain mask: wand is unrestricted. Run brain extraction to enable.</span>
           <span class="nd-info-icon" id="maskWandHelp" tabindex="0" aria-label="Magic wand help">i
-            <span class="nd-info-tooltip" role="tooltip">Click inside the lesion to grow connected voxels within the radius. Growth spans slices unless Single slice only is checked. Tolerance is ±% of the image’s robust intensity range, giving dark and bright seeds the same absolute allowance; the mouse wheel also adjusts it. Similar tissue and CSF may be included: this is intensity growing, not stroke detection. Switch to Paint to scroll slices. Review every affected slice; Undo removes a growth.</span>
+            <span class="nd-info-tooltip" role="tooltip">Click inside the lesion to grow connected voxels within the radius. Brain mask only prevents growth outside the brain mask, even when its overlay is hidden. Disable it if the brain mask excludes part of the lesion. Growth spans slices unless Single slice only is checked. Tolerance is ±% of the image’s robust intensity range, giving dark and bright seeds the same absolute allowance; the mouse wheel also adjusts it. Similar tissue and CSF may be included: this is intensity growing, not stroke detection. Switch to Paint to scroll slices. Review every affected slice; Undo removes a growth.</span>
           </span>
         </div>
         <div class="mask-toolbar-group mask-edit-group" role="group" aria-label="Mask edit actions">

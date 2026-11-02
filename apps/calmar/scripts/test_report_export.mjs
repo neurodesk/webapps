@@ -30,6 +30,32 @@ const { bindPatientBehavior } = await import('../web/js/modules/patient-behavior
 {
   const dom = new JSDOM(html);
   const doc = dom.window.document;
+  const behavior = bindPatientBehavior(doc);
+  behavior.setKnowledgeBase(kb);
+  const select = doc.getElementById('patientObservedSymptoms');
+  assert.ok(select.options.length > 0);
+  select.options[0].selected = true;
+  const row = doc.createElement('tr');
+  row.dataset.target = select.options[0].value;
+  row.insertCell().textContent = 'Evidence strength';
+  row.insertCell().textContent = select.options[0].textContent;
+  doc.getElementById('kbLocationBody').appendChild(row);
+  select.dispatchEvent(new dom.window.Event('change'));
+  assert.match(row.textContent, /Observed difficulty/);
+  assert.match(doc.getElementById('patientBehaviorReportBody').textContent, /Matching lesion-based evidence/);
+  behavior.render();
+  assert.equal(doc.querySelectorAll('[data-observed-symptom]').length, 1);
+  doc.getElementById('includePatientBehavior').checked = false;
+  behavior.render();
+  assert.equal(doc.querySelectorAll('[data-observed-symptom]').length, 0);
+  assert.equal(select.selectedOptions.length, 1);
+  behavior.reset();
+  assert.equal(select.selectedOptions.length, 0);
+}
+
+{
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
   const context = bindPatientBehavior(doc);
   const notes = doc.getElementById('patientBehaviorNotes');
   notes.value = 'Difficulty naming objects. <img src=x onerror=alert(1)>';

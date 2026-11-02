@@ -9,7 +9,7 @@ import {
   parseNiftiHeader,
   readNiftiImageData,
 } from '../src/file-io/NiftiUtils.js';
-import { createDrawingAdapter, distinctLabels, editedFileName, maskToUint8Nifti, installContrastRangeWand } from '../src/viewer/drawing.js';
+import { createDrawingAdapter, distinctLabels, editedFileName, maskToUint8Nifti, maskToDrawingBitmap, installContrastRangeWand } from '../src/viewer/drawing.js';
 
 test('contrast-range wand gives dark, zero and negative seeds the same width and preserves native arguments', () => {
   const calls = [];
@@ -358,3 +358,38 @@ for (const makeNv of [legacyNv, currentNv]) {
     assert.equal(nv.layer.loads, loads);
   });
 }
+
+
+test('brain restriction blocks traversal and outside previews without mutating anatomy', () => {
+  const source = new Float32Array([20, 20, 20]);
+  const image = { img2RAS: () => source };
+  const originalImage = image.img2RAS;
+  let calls = 0;
+  const nv = {
+    volumes: [image], opts: { clickToSegment: true }, drawBitmap: new Uint8Array([0, 1, 0]),
+    back: { dims: [3, 3, 1, 1], robust_min: 0, robust_max: 100, getValue: () => 20 },
+    drawFloodFill() { calls++; assert.deepEqual([...image.img2RAS()], [20, NaN, 20]); throw new Error('native failure'); },
+  };
+  installContrastRangeWand(nv, { getMask: () => new Uint8Array([1, 0, 1]) });
+  assert.throws(() => nv.drawFloodFill([0, 0, 0], 1, Infinity), /native failure/);
+  assert.equal(image.img2RAS, originalImage);
+  assert.deepEqual([...source], [20, 20, 20]);
+  const preview = new Uint8Array([1, 1, 1]);
+  nv.drawFloodFill([1, 0, 0], 1, Infinity, NaN, NaN, 6, 15, false, preview);
+  assert.deepEqual(preview, nv.drawBitmap);
+  assert.equal(calls, 1);
+});
+
+test('brain mask follows the viewer signed permutation and rejects a displaced grid', async () => {
+  const data = new Float32Array(24);
+  data[1 + 2 * 4] = 1;
+  const bytes = createFloat32Nifti(data, sourceHeader());
+  const hdr = parseNiftiHeader(bytes);
+  const nv = { volumes: [{ hdr, permRAS: [2, -1, 3] }] };
+  const result = await maskToDrawingBitmap(nv, bytes);
+  assert.equal(result.reduce((a, b) => a + b), 1);
+  assert.equal(result[2 + 2 * 3], 1);
+  nv.volumes[0].hdr = { ...hdr, affine: hdr.affine.map(row => [...row]) };
+  nv.volumes[0].hdr.affine[0][3] += 10;
+  await assert.rejects(maskToDrawingBitmap(nv, bytes), /must match/);
+});

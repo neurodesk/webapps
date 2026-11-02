@@ -1,4 +1,4 @@
-import { installContrastRangeWand } from '@neurodesk/webapp-components/viewer';
+import { installContrastRangeWand, maskToDrawingBitmap } from '@neurodesk/webapp-components/viewer';
 
 export class MaskDrawingController {
   constructor(options) {
@@ -7,7 +7,8 @@ export class MaskDrawingController {
     this.defaultOpacity = options.defaultOpacity ?? 0.7;
     this.defaultColormap = options.defaultColormap || 'gray';
     this.manualUndoSnapshots = [];
-    this.wandSettings = { tolerance: 10, radius: 15, singleSlice: false };
+    this.wandSettings = { tolerance: 10, radius: 15, singleSlice: false, brainOnly: true };
+    this.brainMask = null;
   }
 
   get hasDrawing() {
@@ -148,7 +149,12 @@ export class MaskDrawingController {
       this.nv.opts.penSize = 1;
       this.nv.setPenValue?.(1, tool === 'lasso');
       if (tool === 'wand') {
-        if (!this.restoreWandFill) this.restoreWandFill = installContrastRangeWand(this.nv);
+        if (!this.restoreWandFill) this.restoreWandFill = installContrastRangeWand(this.nv, {
+          getMask: () => {
+            if (!this.wandSettings.brainOnly || !this.brainMask) return null;
+            return this.brainMask.image === this.nv.volumes?.[0] ? this.brainMask.data : new Uint8Array(0);
+          },
+        });
         this.setWandOptions(this.wandSettings);
         this.nv.opts.clickToSegment = true;
       }
@@ -161,12 +167,22 @@ export class MaskDrawingController {
     }
   }
 
-  setWandOptions({ tolerance = this.wandSettings.tolerance, radius = this.wandSettings.radius, singleSlice = this.wandSettings.singleSlice } = {}) {
+  async loadBrainMaskFile(file) {
+    const request = this.brainMaskRequest = {};
+    this.brainMask = null;
+    if (!file) return;
+    const image = this.nv.volumes?.[0];
+    const data = await maskToDrawingBitmap(this.nv, file);
+    if (this.brainMaskRequest === request && this.nv.volumes?.[0] === image) this.brainMask = { image, data };
+  }
+
+  setWandOptions({ tolerance = this.wandSettings.tolerance, radius = this.wandSettings.radius, singleSlice = this.wandSettings.singleSlice, brainOnly = this.wandSettings.brainOnly } = {}) {
     const bounded = (value, fallback) => Number.isFinite(Number(value)) ? Math.max(1, Math.min(50, Number(value))) : fallback;
     this.wandSettings = {
       tolerance: bounded(tolerance, this.wandSettings.tolerance),
       radius: bounded(radius, this.wandSettings.radius),
       singleSlice: !!singleSlice,
+      brainOnly: !!brainOnly,
     };
     if (this.nv?.opts) {
       Object.assign(this.nv.opts, {

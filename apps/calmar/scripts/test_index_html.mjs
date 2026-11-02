@@ -378,7 +378,7 @@ assert.deepEqual(
     groups.map(group => [group.getAttribute('aria-label'), controls(group)]),
     [
       ['Draw lesion mask', ['maskPaintButton', 'maskLassoButton', 'maskWandButton', 'maskEraseButton', 'maskEraseClusterButton', 'maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']],
-      ['Magic wand settings', ['maskWandTolerance', 'maskWandRadius', 'maskWandSingleSlice', 'maskWandHelp']],
+      ['Magic wand settings', ['maskWandTolerance', 'maskWandRadius', 'maskWandSingleSlice', 'maskWandBrainOnly', 'maskWandHelp']],
       ['Mask edit actions', ['maskUndoButton', 'maskBlankButton', 'maskSmoothButton']],
       ['Mask slice interpolation', ['maskInterpolateAxis', 'maskInterpolateButton', 'maskInterpolateHelp']],
       ['Mask review actions', ['confirmLesionMaskButton', 'uploadReviewMaskButton', 'downloadEditedLesionMaskButton']]
