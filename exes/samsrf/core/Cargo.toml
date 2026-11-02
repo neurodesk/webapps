@@ -12,6 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 base64 = "0.22"
+delaunator = "1.0.2"
 gif = { version = "0.13", default-features = false, features = ["std"] }
 libm = "0.2"
 miniz_oxide = "0.8"

@@ -12,7 +12,7 @@ pub enum Error {
     Expression(String),
     /// Inputs that cannot be combined (volume counts, vertex counts, ...).
     Shape(String),
-    /// Phase 2 work declared but not yet written.
+    /// A SamSrf option this port does not support.
     NotImplemented(&'static str),
 }
 
@@ -25,7 +25,7 @@ impl fmt::Display for Error {
             Error::Model(message) => write!(f, "model: {message}"),
             Error::Expression(message) => write!(f, "expression: {message}"),
             Error::Shape(message) => write!(f, "{message}"),
-            Error::NotImplemented(what) => write!(f, "{what} is not implemented yet (phase 2)"),
+            Error::NotImplemented(what) => write!(f, "{what} is not supported by this port"),
         }
     }
 }
