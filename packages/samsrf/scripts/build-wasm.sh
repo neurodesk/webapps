@@ -45,7 +45,10 @@ fi
 
 export RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN"
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
-export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo"
+# exes/nifti is a path dependency outside the samsrf workspace, so its panic locations
+# carry the checkout's absolute path unless the repository root is remapped too.
+repo_root="$(cd ../.. && pwd)"
+export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$repo_root=/webapps"
 
 crate=../../exes/samsrf/wasm
 scratch="$(mktemp -d -t samsrf-wasm.XXXXXX)"
