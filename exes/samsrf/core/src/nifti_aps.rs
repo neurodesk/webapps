@@ -78,7 +78,7 @@ pub fn read_apertures(bytes: &[u8]) -> Result<Apertures> {
 mod tests {
     use super::*;
 
-    /// A NIfTI-1 single file holding `values` (column-major) as `datatype` little-endian.
+    /// A little-endian NIfTI-1 single file whose data block is `voxels`.
     fn nifti(dims: &[i16], datatype: i16, voxels: &[u8], slope: f32, intercept: f32) -> Vec<u8> {
         let mut bytes = vec![0u8; 352];
         bytes[0..4].copy_from_slice(&348i32.to_le_bytes());
