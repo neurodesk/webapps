@@ -580,3 +580,13 @@
 .dicompare-unchecked-content {
   border-top: 1px solid var(--nd-color-border);
 }
+
+.btn-example {
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  width: 100%;
+  margin-top: var(--space-sm);
+}
