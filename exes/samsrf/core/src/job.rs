@@ -67,7 +67,6 @@ enum Analysis {
 pub struct Job {
     analysis: Analysis,
     data: TimeSeries,
-    kept: Vec<u32>,
     /// Kept position per vertex of the hemisphere, or `u32::MAX`.
     kept_position: Vec<u32>,
     /// The analysed vertices in label order, after the noise-ceiling threshold.
@@ -227,7 +226,7 @@ impl Job {
                 Analysis::RevCorCf(Box::new(revcor_cf::Prepared::new(cf, &seed.vertices, &seed_courses, &seed.template, &area, surface.as_ref())?))
             }
         };
-        Ok(Job { analysis, data, kept, kept_position, mver, noise_ceiling, seed_fine_fit, total_vertices, model_name })
+        Ok(Job { analysis, data, kept_position, mver, noise_ceiling, seed_fine_fit, total_vertices, model_name })
     }
 
     pub fn kind(&self) -> Kind {
@@ -343,10 +342,9 @@ impl Job {
             return Err(Error::Shape(format!("partial results cover {expected} of {} vertices", self.mver.len())));
         }
         let values = self.values();
-        let fill = match &self.analysis {
-            Analysis::RevCorPrf(prepared) if prepared.model.prf_function.is_some() => f64::NAN,
-            _ => 0.0,
-        };
+        // samsrf_compress_srf keeps the ROI columns and samsrf_expand_srf zero-fills the
+        // rest, so every map, the noise ceiling included, is 0 outside the ROI.
+        let fill = 0.0;
         let mut maps = Maps { values: values.clone(), vertices: self.total_vertices, data: vec![fill; values.len() * self.total_vertices] };
         let mut raw = match &self.analysis {
             Analysis::RevCorPrf(_) => Some(Maps::zeros(revcor_prf::RAW_VALUES.iter().map(|value| value.to_string()).collect(), self.total_vertices)),
@@ -375,8 +373,8 @@ impl Job {
         if let Some(ceiling) = &self.noise_ceiling {
             let mut row = vec![0.0; self.total_vertices];
             let mut known = vec![false; self.total_vertices];
-            for (position, &vertex) in self.kept.iter().enumerate() {
-                row[vertex as usize] = ceiling[position];
+            for &vertex in &self.mver {
+                row[vertex as usize] = ceiling[self.kept_position[vertex as usize] as usize];
                 known[vertex as usize] = true;
             }
             maps.values.push("Noise Ceiling".into());

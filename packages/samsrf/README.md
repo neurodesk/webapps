@@ -273,10 +273,14 @@ reference is produced.
   uses QR. They agree to rounding. A rank-deficient GLM (a constant
   prediction) follows MATLAB's pivoting rule: the column with the larger norm
   keeps its coefficient and the other is 0.
-- **Noise ceiling outside the kept vertices.** SamSrf computes the noise
-  ceiling for every vertex; the job only has it for the vertices with a time
-  course. The `Noise Ceiling` row is 0 elsewhere and `nR^2` is 0 there (SamSrf
-  has `0 / ceiling`, also 0 unless the ceiling is 0 or NaN).
+- **Maps outside the ROI.** `samsrf_compress_srf` keeps the ROI's columns and
+  `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside
+  the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected
+  `rc` model fit included; `nR^2` is 0 there too.
+- **Template precision.** `readBensonTemplate` rounds every step to single
+  precision as MATLAB does, but Rust's `cos` and `sin` are correctly rounded
+  where Octave's single-precision versions are not: about 0.1 % of the
+  template coordinates differ by one float32 ulp (4e-8 relative).
 - **`fminsearch` stop.** SamSrf stops a fine fit when its `OutputFcn` sees a
   non-finite best value; that can only be the first value (NaN sorts last), and
   the port does the same. MATLAB's exit flag for that case is not reproduced;
