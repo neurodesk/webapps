@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runAnalysis, shardRanges, workerCount } from "../src/pool.js";
+// Loads the WebAssembly module synchronously, so the engine's own init() has nothing to fetch.
+import "@neurodesk/samsrf/node";
 import * as engine from "../src/engine.js";
 
 test("shards cover every unit once, several per worker", () => {
@@ -40,9 +42,41 @@ function fakeWorker(log) {
   return worker;
 }
 
-const gifti = (vertices) => ({ name: "lh_bars1.gii", bytes: new TextEncoder().encode(`<GIFTI><DataArray Dim0="${vertices}">`) });
+// Synthetic inputs in the formats the engine reads: one ASCII GIfTI run of 10 vertices and
+// 4 x 4 NIfTI apertures. Vertices 2, 5 and 7 (the ROI) follow one aperture pixel each, so
+// reverse correlation without an HRF finds them.
+const PIXELS = 16;
+const VOLUMES = 40;
+const frames = Array.from({ length: VOLUMES }, (_, volume) => Array.from({ length: PIXELS }, (_, pixel) => ((volume * 7 + pixel * 5) % 11) < 4 ? 1 : 0));
+
+function niftiApertures() {
+  const bytes = new Uint8Array(352 + PIXELS * VOLUMES * 4);
+  const view = new DataView(bytes.buffer);
+  view.setInt32(0, 348, true);
+  [3, 4, 4, VOLUMES, 1, 1, 1, 1].forEach((dim, index) => view.setInt16(40 + 2 * index, dim, true));
+  view.setInt16(70, 16, true);
+  view.setInt16(72, 32, true);
+  for (let index = 0; index < 8; index++) view.setFloat32(76 + 4 * index, 1, true);
+  view.setFloat32(108, 352, true);
+  bytes.set(new TextEncoder().encode("n+1\0"), 344);
+  frames.forEach((frame, volume) => frame.forEach((value, pixel) => view.setFloat32(352 + 4 * (volume * PIXELS + pixel), value, true)));
+  return { name: "aps_test.nii", bytes };
+}
+
+function giftiRun(vertices) {
+  const course = (vertex, volume) => ([2, 5, 7].includes(vertex) ? frames[volume][vertex] : Math.sin(volume * (vertex + 1)));
+  const arrays = Array.from({ length: VOLUMES }, (_, volume) => [
+    `<DataArray Intent="NIFTI_INTENT_TIME_SERIES" DataType="NIFTI_TYPE_FLOAT32" ArrayIndexingOrder="RowMajorOrder" Dimensionality="1" Dim0="${vertices}" Encoding="ASCII" Endian="LittleEndian">`,
+    `<Data>${Array.from({ length: vertices }, (_, vertex) => course(vertex, volume)).join(" ")}</Data>`,
+    "</DataArray>",
+  ].join("\n"));
+  const text = ['<?xml version="1.0" encoding="UTF-8"?>', `<GIFTI Version="1.0" NumberOfDataArrays="${VOLUMES}">`, ...arrays, "</GIFTI>"].join("\n");
+  return { name: "lh_bars1.gii", bytes: new TextEncoder().encode(text) };
+}
+
 const label = { name: "lh.roi.label", bytes: new TextEncoder().encode("#!ascii label\n3\n2 0 0 0 0\n5 0 0 0 0\n7 0 0 0 0\n") };
-const inputs = { analysis: "rc", model: { Name: "pRF" }, runs: [gifti(10)], apertures: null, roi: label, surfaces: {}, template: null, seed: null, normalise: true, average: true };
+const model = { Name: "pRF", Scaling_Factor: 9.5, TR: 1, Hrf: 1, Aperture_File: "aps_test" };
+const inputs = { analysis: "rc", model, runs: [giftiRun(10)], apertures: niftiApertures(), roi: label, surfaces: {}, template: null, seed: null, normalise: true, average: true };
 
 test("an analysis prepares once, fits every shard and merges full-length maps", async () => {
   const log = [];
@@ -55,7 +89,7 @@ test("an analysis prepares once, fits every shard and merges full-length maps", 
   });
   assert.equal(log.filter((type) => type === "prepare").length, 1);
   assert.equal(log.filter((type) => type === "merge").length, 1);
-  assert.equal(result.outName, "lh_pRF");
+  assert.equal(result.outName, "lh_pRF_Rcp");
   assert.ok(result.maps.every(({ values }) => values.length === 10));
   const r2 = result.maps.find(({ name }) => name === "R^2").values;
   assert.deepEqual([...r2].map((value, vertex) => value !== 0 ? vertex : -1).filter((vertex) => vertex >= 0), [2, 5, 7], "only ROI vertices are fitted");

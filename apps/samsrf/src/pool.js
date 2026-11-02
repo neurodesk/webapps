@@ -47,7 +47,7 @@ export function runAnalysis(inputs, { signal, onProgress, onLog, workers = worke
 
     const request = (worker, message) => new Promise((done, fail) => {
       worker.onmessage = ({ data }) => {
-        if (data.type === "progress") return message.onProgress?.(data.done);
+        if (data.type === "progress") return message.onProgress?.(data.done, data.total);
         if (data.type === "error") return fail(new Error(data.message));
         done(data.value);
       };
@@ -62,7 +62,10 @@ export function runAnalysis(inputs, { signal, onProgress, onLog, workers = worke
       const first = createWorker();
       pool.push(first);
       onProgress?.(0, "Reading inputs…");
-      const job = await request(first, { body: { type: "prepare", inputs } });
+      const job = await request(first, {
+        body: { type: "prepare", inputs },
+        onProgress: (done, total) => onProgress?.(PREPARE * (done / total), "Building the search space…"),
+      });
       for (const line of job.summary) onLog?.(line);
       const ranges = shardRanges(job.units, workers);
       while (pool.length < Math.min(workers, ranges.length)) pool.push(createWorker());

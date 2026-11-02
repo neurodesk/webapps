@@ -456,7 +456,7 @@ async function runSelected(signal) {
     const first = [...result.mapOf].find(([, name]) => name === firstMap)?.[0];
     if (viewer.hasSurface && first) await showMap(first);
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
-    const outcome = ENGINE.stub ? `${ANALYSES[kind].outcome} · placeholder engine, not a SamSrf fit` : ANALYSES[kind].outcome;
+    const outcome = ANALYSES[kind].outcome;
     progress.end(outcome);
     status(`${outcome} (${seconds} s)`, { channel: "analysis" });
     return {
@@ -464,7 +464,6 @@ async function runSelected(signal) {
       provenance: {
         method: `samsrf-${kind}`,
         engine: ENGINE.name,
-        placeholder: ENGINE.stub,
         model: structuredClone(model),
         normalise: $("normalise").checked,
         average: $("combine").value === "average",
