@@ -39,10 +39,10 @@ impl Apertures {
     /// of an `aps_*.mat` file gives `ApFrm`. Mirrors `VectoriseApertures.m`: rejects odd side
     /// lengths, computes `ApXY` with the rectangular scaling, keeps `ApCond` as conditions.
     pub fn from_dense(height: usize, width: usize, volumes: usize, data: &[f64], conditions: Option<Vec<f64>>) -> Result<Self> {
-        if width % 2 != 0 {
+        if !width.is_multiple_of(2) {
             return Err(Error::Shape(format!("Aperture X dimension is an odd number ({width}); side lengths must be even")));
         }
-        if height % 2 != 0 {
+        if !height.is_multiple_of(2) {
             return Err(Error::Shape(format!("Aperture Y dimension is an odd number ({height}); side lengths must be even")));
         }
         if width == 0 || height == 0 || volumes == 0 {
@@ -70,7 +70,7 @@ impl Apertures {
     /// uniform scale, as files from before SamSrf 9.81 baked `Scaling_Factor` in). Any other
     /// layout (`BackprojAps` writes one pixel per seed vertex) is a `pixels x 1` strip.
     pub fn from_vectorised(ap_frm_rows: usize, volumes: usize, ap_frm: &[f64], ap_xy: &[f64]) -> Result<Self> {
-        if ap_xy.len() % 2 != 0 {
+        if !ap_xy.len().is_multiple_of(2) {
             return Err(Error::Shape(format!("ApXY has {} values; it must have two columns", ap_xy.len())));
         }
         let pixels = ap_xy.len() / 2;
@@ -198,11 +198,11 @@ fn grid_xy(height: usize, width: usize) -> Vec<[f64; 2]> {
 fn grid_shape(xy: &[[f64; 2]]) -> Option<(usize, usize)> {
     let pixels = xy.len();
     let height = xy.iter().take_while(|point| point[0] == xy[0][0]).count();
-    if height == 0 || pixels % height != 0 {
+    if height == 0 || !pixels.is_multiple_of(height) {
         return None;
     }
     let width = pixels / height;
-    if height % 2 != 0 || width % 2 != 0 {
+    if height % 2 != 0 || !width.is_multiple_of(2) {
         return None;
     }
     let grid = grid_xy(height, width);
