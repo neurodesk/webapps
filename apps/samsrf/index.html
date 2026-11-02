@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SamSrf — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Data</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <div id="runsField"></div>
+          <p id="runsInfo" class="nd-file-info" hidden></p>
+          <div id="aperturesField"></div>
+          <div id="roiField"></div>
+          <div id="surfacesField"></div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="analysisSection" open>
+        <summary class="nd-section-title">Analysis</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="analysis">Method</label>
+            <select id="analysis">
+              <option value="prf">pRF forward model</option>
+              <option value="rc">Reverse-correlation pRF</option>
+              <option value="cf">Connective fields</option>
+            </select>
+          </div>
+          <div class="nd-field">
+            <label for="preset">Model
+              <span class="nd-info-icon" tabindex="0" aria-label="About the model presets">i<span class="nd-info-tooltip">The SamSrf example models and the standard models in SamSrf's Models folder. Edit any field in Advanced settings.</span></span>
+            </label>
+            <select id="preset"></select>
+          </div>
+          <div id="cfInputs" hidden>
+            <div id="templateField"></div>
+            <div id="seedField"></div>
+          </div>
+          <div class="nd-row" id="stimulusFields">
+            <div class="nd-field">
+              <label for="tr">TR <small>s</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About TR">i<span class="nd-info-tooltip">The time between apertures, which is the scanner TR unless predictions are downsampled.</span></span>
+              </label>
+              <input id="tr" type="number" min="0.01" step="any" value="1" />
+            </div>
+            <div class="nd-field">
+              <label for="scalingFactor">Stimulus radius <small>°</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About the stimulus radius">i<span class="nd-info-tooltip">SamSrf's Scaling_Factor: the eccentricity of the aperture edge in degrees of visual angle.</span></span>
+              </label>
+              <input id="scalingFactor" type="number" min="0.01" step="any" value="9.5" />
+            </div>
+          </div>
+          <div class="nd-field" id="hrfField">
+            <label for="hrf">HRF</label>
+            <select id="hrf"></select>
+          </div>
+          <div class="nd-field">
+            <label for="combine">Runs</label>
+            <select id="combine">
+              <option value="average">Average runs</option>
+              <option value="concatenate">Concatenate runs</option>
+            </select>
+          </div>
+          <label class="nd-check"><input id="normalise" type="checkbox" checked /> Detrend and z-score each run</label>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field" data-analysis="prf">
+                <label for="fineFit">Fine fit</label>
+                <select id="fineFit">
+                  <option value="nelder-mead">Nelder-Mead</option>
+                  <option value="hooke-jeeves">Hooke-Jeeves</option>
+                </select>
+              </div>
+              <div class="nd-field" data-analysis="prf">
+                <label for="fineFitThreshold">Fine-fit threshold <small>R²</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the fine-fit threshold">i<span class="nd-info-tooltip">Only vertices whose coarse fit reaches this R² go on to the fine fit (Fine_Fit_Threshold).</span></span>
+                </label>
+                <input id="fineFitThreshold" type="number" min="0" max="1" step="0.01" value="0.01" />
+              </div>
+              <label class="nd-check" data-analysis="prf"><input id="coarseOnly" type="checkbox" /> Coarse fit only</label>
+              <div class="nd-field" data-analysis="rc">
+                <label for="revcorThreshold">Profile threshold <small>R²</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the profile threshold">i<span class="nd-info-tooltip">Correlation profiles below this R² are not analysed further (R2_Threshold).</span></span>
+                </label>
+                <input id="revcorThreshold" type="number" min="0" max="1" step="0.01" value="0" />
+              </div>
+              <div class="nd-field">
+                <label for="modelJson">Model JSON
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the model JSON">i<span class="nd-info-tooltip">The model exactly as SamSrf reads it. Edits here are used for the run; the fields above update to match.</span></span>
+                </label>
+                <textarea id="modelJson" rows="10" spellcheck="false"></textarea>
+              </div>
+              <div id="modelField"></div>
+              <button id="saveModel" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Save model JSON</button>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Fit pRF model</button>
+          <p id="runHint" class="nd-hint">Needs runs and apertures</p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+          <button id="downloadAll" class="nd-btn nd-btn-secondary" type="button" disabled>Download all maps (.zip)</button>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Cortical surface viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a SamSrf data folder anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>SamSrf maps population receptive fields (pRFs) and connective fields on the cortical surface. This app runs the analyses of SamSrf's <code>SamSrfAnalysis</code> command line on GIfTI time series: a forward-model pRF fit (a coarse grid search, then a Nelder-Mead or Hooke-Jeeves fine fit), reverse-correlation pRF profiles, and reverse-correlation connective fields against a template map such as the Benson atlas. It writes the GIfTI maps SamSrf exports (R², position, size, polar angle and eccentricity) and shows them on the inflated surface. The example is the left hemisphere of SamSrf's X001 sweeping-bar data set (OSF h92mr, CC BY 4.0), restricted to V1 to V3.</p>
+    </template>
+    <template id="privacyContent"><p>Your data are processed in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -30,6 +30,7 @@ Paths in this table are relative to the repository root. Existing implementation
 
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
+| `samsrf` | pRF fit, reverse-correlation pRF and connective fields on GIfTI time series (SamSrf `SamSrfAnalysis`) | `exes/samsrf` (Rust core) and `packages/samsrf` (WebAssembly and the `samsrf` command line) are in progress; the app reaches them only through `apps/samsrf/src/engine.js`, which holds a placeholder until then. |
 | `brainqcnet` | Artifact detection on one T1-weighted image (BrainQCNet) | The authors publish the BIDS app container `garciaml/brainqcnetcpu`; the Standalone dialog lists version 1.0.1, pinned by digest, whose tables the app reproduces, so no separate command line is packaged. |
 | `ants-denoise` | Adaptive non-local means denoising of one 3D image | Native ANTs ships `DenoiseImage`. The Standalone dialog lists the Neurodesk ANTs container, whose `DenoiseImage` gives the app's voxels with one ITK thread and the same options, so no separate command line is packaged. |
 | `greedy` | Affine/deformable registration and reslicing | `exes/greedy` has the Rust CLI. This change adds native release CI and the bundled npm command. macOS signing and target-runner verification remain release gates. |

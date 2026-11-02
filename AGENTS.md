@@ -347,6 +347,15 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Needs 3+ echoes (`MIN_ECHOES`; tedana's PCA fails with 2).
 - The regressors TSV comes from the dropped files (`*_desc-confounds_timeseries.tsv`, else a single non-events TSV; `src/inputs.js`) and is sent only for trees in the "Needs a confounds TSV" menu group. The moco example ships its confounds; e2e checks motion_aroma against native hashes.
 
+## samsrf
+
+- The app reproduces SamSrf X's `SamSrfAnalysis` (samsrf/samsrf@41ed1e96) for GIfTI input: `prf` (forward-model fit), `rc` (reverse-correlation pRF) and `cf` (reverse-correlation connective fields against a template map such as Benson). Numerics belong to `@neurodesk/samsrf`; the app does none.
+- `src/engine.js` is the only module that calls the engine: `createJob(inputs)`, `runShard(job, start, end, onProgress)` and `mergeShards(job, shards)`, typed in its header. `src/pool.js` runs them on module workers (`src/worker.js`, one engine instance each, at most 8), shards the ROI's vertices from a queue, merges in the first worker and terminates every worker on cancel. Until the package is wired, `engine.js` holds a placeholder that writes synthetic maps and says so in the status bar and provenance.
+- Model presets (`src/models.js`) reproduce the three `Models/Json` examples and the standard `Models/*.m` models; their grids scale with the stimulus radius as the `.m` files do. JSON has no Infinity, so `Hrf` for concurrent fitting travels as the string `"Inf"`.
+- A dropped folder is sorted by name (`src/inputs.js`): `.label` is the ROI unless its name says seed, a GIfTI named benson/template/atlas is the template, FreeSurfer and `.surf.gii` names are surfaces, other GIfTIs are runs.
+- Maps are drawn as NiiVue rc.26 mesh layers from scalar-only mz3 (`writeMz3Scalars`). NiiVue draws NaN black and clamps negatives, so `src/display.js` encodes each map: vertices with R² above the threshold map into [1, 2], the rest are 0 and transparent.
+- The example (`x001-bars`, HF `samsrf/example/`) is SamSrf's X001 left hemisphere with vertices outside V1-V3 zeroed; `SAMSRF_EXAMPLE_DIR` serves it locally to the e2e tests.
+
 ## pipeline-builder
 
 - Validation is NeuroFlow's core, vendored as WASM (`vendor/neuroflow/README.md`, `provenance.json`). Import/export keeps the workflow's `neuroflow` version; 0.1.0 or missing becomes 0.1.1.
