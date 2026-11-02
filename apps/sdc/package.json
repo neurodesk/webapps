@@ -5,14 +5,16 @@
   "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app sdc",
+    "dev": "node scripts/copy-runtime.mjs && vite",
+    "build": "node scripts/copy-runtime.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app sdc",
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
+    "@neurodesk/ants-denoise": "workspace:*",
+    "@neurodesk/hmc-registration": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/sdc": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",

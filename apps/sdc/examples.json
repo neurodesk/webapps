@@ -47,6 +47,51 @@
         "sha256": "9190a0427dfab8dc7ead4d606d29bb6e19807ca54531851143d20bdcf058bf1a",
         "bytes": 250
       }
+    ],
+    "method": "pyhysco"
+  },
+  {
+    "id": "ds005134-slab-t1w",
+    "method": "syn",
+    "label": "AP DWI slab and T1w, SyN-SDC",
+    "description": "OpenNeuro ds005134 sub-01 (CC0): all 137 volumes of the AP DWI series, slices 28-37, and the full 0.8 mm T1w.",
+    "expectedResult": "A field map in Hz and the corrected DWI series, b0 volumes kept, with the bval, bvec and sidecar.",
+    "files": [
+      {
+        "role": "image",
+        "name": "sub-01_dir-AP_desc-slab_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.nii.gz",
+        "sha256": "1e7c8461d9bfc3c80633f930dc1df16d892a6bfd5e15db4c5a2be9d021e48d00",
+        "bytes": 8353126
+      },
+      {
+        "role": "sidecar",
+        "name": "sub-01_dir-AP_desc-slab_dwi.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.json",
+        "sha256": "ee4aea62833b98301faedafd2633662e54c9dfd33ac40fb1bf1d03caf5c3b757",
+        "bytes": 2856
+      },
+      {
+        "role": "bval",
+        "name": "sub-01_dir-AP_desc-slab_dwi.bval",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.bval",
+        "sha256": "5f990dc6bfeb61653df62e49437d1e71c1a4e4d487c478c7dd7571307566ff19",
+        "bytes": 634
+      },
+      {
+        "role": "bvec",
+        "name": "sub-01_dir-AP_desc-slab_dwi.bvec",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.bvec",
+        "sha256": "7141cc17a90f78c29dbdc1218755081d51c93988d139886fcb9871d9e3fdfd6d",
+        "bytes": 3619
+      },
+      {
+        "role": "t1w",
+        "name": "sub-01_run-001_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/8520dbcafd737b895b9f5eb4f5f8149a82a3bb18/sdc/reference/input/sub-01_run-001_T1w.nii.gz",
+        "sha256": "fab571879a3f83803405b53a2161f60f58cb32a4a04ee5b54b7b090a61af4a6e",
+        "bytes": 17420714
+      }
     ]
   }
 ]

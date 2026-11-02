@@ -659,6 +659,33 @@ try {
     await expect(page.locator('#reference')).toHaveValue('0');
     await expect(page.locator('#fileInfo')).toHaveText('Image 1: sub-01_dir-PA_epi.nii · j');
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+    // SyN-SDC: a DWI series whose sidecar lacks the acquisition fields, and a T1w.
+    await page.locator('#method').selectOption('syn');
+    await expect(page.locator('#fileInfo')).toBeHidden();
+    await expect(page.locator('#runButton')).toHaveText('Correct distortion');
+    await page.locator('#imageInput').setInputFiles([
+      ...dwiSeries('sub-01_dir-AP_dwi'),
+      { name: 'sub-01_dir-AP_dwi.json', mimeType: 'application/json', buffer: Buffer.from('{}') },
+      nifti('sub-01_T1w.nii'),
+    ]);
+    await expect(page.locator('#pairInfo')).toHaveText('T1w: sub-01_T1w.nii');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    // The acquisition fields and Advanced settings chosen must survive closing their sections.
+    await page.locator('#direction').selectOption('j-');
+    await page.locator('#readout').fill('0.038');
+    const advanced = page.locator('#advancedSettings > summary');
+    await advanced.tap();
+    await page.locator('#prior').selectOption('none');
+    await advanced.tap();
+    await expect(page.locator('#prior')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#direction')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#direction')).toHaveValue('j-');
+    await expect(page.locator('#readout')).toHaveValue('0.038');
+    await expect(page.locator('#prior')).toHaveValue('none');
+    await expect(page.locator('#cancelButton')).toBeHidden();
   });
   await check('dwicorrect', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });

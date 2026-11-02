@@ -244,7 +244,7 @@ try {
           multiple: input.multiple,
         })));
         for (const input of result.uploads) {
-          if (!['image', 'model', 'surface', 'protocol', 'gradients', 'metadata', 'dataset'].includes(input.kind)) {
+          if (!['image', 'model', 'surface', 'protocol', 'gradients', 'metadata', 'dataset', 'mask'].includes(input.kind)) {
             result.failures.push(`${input.id}: declare data-neurodesk-input; scan fields must use image`);
           } else if (input.kind === 'image' && (input.accept || !input.multiple)) {
             result.failures.push(`${input.id}: use one multi-file NIfTI/DICOM picker without an accept filter, including extensionless DICOM`);

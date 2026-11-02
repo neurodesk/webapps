@@ -1148,6 +1148,12 @@ importers:
 
   apps/sdc:
     dependencies:
+      '@neurodesk/ants-denoise':
+        specifier: workspace:*
+        version: link:../../packages/ants-denoise
+      '@neurodesk/hmc-registration':
+        specifier: workspace:*
+        version: link:../../packages/hmc-registration
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support

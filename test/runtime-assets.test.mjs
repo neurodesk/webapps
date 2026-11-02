@@ -7,6 +7,26 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 const dist = join(repoRoot, 'dist');
 
+test('n4 and sdc share one N4 binary while each keeps its pthread module', async () => {
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+  const family = manifest.families.find(({ id }) => id === 'n4-wasm');
+  assert.equal(family?.deduplicate, true);
+  const checksum = createHash('sha256').update(await readFile(join(repoRoot, 'packages/n4/wasm/n4-bias.wasm'))).digest('hex');
+  assert.equal(family.files[0].sha256, checksum, 'rebuild of packages/n4 must update the n4-wasm pin');
+  const runtime = `_runtime/${family.target}/n4-bias.wasm`;
+  assert.equal(createHash('sha256').update(await readFile(join(dist, runtime))).digest('hex'), checksum);
+  for (const app of ['n4', 'sdc']) {
+    await assert.rejects(access(join(dist, app, 'n4/n4-bias.wasm')), { code: 'ENOENT' }, `${app}: app copy remains`);
+    const glue = await readFile(join(dist, app, 'n4/n4-bias.mjs'), 'utf8');
+    assert.ok(glue.includes(`new URL("../../${runtime}",import.meta.url)`), `${app}: the module must load the shared binary`);
+  }
+});
+
+test('sdc stages only the MindGrab CPU modules it runs', async () => {
+  const files = await readdir(join(dist, 'sdc', 'mindgrab'));
+  assert.deepEqual(files.filter(name => name.startsWith('brainchop-')).sort(), ['brainchop-mindgrab.js', 'brainchop-mindgrab.wasm']);
+});
+
 for (const { familyId, packageName, pinName, consumers } of [
   { familyId: 'hmc-registration-wasm', packageName: 'hmc-registration', pinName: 'HMC_REGISTRATION_WASM_SHA256', consumers: ['bison', 'hmc'] },
   { familyId: 'ants-denoise-wasm', packageName: 'ants-denoise', pinName: 'DENOISE_WASM_SHA256', consumers: ['bison', 'ants-denoise'] },

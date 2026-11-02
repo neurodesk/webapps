@@ -119,6 +119,21 @@
       ]
     },
     {
+      "id": "n4-wasm",
+      "version": "0.6.20261031",
+      "target": "n4/0.6.20261031",
+      "deduplicate": true,
+      "reason": "Share the N4 binary used by N4 and SDC's SyN-SDC while keeping each app's pthread module inside its service-worker scope; the module finds the binary through its static new URL(\"n4-bias.wasm\").",
+      "files": [
+        {
+          "name": "n4-bias.wasm",
+          "source_app": "n4",
+          "source": "n4/n4-bias.wasm",
+          "sha256": "3d15f90b995c5996977863d59b2d68f186136a26d68775a880f97a583e38e638"
+        }
+      ]
+    },
+    {
       "id": "nv-mcp",
       "version": "1.0.0-rc.7",
       "target": "nv-mcp/1.0.0-rc.7",

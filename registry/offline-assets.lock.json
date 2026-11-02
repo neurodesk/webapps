@@ -4498,6 +4498,13 @@
       "kind": "model",
       "license": "LicenseRef-MNI152NLin2009cAsym",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/8520dbcafd737b895b9f5eb4f5f8149a82a3bb18/sdc/reference/input/sub-01_run-001_T1w.nii.gz": {
+      "sha256": "fab571879a3f83803405b53a2161f60f58cb32a4a04ee5b54b7b090a61af4a6e",
+      "bytes": 17420714,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -5478,7 +5485,12 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/fmap_atlas.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/fmap_atlas_2_MNI152NLin2009cAsym_affine.mat",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.bval",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.bvec",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/8520dbcafd737b895b9f5eb4f5f8149a82a3bb18/sdc/reference/input/sub-01_run-001_T1w.nii.gz"
     ],
     "dwicorrect": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ef3e1da9f96a2e79d347333354d8c6bdb68f1f37/dwicorrect/examples/ds006676-sub-001-S3P1/sub-001_ses-001_acq-S3P1_dir-AP_dwi.nii.gz",

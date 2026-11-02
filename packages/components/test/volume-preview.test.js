@@ -276,3 +276,24 @@ test('the shared queue restores every field of a complete renderer snapshot', as
   assert.deepEqual(visible, { file: 'components.nii', base: 'S0map.nii', frame: 3, range: [0.3, 0.7], label: 'ICA 3' });
   assert.deepEqual(draws, ['components.nii', 'new-input.nii', 'components.nii']);
 });
+
+test('an overlay is drawn on its image with a signed window, and null clears the viewer', async () => {
+  const loads = [];
+  const emptyState = { hidden: false };
+  const viewer = {
+    async loadVolumes(volumes) {
+      loads.push(volumes);
+    },
+    async removeAllVolumes() {
+      loads.push([]);
+    },
+  };
+  const show = createNiivueVolumePreview({ viewer, ready: Promise.resolve(), emptyState });
+  await show({ file: a.file, overlay: { file: b.file, range: [1, 20] } });
+  assert.deepEqual(loads[0].map((volume) => volume.name), ['a.nii.gz', 'b.nii.gz']);
+  assert.deepEqual(loads[0][1], { url: b.file, name: 'b.nii.gz', colormap: 'warm', colormapNegative: 'winter', opacity: 0.6, calMin: 1, calMax: 20, calMinNeg: -20, calMaxNeg: -1 });
+  assert.equal(emptyState.hidden, true);
+  await show(null);
+  assert.deepEqual(loads[1], []);
+  assert.equal(emptyState.hidden, false);
+});

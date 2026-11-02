@@ -37,7 +37,8 @@ export async function gzip(bytes) {
  * @param {string | URL} options.registrationWorker the bundler's URL of @neurodesk/hmc-registration/worker
  * @param {string | URL} options.denoiseWorker the bundler's URL of @neurodesk/ants-denoise/worker
  * @param {string | URL} options.n4Worker the bundler's URL of this package's src/syn/n4-worker.js
- * @param {{ module: string, wasm: string }} options.n4Kernel the URLs of @neurodesk/n4/module and /wasm
+ * @param {{ module: string, wasm?: string }} options.n4Kernel the URLs of @neurodesk/n4/module and /wasm;
+ *   without `wasm` the module loads n4-bias.wasm from beside itself
  * @param {string | URL | Response | ArrayBuffer} options.fieldFit the field-fit module (@neurodesk/sdc/field-fit.wasm)
  * @param {(bytes: Uint8Array, options: { signal?: AbortSignal }) => Promise<Uint8Array>} [options.mindgrab]
  *   the app's MindGrab ('mindgrab' model) brain mask; not needed when the user gives both masks

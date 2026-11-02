@@ -1,0 +1,18 @@
+{
+  "description": "packages/sdc's SyN-SDC pipeline in Node on the \"ds005134-slab-t1w\" example (apps/sdc/scripts/syn-node-reference.mjs): the SHA-256 of each output, gzip-decompressed.",
+  "example": "ds005134-slab-t1w",
+  "seed": 1234,
+  "minutes": 63,
+  "outputs": {
+    "sub-01_dir-AP_desc-brain_mask.nii.gz": "4372c17c8c46d0fc6284058d429e1e73c087f94c5dbd67d5ff6dcbb8611c0771",
+    "sub-01_dir-AP_desc-coeff_fieldmap.json": "11f63f3b7d6f2fb2234a128ade3bb94c1530d860566e57b75f6159ee719b9a52",
+    "sub-01_dir-AP_desc-coeff_fieldmap.nii.gz": "8aa27c5ddd95a86fd98014c169c2985fecddbb43fae33c49d40e22b389b79861",
+    "sub-01_dir-AP_desc-preproc_fieldmap.json": "09c6506fb411ca15d9e2e225336c65f57f43cea4c86782f6eb34f5d3a130761e",
+    "sub-01_dir-AP_desc-preproc_fieldmap.nii.gz": "def2bf0565afdb9285870f3e25de9ec61602a834a128fcc3c5e6064a81c06c27",
+    "sub-01_dir-AP_desc-sdc_dwi.bval": "5f990dc6bfeb61653df62e49437d1e71c1a4e4d487c478c7dd7571307566ff19",
+    "sub-01_dir-AP_desc-sdc_dwi.bvec": "7141cc17a90f78c29dbdc1218755081d51c93988d139886fcb9871d9e3fdfd6d",
+    "sub-01_dir-AP_desc-sdc_dwi.json": "1dc469c80faa12f85aa2d4b4ccd501c4d89a30bab8153d8e5af891443feef916",
+    "sub-01_dir-AP_desc-sdc_dwi.nii.gz": "c9aac0231a38b0aca28ad91d40669c2abe24730f218c72266d5845ef2d91e9c4",
+    "sub-01_dir-AP_from-orig_to-sdc_mode-image_xfm.nii.gz": "d3b233ef8bb321b004f97deb913d93f93237f225997bfb136edd9c081bd57342"
+  }
+}

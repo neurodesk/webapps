@@ -1685,12 +1685,22 @@ apps:
 
   sdc:
     about:
-      - "SDC estimates the susceptibility field of an EPI acquisition from two b = 0 images with opposite phase-encoding directions, such as AP and PA, in this browser. It is a port of PyHySCO 0.0.4 (Julian and Ruthotto 2024), the hyperelastic susceptibility correction of Ruthotto et al. 2012, and its CPU field differs from PyHySCO's by a median of 5e-6 Hz (at most 0.03 Hz). In a comparison on six subjects it was the closest fast method to FSL topup; DR-BUDDI was closer but takes about 40 minutes. Each input's volumes with b ≤ 50 are averaged, without motion correction, and the two images must be in one space. The field is in Hz, with topup's sign, on the grid of the field reference; a constant offset against another tool is a translation along the phase-encoding axis. The corrected images are for quality control: the app does not resample the DWI series. The example is a 10-slice slab of OpenNeuro ds005134 (CC0); because the regularization is 3D, a slab's field is not identical to the field of the full volume. The solver is GPL-3.0-or-later, as PyHySCO is. ANTs restricted SyN is not offered for reverse-PE pairs: its tested schedule failed the image gate on all six subjects. Single-PE ANTs SyN-SDC is still under development and is not available in this app."
+      - "SDC estimates the susceptibility field of an EPI acquisition from two b = 0 images with opposite phase-encoding directions, such as AP and PA, in this browser. It is a port of PyHySCO 0.0.4 (Julian and Ruthotto 2024), the hyperelastic susceptibility correction of Ruthotto et al. 2012, and its CPU field differs from PyHySCO's by a median of 5e-6 Hz (at most 0.03 Hz). In a comparison on six subjects it was the closest fast method to FSL topup; DR-BUDDI was closer but takes about 40 minutes. Each input's volumes with b ≤ 50 are averaged, without motion correction, and the two images must be in one space. The field is in Hz, with topup's sign, on the grid of the field reference; a constant offset against another tool is a translation along the phase-encoding axis. PyHySCO's corrected images are for quality control: it does not resample the DWI series. The example is a 10-slice slab of OpenNeuro ds005134 (CC0); because the regularization is 3D, a slab's field is not identical to the field of the full volume. The solver is GPL-3.0-or-later, as PyHySCO is. ANTs restricted SyN is not offered for reverse-PE pairs: its tested schedule failed the image gate on all six subjects."
+      - "Without a reverse phase-encoding image, SyN-SDC estimates the field from one DWI series and a T1w of the same session. It ports sdcflows 2.17.1's fieldmap-less workflow as fMRIPrep wires it (Wang et al. 2017 evaluated the method in diffusion MRI): the mean b0 is registered to the T1w with ANTs SyN (Avants et al. 2008), deforming mainly along the phase-encoding axis, on a 1.2 mm grid, and sdcflows' distortion atlas (Treiber et al. 2016) limits the second stage to where distortion is expected. MindGrab masks the mean b0 and the T1w unless you give masks. The field is fitted with cubic B-splines and the whole series is resampled once, with the Jacobian factor; the b0 volumes are kept, and b-vectors are not rotated, because the correction moves voxels along the phase-encoding axis only. Of the two methods, only SyN-SDC writes a corrected DWI series. The phase-encoding direction and the total readout time come from the sidecar, or from the sidebar when no sidecar has them; the direction is never guessed. On the full-brain ds005134 reference, given native N4's EPI reference, its field is within 0.04 Hz (median in the brain) of native sdcflows at the same seed; N4's float rounding alone moves it by about 0.5 Hz. A bias-corrected T1w is better. The example, the ds005134 slab with the full T1w, took 56 minutes in Chromium on a 16-core server, and its outputs equal the Node pipeline's byte for byte; most of the time goes to registering the 0.8 mm T1w. The SyN-SDC code is Apache-2.0."
       - PyHySCO uses float32 WebGPU on a hardware adapter when the browser supports WebAssembly JSPI, and CPU WebAssembly otherwise. A failed GPU run falls back to the CPU. Saved sidecars and automation provenance record the actual backend, adapter and any GPU failure.
     packages:
       - name: PyHySCO 0.0.4 (Rust, WebAssembly and WebGPU port)
         url: https://github.com/EmoryMLIP/PyHySCO
         role: susceptibility field estimation, ported under the GPL-3.0
+      - name: sdcflows 2.17.1 SyN-SDC (JavaScript and WebAssembly port)
+        url: https://github.com/nipreps/sdcflows
+        role: fieldmap-less susceptibility distortion correction, ported under the Apache-2.0
+      - name: ANTs (WebAssembly)
+        url: https://github.com/ANTsX/ANTs
+        role: antsRegistration, antsApplyTransforms, Laplacian, DenoiseImage and N4 for SyN-SDC
+      - name: MindGrab (brainchop)
+        url: https://github.com/neuroneural/brainchop
+        role: brain masks of the mean b0 and the T1w for SyN-SDC
       - name: NiiVue
         url: https://github.com/niivue/niivue
         role: image viewer
@@ -1710,6 +1720,36 @@ apps:
           Diffeomorphic susceptibility artifact correction of diffusion-weighted magnetic resonance
           images. Physics in Medicine and Biology. 2012;57(18):5715–5731."
         doi: 10.1088/0031-9155/57/18/5715
+      - group: Distortion correction
+        title: SDCFlows
+        reference: "Esteban O, Markiewicz CJ, Blair R, et al. SDCFlows: Susceptibility Distortion Correction workFLOWS [Computer software]. Zenodo."
+        doi: 10.5281/zenodo.3758524
+        code: https://github.com/nipreps/sdcflows
+      - group: Distortion correction
+        title: SyN-SDC evaluation
+        reference: "Wang S, Peterson DJ, Gatenby JC, Li W, Grabowski TJ, Madhyastha TM. Evaluation of field map and nonlinear registration methods for correction of susceptibility artifacts in diffusion MRI. Frontiers in Neuroinformatics. 2017;11:17."
+        doi: 10.3389/fninf.2017.00017
+      - group: Distortion correction
+        title: Distortion atlas (SyN-SDC prior)
+        reference: "Treiber JM, White NS, Steed TC, et al. Characterization and correction of geometric distortions in 814 diffusion weighted images. PLoS ONE. 2016;11(3):e0152472."
+        doi: 10.1371/journal.pone.0152472
+      - group: Registration
+        title: ANTs SyN
+        reference: "Avants BB, Epstein CL, Grossman M, Gee JC. Symmetric diffeomorphic image registration with cross-correlation: evaluating automated labeling of elderly and neurodegenerative brain. Medical Image Analysis. 2008;12(1):26–41."
+        doi: 10.1016/j.media.2007.06.004
+        code: https://github.com/ANTsX/ANTs
+      - group: Preprocessing
+        title: N4 bias field correction
+        reference: "Tustison NJ, Avants BB, Cook PA, et al. N4ITK: improved N3 bias correction. IEEE Transactions on Medical Imaging. 2010;29(6):1310–1320."
+        doi: 10.1109/TMI.2010.2046908
+      - group: Preprocessing
+        title: Adaptive non-local means denoising
+        reference: "Manjón JV, Coupé P, Martí-Bonmatí L, Collins DL, Robles M. Adaptive non-local means denoising of MR images with spatially varying noise levels. Journal of Magnetic Resonance Imaging. 2010;31(1):192–203."
+        doi: 10.1002/jmri.22003
+      - group: Brain extraction
+        title: MindGrab
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        url: https://arxiv.org/abs/2506.11860
       - group: DICOM conversion
         title: dcm2niix
         reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for
