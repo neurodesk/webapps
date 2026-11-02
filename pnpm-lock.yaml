@@ -1148,6 +1148,9 @@ importers:
 
   apps/samsrf:
     dependencies:
+      '@neurodesk/samsrf':
+        specifier: workspace:*
+        version: link:../../packages/samsrf
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
