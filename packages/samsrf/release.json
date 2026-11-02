@@ -1,0 +1,41 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "samsrf-v",
+  "displayName": "SamSrf",
+  "app": "samsrf",
+  "run": "rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat",
+  "readme": {
+    "run": "Map population receptive fields by reverse correlation",
+    "notes": [
+      "Runs SamSrfAnalysis on GIfTI time series: prf (forward-model fit), rc (reverse",
+      "correlation) or cf (connective fields, with --seed, --template and --surf).",
+      "MODEL.json is a SamSrf model file. It writes SamSrf's GIfTI maps and a provenance",
+      "file. Add --help for every option.",
+      "",
+      "No network connection is required. Input is GIfTI surface data with FreeSurfer",
+      "labels and surfaces; volumetric NIfTI time series are not supported.",
+      "",
+      "The samsrf command line is research software. It ports SamSrf by Samuel",
+      "Schwarzkopf (BSD-3-Clause, https://github.com/samsrf/samsrf, commit 41ed1e96)",
+      "to Rust and WebAssembly; its maps are the ones the SamSrf web app writes."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "samsrf"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "samsrf.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "samsrf"
+    }
+  }
+}

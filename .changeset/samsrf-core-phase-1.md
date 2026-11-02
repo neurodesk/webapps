@@ -1,0 +1,5 @@
+---
+"@neurodesk/samsrf": minor
+---
+
+Phase 1 of the SamSrf port: a Rust core compiled to one WebAssembly binary for browsers and Node, with GIFTI, FreeSurfer, MAT v5, NIfTI and GIF readers, the SPM-style GIFTI map writer, aperture vectorisation, model JSON parsing with `samsrf_model_defaults`, the model expression language and pRF profile functions, every HRF variant, `samsrf_gii2srf` preprocessing with the noise ceiling and global signal, and `samsrf_removenoise`. The three analyses run behind one `createJob`: `samsrf_fit_prf` (search space, coarse fit, Nelder-Mead or Hooke-Jeeves fine fit, concurrent HRF fit, compressive nonlinearity, bad-fit filter, betas, `samsrf_normr2`), `samsrf_revcor_prf` (convex hull or 2D model fit) and `samsrf_revcor_cf` (convex hull, summary statistics or Gaussian fit, geodesic smoothing), each on vertex ranges a browser can spread over Web Workers. An Octave harness runs SamSrf's own sources for the reference; the readers, preprocessing and HRFs pass 106 parity checks at 1e-9 and the analyses are compared map by map (`validation/README.md`).

@@ -2182,3 +2182,39 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  samsrf:
+    packages:
+      - name: SamSrf X (Rust and WebAssembly port)
+        url: https://github.com/samsrf/samsrf
+        role: pRF and connective field analysis, ported under the BSD 3-clause licence
+      - name: NiiVue
+        url: https://github.com/niivue/niivue
+        role: surface viewer
+    builders: SamSrf, which this app ports, is developed by D. Samuel Schwarzkopf and the SamPenDu lab.
+    citations:
+      - group: Population receptive fields
+        title: pRF forward model
+        reference: "Dumoulin SO, Wandell BA. Population receptive field estimates in human visual
+          cortex. NeuroImage. 2008;39(2):647–660."
+        doi: 10.1016/j.neuroimage.2007.09.034
+      - group: Population receptive fields
+        title: SamSrf
+        reference: "Schwarzkopf DS. SamSrf: population receptive field and connective field
+          mapping toolbox [Computer software]."
+        url: https://github.com/samsrf/samsrf
+      - group: Connective fields
+        title: Connective field modeling
+        reference: "Haak KV, Winawer J, Harvey BM, Renken R, Dumoulin SO, Wandell BA, Cornelissen FW.
+          Connective field modeling. NeuroImage. 2013;66:376–384."
+        doi: 10.1016/j.neuroimage.2012.10.037
+      - group: Connective fields
+        title: Reverse-correlation connective fields
+        reference: "Tangtartharakul G, Morgan CA, Rushton SK, Schwarzkopf DS. Retinotopic connectivity
+          maps of human visual cortex with unconstrained eye movements. Human Brain Mapping.
+          2023;44(16):5221–5237."
+        doi: 10.1002/hbm.26446
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

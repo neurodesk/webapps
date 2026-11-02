@@ -33,7 +33,8 @@ Emscripten `niimath.js` build works, including DWI2TRX's vendored dtifit build.
 `loadMindgrabCpu` drives `@brainchop/mindgrab`'s threaded CPU modules
 (Emscripten pthreads on `worker_threads`, weights compiled into the `.wasm`).
 It returns `segment` and `segmentTissues` with the browser wrapper's options and
-result shape. To use `runMindgrab` from `@neurodesk/brain-extraction`, pass the CPU
+result shape. A `signal` option (an `AbortSignal`) terminates the run's worker thread
+and rejects with the signal's reason. To use `runMindgrab` from `@neurodesk/brain-extraction`, pass the CPU
 `segment` function and the version of that same package together in `runtime`.
 Given a decoded input `volume`:
 
