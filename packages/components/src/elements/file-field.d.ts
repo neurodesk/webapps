@@ -5,7 +5,7 @@ export interface FileFieldConfig {
   text?: string;
   html?: string;
   label?: string;
-  kind?: 'image' | 'model' | 'surface' | 'protocol' | 'gradients' | 'metadata' | 'dataset';
+  kind?: 'image' | 'model' | 'surface' | 'protocol' | 'gradients' | 'metadata' | 'dataset' | 'mask';
   multiple?: boolean;
   accept?: string;
   directory?: boolean;
