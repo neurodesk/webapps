@@ -9,7 +9,9 @@ function analyses(example_dir, out_dir, samsrf_dir)
 % under <out_dir>/gifti, the Benson sidecar under <out_dir>/analyses/gifti, and
 % labels/roi_full.label, labels/seed_v1.label and apertures/aps_Bars.mat under
 % <out_dir>/analyses (run.sh prepares all of them). The environment variable
-% SAMSRF_ANALYSES, a comma-separated list of run names, restricts the runs.
+% SAMSRF_ANALYSES, a comma-separated list of run names, restricts the runs. SamSrf's
+% code runs unpatched: when an analysis errors, <run>.json records the error instead of
+% the maps.
 % README.md ("Analyses") lists every file written.
 
 t0 = tic;
@@ -17,7 +19,6 @@ save_default_options('-v7');
 more off;
 adir = fullfile(out_dir, 'analyses');
 cd(adir);
-use_patched_cfparam_loop(samsrf_dir, adir);
 delete_if_present('src_pRF_Gaussian.mat');
 delete_if_present('reg_aps_Bars.mat');
 
@@ -57,33 +58,6 @@ for i = 1:size(runs, 1)
     warning('off', 'Octave:language-extension');
 end
 printf('analyses.m finished in %.0f s\n', toc(t0));
-end
-
-%% samsrf_cfparam_loop relies on MATLAB's parfor creating an unassigned sliced output
-function use_patched_cfparam_loop(samsrf_dir, adir)
-% fIimg is only initialised for the convex hull (FitPrf = []) and only assigned in that
-% branch of the parfor, yet the function ends with fSimg = [fSimg; fIimg] for every
-% FitPrf. In MATLAB, parfor classifies fIimg as a sliced output and creates it as []
-% when no iteration assigns it, so fSimg keeps one row and samsrf_revcor_cf's 6-row
-% (summary) and 8-row (fit) Data add up. Octave runs parfor as for, where fIimg stays
-% undefined and the concatenation errors. The copy below adds that empty initialisation
-% and nothing else; it is written to <out>/analyses/patched and put in front of the path.
-source = fullfile(samsrf_dir, 'Fitting', 'samsrf_cfparam_loop.m');
-text = fileread(source);
-old = sprintf('if isempty(FitPrf)\n    fIimg = zeros(1,nver); %% Sigma map\nend\n');
-new = sprintf('if isempty(FitPrf)\n    fIimg = zeros(1,nver); %% Sigma map\nelse\n    fIimg = []; %% Octave harness: what MATLAB''s parfor leaves for an unassigned sliced output\nend\n');
-if numel(strfind(text, old)) ~= 1
-    error('analyses: the fIimg initialisation in %s has changed; review the patch', source);
-end
-pdir = fullfile(adir, 'patched');
-if ~exist(pdir, 'dir')
-    mkdir(pdir);
-end
-fid = fopen(fullfile(pdir, 'samsrf_cfparam_loop.m'), 'w');
-fwrite(fid, strrep(text, old, new));
-fclose(fid);
-addpath(pdir);
-rehash();
 end
 
 %% The averaged, detrended and z-scored runs plus the white surface, as samsrf_gii2srf with a surf folder
@@ -296,13 +270,18 @@ for i = 1:numel(out_files)
     delete_if_present([out_files{i} '.mat']);
 end
 started = tic;
-switch analysis
-    case 'prf'
-        OutFile = samsrf_fit_prf(Model, Srf, roi);
-    case 'rc'
-        OutFile = samsrf_revcor_prf(Model, Srf, roi);
-    case 'cf'
-        OutFile = samsrf_revcor_cf(Model, Srf, roi);
+try
+    switch analysis
+        case 'prf'
+            OutFile = samsrf_fit_prf(Model, Srf, roi);
+        case 'rc'
+            OutFile = samsrf_revcor_prf(Model, Srf, roi);
+        case 'cf'
+            OutFile = samsrf_revcor_cf(Model, Srf, roi);
+    end
+catch err
+    write_error(name, analysis, Model, roi, err, toc(started));
+    return;
 end
 seconds = toc(started);
 saved = load(OutFile);
@@ -343,6 +322,25 @@ info.seconds = seconds;
 write_json([name '.json'], info);
 movefile(output_name(OutFile), [name '_' output_name(OutFile)]);
 printf('%s: %d x %d in %.0f s\n', name, info.rows, info.vertices, seconds);
+end
+
+function write_error(name, analysis, Model, roi, err, seconds)
+% The analysis failed inside SamSrf: record the message and where it was raised.
+info.name = name;
+info.analysis = analysis;
+info.model = json_value(Model);
+info.roi_label = [roi '.label'];
+if strcmp(analysis, 'cf')
+    info.seed_label = [Model.SeedRoi '.label'];
+else
+    info.seed_label = NaN;
+end
+info.error = err.message;
+info.error_identifier = err.identifier;
+info.error_stack = arrayfun(@(f) sprintf('%s at line %d', f.name, f.line), err.stack(:)', 'UniformOutput', false);
+info.seconds = seconds;
+write_json([name '.json'], info);
+printf('%s: FAILED in SamSrf after %.0f s: %s\n', name, seconds, err.message);
 end
 
 function name = output_name(OutFile)

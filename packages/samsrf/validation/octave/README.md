@@ -8,8 +8,13 @@ they live under `SAMSRF_REFERENCE_DIR` and are never committed.
 ## Run
 
 ```sh
-packages/samsrf/validation/octave/run.sh
+packages/samsrf/validation/octave/run.sh             # reference.m, then analyses.m
+packages/samsrf/validation/octave/run.sh reference   # reference.m only
+packages/samsrf/validation/octave/run.sh analyses    # analyses.m only
 ```
+
+The analyses step takes hours, so it can run on its own. It reads the GIFTI sidecars
+the reference step writes under `gifti/` and dumps them first when they are missing.
 
 Environment variables, with their defaults:
 
@@ -19,6 +24,8 @@ Environment variables, with their defaults:
 | `SAMSRF_REFERENCE_DIR` | `/storage/scratch/samsrf-work/reference` | Output directory, created if missing |
 | `SAMSRF_SOURCE_DIR` | `/storage/scratch/samsrf-work/src/samsrf` | The SamSrf checkout, mounted read-only |
 | `SAMSRF_OCTAVE_IMAGE` | `gnuoctave/octave:9.2.0` | The Docker image |
+| `SAMSRF_LABEL_DIR` | `/storage/scratch/samsrf-work/example` | The web app's example; `lh.V123.label` and `lh.V1_seed.label` become the analyses' ROI and seed |
+| `SAMSRF_ANALYSES` | (all) | Comma-separated analysis run names to run, e.g. `rc_fit,cf_summary` |
 
 The script needs Docker and a host `python3` with numpy (it runs the Python with `-I`).
 It runs `dump_gifti.py` and `select_vertices.py` on the host, copies `aps_Bars.mat`
@@ -146,6 +153,86 @@ and 159 function evaluations, the counts MATLAB documents. Octave's own `fminsea
 gives 74 and 143. `stopped_by_outputfcn` is the same search with an `OutputFcn` that
 returns true at iteration 10: `exitflag = -1`, 10 iterations, 21 evaluations.
 
+### Analyses (`analyses.m`, under `analyses/`)
+
+`analyses.m` runs SamSrf's three analyses, `samsrf_fit_prf`, `samsrf_revcor_prf` and
+`samsrf_revcor_cf` from `Fitting/` (with `samsrf_fit2dprf` from `Analysis/`), unmodified,
+with the shims below. It works in `analyses/`, where the analyses save their search
+space (`src_pRF_Gaussian.mat`), regressors (`reg_aps_Bars.mat`) and map files. Both
+caches are deleted at the start, so the first pRF run generates the search space and
+the later ones load it; `rc_hull` generates the regressors and `rc_fit` loads them.
+When an analysis errors inside SamSrf, `<run>.json` records the error instead of the
+maps (below); SamSrf is not patched.
+
+Inputs prepared by `run.sh` and `analyses.m`:
+
+| File | Content |
+| --- | --- |
+| `labels/roi_full.label` | `lh.V123.label` of the web app's example, copied: 6587 vertices |
+| `labels/seed_v1.label` | `lh.V1_seed.label`, copied: 2917 vertices (Benson V1 within V123) |
+| `labels/roi_fine.label` | 200 ROI vertices: the 100 with the highest noise ceiling, plus 100 of the rest drawn with `rand('state', 1)` and `randperm`, sorted ascending |
+| `labels/roi_tiny.label` | The 20 ROI vertices with the highest noise ceiling, sorted ascending |
+| `subsets.json` | `roi_fine`, `roi_tiny`, `seed`, `roi_full`: 0-based vertex indices in label file order |
+| `apertures/aps_Bars.mat` | `prf/aps_Bars.mat`, copied. `samsrf_fit_prf` vectorises it into `apertures/aps_Bars_vec` itself; `samsrf_revcor_prf` uses the 100 x 100 x 250 original |
+| `gifti/lh_benson.gii.{f32,json}`, `gifti/lh_benson_samples.json` | `dump_gifti.py` on `benson/lh_benson.gii` (3 float32 arrays) |
+| `template/lh_benson.mat` | The Benson template `Srf` as `samsrf_benson2srf` builds it (single-precision angle and eccentricity arithmetic, double `Data`), with the white surface's `Vertices` and `Faces`; `Model.Template = 'template/lh_benson'` |
+| `template_data.f64` | 5 x 134260: its `Data` (`R^2` = ROI label non-zero, `x0`, `y0`, `Sigma` all NaN, `ROI`) |
+| `template.json` | `values`, `shape`, `source` |
+
+The functional `Srf` is `samsrf_gii2srf(runs, '', 1, true, true)` as in the
+preprocessing section, given what `samsrf_gii2srf` reads from a surf folder:
+`Vertices` and `Faces` from `surf/lh.white`, `Area` from `surf/lh.area` (a row),
+`Hemisphere = 'lh'`. The runs are the original X001 runs, not the web example's
+(which zeroes vertices outside V1-V3), so the CF global signal differs between the two.
+
+Models: `Example_2D_Gaussian_pRF.json` and `Example_Reverse_Correlation_pRF.json` read
+as `LoadModelJson` would (Octave has no `readstruct`: `jsondecode`, numeric arrays as
+rows, the function strings through `str2func`), with `Aperture_File =
+'apertures/aps_Bars'`. The CF model is `Name = 'CF_Rcp'`, `SeedRoi = 'labels/seed_v1'`,
+`Template = 'template/lh_benson'`, and SamSrf's defaults.
+
+| Run | Function | Model change | ROI |
+| --- | --- | --- | --- |
+| `prf_coarse` | `samsrf_fit_prf` | `Coarse_Fit_Only = 1` | `roi_full` |
+| `prf_nm` | `samsrf_fit_prf` | none (Nelder-Mead) | `roi_fine` |
+| `prf_hj` | `samsrf_fit_prf` | `Hooke_Jeeves_Steps = [0.01 0.01 0.01]` | `roi_fine` |
+| `prf_hrf` | `samsrf_fit_prf` | `Hrf = Inf` (concurrent HRF fit) | `roi_tiny` |
+| `prf_css` | `samsrf_fit_prf` | `Compressive_Nonlinearity = 1` | `roi_tiny` |
+| `rc_hull` | `samsrf_revcor_prf` | none (convex hull) | `roi_full` |
+| `rc_fit` | `samsrf_revcor_prf` | 2D Gaussian `Prf_Function`, `Param_Names {x0, y0, Sigma}`, `Scaled_Param [1 1 1]`, `SeedPar_Function @(V) [V(2:3); V(4)/(2*sqrt(2*log(2)))]`, `R2_Threshold = 0.1` | `roi_fine` |
+| `cf_hull` | `samsrf_revcor_cf` | none (`Fit_pRF = 0`, convex hull) | `roi_full` |
+| `cf_summary` | `samsrf_revcor_cf` | `Fit_pRF = -1` | `roi_full` |
+| `cf_fit` | `samsrf_revcor_cf` | `Fit_pRF = 1` (Nelder-Mead) | `roi_tiny` |
+| `cf_smooth` | `samsrf_revcor_cf` | `Smoothing = 3` | `roi_fine` |
+
+Per run, after loading the map file the analysis saved and `samsrf_expand_srf`:
+
+| File | Content |
+| --- | --- |
+| `<run>.json` | `name`, `analysis` (`prf`, `rc`, `cf`), `model` (the saved `Model`, after the run: function handles as `func2str` text in Octave's spacing, non-finite numbers as `"Inf"`/`"NaN"`), `roi_label`, `seed_label`, `out_file`, `values`, `raw_values`, `rows`, `vertices` (134260), `mver` (0-based analysed vertices in label order), `data_file`, `raw_rows`, `raw_file`, `seconds` (wall time of the analysis call). Absent fields are `null` |
+| `<run>_data.f64` | `rows` x 134260: `Srf.Data`; 0 outside the ROI, as `samsrf_expand_srf` leaves it |
+| `<run>_raw.f64` | `raw_rows` x 134260: `Srf.Raw_Data` (`rc_hull`, `rc_fit`) |
+| `<run>_<out_file>` | The map file itself, renamed so the next run cannot load it (Octave binary format) |
+
+A run that errors inside SamSrf writes `<run>.json` with `name`, `analysis`, `model`
+(as given), `roi_label`, `seed_label`, `error`, `error_identifier`, `error_stack` and
+`seconds`, and no maps.
+
+`values` per run on X001: the `prf` runs give `nR^2`, the parameters (plus `Exponent`
+for `prf_css` and `RLat`, `ULat`, `RDisp`, `UDisp`, `AmpRat` for `prf_hrf`), `Beta`,
+`Baseline`, `Noise Ceiling` and `R^2` (`samsrf_normr2` moves raw R² to the last row
+after zeroing it where the noise ceiling is <= 0, and puts R² / noise ceiling first).
+`rc_hull` keeps the reverse-correlation names `R^2`, `x0`, `y0`, `Fwhm`, `Beta`, but
+rows 2-4 hold the hull centroid and `sqrt(area) / (2 sqrt(2 ln 2))`; `Raw_Data` holds
+the peak-based values.
+
+Geometry checks:
+
+| File | Content |
+| --- | --- |
+| `georoi.json` | `cases`: for the first three `seed_v1` vertices, `samsrf_georoi(v + 1, 20, Vertices, Faces)` as `vertex`, `steps`, `vs` (0-based, sorted) and `ds`. Immediate neighbours of `v` get distance 0, like `v` itself |
+| `convexhull_cases.json` | `cases`: hand-made point sets through the lines of `samsrf_cfparam_loop`'s positive subfield (`unique(..., 'rows')`, `delaunay`, `samsrf_clusterroi(peak, R, max / 2, tri)`, `polyshape`, `convhull`, `area`, `centroid`). Each has `points`, `statistic`, `unique_points`, `unique_order`, `unique_statistic`, `threshold`, `triangles`, `pos` (0-based into the unique points), `area`, `centroid` (`"NaN"` when empty). Cases: a Gaussian on a 5 x 5 grid, a square ring with a hole, an L, two blobs on a 6 x 6 grid (only the higher one is grown), 3 collinear points and 2 points |
+
 ## Shims
 
 Each file in `shims/` documents itself at the top.
@@ -160,6 +247,15 @@ Each file in `shims/` documents itself at the top.
 | `samsrf_32bit_srf.m` | Identity. SamSrf's version converts every double field to single unconditionally (its `exist('SamSrfDefs.defs_64bit', 'var')` guard tests a name that never exists); the reference stays in double, and this also avoids `LoadSamSrfDefaults` and `SamSrf_defaults.json`. |
 | `gifti.m` | SPM's `gifti` class is absent; returns a struct whose `cdata` (vertices x arrays, single) comes from the sidecars `dump_gifti.py` writes. |
 | `spm.m` | Empty, so `exist('spm', 'file')` is true and `samsrf_gii2srf` reads GIFTI files. |
+| `samsrf_loadlabel.m` | SamSrf's goes through `Read_FreeSurfer`'s `textscan`, which misreads labels in Octave (below). Reads the label directly and returns its vertex indices + 1 in file order, which the analyses keep (`mver`, `Srf.SeedVx`). |
+| `gcp.m` | No-op. The fine-fit loops call `gcp` in `try` and call `samsrf_error` (fatal) when it fails, so SamSrf needs the Parallel Computing Toolbox; `parallel.pool.DataQueue` still fails and is caught (no progress reports). |
+| `verLessThan.m` | Octave's errors on `'matlab'`; `samsrf_fit_prf` asks `verLessThan('matlab', '7.13')`. Returns false (a current MATLAB), errors on any other name. |
+| `save.m` | Octave writes neither `-v7.3` nor function handles in a MAT 5 file; maps the `-v7.3` flag of the analyses' `save` calls to Octave's lossless `-binary`, running the built-in in the caller's workspace. Every other call passes through. |
+| `nansum.m`, `nanmax.m`, `nanmedian.m` | Statistics-package functions the container lacks (`samsrf_cfparam_loop`). `mad` and `prctile` are in core Octave. |
+| `imresize.m` | Image package absent. Identity for a resize to the same size (100 x 100 apertures, `Rdim` 100), an error otherwise. |
+| `delaunay.m` | Octave's 2-D `delaunay` (`delaunayn([x y], [])`), but returns `zeros(0, 3)` for fewer than 3 or collinear points, where MATLAB returns an empty triangulation and qhull errors. |
+| `delaunayTriangulation.m`, `convexHull.m` | MATLAB classes in `samsrf_revcor_prf`'s convex hull branch: a struct with `Points`, and Octave's `convhull` (closed index loop and area), which errors on degenerate points as MATLAB's method does. |
+| `polyshape.m` | Classdef with `area`, `centroid` and `convhull` (`samsrf_revcor_prf`, `samsrf_cfparam_loop`). Drops a closing repeat and consecutive duplicates; empty (area 0, centroid NaN) for fewer than 3 points or collinear points. `convhull` is the hull of the vertices, which is also the hull of MATLAB's simplified polygon. |
 
 `EnsurePath` and `LoadSamSrfDefaults` exist in the SamSrf sources and need no shim;
 `parfor` runs as `for` in Octave. SamSrf's `Read_FreeSurfer` is not used (see below).

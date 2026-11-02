@@ -67,6 +67,7 @@ if [ "$mode" != reference ]; then
   cp "$labels/lh.V1_seed.label" "$analyses/labels/seed_v1.label"
   cp "$example/prf/aps_Bars.mat" "$analyses/apertures/aps_Bars.mat"
   rm -f "$analyses/apertures/aps_Bars_vec" "$analyses/apertures/aps_Bars_vec.mat"
+  rm -rf "$analyses/patched"
   # samsrf_fit2dprf (reverse-correlation pRF fitting and CF fitting) lives in Analysis/.
   octave "$octave_path addpath('/samsrf/Analysis'); addpath('/harness/shims'); analyses('/example', '/out', '/samsrf');" 2>&1 | tee "$analyses/octave.log"
   seconds=$(( $(date +%s) - start ))
