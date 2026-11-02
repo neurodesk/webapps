@@ -10,7 +10,8 @@ const mindgrabPackage = runtimeRequire.resolve("@brainchop/mindgrab/package.json
 // One shared owner supplies the app path, dev shell, theme, and isolation policy.
 export default neurodeskViteConfig({
   appId: "sdc",
-  plugins: [mindgrabAssets({ packageJson: mindgrabPackage, models: ["mindgrab"] })],
+  // SyN-SDC always runs MindGrab on its CPU modules (src/syn-worker.js), so only they are staged.
+  plugins: [mindgrabAssets({ packageJson: mindgrabPackage, models: ["mindgrab"], backends: ["cpu"] })],
   // The MindGrab worker always passes assetPath, so its modules load from the mindgrab/ copies.
   worker: { format: "es", plugins: () => [mindgrabFromAssetPath()] },
   build: { target: "esnext", outDir: "dist", assetsInlineLimit: 0 },

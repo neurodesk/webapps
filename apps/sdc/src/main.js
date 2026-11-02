@@ -394,7 +394,8 @@ function runSynWorker(inputs, signal, onProgress) {
     registrationWorker: absolute(registrationWorker),
     denoiseWorker: absolute(denoiseWorker),
     n4Worker: absolute(n4Worker),
-    n4Kernel: { module: `${base}n4/n4-bias.mjs`, wasm: `${base}n4/n4-bias.wasm` },
+    // The module loads n4-bias.wasm beside itself, so the composite site can share one copy.
+    n4Kernel: { module: `${base}n4/n4-bias.mjs` },
     fieldFit: absolute(fieldFitUrl),
     mindgrab: `${base}mindgrab/`,
   };
