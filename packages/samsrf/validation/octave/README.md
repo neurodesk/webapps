@@ -298,6 +298,22 @@ Each file in `shims/` documents itself at the top.
 - Octave warns that `shims/fminsearch.m` shadows a core function; that warning is
   expected.
 
+- `samsrf_cfparam_loop` initialises `fIimg` only for the convex hull (`FitPrf = []`)
+  and assigns it only inside that branch of its `parfor`, but ends with
+  `fSimg = [fSimg; fIimg]` for every `FitPrf`. In Octave, where `parfor` is a `for`,
+  `Fit_pRF = -1` and `Fit_pRF = 1` therefore fail after the whole vertex loop with
+  `'fIimg' undefined near line 192, column 17`, and `cf_summary.json` and
+  `cf_fit.json` record that error instead of maps. MATLAB's `parfor` probably creates
+  an unassigned sliced output as `[]`, which would make `fSimg` one row and the 6-row
+  (summary) and 8-row (fit) `Data` of `samsrf_revcor_cf` add up; that was not verified
+  (no MATLAB), and the harness does not patch SamSrf to find out.
+- `samsrf_revcor_cf`'s `Fwhm` is `sqrt(sum(Area(R > mR / 2)))` with `R` over the seed
+  vertices and `Area` over all 134260 vertices, so it sums the area of the first 2917
+  mesh vertices, not of the seed vertices. Both MATLAB and Octave index that way.
+- `Vx` in the CF maps is the 1-based peak seed vertex (`SeedVx(m)`).
+- An Octave process killed by a signal writes `octave-workspace` in the working
+  directory; it is not an output.
+
 ## Checks on the X001 outputs
 
 `preprocess_average.f64` has no NaN; the noise ceiling is finite for 7013 of 7099
@@ -305,3 +321,26 @@ subset vertices, within [-0.74, 0.95], with a median of 0.77 over the ROI.
 `preprocess_removenoise.f64` residuals are orthogonal to the global signal to 6e-15.
 The HRF peaks are at 5 s for the canonical and de Haas kernels. `prf_errfun` on the
 three chosen vertices returns errors between 0.82 and 0.95 for the fixed guesses.
+
+The analyses on X001 (16-core host; `seconds` in each JSON is the time of the analysis
+call alone):
+
+| Run | Seconds | Result |
+| --- | --- | --- |
+| `prf_coarse` | 1311 (search space 979 of it) | 8 x 134260. All 6587 parameter sets finite; R² is 0 for the 204 vertices whose noise ceiling is <= 0 (`samsrf_normr2`), median 0.63; x0 and y0 within ±15 (the grid). 177 vertices have \|Beta\| > 100 (up to 2e13): their best prediction is nearly constant |
+| `prf_nm` | 1096 | 8 x 134260. R² in [0, 1], 180 of 200 above 0.1; 18 fine fits rejected and zeroed (a scaled parameter beyond 2 x 9.5 or Sigma <= 0); \|x0\| up to 18.8, \|y0\| up to 15.3 |
+| `prf_hj` | 555 | 8 x 134260. 197 of 200 above 0.1, none rejected |
+| `prf_hrf` | 1042 | 13 x 134260. All 20 fitted, R² 0.85-0.92 |
+| `prf_css` | 272 | 9 x 134260. All 20 fitted, R² 0.59-0.88, exponents 0.08-4.7 |
+| `rc_hull` | 625 | 6 x 134260 plus 5 raw rows. No hull failed: all 6587 centroids finite |
+| `rc_fit` | 197 | 7 x 134260 plus 5 raw rows. 193 of 200 pass `R2_Threshold`; 40 of those fail `KeepFit` (a scaled parameter beyond 1.5 x 9.5), so 47 columns are NaN |
+| `cf_hull` | 2106 | 10 x 134260. x0 and y0 finite for 6579 of 6587 vertices; 8 have a degenerate positive subfield (NaN centroid, Centre 0) |
+| `cf_summary` | 2121 | SamSrf error: `'fIimg' undefined near line 192, column 17` |
+| `cf_fit` | 3418 | SamSrf error: the same |
+| `cf_smooth` | 915 (distance matrix 828 of it) | 10 x 134260. All 200 vertices finite |
+
+The analysis calls took 5098 s for the pRF and reverse-correlation runs and 13658 s
+with the CF runs; the CF invocation of `run.sh analyses` took 8718 s wall time
+(`wall_time.txt` holds the last invocation's). The coarse fit of `prf_coarse` peaks
+near 15 GB in Octave (`corr` of 6587 time courses against 25920 predictions in one
+block).
