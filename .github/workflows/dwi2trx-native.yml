@@ -48,7 +48,7 @@ jobs:
   # compares its maps with packages/dwi2trx/validation/dwi-gradients-reference.json, the reference
   # the archives are held to.
   web-app-reference:
-    if: github.event_name != 'workflow_dispatch' || !inputs.tracking_only
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.tracking_only)
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
@@ -76,7 +76,7 @@ jobs:
   # Archives are built, and published, only once the web app still matches the reference they are
   # held to.
   portable:
-    if: github.event_name != 'workflow_dispatch' || !inputs.tracking_only
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.tracking_only)
     needs: web-app-reference
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:

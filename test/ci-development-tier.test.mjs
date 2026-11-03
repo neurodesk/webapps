@@ -8,7 +8,7 @@ import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 
 const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8'));
-const evaluate = (expression, github) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github });
+const evaluate = (expression, github, inputs = {}) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs });
 
 test('draft feedback selects direct app edits; ready PRs retain shared coverage', async () => {
   const registry = await loadAppsRegistry();
@@ -26,6 +26,14 @@ test('ready and updated PRs run deferred native jobs; push and dispatch retain t
   for (const file of await readdir(new URL('../.github/workflows', import.meta.url))) {
     if (!file.endsWith('.yml')) continue;
     const flow = await workflow(file);
+    if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
+      for (const [id, job] of Object.entries(flow.jobs)) {
+        if (job.needs) continue;
+        assert.equal(evaluate(job.if ?? 'true', {
+          event_name: 'pull_request', event: { pull_request: { draft: true } },
+        }), false, `${file}: entry job ${id} must defer drafts or be restricted to non-PR events`);
+      }
+    }
     for (const job of Object.values(flow.jobs)) {
       if (!String(job.if).includes('!github.event.pull_request.draft')) continue;
       if (file === 'ci.yml') continue;
@@ -59,4 +67,16 @@ test('NeuroFlow push coverage matches PR paths and retains the scheduled backsto
 
 test('native driver filters are generated from their imported files', () => {
   execFileSync(process.execPath, ['scripts/sync-native-driver-paths.mjs', '--check']);
+});
+
+
+test('DWI2TRX preserves manual tracking-only selection', async () => {
+  const flow = await workflow('dwi2trx-native.yml');
+  const github = { event_name: 'workflow_dispatch', event: {} };
+  for (const tracking_only of [true, false]) {
+    for (const id of ['web-app-reference', 'portable']) {
+      assert.equal(evaluate(flow.jobs[id].if, github, { tracking_only }), !tracking_only);
+    }
+    assert.equal(evaluate(flow.jobs.tracking.if, github, { tracking_only }), tracking_only);
+  }
 });
