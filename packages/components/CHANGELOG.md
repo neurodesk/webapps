@@ -1,5 +1,12 @@
 # @neurodesk/webapp-components
 
+## 0.22.4
+
+### Patch Changes
+
+- 8e9346d: Fail a download whose headers or next body chunk do not arrive within 30 s, instead of leaving it pending for ever when the host accepts the connection and then goes silent. `fetchModel` and `fetchWithRetry` apply the stall guard to every model and example download; the waits between HTTP 429 retries are not counted, and a user's cancel still reports as a cancel. The example selector reports a stalled download as "The download of <file> stalled (no data for 30 s). Load the example again to retry."
+- 239dedd: Add SamSrf, which maps population receptive fields and connective fields on the cortical surface from GIfTI time series: a forward-model pRF fit, reverse-correlation pRF and reverse-correlation connective fields, with SamSrf's model presets, its GIfTI map set and the maps drawn on the inflated surface with an R² threshold. Shared components gain `writeMz3Scalars`, a scalar-only mz3 that NiiVue loads as a mesh layer, and `readFreeSurferCurv`.
+
 ## 0.22.3
 
 ### Patch Changes

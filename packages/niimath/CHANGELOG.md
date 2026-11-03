@@ -1,5 +1,12 @@
 # @neurodesk/niimath
 
+## 1.3.20261103
+
+### Patch Changes
+
+- Updated dependencies [71881c8]
+  - @neurodesk/node-drivers@0.3.2
+
 ## 1.3.20261031
 
 ### Patch Changes
