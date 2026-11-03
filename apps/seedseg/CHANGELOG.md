@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- 2a5eef8: Record upstream astewartau/prostate at 2968f64. Preserve the shared scientific pipeline and locally staged, lazy Dicompare reporting. Exclude the upstream synthetic example under the interface standard's SeedSeg exception, and record that constraint for future syncs.
+
 - Updated dependencies [8e9346d]
 - Updated dependencies [491c3ce]
   - @neurodesk/webapp-components@0.23.0
