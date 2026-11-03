@@ -19,7 +19,7 @@ import { ORIENTATIONS, makeVolume } from './volume.js';
 
 // The web app's encode-volume and encode-dicom automation parameters, as options.
 export const OPTIONS = {
-  orientation: { type: 'string', enum: ORIENTATIONS, default: 'sagittal', description: 'Slice orientation.' },
+  orientation: { type: 'string', enum: ORIENTATIONS, default: 'sagittal', description: 'Array axis to step through: axial = axis 1, coronal = axis 2, sagittal = axis 3 (the stored slices). Not anatomical planes.' },
   fps: { type: 'number', minimum: 1, maximum: 120, default: 20, description: 'Frames per second.' },
   start: { type: 'integer', minimum: 0, description: 'First slice index (zero-based).' },
   end: { type: 'integer', minimum: 0, description: 'Exclusive end slice index (zero-based).' },
