@@ -422,5 +422,5 @@ const inferenceModelsList = [
     inferenceDelay: 100, // Delay in ms time while looping layers applying.
     description:
       'The omnimodal skull stripping model delivers high-accuracy brain extraction in seconds, supporting multiple imaging modalities including T1, T2, FLAIR, DWI, EPI, MRA, PDw, CT, and PET without a need for tuning. It runs in a single pass with only 15 filters per layer, and is offered in high-memory/fast and low-memory/slow configurations. Use it today to improve and accelerate your brain extraction!'
-  },    
+  },
 ] // inferenceModelsList
