@@ -1107,7 +1107,7 @@ mod tests {
 
     #[test]
     fn magnitude_only_relaxometry_preserves_hertz_seconds_and_mask() {
-        let tes = [0.01, 0.02, 0.03];
+        let tes = [0.03, 0.01, 0.02];
         let magnitudes: Vec<f64> = tes
             .iter()
             .map(|te| 100.0 * (-20.0_f64 * te).exp())
@@ -1311,20 +1311,17 @@ mod tests {
     }
 
     // The browser made its mask with this recipe, so exports must describe it even where it
-    // equals the general default and the inversion (QSMART) has a default mask of its own.
+    // equals the general default. QSMART no longer substitutes its own default mask.
     #[test]
     fn a_qsmart_export_keeps_the_mask_recipe_the_browser_used() {
         let mut config = qsmxt_engine::PipelineConfig::default();
         config.inversion.algorithm = qsmxt_engine::QsmAlgorithm::Qsmart;
         apply_mask_section(&mut config, "phase-quality,threshold:otsu,dilate:1,fill-holes:0,erode:1").unwrap();
         let command = qsmxt_engine::generate_command(&config);
-        assert!(command.contains("--mask-preset robust-threshold"), "{command}");
+        assert_eq!(config.normalised().0.masking.sections, config.masking.sections);
+        assert_eq!(command, "qsmxt run <bids_dir> --qsm-algorithm qsmart");
         let back = qsmxt_engine::PipelineConfig::from_toml(&config.to_toml().unwrap()).unwrap();
         assert_eq!(back.normalised().0.masking.sections, config.masking.sections);
-        // Where the mark decides nothing it is not set, so the settings file does not carry it.
-        let mut rts = qsmxt_engine::PipelineConfig::default();
-        apply_mask_section(&mut rts, "phase-quality,threshold:otsu,dilate:1,fill-holes:0,erode:1").unwrap();
-        assert!(!rts.masking.recipe_chosen);
     }
 
     #[test]
@@ -1455,11 +1452,6 @@ fn apply_mask_section(
         generator,
         refinements: ops,
     }];
-    // The browser made its mask with this recipe, so it is chosen: without the mark the engine
-    // swaps the general default for the inversion's own (QSMART's BET) in command and methods.
-    // Keep the mark only where normalising does, so other runs' settings files do not carry it.
-    config.masking.recipe_chosen = true;
-    config.masking.recipe_chosen = config.normalised().0.masking.recipe_chosen;
     Ok(())
 }
 
@@ -1662,11 +1654,23 @@ fn magnitude_relaxometry(
     if magnitudes.iter().any(|v| !v.is_finite()) {
         return Err("magnitude contains non-finite values".into());
     }
-    let [nx, ny, nz] = dims;
-    let [vx, vy, vz] = voxel_size;
-    let grid = qsm_core::Grid::new(nx, ny, nz, vx, vy, vz);
-    let (mut r2star, _) = qsm_core::r2star::r2star_arlo(magnitudes, mask, echo_times, &grid)
+    let n_echoes = echo_times.len();
+    let mut order: Vec<usize> = (0..n_echoes).collect();
+    order.sort_by(|&a, &b| echo_times[a].total_cmp(&echo_times[b]));
+    let sorted_times: Vec<f64> = order.iter().map(|&e| echo_times[e]).collect();
+    let mut echo_volumes = vec![0.0; magnitudes.len()];
+    for (e, &source) in order.iter().enumerate() {
+        for v in 0..count {
+            echo_volumes[e * count + v] = magnitudes[v * n_echoes + source];
+        }
+    }
+    let mut r2star = qsm_core::r2star::arlo(&echo_volumes, &sorted_times, count)
         .map_err(|e| e.to_string())?;
+    for (value, &included) in r2star.iter_mut().zip(mask) {
+        if included == 0 {
+            *value = 0.0;
+        }
+    }
     let t2star = qsm_core::r2star::t2star_from_r2star(&r2star);
     r2star.extend(t2star);
     Ok(r2star)
