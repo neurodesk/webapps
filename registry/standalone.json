@@ -1557,35 +1557,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.5.20261020",
-          "url": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261020/elastix-register-0.5.20261020-linux-x64.tar.gz",
-          "sha256": "6b47d2962b91b38b98b8e8993a23a2559eed63fe3b56f9fca5bd6a4670e76d73",
-          "bytes": 106195021,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261020/elastix-register-0.5.20261020-linux-x64.tar.gz.validation.txt",
+          "version": "0.5.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261103/elastix-register-0.5.20261103-linux-x64.tar.gz",
+          "sha256": "89379ba9a0a96ec2565ae2bd0ca858fe6047e8ffc0183476e4c7c0363c704e61",
+          "bytes": 106196608,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261103/elastix-register-0.5.20261103-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf elastix-register-0.5.20261020-linux-x64.tar.gz\n./elastix-register-0.5.20261020-linux-x64/elastix-register moving.nii.gz fixed.nii.gz results --method affine"
+          "command": "tar -xzf elastix-register-0.5.20261103-linux-x64.tar.gz\n./elastix-register-0.5.20261103-linux-x64/elastix-register moving.nii.gz fixed.nii.gz results --method affine"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.5.20261020",
-          "url": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261020/elastix-register-0.5.20261020-macos-arm64.pkg",
-          "sha256": "d75123df1c9b06626ca6a3c45df6bf41af8d40a2c73b6641dce42be7332a2691",
-          "bytes": 100310692,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261020/elastix-register-0.5.20261020-macos-arm64.pkg.validation.txt",
+          "version": "0.5.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261103/elastix-register-0.5.20261103-macos-arm64.pkg",
+          "sha256": "bc8b16888b8ad0cbf03dd363c753c42658916867af1b3e2645759c373c224265",
+          "bytes": 100309508,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261103/elastix-register-0.5.20261103-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg elastix-register-0.5.20261020-macos-arm64.pkg -target /\nelastix-register self-check\nelastix-register moving.nii.gz fixed.nii.gz results --method affine"
+          "command": "sudo installer -pkg elastix-register-0.5.20261103-macos-arm64.pkg -target /\nelastix-register self-check\nelastix-register moving.nii.gz fixed.nii.gz results --method affine"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.5.20261020",
-          "url": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261020/elastix-register-0.5.20261020-windows-x64.zip",
-          "sha256": "8f7bb8f592e633b2a954c60c66fd1785899d2b9849fe5b8374f7015a505e665b",
-          "bytes": 99725828,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261020/elastix-register-0.5.20261020-windows-x64.zip.validation.txt",
+          "version": "0.5.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261103/elastix-register-0.5.20261103-windows-x64.zip",
+          "sha256": "57cf34579e65909853f2a2410e98049b70ae39bb75181c4b6cb6d8bac7d91036",
+          "bytes": 99725832,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/elastix-v0.5.20261103/elastix-register-0.5.20261103-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\elastix-register-0.5.20261020-windows-x64.zip -DestinationPath .\n.\\elastix-register-0.5.20261020-windows-x64\\elastix-register.exe moving.nii.gz fixed.nii.gz results --method affine"
+          "command": "Expand-Archive -Path .\\elastix-register-0.5.20261103-windows-x64.zip -DestinationPath .\n.\\elastix-register-0.5.20261103-windows-x64\\elastix-register.exe moving.nii.gz fixed.nii.gz results --method affine"
         }
       ],
       "containers": []
