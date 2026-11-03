@@ -759,35 +759,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.5.20261020",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dicom2vid-v0.5.20261020/dicom2vid-0.5.20261020-linux-x64.tar.gz",
-          "sha256": "e3051f1feeda27ca38d5f071d20d14682f970783ca3a4edb7bd9782b922970d7",
-          "bytes": 47546254,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicom2vid-v0.5.20261020/dicom2vid-0.5.20261020-linux-x64.tar.gz.validation.txt",
+          "version": "0.6.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261103/mri2vid-0.6.20261103-linux-x64.tar.gz",
+          "sha256": "6470364ebb2ade93dd5d7bf5db430c64b787c954ff56bdaa833c1fe5654b79f0",
+          "bytes": 47944689,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261103/mri2vid-0.6.20261103-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf dicom2vid-0.5.20261020-linux-x64.tar.gz\n./dicom2vid-0.5.20261020-linux-x64/dicom2vid T1.nii.gz videos --orientation axial"
+          "command": "tar -xzf mri2vid-0.6.20261103-linux-x64.tar.gz\n./mri2vid-0.6.20261103-linux-x64/mri2vid T1.nii.gz videos --orientation axial"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.5.20261020",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dicom2vid-v0.5.20261020/dicom2vid-0.5.20261020-macos-arm64.pkg",
-          "sha256": "b7a156dc8fdeedaa033df9b0fdcb5f6d7d676edf4e840df97bd948d83ff9a7d3",
-          "bytes": 41027018,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicom2vid-v0.5.20261020/dicom2vid-0.5.20261020-macos-arm64.pkg.validation.txt",
+          "version": "0.6.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261103/mri2vid-0.6.20261103-macos-arm64.pkg",
+          "sha256": "5b5d38a9953aa3f18afe6e77bdb7d5f5621461feec2436f2e7dc1a6c31aab8bb",
+          "bytes": 41423315,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261103/mri2vid-0.6.20261103-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg dicom2vid-0.5.20261020-macos-arm64.pkg -target /\ndicom2vid self-check\ndicom2vid T1.nii.gz videos --orientation axial"
+          "command": "sudo installer -pkg mri2vid-0.6.20261103-macos-arm64.pkg -target /\nmri2vid self-check\nmri2vid T1.nii.gz videos --orientation axial"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.5.20261020",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dicom2vid-v0.5.20261020/dicom2vid-0.5.20261020-windows-x64.zip",
-          "sha256": "b7717329f00a8df1215e53fa9c35af717d2cedc1376ed3869641f6449f147542",
-          "bytes": 37257200,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicom2vid-v0.5.20261020/dicom2vid-0.5.20261020-windows-x64.zip.validation.txt",
+          "version": "0.6.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261103/mri2vid-0.6.20261103-windows-x64.zip",
+          "sha256": "92255bca0aaa6f6029548cfa73d036d0aa90c6a14d3a9700f1ac0afa89f6bfee",
+          "bytes": 37665653,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261103/mri2vid-0.6.20261103-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\dicom2vid-0.5.20261020-windows-x64.zip -DestinationPath .\n.\\dicom2vid-0.5.20261020-windows-x64\\dicom2vid.exe T1.nii.gz videos --orientation axial"
+          "command": "Expand-Archive -Path .\\mri2vid-0.6.20261103-windows-x64.zip -DestinationPath .\n.\\mri2vid-0.6.20261103-windows-x64\\mri2vid.exe T1.nii.gz videos --orientation axial"
         }
       ],
       "containers": []
