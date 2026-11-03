@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Support complete structural and diffusion example bundles through the normal image inputs, clearing previous subject data and unknown demographics. Add a reproducible, checksummed preparation tool for paired public OpenADS DWI, ADC and b0 examples.
+  - @neurodesk/calmar@0.10.20261103
 - Run CI browser cases serially to avoid contention between ONNX inference and software WebGL. Wait for the asynchronous scan-and-mask viewer load before checking that the report is hidden; retain the mask voxel and rendered-image assertions.
   - @neurodesk/calmar@0.10.20261103
 - Allow the full lasso and behavioural reporting browser workflow the same CI time budget as other drawing tests, retaining all drawing, confirmation, sorting, export and subject-reset assertions.

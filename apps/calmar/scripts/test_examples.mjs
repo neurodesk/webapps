@@ -14,6 +14,8 @@ async function loadAdapter() {
   const app = {
     updateOutput() {},
     clearDiffusionInputs() {},
+    clearResults() {},
+    async setDeepIslesInput(kind, file) { loaded.push({ kind, file }); },
     patientBehavior: { loadExampleContext(context) { contexts.push(context); } },
     async setStructural(file) { loaded.push(file); },
     async startUploadedLesionMaskReview() {
@@ -70,4 +72,27 @@ test('example metadata is never applied after a superseded scan import', async (
     assertCurrent() { if (++checks === 2) throw new DOMException('Cancelled', 'AbortError'); },
   }), { name: 'AbortError' });
   assert.deepEqual(contexts, []);
+});
+
+for (const roles of [['dwi', 'adc'], ['dwi', 'b0'], ['structural', 'dwi', 'adc', 'b0']]) {
+  test(`example loads the complete ${roles.join('+')} bundle and clears the previous subject`, async () => {
+    const { app, options, loaded, contexts } = await loadAdapter();
+    let cleared = false;
+    app.clearResults = value => { assert.deepEqual(value, { full: true }); cleared = true; };
+    const bundle = { files: roles.map(role => ({ role, name: `${role}.nii` })) };
+    const files = bundle.files.map(file => new File(['example'], file.name));
+    await options.onLoad(bundle, { fetchFiles: async () => files, assertCurrent() {} });
+    assert.equal(cleared, true);
+    assert.equal(app.structuralFromDiffusion, null);
+    assert.deepEqual(loaded.map(value => value.kind || 'structural'), roles);
+    assert.deepEqual(contexts, [undefined], 'unknown demographics are cleared, never inferred');
+  });
+}
+
+test('an incomplete diffusion bundle is rejected before replacing the current subject', async () => {
+  const { app, options } = await loadAdapter();
+  app.clearResults = () => assert.fail('must preserve the previous subject');
+  await assert.rejects(options.onLoad({ files: [{ role: 'b0' }] }, {
+    fetchFiles: async () => [new File(['scan'], 'b0.nii')], assertCurrent() {},
+  }), /DWI\/TRACE with ADC or b0/);
 });

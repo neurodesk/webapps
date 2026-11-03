@@ -28,6 +28,10 @@ other filesystem errors must remain visible rather than trigger a download.
 
 ## Architecture
 
+- `scripts/prepare_diffusion_examples.mjs` stages checksum-pinned OpenADS DWI/ADC/b0 and redistribution terms under TMPDIR. Its `--hf-revision` requires a real dataset commit; the opt-in `dev:diffusion-examples` command uses `--local` to generate ignored `web/examples.json` with immutable original URLs. Production catalog/offline entries await the HF mirror. `e2e/diffusion-examples.spec.js` exercises both real bundles through segmentation and native-mask download.
+
+- The default app unit suite includes `test:examples`. Example bundles route `structural`, `dwi`, `adc` and `b0` through the normal input setters. Validate a complete T1 or DWI+(ADC/b0) bundle before clearing prior subject state; check example cancellation after every asynchronous import, and clear unknown demographics. Never present b0 alone as an automatic segmentation example.
+
 - KB runs own an AbortController: Cancel, changed evidence, and replaced inputs invalidate publication, abort KB/atlas fetches, and terminate tract scoring. `DisconnectomeClient.terminate()` must reject pending queries even while atlas bytes are loading; late replies must not publish or restart work. A completed run can reuse its worker atlas.
 - Report image capture requires a loaded lesion/segmentation overlay and successful lesion centering. Registration QC stacks must yield no images, with an omission warning retained in both the export dialog and document; capture restores the crosshair. `e2e/pr-review.spec.js` covers QC exports and cancellation/retry.
 

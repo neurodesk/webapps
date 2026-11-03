@@ -381,11 +381,24 @@ export class LesionNetworkMappingApp {
       onLoad: async (example, { fetchFiles, assertCurrent }) => {
         const files = await fetchFiles();
         assertCurrent();
-        const structural = files[example.files.findIndex(file => file.role === 'structural')];
-        // The example is a T1 only; diffusion inputs belong to another subject.
+        const input = role => files[example.files.findIndex(file => file.role === role)];
+        const structural = input('structural');
+        const dwi = input('dwi');
+        if (!structural && !(dwi && (input('adc') || input('b0')))) {
+          throw new Error('The example needs a T1, or DWI/TRACE with ADC or b0.');
+        }
         this.clearDiffusionInputs();
-        await this.setStructural(structural);
-        assertCurrent();
+        this.clearResults({ full: true });
+        this.structuralFromDiffusion = null;
+        if (structural) {
+          await this.setStructural(structural);
+          assertCurrent();
+        }
+        for (const role of ['dwi', 'adc', 'b0']) {
+          if (!input(role)) continue;
+          await this.setDeepIslesInput(role, input(role));
+          assertCurrent();
+        }
         this.patientBehavior?.loadExampleContext(example.patientContext);
       },
       onStatus: (message) => this.updateOutput(message),

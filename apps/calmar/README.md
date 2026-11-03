@@ -853,3 +853,24 @@ dated snapshot update to `main`. Each manifest records the full `kbSourceCommit`
 reports continue to identify the evidence revision used. A failed check leaves
 the previous snapshot in place. Existing deployments need to pull and rebuild to
 use the updated snapshot; the browser does not silently change evidence mid-run.
+
+
+### Preparing paired diffusion examples
+
+`node scripts/prepare_diffusion_examples.mjs` downloads the unchanged OpenADS
+example DWI, ADC and b0 to `$TMPDIR/calmar-diffusion-example`, verifies the
+pinned checksums and NIfTI dimensions, and preserves the source commit,
+attribution and JHU non-profit research licence. Upload that folder's contents
+to `examples/calmar/stroke-diffusion/` in `neurodeskorg/webapps`.
+
+After upload, run `node scripts/prepare_diffusion_examples.mjs --hf-revision
+<40-character-commit>` to write the two catalog entries to the prepared folder.
+For local development, run `pnpm --filter calmar dev:diffusion-examples`.
+This stages the paired scans in TMPDIR and generates the ignored local
+`web/examples.json` catalog using immutable original URLs. Production catalog
+entries are registered after the Hugging Face upload. Register entries in
+`examples.json` and run the root
+`scripts/lock-example-assets.mjs` before enabling them. The DWI+ADC bundle
+supplies ADC directly; the DWI+b0 bundle exercises ADC computation. b0 alone
+is not an automatic-lesion example. No demographic values are supplied for
+this participant.
