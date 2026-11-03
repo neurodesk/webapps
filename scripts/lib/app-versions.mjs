@@ -15,6 +15,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/brain-extraction': 'brain-extraction',
   '@neurodesk/brain2print': 'brain2print',
   '@neurodesk/browserqc': 'browserqc',
+  '@neurodesk/brainqcnet': 'brainqcnet',
   '@neurodesk/calmar': 'calmar',
   '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/deface': 'deface',

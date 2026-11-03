@@ -1,6 +1,6 @@
 {
   "name": "bison",
-  "version": "0.2.20261102",
+  "version": "0.2.20261103",
   "private": true,
   "type": "module",
   "scripts": {

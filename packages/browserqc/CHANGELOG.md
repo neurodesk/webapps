@@ -1,6 +1,6 @@
 # @neurodesk/browserqc
 
-## 1.6.20261102
+## 1.6.20261103
 
 ### Patch Changes
 

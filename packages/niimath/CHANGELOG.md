@@ -1,6 +1,6 @@
 # @neurodesk/niimath
 
-## 1.3.20261102
+## 1.3.20261103
 
 ### Patch Changes
 

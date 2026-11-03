@@ -1,13 +1,17 @@
 # n4
 
-## 0.6.20261102
+## 0.6.20261103
 
 ### Patch Changes
 
-- Updated dependencies [8e9346d]
 - Updated dependencies [491c3ce]
   - @neurodesk/webapp-components@0.23.0
-  - @neurodesk/n4@0.6.20261102
+  - @neurodesk/n4@0.6.20261103
+  - @neurodesk/runtime-support@0.9.21
+- Updated dependencies [8e9346d]
+- Updated dependencies [239dedd]
+  - @neurodesk/webapp-components@0.22.4
+  - @neurodesk/n4@0.6.20261103
   - @neurodesk/runtime-support@0.9.20
 
 ## 0.6.20261031

@@ -1,6 +1,6 @@
 # @neurodesk/mri2vid
 
-## 0.6.20261102
+## 0.6.20261103
 
 ### Patch Changes
 
