@@ -1249,3 +1249,28 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: brainchop
+    path: brainchop
+    title: Brainchop
+    description: Whole brain MRI tissue and atlas segmentation.
+    categories: [image-processing]
+    keywords: [brain, segmentation, brainchop]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgl-required
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      hardware_gpu: true
+      release: false

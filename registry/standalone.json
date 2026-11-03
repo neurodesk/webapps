@@ -2050,6 +2050,13 @@
         }
       ],
       "containers": []
+    },
+    "brainchop": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

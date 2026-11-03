@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { access, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -351,4 +351,45 @@ test('asyncify shares its binary while keeping each pthread module in its app sc
     }
   }
   assert.deepEqual(await readFile(join(siteDist, '_runtime/ort-web/1.29.0-asyncify', wasm.name)), binary);
+});
+
+test('identical workspace styles share one file while different app CSS stays local', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'workspace-css-rewrite-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  const module = 'export const shared = true;';
+  const moduleHash = createHash('sha256').update(module).digest('hex');
+  const css = '.nd-field { display: block; }';
+  const hash = createHash('sha256').update(css).digest('hex');
+  const apps = ['brainchop', 'other'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
+  for (const app of apps) {
+    await mkdir(join(siteDist, app.path, 'assets'), { recursive: true });
+    await writeFile(join(siteDist, app.path, 'assets', 'shared-12345678.js'), module);
+    const name = app.id === 'brainchop' ? 'index-abcdefgh.css' : 'workspace-12345678.css';
+    await writeFile(join(siteDist, app.path, 'assets', name), css);
+    await writeFile(join(siteDist, app.path, 'assets', 'index-different.css'), '.custom { display: grid; }');
+    await writeFile(join(siteDist, app.path, 'index.html'), `<html><head><link rel="stylesheet" href="/${app.path}/assets/${name}"><script type="module" src="./assets/shared-12345678.js"></script></head></html>`);
+  }
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families: [{
+    id: 'shared-module', target: 'module/test', deduplicate: true,
+    files: [{ name: 'shared.js', source_app: 'brainchop', source: 'assets/shared-12345678.js', sha256: moduleHash }],
+  }, {
+    id: 'workspace-css', target: 'workspace/test', deduplicate: true, match_by: 'sha256',
+    files: [{ name: 'workspace.css', source_app: 'brainchop', source: 'assets/index-abcdefgh.css', sha256: hash }],
+  }] }));
+  await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  assert.equal(await readFile(join(siteDist, '_runtime/module/test/shared.js'), 'utf8'), module);
+  assert.equal(await readFile(join(siteDist, '_runtime/workspace/test/workspace.css'), 'utf8'), css);
+  for (const app of apps) {
+    assert.deepEqual(await readdir(join(siteDist, app.path, 'assets')), ['index-different.css']);
+    const html = await readFile(join(siteDist, app.path, 'index.html'), 'utf8');
+    const href = html.match(/rel="stylesheet" href="([^"]+)"/)[1];
+    for (const base of ['https://example.test/', 'https://example.test/webapps/']) {
+      const src = html.match(/type="module" src="([^"]+)"/)[1];
+      assert.equal(new URL(src, `${base}${app.path}/`).href, `${base}_runtime/module/test/shared.js`);
+      assert.equal(new URL(href, `${base}${app.path}/`).href, `${base}_runtime/workspace/test/workspace.css`);
+    }
+  }
 });
