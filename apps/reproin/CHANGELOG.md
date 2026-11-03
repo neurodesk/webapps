@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- Make the example retry browser test serve provisioned DICOM files after its injected failure, avoiding transient remote download failures. Report an unexpected terminal download error immediately with the selector's message.
 - Updated dependencies [491c3ce]
   - @neurodesk/webapp-components@0.23.0
 - Updated dependencies [8e9346d]
