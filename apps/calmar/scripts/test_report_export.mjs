@@ -250,6 +250,22 @@ const { bindPatientBehavior } = await import('../web/js/modules/patient-behavior
   app.renderMethodSummary();
   assert.match(document.getElementById('resultsMethodText').textContent, /^This run performed, [^:]+: a lesion mask supplied already on the atlas grid/);
 
+  // QC stacks have no lesion: never caption their canvas as a lesion image.
+  let canvasReads = 0;
+  app.nv = { canvas: { toDataURL() { canvasReads++; return 'data:image/png;base64,QC'; } }, volumes: [{}] };
+  app.viewerController = { getVolumeIndexForStage: () => null };
+  assert.deepEqual(app.captureLesionImages('both'), []);
+  assert.equal(canvasReads, 0);
+  app.triggerBrowserDownload = async () => {};
+  for (const box of document.querySelectorAll('#reportParts [data-report-part]')) box.checked = ['method', 'image'].includes(box.dataset.reportPart);
+  const qcExport = await app.exportReport('html');
+  assert.match(qcExport, /Lesion images omitted/);
+  assert.ok(!qcExport.includes('<img'));
+  assert.match(document.getElementById('reportModalStatus').textContent, /Saved .*Lesion images omitted/);
+  document.querySelector('#reportParts [data-report-part="method"]').checked = false;
+  assert.equal(await app.exportReport('html'), null);
+  assert.match(document.getElementById('reportModalStatus').textContent, /Lesion images omitted/);
+
   // exportReport: ticked boxes decide the parts; the image is captured only when ticked; HTML download goes through the app's download path.
   const downloads = [];
   app.triggerBrowserDownload = async (file, filename) => { downloads.push({ filename, size: file.size }); };

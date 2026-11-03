@@ -162,6 +162,15 @@ for (const width of [1440, 390]) {
     });
     expect(overlay.voxels).toBe(30);
     expect(overlay.opacity).toBeGreaterThan(0);
+    const capture = await page.evaluate(() => {
+      app.nv.scene.crosshairPos = [0.3, 0.4, 0.6];
+      const images = app.captureLesionImages('both');
+      return { images, crosshair: [...app.nv.scene.crosshairPos] };
+    });
+    expect(capture.images).toHaveLength(2);
+    expect(capture.images[0].dataUrl).not.toBe(capture.images[1].dataUrl);
+    expect(capture.crosshair).toEqual([0.3, 0.4, 0.6]);
+    await page.evaluate(() => app.centerCrosshairOnLesion());
     const withMask = await page.locator('#gl1').screenshot();
     await page.evaluate(() => app.viewerController.setStageVisible('segmentation', false));
     const withoutMask = await page.locator('#gl1').screenshot();

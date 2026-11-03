@@ -325,3 +325,25 @@ function restoreFetch() { globalThis.fetch = ORIG_FETCH; }
 }
 
 console.log('atlas-loader cache OK: URL fragment fix + streaming progress + lazy channel loading + parser fallback + failure cases.');
+
+// Abort reaches the network request and also rejects a pending cache hit.
+{
+  const controller = new AbortController();
+  globalThis.fetch = async (url, { signal }) => new Promise((resolve, reject) => {
+    assert.equal(signal, controller.signal);
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+  const loading = fetchCacheFirst('https://example.com/abort', 'abort', null, { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(loading, { name: 'AbortError' });
+  restoreFetch();
+
+  const cachedController = new AbortController();
+  let finishCache;
+  const cached = fetchCacheFirst('https://example.com/cache', 'cache', {
+    match: () => new Promise(resolve => { finishCache = resolve; }),
+  }, { signal: cachedController.signal });
+  cachedController.abort();
+  finishCache({ arrayBuffer: async () => new ArrayBuffer(1) });
+  await assert.rejects(cached, { name: 'AbortError' });
+}

@@ -55,7 +55,7 @@ export function kbAssetId(manifest, evidence = 'approved') {
 }
 
 /** The knowledge base JSON for an evidence level (default: approved findings), Cache Storage first. */
-export async function loadKnowledgeBase(manifest, { fetchBuffer = null, evidence = 'approved' } = {}) {
+export async function loadKnowledgeBase(manifest, { fetchBuffer = null, evidence = 'approved', signal } = {}) {
   const config = kbReportConfig(manifest);
   const assetId = kbAssetId(manifest, evidence);
   if (!assetId) throw new Error('This build hosts no knowledge-base export with drafts');
@@ -67,7 +67,7 @@ export async function loadKnowledgeBase(manifest, { fetchBuffer = null, evidence
     buffer = await fetchBuffer(entry);
   } else {
     const cache = typeof caches !== 'undefined' ? await caches.open(KB_CACHE) : null;
-    buffer = await fetchCacheFirst(entry.sourceUrl, entry.cacheKey, cache);
+    buffer = await fetchCacheFirst(entry.sourceUrl, entry.cacheKey, cache, { signal });
   }
   const kb = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer)));
   if (kb.schemaVersion !== 1) throw new Error(`Unsupported knowledge-base schema ${kb.schemaVersion}`);
@@ -186,17 +186,27 @@ export class DisconnectomeClient {
   async query(lesionBuffer, { atlasKey, atlasBytes }) {
     const worker = this.ensureWorker();
     const id = this.nextId++;
-    const message = { id, type: 'query', atlasKey, lesion: lesionBuffer };
-    const transfer = [lesionBuffer];
-    if (!this.sentAtlasKeys.has(atlasKey)) {
-      if (typeof atlasBytes !== 'function') throw new Error(`disconnectome: the atlas bytes are needed for the first query of ${atlasKey}`);
-      const atlas = await atlasBytes();
-      message.atlas = atlas.slice(0);
-      transfer.push(message.atlas);
-    }
     const result = new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
-    worker.postMessage(message, transfer);
+    // Register before downloading: cancellation must settle this promise too.
+    void (async () => {
+      try {
+        const message = { id, type: 'query', atlasKey, lesion: lesionBuffer };
+        const transfer = [lesionBuffer];
+        if (!this.sentAtlasKeys.has(atlasKey)) {
+          if (typeof atlasBytes !== 'function') throw new Error(`disconnectome: the atlas bytes are needed for the first query of ${atlasKey}`);
+          const atlas = await atlasBytes();
+          message.atlas = atlas.slice(0);
+          transfer.push(message.atlas);
+        }
+        if (!this.pending.has(id) || worker !== this.worker) return;
+        worker.postMessage(message, transfer);
+      } catch (error) {
+        this.pending.get(id)?.reject(error);
+        this.pending.delete(id);
+      }
+    })();
     const data = await result;
+    if (worker !== this.worker) throw new DOMException('Disconnectome cancelled', 'AbortError');
     this.sentAtlasKeys.add(atlasKey);
     return { tracts: data.tracts, fractions: data.fractions };
   }
@@ -205,6 +215,8 @@ export class DisconnectomeClient {
     this.worker?.terminate();
     this.worker = null;
     this.sentAtlasKeys.clear();
+    for (const waiting of this.pending.values()) waiting.reject(new DOMException('Disconnectome cancelled', 'AbortError'));
+    this.pending.clear();
   }
 }
 

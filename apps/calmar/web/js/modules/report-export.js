@@ -116,12 +116,15 @@ const STYLE = `
  * One self-contained HTML document from the selected parts.
  * `images`: [{ label, dataUrl }] placed where the 'image' part sits.
  */
-export function buildReportDocument({ title = 'CALMaR report', subtitle = '', parts = [], images = [], generated = new Date() } = {}) {
+export function buildReportDocument({ title = 'CALMaR report', subtitle = '', parts = [], images = [], imageWarning = '', generated = new Date() } = {}) {
   const when = generated instanceof Date ? generated.toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : String(generated);
   const body = [];
   for (const part of REPORT_PARTS) {
     if (part.id === 'image') {
-      if (!images.length) continue;
+      if (!images.length) {
+        if (imageWarning) body.push(`<section class="report-part" data-part="image"><h2>${escapeHtml(part.label)}</h2><p>${escapeHtml(imageWarning)}</p></section>`);
+        continue;
+      }
       body.push(`<section class="report-part" data-part="image"><h2>${escapeHtml(part.label)}</h2><div class="report-images">`
         + images.map((image) => `<figure><img src="${image.dataUrl}" alt="${escapeHtml(image.label)}"><figcaption>${escapeHtml(image.label)}</figcaption></figure>`).join('')
         + '</div></section>');

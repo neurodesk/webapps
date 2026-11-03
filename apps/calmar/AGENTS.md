@@ -3,7 +3,7 @@
 
 - after every change to the source code make sure the Agent.md file is updated
 - after every new feature added, make sure there is a test for the feature (no tests for removing features)
-- Verify changed workflows against a fresh production build; follow root interface checks for browser changes.
+- Verify changed workflows against a fresh production build; follow root interface checks for browser changes. Playwright serves `dist` with the shared production shell, building first unless `NEURODESK_E2E_PREBUILT=1`; source-only `web/run.sh` lacks the theme controls and production layout.
 
 
 ## Linting
@@ -25,6 +25,9 @@ other filesystem errors must remain visible rather than trigger a download.
 - Google Analytics is injected by the monorepo's shared hosting shell, never by `web/index.html`. The shared bootstrap uses measurement ID `G-4Z9774J59Y`, sends automatic page views only, and makes no Google request when Do Not Track or Global Privacy Control is enabled. Do not add app-local analytics or custom events carrying filenames, patient image metadata, voxel values, masks, screenshots, generated outputs, free text, or analysis results. Keep `scripts/test_index_html.mjs` and the privacy modal aligned if analytics changes.
 
 ## Architecture
+
+- KB runs own an AbortController: Cancel, changed evidence, and replaced inputs invalidate publication, abort KB/atlas fetches, and terminate tract scoring. `DisconnectomeClient.terminate()` must reject pending queries even while atlas bytes are loading; late replies must not publish or restart work. A completed run can reuse its worker atlas.
+- Report image capture requires a loaded lesion/segmentation overlay and successful lesion centering. Registration QC stacks must yield no images, with an omission warning retained in both the export dialog and document; capture restores the crosshair. `e2e/pr-review.spec.js` covers QC exports and cancellation/retry.
 
 - `web/js/lnm-app.js` — Main CALMaR app class. Owns the full chain: file load, brain extraction, lesion segmentation or uploaded/blank editable mask review, MNI registration, warp+resample bridge, selected-atlas overlap, FC network map, thresholding, subject-space atlas QC, version-label formatting, and the one-click `runFullPipeline()`
 - `web/js/app/config.js` — Model config and embedded date version, synchronised by root `pnpm release`

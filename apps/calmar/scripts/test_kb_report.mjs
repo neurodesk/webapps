@@ -35,6 +35,44 @@ const {
 } = await import('../web/js/modules/kb-report.js');
 const { decodeNiftiBuffer } = await import('../web/js/modules/atlas-loader.js');
 
+// Cancellation settles both downloads and worker queries; a subsequent query can restart.
+{
+  const workers = [];
+  class ControlledWorker {
+    constructor() { this.messages = []; workers.push(this); }
+    postMessage(message) { this.messages.push(message); }
+    terminate() { this.terminated = true; }
+  }
+  const client = new DisconnectomeClient('test-worker', { WorkerClass: ControlledWorker });
+  let finishDownload;
+  const downloading = client.query(new ArrayBuffer(1), {
+    atlasKey: 'atlas', atlasBytes: () => new Promise(resolve => { finishDownload = resolve; }),
+  });
+  const cancelledDownload = assert.rejects(downloading, { name: 'AbortError' });
+  client.terminate();
+  await cancelledDownload;
+  assert.equal(client.pending.size, 0);
+  finishDownload(new ArrayBuffer(2));
+  await Promise.resolve();
+  assert.equal(workers[0].messages.length, 0, 'late atlas data cannot restart a cancelled worker');
+
+  const scoring = client.query(new ArrayBuffer(1), { atlasKey: 'atlas', atlasBytes: async () => new ArrayBuffer(2) });
+  await Promise.resolve();
+  assert.equal(workers[1].messages.length, 1);
+  const cancelledScoring = assert.rejects(scoring, { name: 'AbortError' });
+  client.terminate();
+  await cancelledScoring;
+  assert.equal(workers[1].terminated, true);
+
+  const restarted = client.query(new ArrayBuffer(1), { atlasKey: 'atlas', atlasBytes: async () => new ArrayBuffer(2) });
+  await Promise.resolve();
+  const message = workers[2].messages[0];
+  workers[2].onmessage({ data: { id: message.id, tracts: ['bundle'], fractions: [0.5] } });
+  assert.deepEqual(await restarted, { tracts: ['bundle'], fractions: [0.5] });
+  assert.ok(client.sentAtlasKeys.has('atlas'));
+  client.terminate();
+}
+
 // --- Assets -----------------------------------------------------------------
 
 {

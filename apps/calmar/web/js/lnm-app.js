@@ -606,6 +606,7 @@ export class LesionNetworkMappingApp {
     const cancelBtn = document.getElementById('cancelButton');
     if (cancelBtn) {
       cancelBtn.addEventListener('click', () => {
+        this.cancelKbReport();
         try { this.executor.cancel(); }
         catch (err) { this.updateOutput(`Cancel failed: ${err.message}`); }
         this._pipelineRunning = false;
@@ -1318,6 +1319,9 @@ export class LesionNetworkMappingApp {
     const nv = this.nv;
     const canvas = nv?.canvas;
     if (!nv || !canvas || typeof canvas.toDataURL !== 'function') return [];
+    const lesionIndex = ['lesion', 'segmentation'].map(stage => this.viewerController?.getVolumeIndexForStage?.(stage)).find(index => index !== null && index !== undefined);
+    if (lesionIndex === undefined || !nv.volumes?.[lesionIndex]) return [];
+    const previousCrosshair = nv.scene?.crosshairPos ? [...nv.scene.crosshairPos] : null;
     const wanted = mode === 'both' ? ['with-mask', 'without-mask'] : [mode];
     const images = [];
     const previousSliceType = nv.opts?.sliceType;
@@ -1326,7 +1330,7 @@ export class LesionNetworkMappingApp {
     try {
       for (const [stage] of otherLayers) this.viewerController?.setStageVisible?.(stage, false);
       if (typeof nv.setSliceType === 'function' && nv.sliceTypeMultiplanar !== undefined) nv.setSliceType(nv.sliceTypeMultiplanar);
-      this.centerCrosshairOnLesion();
+      if (!this.centerCrosshairOnLesion()) return [];
       for (const variant of wanted) {
         const show = variant === 'with-mask';
         for (const stage of ['segmentation', 'lesion']) this.viewerController?.setStageVisible?.(stage, show);
@@ -1338,6 +1342,7 @@ export class LesionNetworkMappingApp {
         images.push({ label, dataUrl: canvas.toDataURL('image/png') });
       }
     } finally {
+      if (previousCrosshair) nv.scene.crosshairPos = previousCrosshair;
       for (const [stage, visible] of otherLayers) this.viewerController?.setStageVisible?.(stage, visible);
       for (const stage of ['segmentation', 'lesion']) this.viewerController?.setStageVisible?.(stage, lesionVisible);
       if (previousSliceType !== undefined && typeof nv.setSliceType === 'function') nv.setSliceType(previousSliceType);
@@ -1398,34 +1403,39 @@ export class LesionNetworkMappingApp {
     this.renderMethodSummary();
     const parts = collectReportParts(document, selected);
     let images = [];
+    let imageWarning = '';
     if (selected.includes('image')) {
       try {
         images = this.captureLesionImages(imageMode);
       } catch (err) {
         this.updateOutput(`Lesion image not captured: ${err.message}`, { level: 'warning' });
       }
-      if (!images.length) note('The lesion image could not be captured; the report continues without it.');
+      if (!images.length) {
+        imageWarning = 'Lesion images omitted. Choose View scan with lesion mask, then export again.';
+        note(imageWarning);
+        this.updateOutput(imageWarning, { level: 'warning' });
+      }
     }
     if (!parts.length && !images.length) {
-      note('Nothing selected.');
+      note(imageWarning || 'Nothing selected.');
       return null;
     }
     const html = buildReportDocument({
       title: 'CALMaR report',
       subtitle: `CALMaR ${Config.VERSION}`,
-      parts, images,
+      parts, images, imageWarning,
     });
     const filename = `calmar-report-${new Date().toISOString().slice(0, 10)}.html`;
     this.updateOutput(`Report built: ${parts.map((p) => p.label).join(', ')}${images.length ? `, ${images.length} image${images.length === 1 ? '' : 's'}` : ''}.`);
     if (kind === 'html') {
       await this.triggerBrowserDownload(new File([html], filename, { type: 'text/html' }), filename);
-      note(`Saved ${filename}.`);
+      note(`Saved ${filename}.${imageWarning ? ` ${imageWarning}` : ''}`);
       return html;
     }
     note('Opening the print dialog; choose "Save as PDF" there.');
     try {
       await printHtmlDocument(document, html);
-      note('');
+      note(imageWarning);
     } catch (err) {
       note(`Printing is not available here (${err.message}); use Download HTML and print that file.`);
       this.updateOutput(`Report print failed: ${err.message}`, { level: 'warning' });
@@ -1837,6 +1847,7 @@ export class LesionNetworkMappingApp {
    * report is already shown it is recomputed for the same lesion.
    */
   async handleKbEvidenceChange(value) {
+    this.cancelKbReport();
     if (value === 'off') {
       this.kbEvidence = 'off';
       clearKbReport(document);
@@ -1873,7 +1884,28 @@ export class LesionNetworkMappingApp {
     }
   }
 
+  cancelKbReport() {
+    this._kbAbortController?.abort();
+    this._kbAbortController = null;
+    this.disconnectomeClient?.terminate?.();
+  }
+
   async runKbReport() {
+    if (this._kbAbortController) this.cancelKbReport();
+    if (this.kbEvidence === 'off') return;
+    const controller = new AbortController();
+    this._kbAbortController = controller;
+    try {
+      return await this.buildKbReport(controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) return { stopPipeline: true };
+      throw error;
+    } finally {
+      if (this._kbAbortController === controller) this._kbAbortController = null;
+    }
+  }
+
+  async buildKbReport(signal) {
     if (this.kbEvidence === 'off') return;
     const requestedEvidence = this.kbEvidence;
     const sourceFile = this.mniLesionFile || this.lesionFile;
@@ -1883,6 +1915,7 @@ export class LesionNetworkMappingApp {
     }
     const generation = this._resultsGeneration;
     const manifest = await this.ensureManifest();
+    if (signal.aborted) return { stopPipeline: true };
     if (this.kbEvidence !== requestedEvidence) return;
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
     if (!manifest.kbReport) {
@@ -1892,15 +1925,18 @@ export class LesionNetworkMappingApp {
     this.updateOutput('Loading the aphasia knowledge base...');
     if (!this.knowledgeBase || this.knowledgeBase.evidence !== this.kbEvidence) {
       const evidence = this.kbEvidence;
-      const { kb, entry } = await loadKnowledgeBase(manifest, { evidence });
+      const { kb, entry } = await loadKnowledgeBase(manifest, { evidence, signal });
+      if (signal.aborted) return { stopPipeline: true };
       this.knowledgeBase = { kb, entry, evidence };
     }
+    if (signal.aborted) return { stopPipeline: true };
     if (this.kbEvidence !== requestedEvidence) return;
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
     const { kb } = this.knowledgeBase;
 
     this.updateOutput('Decoding the MNI-space lesion for the knowledge-base report...');
     const decoded = await decodeNiftiBuffer(await sourceFile.arrayBuffer());
+    if (signal.aborted) return { stopPipeline: true };
     if (this.kbEvidence !== requestedEvidence) return;
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
     const lesion = { data: binarise(decoded.data), dims: decoded.dims, affine: affineFromHeader(decoded.header) };
@@ -1916,7 +1952,8 @@ export class LesionNetworkMappingApp {
         continue;
       }
       this.updateOutput(`Loading the ${name} atlas for the knowledge-base report...`);
-      const atlas = await loadAtlasFromManifest(entry.id, { manifest });
+      const atlas = await loadAtlasFromManifest(entry.id, { manifest, signal });
+      if (signal.aborted) return { stopPipeline: true };
       if (this.kbEvidence !== requestedEvidence) return;
       if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
       atlases.push({ name, atlas });
@@ -1951,11 +1988,13 @@ export class LesionNetworkMappingApp {
             this.updateOutput(`Downloading the ENIGMA tract atlas (${(disco.entry.sizeBytes / 1e6).toFixed(1)} MB, cached afterwards)...`);
             const cache = typeof caches !== 'undefined' ? await caches.open('lnm-assets-v1') : null;
             return fetchCacheFirst(disco.entry.sourceUrl, disco.entry.cacheKey, cache, {
+              signal,
               label: 'ENIGMA tract atlas',
-              onProgress: ({ received, total }) => this.handleWorkerProgress(total ? received / total : 0, 'Downloading tract atlas')
+              onProgress: ({ received, total }) => !signal.aborted && this.handleWorkerProgress(total ? received / total : 0, 'Downloading tract atlas')
             });
           }
         });
+        if (signal.aborted) return { stopPipeline: true };
         if (this.kbEvidence !== requestedEvidence) return;
         if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
         fractions = fractionsByBundle(tracts, values);
@@ -1966,6 +2005,7 @@ export class LesionNetworkMappingApp {
         context.disconnectomeNote = `Disconnectome: ${context.disconnectomeLabel} (${disco.entry.bundles} bundles, nii2tvx), ` +
           'fraction of each bundle\'s streamlines passing through the lesion resampled onto the FSL MNI152 1 mm grid.';
       } catch (err) {
+        if (signal.aborted) return { stopPipeline: true };
         if (this.kbEvidence !== requestedEvidence) return;
         if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
         context.disconnectomeError = err.message;
@@ -1977,6 +2017,7 @@ export class LesionNetworkMappingApp {
     }
 
     const result = evaluateDamage(kb, damage.rowsByAtlas, { fractions, lesionVolumeMl: volumeMl });
+    if (signal.aborted) return { stopPipeline: true };
     if (this.kbEvidence !== requestedEvidence) return;
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Knowledge-base report');
     this.kbReport = { result, context, rowsByAtlas: damage.rowsByAtlas, fractions };
@@ -4485,6 +4526,7 @@ export class LesionNetworkMappingApp {
 
   /** Forget the overlap, network map and threshold derived from the current lesion. */
   clearDerivedResults() {
+    this.cancelKbReport();
     this._resultsGeneration += 1;
     this.overlapResult = null;
     this.affectedNetworkResult = null;
