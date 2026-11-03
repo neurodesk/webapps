@@ -229,6 +229,9 @@ for (const width of [1440, 390]) {
   });
 
   test(`lasso, sortable overlap and behavioural context at ${width}px`, async ({ page }) => {
+    // Software WebGL on CI shares CPU with the real segmentation example.
+    // Budget the complete drawing, confirmation, reporting and subject-reset workflow.
+    test.setTimeout(120000);
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/');
     await page.waitForFunction(() => globalThis.app?.nv?.canvas);

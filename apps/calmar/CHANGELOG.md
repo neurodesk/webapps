@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Allow the full lasso and behavioural reporting browser workflow the same CI time budget as other drawing tests, retaining all drawing, confirmation, sorting, export and subject-reset assertions.
+  - @neurodesk/calmar@0.10.20261103
 - Prevent registration QC views from being exported as lesion screenshots, retaining an explicit omission warning in the report. Cancel KB downloads and tract scoring without publishing late results, and allow reporting to restart afterward. Run browser regression tests against the production shell to match deployed controls and layout.
   - @neurodesk/calmar@0.10.20261103
 
