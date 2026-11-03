@@ -304,7 +304,10 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
     expect(command).toContain('--qsm-algorithm qsmart');
     expect(command).not.toContain('--mask-preset bet');
     expect(command).not.toContain('--mask-preset');
-    expect(wasm.generate_methods_wasm(json, 'QSMbly', mask)).not.toMatch(/\bBET\b/);
+    const methods = wasm.generate_methods_wasm(json, 'QSMbly', mask);
+    const description = methods.split('\n## References')[0];
+    expect(description).toContain('A brain mask was generated using Otsu thresholding');
+    expect(description).not.toMatch(/\bBET\b/);
     const toml = wasm.config_json_to_toml_selected_wasm(json, mask);
     const { config } = JSON.parse(wasm.config_from_toml_wasm(toml));
     const defaults = JSON.parse(wasm.get_default_config_json_wasm());
