@@ -999,9 +999,9 @@ apps:
   - id: sdc
     path: sdc
     title: SDC
-    description: Distortion correction from reverse phase-encoding b0.
+    description: Distortion correction from reverse-PE b0 or a T1w.
     categories: [diffusion-imaging]
-    keywords: [susceptibility distortion, topup, PyHySCO, reverse phase-encoding, diffusion MRI, field map, WebAssembly]
+    keywords: [susceptibility distortion, topup, PyHySCO, reverse phase-encoding, SyN-SDC, sdcflows, fieldmap-less, diffusion MRI, field map, WebAssembly]
     anatomy: [brain]
     modalities: [mri]
     inputs: [dicom, nifti]
@@ -1009,6 +1009,7 @@ apps:
     handoff: none
     legacy_domain: null
     runtime: vite-wasm
+    app_scoped_runtime_families: [mindgrab-20260925]
     model_manifest: null
     asset_manifest_schema: null
     source: neurodesk/webapps@local

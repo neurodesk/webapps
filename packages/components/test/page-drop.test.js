@@ -31,6 +31,18 @@ test('auxiliary files go to their own input and a scan fills each empty image sl
   assert.deepEqual(fsl.map(([input, files]) => [input, files.map(f => f.name)]), [[scan, ['data.nii.gz']], [gradients, ['bvals', 'bvecs']]]);
 });
 
+test('a mask input never takes dropped scans, so a DWI and its T1w stay together', () => {
+  const { document } = new JSDOM(`<body>
+    <input type="file" data-neurodesk-input="mask" id="dwiMask">
+    <input type="file" data-neurodesk-input="image" id="images" multiple>
+    <input type="file" data-neurodesk-input="mask" id="t1wMask"></body>`).window;
+  const scan = primaryInput(document);
+  assert.equal(scan.id, 'images', 'a mask input never leads, even when it comes first');
+  const masks = [document.getElementById('dwiMask'), document.getElementById('t1wMask')];
+  const files = ['sub-01_dwi.nii.gz', 'sub-01_dwi.bval', 'sub-01_dwi.bvec', 'sub-01_dwi.json', 'sub-01_T1w.nii.gz'].map(file);
+  assert.deepEqual(routeFiles(files, [masks[0], scan, masks[1]], scan), [[scan, files]]);
+});
+
 test('a dropped BIDS diffusion dataset stays together at the primary input', () => {
   const scan = { dataset: { neurodeskInput: 'image' } };
   const mask = { dataset: { neurodeskInput: 'image' } };

@@ -12,7 +12,6 @@ import { TRT, adoptPair, pinnedBytes, routeExample, syntheticPair } from "./fixt
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const native = JSON.parse(readFileSync(new URL("./native-reference.json", import.meta.url), "utf8"));
 const exampleUrls = examples.flatMap((example) => example.files.map((file) => file.url));
-const imageUrl = examples[0].files[0].url;
 
 async function download(page, label) {
   const event = page.waitForEvent("download");
@@ -239,7 +238,7 @@ test("the automation operation estimates the field from two images", async ({ pa
   expect(Object.keys(report.artifacts).sort()).toEqual(["corrected1", "corrected2", "field", "sidecar"]);
 });
 
-for (const example of examples) {
+for (const example of examples.filter((entry) => entry.method === "pyhysco")) {
   test(`example ${example.id} gives the native command line's field (port gate)`, async ({ page }) => {
     test.setTimeout(180000);
     await routeExample(page.context(), [...exampleUrls, native.url]);
@@ -268,13 +267,12 @@ for (const example of examples) {
   });
 }
 
-for (const failure of ["download", "empty image"]) {
-  test(`a failed ${failure} can retry the same example`, async ({ page }) => {
+for (const [failure, example] of [["download", examples[0]], ["empty image", examples[0]], ["download", examples[1]]]) {
+  test(`a failed ${failure} can retry example ${example.id}`, async ({ page }) => {
     test.setTimeout(150000);
-    const example = examples[0];
     await routeExample(page.context(), exampleUrls);
     let attempts = 0;
-    await page.context().route(imageUrl, (route) => {
+    await page.context().route(example.files[0].url, (route) => {
       attempts++;
       if (attempts > 1) return route.fallback();
       return route.fulfill({ status: failure === "download" ? 503 : 200, body: "" });

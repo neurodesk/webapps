@@ -37,12 +37,22 @@ export function createPreviewQueue({ ready, render }) {
   };
 }
 
-/** NiiVue adapter for a single file and an optional copied scalar-map window. */
+/**
+ * NiiVue adapter for one file with an optional copied scalar-map window, and an optional signed
+ * overlay on it (a field map on its image: warm above range[0], winter below -range[0]).
+ * `null` clears the viewer.
+ */
 export function createNiivueVolumePreview({ viewer, ready, emptyState }) {
   async function render(preview) {
     if (preview) {
       const window = preview.range ? { calMin: preview.range[0], calMax: preview.range[1] } : {};
-      await viewer.loadVolumes([{ url: preview.file, name: preview.file.name, colormap: 'gray', ...window }]);
+      const volumes = [{ url: preview.file, name: preview.file.name, colormap: 'gray', ...window }];
+      const overlay = preview.overlay;
+      if (overlay) {
+        const range = overlay.range ? { calMin: overlay.range[0], calMax: overlay.range[1], calMinNeg: -overlay.range[1], calMaxNeg: -overlay.range[0] } : {};
+        volumes.push({ url: overlay.file, name: overlay.file.name, colormap: 'warm', colormapNegative: 'winter', opacity: 0.6, ...range });
+      }
+      await viewer.loadVolumes(volumes);
     } else {
       await viewer.removeAllVolumes();
     }
@@ -50,5 +60,6 @@ export function createNiivueVolumePreview({ viewer, ready, emptyState }) {
   }
 
   const show = createPreviewQueue({ ready, render });
-  return (preview, options) => show({ file: preview.file, range: preview.range && [...preview.range] }, options);
+  const copy = (preview) => ({ file: preview.file, range: preview.range && [...preview.range] });
+  return (preview, options) => show(preview ? { ...copy(preview), overlay: preview.overlay && copy(preview.overlay) } : null, options);
 }
