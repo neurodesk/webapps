@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/bison",
-  "version": "0.2.20261031",
+  "version": "0.2.20261103",
   "description": "BISON brain tissue and white matter hyperintensity segmentation for browsers and the command line",
   "type": "module",
   "private": true,
