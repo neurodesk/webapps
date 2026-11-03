@@ -2194,3 +2194,18 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  brainchop:
+    packages:
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: Brainchop, url: https://brainchop.org/, role: whole brain segmentation }
+      - { name: TensorFlow.js, url: https://www.tensorflow.org/js, role: WebGL inference }
+    citations:
+      - group: Segmentation
+        title: Brainchop
+        reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. JOSS. 2023;8(83):5098."
+        url: https://doi.org/10.21105/joss.05098
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

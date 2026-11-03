@@ -4596,6 +4596,146 @@
       "contentType": "application/octet-stream",
       "kind": "example",
       "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model5_gw_ae/colormap.json": {
+      "sha256": "36a45c1cc84ccb73482f3ad5a4d482da1f965e55c4b59f8f18d3649a8e7fd94d",
+      "bytes": 82,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model5_gw_ae/colormap3.json": {
+      "sha256": "71f3ce5c5d9d0db1208937f55fa35b9970ce63c1a24753cf74c471fe9a3c27eb",
+      "bytes": 137,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model5_gw_ae/group1-shard1of1.bin": {
+      "sha256": "ca0d1b8ff72f8719d9525acaf9a1f1cb66dbb173b4ee1d7540f99e022cf4bfd8",
+      "bytes": 22392,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model5_gw_ae/model.json": {
+      "sha256": "7aabd59933bd3528f120107165f5dd577c5b749cf91fc2f949987d7bc620ce59",
+      "bytes": 9356,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model20chan3cls/colormap.json": {
+      "sha256": "71f3ce5c5d9d0db1208937f55fa35b9970ce63c1a24753cf74c471fe9a3c27eb",
+      "bytes": 137,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model20chan3cls/model.bin": {
+      "sha256": "aecc03e3db596bfffab0ea1143f0848dbf4da4e317e04ef202986c6888cd467f",
+      "bytes": 348732,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model20chan3cls/model.json": {
+      "sha256": "53932edad5330073bbac906049a31b84a2ca3d8c65d658feea848130004b984b",
+      "bytes": 28897,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan18cls/colormap.json": {
+      "sha256": "10ebff5980dd2afe1a1407dd951d1258dfc95fec51641bab9b4a9b88d76808c5",
+      "bytes": 608,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan18cls/model.bin": {
+      "sha256": "7039651d91c4cee0b7b1ddfe93fe2f5cb9b71d99f5a126fdef407e2a36bb52d4",
+      "bytes": 784152,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan18cls/model.json": {
+      "sha256": "d28521c0965e452c371314e4b5b4dcef7b19aa91241b17ef894ac24952139701",
+      "bytes": 28638,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model18cls/colormap.json": {
+      "sha256": "10ebff5980dd2afe1a1407dd951d1258dfc95fec51641bab9b4a9b88d76808c5",
+      "bytes": 608,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model18cls/model.bin": {
+      "sha256": "725096439f64ece1ca45ec3c5115c9fa6004f6538cac3032b85966d3772b605e",
+      "bytes": 385632,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model18cls/model.json": {
+      "sha256": "57346ac8b66ebe8d92296b1cf9988143be4949b6ef9695a790ef3d7fba3fb81b",
+      "bytes": 28638,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan50cls/colormap.json": {
+      "sha256": "3895b0c40b1ef299bda68ac79bce6f1bbbb6e28d9dd990ef121402c08bc34645",
+      "bytes": 1722,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan50cls/model.bin": {
+      "sha256": "a7e597568dc7750c64cce8c64c4ca3ec7215716949efd741f19904da1baffa81",
+      "bytes": 788120,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan50cls/model.json": {
+      "sha256": "105db3a77c49fb3e7d59c6e9506981e13223b76dcd4c4b407640d422409e5353",
+      "bytes": 28901,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/colormap.json": {
+      "sha256": "a450db760609a91a38b3ff1810a465841c39b1ff138cab005071c897ad0da069",
+      "bytes": 3904,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/group1-shard1of1.bin": {
+      "sha256": "8a0aa1e2d94e5edc94c54aed900da978d2a1388bee4621cee05e473db64b84af",
+      "bytes": 345488,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/model.json": {
+      "sha256": "b80a9ac7dccaecc08d59a7f2285a1dce50305d317f505b437518773ab2b27446",
+      "bytes": 8504,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/model_D95.json": {
+      "sha256": "32794cec0233349b82b12279fd255c0c50d1536f21533fd223d48375fd923840",
+      "bytes": 8503,
+      "contentType": "application/json",
+      "kind": "model",
+      "dependencies": []
     }
   },
   "apps": {
@@ -5842,6 +5982,29 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh.inflated",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh.curv",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh.area"
+    ],
+    "brainchop": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/t1_crop.nii.gz",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model5_gw_ae/colormap.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model5_gw_ae/colormap3.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model5_gw_ae/group1-shard1of1.bin",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model5_gw_ae/model.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model20chan3cls/colormap.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model20chan3cls/model.bin",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model20chan3cls/model.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan18cls/colormap.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan18cls/model.bin",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan18cls/model.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model18cls/colormap.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model18cls/model.bin",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model18cls/model.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan50cls/colormap.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan50cls/model.bin",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model30chan50cls/model.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/colormap.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/group1-shard1of1.bin",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/model.json",
+      "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/model_D95.json"
     ]
   }
 }
