@@ -154,7 +154,7 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
           // Match the declared filename so empty strings in minified workers cannot consume its opening quote.
           const assetReference = new RegExp(`(['"])([^'"\\n]*${escapedName})\\1`, 'g');
           let references = 0;
-          for (const file of appFiles.filter(file => TEXT_EXTENSIONS.has(extname(file)))) {
+          for (const file of appFiles.filter(file => !claimed.has(file) && TEXT_EXTENSIONS.has(extname(file)))) {
             const original = await readFile(file, 'utf8');
             const rewritten = original.replace(assetReference, (match, quote, reference) => {
               const referencedPath = reference.startsWith('/')
