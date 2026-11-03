@@ -375,3 +375,9 @@ test(`the status bar starts with "${IDLE_STATUS}"`, async () => {
   assert.deepEqual(failures, []);
 });
 
+
+ test('shared report helpers support adjacent help and right-aligned cells', async () => {
+  const css = await readFile(new URL('../packages/components/src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-heading-inline > :is\(h2, h3, label, button\)\s*\{\s*flex: 0 1 auto;/);
+  assert.match(css, /\.nd-table-right :is\(th, td\)\s*\{\s*text-align: right;/);
+});

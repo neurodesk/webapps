@@ -22,9 +22,13 @@
       "@neurodesk/calmar/inference-pipeline": "./vendor/calmar/src/inference-pipeline.js",
       "@neurodesk/calmar/alignment": "./vendor/calmar/src/alignment.js",
       "@neurodesk/calmar/pipeline": "./vendor/calmar/src/pipeline.js",
+      "@neurodesk/calmar/kb-evidence": "./vendor/calmar/src/kb-evidence.js",
+      "@neurodesk/calmar/report-damage": "./vendor/calmar/src/report-damage.js",
+      "@neurodesk/nii2tvx": "./vendor/nii2tvx/src/index.js",
       "@neurodesk/webapp-components": "./vendor/webapp-components/src/index.js",
       "@neurodesk/webapp-components/automation": "./vendor/webapp-components/src/automation/index.js",
       "@neurodesk/webapp-components/ui": "./vendor/webapp-components/src/ui/index.js",
+      "@neurodesk/webapp-components/viewer": "./vendor/webapp-components/src/viewer/index.js",
       "@neurodesk/webapp-components/file-io": "./vendor/webapp-components/src/file-io/index.js",
       "@neurodesk/webapp-components/volume": "./vendor/webapp-components/src/volume/index.js",
       "@neurodesk/webapp-components/": "./vendor/webapp-components/src/"
@@ -79,28 +83,28 @@
 
       <!-- 1. INPUT — choose a structural T1 or an atlas-aligned lesion mask. -->
       <section class="sidebar-section" id="stepLoadSection" data-disclosure>
-        <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
+        <h2 class="section-title nd-heading-inline"><button type="button" class="section-toggle" data-disclosure-toggle>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           1. Input
         </button></h2>
         <div class="section-content" data-disclosure-panel>
           <div class="param-group">
-            <div class="param-label-row">
+            <div class="param-label-row nd-heading-inline">
               <label class="param-label" for="structuralFileInput">Structural T1 (NIfTI / DICOM)</label>
               <span class="nd-info-icon" aria-label="Structural T1 help" tabindex="0">i
                 <span class="nd-info-tooltip" role="tooltip">
-                  Choose a structural T1. Loading the image only displays it; processing starts when you click Run analysis.
+                  Choose a structural T1. Loading the image only displays it; processing starts when you click Run lesion segmentation.
                 </span>
               </span>
             </div>
             <input type="file" data-neurodesk-input="image" id="structuralFileInput" multiple>
           </div>
           <div class="param-group">
-            <div class="param-label-row">
+            <div class="param-label-row nd-heading-inline">
               <label class="param-label" for="deepIslesDwiFileInput">DWI/TRACE (NIfTI / DICOM)</label>
               <span class="nd-info-icon" aria-label="DWI/TRACE help" tabindex="0">i
                 <span class="nd-info-tooltip" role="tooltip">
-                  With DWI/TRACE plus ADC or b0, Run analysis seeds the lesion with DeepISLES (SEALS) instead of the T1 model. Without ADC, it is computed from the b0. Without a T1, the b0 (or DWI/TRACE) is used for registration.
+                  With DWI/TRACE plus ADC or b0, Run lesion segmentation seeds the lesion with DeepISLES (SEALS) instead of the T1 model. Without ADC, it is computed from the b0. Without a T1, the b0 (or DWI/TRACE) is used for registration.
                 </span>
               </span>
             </div>
@@ -114,19 +118,20 @@
             <label class="param-label" for="deepIslesB0FileInput">b0 (NIfTI / DICOM)</label>
             <input type="file" data-neurodesk-input="image" id="deepIslesB0FileInput" multiple>
           </div>
+          <button class="btn btn-primary" id="runLesionPreparationButton">Run lesion segmentation</button>
         </div>
       </section>
 
       <!-- 2. RUN — primary one-click action. Per-stage controls hidden in
            Advanced disclosure to avoid overwhelming clinicians. -->
       <section class="sidebar-section" id="stepLesionSection" data-disclosure>
-        <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
+        <h2 class="section-title nd-heading-inline"><button type="button" class="section-toggle" data-disclosure-toggle>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          2. Run analysis
+          2. Reporting analysis
 
         </button><span class="nd-info-icon" aria-label="Run analysis help" tabindex="0">i
             <span class="nd-info-tooltip" role="tooltip">
-              Runs the selected chain: brain extraction, prealign when needed, lesion segmentation, registration, atlas overlap, FC map, and thresholding.
+              Runs registration, atlas overlap, connectivity and optional knowledge-base reporting after mask acceptance.
             </span>
           </span></h2>
         <div class="section-content" data-disclosure-panel>
@@ -134,12 +139,22 @@
             <label class="param-label" for="atlasSelect">Atlas</label>
             <select id="atlasSelect" class="select-input">
               <option value="schaefer400" selected>Schaefer 400 parcels</option>
+              <option value="harvardoxford">Harvard–Oxford cortical + subcortical (direct overlap)</option>
               <option value="yeo7">Yeo 7 networks</option>
             </select>
           </div>
+          <div class="param-group">
+            <label class="param-label" for="kbEvidenceSelect">Knowledge-base evidence</label>
+            <select id="kbEvidenceSelect" class="select-input" title="Which literature findings the knowledge-base report uses">
+              <option value="off">Do not include knowledge-base findings</option>
+              <option value="approved" selected>Approved findings only</option>
+              <option value="drafts">Approved + unreviewed drafts</option>
+            </select>
+          </div>
+
           <div class="step-buttons">
-            <button class="btn btn-primary" id="runFullPipelineButton">
-              Run analysis
+            <button class="btn btn-secondary" id="runFullPipelineButton">
+              Run reporting analysis
             </button>
           </div>
 
@@ -170,7 +185,7 @@
                 </div>
                 <button class="btn btn-secondary btn-sm" id="checkAtlasAlignmentButton" disabled>5 Check atlas alignment</button>
                 <div class="param-group workflow-control">
-                  <div class="param-label-row">
+                  <div class="param-label-row nd-heading-inline">
                     <label class="param-label" for="registrationBlendValue">Patient/MNI blend</label>
                     <span id="registrationBlendLabel" class="param-value">50% patient</span>
                   </div>
@@ -195,9 +210,64 @@
         </div>
       </section>
 
+          <details class="sidebar-section nd-report-form" id="patientBehaviorOptions">
+            <summary class="section-title">Behavioural information (optional)</summary>
+            <div class="nd-section-content">
+              <label class="nd-check"><input id="includePatientBehavior" type="checkbox" checked> Include in report</label>
+              <p class="nd-hint" id="patientContextSource" hidden></p>
+              <div class="nd-field">
+                <label for="patientAge">Age at stroke (years)</label>
+                <input id="patientAge" type="number" min="0" max="130" step="1" placeholder="Not recorded">
+              </div>
+              <div class="nd-field">
+                <label for="patientSex">Sex</label>
+                <select id="patientSex">
+                  <option value="">Not recorded</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="other">Other</option>
+                  <option value="not-disclosed">Prefer not to disclose</option>
+                </select>
+              </div>
+              <div class="nd-field">
+                <label for="patientTpo">Time post-onset at assessment (TPO)</label>
+                <input id="patientTpo" type="number" min="0" step="any" placeholder="Not recorded">
+                <label for="patientTpoUnit">TPO unit</label>
+                <select id="patientTpoUnit">
+                  <option value="days">Days</option>
+                  <option value="weeks">Weeks</option>
+                  <option value="months" selected>Months</option>
+                  <option value="years">Years</option>
+                </select>
+                <span class="nd-hint">Patient context; demographic values do not currently filter KB findings.</span>
+                <span class="nd-hint hidden" id="patientContextError">Check age (0–130 whole years) and TPO (zero or greater).</span>
+              </div>
+              <div class="nd-field">
+                <label for="patientBehaviorNotes">Clinical observations</label>
+                <textarea id="patientBehaviorNotes" rows="3" placeholder="Observed language, communication or other behavioural difficulties"></textarea>
+              </div>
+              <div id="patientBehaviorAssessments"></div>
+              <button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" id="addPatientAssessment">Add assessment</button>
+              <div class="nd-field">
+                <div class="nd-heading-inline">
+                <label for="patientObservedSymptoms">Observed difficulties (KB labels)</label>
+                <span class="nd-info-icon" tabindex="0" aria-label="Behavioural evidence matching help">i
+                  <span class="nd-info-tooltip" role="tooltip">Select symptoms and optionally rate their severity to mark matching lesion-based KB evidence. Ratings are descriptive, not standardized test scores. Unselected symptoms are unassessed, not absent. Notes and raw scores are not interpreted automatically. Selection does not change anatomical overlap, evidence direction, strength or therapy rankings.</span>
+                </span>
+                </div>
+                <select id="patientObservedSymptoms" multiple size="6" disabled aria-describedby="patientSymptomsHint"></select>
+                <div id="patientSymptomSeverity"></div>
+                <span class="nd-hint" id="patientSymptomsHint">Open this section to load symptom labels.</span>
+
+                <button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" id="loadPatientSymptoms">Load / refresh symptom labels</button>
+              </div>
+
+            </div>
+          </details>
+
       <!-- 3. RESULTS — result filters and downloads; the tables are in the viewer's Results view. -->
       <section class="sidebar-section collapsed" id="resultsSection" data-disclosure>
-        <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
+        <h2 class="section-title nd-heading-inline"><button type="button" class="section-toggle" data-disclosure-toggle>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-7"/></svg>
           3. Results
         </button></h2>
@@ -218,7 +288,7 @@
               </span>
             </div>
             <div class="param-row">
-              <div class="param-label-row">
+              <div class="param-label-row nd-heading-inline">
                 <label for="networkThresholdValue">Top voxels</label>
                 <span id="networkThresholdValueLabel" class="param-value">5%</span>
               </div>
@@ -230,6 +300,7 @@
           </div>
 
           <div class="step-buttons results-actions">
+            <button class="btn btn-secondary btn-sm" id="downloadReportButton" disabled title="Choose the sections to include, then print to PDF or save as HTML">Download report</button>
             <button class="btn btn-secondary btn-sm" id="downloadOverlapCsv" disabled>Download overlap CSV</button>
             <button class="btn btn-secondary btn-sm" id="downloadNetworkMapButton" disabled>Download network map</button>
             <button class="btn btn-secondary btn-sm" id="downloadThresholdedNetworkMapButton" disabled>Download thresholded mask</button>
@@ -267,6 +338,8 @@
         <div class="mask-toolbar-group mask-draw-group" role="group" aria-label="Draw lesion mask">
           <div class="segmented-control" role="group" aria-label="Mask drawing mode">
             <button class="tool-button active" id="maskPaintButton" type="button" title="Paint lesion voxels">Paint</button>
+            <button class="tool-button" id="maskLassoButton" type="button" aria-pressed="false" title="Outline the lesion on a 2D slice; release to close and fill">Lasso</button>
+            <button class="tool-button" id="maskWandButton" type="button" aria-pressed="false" title="Click a lesion seed to grow a connected region of similar intensity">Magic wand</button>
             <button class="tool-button" id="maskEraseButton" type="button" title="Erase lesion voxels">Erase</button>
             <button class="tool-button" id="maskEraseClusterButton" type="button" title="Erase the connected lesion cluster under the cursor">Erase cluster</button>
           </div>
@@ -284,6 +357,28 @@
             <input type="checkbox" id="maskFilledToggle">
             <span>Fill</span>
           </label>
+        </div>
+        <div class="mask-toolbar-group hidden" id="maskWandControls" role="group" aria-label="Magic wand settings">
+          <label class="compact-control" for="maskWandTolerance">
+            <span>Tolerance %</span>
+            <input id="maskWandTolerance" type="number" min="1" max="50" step="1" value="10" class="tool-select">
+          </label>
+          <label class="compact-control" for="maskWandRadius">
+            <span>Radius mm</span>
+            <input id="maskWandRadius" type="number" min="1" max="50" step="1" value="15" class="tool-select">
+          </label>
+          <label class="viewer-checkbox">
+            <input id="maskWandSingleSlice" type="checkbox">
+            <span>Single slice only</span>
+          </label>
+          <label class="viewer-checkbox">
+            <input id="maskWandBrainOnly" type="checkbox" disabled>
+            <span>Brain mask only</span>
+          </label>
+          <span class="nd-hint" id="maskWandBrainHint">No brain mask: wand is unrestricted. Run brain extraction to enable.</span>
+          <span class="nd-info-icon" id="maskWandHelp" tabindex="0" aria-label="Magic wand help">i
+            <span class="nd-info-tooltip" role="tooltip">Click inside the lesion to grow connected voxels within the radius. Brain mask only prevents growth outside the brain mask, even when its overlay is hidden. Disable it if the brain mask excludes part of the lesion. Growth spans slices unless Single slice only is checked. Tolerance is ±% of the image’s robust intensity range, giving dark and bright seeds the same absolute allowance; the mouse wheel also adjusts it. Similar tissue and CSF may be included: this is intensity growing, not stroke detection. Switch to Paint to scroll slices. Review every affected slice; Undo removes a growth.</span>
+          </span>
         </div>
         <div class="mask-toolbar-group mask-edit-group" role="group" aria-label="Mask edit actions">
           <button class="tool-button" id="maskUndoButton" type="button" title="Undo mask edit">Undo</button>
@@ -383,18 +478,30 @@
       <canvas id="gl1"></canvas>
       <section id="resultsReport" class="nd-viewer-report" aria-label="Results" hidden>
         <div class="nd-report-stack">
+          <section id="patientBehaviorReport" aria-label="Behavioural information" hidden>
+            <div class="nd-report-heading"><h3>Behavioural information</h3></div>
+            <p class="nd-report-notes">Supplied clinical context; scores are shown as entered and do not change the analysis.</p>
+            <div id="patientBehaviorReportBody"></div>
+          </section>
+          <section id="resultsMethod" class="hidden" aria-label="Method">
+            <details>
+              <summary>Method</summary>
+              <div id="resultsMethodText"></div>
+            </details>
+          </section>
+          <section id="scanConfirmation" aria-label="Scan confirmation">
+            <div class="nd-report-heading nd-heading-inline"><h3>Scan confirmation</h3></div>
+            <button type="button" id="captureReportScan" class="btn btn-secondary">View scan with lesion mask</button>
+          </section>
           <div id="outsideAtlasWarning" class="nd-message warning hidden" role="note"></div>
           <section aria-label="Direct lesion overlap">
-            <div class="nd-report-heading">
-              <h3>Direct lesion overlap</h3>
-              <span class="nd-info-icon" aria-label="Direct lesion overlap help" tabindex="0">i
-                <span class="nd-info-tooltip" role="tooltip">
-                  Atlas labels listed here contain lesion voxels directly. Lesion % is the share of lesion voxels in each label.
-                </span>
-              </span>
+            <div class="nd-report-heading nd-heading-inline">
+              <h3>Direct lesion overlap <span class="nd-info-icon" aria-label="Direct lesion overlap help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip" id="directOverlapHelp">Atlas labels listed here contain lesion voxels directly. Lesion % divides overlap by the whole lesion; ROI covered % divides the same overlap by the whole atlas region. A region of interest (ROI) is an atlas label.</span>
+              </span></h3>
             </div>
             <div class="nd-table-scroll">
-              <table id="networkOverlapTable" class="nd-data-table">
+              <table id="networkOverlapTable" class="nd-data-table nd-table-right">
                 <thead>
                   <tr>
                     <th>Atlas label</th>
@@ -407,7 +514,7 @@
             </div>
           </section>
           <section id="directFunctionProfileResults" class="hidden" aria-label="Functional associations from direct lesion overlap">
-            <div class="nd-report-heading">
+            <div class="nd-report-heading nd-heading-inline">
               <h3>Functional associations from direct lesion overlap</h3>
               <span class="nd-info-icon" aria-label="Direct functional associations help" tabindex="0">i
                 <span class="nd-info-tooltip" role="tooltip">
@@ -416,7 +523,7 @@
               </span>
             </div>
             <div class="nd-table-scroll">
-              <table id="directFunctionProfileTable" class="nd-data-table">
+              <table id="directFunctionProfileTable" class="nd-data-table nd-table-right">
                 <thead>
                   <tr>
                     <th>Term</th>
@@ -430,16 +537,16 @@
           </section>
           <p class="nd-report-notes" id="networkThresholdSummary">Run analysis first to enable thresholding.</p>
           <section id="affectedNetworkResults" class="hidden" aria-label="Connectivity-map effects">
-            <div class="nd-report-heading">
+            <div class="nd-report-heading nd-heading-inline">
               <h3>Connectivity-map effects</h3>
               <span class="nd-info-icon" aria-label="Connectivity-map effects help" tabindex="0">i
                 <span class="nd-info-tooltip" role="tooltip">
-                  Atlas labels listed here contain voxels surviving the thresholded connectivity map. Map % is the share of thresholded map voxels in each label.
+                  The lesion overlaps atlas seed regions. Their normative functional-connectivity maps are weighted by lesion overlap and summed, then thresholded. Map % divides surviving voxels in this label by all surviving map voxels. These are group connectivity associations, not measured damage outside the lesion.
                 </span>
               </span>
             </div>
             <div class="nd-table-scroll">
-              <table id="affectedNetworkTable" class="nd-data-table">
+              <table id="affectedNetworkTable" class="nd-data-table nd-table-right">
                 <thead>
                   <tr>
                     <th>Atlas label</th>
@@ -450,17 +557,41 @@
                 <tbody></tbody>
               </table>
             </div>
+            <details><summary>How connectivity becomes a functional association</summary>
+              <figure class="nd-chart-figure"><figcaption>Explanatory flow; this is not a patient-specific connectivity measurement.</figcaption>
+                <svg viewBox="0 0 480 215" role="img" aria-label="Lesion overlap weights normative connectivity maps. Thresholded map overlap weights literature profiles to give exploratory functional terms.">
+                  <g fill="none" stroke="currentColor">
+                    <rect x="5" y="5" width="470" height="40" rx="5"/>
+                    <path d="M240 45v15m-5-5 5 5 5-5"/>
+                    <rect x="5" y="60" width="470" height="40" rx="5"/>
+                    <path d="M240 100v15m-5-5 5 5 5-5"/>
+                    <rect x="5" y="115" width="470" height="40" rx="5"/>
+                    <path d="M240 155v15m-5-5 5 5 5-5"/>
+                    <rect x="5" y="170" width="470" height="40" rx="5"/>
+                  </g>
+                  <g fill="currentColor" text-anchor="middle">
+                    <text x="240" y="30">Lesion overlap → atlas seed weights</text>
+                    <text x="240" y="85">Weighted normative connectivity → threshold</text>
+                    <text x="240" y="140">Surviving map voxels → atlas-label weights</text>
+                    <text x="240" y="195">Literature profiles → exploratory functional terms</text>
+                  </g>
+                </svg>
+                <p>Lesion → seed-region weights → weighted normative connectivity map → threshold → atlas-label overlap</p>
+                <p>Atlas-label overlap → Neurosynth term profiles → weighted term scores</p>
+                <p>Connected regions can lie outside the stroke. Associated terms suggest research hypotheses; they do not establish lost function.</p>
+              </figure>
+            </details>
             <section id="mapFunctionProfileResults" class="hidden" aria-label="Functional associations from connectivity-map effects">
-              <div class="nd-report-heading">
+              <div class="nd-report-heading nd-heading-inline">
                 <h3>Functional associations from connectivity-map effects</h3>
                 <span class="nd-info-icon" aria-label="Connectivity-map functional associations help" tabindex="0">i
                   <span class="nd-info-tooltip" role="tooltip">
-                    Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.
+                    Surviving connectivity-map voxels identify atlas labels. Their Neurosynth literature-term profiles are weighted by map overlap to rank associated functions. A higher score means a stronger literature association, not a probability of impairment or a measured deficit.
                   </span>
                 </span>
               </div>
               <div class="nd-table-scroll">
-                <table id="mapFunctionProfileTable" class="nd-data-table">
+                <table id="mapFunctionProfileTable" class="nd-data-table nd-table-right">
                   <thead>
                     <tr>
                       <th>Term</th>
@@ -473,6 +604,52 @@
               </div>
             </section>
           </section>
+          <h1 id="kbReportHeading" class="hidden">Stroke Aphasia Knowledge Base</h1>
+          <section id="kbMeasuresResults" class="hidden" aria-label="This lesion's measures: what the evidence says">
+            <div class="nd-report-heading nd-heading-inline">
+              <h3>Lesion size: what the evidence says</h3>
+              <span class="nd-info-icon" aria-label="Lesion size evidence help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
+                  The lesion's volume, read before its location: larger lesions damage more regions and match more findings whatever their position, and volume is itself one of the stronger correlates of severity. Group associations, not predictions.
+                </span>
+              </span>
+            </div>
+            <div id="kbMeasuresBody"></div>
+          </section>
+          <section id="kbLocationResults" class="hidden" aria-label="Lesion location: what the evidence says">
+            <div class="nd-report-heading nd-heading-inline">
+              <h3>Lesion location: what the evidence says</h3>
+              <span class="nd-info-icon" aria-label="Lesion location evidence help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
+                  Published group-level findings about symptoms, matched to the regions this lesion damages through the aphasia knowledge base's curated atlas mapping. Literature associations, not predictions for this person.
+                </span>
+              </span>
+            </div>
+            <div id="kbLocationBody"></div>
+          </section>
+          <section id="kbWhiteMatterResults" class="hidden" aria-label="White-matter disconnection: what the evidence says">
+            <div class="nd-report-heading nd-heading-inline">
+              <h3>White-matter disconnection: what the evidence says</h3>
+              <span class="nd-info-icon" aria-label="White-matter disconnection help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
+                  JHU reference-tract overlap and, when available, ENIGMA streamline-based disconnection with linked knowledge-base findings. Atlas overlap does not measure the fraction of fibres disconnected.
+                </span>
+              </span>
+            </div>
+            <div id="kbWhiteMatterBody"></div>
+          </section>
+          <section id="kbTherapyResults" class="hidden" aria-label="Therapy evidence">
+            <div class="nd-report-heading nd-heading-inline">
+              <h3>Therapy evidence for the implicated impairments</h3>
+              <span class="nd-info-icon" aria-label="Therapy evidence help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
+                  Therapies whose knowledge-base entries target the symptom-level impairments the lesion location points to. Research associations from the lesion alone, not prescriptions.
+                </span>
+              </span>
+            </div>
+            <div id="kbTherapyBody"></div>
+          </section>
+          <div class="nd-report-notes hidden" id="kbReportProvenance"></div>
         </div>
       </section>
     </div>
@@ -531,6 +708,41 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="reportModal" inert aria-hidden="true">
+  <div class="modal report-modal">
+    <div class="modal-header">
+      <h3>Download report</h3>
+      <button class="modal-close" id="closeReport" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p>Choose what to include. The report is built from the Results view as shown, with every finding expanded, and never leaves this computer.</p>
+      <fieldset class="report-parts" id="reportParts">
+        <legend>Sections</legend>
+        <label><input type="checkbox" data-report-part="behavior" checked> Behavioural information</label>
+        <label><input type="checkbox" data-report-part="method" checked> Method summary</label>
+        <label><input type="checkbox" data-report-part="image" checked> Lesion image (3-plane crosshair on the lesion)</label>
+        <div class="report-image-options" id="reportImageOptions">
+          <label><input type="radio" name="reportImage" value="with-mask" checked> with the lesion mask</label>
+          <label><input type="radio" name="reportImage" value="without-mask"> without the mask</label>
+          <label><input type="radio" name="reportImage" value="both"> both</label>
+        </div>
+        <label><input type="checkbox" data-report-part="overlap" checked> Direct lesion overlap</label>
+        <label><input type="checkbox" data-report-part="network" checked> Connectivity-map effects</label>
+        <label><input type="checkbox" data-report-part="measures" checked> Lesion size: what the evidence says</label>
+        <label><input type="checkbox" data-report-part="location" checked> Lesion location: what the evidence says</label>
+        <label><input type="checkbox" data-report-part="whiteMatter" checked> White-matter disconnection</label>
+        <label><input type="checkbox" data-report-part="therapy" checked> Therapy evidence</label>
+        <label><input type="checkbox" data-report-part="provenance" checked> Provenance and caveats</label>
+      </fieldset>
+      <div class="step-buttons report-actions">
+        <button class="btn btn-secondary btn-sm" id="reportPrintButton" type="button" title="Opens the browser's print dialog, where Save as PDF is an option">Save as PDF</button>
+        <button class="btn btn-secondary btn-sm" id="reportHtmlButton" type="button" title="One self-contained HTML file with the images embedded">Download HTML</button>
+      </div>
+      <p class="nd-report-notes" id="reportModalStatus"></p>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="privacyModal" inert aria-hidden="true">
   <div class="modal privacy-modal">
     <div class="modal-header">
@@ -549,7 +761,7 @@
       </div>
       <h4>What this means</h4>
       <ul class="privacy-list">
-        <li>No patient image data, lesion masks, voxel values, screenshots, or generated outputs are uploaded by the app.</li>
+        <li>No patient image data, lesion masks, behavioural observations, assessment scores, voxel values, screenshots, or generated outputs are uploaded by the app.</li>
         <li>Atlas and model assets may be fetched by the browser when a workflow needs them.</li>
         <li>Downloaded result files are created locally from browser memory.</li>
       </ul>

@@ -12,6 +12,9 @@ running entirely in the browser:
    Schaefer uses the supported public N=155 development_fmri pack through the
    lazy-shard loader.
 5. Threshold and visualize on top of MNI.
+6. Read the knowledge-base report: cited literature findings for the damaged
+   regions, the white-matter tracts the lesion disconnects, and therapies
+   with evidence for the implicated impairments.
 
 No backend. No data upload. Hosted on GitHub Pages.
 
@@ -611,6 +614,61 @@ Pure JS in [`web/js/modules/threshold.js`](web/js/modules/threshold.js);
 the slider re-fires `applyNetworkThreshold` on every input change so the
 mask + summary stay in sync with the controls.
 
+## Knowledge-base report
+
+After the atlas results, the Results view shows what the aphasia knowledge
+base ([micmas/stroke-aphasia-kb](https://github.com/micmas/stroke-aphasia-kb), its own repository: curated, source-traceable findings linking
+stroke lesion locations to aphasia impairments, therapy responses and
+recovery predictors; the [calmar](https://github.com/micmas/calmar)
+pipeline pins the same repository as a submodule) says about this lesion. It is the browser port of the Python
+participant report's evidence sections:
+
+- **Lesion size: what the evidence says.** Read first, as in the Python
+  report: the volume of the MNI-space mask, the note that larger lesions
+  match more findings whatever their location, and the knowledge base's
+  findings about lesion volume.
+- **Lesion location: what the evidence says.** The warped lesion is copied by
+  world coordinates onto the label atlases the knowledge base's curated atlas
+  mapping is defined on (HarvardOxford cortical and AAL, fetched from a pinned
+  `neurodata/neuroparc` commit; JHU tracts and XTRACT when hosted) and reduced to damage per anatomical unit and hemisphere. A
+  region counts as damaged when it holds ≥5 % of the lesion or ≥25 % of it is
+  destroyed. The findings matched to those regions are summarised per
+  symptom target, ordered by a display heuristic that is not an evidence
+  grade, and listed per damaged region with their citation, method,
+  relationship direction, strength, confidence, study phase, review
+  provenance, lesion-mapping design (analysis, n, corrections; schema v2.7,
+  which also grades down findings with weak designs) and source passages. Aphasia types are never shown as targets:
+  the report does not infer the presence or type of aphasia from a lesion.
+- **White-matter disconnection.** The lesion is resampled onto the FSL
+  MNI152 1 mm grid and scored against the ENIGMA Symmetric tractography atlas
+  with nii2tvx, the [Disconnectome](../disconnectome/) webapp's engine: for
+  each of 65 bundles, the fraction of its streamlines passing through the
+  lesion. A tract counts as disconnected at ≥50 %; the knowledge base's tract
+  regions take their most disconnected bundle, and their findings follow.
+- **Therapy evidence.** Therapies whose entries target the symptom-level
+  impairments the lesion points to, with their active ingredients (RTSS)
+  and citations. No behavioural data enter the webapp, so these are
+  lesion-only associations; the full report weighs a behavioural profile
+  three times as much.
+
+Everything is a group-level literature association, never a prediction for
+the person on the screen. Citation keys link to the paper's DOI. The Results
+view opens with a Method paragraph naming what the run did and which model
+and atlas versions it used, and **Download report** lets you choose the
+sections (and a 3-plane lesion image, with or without the mask) to save as
+PDF through the browser's print dialog or as one self-contained HTML file. The
+knowledge base ships in two versions, chosen under **Knowledge-base evidence**
+before running: `web/models/annotations/aphasia-kb.json` (approved entries,
+the default) and `aphasia-kb-drafts.json` (approved plus unreviewed drafts,
+each draft finding marked "Unreviewed draft" in the report). Both are exported
+by `export_webapp.py` in the KB repository
+(`python3 scripts/sync_kb.py --kb <stroke-aphasia-kb checkout> --both` runs the
+two exports, records the KB commit and updates the manifests); the evidence logic
+in `packages/calmar/src/kb-evidence.js` is the KB repository's
+`js/kb-evidence.js` vendored at a pinned commit, checked against fixtures the
+same script writes with the Python code (`tests/fixtures/kb-parity/kb-parity.json`).
+The KB is edited only in its own repository; this app never modifies it.
+
 ## Attribution
 
 The browser scaffolding (NiiVue viewer integration, ONNX Runtime Web worker
@@ -626,6 +684,8 @@ Pipeline-specific dependencies (added incrementally):
 - **Registration**: SynthMorph (Hoffmann 2022, Apache-2.0); UNet-only ONNX cut (layers 0–33); JS-side SVF integration + warp.
 - **Atlases**: Yeo 2011 7-network cortical atlas; Schaefer 2018 400 × 7 networks (CC-BY).
 - **Connectomes**: Yeo7 development_fmri N=155 group functional connectivity (computed by `scripts/build_yeo7_connectome.py`, Yeo7 ROI seed-to-voxel t-maps). Schaefer400 development_fmri N=155 group functional connectivity is built by `scripts/build_schaefer400_connectome.py` and served as 10 lazy float16 shards with a 4 mm Schaefer companion atlas.
+- **Knowledge-base report atlases**: Harvard-Oxford cortical structural atlas (cort-maxprob-thr25, 2 mm) and JHU white-matter tractography atlas (maxprob-thr50, 2 mm) and XTRACT HCP tract atlases (Warrington 2020; maxprob5, 1 mm) from FSL (FSL atlas licence, non-commercial); AAL (Tzourio-Mazoyer 2002, SPM12 release; free for academic use). ENIGMA Symmetric White Matter Tractography Atlas v1.0.0 (Ba Gari et al. 2026, CC-BY-4.0) as the TVX index pinned by `packages/nii2tvx`, scored with nii2tvx (BSD-2-Clause).
+- **Knowledge base**: the stroke aphasia knowledge base, [micmas/stroke-aphasia-kb](https://github.com/micmas/stroke-aphasia-kb) (MIT), approved entries, exported by its `export_webapp.py`; each finding keeps its citation key, and the bibliography travels with the export.
 - **Functional profiles**: Exploratory term associations from compact Neurosynth v7 / NiMARE profile assets. Yeo7 profiles are rebuilt offline with `scripts/build_yeo7_function_profiles.py`; Schaefer400 profiles are generated by `scripts/build_schaefer400_function_profiles.py` with a parcel-wise NiMARE `ROIAssociationDecoder` over all 400 Schaefer ROIs. Both are weighted in-browser by direct lesion overlap or thresholded connectivity-map effects.
 
 ### Diffusion lesion seed (DeepISLES SEALS)
@@ -783,3 +843,34 @@ Standalone action lists verified releases after publication.
 
 See the [command-line guide](../../packages/calmar/README.md#command-line) for
 atlas-space inputs, offline model preparation, outputs and platform support.
+
+### Automatic KB updates on the fork
+
+The **CALMaR knowledge-base sync** GitHub workflow checks `micmas/stroke-aphasia-kb`
+hourly and can also be run manually. A new revision regenerates both evidence
+levels, validates their checksums and Python/JavaScript parity, and commits a
+dated snapshot update to `main`. Each manifest records the full `kbSourceCommit`;
+reports continue to identify the evidence revision used. A failed check leaves
+the previous snapshot in place. Existing deployments need to pull and rebuild to
+use the updated snapshot; the browser does not silently change evidence mid-run.
+
+
+### Preparing paired diffusion examples
+
+`node scripts/prepare_diffusion_examples.mjs` downloads the unchanged OpenADS
+example DWI, ADC and b0 to `$TMPDIR/calmar-diffusion-example`, verifies the
+pinned checksums and NIfTI dimensions, and preserves the source commit,
+attribution and JHU non-profit research licence. Upload that folder's contents
+to `examples/calmar/stroke-diffusion/` in `neurodeskorg/webapps`.
+
+After upload, run `node scripts/prepare_diffusion_examples.mjs --hf-revision
+<40-character-commit>` to write the two catalog entries to the prepared folder.
+For local development, run `pnpm --filter calmar dev:diffusion-examples`.
+This stages the paired scans in TMPDIR and generates the ignored local
+`web/examples.json` catalog using immutable original URLs. Production catalog
+entries are registered after the Hugging Face upload. Register entries in
+`examples.json` and run the root
+`scripts/lock-example-assets.mjs` before enabling them. The DWI+ADC bundle
+supplies ADC directly; the DWI+b0 bundle exercises ADC computation. b0 alone
+is not an automatic-lesion example. No demographic values are supplied for
+this participant.

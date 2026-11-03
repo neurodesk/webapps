@@ -90,11 +90,11 @@ assert.deepEqual(
   assert.deepEqual(ids($$('.app-sidebar section.sidebar-section')), ['stepLoadSection', 'stepLesionSection', 'resultsSection']);
   assert.deepEqual(
     $$('.app-sidebar .section-toggle').map(label),
-    ['1. Input', '2. Run analysis', '3. Results']
+    ['1. Input', '2. Reporting analysis', '3. Results']
   );
   const primary = $$('.app-sidebar .btn-primary');
-  assert.deepEqual(ids(primary), ['runFullPipelineButton'], 'the sidebar has exactly one primary action');
-  assert.equal(text(primary[0]), 'Run analysis');
+  assert.deepEqual(ids(primary), ['runLesionPreparationButton'], 'the sidebar has exactly one primary action');
+  assert.equal(text(primary[0]), 'Run lesion segmentation');
   assert.equal($$('.btn-primary').length, 1, 'and no other primary button anywhere');
   assert.equal($('#pipelineSelect, label[for="pipelineSelect"]'), null, 'no visible pipeline selector');
 }
@@ -117,7 +117,7 @@ assert.deepEqual(
     assert.equal(input.multiple, true, `${id} accepts a DICOM series`);
   }
   const structuralHelp = $('#stepLoadSection .nd-info-icon[aria-label="Structural T1 help"] .nd-info-tooltip');
-  assert.match(text(structuralHelp), /Loading the image only displays it; processing starts when you click Run analysis\./);
+  assert.match(text(structuralHelp), /Loading the image only displays it; processing starts when you click Run lesion segmentation\./);
   // The hidden compatibility hooks behind the compact buttons.
   for (const id of ['lesionFileInput', 'manualMaskFileInput']) {
     const input = document.getElementById(id);
@@ -134,7 +134,7 @@ assert.deepEqual(
   const options = Array.from($('#atlasSelect').options);
   assert.deepEqual(
     options.map(option => [option.value, option.textContent, option.selected]),
-    [['schaefer400', 'Schaefer 400 parcels', true], ['yeo7', 'Yeo 7 networks', false]]
+    [['schaefer400', 'Schaefer 400 parcels', true], ['harvardoxford', 'Harvard–Oxford cortical + subcortical (direct overlap)', false], ['yeo7', 'Yeo 7 networks', false]]
   );
 }
 
@@ -225,18 +225,39 @@ assert.deepEqual(
   assert.ok(report.classList.contains('nd-viewer-report'));
   assert.equal(report.hidden, true, 'the report starts hidden');
   assert.deepEqual(
-    Array.from(report.querySelectorAll('h3')).map(text),
+    Array.from(report.querySelectorAll('h3')).map(node => {
+      const copy = node.cloneNode(true);
+      copy.querySelectorAll('.nd-info-icon').forEach(info => info.remove());
+      return text(copy);
+    }),
     [
+      // What the run did, first; empty until there is a result.
+      'Behavioural information',
+      'Scan confirmation',
       'Direct lesion overlap',
       'Functional associations from direct lesion overlap',
       'Connectivity-map effects',
-      'Functional associations from connectivity-map effects'
+      'Functional associations from connectivity-map effects',
+      // The knowledge-base report follows the atlas results: lesion size
+      // first, then cited findings for the damaged regions, disconnected
+      // tracts, matched therapies.
+      'Lesion size: what the evidence says',
+      'Lesion location: what the evidence says',
+      'White-matter disconnection: what the evidence says',
+      'Therapy evidence for the implicated impairments'
     ]
   );
   assert.deepEqual(
     ids(Array.from(report.querySelectorAll('[id]')).filter(element => !element.parentElement.closest('table'))),
     [
+      'patientBehaviorReport',
+      'patientBehaviorReportBody',
+      'resultsMethod',
+      'resultsMethodText',
+      'scanConfirmation',
+      'captureReportScan',
       'outsideAtlasWarning',
+      'directOverlapHelp',
       'networkOverlapTable',
       'directFunctionProfileResults',
       'directFunctionProfileTable',
@@ -244,7 +265,17 @@ assert.deepEqual(
       'affectedNetworkResults',
       'affectedNetworkTable',
       'mapFunctionProfileResults',
-      'mapFunctionProfileTable'
+      'mapFunctionProfileTable',
+      'kbReportHeading',
+      'kbMeasuresResults',
+      'kbMeasuresBody',
+      'kbLocationResults',
+      'kbLocationBody',
+      'kbWhiteMatterResults',
+      'kbWhiteMatterBody',
+      'kbTherapyResults',
+      'kbTherapyBody',
+      'kbReportProvenance'
     ],
     'the report keeps the result ids in reading order'
   );
@@ -258,7 +289,8 @@ assert.deepEqual(
   assert.deepEqual(columns('affectedNetworkTable'), ['Atlas label', 'Voxels', 'Map %']);
   assert.deepEqual(columns('directFunctionProfileTable'), ['Term', 'Score', 'Atlas label drivers']);
   assert.deepEqual(columns('mapFunctionProfileTable'), ['Term', 'Score', 'Atlas label drivers']);
-  for (const id of ['outsideAtlasWarning', 'directFunctionProfileResults', 'affectedNetworkResults', 'mapFunctionProfileResults']) {
+  for (const id of ['resultsMethod', 'outsideAtlasWarning', 'directFunctionProfileResults', 'affectedNetworkResults', 'mapFunctionProfileResults',
+    'kbMeasuresResults', 'kbLocationResults', 'kbWhiteMatterResults', 'kbTherapyResults', 'kbReportProvenance']) {
     assert.ok(document.getElementById(id).classList.contains('hidden'), `${id} is hidden until there is a result`);
   }
 
@@ -274,17 +306,18 @@ assert.deepEqual(
   const helpFor = name => text($(`:is(#resultsSection, #resultsReport) .nd-info-icon[aria-label="${name}"] .nd-info-tooltip`));
   assert.match(helpFor('Direct lesion overlap help'), /^Atlas labels listed here contain lesion voxels directly\. Lesion % /);
   assert.match(helpFor('Threshold connectivity map help'), /group-FC weighted t-map derived from the direct lesion-overlap profile/);
-  assert.match(helpFor('Connectivity-map effects help'), /surviving the thresholded connectivity map\. Map % /);
+  assert.match(helpFor('Connectivity-map effects help'), /Map % divides surviving voxels/);
   for (const name of ['Direct functional associations help', 'Connectivity-map functional associations help']) {
     assert.equal(
       helpFor(name),
-      'Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.'
+      name === 'Direct functional associations help' ? 'Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.' : 'Surviving connectivity-map voxels identify atlas labels. Their Neurosynth literature-term profiles are weighted by map overlap to rank associated functions. A higher score means a stronger literature association, not a probability of impairment or a measured deficit.'
     );
   }
 
   assert.deepEqual(
     $$('#resultsSection .results-actions button').map(button => [button.id, text(button), button.disabled]),
     [
+      ['downloadReportButton', 'Download report', true],
       ['downloadOverlapCsv', 'Download overlap CSV', true],
       ['downloadNetworkMapButton', 'Download network map', true],
       ['downloadThresholdedNetworkMapButton', 'Download thresholded mask', true],
@@ -344,7 +377,8 @@ assert.deepEqual(
   assert.deepEqual(
     groups.map(group => [group.getAttribute('aria-label'), controls(group)]),
     [
-      ['Draw lesion mask', ['maskPaintButton', 'maskEraseButton', 'maskEraseClusterButton', 'maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']],
+      ['Draw lesion mask', ['maskPaintButton', 'maskLassoButton', 'maskWandButton', 'maskEraseButton', 'maskEraseClusterButton', 'maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']],
+      ['Magic wand settings', ['maskWandTolerance', 'maskWandRadius', 'maskWandSingleSlice', 'maskWandBrainOnly', 'maskWandHelp']],
       ['Mask edit actions', ['maskUndoButton', 'maskBlankButton', 'maskSmoothButton']],
       ['Mask slice interpolation', ['maskInterpolateAxis', 'maskInterpolateButton', 'maskInterpolateHelp']],
       ['Mask review actions', ['confirmLesionMaskButton', 'uploadReviewMaskButton', 'downloadEditedLesionMaskButton']]
@@ -354,6 +388,8 @@ assert.deepEqual(
     Array.from(toolbar.querySelectorAll('button')).map(button => [label(button), button.title]),
     [
       ['Paint', 'Paint lesion voxels'],
+      ['Lasso', 'Outline the lesion on a 2D slice; release to close and fill'],
+      ['Magic wand', 'Click a lesion seed to grow a connected region of similar intensity'],
       ['Erase', 'Erase lesion voxels'],
       ['Erase cluster', 'Erase the connected lesion cluster under the cursor'],
       ['Undo', 'Undo mask edit'],
@@ -495,7 +531,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   const selector = $('#stepLoadSection .section-content').firstElementChild;
   assert.equal(selector.tagName.toLowerCase(), 'nd-example-selector', 'the example selector leads the input section');
   assert.equal($('#atlasSelect').value, 'schaefer400');
-  assert.equal($('#atlasSelect').options.length, 2, 'atlas options are not duplicated at boot');
+  assert.equal($('#atlasSelect').options.length, 3, 'atlas options are not duplicated at boot');
   assert.equal(app.registrationQcMode, 'mni', 'QC view starts from the selected option');
   assert.equal(text($('#registrationBlendLabel')), '50% patient');
   const slider = $('#networkThresholdValue');
@@ -525,7 +561,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
     };
   };
   for (const method of [
-    'runFullPipeline', 'runBrainExtraction', 'prealignToMni160', 'runLesionSegmentation', 'runDeepIslesSegmentation',
+    'runFullPipeline', 'runReportingAnalysis', 'runLesionPreparation', 'showScanConfirmation', 'runBrainExtraction', 'prealignToMni160', 'runLesionSegmentation', 'runDeepIslesSegmentation',
     'startLesionMaskReview', 'runRegistration', 'showRegistrationQc', 'applyRegistrationToLesion', 'runAtlasOverlap',
     'runFcNetworkMap', 'exportCsv', 'downloadNetworkMap', 'downloadThresholdedNetworkMap', 'showSubjectSpaceAtlas',
     'downloadSubjectSpaceAtlas', 'clearResults', 'downloadBrainMask', 'downloadLesionMask', 'confirmLesionDrawing',
@@ -550,7 +586,9 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
     assert.deepEqual(calls, expected, `#${id}`);
   };
 
-  await expectClick('runFullPipelineButton', [['runFullPipeline']]);
+  await expectClick('runLesionPreparationButton', [['runLesionPreparation']]);
+  await expectClick('captureReportScan', [['showScanConfirmation']]);
+  await expectClick('runFullPipelineButton', [['runReportingAnalysis']]);
   await expectClick('runBrainExtractionButton', [['runBrainExtraction']]);
   await expectClick('prealignToMniButton', [['prealignToMni160']]);
   app.autoLesionSeedFile = { name: 'seed.nii' };
@@ -581,6 +619,8 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
 
   // Mask review toolbar.
   await expectClick('maskPaintButton', [['setMaskDrawingTool', 'paint']]);
+  await expectClick('maskLassoButton', [['setMaskDrawingTool', 'lasso']]);
+  await expectClick('maskWandButton', [['setMaskDrawingTool', 'wand']]);
   await expectClick('maskEraseButton', [['setMaskDrawingTool', 'erase']]);
   await expectClick('maskEraseClusterButton', [['setMaskDrawingTool', 'eraseCluster']]);
   await expectClick('maskUndoButton', [['undo']]);
@@ -782,3 +822,8 @@ assert.equal($('dialog'), null, 'dialogs come from the shared shell, not <dialog
 
 console.log('index.html OK: document structure, live control wiring and page policies checked with jsdom.');
 process.exit(0);
+
+assert.ok($('#kbEvidenceSelect option[value="off"]'));
+assert.equal($('#resultsMethod details').open, false);
+assert.equal($('#kbReportHeading').tagName, 'H1');
+assert.ok($('#captureReportScan'));

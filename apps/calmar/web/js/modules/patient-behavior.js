@@ -1,0 +1,229 @@
+import { isSymptomTarget, displayName } from './kb-evidence.js';
+// Session-only clinical context. Never stored, transmitted or used by the models.
+export function bindPatientBehavior(doc) {
+  const notes = doc.getElementById('patientBehaviorNotes');
+  const include = doc.getElementById('includePatientBehavior');
+  const rows = doc.getElementById('patientBehaviorAssessments');
+  const report = doc.getElementById('patientBehaviorReport');
+  const body = doc.getElementById('patientBehaviorReportBody');
+  if (!notes || !include || !rows || !report || !body) return null;
+  const symptoms = doc.getElementById('patientObservedSymptoms');
+  const hint = doc.getElementById('patientSymptomsHint');
+  const age = doc.getElementById('patientAge');
+  const sex = doc.getElementById('patientSex');
+  const tpo = doc.getElementById('patientTpo');
+  const tpoUnit = doc.getElementById('patientTpoUnit');
+  const severityRows = doc.getElementById('patientSymptomSeverity');
+  const severity = new Map();
+  const severityLabels = { observed: 'Observed — severity unspecified', mild: 'Mild', moderate: 'Moderate', severe: 'Severe' };
+  let nextId = 0;
+  let exampleSource = null;
+
+  function appendSource(target) {
+    target.append('Example source (fields editable): ');
+    const link = doc.createElement('a');
+    link.href = exampleSource.url;
+    link.textContent = exampleSource.label;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    target.appendChild(link);
+  }
+
+  function loadExampleContext(context) {
+    reset();
+    if (!context) return;
+    age.value = context.ageAtStroke ?? '';
+    sex.value = context.sex || '';
+    tpo.value = context.tpo ?? '';
+    tpoUnit.value = context.tpoUnit || 'months';
+    notes.value = context.notes || '';
+    rows.replaceChildren();
+    for (const assessment of context.assessments || []) {
+      const row = addAssessment();
+      const inputs = row.querySelectorAll('input');
+      inputs[0].value = assessment.name || '';
+      inputs[1].value = assessment.result || '';
+      inputs[2].value = assessment.date || '';
+    }
+    if (!rows.children.length) addAssessment();
+    exampleSource = context.source || null;
+    render();
+  }
+
+
+  function syncSeverity() {
+    severityRows.replaceChildren();
+    for (const option of symptoms.selectedOptions) {
+      const field = doc.createElement('div');
+      field.className = 'nd-field';
+      const label = doc.createElement('label');
+      const select = doc.createElement('select');
+      select.id = `patient-symptom-severity-${nextId++}`;
+      select.dataset.symptom = option.value;
+      label.htmlFor = select.id;
+      label.textContent = `${option.textContent} — severity`;
+      for (const [value, text] of Object.entries(severityLabels)) {
+        const choice = doc.createElement('option');
+        choice.value = value;
+        choice.textContent = text;
+        select.appendChild(choice);
+      }
+      select.value = severity.get(option.value) || 'observed';
+      select.addEventListener('change', () => {
+        severity.set(option.value, select.value);
+        render();
+      });
+      field.append(label, select);
+      severityRows.appendChild(field);
+    }
+  }
+
+
+  function setKnowledgeBase(kb) {
+    const selected = new Set([...symptoms.selectedOptions].map(option => option.value));
+    symptoms.replaceChildren();
+    const entries = Object.entries(kb.entries || {}).filter(([id, entry]) => entry.bucket === 'impairments' && isSymptomTarget(kb, id, 'impairment'));
+    entries.sort(([a], [b]) => displayName(kb, a).localeCompare(displayName(kb, b)));
+    for (const [id] of entries) {
+      const option = doc.createElement('option');
+      option.value = id;
+      option.textContent = displayName(kb, id);
+      option.selected = selected.has(id);
+      symptoms.appendChild(option);
+    }
+    symptoms.disabled = false;
+    hint.textContent = 'Select symptoms; severity is optional. Unselected symptoms remain unassessed.';
+    syncSeverity();
+    render();
+  }
+
+
+  function render() {
+    body.replaceChildren();
+    const source = doc.getElementById('patientContextSource');
+    if (source) {
+      source.replaceChildren();
+      source.hidden = !exampleSource;
+      if (exampleSource) appendSource(source);
+    }
+    if (include.checked && exampleSource) {
+      const paragraph = doc.createElement('p');
+      appendSource(paragraph);
+      body.appendChild(paragraph);
+    }
+    doc.querySelectorAll('[data-observed-symptom]').forEach(node => node.remove());
+    const invalid = [age, tpo].filter(input => input && !input.validity.valid);
+    for (const input of [age, tpo]) input?.setAttribute('aria-invalid', String(invalid.includes(input)));
+    doc.getElementById('patientContextError')?.classList.toggle('hidden', !invalid.length);
+    const context = [];
+    if (age?.value && age.validity.valid) context.push(`Age at stroke: ${age.value} years`);
+    if (sex?.value) context.push(`Sex: ${sex.selectedOptions[0].textContent}`);
+    if (tpo?.value && tpo.validity.valid) context.push(`Time post-onset at assessment: ${tpo.value} ${tpoUnit.value}`);
+    if (include.checked && context.length) {
+      const paragraph = doc.createElement('p');
+      paragraph.textContent = `${context.join('; ')}. ${exampleSource ? 'Example dataset context (editable)' : 'Patient-provided context'}; these values do not filter KB findings.`;
+      body.appendChild(paragraph);
+    }
+    const selected = include.checked ? [...(symptoms?.selectedOptions || [])] : [];
+    for (const option of selected) {
+      const matches = [...doc.querySelectorAll('#kbLocationBody tr[data-target]')].filter(row => row.dataset.target === option.value);
+      for (const row of matches) {
+        const mark = doc.createElement('mark');
+        mark.dataset.observedSymptom = option.value;
+        const rating = severity.get(option.value) || 'observed';
+        mark.textContent = ` · Observed difficulty${rating === 'observed' ? '' : ` (${severityLabels[rating].toLowerCase()})`}`;
+        row.cells[1].appendChild(mark);
+      }
+      const paragraph = doc.createElement('p');
+      const rating = severity.get(option.value) || 'observed';
+      paragraph.textContent = `${option.textContent}: observed (patient-provided) — ${rating === 'observed' ? 'severity unspecified' : severityLabels[rating].toLowerCase()}. ${matches.length ? 'Matching lesion-based evidence is marked below.' : 'No matching direct-damage summary in the current report; this does not rule out the difficulty.'}`;
+      body.appendChild(paragraph);
+    }
+    const assessments = [...rows.children].map(row => [...row.querySelectorAll('input')].map(input => input.value.trim()))
+      .filter(values => values.some(Boolean));
+    report.hidden = !include.checked || (!notes.value.trim() && !assessments.length && !selected.length && !context.length);
+    if (report.hidden) return;
+    for (const text of notes.value.trim().split(/\n+/).filter(Boolean)) {
+      const paragraph = doc.createElement('p');
+      paragraph.textContent = text;
+      body.appendChild(paragraph);
+    }
+    if (!assessments.length) return;
+    const wrapper = doc.createElement('div');
+    wrapper.className = 'nd-table-scroll';
+    const table = doc.createElement('table');
+    table.className = 'nd-data-table nd-table-right';
+    const header = table.createTHead().insertRow();
+    for (const label of ['Assessment', 'Score / result', 'Date']) {
+      const cell = doc.createElement('th');
+      cell.scope = 'col';
+      cell.textContent = label;
+      header.appendChild(cell);
+    }
+    const tbody = table.createTBody();
+    for (const values of assessments) {
+      const row = tbody.insertRow();
+      for (const value of values) row.insertCell().textContent = value || '—';
+    }
+    wrapper.appendChild(table);
+    body.appendChild(wrapper);
+  }
+
+  function addAssessment() {
+    const row = doc.createElement('div');
+    row.className = 'nd-section-content';
+    const id = nextId++;
+    for (const [key, label, type] of [['name', 'Assessment name', 'text'], ['result', 'Score / result', 'text'], ['date', 'Assessment date', 'date']]) {
+      const field = doc.createElement('div');
+      field.className = 'nd-field';
+      const caption = doc.createElement('label');
+      const input = doc.createElement('input');
+      input.id = `patient-assessment-${id}-${key}`;
+      input.type = type;
+      if (type === 'text') input.maxLength = 500;
+      caption.htmlFor = input.id;
+      caption.textContent = label;
+      field.append(caption, input);
+      row.appendChild(field);
+    }
+    const remove = doc.createElement('button');
+    remove.type = 'button';
+    remove.className = 'nd-btn nd-btn-secondary nd-btn-sm';
+    remove.textContent = 'Remove assessment';
+    remove.addEventListener('click', () => {
+      row.remove();
+      doc.getElementById('addPatientAssessment').focus();
+      render();
+    });
+    row.appendChild(remove);
+    rows.appendChild(row);
+    return row;
+  }
+  const add = doc.getElementById('addPatientAssessment');
+  add.addEventListener('click', () => {
+    addAssessment();
+    rows.lastElementChild.querySelector('input').focus();
+  });
+  for (const control of [notes, include, rows]) control.addEventListener('input', render);
+  include.addEventListener('change', render);
+  symptoms?.addEventListener('change', () => { syncSeverity(); render(); });
+  for (const input of [age, sex, tpo, tpoUnit]) {
+    input?.addEventListener('input', render);
+    input?.addEventListener('change', render);
+  }
+  function reset() {
+    exampleSource = null;
+    notes.value = '';
+    for (const input of [age, sex, tpo]) if (input) input.value = '';
+    if (tpoUnit) tpoUnit.value = 'months';
+    severity.clear();
+    if (symptoms) for (const option of symptoms.options) option.selected = false;
+    syncSeverity();
+    include.checked = true;
+    rows.replaceChildren();
+    addAssessment();
+    render();
+  }
+  reset();
+  return { reset, render, setKnowledgeBase, loadExampleContext };
+}

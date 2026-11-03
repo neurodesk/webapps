@@ -2,7 +2,7 @@
   {
     "id": "stroke-lesion",
     "label": "Stroke T1 MRI",
-    "description": "Structural MRI from OpenNeuro ds004884, reduced to the validated demonstration grid. Run analysis to compute a lesion mask, then review and confirm it before network mapping.",
+    "description": "Structural MRI from OpenNeuro ds004884, participant sub-M2051, session ses-284. Includes published demographic and WAB-R context. Run segmentation, then review and confirm the mask before reporting.",
     "expectedResult": "A computed lesion mask for review and downloadable lesion-network mapping results.",
     "files": [
       {
@@ -12,6 +12,27 @@
         "sha256": "725a37bf9556c6776a7be552597999df67d175a44eafc03252db058e8f5c5cad",
         "bytes": 4104013
       }
-    ]
+    ],
+    "patientContext": {
+      "ageAtStroke": 45,
+      "sex": "male",
+      "tpo": 705,
+      "tpoUnit": "days",
+      "notes": "Example MRI: 284 days post-stroke (ses-284). WAB-R assessment: 705 days post-stroke; not contemporaneous with this MRI. Dataset WAB classification: Broca.",
+      "assessments": [
+        {
+          "name": "WAB-R Aphasia Quotient",
+          "result": "34.7 (705 days post-stroke)",
+          "date": ""
+        }
+      ],
+      "source": {
+        "label": "OpenNeuro ds004884 v1.0.1 \u00b7 sub-M2051 \u00b7 ses-284",
+        "url": "https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/participants.tsv",
+        "dictionaryUrl": "https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/participants.json",
+        "readmeUrl": "https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/README.md",
+        "imagingTpoDays": 284
+      }
+    }
   }
 ]

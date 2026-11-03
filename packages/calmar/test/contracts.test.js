@@ -11,6 +11,10 @@ test('CLI model pins and defaults equal the browser manifest', async () => {
     await readFile(new URL('../../../apps/calmar/web/models/manifest.json', import.meta.url))
   );
   assert.deepEqual(manifest, browser);
+  assert.equal(
+    manifest.modelAssets.find((asset) => asset.id === 'lnm-stroke-lesion').preprocessing.paddingMode,
+    'minimum'
+  );
   for (const id of ['lnm-synthstrip', 'lnm-stroke-lesion', 'lnm-synthmorph-mni']) {
     const model = manifest.modelAssets.find((asset) => asset.id === id);
     assert.equal(assets.find((asset) => asset.id === id).sha256, model.checksum.replace(/^sha256:/, ''));

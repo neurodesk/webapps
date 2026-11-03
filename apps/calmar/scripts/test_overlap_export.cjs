@@ -27,6 +27,7 @@ const { pathToFileURL } = require('node:url');
   );
   const { serializeOverlapCsv } = await import(moduleUrl);
 
+  assert.match(serializeOverlapCsv({ networks: [{ network: 'Cingulate Gyrus, anterior division', voxelsInLesion: 1 }] }), /"Cingulate Gyrus, anterior division",1/);
   const HEADER = 'network,voxelsInLesion,fractionOfLesion,voxelsInNetwork,fractionOfNetwork,parcels';
 
   // ---- Case 1: empty summary -> header only ----

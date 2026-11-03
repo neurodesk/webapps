@@ -1,5 +1,31 @@
 # @neurodesk/calmar
 
+## 0.10.20261103
+
+## 0.10.20261102
+
+## 0.9.20261102
+
+### Patch Changes
+
+- Host the commit-pinned JHU white-matter tractography atlas used by the KB mapping. Show direct tract overlap, lesion share and tract-ROI coverage in white-matter evidence even when ENIGMA disconnection is unavailable. Distinguish anatomical overlap from streamline disconnection, explain limited atlas coverage, and include JHU-mapped findings through the existing lesion-location evidence logic.
+
+## 0.8.20261102
+
+### Patch Changes
+
+- Keep T1 lesion-segmentation windows inside the image instead of padding the prealigned scan to 256 cubed. Apply the same manifest-controlled correction in the browser and command line, preserve native-space mask review, and record the padding mode in command-line provenance. Add window-context regression tests and a checksummed nine-scan development comparison.
+
+## 0.8.20261030
+
+### Minor Changes
+
+- c97bb7e: CALMaR Results view gains the knowledge-base report: cited literature findings for the regions the warped lesion damages (HarvardOxford and AAL label atlases through the aphasia knowledge base's curated atlas mapping; JHU and XTRACT when hosted), white-matter disconnection from the ENIGMA tractography atlas scored with nii2tvx, and the therapies whose evidence targets the implicated impairments. The evidence logic is a JavaScript port of the Python participant report, checked against fixtures the Python code writes.
+
+### Patch Changes
+
+- Make knowledge-base findings optional, fold method and region-level evidence, explain overlap denominators and normative connectivity with figures, expose finding directions and scan confirmation, and add combined Harvard–Oxford cortical/subcortical direct overlap with ROI coverage percentages.
+
 ## 0.7.20261103
 
 ### Patch Changes

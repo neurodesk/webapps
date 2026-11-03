@@ -312,6 +312,9 @@ importers:
       '@neurodesk/calmar':
         specifier: workspace:*
         version: link:../../packages/calmar
+      '@neurodesk/nii2tvx':
+        specifier: workspace:*
+        version: link:../../packages/nii2tvx
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components

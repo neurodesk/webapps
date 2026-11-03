@@ -277,6 +277,30 @@ apps:
         title: Neurosynth
         reference: "Yarkoni T, Poldrack RA, Nichols TE, Van Essen DC, Wager TD. Large-scale automated synthesis of human functional neuroimaging data. Nature Methods. 2011;8(8):665–670."
         doi: 10.1038/nmeth.1635
+      - group: Knowledge-base report atlases
+        title: Harvard-Oxford cortical and subcortical atlases
+        reference: "Desikan RS, Ségonne F, Fischl B, et al. An automated labeling system for subdividing the human cerebral cortex on MRI scans into gyral based regions of interest. NeuroImage. 2006;31(3):968–980."
+        doi: 10.1016/j.neuroimage.2006.01.021
+      - group: Knowledge-base report atlases
+        title: AAL atlas
+        reference: "Tzourio-Mazoyer N, Landeau B, Papathanassiou D, et al. Automated anatomical labeling of activations in SPM using a macroscopic anatomical parcellation of the MNI MRI single-subject brain. NeuroImage. 2002;15(1):273–289."
+        doi: 10.1006/nimg.2001.0978
+      - group: Knowledge-base report atlases
+        title: JHU white-matter tractography atlas
+        reference: "Hua K, Zhang J, Wakana S, et al. Tract probability maps in stereotaxic spaces: analyses of white matter anatomy and tract-specific quantification. NeuroImage. 2008;39(1):336–347."
+        doi: 10.1016/j.neuroimage.2007.07.053
+      - group: Knowledge-base report atlases
+        title: XTRACT tract atlases
+        reference: "Warrington S, Bryant KL, Khrapitchev AA, et al. XTRACT: standardised protocols for automated tractography in the human and macaque brain. NeuroImage. 2020;217:116923."
+        doi: 10.1016/j.neuroimage.2020.116923
+      - group: Disconnectome
+        title: ENIGMA Symmetric White Matter Tractography Atlas
+        reference: "Ba Gari I, Alibrando JD, Feng Y, Villalon-Reina JE, Cabalinan A, Nabulsi L, Thompson PM, Yeh FC, Chandio BQ, Nir TM, Jahanshad N. ENIGMA Symmetric White Matter Tractography Atlas v1.0.0. Zenodo; 2026."
+        doi: 10.5281/zenodo.19656193
+      - group: Disconnectome
+        title: nii2tvx
+        reference: "Neurodesk. nii2tvx: lesion-to-tract disconnection queries on a voxel index of a tractography atlas [Computer software]."
+        url: https://github.com/neurodesk/webapps/tree/main/exes/nii2tvx
       - group: Browser inference
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
