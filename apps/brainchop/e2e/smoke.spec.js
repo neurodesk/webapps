@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { hardwareGpu } from '../../../test-utils/hardware-gpu.mjs';
 import { readFile } from 'node:fs/promises';
 import examples from '../examples.json' with { type: 'json' };
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
@@ -39,7 +40,8 @@ test('cancelling inference allows another run', async ({ page }) => {
 });
 
 for (const [model, classes] of [['tissue-light', 3], ['tissue', 3], ['subcortical', 18], ['subcortical-small', 18], ['aparc50', 50], ['aparc104', 104]]) {
-  test(`real ${model} model produces a downloadable NIfTI label map`, async ({ page }) => {
+  test(`real ${model} model produces a downloadable NIfTI label map`, async ({ page }, testInfo) => {
+    test.skip(!hardwareGpu && testInfo.project.use.channel !== 'chromium', 'Full inference requires hardware WebGL or the local Mesa runner.');
     test.setTimeout(1200000);
     await page.goto('/');
     await loadExample(page);
