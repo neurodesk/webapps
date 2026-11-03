@@ -153,7 +153,8 @@ for (const width of [1440, 390]) {
       app.viewerLayerVisibility.lesion = false;
     });
     await page.locator('#captureReportScan').click();
-    await expect(page.locator('#resultsReport')).toBeHidden();
+    // Switching from the report decodes and uploads both NIfTI volumes before hiding it.
+    await expect(page.locator('#resultsReport')).toBeHidden({ timeout: 30000 });
     expect(await page.evaluate(() => app.viewerLayerVisibility.lesion)).toBe(true);
     expect(await page.evaluate(() => app.centerCrosshairOnLesion())).toBe(true);
     const overlay = await page.evaluate(() => {

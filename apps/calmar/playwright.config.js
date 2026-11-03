@@ -5,6 +5,8 @@ const config = staticAppPlaywrightConfig({ port });
 
 export default {
   ...config,
+  // The ONNX example and software-WebGL workflows otherwise compete for the same CPU.
+  workers: process.env.CI ? 1 : undefined,
   webServer: {
     ...config.webServer,
     command: `${process.env.NEURODESK_E2E_PREBUILT ? '' : 'pnpm build && '}node ../../scripts/dev-server.mjs --dir dist --port ${port} --cache-policy no-store --staging-route /__lnm_downloads/`,

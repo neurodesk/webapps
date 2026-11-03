@@ -8,7 +8,7 @@
 
 ## Linting
 
-- The combined lasso/behavioural reporting browser test uses a 120-second workflow budget, like the other drawing tests: CI software WebGL runs beside the real segmentation example. Keep its drawing, confirmation, sorting, export and subject-reset assertions intact.
+- CI runs the browser suite with one worker so the ONNX example and software-WebGL workflows do not compete for the same CPU. The combined lasso/behavioural reporting browser test uses a 120-second workflow budget, like the other drawing tests: CI software WebGL runs beside the real segmentation example. Keep its drawing, confirmation, sorting, export and subject-reset assertions intact. Scan-confirmation assertions allow 30 seconds for both NIfTI volumes to load before the report gives way to the viewer; retain voxel-count and with/without-mask image checks.
 
 Run `pnpm --filter calmar lint` before committing JS changes. This parses all `web/**/*.js` files for syntax errors using acorn. The same check runs in CI before deploy.
 
