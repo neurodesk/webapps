@@ -136,11 +136,15 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
         // An app's vendored components are not its own copies: removeAppCopies replaces them with the shared store.
         const vendored = join(siteDist, app.path, 'vendor', 'webapp-components') + sep;
         const appFiles = files.filter(file => file.startsWith(join(siteDist, app.path) + sep) && !file.startsWith(vendored));
-        const copies = appFiles.filter(file => !claimed.has(file) && unhashedName(file) === unhashedName(asset.source));
+        const byContent = family.match_by === 'sha256';
+        const copies = appFiles.filter(file => !claimed.has(file) && (byContent
+          ? extname(file) === extname(asset.source)
+          : unhashedName(file) === unhashedName(asset.source)));
         if (!copies.length) continue;
         if (app.app_scoped_runtime_families?.includes(family.id)) throw new Error(`Cannot deduplicate scoped runtime ${family.id}`);
         for (const sourcePath of copies) {
           const actual = await sha256(sourcePath);
+          if (byContent && actual !== asset.sha256) continue;
           // Another pinned version of the same runtime claims this copy; any other bytes are drift.
           if (actual !== asset.sha256 && families.some(other => other.files.some(file => file.name === asset.name && file.sha256 === actual))) continue;
           if (actual !== asset.sha256) {
