@@ -22,6 +22,8 @@ other filesystem errors must remain visible rather than trigger a download.
 
 ## Dependency Maintenance
 
+- When merging upstream date releases, preserve the newer CALMaR app/package release series and retain both changelog histories; do not downgrade the app to the upstream pre-feature series.
+
 - Pin dependency versions through pnpm workspace manifests and `pnpm-lock.yaml`. Do not use npm/latest or add a package-lock.
 - Keep browser CDN dependencies pinned in `web/index.html`; check the upstream package version before changing those URLs.
 - Google Analytics is injected by the monorepo's shared hosting shell, never by `web/index.html`. The shared bootstrap uses measurement ID `G-4Z9774J59Y`, sends automatic page views only, and makes no Google request when Do Not Track or Global Privacy Control is enabled. Do not add app-local analytics or custom events carrying filenames, patient image metadata, voxel values, masks, screenshots, generated outputs, free text, or analysis results. Keep `scripts/test_index_html.mjs` and the privacy modal aligned if analytics changes.
