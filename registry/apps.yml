@@ -183,7 +183,7 @@ apps:
     runtime: static-esm
     model_manifest: models/seedseg.manifest.json
     asset_manifest_schema: scientific-assets-v1
-    source: astewartau/prostate@c9b328a2e0bc1768c0b75640f5532e2853e7ef31
+    source: astewartau/prostate@2968f6486655eb412db762eb69d87ce427835954
     license: MIT
     maintainers: [astewartau]
     support_status: active
