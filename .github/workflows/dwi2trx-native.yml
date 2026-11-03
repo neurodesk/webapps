@@ -2,10 +2,14 @@ name: dwi2trx-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/dwi2trx-native.yml'
       - 'packages/dwi2trx/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/components/**'
       - 'apps/dwi2trx/**'
   push:
@@ -15,7 +19,10 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/dwi2trx/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/components/**'
       - 'apps/dwi2trx/**'
   workflow_dispatch:

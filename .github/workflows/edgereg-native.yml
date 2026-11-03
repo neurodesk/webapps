@@ -2,10 +2,12 @@ name: edgereg-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/edgereg-native.yml'
       - 'packages/edgereg/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/components/**'
       - 'apps/edgereg/**'
   push:
@@ -15,7 +17,8 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/edgereg/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/components/**'
       - 'apps/edgereg/**'
   workflow_dispatch:
@@ -36,6 +39,7 @@ jobs:
   # Registers the pinned example through the built web app and compares its download with
   # packages/edgereg/validation/t1-mni-reference.json, the reference the archives are held to.
   web-app-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -63,6 +67,7 @@ jobs:
   # Native niimath, built from source, runs the command line's argv on the pinned example and must
   # stay within NATIVE_TOLERANCES in packages/edgereg/validation/reference.mjs.
   native-niimath:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     env:

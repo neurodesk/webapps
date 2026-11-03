@@ -2,6 +2,7 @@ name: elastix-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/elastix-native.yml'
       - 'packages/elastix/**'
@@ -34,6 +35,7 @@ jobs:
   # Registers the pinned example through the built web app and compares each preset's downloads with
   # packages/elastix/validation/t1-mni-reference.json, the reference the archives are held to.
   web-app-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:

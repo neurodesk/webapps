@@ -6,6 +6,7 @@ name: hmc-registration
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/hmc-registration.yml'
       - 'packages/hmc-registration/**'
@@ -27,6 +28,7 @@ permissions:
 
 jobs:
   browser-worker:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: Browser worker registers the test pair
     runs-on: ubuntu-latest
     timeout-minutes: 30

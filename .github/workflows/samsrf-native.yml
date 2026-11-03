@@ -7,6 +7,7 @@ name: samsrf-native
 # each archive on the web app's example (packages/samsrf/validation/cli-check.mjs).
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/samsrf-native.yml'
       - '.github/actions/setup-wasm-opt/**'
@@ -41,6 +42,7 @@ concurrency:
 
 jobs:
   test:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -65,6 +67,7 @@ jobs:
         run: node --test packages/samsrf/test/*.test.js
 
   wasm-source:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:

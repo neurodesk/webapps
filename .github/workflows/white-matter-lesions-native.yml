@@ -2,6 +2,7 @@ name: white-matter-lesions-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/white-matter-lesions-native.yml'
       - 'packages/white-matter-lesions/**'
@@ -40,6 +41,7 @@ permissions:
 
 jobs:
   portable:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write
@@ -62,6 +64,7 @@ jobs:
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
 
   browser-memory:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: Five-fold memory (${{ matrix.browser }})
     strategy:
       fail-fast: false

@@ -2,6 +2,7 @@ name: sdc-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/sdc-native.yml'
       - '.github/actions/setup-wasm-opt/**'
@@ -25,7 +26,8 @@ on:
       - 'packages/n4/src/**'
       - 'packages/n4/wasm/**'
       - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/**'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/runtime-support/package.json'
       - 'packages/runtime-support/src/mindgrab/**'
   push:
@@ -55,7 +57,8 @@ on:
       - 'packages/n4/src/**'
       - 'packages/n4/wasm/**'
       - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/**'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/runtime-support/package.json'
       - 'packages/runtime-support/src/mindgrab/**'
   workflow_dispatch:
@@ -74,6 +77,7 @@ permissions:
 
 jobs:
   rust:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: exes/sdc tests, clippy and format
     runs-on: ubuntu-24.04
     steps:
@@ -93,6 +97,7 @@ jobs:
         run: cargo +1.98.0 fmt --all --check
 
   wasm-source:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: committed WASM module equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -122,6 +127,7 @@ jobs:
   # Runs the SyN-SDC pipeline on the web app's browser runtimes in Chromium and compares every output
   # with packages/sdc/validation/browser-reference.json, the reference the archives are held to.
   browser-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: browser reference still holds
     runs-on: ubuntu-24.04
     timeout-minutes: 60

@@ -4,6 +4,7 @@ name: synthseg-portable
 # synthseg-native.yml; scripts/lib/native-releases.mjs gives each workflow its own platforms.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - 'packages/components/package.json'
       - '.github/workflows/synthseg-portable.yml'
@@ -38,6 +39,7 @@ permissions:
 
 jobs:
   portable:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write

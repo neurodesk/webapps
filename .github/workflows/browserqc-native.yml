@@ -2,10 +2,14 @@ name: browserqc-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/browserqc-native.yml'
       - 'packages/browserqc/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/components/**'
       - 'apps/browserqc/**'
   push:
@@ -15,7 +19,10 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/browserqc/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/components/**'
       - 'apps/browserqc/**'
   workflow_dispatch:
@@ -37,6 +44,7 @@ jobs:
   # compares its downloads with packages/browserqc/validation/reference.json, the reference the
   # archives are held to.
   web-app-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
