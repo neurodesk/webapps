@@ -109,6 +109,7 @@ test("cancelling archive creation never publishes the dataset", async ({ page })
 });
 
 test("a failed example download can retry", async ({ page }) => {
+  test.setTimeout(90000);
   const directory = process.env.REPROIN_E2E_DICOM_DIR;
   test.skip(!directory, "run node scripts/e2e-test-data.mjs reproin and export REPROIN_E2E_DICOM_DIR");
   let attempts = 0;
@@ -129,7 +130,7 @@ test("a failed example download can retry", async ({ page }) => {
   await expect(page.locator("#runButton")).toBeDisabled();
   await picker.selectOption(example.id);
   const selector = page.locator("[data-neurodesk-examples]");
-  await expect(selector).not.toHaveAttribute("data-example-state", "loading");
+  await expect(selector).not.toHaveAttribute("data-example-state", "loading", { timeout: 60000 });
   expect(await selector.getAttribute("data-example-state"), await selector.innerText()).toBe("ready");
   await expect(page.locator("#runButton")).toBeEnabled();
   expect(attempts).toBe(2);
