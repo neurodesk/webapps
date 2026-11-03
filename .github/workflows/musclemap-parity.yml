@@ -2,6 +2,7 @@ name: musclemap-parity
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - 'packages/components/package.json'
       - 'apps/musclemap/**'
@@ -38,6 +39,7 @@ env:
 
 jobs:
   parity:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:

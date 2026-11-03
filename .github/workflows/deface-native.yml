@@ -2,12 +2,16 @@ name: deface-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - 'packages/runtime-support/package.json'
       - '.github/workflows/deface-native.yml'
       - 'packages/deface/**'
       - 'apps/deface/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/runtime-support/src/niimath/**'
       - 'packages/runtime-support/src/mindgrab/**'
   push:
@@ -19,7 +23,10 @@ on:
       - 'exes/node-cli/**'
       - 'packages/deface/**'
       - 'apps/deface/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/runtime-support/src/niimath/**'
       - 'packages/runtime-support/src/mindgrab/**'
   workflow_dispatch:
@@ -38,6 +45,7 @@ permissions:
 
 jobs:
   browser-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: browser reference still holds
     runs-on: ubuntu-24.04
     timeout-minutes: 60

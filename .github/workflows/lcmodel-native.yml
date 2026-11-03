@@ -12,9 +12,13 @@ name: lcmodel-native
 # built and checked against the web app's own results on its examples.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - 'packages/components/package.json'
       - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/dcm2niix.js'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
       - '.github/workflows/lcmodel-native.yml'
       - 'exes/lcmodel/**'
       - 'exes/fida/**'
@@ -22,14 +26,18 @@ on:
       - 'models/lcmodel.manifest.json'
       - 'apps/lcmodel/**'
       - 'packages/components/src/file-io/NiftiUtils.js'
+      - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/dcm2niix.js'
-      - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
   push:
     branches: [main]
     paths:
       - 'packages/components/package.json'
       - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/dcm2niix.js'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
       - '.github/workflows/lcmodel-native.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
@@ -39,9 +47,10 @@ on:
       - 'models/lcmodel.manifest.json'
       - 'apps/lcmodel/**'
       - 'packages/components/src/file-io/NiftiUtils.js'
+      - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/dcm2niix.js'
-      - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
   workflow_dispatch:
     inputs:
       sign_release:
@@ -58,6 +67,7 @@ concurrency:
 
 jobs:
   test:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -82,6 +92,7 @@ jobs:
         run: node --test packages/lcmodel/test/lcmodel-wasm.test.js
 
   fida-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     env:
       DATA: ${{ github.workspace }}/../fida-reference
@@ -118,6 +129,7 @@ jobs:
   # compares its downloads with packages/lcmodel/validation/browser-reference.json, the reference
   # the archives are held to.
   web-app-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:

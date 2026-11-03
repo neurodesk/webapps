@@ -2,10 +2,12 @@ name: niimath-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/niimath-native.yml'
       - 'packages/niimath/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/niimath.js'
       - 'apps/niimath/**'
   push:
     branches: [main]
@@ -14,7 +16,8 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/niimath/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/niimath.js'
       - 'apps/niimath/**'
   workflow_dispatch:
     inputs:
@@ -35,6 +38,7 @@ jobs:
   # compares each download with packages/niimath/validation/browser-reference.json, the reference
   # the archives are held to.
   web-app-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:

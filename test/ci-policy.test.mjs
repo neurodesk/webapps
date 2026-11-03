@@ -33,7 +33,8 @@ test('new pushes cannot cancel scheduled or manually requested coverage', async 
     const flow = await workflow(name);
     assert.equal(new Set(events.map((event) => group(flow.concurrency.group, event))).size, events.length, name);
     for (const event of events) {
-      assert.equal(evaluate(flow.concurrency['cancel-in-progress'], event), ['pull_request', 'push'].includes(event), `${name}: ${event}`);
+      const cancels = event === 'pull_request' || (name !== 'ci' && event === 'push');
+      assert.equal(evaluate(flow.concurrency['cancel-in-progress'], event), cancels, `${name}: ${event}`);
     }
   }
 });
@@ -119,9 +120,17 @@ test('correctness lint runs on every CI event with no duplicate routine gate', a
   const quality = await workflow('code-quality');
   for (const event of ['pull_request', 'push']) {
     assert.ok(Object.hasOwn(quality.on, event), event);
-    assert.deepEqual(quality.on[event], ci.on[event], `${event} correctness has the same branch coverage and no path filter`);
+    assert.deepEqual(quality.on[event]?.branches, ci.on[event]?.branches, `${event} correctness has the same branch coverage`);
     assert.equal(quality.on[event]?.paths, undefined);
     assert.equal(quality.on[event]?.['paths-ignore'], undefined);
+  }
+  // CI also reacts to draft transitions; lint already checks the same commit
+  // on opening, reopening and every push, regardless of draft state.
+  const defaultPrTypes = ['opened', 'synchronize', 'reopened'];
+  const lintTypes = quality.on.pull_request?.types ?? defaultPrTypes;
+  for (const type of defaultPrTypes) {
+    assert.ok(lintTypes.includes(type), `correctness covers ${type}`);
+    assert.ok(ci.on.pull_request.types.includes(type), `CI covers ${type}`);
   }
   const standalone = quality.jobs.correctness.steps.find((step) => step.run === 'pnpm lint:correctness');
   assert.ok(standalone);

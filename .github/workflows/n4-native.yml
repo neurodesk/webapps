@@ -2,10 +2,13 @@ name: n4-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/n4-native.yml'
       - 'packages/n4/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/components/**'
       - 'packages/runtime-support/**'
       - 'apps/n4/**'
@@ -16,7 +19,9 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/n4/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/components/**'
       - 'packages/runtime-support/**'
       - 'apps/n4/**'
@@ -39,6 +44,7 @@ jobs:
   # MindGrab mask, and compares every download with packages/n4/validation/browser-reference.json,
   # the reference the archives are held to.
   web-app-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:

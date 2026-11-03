@@ -626,7 +626,7 @@ test('a root-relative path joined onto a computed repository root selects its ap
 
 test('ci.yml runs the composite site build on pull requests that need it', async () => {
   const ci = parse(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
-  assert.equal(ci.jobs['composite-site'].if, "github.event_name != 'pull_request' || needs.app-plan.outputs.has_site == 'true'");
+  assert.equal(ci.jobs['composite-site'].if, "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'pull_request' || needs.app-plan.outputs.has_site == 'true')");
   assert.equal(ci.jobs['app-plan'].outputs.has_site, '${{ steps.plan.outputs.has_site }}');
 });
 

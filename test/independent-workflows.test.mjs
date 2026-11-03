@@ -242,7 +242,7 @@ test('manual DWI2TRX tracking diagnostics isolate Metal from reference and publi
   assert.ok(tracking.steps.some(step => step.if === 'always()' && step.with?.name === 'dwi2trx-tracking-diagnostic'));
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const only of [false, true]) {
-      const context = { github: { event_name: event }, inputs: { tracking_only: only, sign_release: true } };
+      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { tracking_only: only, sign_release: true } };
       assert.equal(runInNewContext(tracking.if, context), event === 'workflow_dispatch' && only);
       for (const name of ['web-app-reference', 'portable']) {
         assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !only);

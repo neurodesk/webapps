@@ -2,6 +2,7 @@ name: dwi-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - 'packages/components/package.json'
       - 'packages/dwi2trx/package.json'
@@ -81,6 +82,7 @@ permissions:
 
 jobs:
   rust:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: exes/dwi tests, clippy and format
     runs-on: ubuntu-24.04
     steps:
@@ -106,6 +108,7 @@ jobs:
   # missing-data skip into a failure. When a test starts to read another subset, add it to the
   # fetch line and to the cache key (the cache saves only on a key miss).
   hmc-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: exes/dwi tests on the pinned hmc reference data
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -158,6 +161,7 @@ jobs:
           if-no-files-found: warn
 
   sdc-field-fit-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: deterministic SDC field fitting on the pinned native reference
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -189,6 +193,7 @@ jobs:
         run: node exes/dwi/sdc/validation/wasm-reference.mjs
 
   wasm-source:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: committed WASM modules equal a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -258,6 +263,7 @@ jobs:
         run: node --test test/syn.test.js
 
   dmipy-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: nonlinear NODDI native and WASM maps on the pinned WM reference
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -294,6 +300,7 @@ jobs:
         run: node exes/dwi/dmipy/validation/wasm-reference.mjs "$RUNNER_TEMP/dmipy-wasm-report.json"
 
   oracle:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: exes/dwi oracle tests on the pinned AMICO, Patch2Self and mrdegibbs data
     runs-on: ubuntu-24.04
     timeout-minutes: 30

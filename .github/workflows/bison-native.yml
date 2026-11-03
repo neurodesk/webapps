@@ -2,13 +2,15 @@ name: bison-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/bison-native.yml'
       - 'packages/bison/**'
       - 'packages/greedy/**'
       - 'packages/hmc-registration/**'
       - 'packages/ants-denoise/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/components/**'
       - 'packages/runtime-support/**'
       - 'apps/bison/**'
@@ -26,7 +28,8 @@ on:
       - 'packages/greedy/**'
       - 'packages/hmc-registration/**'
       - 'packages/ants-denoise/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/components/**'
       - 'packages/runtime-support/**'
       - 'apps/bison/**'
@@ -52,6 +55,7 @@ jobs:
   # Segments both pinned examples in the built web app and compares every download with
   # packages/bison/validation/browser-reference.json, the reference the archives are held to.
   web-app-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 240
     steps:

@@ -2,6 +2,7 @@ name: syncro-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/syncro-native.yml'
       - 'packages/syncro/**'
@@ -46,6 +47,7 @@ permissions:
 
 jobs:
   portable:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write
