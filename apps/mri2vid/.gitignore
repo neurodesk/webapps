@@ -35,3 +35,7 @@ node_modules/
 # Local editor and dropped screenshots
 .vscode/
 Screenshot*.png
+
+# Notices staged by packages/mri2vid/scripts/stage-browser.mjs
+/web/LICENSE
+/web/NOTICE

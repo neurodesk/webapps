@@ -3,7 +3,8 @@ Copyright (c) 2023, Thom Shaw, and the Neurodesk contributors
 BSD-3-Clause (LICENSE)
 
 The shared pipeline, encoder and muxers come from packages/mri2vid; see
-packages/mri2vid/NOTICE.
+vendor/mri2vid/NOTICE in the browser distribution (packages/mri2vid/NOTICE
+in the source tree).
 
 web/js/vendor/niivue.js is an esbuild bundle of @niivue/niivue 0.69.0,
 BSD-2-Clause, Copyright (c) 2021, Niivue (https://github.com/niivue/niivue).
