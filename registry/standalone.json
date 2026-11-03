@@ -1742,35 +1742,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.4.20261027",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-linux-x64.tar.gz",
-          "sha256": "8c974f88532b4103be54a8fbbb222bf15af69f19976d3797785dd559d9026e97",
-          "bytes": 44554885,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-linux-x64.tar.gz.validation.txt",
+          "version": "0.4.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-linux-x64.tar.gz",
+          "sha256": "0eb0e8cc1dcad6e34eb0b0cf437e704556ade84bd2b431a49629ed9468a9e226",
+          "bytes": 44553823,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf dwidenoise-0.4.20261027-linux-x64.tar.gz\n./dwidenoise-0.4.20261027-linux-x64/dwidenoise sub-01_dwi.nii.gz results"
+          "command": "tar -xzf dwidenoise-0.4.20261103-linux-x64.tar.gz\n./dwidenoise-0.4.20261103-linux-x64/dwidenoise sub-01_dwi.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.4.20261027",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-macos-arm64.pkg",
-          "sha256": "7161e268866aedb19591b2ed893a120ce5850cd3bdb195806eebad2c15c966d5",
-          "bytes": 38159117,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-macos-arm64.pkg.validation.txt",
+          "version": "0.4.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-macos-arm64.pkg",
+          "sha256": "1290ad2aaf397df9180a732fd18579f16cec091069ed99033305a7f83dee5190",
+          "bytes": 38159773,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg dwidenoise-0.4.20261027-macos-arm64.pkg -target /\ndwidenoise self-check\ndwidenoise sub-01_dwi.nii.gz results"
+          "command": "sudo installer -pkg dwidenoise-0.4.20261103-macos-arm64.pkg -target /\ndwidenoise self-check\ndwidenoise sub-01_dwi.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.4.20261027",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-windows-x64.zip",
-          "sha256": "ba2946959cc909c4188660d86e7b783eb5316d8178974e86ec179dd0dda8d72b",
-          "bytes": 34872675,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261027/dwidenoise-0.4.20261027-windows-x64.zip.validation.txt",
+          "version": "0.4.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-windows-x64.zip",
+          "sha256": "cdd5a66ab37afcc2859220b87c4b0eac9c1854aa654c3d88397dbb76f15be4f7",
+          "bytes": 34874301,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\dwidenoise-0.4.20261027-windows-x64.zip -DestinationPath .\n.\\dwidenoise-0.4.20261027-windows-x64\\dwidenoise.exe sub-01_dwi.nii.gz results"
+          "command": "Expand-Archive -Path .\\dwidenoise-0.4.20261103-windows-x64.zip -DestinationPath .\n.\\dwidenoise-0.4.20261103-windows-x64\\dwidenoise.exe sub-01_dwi.nii.gz results"
         }
       ],
       "containers": []
