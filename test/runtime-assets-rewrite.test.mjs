@@ -369,19 +369,17 @@ test('identical workspace styles share one file while different app CSS stays lo
     await writeFile(join(siteDist, app.path, 'assets', 'shared-12345678.js'), module);
     const name = app.id === 'brainchop' ? 'index-abcdefgh.css' : 'workspace-12345678.css';
     await writeFile(join(siteDist, app.path, 'assets', name), css);
-    await writeFile(join(siteDist, app.path, 'assets', 'index-different.css'), '.custom { display: grid; }');
+    await writeFile(join(siteDist, app.path, 'assets', 'index-different.css'), `.custom-${app.id} { display: grid; }`);
     await writeFile(join(siteDist, app.path, 'index.html'), `<html><head><link rel="stylesheet" href="/${app.path}/assets/${name}"><script type="module" src="./assets/shared-12345678.js"></script></head></html>`);
   }
   await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families: [{
     id: 'shared-module', target: 'module/test', deduplicate: true,
     files: [{ name: 'shared.js', source_app: 'brainchop', source: 'assets/shared-12345678.js', sha256: moduleHash }],
-  }, {
-    id: 'workspace-css', target: 'workspace/test', deduplicate: true, match_by: 'sha256',
-    files: [{ name: 'workspace.css', source_app: 'brainchop', source: 'assets/index-abcdefgh.css', sha256: hash }],
+
   }] }));
   await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
   assert.equal(await readFile(join(siteDist, '_runtime/module/test/shared.js'), 'utf8'), module);
-  assert.equal(await readFile(join(siteDist, '_runtime/workspace/test/workspace.css'), 'utf8'), css);
+  assert.equal(await readFile(join(siteDist, `_runtime/styles/${hash}/shared.css`), 'utf8'), css);
   for (const app of apps) {
     assert.deepEqual(await readdir(join(siteDist, app.path, 'assets')), ['index-different.css']);
     const html = await readFile(join(siteDist, app.path, 'index.html'), 'utf8');
@@ -389,7 +387,7 @@ test('identical workspace styles share one file while different app CSS stays lo
     for (const base of ['https://example.test/', 'https://example.test/webapps/']) {
       const src = html.match(/type="module" src="([^"]+)"/)[1];
       assert.equal(new URL(src, `${base}${app.path}/`).href, `${base}_runtime/module/test/shared.js`);
-      assert.equal(new URL(href, `${base}${app.path}/`).href, `${base}_runtime/workspace/test/workspace.css`);
+      assert.equal(new URL(href, `${base}${app.path}/`).href, `${base}_runtime/styles/${hash}/shared.css`);
     }
   }
 });
