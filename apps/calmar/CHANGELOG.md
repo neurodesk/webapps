@@ -1,5 +1,20 @@
 # calmar
 
+## 0.11.20261104
+
+### Minor Changes
+
+- Add checksum-pinned SOOP and ISLES 2022 DWI/ADC examples to CALMaR, preserving original release terms, attribution and provenance in the offline bundle. Add an acute-example choice that alternates cases after successful imports, while keeping each scan directly selectable. Clear prior subject results and demographic context when replacing inputs, and verify real segmentation and native-mask downloads for both datasets.
+
+  Support optional example rotations in the shared selector. Loading messages identify the actual case, failed or cancelled imports retain the same next case, and replacing a catalogue resets its rotation.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.24.0
+  - @neurodesk/calmar@0.11.20261104
+  - @neurodesk/nii2tvx@0.3.20261104
+
 ## 0.10.20261103
 
 ### Patch Changes

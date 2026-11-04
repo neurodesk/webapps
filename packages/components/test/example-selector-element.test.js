@@ -9,6 +9,94 @@ const examples = [{
   files: [{ role: 'image', name: 'brain.nii', url: 'https://example.test/brain.nii' }],
 }];
 const tick = () => new Promise(resolve => setImmediate(resolve));
+
+function rotationCatalog() {
+  const first = examples[0];
+  const second = { ...first, id: 'second', label: 'Second MRI', files: [{ ...first.files[0], name: 'second.nii', url: 'https://example.test/second.nii' }] };
+  return [{ ...first, id: 'rotate', rotation: [first.id, second.id] }, first, second];
+}
+
+test('rotating examples fetch the actual case and keep fixed cases selectable', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const urls = [];
+  globalThis.fetch = async url => { urls.push(url); return new Response('scan'); };
+  const loaded = [];
+  const { control, window } = setup(async (example, { fetchFiles }) => {
+    const files = await fetchFiles();
+    loaded.push([example.id, files[0].name]);
+  });
+  control.examples = rotationCatalog();
+  for (const id of ['rotate', 'rotate', 'brain', 'rotate']) {
+    control.select.value = id;
+    control.select.dispatchEvent(new window.Event('change'));
+    await tick();
+  }
+  assert.deepEqual(loaded, [['brain', 'brain.nii'], ['second', 'second.nii'], ['brain', 'brain.nii'], ['brain', 'brain.nii']]);
+  assert.deepEqual(urls.map(url => new URL(url).pathname), ['/brain.nii', '/second.nii', '/brain.nii', '/brain.nii']);
+  assert.equal(control.dataset.exampleId, 'brain');
+  assert.equal(control.querySelector('[role="status"]').textContent, 'Brain MRI loaded.');
+  control.examples = rotationCatalog();
+  control.select.value = 'rotate';
+  control.select.dispatchEvent(new window.Event('change'));
+  await tick();
+  assert.equal(loaded.at(-1)[0], 'brain', 'replacing the catalogue resets its rotation');
+  control.destroy();
+});
+
+test('failed and cancelled rotating imports retry the same case and ignore late completion', async () => {
+  let fail = true;
+  let release;
+  const loaded = [];
+  const { control, window } = setup(async (example, { assertCurrent }) => {
+    loaded.push(example.id);
+    if (fail) { fail = false; throw new Error('Offline'); }
+    if (!release) await new Promise(resolve => { release = resolve; });
+    assertCurrent();
+  });
+  control.examples = rotationCatalog();
+  const rotate = () => {
+    control.select.value = 'rotate';
+    control.select.dispatchEvent(new window.Event('change'));
+  };
+  rotate();
+  await tick();
+  rotate();
+  control.cancel();
+  rotate();
+  await tick();
+  release();
+  await tick();
+  assert.deepEqual(loaded, ['brain', 'brain', 'brain']);
+  rotate();
+  await tick();
+  assert.equal(loaded.at(-1), 'second');
+  assert.equal(control.dataset.exampleId, 'second');
+  control.destroy();
+});
+
+test('an invalid rotation aborts an earlier import and clears its identity', async () => {
+  let signal;
+  let release;
+  const { control, window } = setup(async (_example, context) => {
+    signal = context.signal;
+    await new Promise(resolve => { release = resolve; });
+    context.assertCurrent();
+  });
+  control.examples = rotationCatalog();
+  control.select.value = 'rotate';
+  control.select.dispatchEvent(new window.Event('change'));
+  control.examples[0].rotation[0] = 'missing';
+  control.select.dispatchEvent(new window.Event('change'));
+  assert.equal(signal.aborted, true);
+  assert.equal(control.dataset.exampleState, 'error');
+  assert.equal(control.dataset.exampleId, undefined);
+  assert.equal(control.select.disabled, false);
+  release();
+  await tick();
+  assert.equal(control.dataset.exampleState, 'error');
+  control.destroy();
+});
 function setup(onLoad) {
   const { window } = new JSDOM('<!doctype html><body><input type="file"></body>');
   const control = createExampleSelector({ examples, onLoad }, window.document);

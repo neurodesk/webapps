@@ -31,6 +31,7 @@ globalThis.Worker = class {
 };
 
 const { LesionNetworkMappingApp } = await import(path.join(ROOT, 'web/js/lnm-app.js'));
+const { MaskDrawingController } = await import(path.join(ROOT, 'web/js/controllers/MaskDrawingController.js'));
 const { ATLAS_OPTIONS, getAtlasOptionById } = await import(path.join(ROOT, 'web/js/app/atlas-options.js'));
 
 function makeApp() {
@@ -402,6 +403,10 @@ for (const [input, load] of [
 // ---- Start over: results are dropped, the structural image is kept ----
 {
   const app = makeApp();
+  app.nv.opts = {};
+  app.nv.drawBitmap = new Uint8Array([1, 0, 0, 1]);
+  app.maskDrawingController = new MaskDrawingController({ nv: app.nv });
+  app.maskDrawingController.manualUndoSnapshots = [new Uint8Array([1, 0, 0, 1])];
   const viewer = [];
   app.viewerController = {
     clearAll: () => viewer.push('clearAll'),
@@ -441,6 +446,8 @@ for (const [input, load] of [
   assert.equal(document.getElementById('outsideAtlasWarning').classList.contains('hidden'), false);
 
   app.clearResults({ full: false });
+  assert.equal(app.nv.drawBitmap, null, 'clearing results erases the previous subject drawing');
+  assert.deepEqual(app.maskDrawingController.manualUndoSnapshots, [], 'old drawing Undo cannot restore a cleared subject');
   assert.equal(app.structuralFile, structural, 'the structural image survives');
   assert.deepEqual(
     [app.overlapResult, app.networkMapData, app.lesionMaskFile, app.lesionMaskConfirmed, app.hasRegistrationDisplacement],

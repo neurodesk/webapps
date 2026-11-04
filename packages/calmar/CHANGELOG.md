@@ -1,5 +1,12 @@
 # @neurodesk/calmar
 
+## 0.11.20261104
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.24.0
+
 ## 0.10.20261103
 
 ## 0.10.20261102

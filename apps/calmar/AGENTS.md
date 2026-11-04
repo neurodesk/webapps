@@ -30,7 +30,7 @@ other filesystem errors must remain visible rather than trigger a download.
 
 ## Architecture
 
-- `scripts/prepare_diffusion_examples.mjs` stages checksum-pinned OpenADS DWI/ADC/b0 and redistribution terms under TMPDIR. Its `--hf-revision` requires a real dataset commit; the opt-in `dev:diffusion-examples` command uses `--local` to generate ignored `web/examples.json` with immutable original URLs. Production catalog/offline entries await the HF mirror. `e2e/diffusion-examples.spec.js` exercises both real bundles through segmentation and native-mask download.
+- Acute examples use SOOP ds004889 v1.1.2 (CC0) and ISLES 2022 Zenodo 7960856 v2.3.1 (the release metadata declares CC BY 4.0; retain the original accompanying terms). `scripts/prepare_diffusion_examples.mjs` restores and verifies the registered Hugging Face mirror under TMPDIR; it does not prepare new source uploads. The shared selector's optional `rotation` lists concrete catalogue IDs: only successful imports advance it, so cancellation and retries keep the same case. Show the actual loaded dataset/case, keep both cases directly selectable, and never load the reference lesion as a segmentation input.
 
 - The default app unit suite includes `test:examples`. Example bundles route `structural`, `dwi`, `adc` and `b0` through the normal input setters. Validate a complete T1 or DWI+(ADC/b0) bundle before clearing prior subject state; check example cancellation after every asynchronous import, and clear unknown demographics. Never present b0 alone as an automatic segmentation example.
 
@@ -205,7 +205,11 @@ from a stalled output handoff before changing the budget again.
 
 ## Examples
 
-The example imports only a structural T1. Run analysis computes the lesion mask; never preload a reference lesion mask. Keep confirmation of the computed mask explicit before network mapping. When changing example input handling, run `pnpm test:examples` as well as the shared example contract tests.
+The chronic example imports a structural T1; acute examples import DWI/TRACE and ADC from one subject. Selecting an example does not process it. Run segmentation computes the lesion mask; never preload a reference lesion mask. Keep confirmation explicit before network mapping, and clear unknown demographics on acute imports. Run `pnpm test:examples`, shared selector and catalogue tests, and both real acute browser workflows when changing examples. SEALS trained on ISLES 2022: its training-set example is a software demonstration, not independent validation of accuracy.
+
+Clearing results must close and erase the NiiVue drawing, including its drawing Undo state. An unconfirmed drawing is downloadable only during active mask review, so switching examples cannot leave a previous subject's mask available.
+
+The acute browser suite also checks rotation on a phone and hosted-download retry/cancellation. Neither failed nor cancelled downloads may advance the next case or replace the previous inputs.
 
 ## Threaded runtime hosting
 

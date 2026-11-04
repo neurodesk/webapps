@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/fireants",
-  "version": "0.4.20261103",
+  "version": "0.4.20261104",
   "description": "FireANTs image registration on the CPU from the command line",
   "type": "module",
   "license": "Apache-2.0",

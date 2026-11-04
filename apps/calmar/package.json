@@ -60,8 +60,7 @@
     "pretest": "pnpm vendor && pnpm runtime-support",
     "pretest:e2e": "pnpm vendor && pnpm runtime-support",
     "test:e2e": "playwright test",
-    "test:examples": "node --test scripts/test_examples.mjs",
-    "dev:diffusion-examples": "pnpm vendor && pnpm runtime-support && node scripts/prepare_diffusion_examples.mjs --local && node ../../scripts/dev-server.mjs --dir web --app calmar --port 8080 --cache-policy 'no-store, must-revalidate' --staging-route /__lnm_downloads/ --build-info"
+    "test:examples": "node --test scripts/test_examples.mjs"
   },
   "dependencies": {
     "nifti-reader-js": "^0.8.0",
@@ -86,5 +85,5 @@
       }
     }
   },
-  "version": "0.10.20261103"
+  "version": "0.11.20261104"
 }

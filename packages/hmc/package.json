@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/hmc",
-  "version": "0.4.20261103",
+  "version": "0.4.20261104",
   "description": "DWI head-motion correction for browsers and the command line: a pool of ANTs registration workers, one resampling and BIDS-derivative outputs",
   "type": "module",
   "private": true,

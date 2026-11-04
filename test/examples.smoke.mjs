@@ -42,7 +42,7 @@ try {
     for (const example of examples) {
       await selector.selectOption(example.id);
       await expect(state).toHaveAttribute('data-example-state', 'ready', { timeout: 180000 });
-      await expect(state).toHaveAttribute('data-example-id', example.id);
+      await expect(state).toHaveAttribute('data-example-id', example.rotation?.[0] ?? example.id);
       await expect(selector).toBeEnabled();
       console.log(`PASS ${app.id}: imported ${example.id}`);
     }

@@ -992,7 +992,7 @@ export class LesionNetworkMappingApp {
     const uploadReview = document.getElementById('uploadReviewMaskButton');
     if (uploadReview) uploadReview.disabled = !available;
     const download = document.getElementById('downloadEditedLesionMaskButton');
-    const downloadAvailable = !!(this.confirmedNativeLesionFile || this.maskDrawingController?.hasDrawing);
+    const downloadAvailable = !!(this.confirmedNativeLesionFile || (this.maskReviewActive && this.maskDrawingController?.hasDrawing));
     if (download) download.disabled = !downloadAvailable;
     const status = document.getElementById('maskReviewStatus');
     if (status) {
@@ -4570,6 +4570,7 @@ export class LesionNetworkMappingApp {
   }
 
   clearResults({ full = false } = {}) {
+    this.maskDrawingController?.close?.({ clearDrawing: true });
     document.getElementById('resultsSection').classList.add('collapsed');
     this.clearDerivedResults();
     this.brainmaskFile = null;

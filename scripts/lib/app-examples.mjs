@@ -51,6 +51,19 @@ export async function loadAppExamples(app, root = repoRoot) {
       }
     }
   }
+  for (const example of examples) {
+    if (example.rotation === undefined) continue;
+    if (!Array.isArray(example.rotation) || example.rotation.length < 2 || new Set(example.rotation).size !== example.rotation.length) {
+      throw new Error(`${app.id}: example rotations need at least two unique catalogue ids`);
+    }
+    const cases = example.rotation.map(id => examples.find(item => item.id === id));
+    if (cases.some(item => !item || item.rotation !== undefined)) {
+      throw new Error(`${app.id}: example rotations must reference concrete catalogue entries`);
+    }
+    if (JSON.stringify(example.files) !== JSON.stringify(cases[0].files)) {
+      throw new Error(`${app.id}: rotation files must match its first case`);
+    }
+  }
   if (app.ci.browser_test !== true) throw new Error(`${app.id}: enable ci.browser_test for the example workflow`);
   return examples;
 }
