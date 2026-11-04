@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/astewartau/qsmbly",
-  "previousCommit": "cf88ee361e315c48d867156fd9b6de5599dc62cd",
-  "commit": "0b6e3d3cf4c71a0d45d126f60fb2bf949bed35d3",
+  "previousCommit": "0b6e3d3cf4c71a0d45d126f60fb2bf949bed35d3",
+  "commit": "dab1846f41d69af9111ffa91d21457a1cf40f4d7",
   "qsmCore": "046e2e3bd21b1f35ce2760c115145c52956645a2",
   "integration": [
     "Keep the monorepo shell, design system, shared dialogs and real-brain example manifest.",
