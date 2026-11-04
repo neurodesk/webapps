@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { prepareWorkflow, verifyWorkflow } from './workflows.mjs';
+import { diagnosticLines, failureSnapshot } from './smoke-diagnostics.mjs';
 import { observePageDiagnostics } from './page-diagnostics.mjs';
 import { verifyBundle } from '../../packages/desktop/src/bundle.js';
 
@@ -38,13 +39,13 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
     });
     if (environment.NEURODESK_SMOKE_DIAGNOSTICS === '1') {
       const child = desktop.process();
-      for (const channel of ['stdout', 'stderr']) child[channel]?.on('data', chunk => {
-        // Main-process diagnostics contain only allowlisted metadata; other output may contain user paths.
-        for (const line of String(chunk).split('\n')) {
-          if (line.startsWith('{') && line.includes('"diagnostic":"offline-server"')) console.error(line);
-        }
-        console.error(JSON.stringify({ time: new Date().toISOString(), event: `electron-${channel}`, bytes: chunk.length }));
-      });
+      for (const channel of ['stdout', 'stderr']) {
+        const consume = diagnosticLines(record => console.error(JSON.stringify(record)));
+        child[channel]?.on('data', chunk => {
+          consume(chunk);
+          console.error(JSON.stringify({ time: new Date().toISOString(), event: `electron-${channel}`, bytes: chunk.length }));
+        });
+      }
       child.on('exit', (code, signal) => console.error(JSON.stringify({ time: new Date().toISOString(), event: 'electron-exit', code, signal })));
     }
     const page = await desktop.firstWindow();
@@ -97,8 +98,8 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
     results.push({ app: app.id, passed: !errors.length && !missing.length && !blocked.length, errors, missing, blocked, downloaded, workflow, diagnostics });
   } catch (error) {
     if (desktop && environment.NEURODESK_SMOKE_DIAGNOSTICS === '1') {
-      try { console.error(JSON.stringify({ time: new Date().toISOString(), event: 'failure-snapshot', server: await desktop.evaluate(() => globalThis.neurodeskOffline?.serverSnapshot?.()) })); }
-      catch { console.error(JSON.stringify({ time: new Date().toISOString(), event: 'failure-snapshot-unavailable' })); }
+      const server = await failureSnapshot(() => desktop.evaluate(() => globalThis.neurodeskOffline?.serverSnapshot?.()));
+      console.error(JSON.stringify({ time: new Date().toISOString(), event: server ? 'failure-snapshot' : 'failure-snapshot-unavailable', ...(server ? { server } : {}) }));
     }
     errors.push(error.message);
     results.push({ app: app.id, passed: false, errors, missing, diagnostics });

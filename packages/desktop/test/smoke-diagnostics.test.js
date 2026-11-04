@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startOfflineServer } from '../src/server.js';
 
-test('diagnostics distinguish stream failure and socket closure without hiding failure', async () => {
+test('diagnostics distinguish stream failure and socket closure without hiding failure', { skip: process.platform !== 'linux' ? 'requires Linux /proc/self/mem EIO fixture' : false }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'smoke-diagnostics-'));
   const records = [];
   const original = console.error;
@@ -18,7 +18,6 @@ test('diagnostics distinguish stream failure and socket closure without hiding f
     // A directory passes stat but is rejected before streaming; /proc/self/mem
     // is a regular file whose stream fails on Linux without reading user data.
     local = await startOfflineServer(root, { resolveFile: () => '/proc/self/mem' });
-    if (process.platform !== 'linux') return;
     await assert.rejects(fetch(`${local.origin}/synthseg/app-shell.js?secret=never-log`));
     local.close();
     await new Promise(resolve => local.server.once('close', resolve));
