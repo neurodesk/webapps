@@ -1,3 +1,4 @@
+import { errorMonitor } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
@@ -17,8 +18,17 @@ export const mimeType = path => ({
  * starts one per viewer window, so a viewer's mounts are reachable only at that viewer's address.
  */
 export async function startOfflineServer(root, { port = 0, resolveFile } = {}) {
+  const diagnostic = process.env.NEURODESK_SMOKE_DIAGNOSTICS === '1';
+  const log = (event, fields = {}) => {
+    if (diagnostic) console.error(JSON.stringify({ time: new Date().toISOString(), diagnostic: 'offline-server', event, ...fields }));
+  };
   const mounts = new Map();
   const server = createServer(async (request, response) => {
+    const shell = /^\/[^/?]+\/app-shell\.js(?:\?|$)/.test(request.url);
+    const record = (event, fields) => { if (shell) log(event, fields); };
+    record('request');
+    response.on('finish', () => record('response-finish', { status: response.statusCode }));
+    response.on('close', () => record('response-close', { finished: response.writableFinished, destroyed: request.socket.destroyed }));
     try {
       if (!['GET', 'HEAD'].includes(request.method)) {
         response.writeHead(405).end();
@@ -61,12 +71,27 @@ export async function startOfflineServer(root, { port = 0, resolveFile } = {}) {
         headers['Content-Length'] = details.size;
         response.writeHead(200, headers);
         if (request.method === 'HEAD') response.end();
-        else createReadStream(path).on('error', () => response.destroy()).pipe(response);
+        else createReadStream(path).on('error', error => { record('stream-error', { code: error.code }); response.destroy(); }).pipe(response);
       }
     } catch {
       response.writeHead(404, { 'Content-Type': 'text/plain' }).end('File not included in this offline installation.');
     }
   });
+  if (diagnostic) {
+    server.on('listening', () => log('listening'));
+    server.on('close', () => log('close'));
+    const emit = server.emit;
+    server.emit = function (event, ...args) {
+      if (event === 'clientError') log('clientError', { code: args[0]?.code });
+      return emit.call(this, event, ...args);
+    };
+    // errorMonitor observes without consuming unhandled errors or changing clientError defaults.
+    server.on(errorMonitor, error => log('error', { code: error.code }));
+    server.on('connection', socket => {
+      socket.on('close', hadError => log('socket-close', { hadError }));
+      socket.on(errorMonitor, error => log('socket-error', { code: error.code }));
+    });
+  }
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
