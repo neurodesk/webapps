@@ -59,6 +59,25 @@ test('main CI can finish while PR pushes cancel their predecessors', async () =>
   assert.equal(evaluate(plan.env.CI_DRAFT, { event_name: 'pull_request', event: { pull_request: { draft: true } } }), true);
 });
 
+test('returning to draft cancels the prior run without starting CI jobs', async () => {
+  const flow = await workflow('ci.yml');
+  assert.ok(flow.on.pull_request.types.includes('converted_to_draft'));
+  const skipped = new Set();
+  for (const [id, job] of Object.entries(flow.jobs)) {
+    const needs = [job.needs ?? []].flat();
+    if (needs.length) {
+      assert.ok(needs.every(dependency => skipped.has(dependency)), `${id} depends on skipped jobs`);
+      assert.doesNotMatch(job.if ?? '', /always\(|!cancelled\(/, `${id} must respect skipped dependencies`);
+    } else {
+      assert.equal(evaluate(job.if, { event: { action: 'converted_to_draft' } }), false, id);
+      for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review', undefined]) {
+        assert.equal(evaluate(job.if, { event: { action } }), true, `${id}: ${action}`);
+      }
+    }
+    skipped.add(id);
+  }
+});
+
 test('NeuroFlow push coverage matches PR paths and retains the scheduled backstop', async () => {
   const flow = await workflow('neuroflow.yml');
   assert.deepEqual(flow.on.push.paths, flow.on.pull_request.paths);
