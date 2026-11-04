@@ -211,22 +211,6 @@
           "sha256": "ef5671590c9e38258beaa6c5ab90be4c830f68a684cd5cc47cb57e2aa95480d6"
         }
       ]
-    },
-    {
-      "id": "imaging-workspace-css",
-      "version": "177ae0c79659",
-      "target": "imaging-workspace/177ae0c79659",
-      "deduplicate": true,
-      "match_by": "sha256",
-      "reason": "Share byte-identical self-contained workspace CSS; other app styles remain local regardless of filename.",
-      "files": [
-        {
-          "name": "imaging-workspace.css",
-          "source_app": "brainchop",
-          "source": "assets/index-DO8KcUF6.css",
-          "sha256": "177ae0c79659aad1f5ddd75dc8b6a516a02a67da9d44d8be69c8e5192cfe1b88"
-        }
-      ]
     }
   ],
   "downloads": [

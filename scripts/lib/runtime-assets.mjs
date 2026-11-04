@@ -175,12 +175,36 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
   }
 }
 
+async function sharedStylesheets(siteDist, registry) {
+  const groups = new Map();
+  for (const app of registry.apps) {
+    const assets = join(siteDist, app.path, 'assets');
+    const names = await readdir(assets).catch(error => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    });
+    for (const name of names.filter(name => name.endsWith('.css'))) {
+      const source = await readFile(join(assets, name), 'utf8');
+      if (/@import|url\((?!["']?data:)/i.test(source)) continue;
+      const hash = createHash('sha256').update(source).digest('hex');
+      const group = groups.get(hash) ?? [];
+      group.push({ app, name });
+      groups.set(hash, group);
+    }
+  }
+  return [...groups].filter(([, copies]) => copies.length > 1).map(([hash, copies]) => ({
+    id: `stylesheet-${hash}`, target: `styles/${hash}`, deduplicate: true, match_by: 'sha256',
+    files: [{ name: 'shared.css', source_app: copies[0].app.id, source: `assets/${copies[0].name}`, sha256: hash }],
+  }));
+}
+
 export async function assembleRuntimeAssetStore({ repoRoot, siteDist, registry }) {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
   if (manifest.schema_version !== 1) throw new Error('Unsupported runtime-assets manifest schema');
   const runtimeRoot = join(siteDist, '_runtime');
   await rm(runtimeRoot, { recursive: true, force: true });
 
+  manifest.families.push(...await sharedStylesheets(siteDist, registry));
   for (const family of manifest.families) {
     await copyVerifiedFamily({ family, repoRoot, siteDist, registry });
   }
