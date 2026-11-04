@@ -1,4 +1,4 @@
-qsmbly run /storage/.t3/scratch/2026-11-04-audit-all-issues-across-our-38520f69/qsmbly-repair/parity-4276acff-20261104/native-retry/bids /storage/.t3/scratch/2026-11-04-audit-all-issues-across-our-38520f69/qsmbly-repair/parity-4276acff-20261104/native-retry/out --mask phase-quality,threshold:otsu,dilate:1,fill-holes:0,erode:2 --vsharp-max-radius 18 --qsm-algorithm rts
+qsmbly run <repository>/parity-4276acff-20261104/native-retry/bids <repository>/parity-4276acff-20261104/native-retry/out --mask phase-quality,threshold:otsu,dilate:1,fill-holes:0,erode:2 --vsharp-max-radius 18 --qsm-algorithm rts
 {
   "seconds": 106,
   "metrics": {
@@ -31,7 +31,7 @@ AssertionError [ERR_ASSERTION]: CLI χ map differs from the browser's qsmbly 0.3
 + ]
 - []
 
-    at file:///storage/.t3/scratch/2026-11-04-audit-all-issues-across-our-38520f69/qsmbly-repair/packages/qsmbly/validation/cli-check.mjs:93:10 {
+    at file://<repository>/packages/qsmbly/validation/cli-check.mjs:93:10 {
   generatedMessage: false,
   code: 'ERR_ASSERTION',
   actual: [

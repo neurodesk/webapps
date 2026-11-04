@@ -37,6 +37,11 @@ echo "=== QSMbly WASM Build ($BUILD_TYPE) ==="
 echo ""
 
 # Check for required tools
+if ! command -v wasm-opt &> /dev/null; then
+    echo "Error: wasm-opt is not installed. Install Binaryen (CI uses version 117)." >&2
+    exit 1
+fi
+
 if ! command -v wasm-pack &> /dev/null; then
     echo "Error: wasm-pack is not installed."
     echo "Install it with: cargo install wasm-pack"
