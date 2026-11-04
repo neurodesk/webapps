@@ -15,7 +15,7 @@ export function diagnosticLines(write, limit = 8192) {
           const value = JSON.parse(pending);
           if (value?.diagnostic === 'offline-server' && events.has(value.event) && typeof value.time === 'string' && /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(value.time)) {
             const record = { time: value.time, diagnostic: 'offline-server', event: value.event };
-            if (typeof value.code === 'string' && /^E[A-Z0-9_]{1,40}$/.test(value.code)) record.code = value.code;
+            if (typeof value.code === 'string' && /^(?:E[A-Z0-9_]{1,40}|HPE_[A-Z0-9_]{1,40})$/.test(value.code)) record.code = value.code;
             if (Number.isInteger(value.status) && value.status >= 100 && value.status <= 599) record.status = value.status;
             for (const key of ['finished', 'destroyed', 'hadError']) if (typeof value[key] === 'boolean') record[key] = value[key];
             write(record);

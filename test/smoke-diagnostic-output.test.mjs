@@ -26,3 +26,10 @@ test('unresponsive or rejected evaluation cannot block failure recording', async
   assert.equal(await failureSnapshot(() => Promise.reject(new Error('closed')), 10), undefined);
   assert.deepEqual(await failureSnapshot(() => ({ listening: true })), { listening: true });
 });
+
+ test('HTTP parser error codes survive filtering without arbitrary text', () => {
+ const records = [];
+ const consume = diagnosticLines(record => records.push(record));
+ for (const code of ['HPE_INVALID_METHOD', 'ECONNRESET', 'private path']) consume(JSON.stringify({ time: '2026-11-04T00:00:00.000Z', diagnostic: 'offline-server', event: 'clientError', code }) + '\n');
+ assert.deepEqual(records.map(record => record.code), ['HPE_INVALID_METHOD', 'ECONNRESET', undefined]);
+ });
