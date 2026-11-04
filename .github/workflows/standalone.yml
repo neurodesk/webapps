@@ -184,6 +184,7 @@ jobs:
         run: node scripts/desktop/pack.mjs
         env:
           NEURODESK_TEST_REPORT: packaged-desktop-reports
+          NEURODESK_SMOKE_DIAGNOSTICS: ${{ runner.os == 'Windows' && '1' || '' }}
           CSC_LINK: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.CSC_KEY_PASSWORD || '' }}
           APPLE_ID: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLEID || '' }}
