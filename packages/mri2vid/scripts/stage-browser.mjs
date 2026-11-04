@@ -14,6 +14,10 @@ await cp(new URL('../src/', import.meta.url), destination, {
   filter: (path) => !NODE_ONLY.has(basename(path)),
 });
 console.log(`Staged the shared mri2vid modules: ${fileURLToPath(destination)}`);
+for (const name of ['LICENSE', 'NOTICE']) {
+  await cp(new URL(`../${name}`, import.meta.url), new URL(`mri2vid/${name}`, vendor));
+  await cp(new URL(`../../${name}`, vendor), new URL(`../${name}`, vendor));
+}
 
 const dcm2niix = new URL('dcm2niix/', vendor);
 const dist = new URL('./', import.meta.resolve('@niivue/dcm2niix'));

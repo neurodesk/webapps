@@ -176,6 +176,15 @@ async function main() {
     const info = await page.textContent('#resultInfo');
     if (href && href.startsWith('blob:')) ok(`UI flow produced downloadable video: ${info} (preview: ${scrubLabel})`);
     else fail(`UI flow: bad download href ${href}`);
+
+    // Orientations are array axes, so the page must not show plane names.
+    const labels = await page.$$eval('#orientation option', (os) => os.map((o) => `${o.value}=${o.textContent}`).join(','));
+    const wantLabels = 'axial=Axis 1,axial_flipped=Axis 1 flipped,coronal=Axis 2,coronal_flipped=Axis 2 flipped,sagittal=Axis 3,sagittal_flipped=Axis 3 flipped';
+    if (labels === wantLabels) ok('orientation options are labelled by axis');
+    else fail(`orientation labels: ${labels}`);
+    const dl = await page.getAttribute('#downloadLink', 'download');
+    if (/_axis_3\.webm$/.test(dl)) ok(`download named by axis (${dl})`);
+    else fail(`download name not by axis: ${dl}`);
     const logText = await page.textContent('#technicalLogOutput');
     if (/Encoding \d+ frames/.test(logText)) ok('technical log records the encode');
     else fail('technical log lacks the encode entry');

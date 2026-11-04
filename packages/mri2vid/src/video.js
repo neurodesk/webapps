@@ -21,10 +21,13 @@ export function evenDim(n) {
   return n % 2 === 0 ? n : n + 1;
 }
 
+// 1 bit per pixel with a 2 Mbps floor. Measured on a T1 (40 slices, 20 fps), the
+// old 0.12 bpp / 1 Mbps kept 94% of edge energy at native size and 43% at 4x
+// upscale (H.264); this keeps 97% at both. Images need more than natural video.
 export function bitrateFor(width, height, fps) {
-  const bpp = 0.12;
+  const bpp = 1;
   const b = Math.round(width * height * fps * bpp);
-  return Math.max(1_000_000, Math.min(b, 24_000_000));
+  return Math.max(2_000_000, Math.min(b, 24_000_000));
 }
 
 export function frameDurationUs(fps) {

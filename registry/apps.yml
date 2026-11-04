@@ -303,7 +303,7 @@ apps:
     modalities: [mri, ct]
     inputs: [dicom, nifti, mgz]
     hardware: cpu
-    legacy_domain: thomshaw92.github.io/DICOM2Vid
+    legacy_domain: thomshaw92.github.io/MRI2Vid
     runtime: static-esm
     model_manifest: null
     asset_manifest_schema: null

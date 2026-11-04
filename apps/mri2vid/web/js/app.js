@@ -232,10 +232,10 @@ function onVolumeLoaded(gen = loadGen) {
 
   const sel = $('orientation');
   if (!sel.options.length) {
-    for (const o of ORIENTATIONS) {
+    for (const o of [...ORIENTATIONS].sort((a, b) => axisLabel(a).localeCompare(axisLabel(b)))) {
       const opt = document.createElement('option');
       opt.value = o;
-      opt.textContent = o.replace('_', ' ');
+      opt.textContent = axisLabel(o);
       sel.appendChild(opt);
     }
     sel.value = 'sagittal';
@@ -555,6 +555,12 @@ function togglePlay() {
 
 // ---- reconstruction, rotation, modals ----
 function baseOf(orientation) { return orientation.replace('_flipped', ''); }
+// The keys keep MRI2vid.py's plane names, but the ops are array-axis reslices, so a
+// plane name is only right for a sagittal acquisition. Show the array axis instead.
+const AXIS_NUM = { axial: 1, coronal: 2, sagittal: 3 };
+function axisLabel(o, sep = ' ') {
+  return `Axis${sep}${AXIS_NUM[baseOf(o)]}${o.endsWith('_flipped') ? `${sep}flipped` : ''}`;
+}
 function setOrientation(value) { $('orientation').value = value; refreshRange(); }
 function syncReconButtons() {
   const cur = $('orientation').value || 'sagittal';
@@ -623,7 +629,7 @@ async function generate({ options, signal, throwOnError = false, progress } = {}
     showResult(res, opts, first, sliceIndices.length);
     setStatus(`Video ready · ${$('resultInfo').textContent}`);
     setProgress(1);
-    return { file: new File([res.blob], `${S.volumeBase}_${opts.orientation}.${res.ext}`, { type: res.mime }),
+    return { file: new File([res.blob], `${S.volumeBase}_${axisLabel(opts.orientation, '_').toLowerCase()}.${res.ext}`, { type: res.mime }),
       summary: { codec: res.codecName, container: res.container, frames: sliceIndices.length, width: res.width, height: res.height, fps: opts.fps },
       provenance: { parameters: opts, normalization: norm, dimensions: Array.from(vol.dims), sliceIndices } };
   } catch (e) {
@@ -646,7 +652,7 @@ function showResult(res, opts, firstFrame, nFrames) {
   $('resultVideo').src = url;
   const link = $('downloadLink');
   link.href = url;
-  link.download = `${S.volumeBase}_${opts.orientation}.${res.ext}`;
+  link.download = `${S.volumeBase}_${axisLabel(opts.orientation, '_').toLowerCase()}.${res.ext}`;
   const kb = Math.round(res.blob.size / 1024);
   $('resultInfo').textContent = `${res.codecName}, ${res.container.toUpperCase()}, ${nFrames} frames, ${firstFrame.fW}x${firstFrame.fH}, ${kb} KB.`;
   $('resultPanel').classList.remove('hidden');
@@ -786,7 +792,7 @@ automation.registerViewer('main', {
   state: () => ({ dimensions: S.volume ? Array.from(S.volume.dims) : null, orientation: $('orientation').value,
     slice: S.preview.idx, normalization: S.dataNorm }),
   tabs: {
-    list: () => ORIENTATIONS.map(id => ({ id, label: id, active: $('orientation').value === id })),
+    list: () => ORIENTATIONS.map(id => ({ id, label: axisLabel(id), active: $('orientation').value === id })),
     select: setOrientation,
   },
 });
