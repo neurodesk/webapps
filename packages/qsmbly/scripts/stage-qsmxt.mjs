@@ -1,7 +1,7 @@
-// Stage this host's pinned QSMxT release archive in native/, after checking its SHA-256.
+// Build pinned QSMxT source; retain dcm2niix from the checksum-verified release archive.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { EXAMPLE_ASSETS, MODEL_ASSETS, QSMXT, nativeDirectory, qsmxtVersion, releasePlatform } from '../src/node.js';
 import { verifyNativeExamples, verifyNativeWeights } from '../src/native-registry.js';
@@ -44,6 +44,28 @@ try {
   const expected = [...target.executables, ...target.files].sort();
   if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`${basename(target.url)} contains ${names.join(', ')}, expected ${expected.join(', ')}`);
   for (const name of target.executables) await chmod(join(extracted, name), 0o755);
+  if (platform !== releasePlatform()) throw new Error('Build QSMxT on its target platform');
+  const sourceResponse = await fetch(QSMXT.build.url);
+  if (!sourceResponse.ok) throw new Error(`Source download: HTTP ${sourceResponse.status}`);
+  const sourceBytes = Buffer.from(await sourceResponse.arrayBuffer());
+  if (createHash('sha256').update(sourceBytes).digest('hex') !== QSMXT.build.sha256) {
+    throw new Error('QSMxT source checksum mismatch');
+  }
+  const sourceArchive = join(work, 'source.tar.gz');
+  const source = join(work, 'source');
+  await writeFile(sourceArchive, sourceBytes);
+  await mkdir(source);
+  for (const [command, args] of [
+    [tar, ['-xf', sourceArchive, '-C', source, '--strip-components=1']],
+    ['rustup', ['toolchain', 'install', QSMXT.build.toolchain, '--profile', 'minimal']],
+    ['cargo', [`+${QSMXT.build.toolchain}`, 'build', '--locked', '--release', '--manifest-path', join(source, 'Cargo.toml')]],
+  ]) {
+    const result = spawnSync(command, args, { stdio: 'inherit' });
+    if (result.status !== 0) throw new Error(`${command} failed building pinned QSMxT`);
+  }
+  const executable = platform === 'windows-x64' ? 'qsmxt.exe' : 'qsmxt';
+  await copyFile(join(source, 'target', 'release', executable), join(extracted, executable));
+  await writeFile(join(extracted, 'source.json'), `${JSON.stringify(QSMXT.build, null, 2)}\n`);
   await writeFile(join(extracted, 'archive.sha256'), `${target.sha256}\n`);
   await rm(directory, { recursive: true, force: true });
   await rename(extracted, directory);

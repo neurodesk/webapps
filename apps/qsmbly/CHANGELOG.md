@@ -1,5 +1,18 @@
 # qsmbly
 
+## 0.31.20261104
+
+### Patch Changes
+
+- 6343993: Merge upstream astewartau/qsmbly 0b6e3d3..dab1846:
+
+  - Repin qsmxt-engine to QSMxT 921e5fc (now pinned at 9994450; QSM.rs v0.40.0) (#196)
+  - Parity script: find a run's record, methods and graph under nested workflow folders (#195)
+  - next.html: each step's run state on its header line, not under the chevron (#198)
+  - next.html: the pipeline rules' recommendations and reference pipelines (#194) (#197)
+
+  Adapt the browser Rust bindings to the new masking and ARLO APIs, preserving voxel-major inputs, echo ordering, and masked outputs.
+
 ## 0.31.20261103
 
 ### Patch Changes

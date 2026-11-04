@@ -7,7 +7,7 @@
   "readme": {
     "run": "Reconstruct susceptibility maps from a BIDS dataset",
     "notes": [
-      "QSMbly's command line is QSMxT 10.0.0. Use the processing command QSMbly",
+      "QSMbly's command line is QSMxT source commit 999445010a067d9597299f217a9a1165d4b7d62d. Use the processing command QSMbly",
       "exports with qsmbly in place of qsmxt. The release validation compares the",
       "real-brain QSM workflow with the browser under recorded numerical tolerances.",
       "Run qsmbly help for all commands, and",
