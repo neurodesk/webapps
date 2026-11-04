@@ -169,6 +169,7 @@ jobs:
         env:
           NEURODESK_TEST_REPORT: desktop-workflow-reports
           NEURODESK_WORKFLOWS: '1'
+          NEURODESK_SMOKE_DIAGNOSTICS: ${{ runner.os == 'Windows' && '1' || '' }}
       - name: Test Linux offline computations and exports
         if: runner.os == 'Linux'
         run: xvfb-run -a node scripts/desktop/smoke.mjs
