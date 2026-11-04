@@ -89,6 +89,7 @@ export const provisioners = {
   // The browser reference runs quality control of the pinned example with each of the four models
   // on the CPU backend, about 12 min on eight cores.
   browserqc: { env: ['BROWSERQC_BROWSER_REFERENCE'], provision: async () => ({ BROWSERQC_BROWSER_REFERENCE: 'check' }) },
+  brainchop: { env: [], provision: async () => ({}) },
   brain2print: { env: [], provision: async () => ({}) },
   // Synthetic NIfTI/DICOM fixtures are generated in the suite; the worker verifies pinned models.
   seedseg: { env: [], provision: async () => ({}) },

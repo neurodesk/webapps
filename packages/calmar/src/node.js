@@ -182,6 +182,7 @@ export async function prepareLesion({ input, output, ...options }) {
       return { id, checksum: model.checksum };
     }),
     segmentation: {
+      paddingMode: entry.preprocessing?.paddingMode ?? 'multiple',
       overlap: entry.overlap,
       testTimeAugmentation: entry.testTimeAugmentation,
       threshold: entry.probabilityThreshold,

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "app": "sdc",
+  "license": "NOASSERTION",
+  "description": "The SyN-SDC prior of packages/sdc (plan Q59, Q60): sdcflows' distortion atlas, its affine to MNI152NLin2009cAsym and the 1 mm template T1w and brain mask. sdc/prior/ on the dataset holds them with their notices (README.md, LICENSE-sdcflows, LICENSE-MNI152NLin2009cAsym); exes/dwi/sdc/validation/prior.manifest.json pins the whole folder.",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4c6c9e8efd8a1f4d110501f6fe30a10029bec570/sdc/prior/",
+  "assets": [
+    {
+      "filename": "fmap_atlas.nii.gz",
+      "bytes": 5801500,
+      "sha256": "72b8d2cc7ff3324f3bfaf52712bc191256e795bcff5ee168563b89e584aa40bb",
+      "license": "CC-BY-4.0",
+      "source": "sdcflows 2.17.1 data/fmap_atlas.nii.gz: S2 File of Treiber et al. 2016, PLoS ONE 11(3): e0152472, doi:10.1371/journal.pone.0152472.s002, NaN set to 0"
+    },
+    {
+      "filename": "fmap_atlas_2_MNI152NLin2009cAsym_affine.mat",
+      "bytes": 193,
+      "sha256": "588820bdaefab4f98c42b3a394c7c975ad9764bc5d8b095718f47419a9ea6ffc",
+      "license": "Apache-2.0",
+      "source": "sdcflows 2.17.1 data/fmap_atlas_2_MNI152NLin2009cAsym_affine.mat"
+    },
+    {
+      "filename": "tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz",
+      "bytes": 13685075,
+      "sha256": "1f27aabea9f7183dc0c69dafa71e1787b921ca778d655d9c1bf302b273d5627a",
+      "license": "LicenseRef-MNI152NLin2009cAsym",
+      "source": "TemplateFlow tpl-MNI152NLin2009cAsym at 15d7c02160f79f5218d2545b4febebeecc11531d"
+    },
+    {
+      "filename": "tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz",
+      "bytes": 159538,
+      "sha256": "e40bb1816736504d4c25abc243c1c8503df1d308f64c048318aa4b829e09a7ae",
+      "license": "LicenseRef-MNI152NLin2009cAsym",
+      "source": "TemplateFlow tpl-MNI152NLin2009cAsym at 15d7c02160f79f5218d2545b4febebeecc11531d"
+    }
+  ]
+}

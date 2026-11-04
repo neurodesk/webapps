@@ -1,0 +1,25 @@
+{
+  "name": "brainchop",
+  "version": "0.1.20261103",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app brainchop",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "node ../../scripts/lint.mjs --workspace"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "@tensorflow/tfjs": "4.20.0",
+    "@niivue/niivue": "0.62.0",
+    "@neurodesk/runtime-support": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "vite": "^5.0.0"
+  },
+  "license": "MIT"
+}

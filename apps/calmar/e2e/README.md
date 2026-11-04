@@ -38,3 +38,22 @@ with 65,607 foreground voxels. Its report requires review and leaves the lesion
 unconfirmed. This checks execution, geometry, artifact hashes, and review state,
 not accuracy against an expert lesion annotation. Run the opt-in check on the
 target machine before treating that machine's execution as verified.
+
+## Review-to-report orientation regression
+
+`mask-orientation.spec.js` uses asymmetric, non-cubic MRI phantoms with a known
+world-space lesion. It checks the real NiiVue drawing against an anatomical
+landmark, then compares downloaded and confirmed native masks voxel-for-voxel
+and checks that the reporting-grid mask stays in the same hemisphere. The old
+raw-drawing/native-header combination is explicitly checked to fail on LAS.
+All 48 signed axis permutations run through the T1 route. Representative
+flips and permutations also run through b0-as-anatomy, DWI+ADC, DWI+b0,
+DWI+ADC+b0, and separate T1+diffusion inputs (different storage orientations),
+plus uploaded masks, manual drawings, gzip, qform-only and oblique images.
+Four additional cases use actual DICOM conversion through each image picker
+before checking confirmation. No clinical scans are stored by these tests.
+
+Registration is deliberately an identity world-space mapping in this suite:
+it isolates the handoff from neural segmentation and registration accuracy.
+These tests do not establish clinical accuracy or rule out problems caused
+by incorrect source geometry or a failed registration on a particular scan.

@@ -26,6 +26,7 @@ export async function segmentCandidate(volume, entry, runPatch, onProgress = () 
       );
     },
     {
+      paddingMode: entry.preprocessing?.paddingMode,
       overlap: entry.overlap ?? 0.25,
       threshold: entry.probabilityThreshold ?? 0.4,
       minComponentSize: entry.minComponentSize ?? 30,

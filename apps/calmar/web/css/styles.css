@@ -20,8 +20,6 @@ details[open] > summary { margin-bottom: 4px; }
 .param-label-row { display: flex; align-items: center; gap: var(--nd-space-xs); min-width: 0; margin-bottom: 2px; }
 .param-label-row label,
 .param-label { min-width: 0; color: var(--nd-color-text); font-size: 0.8rem; font-weight: 500; line-height: 1.3; }
-.param-label-row .nd-info-icon { margin-left: auto; }
-.section-title .nd-info-icon { margin-right: var(--nd-space-md); }
 
 .param-input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appearance: none; background: var(--nd-color-border); border-radius: 2px; cursor: pointer; }
 .param-input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 13px; height: 13px; background: var(--nd-color-primary); border-radius: 50%; border: 2px solid white; cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); }
@@ -116,3 +114,16 @@ input[type="file"]::file-selector-button:hover { border-color: var(--nd-color-bo
   .app-sidebar { border-right: none; border-bottom: 1px solid var(--nd-color-border); max-height: 50vh; }
 }
 
+
+/* Download report modal: section checklist and image option. */
+.report-modal { max-width: 480px; }
+.report-parts { display: grid; gap: 6px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); }
+.report-parts legend { padding: 0 4px; font-weight: 600; }
+.report-parts label { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; }
+.report-image-options { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -2px 0 2px 24px; }
+.report-image-options label { font-size: 0.8rem; color: var(--nd-color-text-muted); }
+.report-actions { justify-content: flex-start; }
+
+/* Knowledge-base report: findings nobody has approved yet (the drafts export). */
+.kb-draft-badge { display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; color: var(--nd-color-warning); background: var(--nd-color-warning-bg); border: 1px solid var(--nd-color-warning); }
+.kb-drafts-note { color: var(--nd-color-warning); }

@@ -2,6 +2,7 @@ name: dwi-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - 'packages/components/package.json'
       - 'packages/dwi2trx/package.json'
@@ -16,6 +17,9 @@ on:
       - 'packages/hmc/**'
       - 'packages/hmc-registration/**'
       - 'packages/sdc/**'
+      - 'packages/ants-denoise/package.json'
+      - 'packages/ants-denoise/src/**'
+      - 'packages/ants-denoise/wasm/**'
       - 'packages/runtime-support/package.json'
       - 'packages/runtime-support/src/mindgrab/backend.js'
       - 'packages/components/src/file-io/NiftiUtils.js'
@@ -48,6 +52,9 @@ on:
       - 'packages/hmc/**'
       - 'packages/hmc-registration/**'
       - 'packages/sdc/**'
+      - 'packages/ants-denoise/package.json'
+      - 'packages/ants-denoise/src/**'
+      - 'packages/ants-denoise/wasm/**'
       - 'packages/runtime-support/package.json'
       - 'packages/runtime-support/src/mindgrab/backend.js'
       - 'packages/components/src/file-io/NiftiUtils.js'
@@ -75,6 +82,7 @@ permissions:
 
 jobs:
   rust:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: exes/dwi tests, clippy and format
     runs-on: ubuntu-24.04
     steps:
@@ -100,6 +108,7 @@ jobs:
   # missing-data skip into a failure. When a test starts to read another subset, add it to the
   # fetch line and to the cache key (the cache saves only on a key miss).
   hmc-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: exes/dwi tests on the pinned hmc reference data
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -152,6 +161,7 @@ jobs:
           if-no-files-found: warn
 
   sdc-field-fit-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: deterministic SDC field fitting on the pinned native reference
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -183,6 +193,7 @@ jobs:
         run: node exes/dwi/sdc/validation/wasm-reference.mjs
 
   wasm-source:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: committed WASM modules equal a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -245,8 +256,14 @@ jobs:
       - name: SDC field-fit tests on the committed module
         working-directory: packages/sdc
         run: node --test test/field-fit.test.js
+      # The SyN-SDC ports against SciPy's outputs, the refusals, a synthetic run whose outputs the
+      # n4 and noddi inputs accept, and cancellation. The full-brain gate is sdc-registration-gate.yml.
+      - name: SDC SyN pipeline tests on the committed modules
+        working-directory: packages/sdc
+        run: node --test test/syn.test.js
 
   dmipy-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: nonlinear NODDI native and WASM maps on the pinned WM reference
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -283,6 +300,7 @@ jobs:
         run: node exes/dwi/dmipy/validation/wasm-reference.mjs "$RUNNER_TEMP/dmipy-wasm-report.json"
 
   oracle:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: exes/dwi oracle tests on the pinned AMICO, Patch2Self and mrdegibbs data
     runs-on: ubuntu-24.04
     timeout-minutes: 30

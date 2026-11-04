@@ -1,5 +1,17 @@
 # @neurodesk/n4
 
+## 0.6.20261103
+
+### Patch Changes
+
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+- Updated dependencies [8e9346d]
+- Updated dependencies [239dedd]
+- Updated dependencies [71881c8]
+  - @neurodesk/webapp-components@0.22.4
+  - @neurodesk/node-drivers@0.3.2
+
 ## 0.6.20261031
 
 ### Patch Changes

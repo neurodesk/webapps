@@ -49,6 +49,7 @@ export const INPUT_FORMATS = new Map([
 ]);
 export const HARDWARE = new Map([
   ['cpu', 'No GPU needed'],
+  ['webgl-required', 'Needs WebGL'],
   ['webgpu-optional', 'WebGPU optional'],
   ['webgpu-required', 'Needs WebGPU'],
 ]);

@@ -1,0 +1,22 @@
+{
+  "browser": "chromium 156.0.8078.4",
+  "mindgrab": "0.1.20260925",
+  "backend": "cpu",
+  "cases": {
+    "synthetic-mindgrab-no-prior": {
+      "seconds": 419.661,
+      "sha256": {
+        "sub-01_dir-AP_desc-brain_mask.nii.gz": "ad063a135e15de34d5ad33ca2a9fda17ba61722b9c331d4f4674b357519d9d9a",
+        "sub-01_dir-AP_desc-coeff_fieldmap.json": "d665b7fe2910462f38181d1b51d444d174eddb7ed96d633311b6a39babfb912c",
+        "sub-01_dir-AP_desc-coeff_fieldmap.nii.gz": "5d67e4a805a0e65d3c4cc94fb04102fa693d0c60bef8d9ba1c0e82fc77046374",
+        "sub-01_dir-AP_desc-preproc_fieldmap.json": "a848c66e026fb4abf1554711a7e2902b2f88fea60d1f2e5c397c5bc273a4c6de",
+        "sub-01_dir-AP_desc-preproc_fieldmap.nii.gz": "3f763c6441cf117131ac1d04dcaf95a02fcba3e89d8c8950915a22858e4dd3c6",
+        "sub-01_dir-AP_desc-sdc_dwi.bval": "5cc0c6b817d3dd0103b0609f4200ffe5513d9554098dec2807cf5b1e7fbcef80",
+        "sub-01_dir-AP_desc-sdc_dwi.bvec": "394e3347d35bcb26d377c6133f85b1c7e68e65e94f45065ae2531ddd69dfa4e6",
+        "sub-01_dir-AP_desc-sdc_dwi.json": "d09d0b7daa0e0be7f4e91c5f29b8009eda69a7f75a8f54779283b3f92b73b08d",
+        "sub-01_dir-AP_desc-sdc_dwi.nii.gz": "cc2b421648fe28928f84a683c85678404faa28086008f28d2a128bd28be08210",
+        "sub-01_dir-AP_from-orig_to-sdc_mode-image_xfm.nii.gz": "26c81212bc6c3d7c221bfa5d221566229ddfbb5fb19220ab4e10daa9d0dc880e"
+      }
+    }
+  }
+}

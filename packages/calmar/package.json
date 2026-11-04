@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/calmar",
-  "version": "0.7.20261031",
+  "version": "0.10.20261103",
   "type": "module",
   "license": "UNLICENSED",
   "engines": {
@@ -26,7 +26,9 @@
     "./inference-pipeline": "./src/inference-pipeline.js",
     "./pipeline": "./src/pipeline.js",
     "./alignment": "./src/alignment.js",
-    "./seals": "./src/seals.js"
+    "./seals": "./src/seals.js",
+    "./kb-evidence": "./src/kb-evidence.js",
+    "./report-damage": "./src/report-damage.js"
   },
   "files": [
     "src",

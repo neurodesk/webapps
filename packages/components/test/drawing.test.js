@@ -9,7 +9,55 @@ import {
   parseNiftiHeader,
   readNiftiImageData,
 } from '../src/file-io/NiftiUtils.js';
-import { createDrawingAdapter, distinctLabels, editedFileName, maskToUint8Nifti } from '../src/viewer/drawing.js';
+import { createDrawingAdapter, distinctLabels, editedFileName, maskToUint8Nifti, maskToDrawingBitmap, drawingToNativeBitmap, installContrastRangeWand } from '../src/viewer/drawing.js';
+
+test('contrast-range wand gives dark, zero and negative seeds the same width and preserves native arguments', () => {
+  const calls = [];
+  let seed = 80;
+  const nv = {
+    opts: { clickToSegment: true, clickToSegmentPercent: 0.1 },
+    back: { robust_min: -20, robust_max: 180, getValue: () => seed },
+    drawFloodFill(...args) { calls.push({ receiver: this, args }); return 42; },
+  };
+  const original = nv.drawFloodFill;
+  const restore = installContrastRangeWand(nv);
+  const bitmap = new Uint8Array(1);
+  for (const center of [80, 20, 0, -10]) {
+    seed = center;
+    assert.equal(nv.drawFloodFill([1, 2, 3], 1, Infinity, 999, 1000, 6, 15, false, bitmap), 42);
+    const call = calls.at(-1);
+    assert.equal(call.receiver, nv);
+    assert.deepEqual(call.args.slice(3, 5), [center - 20, center + 20]);
+    assert.deepEqual(call.args.slice(5), [6, 15, false, bitmap]);
+  }
+  nv.back.cal_min = 0;
+  nv.back.cal_max = 1;
+  nv.drawFloodFill([1, 2, 3], 1, Infinity, 0, 1);
+  assert.deepEqual(calls.at(-1).args.slice(3, 5), [-30, 10], 'windowing does not alter tolerance');
+  nv.opts.clickToSegment = false;
+  nv.drawFloodFill([1, 2, 3], 1, Infinity, 999, 1000);
+  assert.deepEqual(calls.at(-1).args.slice(3, 5), [999, 1000], 'other drawing tools are untouched');
+  nv.opts.clickToSegment = true;
+  nv.drawFloodFill([1, 2, 3], 1, Infinity, 999, 1000, 6, 15, false, bitmap, true);
+  assert.deepEqual(calls.at(-1).args.slice(3, 5), [999, 1000], 'native grow/erase-cluster tools are untouched');
+  restore();
+  assert.equal(nv.drawFloodFill, original);
+});
+
+test('contrast-range wand falls back to global extrema and converts calibrated bounds to raw voxel units', () => {
+  const intervals = [];
+  const nv = {
+    opts: { clickToSegment: true, clickToSegmentPercent: 0.1 },
+    back: { robust_min: 5, robust_max: 5, global_min: -50, global_max: 150, hdr: { scl_slope: 2, scl_inter: -50 }, getValue: () => -10 },
+    drawFloodFill(...args) { intervals.push(args.slice(3, 5)); },
+  };
+  installContrastRangeWand(nv);
+  nv.drawFloodFill([0, 0, 0], 1, Infinity);
+  assert.deepEqual(intervals.at(-1), [10, 30]);
+  nv.back = { robust_min: 150, robust_max: -50, hdr: { scl_slope: -2, scl_inter: 50 }, getValue: () => 10 };
+  nv.drawFloodFill([0, 0, 0], 1, -Infinity);
+  assert.deepEqual(intervals.at(-1), [10, 30], 'negative calibration slopes keep ordered bounds');
+});
 
 const DIMS = [4, 3, 2];
 
@@ -310,3 +358,64 @@ for (const makeNv of [legacyNv, currentNv]) {
     assert.equal(nv.layer.loads, loads);
   });
 }
+
+
+test('brain restriction blocks traversal and outside previews without mutating anatomy', () => {
+  const source = new Float32Array([20, 20, 20]);
+  const image = { img2RAS: () => source };
+  const originalImage = image.img2RAS;
+  let calls = 0;
+  const nv = {
+    volumes: [image], opts: { clickToSegment: true }, drawBitmap: new Uint8Array([0, 1, 0]),
+    back: { dims: [3, 3, 1, 1], robust_min: 0, robust_max: 100, getValue: () => 20 },
+    drawFloodFill() { calls++; assert.deepEqual([...image.img2RAS()], [20, NaN, 20]); throw new Error('native failure'); },
+  };
+  installContrastRangeWand(nv, { getMask: () => new Uint8Array([1, 0, 1]) });
+  assert.throws(() => nv.drawFloodFill([0, 0, 0], 1, Infinity), /native failure/);
+  assert.equal(image.img2RAS, originalImage);
+  assert.deepEqual([...source], [20, 20, 20]);
+  const preview = new Uint8Array([1, 1, 1]);
+  nv.drawFloodFill([1, 0, 0], 1, Infinity, NaN, NaN, 6, 15, false, preview);
+  assert.deepEqual(preview, nv.drawBitmap);
+  assert.equal(calls, 1);
+});
+
+test('brain mask follows the viewer signed permutation and rejects a displaced grid', async () => {
+  const data = new Float32Array(24);
+  data[1 + 2 * 4] = 1;
+  const bytes = createFloat32Nifti(data, sourceHeader());
+  const hdr = parseNiftiHeader(bytes);
+  const nv = { volumes: [{ hdr, permRAS: [2, -1, 3] }] };
+  const result = await maskToDrawingBitmap(nv, bytes);
+  assert.equal(result.reduce((a, b) => a + b), 1);
+  assert.equal(result[2 + 2 * 3], 1);
+  nv.volumes[0].hdr = { ...hdr, affine: hdr.affine.map(row => [...row]) };
+  nv.volumes[0].hdr.affine[0][3] += 10;
+  await assert.rejects(maskToDrawingBitmap(nv, bytes), /must match/);
+});
+
+
+test('drawing export reverses all 48 signed axis permutations on a non-cubic grid', () => {
+  const dims = [4, 3, 2];
+  const native = Uint8Array.from({ length: 24 }, (_, i) => i + 1);
+  const hdr = parseNiftiHeader(sourceHeader());
+  for (const perm of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
+    for (let bits = 0; bits < 8; bits++) {
+      const axes = perm.map((axis, i) => (axis + 1) * ((bits >> i) & 1 ? -1 : 1));
+      const outDims = perm.map(axis => dims[axis]);
+      const ras = new Uint8Array(24);
+      for (let z = 0; z < dims[2]; z++) for (let y = 0; y < dims[1]; y++) for (let x = 0; x < dims[0]; x++) {
+        const source = [x, y, z];
+        const dest = perm.map((axis, i) => axes[i] < 0 ? dims[axis] - 1 - source[axis] : source[axis]);
+        ras[dest[0] + outDims[0] * (dest[1] + outDims[1] * dest[2])] = native[x + dims[0] * (y + dims[1] * z)];
+      }
+      assert.deepEqual(drawingToNativeBitmap({ volumes: [{ hdr, permRAS: axes }], drawBitmap: ras }, hdr), native, String(axes));
+    }
+  }
+  const nv = { volumes: [{ hdr, permRAS: [-1, 2, 3] }], drawBitmap: native };
+  const shifted = { ...hdr, affine: hdr.affine.map(row => [...row]) };
+  shifted.affine[0][3] += 1;
+  assert.throws(() => drawingToNativeBitmap(nv, shifted), /does not match/);
+  nv.volumes[0].permRAS = undefined;
+  assert.throws(() => drawingToNativeBitmap(nv), /orientation/);
+});

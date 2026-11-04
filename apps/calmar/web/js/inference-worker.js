@@ -386,6 +386,7 @@ async function stepInference(params) {
     },
     {
       overlap, threshold, minComponentSize, testTimeAugmentation,
+      paddingMode: preprocessing.paddingMode,
       onLog: (msg) => postLog(msg),
       onProgress: (stepsDone, totalSteps, label) => {
         const elapsed = (performance.now() - inferenceStartTime) / 1000;

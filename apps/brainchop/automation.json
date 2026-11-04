@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "app": "brainchop",
+  "title": "Brainchop",
+  "description": "Whole brain T1 MRI segmentation with Brainchop.",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Run segmentation",
+      "description": "Whole brain T1 MRI segmentation with Brainchop.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "description": "One NIfTI image.",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "model": {
+          "type": "string",
+          "default": "tissue-light",
+          "enum": [
+            "tissue-light",
+            "tissue",
+            "subcortical",
+            "subcortical-small",
+            "aparc50",
+            "aparc104"
+          ],
+          "description": "Brainchop tissue or atlas network"
+        }
+      },
+      "artifacts": {
+        "segmentation": {
+          "type": "neuro:label-map",
+          "mediaType": "application/octet-stream",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

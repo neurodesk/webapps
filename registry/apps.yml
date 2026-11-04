@@ -183,7 +183,7 @@ apps:
     runtime: static-esm
     model_manifest: models/seedseg.manifest.json
     asset_manifest_schema: scientific-assets-v1
-    source: astewartau/prostate@c9b328a2e0bc1768c0b75640f5532e2853e7ef31
+    source: astewartau/prostate@2968f6486655eb412db762eb69d87ce427835954
     license: MIT
     maintainers: [astewartau]
     support_status: active
@@ -303,7 +303,7 @@ apps:
     modalities: [mri, ct]
     inputs: [dicom, nifti, mgz]
     hardware: cpu
-    legacy_domain: thomshaw92.github.io/DICOM2Vid
+    legacy_domain: thomshaw92.github.io/MRI2Vid
     runtime: static-esm
     model_manifest: null
     asset_manifest_schema: null
@@ -999,9 +999,9 @@ apps:
   - id: sdc
     path: sdc
     title: SDC
-    description: Distortion correction from reverse phase-encoding b0.
+    description: Distortion correction from reverse-PE b0 or a T1w.
     categories: [diffusion-imaging]
-    keywords: [susceptibility distortion, topup, PyHySCO, reverse phase-encoding, diffusion MRI, field map, WebAssembly]
+    keywords: [susceptibility distortion, topup, PyHySCO, reverse phase-encoding, SyN-SDC, sdcflows, fieldmap-less, diffusion MRI, field map, WebAssembly]
     anatomy: [brain]
     modalities: [mri]
     inputs: [dicom, nifti]
@@ -1009,6 +1009,7 @@ apps:
     handoff: none
     legacy_domain: null
     runtime: vite-wasm
+    app_scoped_runtime_families: [mindgrab-20260925]
     model_manifest: null
     asset_manifest_schema: null
     source: neurodesk/webapps@local
@@ -1021,7 +1022,7 @@ apps:
       shared_runtime: false
       browser_test: true
       hardware_gpu: true
-      release: false
+      release: true
 
   - id: me-ica
     path: me-ica
@@ -1222,4 +1223,54 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
+      release: false
+  - id: samsrf
+    path: samsrf
+    title: SamSrf
+    description: Map population receptive fields on the cortex.
+    categories: [surfaces, quantitative-mri]
+    keywords: [pRF, retinotopy, population receptive field, connective field, visual cortex, reverse correlation, SamSrf, GIfTI]
+    anatomy: [brain]
+    modalities: [mri, surface]
+    inputs: [gifti, freesurfer]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
+    ci:
+      toolchains: [node, rust-wasm]
+      shared_runtime: false
+      browser_test: true
+      release: true
+  - id: brainchop
+    path: brainchop
+    title: Brainchop
+    description: Whole brain MRI tissue and atlas segmentation.
+    categories: [image-processing]
+    keywords: [brain, segmentation, brainchop]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgl-required
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      hardware_gpu: true
       release: false

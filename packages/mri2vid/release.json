@@ -5,7 +5,7 @@
   "app": "mri2vid",
   "run": "T1.nii.gz videos --orientation axial",
   "readme": {
-    "run": "Turn the axial slices of a volume into a WebM video",
+    "run": "Turn the slices of a volume into a WebM video",
     "notes": [
       "Input is NIfTI, MGZ/MGH, or DICOM files or folders; dcm2niix is included and reads compressed DICOM.",
       "When a folder holds several DICOM series, the command lists them; choose one with --series-uid.",

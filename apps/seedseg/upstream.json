@@ -14,7 +14,8 @@
     "Keep `@playwright/test` declared as exact devDependencies for the monorepo e2e suite; the dependency checker rejects tooling resolved through another workspace's or the root's node_modules.",
     "Keep Cite owned by the shared shell. Move new upstream citations from web/index.html#citationsModal into registry/app-information.yml and test/app-information.test.mjs; do not restore the local Cite button, modal or handlers. The sync refreshes upstream-citations.json from its target commit and contract tests require every recorded DOI in the registry.",
     "Keep the monorepo idle status: #statusText starts as \"Drag and drop files\" (design system); the window-wide drop comes from the shared components.",
-    "SeedSeg loads dicompare's controller, worker and schema from the locally staged web/vendor/dicompare copies. The rewrite points any remaining upstream reference to dicompare.neurodesk.org, which stopped serving in October 2026, at https://webapps.neurodesk.org/dicompare instead."
+    "SeedSeg loads dicompare's controller, worker and schema from the locally staged web/vendor/dicompare copies. The rewrite points any remaining upstream reference to dicompare.neurodesk.org, which stopped serving in October 2026, at https://webapps.neurodesk.org/dicompare instead.",
+    "Keep examples.json empty and do not import the upstream example button or downloader. The interface standard excludes SeedSeg because its synthetic public example was withdrawn as unsuitable; a replacement needs scientific validation and the shared example contract before adoption."
   ],
   "citationSnapshot": {
     "file": "web/index.html",

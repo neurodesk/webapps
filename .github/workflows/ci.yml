@@ -2,6 +2,7 @@ name: ci
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
   schedule:
@@ -24,7 +25,7 @@ permissions:
 concurrency:
   # Keep the nightly full-catalog backstop independent of narrowed push runs.
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
@@ -63,10 +64,11 @@ jobs:
       - name: Generate affected app plan
         id: plan
         env:
-          # A push to main is superseded by the next one, so it diffs from the
-          # last commit ci finished green on main, not from its own `before`.
+          # Pending pushes coalesce; compare with the last completed green run
+          # so every intervening merge is covered.
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && 'last-success' || '' }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          CI_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/app-plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
 
@@ -125,7 +127,7 @@ jobs:
         run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
       - name: Install wasm-pack 0.13.1
         if: matrix.rust_wasm
-        run: cargo install wasm-pack --version 0.13.1 --locked
+        uses: ./.github/actions/setup-wasm-pack
       - name: Set up wasm-opt
         if: matrix.rust_wasm
         uses: ./.github/actions/setup-wasm-opt
@@ -170,7 +172,7 @@ jobs:
     # App-scoped changes can break composite assembly (runtime-store rewrites,
     # artifact budgets), so any PR that selects at least one app runs the
     # composite checks; only docs-only changes skip them.
-    if: github.event_name != 'pull_request' || needs.app-plan.outputs.has_site == 'true'
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'pull_request' || needs.app-plan.outputs.has_site == 'true')
     runs-on: ubuntu-latest
     outputs:
       agent_site_ready: ${{ steps.agent-site.outputs.ready }}
@@ -192,7 +194,7 @@ jobs:
       - name: Install pinned nightly toolchain
         run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
       - name: Install wasm-pack 0.13.1
-        run: cargo install wasm-pack --version 0.13.1 --locked
+        uses: ./.github/actions/setup-wasm-pack
       - name: Set up wasm-opt
         uses: ./.github/actions/setup-wasm-opt
       - run: pnpm install --frozen-lockfile
@@ -358,7 +360,9 @@ jobs:
         if: matrix.rust_wasm
         run: |
           rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-pack
+        if: matrix.rust_wasm
+        uses: ./.github/actions/setup-wasm-pack
       - name: Set up wasm-opt
         if: matrix.rust_wasm
         uses: ./.github/actions/setup-wasm-opt
@@ -448,7 +452,9 @@ jobs:
         if: matrix.rust_wasm
         run: |
           rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-pack
+        if: matrix.rust_wasm
+        uses: ./.github/actions/setup-wasm-pack
       - name: Set up wasm-opt
         if: matrix.rust_wasm
         uses: ./.github/actions/setup-wasm-opt

@@ -136,11 +136,15 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
         // An app's vendored components are not its own copies: removeAppCopies replaces them with the shared store.
         const vendored = join(siteDist, app.path, 'vendor', 'webapp-components') + sep;
         const appFiles = files.filter(file => file.startsWith(join(siteDist, app.path) + sep) && !file.startsWith(vendored));
-        const copies = appFiles.filter(file => !claimed.has(file) && unhashedName(file) === unhashedName(asset.source));
+        const byContent = family.match_by === 'sha256';
+        const copies = appFiles.filter(file => !claimed.has(file) && (byContent
+          ? extname(file) === extname(asset.source)
+          : unhashedName(file) === unhashedName(asset.source)));
         if (!copies.length) continue;
         if (app.app_scoped_runtime_families?.includes(family.id)) throw new Error(`Cannot deduplicate scoped runtime ${family.id}`);
         for (const sourcePath of copies) {
           const actual = await sha256(sourcePath);
+          if (byContent && actual !== asset.sha256) continue;
           // Another pinned version of the same runtime claims this copy; any other bytes are drift.
           if (actual !== asset.sha256 && families.some(other => other.files.some(file => file.name === asset.name && file.sha256 === actual))) continue;
           if (actual !== asset.sha256) {
@@ -150,7 +154,7 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
           // Match the declared filename so empty strings in minified workers cannot consume its opening quote.
           const assetReference = new RegExp(`(['"])([^'"\\n]*${escapedName})\\1`, 'g');
           let references = 0;
-          for (const file of appFiles.filter(file => TEXT_EXTENSIONS.has(extname(file)))) {
+          for (const file of appFiles.filter(file => !claimed.has(file) && TEXT_EXTENSIONS.has(extname(file)))) {
             const original = await readFile(file, 'utf8');
             const rewritten = original.replace(assetReference, (match, quote, reference) => {
               const referencedPath = reference.startsWith('/')
@@ -171,12 +175,36 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
   }
 }
 
+async function sharedStylesheets(siteDist, registry) {
+  const groups = new Map();
+  for (const app of registry.apps) {
+    const assets = join(siteDist, app.path, 'assets');
+    const names = await readdir(assets).catch(error => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    });
+    for (const name of names.filter(name => name.endsWith('.css'))) {
+      const source = await readFile(join(assets, name), 'utf8');
+      if (/@import|url\((?!["']?data:)/i.test(source)) continue;
+      const hash = createHash('sha256').update(source).digest('hex');
+      const group = groups.get(hash) ?? [];
+      group.push({ app, name });
+      groups.set(hash, group);
+    }
+  }
+  return [...groups].filter(([, copies]) => copies.length > 1).map(([hash, copies]) => ({
+    id: `stylesheet-${hash}`, target: `styles/${hash}`, deduplicate: true, match_by: 'sha256',
+    files: [{ name: 'shared.css', source_app: copies[0].app.id, source: `assets/${copies[0].name}`, sha256: hash }],
+  }));
+}
+
 export async function assembleRuntimeAssetStore({ repoRoot, siteDist, registry }) {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
   if (manifest.schema_version !== 1) throw new Error('Unsupported runtime-assets manifest schema');
   const runtimeRoot = join(siteDist, '_runtime');
   await rm(runtimeRoot, { recursive: true, force: true });
 
+  manifest.families.push(...await sharedStylesheets(siteDist, registry));
   for (const family of manifest.families) {
     await copyVerifiedFamily({ family, repoRoot, siteDist, registry });
   }

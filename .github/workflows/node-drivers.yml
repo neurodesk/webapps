@@ -6,6 +6,7 @@ name: node-drivers
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/node-drivers.yml'
       - 'packages/node-drivers/**'
@@ -32,6 +33,7 @@ env:
 
 jobs:
   node:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: Node parity (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -61,6 +63,7 @@ jobs:
         run: pnpm --filter @neurodesk/node-drivers test
 
   browser:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: Browser references still hold
     runs-on: ubuntu-latest
     timeout-minutes: 60

@@ -1,5 +1,90 @@
 # calmar
 
+## 0.10.20261103
+
+### Patch Changes
+
+- Support complete structural and diffusion example bundles through the normal image inputs, clearing previous subject data and unknown demographics. Add a reproducible, checksummed preparation tool for paired public OpenADS DWI, ADC and b0 examples.
+  - @neurodesk/calmar@0.10.20261103
+- Run CI browser cases serially to avoid contention between ONNX inference and software WebGL. Wait for the asynchronous scan-and-mask viewer load before checking that the report is hidden; retain the mask voxel and rendered-image assertions.
+  - @neurodesk/calmar@0.10.20261103
+- Allow the full lasso and behavioural reporting browser workflow the same CI time budget as other drawing tests, retaining all drawing, confirmation, sorting, export and subject-reset assertions.
+  - @neurodesk/calmar@0.10.20261103
+- Prevent registration QC views from being exported as lesion screenshots, retaining an explicit omission warning in the report. Cancel KB downloads and tract scoring without publishing late results, and allow reporting to restart afterward. Run browser regression tests against the production shell to match deployed controls and layout.
+  - @neurodesk/calmar@0.10.20261103
+
+## 0.10.20261102
+
+### Minor Changes
+
+- Add a native magic-wand tool for lesion-mask review. Grow connected, similar-intensity voxels across slices with adjustable tolerance and a physical radius, or confine growth to one slice. Preserve existing edits, native Undo and explicit mask approval; clear hover previews and restore normal drawing/navigation on leaving the tool. Explain that intensity growth does not identify stroke-specific boundaries.
+
+### Patch Changes
+
+- Fix edited lesion masks flipping or changing orientation when downloaded or confirmed for reporting. Convert the viewer's RAS drawing back to native voxel order before writing scan geometry; reject a mismatched base image. Cover signed axis permutations and structural/diffusion input routes with asymmetric-mask regressions.
+  - @neurodesk/calmar@0.10.20261102
+- Populate the stroke example with source-verified demographics and WAB-R context, distinguish assessment day 705 from MRI day 284, and retain pinned source attribution in the report. Clear example context when loading another subject.
+  - @neurodesk/calmar@0.10.20261102
+- Add optional age at stroke, sex, time post-onset with units, and per-symptom descriptive severity to behavioural context and report exports. Preserve simple observed ratings and mark severity beside matching KB symptom evidence without reweighting findings.
+  - @neurodesk/calmar@0.10.20261102
+- Constrain magic wand growth to the native brain mask by default when available. Give behavioural information its own sidebar heading and mark KB evidence matching explicitly selected observed difficulties.
+  - @neurodesk/calmar@0.10.20261102
+- Fix magic-wand tolerance collapsing around dark, zero or negative lesion seeds. Use the image's robust contrast range for a brightness-independent interval and convert calibrated NIfTI bounds to the raw units used by native flood fill. Keep the native radius, connectivity, preview, Undo and review behavior through an opt-in shared adapter. Add browser comparisons against the old seed-relative rule, including signed and scaled images.
+  - @neurodesk/calmar@0.10.20261102
+- Move the sidebar's primary action from lesion segmentation to reporting once the mask is confirmed, leaving segmentation as a secondary action. Restore segmentation emphasis when review reopens or the subject changes, and emphasize reporting directly for supplied atlas-space lesion masks. Keep exactly one primary action using the shared button styles.
+  - @neurodesk/calmar@0.10.20261102
+- @neurodesk/calmar@0.10.20261102
+
+## 0.9.20261102
+
+### Minor Changes
+
+- Add a filled freehand Lasso tool for slice-based lesion review, with native Undo and restoration of brush settings. Make overlap tables sortable by label, voxel count, lesion percentage and ROI coverage, preserving folded rows and printable headers. Add optional session-only behavioural observations and assessment results/dates to selectable report exports, clearing them when the subject changes and keeping them separate from lesion-based analysis.
+
+### Patch Changes
+
+- Host the commit-pinned JHU white-matter tractography atlas used by the KB mapping. Show direct tract overlap, lesion share and tract-ROI coverage in white-matter evidence even when ENIGMA disconnection is unavailable. Distinguish anatomical overlap from streamline disconnection, explain limited atlas coverage, and include JHU-mapped findings through the existing lesion-location evidence logic.
+- Updated dependencies
+  - @neurodesk/calmar@0.9.20261102
+- @neurodesk/calmar@0.9.20261102
+
+## 0.8.20261102
+
+### Patch Changes
+
+- Keep T1 lesion-segmentation windows inside the image instead of padding the prealigned scan to 256 cubed. Apply the same manifest-controlled correction in the browser and command line, preserve native-space mask review, and record the padding mode in command-line provenance. Add window-context regression tests and a checksummed nine-scan development comparison.
+- Updated dependencies
+  - @neurodesk/calmar@0.8.20261102
+- Keep approved and draft KB snapshots current with an hourly, tested source sync on the fork. Record the exact source commit, invalidate changed exports by checksum, and refresh both snapshots from the latest KB revision.
+  - @neurodesk/calmar@0.8.20261102
+
+## 0.8.20261030
+
+### Minor Changes
+
+- c97bb7e: CALMaR Results view gains the knowledge-base report: cited literature findings for the regions the warped lesion damages (HarvardOxford and AAL label atlases through the aphasia knowledge base's curated atlas mapping; JHU and XTRACT when hosted), white-matter disconnection from the ENIGMA tractography atlas scored with nii2tvx, and the therapies whose evidence targets the implicated impairments. The evidence logic is a JavaScript port of the Python participant report, checked against fixtures the Python code writes.
+- Make knowledge-base findings optional, fold method and region-level evidence, explain overlap denominators and normative connectivity with figures, expose finding directions and scan confirmation, and add combined Harvard–Oxford cortical/subcortical direct overlap with ROI coverage percentages.
+
+### Patch Changes
+
+- Separate lesion segmentation and mask acceptance from reporting, open scan confirmation in the live viewer with the confirmed mask loaded, remove the percentage tutorial, keep help beside headings through shared layout helpers, and right-align report tables with Damaged coverage labels.
+  - @neurodesk/calmar@0.8.20261030
+- Updated dependencies [c97bb7e]
+- Updated dependencies
+  - @neurodesk/calmar@0.8.20261030
+
+## 0.7.20261103
+
+### Patch Changes
+
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+  - @neurodesk/calmar@0.7.20261103
+- Updated dependencies [8e9346d]
+- Updated dependencies [239dedd]
+  - @neurodesk/webapp-components@0.22.4
+  - @neurodesk/calmar@0.7.20261103
+
 ## 0.7.20261031
 
 ### Patch Changes

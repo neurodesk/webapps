@@ -65,7 +65,7 @@ export async function loadMindgrabCpu(packageJsonUrl) {
     return { args, maskPath };
   }
 
-  function run({ model, args, input, primaryOutput, extraOutputs, timeoutMs, onLog }) {
+  function run({ model, args, input, primaryOutput, extraOutputs, timeoutMs, onLog, signal }) {
     const log = [];
     const worker = new Worker(new URL('./mindgrab-worker.js', import.meta.url), {
       workerData: {
@@ -83,12 +83,20 @@ export async function loadMindgrabCpu(packageJsonUrl) {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         await worker.terminate();
         if (error) reject(error);
         else resolve(value);
       };
       const fail = message => finish(new BrainchopError('inference-failed', message, log));
+      // An abort terminates the thread, which frees its heap, and rejects with the signal's reason.
+      const onAbort = () => finish(signal.reason ?? new DOMException('MindGrab cancelled.', 'AbortError'));
       const timer = setTimeout(() => fail(`the ${model} module did not finish within ${timeoutMs} ms; this machine may simply be slower than the limit allows`), timeoutMs);
+      if (signal?.aborted) {
+        onAbort();
+        return;
+      }
+      signal?.addEventListener('abort', onAbort, { once: true });
       worker.on('message', message => {
         if (message.type === 'log') {
           log.push(message.line);
@@ -128,6 +136,7 @@ export async function loadMindgrabCpu(packageJsonUrl) {
       extraOutputs: tissueMode ? TISSUE_OUTPUTS : maskPath ? [maskPath] : [],
       timeoutMs: options.timeoutMs ?? CPU_TIMEOUT_MS,
       onLog: options.onLog,
+      signal: options.signal,
     }));
     previousRun = turn.then(() => {}, () => {});
     const result = await turn;

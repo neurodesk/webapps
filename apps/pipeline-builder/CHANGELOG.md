@@ -1,5 +1,16 @@
 # pipeline-builder
 
+## 0.2.20261103
+
+### Patch Changes
+
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+- 6f1b30f: Show a problem with an imported step whose name contains a dot (`bad.name`) against that step, not against a step named by the text before the dot. A problem that names no step in the workflow is listed in the workflow summary instead of being dropped.
+- Updated dependencies [8e9346d]
+- Updated dependencies [239dedd]
+  - @neurodesk/webapp-components@0.22.4
+
 ## 0.2.20261031
 
 ### Patch Changes

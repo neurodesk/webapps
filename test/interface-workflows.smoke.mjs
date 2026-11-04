@@ -417,6 +417,29 @@ try {
     await page.locator('#overlayPanel > summary').tap();
     await expect(page.locator('#surfaceList')).toContainText('interface.obj');
   });
+  await check('samsrf', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open','');
+    const file = name => ({ name, mimeType: 'application/octet-stream', buffer: Buffer.from('x') });
+    await page.locator('#runsInput').setInputFiles(['lh_uBars1.gii','aps_Bars.mat','lh.V123.label','lh.inflated'].map(file));
+    await expect(page.locator('#runsInfo')).toHaveText('lh_uBars1.gii');
+    await expect(page.locator('#aperturesDrop')).toContainText('aps_Bars.mat');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await page.locator('#analysis').selectOption('cf');
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await expect(page.locator('#runHint')).toHaveText('Needs a template map, a seed label, a surface area file');
+    await page.locator('#analysis').selectOption('prf');
+    await page.locator('#advancedSettings > summary').tap();
+    await page.locator('#fineFitThreshold').fill('0.2');
+    await page.locator('#fineFitThreshold').dispatchEvent('change');
+    await expect(page.locator('#modelJson')).toHaveValue(/"Fine_Fit_Threshold": 0.2/);
+    const task = page.locator('#analysisSection > summary');
+    await task.tap();
+    await expect(page.locator('#fineFitThreshold')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#fineFitThreshold')).toHaveValue('0.2');
+  });
   await check('dicompare', async page => {
     const toggle = page.locator('button[aria-controls="workflow-compare"]');
     await toggle.focus(); await page.keyboard.press('Enter');
@@ -659,6 +682,33 @@ try {
     await expect(page.locator('#reference')).toHaveValue('0');
     await expect(page.locator('#fileInfo')).toHaveText('Image 1: sub-01_dir-PA_epi.nii · j');
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+    // SyN-SDC: a DWI series whose sidecar lacks the acquisition fields, and a T1w.
+    await page.locator('#method').selectOption('syn');
+    await expect(page.locator('#fileInfo')).toBeHidden();
+    await expect(page.locator('#runButton')).toHaveText('Correct distortion');
+    await page.locator('#imageInput').setInputFiles([
+      ...dwiSeries('sub-01_dir-AP_dwi'),
+      { name: 'sub-01_dir-AP_dwi.json', mimeType: 'application/json', buffer: Buffer.from('{}') },
+      nifti('sub-01_T1w.nii'),
+    ]);
+    await expect(page.locator('#pairInfo')).toHaveText('T1w: sub-01_T1w.nii');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    // The acquisition fields and Advanced settings chosen must survive closing their sections.
+    await page.locator('#direction').selectOption('j-');
+    await page.locator('#readout').fill('0.038');
+    const advanced = page.locator('#advancedSettings > summary');
+    await advanced.tap();
+    await page.locator('#prior').selectOption('none');
+    await advanced.tap();
+    await expect(page.locator('#prior')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#direction')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#direction')).toHaveValue('j-');
+    await expect(page.locator('#readout')).toHaveValue('0.038');
+    await expect(page.locator('#prior')).toHaveValue('none');
+    await expect(page.locator('#cancelButton')).toBeHidden();
   });
   await check('dwicorrect', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });

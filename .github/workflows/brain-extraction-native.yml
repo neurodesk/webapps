@@ -2,10 +2,13 @@ name: brain-extraction-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/brain-extraction-native.yml'
       - 'packages/brain-extraction/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
       - 'apps/brain-extraction/**'
       - 'apps/qsmbly/rust-wasm/**'
       - 'packages/synthsr/**'
@@ -17,7 +20,9 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/brain-extraction/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
       - 'apps/brain-extraction/**'
       - 'apps/qsmbly/rust-wasm/**'
       - 'packages/synthsr/**'
@@ -38,6 +43,7 @@ permissions:
 
 jobs:
   wasm-source:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: committed BET WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:

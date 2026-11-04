@@ -1,0 +1,14 @@
+name: Set up wasm-pack
+description: Cache the pinned wasm-pack executable independently of app build caches.
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v6
+      id: cache
+      with:
+        path: ~/.cargo/bin/wasm-pack
+        key: wasm-pack-${{ runner.os }}-${{ runner.arch }}-0.13.1
+    - name: Install wasm-pack
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo install wasm-pack --version 0.13.1 --locked --force

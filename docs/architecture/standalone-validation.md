@@ -104,3 +104,23 @@ NEURODESK_WORKFLOWS=1 node scripts/desktop/smoke.mjs
 ```
 
 Set `NEURODESK_TEST_REPORT` to preserve screenshots, native downloads and `startup.json`. Use `NEURODESK_TEST_APP` with comma-separated IDs for a focused run. `NEURODESK_EXECUTABLE` selects an extracted release executable, and `NEURODESK_BUNDLE` selects its packaged offline resources. GitHub uploads the same reports as workflow artifacts.
+
+### Brainchop (2026-11-03)
+
+Brainchop's TensorFlow.js WebGL path has no CPU inference fallback. On this
+Linux host, Chromium's SwiftShader adapter rejected the full-head T1 example
+with `Requested texture size [8237x8238] greater than WebGL maximum … [8192x8192]`
+even for the light tissue network. The app reported the error and re-enabled
+Run. Its complete six-model browser suite therefore targets the hardware GPU
+runner; it is excluded from hosted desktop workflow runs. Hardware completion
+has not yet been recorded. The shared example uses the cropped T1 already
+published for BrowserQC and Brain2Print; it also exceeded the same software
+adapter limit (8351 × 8351). A headed Chromium run under Xvfb with Mesa llvmpipe (16384-pixel textures)
+completed the light model in about 84 seconds and downloaded a 256³ uint8 NIfTI
+label map with valid labels. This is local software-renderer evidence, not a
+completed run on every hosted desktop target.
+
+The final five-test Mesa pass also covered example download failure/retry,
+cancellation, DICOM conversion and retained model selection. The other five
+model tests are registered for hardware GPU CI; their local software-renderer
+runs were not completed.

@@ -289,6 +289,16 @@ Shipped on 1 November 2026 (`sdc-gate/results-kernel.json`). The committed kerne
 - **Q66:** both runs are under the 0.05 Hz floor, so `d ≤ max(spread, 0.05 Hz)` holds for any spread, and `d < 0.5 Hz` holds. `gate.py` now decides the spread condition from the floor when no spread runs are given, and `--require` fails when it stays undecided, so the CI replay checks the whole rule.
 - HMC's `GC` registrations do not use the edited metric, and #612 moved BISON's FLAIR rigid to Greedy. The package's own Mattes goldens (`test/expected.mjs`) now come from `native-reference.sh` on the native deriv64 build. On this host the stock native build reproduces every previous golden byte for byte.
 
+Measured on 1 November 2026 with the pipeline of #464 (`packages/sdc`, PR #673; every step in this repository's WebAssembly and JavaScript, seed 1234, the same reference):
+
+| Run | `fmap` median | p95 | max | `epi2anat` shift |
+| --- | ---: | ---: | ---: | ---: |
+| the gate: native N4's output swapped in | 0.036 | 0.198 | 0.963 | - |
+| report only: the WebAssembly N4 too | 0.546 | 1.26 | 4.80 | 0.074 mm |
+
+- **One voxel changed by 1/255 moves the field by 0.55 Hz.** The WebAssembly N4 (`packages/n4`) differs from native N4 by float rounding. After the 2/100 clip, that changes 1 of the 928,464 voxels of the EPI reference by 1/255. That voxel moves the float `epi2anat` affine 0.074 mm, and SyN turns the shift into 0.55 Hz. Given the reference's EPI reference, the pipeline writes the `epi2anat` transform of the end-to-end run above byte for byte. The mean b0 and both MindGrab masks equal the reference's.
+- **Decided (1 November 2026, PR #673):** the end-to-end gate takes N4's output from native N4. That output is pinned in `sdc/reference/`, made from the same mean b0, and swapped in by the gate test only. N4 keeps its own native gate in `packages/n4`. Q66 is unchanged. The all-WebAssembly figure is report only.
+
 The idea is the same as Q53: the WASM result must be within the native repeat spread. The rule is different in two ways:
 
 - Q53 uses one seed pair and compares per volume and per axis. Q66 takes the maximum over three pairs. That is closer to the shell-maximum alternative of the HMC plan, which is not accepted.
@@ -300,7 +310,8 @@ CI:
 
 - The gate tests of #462 and #464 are Node tests, not Playwright tests. The `@slow` tag of AGENTS.md does not apply to them.
 - The full-brain gate runs in a native workflow job, as the `fida-reference` job in `lcmodel-native.yml` does. The job provisions the pinned `sdc/reference/` data and sets a require variable, so a missing input fails the test and does not skip it (#462). The job runs on pull requests that change `packages/sdc`, `packages/hmc-registration` or `exes/dwi/sdc`, nightly and on manual dispatch.
-  - `.github/workflows/sdc-registration-gate.yml` is that job for the SyN-only replay on the 1.2 mm grid: it fetches the data with their SHA-256, replays SyN with the committed kernel through sdcflows, and requires the whole rule (`gate.py --require`). The double replays at seeds 1235 and 1236 are not on the dataset; the committed kernel's d (0.040 Hz) is under the 0.05 Hz floor, so the spread condition holds without them. The end-to-end run needs a native `DenoiseImage` and is not in CI. It runs on pull requests that change `packages/hmc-registration` or `exes/dwi/sdc`, nightly and on manual dispatch; `packages/sdc` joins when the pipeline of #464 runs in the gate.
+  - `.github/workflows/sdc-registration-gate.yml` is that job for the SyN-only replay on the 1.2 mm grid: it fetches the data with their SHA-256, replays SyN with the committed kernel through sdcflows, and requires the whole rule (`gate.py --require`). The double replays at seeds 1235 and 1236 are not on the dataset; the committed kernel's d (0.040 Hz) is under the 0.05 Hz floor, so the spread condition holds without them. The end-to-end run needs a native `DenoiseImage` and is not in CI. It runs on pull requests that change `packages/hmc-registration`, `packages/sdc` or `exes/dwi/sdc`, nightly and on manual dispatch.
+  - Its job `pipeline` runs the pipeline of #464 (`packages/sdc/test/syn-gate.test.js`) end to end in Node, with native N4's pinned output swapped in and every other step in this repository's WebAssembly and JavaScript. It requires the same rule against the same native run (`SDC_REQUIRE_SYN_GATE=1`). It also checks the DWI unwarp against sdcflows' and reports the slab run against the native slab runs. The measured numbers are in `packages/sdc/README.md`.
 - The slab e2e test of #465 is a Playwright test. It is untagged and runs on every pull request. It compares the app with the native slab runs of section 6.1, with report-only numbers.
 - If a full-brain Playwright test is added later, AGENTS.md allows `@slow` only when an untagged test completes a run with the same model, method, option and kind of geometry. The maintainer decides then if the slab test satisfies that rule.
 

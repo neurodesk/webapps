@@ -336,8 +336,14 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   };
 }
 
-export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map()) {
-  const { apps: selected, site, reasons } = selectAffectedApps(registry, changedPaths, graph, manifests);
+export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false } = {}) {
+  const affected = selectAffectedApps(registry, changedPaths, graph, manifests);
+  // Drafts give fast feedback on app edits. Ready PRs always use the complete
+  // dependency plan, including shared-code changes, at their current head.
+  const selected = draft && changedPaths.length
+    ? affected.apps.filter((app) => changedPaths.some((path) => path.startsWith(`apps/${app.id}/`) || path === `models/${app.id}.manifest.json`))
+    : affected.apps;
+  const { site, reasons } = affected;
   const releasable = selected.filter((app) => app.ci.release);
   const browserTested = selected.filter((app) => app.ci.browser_test);
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);

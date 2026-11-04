@@ -21,6 +21,8 @@ export function mountImagingWorkspace(config: ImagingWorkspaceConfig): HTMLEleme
 export interface VolumePreview {
   readonly file: File;
   readonly range?: readonly [minimum: number, maximum: number];
+  /** A signed map drawn on the image: warm above range[0], winter below -range[0]. */
+  readonly overlay?: { readonly file: File; readonly range?: readonly [minimum: number, maximum: number] };
 }
 
 export interface NiivueVolumePreviewOptions {
@@ -28,9 +30,13 @@ export interface NiivueVolumePreviewOptions {
     loadVolumes(options: Array<{
       url: File;
       name: string;
-      colormap: 'gray';
+      colormap: 'gray' | 'warm';
+      colormapNegative?: 'winter';
+      opacity?: number;
       calMin?: number;
       calMax?: number;
+      calMinNeg?: number;
+      calMaxNeg?: number;
     }>): Promise<unknown>;
     removeAllVolumes(): Promise<void>;
   };
@@ -40,7 +46,7 @@ export interface NiivueVolumePreviewOptions {
 
 /** Resolves after display commit; cancellation rejects after restoring the previous preview. */
 export function createNiivueVolumePreview(options: NiivueVolumePreviewOptions):
-  (preview: VolumePreview, options?: { signal?: AbortSignal }) => Promise<void>;
+  (preview: VolumePreview | null, options?: { signal?: AbortSignal }) => Promise<void>;
 
 // ---- Workflow vocabulary builders (ui) ----
 export function renderSidebarSection(config?: {
