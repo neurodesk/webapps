@@ -333,35 +333,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.6.20261020",
-          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261020/vesselboost-0.6.20261020-linux-x64.tar.gz",
-          "sha256": "baedd12cda34df087138d2c11738435bf12ad1b074ecceefba85101c19dfd561",
-          "bytes": 169318368,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261020/vesselboost-0.6.20261020-linux-x64.tar.gz.validation.txt",
+          "version": "0.6.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-linux-x64.tar.gz",
+          "sha256": "1995e544f7bdc322643f151d9773f8776198ef0625d34e9a044c50ef312f051d",
+          "bytes": 169338909,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf vesselboost-0.6.20261020-linux-x64.tar.gz\n./vesselboost-0.6.20261020-linux-x64/vesselboost input.nii.gz results"
+          "command": "tar -xzf vesselboost-0.6.20261103-linux-x64.tar.gz\n./vesselboost-0.6.20261103-linux-x64/vesselboost input.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.6.20261020",
-          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261020/vesselboost-0.6.20261020-macos-arm64.pkg",
-          "sha256": "c540a4ed665688839d53d05eba512ee36ed7d5c4d18892f27258cf4aab4c29da",
-          "bytes": 170844453,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261020/vesselboost-0.6.20261020-macos-arm64.pkg.validation.txt",
+          "version": "0.6.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-macos-arm64.pkg",
+          "sha256": "df87625bca25703b524f2a769a60b4c7d6838162c21fe6fed144272b7a994ee9",
+          "bytes": 170864122,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg vesselboost-0.6.20261020-macos-arm64.pkg -target /\nvesselboost self-check\nvesselboost input.nii.gz results"
+          "command": "sudo installer -pkg vesselboost-0.6.20261103-macos-arm64.pkg -target /\nvesselboost self-check\nvesselboost input.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.6.20261020",
-          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261020/vesselboost-0.6.20261020-windows-x64.zip",
-          "sha256": "367fb6a6d10fb431decc5ac84dc57ce836413ee78ecf0bcfd1d51b0b4256f141",
-          "bytes": 170996546,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261020/vesselboost-0.6.20261020-windows-x64.zip.validation.txt",
+          "version": "0.6.20261103",
+          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-windows-x64.zip",
+          "sha256": "e2eb10166669771270b89ea7bc0f78e0c08f6701c1a16aefe00df4847f82cb23",
+          "bytes": 171028854,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\vesselboost-0.6.20261020-windows-x64.zip -DestinationPath .\n.\\vesselboost-0.6.20261020-windows-x64\\vesselboost.exe input.nii.gz results"
+          "command": "Expand-Archive -Path .\\vesselboost-0.6.20261103-windows-x64.zip -DestinationPath .\n.\\vesselboost-0.6.20261103-windows-x64\\vesselboost.exe input.nii.gz results"
         }
       ],
       "containers": [
