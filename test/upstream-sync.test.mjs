@@ -10,6 +10,40 @@ import { PACKAGE_VERSION_SITE, mergeUpstream } from '../scripts/lib/upstream-syn
 const pkg = (version, dependencies) => `${JSON.stringify({ name: 'demo', version, dependencies }, null, 2)}\n`;
 const lines = (...items) => `${items.join('\n')}\n`;
 
+test('conflicted sync refreshes confirm draft status before pushing', () => {
+  const workflow = YAML.parse(readFileSync(new URL('../.github/workflows/upstream-sync.yml', import.meta.url), 'utf8'));
+  const script = workflow.jobs.sync.steps.find(step => step.name === 'Open or refresh the pull request').run;
+  const mocks = `
+    git() {
+      case "$1" in
+        diff) return 1 ;;
+        rev-parse) echo old-head ;;
+        push) echo PUSH ;;
+      esac
+    }
+    gh() {
+      case "$2" in
+        list) echo 123 ;;
+        view) echo "$DRAFT" ;;
+        ready) echo DRAFT; [ "$DENY" = 0 ] || return 1; DRAFT=true ;;
+        edit|comment) : ;;
+        *) return 1 ;;
+      esac
+    }
+  `;
+  const run = (conflicts, draft, deny = '0') => execFileSync('bash', ['-e', '-c', mocks + script], {
+    encoding: 'utf8',
+    env: { ...process.env, CONFLICTS: conflicts, DRAFT: draft, DENY: deny, BRANCH: 'upstream/demo', APP: 'demo', TARGET: 'abc' },
+  });
+  assert.equal(run('1', 'false'), 'DRAFT\nPUSH\n');
+  assert.equal(run('1', 'true'), 'PUSH\n');
+  assert.equal(run('0', 'false'), 'PUSH\n');
+  assert.throws(() => run('1', 'false', '1'), error => {
+    assert.equal(error.stdout, 'DRAFT\n');
+    return true;
+  });
+});
+
 test('the workflow preserves human amendments to commits authored by the bot', () => {
   const root = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'upstream-guard-test-'));
   try {

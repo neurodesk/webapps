@@ -9,10 +9,35 @@ when the PR is ready.
 
 Mark the PR ready when it is ready for integration testing. `ready_for_review`
 and every subsequent push to a ready PR run the complete affected-app plan,
-composite checks, and path-selected native/reference suites. Reopening and
-converting a PR back to draft also refresh the checks. GitHub prevents merging
+composite checks, and path-selected native/reference suites. Reopening also
+refreshes the checks. Converting a PR back to draft cancels the previous PR
+run without starting CI test jobs on the unchanged head. GitHub prevents merging
 a draft PR. Before merging a ready PR, verify the full checks on its current
 head; this change does not configure repository branch protection.
+
+## Agent procedure
+
+Follow the draft lifecycle in [AGENTS.md](../../AGENTS.md#ci-scope).
+Keep the PR in draft through local validation and review fixes, and batch
+related fixes into a push. Converting a ready PR back to draft must happen
+before pushing further edits, so the push receives development feedback.
+Use an explicit PR number with `gh pr ready` and `gh pr view` to avoid
+changing another PR when working across branches. This also applies when
+fixing an `upstream/*` PR created by the sync bot.
+
+If a check fails because of runner infrastructure and no code change is
+needed, rerun only the failed jobs on the same head with
+`gh run rerun <run-id> --failed`. Keep that PR ready; marking it ready again
+after a draft transition would start another set of checks. Investigate test
+failures before rerunning them.
+
+The workflows enforce which tests run for the current draft state. They do
+not automatically convert PRs to draft or infer whether a push is iterative.
+The agent must verify draft status before pushing development changes, and
+verify full checks on the final ready head before merging. A previous green
+head or a green draft run does not satisfy that requirement.
+
+## Workflow coverage
 
 No label or previous successful commit opts a new commit out of testing.
 The existing wide-PR macOS GPU policy remains: full-catalog GPU validation

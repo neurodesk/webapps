@@ -35,6 +35,7 @@ env:
 
 jobs:
   app-plan:
+    if: github.event.action != 'converted_to_draft'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -73,6 +74,7 @@ jobs:
         run: node scripts/app-plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
 
   workspace-contracts:
+    if: github.event.action != 'converted_to_draft'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -511,6 +513,7 @@ jobs:
           retention-days: 7
 
   homepage-easter-egg:
+    if: github.event.action != 'converted_to_draft'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
