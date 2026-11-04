@@ -277,7 +277,8 @@ h1 {
   margin-top: 1rem;
 }
 
-#result-summary { flex: 0 0 auto; margin: 0; color: var(--muted); font-size: 0.8rem; }
+/* A fixed column keeps the chips still while the summary names each category. */
+#result-summary { flex: 0 0 12rem; margin: 0; color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
 
 .filter-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: flex-end; }
 
@@ -454,6 +455,7 @@ h1 {
   .privacy-card { max-width: 27rem; }
   .catalog-controls__meta { align-items: flex-start; flex-direction: column; }
   .filter-chips { justify-content: flex-start; }
+  #result-summary { flex-basis: auto; order: 1; }
   .category-section__header { grid-template-columns: 1fr; gap: 0.75rem; }
   .analytics-section__header { grid-template-columns: 1fr; gap: 0.75rem; }
   .app-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
