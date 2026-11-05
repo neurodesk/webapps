@@ -217,7 +217,10 @@ export function ngffMultiscales(attributes) {
   return multiscales[0];
 }
 
-/** The [z, y, x] scale of each dataset, in µm, from NGFF coordinate transformations. */
+/**
+ * Each dataset's declared [z, y, x] scale (in the axes' units, null when the dataset declares no
+ * scale transform) and its voxel size in µm when the axes name a unit.
+ */
 export function ngffLevels(multiscale) {
   const axes = (multiscale.axes ?? []).map((axis) => (typeof axis === 'string' ? { name: axis } : axis));
   const spatial = ['z', 'y', 'x'].map((name) => axes.findIndex((axis) => axis.name === name));
@@ -226,15 +229,16 @@ export function ngffLevels(multiscale) {
   const top = multiscale.coordinateTransformations ?? [];
   const topScale = top.find((t) => t.type === 'scale')?.scale;
   return multiscale.datasets.map((dataset) => {
-    const scale = (dataset.coordinateTransformations ?? []).find((t) => t.type === 'scale')?.scale ?? axes.map(() => 1);
+    const declaredScale = (dataset.coordinateTransformations ?? []).find((t) => t.type === 'scale')?.scale;
+    const scale = declaredScale ?? axes.map(() => 1);
     // The declared scale in the axes' own units (unit-less when an axis names none): its ratio
     // between levels holds even when the size in µm is unknown.
-    const declared = Object.fromEntries(['z', 'y', 'x'].map((name, i) => [name, scale[spatial[i]] * (topScale ? topScale[spatial[i]] : 1)]));
+    const declared = Object.fromEntries(['z', 'y', 'x'].map((name, i) => [name, declaredScale ? scale[spatial[i]] * (topScale ? topScale[spatial[i]] : 1) : null]));
     return {
       path: dataset.path,
       axes: axes.map((axis) => axis.name),
       scale: declared,
-      voxelSizeUm: Object.fromEntries(['z', 'y', 'x'].map((name, i) => [name, units[i] === null ? null : declared[name] * units[i]])),
+      voxelSizeUm: Object.fromEntries(['z', 'y', 'x'].map((name, i) => [name, units[i] === null || declared[name] === null ? null : declared[name] * units[i]])),
     };
   });
 }

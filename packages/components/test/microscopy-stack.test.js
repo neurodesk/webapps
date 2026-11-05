@@ -184,3 +184,13 @@ test('an OME-Zarr chunk several planes deep is decoded once for all its planes',
   assert.deepEqual([...(await stack.readPlane(1))], [6, 8, 10, 7, 9, 11]);
   assert.equal(reads, 1);
 });
+
+test("ngffLevels keeps declared scales in the axes' own units, and none for a dataset without a scale", () => {
+  const levels = ngffLevels({
+    axes: ["z", "y", "x"].map((name) => ({ name, type: "space" })),
+    datasets: [{ path: "0", coordinateTransformations: [{ type: "scale", scale: [10.2, 10.2, 10.2] }] }, { path: "1" }],
+  });
+  assert.deepEqual(levels[0].scale, { z: 10.2, y: 10.2, x: 10.2 });
+  assert.deepEqual(levels[0].voxelSizeUm, { z: null, y: null, x: null });
+  assert.deepEqual(levels[1].scale, { z: null, y: null, x: null });
+});
