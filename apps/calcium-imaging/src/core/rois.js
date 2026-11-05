@@ -92,10 +92,12 @@ export function findSeeds(image, height, width, { threshold, radius, margin = 0 
       let peak = true;
       for (let dy = -r; dy <= r && peak; dy++) {
         const yy = y + dy;
-        if (yy < 0 || yy >= height) continue;
+        // Neighbours in the excluded border band (replicated edges after motion correction)
+        // must not suppress a seed just inside the usable area.
+        if (yy < margin || yy >= height - margin) continue;
         for (let dx = -r; dx <= r; dx++) {
           const xx = x + dx;
-          if (xx < 0 || xx >= width || (dx === 0 && dy === 0)) continue;
+          if (xx < margin || xx >= width - margin || (dx === 0 && dy === 0)) continue;
           if (image[yy * width + xx] > value) {
             peak = false;
             break;
@@ -172,6 +174,8 @@ export function detectRois(correlation, height, width, { z, diameter, margin = 0
   const level = robustLevel(correlation, height, width, margin);
   const threshold = level.median + z * level.sigma;
   const floor = level.median + (z / 2) * level.sigma;
+  // A correlation image without contrast (a blank or constant movie) has no cells to find.
+  if (!(level.sigma > 0)) return { labels: new Uint16Array(height * width), threshold, floor, margin, seeds: 0 };
   const seeds = findSeeds(correlation, height, width, { threshold, radius: diameter / 2, margin });
   const grown = watershed(correlation, height, width, seeds, { floor, maxDistance: diameter, margin });
   const areas = labelAreas(grown);

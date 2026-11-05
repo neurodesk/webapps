@@ -21,6 +21,7 @@ import { APP, MAX_MOVIE_BYTES, MOTION_LABELS, SettingsError, provenance, readSet
 import { allOrAbort } from "./tasks.js";
 import { addDiscRoi, removeRoiAt } from "./core/rois.js";
 import { borderMargin } from "./core/pipeline.js";
+import { PATCH_SPECTRA_BUDGET, patchSpectraBytes } from "./core/registration.js";
 import { outputStem, roisCsv, shiftSvg, shiftsCsv, toInputType, traceSvg, tracesCsv } from "./outputs.js";
 import { displayNifti, displaySpacing, roiColormap } from "./display.js";
 import examples from "../examples.json";
@@ -262,6 +263,11 @@ async function motionCorrect(settings, signal) {
   const out = floatArray(movie.length);
   const threads = SHARED ? Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 4) - 1, Math.ceil(frames / 16))) : 1;
   const passes = settings.motion === "none" ? 1 : settings.templatePasses;
+  // Every worker holds the patch spectra; refuse settings that would exhaust memory before starting.
+  const spectra = settings.motion === "piecewise" ? patchSpectraBytes(height, width, settings.patchSize, settings.patchOverlap) : 0;
+  if (spectra > PATCH_SPECTRA_BUDGET || threads * spectra > 4 * PATCH_SPECTRA_BUDGET) {
+    throw new SettingsError("patchOverlap", `Patches of ${settings.patchSize} px overlapping by ${settings.patchOverlap} px need too much memory for this movie; use a larger patch size or less overlap.`);
+  }
   let { template } = await callWorker({ type: "template", movie, width, height, frames }, { signal });
   let shifts = [];
   let patches = null;
