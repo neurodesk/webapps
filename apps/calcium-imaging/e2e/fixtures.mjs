@@ -56,4 +56,13 @@ export function syntheticMovie(frames = 120, { frameRate = 10 } = {}) {
   return Buffer.from(writeTiffStack({ width, height, data, description }));
 }
 
+/** A 32 × 32 uint16 OME-TIFF of `pages` noise pages whose Pixels declare SizeZ and SizeT. */
+export function omeStack({ pages, sizeZ = 1, sizeT = pages }) {
+  const width = 32;
+  const height = 32;
+  const data = Uint16Array.from({ length: pages * width * height }, (_, i) => 100 + ((i * 2654435761) >>> 24));
+  const description = `<?xml version="1.0" encoding="UTF-8"?><OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><Image ID="Image:0"><Pixels ID="Pixels:0" DimensionOrder="XYCZT" Type="uint16" SizeX="${width}" SizeY="${height}" SizeC="1" SizeZ="${sizeZ}" SizeT="${sizeT}"><TiffData IFD="0" PlaneCount="${pages}"/></Pixels></Image></OME>`;
+  return Buffer.from(writeTiffStack({ width, height, data, description }));
+}
+
 export const tiff = (name, buffer) => ({ name, mimeType: "image/tiff", buffer });

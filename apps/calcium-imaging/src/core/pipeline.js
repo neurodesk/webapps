@@ -81,14 +81,14 @@ export function analyse(registered, { width, height, frames, frameRate }, option
   const correlation = localCorrelationImage(registered, frames, height, width);
   const detection = labels ? null : detectRois(correlation, height, width, { z: options.seedZ, diameter: options.diameter, margin });
   const roiLabels = labels ?? detection.labels;
-  return { mean, max, correlation, detection, ...extractActivity(registered, { width, height, frames, frameRate }, options, roiLabels) };
+  return { mean, max, correlation, detection, ...extractActivity(registered, { width, height, frames, frameRate }, options, roiLabels, { margin }) };
 }
 
-/** Traces and deconvolution for a label image (used again after ROI edits). */
-export function extractActivity(registered, { width, height, frames, frameRate }, options, labels) {
+/** Traces and deconvolution for a label image (used again after ROI edits); `margin` as for borderMargin. */
+export function extractActivity(registered, { width, height, frames, frameRate }, options, labels, { margin = 0 } = {}) {
   const plane = width * height;
   const rois = roiPixels(labels);
-  const neuropil = neuropilMasks(labels, height, width, rois, { innerGap: 2, minPixels: 200, maxRadius: Math.max(20, Math.round(5 * options.diameter)) });
+  const neuropil = neuropilMasks(labels, height, width, rois, { innerGap: 2, minPixels: 200, maxRadius: Math.max(20, Math.round(5 * options.diameter)), margin });
   const F = meanTraces(registered, frames, plane, rois);
   const Fneu = meanTraces(registered, frames, plane, neuropil);
   const window = Math.max(3, Math.min(frames, Math.round(options.baselineWindow * frameRate)));

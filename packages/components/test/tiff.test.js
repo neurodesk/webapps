@@ -115,3 +115,68 @@ test('writeTiffStack refuses data that is not whole pages', () => {
   assert.throws(() => writeTiffStack({ width: 4, height: 4, data: new Uint16Array(20) }), /whole number/);
   assert.throws(() => writeTiffStack({ width: 2, height: 2, data: [1, 2, 3, 4] }), /Cannot write/);
 });
+
+test('OME attributes are read in either quote form, with XML entities decoded', () => {
+  const xml = "<?xml version='1.0'?><ome:OME xmlns:ome='http://www.openmicroscopy.org/Schemas/OME/2016-06'><ome:Image ID='Image:0' Name='a &quot;b&quot;'><ome:Pixels DimensionOrder='XYZCT' SizeC='1' SizeT='12' SizeZ=\"1\" PhysicalSizeX='0.5' PhysicalSizeXUnit='&#181;m' PhysicalSizeY=\"400\" PhysicalSizeYUnit=\"n&#x6D;\" TimeIncrement='50' TimeIncrementUnit='&#x6d;s' Type='uint16'/></ome:Image></ome:OME>";
+  const ome = parseOmeDescription(xml);
+  assert.equal(ome.sizeT, 12);
+  assert.equal(ome.sizeZ, 1);
+  assert.equal(ome.dimensionOrder, 'XYZCT');
+  assert.equal(ome.pixelSize.x, 0.5);
+  assert.ok(Math.abs(ome.pixelSize.y - 0.4) < 1e-12);
+  assert.ok(Math.abs(ome.frameInterval - 0.05) < 1e-12);
+  // An entity-encoded unit that names nothing known stays unknown rather than defaulting to µm.
+  assert.equal(parseOmeDescription(xml.replace("'&#181;m'", "'&amp;m'")).pixelSize.x, null);
+});
+
+test('an OME-TIFF with two Image series is refused before decoding', async () => {
+  await assert.rejects(inspectTiffStack(fixture('two-series.ome.tif')), /2 image series/);
+  await assert.rejects(readTiffStack(fixture('two-series.ome.tif')), /2 image series/);
+});
+
+test('an ImageJ description whose images= disagrees with the page count is refused', async () => {
+  const data = new Uint8Array(4 * 3);
+  const bytes = writeTiffStack({ width: 2, height: 2, data, description: 'ImageJ=1.11a\nimages=5\nframes=5\n' });
+  await assert.rejects(readTiffStack(buffer(bytes)), /declares 5 images but holds 3 pages/);
+  const matching = writeTiffStack({ width: 2, height: 2, data, description: imagejDescription({ frames: 3 }) });
+  assert.equal((await readTiffStack(buffer(matching))).pages, 3);
+});
+
+// Each short description was also read back with Python tifffile 2026.3.3 once
+// (TiffFile(...).pages[0].description), which returned the same string for all five.
+for (const description of ['', 'a', 'ab', 'abc', 'abcd']) {
+  test(`writeTiffStack stores the ${description.length}-character description ${JSON.stringify(description)} where readers find it`, async () => {
+    const bytes = writeTiffStack({ width: 3, height: 2, data: Uint16Array.from({ length: 12 }, (_, i) => i), description });
+    const view = new DataView(bytes.buffer);
+    const ifd = view.getUint32(4, true);
+    const entries = view.getUint16(ifd, true);
+    const entry = Array.from({ length: entries }, (_, k) => ifd + 2 + k * 12).find((at) => view.getUint16(at, true) === 270);
+    if (!description) {
+      assert.equal(entry, undefined);
+    } else {
+      assert.equal(view.getUint32(entry + 4, true), description.length + 1);
+      // Four bytes or fewer, NUL included: the value sits in the entry, not at an offset.
+      if (description.length + 1 <= 4) assert.deepEqual(Array.from(bytes.subarray(entry + 8, entry + 8 + description.length + 1)), [...new TextEncoder().encode(description), 0]);
+      else assert.equal(new TextDecoder().decode(bytes.subarray(view.getUint32(entry + 8, true), view.getUint32(entry + 8, true) + description.length)), description);
+    }
+    const stack = await readTiffStack(buffer(bytes));
+    assert.equal(stack.metadata.description, description);
+    assert.equal(stack.pages, 2);
+    assert.deepEqual(Array.from(stack.data), Array.from({ length: 12 }, (_, i) => i));
+  });
+}
+
+test('readTiffStack decodes into a caller-chosen type, optionally shared, with maxBytes on that output', async () => {
+  const floats = await readTiffStack(fixture('stack-deflate-uint16.ome.tif'), { Type: Float32Array });
+  assert.ok(floats.data instanceof Float32Array);
+  assert.ok(floats.data.buffer instanceof ArrayBuffer);
+  assert.equal(floats.dtype, 'uint16');
+  assert.deepEqual(Array.from(floats.data), Array.from({ length: 60 }, (_, i) => i * 997));
+  const shared = await readTiffStack(fixture('stack-deflate-uint16.ome.tif'), { Type: Float32Array, shared: true });
+  assert.ok(shared.data.buffer instanceof SharedArrayBuffer);
+  assert.deepEqual(Array.from(shared.data), Array.from(floats.data));
+  // 60 uint16 samples are 120 bytes in the file's type but 240 as float32.
+  await assert.doesNotReject(readTiffStack(fixture('stack-deflate-uint16.ome.tif'), { maxBytes: 120 }));
+  await assert.rejects(readTiffStack(fixture('stack-deflate-uint16.ome.tif'), { Type: Float32Array, maxBytes: 239 }), InputTooLargeError);
+  await assert.rejects(readTiffStack(fixture('stack-deflate-uint16.ome.tif'), { Type: Array }), /Cannot read a TIFF stack into Array/);
+});

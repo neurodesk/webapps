@@ -2,24 +2,22 @@
 // on cancel, so no state outlives a run. Movies travel as SharedArrayBuffer views when the page
 // is cross-origin isolated, otherwise as copies.
 import { inspectTiffStack, readTiffStack } from '@neurodesk/webapp-components/file-io/tiff';
+import { InputTooLargeError } from '@neurodesk/webapp-components/file-io/input-limits';
 import { initialTemplate } from './core/registration.js';
 import { analyse, extractActivity, registerRange } from './core/pipeline.js';
-import { MAX_MOVIE_BYTES } from './config.js';
-
-function floatArray(length, shared) {
-  return new Float32Array(shared ? new SharedArrayBuffer(length * 4) : new ArrayBuffer(length * 4));
-}
+import { MAX_MOVIE_BYTES, checkMovie } from './config.js';
 
 const handlers = {
-  async decode({ buffer, shared }) {
-    const info = await inspectTiffStack(buffer);
-    const bytes = info.pages * info.width * info.height * 4;
-    if (bytes > MAX_MOVIE_BYTES) throw new Error(`This movie needs ${(bytes / 1e9).toFixed(2)} GB as float32; the limit is ${(MAX_MOVIE_BYTES / 1e9).toFixed(1)} GB. Crop it in time or space first.`);
-    const stack = await readTiffStack(buffer, { maxBytes: MAX_MOVIE_BYTES, onProgress: (done, total) => postMessage({ progress: done / total }) });
-    const movie = floatArray(stack.data.length, shared);
-    movie.set(stack.data);
-    const { data: _data, ...rest } = stack;
-    return { ...rest, movie };
+  async decode({ buffer, shared, name }) {
+    checkMovie(await inspectTiffStack(buffer), name);
+    // Each page is decoded straight into the float32 movie: the file and the movie are the only copies.
+    try {
+      const { data: movie, ...rest } = await readTiffStack(buffer, { Type: Float32Array, shared, maxBytes: MAX_MOVIE_BYTES, onProgress: (done, total) => postMessage({ progress: done / total }) });
+      return { ...rest, movie };
+    } catch (error) {
+      if (!(error instanceof InputTooLargeError)) throw error;
+      throw new Error(`This movie needs ${(error.actualBytes / 1e9).toFixed(2)} GB as float32; the limit is ${(MAX_MOVIE_BYTES / 1e9).toFixed(1)} GB. Crop it in time or space first.`);
+    }
   },
   template({ movie, width, height, frames }) {
     return { template: initialTemplate(movie, frames, height, width) };
@@ -37,15 +35,25 @@ const handlers = {
   analyse({ registered, dims, options, labels, margin }) {
     return analyse(registered, dims, options, labels ?? null, { margin });
   },
-  activity({ registered, dims, options, labels }) {
-    return extractActivity(registered, dims, options, labels);
+  activity({ registered, dims, options, labels, margin }) {
+    return extractActivity(registered, dims, options, labels, { margin });
   },
 };
+
+// The result's own typed arrays (the decoded movie, registered frames) move to the page
+// instead of being copied; shared buffers are already visible there.
+function transferables(result) {
+  const buffers = new Set();
+  for (const value of Object.values(result ?? {})) {
+    if (ArrayBuffer.isView(value) && value.buffer instanceof ArrayBuffer && value.byteLength === value.buffer.byteLength) buffers.add(value.buffer);
+  }
+  return [...buffers];
+}
 
 self.onmessage = async ({ data }) => {
   try {
     const result = await handlers[data.type](data);
-    postMessage({ result });
+    postMessage({ result }, transferables(result));
   } catch (error) {
     postMessage({ error: error?.message ?? String(error) });
   }

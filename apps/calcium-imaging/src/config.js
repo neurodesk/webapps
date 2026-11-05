@@ -5,11 +5,38 @@ import { DEFAULTS } from "./core/pipeline.js";
 export const APP = Object.freeze({
   id: "calcium-imaging",
   title: automation.title,
-  version: "0.0.0",
+  version: "0.0.20261105",
 });
 
-/** The decoded float32 movie may use at most 1 GB (the registered copy needs as much again). */
-export const MAX_MOVIE_BYTES = 1_000_000_000;
+/**
+ * The decoded float32 movie may use at most 500 MB. Measured 2026-11-05 (Playwright Chromium,
+ * Linux, cross-origin isolated) on a synthetic 512 × 512 × 256 uint16 movie (268 MB as
+ * float32): loading, a default rigid run, viewing and downloading the registered movie peaked at
+ * 7.4× the float32 size, summed PSS of every Chromium process (page, workers, GPU). 500 MB
+ * keeps that peak near 3.7 GB.
+ */
+export const MAX_MOVIE_BYTES = 500_000_000;
+
+/**
+ * Refuses a TIFF that is not one single-plane, single-channel movie of at least 20 frames,
+ * from its page directories (before any pixel is decoded). ImageJ writes any unlabelled
+ * stack as `slices=N` without `frames=` or `hyperstack=true`, so such a stack is read as N
+ * frames; OME `SizeZ` and ImageJ hyperstack `slices` are spatial and refused.
+ * @param {import("@neurodesk/webapp-components/file-io/tiff").TiffStackInfo} info
+ * @returns {{ frames: number }}
+ */
+export function checkMovie({ pages, metadata }, name) {
+  const description = metadata.description ?? "";
+  const plainImagejStack = metadata.kind === "imagej" && !/^hyperstack=true\s*$/m.test(description) && !/^frames=/m.test(description);
+  const sizeZ = plainImagejStack ? 1 : metadata.sizeZ;
+  const sizeT = plainImagejStack ? pages / Math.max(1, metadata.sizeC) : metadata.sizeT;
+  if (metadata.sizeC > 1) throw new Error(`${name} has ${metadata.sizeC} channels; save the calcium channel as its own movie.`);
+  if (sizeZ > 1 && sizeT > 1) throw new Error(`${name} is a volume time series (${sizeZ} planes × ${sizeT} time points); save one plane as its own movie.`);
+  if (sizeZ > 1) throw new Error(`${name} is a Z-stack of ${sizeZ} planes, not a movie; this app needs one plane over time.`);
+  if (sizeT !== pages) throw new Error(`${name} declares ${sizeT} time points but holds ${pages} pages; save the movie again.`);
+  if (pages < 20) throw new Error(`${name} has ${pages} pages; a movie needs at least 20 frames.`);
+  return { frames: pages };
+}
 
 export const MOTION_LABELS = Object.freeze({
   rigid: "Rigid",
@@ -73,6 +100,7 @@ export function readSettings(values) {
 export function provenance({ input, settings, dims, roiSource, cells, detection, timings }) {
   return {
     app: APP.id,
+    version: APP.version,
     input: { name: input.name, bytes: input.size, dtype: dims.dtype, frames: dims.frames, height: dims.height, width: dims.width, metadata: dims.metadataKind },
     frameRateHz: settings.frameRate,
     motionCorrection: {
@@ -91,7 +119,7 @@ export function provenance({ input, settings, dims, roiSource, cells, detection,
       ...(detection ? { method: "local-correlation seeds and watershed", cellDiameterPx: settings.diameter, seedZ: settings.seedZ, seedThreshold: detection.threshold, growthFloor: detection.floor, borderMarginPx: detection.margin, seeds: detection.seeds } : {}),
     },
     traces: {
-      neuropil: "ring from 2 px beyond each ROI, ≥ 200 px, excluding pixels within 2 px of any ROI",
+      neuropil: "ring from 2 px beyond each ROI, ≥ 200 px, excluding pixels within 2 px of any ROI and the border band",
       neuropilCoefficient: settings.neuropilCoefficient,
       baseline: `running ${settings.baselinePercentile}th percentile over ${settings.baselineWindow} s`,
       deltaFOverF: "(Fc − F0) / F0",

@@ -75,18 +75,21 @@ export function registerTranslation(spectrum, frame, { upsample = 10, maxShift =
     }
   }
   if (upsample <= 1) return { shift: peak, peak: Math.sqrt(best) / n };
-  // Refine on a (1.5 · upsample)-point grid centred on the integer peak.
+  // Refine on a (1.5 · upsample)-point grid centred on the integer peak, keeping only the
+  // points inside the same bounds as the integer search (the peak itself always is).
   const size = Math.ceil(upsample * 1.5);
   const offset = Math.floor(size / 2);
-  const ys = Array.from({ length: size }, (_, j) => peak[0] + (j - offset) / upsample);
-  const xs = Array.from({ length: size }, (_, j) => peak[1] + (j - offset) / upsample);
+  const permitted = (value, limit, middle) => Math.abs(value) <= limit && Math.abs(value - middle) <= radius;
+  const ys = Array.from({ length: size }, (_, j) => peak[0] + (j - offset) / upsample).filter((y) => permitted(y, limitY, center[0]));
+  const xs = Array.from({ length: size }, (_, j) => peak[1] + (j - offset) / upsample).filter((x) => permitted(x, limitX, center[1]));
   // Columns first: G(ky, x) = Σ_kx R(ky, kx) e^{2πi kx x / W}.
   const kernelX = dftKernel(xs, width);
-  const partRe = new Float64Array(height * size);
-  const partIm = new Float64Array(height * size);
+  const columns = xs.length;
+  const partRe = new Float64Array(height * columns);
+  const partIm = new Float64Array(height * columns);
   for (let ky = 0; ky < height; ky++) {
     const row = ky * width;
-    for (let j = 0; j < size; j++) {
+    for (let j = 0; j < columns; j++) {
       let sr = 0;
       let si = 0;
       const kernel = j * width;
@@ -98,20 +101,20 @@ export function registerTranslation(spectrum, frame, { upsample = 10, maxShift =
         sr += ar * br - ai * bi;
         si += ar * bi + ai * br;
       }
-      partRe[ky * size + j] = sr;
-      partIm[ky * size + j] = si;
+      partRe[ky * columns + j] = sr;
+      partIm[ky * columns + j] = si;
     }
   }
   const kernelY = dftKernel(ys, height);
   let refined = -Infinity;
   let shift = peak;
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
+  for (let i = 0; i < ys.length; i++) {
+    for (let j = 0; j < columns; j++) {
       let sr = 0;
       let si = 0;
       for (let ky = 0; ky < height; ky++) {
-        const ar = partRe[ky * size + j];
-        const ai = partIm[ky * size + j];
+        const ar = partRe[ky * columns + j];
+        const ai = partIm[ky * columns + j];
         const br = kernelY.re[i * height + ky];
         const bi = kernelY.im[i * height + ky];
         sr += ar * br - ai * bi;

@@ -106,6 +106,26 @@ test("neuropil rings leave a 2 px gap around every ROI and reach 200 pixels", ()
   }
 });
 
+test("neuropil rings leave out the border band that motion correction filled from the edge", () => {
+  const width = 40;
+  const height = 40;
+  const margin = 4;
+  const labels = new Uint16Array(width * height);
+  // An ROI beside the band, whose ring would otherwise reach the replicated edge pixels.
+  for (let y = 6; y <= 9; y++) for (let x = 6; x <= 9; x++) labels[y * width + x] = 1;
+  const rois = roiPixels(labels);
+  const [unbounded] = neuropilMasks(labels, height, width, rois);
+  const inBand = (i) => {
+    const y = Math.floor(i / width);
+    const x = i % width;
+    return y < margin || x < margin || y >= height - margin || x >= width - margin;
+  };
+  assert.ok(Array.from(unbounded).some(inBand));
+  const [ring] = neuropilMasks(labels, height, width, rois, { margin });
+  assert.ok(ring.length >= 200);
+  assert.equal(Array.from(ring).filter(inBand).length, 0);
+});
+
 test("the running percentile matches a direct computation with truncated windows", () => {
   const x = Float64Array.from({ length: 37 }, (_, i) => Math.sin(i * 1.7) * 10 + i);
   const window = 9;

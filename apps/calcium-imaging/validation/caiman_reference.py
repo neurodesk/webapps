@@ -7,7 +7,8 @@ the means of consecutive 10-frame bins, so the comparison isolates the shift est
     python -I caiman_reference.py <example.ome.tif> <out.json>
 
 Run with CaImAn at flatironinstitute/CaImAn@240e1f2 (pip install of the git checkout,
-Python 3.11); `validation/README.md` records the environment and the results.
+Python 3.11); the Validation section of the app README.md records the environment and
+the results.
 """
 import json
 import sys

@@ -8,7 +8,7 @@ import { readTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { analyse, borderMargin, motionCorrect } from "../src/core/pipeline.js";
 import { readSettings } from "../src/config.js";
 import { parseShiftsCsv, roisCsv, shiftsCsv, tracesCsv } from "../src/outputs.js";
-import { example, exampleBytes, exampleFile, sha256, syntheticMovie, tiff } from "./fixtures.mjs";
+import { example, exampleBytes, exampleFile, omeStack, sha256, syntheticMovie, tiff } from "./fixtures.mjs";
 
 const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));
 const caiman = JSON.parse(readFileSync(new URL("../validation/caiman-rigid-shifts.json", import.meta.url), "utf8"));
@@ -174,15 +174,24 @@ test("ROIs can be added and removed at the cursor, and the traces follow", async
   await runAndWait(page);
   const before = (await downloadRow(page, "ROI table")).bytes.toString("utf8").trim().split("\n").length - 1;
   expect(before).toBeGreaterThanOrEqual(3);
-  // Clicking the canvas centre puts the cursor at the image centre, where there is no cell.
+  // Off the canvas centre on both axes, so a transposed or mirrored cursor would put the ROI
+  // elsewhere; the point lies between the four cells, away from the image centre (24, 32).
   const canvas = page.locator("#gl1");
   const box = await canvas.boundingBox();
-  await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await canvas.click({ position: { x: box.width / 2 + box.height * 0.06, y: box.height * 0.58 } });
   await expect(page.locator("#addRoi")).toBeEnabled();
+  const [, cursorX, cursorY] = (await page.locator("#location").textContent()).match(/^x (\d+), y (\d+)/).map(Number);
+  expect(cursorX).not.toBe(32);
+  expect(cursorY).not.toBe(24);
   await page.locator("#addRoi").click();
   await expect(page.locator("#statusText")).toHaveText(`ROIs updated · ${before + 1} ROIs`, { timeout: 60000 });
   const added = (await downloadRow(page, "ROI table")).bytes.toString("utf8").trim().split("\n");
   expect(added).toHaveLength(before + 2);
+  // The new disc is the highest id; a whole disc clear of the other ROIs is centred on the cursor.
+  const header = added[0].split(",");
+  const row = added.slice(1).map((line) => line.split(",")).find((cells) => Number(cells[0]) === before + 1);
+  expect(Number(row[header.indexOf("centroid_y_px")])).toBeCloseTo(cursorY, 5);
+  expect(Number(row[header.indexOf("centroid_x_px")])).toBeCloseTo(cursorX, 5);
   await expect(page.locator("#removeRoi")).toBeEnabled();
   await page.locator("#removeRoi").click();
   await expect(page.locator("#statusText")).toHaveText(`ROIs updated · ${before} ROIs`, { timeout: 60000 });
@@ -196,6 +205,16 @@ test("refusals: an RGB TIFF, a movie too short and a missing frame rate", async 
   await page.locator("#movieInput").setInputFiles(tiff("rgb.tif", rgb));
   await expect(page.locator("#statusText")).toContainText("3 samples per pixel (RGB)");
   await expect(page.locator("#runButton")).toBeDisabled();
+  // A 30-plane Z-stack, two OME series and a SizeT that is not the page count are not movies.
+  await page.locator("#movieInput").setInputFiles(tiff("zstack.ome.tif", omeStack({ pages: 30, sizeZ: 30, sizeT: 1 })));
+  await expect(page.locator("#statusText")).toHaveText("zstack.ome.tif is a Z-stack of 30 planes, not a movie; this app needs one plane over time.");
+  const twoSeries = readFileSync(new URL("../../../packages/components/test/fixtures/two-series.ome.tif", import.meta.url));
+  await page.locator("#movieInput").setInputFiles(tiff("two-series.ome.tif", twoSeries));
+  await expect(page.locator("#statusText")).toContainText("holds 2 image series");
+  await page.locator("#movieInput").setInputFiles(tiff("sizet.ome.tif", omeStack({ pages: 30, sizeT: 25 })));
+  await expect(page.locator("#statusText")).toHaveText("sizet.ome.tif declares 25 time points but holds 30 pages; save the movie again.");
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect(page.locator("#fileInfo")).toBeHidden();
   await page.locator("#movieInput").setInputFiles(tiff("short.tif", syntheticMovie(10)));
   await expect(page.locator("#statusText")).toContainText("needs at least 20 frames");
   await loadMovie(page, tiff("synthetic.tif", syntheticMovie()));
@@ -210,6 +229,22 @@ test("refusals: an RGB TIFF, a movie too short and a missing frame rate", async 
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toHaveText("Patch overlap must be smaller than the patch size.");
   await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
+});
+
+test("a frame rate entered over the file's sets the movie TIFF's frame interval, as in the CSVs", async ({ page }) => {
+  test.setTimeout(180000);
+  await page.goto("/");
+  await loadMovie(page, tiff("synthetic.tif", syntheticMovie(60, { frameRate: 10 })));
+  await expect(page.locator("#frameRate")).toHaveValue("10");
+  await page.locator("#frameRate").fill("20");
+  await runAndWait(page);
+  const movie = await readTiffStack(arrayBuffer((await downloadRow(page, "Registered movie")).bytes));
+  expect(movie.pages).toBe(60);
+  expect(movie.metadata.frameInterval).toBe(0.05);
+  const shifts = (await downloadRow(page, "Shifts")).bytes.toString("utf8").trim().split("\n");
+  expect(shifts[2].split(",")[1]).toBe("0.05");
+  const traces = (await downloadRow(page, "Traces (CSV)")).bytes.toString("utf8").trim().split("\n");
+  expect(traces[2].split(",")[1]).toBe("0.05");
 });
 
 test("cancelling a run stops its workers, leaves no output and permits a complete retry", async ({ page }) => {

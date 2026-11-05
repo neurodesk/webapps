@@ -212,6 +212,9 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
   noddi: [
     { file: 'apps/noddi/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],
+  'calcium-imaging': [
+    { file: 'apps/calcium-imaging/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
   dwicorrect: [
     { file: 'apps/dwicorrect/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],

@@ -20,6 +20,10 @@ def main(out):
                      metadata={"axes": "TYX", "finterval": 0.5, "unit": "um"})
     rgb = np.zeros((4, 5, 3), dtype=np.uint8)
     tifffile.imwrite(f"{out}/rgb-uint8.tif", rgb, photometric="rgb")
+    # Two OME Image series in one file: 3 time points, then 2.
+    with tifffile.TiffWriter(f"{out}/two-series.ome.tif", ome=True) as tif:
+        tif.write(ramp, metadata={"axes": "TYX"})
+        tif.write(ramp[:2], metadata={"axes": "TYX"})
 
 
 if __name__ == "__main__":

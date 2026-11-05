@@ -4,7 +4,8 @@
 // maxima at or above t, at least a cell radius apart. Each seed grows by marker-controlled
 // watershed (Meyer flooding of −correlation, 4-connected) over pixels at or above
 // median + (z/2) · 1.4826 · MAD and no farther than one cell diameter from its seed. Regions
-// outside [π(d/4)², π d²] pixels are dropped. Labels are 1…n in seed order (strongest first).
+// outside [π(d/4)², π d²] pixels are dropped. Labels are 1…n in raster order of each kept
+// region's first pixel (row by row, top left first), not in seed strength.
 // A border band of `margin` pixels is left out: after motion correction its pixels are copies
 // of the edge (replicated borders), so neighbouring pixels there correlate perfectly.
 

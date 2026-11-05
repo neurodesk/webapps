@@ -4,12 +4,22 @@ Two-photon calcium imaging preprocessing in the browser, on the CPU in module wo
 
 1. **Input**: one single-channel, single-plane TIFF movie, one frame per page (baseline,
    ImageJ or OME-TIFF), read with `@neurodesk/webapp-components/file-io/tiff`. The frame rate
-   comes from OME `TimeIncrement` or ImageJ `finterval`/`fps`, or the user enters it.
+   comes from OME `TimeIncrement` or ImageJ `finterval`/`fps`, or the user enters it; the
+   entered rate is the one every output uses. Before decoding, the app refuses several
+   channels, Z-stacks (OME `SizeZ` > 1, ImageJ hyperstack `slices`), several OME series and
+   a declared time-point count that is not the page count. An ImageJ stack with only `slices=N`
+   (ImageJ's label for any unlabelled stack) is read as N frames.
 2. **Motion correction**: rigid, piecewise rigid or none (`src/core/registration.js`).
 3. **Summary images**: mean, maximum and local correlation (`src/core/images.js`).
 4. **ROIs**: detected from the correlation image, then edited at the cursor (`src/core/rois.js`).
 5. **Traces**: ROI and neuropil fluorescence, neuropil subtraction and ΔF/F (`src/core/traces.js`).
 6. **Deconvolution**: OASIS for an AR(1) model (`src/core/oasis.js`).
+
+Memory: the float32 movie may be at most 500 MB (`MAX_MOVIE_BYTES` in `src/config.js`, e.g.
+512 × 512 × 470 frames). On a 268 MB synthetic movie the browser's peak, summed over every
+Chromium process, was 7.4× the float32 size, so the limit keeps it near 3.7 GB. The registered
+movie TIFF is written only when downloaded, and the viewer's NIfTI copy of a movie is dropped
+once NiiVue has read it.
 
 Outputs: the registered movie (TIFF in the input's sample type), the shifts (CSV), the mean,
 max and correlation images (float32 TIFF), the ROI labels (uint16 TIFF), the traces and ROI
@@ -26,6 +36,8 @@ All numerics are written from the papers; no code comes from CaImAn (GPL-2.0), S
   ⌈1.5 · upsample⌉-point neighbourhood. The default estimator is the plain cross-correlation,
   as NoRMCorre and CaImAn compute it; *Phase correlation* whitens the cross-power spectrum
   first. Any frame size works: the FFT is radix-2 with Bluestein's algorithm for other lengths.
+  The sub-pixel refinement keeps to the same bounds as the integer peak, so no shift exceeds
+  `maxShift` (or `maxDeviation` for a patch).
 - **Templates.** The first template is the median over time of the means of consecutive
   10-frame bins. With `templatePasses` > 1, each further pass registers the original frames to
   the mean of the previous pass's registered frames; passes before the last are rigid.
@@ -47,7 +59,7 @@ All numerics are written from the papers; no code comes from CaImAn (GPL-2.0), S
   the recording: add silent cells with **Add ROI at cursor** (a disc of one cell diameter that
   leaves existing ROIs alone).
 - **Neuropil and ΔF/F.** F is the mean of an ROI's pixels. Its neuropil is the ring of pixels more than
-  2 px from every ROI and within R of this one, with R the smallest whole radius from 3 px that
+  2 px from every ROI, outside the border band and within R of this one, with R the smallest whole radius from 3 px that
   gives at least 200 pixels (at most 5 cell diameters). Fc = F − r · Fneu with r = 0.7
   (Chen et al. 2013, as Suite2p uses). F0 is the running 8th percentile of Fc over a centred 60 s
   window, truncated at the ends, and ΔF/F = (Fc − F0)/F0. Where F0 ≤ 0, ΔF/F is undefined: those
@@ -98,6 +110,12 @@ analysis take about 10 s.
   constraint more tightly.
 - ROI detection is the app's own simple method (above), not Suite2p's or CNMF's, and finds active
   cells only.
+- `maxShift` is symmetric: shifts from −`maxShift` to +`maxShift` are allowed. CaImAn's
+  `max_shifts` zeroes cross-correlation rows `max_shifts:-max_shifts`, which allows −`max_shifts`
+  to `max_shifts` − 1, and CaImAn does not bound its sub-pixel refinement.
+- The DFT kernel of the sub-pixel refinement gives the Nyquist bin of an even dimension the
+  frequency +N/2; CaImAn (`ifftshift(arange(N)) − N//2`) gives it −N/2. For a sub-pixel position
+  the two kernels differ only in that one bin; the example's shifts are identical on every frame.
 
 ## Example
 
@@ -106,9 +124,11 @@ analysis take about 10 s.
 `sub-NV60/sub-NV60_ses-20180307T125239_ophys.nwb` in DANDI 000249 version 0.230423.1416
 (Schiavo, Valtcheva, Bair-Marshall, Song, Martin & Froemke; mouse auditory cortex, layer 2/3
 excitatory neurons, 256 × 256 pixels at 3.90625 Hz), licensed CC-BY-4.0. It is written as a
-zlib-compressed OME-TIFF with `TimeIncrement` 0.256 s and pinned in the `neurodeskorg/webapps`
-dataset at commit `dfeaa34`. The pixel size is not recorded in the source, so the app shows the
-image in pixels. Cite Schiavo et al. 2020 (Nature 587:426) and the DANDI dataset when using it.
+zlib-compressed OME-TIFF with `TimeIncrement` 0.256 s by `validation/stage_example.py`, and pinned
+in the `neurodeskorg/webapps` dataset at commit `54b983b`, beside a `README.md` with its
+attribution and licence (DOI 10.48324/dandi.000249/0.230423.1416, CC BY 4.0). The pixel size is
+not recorded in the source, so the app shows the image in pixels. Cite Schiavo et al. 2020
+(Nature 587:426) and the DANDI dataset when using it.
 
 ## Development
 
