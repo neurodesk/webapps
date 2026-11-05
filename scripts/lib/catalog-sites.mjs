@@ -211,3 +211,33 @@ export async function projectHubSite({ siteDist, destination, registry }) {
   await writeFile(join(destination, 'index.html'), renderHubPage(registry));
   await writeFile(join(destination, '_headers'), headersFile);
 }
+
+// Workers runtime behaviour the assets-only sites were checked with.
+const WORKER_COMPATIBILITY_DATE = '2026-07-12';
+
+/**
+ * The Wrangler configuration that deploys one site (`dist-sites/<site>`) as an
+ * assets-only Cloudflare Worker on its custom domain. It sits beside the site
+ * directory so `wrangler deploy --config dist-sites/<site>.wrangler.json` finds it.
+ */
+export function workerConfig(host, site) {
+  return {
+    name: host.replaceAll('.', '-'),
+    compatibility_date: WORKER_COMPATIBILITY_DATE,
+    workers_dev: false,
+    routes: [{ pattern: host, custom_domain: true }],
+    assets: {
+      directory: `./${site}`,
+      html_handling: 'auto-trailing-slash',
+      not_found_handling: '404-page',
+    },
+  };
+}
+
+/** Every site a Cloudflare Worker serves: the worker-hosted catalogues and the hub. */
+export function workerSites(registry) {
+  return [
+    ...registry.site.catalogs.filter((catalog) => catalog.hosting === 'worker').map((catalog) => ({ host: catalog.host, site: catalog.id })),
+    { host: registry.site.hub.host, site: HUB_SITE },
+  ];
+}

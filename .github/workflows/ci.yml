@@ -220,6 +220,8 @@ jobs:
         run: node test/automation-catalog.smoke.mjs
       - name: Test shared runtime assembly
         run: node --test test/runtime-assets.test.mjs
+      - name: Check each catalogue site holds its apps and everything they load
+        run: node --test test/catalog-sites.test.mjs
       - name: Verify resources persist across browser restarts
         run: pnpm test:resource-cache
       - name: Load threaded models with service-worker isolation

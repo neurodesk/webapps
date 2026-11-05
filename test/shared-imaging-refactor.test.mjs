@@ -188,7 +188,7 @@ test('every app that loads the staged dcm2niix module stages it before build', a
 test('registry shell metadata drives adapters without app-id branches', async () => {
   const shell = await source('site', 'app-shell.js');
   const theme = await source('site', 'app-theme.css');
-  const build = await source('scripts', 'build-site.mjs');
+  const build = await source('scripts', 'lib', 'catalog-sites.mjs');
   assert.match(build, /shell:\s*app\.shell/);
   assert.match(shell, /metadata\.shell/);
   assert.doesNotMatch(shell, /\b(calmar|dicompare|qsmbly|surfannotate|easy-mp2rage|mri2vid)\b/);

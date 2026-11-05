@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { findApp, findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
-import { SHARED_ROOT_FILES, projectCatalogSite, projectHubSite, runtimeReferences } from '../scripts/lib/catalog-sites.mjs';
+import { SHARED_ROOT_FILES, projectCatalogSite, projectHubSite, runtimeReferences, workerConfig, workerSites } from '../scripts/lib/catalog-sites.mjs';
 import { loadNotFoundTemplate } from '../scripts/lib/not-found-page.mjs';
 import { loadStandalone } from '../scripts/lib/standalone.mjs';
 
@@ -105,4 +105,32 @@ test('the hub site holds the hub page and nothing it does not load', async (t) =
   const hubDir = join(root, 'dist-sites/hub');
   await projectHubSite({ siteDist, destination: hubDir, registry: full });
   assert.deepEqual((await readdir(hubDir)).sort(), ['_headers', 'fonts', 'index.html', 'landing.css', 'sciget-logo.svg', 'theme.js']);
+});
+
+test('the Worker-hosted sites deploy as assets-only Workers on their own domains', () => {
+  assert.deepEqual(workerSites(full), [
+    { host: 'mskapps.sciget.org', site: 'msk' },
+    { host: 'webapps.sciget.org', site: 'hub' },
+  ]);
+  assert.deepEqual(workerConfig('mskapps.sciget.org', 'msk'), {
+    name: 'mskapps-sciget-org',
+    compatibility_date: '2026-07-12',
+    workers_dev: false,
+    routes: [{ pattern: 'mskapps.sciget.org', custom_domain: true }],
+    assets: { directory: './msk', html_handling: 'auto-trailing-slash', not_found_handling: '404-page' },
+  });
+  assert.ok(!('main' in workerConfig('webapps.sciget.org', 'hub')), 'assets only, no Worker script');
+});
+
+test('the deploy workflow deploys every Worker site the registry declares', async () => {
+  const { parse } = await import('yaml');
+  const workflow = parse(await readFile(join(repoRoot, '.github/workflows/deploy-pages.yml'), 'utf8'));
+  const matrix = workflow.jobs['deploy-workers'].strategy.matrix.include;
+  assert.deepEqual(matrix, workerSites(full).map(({ host, site }) => ({ site, url: `https://${host}/` })));
+  const pages = workflow.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-pages-artifact'));
+  const primary = full.site.catalogs.find((catalog) => catalog.hosting === 'pages');
+  assert.equal(pages.with.path, `dist-sites/${primary.id}`);
+  for (const step of workflow.jobs.deploy.steps.filter((candidate) => candidate.env?.BASE_URL)) {
+    assert.equal(step.env.SITE_CATALOG, primary.id, `${step.name} checks only the Pages catalogue`);
+  }
 });

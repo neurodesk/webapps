@@ -60,10 +60,22 @@ jobs:
         run: |
           node --test test/runtime-assets.test.mjs
           pnpm test:runtime-startup
+      - name: Verify each catalogue site holds its apps and everything they load
+        run: node --test test/catalog-sites.test.mjs
       - uses: actions/configure-pages@v6
+      # webapps.neurodesk.org serves the neuro catalogue; the Worker sites deploy below.
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: dist
+          path: dist-sites/neuro
+      - uses: actions/upload-artifact@v7
+        with:
+          name: worker-sites
+          path: |
+            dist-sites/msk
+            dist-sites/msk.wrangler.json
+            dist-sites/hub
+            dist-sites/hub.wrangler.json
+          if-no-files-found: error
 
   deploy:
     environment:
@@ -90,11 +102,76 @@ jobs:
         run: pnpm test:deployed
         env:
           BASE_URL: ${{ steps.deployment.outputs.page_url }}
+          SITE_CATALOG: neuro
       - name: Verify standalone downloads in every deployed application
         run: node test/standalone-downloads.smoke.mjs
         env:
           BASE_URL: ${{ steps.deployment.outputs.page_url }}
+          SITE_CATALOG: neuro
       - name: Verify deployed NIfTI and DICOM scan pickers
         run: pnpm test:image-uploads
         env:
           BASE_URL: ${{ steps.deployment.outputs.page_url }}
+          SITE_CATALOG: neuro
+
+  # mskapps.sciget.org and the webapps.sciget.org hub are assets-only Cloudflare
+  # Workers on custom domains (dist-sites/<site>.wrangler.json, written by the build).
+  deploy-workers:
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - site: msk
+            url: https://mskapps.sciget.org/
+          - site: hub
+            url: https://webapps.sciget.org/
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/download-artifact@v8
+        with:
+          name: worker-sites
+          path: dist-sites
+      - name: Deploy the ${{ matrix.site }} site
+        run: pnpm dlx wrangler@3.114.17 deploy --config dist-sites/${{ matrix.site }}.wrangler.json
+      - name: Check the hub lists every catalogue
+        if: matrix.site == 'hub'
+        run: |
+          page="$(curl --fail --silent --show-error --retry 5 --retry-all-errors ${{ matrix.url }})"
+          for host in webapps.neurodesk.org mskapps.sciget.org; do
+            grep -q "href=\"https://$host/\"" <<< "$page" || { echo "hub does not link $host"; exit 1; }
+          done
+      - run: pnpm install --frozen-lockfile
+        if: matrix.site != 'hub'
+      - name: Install browser
+        if: matrix.site != 'hub'
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Verify deployed cross-origin isolation
+        if: matrix.site != 'hub'
+        run: pnpm test:deployed
+        env:
+          BASE_URL: ${{ matrix.url }}
+          SITE_CATALOG: ${{ matrix.site }}
+      - name: Verify standalone downloads in every deployed application
+        if: matrix.site != 'hub'
+        run: node test/standalone-downloads.smoke.mjs
+        env:
+          BASE_URL: ${{ matrix.url }}
+          SITE_CATALOG: ${{ matrix.site }}
+      - name: Verify deployed NIfTI and DICOM scan pickers
+        if: matrix.site != 'hub'
+        run: pnpm test:image-uploads
+        env:
+          BASE_URL: ${{ matrix.url }}
+          SITE_CATALOG: ${{ matrix.site }}

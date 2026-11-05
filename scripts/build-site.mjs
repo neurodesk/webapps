@@ -5,7 +5,15 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppInformation } from './lib/app-information.mjs';
-import { HUB_SITE, SITES_DIR, hostedThemeOptions, projectCatalogSite, projectHubSite } from './lib/catalog-sites.mjs';
+import {
+  HUB_SITE,
+  SITES_DIR,
+  hostedThemeOptions,
+  projectCatalogSite,
+  projectHubSite,
+  workerConfig,
+  workerSites,
+} from './lib/catalog-sites.mjs';
 import { injectCompositeTheme } from './lib/composite-theme.mjs';
 import { renderLandingPage } from './lib/landing-page.mjs';
 import { loadNotFoundTemplate, renderNotFoundPage } from './lib/not-found-page.mjs';
@@ -86,3 +94,6 @@ for (const catalog of registry.site.catalogs) {
 }
 await projectHubSite({ siteDist, destination: join(sitesDir, HUB_SITE), registry });
 console.log(`Wrote the ${registry.site.hub.host} hub at ${join(sitesDir, HUB_SITE)}`);
+for (const { host, site } of workerSites(registry)) {
+  await writeFile(join(sitesDir, `${site}.wrangler.json`), `${JSON.stringify(workerConfig(host, site), null, 2)}\n`);
+}
