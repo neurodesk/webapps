@@ -8,7 +8,10 @@ const TYPE_NAME = { 2: "axon", 3: "basal", 4: "apical" };
 const number = (value) => (Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(10))));
 /** The mean angle in degrees, or null without bifurcations. */
 const meanDegrees = (values) => (values.length ? (values.reduce((sum, value) => sum + value, 0) / values.length) * DEGREES : null);
-const field = (value) => (value == null ? "" : typeof value === "number" ? number(value) : /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
+/** Text a spreadsheet could run as a formula gets a leading quote (OWASP CSV injection). */
+const inert = (text) => (/^[=+\-@\t\r]/.test(text) ? `'${text}` : text);
+const quoted = (text) => (/[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text);
+const field = (value) => (value == null ? "" : typeof value === "number" ? number(value) : quoted(inert(value)));
 const csv = (rows) => `${rows.map((row) => row.map(field).join(",")).join("\n")}\n`;
 
 /** The morphometrics rows of one neuron: one per neurite type, "all" first. */

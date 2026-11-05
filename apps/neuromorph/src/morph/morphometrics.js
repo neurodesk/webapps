@@ -1,7 +1,7 @@
 // Morphometrics of an SWC tree, defined as NeuroM 4 defines them (see README.md,
 // "Definitions"). Pure: samples from readSwc in, numbers out. Distances are in the
 // file's units (µm for NeuroMorpho.Org), angles in radians.
-import { SOMA } from "./swc.js";
+import { SOMA, sampleKinds } from "./swc.js";
 
 export const NEURITE_TYPES = Object.freeze({ all: null, axon: 2, basal: 3, apical: 4 });
 
@@ -29,22 +29,15 @@ export function angle(origin, a, b) {
 }
 
 /**
- * Build the soma and neurites. The soma is every type-1 sample reached from a type-1
- * root through type-1 parents; its first sample is the centre, as NeuroM takes it for
- * SWC somata. A type-1 sample inside a neurite takes its parent's type.
+ * Build the soma and neurites, typing each sample as sampleKinds does. The soma's first
+ * sample is the centre, as NeuroM takes it for SWC somata. A neurite takes the type of its
+ * first sample and holds every section below it, whatever their types, as in NeuroM.
  * @param {import("./swc.js").Sample[]} samples parents first
  * @returns {Morphology}
  */
 export function buildMorphology(samples) {
   const byId = new Map(samples.map((s) => [s.id, s]));
-  const kind = new Map();
-  for (const s of samples) {
-    const parent = byId.get(s.parent);
-    const parentKind = parent ? kind.get(parent.id) : null;
-    if (s.type === SOMA && (!parent || parentKind === SOMA)) kind.set(s.id, SOMA);
-    else if (s.type === SOMA) kind.set(s.id, parentKind);
-    else kind.set(s.id, s.type);
-  }
+  const kind = sampleKinds(samples);
   const children = new Map();
   const roots = [];
   for (const s of samples) {
@@ -116,7 +109,7 @@ function firstDistinct(points) {
   return points[1];
 }
 
-/** The neurites of one type, or all of them for `null`. */
+/** The neurites whose first sample has this type, or all of them for `null`; NeuroM filters the same way. */
 export function neuritesOf(morphology, type) {
   return type == null ? morphology.neurites : morphology.neurites.filter((neurite) => neurite.type === type);
 }

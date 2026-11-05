@@ -236,3 +236,60 @@ test("Sholl counts match counting every radius for every segment", () => {
   assert.deepEqual(shollCrossings(morphology, radii), brute);
   assert.ok(brute.some((count) => count > 0));
 });
+
+test("a repeated point lends its radius before it is merged", () => {
+  const { samples, issues } = readSwc(swc("1 1 0 0 0 5 -1", "2 3 5 0 0 0 1", "3 3 5 0 0 2 2", "4 3 10 0 0 0 3"));
+  assert.deepEqual(samples.map((s) => [s.id, s.r]), [[1, 5], [2, 2], [4, 2]]);
+  assert.ok(!issues.some((issue) => issue.code === "nonpositive-radius" && !issue.repaired));
+  const features = measure(buildMorphology(samples), 3, { unknownZeroRadii: true });
+  assert.ok(features.surfaceArea > 0);
+  assert.ok(features.volume > 0);
+});
+
+test("a whole neurite counts under its first sample's type, as NeuroM does", () => {
+  // NeuroM 4.0.6 gives basal total_length 12 and 3 sections for this file.
+  const { samples, issues } = readSwc(swc("1 1 0 0 0 1 -1", "2 3 0 1 0 0.5 1", "3 3 0 2 0 0.5 2", "4 3 1 2 0 0.5 3", "5 7 0 12 0 0.5 3"));
+  const analysis = analyse(buildMorphology(samples), 5);
+  assert.equal(analysis.features.basal.totalLength, 12);
+  assert.equal(analysis.features.basal.sections, 3);
+  assert.deepEqual(analysis.sholl.crossings.basal, analysis.sholl.crossings.all);
+  const custom = issues.find((issue) => issue.code === "custom-type");
+  assert.match(custom.message, /a neurite counts under the type of its first sample/);
+  assert.doesNotMatch(custom.message, /; counted under All only$/);
+});
+
+test("a type-1 sample inside a neurite borrows a neurite radius, as it is measured", () => {
+  const { samples, issues } = readSwc(swc("1 1 0 0 0 5 -1", "2 3 5 0 0 1 1", "3 1 10 0 0 0 2", "4 3 15 0 0 1 3"));
+  assert.equal(samples.find((s) => s.id === 3).r, 1);
+  assert.ok(issues.some((issue) => issue.code === "nonpositive-radius" && issue.repaired));
+  const features = measure(buildMorphology(samples), 3, { unknownZeroRadii: true });
+  assert.equal(features.zeroRadii, 0);
+  assert.ok(features.surfaceArea > 0);
+});
+
+test("a header entry with line breaks is written as comment lines", () => {
+  const { samples } = readSwc(FORK);
+  const text = writeSwc(samples, ["# original", "Repaired from evil\n9 3 1 1 1 1 1\r\n=cmd"]);
+  assert.ok(text.split("\n").filter((line) => line.trim() && !/^\d/.test(line)).every((line) => line.startsWith("#")));
+  const reread = readSwc(text, { repair: false });
+  assert.deepEqual(reread.samples.map((s) => s.id), samples.map((s) => s.id));
+  assert.deepEqual(reread.issues, []);
+});
+
+test("text a spreadsheet would run as a formula is neutralised in every table", () => {
+  const { samples } = readSwc(FORK);
+  const analysis = analyse(buildMorphology(samples), 5);
+  const names = ["=HYPERLINK(1)", "+1", "-cmd", "@SUM(A1)", "\tx", "\rx"];
+  const neurons = names.map((name) => ({ name, analysis }));
+  for (const table of [morphometricsCsv(neurons), shollCsv(neurons), bifurcationsCsv(neurons)]) {
+    for (const name of names) assert.ok(!table.split("\n").some((line) => line.startsWith(name.replace(/^\r/, ""))), `${name} leads a row`);
+    assert.match(table, /^'=HYPERLINK\(1\),/m);
+    assert.match(table, /^'\+1,/m);
+    assert.match(table, /^'-cmd,/m);
+    assert.match(table, /^'@SUM\(A1\),/m);
+    assert.match(table, /^'\tx,/m);
+    assert.match(table, /^"'\rx",/m);
+  }
+  const negative = morphometricsCsv([{ name: "n", analysis: { features: { ...analysis.features, all: { ...analysis.features.all, totalLength: -2.5 } } } }]);
+  assert.match(negative.split("\n")[1], /,-2\.5,/);
+});

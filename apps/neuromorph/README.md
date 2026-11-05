@@ -78,7 +78,8 @@ These are deliberate, and none applies to the examples:
    from the first sample and reports the file.
 
 Other reported checks: neurites detached from the soma, several soma groups, soma samples
-inside a neurite, types other than 1–4 (counted only under All), steps of more than 30 µm
+inside a neurite, types other than 1–4 (as in NeuroM, a neurite counts under the type of
+its first sample, so one that starts with another type counts only under All), steps of more than 30 µm
 along z (NeuroM's `has_no_jumps` default), multifurcations, and samples listed before their
 parent.
 

@@ -2,7 +2,8 @@
 //
 // An SWC sample is one line: id, type, x, y, z, radius, parent (Cannon et al. 1998).
 // Types follow the standard: 1 soma, 2 axon, 3 basal dendrite, 4 apical dendrite;
-// anything else is kept and measured under "All" only.
+// anything else is kept. As in NeuroM, a whole neurite is measured under the type of its
+// first sample, so a neurite that starts with another type is measured under "All" only.
 
 export const SOMA = 1;
 export const TYPE_NAMES = Object.freeze({ 1: "soma", 2: "axon", 3: "basal", 4: "apical" });
@@ -115,13 +116,31 @@ function childMap(samples) {
 }
 
 /**
+ * The type each sample is measured as. The soma is every type-1 sample reached from a
+ * type-1 root through type-1 parents; a type-1 sample inside a neurite takes its parent's
+ * type. Repair and measurement both use it.
+ * @param {Sample[]} samples parents first
+ * @returns {Map<number, number>} sample id to type
+ */
+export function sampleKinds(samples) {
+  const kinds = new Map();
+  for (const s of samples) {
+    const parentKind = kinds.get(s.parent);
+    if (s.type !== SOMA) kinds.set(s.id, s.type);
+    else if (parentKind === undefined || parentKind === SOMA) kinds.set(s.id, SOMA);
+    else kinds.set(s.id, parentKind);
+  }
+  return kinds;
+}
+
+/**
  * Nonpositive radii take the nearest positive radius above them, else the nearest below
  * them (fewest steps, first child first), looking only at samples of the same kind (soma
- * or neurite), so a dendrite never borrows the soma's radius. Two linear passes over the
+ * or neurite, as sampleKinds classifies them), so a dendrite never borrows the soma's radius. Two linear passes over the
  * parents-first order, both on the radii as read. Returns the lines it fixed.
  */
-function repairRadii(samples, byId, children) {
-  const sameKind = (a, b) => (a.type === SOMA) === (b.type === SOMA);
+function repairRadii(samples, byId, children, kinds) {
+  const sameKind = (a, b) => (kinds.get(a.id) === SOMA) === (kinds.get(b.id) === SOMA);
   const above = new Map();
   for (const s of samples) {
     const parent = byId.get(s.parent);
@@ -153,12 +172,12 @@ function repairRadii(samples, byId, children) {
 }
 
 /** A neurite sample at its parent's position is removed; its children move to the parent. */
-function mergeDuplicates(samples, byId) {
+function mergeDuplicates(samples, byId, kinds) {
   const removed = new Set();
   for (const s of samples) {
     const parent = byId.get(s.parent);
-    if (!parent || s.type === SOMA || parent.type === SOMA) continue;
-    if (s.type !== parent.type) continue;
+    if (!parent || kinds.get(s.id) === SOMA || kinds.get(parent.id) === SOMA) continue;
+    if (kinds.get(s.id) !== kinds.get(parent.id)) continue;
     if (s.x === parent.x && s.y === parent.y && s.z === parent.z) removed.add(s.id);
   }
   if (!removed.size) return { samples, merged: [] };
@@ -205,7 +224,7 @@ function inspect(samples, issues, repaired) {
   const custom = samples.filter((s) => !TYPE_NAMES[s.type]);
   if (custom.length) {
     const types = [...new Set(custom.map((s) => s.type))].sort((a, b) => a - b).join(", ");
-    issue(issues, "custom-type", "info", `Type ${types} is not soma, axon, basal or apical; counted under All only`, custom.map((s) => s.line), false);
+    issue(issues, "custom-type", "info", `Type ${types} is not soma, axon, basal or apical; as in NeuroM, a neurite counts under the type of its first sample, so one starting with type ${types} counts under All only`, custom.map((s) => s.line), false);
   }
   const changes = samples.filter((s) => {
     const parent = byId.get(s.parent);
@@ -228,7 +247,8 @@ function inspect(samples, issues, repaired) {
   const zero = samples.filter((s) => !(s.r > 0));
   if (zero.length) {
     const what = repaired ? "with zero or negative radius and no positive radius in its neurite or soma to copy" : "with zero or negative radius";
-    const blank = zero.some((s) => s.type !== SOMA && (repaired || s.r < 0));
+    const kinds = sampleKinds(samples);
+    const blank = zero.some((s) => kinds.get(s.id) !== SOMA && (repaired || s.r < 0));
     issue(issues, "nonpositive-radius", "warning", `${plural(zero.length, "sample")} ${what}${blank ? "; surface area and volume are left blank" : ""}`, zero.map((s) => s.line), false);
   }
   if (!repaired) {
@@ -257,19 +277,26 @@ export function readSwc(text, { repair = true } = {}) {
   connect(samples, issues);
   samples = sortSamples(samples, issues);
   if (repair) {
-    const merged = mergeDuplicates(samples, new Map(samples.map((s) => [s.id, s])));
+    // Radii first, so a sample about to be merged still lends its radius to its neighbours.
+    const byId = new Map(samples.map((s) => [s.id, s]));
+    const kinds = sampleKinds(samples);
+    const repairedLines = repairRadii(samples, byId, childMap(samples), kinds);
+    const merged = mergeDuplicates(samples, byId, kinds);
     samples = merged.samples;
     if (merged.merged.length) {
       issue(issues, "zero-length-segment", "warning", `${plural(merged.merged.length, "sample")} at their parent's position merged into it`, merged.merged, true);
     }
-    const fixed = repairRadii(samples, new Map(samples.map((s) => [s.id, s])), childMap(samples));
+    const fixed = repairedLines.filter((line) => !merged.merged.includes(line));
     if (fixed.length) issue(issues, "nonpositive-radius", "warning", `${plural(fixed.length, "zero or negative radius")} replaced by the nearest positive radius`, fixed, true);
   }
   inspect(samples, issues, repair);
   return { samples, issues, header };
 }
 
-/** The samples as SWC text, parents first. Header lines starting with # are written as they are; others become comments. */
+/**
+ * The samples as SWC text, parents first. Header entries are split into lines; a line
+ * starting with # is written as it is, any other becomes a comment.
+ */
 export function writeSwc(samples, header = []) {
   const format = (value) => {
     for (let digits = 1; digits < 17; digits++) {
@@ -278,7 +305,7 @@ export function writeSwc(samples, header = []) {
     }
     return String(value);
   };
-  const lines = header.map((line) => (line.startsWith("#") ? line : `# ${line}`));
+  const lines = header.flatMap((entry) => entry.split(/\r\n|\n|\r/)).map((line) => (line.startsWith("#") ? line : `# ${line}`));
   for (const s of samples) lines.push([s.id, s.type, format(s.x), format(s.y), format(s.z), format(s.r), s.parent].join(" "));
   return `${lines.join("\n")}\n`;
 }
