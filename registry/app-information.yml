@@ -235,8 +235,8 @@ apps:
         url: https://github.com/liamchalcroft/SynthStroke
       - group: Lesion segmentation
         title: DeepISLES
-        reference: "de la Rosa E, Reyes M, Liew SL, et al. A robust ensemble algorithm for ischemic stroke lesion segmentation: generalizability and clinical utility beyond the ISLES challenge. arXiv. 2024."
-        url: https://arxiv.org/abs/2403.19425
+        reference: "de la Rosa E, Reyes M, Liew SL, et al. DeepISLES: a clinically validated ischemic stroke segmentation model from the ISLES'22 challenge. Nature Communications. 2025;16:7357."
+        doi: 10.1038/s41467-025-62373-x
       - group: Lesion segmentation
         title: nnU-Net (DeepISLES SEALS)
         reference: "Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211."
@@ -245,6 +245,10 @@ apps:
         title: ISLES 2022
         reference: "Hernandez Petzsche MR, de la Rosa E, Hanning U, et al. ISLES 2022: a multi-center magnetic resonance imaging stroke lesion segmentation dataset. Scientific Data. 2022;9:762."
         doi: 10.1038/s41597-022-01875-5
+      - group: Example data
+        title: Stroke Outcome Optimization Project (SOOP)
+        reference: "Absher J, Goncher S, Newman-Norlund R, et al. The stroke outcome optimization project: Acute ischemic strokes from a comprehensive stroke center. Scientific Data. 2024;11:839."
+        doi: 10.1038/s41597-024-03667-5
       - group: Lesion segmentation
         title: ATLAS v2.0
         reference: "Liew SL, Lo BP, Donnelly MR, et al. A large, curated, open-source stroke neuroimaging dataset to improve lesion segmentation algorithms. Scientific Data. 2022;9:320."

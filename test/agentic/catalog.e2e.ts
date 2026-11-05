@@ -61,7 +61,7 @@ for (const entry of catalog) {
         });
         const state = browser.locator('[data-neurodesk-examples]');
         await expect(state).toHaveAttribute('data-example-state', 'ready', { timeout: 300000 });
-        await expect(state).toHaveAttribute('data-example-id', example.id);
+        await expect(state).toHaveAttribute('data-example-id', example.rotation?.[0] ?? example.id);
         await expect(browser.locator('select[data-neurodesk-example]')).toBeEnabled();
       });
     }

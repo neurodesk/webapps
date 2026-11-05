@@ -22,6 +22,7 @@ export function defineExampleSelector(view = globalThis.window) {
     #active = null;
     #picks = 0;
     #fileActions = true;
+    #rotationIndex = new Map();
 
     static get observedAttributes() {
       return ['disabled'];
@@ -50,6 +51,7 @@ export function defineExampleSelector(view = globalThis.window) {
     set examples(value) {
       this.cancel();
       this.#examples = value;
+      this.#rotationIndex.clear();
       if (this.#select) {
         this.#renderOptions();
         delete this.dataset.exampleId;
@@ -288,8 +290,20 @@ export function defineExampleSelector(view = globalThis.window) {
     }
 
     async #load() {
-      const example = this.#examples.find(item => item.id === this.#select.value);
-      if (!example || this.disabled || !this.isConnected) return;
+      const selection = this.#examples.find(item => item.id === this.#select.value);
+      if (!selection || this.disabled || !this.isConnected) return;
+      const index = this.#rotationIndex.get(selection.id) ?? 0;
+      const example = selection.rotation
+        ? this.#examples.find(item => item.id === selection.rotation[index % selection.rotation.length])
+        : selection;
+      if (!example || example.rotation) {
+        this.cancel();
+        this.#select.value = '';
+        delete this.dataset.exampleId;
+        this.#describe(null);
+        this.#status('error', 'The example rotation refers to an unavailable scan.', true);
+        return;
+      }
       this.cancel();
       const controller = new AbortController();
       this.#active = controller;
@@ -338,6 +352,7 @@ export function defineExampleSelector(view = globalThis.window) {
           },
         });
         assertCurrent();
+        if (selection.rotation) this.#rotationIndex.set(selection.id, index + 1);
         this.dataset.exampleId = example.id;
         this.#describe(example);
         this.#status('ready', `${example.label} loaded.`, false, { description: example.description, expectedResult: example.expectedResult });

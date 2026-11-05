@@ -1,5 +1,14 @@
 # edgereg
 
+## 0.5.20261104
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.24.0
+  - @neurodesk/edgereg@0.5.20261104
+  - @neurodesk/runtime-support@0.9.22
+
 ## 0.5.20261103
 
 ### Patch Changes
