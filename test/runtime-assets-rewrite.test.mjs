@@ -419,6 +419,7 @@ test('lazy chunks preload a deduplicated stylesheet from the shared store', asyn
   for (const app of apps) {
     assert.deepEqual((await readdir(join(siteDist, app.path, 'assets'))).sort(), ['decoder-Efgh5678.js', 'index-Abcd1234.js']);
     const chunk = await readFile(join(siteDist, app.path, 'assets', 'index-Abcd1234.js'), 'utf8');
+    assert.ok(chunk.includes(`"../_runtime/styles/${hash}/shared.css"`), chunk);
     const context = {};
     vm.runInNewContext(chunk.replace('export const deps', 'globalThis.deps'), context);
     const origin = 'https://example.test';
@@ -429,8 +430,12 @@ test('lazy chunks preload a deduplicated stylesheet from the shared store', asyn
   }
 });
 
-test('a deduplicated stylesheet reference that resolves nowhere fails the site build', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'workspace-css-unresolved-'));
+const sharedCss = '.nd-field { display: block; }';
+const sharedCssHash = createHash('sha256').update(sharedCss).digest('hex');
+
+// Two apps ship the same hashed stylesheet; `other` also ships `lazy-Abcd1234.js` with the given source.
+async function sharedStylesheetSite(t, label, lazySource) {
+  const root = await mkdtemp(join(tmpdir(), `workspace-css-${label}-`));
   t.after(() => rm(root, { recursive: true, force: true }));
   const siteDist = join(root, 'dist');
   await prepareParameterRuntimeFixture(root);
@@ -439,12 +444,47 @@ test('a deduplicated stylesheet reference that resolves nowhere fails the site b
   const apps = ['brainchop', 'other'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
   for (const app of apps) {
     await mkdir(join(siteDist, app.path, 'assets'), { recursive: true });
-    await writeFile(join(siteDist, app.path, 'assets', 'index-DO8KcUF6.css'), '.nd-field { display: block; }');
+    await writeFile(join(siteDist, app.path, 'assets', 'index-DO8KcUF6.css'), sharedCss);
     await writeFile(join(siteDist, app.path, 'index.html'), `<link rel="stylesheet" href="./assets/index-DO8KcUF6.css">`);
   }
-  await writeFile(join(siteDist, 'other', 'assets', 'lazy-Abcd1234.js'), 'export const css = "styles/index-DO8KcUF6.css";');
-  await assert.rejects(
-    assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } }),
-    /Unresolved reference styles\/index-DO8KcUF6\.css/,
-  );
+  const lazy = join(siteDist, 'other', 'assets', 'lazy-Abcd1234.js');
+  await writeFile(lazy, lazySource);
+  const assemble = () => assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  return { siteDist, lazy, assemble };
+}
+
+for (const [label, source] of [
+  ['url', 'export const css = new URL("styles/index-DO8KcUF6.css", import.meta.url).href;'],
+  ['mapdeps', 'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["styles/index-DO8KcUF6.css"])))=>i.map(i=>d[i]);'],
+]) {
+  test(`a deduplicated stylesheet ${label} reference that resolves nowhere fails the site build`, async (t) => {
+    const { assemble } = await sharedStylesheetSite(t, `unresolved-${label}`, source);
+    await assert.rejects(assemble(), /Unresolved reference styles\/index-DO8KcUF6\.css/);
+  });
+}
+
+test('strings that only mention a deduplicated stylesheet name are left alone', async (t) => {
+  const source = [
+    'export const diagnosticKey = "assets/index-DO8KcUF6.css";',
+    'export const message = "missing assets/index-DO8KcUF6.css";',
+    'export const plain = "styles/index-DO8KcUF6.css";',
+    'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/highlight-index-DO8KcUF6.css"])))=>i.map(i=>d[i]);',
+    'export const other = new URL("./vendor-index-DO8KcUF6.css", import.meta.url).href;',
+  ].join('\n');
+  const { siteDist, lazy, assemble } = await sharedStylesheetSite(t, 'unrelated', source);
+  await writeFile(join(siteDist, 'other', 'assets', 'highlight-index-DO8KcUF6.css'), '.highlight { color: red; }');
+  await assemble();
+  assert.equal(await readFile(lazy, 'utf8'), source);
+});
+
+test('a deduplicated stylesheet URL keeps its query and fragment', async (t) => {
+  const { lazy, assemble } = await sharedStylesheetSite(t, 'suffix', [
+    'export const themed = new URL("/other/assets/index-DO8KcUF6.css?theme", import.meta.url).href;',
+    'export const anchored = new URL("./index-DO8KcUF6.css#root", import.meta.url).href;',
+  ].join('\n'));
+  await assemble();
+  assert.equal(await readFile(lazy, 'utf8'), [
+    `export const themed = new URL("../../_runtime/styles/${sharedCssHash}/shared.css?theme", import.meta.url).href;`,
+    `export const anchored = new URL("../../_runtime/styles/${sharedCssHash}/shared.css#root", import.meta.url).href;`,
+  ].join('\n'));
 });
