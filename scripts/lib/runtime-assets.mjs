@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { isUrlWithinServiceWorkerScope } from './runtime-support.mjs';
@@ -183,7 +184,10 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
               // `new URL(x, import.meta.url)` is a module asset; `new URL(x, "https://…")` is not.
               const moduleUrl = /new\s+URL\(\s*$/.test(original.slice(Math.max(0, offset - 32), offset))
                 && /^\s*,\s*import\.meta\.url\b/.test(original.slice(offset + match.length, offset + match.length + 48));
-              if (byContent && (inMapDeps || moduleUrl)) {
+              // A reference to another existing file of the same name (vendor/style.css beside a
+              // shared assets/style.css) stays local; only a reference that resolves nowhere fails.
+              const elsewhere = existsSync(referencedPath) || (inMapDeps && existsSync(resolve(appRoot, reference)));
+              if (byContent && (inMapDeps || moduleUrl) && !elsewhere) {
                 throw new Error(`Unresolved reference ${reference} to deduplicated ${sourcePath} in ${file}`);
               }
               return match;

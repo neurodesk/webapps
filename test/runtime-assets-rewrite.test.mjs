@@ -478,6 +478,16 @@ test('strings that only mention a deduplicated stylesheet name are left alone', 
   assert.equal(await readFile(lazy, 'utf8'), source);
 });
 
+test('a reference to another existing stylesheet of the same name stays local and does not fail', async (t) => {
+  const source = 'export const vendor = new URL("../vendor/index-DO8KcUF6.css", import.meta.url).href;';
+  const { siteDist, lazy, assemble } = await sharedStylesheetSite(t, 'samename', source);
+  await mkdir(join(siteDist, 'other', 'vendor'), { recursive: true });
+  await writeFile(join(siteDist, 'other', 'vendor', 'index-DO8KcUF6.css'), '.vendor { color: blue; }');
+  await assemble();
+  assert.equal(await readFile(lazy, 'utf8'), source);
+  assert.equal(await readFile(join(siteDist, 'other', 'vendor', 'index-DO8KcUF6.css'), 'utf8'), '.vendor { color: blue; }');
+});
+
 test('a deduplicated stylesheet URL keeps its query and fragment', async (t) => {
   const { lazy, assemble } = await sharedStylesheetSite(t, 'suffix', [
     'export const themed = new URL("/other/assets/index-DO8KcUF6.css?theme", import.meta.url).href;',
