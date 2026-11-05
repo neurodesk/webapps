@@ -45,16 +45,19 @@ test('browser reference pins its exact engine and core, with a measured native r
     assert.equal(lockedCommit('qsmxt-engine', text), engine);
     assert.equal(reference.qsmCoreCommit, lockedCommit('qsm-core', text));
   }
+  assert.equal(QSMXT.build.commit, engine);
+  assert.match(reference.configToml, /^schema_version = 2$/m);
+  assert.match(reference.configToml, /^radius_step = 1(?:\.0)?$/m);
   assert.equal(reference.observed.nativeVersion, QSMXT.version);
   assert.equal(reference.observed.nativeCore, QSMXT.qsmCore);
   assert.deepEqual(Object.keys(QSMXT.targets).sort(), ['linux-x64', 'macos-arm64', 'windows-x64']);
   const release = JSON.parse(await readFile(new URL('../release.json', import.meta.url), 'utf8'));
   for (const [platform, target] of Object.entries(QSMXT.targets)) {
-    assert.ok(target.url.startsWith(`https://github.com/QSMxT/QSMxT/releases/download/v${QSMXT.version}/qsmxt-v${QSMXT.version}-`), platform);
+    assert.ok(target.url.startsWith(`https://github.com/QSMxT/QSMxT/releases/download/v10.0.0/qsmxt-v10.0.0-`), platform);
     assert.match(target.sha256, /^[0-9a-f]{64}$/);
     assert.deepEqual(release.targets[platform].native, target.executables.map((name) => `app/native/${name}`), platform);
   }
-  // The glibc build needs glibc 2.39; the static musl build runs on every x64 Linux.
+  // The helper archive remains pinned independently of the source-built QSMxT.
   assert.match(QSMXT.targets['linux-x64'].url, /x86_64-unknown-linux-musl/);
   assert.equal(release.bundleModels, false);
 });

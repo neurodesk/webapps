@@ -10,12 +10,14 @@ export const RTS_DEFAULTS = {
   "rho": 10,
   "tol": 0.01,
   "max_iter": 20,
-  "lsmr_iter": 4
+  "lsmr_iter": 4,
+  "tau": 0.7,
+  "gamma": 5
 };
 
 export const TV_DEFAULTS = {
-  "lambda": 0.0002,
-  "rho": 0.02,
+  "lambda": 0.001,
+  "rho": null,
   "tol": 0.001,
   "max_iter": 250
 };
@@ -25,12 +27,12 @@ export const TKD_DEFAULTS = {
 };
 
 export const TGV_DEFAULTS = {
-  "iterations": 1000,
+  "iterations": null,
   "erosions": 3,
-  "alpha0": 0.0002002475,
-  "alpha1": 0.00006674916,
+  "alpha0": 0.002,
+  "alpha1": 0.003,
   "step_size": 3,
-  "tol": 0.00001
+  "te": "first"
 };
 
 export const BET_DEFAULTS = {
@@ -46,13 +48,17 @@ export const VSHARP_DEFAULTS = {
   "deconvolve": false,
   "threshold": 0.2,
   "max_radius": 12,
-  "min_radius": 1,
-  "grid": "native",
+  "min_radius": 2,
+  "radius_step": 1,
+  "grid": "isotropic",
   "grid_spacing": 1
 };
 
 export const PDF_DEFAULTS = {
-  "tol": 0.00001
+  "tol": 0.1,
+  "n_cg": 300,
+  "space": "image",
+  "n_pad": 40
 };
 
 export const LBV_DEFAULTS = {
@@ -83,16 +89,21 @@ export const SHARP_DEFAULTS = {
 };
 
 export const RESHARP_DEFAULTS = {
-  "radius": 6,
+  "radius": 3,
   "tik_reg": 0.0001,
   "tol": 0.000001,
-  "max_iter": 30
+  "max_iter": 200
 };
 
 export const HARPERELLA_DEFAULTS = {
   "radius": 10,
   "max_iter": 40,
-  "tol": 0.000001
+  "tol": 0.001,
+  "pad": [
+    0,
+    0,
+    0
+  ]
 };
 
 export const TIKHONOV_DEFAULTS = {
@@ -102,41 +113,45 @@ export const TIKHONOV_DEFAULTS = {
 
 export const NLTV_DEFAULTS = {
   "lambda": 0.001,
+  "rho": null,
   "mu": 1,
   "tol": 0.001,
   "max_iter": 250,
-  "newton_iter": 10
+  "tol_newton": 0.000001,
+  "max_iter_newton": 10,
+  "te": "first"
 };
 
 export const NDI_DEFAULTS = {
   "tau": 2,
   "alpha": 0.00001,
-  "max_iter": 200,
-  "phase_scale": 1
+  "max_iter": 100,
+  "auto_stop": false,
+  "te": "first"
 };
 
 export const FANSI_DEFAULTS = {
   "alpha1": 0.0002,
-  "mu1": 0.02,
+  "mu1": null,
   "mu2": 1,
-  "alpha0": 0.0004,
-  "mu0": 0.04,
+  "alpha0": null,
+  "mu0": null,
   "max_iter": 150,
   "tol_update": 0.1,
   "tol_delta": 0.000001,
-  "phase_scale": 1
+  "te": "spacing"
 };
 
 export const L1QSM_DEFAULTS = {
-  "alpha1": 0.0002,
-  "mu1": 0.02,
+  "alpha1": 0.005,
+  "mu1": null,
   "mu2": 1,
   "mu3": 1,
-  "lambda": 1,
+  "lambda": 0.8,
   "max_iter": 50,
   "tol_update": 1,
   "tol_delta": 0.000001,
-  "phase_scale": 1
+  "te": "first"
 };
 
 export const WHQSM_DEFAULTS = {
@@ -144,44 +159,63 @@ export const WHQSM_DEFAULTS = {
   "mu1": 0.02,
   "mu2": 1,
   "beta": 150,
-  "muh": 3,
-  "max_iter": 300,
+  "muh": 5,
+  "max_iter": 150,
   "tol_update": 0.1,
   "tol_delta": 0.000001,
-  "phase_scale": 1
+  "weight": "flat",
+  "te": "first"
 };
 
 export const HDQSM_DEFAULTS = {
-  "alpha_l2": 0.0001,
-  "mu1_l2": 0.01,
+  "alpha_l2": 0.00003,
+  "mu1_l2": null,
   "mu2": 1,
   "max_iter_l1": 20,
   "max_iter_l2": 80,
-  "tol_update": 1
+  "tol_update": 0.01
 };
 
 export const MEDI_DEFAULTS = {
-  "lambda": 0.001,
-  "merit": false,
+  "lambda": 1000,
+  "merit": true,
   "smv": true,
   "smv_radius": 5,
+  "smv_shrink_mask": true,
   "data_weighting": 1,
-  "percentage": 0.3,
+  "percentage": 0.9,
   "cg_tol": 0.01,
-  "cg_max_iter": 10,
-  "max_iter": 30,
-  "tol": 0.1
+  "cg_max_iter": 100,
+  "max_iter": 10,
+  "tol": 0.1,
+  "csf": true,
+  "lambda_csf": 100,
+  "csf_r2s_threshold": 5,
+  "csf_erode": true,
+  "zeropad": [
+    0,
+    0,
+    0
+  ],
+  "msmv": false,
+  "msmv_maxk": 5,
+  "msmv_vessel_radius": null,
+  "msmv_prefilter": true,
+  "te": "spacing"
 };
 
 export const TFI_DEFAULTS = {
-  "lambda": 0.000075,
+  "merit": true,
+  "linear": true,
+  "lambda": 1000,
   "precond": 30,
   "data_weighting": 1,
   "percentage": 0.9,
   "cg_tol": 0.01,
   "cg_max_iter": 100,
   "max_iter": 10,
-  "tol": 0.1
+  "tol": 0.1,
+  "te": "spacing"
 };
 
 export const QSMART_DEFAULTS = {
@@ -198,7 +232,9 @@ export const QSMART_DEFAULTS = {
   "frangi_scale_min": 0.5,
   "frangi_scale_max": 6,
   "frangi_scale_ratio": 0.5,
-  "frangi_c": 500
+  "frangi_c": 500,
+  "vessel_magnitude": "mean-n4",
+  "vessel_size_units": "voxels"
 };
 
 export const ROMEO_DEFAULTS = {
@@ -221,9 +257,9 @@ export const ROMEO_DEFAULTS = {
 
 export const MCPC3DS_DEFAULTS = {
   "sigma": [
-    4,
-    4,
-    4
+    7,
+    7,
+    7
   ]
 };
 
@@ -234,8 +270,8 @@ export const LINEAR_FIT_DEFAULTS = {
 
 export const ILSQR_DEFAULTS = {
   "tol": 0.001,
-  "max_iter": 100,
-  "pad_mm": 16
+  "max_iter": 40,
+  "pad_mm": 12
 };
 
 export const DL_TILING_DEFAULTS = {
@@ -263,19 +299,19 @@ export const DL_TILING_DEFAULTS = {
 
 export const TGV_ALPHA_PRESETS = {
   "1": [
-    0.00006674916,
-    0.00006674916
+    0.001,
+    0.001
   ],
   "2": [
-    0.00013349832,
-    0.00013349832
+    0.002,
+    0.003
   ],
   "3": [
-    0.00026699665,
-    0.000400495
+    0.003,
+    0.0050000004
   ],
   "4": [
-    0.000400495,
-    0.00066749164
+    0.004,
+    0.007
   ]
 };

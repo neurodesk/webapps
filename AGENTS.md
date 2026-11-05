@@ -358,6 +358,12 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Needs 3+ echoes (`MIN_ECHOES`; tedana's PCA fails with 2).
 - The regressors TSV comes from the dropped files (`*_desc-confounds_timeseries.tsv`, else a single non-events TSV; `src/inputs.js`) and is sent only for trees in the "Needs a confounds TSV" menu group. The moco example ships its confounds; e2e checks motion_aroma against native hashes.
 
+## stardist
+
+- `src/stardist.js` ports StarDist 0.9.1's 2D prediction path (csbdeep normalization and tiling, sparse candidates, `c_non_max_suppression_inds`, `polygons_to_label`) and must keep giving Python's labels: on the example they are identical pixel for pixel, with and without tiling. NMS reproduces the C++ float32 arithmetic and uses `clipper-lib` 6.4.2, the JavaScript port of the Clipper StarDist links; keep both.
+- `validation/reference.json` is Python StarDist's result (`validation/reference.py`, environment in the README); the unit tests and `e2e/workflow.spec.js` read it. Rerecord it when the model, the example or the reference versions change.
+- The ONNX model is converted once by `validation/convert_model.py` and pinned in `models/stardist.manifest.json`, which also holds the model's thresholds, grid and tile overlap (94 px, from `_axes_tile_overlap`).
+
 ## samsrf
 
 - The app reproduces SamSrf X's `SamSrfAnalysis` (samsrf/samsrf@41ed1e96) for GIfTI input: `prf` (forward-model fit), `rc` (reverse-correlation pRF) and `cf` (reverse-correlation connective fields against a template map such as Benson). Numerics belong to `@neurodesk/samsrf`; the app does none.

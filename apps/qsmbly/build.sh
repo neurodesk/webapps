@@ -37,6 +37,11 @@ echo "=== QSMbly WASM Build ($BUILD_TYPE) ==="
 echo ""
 
 # Check for required tools
+if ! command -v wasm-opt &> /dev/null; then
+    echo "Error: wasm-opt is not installed. Install Binaryen (CI uses version 117)." >&2
+    exit 1
+fi
+
 if ! command -v wasm-pack &> /dev/null; then
     echo "Error: wasm-pack is not installed."
     echo "Install it with: cargo install wasm-pack"
@@ -124,6 +129,9 @@ echo "      Base bundle (classical + separation + relaxometry + model registry).
 "${WP[@]}" build --target web --release --out-dir pkg ${BASE_FEATS:+--features "$BASE_FEATS"}
 echo "      DL bundle (deep-learning inference via tract; lazy-loaded, SIMD128)..."
 RUSTFLAGS="$DL_RUSTFLAGS" "${WP[@]}" build --target web --release --out-dir pkg-dl --out-name qsm_wasm_dl --features "$DL_FEATS"
+
+# Keep the full DL runtime within the host's 25 MiB per-file limit.
+wasm-opt pkg-dl/qsm_wasm_dl_bg.wasm -Oz --enable-threads --enable-bulk-memory --enable-mutable-globals --enable-simd -o pkg-dl/qsm_wasm_dl_bg.wasm
 
 echo ""
 echo "[2/4] Generating algorithm defaults from QSM.rs..."
