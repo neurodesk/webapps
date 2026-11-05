@@ -21,7 +21,9 @@ in a module worker (cancel terminates the worker) and `validation/run-example.mj
 pipeline in Node with the same WebAssembly bytes. A registration-only run of an OME-Zarr image
 reads its coarsest level with voxels of at most 50 µm. Runs whose registration grid is larger
 than four atlases (a voxel size in the wrong unit) or whose buffers need more than 3 GB are
-refused before reading.
+refused before reading. That estimate leaves out two bounded buffers: the OME-Zarr reader keeps
+one decoded chunk slab of up to 512 MB, and detection may hold up to 600 MB of soma voxels in open
+structures before it stops, so a run can peak at about 4.1 GB.
 
 ## Outputs
 
@@ -62,9 +64,12 @@ counted another way on the same brain.
   brainreg's brain are injected as candidates (`runPipeline`'s `cells`) through the whole
   register, map and assign path: their atlas coordinates lie a median of 1.9 atlas voxels from
   brainreg's deformation field at the same voxels, 98 % get brainreg's hemisphere, and of those at
-  least two voxels inside a major division 99.8 % get brainreg's division (the test requires a
-  median of at most 2 voxels and 95 %). The same stack reoriented to `ras` (40 × 50 × 40 µm) maps
-  the same points to the same place.
+  least two voxels inside a major division (4,289 of the 8,631) 99.8 % get brainreg's division
+  (the test requires a median of at most 2 voxels and 95 %). Over all 8,631 points, boundaries
+  included, 90.5 % get brainreg's division (98.9 % of those at least one voxel inside; the test
+  requires 85 %), and about 71 % get exactly brainreg's leaf region: counts in small regions and
+  near boundaries depend on the registration method. The same stack reoriented to `ras`
+  (40 × 50 × 40 µm) maps the same points to the same place.
 
 ## Deliberate divergences
 

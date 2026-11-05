@@ -53,6 +53,23 @@ test('a registration-only run reads the coarsest OME-Zarr level at most 50 µm',
   assert.deepEqual([...read], [0]);
 });
 
+test('the level choice follows the declared OME-Zarr scales, not the shape ratio', () => {
+  // An odd-sized pyramid: 101³ at 10.2 µm and 21³ at 51 µm. The shape ratio makes level 1
+  // 49.06 µm, but its declared voxels are 51 µm, coarser than the atlas.
+  const levels = [
+    { shape: [101, 101, 101], voxelSizeUm: { z: 10.2, y: 10.2, x: 10.2 } },
+    { shape: [51, 51, 51], voxelSizeUm: { z: 20.4, y: 20.4, x: 20.4 } },
+    { shape: [21, 21, 21], voxelSizeUm: { z: 51, y: 51, x: 51 } },
+  ];
+  const chosen = chooseLevel({ shape: levels[0].shape, levels }, [10.2, 10.2, 10.2]);
+  assert.equal(chosen.level, 1);
+  assert.deepEqual(chosen.voxelSizeUm.map((v) => Number(v.toFixed(9))), [20.4, 20.4, 20.4]);
+  // The user's calibration scales the declared ratios: at 8 µm, level 2 is 40 µm.
+  const recalibrated = chooseLevel({ shape: levels[0].shape, levels }, [8, 8, 8]);
+  assert.equal(recalibrated.level, 2);
+  assert.deepEqual(recalibrated.voxelSizeUm.map((v) => Number(v.toFixed(9))), [40, 40, 40]);
+});
+
 test('oversized grids and runs are refused before any plane is read', async () => {
   let reads = 0;
   const counting = (shape) => syntheticStack(shape, {

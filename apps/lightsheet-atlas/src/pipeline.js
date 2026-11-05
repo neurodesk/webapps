@@ -21,13 +21,21 @@ const gib = (bytes) => `${(bytes / 2 ** 30).toFixed(1)} GB`;
 /**
  * The resolution level a registration-only run reads: the coarsest OME-Zarr level whose voxels
  * are all at most the atlas resolution, so a whole-brain run does not decode full resolution.
- * `voxelSizeUm` is level 0's; returns { level, shape, voxelSizeUm } (level 0 for TIFF stacks).
+ * `voxelSizeUm` is level 0's (the user's calibration); a level's voxels are that times the ratio
+ * of its declared scale to level 0's, or of the shapes where a level declares no scale (odd
+ * dimensions make the shape ratio smaller than the scale ratio).
+ * Returns { level, shape, voxelSizeUm } (level 0 for TIFF stacks).
  */
 export function chooseLevel(stack, voxelSizeUm) {
   let chosen = { level: 0, shape: stack.shape, voxelSizeUm };
-  const top = stack.levels?.[0]?.shape;
+  const top = stack.levels?.[0];
+  const axes = ['z', 'y', 'x'];
   stack.levels?.forEach((level, index) => {
-    const spacing = voxelSizeUm.map((v, k) => (v * top[k]) / level.shape[k]);
+    const spacing = voxelSizeUm.map((v, k) => {
+      const declared = level.voxelSizeUm?.[axes[k]];
+      const base = top.voxelSizeUm?.[axes[k]];
+      return declared > 0 && base > 0 ? (v * declared) / base : (v * top.shape[k]) / level.shape[k];
+    });
     if (index > 0 && spacing.every((v) => v <= ATLAS_RESOLUTION_UM)) chosen = { level: index, shape: level.shape, voxelSizeUm: spacing };
   });
   return chosen;

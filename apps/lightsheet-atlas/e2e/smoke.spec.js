@@ -88,6 +88,15 @@ function writeOmeZarr(root) {
   }
 }
 
+test("the OME-Zarr folder picker takes keyboard focus", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("select[data-neurodesk-example]").waitFor();
+  const picker = page.locator("#folderInput");
+  expect(await picker.evaluate((input) => input.tabIndex)).toBeGreaterThanOrEqual(0);
+  await picker.focus();
+  await expect(picker).toBeFocused();
+});
+
 test("an OME-Zarr folder chosen with the folder picker loads and runs", async ({ page }, testInfo) => {
   test.setTimeout(120000);
   const root = testInfo.outputPath("sample.ome.zarr");

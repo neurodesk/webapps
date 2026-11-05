@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { comparePoints, divisionOf, loadBrainreg, medianMapDistanceUm, wholeBrainDice } from '../validation/brainreg-compare.mjs';
 import { loadAtlas, openExample, runExample } from '../validation/run-example.mjs';
 import { downsampledShape, stackToGrid } from '../src/space.js';
+import { resultFiles } from '../src/outputs.js';
+import { parseNiftiHeader } from '@neurodesk/webapp-components/file-io/nifti';
 
 const brainreg = await loadBrainreg();
 const atlas = await loadAtlas();
@@ -53,6 +55,8 @@ function assertMapsLikeBrainreg(result, label) {
   const inside = rows.filter((_, i) => interior(result.assigned[i], result.table));
   assert.ok(inside.length > 2000, `${label}: ${inside.length} interior points`);
   assert.ok(share(inside, 'division') >= 0.95, `${label}: major division agrees for ${share(inside, 'division')}`);
+  // Over all points, boundaries included, 90.5 % get brainreg's division.
+  assert.ok(share(rows, 'division') >= 0.85, `${label}: major division agrees for ${share(rows, 'division')} of all points`);
   return rows;
 }
 
@@ -100,4 +104,13 @@ test('the same brain in another orientation maps the same points to the same pla
   const shifts = second.assigned.map((row, i) => (row.atlas && first.assigned[i].atlas ? Math.hypot(...row.atlas.map((v, axis) => v - first.assigned[i].atlas[axis])) : Infinity));
   const sorted = shifts.sort((p, q) => p - q);
   assert.ok(sorted[Math.floor(sorted.length * 0.95)] < 0.5, `95th percentile shift ${sorted[Math.floor(sorted.length * 0.95)]} atlas voxels`);
+});
+
+test('a registered run with candidates writes the candidates table and marks on the atlas grid', () => {
+  const { files, gridShape } = resultFiles(first, { register: true, voxelSizeUm });
+  const lines = new TextDecoder().decode(files.candidates).trimEnd().split('\n');
+  assert.equal(lines[0], 'x,y,z,atlas_ap_um,atlas_si_um,atlas_rl_um,acronym,structure_id,hemisphere');
+  assert.equal(lines.length - 1, points.length);
+  assert.deepEqual(gridShape, first.grid.shape);
+  for (const bytes of [files.marks, files.labels]) assert.deepEqual(parseNiftiHeader(bytes).dims.slice(1, 4), first.grid.shape);
 });

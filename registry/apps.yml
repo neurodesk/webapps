@@ -1422,6 +1422,11 @@ apps:
     shell: imaging-workspace
     handoff: none
     app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
   - id: lightsheet-atlas
     path: lightsheet-atlas
     title: Light-sheet atlas
