@@ -30,6 +30,7 @@ Paths in this table are relative to the repository root. Existing implementation
 
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
+| `calcium-imaging` | Two-photon movie preprocessing: motion correction, ROIs, ΔF/F and OASIS deconvolution | The pipeline is pure JavaScript in `apps/calcium-imaging/src/core`; a Node command line could reuse it unchanged. No package yet. |
 | `brainchop` | Browser TensorFlow.js segmentation | Six pinned tissue and atlas models; no command-line package. |
 | `samsrf` | pRF fit, reverse-correlation pRF and connective fields on GIfTI time series (SamSrf `SamSrfAnalysis`) | `exes/samsrf` (Rust core) and `packages/samsrf` (WebAssembly and the `samsrf` command line) are in progress; the app reaches them only through `apps/samsrf/src/engine.js`, which holds a placeholder until then. |
 | `stardist` | Nucleus segmentation of one 2D fluorescence image (StarDist `2D_versatile_fluo`) | No command line is packaged: Python StarDist 0.9.1 (`stardist` on PyPI) gives the app's labels on the example (`apps/stardist/validation`). |

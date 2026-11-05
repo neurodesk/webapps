@@ -18,6 +18,9 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/deface`: BSD-2-Clause (`apps/deface/LICENSE`)
 - `apps/easy-mp2rage`: GPL-3.0-or-later (`apps/easy-mp2rage/LICENSE`)
 - `apps/niimath`: BSD-2-Clause (`apps/niimath/LICENSE`)
+- `apps/calcium-imaging`: MIT (`apps/calcium-imaging/LICENSE`); its motion correction, ROI, ΔF/F and
+  OASIS code is written from the papers. CaImAn (GPL-2.0), OASIS (GPL-3.0) and scikit-image ran only
+  as external validation references; their outputs, not their code, are in `apps/calcium-imaging/test/fixtures`
 - `packages/degibbs`: MPL-2.0 (`packages/degibbs/LICENSE`), as the MRtrix3 `mrdegibbs` source it ports;
   attribution in `packages/degibbs/NOTICE`. It holds the degibbs WebAssembly module and command line
 - `packages/n4`: Apache-2.0 AND MPL-2.0 (`packages/n4/LICENSE`): ANTs N4 in WebAssembly (Apache-2.0) and the

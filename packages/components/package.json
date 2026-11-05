@@ -54,6 +54,10 @@
       "default": "./src/file-io/gradients.js"
     },
     "./file-io/mesh": "./src/file-io/mesh.js",
+    "./file-io/tiff": {
+      "types": "./src/file-io/tiff.d.ts",
+      "default": "./src/file-io/tiff.js"
+    },
     "./fetch": {
       "types": "./src/net/fetchWithRetry.d.ts",
       "default": "./src/net/fetchWithRetry.js"
@@ -132,6 +136,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "geotiff": "3.0.5",
     "zod": "^4.6.5"
   },
   "devDependencies": {

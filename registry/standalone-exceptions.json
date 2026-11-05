@@ -11,5 +11,6 @@
   "ants-denoise": "ANTs ships DenoiseImage as its own command line: the Standalone dialog lists the Neurodesk ANTs container, whose DenoiseImage gives the app's voxels with one thread and the same options",
   "brainqcnet": "the authors publish BrainQCNet as a BIDS app container: the Standalone dialog lists garciaml/brainqcnetcpu 1.0.1, whose tables the app reproduces byte for byte (packages/brainqcnet/validation)",
   "brainchop": "Browser TensorFlow.js inference with WebGL; no command-line package.",
-  "stardist": "Python StarDist (pip install stardist) is the command-line reference the app reproduces label for label on the example; no separate command line is packaged"
+  "stardist": "Python StarDist (pip install stardist) is the command-line reference the app reproduces label for label on the example; no separate command line is packaged",
+  "calcium-imaging": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; CaImAn and Suite2p are the established command-line tools for batch work"
 }
