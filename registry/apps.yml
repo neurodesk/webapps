@@ -1,7 +1,44 @@
 # Canonical catalog for the composite webapps site. Parsed and validated only
 # through scripts/lib/apps-registry.mjs; callers must not grep this file.
 site:
+  # The primary host: the GitHub Pages catalogue and its analytics report.
   domain: webapps.neurodesk.org
+  # webapps.sciget.org lists the catalogues and hosts no apps.
+  hub:
+    host: webapps.sciget.org
+    title: SciGet Webapps
+    heading: Run Scientific Imaging Tools in Your Browser
+    description: Imaging tools that run locally in your browser, grouped by field.
+    brand:
+      name: SciGet
+      logo: sciget-logo.svg
+      home: https://webapps.sciget.org/
+      more_apps: More SciGet web apps
+  # Every app belongs to exactly one catalogue (its `catalog:`) and is served
+  # only from that catalogue's host. Handoff menus list the apps of one host.
+  catalogs:
+    - id: neuro
+      host: webapps.neurodesk.org
+      hosting: pages
+      title: Neurodesk Webapps
+      heading: Run Neuroimaging Tools in Your Browser
+      description: Segment, register, measure, prepare, and explore imaging data in your browser without installing software or uploading your scans.
+      brand:
+        name: Neurodesk
+        logo: neurodesk-logo.svg
+        home: https://neurodesk.org/
+        more_apps: More Neurodesk web apps
+    - id: msk
+      host: mskapps.sciget.org
+      hosting: worker
+      title: SciGet MSK Webapps
+      heading: Run Musculoskeletal and Body Imaging Tools in Your Browser
+      description: Segment muscles, measure fat and blood flow, and check body imaging protocols in your browser without uploading your scans.
+      brand:
+        name: SciGet
+        logo: sciget-logo.svg
+        home: https://webapps.sciget.org/
+        more_apps: More SciGet MSK web apps
   analytics:
     measurement_id: G-4Z9774J59Y
     period_days: 30
@@ -43,6 +80,7 @@ site:
 apps:
   - id: musclemap
     path: musclemap
+    catalog: msk
     title: MuscleMap
     description: Segment muscles in MRI or CT and measure fat.
     categories: [segmentation]
@@ -69,6 +107,7 @@ apps:
       release: true
   - id: vesselboost
     path: vesselboost
+    catalog: neuro
     title: VesselBoost
     description: Segment brain blood vessels in TOF or SWI images.
     categories: [segmentation]
@@ -94,6 +133,7 @@ apps:
       release: true
   - id: spinalcordtoolbox
     path: sct
+    catalog: neuro
     title: Spinal Cord Toolbox
     description: Segment and measure the spinal cord, lesions and vertebrae.
     categories: [segmentation]
@@ -121,6 +161,7 @@ apps:
       release_test: test:release
   - id: calmar
     path: calmar
+    catalog: neuro
     title: CALMaR
     description: Map a stroke lesion to the brain networks it affects.
     categories: [lesion-mapping]
@@ -146,6 +187,7 @@ apps:
       release: true
   - id: qsmbly
     path: qsmbly
+    catalog: neuro
     title: QSMbly
     description: Make QSM, R2* and SWI maps from multi-echo MRI.
     categories: [quantitative-mri]
@@ -171,6 +213,7 @@ apps:
       release: true
   - id: seedseg
     path: seedseg
+    catalog: msk
     title: SeedSeg
     description: Find gold fiducial markers in prostate MRI.
     categories: [segmentation]
@@ -197,6 +240,7 @@ apps:
       release: true
   - id: dicompare
     path: dicompare
+    catalog: neuro
     title: dicompare
     description: Check DICOM acquisitions against a reference protocol.
     categories: [quality-control]
@@ -222,6 +266,7 @@ apps:
       release: true
   - id: deface
     path: deface
+    catalog: neuro
     title: Deface
     description: Remove facial features from head MRI for sharing.
     categories: [image-processing]
@@ -247,6 +292,7 @@ apps:
       release: true
   - id: easy-mp2rage
     path: easy-mp2rage
+    catalog: neuro
     title: Easy MP2RAGE T1 Map
     description: Make B1-corrected T1 maps and denoised MP2RAGE images.
     categories: [quantitative-mri]
@@ -271,6 +317,7 @@ apps:
       release: true
   - id: niimath
     path: niimath
+    catalog: neuro
     title: NiiMath
     description: Apply image maths, filters and meshing with niimath.
     categories: [image-processing]
@@ -295,6 +342,8 @@ apps:
       release: true
   - id: mri2vid
     path: mri2vid
+    catalog: neuro
+    former_paths: [dicom2vid]
     title: MRI2VID
     description: Convert DICOM, NIfTI or MGZ volumes into scrolling videos.
     categories: [visualization]
@@ -319,6 +368,7 @@ apps:
       release: true
   - id: browserqc
     path: browserqc
+    catalog: neuro
     title: BrowserQC
     description: Measure MRIQC-style quality metrics on T1-weighted MRI.
     categories: [quality-control]
@@ -345,6 +395,7 @@ apps:
       e2e_shards: 2
   - id: surfannotate
     path: surfannotate
+    catalog: neuro
     title: SurfAnnotate
     description: View cortical surfaces and draw regions of interest.
     categories: [surfaces, visualization]
@@ -370,6 +421,7 @@ apps:
       release: true
   - id: zarro
     path: zarro
+    catalog: neuro
     title: ZARRo
     description: Stream, view and measure large OME-Zarr images.
     categories: [visualization]
@@ -395,6 +447,7 @@ apps:
       release: true
   - id: synthsr
     path: synthsr
+    catalog: neuro
     title: SynthSR
     description: Synthesize a 1 mm T1-weighted image from brain MRI or CT.
     categories: [reconstruction]
@@ -422,6 +475,7 @@ apps:
     artifact_budget_bytes: 65000000
   - id: synthseg
     path: synthseg
+    catalog: neuro
     title: SynthSeg
     description: Label brain structures in MRI or CT of any contrast.
     categories: [segmentation]
@@ -448,6 +502,7 @@ apps:
       release: true
   - id: syncro
     path: syncro
+    catalog: neuro
     title: SYNcro
     description: Normalize brain scans and lesion masks to MNI space.
     categories: [registration, lesion-mapping]
@@ -474,6 +529,7 @@ apps:
       release: true
   - id: dwi2trx
     path: dwi2trx
+    catalog: neuro
     title: dwi2trx
     description: Fit diffusion tensors and track white-matter streamlines.
     categories: [diffusion-imaging]
@@ -500,6 +556,7 @@ apps:
       release: true
   - id: edgereg
     path: edgereg
+    catalog: neuro
     title: EdgeReg
     description: Align two brain images with fast affine registration.
     categories: [registration]
@@ -524,6 +581,7 @@ apps:
       release: true
   - id: disconnectome
     path: disconnectome
+    catalog: neuro
     title: Disconnectome
     description: Find which white-matter bundles a lesion disconnects.
     categories: [lesion-mapping, diffusion-imaging]
@@ -548,6 +606,7 @@ apps:
       release: true
   - id: greedy
     path: greedy
+    catalog: neuro
     title: Greedy
     description: Affine and deformable MRI registration with Greedy.
     categories: [registration]
@@ -573,6 +632,7 @@ apps:
       release: true
   - id: ants
     path: ants
+    catalog: neuro
     title: ANTs
     description: Affine and SyN diffeomorphic MRI registration with ANTs.
     categories: [registration]
@@ -598,6 +658,7 @@ apps:
       release: true
   - id: brain2print
     path: brain2print
+    catalog: neuro
     title: Brain2Print
     description: Make a 3D-printable brain model from an MRI scan.
     categories: [surfaces]
@@ -623,6 +684,7 @@ apps:
       release: true
   - id: topofit
     path: topofit
+    catalog: neuro
     title: TopoFit
     description: Reconstruct white and pial cortical surfaces from T1 MRI.
     categories: [surfaces]
@@ -648,6 +710,7 @@ apps:
       release: true
   - id: fireants
     path: fireants
+    catalog: neuro
     title: FireANTs
     description: Register brain images with CPU or WebGPU FireANTs.
     categories: [registration]
@@ -673,6 +736,7 @@ apps:
       release: true
   - id: brain-extraction
     path: brain-extraction
+    catalog: neuro
     title: Brain extraction
     description: Remove the skull with BET, MindGrab or SynthStrip.
     categories: [segmentation, image-processing]
@@ -698,6 +762,7 @@ apps:
       release: true
   - id: carotid-flow
     path: carotid-flow
+    catalog: msk
     title: Carotid Flow
     description: Measure carotid blood flow from phase-contrast MRI.
     categories: [quantitative-mri]
@@ -723,6 +788,7 @@ apps:
       release: true
   - id: lcmodel
     path: lcmodel
+    catalog: neuro
     title: LCModel
     description: Measure brain metabolites from single-voxel MRS.
     categories: [quantitative-mri]
@@ -748,6 +814,7 @@ apps:
       release: true
   - id: white-matter-lesions
     path: white-matter-lesions
+    catalog: neuro
     title: White matter lesions
     description: Segment white matter lesions on FLAIR with FLAMeS.
     categories: [segmentation, lesion-mapping]
@@ -773,6 +840,7 @@ apps:
       release: true
   - id: nesvor
     path: nesvor
+    catalog: neuro
     title: NeSVoR
     description: Reconstruct a 3D fetal or neonatal brain from 2D MRI stacks.
     categories: [reconstruction]
@@ -799,6 +867,7 @@ apps:
       release: true
   - id: elastix
     path: elastix
+    catalog: neuro
     title: elastix
     description: Rigid, affine and B-spline registration with elastix.
     categories: [registration]
@@ -823,6 +892,7 @@ apps:
       release: true
   - id: dicomview
     path: dicomview
+    catalog: neuro
     title: DICOM View
     description: Browse DICOM series, images, headers and protocol.
     categories: [visualization, quality-control]
@@ -847,6 +917,7 @@ apps:
       release: true
   - id: fastprep
     path: fastprep
+    catalog: neuro
     title: fastprep
     description: Preprocess fMRI BOLD runs in the style of fMRIPrep.
     categories: [image-processing, pipelines]
@@ -874,6 +945,7 @@ apps:
       release: false
   - id: noddi
     path: noddi
+    catalog: neuro
     title: NODDI
     description: Fit diffusion tensor and NODDI maps from diffusion MRI.
     categories: [diffusion-imaging]
@@ -899,6 +971,7 @@ apps:
       release: true
   - id: degibbs
     path: degibbs
+    catalog: neuro
     title: Degibbs
     description: Remove Gibbs ringing from MRI scans.
     categories: [image-processing, diffusion-imaging]
@@ -924,6 +997,7 @@ apps:
 
   - id: n4
     path: n4
+    catalog: neuro
     title: N4
     description: Correct intensity bias fields in MRI scans.
     categories: [image-processing, diffusion-imaging]
@@ -949,6 +1023,7 @@ apps:
       release: true
   - id: dcm2niix
     path: dcm2niix
+    catalog: neuro
     title: dcm2niix
     description: Convert scanner DICOM exports to anatomical and DWI BIDS.
     categories: [image-processing]
@@ -974,6 +1049,7 @@ apps:
       release: false
   - id: dwidenoise
     path: dwidenoise
+    catalog: neuro
     title: Dwidenoise
     description: Denoise diffusion MRI with Patch2Self.
     categories: [image-processing, diffusion-imaging]
@@ -998,6 +1074,7 @@ apps:
       release: true
   - id: sdc
     path: sdc
+    catalog: neuro
     title: SDC
     description: Distortion correction from reverse-PE b0 or a T1w.
     categories: [diffusion-imaging]
@@ -1026,6 +1103,7 @@ apps:
 
   - id: me-ica
     path: me-ica
+    catalog: neuro
     title: ME-ICA
     description: Multi-echo fMRI denoising with tedana's ME-ICA.
     categories: [image-processing]
@@ -1051,6 +1129,7 @@ apps:
       release: false
   - id: dwicorrect
     path: dwicorrect
+    catalog: neuro
     title: DWI Correct
     description: Correct motion, eddy currents and distortion in DWI.
     categories: [diffusion-imaging]
@@ -1076,6 +1155,7 @@ apps:
       release: false
   - id: pipeline-builder
     path: pipeline-builder
+    catalog: neuro
     title: Pipeline builder
     description: Chain apps into a NeuroFlow workflow.
     categories: [pipelines]
@@ -1101,6 +1181,7 @@ apps:
       release: false
   - id: hmc
     path: hmc
+    catalog: neuro
     title: HMC
     description: DWI head-motion correction with GP or b0-template targets.
     categories: [image-processing]
@@ -1127,6 +1208,7 @@ apps:
 
   - id: bison
     path: bison
+    catalog: neuro
     title: BISON tissue segmentation
     description: Segment brain tissue from a T1, and WMH with a FLAIR.
     categories: [segmentation, lesion-mapping]
@@ -1152,6 +1234,7 @@ apps:
       e2e_shards: 2
   - id: ants-denoise
     path: ants-denoise
+    catalog: neuro
     title: ANTs DenoiseImage
     description: Reduce noise in 3D MRI with ANTs adaptive non-local means.
     categories: [image-processing]
@@ -1176,6 +1259,7 @@ apps:
       release: false
   - id: brainqcnet
     path: brainqcnet
+    catalog: neuro
     title: BrainQCNet
     description: Detect motion and other artifacts in T1-weighted MRI.
     categories: [quality-control]
@@ -1201,6 +1285,7 @@ apps:
       release: true
   - id: reproin
     path: reproin
+    catalog: neuro
     title: ReproIn
     description: ReproIn DICOM to BIDS, on-device.
     categories: [image-processing]
@@ -1226,6 +1311,7 @@ apps:
       release: false
   - id: samsrf
     path: samsrf
+    catalog: neuro
     title: SamSrf
     description: Map population receptive fields on the cortex.
     categories: [surfaces, quantitative-mri]
@@ -1251,6 +1337,7 @@ apps:
       release: true
   - id: brainchop
     path: brainchop
+    catalog: neuro
     title: Brainchop
     description: Whole brain MRI tissue and atlas segmentation.
     categories: [image-processing]

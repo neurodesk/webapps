@@ -252,3 +252,69 @@ test('registry validation rejects a handoff form apps cannot receive', async () 
   await writeFile(path, stringify(raw));
   await assert.rejects(loadAppsRegistry(path), /handoff for .* must be one of nifti, dicom, none/);
 });
+
+test('every app belongs to exactly one declared catalogue', async () => {
+  const registry = await loadAppsRegistry();
+  const ids = new Set(registry.site.catalogs.map(({ id }) => id));
+  for (const app of registry.apps) assert.ok(ids.has(app.catalog), `${app.id} must name a declared catalogue`);
+  assert.deepEqual(
+    registry.apps.filter(({ catalog }) => catalog === 'msk').map(({ id }) => id).sort(),
+    ['carotid-flow', 'musclemap', 'seedseg'],
+  );
+});
+
+test('every catalogue and the hub name a logo the site ships', async () => {
+  const registry = await loadAppsRegistry();
+  for (const entry of [registry.site.hub, ...registry.site.catalogs]) {
+    await access(join(repoRoot, 'site', entry.brand.logo));
+  }
+});
+
+test('registry rejects unknown, missing and repeated catalogue membership', async () => {
+  const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+  const path = join(await mkdtemp(join(tmpdir(), 'apps-catalogs-')), 'apps.yml');
+  const original = raw.apps[0].catalog;
+  for (const catalog of [undefined, 'unknown', ['neuro', 'msk']]) {
+    raw.apps[0].catalog = catalog;
+    await writeFile(path, stringify(raw));
+    await assert.rejects(loadAppsRegistry(path), /catalog for musclemap must be exactly one declared catalog id/);
+  }
+  raw.apps[0].catalog = original;
+  await writeFile(path, stringify(raw));
+  await loadAppsRegistry(path);
+});
+
+test('registry rejects duplicate catalogue hosts and ids, and catalogues without apps', async () => {
+  const cases = [
+    [raw => { raw.site.catalogs[1].host = raw.site.catalogs[0].host; }, /duplicate catalog host: webapps\.neurodesk\.org/],
+    [raw => { raw.site.catalogs[1].host = raw.site.hub.host; }, /duplicate catalog host: webapps\.sciget\.org/],
+    [raw => { raw.site.catalogs[1].id = 'neuro'; }, /duplicate catalog id: neuro/],
+    [raw => { raw.site.catalogs.push({ ...raw.site.catalogs[1], id: 'empty', host: 'empty.sciget.org' }); }, /catalog empty has no apps/],
+    [raw => { raw.site.catalogs[1].hosting = 'pages'; }, /exactly one catalog must use pages hosting, on site\.domain/],
+    [raw => { raw.site.catalogs[0].hosting = 'worker'; }, /exactly one catalog must use pages hosting, on site\.domain/],
+    [raw => { raw.site.catalogs[1].hosting = 'netlify'; }, /hosting for catalog msk must be one of: pages, worker/],
+    [raw => { delete raw.site.hub; }, /site\.hub\.host must be a host name/],
+    [raw => { raw.site.catalogs[1].brand.logo = '../secret.svg'; }, /catalog msk\.brand\.logo must name an SVG file/],
+    [raw => { raw.site.catalogs = []; }, /site\.catalogs must be a non-empty array/],
+  ];
+  for (const [mutate, message] of cases) {
+    const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+    mutate(raw);
+    const path = join(await mkdtemp(join(tmpdir(), 'apps-catalogs-')), 'apps.yml');
+    await writeFile(path, stringify(raw));
+    await assert.rejects(loadAppsRegistry(path), message);
+  }
+});
+
+test('registry rejects a former path that is repeated or still in use', async () => {
+  for (const [paths, message] of [
+    [['dicom2vid'], /former_paths for .* must be unique app paths/],
+    [['dicomview'], /former path dicomview is a current app path/],
+  ]) {
+    const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+    raw.apps[0].former_paths = paths;
+    const path = join(await mkdtemp(join(tmpdir(), 'apps-catalogs-')), 'apps.yml');
+    await writeFile(path, stringify(raw));
+    await assert.rejects(loadAppsRegistry(path), message);
+  }
+});
