@@ -238,3 +238,16 @@ test("with neuropil subtraction off, an ROI without a neuropil ring keeps its tr
   const { dff } = deltaFOverF(F, Fneu, { coefficient: 0, window: 20 });
   assert.ok(dff.every(Number.isFinite));
 });
+
+test("a constant background over most of the image does not hide an active cell", () => {
+  const height = 40;
+  const width = 40;
+  const image = new Float32Array(height * width);
+  // A correlated 6 × 6 cell on a zero background: the median absolute deviation is 0.
+  for (let y = 17; y < 23; y++) for (let x = 17; x < 23; x++) image[y * width + x] = 0.95;
+  image[20 * width + 20] = 0.9999;
+  const { labels, seeds } = detectRois(image, height, width, { z: 3, diameter: 6 });
+  assert.equal(seeds, 1);
+  assert.equal(labels[20 * width + 20], 1);
+  assert.equal(labels[0], 0);
+});
