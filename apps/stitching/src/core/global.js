@@ -5,9 +5,10 @@
 // it was measured on, so a small diagonal overlap cannot pull tiles as hard as a full edge.
 // Links below the correlation threshold are left out. After each solve the link with the
 // largest residual is removed, and the system solved again, while Fiji's Grid/Collection
-// stitching (Stitching 3.1.8) would remove one: when that residual is above `maxRatio` times
-// the mean residual and above 0.95 px, or when the mean residual itself is above `maxAbsolute`
-// pixels.
+// stitching (Stitching 3.1.8) would remove one. As in Fiji, the test is on tiles, not links: a
+// tile's error is the mean residual of its used links, and the worst link is removed when the
+// largest tile error is above `maxRatio` times the mean tile error and above 0.95 px, or when
+// the mean tile error itself is above `maxAbsolute` pixels.
 //
 // One tile per component is fixed: the lowest-numbered tile of the largest component stays at
 // its approximate position. Every other component (a tile whose links were all rejected, or a
@@ -17,13 +18,13 @@
 export const GLOBAL_DEFAULTS = Object.freeze({
   /** Links whose cross-correlation is below this are not used (Fiji's default is 0.3). */
   threshold: 0.3,
-  /** The worst link is an outlier when its residual is above maxRatio × the mean residual (and 0.95 px) … */
+  /** The worst link is an outlier when the largest tile error is above maxRatio × the mean tile error (and 0.95 px) … */
   maxRatio: 2.5,
-  /** … or when the mean residual is above this many pixels (Fiji's defaults are 2.5 and 3.5). */
+  /** … or when the mean tile error is above this many pixels (Fiji's defaults are 2.5 and 3.5). */
   maxAbsolute: 3.5,
 });
 
-/** The worst residual must also exceed this for the ratio test, as in Fiji. */
+/** The largest tile error must also exceed this for the ratio test, as in Fiji. */
 export const MIN_OUTLIER_RESIDUAL = 0.95;
 
 /** Fiji's condition for removing the worst link after a solve. */
@@ -31,9 +32,37 @@ export function isOutlierStep(worst, average, { maxRatio, maxAbsolute }) {
   return (average * maxRatio < worst && worst > MIN_OUTLIER_RESIDUAL) || average > maxAbsolute;
 }
 
-function components(count, links) {
+/**
+ * Fiji's error statistics: the mean and largest, across tiles with a used link, of each tile's
+ * mean residual over its used links (TileConfigurationStitching.computeError).
+ * @param {{ i: number, j: number, residual: number }[]} used
+ */
+export function tileErrors(used) {
+  const sums = new Map();
+  for (const { i, j, residual } of used) {
+    for (const tile of [i, j]) {
+      const [sum, count] = sums.get(tile) ?? [0, 0];
+      sums.set(tile, [sum + residual, count + 1]);
+    }
+  }
+  const errors = [...sums.values()].map(([sum, count]) => sum / count);
+  return {
+    average: errors.reduce((a, b) => a + b, 0) / errors.length,
+    largest: Math.max(...errors),
+  };
+}
+
+/** Connected components of the tiles under `links`, largest first. */
+export function components(count, links) {
   const parent = Array.from({ length: count }, (_, i) => i);
-  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  // Iterative, with path halving: a chain of thousands of tiles would overflow a recursive find.
+  const find = (i) => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  };
   for (const { i, j } of links) parent[find(i)] = find(j);
   const groups = new Map();
   for (let i = 0; i < count; i++) {
@@ -150,9 +179,10 @@ export function optimisePositions(approximate, measured, options = {}) {
     }
     for (const link of links) link.residual = residual(link, positions);
     if (!used.length) break;
-    const average = used.reduce((sum, link) => sum + link.residual, 0) / used.length;
-    const worst = used.reduce((a, b) => (b.residual > a.residual ? b : a));
-    if (isOutlierStep(worst.residual, average, { maxRatio, maxAbsolute })) worst.status = 'outlier';
+    const { average, largest } = tileErrors(used);
+    if (isOutlierStep(largest, average, { maxRatio, maxAbsolute })) {
+      used.reduce((a, b) => (b.residual > a.residual ? b : a)).status = 'outlier';
+    }
     else break;
   }
   return {

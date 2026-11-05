@@ -3,6 +3,7 @@
 // step across workers with the same functions; the validation scripts run `stitch` directly.
 import { registerPair } from './pairwise.js';
 import { optimisePositions } from './global.js';
+import { checkSolverMemory } from './memory.js';
 import { overlappingPairs } from './tile-layout.js';
 
 /** Every pair that overlaps under the approximate layout, with B's approximate offset from A. */
@@ -35,6 +36,7 @@ export function stitch(tiles, approximate, options = {}) {
   if (tiles.length < 2) throw new Error('Stitching needs at least two tiles.');
   const pairs = planPairs(tiles.map((tile) => tile.shape), approximate);
   if (!pairs.length) throw new Error('No tiles overlap under this layout; check the grid size, order and overlap.');
+  checkSolverMemory({ shapes: tiles.map((tile) => tile.shape), dtype: tiles[0].dtype ?? 'float64', pairs });
   const links = registerPairs(tiles, pairs, options.pairwise);
   return optimisePositions(approximate, links, options.global);
 }

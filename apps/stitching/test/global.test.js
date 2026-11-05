@@ -61,7 +61,8 @@ test('outliers follow Fiji 3.1.8: worst > 2.5 × mean and > 0.95 px, or mean > 3
   assert.equal(isOutlierStep(3, 2, limits), false);
 });
 
-test('a link 2 px off in a 3 × 3 grid is removed although its residual is below 3.5 px', () => {
+test('a link 2.5 px off in a 3 × 3 grid is kept, as in Fiji: its tiles average it with good links', async () => {
+  const { tileErrors } = await import('../src/core/global.js');
   const grid = [];
   const truth = [];
   for (let row = 0; row < 3; row++) {
@@ -79,9 +80,41 @@ test('a link 2 px off in a 3 × 3 grid is removed although its residual is below
   const bad = links.findIndex((link) => link.i === 4 && link.j === 5);
   links[bad].offset = links[bad].offset.map((v, d) => v + [2.5, 0][d]);
   const result = optimisePositions(grid, links);
-  assert.deepEqual(result.links.flatMap((link, k) => (link.status === 'outlier' ? [k] : [])), [bad]);
-  assert.ok(result.links[bad].residual < 3.5, `${result.links[bad].residual}`);
-  result.positions.forEach((p, k) => p.forEach((v, d) => assert.ok(Math.abs(v - truth[k][d]) < 1e-9)));
+  // Per link the worst residual (1.0417 px) is above 2.5 × the mean (0.3819 px) and 0.95 px,
+  // but per tile, Fiji's statistic, the largest error is 0.6944 px against a 0.3665 px mean.
+  const residuals = result.links.map((link) => link.residual);
+  assert.ok(Math.abs(Math.max(...residuals) - 1.0417) < 1e-4);
+  assert.ok(Math.abs(residuals.reduce((a, b) => a + b) / residuals.length - 0.3819) < 1e-4);
+  const { largest, average } = tileErrors(result.links);
+  assert.ok(Math.abs(largest - 0.6944) < 1e-4, `${largest}`);
+  assert.ok(Math.abs(average - 0.3665) < 1e-4, `${average}`);
+  assert.ok(result.links.every((link) => link.status === 'used'));
+});
+
+test('the gate uses mean tile errors: dense consistent links dilute link means more than tile means', () => {
+  // Two triangles that each close 19.5 px off (6.5 px residual per link) and a consistent
+  // 2 × 2 block with all six links. Per link the mean is 3.25 px and the worst 6.5 px, which
+  // a per-link test would keep; per tile the mean is 3.9 px, above 3.5 px, so a link goes.
+  const approximate = [];
+  const links = [];
+  const add = (i, j, offset) => links.push({ i, j, r: 0.9, offset });
+  for (let t = 0; t < 2; t++) {
+    const o = approximate.length;
+    approximate.push([t * 300, 0], [t * 300 + 90, 0], [t * 300 + 90, 90]);
+    add(o, o + 1, [109.5, 0]);
+    add(o + 1, o + 2, [0, 90]);
+    add(o, o + 2, [90, 90]);
+  }
+  const o = approximate.length;
+  approximate.push([0, 300], [90, 300], [0, 390], [90, 390]);
+  for (let a = 0; a < 4; a++) {
+    for (let b = a + 1; b < 4; b++) add(o + a, o + b, approximate[o + b].map((v, d) => v - approximate[o + a][d]));
+  }
+  const result = optimisePositions(approximate, links);
+  const outliers = result.links.flatMap((link, k) => (link.status === 'outlier' ? [k] : []));
+  assert.equal(outliers.length, 2);
+  assert.ok(outliers.some((k) => k < 3) && outliers.some((k) => k >= 3 && k < 6), `${outliers}`);
+  assert.ok(result.links.filter((link) => link.status === 'used').every((link) => link.residual < 1e-9));
 });
 
 test('overlap weighting: a wrong diagonal link (r = 0.58) in a 3 × 2 grid moves tiles < 0.2 px', () => {

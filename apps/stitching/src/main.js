@@ -21,7 +21,7 @@ import { compareNames, gridPositions, parseTileConfiguration, positionsFromConfi
 import { planPairs } from "./core/pipeline.js";
 import { optimisePositions } from "./core/global.js";
 import { fusedGeometry } from "./core/fusion.js";
-import { checkFusionMemory, registrationWorkers } from "./core/memory.js";
+import { checkFusionMemory, checkSolverMemory, registrationWorkers } from "./core/memory.js";
 import { linksCsv, outputStem, provenance, registeredConfiguration, summarise } from "./outputs.js";
 import { displayNifti, displaySpacing } from "./display.js";
 import examples from "../examples.json";
@@ -397,6 +397,7 @@ async function stitchTiles(signal, settings) {
     checkFusedSize(approximate);
     const pairs = planPairs(tiles.map((tile) => tile.shape), approximate);
     if (!pairs.length) throw new Error("No tiles overlap under this layout; check the grid size, order and overlap.");
+    checkSolverMemory({ shapes: tiles.map((tile) => tile.shape), dtype: tiles[0].dtype, pairs });
     const wanted = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1, pairs.length));
     const threads = registrationWorkers({ shapes: tiles.map((tile) => tile.shape), dtype: tiles[0].dtype, pairs, names: tiles.map((tile) => tile.name), shared: SHARED, wanted });
     technical(`Registering ${pairs.length} overlapping pairs in ${threads} worker${threads > 1 ? "s" : ""}`);

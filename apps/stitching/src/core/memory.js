@@ -9,11 +9,17 @@
 // otherwise) and four copies of the result in the tiles' sample type: the worker's output, the
 // TIFF, the display NIfTI and the OME-Zarr archive.
 //
+// The global optimisation solves each connected component of linked tiles as a dense system:
+// an n × n float64 matrix for its n − 1 free tiles and a copy for the Cholesky factor, one
+// component at a time. Rejected links only split components, so the planned pairs' components
+// bound it before any pair is registered.
+//
 // With cross-origin isolation the tiles are decoded into SharedArrayBuffers and every worker
 // reads the same bytes; without it each worker receives a structured-clone copy, counted here
 // as a copy of every tile per worker.
 import { formatBytes } from '@neurodesk/webapp-components/file-io/input-limits';
 import { accumulatesInFloat64Type } from './fusion.js';
+import { components } from './global.js';
 import { frameShape, overlapRegion } from './pairwise.js';
 
 /** Bytes the tiles, pair registrations and fusion of one run may hold at once. */
@@ -48,6 +54,26 @@ export function pairBytes(shapeA, shapeB, approximateOffset) {
 export function fusionBytes(shape, dtype) {
   const pixels = product(shape);
   return pixels * (2 * (accumulatesInFloat64Type(dtype) ? 8 : 4) + 4 * SAMPLE_BYTES[dtype]);
+}
+
+/** Bytes the global optimisation's largest component allocates, and that component's tile count. */
+export function solverBytes(count, pairs) {
+  const [largest] = components(count, pairs);
+  const free = largest.length - 1;
+  return { bytes: 2 * 8 * free * free, tiles: largest.length };
+}
+
+/** Throws MemoryBudgetError when the tiles and the global optimisation do not fit the budget. */
+export function checkSolverMemory({ shapes, dtype, pairs, budget = MEMORY_BUDGET }) {
+  const tiles = tileBytes(shapes, dtype);
+  const solver = solverBytes(shapes.length, pairs);
+  if (tiles + solver.bytes > budget) {
+    throw new MemoryBudgetError(
+      `Solving the positions of ${solver.tiles} linked tiles needs ${formatBytes(solver.bytes)} for the least-squares system; `
+      + `with the tiles (${formatBytes(tiles)}) that is more than this app's ${formatBytes(budget)} working memory. `
+      + 'Stitch the mosaic in smaller parts.',
+    );
+  }
 }
 
 /**
