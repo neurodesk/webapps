@@ -1,7 +1,12 @@
 """Make the example's 2D cell label image with Big-FISH's classical segmentation.
 
 Follows the last cell of big-fish-examples' notebook "4 - Segment nuclei and
-cells" on experiment_1 (DAPI and smFISH maximum projections):
+cells" on experiment_1 (DAPI and smFISH maximum projections). DIR holds the two
+big-fish-examples release files it reads, unchanged:
+
+    https://github.com/fish-quant/big-fish-examples/releases/download/data/experiment_1_dapi_fov_1.tif
+    https://github.com/fish-quant/big-fish-examples/releases/download/data/experiment_1_smfish_fov_1.tif
+
 
     python -I make_cell_labels.py DIR
 

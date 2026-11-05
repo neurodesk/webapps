@@ -1,12 +1,22 @@
 // Sub-pixel spot localisation: Big-FISH 0.6.2 detection.fit_subpixel (BSD-3-Clause,
-// see ../LICENSE-BIGFISH.txt). Each spot's neighbourhood is fitted with Big-FISH's
+// see ../LICENSE and ../NOTICE). Each spot's neighbourhood is fitted with Big-FISH's
 // pixel-integrated Gaussian (gaussian_3d / gaussian_2d) from the same start point
 // and with the same bounds, and the same rules keep or reject the fitted centre.
 // Big-FISH calls SciPy's trust-region-reflective curve_fit on a float32 model with
 // a finite-difference Jacobian; this port fits the float64 model with its analytic
 // Jacobian by Levenberg-Marquardt (README.md, "Divergences from Big-FISH").
 
-// erf from FreeBSD msun s_erf.c (Sun Microsystems fdlibm, permissive licence).
+// erf translated from FreeBSD msun lib/msun/src/s_erf.c (fdlibm), whose notice follows:
+/*
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunPro, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
+ */
 const ERX = 8.45062911510467529297e-01;
 const EFX = 1.28379167095512586316e-01;
 const PP = [1.28379167095512558561e-01, -3.25042107247001499370e-01, -2.84817495755985104766e-02, -5.77027029648944159157e-03, -2.37630166566501626084e-05];
@@ -207,18 +217,21 @@ export function levenbergMarquardt(start, size, data, voxelSize, lower) {
 function crop(image, coord, radius) {
   const { shape } = image;
   const low = coord.map((c, a) => Math.max(0, Math.trunc(c - radius[a])));
-  const high = coord.map((c, a) => Math.min(shape[a] - 1, Math.min(shape[a], Math.trunc(c + radius[a]))));
+  const high = coord.map((c, a) => Math.min(shape[a] - 1, Math.trunc(c + radius[a])));
   return { low, size: high.map((h, a) => h - low[a] + 1) };
 }
 
 // detection.fit_subpixel: sub-pixel (z, y, x) or (y, x) for each integer spot, in pixels.
-export function fitSubpixel(image, spots, { voxelSize, spotRadius }) {
+// onProgress(fitted, total) follows the spots, at most once per percent.
+export function fitSubpixel(image, spots, { voxelSize, spotRadius, onProgress = () => {} }) {
   const ndim = image.shape.length;
   const stride = image.shape.map((_, a) => image.shape.slice(a + 1).reduce((p, s) => p * s, 1));
   const radius = spotRadius.map((r, a) => Math.sqrt(ndim) * (r / voxelSize[a]));
   const voxel = ndim === 3 ? [voxelSize[0], voxelSize[2], voxelSize[2]] : [voxelSize[1], voxelSize[1]];
   const sigmaStart = ndim === 3 ? [spotRadius[0], spotRadius[2]] : [spotRadius[1]];
-  return spots.map((coord) => {
+  const every = Math.max(1, Math.ceil(spots.length / 100));
+  return spots.map((coord, spot) => {
+    if (spot % every === 0) onProgress(spot, spots.length);
     const { low, size } = crop(image, coord, radius);
     const count = size.reduce((a, b) => a * b, 1);
     const data = new Float64Array(count);

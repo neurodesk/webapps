@@ -46,8 +46,19 @@ test("a threshold set by hand replaces the elbow", () => {
   const image = syntheticImage(expected.generator.shape, expected.generator.spots, expected.generator.seed);
   const high = detectSpots(image, { voxelSize: expected.voxelSize, spotRadius: expected.spotRadius, threshold: 200 });
   assert.equal(high.threshold, 200);
-  assert.equal(high.automaticThreshold, expected.threshold);
+  assert.equal(high.automaticThreshold, null);
+  assert.equal(high.curve, null);
   assert.equal(high.spots.length, 21);
+});
+
+test("a threshold set by hand works on an image whose spot count curve has no elbow", () => {
+  // Big-FISH 0.6.2 detect_spots(threshold=1) returns 7 spots here without searching for an elbow.
+  const image = syntheticImage([20, 20], 10, 27);
+  const settings = { voxelSize: [100, 100], spotRadius: [200, 200] };
+  assert.throws(() => detectSpots(image, settings), /no elbow/);
+  const result = detectSpots(image, { ...settings, threshold: 1 });
+  assert.equal(result.threshold, 1);
+  assert.equal(result.spots.length, 7);
 });
 
 test("object radius in pixels is radius over voxel size per axis", () => {

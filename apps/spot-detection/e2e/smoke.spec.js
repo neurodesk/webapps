@@ -108,22 +108,30 @@ test("cancelling a run keeps no outputs and the run can be repeated", async ({ p
 });
 
 test("a failed example download can be retried", async ({ page }) => {
+  test.setTimeout(240000);
+  // Every request fails, automatic retries included, until the example reports the error; the
+  // user's retry then gets the real file, which must pass the downloader's size and SHA-256 check.
+  let failing = true;
   let attempts = 0;
-  await page.route(example.files[0].url, (route) => {
+  await page.context().route(example.files[0].url, (route) => {
     attempts++;
-    return attempts === 1 ? route.fulfill({ status: 503, body: "" }) : route.fulfill({ body: syntheticTiff, contentType: "image/tiff" });
+    return failing ? route.fulfill({ status: 503, body: "" }) : route.fallback();
   });
-  await page.route(example.files[1].url, (route) => route.fulfill({ body: writeTiffStack({ data: new Uint16Array(48 * 56).fill(1), shape: [48, 56] }), contentType: "image/tiff" }));
   await page.goto("/");
   const picker = page.getByRole("combobox", { name: "Input", exact: true });
+  const state = page.locator("[data-neurodesk-examples]");
   await picker.selectOption(example.id);
-  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "error");
+  await expect(state).toHaveAttribute("data-example-state", "error", { timeout: 120000 });
   await expect(page.locator("#runButton")).toBeDisabled();
+  const failed = attempts;
+  expect(failed).toBeGreaterThan(0);
+  failing = false;
+  await expect(picker).toBeEnabled();
   await picker.selectOption(example.id);
-  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
-  await expect(page.locator("#fileInfo")).toContainText("8 × 48 × 56");
+  await expect(state).toHaveAttribute("data-example-state", "ready", { timeout: 120000 });
+  await expect(page.locator("#fileInfo")).toHaveText("experiment_1_smfish_fov_1.tif · 23 × 650 × 500 · uint16");
   await expect(page.locator("#runButton")).toBeEnabled();
-  expect(attempts).toBe(2);
+  expect(attempts).toBe(failed + 1);
 });
 
 test("a corrupt example file is reported and leaves no input", async ({ page }) => {
@@ -137,23 +145,84 @@ test("a corrupt example file is reported and leaves no input", async ({ page }) 
 });
 
 test("cancelling an example download permits retry", async ({ page }) => {
+  test.setTimeout(240000);
+  // The first request's real response is held until after the cancel; the retry is not held.
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
-  await page.route(example.files[0].url, async (route) => {
-    await gate;
-    await route.fulfill({ body: syntheticTiff, contentType: "image/tiff" });
+  let attempts = 0;
+  await page.context().route(example.files[0].url, async (route) => {
+    attempts++;
+    if (attempts === 1) await gate;
+    await route.fallback().catch(() => {});
   });
-  await page.route(example.files[1].url, (route) => route.fulfill({ body: writeTiffStack({ data: new Uint16Array(48 * 56).fill(1), shape: [48, 56] }), contentType: "image/tiff" }));
   await page.goto("/");
   const picker = page.getByRole("combobox", { name: "Input", exact: true });
+  const state = page.locator("[data-neurodesk-examples]");
   await picker.selectOption(example.id);
+  await expect.poll(() => attempts).toBe(1);
   await page.getByRole("button", { name: "Cancel example download", exact: true }).click();
-  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "cancelled");
+  await expect(state).toHaveAttribute("data-example-state", "cancelled");
   release();
   await expect(page.locator("#fileInfo")).toBeHidden();
+  await expect(page.locator("#runButton")).toBeDisabled();
   await picker.selectOption(example.id);
-  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(state).toHaveAttribute("data-example-state", "ready", { timeout: 120000 });
+  await expect(page.locator("#fileInfo")).toHaveText("experiment_1_smfish_fov_1.tif · 23 × 650 × 500 · uint16");
   await expect(page.locator("#runButton")).toBeEnabled();
+  expect(attempts).toBe(2);
+});
+
+test("3D cell labels with the maximum projection are refused before a worker starts", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles({ name: "synthetic.tif", mimeType: "image/tiff", buffer: syntheticTiff });
+  await expect(page.locator("#fileInfo")).toContainText("8 × 48 × 56");
+  await page.locator("#labelSection > summary").click();
+  const labels = writeTiffStack({ data: new Uint16Array(8 * 48 * 56).fill(1), shape: [8, 48, 56] });
+  await page.locator("#labelInput").setInputFiles({ name: "cells.tif", mimeType: "image/tiff", buffer: labels });
+  await expect(page.locator("#labelField")).toContainText("cells.tif · 1 cell");
+  await page.locator("#detectIn").selectOption("projection");
+  const workers = [];
+  page.on("worker", (worker) => workers.push(worker.url()));
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText(/^3D cell labels cannot count spots found in the 2D maximum projection/);
+  await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
+  await expect(page.locator("#runButton")).toBeEnabled();
+  expect(workers).toEqual([]);
+});
+
+test("the form and the automation operation take the voxel size from TIFF metadata", async ({ page }) => {
+  test.setTimeout(120000);
+  // ImageJ metadata: 250 nm between planes, 90 nm pixels, unlike the 300 and 103 nm defaults.
+  const tiff = writeTiffStack(syntheticStack, { description: "ImageJ=1.53t\nimages=8\nslices=8\nunit=micron\nspacing=0.25\n", resolution: [1 / 0.09, 1 / 0.09] });
+  const settings = { spotRadius: [350, 150, 150], threshold: 150 };
+  const expected = analyse(syntheticStack, { ...settings, voxelSize: [250, 90, 90] }).spotsCsv;
+  expect(expected.split("\n").length).toBeGreaterThan(3);
+  expect(analyse(syntheticStack, { ...settings, voxelSize: [300, 103, 103] }).spotsCsv).not.toBe(expected);
+
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles({ name: "calibrated.tif", mimeType: "image/tiff", buffer: tiff });
+  await expect(page.locator("#fileInfo")).toContainText("8 × 48 × 56");
+  await expect(page.locator("#voxelZ")).toHaveValue("250");
+  await expect(page.locator("#voxelYx")).toHaveValue("90");
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#threshold").fill("150");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText(/^\d+ spots detected$/, { timeout: 60000 });
+  expect((await downloadRow(page, "Spots")).text).toBe(expected);
+
+  await page.locator("#voxelZ").fill("300");
+  await page.locator("#voxelYx").fill("103");
+  await page.locator("#neurodesk-input-transfer").setInputFiles({ name: "calibrated.tif", mimeType: "image/tiff", buffer: tiff });
+  await page.evaluate(async () => {
+    await globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" });
+    await globalThis.neurodeskAutomation.dispatch("start", { parameters: { threshold: 150 } });
+  });
+  await expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state), { timeout: 60000 }).toBe("succeeded");
+  const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
+  expect(report.provenance.voxelSizeNm).toEqual([250, 90, 90]);
+  const download = page.waitForEvent("download");
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("download", { artifactId: "spots" }));
+  expect(readFileSync(await (await download).path(), "utf8")).toBe(expected);
 });
 
 test("the automation operation writes the spots table the Node pipeline writes", async ({ page }) => {

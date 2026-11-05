@@ -36,6 +36,46 @@ export function detectionSettings(parameters = {}) {
   };
 }
 
+// The form's voxel sizes from a TIFF's metadata (ImageJ or OME, in nm), rounded as the form
+// shows them; an axis the file does not record is left out.
+export function voxelFromFile(voxelSize) {
+  const round = (value) => (value ? Number(value.toFixed(3)) : undefined);
+  const out = {};
+  const z = round(voxelSize?.z);
+  const yx = round(voxelSize?.x ?? voxelSize?.y);
+  if (z !== undefined) out.voxelZ = z;
+  if (yx !== undefined) out.voxelYx = yx;
+  return out;
+}
+
+// Estimated bytes the analysis holds per input voxel, by input type: the page's input and its
+// display copy, the worker's clone, the float image and the two LoG buffers (float32 for uint8
+// and float32 input, float64 otherwise), the filtered image cast back to an integer type, two
+// local-maximum buffers of the filtered image's type, three byte masks and, for float images,
+// the float64 copy sorted for the threshold percentile.
+export const WORKING_BYTES = Object.freeze({ uint8: 21, uint16: 39, float32: 39, float64: 67 });
+// The working memory a run may need: 4 GiB, what 64-bit Chromium gives one tab's arrays.
+export const MEMORY_BUDGET = 4 * 1024 ** 3;
+
+// Refuses a run that cannot finish, before the worker starts: an image too large for the
+// memory budget, or 3D cell labels with detection in the 2D maximum projection.
+export function checkRun(image, settings, labels = null) {
+  if (labels?.shape.length === 3 && image.shape.length === 3 && settings.projection) {
+    throw new Error("3D cell labels cannot count spots found in the 2D maximum projection; detect in the 3D stack, or load one y × x label plane.");
+  }
+  const voxels = image.shape.reduce((a, b) => a * b, 1);
+  const bytes = voxels * WORKING_BYTES[image.dtype];
+  if (bytes > MEMORY_BUDGET) {
+    const gb = (n) => (n / 1024 ** 3).toFixed(1);
+    throw new Error(`This ${image.shape.join(" × ")} ${image.dtype} image needs about ${gb(bytes)} GB of working memory, above the ${gb(MEMORY_BUDGET)} GB limit; crop it or keep fewer planes.`);
+  }
+}
+
+// A threshold as the results and the log show it: integers whole, others to 4 significant digits.
+export function formatThreshold(threshold) {
+  return Number.isInteger(threshold) ? String(threshold) : String(Number(threshold.toPrecision(4)));
+}
+
 const stem = (name) => name.replace(/\.(ome\.)?tiff?$/i, "").replace(/\.nii(\.gz)?$/i, "");
 
 export function outputNames(inputName, projection) {

@@ -16,11 +16,12 @@ import {
   bindInfoTooltips,
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
-import { createNiftiFromVolume, downloadFile } from "@neurodesk/webapp-components/file-io";
+import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { gzipFile } from "@neurodesk/webapp-components/file-io/bids-derivatives";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { readTiffStack } from "./tiff.js";
-import { APP, DEFAULTS, describeImage, detectionSettings, outputNames, provenance } from "./config.js";
+import { APP, DEFAULTS, checkRun, describeImage, detectionSettings, formatThreshold, outputNames, provenance, voxelFromFile } from "./config.js";
+import { niftiFile, overlayVolume } from "./volumes.js";
 import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
@@ -99,34 +100,6 @@ async function showVolume(volume, options) {
   return preview(volume, options);
 }
 
-// The stack as NIfTI for NiiVue: x fastest as in the TIFF, row 0 at the top, lengths in µm.
-function niftiFile(image, voxelNm, name) {
-  const [nz, ny, nx] = image.shape.length === 3 ? image.shape : [1, ...image.shape];
-  const [dz, dy, dx] = voxelNm.map((nm) => nm / 1000);
-  const affine = [[dx, 0, 0, 0], [0, -dy, 0, (ny - 1) * dy], [0, 0, dz, 0], [0, 0, 0, 1]];
-  const buffer = createNiftiFromVolume({ hdr: { dims: [3, nx, ny, nz, 1, 1, 1, 1], pixDims: [1, dx, dy, dz, 1, 1, 1, 1], affine }, img: image.data });
-  return new File([buffer], name, { type: "application/octet-stream" });
-}
-
-// Rings of radius 3 voxels around each spot, in its xy plane: the spot itself stays visible.
-function overlayVolume(shape, spots) {
-  const [nz, ny, nx] = shape.length === 3 ? shape : [1, ...shape];
-  const data = new Uint8Array(nz * ny * nx);
-  for (const spot of spots) {
-    const [z, y, x] = spot.length === 3 ? spot : [0, ...spot];
-    for (let dy = -3; dy <= 3; dy++) {
-      for (let dx = -3; dx <= 3; dx++) {
-        const r2 = dx * dx + dy * dy;
-        if (r2 < 5 || r2 > 10) continue;
-        const yy = y + dy;
-        const xx = x + dx;
-        if (yy >= 0 && yy < ny && xx >= 0 && xx < nx) data[(z * ny + yy) * nx + xx] = 1;
-      }
-    }
-  }
-  return { data, shape };
-}
-
 const results = createResultList({
   element: $("resultList"),
   onView: (stage) => {
@@ -202,13 +175,10 @@ async function readTiffFiles(files, signal, what) {
 }
 
 function showVoxelSize(voxelSize) {
-  if (!voxelSize) return false;
-  const set = (id, value) => {
-    if (value) $(id).value = String(Number(value.toFixed(3)));
-  };
-  set("voxelZ", voxelSize.z);
-  set("voxelYx", voxelSize.x ?? voxelSize.y);
-  return Boolean(voxelSize.x || voxelSize.z);
+  const fromFile = voxelFromFile(voxelSize);
+  if (fromFile.voxelZ !== undefined) $("voxelZ").value = String(fromFile.voxelZ);
+  if (fromFile.voxelYx !== undefined) $("voxelYx").value = String(fromFile.voxelYx);
+  return Object.keys(fromFile).length > 0;
 }
 
 async function loadFiles(filesPromise, signal) {
@@ -328,6 +298,7 @@ function textFile(text, name) {
 
 async function detect(signal, settings = detectionSettings(formParameters())) {
   if (!input) throw new Error("Load an image before detecting spots.");
+  checkRun(input.image, settings, labels?.image);
   const operation = begin(`Detecting spots in ${input.name}…`, signal);
   running = operation.controller;
   const current = operation.controller.signal;
@@ -347,10 +318,10 @@ async function detect(signal, settings = detectionSettings(formParameters())) {
     current.throwIfAborted();
     const spotsFile = textFile(result.spotsCsv, names.spots);
     const sigma = result.sigma.map((s) => s.toFixed(3)).join(" × ");
-    log.log(`LoG sigma ${sigma} px; ${result.curve.thresholds.length} candidate thresholds`, "info", "technical");
-    log.log(`Threshold ${result.threshold}${settings.threshold === null ? " (automatic, elbow of the spot count curve)" : " (set by hand)"}; ${result.spots.length} spots`, "info", "analysis");
+    log.log(`LoG sigma ${sigma} px${result.curve ? `; ${result.curve.thresholds.length} candidate thresholds` : ""}`, "info", "technical");
+    log.log(`Threshold ${formatThreshold(result.threshold)}${settings.threshold === null ? " (automatic, elbow of the spot count curve)" : " (set by hand)"}; ${result.spots.length} spots`, "info", "analysis");
     outputs = {
-      spots: { description: `Spots · ${result.spots.length} at threshold ${result.threshold}`, file: spotsFile },
+      spots: { description: `Spots · ${result.spots.length} at threshold ${formatThreshold(result.threshold)}`, file: spotsFile },
       overlay: { description: "Spot overlay (NIfTI)", file: overlay, base },
     };
     if (result.cells) {
@@ -445,9 +416,12 @@ registerAppAutomation({
   app: APP.id,
   operations: {
     "detect-spots": async ({ inputs, parameters, signal }) => {
-      const settings = detectionSettings(parameters);
+      detectionSettings(parameters);
       await loadFiles(Promise.resolve(inputs.image), signal);
       if (inputs.labels?.length) await loadLabels(Promise.resolve(inputs.labels), signal);
+      // A voxel size the parameters leave out comes from the TIFF's metadata, as in the form.
+      const given = Object.fromEntries(Object.entries(parameters).filter(([, value]) => value !== undefined));
+      const settings = detectionSettings({ ...DEFAULTS, ...voxelFromFile(input.image.voxelSize), ...given });
       showSettings(settings);
       return detect(signal, settings);
     },

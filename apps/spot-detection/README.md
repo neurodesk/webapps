@@ -6,7 +6,7 @@ browser, with the spot detector of [Big-FISH](https://github.com/fish-quant/big-
 
 ## Method
 
-`src/bigfish.js` and `src/subpixel.js` port Big-FISH 0.6.2 (BSD-3-Clause, `LICENSE-BIGFISH.txt`):
+`src/bigfish.js` and `src/subpixel.js` port Big-FISH 0.6.2 (BSD-3-Clause, `LICENSE`, `NOTICE`):
 
 1. `get_object_radius_pixel`: sigma = spot radius / voxel size per axis (nm).
 2. `stack.log_filter`: SciPy `gaussian_laplace` (truncate 4, mode reflect) on the image scaled
@@ -16,7 +16,8 @@ browser, with the spot detector of [Big-FISH](https://github.com/fish-quant/big-
    2 ceil(sigma) + 1 voxels per axis.
 4. Automatic threshold (`_get_candidate_thresholds`, `_get_spot_counts`,
    `get_breaking_point`): log spot count against candidate threshold, smoothed over 5, and
-   its elbow. A threshold typed in Advanced settings replaces it.
+   its elbow. A threshold typed in Advanced settings replaces it, and the elbow is then not
+   searched for, as in Big-FISH.
 5. `spots_thresholding` with duplicates removed: connected maxima above the threshold
    (full connectivity) become their centroid, truncated to integers.
 6. `fit_subpixel`: each spot's neighbourhood (sqrt(ndim) times the radius) is fitted with
@@ -34,12 +35,21 @@ Not included: dense-region decomposition (`decompose_dense`) and cluster detecti
 
 One one-channel TIFF (uint8, uint16, float32 or float64), one page per z plane, read with
 geotiff.js. The voxel size comes from ImageJ or OME-TIFF metadata when present, else from the
-form. Optional cell labels: an integer TIFF of one y × x plane or of the image's size.
+form; the automation operation does the same for a voxel size its parameters leave out (300 and
+103 nm when the file has none). Optional cell labels: an integer TIFF of one y × x plane or of the
+image's size. 3D labels need detection in the 3D stack: the app refuses them with "2D maximum
+projection" before it starts.
+
+The detector holds about 21 (uint8), 39 (uint16, float32) or 67 (float64) bytes per input voxel
+(`WORKING_BYTES` in `src/config.js`). A run that would need more than 4 GiB, what 64-bit Chromium
+gives one tab's arrays, is refused before it starts: a 100-plane 1024 × 1024 uint16 stack needs
+3.8 GiB and runs; 120 such planes do not.
 
 - `<name>_spots.csv`: `spot_id`, sub-pixel `z, y, x` (voxels), integer `z_px, y_px, x_px`, raw
   `intensity` at that voxel, `log_response` (the filtered value Big-FISH thresholds) and, with
   labels, `cell_id`.
-- `<name>_spots.nii.gz`: a ring around each spot in its plane, for viewing over the image.
+- `<name>_spots.nii.gz`: a ring around each spot in its plane, for viewing over the image, with
+  the voxel size in millimetres as NIfTI records it.
 - `<name>_cell_counts.csv` with labels: `cell_id, spots, area_px`, and a `0` row for spots outside.
 
 ## Example
@@ -48,7 +58,8 @@ form. Optional cell labels: an integer TIFF of one y × x plane or of the image'
 [Big-FISH examples](https://github.com/fish-quant/big-fish-examples) release, BSD 3-Clause,
 unchanged, and `experiment_1_cell_label.tif`, its two cells segmented by
 `validation/make_cell_labels.py` with Big-FISH's classical segmentation (the last cell of
-notebook 4). Both are pinned at `neurodeskorg/webapps@baa8f47d`, `spot-detection/example/`.
+notebook 4) from that stack and the same release's DAPI stack,
+<https://github.com/fish-quant/big-fish-examples/releases/download/data/experiment_1_dapi_fov_1.tif>. Both are pinned at `neurodeskorg/webapps@baa8f47d`, `spot-detection/example/`.
 
 ## Validation
 

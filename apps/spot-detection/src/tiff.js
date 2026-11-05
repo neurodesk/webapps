@@ -23,8 +23,11 @@ function imagejVoxelSize(description, resolution) {
   return { z: Number.isFinite(spacing) ? spacing * scale : null, y: Number.isFinite(y) ? y * scale : null, x: Number.isFinite(x) ? x * scale : null };
 }
 
+// OME elements may carry any namespace prefix (<OME>, <ome:OME>, <ome:Pixels>).
+const OME_ROOT = /<(?:[\w.-]+:)?OME[\s>/]/;
+
 function omeVoxelSize(description) {
-  const pixels = description.match(/<(?:\w+:)?Pixels\b[^>]*>/)?.[0];
+  const pixels = description.match(/<(?:[\w.-]+:)?Pixels\b[^>]*>/)?.[0];
   if (!pixels) return null;
   const attribute = (name) => pixels.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1];
   if (Number(attribute("SizeC") ?? 1) > 1 || Number(attribute("SizeT") ?? 1) > 1) {
@@ -49,7 +52,7 @@ export async function readTiffStack(buffer, { signal } = {}) {
   if (!dtype) throw new Error(`TIFF sample type ${first.getSampleFormat()}:${first.getBitsPerSample()} is not uint8, uint16, float32 or float64.`);
   const description = String((await first.fileDirectory.loadValue("ImageDescription")) ?? "");
   const resolution = [first.fileDirectory.getValue("XResolution"), first.fileDirectory.getValue("YResolution")].map((r) => (Array.isArray(r) || ArrayBuffer.isView(r) ? r[0] / r[1] : r));
-  const voxelSize = description.includes("<OME") ? omeVoxelSize(description) : description.startsWith("ImageJ=") ? imagejVoxelSize(description, resolution) : null;
+  const voxelSize = OME_ROOT.test(description) ? omeVoxelSize(description) : description.startsWith("ImageJ=") ? imagejVoxelSize(description, resolution) : null;
   const Data = { uint8: Uint8Array, uint16: Uint16Array, float32: Float32Array, float64: Float64Array }[dtype];
   const data = new Data(count * width * height);
   for (let page = 0; page < count; page++) {

@@ -1,6 +1,6 @@
 // Port of Big-FISH 0.6.2 spot detection (bigfish.detection, bigfish.stack.log_filter),
 // BSD-3-Clause, Copyright (c) 2020, Arthur Imbert.
-// See ../LICENSE-BIGFISH.txt. Each function names the Big-FISH or
+// See ../LICENSE and ../NOTICE. Each function names the Big-FISH or
 // SciPy/NumPy routine it reproduces; the arithmetic order follows theirs so the
 // filtered image, the local maxima, the elbow threshold and the spot set equal
 // Big-FISH's (validation/reference.json, test/bigfish.test.js).
@@ -250,8 +250,9 @@ export function localMaximum(filtered, minDistance) {
   const { data, shape } = filtered;
   const radii = minDistance.map((d) => Math.ceil(d));
   let current = data;
-  const buffer = new Float64Array(data.length);
-  const next = new Float64Array(data.length);
+  // A maximum is one of the input's values, so the input's own array type holds it exactly.
+  const buffer = new data.constructor(data.length);
+  const next = new data.constructor(data.length);
   for (let axis = 0; axis < shape.length; axis++) {
     const target = axis % 2 === 0 ? buffer : next;
     maximumAlong(current, target, shape, axis, radii[axis]);
@@ -444,7 +445,8 @@ export function thresholdSpots(filtered, mask, threshold) {
 }
 
 // detection.detect_spots for one image with voxel size and spot radius (nm).
-// `threshold` null or undefined selects Big-FISH's automatic elbow threshold.
+// `threshold` null or undefined selects Big-FISH's automatic elbow threshold; a given
+// threshold skips the elbow search, as Big-FISH does, so `curve` is then null.
 export function detectSpots(image, { voxelSize, spotRadius, threshold = null, onProgress = () => {} }) {
   const sigma = objectRadiusPixel(voxelSize, spotRadius);
   if (sigma.length !== image.shape.length) throw new Error(`Give ${image.shape.length} voxel sizes and spot radii for a ${image.shape.length}D image.`);
@@ -453,10 +455,10 @@ export function detectSpots(image, { voxelSize, spotRadius, threshold = null, on
   onProgress("Local maxima", 0.6);
   const mask = localMaximum(filtered, sigma);
   onProgress("Threshold", 0.75);
-  const curve = elbowCurve(filtered, mask);
+  const curve = threshold === null ? elbowCurve(filtered, mask) : null;
   const used = threshold ?? curve.threshold;
   const spots = used === null ? [] : thresholdSpots(filtered, mask, used);
-  return { sigma, filtered, threshold: used, automaticThreshold: curve.threshold, curve, spots };
+  return { sigma, filtered, threshold: used, automaticThreshold: curve?.threshold ?? null, curve, spots };
 }
 
 // stack.maximum_projection: the maximum over z of a 3D stack.

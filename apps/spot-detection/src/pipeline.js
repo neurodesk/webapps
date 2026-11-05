@@ -12,7 +12,8 @@ export function analyse(image, { voxelSize, spotRadius, threshold = null, projec
   const radius = spotRadius.slice(-ndim);
   const detection = detectSpots(source, { voxelSize: voxel, spotRadius: radius, threshold, onProgress });
   onProgress("Sub-pixel fit", 0.8);
-  const positions = subpixel ? fitSubpixel(source, detection.spots, { voxelSize: voxel, spotRadius: radius }) : detection.spots.map((s) => s.slice());
+  const fitProgress = (fitted, total) => onProgress(`Sub-pixel fit, spot ${fitted + 1} of ${total}`, 0.8 + 0.18 * (fitted / total));
+  const positions = subpixel ? fitSubpixel(source, detection.spots, { voxelSize: voxel, spotRadius: radius, onProgress: fitProgress }) : detection.spots.map((s) => s.slice());
   const ids = cellIds(detection.spots, labels, source.shape);
   const cells = ids ? cellCounts(ids, labels) : null;
   return {

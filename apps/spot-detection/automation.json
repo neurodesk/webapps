@@ -28,8 +28,8 @@
         }
       },
       "parameters": {
-        "voxelZ": { "type": "number", "default": 300, "minimum": 0, "description": "Voxel size between planes, nm." },
-        "voxelYx": { "type": "number", "default": 103, "minimum": 0, "description": "Pixel size in y and x, nm." },
+        "voxelZ": { "type": "number", "minimum": 0, "description": "Voxel size between planes, nm; omit to use the TIFF's metadata, else 300." },
+        "voxelYx": { "type": "number", "minimum": 0, "description": "Pixel size in y and x, nm; omit to use the TIFF's metadata, else 103." },
         "radiusZ": { "type": "number", "default": 350, "minimum": 0, "description": "Spot radius along z, nm." },
         "radiusYx": { "type": "number", "default": 150, "minimum": 0, "description": "Spot radius in y and x, nm." },
         "threshold": { "type": "number", "minimum": 0, "description": "LoG threshold; omit for Big-FISH's automatic elbow threshold." },

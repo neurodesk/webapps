@@ -9,7 +9,7 @@ self.onmessage = ({ data }) => {
       onProgress: (stage, fraction) => self.postMessage({ progress: { stage, fraction } }),
     });
     const { image, curve, ...rest } = result;
-    self.postMessage({ result: { ...rest, image: { shape: image.shape, dtype: image.dtype, data: image.data }, curve: { thresholds: curve.thresholds, counts: curve.counts } } });
+    self.postMessage({ result: { ...rest, image: { shape: image.shape, dtype: image.dtype, data: image.data }, curve: curve && { thresholds: curve.thresholds, counts: curve.counts } } });
   } catch (error) {
     self.postMessage({ error: error.message });
   }

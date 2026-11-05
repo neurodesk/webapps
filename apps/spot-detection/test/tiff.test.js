@@ -30,3 +30,20 @@ test("multichannel ImageJ stacks are refused", async () => {
   const tiff = writeTiffStack({ data: new Uint16Array(2 * 4), shape: [2, 2, 2] }, { description: "ImageJ=1.53t\nimages=2\nchannels=2\n" });
   await assert.rejects(readTiffStack(arrayBuffer(tiff)), /several channels/);
 });
+
+const prefixedOme = (sizeC) => `<?xml version="1.0"?><ome:OME xmlns:ome="http://www.openmicroscopy.org/Schemas/OME/2016-06"><ome:Image ID="Image:0"><ome:Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint16" SizeX="2" SizeY="2" SizeZ="${4 / sizeC}" SizeC="${sizeC}" SizeT="1" PhysicalSizeX="0.1" PhysicalSizeY="0.1" PhysicalSizeZ="0.25"/></ome:Image></ome:OME>`;
+
+test("OME-XML with a namespace prefix gives its voxel size", async () => {
+  const tiff = writeTiffStack({ data: new Uint16Array(4 * 4), shape: [4, 2, 2] }, { description: prefixedOme(1) });
+  const image = await readTiffStack(arrayBuffer(tiff));
+  assert.deepEqual(image.shape, [4, 2, 2]);
+  assert.ok(Math.abs(image.voxelSize.z - 250) < 1e-9);
+  assert.ok(Math.abs(image.voxelSize.x - 100) < 1e-9);
+});
+
+test("multichannel OME-TIFFs are refused whatever their namespace prefix", async () => {
+  const tiff = writeTiffStack({ data: new Uint16Array(4 * 4), shape: [4, 2, 2] }, { description: prefixedOme(2) });
+  await assert.rejects(readTiffStack(arrayBuffer(tiff)), /several channels/);
+  const timeSeries = prefixedOme(1).replace('SizeT="1"', 'SizeT="4"');
+  await assert.rejects(readTiffStack(arrayBuffer(writeTiffStack({ data: new Uint16Array(4 * 4), shape: [4, 2, 2] }, { description: timeSeries }))), /time points/);
+});
