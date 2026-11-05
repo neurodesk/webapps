@@ -10,9 +10,9 @@
 // 3. In the box, the centre is the brightest pixel of the projection and the brightest plane
 //    there; the x and y profiles run through that voxel across the box, the z profile through
 //    the whole stack.
-// 4. Each profile is fitted with ImageJ's Gaussian (fit.js); FWHM = 2·sqrt(2 ln 2)·σ. Beads
-//    whose three fits have an adjusted R² below the threshold (0.95 by default) are listed but
-//    left out of the summary.
+// 4. Each profile is fitted with ImageJ's Gaussian (fit.js); FWHM = 2·sqrt(2 ln 2)·σ. A bead
+//    is listed but left out of the summary if any axis fit has an adjusted R² below the
+//    threshold (0.95 by default).
 //
 // Stacks are plane, row, column order: index = (z · ny + y) · nx + x.
 import { fitGaussian } from './fit.js';
@@ -189,6 +189,7 @@ export function analyseBeads(data, { nx, ny, nz, spacing }, { halfBox, prominenc
     bead.goodFit = bead.r2.x >= minR2 && bead.r2.y >= minR2 && bead.r2.z >= minR2;
     onProgress?.(k + 1, maxima.length);
   }
+  onProgress?.(maxima.length, maxima.length);
   return { beads, background: noise, prominence: threshold, maximaCount: maxima.length };
 }
 

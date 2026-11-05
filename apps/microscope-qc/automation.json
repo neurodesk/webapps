@@ -109,7 +109,7 @@
           "description": "Reject beads with a saturated voxel in their box"
         },
         "step": {
-          "type": "number",
+          "type": "integer",
           "minimum": 1,
           "maximum": 50,
           "description": "Iso-intensity zone step in percent (field illumination)",

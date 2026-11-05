@@ -208,18 +208,23 @@ test("cancelling a run leaves no output and permits a complete retry", async ({ 
   test.setTimeout(300000);
   await page.goto("/");
   await loadExample(page, beads);
+  // The first PSF task takes the stack (transferred, not copied) and its result is held back, so
+  // cancelling terminates the worker with the stack and the retry has to decode the file again.
   await page.evaluate(() => {
     const post = Worker.prototype.postMessage;
     Worker.prototype.postMessage = function (message, transfer) {
-      if (message?.type === "psf" && !window.releasePsf) {
-        window.releasePsf = () => post.call(this, message, transfer);
-        return undefined;
+      if (message?.type === "psf" && !window.heldPsf) {
+        window.heldPsf = true;
+        const deliver = this.onmessage;
+        this.onmessage = (event) => {
+          if (event.data.progress !== undefined) deliver(event);
+        };
       }
       return post.call(this, message, transfer);
     };
   });
   await page.locator("#runButton").click();
-  await page.waitForFunction(() => typeof window.releasePsf === "function");
+  await page.waitForFunction(() => window.heldPsf === true);
   await expect(page.locator("#cancelButton")).toBeVisible();
   await page.locator("#cancelButton").click();
   await expect(page.locator("#statusText")).toHaveText("Cancelled");

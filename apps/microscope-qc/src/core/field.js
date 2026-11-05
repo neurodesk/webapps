@@ -6,8 +6,9 @@
 // - Uniformity = 100 · min / max.
 // - Field uniformity = 100 − 100 · SD(8 border points) / max, the SD (population) of the four
 //   corners and the four edge midpoints.
-// - Pixels are binned into iso-intensity zones of floor(I / max · 100 / step) · step percent.
-//   The reference zone is the top one (≥ 100 − step %, default 90–100 %), or the maximum pixel.
+// - Pixels are binned into iso-intensity zones of floor(I / max · 100 / step) · step percent,
+//   for a whole-number step. The reference zone is the top one (≥ 100 − step %, default
+//   90–100 %), or the maximum pixel.
 // - Centering accuracy = 100 − 200 · d / sqrt(w² + h²), d the distance in pixels from the
 //   reference zone's centroid to the image centre (floor(w / 2), floor(h / 2)).
 //
@@ -135,6 +136,19 @@ export function lineProfile(image, width, height, [x1, y1], [x2, y2]) {
   return { distance, values };
 }
 
+/** Uniformity and field uniformity (%) from the extremes and the eight border intensities. */
+export function uniformityMetrics({ min, max, border }) {
+  const mean = border.reduce((a, b) => a + b, 0) / border.length;
+  const sd = Math.sqrt(border.reduce((a, b) => a + (b - mean) ** 2, 0) / border.length);
+  return { uniformity: (100 * min) / max, fieldUniformity: 100 - (100 * sd) / max };
+}
+
+/** Centering accuracy (%) of a reference point against the image centre. */
+export function centeringAccuracy(reference, centre, width, height) {
+  const diagonal = Math.sqrt(width * width + height * height);
+  return 100 - (200 * Math.hypot(reference.x - centre.x, reference.y - centre.y)) / diagonal;
+}
+
 /**
  * Field illumination metrics.
  * @param {ArrayLike<number>} image
@@ -142,7 +156,7 @@ export function lineProfile(image, width, height, [x1, y1], [x2, y2]) {
  * @param {{ blur: boolean, step: number, referenceZone: boolean, saturation: number | null }} options step in percent
  */
 export function analyseField(image, { width, height, dtype }, { blur = true, step = 10, referenceZone = true, saturation = null } = {}) {
-  if (!(step > 0 && step <= 50)) throw new Error('The iso-intensity step must be between 0 and 50 %.');
+  if (!(Number.isInteger(step) && step >= 1 && step <= 50)) throw new Error('The iso-intensity step must be a whole number from 1 to 50 %.');
   if (width < 3 || height < 3) throw new Error('A field illumination image needs at least 3 × 3 pixels.');
   let saturated = 0;
   if (saturation !== null) for (let i = 0; i < image.length; i++) if (image[i] >= saturation) saturated++;
@@ -182,9 +196,10 @@ export function analyseField(image, { width, height, dtype }, { blur = true, ste
   const minPos = position(minAt);
   const centre = { x: Math.trunc(width / 2), y: Math.trunc(height / 2) };
   const reference = referenceZone ? { x: zoneX / zoneCount, y: zoneY / zoneCount } : maxPos;
-  const halfDiagonal = Math.sqrt(width * width + height * height);
-  const distance = Math.hypot(reference.x - centre.x, reference.y - centre.y);
-  const at = ({ x, y }) => pixels[Math.round(y) * width + Math.round(x)];
+  // Points are pixel indices, or a centroid of pixel centres (index + 0.5): the pixel holding
+  // a point is floor(coordinate), kept inside the image.
+  const pixel = (value, size) => Math.min(size - 1, Math.max(0, Math.floor(value)));
+  const at = ({ x, y }) => pixels[pixel(y, height) * width + pixel(x, width)];
   const border = [
     ['Top-left corner', { x: 0, y: 0 }],
     ['Top-right corner', { x: width - 1, y: 0 }],
@@ -196,8 +211,6 @@ export function analyseField(image, { width, height, dtype }, { blur = true, ste
     ['Right edge, middle', { x: width - 1, y: centre.y }],
   ];
   const borderValues = border.map(([, point]) => at(point));
-  const mean = borderValues.reduce((a, b) => a + b, 0) / borderValues.length;
-  const sd = Math.sqrt(borderValues.reduce((a, b) => a + (b - mean) ** 2, 0) / borderValues.length);
   const points = [
     ['Maximum', maxPos, max],
     [referenceZone ? `Reference zone (${threshold}–100 %) centroid` : 'Reference (maximum pixel)', reference, at(reference)],
@@ -211,9 +224,8 @@ export function analyseField(image, { width, height, dtype }, { blur = true, ste
     diagonalTrBl: lineProfile(pixels, width, height, [width - 1, 0], [0, height - 1]),
   };
   return {
-    uniformity: (100 * min) / max,
-    fieldUniformity: 100 - (100 * sd) / max,
-    centeringAccuracy: 100 - (200 * distance) / halfDiagonal,
+    ...uniformityMetrics({ min, max, border: borderValues }),
+    centeringAccuracy: centeringAccuracy(reference, centre, width, height),
     min,
     max,
     centre,

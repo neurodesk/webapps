@@ -2542,6 +2542,10 @@ apps:
         title: PSFj
         reference: "Theer P, Mongis C, Knop M. PSFj: know your fluorescence microscope. Nature Methods. 2014;11(10):981–982."
         doi: 10.1038/nmeth.3102
+      - group: Theoretical resolution
+        title: Multiphoton resolution
+        reference: "Zipfel WR, Williams RM, Webb WW. Nonlinear magic: multiphoton microscopy in the biosciences. Nature Biotechnology. 2003;21(11):1369–1377."
+        doi: 10.1038/nbt899
       - group: Example data
         title: 100 nm bead z-stacks, NA 0.95 (Zenodo 10522322)
         reference: "Miora RHD, Senftleben M, Abrahamsson S. Experimental validation of numerical point spread function calculation including aberration estimation [Data set]. Zenodo; 2024. CC BY 4.0."

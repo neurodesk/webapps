@@ -1,12 +1,14 @@
-// Independent reference numbers for microscope-qc, run in Fiji (ImageJ 1) headless with the
-// MetroloJ_QC 1.3.1.2 jar on the class path (see validation/README.md for the Docker command).
+// Reference numbers for microscope-qc, run in Fiji (ImageJ 1) headless with the MetroloJ_QC
+// 1.3.1.2 jar on the class path (validation/reference.mjs runs it in the pinned Docker image).
 //
 // PSF: ImageJ's MaximumFinder finds the maxima of the ZProjector maximum projection with the
 // given prominence; for every bead centre listed in `centres` (from the app) the profiles are
 // taken exactly as MetroloJ_QC's PSFprofiler does (ImageProcessor.getLine across the crop for x
 // and y, a Slicer reslice for z) and fitted with MetroloJ_QC's own CurveFitterPlus (ImageJ's
-// Gaussian, MetroloJ_QC's starting values). Field: ImageJ's GaussianBlur (σ = 2) and the
-// field-illumination formulas of MetroloJ_QC's fieldIllumination class.
+// Gaussian, MetroloJ_QC's starting values). Field: ImageJ's GaussianBlur (σ = 2), then the
+// field-illumination formulas restated in Groovy below. Those formulas are written by the same
+// author as the app, so they are not an independent check; test/field.test.js pins them to a
+// published MetroloJ_QC report instead.
 //
 // Arguments (key=value, comma separated): stack, centres, halfBox, prominence, px, pz, field, out
 #@ String args

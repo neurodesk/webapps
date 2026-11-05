@@ -11,18 +11,43 @@ export const APP = Object.freeze({
 
 export const ANALYSES = Object.freeze({ psf: "PSF from beads", field: "Field illumination" });
 
-/** Decoded stacks above this are refused before decoding (float32 working copy). */
-export const MAX_STACK_BYTES = 1.5e9;
+/** Files above this are refused before they are read into memory. */
+export const MAX_FILE_BYTES = 1e9;
 
-/** Refuses stacks this app cannot interpret, from the page directories, before decoding. */
-export function checkStack(info) {
+/** Images whose estimated peak working memory is above this are refused before decoding. */
+export const MAX_PEAK_BYTES = 2e9;
+
+// Working memory per pixel of one plane, on top of the float32 stack (4 bytes per voxel, held
+// once: the page and the worker hand it back and forth): the float64 projection (8), the sort
+// order array (16, V8's worst case with its sort copy), the union-find arrays (8), the maxima
+// list (16) and the page's projection, its float32 copy and the display NIfTI (16). Field
+// illumination's blur, zones and returned copy fit inside the same allowance.
+const PLANE_BYTES_PER_PIXEL = 64;
+
+/**
+ * Estimated peak bytes for an image: while decoding, the encoded file and the stack; while
+ * analysing, the stack and the per-plane working arrays.
+ */
+export function peakBytes({ width, height, pages }, encodedBytes = 0) {
+  const plane = width * height;
+  const stack = 4 * plane * pages;
+  return Math.max(encodedBytes + stack, stack + PLANE_BYTES_PER_PIXEL * plane);
+}
+
+/** Refuses a file too large to read, before `file.arrayBuffer()`. */
+export function checkFileSize(file) {
+  if (file.size > MAX_FILE_BYTES) throw new Error(`${file.name} is ${(file.size / 1e9).toFixed(2)} GB; the limit is ${(MAX_FILE_BYTES / 1e9).toFixed(1)} GB. Crop it first.`);
+}
+
+/** Refuses stacks this app cannot interpret or hold, from the page directories, before decoding. */
+export function checkStack(info, encodedBytes = 0) {
   const { metadata, pages, width, height } = info;
   if (metadata.images > 1) throw new Error(`This OME-TIFF holds ${metadata.images} images (series); save the one to analyse as its own file.`);
   if (metadata.sizeC > 1) throw new Error(`This TIFF has ${metadata.sizeC} channels; save one channel as its own stack.`);
   if (metadata.sizeT > 1 && metadata.sizeZ > 1) throw new Error(`This TIFF is a time series of ${metadata.sizeZ}-plane stacks; save one time point.`);
   if (metadata.sizeT > 1 && metadata.kind !== "baseline") throw new Error(`This TIFF is a time series of ${metadata.sizeT} frames, not a z-stack or a single image.`);
-  const bytes = pages * width * height * 4;
-  if (bytes > MAX_STACK_BYTES) throw new Error(`This stack needs ${(bytes / 1e9).toFixed(2)} GB as float32; the limit is ${(MAX_STACK_BYTES / 1e9).toFixed(1)} GB. Crop it first.`);
+  const bytes = peakBytes({ width, height, pages }, encodedBytes);
+  if (bytes > MAX_PEAK_BYTES) throw new Error(`This image needs about ${(bytes / 1e9).toFixed(2)} GB of working memory; the limit is ${(MAX_PEAK_BYTES / 1e9).toFixed(1)} GB. Crop it first.`);
 }
 
 export class SettingsError extends Error {
@@ -33,7 +58,7 @@ export class SettingsError extends Error {
   }
 }
 
-function number(values, field, label, { min = -Infinity, max = Infinity, optional = false, exclusiveMin = false } = {}) {
+function number(values, field, label, { min = -Infinity, max = Infinity, optional = false, exclusiveMin = false, integer = false } = {}) {
   const raw = values[field];
   if (raw === undefined || raw === null || String(raw).trim() === "") {
     if (optional) return null;
@@ -45,6 +70,7 @@ function number(values, field, label, { min = -Infinity, max = Infinity, optiona
     const range = `${exclusiveMin ? "above" : "at least"} ${min}${Number.isFinite(max) ? ` and at most ${max}` : ""}`;
     throw new SettingsError(field, `${label[0].toUpperCase()}${label.slice(1)} must be a number ${range}.`);
   }
+  if (integer && !Number.isInteger(value)) throw new SettingsError(field, `${label[0].toUpperCase()}${label.slice(1)} must be a whole number.`);
   return value;
 }
 
@@ -60,7 +86,7 @@ export function readSettings(values) {
       analysis,
       blur: values.blur !== false && values.blur !== "false",
       referenceZone: values.referenceZone !== false && values.referenceZone !== "false",
-      step: number(values, "step", "the iso-intensity step", { min: 1, max: 50 }),
+      step: number(values, "step", "the iso-intensity step", { min: 1, max: 50, integer: true }),
     };
   }
   const microscope = values.microscope;

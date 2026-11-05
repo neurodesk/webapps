@@ -17,7 +17,7 @@ import {
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
-import { ANALYSES, APP, SettingsError, boxHalfWidth, provenance, readSettings, saturationLevel, suggestedAnalysis } from "./config.js";
+import { ANALYSES, APP, SettingsError, boxHalfWidth, checkFileSize, provenance, readSettings, saturationLevel, suggestedAnalysis } from "./config.js";
 import { MICROSCOPES } from "./core/optics.js";
 import { maxProjection } from "./core/psf.js";
 import {
@@ -171,11 +171,34 @@ function callWorker(message, { signal, onProgress, transfer = [] } = {}) {
         return;
       }
       stop();
-      if (data.error !== undefined) reject(new Error(data.error));
+      if (data.error !== undefined) reject(Object.assign(new Error(data.error), { data: data.data }));
       else resolve(data.result);
     };
     worker.postMessage(message, transfer);
   });
+}
+
+/** Decodes the file again when a cancelled task's worker was terminated holding the stack. */
+async function restoreStack(signal) {
+  if (input.data.buffer.byteLength) return;
+  const buffer = await input.file.arrayBuffer();
+  input.data = (await callWorker({ type: "decode", buffer }, { signal, transfer: [buffer] })).data;
+}
+
+/**
+ * Runs a task on the loaded stack, transferred to the worker rather than copied and taken back
+ * with the result or the error.
+ */
+async function callWithStack(message, options) {
+  const target = input;
+  try {
+    const { data, ...result } = await callWorker({ ...message, data: target.data }, { ...options, transfer: [target.data.buffer] });
+    target.data = data;
+    return result;
+  } catch (error) {
+    if (error.data) target.data = error.data;
+    throw error;
+  }
 }
 
 function clearRun() {
@@ -219,6 +242,7 @@ async function loadFiles(filesPromise, signal) {
     const [file] = files;
     if (!file.size) throw new Error(`${file.name} is empty.`);
     if (!/\.tiff?$/i.test(file.name)) throw new Error(`${file.name} is not a TIFF (.tif, .tiff or .ome.tif) image.`);
+    checkFileSize(file);
     const buffer = await file.arrayBuffer();
     current.throwIfAborted();
     const decoded = await callWorker({ type: "decode", buffer }, {
@@ -407,17 +431,19 @@ async function runQc(signal, settings) {
   clearRun();
   try {
     const started = performance.now();
+    await restoreStack(current);
     const stem = outputStem(input.file.name);
     const saturation = saturationLevel(dtype);
     let next;
     if (settings.analysis === "psf") {
+      // The projection is drawn from the stack before the worker takes it.
       input.display = null;
+      inputDisplay();
       const spacing = { x: settings.pixelX, y: settings.pixelY, z: settings.zStep };
       const halfBox = boxHalfWidth(settings);
       const prominence = settings.prominence;
-      const result = await callWorker({
+      const result = await callWithStack({
         type: "psf",
-        data: input.data,
         dims: { nx: width, ny: height, nz: planes, spacing },
         options: { halfBox, prominence, autoProminence: 10, minR2: settings.minR2, saturation: settings.excludeSaturated ? saturation : null },
         theory: settings.theory,
@@ -437,7 +463,7 @@ async function runQc(signal, settings) {
       log.log(`Beads: ${result.maximaCount} maxima above prominence ${result.prominence.toFixed(1)}; ${result.summary.measured} measured, ${result.summary.used} used`, "info", "analysis");
       log.log(`FWHM (mean ± SD, µm): x ${formatNumber(result.summary.x.mean)} ± ${formatNumber(result.summary.x.sd)}, y ${formatNumber(result.summary.y.mean)} ± ${formatNumber(result.summary.y.sd)}, z ${formatNumber(result.summary.z.mean)} ± ${formatNumber(result.summary.z.sd)}`, "info", "analysis");
     } else {
-      const field = await callWorker({ type: "field", data: input.data, dims: { width, height, dtype }, options: { blur: settings.blur, step: settings.step, referenceZone: settings.referenceZone, saturation } }, { signal: current });
+      const field = await callWithStack({ type: "field", dims: { width, height, dtype }, options: { blur: settings.blur, step: settings.step, referenceZone: settings.referenceZone, saturation } }, { signal: current });
       current.throwIfAborted();
       const { zones, profiles: _profiles, smoothed: _smoothed, ...summary } = field;
       const record = provenance({ input: input.file, settings, dims: input.dims, extra: { metrics: { uniformity: field.uniformity, fieldUniformity: field.fieldUniformity, centeringAccuracy: field.centeringAccuracy } } });

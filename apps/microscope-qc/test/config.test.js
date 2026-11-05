@@ -1,7 +1,7 @@
 // Settings validation, theoretical resolution, OME optics and output tables.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { APP, SettingsError, boxHalfWidth, checkStack, readSettings, saturationLevel, suggestedAnalysis } from "../src/config.js";
+import { APP, MAX_FILE_BYTES, SettingsError, boxHalfWidth, checkFileSize, checkStack, peakBytes, readSettings, saturationLevel, suggestedAnalysis } from "../src/config.js";
 import { omeOptics, theoreticalResolution } from "../src/core/optics.js";
 import { beadsCsv, csv, outputStem } from "../src/outputs.js";
 import { displayAffine, displaySpacing } from "../src/display.js";
@@ -31,6 +31,14 @@ test("OME optics are read whatever the prefix, quote style or entities", () => {
   assert.equal(omeOptics('<OME><Objective LensNA="0.3" Immersion="Air"/></OME>').refractiveIndex, 1);
 });
 
+test("OME optics come from the objective the image's ObjectiveSettings names", () => {
+  const instrument = '<Objective ID="Objective:0:0" LensNA="0.3" Immersion="Air"/><Objective ID="Objective:0:1" LensNA="1.4" Immersion="Oil"/>';
+  assert.equal(omeOptics(`<OME>${instrument}<Image><ObjectiveSettings ID="Objective:0:1" RefractiveIndex="1.518"/></Image></OME>`).na, 1.4);
+  assert.equal(omeOptics(`<OME>${instrument}<Image><ObjectiveSettings ID="Objective:0:0"/></Image></OME>`).refractiveIndex, 1);
+  assert.equal(omeOptics(`<OME>${instrument}</OME>`).na, null);
+  assert.equal(omeOptics(`<OME>${instrument}<Image><ObjectiveSettings ID="Objective:9"/></Image></OME>`).na, null);
+});
+
 test("PSF settings need the optics and voxel size; field settings do not", () => {
   const settings = readSettings(PSF);
   assert.equal(settings.zStep, 0.133);
@@ -43,6 +51,7 @@ test("PSF settings need the optics and voxel size; field settings do not", () =>
   assert.throws(() => readSettings({ ...PSF, microscope: "confocal" }), (error) => error.field === "excitation");
   assert.deepEqual(readSettings({ analysis: "field", step: "10", blur: true, referenceZone: false }), { analysis: "field", blur: true, referenceZone: false, step: 10 });
   assert.throws(() => readSettings({ analysis: "field", step: "0" }), (error) => error.field === "step");
+  assert.throws(() => readSettings({ analysis: "field", step: "1.15" }), (error) => error.field === "step" && /whole number/.test(error.message));
 });
 
 test("stacks the app cannot interpret are refused from their headers", () => {
@@ -56,6 +65,21 @@ test("stacks the app cannot interpret are refused from their headers", () => {
   assert.equal(saturationLevel("float32"), null);
   assert.equal(suggestedAnalysis(81), "psf");
   assert.equal(suggestedAnalysis(1), "field");
+});
+
+test("images whose working memory exceeds the budget are refused before reading or decoding", () => {
+  const base = { metadata: { kind: "ome", images: 1, sizeC: 1, sizeZ: 4, sizeT: 1 } };
+  // The float32 stack is 1.07 GB, but the per-plane arrays of an 8192 × 8192 plane are 4.3 GB.
+  const wide = { ...base, width: 8192, height: 8192, pages: 4 };
+  assert.ok(4 * 8192 * 8192 * 4 < 1.5e9);
+  assert.ok(peakBytes(wide) > 5e9);
+  assert.throws(() => checkStack(wide), /working memory; the limit is 2\.0 GB/);
+  // The encoded file counts while decoding.
+  const stack = { ...base, width: 512, height: 512, pages: 600, metadata: { ...base.metadata, sizeZ: 600 } };
+  assert.doesNotThrow(() => checkStack(stack, 0));
+  assert.throws(() => checkStack(stack, 1.5e9), /limit/);
+  assert.doesNotThrow(() => checkFileSize({ name: "a.tif", size: MAX_FILE_BYTES }));
+  assert.throws(() => checkFileSize({ name: "big.tif", size: MAX_FILE_BYTES + 1 }), /big\.tif is 1\.00 GB; the limit is 1\.0 GB/);
 });
 
 test("tables quote text and keep numbers short; names lose the TIFF extension", () => {

@@ -1,8 +1,10 @@
 // Theoretical resolution and the acquisition optics an OME-XML header records.
 //
-// The resolutions are the FWHM estimates of Faklaris et al. 2022 (J Cell Biol 221:e202107093,
-// Table 1), the values MetroloJ_QC compares measured bead FWHMs with. Wavelengths are in
-// nanometres, results in micrometres. Widefield and spinning disk use the emission
+// The resolutions are the FWHM estimates MetroloJ_QC compares measured bead FWHMs with: the
+// widefield, confocal and spinning-disk formulas of Faklaris et al. 2022 (J Cell Biol
+// 221:e202107093, Methods), and for multiphoton the constants of Zipfel, Williams & Webb 2003
+// (Nat Biotechnol 21:1369, doi:10.1038/nbt899). Wavelengths are in nanometres, results in
+// micrometres. Widefield and spinning disk use the emission
 // wavelength, point-scanning confocal and multiphoton the excitation wavelength.
 
 export const MICROSCOPES = Object.freeze({
@@ -52,13 +54,17 @@ function decode(value) {
   });
 }
 
-/** The attributes of the first `<prefix:Name …>` element, in either quote style, entities decoded. */
+/** The attributes of every `<prefix:Name …>` element, in either quote style, entities decoded. */
+function elements(xml, name) {
+  return Array.from(xml.matchAll(new RegExp(`<(?:[\\w.-]+:)?${name}\\b([^>]*)>`, 'g')), ([, tag]) => {
+    const attributes = {};
+    for (const [, key, double, single] of tag.matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) attributes[key] = decode(double ?? single);
+    return attributes;
+  });
+}
+
 function element(xml, name) {
-  const tag = xml.match(new RegExp(`<(?:[\\w.-]+:)?${name}\\b([^>]*)>`))?.[1];
-  if (tag === undefined) return null;
-  const attributes = {};
-  for (const [, key, double, single] of tag.matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) attributes[key] = decode(double ?? single);
-  return attributes;
+  return elements(xml, name)[0] ?? null;
 }
 
 const NANOMETRES = { nm: 1, 'µm': 1000, um: 1000, pm: 1e-3, 'Å': 0.1, m: 1e9 };
@@ -81,8 +87,10 @@ export function omeOptics(description) {
   const xml = String(description ?? '');
   const empty = { na: null, refractiveIndex: null, emission: null, excitation: null, type: null };
   if (!/<(?:[\w.-]+:)?OME\b/.test(xml)) return empty;
-  const objective = element(xml, 'Objective');
   const settings = element(xml, 'ObjectiveSettings');
+  // The image's ObjectiveSettings names the objective used; an instrument may list several.
+  const objectives = elements(xml, 'Objective');
+  const objective = settings?.ID !== undefined ? objectives.find((candidate) => candidate.ID === settings.ID) ?? null : objectives.length === 1 ? objectives[0] : null;
   const channel = element(xml, 'Channel');
   const na = Number(objective?.LensNA);
   const index = Number(settings?.RefractiveIndex);

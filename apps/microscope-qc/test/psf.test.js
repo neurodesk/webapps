@@ -77,7 +77,7 @@ test("bead fits equal MetroloJ_QC's CurveFitterPlus on the example's profiles", 
       const values = bead.profiles[axis];
       const step = axis === "z" ? 0.1328337499999975 : 0.1261517431295761;
       const fit = fitGaussian(values.map((_, i) => i * step), values);
-      assert.ok(Math.abs(fit.fwhm - bead.fwhm[axis]) / bead.fwhm[axis] < 1e-5, `bead ${bead.id} ${axis}: ${fit.fwhm} vs MetroloJ_QC ${bead.fwhm[axis]}`);
+      assert.ok(Math.abs(fit.fwhm - bead.fwhm[axis]) / bead.fwhm[axis] < 2e-6, `bead ${bead.id} ${axis}: ${fit.fwhm} vs MetroloJ_QC ${bead.fwhm[axis]}`);
       assert.ok(Math.abs(fit.r2 - bead.r2[axis]) < 1e-6);
       compared++;
     }
@@ -96,7 +96,7 @@ test("maxima and bead centres equal ImageJ's MaximumFinder and MetroloJ_QC's cen
   for (const ref of reference.small.beads) {
     const bead = fitted.find((b) => b.id === ref.id);
     assert.deepEqual([bead.x, bead.y, bead.z], [ref.x, ref.y, ref.z]);
-    for (const axis of ["x", "y", "z"]) assert.ok(Math.abs(bead.fwhm[axis] - ref.fwhm[axis]) / ref.fwhm[axis] < 1e-5, `${ref.id} ${axis}`);
+    for (const axis of ["x", "y", "z"]) assert.ok(Math.abs(bead.fwhm[axis] - ref.fwhm[axis]) / ref.fwhm[axis] < 2e-6, `${ref.id} ${axis}`);
   }
 });
 
@@ -117,4 +117,12 @@ test("the automatic prominence is 10 background SDs of the projection", () => {
   const result = analyseBeads(Float32Array.from(small.data), small, { halfBox: 6, minR2: 0.95, saturation: null });
   assert.ok(Math.abs(result.prominence - 10 * result.background.sd) < 1e-12);
   assert.throws(() => analyseBeads(new Float32Array(64 * 64), { nx: 64, ny: 64, nz: 1, spacing: { x: 1, y: 1, z: 1 } }, { halfBox: 4, minR2: 0.9, saturation: null }), /z-stack/);
+});
+
+test("progress reaches the end even when the last maxima are rejected", () => {
+  const small = smallBeads();
+  const calls = [];
+  const { beads, maximaCount } = analyseBeads(Float32Array.from(small.data), small, { halfBox: 15, prominence: 100, minR2: 0.95, saturation: 65535 }, (done, total) => calls.push([done, total]));
+  assert.ok(beads.at(-1).rejection, "the last maximum is rejected in this case");
+  assert.deepEqual(calls.at(-1), [maximaCount, maximaCount]);
 });

@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { analyseField, imagejGaussianBlur, imagejGaussianKernel, lineProfile } from "../src/core/field.js";
+import { analyseField, centeringAccuracy, imagejGaussianBlur, imagejGaussianKernel, lineProfile, uniformityMetrics } from "../src/core/field.js";
 import { smallField } from "./synthetic.js";
 
 const reference = JSON.parse(readFileSync(new URL("./fixtures/metroloj-reference.json", import.meta.url), "utf8"));
@@ -54,4 +54,37 @@ test("profiles sample round(length) + 1 points along the line", () => {
   const image = Float32Array.from({ length: 12 }, (_, i) => i);
   const profile = lineProfile(image, 4, 3, [0, 1], [3, 1]);
   assert.deepEqual(Array.from(profile.values), [4, 5, 6, 7]);
+});
+
+test("the formulas reproduce a published MetroloJ_QC field illumination report", () => {
+  // University of Eastern Finland, LSM800 field illumination, 2026-06-12, MetroloJ_QC 1.3.1.2:
+  // https://sites.uef.fi/cell-and-tissue-imaging-unit/wp-content/uploads/sites/168/2026/07/LSM800_Illumination_2026-06-12_Illumination.pdf
+  const { uniformity, fieldUniformity } = uniformityMetrics({ min: 19, max: 42, border: [23, 40, 21, 32, 26, 27, 28, 31] });
+  assert.equal(uniformity.toFixed(1), "45.2");
+  assert.equal(fieldUniformity.toFixed(1), "86.8");
+  assert.equal(centeringAccuracy({ x: 900.9, y: 997.6 }, { x: 980, y: 980 }, 1960, 1960).toFixed(1), "94.2");
+});
+
+test("the iso-intensity step is a whole number, and any whole step finds the reference zone", () => {
+  const dims = { width: 9, height: 7, dtype: "uint16" };
+  const flat = new Uint16Array(63).fill(500);
+  assert.throws(() => analyseField(flat, dims, { step: 1.15 }), /whole number/);
+  for (const step of [1, 3, 7, 33, 50]) {
+    const field = analyseField(flat, dims, { step });
+    assert.equal(field.referencePixels, 63, `step ${step}`);
+    assert.deepEqual(field.reference, { x: 4.5, y: 3.5 });
+    assert.ok(Number.isFinite(field.centeringAccuracy));
+  }
+});
+
+test("reference points on the right and bottom edges read their own pixel", () => {
+  for (const [x, y] of [[2, 2], [2, 0], [0, 2], [2, 1]]) {
+    const data = new Float32Array(9).fill(1);
+    data[y * 3 + x] = 10;
+    const field = analyseField(data, { width: 3, height: 3, dtype: "float32" }, { blur: false });
+    assert.deepEqual(field.reference, { x: x + 0.5, y: y + 0.5 });
+    const point = field.points.find((p) => p.name.startsWith("Reference zone"));
+    assert.equal(point.intensity, 10, `bright pixel (${x}, ${y})`);
+    assert.equal(point.relative, 1);
+  }
 });

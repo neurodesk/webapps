@@ -2,7 +2,7 @@
   {
     "id": "evos-beads",
     "label": "100 nm beads, widefield 40×/0.95 (81 planes)",
-    "description": "TetraSpeck beads imaged through a 40×/0.95 air objective on an EVOS M5000 widefield microscope (Miora, Senftleben & Abrahamsson, Zenodo 10522322, CC BY 4.0): 512 × 512 × 81, 0.126 µm pixels, 0.133 µm z step.",
+    "description": "TetraSpeck beads imaged through a 40×/0.95 air objective on an EVOS M5000 widefield microscope (Miora, Senftleben & Abrahamsson, Zenodo 10522322, CC BY 4.0, https://creativecommons.org/licenses/by/4.0/): 512 × 512 × 81, 0.126 µm pixels, 0.133 µm z step. Cropped from the 2048 × 1536 original, OME-XML header added; pixels unchanged.",
     "expectedResult": "About 60 beads detected; the well-fitted ones give lateral FWHM near 0.38 µm (1.4 × the 0.28 µm theory) and axial near 2.3 µm, flagged at over 2 × the 1.03 µm theory.",
     "files": [
       {

@@ -1,6 +1,6 @@
 // Records test/fixtures/metroloj-reference.json: ImageJ and MetroloJ_QC numbers for the bead
 // example, the small synthetic bead stack and the small synthetic field image, computed in Fiji
-// by metroloj_reference.groovy (Docker fiji/fiji with the MetroloJ_QC 1.3.1.2 jar).
+// by metroloj_reference.groovy (the Fiji Docker image and MetroloJ_QC 1.3.1.2 jar pinned below).
 //
 // usage: node validation/reference.mjs <examples-dir> <MetroloJ_QC.jar> <scratch-dir>
 //   <examples-dir> holds evos-40x-na095-tetraspeck-100nm.ome.tif and
@@ -15,12 +15,18 @@ import { omeOptics, theoreticalResolution } from "../src/core/optics.js";
 import { boxHalfWidth } from "../src/config.js";
 import { smallBeads, smallField } from "../test/synthetic.js";
 
+// fiji/fiji:latest when the fixture was recorded (ImageJ 1.53q).
+const FIJI_IMAGE = "fiji/fiji@sha256:6ca1105db5b8f4234baab107f7b833ba0f5da64770ef48dddabb954990d68120";
+// MetroloJ_QC-1.3.1.2.jar, the jar the fixture was recorded with.
+const METROLOJ_JAR_SHA256 = "aae4a65782a2844fcece29c951f3d58f9e8e7ea742385afdf04a177f01f262d2";
+
 const [examplesDir, jar, scratchArg] = process.argv.slice(2);
 if (!scratchArg) throw new Error("usage: node validation/reference.mjs <examples-dir> <MetroloJ_QC.jar> <scratch-dir>");
 const scratch = resolve(scratchArg);
 await mkdir(scratch, { recursive: true });
 const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));
 const here = new URL(".", import.meta.url).pathname;
+if (createHash("sha256").update(await readFile(jar)).digest("hex") !== METROLOJ_JAR_SHA256) throw new Error(`${jar}: SHA-256 differs from MetroloJ_QC 1.3.1.2`);
 
 async function example(name) {
   const file = examples.flatMap((e) => e.files).find((f) => f.name === name);
@@ -34,7 +40,7 @@ function fiji({ stack, centres, halfBox, prominence, px, pz, field = "none", out
   const args = `stack=/w/${stack},centres=/w/${centres},halfBox=${halfBox},prominence=${prominence},px=${px},pz=${pz},field=${field === "none" ? "none" : `/w/${field}`},out=/w/${out}`;
   execFileSync("docker", [
     "run", "--rm", "-v", `${scratch}:/w`, "-v", `${resolve(jar)}:/opt/fiji/Fiji.app/plugins/MetroloJ_QC.jar:ro`, "-v", `${here}:/v:ro`,
-    "fiji/fiji:latest", "ImageJ-linux64", "--headless", "--console", "--run", "/v/metroloj_reference.groovy", `args="${args}"`,
+    FIJI_IMAGE, "ImageJ-linux64", "--headless", "--console", "--run", "/v/metroloj_reference.groovy", `args="${args}"`,
   ], { stdio: "inherit", timeout: 600000 });
 }
 
@@ -89,7 +95,7 @@ fiji({ stack: "small-beads.tif", centres: await centresFor("small-centres.csv", 
 const smallRef = await parse("small.csv");
 
 const fixture = {
-  source: "validation/reference.mjs: Fiji (fiji/fiji:latest, ImageJ 1.53q) headless with MetroloJ_QC 1.3.1.2; profiles and fits from MetroloJ_QC's CurveFitterPlus, maxima from ImageJ's MaximumFinder (strict, edges kept), blur from ImageJ's GaussianBlur",
+  source: `validation/reference.mjs: Fiji (${FIJI_IMAGE}, ImageJ 1.53q) headless with MetroloJ_QC 1.3.1.2 (jar sha256 ${METROLOJ_JAR_SHA256}); profiles and fits from MetroloJ_QC's CurveFitterPlus, maxima from ImageJ's MaximumFinder (strict, edges kept), blur from ImageJ's GaussianBlur, field formulas restated in Groovy`,
   example: {
     file: beadsName,
     halfBox,
