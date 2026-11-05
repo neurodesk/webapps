@@ -2,7 +2,7 @@
 // any voxels are decoded, and non-finite samples refused at load.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rasterSize, readImages } from "../src/io.js";
+import { rasterSize, readImages, withoutExif } from "../src/io.js";
 import { tiffLayout, writeTiff } from "../src/tiff.js";
 import { MAX_VOXELS } from "../src/config.js";
 import { buildTiff, omeXml } from "./tiff-fixtures.mjs";
@@ -176,4 +176,54 @@ test("a JPEG the browser decodes rotated from its header size is refused", async
   mockDecoder({ rotates: "always" });
   const files = [0, 1].map((z) => rotatedJpeg(z));
   await assert.rejects(readImages(files), /slice0\.jpg could not be read: it decodes to 2 × 4, not the 4 × 2 its header gives/);
+});
+
+test("EXIF after the start of frame is stripped too, so the slice stays on its stored grid", async (t) => {
+  t.after(removeDecoder);
+  mockDecoder({ rotates: "exif" });
+  const [marker, payload] = EXIF_ROTATED;
+  const sof = [0xff, 0xc0, 0, 11, 8, 0, 2, 0, 4, 1, 1, 0x11, 0];
+  const segment = (m, p) => [0xff, m, (p.length + 2) >> 8, (p.length + 2) & 0xff, ...p];
+  const bytes = new Uint8Array([0xff, 0xd8, ...sof, ...segment(marker, payload), ...segment(0xfe, [0]), 0xff, 0xd9]);
+  const { image } = await readImages([new File([bytes], "late.jpg", { type: "image/jpeg" })]);
+  assert.deepEqual(image.dims, [4, 2, 1]);
+  assert.deepEqual([...image.data], [0, 1, 2, 3, 10, 11, 12, 13]);
+});
+
+test("a PNG loses its eXIf chunk before decoding and keeps every other chunk", async () => {
+  const chunk = (type, data) => {
+    const out = new Uint8Array(12 + data.length);
+    new DataView(out.buffer).setUint32(0, data.length);
+    out.set(Buffer.from(type, "latin1"), 4);
+    out.set(data, 8);
+    return out;
+  };
+  const png = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", new Uint8Array(13)), chunk("eXIf", new Uint8Array([0x4d, 0x4d, 0, 0x2a])), chunk("IDAT", new Uint8Array([1, 2, 3])), chunk("IEND", new Uint8Array())]);
+  const bytes = Buffer.from(await (await withoutExif(png)).arrayBuffer());
+  assert.equal(bytes.includes("eXIf"), false);
+  for (const type of ["IHDR", "IDAT", "IEND"]) assert.equal(bytes.includes(type), true, type);
+  assert.equal(bytes.length, png.size - 16);
+});
+
+test("a TIFF stack decodes from one read of the file, not one slice per strip", async () => {
+  const buffer = buildTiff({ width: 16, height: 16, pages: pages(64) });
+  class CountingFile extends File {
+    slices = 0;
+    reads = 0;
+    slice(...args) {
+      this.slices += 1;
+      return super.slice(...args);
+    }
+    arrayBuffer() {
+      this.reads += 1;
+      return super.arrayBuffer();
+    }
+  }
+  const probeOnly = new CountingFile([buffer], "probe.tif", { type: "image/tiff" });
+  await tiffLayout(probeOnly);
+  const file = new CountingFile([buffer], "stack.tif", { type: "image/tiff" });
+  const { image } = await readImages([file]);
+  assert.deepEqual(image.dims, [16, 16, 64]);
+  assert.equal(file.reads, 1);
+  assert.ok(file.slices <= probeOnly.slices + 2, `${file.slices} slices against ${probeOnly.slices} for the headers alone`);
 });

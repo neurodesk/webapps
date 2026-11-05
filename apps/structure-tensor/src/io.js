@@ -27,8 +27,9 @@ const readView = async (file, at, length) => new DataView(await file.slice(at, a
 /**
  * The marker segments of a JPEG before its scan, read with small slices so large APP segments
  * (ICC profiles, EXIF thumbnails) cost no more than their headers. Yields
- * { at, marker, length, view } with `view` the segment's first 12 bytes; stops at a
- * start of frame, a scan, the end of the file or a byte that is not a marker.
+ * { at, marker, length, view } with `view` the segment's first 12 bytes; stops at the
+ * scan, the end of the file or a byte that is not a marker. Segments after the start of
+ * frame are yielded too: an APP1 there still carries an orientation decoders apply.
  */
 async function* jpegSegments(file) {
   let at = 2;
@@ -48,12 +49,11 @@ async function* jpegSegments(file) {
     if (marker === 0xd9 || marker === 0xda) return;
     const length = 2 + view.getUint16(2);
     yield { at, marker, length, view };
-    // Start-of-frame markers, except DHT (C4), JPG (C8) and DAC (CC).
-    if (isFrameStart(marker)) return;
     at += length;
   }
 }
 
+// Start-of-frame markers, except DHT (C4), JPG (C8) and DAC (CC).
 const isFrameStart = (marker) => marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
 
 const isJpeg = async (file) => file.size >= 4 && (await readView(file, 0, 2)).getUint16(0) === 0xffd8;
@@ -69,8 +69,29 @@ export async function rasterSize(file) {
   return null;
 }
 
-/** The JPEG without its EXIF segments, so no decoder can apply their orientation. */
-async function withoutExif(file) {
+const isPng = async (file) => file.size >= 8 && (await readView(file, 0, 4)).getUint32(0) === 0x89504e47;
+
+/** The PNG without its eXIf chunks, read chunk header by chunk header. */
+async function withoutPngExif(file) {
+  const parts = [];
+  let kept = 0;
+  for (let at = 8; at + 12 <= file.size; ) {
+    const view = await readView(file, at, 8);
+    const length = view.getUint32(0);
+    const type = view.getUint32(4);
+    if (type === 0x65584966) {
+      parts.push(file.slice(kept, at));
+      kept = at + 12 + length;
+    }
+    if (type === 0x49454e44) break;
+    at += 12 + length;
+  }
+  return kept ? new Blob([...parts, file.slice(kept)], { type: file.type }) : file;
+}
+
+/** The JPEG or PNG without its EXIF metadata, so no decoder can apply its orientation. */
+export async function withoutExif(file) {
+  if (await isPng(file)) return withoutPngExif(file);
   if (!(await isJpeg(file))) return file;
   const parts = [];
   let kept = 0;
@@ -88,7 +109,7 @@ async function withoutExif(file) {
  * orientation is ignored, as ImageJ ignores it. A decoder that rotates anyway is refused.
  */
 async function readRaster(file, [nx, ny]) {
-  const bitmap = await createImageBitmap(await withoutExif(file), { imageOrientation: "none" });
+  const bitmap = await createImageBitmap(await withoutExif(file));
   const { width, height } = bitmap;
   if (width !== nx || height !== ny) {
     bitmap.close();
@@ -106,7 +127,7 @@ async function readRaster(file, [nx, ny]) {
 
 /**
  * One file's kind and dimensions from its header alone, before any voxel array is allocated.
- * A TIFF also carries its parsed layout for `decode`. Throws a message for the status bar.
+ * Throws a message for the status bar.
  */
 async function probe(file) {
   const kind = inputKind(file.name);
@@ -115,7 +136,7 @@ async function probe(file) {
   try {
     if (kind === "tiff") {
       const layout = await tiffLayout(file);
-      return { file, kind, dims: layout.dims, layout };
+      return { file, kind, dims: layout.dims };
     }
     if (kind === "nifti") {
       const { dims } = await readNiftiHeader(file);
@@ -131,14 +152,15 @@ async function probe(file) {
 }
 
 /** Decodes a probed file's voxels. */
-async function decode({ file, kind, dims, layout }) {
+async function decode({ file, kind, dims }) {
   if (kind === "nifti") {
     const volume = parseNiftiVolume(await decodeNiftiBuffer(await file.arrayBuffer()), { OutputCtor: Float64Array });
     return { data: volume.imageData, dims: volume.dims, spacing: volume.voxelSize, unit: "mm", kind, header: volume.headerBytes };
   }
   let image;
   try {
-    image = kind === "tiff" ? await readTiffPages(layout) : await readRaster(file, dims);
+    // The probe read only headers; pixels come from one read, not one slice per strip.
+    image = kind === "tiff" ? await readTiffPages(await tiffLayout(await file.arrayBuffer())) : await readRaster(file, dims);
   } catch (error) {
     throw new Error(`${file.name} could not be read: ${error.message}`);
   }
