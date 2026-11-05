@@ -1,4 +1,6 @@
 import { test } from "node:test";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { readImageStack } from "../src/image-stack.js";
 import { writeTiffStack } from "./tiff-fixture.mjs";
@@ -81,13 +83,16 @@ test("a TIFF whose header declares more than the memory budget is refused before
     }
     ifd = view.getUint32(ifd + 2 + entries * 12, true);
   }
-  const allocate = Uint16Array;
-  let largest = 0;
-  globalThis.Uint16Array = new Proxy(allocate, { construct(target, args) { if (typeof args[0] === "number") largest = Math.max(largest, args[0]); return new target(...args); } });
-  try {
-    await assert.rejects(readImageStack(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)), /2 × 32768 × 32768 uint16 image needs about 78\.0 GB/);
-  } finally {
-    globalThis.Uint16Array = allocate;
-  }
-  assert.ok(largest < 1e6, `allocated ${largest} elements before refusing`);
+  // A stub that fails loudly replaces the pixel decoder, so the message shows the refusal came first.
+  const script = `
+    import { mock } from "node:test";
+    import { inspectTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
+    mock.module("@neurodesk/webapp-components/file-io/tiff", { namedExports: { inspectTiffStack, readTiffStack: () => { throw new Error("pixels decoded"); } } });
+    const { readImageStack } = await import(${JSON.stringify(new URL("../src/image-stack.js", import.meta.url).href)});
+    const bytes = Buffer.from(process.argv[1], "base64");
+    await readImageStack(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)).catch((error) => console.log(error.message));
+  `;
+  const args = ["--experimental-test-module-mocks", "--no-warnings", "--input-type=module", "-e", script, Buffer.from(buffer).toString("base64")];
+  const message = execFileSync(process.execPath, args, { cwd: fileURLToPath(new URL("..", import.meta.url)), encoding: "utf8" }).trim();
+  assert.match(message, /^This 2 × 32768 × 32768 uint16 image needs about 78\.0 GB/);
 });

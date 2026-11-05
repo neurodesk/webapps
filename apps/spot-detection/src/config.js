@@ -37,12 +37,18 @@ export function detectionSettings(parameters = {}) {
 }
 
 // The form's voxel sizes from a TIFF's metadata (ImageJ or OME, in nm), rounded as the form
-// shows them; an axis the file does not record is left out.
+// shows them; an axis the file does not record is left out. The settings hold one yx pixel
+// size, so a file whose y and x spacings differ is refused rather than analysed at one of them.
 export function voxelFromFile(voxelSize) {
   const round = (value) => (value ? Number(value.toFixed(3)) : undefined);
   const out = {};
   const z = round(voxelSize?.z);
-  const yx = round(voxelSize?.x ?? voxelSize?.y);
+  const y = round(voxelSize?.y);
+  const x = round(voxelSize?.x);
+  if (y !== undefined && x !== undefined && y !== x) {
+    throw new Error(`The file's pixels are ${y} nm in y and ${x} nm in x; spot detection needs square pixels, so resample the image to one yx spacing.`);
+  }
+  const yx = x ?? y;
   if (z !== undefined) out.voxelZ = z;
   if (yx !== undefined) out.voxelYx = yx;
   return out;

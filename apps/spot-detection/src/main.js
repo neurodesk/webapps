@@ -115,7 +115,11 @@ async function showResult(stage) {
     return showVolume({ file: input.display });
   }
   log.log(`Showing ${outputs.overlay.base.name} with the detected spots`, "info", "technical");
-  return showVolume({ file: outputs.overlay.base, overlay: { file: outputs.overlay.file, range: [0.5, 1] } });
+  return showOverlay(outputs.overlay);
+}
+
+function showOverlay(overlay, signal) {
+  return showVolume({ file: overlay.base, overlay: { file: overlay.file, range: [0.5, 1] } }, { signal });
 }
 
 function clearOutputs() {
@@ -174,11 +178,21 @@ async function readTiffFiles(files, signal, what) {
   return { file, image };
 }
 
-function showVoxelSize(voxelSize) {
-  const fromFile = voxelFromFile(voxelSize);
+// The voxel size the preview is drawn at: the file's, else the form's when it is valid, else
+// the default. The form's other settings are checked when a run starts, not here.
+function previewVoxel(fromFile) {
+  const form = (id) => {
+    const value = Number($(id).value);
+    return value > 0 ? value : DEFAULTS[id];
+  };
+  const z = fromFile.voxelZ ?? form("voxelZ");
+  const yx = fromFile.voxelYx ?? form("voxelYx");
+  return [z, yx, yx];
+}
+
+function showVoxelSize(fromFile) {
   if (fromFile.voxelZ !== undefined) $("voxelZ").value = String(fromFile.voxelZ);
   if (fromFile.voxelYx !== undefined) $("voxelYx").value = String(fromFile.voxelYx);
-  return Object.keys(fromFile).length > 0;
 }
 
 async function loadFiles(filesPromise, signal) {
@@ -189,11 +203,11 @@ async function loadFiles(filesPromise, signal) {
     const files = await filesPromise;
     const { file, image } = await readTiffFiles(files, current, "image");
     if (image.shape.length === 3 && image.shape[0] < 2) throw new Error(`${file.name} has one plane; it is read as a 2D image.`);
-    const fromFile = showVoxelSize(image.voxelSize);
-    const settings = detectionSettings(formParameters());
-    const display = niftiFile(image, settings.voxelSize.slice(-3), `${file.name}.nii`);
+    const fromFile = voxelFromFile(image.voxelSize);
+    const display = niftiFile(image, previewVoxel(fromFile), `${file.name}.nii`);
     await showVolume({ file: display }, { signal: current });
     current.throwIfAborted();
+    showVoxelSize(fromFile);
     input = { name: file.name, file, image, display };
     clearLabels();
     clearOutputs();
@@ -203,8 +217,11 @@ async function loadFiles(filesPromise, signal) {
     $("fileInfo").textContent = describeImage(file.name, image.shape, image.dtype);
     $("dropZone").classList.add("has-files");
     progress.setProgress(0);
-    log.log(`${describeImage(file.name, image.shape, image.dtype)}; voxel size ${fromFile ? "from the file" : "from the form"}`, "info", "analysis");
+    log.log(`${describeImage(file.name, image.shape, image.dtype)}; voxel size ${Object.keys(fromFile).length ? "from the file" : "from the form"}`, "info", "analysis");
     status(`${file.name} loaded`);
+  } catch (error) {
+    progress.reset();
+    throw error;
   } finally {
     loading = null;
     finish(operation);
@@ -232,6 +249,9 @@ async function loadLabels(filesPromise, signal) {
     syncInputFiles("labelInput", [file]);
     progress.setProgress(0);
     status(`Spots will be counted in the ${plural(cells, "cell")} of ${file.name}`);
+  } catch (error) {
+    progress.reset();
+    throw error;
   } finally {
     loading = null;
     finish(operation);
@@ -320,18 +340,22 @@ async function detect(signal, settings = detectionSettings(formParameters())) {
     const sigma = result.sigma.map((s) => s.toFixed(3)).join(" × ");
     log.log(`LoG sigma ${sigma} px${result.curve ? `; ${result.curve.thresholds.length} candidate thresholds` : ""}`, "info", "technical");
     log.log(`Threshold ${formatThreshold(result.threshold)}${settings.threshold === null ? " (automatic, elbow of the spot count curve)" : " (set by hand)"}; ${result.spots.length} spots`, "info", "analysis");
-    outputs = {
-      spots: { description: `Spots · ${result.spots.length} at threshold ${formatThreshold(result.threshold)}`, file: spotsFile },
+    const finished = {
+      spots: { description: `Spots · ${result.spots.length} at threshold ${formatThreshold(result.threshold)}`, file: spotsFile, viewable: false },
       overlay: { description: "Spot overlay (NIfTI)", file: overlay, base },
     };
     if (result.cells) {
       const cellsFile = textFile(result.cellsCsv, names.cells);
-      outputs.cells = { description: `Cell counts · ${plural(result.cells.cells.length, "cell")}`, file: cellsFile };
+      finished.cells = { description: `Cell counts · ${plural(result.cells.cells.length, "cell")}`, file: cellsFile, viewable: false };
+    }
+    log.log(`Showing ${base.name} with the detected spots`, "info", "technical");
+    await showOverlay(finished.overlay, current);
+    current.throwIfAborted();
+    outputs = finished;
+    if (result.cells) {
       for (const cell of result.cells.cells) log.log(`Cell ${cell.id}: ${cell.spots} spots (${cell.area} px)`, "info", "analysis");
       log.log(`${result.cells.outside} spots outside every cell`, "info", "analysis");
     }
-    await showResult("overlay");
-    current.throwIfAborted();
     results.render({ input: { description: "Input image", file: input.file }, ...outputs });
     $("outputSection").open = true;
     log.log(`Detected in ${seconds.toFixed(1)} s`, "info", "technical");

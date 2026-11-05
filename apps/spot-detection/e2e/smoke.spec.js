@@ -1,6 +1,6 @@
 // Browser tests on the production build: the hosted Big-FISH example through detection and
 // download (checked against Big-FISH's recorded spots), the 2D projection, cancel, failed
-// downloads with retry, and the automation contract.
+// downloads with retry, cancelled and failed loads, download-only tables, and the automation contract.
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { analyse } from "../src/pipeline.js";
@@ -252,4 +252,125 @@ test("the automation operation writes the spots table the Node pipeline writes",
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("download", { artifactId: "spots" }));
   expect(readFileSync(await (await download).path(), "utf8")).toBe(expected.spotsCsv);
   expect(automation.defaultOperation).toBe("detect-spots");
+});
+
+// Records the name of each volume NiiVue's loader worker is sent, and holds the first one whose
+// name matches the pattern until the test releases it.
+async function trackVolumeLoads(page) {
+  await page.addInitScript(() => {
+    globalThis.volumeLoads = [];
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, ...rest) {
+      const file = message?.url instanceof File ? message.url : null;
+      if (file) globalThis.volumeLoads.push(file.name);
+      const hold = globalThis.holdLoad;
+      if (!file || !hold || !new RegExp(hold.pattern).test(file.name)) return post.call(this, message, ...rest);
+      globalThis.holdLoad = null;
+      hold.held = true;
+      void hold.gate.then(() => post.call(this, message, ...rest));
+    };
+  });
+}
+
+async function holdLoad(page, pattern) {
+  await page.evaluate((source) => {
+    const hold = { pattern: source, held: false };
+    hold.gate = new Promise((resolve) => {
+      hold.release = resolve;
+    });
+    globalThis.heldLoad = hold;
+    globalThis.holdLoad = hold;
+  }, pattern);
+}
+
+const held = (page) => page.waitForFunction(() => globalThis.heldLoad?.held);
+const release = (page) => page.evaluate(() => globalThis.heldLoad.release());
+
+test("cancelling while the result loads keeps the input in view and publishes no outputs", async ({ page }) => {
+  test.setTimeout(120000);
+  await trackVolumeLoads(page);
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles({ name: "synthetic.tif", mimeType: "image/tiff", buffer: syntheticTiff });
+  await expect(page.locator("#fileInfo")).toContainText("8 × 48 × 56");
+  await page.locator("#detectIn").selectOption("projection");
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#threshold").fill("150");
+  await holdLoad(page, "_spots\\.nii\\.gz$");
+  await page.locator("#runButton").click();
+  await held(page);
+  const before = await page.evaluate(() => globalThis.volumeLoads.length);
+  await page.locator("#cancelButton").click();
+  await release(page);
+  await expect(page.locator("#statusText")).toHaveText("Cancelled");
+  await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
+  await expect(page.locator("#progress")).toHaveAttribute("value", "0");
+  // The viewer goes back to the input image rather than keeping the cancelled overlay.
+  await expect.poll(() => page.evaluate((from) => globalThis.volumeLoads.slice(from), before)).toContain("synthetic.tif.nii");
+});
+
+test("cancelling an image while it loads keeps the previous voxel size", async ({ page }) => {
+  await trackVolumeLoads(page);
+  await page.goto("/");
+  const tiff = writeTiffStack(syntheticStack, { description: "ImageJ=1.53t\nimages=8\nslices=8\nunit=micron\nspacing=0.25\n", resolution: [1 / 0.09, 1 / 0.09] });
+  await holdLoad(page, "^calibrated\\.tif\\.nii$");
+  await page.locator("#imageInput").setInputFiles({ name: "calibrated.tif", mimeType: "image/tiff", buffer: tiff });
+  await held(page);
+  await page.locator("#cancelButton").click();
+  await release(page);
+  await expect(page.locator("#statusText")).toHaveText("Cancelled");
+  await expect(page.locator("#fileInfo")).toBeHidden();
+  await expect(page.locator("#voxelZ")).toHaveValue("300");
+  await expect(page.locator("#voxelYx")).toHaveValue("103");
+  await expect(page.locator("#progress")).toHaveAttribute("value", "0");
+});
+
+test("failed image and label loads stop the progress bar", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles({ name: "broken.tif", mimeType: "image/tiff", buffer: Buffer.from("not a tiff") });
+  await expect(page.locator("#statusText")).toHaveClass(/error/);
+  await expect(page.locator("#progress")).toHaveAttribute("value", "0");
+  await page.locator("#imageInput").setInputFiles({ name: "synthetic.tif", mimeType: "image/tiff", buffer: syntheticTiff });
+  await expect(page.locator("#fileInfo")).toContainText("8 × 48 × 56");
+  await page.locator("#labelSection > summary").click();
+  const labels = writeTiffStack({ data: new Uint16Array(4 * 4).fill(1), shape: [4, 4] });
+  await page.locator("#labelInput").setInputFiles({ name: "small.tif", mimeType: "image/tiff", buffer: labels });
+  await expect(page.locator("#statusText")).toHaveText(/^small\.tif is 4 × 4; it must match the image/);
+  await expect(page.locator("#progress")).toHaveAttribute("value", "0");
+});
+
+test("unfinished settings do not block loading an image or an automation run", async ({ page }) => {
+  test.setTimeout(120000);
+  await page.goto("/");
+  await page.locator("#radiusYx").fill("");
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#threshold").fill("-1");
+  await page.locator("#imageInput").setInputFiles({ name: "synthetic.tif", mimeType: "image/tiff", buffer: syntheticTiff });
+  await expect(page.locator("#fileInfo")).toContainText("8 × 48 × 56");
+  await page.locator("#neurodesk-input-transfer").setInputFiles({ name: "synthetic.tif", mimeType: "image/tiff", buffer: syntheticTiff });
+  await page.evaluate(async () => {
+    await globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" });
+    await globalThis.neurodeskAutomation.dispatch("start", { parameters: { threshold: 150 } });
+  });
+  await expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state), { timeout: 60000 }).toBe("succeeded");
+  const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
+  expect(report.provenance.spots).toBe(analyse(syntheticStack, { voxelSize: [300, 103, 103], spotRadius: [350, 150, 150], threshold: 150 }).spots.length);
+});
+
+test("the spots and cell count tables are download-only; the overlay can be viewed", async ({ page }) => {
+  test.setTimeout(120000);
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles({ name: "synthetic.tif", mimeType: "image/tiff", buffer: syntheticTiff });
+  await expect(page.locator("#fileInfo")).toContainText("8 × 48 × 56");
+  await page.locator("#labelSection > summary").click();
+  const labels = writeTiffStack({ data: new Uint16Array(8 * 48 * 56).fill(1), shape: [8, 48, 56] });
+  await page.locator("#labelInput").setInputFiles({ name: "cells.tif", mimeType: "image/tiff", buffer: labels });
+  await expect(page.locator("#labelField")).toContainText("cells.tif · 1 cell");
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#threshold").fill("150");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText(/^\d+ spots detected$/, { timeout: 60000 });
+  const view = (label) => page.locator("#resultList .nd-volume-toggle", { hasText: label }).locator(".nd-view-btn");
+  await expect(view("Spots ·")).toBeDisabled();
+  await expect(view("Cell counts")).toBeDisabled();
+  await expect(view("Spot overlay")).toBeEnabled();
 });

@@ -58,6 +58,11 @@ test("voxel sizes from file metadata are rounded as the form shows them; missing
   assert.deepEqual(voxelFromFile(null), {});
 });
 
+test("a file whose y and x pixel spacings differ is refused, not analysed at its x spacing", () => {
+  assert.throws(() => voxelFromFile({ z: 300, y: 200, x: 100 }), /200 nm in y and 100 nm in x; spot detection needs square pixels/);
+  assert.deepEqual(voxelFromFile({ z: 300, y: 100.0001, x: 100 }), { voxelZ: 300, voxelYx: 100 });
+});
+
 test("thresholds display whole or to four significant digits", () => {
   assert.equal(formatThreshold(355), "355");
   assert.equal(formatThreshold(null), "none");
