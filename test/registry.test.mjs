@@ -289,6 +289,7 @@ test('registry rejects duplicate catalogue hosts and ids, and catalogues without
     [raw => { raw.site.catalogs[1].host = raw.site.catalogs[0].host; }, /duplicate catalog host: webapps\.neurodesk\.org/],
     [raw => { raw.site.catalogs[1].host = raw.site.hub.host; }, /duplicate catalog host: webapps\.sciget\.org/],
     [raw => { raw.site.catalogs[1].id = 'neuro'; }, /duplicate catalog id: neuro/],
+    [raw => { raw.site.catalogs[1].id = 'hub'; }, /catalog id hub is reserved for the hub page/],
     [raw => { raw.site.catalogs.push({ ...raw.site.catalogs[1], id: 'empty', host: 'empty.sciget.org' }); }, /catalog empty has no apps/],
     [raw => { raw.site.catalogs[1].hosting = 'pages'; }, /exactly one catalog must use pages hosting, on site\.domain/],
     [raw => { raw.site.catalogs[0].hosting = 'worker'; }, /exactly one catalog must use pages hosting, on site\.domain/],

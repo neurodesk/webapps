@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import {
+  appHosts,
   dimensionFilter,
   emptyAnalytics,
   MIN_PUBLISHED_COUNTRY_USERS,
@@ -36,6 +37,16 @@ test('builds an aggregate filter limited to registered app paths', () => {
     ),
     ['/vesselboost/', '/calmar/'],
   );
+});
+
+test('counts each app on its catalogue host, and a moved app on the primary domain too', async () => {
+  const registry = await loadAppsRegistry();
+  const app = (id) => registry.apps.find((entry) => entry.id === id);
+  assert.deepEqual(appHosts(registry, app('dicomview')), ['webapps.neurodesk.org']);
+  assert.deepEqual(appHosts(registry, app('musclemap')), ['mskapps.sciget.org', 'webapps.neurodesk.org']);
+  assert.deepEqual(dimensionFilter({ hostName: ['mskapps.sciget.org', 'webapps.neurodesk.org'] }), {
+    filter: { fieldName: 'hostName', inListFilter: { values: ['mskapps.sciget.org', 'webapps.neurodesk.org'], caseSensitive: false } },
+  });
 });
 
 test('summarizes GA4 users and page views', () => {

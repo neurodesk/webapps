@@ -93,6 +93,8 @@ function validateCatalogs(registry, errors) {
   const hosts = new Set([registry.site.hub?.host]);
   for (const catalog of catalogs) {
     if (!ID.test(catalog?.id ?? '')) errors.push(`invalid catalog id: ${catalog?.id}`);
+    // dist-sites/hub holds the hub page.
+    if (catalog?.id === 'hub') errors.push('catalog id hub is reserved for the hub page');
     if (ids.has(catalog?.id)) errors.push(`duplicate catalog id: ${catalog.id}`);
     if (hosts.has(catalog?.host)) errors.push(`duplicate catalog host: ${catalog.host}`);
     if (!HOSTINGS.has(catalog?.hosting)) errors.push(`hosting for catalog ${catalog?.id} must be one of: ${[...HOSTINGS].join(', ')}`);
