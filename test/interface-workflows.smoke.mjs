@@ -8,7 +8,7 @@ import { dicomSeries } from '../test-utils/dicom-fixture.mjs';
 import { bidsTree, dropFolder } from '../test-utils/bids-folder-drop.mjs';
 import { imagejDescription, writeTiffStack } from '../packages/components/src/file-io/tiff.js';
 import { syntheticImage } from '../apps/spot-detection/src/synthetic.js';
-import { writeTiffStack } from '../apps/spot-detection/test/tiff-fixture.mjs';
+import { writeTiffStack as writeSpotTiff } from '../apps/spot-detection/test/tiff-fixture.mjs';
 
 function nifti(name, value = 20) {
   const buffer = Buffer.alloc(352 + 4096, 0);
@@ -620,7 +620,7 @@ try {
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
   await check('spot-detection', async page => {
-    const tiff = (name, image) => ({ name, mimeType: 'image/tiff', buffer: writeTiffStack(image) });
+    const tiff = (name, image) => ({ name, mimeType: 'image/tiff', buffer: writeSpotTiff(image) });
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
     await page.locator('#imageInput').setInputFiles(tiff('cells.tif', syntheticImage([6, 40, 48], 15, 5)));
