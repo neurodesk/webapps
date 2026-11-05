@@ -78,7 +78,7 @@ export function renderMorphometricsReport(section, neuron) {
   const notes = element("div", { className: "nd-report-notes" }, [
     element("p", { textContent: "Definitions follow NeuroM 4: lengths exclude the soma and the gap from the soma to each neurite; angles are measured at bifurcations with exactly two branches." }),
   ]);
-  if (all.nonpositiveRadii) {
+  if (all.nonpositiveRadii && all.surfaceArea === null) {
     notes.append(element("p", { textContent: `Surface area and volume are blank: ${all.nonpositiveRadii} neurite point${all.nonpositiveRadii === 1 ? " has" : "s have"} a zero or negative radius.` }));
   }
   section.replaceChildren(lead, table(["Measure", ...types.map((type) => TYPE_HEADINGS[type])], rows, "Morphometrics"), checks, notes);

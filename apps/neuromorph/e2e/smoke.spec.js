@@ -209,6 +209,39 @@ test("an unreadable file in a folder is skipped and named; the rest load and mea
   await expect(page.locator("#statusText")).toHaveText("cells/fork.swc measured");
 });
 
+test("a file the browser cannot read is skipped and named; the readable ones load", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    const text = File.prototype.text;
+    File.prototype.text = function () {
+      return this.name === "locked.swc" ? Promise.reject(new DOMException("The requested file could not be read", "NotReadableError")) : text.call(this);
+    };
+  });
+  await page.locator("#swcInput").setInputFiles([swcFile("fork.swc", FORK), swcFile("locked.swc", FORK)]);
+  await expect(page.locator("#statusText")).toHaveText("fork.swc loaded; skipped locked.swc: The requested file could not be read");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("fork.swc measured");
+});
+
+test("with repair off a zero radius is measured, and the report does not call area and volume blank", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#repair").uncheck();
+  await page.locator("#swcInput").setInputFiles([swcFile("zero.swc", "1 1 0 0 0 5 -1\n2 3 5 0 0 0 1\n3 3 10 0 0 1 2")]);
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("zero.swc measured");
+  await expect(page.locator("#morphometricsReport")).toBeVisible();
+  await expect(page.locator("#morphometricsReport")).not.toContainText("are blank");
+});
+
+test("a second flat file of one name downloads its repair under a numbered name", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#swcInput").setInputFiles([swcFile("broken.swc", BROKEN), swcFile("broken.swc", BROKEN)]);
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("2 reconstructions measured");
+  const second = await download(page, "Repaired SWC · broken.swc (2)");
+  expect(second.name).toBe("broken_2_repaired.swc");
+});
+
 test("files with one name in two folders stay apart in the selector, tables, downloads and automation", async ({ page }) => {
   const LONGER = FORK.replace("5 3 20 0 0 0.5 3", "5 3 40 0 0 0.5 3");
   await page.goto("/");

@@ -288,14 +288,21 @@ async function loadFiles(filesPromise, signal) {
     if (!swc.length) throw new Error("Choose one or more .swc reconstructions.");
     const ids = new Set();
     const entries = [];
+    const unread = [];
     for (const file of swc) {
       let id = relativePath(file);
       for (let n = 2; ids.has(id); n++) id = `${relativePath(file)} (${n})`;
       ids.add(id);
-      entries.push({ id, text: await file.text() });
+      try {
+        entries.push({ id, text: await file.text() });
+      } catch (error) {
+        unread.push({ id, error: `${id}: ${error.message}` });
+      }
       aborted.throwIfAborted();
     }
-    const { loaded, failed } = await readEntries(entries, aborted);
+    const read = entries.length ? await readEntries(entries, aborted) : { loaded: [], failed: [] };
+    const loaded = read.loaded;
+    const failed = [...unread, ...read.failed];
     if (!loaded.length) throw new Error(failed.map(({ error }) => error).join(" "));
     lastSkipped = failed;
     await adopt(loaded, failed, files.length - swc.length);
@@ -368,7 +375,8 @@ function outputName(kind) {
 
 /** A download name for a repaired file: its path with folders joined by "_", unique in the batch. */
 function repairedName(id, taken) {
-  const base = stem(id.replace(/ \((\d+)\)$/, "_$1")).replaceAll("/", "_");
+  const [, path, copy] = id.match(/^(.*?)(?: \((\d+)\))?$/);
+  const base = `${stem(path)}${copy ? `_${copy}` : ""}`.replaceAll("/", "_");
   let name = `${base}_repaired.swc`;
   for (let n = 2; taken.has(name); n++) name = `${base}_${n}_repaired.swc`;
   taken.add(name);
