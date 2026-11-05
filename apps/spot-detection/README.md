@@ -33,8 +33,8 @@ Not included: dense-region decomposition (`decompose_dense`) and cluster detecti
 
 ## Inputs and outputs
 
-One one-channel TIFF (uint8, uint16, float32 or float64), one page per z plane, read with
-geotiff.js. The voxel size comes from ImageJ or OME-TIFF metadata when present, else from the
+One one-channel TIFF (uint8, uint16, float32 or float64), one page per z plane, read with the
+shared TIFF module (geotiff.js). The voxel size comes from ImageJ or OME-TIFF metadata when present, else from the
 form; the automation operation does the same for a voxel size its parameters leave out (300 and
 103 nm when the file has none). Optional cell labels: an integer TIFF of one y × x plane or of the
 image's size. 3D labels need detection in the 3D stack: the app refuses them with "2D maximum

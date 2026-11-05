@@ -19,7 +19,7 @@ import {
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { gzipFile } from "@neurodesk/webapp-components/file-io/bids-derivatives";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
-import { readTiffStack } from "./tiff.js";
+import { readImageStack } from "./image-stack.js";
 import { APP, DEFAULTS, checkRun, describeImage, detectionSettings, formatThreshold, outputNames, provenance, voxelFromFile } from "./config.js";
 import { niftiFile, overlayVolume } from "./volumes.js";
 import examples from "../examples.json";
@@ -169,7 +169,7 @@ async function readTiffFiles(files, signal, what) {
   const [file] = files;
   if (!file.size) throw new Error(`${file.name} is empty.`);
   if (!/\.tiff?$/i.test(file.name)) throw new Error(`${file.name} is not a TIFF (.tif or .tiff).`);
-  const image = await readTiffStack(await file.arrayBuffer(), { signal });
+  const image = await readImageStack(await file.arrayBuffer(), { signal });
   signal.throwIfAborted();
   return { file, image };
 }

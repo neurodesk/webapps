@@ -13,8 +13,7 @@
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*",
-    "@niivue/niivue": "1.0.0-rc.33",
-    "geotiff": "3.0.5"
+    "@niivue/niivue": "1.0.0-rc.33"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

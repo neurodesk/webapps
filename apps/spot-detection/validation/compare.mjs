@@ -6,13 +6,13 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { analyse } from "../src/pipeline.js";
 import { logFilter, objectRadiusPixel } from "../src/bigfish.js";
-import { readTiffStack } from "../src/tiff.js";
+import { readImageStack } from "../src/image-stack.js";
 
 const directory = process.argv[2];
 const reference = JSON.parse(readFileSync(new URL("./reference.json", import.meta.url), "utf8"));
 const read = async (name) => {
   const bytes = readFileSync(join(directory, name));
-  return readTiffStack(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length));
+  return readImageStack(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length));
 };
 const image = await read("experiment_1_smfish_fov_1.tif");
 const labels = await read("experiment_1_cell_label.tif");
