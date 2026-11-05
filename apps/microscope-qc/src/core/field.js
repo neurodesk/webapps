@@ -185,7 +185,10 @@ export function analyseField(image, { width, height, dtype }, { blur = true, ste
   for (let i = 0; i < pixels.length; i++) {
     const zone = Math.trunc((Math.trunc((pixels[i] / max) * 100 / step) * step));
     zones[i] = Math.max(0, Math.min(100, zone));
-    if (zones[i] >= threshold) {
+    // The reference zone is every pixel at or above (100 - step) % of the maximum, whether or
+    // not the step divides 100 (with step 7 the top iso zone starts at 98 %, not 93 %).
+    // Dividing by the step keeps the comparison identical to the zone labels when it does.
+    if ((pixels[i] / max) * 100 / step >= threshold / step) {
       zoneCount++;
       zoneX += (i % width) + 0.5;
       zoneY += Math.floor(i / width) + 0.5;

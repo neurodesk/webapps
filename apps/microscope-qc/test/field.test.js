@@ -88,3 +88,12 @@ test("reference points on the right and bottom edges read their own pixel", () =
     assert.equal(point.relative, 1);
   }
 });
+
+test("with a step that does not divide 100 the reference zone is still every pixel at or above 100 - step %", () => {
+  // A 3 × 3 image at 75, 94, 95, 98 and 100 % of the maximum; the other pixels are 0 %.
+  const data = Float32Array.from([75, 94, 95, 98, 100, 0, 0, 0, 0]);
+  const dims = { width: 3, height: 3, dtype: "float32" };
+  assert.equal(analyseField(data, dims, { blur: false, step: 7 }).referencePixels, 4);
+  assert.equal(analyseField(data, dims, { blur: false, step: 30 }).referencePixels, 5);
+  assert.equal(analyseField(data, dims, { blur: false, step: 10 }).referencePixels, 4);
+});
