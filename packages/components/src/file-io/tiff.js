@@ -195,6 +195,10 @@ function omePlaneIfds(ome, description, ifdCount) {
     // is given, else every remaining plane.
     const ifd = block.ifd ?? 0;
     const count = block.planeCount ?? (block.ifd === null ? planes - start : 1);
+    // An explicit PlaneCount past the planes Pixels declares contradicts the sizes.
+    if (block.planeCount !== null && block.planeCount !== undefined && start + count > planes) {
+      throw new Error(`This OME-TIFF's TiffData maps ${start + count} planes but its Pixels declare ${planes}; save it again.`);
+    }
     for (let j = 0; j < count && start + j < planes; j++) map[start + j] = ifd + j;
   }
   const missing = map.indexOf(-1);

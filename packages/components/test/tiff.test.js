@@ -361,6 +361,13 @@ test('a sequential OME mapping that leaves a plane unmapped is refused before de
   await assert.rejects(inspectTiffStack(buffer(writeTiffStack({ width: 2, height: 2, data: new Uint8Array(8), description: beyond }))), /names page 3, but the file has 2/);
 });
 
+test('a TiffData PlaneCount past the planes Pixels declares is refused, not cut short', async () => {
+  // 3 pages mapped by one TiffData, but Pixels declares SizeT 2: the file contradicts itself.
+  const contradictory = '<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="2" SizeY="2" SizeC="1" SizeZ="1" SizeT="2"><TiffData IFD="0" PlaneCount="3"/></Pixels></Image></OME>';
+  const bytes = writeTiffStack({ width: 2, height: 2, data: new Uint8Array(12), description: contradictory });
+  await assert.rejects(inspectTiffStack(buffer(bytes)), /maps 3 planes but its Pixels declare 2/);
+});
+
 test('imagejDescription labels a calibrated z stack that reads back as z planes', async () => {
   const description = imagejDescription({ slices: 4, spacing: 0.13, unit: 'micron', min: 0, max: 1 });
   assert.equal(description, 'ImageJ=1.11a\nimages=4\nslices=4\nhyperstack=true\nspacing=0.13\nunit=micron\nmin=0\nmax=1\n');
