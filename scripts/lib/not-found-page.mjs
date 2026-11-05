@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { primaryCatalog } from './apps-registry.mjs';
+import { catalogApps, primaryCatalog } from './apps-registry.mjs';
 
 const DEFAULT_TITLE = 'Neurodesk Webapps';
 const DICOMPARE_ROUTES = '<script src="/dicompare/dicompare-routes.js"></script>';
@@ -8,13 +8,14 @@ const MOVED = /(<script type="application\/json" id="moved-apps">)[\s\S]*?(<\/sc
 
 /**
  * Where each app path this host does not serve now lives: a former path goes to
- * its app (on this host, or on the host of the app's catalogue), and an app of
- * another catalogue goes to that catalogue's host. Without a catalogue (the
+ * its app (on this host when it serves the app, else on the app's home host), and
+ * an app this host does not serve goes to its home host. Without a catalogue (the
  * all-app assembly) every app is present and only former paths move.
  */
 export function movedAppRoutes(registry, catalog) {
   const routes = {};
-  const here = (app) => !catalog || app.catalog === catalog.id;
+  const served = new Set((catalog ? catalogApps(registry, catalog) : registry.apps).map((app) => app.id));
+  const here = (app) => served.has(app.id);
   const home = (app) => {
     if (here(app)) return `/${app.path}`;
     const host = registry.site.catalogs.find((candidate) => candidate.id === app.catalog).host;
@@ -30,7 +31,7 @@ export function movedAppRoutes(registry, catalog) {
 /** The 404 page of one host, from the site/404.html template. */
 export function renderNotFoundPage(template, { registry, catalog }) {
   const title = (catalog ?? primaryCatalog(registry)).title;
-  const apps = catalog ? registry.apps.filter((app) => app.catalog === catalog.id) : registry.apps;
+  const apps = catalog ? catalogApps(registry, catalog) : registry.apps;
   const routes = JSON.stringify(movedAppRoutes(registry, catalog)).replaceAll('<', '\\u003c');
   let html = template
     .replace(MOVED, (_match, open, close) => `${open}${routes}${close}`)

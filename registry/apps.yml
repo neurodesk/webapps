@@ -879,6 +879,7 @@ apps:
   - id: elastix
     path: elastix
     catalog: neuro
+    also_in: [microscopy]
     title: elastix
     description: Rigid, affine and B-spline registration with elastix.
     categories: [registration]

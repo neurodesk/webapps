@@ -36,7 +36,7 @@ For catalog-wide work, use [the interface audit](docs/architecture/interface-aud
 
 Apps are served from several hosts: `webapps.neurodesk.org` (catalogue `neuro`, GitHub Pages), `mskapps.sciget.org` (`msk`) and `microscopyapps.sciget.org` (`microscopy`), both assets-only Cloudflare Workers, and the `webapps.sciget.org` hub, which lists the catalogues and hosts no apps. Read [catalogue sites](docs/architecture/catalogue-sites.md) before changing hosting, the landing page or the build.
 
-- Every app names exactly one `catalog:` in `registry/apps.yml`; `site.catalogs` and `site.hub` hold the hosts and brands. A new app joins the primary catalogue unless `pnpm new-app --catalog <id>` says otherwise.
+- Every app names exactly one home `catalog:` in `registry/apps.yml`, and may list other catalogues that serve a copy under `also_in:`; `site.catalogs` and `site.hub` hold the hosts and brands. A new app joins the primary catalogue unless `pnpm new-app --catalog <id>` says otherwise.
 - `dist/` stays the all-app assembly the desktop suite reads. `scripts/build-site.mjs` projects `dist-sites/<catalog>` and `dist-sites/hub` from it; `test/catalog-sites.test.mjs` (after a build) holds each site to its apps and to every file they reference.
 - A handoff only works within one host, so each site's DICOM View lists only that host's apps. A moved or renamed app keeps its old links through the 404 table generated from the registry (`former_paths`, other catalogues' apps); do not hand-edit `site/404.html` routes.
 - Reference shared runtime files (`_runtime/`) by plain string paths. The projection follows them and fails the build on a computed path.

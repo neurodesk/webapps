@@ -44,6 +44,7 @@ test('counts each app on its catalogue host, and a moved app on the primary doma
   const app = (id) => registry.apps.find((entry) => entry.id === id);
   assert.deepEqual(appHosts(registry, app('dicomview')), ['webapps.neurodesk.org']);
   assert.deepEqual(appHosts(registry, app('musclemap')), ['mskapps.sciget.org', 'webapps.neurodesk.org']);
+  assert.deepEqual(appHosts(registry, app('elastix')), ['webapps.neurodesk.org', 'microscopyapps.sciget.org']);
   assert.deepEqual(dimensionFilter({ hostName: ['mskapps.sciget.org', 'webapps.neurodesk.org'] }), {
     filter: { fieldName: 'hostName', inListFilter: { values: ['mskapps.sciget.org', 'webapps.neurodesk.org'], caseSensitive: false } },
   });

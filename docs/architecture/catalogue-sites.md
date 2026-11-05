@@ -1,13 +1,13 @@
 # Catalogue sites
 
-The apps are served from several hosts. Each host serves one catalogue, and each
-app belongs to exactly one catalogue.
+The apps are served from several hosts. Each host serves one catalogue. Each app
+has one home catalogue and can also be served by others.
 
 | Host | Catalogue | Hosting | Apps |
 | --- | --- | --- | --- |
 | `webapps.neurodesk.org` | `neuro` | GitHub Pages | every app not listed below |
 | `mskapps.sciget.org` | `msk` | Cloudflare Worker, assets only | MuscleMap, SeedSeg, Carotid Flow |
-| `microscopyapps.sciget.org` | `microscopy` | Cloudflare Worker, assets only | StarDist, ZARRo |
+| `microscopyapps.sciget.org` | `microscopy` | Cloudflare Worker, assets only | StarDist, ZARRo; elastix (also on neuro) |
 | `webapps.sciget.org` | hub | Cloudflare Worker, assets only | none: one card per catalogue |
 
 `neurodesk.org` DNS is on AWS Route 53, so the neuro catalogue stays on GitHub
@@ -21,13 +21,18 @@ Pages. `sciget.org` DNS is on Cloudflare.
   (`pages` or `worker`), `title`, `heading`, `description` and `brand` (product
   name, logo file in `site/`, home URL and the More Apps label).
 - `site.hub`: the hub page's host, text and brand.
-- `catalog:` on every app: the id of the catalogue that serves it.
+- `catalog:` on every app: its home catalogue. Its old links redirect there, and
+  other hosts' 404 pages send its path there.
+- `also_in:` on an app, optional: other catalogues that serve a copy. Each copy
+  carries the brand, title and URL of the host that serves it, and appears in that
+  host's landing page and DICOM View menu. Analytics counts every copy.
 - `former_paths:` on an app: paths it was served from before a rename.
 
 `scripts/lib/apps-registry.mjs` rejects an unknown, missing or repeated
 `catalog`, a duplicate catalogue id or host, a catalogue without apps, and any
-setup other than exactly one `pages` catalogue on `site.domain`. To move an app,
-change its `catalog:`.
+setup other than exactly one `pages` catalogue on `site.domain`. `also_in` must name other
+declared catalogues, each once. To move an app, change its `catalog:`; to serve
+it on another host too, add that catalogue to `also_in`.
 
 ## Build
 
