@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@neurodesk/deconvolution": "workspace:*",
-    "@neurodesk/microscopy-tiff": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.33"
   },

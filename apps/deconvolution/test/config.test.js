@@ -2,9 +2,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createNiftiFromVolume, parseNiftiHeader } from "@neurodesk/webapp-components/file-io";
-import { writeImageJTiff } from "@neurodesk/microscopy-tiff";
-import { APP, EXAMPLE_OPTICS, niftiGeometry, niftiSpacingUm, outputNames, provenance, spacingComplete, stem } from "../src/config.js";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
+import { APP, EXAMPLE_OPTICS, checkPsfSpacing, niftiGeometry, niftiSpacingUm, outputNames, provenance, setNiftiSpacing, spacingComplete, stackNifti, stackTiff, stem } from "../src/config.js";
 import { formatOf, readVolume } from "../src/input.js";
+import { stageNotices } from "../scripts/stage-notices.mjs";
 import examples from "../examples.json" with { type: "json" };
 
 test("app id and every example has optics", () => {
@@ -50,10 +53,11 @@ test("NIfTI spacing honours xyzt_units", () => {
 test("readVolume reads TIFF and NIfTI into the same [z][y][x] layout and micrometres", async () => {
   const data = Float32Array.from({ length: 2 * 3 * 4 }, (_, i) => i);
   const spacingUm = { x: 0.2, y: 0.2, z: 0.5 };
-  const tiff = await readVolume(new File([writeImageJTiff({ data, width: 4, height: 3, depth: 2, spacingUm })], "s.tif"));
+  const tiff = await readVolume(new File([stackTiff(data, [2, 3, 4], spacingUm)], "s.tif"));
   assert.deepEqual(tiff.dims, [2, 3, 4]);
   assert.deepEqual(Array.from(tiff.data), Array.from(data));
   assert.equal(tiff.spacingUm.z, 0.5);
+  assert.equal(tiff.spacingSource, "ImageJ");
   const nifti = await readVolume(new File([createNiftiFromVolume({ hdr: niftiGeometry([2, 3, 4], spacingUm), img: data })], "s.nii"));
   assert.deepEqual(nifti.dims, [2, 3, 4]);
   assert.deepEqual(Array.from(nifti.data), Array.from(data));
@@ -81,4 +85,111 @@ test("provenance names the PSF and method", () => {
   assert.equal(record.psf.excitationNm, 488);
   assert.match(record.method, /Dey et al/);
   assert.deepEqual(record.dimensions, { x: 4, y: 3, z: 2 });
+});
+
+/** The voxel-to-world matrix of a NIfTI-1 header's qform (NIfTI-1 standard, as nibabel's get_qform). */
+function qformMatrix(view) {
+  const f = (offset) => view.getFloat32(offset, true);
+  const [b, c, d] = [f(256), f(260), f(264)];
+  const a = Math.sqrt(Math.max(0, 1 - (b * b + c * c + d * d)));
+  const rotation = [
+    [a * a + b * b - c * c - d * d, 2 * (b * c - a * d), 2 * (b * d + a * c)],
+    [2 * (b * c + a * d), a * a + c * c - b * b - d * d, 2 * (c * d - a * b)],
+    [2 * (b * d - a * c), 2 * (c * d + a * b), a * a + d * d - c * c - b * b],
+  ];
+  const qfac = f(76) < 0 ? -1 : 1;
+  const scale = [f(80), f(84), f(88) * qfac];
+  return rotation.map((row, i) => [...row.map((value, j) => value * scale[j]), f(268 + 4 * i)]);
+}
+
+const sformMatrix = (view) => [0, 1, 2].map((row) => [0, 1, 2, 3].map((column) => view.getFloat32(280 + 16 * row + 4 * column, true)));
+
+function assertMatricesClose(actual, expected, tolerance = 1e-12) {
+  actual.forEach((row, i) => row.forEach((value, j) => assert.ok(Math.abs(value - expected[i][j]) <= tolerance, `[${i}][${j}] ${value} vs ${expected[i][j]}\n${JSON.stringify(actual)}\n${JSON.stringify(expected)}`)));
+}
+
+test("a NIfTI written from a TIFF stack has a qform equal to its sform, y flipped", () => {
+  const view = new DataView(stackNifti(new Float32Array(60), [3, 4, 5], { x: 0.065, y: 0.065, z: 0.13 }));
+  assert.equal(view.getInt16(252, true), 1);
+  assert.equal(view.getInt16(254, true), 1);
+  const sform = sformMatrix(view);
+  assert.ok(sform[1][1] < 0, "y is flipped");
+  assertMatricesClose(qformMatrix(view), sform);
+});
+
+test("edited spacing rewrites a NIfTI input's pixdims and sform scales, keeping orientation and origin", () => {
+  // An oblique sform in micrometres (xyzt_units 3): x along -x, y and z rotated 30° about x.
+  const header = new Uint8Array(stackNifti(new Float32Array(60), [3, 4, 5], { x: 1, y: 1, z: 1 })).slice(0, 352).buffer;
+  const view = new DataView(header);
+  view.setUint8(123, 3);
+  const cos = Math.cos(Math.PI / 6);
+  const sin = Math.sin(Math.PI / 6);
+  const rows = [[-0.2, 0, 0, 5], [0, 0.2 * cos, -0.6 * sin, -7], [0, 0.2 * sin, 0.6 * cos, 11]];
+  rows.forEach((row, i) => row.forEach((value, j) => view.setFloat32(280 + 16 * i + 4 * j, value, true)));
+  [0.2, 0.2, 0.6].forEach((value, i) => view.setFloat32(80 + 4 * i, value, true));
+  const out = new DataView(setNiftiSpacing(header, { x: 0.1, y: 0.1, z: 0.3 }));
+  assert.deepEqual([80, 84, 88].map((offset) => Number(out.getFloat32(offset, true).toPrecision(6))), [0.1, 0.1, 0.3]);
+  const halved = rows.map((row) => [...row.slice(0, 3).map((value) => value / 2), row[3]]);
+  assertMatricesClose(sformMatrix(out), halved, 1e-6);
+  // A millimetre header stores the same micrometres as millimetres.
+  out.setUint8(123, 2);
+  setNiftiSpacing(header, { x: 0.1, y: 0.1, z: 0.3 });
+  assert.ok(Math.abs(out.getFloat32(80, true) - 1e-4) < 1e-10);
+});
+
+test("readVolume takes edited NIfTI spacing round trip through setNiftiSpacing", async () => {
+  const buffer = setNiftiSpacing(stackNifti(new Float32Array(60), [3, 4, 5], { x: 0.065, y: 0.065, z: 0.13 }), { x: 0.08, y: 0.08, z: 0.2 });
+  const volume = await readVolume(new File([buffer], "edited.nii"));
+  for (const [axis, want] of [["x", 0.08], ["y", 0.08], ["z", 0.2]]) assert.ok(Math.abs(volume.spacingUm[axis] - want) < 1e-6, axis);
+  const view = new DataView(buffer);
+  assertMatricesClose(qformMatrix(view), sformMatrix(view));
+});
+
+test("TIFF channels, time points, OME series and non-square pixels are refused", async () => {
+  const tiff = (description, pages = 2, pixelSize = null) => new File([writeTiffStack({ width: 2, height: 2, data: new Uint16Array(4 * pages), description, pixelSize })], "s.tif");
+  const ome = (sizes, extra = "") => `<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="2" SizeY="2" ${sizes}/></Image>${extra}</OME>`;
+  await assert.rejects(readVolume(tiff(ome('SizeC="2" SizeZ="1" SizeT="1"'))), /2 channels/);
+  await assert.rejects(readVolume(tiff(ome('SizeC="1" SizeZ="1" SizeT="2"'))), /2 time points/);
+  await assert.rejects(readVolume(tiff(ome('SizeC="1" SizeZ="2" SizeT="1"', '<Image ID="Image:1"><Pixels SizeX="2" SizeY="2"/></Image>'))), /2 image series/);
+  await assert.rejects(readVolume(tiff("ImageJ=1.11a\nimages=2\nframes=2\n")), /2 time points/);
+  await assert.rejects(readVolume(tiff("ImageJ=1.11a\nimages=2\nchannels=2\n")), /2 channels/);
+  await assert.rejects(readVolume(tiff("ImageJ=1.11a\nimages=2\nunit=micron\n", 2, { x: 0.1, y: 0.2 })), /square pixels/);
+  // Unlabelled pages, plain or ImageJ, are z planes.
+  assert.deepEqual((await readVolume(tiff("", 3))).dims, [3, 2, 2]);
+  assert.deepEqual((await readVolume(tiff("ImageJ=1.11a\nimages=3\nslices=3\n", 3))).dims, [3, 2, 2]);
+  assert.equal((await readVolume(tiff(ome('SizeC="1" SizeZ="2" SizeT="1" PhysicalSizeX="0.1" PhysicalSizeY="0.1"')))).spacingSource, "OME-XML");
+  // A plain TIFF's resolution tags are a print size, not a voxel size.
+  const plain = await readVolume(tiff("", 2, { x: 0.5, y: 0.5 }));
+  assert.deepEqual([plain.spacingUm, plain.spacingSource], [{ x: null, y: null, z: null }, null]);
+});
+
+test("a NIfTI with non-square pixels is refused", async () => {
+  await assert.rejects(readVolume(new File([stackNifti(new Float32Array(60), [3, 4, 5], { x: 0.1, y: 0.15, z: 0.3 })], "oblong.nii")), /0\.1 × 0\.15 µm pixels; this app needs square pixels/);
+});
+
+test("a measured PSF is checked against the image's spacing on all three axes", () => {
+  const image = { x: 0.1, y: 0.1, z: 0.25 };
+  assert.equal(checkPsfSpacing({ x: 0.1, y: 0.1, z: 0.25 }, image, "bead.tif"), null);
+  assert.throws(() => checkPsfSpacing({ x: 0.1, y: 0.2, z: 0.25 }, image, "bead.tif"), /along y/);
+  assert.throws(() => checkPsfSpacing({ x: 0.1, y: 0.1, z: 0.5 }, image, "bead.tif"), /along z/);
+  assert.match(checkPsfSpacing({ x: null, y: null, z: null }, image, "bead.tif"), /bead\.tif records no voxel size along x, y, z; it is taken to be on the image's 0\.1 × 0\.1 × 0\.25 µm grid/);
+});
+
+test("the staged notices name the crates the module links, with their copyright lines", async () => {
+  const out = await mkdtemp(join(process.env.TMPDIR ?? ".", "deconvolution-notices-"));
+  try {
+    const names = await stageNotices(out);
+    const read = (name) => readFile(join(out, name), "utf8");
+    assert.ok(names.includes("deconvolution-THIRD_PARTY_NOTICES.md"));
+    const notices = await read("deconvolution-THIRD_PARTY_NOTICES.md");
+    for (const [crate, line] of [["wasm-bindgen 0.2.130", "Copyright (c) 2014 Alex Crichton"], ["rustfft 6.4.1", "Copyright (c) 2015 The RustFFT Developers"], ["realfft 3.5.1", "Copyright (c) 2020 Henrik Enquist and RealFFT contributors"], ["num-complex 0.4.6", "Copyright (c) 2014 The Rust Project Developers"], ["libm 0.2.16", "Copyright (c) 2018 Jorge Aparicio"], ["unicode-ident 1.0.27", "Copyright © 1991-2023 Unicode, Inc."]]) {
+      const section = notices.split("\n## ").find((part) => part.startsWith(crate));
+      assert.ok(section, `${crate} is listed`);
+      assert.ok(section.includes(line), `${crate}: ${line}`);
+    }
+    assert.match(await read("deconvolution-NOTICE.txt"), /Copyright \(C\) 1993 by Sun Microsystems, Inc\./);
+    assert.match(await read("geotiff-LICENSE.txt"), /MIT License/);
+  } finally {
+    await rm(out, { recursive: true, force: true });
+  }
 });

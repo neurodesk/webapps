@@ -345,8 +345,10 @@ mod tests {
 
     #[test]
     fn index_matched_psf_is_symmetric_in_z_and_peaks_at_the_centre() {
+        let microscope = Microscope { ns: 1.515, ..Microscope::default() };
+        assert_eq!((microscope.ns, microscope.ng), (microscope.ni, microscope.ni));
         let spec = PsfSpec {
-            microscope: Microscope::default(),
+            microscope,
             modality: Modality::Widefield,
             emission_um: 0.52,
             dxy: 0.1,

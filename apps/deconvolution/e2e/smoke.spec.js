@@ -4,7 +4,8 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { readTiffStack, writeImageJTiff } from "@neurodesk/microscopy-tiff";
+import { readTiffStack as readTiff } from "@neurodesk/webapp-components/file-io/tiff";
+import { DEFAULT_OPTICS, stackNifti, stackTiff } from "../src/config.js";
 import { readVolume } from "../src/input.js";
 import { deconvolveInNode, sha256 } from "../src/reference.mjs";
 
@@ -15,6 +16,12 @@ const [exampleFile] = example.files;
 
 const status = (page) => page.locator("#statusText");
 const row = (page, text) => page.locator("#resultList .nd-volume-toggle", { hasText: text });
+
+/** A downloaded TIFF stack as `{ dims, data, spacingUm }`. */
+async function readTiffStack(bytes) {
+  const stack = await readTiff(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  return { dims: [stack.pages, stack.height, stack.width], dtype: stack.dtype, data: stack.data, spacingUm: stack.metadata.pixelSize, metadata: stack.metadata };
+}
 
 async function download(page, text) {
   const pending = page.waitForEvent("download");
@@ -45,7 +52,7 @@ function syntheticStack() {
     psf[k] = 5 + 1000 * Math.exp(-((zz - 3) ** 2 / 1.5 + (yy - 4) ** 2 / 2 + (xx - 6) ** 2 / 2));
   }
   const spacingUm = { x: 0.1, y: 0.1, z: 0.25 };
-  const file = (name, values, [nz, ny, nx]) => ({ name, mimeType: "image/tiff", buffer: Buffer.from(writeImageJTiff({ data: values, width: nx, height: ny, depth: nz, spacingUm })) });
+  const file = (name, values, dims) => ({ name, mimeType: "image/tiff", buffer: Buffer.from(stackTiff(values, dims, spacingUm)) });
   return { dims, data, psf, psfDims, spacingUm, image: file("points.tif", data, dims), psfFile: file("bead.tif", psf, psfDims) };
 }
 
@@ -61,6 +68,10 @@ test("app boots on its workspace with the shared bar and cross-origin isolation"
   const notice = await page.request.get(new URL("licenses/deconvolution-NOTICE.txt", page.url()).href);
   expect(notice.ok()).toBe(true);
   expect(await notice.text()).toContain("Sun Microsystems");
+  const crates = await page.request.get(new URL("licenses/deconvolution-THIRD_PARTY_NOTICES.md", page.url()).href);
+  expect(crates.ok()).toBe(true);
+  const text = await crates.text();
+  for (const line of ["## wasm-bindgen 0.2.130", "Copyright (c) 2014 Alex Crichton", "## rustfft 6.4.1", "Copyright (c) 2015 The RustFFT Developers"]) expect(text).toContain(line);
 });
 
 test("the example deconvolves to the Node reference and downloads calibrated TIFF and NIfTI", async ({ page }) => {
@@ -79,7 +90,8 @@ test("the example deconvolves to the Node reference and downloads calibrated TIF
   const tiff = await download(page, "Deconvolved · Richardson-Lucy");
   expect(tiff.name).toBe("hela-phalloidin488-confocal_deconvolved.tif");
   const stack = await readTiffStack(tiff.bytes);
-  expect([stack.depth, stack.height, stack.width, stack.dtype]).toEqual([41, 256, 256, "float32"]);
+  expect([...stack.dims, stack.dtype]).toEqual([41, 256, 256, "float32"]);
+  expect([stack.metadata.sizeZ, stack.metadata.sizeT]).toEqual([41, 1]);
   expect(stack.spacingUm.z).toBe(0.13);
   expect(stack.spacingUm.x).toBeCloseTo(0.0658941, 6);
   expect(sha256(stack.data)).toBe(expected.sha256);
@@ -97,7 +109,7 @@ test("the example deconvolves to the Node reference and downloads calibrated TIF
   expect(sha256(voxels)).toBe(expected.sha256);
 
   const psf = await readTiffStack((await download(page, "Gibson-Lanni PSF")).bytes);
-  expect([psf.depth, psf.height, psf.width]).toEqual(expected.psfDims);
+  expect(psf.dims).toEqual(expected.psfDims);
   expect(Math.max(...psf.data)).toBe(1);
 });
 
@@ -168,9 +180,42 @@ test("a measured PSF on an odd-sized TIFF stack gives the Node result", async ({
   const stack = await readTiffStack((await download(page, "Deconvolved · Richardson-Lucy")).bytes);
   expect(sha256(stack.data)).toBe(sha256(want.estimate));
   const psf = await readTiffStack((await download(page, "Measured PSF · bead.tif")).bytes);
-  expect([psf.depth, psf.height, psf.width]).toEqual(want.psfDims);
+  expect(psf.dims).toEqual(want.psfDims);
   // The bead peaks at (3, 4, 6); the largest odd box centred there is 7 × 9 × 9.
   expect(want.psfDims).toEqual([7, 9, 9]);
+});
+
+test("edited spacing reaches both downloads of a NIfTI input, keeping its orientation", async ({ page }) => {
+  test.setTimeout(120000);
+  const synthetic = syntheticStack();
+  const input = Buffer.from(stackNifti(synthetic.data, synthetic.dims, { x: 0.1, y: 0.1, z: 0.25 }));
+  const volume = await readVolume(new File([input], "points.nii"));
+  const edited = { x: 0.2, y: 0.2, z: 0.5 };
+  const want = deconvolveInNode(volume, { spacingUm: edited, optics: DEFAULT_OPTICS, iterations: 2 });
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles({ name: "points.nii", mimeType: "application/octet-stream", buffer: input });
+  await expect(page.locator("#fileInfo")).toContainText("points.nii · 17 × 20 × 9 · 0.1 × 0.1 × 0.25 µm");
+  await page.locator("#spacingXY").fill("0.2");
+  await page.locator("#spacingZ").fill("0.5");
+  await page.locator("#iterations").fill("2");
+  await page.locator("#runButton").click();
+  await expect(status(page)).toHaveText("Stack deconvolved", { timeout: 60000 });
+
+  const tiff = await readTiffStack((await download(page, "Deconvolved · Richardson-Lucy")).bytes);
+  expect(tiff.spacingUm.x).toBeCloseTo(0.2, 6);
+  expect(tiff.spacingUm.z).toBe(0.5);
+  expect(sha256(tiff.data)).toBe(sha256(want.estimate));
+
+  const raw = gunzipSync((await download(page, "Deconvolved (NIfTI)")).bytes);
+  const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  const f = (offset) => view.getFloat32(offset, true);
+  // Millimetres: pixdims and the sform's diagonal carry the edited size; the y flip and origin stay.
+  expect([f(80), f(84), f(88)].map((v) => Number(v.toPrecision(6)))).toEqual([2e-4, 2e-4, 5e-4]);
+  expect([f(280), f(300), f(320)].map((v) => Number(v.toPrecision(6)))).toEqual([2e-4, -2e-4, 5e-4]);
+  expect(f(308)).toBeCloseTo(19 * 1e-4, 9);
+  expect([f(76), f(256), f(272)].map((v) => Number(v.toPrecision(6)))).toEqual([-1, 1, Number(Math.fround(19 * 1e-4).toPrecision(6))]);
+  const voxels = new Float32Array(raw.buffer.slice(raw.byteOffset + f(108), raw.byteOffset + raw.byteLength));
+  expect(sha256(voxels)).toBe(sha256(want.estimate));
 });
 
 test("the automation operation runs RL-TV with its parameters and reports its artifacts", async ({ page }) => {

@@ -15,6 +15,7 @@
     "./wasm": "./wasm/deconvolution_wasm.js",
     "./LICENSE": "./LICENSE",
     "./NOTICE": "./NOTICE",
+    "./THIRD_PARTY_NOTICES.md": "./THIRD_PARTY_NOTICES.md",
     "./package.json": "./package.json"
   },
   "files": [
@@ -22,6 +23,7 @@
     "wasm",
     "LICENSE",
     "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
     "README.md"
   ],
   "scripts": {

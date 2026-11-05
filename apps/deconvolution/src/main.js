@@ -16,13 +16,12 @@ import {
   bindInfoTooltips,
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
-import { createFloat32Nifti, createNiftiFromVolume, downloadFile } from "@neurodesk/webapp-components/file-io";
+import { createFloat32Nifti, downloadFile } from "@neurodesk/webapp-components/file-io";
 import { gzipFile } from "@neurodesk/webapp-components/file-io/bids-derivatives";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
-import { writeImageJTiff } from "@neurodesk/microscopy-tiff";
 import { autoPsfSize, memoryPlan, normaliseSum, opticsSettings, prepareImage, prepareMeasuredPsf, runSettings, MAX_PSF_SIDE, METHODS } from "@neurodesk/deconvolution";
 import workerUrl from "@neurodesk/deconvolution/worker?worker&url";
-import { APP, DEFAULT_OPTICS, EXAMPLE_OPTICS, niftiGeometry, outputNames, provenance, spacingComplete } from "./config.js";
+import { APP, DEFAULT_OPTICS, EXAMPLE_OPTICS, checkPsfSpacing, outputNames, provenance, setNiftiSpacing, spacingComplete, stackNifti, stackTiff } from "./config.js";
 import { readVolume } from "./input.js";
 import examples from "../examples.json";
 
@@ -179,9 +178,7 @@ function finish(operation) {
 }
 
 function niftiFor(volume, name) {
-  const geometry = niftiGeometry(volume.dims, volume.spacingUm);
-  const buffer = createNiftiFromVolume({ hdr: geometry, img: volume.data instanceof Float32Array ? volume.data : Float32Array.from(volume.data) });
-  return new File([buffer], name, { type: "application/octet-stream" });
+  return new File([stackNifti(volume.data, volume.dims, volume.spacingUm)], name, { type: "application/octet-stream" });
 }
 
 function oneFile(files, what) {
@@ -211,9 +208,6 @@ async function loadFiles(filesPromise, signal) {
     syncInputFiles("imageInput", files);
     showSpacing("spacingXY", volume.spacingUm.x);
     showSpacing("spacingZ", volume.spacingUm.z);
-    if (volume.spacingUm.x && volume.spacingUm.y && Math.abs(volume.spacingUm.x - volume.spacingUm.y) > 0.01 * volume.spacingUm.x) {
-      log.log(`The pixels are not square (${describeSpacing(volume.spacingUm)} µm); the PSF uses the x size for both.`, "warning");
-    }
     $("fileInfo").hidden = false;
     $("fileInfo").textContent = `${file.name} · ${nx} × ${ny} × ${nz} · ${describeSpacing(volume.spacingUm)} µm`;
     $("dropZone").classList.add("has-files");
@@ -325,9 +319,8 @@ function psfOverride(id) {
 /** The PSF for this run: `{ data (peak 1), dims, source }`. */
 async function makePsf(spacingUm, optics, signal) {
   if (measured) {
-    const spacing = measured.spacingUm;
-    const differs = ["x", "z"].some((axis) => spacing[axis] && Math.abs(spacing[axis] - spacingUm[axis]) > 0.05 * spacingUm[axis]);
-    if (differs) throw new Error(`The measured PSF's voxel size (${describeSpacing(spacing)} µm) differs from the image's; resample it to ${describeSpacing(spacingUm)} µm first.`);
+    const warning = checkPsfSpacing(measured.spacingUm, spacingUm, measured.file.name);
+    if (warning) log.log(warning, "warning");
     const prepared = prepareMeasuredPsf(measured.data, measured.dims);
     log.log(`Measured PSF: background ${prepared.background.toPrecision(4)} subtracted, cropped to ${prepared.dims.slice().reverse().join(" × ")} around its peak`, "info");
     const peak = prepared.data.reduce((max, v) => Math.max(max, v), 0);
@@ -375,14 +368,14 @@ async function deconvolve(signal, settings = formSettings()) {
     current.throwIfAborted();
     const seconds = (performance.now() - started) / 1000;
     const names = outputNames(input.name);
-    const [nz, ny, nx] = input.dims;
-    const tiff = new File([writeImageJTiff({ data: estimate, width: nx, height: ny, depth: nz, spacingUm })], names.tiff, { type: "image/tiff" });
+    const tiff = new File([stackTiff(estimate, input.dims, spacingUm)], names.tiff, { type: "image/tiff" });
+    // A NIfTI input keeps its orientation and origin, with the voxel size the run used.
     const niftiBytes = input.format === "nifti"
-      ? createFloat32Nifti(estimate, input.niftiHeader)
-      : createNiftiFromVolume({ hdr: niftiGeometry(input.dims, spacingUm), img: estimate });
+      ? setNiftiSpacing(createFloat32Nifti(estimate, input.niftiHeader), spacingUm)
+      : stackNifti(estimate, input.dims, spacingUm);
     const nifti = await gzipFile(niftiBytes, names.nifti, current);
     const psfVolume = { dims: psf.dims, spacingUm, data: Float32Array.from(psf.data) };
-    const psfTiff = new File([writeImageJTiff({ data: psfVolume.data, width: psf.dims[2], height: psf.dims[1], depth: psf.dims[0], spacingUm })], names.psfTiff, { type: "image/tiff" });
+    const psfTiff = new File([stackTiff(psfVolume.data, psf.dims, spacingUm)], names.psfTiff, { type: "image/tiff" });
     const psfView = niftiFor(psfVolume, names.psfNifti.replace(/\.gz$/, ""));
     await show(nifti, { signal: current });
     current.throwIfAborted();
