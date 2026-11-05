@@ -169,11 +169,14 @@ function renderAnalytics(data) {
   }
 }
 
-fetch('./analytics.json')
-  .then((response) => {
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
-  })
-  .then(renderAnalytics)
-  .catch(() => renderAnalyticsUnavailable('Aggregate analytics could not be loaded.'));
+// Only the primary catalogue publishes the usage report.
+if (analyticsApps) {
+  fetch('./analytics.json')
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then(renderAnalytics)
+    .catch(() => renderAnalyticsUnavailable('Aggregate analytics could not be loaded.'));
+}
 

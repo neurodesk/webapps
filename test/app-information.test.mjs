@@ -255,3 +255,12 @@ test('NODDI About names the optional nonlinear fit and its validation scope', ()
   assert.match(about, /nonconverged and failed voxel counts/);
   assert.match(about, /full-brain validation outside that mask remains pending/);
 });
+
+test('a hosted site offers handoffs only to the apps it serves', () => {
+  const neuro = registry.apps.filter((app) => app.catalog === 'neuro').map(({ id }) => id);
+  const { catalog } = appInformationPayload(information, 'dicomview', neuro);
+  const ids = catalog.map(({ id }) => id);
+  for (const moved of ['musclemap', 'seedseg', 'carotid-flow']) assert.ok(!ids.includes(moved), `${moved} is served from another host`);
+  assert.ok(ids.includes('white-matter-lesions'));
+  assert.ok(ids.every((id) => neuro.includes(id)));
+});
