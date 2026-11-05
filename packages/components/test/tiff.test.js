@@ -86,6 +86,9 @@ test('ImageJ descriptions give frames, interval from finterval or fps, and calib
   assert.ok(Math.abs(imagej.frameInterval - 1 / 15) < 1e-12);
   assert.deepEqual(imagej.pixelSize, { x: 0.5, y: 0.25, z: null });
   assert.equal(imagej.unlabelledStack, false);
+  const pixels = parseImagejDescription('ImageJ=1.53t\nimages=3\nslices=3\nspacing=2\nunit=pixel\n', [1, 0.5]);
+  assert.deepEqual(pixels.pixelSize, { x: null, y: null, z: null });
+  assert.deepEqual(pixels.declaredSpacing, { x: 1, y: 2, z: 2, unit: 'pixel' });
   assert.equal(parseImagejDescription('ImageJ=1.53t\nimages=30\nslices=30\n').unlabelledStack, true);
   assert.equal(parseImagejDescription('ImageJ=1.53t\nimages=30\nslices=30\nhyperstack=true\n').unlabelledStack, false);
   assert.equal(micrometresPerUnit('\\u00B5m'), 1);
@@ -250,4 +253,12 @@ test('rgb: mean reads RGB pages as the mean of their three samples, as ImageJ co
 test('writeTiffStack refuses RGB data that is not Uint8Array triplets', () => {
   assert.throws(() => writeTiffStack({ width: 2, height: 2, data: new Float32Array(12), rgb: true }), /Uint8Array/);
   assert.throws(() => writeTiffStack({ width: 2, height: 2, data: new Uint8Array(4), rgb: true }), /whole number/);
+});
+
+test('a plain TIFF declares its resolution tags in their own unit, never as micrometres', async () => {
+  const bytes = writeTiffStack({ width: 2, height: 2, data: new Uint8Array(4), pixelSize: { x: 0.5, y: 0.25 } });
+  const { metadata } = await inspectTiffStack(new Blob([bytes]));
+  assert.equal(metadata.kind, 'baseline');
+  assert.deepEqual(metadata.pixelSize, { x: null, y: null, z: null });
+  assert.deepEqual(metadata.declaredSpacing, { x: 0.5, y: 0.25, z: null, unit: null });
 });

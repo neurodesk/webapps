@@ -42,7 +42,7 @@ test("output names follow the input and its format", () => {
   assert.equal(plan3d.vectors[0], "stack_fibre_vectors.nii.gz");
 });
 
-test("float32 and RGB TIFF stacks round-trip through geotiff with their voxel size", async () => {
+test("float32 and RGB TIFF stacks round-trip through the shared TIFF module with their voxel size", async () => {
   const dims = [5, 3, 2];
   const data = Float32Array.from({ length: 30 }, (_, i) => i * 0.25 - 3);
   const back = await readTiff(writeTiff({ data, dims, spacing: [0.5, 0.5, 2], unit: "micron" }));

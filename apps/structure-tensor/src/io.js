@@ -23,9 +23,21 @@ function rasterHeader(dims, spacing) {
 }
 
 /**
+ * Voxel size ratios, x = 1, from a pixel size declared in a unit that is not a length (ImageJ's
+ * `unit=pixel`, the app's own uncalibrated outputs) or a plain TIFF's resolution tags. A
+ * missing axis is as wide as x.
+ */
+function relativeSpacing(declared) {
+  const dx = declared?.x ?? declared?.y ?? declared?.z;
+  if (!dx) return [1, 1, 1];
+  return [declared.x ?? dx, declared.y ?? dx, declared.z ?? dx].map((size) => size / dx);
+}
+
+/**
  * The layout of a TIFF (a File, read range by range, or an ArrayBuffer) from its headers alone:
  * { dims, spacing, unit }. Calibrated sizes are micrometres, named as the file names them
- * (ImageJ's "micron", OME's "µm"). Hyperstacks with several channels or time points and
+ * (ImageJ's "micron", OME's "µm"); otherwise the unit is "pixel" and the declared sizes keep
+ * their ratios. Hyperstacks with several channels or time points and
  * OME-TIFFs whose planes are in other files are refused.
  */
 export async function tiffLayout(source) {
@@ -41,10 +53,11 @@ export async function tiffLayout(source) {
   if (kind === "ome" && pages < sizeZ) {
     throw new Error(`This OME-TIFF declares ${sizeZ} planes but holds ${pages}; its other planes are in other files. Save the stack as one TIFF.`);
   }
-  const dx = pixelSize.x ?? 1;
-  const spacing = [dx, pixelSize.y ?? dx, pixelSize.z ?? dx];
-  const unit = pixelSize.x === null ? "pixel" : kind === "imagej" ? "micron" : "\u00b5m";
-  return { dims: [width, height, pages], spacing, unit };
+  if (pixelSize.x !== null) {
+    const dx = pixelSize.x;
+    return { dims: [width, height, pages], spacing: [dx, pixelSize.y ?? dx, pixelSize.z ?? dx], unit: kind === "imagej" ? "micron" : "\u00b5m" };
+  }
+  return { dims: [width, height, pages], spacing: relativeSpacing(metadata.declaredSpacing), unit: "pixel" };
 }
 
 /**

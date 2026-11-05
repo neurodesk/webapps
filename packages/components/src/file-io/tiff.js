@@ -105,6 +105,7 @@ export function parseOmeDescription(description) {
     sizeZ: Number(attribute('SizeZ') ?? 1),
     sizeT: Number(attribute('SizeT') ?? 1),
     pixelSize: { x: size('X'), y: size('Y'), z: size('Z') },
+    declaredSpacing: { x: finite(attribute('PhysicalSizeX')), y: finite(attribute('PhysicalSizeY')), z: finite(attribute('PhysicalSizeZ')), unit: attribute('PhysicalSizeXUnit') ?? 'µm' },
     frameInterval: increment && timeScale ? increment * timeScale : null,
     stagePosition: omeStagePosition(text),
   };
@@ -159,6 +160,7 @@ export function parseImagejDescription(description, resolution = [null, null]) {
     sizeZ: Number(field('slices') ?? 1),
     sizeT: Number(field('frames') ?? 1),
     pixelSize: scale ? { x: x ? x * scale : null, y: y ? y * scale : null, z: spacing ? spacing * scale : null } : { x: null, y: null, z: null },
+    declaredSpacing: { x, y, z: spacing, unit: field('unit') ?? null },
     frameInterval: interval && timeScale ? interval * timeScale : fps ? 1 / fps : null,
     stagePosition: null,
   };
@@ -194,6 +196,17 @@ function blobSource(blob) {
   };
 }
 
+const RESOLUTION_UNITS = { 2: 'inch', 3: 'centimeter' };
+
+/**
+ * A plain TIFF's pixel size from XResolution/YResolution, in the ResolutionUnit it names (null
+ * for none). Many writers put a nominal 72 dpi here, so it is a ratio, never a calibration.
+ */
+function baselineSpacing(image, resolution) {
+  const [x, y] = resolution.map((value) => (finite(value) ? 1 / value : null));
+  return { x, y, z: null, unit: RESOLUTION_UNITS[image.fileDirectory.getValue('ResolutionUnit') ?? 2] ?? null };
+}
+
 async function openStack(source, rgb) {
   const tiff = source instanceof Blob ? await GeoTIFF.fromSource(blobSource(source)) : await fromArrayBuffer(source);
   const pages = await tiff.getImageCount();
@@ -206,10 +219,11 @@ async function openStack(source, rgb) {
   if (!Type) throw new Error(`TIFF sample type (format ${format}, ${bits} bits) is not 8, 16 or 32-bit integer or 32/64-bit float.`);
   // geotiff keeps the NUL terminator of a value stored inline in its entry.
   const description = String((await first.fileDirectory.loadValue('ImageDescription')) ?? '').replace(/\0+$/, '');
-  const resolution = [rational(first.fileDirectory.getValue('XResolution')), rational(first.fileDirectory.getValue('YResolution'))];
+  // A File is read range by range, so values stored past the directory load on demand.
+  const resolution = [rational(await first.fileDirectory.loadValue('XResolution')), rational(await first.fileDirectory.loadValue('YResolution'))];
   const metadata = parseOmeDescription(description)
     ?? parseImagejDescription(description, resolution)
-    ?? { kind: 'baseline', images: 1, sizeC: 1, sizeZ: 1, sizeT: pages, pixelSize: { x: null, y: null, z: null }, frameInterval: null, stagePosition: null };
+    ?? { kind: 'baseline', images: 1, sizeC: 1, sizeZ: 1, sizeT: pages, pixelSize: { x: null, y: null, z: null }, declaredSpacing: baselineSpacing(first, resolution), frameInterval: null, stagePosition: null };
   if (metadata.images > 1) throw new Error(`This OME-TIFF holds ${metadata.images} image series; save the one you need as its own file.`);
   const declared = metadata.kind === 'imagej' ? Number(description.match(/^images=(\d+)\s*$/m)?.[1]) : NaN;
   if (declared && declared !== pages) throw new Error(`This ImageJ TIFF declares ${declared} images but holds ${pages} pages; save it again from ImageJ or Fiji.`);

@@ -4,7 +4,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { rasterSize, readImages, tiffLayout, withoutExif, writeTiff } from "../src/io.js";
 import { MAX_VOXELS } from "../src/config.js";
+import { analyse } from "../src/tensor.js";
 import { buildTiff, omeXml } from "./tiff-fixtures.mjs";
+import { axisAngle, cylinders3d } from "./synthetic.mjs";
 
 const pages = (count, width = 16, height = 16) => Array.from({ length: count }, (_, z) => new Uint8Array(width * height).fill(z + 1));
 const tiffFile = (buffer, name = "image.ome.tif") => new File([buffer], name, { type: "image/tiff" });
@@ -225,4 +227,33 @@ test("a TIFF stack decodes from one read of the file, not one slice per strip", 
   assert.deepEqual(image.dims, [16, 16, 64]);
   assert.equal(file.reads, 1);
   assert.ok(file.slices <= probeOnly.slices + 2, `${file.slices} slices against ${probeOnly.slices} for the headers alone`);
+});
+
+// A fibre lattice on anisotropic voxels: its orientation is only right when the reader keeps the
+// voxel ratios, though the file names no length unit.
+async function latticeError(spacing, toTiff) {
+  const truth = cylinders3d({ size: [48, 48, 48], spacing, azimuth: 30, elevation: 30, period: 16 });
+  const { image } = await readImages([tiffFile(toTiff(truth), "lattice.tif")]);
+  assert.equal(image.unit, "pixel");
+  assert.deepEqual(image.dims, truth.dims);
+  assert.deepEqual(image.spacing, spacing);
+  const { maps } = analyse(image, { sigma: 2, rho: 4, minCoherency: 0, minEnergy: 0 });
+  const centre = 24 + 48 * (24 + 48 * 24);
+  return axisAngle(Array.from(maps.vectors.slice(centre * 3, centre * 3 + 3)), truth.direction);
+}
+
+test("an ImageJ unit=pixel stack keeps its voxel ratios, so a [1, 1, 2] lattice keeps its orientation", async () => {
+  const error = await latticeError([1, 1, 2], (truth) => writeTiff({ ...truth, unit: "pixel" }));
+  assert.ok(error < 0.01, `orientation error ${error}°`);
+});
+
+test("a plain TIFF's resolution tags give voxel ratios, never micrometres", async () => {
+  const layout = await tiffLayout(buildTiff({ width: 16, height: 16, pages: pages(3), resolution: [100, 50], resolutionUnit: 3 }));
+  assert.deepEqual(layout, { dims: [16, 16, 3], spacing: [1, 2, 1], unit: "pixel" });
+  const error = await latticeError([1, 2, 1], ({ data, dims: [nx, ny, nz] }) => {
+    const samples = Float32Array.from(data);
+    const slices = Array.from({ length: nz }, (_, z) => samples.subarray(z * nx * ny, (z + 1) * nx * ny));
+    return buildTiff({ width: nx, height: ny, pages: slices, resolution: [10, 5], resolutionUnit: 2 });
+  });
+  assert.ok(error < 0.01, `orientation error ${error}°`);
 });

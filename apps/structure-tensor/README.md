@@ -37,11 +37,13 @@ used only as an external validation reference.
 
 ## Inputs and outputs
 
-- TIFF, grey or RGB, single page or stack, read with geotiff.js. Colour channels are averaged, as
-  in ImageJ's RGB to 8-bit conversion. Voxel size comes from the resolution tags and ImageJ's
-  `spacing=`, or from an OME-XML description's `PhysicalSize*` attributes, which also set the
-  number of slices. Hyperstacks with several channels or time points (ImageJ or OME) are refused,
-  and so are OME-TIFFs whose planes are in other files.
+- TIFF, grey or RGB, single page or stack, read with the shared TIFF module. Colour channels are
+  averaged, as in ImageJ's RGB to 8-bit conversion. Voxel size comes from the resolution tags and
+  ImageJ's `spacing=`, or from an OME-XML description's `PhysicalSize*` attributes, which also set
+  the number of slices. Without a length unit (ImageJ's `unit=pixel`, or a plain TIFF's
+  resolution tags) the declared sizes keep their ratios, with x as 1 pixel. Hyperstacks with
+  several channels or time points (ImageJ or OME), OME-TIFFs whose planes are in other files and
+  TIFFs with thumbnail or pyramid pages in the main page chain are refused.
 - NIfTI, 3D. Its angles are measured on the voxel grid with the second index pointing down, as
   for TIFF rows. A NIfTI displayed with +y up therefore shows mirrored angles.
 - PNG and JPEG, and several 2D slices of one size, which are stacked in name order with cubic
