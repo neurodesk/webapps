@@ -2420,3 +2420,50 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  neuromorph:
+    about:
+      - "NeuroMorph checks neuron reconstructions in the SWC format, draws them as tubes coloured by neurite type and measures their morphology: total length, branch and terminal points, path and radial distance, branch and Strahler order, local and remote bifurcation angles, surface area and volume from the radii, and the Sholl profile. It reads one file, several, or a folder, and writes the measures of every neuron to CSV tables."
+      - "The measures follow NeuroM 4, the Blue Brain Project's morphometrics library: on the examples every value agrees with NeuroM 4.0.6 to one part in a million and every Sholl count is identical. Lengths exclude the soma and the gap from the soma to each neurite, surface and volume treat each segment as a truncated cone, and angles are measured only where a branch splits in two. Sholl spheres start one step from the first soma sample, where NeuroM's default bins start at the soma radius."
+      - "Malformed lines, repeated ids, missing parents and parent cycles are always repaired, since no tree exists without that. Zero radii and points repeating their parent's position are repaired when the option is on, and the repaired file can be downloaded. Steps longer than 30 µm along z, neurites detached from the soma and several somata are reported but kept."
+    packages:
+      - { name: NeuroMorph morphometrics, url: https://github.com/neurodesk/webapps/tree/main/apps/neuromorph/src/morph, role: "SWC checks, morphometrics and Sholl analysis, validated against NeuroM" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: mesh viewer }
+    citations:
+      - group: Morphometrics
+        title: NeuroM
+        reference: "Blue Brain Project. NeuroM: a Python toolkit for the analysis and processing of neuron morphologies [Computer software]. Zenodo."
+        doi: 10.5281/zenodo.597333
+        code: https://github.com/BlueBrain/NeuroM
+      - group: Morphometrics
+        title: Sholl analysis
+        reference: "Sholl DA. Dendritic organization in the neurons of the visual and motor cortices of the cat. Journal of Anatomy. 1953;87(4):387–406."
+        url: https://pmc.ncbi.nlm.nih.gov/articles/PMC1244622/
+      - group: Morphometrics
+        title: Strahler order
+        reference: "Strahler AN. Quantitative analysis of watershed geomorphology. Eos, Transactions American Geophysical Union. 1957;38(6):913–920."
+        doi: 10.1029/TR038i006p00913
+      - group: File format
+        title: SWC
+        reference: "Cannon RC, Turner DA, Pyapali GK, Wheal HV. An on-line archive of reconstructed hippocampal neurons. Journal of Neuroscience Methods. 1998;84(1–2):49–54."
+        doi: 10.1016/S0165-0270(98)00091-0
+      - group: Example data
+        title: NeuroMorpho.Org
+        reference: "Ascoli GA, Donohue DE, Halavi M. NeuroMorpho.Org: a central resource for neuronal morphologies. Journal of Neuroscience. 2007;27(35):9247–9251."
+        doi: 10.1523/JNEUROSCI.2055-07.2007
+      - group: Example data
+        title: NeuroMorpho.Org community sharing
+        reference: "Tecuatl C, Ljungquist B, Ascoli GA. Accelerating the continuous community sharing of digital neuromorphology data. FASEB BioAdvances. 2024;6(7):207–221."
+        doi: 10.1096/fba.2024-00048
+      - group: Example data
+        title: CA1 pyramidal cell n120
+        reference: "Pyapali GK, Sik A, Penttonen M, Buzsáki G, Turner DA. Dendritic properties of hippocampal CA1 pyramidal neurons in the rat: intracellular staining in vivo and in vitro. Journal of Comparative Neurology. 1998;391(3):335–352."
+        doi: 10.1002/(SICI)1096-9861(19980216)391:3<335::AID-CNE4>3.0.CO;2-2
+      - group: Example data
+        title: Dentate basket cell
+        reference: "Yu J, Proddutur A, Elgammal FS, Ito T, Santhakumar V. Status epilepticus enhances tonic GABA currents and depolarizes GABA reversal potential in dentate fast-spiking basket cells. Journal of Neurophysiology. 2013;109(7):1746–1763."
+        doi: 10.1152/jn.00891.2012
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
