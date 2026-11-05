@@ -23,11 +23,11 @@ import { extent } from "./morph/morphometrics.js";
 import { morphologyMesh, TYPE_COLORS, TYPE_LABELS } from "./morph/tubes.js";
 import { bifurcationsCsv, morphometricsCsv, shollCsv, summary } from "./morph/outputs.js";
 import { renderMorphometricsReport, renderShollReport } from "./report.js";
+import { repairedName, stem } from "./names.js";
 import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
 const isSwc = (file) => /\.swc$/i.test(file.name);
-const stem = (name) => name.replace(/\.swc$/i, "");
 const basename = (path) => path.slice(path.lastIndexOf("/") + 1);
 /** A file's path within a dropped or chosen folder, else its name. */
 const relativePath = (file) => file.webkitRelativePath || file._webkitRelativePath || file.name;
@@ -371,16 +371,6 @@ function shollStep() {
 
 function outputName(kind) {
   return `${neurons.length === 1 ? stem(basename(neurons[0].id)) : "neuromorph"}_${kind}.csv`;
-}
-
-/** A download name for a repaired file: its path with folders joined by "_", unique in the batch. */
-function repairedName(id, taken) {
-  const [, path, copy] = id.match(/^(.*?)(?: \((\d+)\))?$/);
-  const base = `${stem(path)}${copy ? `_${copy}` : ""}`.replaceAll("/", "_");
-  let name = `${base}_repaired.swc`;
-  for (let n = 2; taken.has(name); n++) name = `${base}_${n}_repaired.swc`;
-  taken.add(name);
-  return name;
 }
 
 /** Measure every loaded neuron in a worker, terminated on cancel. */

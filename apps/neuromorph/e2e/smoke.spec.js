@@ -233,6 +233,14 @@ test("with repair off a zero radius is measured, and the report does not call ar
   await expect(page.locator("#morphometricsReport")).not.toContainText("are blank");
 });
 
+test("a neurite with only zero radii is reported blank in the report when repair cannot fix it", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#swcInput").setInputFiles([swcFile("zeros.swc", "1 1 0 0 0 5 -1\n2 3 5 0 0 0 1\n3 3 10 0 0 0 2")]);
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("zeros.swc measured");
+  await expect(page.locator("#morphometricsReport")).toContainText("Surface area and volume are blank");
+});
+
 test("a second flat file of one name downloads its repair under a numbered name", async ({ page }) => {
   await page.goto("/");
   await page.locator("#swcInput").setInputFiles([swcFile("broken.swc", BROKEN), swcFile("broken.swc", BROKEN)]);
