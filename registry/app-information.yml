@@ -2307,6 +2307,43 @@ apps:
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
         url: https://onnxruntime.ai
+  lightsheet-atlas:
+    packages:
+      - { name: greedy-rs (Rust/WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: "affine and deformable registration to the atlas (single-threaded @neurodesk/greedy build)" }
+      - { name: cellfinder detection (JavaScript port), url: https://github.com/brainglobe/cellfinder, role: "classical cell candidate detection, ported from cellfinder 1.10.1 (BSD-3-Clause)" }
+      - { name: Allen Mouse Brain CCFv3 (BrainGlobe allen_mouse_50um), url: https://atlas.brain-map.org, role: "atlas template and annotation, Allen Institute terms of use" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF reading }
+      - { name: zarrita, url: https://github.com/manzt/zarrita.js, role: OME-Zarr reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Cell detection
+        title: cellfinder
+        reference: "Tyson AL, Rousseau CV, Niedworok CJ, et al. A deep learning algorithm for 3D cell detection in whole mouse brain image datasets. PLOS Computational Biology. 2021;17(5):e1009074."
+        doi: 10.1371/journal.pcbi.1009074
+        code: https://github.com/brainglobe/cellfinder
+      - group: Registration
+        title: brainreg
+        reference: "Tyson AL, Vélez-Fort M, Rousseau CV, et al. Accurate determination of marker location within whole-brain microscopy images. Scientific Reports. 2022;12:867."
+        doi: 10.1038/s41598-021-04676-9
+        code: https://github.com/brainglobe/brainreg
+      - group: Registration
+        title: aMAP
+        reference: "Niedworok CJ, Brown APY, Jorge Cardoso M, et al. aMAP is a validated pipeline for registration and segmentation of high-resolution mouse brain data. Nature Communications. 2016;7:11879."
+        doi: 10.1038/ncomms11879
+      - group: Registration
+        title: Greedy
+        reference: "Greedy was created by Paul Yushkevich at the Penn Image Computing and Science Lab and is maintained by contributors to the Greedy C++ project [Computer software]."
+        url: https://sites.google.com/view/greedyreg/about
+        code: https://github.com/pyushkevich/greedy
+      - group: Atlas
+        title: Allen Mouse Brain Common Coordinate Framework
+        reference: "Wang Q, Ding SL, Li Y, et al. The Allen Mouse Brain Common Coordinate Framework: a 3D reference atlas. Cell. 2020;181(4):936-953.e20."
+        doi: 10.1016/j.cell.2020.04.007
+      - group: Atlas
+        title: BrainGlobe Atlas API
+        reference: "Claudi F, Petrucco L, Tyson AL, Branco T, Margrie TW, Portugues R. BrainGlobe Atlas API: a common interface for neuroanatomical atlases. Journal of Open Source Software. 2020;5(54):2668."
+        doi: 10.21105/joss.02668
+        code: https://github.com/brainglobe/brainglobe-atlasapi
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

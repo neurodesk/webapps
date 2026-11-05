@@ -9,7 +9,8 @@
   },
   "exports": {
     ".": "./src/index.js",
-    "./single": "./src/single.js"
+    "./single": "./src/single.js",
+    "./wasm-single": "./wasm-single/greedy_rs_wasm.js"
   },
   "files": [
     "src",

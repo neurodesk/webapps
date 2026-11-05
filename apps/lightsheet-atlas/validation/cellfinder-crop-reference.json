@@ -1,0 +1,411 @@
+{
+ "tool": "cellfinder 1.10.1 cellfinder.core.detect.detect.main (torch_device=cpu, defaults)",
+ "input": {
+  "files": [
+   "signal_ch000000.tif",
+   "signal_ch000001.tif",
+   "signal_ch000002.tif",
+   "signal_ch000003.tif",
+   "signal_ch000004.tif",
+   "signal_ch000005.tif",
+   "signal_ch000006.tif",
+   "signal_ch000007.tif",
+   "signal_ch000008.tif",
+   "signal_ch000009.tif",
+   "signal_ch000010.tif",
+   "signal_ch000011.tif",
+   "signal_ch000012.tif",
+   "signal_ch000013.tif",
+   "signal_ch000014.tif",
+   "signal_ch000015.tif",
+   "signal_ch000016.tif",
+   "signal_ch000017.tif",
+   "signal_ch000018.tif",
+   "signal_ch000019.tif",
+   "signal_ch000020.tif",
+   "signal_ch000021.tif",
+   "signal_ch000022.tif",
+   "signal_ch000023.tif",
+   "signal_ch000024.tif",
+   "signal_ch000025.tif"
+  ],
+  "shape": [
+   26,
+   1116,
+   627
+  ],
+  "voxelSizesZYX": [
+   5.0,
+   2.0,
+   2.0
+  ],
+  "source": "BrainGlobe test data (CC0) cellfinder/cellfinder-test-data.zip::signal, as the example cellfinder-crop.ome.tif"
+ },
+ "settings": {
+  "somaDiameterPx": 8,
+  "ballXyPx": 3,
+  "ballZPx": 3
+ },
+ "planes": [
+  {
+   "above": 107,
+   "brightTiles": 2222,
+   "aboveSha256": "72f69eb0162a5c1aebc47a09fef5f931258bc636fe8e5a418caa786bc97e54cc"
+  },
+  {
+   "above": 166,
+   "brightTiles": 2220,
+   "aboveSha256": "f313808f1a0abe1d608c728cc0ec4fea52f03b60ceced8a0e842016fb1372a60"
+  },
+  {
+   "above": 181,
+   "brightTiles": 2214,
+   "aboveSha256": "96fbb69476f9e06a1840265dce3c156911f5cd126e8b4925b938fbaec9690ffd"
+  },
+  {
+   "above": 187,
+   "brightTiles": 2212,
+   "aboveSha256": "eba5bf468e712a884c7b7742fe8780d643d1543fea1269af69fc99134e041553"
+  },
+  {
+   "above": 206,
+   "brightTiles": 2213,
+   "aboveSha256": "8f884bc9137896cb5013a818958f80ee2fb7604fe0d3d887d871dcd4460f3382"
+  },
+  {
+   "above": 180,
+   "brightTiles": 2209,
+   "aboveSha256": "05595e2806035ad3edecf0b14edc42da1c6ab34e2f19aa5d673aa928d60d26ec"
+  },
+  {
+   "above": 106,
+   "brightTiles": 2203,
+   "aboveSha256": "be728da18500550ae79e39a37a9400f98d83343be3e294b181a26dfb79baa276"
+  },
+  {
+   "above": 147,
+   "brightTiles": 2203,
+   "aboveSha256": "3f9fe170277d41e092d3801a731d43355f002e3e420e615d27a05bf217035774"
+  },
+  {
+   "above": 80,
+   "brightTiles": 2203,
+   "aboveSha256": "ddcf317d6ddfb1f8f919650ca5dc483b34e5b196c47f1be06f45cfaecc833016"
+  },
+  {
+   "above": 86,
+   "brightTiles": 2202,
+   "aboveSha256": "fc592506feed1780a79a6d89f8770a306dae5153427a399bcdca08c03920b80f"
+  },
+  {
+   "above": 160,
+   "brightTiles": 2202,
+   "aboveSha256": "1585f6c75dd8b082c047548cf9c398860907ce997def2eb305240f164aeae68d"
+  },
+  {
+   "above": 229,
+   "brightTiles": 2195,
+   "aboveSha256": "3aaa8b7d15f614be5c94f7e11861f3f862ea9d4971f2d6a3ab2fbebe13afb8ec"
+  },
+  {
+   "above": 218,
+   "brightTiles": 2195,
+   "aboveSha256": "ab1b94b43c165cff6954da20e082d632a31bb99eb7cfecd394bb730d74cdd2d8"
+  },
+  {
+   "above": 253,
+   "brightTiles": 2190,
+   "aboveSha256": "62e6e366d7a00a86eef65f2d3f1950a969747786d56c4703fdca62bca08ed714"
+  },
+  {
+   "above": 298,
+   "brightTiles": 2194,
+   "aboveSha256": "2a258bf4a0d97c614160d2a5ad1ad19ee975765b437e020e2ac75bec5a84c950"
+  },
+  {
+   "above": 282,
+   "brightTiles": 2191,
+   "aboveSha256": "30884bfd1516960483f781f8c41ff6331a169574fd7c5a168d4a531a7f502de5"
+  },
+  {
+   "above": 193,
+   "brightTiles": 2192,
+   "aboveSha256": "bb9c8332c3a5b5c794029dec91e66b2f1e403d426366f97736cb94e1cf13c7d1"
+  },
+  {
+   "above": 188,
+   "brightTiles": 2183,
+   "aboveSha256": "78830bbd966fc2a93ed586b72642f6f76ca2a0a0df8da718273c0d8bc5259bec"
+  },
+  {
+   "above": 84,
+   "brightTiles": 2189,
+   "aboveSha256": "184c47f951e8fa57e99538611158f2e0a635b3e412d2d88111d470d3af2db70d"
+  },
+  {
+   "above": 138,
+   "brightTiles": 2186,
+   "aboveSha256": "b31083673ead41787de147b1e792d6073f5af63c796c1d9574178984c6b2e2ad"
+  },
+  {
+   "above": 204,
+   "brightTiles": 2185,
+   "aboveSha256": "f874c1a6a8873e92a85592c818cc5a744ef5a122cd179820f4253d25f92ada79"
+  },
+  {
+   "above": 234,
+   "brightTiles": 2177,
+   "aboveSha256": "551cb8ff1550234d670fbea6d54b859650c3fb7cde74c4e3712a9f26a20a58a7"
+  },
+  {
+   "above": 174,
+   "brightTiles": 2178,
+   "aboveSha256": "1ee47be5a2c64fad7dc623ac5c9a38ce277c6dfb0cdda54991d92b9976c4520a"
+  },
+  {
+   "above": 174,
+   "brightTiles": 2178,
+   "aboveSha256": "fba1ab2022b15396ce69f08433c41872fd49ebd86fd8e274049edc570afe2096"
+  },
+  {
+   "above": 142,
+   "brightTiles": 2179,
+   "aboveSha256": "e633865412259d5f916760b61f94b68cc62070350b398dc706cc74195caf5f06"
+  },
+  {
+   "above": 108,
+   "brightTiles": 2176,
+   "aboveSha256": "9f761ecc843c23ba1f51953d32e29a05d062d36d2c2a320b2d62fe7db54fcbcb"
+  }
+ ],
+ "cells": [
+  [
+   14,
+   686,
+   13,
+   1
+  ],
+  [
+   22,
+   671,
+   14,
+   1
+  ],
+  [
+   84,
+   406,
+   24,
+   1
+  ],
+  [
+   132,
+   315,
+   1,
+   1
+  ],
+  [
+   138,
+   331,
+   20,
+   1
+  ],
+  [
+   221,
+   767,
+   3,
+   1
+  ],
+  [
+   300,
+   833,
+   12,
+   1
+  ],
+  [
+   310,
+   924,
+   6,
+   1
+  ],
+  [
+   318,
+   924,
+   5,
+   1
+  ],
+  [
+   326,
+   605,
+   8,
+   1
+  ],
+  [
+   331,
+   710,
+   4,
+   1
+  ],
+  [
+   335,
+   1031,
+   15,
+   1
+  ],
+  [
+   339,
+   1004,
+   15,
+   1
+  ],
+  [
+   346,
+   908,
+   22,
+   1
+  ],
+  [
+   350,
+   1065,
+   21,
+   1
+  ],
+  [
+   366,
+   637,
+   2,
+   1
+  ],
+  [
+   368,
+   708,
+   14,
+   1
+  ],
+  [
+   371,
+   631,
+   3,
+   1
+  ],
+  [
+   371,
+   874,
+   14,
+   1
+  ],
+  [
+   373,
+   332,
+   14,
+   1
+  ],
+  [
+   373,
+   1070,
+   23,
+   1
+  ],
+  [
+   374,
+   876,
+   16,
+   1
+  ],
+  [
+   378,
+   870,
+   13,
+   1
+  ],
+  [
+   393,
+   520,
+   11,
+   1
+  ],
+  [
+   403,
+   666,
+   22,
+   1
+  ],
+  [
+   405,
+   602,
+   11,
+   1
+  ],
+  [
+   416,
+   508,
+   1,
+   1
+  ],
+  [
+   420,
+   908,
+   3,
+   1
+  ],
+  [
+   426,
+   787,
+   16,
+   1
+  ],
+  [
+   433,
+   1102,
+   20,
+   1
+  ],
+  [
+   436,
+   813,
+   5,
+   1
+  ],
+  [
+   468,
+   792,
+   2,
+   1
+  ],
+  [
+   476,
+   858,
+   1,
+   1
+  ],
+  [
+   500,
+   202,
+   6,
+   1
+  ],
+  [
+   554,
+   1015,
+   20,
+   1
+  ],
+  [
+   565,
+   84,
+   18,
+   1
+  ],
+  [
+   571,
+   847,
+   4,
+   1
+  ],
+  [
+   587,
+   855,
+   17,
+   1
+  ]
+ ]
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "app": "lightsheet-atlas",
+  "license": "Allen Institute terms of use (noncommercial redistribution with citation)",
+  "preprocessing_contract": "apps/lightsheet-atlas/validation/prepare_atlas.py: BrainGlobe allen_mouse_50um 3.1, asr axis order, annotation as uint16 indices into the structures file",
+  "atlas": {
+    "name": "Allen Mouse Brain Common Coordinate Framework v3 (2017), 50 µm",
+    "source": "BrainGlobe Atlas API allen_mouse_50um version 3.1 (brainglobe-atlasapi 3.0.2)",
+    "source_url": "https://brainglobe.s3.us-west-2.amazonaws.com/atlas/",
+    "citation": "Wang Q, Ding SL, Li Y, et al. The Allen Mouse Brain Common Coordinate Framework: a 3D reference atlas. Cell. 2020;181(4):936-953.e20.",
+    "doi": "10.1016/j.cell.2020.04.007",
+    "terms": "https://alleninstitute.org/terms-of-use/",
+    "shape": [264, 160, 228],
+    "resolution_um": 50,
+    "orientation": "asr"
+  },
+  "assets": [
+    {
+      "id": "template",
+      "filename": "allen_mouse_50um_template.nii.gz",
+      "bytes": 5932246,
+      "sha256": "cc72a32188504f64ba33b3b49ee8134df2563c5471f41cb3ab339952feae0ca3",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_template.nii.gz"
+    },
+    {
+      "id": "annotation",
+      "filename": "allen_mouse_50um_annotation.nii.gz",
+      "bytes": 1260100,
+      "sha256": "0f495ee499c0c12c8de726fb455dd28a7fa23188d660276f6256d3ab9dd7c9a1",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_annotation.nii.gz"
+    },
+    {
+      "id": "structures",
+      "filename": "allen_mouse_50um_structures.json",
+      "bytes": 117346,
+      "sha256": "cd2ca51d5fea23b9663b0c01f056733813cb6a595eaa77c5088459ab8a7d0da6",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_structures.json"
+    }
+  ]
+}

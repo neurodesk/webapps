@@ -1,0 +1,18 @@
+Light-sheet atlas
+Copyright 2026 Neurodesk contributors. Apache-2.0 (the web application) AND BSD-3-Clause
+(the cell detection port).
+
+src/detect.js ports the classical cell candidate detection of cellfinder 1.10.1
+(cellfinder/core/detect: plane filters, tile walker, ball filter, structure detection and
+structure splitting; https://github.com/brainglobe/cellfinder),
+Copyright (c) 2020, Adam Tyson, University College London, under the BSD 3-Clause licence
+(LICENSE-cellfinder).
+
+The orientation notation and the registration outputs follow brainreg
+(https://github.com/brainglobe/brainreg, BSD-3-Clause); no brainreg code is included.
+
+Registration runs Greedy through @neurodesk/greedy (Apache-2.0; see packages/greedy/NOTICE).
+
+The Allen Mouse Brain Common Coordinate Framework v3 (c) 2015-2017 Allen Institute for Brain
+Science is downloaded at run time, not bundled; it is redistributed for noncommercial
+research use under the Allen Institute terms of use (https://alleninstitute.org/terms-of-use/).

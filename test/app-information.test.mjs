@@ -32,6 +32,7 @@ const REQUIRED_METHODS = {
   stitching: ['10.1093/bioinformatics/btp184', '10.1038/nmeth.2019', '10.1038/s41598-017-04567-y', 'github.com/niivue/niivue'],
   neuromorph: ['10.5281/zenodo.597333', 'PMC1244622', '10.1029/TR038i006p00913', '10.1016/S0165-0270(98)00091-0', '10.1523/JNEUROSCI.2055-07.2007', '10.1096/fba.2024-00048', '10.1152/jn.00891.2012', 'github.com/niivue/niivue'],
   'structure-tensor': ['10.1007/s10237-011-0325-z', '10.1007/978-3-319-28549-8_3', '10.1038/s41597-022-01477-1', 'github.com/niivue/niivue'],
+  'lightsheet-atlas': ['10.1371/journal.pcbi.1009074', '10.1038/s41598-021-04676-9', '10.1038/ncomms11879', 'sites.google.com/view/greedyreg/about', '10.1016/j.cell.2020.04.007', '10.21105/joss.02668', 'github.com/niivue/niivue'],
   'ants-denoise': ['10.1002/jmri.22003', '10.1038/s41598-021-87564-6', '10.1038/s41597-025-05250-y', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   'spot-detection': ['10.1261/rna.079073.121', 'github.com/niivue/niivue'],
   n4: ['10.1109/TMI.2010.2046908', '10.1016/j.neuroimage.2010.09.025', '10.1016/j.neuroimage.2019.116137', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],

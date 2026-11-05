@@ -1,0 +1,105 @@
+{
+ "description": "The app's registration of the brainreg-test-brain example against brainreg's on the same planes. Recompute with validation/run-example.mjs then validation/compare_brainreg.py.",
+ "brainreg": {
+  "version": "brainreg 1.0.16 (NiftyReg backend), brainglobe-atlasapi 3.0.2",
+  "command": "brainreg brain/ out/ -v 50 40 40 --orientation psl --atlas allen_mouse_50um --brain_geometry full",
+  "settings": "defaults: affine 6 steps (5 used), freeform 6 steps (4 used), bending energy 0.95, grid spacing -10, 128 histogram bins, default preprocessing",
+  "input": "BrainGlobe test data (CC0) brainreg/brainreg-test-data.zip::input/brain, the example's planes"
+ },
+ "app": {
+  "registration": "Greedy (@neurodesk/greedy wasm-single): affine NMI 100x50x10 from image centres, then SVF NCC 2x2x2 100x50x0; atlas template moving",
+  "grid": [
+   270,
+   154,
+   217
+  ]
+ },
+ "dice": {
+  "Isocortex": 0.9593,
+  "OLF": 0.8968,
+  "HPF": 0.9294,
+  "CTXsp": 0.8059,
+  "STR": 0.9171,
+  "PAL": 0.8061,
+  "TH": 0.9316,
+  "HY": 0.8821,
+  "MB": 0.9374,
+  "P": 0.9111,
+  "MY": 0.8586,
+  "CB": 0.8873,
+  "fiber tracts": 0.7026,
+  "VS": 0.6498,
+  "root": 0.9728
+ },
+ "atlasCoordinateDistanceUm": {
+  "median": 94.0,
+  "p90": 167.5
+ },
+ "divisionVolumes": {
+  "Isocortex": {
+   "app_mm3": 129.579,
+   "brainreg_mm3": 125.023
+  },
+  "OLF": {
+   "app_mm3": 34.785,
+   "brainreg_mm3": 35.426
+  },
+  "HPF": {
+   "app_mm3": 43.951,
+   "brainreg_mm3": 44.5
+  },
+  "CTXsp": {
+   "app_mm3": 8.791,
+   "brainreg_mm3": 9.05
+  },
+  "STR": {
+   "app_mm3": 46.593,
+   "brainreg_mm3": 46.687
+  },
+  "PAL": {
+   "app_mm3": 10.217,
+   "brainreg_mm3": 9.697
+  },
+  "TH": {
+   "app_mm3": 20.943,
+   "brainreg_mm3": 21.817
+  },
+  "HY": {
+   "app_mm3": 16.467,
+   "brainreg_mm3": 16.007
+  },
+  "MB": {
+   "app_mm3": 37.889,
+   "brainreg_mm3": 37.895
+  },
+  "P": {
+   "app_mm3": 17.694,
+   "brainreg_mm3": 17.138
+  },
+  "MY": {
+   "app_mm3": 38.033,
+   "brainreg_mm3": 31.482
+  },
+  "CB": {
+   "app_mm3": 56.923,
+   "brainreg_mm3": 52.978
+  },
+  "fiber tracts": {
+   "app_mm3": 48.249,
+   "brainreg_mm3": 44.873
+  },
+  "VS": {
+   "app_mm3": 5.334,
+   "brainreg_mm3": 6.326
+  },
+  "root": {
+   "app_mm3": 519.277,
+   "brainreg_mm3": 502.656
+  }
+ },
+ "ours": {
+  "registeredAtlasSha256": "8d45dc471b080754dfbc5cd403aefaa83ae591348bfa9852a90672a143aac2d1",
+  "regionsCsvSha256": "0afd633c1087400230d1cddb9e2acd5f0df03a8265a9f395bdcf3587d18f5c4f",
+  "regionRows": 1365
+ }
+}
