@@ -96,3 +96,15 @@ test('an incomplete diffusion bundle is rejected before replacing the current su
     fetchFiles: async () => [new File(['scan'], 'b0.nii')], assertCurrent() {},
   }), /DWI\/TRACE with ADC or b0/);
 });
+
+for (const id of ['stroke-dwi-adc-soop', 'stroke-dwi-adc-isles2022']) {
+  test(`${id} imports the published DWI/ADC pair and clears previous demographics`, async () => {
+    const { options, loaded, contexts } = await loadAdapter();
+    const example = examples.find(item => item.id === id);
+    assert.deepEqual(example.files.map(file => file.role), ['dwi', 'adc']);
+    assert.equal(example.patientContext, undefined);
+    await options.onLoad(example, { fetchFiles: async () => example.files.map(file => new File(['scan'], file.name)), assertCurrent() {} });
+    assert.deepEqual(loaded.map(item => [item.kind, item.file.name]), example.files.map(file => [file.role, file.name]));
+    assert.deepEqual(contexts, [undefined]);
+  });
+}

@@ -12,6 +12,8 @@
   - next.html: the pipeline rules' recommendations and reference pipelines (#194) (#197)
 
   Adapt the browser Rust bindings to the new masking and ARLO APIs, preserving voxel-major inputs, echo ordering, and masked outputs.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.24.0
 
 ## 0.31.20261103
 

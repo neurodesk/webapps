@@ -855,22 +855,34 @@ the previous snapshot in place. Existing deployments need to pull and rebuild to
 use the updated snapshot; the browser does not silently change evidence mid-run.
 
 
-### Preparing paired diffusion examples
+### Acute diffusion examples
 
-`node scripts/prepare_diffusion_examples.mjs` downloads the unchanged OpenADS
-example DWI, ADC and b0 to `$TMPDIR/calmar-diffusion-example`, verifies the
-pinned checksums and NIfTI dimensions, and preserves the source commit,
-attribution and JHU non-profit research licence. Upload that folder's contents
-to `examples/calmar/stroke-diffusion/` in `neurodeskorg/webapps`.
+The input menu offers **Acute DWI + ADC — next case**, alternating SOOP
+`sub-1` and ISLES 2022 `sub-strokecase0001` after each successful import.
+Both named cases remain selectable to repeat a scan. A failed or cancelled
+import keeps the same next case. The status and tooltip identify the scan
+actually loaded. Select **Run lesion segmentation** to compute its candidate;
+loading a case never runs segmentation or supplies a reference lesion.
+Switching cases clears old results and demographic context.
 
-After upload, run `node scripts/prepare_diffusion_examples.mjs --hf-revision
-<40-character-commit>` to write the two catalog entries to the prepared folder.
-For local development, run `pnpm --filter calmar dev:diffusion-examples`.
-This stages the paired scans in TMPDIR and generates the ignored local
-`web/examples.json` catalog using immutable original URLs. Production catalog
-entries are registered after the Hugging Face upload. Register entries in
-`examples.json` and run the root
-`scripts/lock-example-assets.mjs` before enabling them. The DWI+ADC bundle
-supplies ADC directly; the DWI+b0 bundle exercises ADC computation. b0 alone
-is not an automatic-lesion example. No demographic values are supplied for
-this participant.
+SOOP is OpenNeuro ds004889 v1.1.2, source commit
+`a62344db73f18f384a95b452f4a1a423087e059b`, declared CC0. Its TRACE and ADC
+bytes match the release's git-annex SHA-256 keys. ISLES is Zenodo record
+[7960856](https://zenodo.org/records/7960856), version 2.3.1, declared
+CC BY 4.0 by the release. The archive is `ISLES-2022.zip`, MD5
+`302ee280373cdd5c190ab763d72a7a50`; the selected member CRC32 values were
+verified during extraction by HTTP byte ranges (the full archive MD5 was
+not recomputed). Original README, terms, dataset descriptions and image
+sidecars accompany both unchanged subsets. ISLES' original LICENSE also
+contains a redistribution-permission clause; retain it alongside the
+Zenodo licence declaration. No reference masks or FLAIR images are loaded.
+SEALS trained on ISLES 2022, so this training-set example demonstrates
+software operation and does not provide independent accuracy validation.
+
+All files are mirrored at a pinned commit in `neurodeskorg/webapps`, with
+checksums in `examples.json` and both offline inventories. Citations live
+in the shared Cite dialog. Ordinary `pnpm --filter calmar dev` includes all
+examples.
+`node apps/calmar/scripts/prepare_diffusion_examples.mjs` restores and
+verifies the registered scans and accompanying documents under
+`$TMPDIR/calmar-acute-examples`. Large files stay outside this repository.

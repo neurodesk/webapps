@@ -27,12 +27,82 @@
         }
       ],
       "source": {
-        "label": "OpenNeuro ds004884 v1.0.1 \u00b7 sub-M2051 \u00b7 ses-284",
+        "label": "OpenNeuro ds004884 v1.0.1 · sub-M2051 · ses-284",
         "url": "https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/participants.tsv",
         "dictionaryUrl": "https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/participants.json",
         "readmeUrl": "https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/README.md",
         "imagingTpoDays": 284
       }
     }
+  },
+  {
+    "id": "stroke-dwi-adc",
+    "label": "Acute DWI + ADC — next case",
+    "description": "Alternates SOOP sub-1 and ISLES case 0001 after successful loads. Choose either named case to repeat it. Review each computed lesion before confirming.",
+    "expectedResult": "A computed, editable lesion candidate and downloadable native-space mask. Review and confirm it before reporting.",
+    "files": [
+      {
+        "role": "dwi",
+        "name": "sub-1_rec-TRACE_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/soop/sub-1_rec-TRACE_dwi.nii.gz",
+        "sha256": "48809e72061ef2a94547eaf4524044cdc4c3a213d8c553c6d1c81c83ecedd11d",
+        "bytes": 730211
+      },
+      {
+        "role": "adc",
+        "name": "sub-1_rec-ADC_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/soop/sub-1_rec-ADC_dwi.nii.gz",
+        "sha256": "7555d930de7a962f5bc40f5f02267650b8fb8bbf8b2896558bc6715d2c130028",
+        "bytes": 1039309
+      }
+    ],
+    "rotation": [
+      "stroke-dwi-adc-soop",
+      "stroke-dwi-adc-isles2022"
+    ]
+  },
+  {
+    "id": "stroke-dwi-adc-soop",
+    "label": "Acute DWI + ADC — SOOP sub-1",
+    "description": "Acute-stroke TRACE/DWI and ADC from SOOP ds004889 v1.1.2, sub-1 (CC0). Review the computed lesion candidate before confirming. Demographic context is left blank.",
+    "expectedResult": "A computed, editable lesion candidate and downloadable native-space mask. Review and confirm it before reporting.",
+    "files": [
+      {
+        "role": "dwi",
+        "name": "sub-1_rec-TRACE_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/soop/sub-1_rec-TRACE_dwi.nii.gz",
+        "sha256": "48809e72061ef2a94547eaf4524044cdc4c3a213d8c553c6d1c81c83ecedd11d",
+        "bytes": 730211
+      },
+      {
+        "role": "adc",
+        "name": "sub-1_rec-ADC_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/soop/sub-1_rec-ADC_dwi.nii.gz",
+        "sha256": "7555d930de7a962f5bc40f5f02267650b8fb8bbf8b2896558bc6715d2c130028",
+        "bytes": 1039309
+      }
+    ]
+  },
+  {
+    "id": "stroke-dwi-adc-isles2022",
+    "label": "Acute DWI + ADC — ISLES case 0001",
+    "description": "ISLES 2022 v2.3.1, sub-strokecase0001 (Zenodo CC BY 4.0). SEALS training data: this is a software demonstration, not independent accuracy validation. Demographic context is left blank.",
+    "expectedResult": "A computed, editable lesion candidate and downloadable native-space mask. Review and confirm it before reporting.",
+    "files": [
+      {
+        "role": "dwi",
+        "name": "sub-strokecase0001_ses-0001_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/isles2022/sub-strokecase0001_ses-0001_dwi.nii.gz",
+        "sha256": "afdc5bb8ead4121bda6a250632ba559da3af9e5bc0afad5a30ecc9425ae5dd9e",
+        "bytes": 1593299
+      },
+      {
+        "role": "adc",
+        "name": "sub-strokecase0001_ses-0001_adc.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/isles2022/sub-strokecase0001_ses-0001_adc.nii.gz",
+        "sha256": "9026d12f9595e438705f7e3bbe3319345cf6ba55b339fd8b21fabcbbc9c7fc15",
+        "bytes": 1605880
+      }
+    ]
   }
 ]
