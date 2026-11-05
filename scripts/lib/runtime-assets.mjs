@@ -180,7 +180,10 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
                 return `${quote}${posix(relative(appRoot, targetPath))}${suffix}${quote}`;
               }
               // A hashed stylesheet name is unique, so an asset reference that resolves nowhere would break once the copy is removed.
-              if (byContent && (inMapDeps || /new\s+URL\(\s*$/.test(original.slice(Math.max(0, offset - 32), offset)))) {
+              // `new URL(x, import.meta.url)` is a module asset; `new URL(x, "https://…")` is not.
+              const moduleUrl = /new\s+URL\(\s*$/.test(original.slice(Math.max(0, offset - 32), offset))
+                && /^\s*,\s*import\.meta\.url\b/.test(original.slice(offset + match.length, offset + match.length + 48));
+              if (byContent && (inMapDeps || moduleUrl)) {
                 throw new Error(`Unresolved reference ${reference} to deduplicated ${sourcePath} in ${file}`);
               }
               return match;

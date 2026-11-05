@@ -470,6 +470,7 @@ test('strings that only mention a deduplicated stylesheet name are left alone', 
     'export const plain = "styles/index-DO8KcUF6.css";',
     'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/highlight-index-DO8KcUF6.css"])))=>i.map(i=>d[i]);',
     'export const other = new URL("./vendor-index-DO8KcUF6.css", import.meta.url).href;',
+    'export const external = new URL("styles/index-DO8KcUF6.css", "https://cdn.example/").href;',
   ].join('\n');
   const { siteDist, lazy, assemble } = await sharedStylesheetSite(t, 'unrelated', source);
   await writeFile(join(siteDist, 'other', 'assets', 'highlight-index-DO8KcUF6.css'), '.highlight { color: red; }');
