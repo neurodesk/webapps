@@ -65,6 +65,22 @@ function rational(value) {
   return Number(value);
 }
 
+const ENTITIES = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
+
+/** XML character and predefined entity references decoded (`&#181;m` is `µm`). */
+function decodeXml(value) {
+  return value.replace(/&(?:#x([\da-f]+)|#(\d+)|(\w+));/gi, (reference, hex, decimal, name) => {
+    if (hex || decimal) return String.fromCodePoint(parseInt(hex ?? decimal, hex ? 16 : 10));
+    return ENTITIES[name] ?? reference;
+  });
+}
+
+/** An XML start tag's attribute, in either quote form, with entities decoded. */
+function xmlAttribute(tag, name) {
+  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`));
+  return match ? decodeXml(match[1] ?? match[2]) : undefined;
+}
+
 /** OME-XML `Pixels` attributes, whatever the namespace prefix (`<Pixels>`, `<ome:Pixels>`). */
 export function parseOmeDescription(description) {
   const text = String(description ?? '');
@@ -72,7 +88,7 @@ export function parseOmeDescription(description) {
   const images = text.match(/<(?:[\w.-]+:)?Image\b[^>]*>/g) ?? [];
   const pixels = text.match(/<(?:[\w.-]+:)?Pixels\b[^>]*>/)?.[0];
   if (!pixels) return null;
-  const attribute = (name) => pixels.match(new RegExp(`\\s${name}\\s*=\\s*"([^"]*)"`))?.[1];
+  const attribute = (name) => xmlAttribute(pixels, name);
   const size = (axis) => {
     const value = finite(attribute(`PhysicalSize${axis}`));
     const scale = micrometresPerUnit(attribute(`PhysicalSize${axis}Unit`) ?? 'µm');
@@ -137,11 +153,15 @@ async function openStack(buffer) {
   const bits = first.getBitsPerSample();
   const Type = TYPES[`${format}:${bits}`];
   if (!Type) throw new Error(`TIFF sample type (format ${format}, ${bits} bits) is not 8, 16 or 32-bit integer or 32/64-bit float.`);
-  const description = String((await first.fileDirectory.loadValue('ImageDescription')) ?? '');
+  // geotiff keeps the NUL terminator of a value stored inline in its entry.
+  const description = String((await first.fileDirectory.loadValue('ImageDescription')) ?? '').replace(/\0+$/, '');
   const resolution = [rational(first.fileDirectory.getValue('XResolution')), rational(first.fileDirectory.getValue('YResolution'))];
   const metadata = parseOmeDescription(description)
     ?? parseImagejDescription(description, resolution)
     ?? { kind: 'baseline', images: 1, sizeC: 1, sizeZ: 1, sizeT: pages, pixelSize: { x: null, y: null, z: null }, frameInterval: null };
+  if (metadata.images > 1) throw new Error(`This OME-TIFF holds ${metadata.images} image series; save the one you need as its own file.`);
+  const declared = metadata.kind === 'imagej' ? Number(description.match(/^images=(\d+)\s*$/m)?.[1]) : NaN;
+  if (declared && declared !== pages) throw new Error(`This ImageJ TIFF declares ${declared} images but holds ${pages} pages; save it again from ImageJ or Fiji.`);
   const info = { width: first.getWidth(), height: first.getHeight(), pages, dtype: dtypeName(Type), bytesPerSample: Type.BYTES_PER_ELEMENT, metadata: { ...metadata, description } };
   return { tiff, first, format, bits, Type, info };
 }
@@ -157,16 +177,21 @@ export async function inspectTiffStack(buffer) {
 
 /**
  * Reads every page of a greyscale TIFF into one typed array (page, row, column order).
+ * By default the array has the file's sample type. `Type` (e.g. Float32Array) converts each
+ * page straight into an array of that type, and `shared` backs it with a SharedArrayBuffer,
+ * so no second whole-stack copy is made. `maxBytes` limits the size of that output array.
  * @param {ArrayBuffer} buffer
- * @param {{ signal?: AbortSignal, maxBytes?: number, onProgress?: (done: number, total: number) => void }} [options]
+ * @param {{ signal?: AbortSignal, maxBytes?: number, Type?: Function, shared?: boolean, onProgress?: (done: number, total: number) => void }} [options]
  */
-export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES, onProgress } = {}) {
+export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES, Type: OutputType, shared = false, onProgress } = {}) {
   signal?.throwIfAborted();
   const { tiff, first, format, bits, Type, info } = await openStack(buffer);
   const { width, height, pages } = info;
-  const bytes = pages * width * height * Type.BYTES_PER_ELEMENT;
+  const Output = OutputType ?? Type;
+  if (!SAMPLE[Output.name]) throw new Error(`Cannot read a TIFF stack into ${Output.name}.`);
+  const bytes = pages * width * height * Output.BYTES_PER_ELEMENT;
   if (bytes > maxBytes) throw new InputTooLargeError(bytes, maxBytes, { subject: 'Decoded TIFF stack' });
-  const data = new Type(pages * width * height);
+  const data = new Output(shared ? new SharedArrayBuffer(bytes) : bytes / Output.BYTES_PER_ELEMENT);
   const plane = width * height;
   for (let page = 0; page < pages; page++) {
     signal?.throwIfAborted();
@@ -222,19 +247,21 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
   const planeBytes = plane * data.BYTES_PER_ELEMENT;
   const text = new TextEncoder().encode(`${description}\0`);
   const hasText = description.length > 0;
+  // TIFF 6.0: a value of 4 bytes or fewer sits in the entry itself, not at an offset.
+  const inlineText = text.length <= 4;
   const hasResolution = Boolean(pixelSize?.x && pixelSize?.y);
   const entries = 11 + (hasText ? 1 : 0) + (hasResolution ? 3 : 0);
   const ifdBytes = 2 + entries * 12 + 4;
   const extraBytes = hasResolution ? 16 : 0;
   // Every IFD starts on a word boundary, so an odd plane is padded by one byte.
   const pageBytes = ifdBytes + extraBytes + planeBytes + (planeBytes % 2);
-  const headerBytes = 8 + (hasText ? text.length + (text.length % 2) : 0);
+  const headerBytes = 8 + (hasText && !inlineText ? text.length + (text.length % 2) : 0);
   const total = headerBytes + pages * pageBytes;
   if (total >= 2 ** 32) throw new Error('This stack is larger than 4 GB, the classic TIFF limit.');
   const out = new Uint8Array(total);
   const view = new DataView(out.buffer);
   out.set([0x49, 0x49, 42, 0]);
-  if (hasText) out.set(text, 8);
+  if (hasText && !inlineText) out.set(text, 8);
   view.setUint32(4, headerBytes, true);
   const source = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   const resolution = hasResolution ? [1 / pixelSize.x, 1 / pixelSize.y] : null;
@@ -263,7 +290,8 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
       view.setUint16(at, tag, true);
       view.setUint16(at + 2, type, true);
       view.setUint32(at + 4, count, true);
-      if (type === 3) view.setUint16(at + 8, value, true);
+      if (tag === 270 && inlineText) out.set(text, at + 8);
+      else if (type === 3) view.setUint16(at + 8, value, true);
       else view.setUint32(at + 8, value, true);
     });
     view.setUint32(ifd + 2 + tags.length * 12, page + 1 < pages ? ifd + pageBytes : 0, true);

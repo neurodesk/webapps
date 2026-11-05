@@ -141,6 +141,32 @@ test("maxShift limits the integer peak search", () => {
   assert.ok(Math.abs(registerTranslation(spectrum, frame, { upsample: 1, maxShift: 3 }).shift[0]) <= 3);
 });
 
+test("sub-pixel refinement stays inside maxShift (0.3 px at maxShift 0, 3.7 px at maxShift 3)", () => {
+  const height = 48;
+  const width = 48;
+  const template = texture(height, width, 3);
+  const spectrum = templateSpectrum(template, height, width);
+  for (const [truth, maxShift] of [[0.3, 0], [3.7, 3], [-3.7, 3]]) {
+    const frame = shiftFrame(template, height, width, [-truth, -truth]);
+    const free = registerTranslation(spectrum, frame, { upsample: 10, maxShift: 8 }).shift;
+    assert.ok(Math.abs(free[0] - truth) <= 0.1 + 1e-9, `unbounded ${free} vs ${truth}`);
+    const { shift } = registerTranslation(spectrum, frame, { upsample: 10, maxShift });
+    assert.deepEqual(shift.map(Math.abs), [maxShift, maxShift], `${shift} with maxShift ${maxShift}`);
+  }
+});
+
+test("piecewise patch shifts stay within maxDeviation of the rigid shift after refinement", () => {
+  const height = 64;
+  const width = 64;
+  const template = texture(height, width, 9);
+  // The rigid stage may not move (maxShift 0), so every patch must absorb 3.7 px but may take only 3.
+  const frame = shiftFrame(template, height, width, [-3.7, 3.7]);
+  const result = createRegistration(template, height, width, { mode: "piecewise", maxShift: 0, upsample: 10, patchSize: 32, patchOverlap: 16, maxDeviation: 3 }).correct(frame);
+  assert.deepEqual(result.rigid.map(Math.abs), [0, 0]);
+  for (const [dy, dx] of result.patches) assert.ok(Math.abs(dy) <= 3 && Math.abs(dx) <= 3, `[${dy}, ${dx}]`);
+  assert.ok(result.patches.some(([dy, dx]) => dy === 3 && dx === -3), JSON.stringify(result.patches));
+});
+
 test("patch grids end flush with the image and patch centres are interpolated bilinearly", () => {
   assert.deepEqual(patchStarts(256, 64, 32), [0, 32, 64, 96, 128, 160, 192]);
   assert.deepEqual(patchStarts(100, 64, 32), [0, 32, 36]);

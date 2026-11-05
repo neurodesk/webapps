@@ -3,7 +3,8 @@
 // F is the mean of an ROI's pixels in each frame. Its neuropil is the ring of pixels between
 // `innerGap` and R pixels from the ROI, excluding every pixel within `innerGap` of any ROI, with
 // the smallest whole R ≥ innerGap + 1 that gives at least `minPixels` pixels (R stops at
-// `maxRadius`). The corrected trace is Fc = F − r · Fneu with r = 0.7 by default (Chen et al.
+// `maxRadius`). Pixels in the border band of `margin` pixels, which motion correction filled by
+// replicating the edge, are never neuropil. The corrected trace is Fc = F − r · Fneu with r = 0.7 by default (Chen et al.
 // 2013 Nature 499:295; Suite2p and Kerlin et al. 2010 use the same 0.7). The baseline F0 is a
 // running 8th percentile of Fc over a centred window (60 s by default, truncated at the ends of
 // the recording) and ΔF/F = (Fc − F0) / F0. When F0 is not positive somewhere, the ROI's ΔF/F
@@ -39,7 +40,7 @@ function dilate(labels, height, width, radius) {
 }
 
 /** One neuropil ring per ROI (see the header). */
-export function neuropilMasks(labels, height, width, rois, { innerGap = 2, minPixels = 200, maxRadius = 50 } = {}) {
+export function neuropilMasks(labels, height, width, rois, { innerGap = 2, minPixels = 200, maxRadius = 50, margin = 0 } = {}) {
   const excluded = dilate(labels, height, width, innerGap);
   return rois.map((pixels) => {
     let y0 = height;
@@ -55,8 +56,8 @@ export function neuropilMasks(labels, height, width, rois, { innerGap = 2, minPi
       x1 = Math.max(x1, x);
     }
     const candidates = [];
-    for (let y = Math.max(0, y0 - maxRadius); y <= Math.min(height - 1, y1 + maxRadius); y++) {
-      for (let x = Math.max(0, x0 - maxRadius); x <= Math.min(width - 1, x1 + maxRadius); x++) {
+    for (let y = Math.max(margin, y0 - maxRadius); y <= Math.min(height - 1 - margin, y1 + maxRadius); y++) {
+      for (let x = Math.max(margin, x0 - maxRadius); x <= Math.min(width - 1 - margin, x1 + maxRadius); x++) {
         const i = y * width + x;
         if (excluded[i]) continue;
         let best = Infinity;

@@ -23,17 +23,31 @@ export interface TiffStackInfo {
   metadata: TiffStackMetadata;
 }
 
-export interface TiffStack extends TiffStackInfo {
-  data: TiffSampleArray;
+export interface TiffStack<Data extends TiffSampleArray = TiffSampleArray> extends TiffStackInfo {
+  /** The file's sample type unless `Type` chose another; `dtype` always names the file's. */
+  data: Data;
+}
+
+type TiffSampleArrayConstructor<Data extends TiffSampleArray> = { new (length: number): Data; new (buffer: ArrayBufferLike): Data; readonly BYTES_PER_ELEMENT: number };
+
+export interface ReadTiffStackOptions<Data extends TiffSampleArray = TiffSampleArray> {
+  signal?: AbortSignal;
+  /** Limit on the output array's bytes (in `Type` when given). */
+  maxBytes?: number;
+  /** Decode each page straight into an array of this type instead of the file's sample type. */
+  Type?: TiffSampleArrayConstructor<Data>;
+  /** Back the output with a SharedArrayBuffer. */
+  shared?: boolean;
+  onProgress?: (done: number, total: number) => void;
 }
 
 export function micrometresPerUnit(unit: string | null | undefined): number | null;
 export function parseOmeDescription(description: string | null | undefined): Omit<TiffStackMetadata, 'description'> | null;
 export function parseImagejDescription(description: string | null | undefined, resolution?: [number | null, number | null]): Omit<TiffStackMetadata, 'description'> | null;
-/** Size, sample type and metadata from the page directories; no pixel is decoded. */
+/** Size, sample type and metadata from the page directories; no pixel is decoded. Refuses several OME series and an ImageJ `images=` that is not the page count. */
 export function inspectTiffStack(buffer: ArrayBuffer): Promise<TiffStackInfo>;
 /** Every page of a greyscale TIFF in page, row, column order; refuses multi-sample, palette and over-budget stacks. */
-export function readTiffStack(buffer: ArrayBuffer, options?: { signal?: AbortSignal; maxBytes?: number; onProgress?: (done: number, total: number) => void }): Promise<TiffStack>;
+export function readTiffStack<Data extends TiffSampleArray = TiffSampleArray>(buffer: ArrayBuffer, options?: ReadTiffStackOptions<Data>): Promise<TiffStack<Data>>;
 export function imagejDescription(options: { frames: number; frameInterval?: number | null; unit?: string | null; min?: number | null; max?: number | null }): string;
 /** Uncompressed little-endian baseline TIFF, one strip per page. */
 export function writeTiffStack(stack: { width: number; height: number; data: TiffSampleArray; description?: string; pixelSize?: { x: number; y: number } | null }): Uint8Array;

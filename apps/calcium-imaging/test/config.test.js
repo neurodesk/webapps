@@ -1,4 +1,5 @@
 // DOM-independent unit tests (Node, no browser) of settings, outputs and viewer images.
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNiftiHeader } from "@neurodesk/webapp-components/file-io";
@@ -135,4 +136,7 @@ test("provenance records the method, the 0.7 coefficient and the baseline", () =
   assert.equal(record.traces.neuropilCoefficient, 0.7);
   assert.equal(record.traces.baseline, "running 8th percentile over 60 s");
   assert.equal(record.rois.borderMarginPx, 3);
+  const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(record.version, manifest.version);
+  assert.match(record.version, /^\d+\.\d+\.\d{8}$/);
 });

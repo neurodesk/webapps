@@ -17,7 +17,8 @@ import {
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { imagejDescription, writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
-import { APP, MOTION_LABELS, SettingsError, provenance, readSettings } from "./config.js";
+import { APP, MAX_MOVIE_BYTES, MOTION_LABELS, SettingsError, provenance, readSettings } from "./config.js";
+import { allOrAbort } from "./tasks.js";
 import { addDiscRoi, removeRoiAt } from "./core/rois.js";
 import { borderMargin } from "./core/pipeline.js";
 import { outputStem, roisCsv, shiftSvg, shiftsCsv, toInputType, traceSvg, tracesCsv } from "./outputs.js";
@@ -199,22 +200,20 @@ async function loadFiles(filesPromise, signal) {
     const [file] = files;
     if (!file.size) throw new Error(`${file.name} is empty.`);
     if (!/\.tiff?$/i.test(file.name)) throw new Error(`${file.name} is not a TIFF (.tif, .tiff or .ome.tif) movie.`);
+    // No sample type is wider than float64, so a stored file this large cannot fit as float32.
+    if (file.size > 2 * MAX_MOVIE_BYTES) throw new Error(`${file.name} is ${(file.size / 1e9).toFixed(2)} GB; the float32 movie limit is ${(MAX_MOVIE_BYTES / 1e9).toFixed(1)} GB. Crop it in time or space first.`);
     const buffer = await file.arrayBuffer();
     current.throwIfAborted();
-    const decoded = await callWorker({ type: "decode", buffer, shared: SHARED }, {
+    const decoded = await callWorker({ type: "decode", buffer, shared: SHARED, name: file.name }, {
       signal: current,
       transfer: [buffer],
       onProgress: (fraction) => progress.setProgress(fraction * 0.9, "Reading movie…"),
     });
     current.throwIfAborted();
+    // The worker refused anything but one plane over time (checkMovie) before decoding.
     const { width, height, pages: frames, dtype, metadata } = decoded;
-    if (frames < 20) throw new Error(`${file.name} has ${frames} pages; a movie needs at least 20 frames.`);
-    if (metadata.sizeC > 1) throw new Error(`${file.name} has ${metadata.sizeC} channels; save the calcium channel as its own movie.`);
-    if (metadata.sizeZ > 1 && metadata.sizeT > 1) throw new Error(`${file.name} is a volume time series (${metadata.sizeZ} planes); save one plane as its own movie.`);
     const dims = { width, height, frames, dtype, metadataKind: metadata.kind, pixelSize: metadata.pixelSize, frameInterval: metadata.frameInterval };
-    const movieFile = displayNifti(`${outputStem(file.name)}.nii`, decoded.movie, { width, height, frames, spacing: displaySpacing(metadata.pixelSize), frameInterval: metadata.frameInterval ?? 1 });
-    current.throwIfAborted();
-    input = { file, dims, movie: decoded.movie, display: movieFile };
+    input = { file, dims, movie: decoded.movie };
     clearRun();
     $("frameRate").value = metadata.frameInterval ? String(Number((1 / metadata.frameInterval).toPrecision(6))) : "";
     $("movieInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [file] } }));
@@ -276,9 +275,10 @@ async function motionCorrect(settings, signal) {
       const fraction = (pass - 1 + done.reduce((a, b) => a + b, 0) / frames) / passes;
       progress.setProgress(0.05 + 0.75 * fraction, `Motion correction, pass ${pass} of ${passes}…`);
     };
-    const parts = await Promise.all(ranges.map(([start, end], k) => callWorker(
+    // One failed worker stops the others rather than letting them run to the end.
+    const parts = await allOrAbort(signal, ranges.map(([start, end], k) => (group) => callWorker(
       { type: "register", movie, out: SHARED ? out : null, template, width, height, start, end, options: { ...settings, motion } },
-      { signal, onProgress: (count) => { done[k] = count; report(); } },
+      { signal: group, onProgress: (count) => { done[k] = count; report(); } },
     )));
     if (!SHARED) parts.forEach((part, k) => out.set(part.frames, ranges[k][0] * plane));
     shifts = parts.flatMap((part) => part.shifts);
@@ -298,8 +298,9 @@ function textFile(text, name, type) {
 }
 
 function tiffFile(name, data, frames) {
-  const { width, height, pixelSize, frameInterval } = input.dims;
-  const description = imagejDescription({ frames, frameInterval: frames > 1 ? (frameInterval ?? 1 / run.settings.frameRate) : null, unit: pixelSize?.x ? "micron" : null });
+  const { width, height, pixelSize } = input.dims;
+  // The run's frame rate, which the user may have changed from the file's, as in the CSVs.
+  const description = imagejDescription({ frames, frameInterval: frames > 1 ? 1 / run.settings.frameRate : null, unit: pixelSize?.x ? "micron" : null });
   const bytes = writeTiffStack({ width, height, data, description, pixelSize: pixelSize?.x && pixelSize?.y ? pixelSize : null });
   return new File([bytes], name, { type: "image/tiff" });
 }
@@ -312,8 +313,10 @@ function buildOutputs() {
   const cells = analysis.cells;
   const rate = settings.frameRate;
   const record = provenance({ input: input.file, settings, dims: input.dims, roiSource: run.roiSource, cells, detection: run.detection, timings: run.timings });
+  const owner = run;
   run.files = {
-    registered: { description: `Registered movie · ${MOTION_LABELS[settings.motion]}`, file: run.files?.registered?.file ?? tiffFile(`${stem}_registered.tif`, toInputType(run.registered, input.dims.dtype), frames) },
+    // As large as the movie, so it is written only when downloaded (or handed to automation).
+    registered: { description: `Registered movie · ${MOTION_LABELS[settings.motion]}`, get file() { return tiffFile(`${stem}_registered.tif`, toInputType(owner.registered, input.dims.dtype), frames); } },
     shifts: { description: "Shifts (CSV)", file: textFile(shiftsCsv(run, rate), `${stem}_shifts.csv`, "text/csv"), viewable: false },
     mean: { description: "Mean image", file: run.files?.mean?.file ?? tiffFile(`${stem}_mean.tif`, analysis.mean, 1) },
     max: { description: "Max image", file: run.files?.max?.file ?? tiffFile(`${stem}_max.tif`, analysis.max, 1) },
@@ -371,12 +374,14 @@ toolbar.addEventListener("nd-view-change", ({ detail }) => {
   setView(detail.value);
 });
 
+// Still images are kept as NIfTI for the viewer; a movie's NIfTI is as large as the movie, so
+// it is made each time it is shown and dropped once NiiVue has read it.
 const displayFiles = new Map();
 function displayFile(key, data, frames = 1, window = undefined) {
-  if (!displayFiles.has(key)) {
-    const { width, height, pixelSize } = input.dims;
-    displayFiles.set(key, displayNifti(`${key}.nii`, data, { width, height, frames, spacing: displaySpacing(pixelSize), frameInterval: 1 / (run?.settings.frameRate ?? 1), window }));
-  }
+  const { width, height, pixelSize, frameInterval } = input.dims;
+  const make = () => displayNifti(`${key}.nii`, data, { width, height, frames, spacing: displaySpacing(pixelSize), frameInterval: run ? 1 / run.settings.frameRate : frameInterval ?? 1, window });
+  if (frames > 1) return make();
+  if (!displayFiles.has(key)) displayFiles.set(key, make());
   return displayFiles.get(key);
 }
 
@@ -390,7 +395,7 @@ async function show(stage) {
   await viewerReady();
   const movie = stage === "input" || stage === "registered";
   let base;
-  if (stage === "input") base = input.display;
+  if (stage === "input") base = displayFile(outputStem(input.file.name), input.movie, input.dims.frames);
   else if (stage === "registered") base = displayFile(`registered-${run.id}`, run.registered, input.dims.frames);
   else {
     const image = stage === "labels" ? "correlation" : stage;
@@ -441,6 +446,7 @@ async function preprocess(signal, settings) {
       id: ++runCount,
       labelVersion: 0,
       settings,
+      margin,
       ...corrected,
       analysis,
       labels: analysis.labels,
@@ -478,7 +484,7 @@ async function editRois(nextLabels, message) {
   progress.setCancellable(true);
   try {
     const dims = { ...input.dims, frameRate: run.settings.frameRate };
-    const activity = await callWorker({ type: "activity", registered: run.registered, dims, options: run.settings, labels: nextLabels }, { signal: operation.controller.signal });
+    const activity = await callWorker({ type: "activity", registered: run.registered, dims, options: run.settings, labels: nextLabels, margin: run.margin }, { signal: operation.controller.signal });
     run.labels = activity.labels;
     run.analysis = { ...run.analysis, cells: activity.cells };
     run.labelVersion++;

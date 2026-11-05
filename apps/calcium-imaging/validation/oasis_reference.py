@@ -7,7 +7,8 @@ rounded traces and writes inputs and outputs to test/fixtures/oasis-reference.js
 
     python -I oasis_reference.py <out.json>
 
-Run with OASIS at j-friedrich/OASIS@<commit in validation/README.md>, Python 3.11.
+Run with OASIS at j-friedrich/OASIS@6296247, Python 3.11; the Validation section of
+the app README.md records the environment and the results.
 """
 import json
 import sys
