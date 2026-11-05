@@ -1,5 +1,6 @@
 // The input slots of a SamSrf session and how a dropped file finds its slot.
 // Pure: no DOM, so the rules are unit-tested under Node.
+import { compareRunNames, resolveHemisphere } from "@neurodesk/samsrf/inputs";
 
 /** @typedef {'white' | 'pial' | 'inflated' | 'sphere' | 'mesh' | 'curv' | 'area'} SurfaceRole */
 /** @typedef {'runs' | 'apertures' | 'roi' | 'surfaces' | 'template' | 'seed' | 'model'} Slot */
@@ -55,7 +56,7 @@ function surfaceRole(base) {
 
 /**
  * Sort files into slots. Returns the slots they fill and the names nothing took.
- * Runs keep the order of their names (lh_uBars1 … lh_uBars6), as a shell glob would.
+ * Runs use lexical name order (1, 10, 2), matching MATLAB dir.
  */
 export function sortFiles(files) {
   /** @type {Partial<Inputs> & { model?: File }} */
@@ -68,12 +69,17 @@ export function sortFiles(files) {
     } else if (target.slot === "runs") {
       (filled.runs ??= []).push(file);
     } else if (target.slot === "surfaces") {
+      const previous = filled.surfaces?.[target.role];
+      if (previous) throw new Error(`Choose one ${target.role} file: ${previous.name} and ${file.name} are ambiguous.`);
       (filled.surfaces ??= {})[target.role] = file;
     } else {
+      const previous = filled[target.slot];
+      if (previous) throw new Error(`Choose one ${target.slot} file: ${previous.name} and ${file.name} are ambiguous.`);
       filled[target.slot] = file;
     }
   }
-  filled.runs?.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  filled.runs?.sort(compareRunNames);
+  validateHemisphere(filled);
   return { filled, ignored };
 }
 
@@ -84,6 +90,16 @@ export function mergeInputs(inputs, filled) {
     ...Object.fromEntries(Object.entries(filled).filter(([slot]) => slot !== "model" && slot !== "surfaces")),
     surfaces: { ...inputs.surfaces, ...filled.surfaces },
   };
+}
+
+function validateHemisphere(inputs) {
+  return resolveHemisphere([
+    ...(inputs.runs ?? []).map(file => file.name),
+    inputs.roi?.name,
+    inputs.seed?.name,
+    inputs.template?.name,
+    ...Object.values(inputs.surfaces ?? {}).map(file => file.name),
+  ]);
 }
 
 /** What a mesh is drawn on: the inflated surface when there is one. */
@@ -105,6 +121,11 @@ export function missingInputs(analysis, model, inputs) {
     if (Number(model.Smoothing) > 0 && !inputs.surfaces.white) missing.push("a white surface");
   } else if (!inputs.apertures) {
     missing.push("apertures");
+  }
+  try {
+    validateHemisphere(inputs);
+  } catch {
+    missing.push("matching hemispheres (replace conflicting files or clear inputs)");
   }
   return missing;
 }

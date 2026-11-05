@@ -7,6 +7,8 @@
 // drawn with calMin 1 and calMax 2. The window and the R² threshold therefore
 // live here, not in NiiVue.
 
+import { hemisphereOf as fileHemisphere } from "@neurodesk/samsrf/inputs";
+
 export const POLAR_COLORMAP = "samsrf-polar";
 
 // Red, yellow, green, cyan, blue, magenta and back to red: a full turn ends on the
@@ -113,8 +115,8 @@ export function cameraFor(view, hemisphere) {
 /** lh or rh from file names such as lh_uBars1.gii, rh.inflated. */
 export function hemisphereOf(names) {
   for (const name of names) {
-    const match = /(?:^|[^a-z])(lh|rh)(?:[^a-z]|$)/i.exec(name);
-    if (match) return match[1].toLowerCase();
+    const side = fileHemisphere(name);
+    if (side === "lh" || side === "rh") return side;
   }
   return null;
 }

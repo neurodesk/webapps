@@ -5,10 +5,11 @@
 // SamSrf's file names, one value per surface vertex, fitted R², and a downloadable zip.
 // Numeric parity belongs to @neurodesk/samsrf's own tests.
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
 import { readGifti } from "@neurodesk/samsrf/node";
+import { serveSite } from "../../../test-utils/serve-site.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));
@@ -16,11 +17,24 @@ const example = examples[0];
 const local = process.env.SAMSRF_EXAMPLE_DIR;
 // lh.white and lh.inflated of the example both have this many vertices.
 const VERTICES = 134260;
+let dataServer;
+
+test.beforeAll(async () => {
+  if (local) {
+    const files = new Map(example.files.map(file => [`/${file.name}`, join(local, file.name)]));
+    dataServer = await serveSite(local, { files });
+  }
+});
+test.afterAll(async () => { await dataServer?.close(); });
 
 async function serveLocalExample(page) {
   if (!local) return;
   for (const file of example.files) {
-    await page.route(file.url, (route) => route.fulfill({ body: readFileSync(join(local, file.name)) }));
+    // Whole-surface runs exceed the DevTools base64 message limit; stream their bytes.
+    await page.route(file.url, route => route.fulfill({
+      status: 307, body: '',
+      headers: { location: `${dataServer.origin}/${file.name}`, 'access-control-allow-origin': '*' },
+    }));
   }
 }
 
@@ -109,6 +123,56 @@ test("app boots on its workspace with the shared bar", async ({ page }) => {
   expect(await page.evaluate(() => self.crossOriginIsolated === true)).toBe(true);
 });
 
+test("custom model grids survive radius edits and circular tuning fixes its scale", async ({ page }) => {
+  await page.goto("/");
+  await page.getByText("Advanced settings", { exact: true }).click();
+  const editor = page.locator("#modelJson");
+  const custom = { ...JSON.parse(await editor.inputValue()), Param1: [0.123, 0.456], Param2: [0.789], Param3: [1.234], Hrf: [0.2, 1, 0.5] };
+  await editor.fill(JSON.stringify(custom));
+  await editor.blur();
+  await expect(page.locator("#hrf")).toHaveValue("custom");
+  await page.locator("#scalingFactor").fill("12");
+  await page.locator("#scalingFactor").blur();
+  expect(JSON.parse(await editor.inputValue())).toMatchObject({ ...custom, Scaling_Factor: 12 });
+  await page.locator("#preset").selectOption("tuning-circular");
+  await expect(page.locator("#scalingFactor")).toHaveValue("1");
+  await expect(page.locator("#scalingFactor")).toHaveAttribute("readonly", "");
+  expect(JSON.parse(await editor.inputValue()).Scaling_Factor).toBe(1);
+});
+
+test("a folder with ambiguous anatomy is rejected without replacing inputs", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#runsInput").setInputFiles(['lh.area', 'rh.area'].map(name => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from('x') })));
+  await expect(page.locator("#statusText")).toContainText("ambiguous");
+  await expect(page.locator("#runButton")).toBeDisabled();
+});
+
+test("hemisphere replacements disable Run until consistent and inputs can be cleared", async ({ page }) => {
+  await page.goto("/");
+  const file = name => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from('x') });
+  await page.locator("#runsInput").setInputFiles(['lh_run.gii', 'aps.mat', 'lh.V123.label'].map(file));
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#runsInput").setInputFiles(file('rh_run.gii'));
+  await expect(page.locator("#runsInfo")).toHaveText('rh_run.gii');
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect(page.locator("#runHint")).toContainText('matching hemispheres');
+  await page.locator("#roiInput").setInputFiles(file('rh.V123.label'));
+  await expect(page.locator("#runButton")).toBeEnabled();
+  // The example retains CF files and anatomy even while pRF is selected.
+  await loadExample(page);
+  await page.locator("#runsInput").setInputFiles(file('rh_run.gii'));
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await page.getByRole('button', { name: 'Clear inputs', exact: true }).click();
+  await expect(page.locator("#runsInfo")).toBeHidden();
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "idle");
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  await page.locator("#runsInput").setInputFiles(['rh_run.gii', 'aps.mat', 'rh.V123.label'].map(file));
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#analysis").selectOption('cf');
+  await expect(page.locator("#templateDrop")).not.toContainText('lh_benson.gii');
+  await expect(page.locator("#seedDrop")).not.toContainText('lh.V1_seed.label');
+});
+
 test("the example runs every analysis on part of V1-V3 and downloads SamSrf's maps", async ({ page }) => {
   test.setTimeout(900000);
   await loadExample(page);
@@ -184,14 +248,18 @@ test("a dropped folder fills every input slot", async ({ page }) => {
   await expect(page.locator("#runButton")).toBeEnabled();
 });
 
-test("automation runs a reverse-correlation analysis on the example's files", async ({ page }) => {
+test("automation runs a reverse-correlation analysis on the example's files", async ({ page }, testInfo) => {
   test.setTimeout(1800000);
   const roles = { runs: example.files.filter(({ role }) => role === "run").slice(0, 1), apertures: [example.files[6]], roi: [example.files[7]], surfaces: [example.files[10], example.files[11]] };
   await page.goto("/");
   for (const [role, files] of Object.entries(roles)) {
-    const payloads = [];
-    for (const file of files) payloads.push({ name: file.name, mimeType: "application/octet-stream", buffer: await exampleBytes(file) });
-    await page.locator("#neurodesk-input-transfer").setInputFiles(payloads);
+    const paths = [];
+    for (const file of files) {
+      const path = local ? join(local, file.name) : testInfo.outputPath(file.name);
+      if (!local) writeFileSync(path, await exampleBytes(file));
+      paths.push(path);
+    }
+    await page.locator("#neurodesk-input-transfer").setInputFiles(paths);
     await page.evaluate((target) => globalThis.neurodeskAutomation.dispatch("adopt", { role: target }), role);
   }
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("start", { operation: "rc", parameters: { tr: 1, scalingFactor: 9.5 } }));

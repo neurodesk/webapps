@@ -248,6 +248,16 @@ impl Fields {
     fn hrf(&self) -> Result<HrfSpec> {
         match self.require("Hrf", "HRF is undefined!")? {
             Value::Array(items) if items.is_empty() => Ok(HrfSpec::DeHaas),
+            Value::Array(items) if items.len() == 1 => {
+                let value = as_number("Hrf", &items[0])?;
+                Ok(if value == 0.0 {
+                    HrfSpec::SpmCanonical
+                } else if value == 1.0 {
+                    HrfSpec::None
+                } else {
+                    HrfSpec::Vector(vec![value])
+                })
+            }
             Value::Array(_) => Ok(HrfSpec::Vector(self.vector("Hrf", "HRF is undefined!")?)),
             Value::String(text) => Ok(match text.as_str() {
                 "Inf" | "inf" | "Infinity" => HrfSpec::Fit,
@@ -749,8 +759,10 @@ mod tests {
     fn hrf_forms() {
         let cases = [
             (serde_json::json!(0), HrfSpec::SpmCanonical),
+            (serde_json::json!([0]), HrfSpec::SpmCanonical),
             (serde_json::json!(0.0), HrfSpec::SpmCanonical),
             (serde_json::json!(1), HrfSpec::None),
+            (serde_json::json!([1]), HrfSpec::None),
             (serde_json::json!([]), HrfSpec::DeHaas),
             (serde_json::json!([0.0, 0.5, 1.0, 0.2]), HrfSpec::Vector(vec![0.0, 0.5, 1.0, 0.2])),
             (serde_json::json!("Inf"), HrfSpec::Fit),

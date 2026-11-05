@@ -1,5 +1,11 @@
 # @neurodesk/samsrf
 
+## 0.1.20261105
+
+### Patch Changes
+
+- Correct scalar HRF arrays and nearly constant prediction fits, validate hemisphere and anatomy inputs, preserve custom model grids, and align tuning presets and run ordering with SamSrf. Restore original whole-surface X001 example runs for connective-field global-signal correction and document remaining MATLAB differences with a single-precision reference mode.
+
 ## 0.1.20261104
 
 ## 0.1.20261103

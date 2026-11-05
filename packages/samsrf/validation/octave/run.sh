@@ -18,6 +18,22 @@ labels=${SAMSRF_LABEL_DIR:-/storage/scratch/samsrf-work/example}
 out=${SAMSRF_REFERENCE_DIR:-/storage/scratch/samsrf-work/reference}
 samsrf=${SAMSRF_SOURCE_DIR:-/storage/scratch/samsrf-work/src/samsrf}
 image=${SAMSRF_OCTAVE_IMAGE:-gnuoctave/octave:9.2.0}
+precision=${SAMSRF_REFERENCE_PRECISION:-double}
+precision_path=""
+case "$precision" in
+  double) ;;
+  single)
+    # Use the unmodified upstream function ahead of the identity shim. Require a
+    # separate destination so a sensitivity run cannot overwrite the f64 reference.
+    : "${SAMSRF_REFERENCE_DIR:?single precision requires an explicit SAMSRF_REFERENCE_DIR}"
+    mkdir -p "$out/precision-shims"
+    cp "$samsrf/Surfs/samsrf_32bit_srf.m" "$out/precision-shims/"
+    precision_path="addpath('/samsrf'); addpath('/out/precision-shims');"
+    ;;
+  *) echo "SAMSRF_REFERENCE_PRECISION must be double or single" >&2; exit 2 ;;
+esac
+mkdir -p "$out"
+printf '{"srf_precision":"%s","runtime":"Octave"}\n' "$precision" > "$out/reference-precision.json"
 
 # SamSrf folders first, then the shims, so the shims are in front of the path.
 octave_path="addpath('/samsrf/Fitting', '/samsrf/pRF', '/samsrf/Hrf', '/samsrf/Surfs', '/samsrf/Utils', '/samsrf/Various');"
@@ -50,7 +66,7 @@ if [ "$mode" != analyses ]; then
   python3 -I "$here/select_vertices.py" --label "$example/prf/V123.label" --gifti-json "$out/gifti/lh_uBars1.gii.json" --extra 512 --out "$out/preprocess_vertices.json"
   cp "$example/prf/aps_Bars.mat" "$out/apertures/aps_Bars.mat"
   rm -f "$out/apertures/aps_Bars_vec" "$out/apertures/aps_Bars_vec.mat"
-  octave "$octave_path reference('/example', '/out', '/samsrf');"
+  octave "$octave_path $precision_path reference('/example', '/out', '/samsrf');"
   seconds=$(( $(date +%s) - start ))
   echo "wall time: ${seconds} s" | tee "$out/wall_time.txt"
 fi
@@ -69,7 +85,7 @@ if [ "$mode" != reference ]; then
   rm -f "$analyses/apertures/aps_Bars_vec" "$analyses/apertures/aps_Bars_vec.mat"
   rm -rf "$analyses/patched"
   # samsrf_fit2dprf (reverse-correlation pRF fitting and CF fitting) lives in Analysis/.
-  octave "$octave_path addpath('/samsrf/Analysis'); addpath('/harness/shims'); analyses('/example', '/out', '/samsrf');" 2>&1 | tee "$analyses/octave.log"
+  octave "$octave_path addpath('/samsrf/Analysis'); addpath('/harness/shims'); $precision_path analyses('/example', '/out', '/samsrf');" 2>&1 | tee "$analyses/octave.log"
   seconds=$(( $(date +%s) - start ))
   echo "analyses wall time: ${seconds} s" | tee "$analyses/wall_time.txt"
 fi

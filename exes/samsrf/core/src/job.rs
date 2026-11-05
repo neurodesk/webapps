@@ -141,6 +141,21 @@ impl Partial {
 impl Job {
     pub fn prepare(inputs: JobInputs, progress: &mut dyn FnMut(usize, usize)) -> Result<Job> {
         let JobInputs { model, apertures, hrf, mut data, kept, roi, noise_ceiling, global_signal, seed, surface, area, seed_fine_fit, total_vertices } = inputs;
+        if let Some(seed) = &seed {
+            if seed.template.vertices != total_vertices {
+                return Err(Error::Shape(format!("template has {} vertices, runs have {total_vertices}", seed.template.vertices)));
+            }
+        }
+        if let Some(area) = &area {
+            if area.len() != total_vertices {
+                return Err(Error::Shape(format!("area has {} vertices, runs have {total_vertices}", area.len())));
+            }
+        }
+        if let Some(surface) = &surface {
+            if surface.vertices.len() != total_vertices {
+                return Err(Error::Shape(format!("surface has {} vertices, runs have {total_vertices}", surface.vertices.len())));
+            }
+        }
         if data.vertices != kept.len() {
             return Err(Error::Shape(format!("{} time courses for {} kept vertices", data.vertices, kept.len())));
         }

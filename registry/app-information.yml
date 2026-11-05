@@ -2228,6 +2228,8 @@ apps:
         url: https://github.com/niivue/niivue
 
   samsrf:
+    about:
+      - This port uses double precision and real-valued compressive responses. Results can differ from MATLAB, especially CSS fits; validation uses Octave rather than MATLAB. The example preserves the original whole-surface X001 runs for connective-field global-signal correction. For comparisons, match model settings and run order and use a fresh MATLAB results directory to avoid stale caches.
     packages:
       - name: SamSrf X (Rust and WebAssembly port)
         url: https://github.com/samsrf/samsrf

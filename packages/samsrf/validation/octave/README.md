@@ -2,7 +2,7 @@
 
 Runs SamSrf's own MATLAB sources (commit `41ed1e96`) in GNU Octave 9.2 with a few
 shims and writes the reference outputs that the Rust port's parity script compares
-against. Everything is computed in double precision. The outputs are scratch data:
+against. By default the Srf conversion to single is bypassed; a separate single-precision mode retains the original conversion. The outputs are scratch data:
 they live under `SAMSRF_REFERENCE_DIR` and are never committed.
 
 ## Run
@@ -25,6 +25,7 @@ Environment variables, with their defaults:
 | `SAMSRF_SOURCE_DIR` | `/storage/scratch/samsrf-work/src/samsrf` | The SamSrf checkout, mounted read-only |
 | `SAMSRF_OCTAVE_IMAGE` | `gnuoctave/octave:9.2.0` | The Docker image |
 | `SAMSRF_LABEL_DIR` | `/storage/scratch/samsrf-work/example` | The web app's example; `lh.V123.label` and `lh.V1_seed.label` become the analyses' ROI and seed |
+| `SAMSRF_REFERENCE_PRECISION` | `double` | `single` uses the unmodified upstream `samsrf_32bit_srf`; requires an explicit output directory |
 | `SAMSRF_ANALYSES` | (all) | Comma-separated analysis run names to run, e.g. `rc_fit,cf_summary` |
 
 The script needs Docker and a host `python3` with numpy (it runs the Python with `-I`).
@@ -35,6 +36,16 @@ of them, and calls `reference.m`. Reruns overwrite every output; two runs give
 byte-identical files, except `apertures/aps_Bars_vec`, whose MAT header carries the
 save time. It prints the wall time and writes it to `wall_time.txt` (205 s and 215 s
 on the 16-core development host, of which Octave takes 184 s).
+
+To measure precision sensitivity, use a separate output directory:
+
+```sh
+SAMSRF_REFERENCE_PRECISION=single SAMSRF_REFERENCE_DIR=/storage/tmp/samsrf-single \
+  packages/samsrf/validation/octave/run.sh reference
+```
+
+`reference-precision.json` records the selected Srf precision and Octave runtime.
+This is an Octave sensitivity comparison, not a genuine MATLAB baseline.
 
 ## Outputs
 

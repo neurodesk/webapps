@@ -33,7 +33,7 @@ async function run(argv) {
 
 test('parseCommandLine reads an analysis, with the run files that follow --runs', () => {
   const options = parseCommandLine([
-    'cf', 'model.json', 'out', '--seed', 'lh.V1.label', '--runs', 'rh_a.gii', 'rh_b.gii', '--template', 'benson.gii',
+    'cf', 'model.json', 'out', '--seed', 'rh.V1.label', '--runs', 'rh_a.gii', 'rh_b.gii', '--template', 'benson.gii',
     '--surf', 'surf', '--no-normalise', '--concatenate', '--shards', '4', '--runs', 'rh_c.gii',
   ]);
   assert.deepEqual(options, {
@@ -44,7 +44,7 @@ test('parseCommandLine reads an analysis, with the run files that follow --runs'
     runs: ['rh_a.gii', 'rh_b.gii', 'rh_c.gii'],
     roi: null,
     apertures: null,
-    seed: 'lh.V1.label',
+    seed: 'rh.V1.label',
     template: 'benson.gii',
     white: join('surf', 'rh.white'),
     area: join('surf', 'rh.area'),
@@ -66,7 +66,7 @@ test('hemisphereOf reads lh, rh or bi from the start of the file name', () => {
   assert.equal(hemisphereOf('RH.run.gii'), 'rh');
   assert.equal(hemisphereOf('bi_run.gii'), 'bi');
   assert.equal(hemisphereOf('lhrun.gii'), 'srf');
-  assert.equal(hemisphereOf('sub-01_lh.gii'), 'srf');
+  assert.equal(hemisphereOf('sub-01_lh.gii'), 'lh');
 });
 
 test('parseCommandLine refuses incomplete or contradictory arguments', () => {

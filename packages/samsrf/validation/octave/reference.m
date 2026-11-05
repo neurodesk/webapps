@@ -290,6 +290,8 @@ fclose(fid);
 end
 
 function v = json_number(v)
+% Octave jsonencode does not accept single; widen only at serialization.
+v = double(v);
 if ~isfinite(v)
     v = num2str(v);
 end
