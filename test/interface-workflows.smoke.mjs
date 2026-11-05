@@ -767,6 +767,40 @@ try {
     await expect(page.locator('#fileInfo')).toContainText('interface-movie-2.tif');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
+  await check('structure-tensor', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t1.nii'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-t1.nii · 3D 16 × 16 × 16 · 1 × 1 × 1 mm');
+    await page.locator('#sigma').fill('1.5');
+    await page.locator('#rho').fill('4');
+    // The distribution thresholds must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#minCoherency')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#minCoherency').fill('0.4');
+    await page.locator('#minEnergy').fill('5');
+    await advanced.tap();
+    await expect(page.locator('#minCoherency')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#sigma')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#sigma')).toHaveValue('1.5');
+    await expect(page.locator('#rho')).toHaveValue('4');
+    await expect(page.locator('#minCoherency')).toHaveValue('0.4');
+    await expect(page.locator('#minEnergy')).toHaveValue('5');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('Orientation maps ready', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Direction colour map');
+    // A new image withdraws the results of the old one.
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t2.nii', 40));
+    await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
   await check('brainqcnet', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);

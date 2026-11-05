@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 2,
+  "app": "structure-tensor",
+  "title": "Structure Tensor",
+  "description": "Fibre orientation, coherency and energy of a 2D image or 3D stack by structure-tensor analysis (the OrientationJ method).",
+  "defaultOperation": "analyse",
+  "operations": {
+    "analyse": {
+      "title": "Analyse orientation",
+      "description": "Compute the Gaussian structure tensor of one image and return its orientation, coherency and energy maps, a colour map, the orientation distribution and a summary.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tif",
+            "tiff",
+            "nifti",
+            "png",
+            "jpg",
+            "jpeg"
+          ],
+          "description": "One greyscale or RGB image: a 2D image, or a 3D stack as a multi-page TIFF or 3D NIfTI",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "sigma": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 20,
+          "default": 1,
+          "description": "Gradient scale σ in pixels: the Gaussian derivative's standard deviation"
+        },
+        "rho": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 50,
+          "default": 3,
+          "description": "Window scale ρ in pixels: the standard deviation of the Gaussian that averages the tensor"
+        },
+        "minCoherency": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.2,
+          "description": "Pixels below this coherency are left out of the orientation distribution"
+        },
+        "minEnergy": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.01,
+          "description": "Pixels below this fraction of the largest energy are left out of the orientation distribution"
+        }
+      },
+      "artifacts": {
+        "maps": {
+          "type": "neuro:volume",
+          "mediaType": "application/octet-stream",
+          "space": "input",
+          "minimum": 3,
+          "maximum": 6
+        },
+        "colour": {
+          "type": "file:image",
+          "mediaType": "image/png",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "distribution": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "summary": {
+          "type": "file:json",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

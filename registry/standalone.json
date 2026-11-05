@@ -2192,6 +2192,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "structure-tensor": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }
