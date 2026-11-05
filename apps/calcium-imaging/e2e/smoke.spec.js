@@ -212,7 +212,8 @@ test("refusals: an RGB TIFF, a movie too short and a missing frame rate", async 
   await page.locator("#movieInput").setInputFiles(tiff("two-series.ome.tif", twoSeries));
   await expect(page.locator("#statusText")).toContainText("holds 2 image series");
   await page.locator("#movieInput").setInputFiles(tiff("sizet.ome.tif", omeStack({ pages: 30, sizeT: 25 })));
-  await expect(page.locator("#statusText")).toHaveText("sizet.ome.tif declares 25 time points but holds 30 pages; save the movie again.");
+  // Its TiffData maps 30 planes against a declared SizeT of 25: the shared reader refuses it.
+  await expect(page.locator("#statusText")).toContainText("maps 30 planes but its Pixels declare 25");
   await expect(page.locator("#runButton")).toBeDisabled();
   await expect(page.locator("#fileInfo")).toBeHidden();
   await page.locator("#movieInput").setInputFiles(tiff("short.tif", syntheticMovie(10)));
