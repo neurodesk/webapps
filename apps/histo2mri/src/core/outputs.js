@@ -8,6 +8,9 @@ import { placeOnPlane } from './plane.js';
 import { resliceLocal } from './register.js';
 import { rgbaNifti, scalarNifti, warpNifti } from './nifti.js';
 
+/** Largest copy of the sections in the MRI grid (RGBA, 4 bytes per voxel) a run writes. */
+export const MAX_VOLUME_OUTPUT_BYTES = 1024 ** 3;
+
 /** Output pixels per plane pixel: up to 4, and no finer than the section itself. */
 export function outputFactor(result) {
   return Math.max(1, Math.min(4, Math.round(result.plane.spacing / result.fullSpacing)));
@@ -95,9 +98,10 @@ export function registrationImages(result) {
 
 /**
  * Every registered section drawn into the MRI's grid as RGBA (alpha 0 elsewhere). `items` are
- * { result, warped } with `warped` from warpedSection. Refuses a grid above `maxBytes`.
+ * { result, warped } with `warped` from warpedSection. Refuses a grid above `maxBytes`; runSettings
+ * leaves this output out of a run before it starts when the grid is above the limit.
  */
-export function sectionsInVolume(volume, items, maxBytes = 1024 ** 3) {
+export function sectionsInVolume(volume, items, maxBytes = MAX_VOLUME_OUTPUT_BYTES) {
   const voxels = volume.dims[0] * volume.dims[1] * volume.dims[2];
   if (voxels * 4 > maxBytes) throw new Error(`The MRI grid is too large for a colour copy (${Math.round((voxels * 4) / 1024 ** 2)} MB).`);
   const rgba = new Uint8Array(voxels * 4);

@@ -2,6 +2,27 @@
 // carries the transform as an sform (qform_code 0), so Greedy and NiiVue read the same frame.
 import { createNiftiFromData, createNiftiHeaderFromVolume, parseNiftiHeader } from '@neurodesk/webapp-components/file-io/nifti';
 
+// NIfTI xyzt_units spatial codes in millimetres; 0 (unknown) is read as millimetres.
+const SPATIAL_UNIT_MM = { 0: 1, 1: 1000, 2: 1, 3: 0.001 };
+
+/**
+ * The MRI from a parsed NIfTI (`parseNiftiVolume`) as { dims, affine, data }, with the affine,
+ * translations included, in millimetres whatever unit the header gives. Refuses images that are
+ * not 3-D, an unknown spatial unit, and NaN or infinite voxels.
+ */
+export function mriVolume(parsed, name = 'The MRI') {
+  if (parsed.dims.filter((size) => size > 1).length < 3) throw new Error(`${name} is not a 3D volume.`);
+  const unit = parsed.header.xyztUnits & 7;
+  const scale = SPATIAL_UNIT_MM[unit];
+  if (!scale) throw new Error(`${name} gives its spatial unit as code ${unit}, not metres, millimetres or micrometres.`);
+  const data = parsed.imageData;
+  for (let i = 0; i < data.length; i++) {
+    if (!Number.isFinite(data[i])) throw new Error(`${name} has NaN or infinite voxels; replace them (for example with 0) and load it again.`);
+  }
+  const affine = Array.from(parsed.affine, (row, r) => Array.from(row, (value) => (r < 3 ? value * scale : value)));
+  return { dims: parsed.dims, affine, data };
+}
+
 function spacingOf(sform) {
   return [0, 1, 2].map((c) => Math.hypot(sform[0][c], sform[1][c], sform[2][c]));
 }

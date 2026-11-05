@@ -8,6 +8,8 @@ import { gunzipSync, deflateSync } from "node:zlib";
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));
 const example = examples[0];
+// The Node pipeline's numbers on the example (validation/run.mjs), the same Greedy bytes.
+const validation = JSON.parse(readFileSync(new URL("../validation/results.json", import.meta.url), "utf8"));
 
 function niftiHeader(bytes) {
   const raw = gunzipSync(bytes);
@@ -53,6 +55,8 @@ test("the example registers and its outputs download", async ({ page }) => {
   expect(Math.abs(report.plane.offsetMm)).toBeLessThanOrEqual(2 * 0.6 + 1e-6);
   expect(report.orientation).toEqual({ rotationDegrees: 0, flipped: false });
   expect(report.nmi.final).toBeGreaterThan(report.nmi.initial + 0.05);
+  // results.json rounds to 4 decimals; the worker and Node must not drift beyond that.
+  expect(Math.abs(report.nmi.final - validation.example.nmi.final)).toBeLessThanOrEqual(1e-4);
 
   const warped = await download(page, "Warped section");
   expect(warped.name).toBe("ahead152017_thionin_section150_85um_warped_rgba.nii.gz");
@@ -147,4 +151,15 @@ test("a PNG section is decoded by the browser and kept beside the MRI", async ({
   await page.locator("#sectionInput").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("x") });
   await expect(page.locator("#statusText")).toContainText("is not a NIfTI MRI");
   await expect(page.locator("#sectionInfo")).toHaveText("slide.png · 37 × 23 RGB");
+});
+
+test("an OME-TIFF section fills the pixel size from its OME metadata", async ({ page }) => {
+  await page.goto("/");
+  const ome = readFileSync(new URL("../../../packages/components/test/fixtures/colour-rgb.ome.tif", import.meta.url));
+  await page.locator("#sectionInput").setInputFiles({ name: "slide.ome.tif", mimeType: "image/tiff", buffer: ome });
+  await expect(page.locator("#sectionInfo")).toHaveText("slide.ome.tif · 5 × 4 RGB");
+  await expect(page.locator("#pixelSize")).toHaveValue("2.5");
+  await page.locator("#sectionInput").setInputFiles({ name: "slide.png", mimeType: "image/png", buffer: png(37, 23) });
+  await expect(page.locator("#sectionInfo")).toHaveText("slide.png · 37 × 23 RGB");
+  await expect(page.locator("#pixelSize")).toHaveValue("");
 });

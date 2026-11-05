@@ -107,8 +107,13 @@ export function landmarkErrors(result, transform, landmarks) {
   });
 }
 
+/** Mean, median and maximum landmark error in MRI voxels and in mm. */
 export function summarise(errors) {
-  const voxels = errors.map((error) => error.voxels).sort((a, b) => a - b);
-  const mean = voxels.reduce((sum, value) => sum + value, 0) / voxels.length;
-  return { landmarks: voxels.length, meanVoxels: mean, medianVoxels: voxels[voxels.length >> 1], maxVoxels: voxels[voxels.length - 1] };
+  const stats = (key) => {
+    const values = errors.map((error) => error[key]).sort((a, b) => a - b);
+    return { mean: values.reduce((sum, value) => sum + value, 0) / values.length, median: values[values.length >> 1], max: values[values.length - 1] };
+  };
+  const voxels = stats('voxels');
+  const mm = stats('mm');
+  return { landmarks: errors.length, meanVoxels: voxels.mean, medianVoxels: voxels.median, maxVoxels: voxels.max, meanMm: mm.mean, medianMm: mm.median, maxMm: mm.max };
 }

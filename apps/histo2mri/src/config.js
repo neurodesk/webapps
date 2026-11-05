@@ -1,6 +1,7 @@
 // DOM-independent app config and input rules, unit-tested in Node (test/config.test.js).
 import automation from "../automation.json" with { type: "json" };
 import { DEFAULTS } from "./core/register.js";
+import { MAX_VOLUME_OUTPUT_BYTES } from "./core/outputs.js";
 
 export const APP = Object.freeze({
   id: "histo2mri",
@@ -38,9 +39,11 @@ const finite = (value) => value !== "" && value !== null && value !== undefined 
 
 /**
  * The run settings from the form or automation parameters, checked against the MRI's size.
- * `dims` are the MRI's three dimensions.
+ * `dims` are the MRI's three dimensions. `volumeOutput` is false, with a warning, when the
+ * sections' copy in the MRI grid would exceed `maxVolumeBytes`; the per-section files are
+ * written either way.
  */
-export function runSettings(values, dims, sectionCount = 1) {
+export function runSettings(values, dims, sectionCount = 1, { maxVolumeBytes = MAX_VOLUME_OUTPUT_BYTES } = {}) {
   const axis = Number(values.axis ?? 2);
   if (![0, 1, 2].includes(axis)) throw new Error("The slice axis must be i, j or k.");
   const index = Number(values.index);
@@ -59,7 +62,11 @@ export function runSettings(values, dims, sectionCount = 1) {
   if (!["auto", "haematoxylin", "eosin", "dab"].includes(contrast)) throw new Error(`Unknown contrast ${contrast}.`);
   const orientation = values.orientation ?? DEFAULTS.orientation;
   if (orientation !== "auto" && !/^[0-7]$/.test(String(orientation))) throw new Error(`Unknown orientation ${orientation}.`);
+  const volumeBytes = dims[0] * dims[1] * dims[2] * 4;
+  const volumeOutput = volumeBytes <= maxVolumeBytes;
   return {
+    volumeOutput,
+    warnings: volumeOutput ? [] : [`The MRI grid is too large for a colour copy of the sections (${Math.round(volumeBytes / 1024 ** 2)} MB); each section's files are written without it.`],
     plane: { axis, index, step, tilt },
     options: {
       contrast,

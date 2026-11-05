@@ -393,6 +393,10 @@ const RESOLUTION_UNIT_MICROMETRES = { 2: 25400, 3: 10000 };
 // PhotometricInterpretation values readTiffImage converts to RGB through geotiff's readRGB.
 const CONVERTED_TO_RGB = new Set([3, 5, 6, 8]);
 
+// geotiff converts CMYK, YCbCr and CIELab with 8-bit arithmetic (255 − c), so only 8-bit samples
+// convert correctly; a palette looks its 8 or 16-bit index up in the colour map.
+const EIGHT_BIT_CONVERSIONS = new Set([5, 6, 8]);
+
 function reducedResolution(image) {
   return (Number(image.fileDirectory.getValue('NewSubfileType') ?? 0) & 1) === 1;
 }
@@ -424,7 +428,7 @@ function colourLayout(image) {
     }
     return { channels: 1, samples: [0], invert: photometric === 0, convert: false };
   }
-  if (CONVERTED_TO_RGB.has(photometric)) return { channels: 3, samples: null, invert: false, convert: true };
+  if (CONVERTED_TO_RGB.has(photometric)) return { channels: 3, samples: null, invert: false, convert: true, photometric };
   throw new Error(`This TIFF's photometric interpretation (${PHOTOMETRIC[photometric] ?? photometric}) is not greyscale or colour.`);
 }
 
@@ -434,7 +438,8 @@ function colourLayout(image) {
  * copies of it (pyramids, thumbnails), and a stack of full-size pages or several OME series is
  * refused. PhotometricInterpretation decides the channels: RGB (alpha and other extra samples
  * dropped), black- or white-is-zero greyscale (white-is-zero is inverted), and palette, YCbCr,
- * CMYK or CIELab converted to 8-bit RGB by geotiff. Several samples on a greyscale image are a
+ * CMYK or CIELab converted to 8-bit RGB by geotiff (CMYK, YCbCr and CIELab only from 8-bit
+ * samples; 16-bit ones are refused before decoding). Several samples on a greyscale image are a
  * channel stack and are refused. Samples are 8 or 16-bit unsigned integers, interleaved
  * (row, column, channel). The decoded size is checked against `maxBytes` from the page directory
  * before any pixel is decoded. `pixelSize` (micrometres) comes from OME-XML, ImageJ or the
@@ -464,6 +469,9 @@ export async function readTiffImage(buffer, { signal, maxBytes = MAX_INPUT_BYTES
   const format = image.getSampleFormat();
   const bits = image.getBitsPerSample();
   if (format !== 1 || (bits !== 8 && bits !== 16)) throw new Error(`TIFF sample type (format ${format}, ${bits} bits) is not 8 or 16-bit unsigned; save the image as 8 or 16-bit.`);
+  if (layout.convert && EIGHT_BIT_CONVERSIONS.has(layout.photometric) && bits !== 8) {
+    throw new Error(`This ${bits}-bit ${PHOTOMETRIC[layout.photometric]} TIFF cannot be converted to RGB (only 8-bit ${PHOTOMETRIC[layout.photometric]} can); save it as 8 or 16-bit RGB.`);
+  }
   const outputBits = layout.convert ? 8 : bits;
   const bytes = width * height * layout.channels * (outputBits / 8);
   if (bytes > maxBytes) throw new InputTooLargeError(bytes, maxBytes, { subject: 'Decoded TIFF image' });

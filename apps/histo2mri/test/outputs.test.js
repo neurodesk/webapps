@@ -18,10 +18,18 @@ function obliqueVolume(nu, nv, nz) {
   return { dims: [nu, nv, nz], affine, data };
 }
 
-async function registered() {
+// A mirrored (left-handed) grid sliced along i: the phantom lies in the j-k plane, the i axis
+// runs right to left and j and k are swapped in world space.
+function mirroredVolume(nu, nv, ni) {
+  const affine = [[-0.7, 0, 0, 3], [0, 0, 0.6, -25], [0, 0.6, 0, -30], [0, 0, 0, 1]];
+  const slice = phantomSlice(nu, nv);
+  const data = new Float32Array(ni * nu * nv);
+  for (let k = 0; k < nv; k++) for (let j = 0; j < nu; j++) for (let i = 0; i < ni; i++) data[i + ni * (j + nu * k)] = slice[k * nu + j];
+  return { dims: [ni, nu, nv], affine, data };
+}
+
+async function registered(volume = obliqueVolume(100, 86, 7), start = { axis: 2, index: 3, tilt: [2, -1] }) {
   const greedy = await nodeGreedy();
-  const volume = obliqueVolume(100, 86, 7);
-  const start = { axis: 2, index: 3, tilt: [2, -1] };
   const plane = slicePlane(volume, start);
   const transform = syntheticTransform(plane);
   const section = syntheticSection(samplePlane(volume, plane), plane, transform);
@@ -31,8 +39,7 @@ async function registered() {
 
 const state = registered();
 
-test('the world-space files reproduce the registration through Greedy reslice', async () => {
-  const { greedy, result } = await state;
+async function assertGreedyReproduces({ greedy, result }) {
   const images = registrationImages(result);
   const transforms = worldTransforms(result);
   const local = resliceLocal({ grid: result.plane, image: result.moving.data, width: result.moving.width, height: result.moving.height, placement: result.placement, matrix: result.affine, warp: result.warp });
@@ -48,6 +55,14 @@ test('the world-space files reproduce the registration through Greedy reslice', 
     assert.ok(Math.abs(values[i] - local.values[i]) < 1e-3 * maximum, `pixel ${i}: ${values[i]} vs ${local.values[i]}`);
   }
   assert.ok(compared > values.length / 4, `${compared} pixels compared`);
+}
+
+test('the world-space files reproduce the registration through Greedy reslice', async () => {
+  await assertGreedyReproduces(await state);
+});
+
+test('the world-space files reproduce it on a mirrored grid sliced along i', async () => {
+  await assertGreedyReproduces(await registered(mirroredVolume(100, 86, 7), { axis: 0, index: 3, tilt: [-1, 2] }));
 });
 
 test('written images carry millimetre spacing and the plane frame as an sform', async () => {

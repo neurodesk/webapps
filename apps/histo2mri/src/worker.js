@@ -1,13 +1,14 @@
 // One registration run: every section registered to its plane with Greedy's single-threaded
 // WebAssembly (the bytes test/ runs in Node), then the output files. The page starts one worker
 // per run and terminates it to cancel.
-//   in:  { volume, sections: [{ name, image }], plane: { axis, index, step, tilt }, options, version, axisName }
+//   in:  { volume, sections: [{ name, image }], plane: { axis, index, step, tilt }, options, version, axisName, volumeOutput }
 //   out: { type: 'progress', message, value } | { type: 'section', index, name, files, report }
-//        | { type: 'done', files } | { type: 'error', message }
+//        | { type: 'done', written, files } | { type: 'error', message }
+//   done's files are empty when volumeOutput is false (the MRI grid is too large to copy).
 //   files: [{ kind, name, bytes }] (gzip-compressed NIfTI, matrix text or JSON)
 import init, * as api from '@neurodesk/greedy/wasm-single';
 import { gzip, registerAffineGreedy, registerRigidGreedy, registerSvfGreedy } from '@neurodesk/greedy';
-import { registerSection } from './core/register.js';
+import { preflightSection, registerSection } from './core/register.js';
 import { planeSform, registrationImages, registrationReport, sectionsInVolume, warpedSection, worldTransforms } from './core/outputs.js';
 import { rgbaNifti } from './core/nifti.js';
 import { outputNames } from './config.js';
@@ -20,8 +21,19 @@ const greedy = {
 
 const text = (value) => new TextEncoder().encode(value);
 
-self.onmessage = async ({ data: { volume, sections, plane, options, version, axisName } }) => {
+self.onmessage = async ({ data: { volume, sections, plane, options, version, axisName, volumeOutput } }) => {
   try {
+    // Every section's memory is checked before the first registration, so a section over the
+    // limit does not discard the sections registered before it.
+    const planeOf = (n) => ({ axis: plane.axis, index: plane.index + n * plane.step, tilt: plane.tilt });
+    for (const [n, { name, image }] of sections.entries()) {
+      self.postMessage({ type: 'progress', message: `Checking ${name}`, value: 0 });
+      try {
+        preflightSection({ volume, section: image, plane: planeOf(n), options });
+      } catch (error) {
+        throw new Error(sections.length > 1 ? `${name}: ${error.message}` : error.message);
+      }
+    }
     await init();
     const registered = [];
     for (const [n, { name, image }] of sections.entries()) {
@@ -30,7 +42,7 @@ self.onmessage = async ({ data: { volume, sections, plane, options, version, axi
       const result = await registerSection({
         volume,
         section: image,
-        plane: { axis: plane.axis, index: plane.index + n * plane.step, tilt: plane.tilt },
+        plane: planeOf(n),
         options,
         greedy,
         onProgress: progress,
@@ -51,6 +63,10 @@ self.onmessage = async ({ data: { volume, sections, plane, options, version, axi
       ];
       self.postMessage({ type: 'section', index: n, name, files, report }, files.map((file) => file.bytes.buffer));
       registered.push({ result, warped });
+    }
+    if (!volumeOutput) {
+      self.postMessage({ type: 'done', written: 0, files: [] });
+      return;
     }
     self.postMessage({ type: 'progress', message: 'Placing the sections in the MRI grid', value: 0.95 });
     const { bytes, written } = sectionsInVolume(volume, registered);

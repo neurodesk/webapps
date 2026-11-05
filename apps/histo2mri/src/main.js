@@ -23,6 +23,7 @@ import { decodeRasterImage } from "@neurodesk/webapp-components/file-io/raster-i
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { axisPlanes } from "./core/plane.js";
 import { apply, invert } from "./core/matrix.js";
+import { mriVolume } from "./core/nifti.js";
 import { APP, classifyFiles, runSettings } from "./config.js";
 import examples from "../examples.json";
 
@@ -171,8 +172,13 @@ function finish(operation) {
   progress.setCancellable(false);
 }
 
-function arrayBuffer(bytes) {
-  return bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+// The MRI's voxels in shared memory when the page is cross-origin isolated, so each run's worker
+// reads them without a copy; otherwise each run posts its own copy.
+function shareable(data) {
+  if (!globalThis.crossOriginIsolated) return data;
+  const shared = new Float32Array(new SharedArrayBuffer(data.length * 4));
+  shared.set(data);
+  return shared;
 }
 
 async function readMri(file, signal) {
@@ -180,13 +186,8 @@ async function readMri(file, signal) {
   await assertNiftiDecodedSize(file);
   const buffer = await decodeNiftiBuffer(await file.arrayBuffer());
   signal.throwIfAborted();
-  const parsed = parseNiftiVolume(buffer);
-  if (parsed.dims.filter((size) => size > 1).length < 3) throw new Error(`${file.name} is not a 3D volume.`);
-  const data = parsed.imageData;
-  for (let i = 0; i < data.length; i++) {
-    if (!Number.isFinite(data[i])) throw new Error(`${file.name} has NaN or infinite voxels; replace them (for example with 0) and load it again.`);
-  }
-  return { dims: parsed.dims, affine: Array.from(parsed.affine, (row) => Array.from(row)), data };
+  const volume = mriVolume(parseNiftiVolume(buffer), file.name);
+  return { ...volume, data: shareable(volume.data) };
 }
 
 /** A section as interleaved samples ({ width, height, channels, data, maxValue, pixelSize }). */
@@ -205,6 +206,21 @@ function describeSections() {
   $("stepField").hidden = sections.length < 2;
   sectionField.setText(sections.length ? `${sections.length} section${sections.length > 1 ? "s" : ""}` : "Drop TIFF, PNG or JPEG sections");
   sectionField.setHasFiles(sections.length > 0);
+}
+
+// An OME-TIFF's physical pixel size fills the pixel-size field when it is empty or holds an earlier
+// fill and every section gives the same square size. TIFF resolution tags are not used: scanners
+// and editors often write a nominal 72 or 300 dpi there.
+let prefilledPixelSize = "";
+function prefillPixelSize() {
+  const sizes = sections.map(({ image }) => (image.metadata?.kind === "ome" ? image.pixelSize : null));
+  const [first] = sizes;
+  const same = (value) => Math.abs(value - first.x) <= 1e-6 * first.x;
+  const agreed = first && sizes.every((size) => size && same(size.x) && same(size.y));
+  const field = $("pixelSize");
+  if (field.value !== "" && field.value !== prefilledPixelSize) return;
+  field.value = agreed ? String(first.x) : "";
+  prefilledPixelSize = field.value;
 }
 
 function nameAxes() {
@@ -247,6 +263,7 @@ async function loadInputs(filesPromise, signal, { parameters = null } = {}) {
       sections = nextSections;
       syncInputFiles("sectionInput", sectionFiles);
       describeSections();
+      prefillPixelSize();
     }
     if (parameters) {
       $("axis").value = String(parameters.axis);
@@ -320,8 +337,9 @@ function runWorker(message, signal, onMessage) {
         onMessage(data);
       }
     };
-    const volume = { ...mri.volume, data: mri.volume.data.slice() };
-    worker.postMessage(message({ volume }), [volume.data.buffer]);
+    const shared = mri.volume.data.buffer instanceof SharedArrayBuffer;
+    const volume = shared ? mri.volume : { ...mri.volume, data: mri.volume.data.slice() };
+    worker.postMessage(message({ volume }), shared ? [] : [volume.data.buffer]);
   });
 }
 
@@ -339,6 +357,7 @@ async function register(signal, values = formValues()) {
   const reports = [];
   const artifacts = [];
   const axisName = axisPlanes(mri.volume.affine)[settings.plane.axis];
+  for (const warning of settings.warnings) log.log(warning, "warning");
   try {
     await runWorker(({ volume }) => ({
       volume,
@@ -347,6 +366,7 @@ async function register(signal, values = formValues()) {
       options: settings.options,
       version: APP.version,
       axisName,
+      volumeOutput: settings.volumeOutput,
     }), current, (data) => {
       if (data.type === "progress") {
         progress.setProgress(data.value, data.message);
@@ -374,6 +394,10 @@ async function register(signal, values = formValues()) {
         return;
       }
       const [volumeFile] = data.files;
+      if (!volumeFile) {
+        outputs = rows;
+        return;
+      }
       const output = fileFrom(volumeFile.bytes, volumeFile.name);
       artifacts.push({ role: "volume", file: output });
       outputs = { volume: { description: "Sections in the MRI grid", file: output, base: mri.file, viewable: true }, ...rows };
@@ -382,7 +406,8 @@ async function register(signal, values = formValues()) {
     current.throwIfAborted();
     results.render(outputs);
     $("outputSection").open = true;
-    await showVolumes(mri.file, outputs.volume.file);
+    const shown = outputs.volume ?? outputs["0:warped"];
+    await showVolumes(shown.base, shown.file);
     progress.end("Registration complete");
     status(`Registered ${sections.length} section${sections.length > 1 ? "s" : ""}; NMI ${reports.map((report) => report.nmi.final.toFixed(3)).join(", ")}`);
     return {

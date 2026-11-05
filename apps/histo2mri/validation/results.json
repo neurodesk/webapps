@@ -1,11 +1,53 @@
 {
   "greedy": "@neurodesk/greedy wasm-single",
   "synthetic": {
+    "voxelMm": 0.6,
     "affineOnly": {
       "landmarks": 361,
       "meanVoxels": 0.488,
       "medianVoxels": 0.501,
       "maxVoxels": 1.165,
+      "meanMm": 0.293,
+      "medianMm": 0.301,
+      "maxMm": 0.699,
+      "stages": {
+        "start": {
+          "landmarks": 361,
+          "meanVoxels": 12.53,
+          "medianVoxels": 12.548,
+          "maxVoxels": 25.864,
+          "meanMm": 7.518,
+          "medianMm": 7.529,
+          "maxMm": 15.519
+        },
+        "rigid": {
+          "landmarks": 361,
+          "meanVoxels": 2.942,
+          "medianVoxels": 2.731,
+          "maxVoxels": 7.081,
+          "meanMm": 1.765,
+          "medianMm": 1.638,
+          "maxMm": 4.249
+        },
+        "affine": {
+          "landmarks": 361,
+          "meanVoxels": 0.488,
+          "medianVoxels": 0.501,
+          "maxVoxels": 1.165,
+          "meanMm": 0.293,
+          "medianMm": 0.301,
+          "maxMm": 0.699
+        },
+        "final": {
+          "landmarks": 361,
+          "meanVoxels": 0.488,
+          "medianVoxels": 0.501,
+          "maxVoxels": 1.165,
+          "meanMm": 0.293,
+          "medianMm": 0.301,
+          "maxMm": 0.699
+        }
+      },
       "nmi": {
         "initial": 1.2734,
         "rigid": 1.3717,
@@ -18,6 +60,47 @@
       "meanVoxels": 0.347,
       "medianVoxels": 0.319,
       "maxVoxels": 1.726,
+      "meanMm": 0.208,
+      "medianMm": 0.191,
+      "maxMm": 1.035,
+      "stages": {
+        "start": {
+          "landmarks": 361,
+          "meanVoxels": 12.53,
+          "medianVoxels": 12.548,
+          "maxVoxels": 25.864,
+          "meanMm": 7.518,
+          "medianMm": 7.529,
+          "maxMm": 15.519
+        },
+        "rigid": {
+          "landmarks": 361,
+          "meanVoxels": 2.942,
+          "medianVoxels": 2.731,
+          "maxVoxels": 7.081,
+          "meanMm": 1.765,
+          "medianMm": 1.638,
+          "maxMm": 4.249
+        },
+        "affine": {
+          "landmarks": 361,
+          "meanVoxels": 0.488,
+          "medianVoxels": 0.501,
+          "maxVoxels": 1.165,
+          "meanMm": 0.293,
+          "medianMm": 0.301,
+          "maxMm": 0.699
+        },
+        "final": {
+          "landmarks": 361,
+          "meanVoxels": 0.347,
+          "medianVoxels": 0.319,
+          "maxVoxels": 1.726,
+          "meanMm": 0.208,
+          "medianMm": 0.191,
+          "maxMm": 1.035
+        }
+      },
       "nmi": {
         "initial": 1.2734,
         "rigid": 1.3717,
@@ -27,6 +110,7 @@
     }
   },
   "example": {
+    "voxelMm": 0.6,
     "plane": {
       "offsetMm": -0.3,
       "tiltDegrees": [
@@ -91,6 +175,155 @@
       }
     ],
     "meanErrorMm": 1.8,
-    "meanErrorVoxels": 2.99
+    "meanErrorVoxels": 2.99,
+    "configurations": {
+      "default": {
+        "options": {},
+        "warpKept": true,
+        "plane": {
+          "offsetMm": -0.3,
+          "tiltDegrees": [
+            0,
+            1
+          ]
+        },
+        "nmi": {
+          "initial": 1.1473,
+          "rigid": 1.1941,
+          "affine": 1.2152,
+          "final": 1.2352
+        },
+        "stages": {
+          "start": {
+            "meanErrorMm": 6.79,
+            "meanErrorVoxels": 11.32
+          },
+          "rigid": {
+            "meanErrorMm": 1.88,
+            "meanErrorVoxels": 3.12
+          },
+          "affine": {
+            "meanErrorMm": 1.83,
+            "meanErrorVoxels": 3.05
+          },
+          "final": {
+            "meanErrorMm": 1.8,
+            "meanErrorVoxels": 2.99
+          }
+        }
+      },
+      "noPlaneSearch": {
+        "options": {
+          "refinePlane": false
+        },
+        "warpKept": true,
+        "plane": {
+          "offsetMm": 0,
+          "tiltDegrees": [
+            0,
+            0
+          ]
+        },
+        "nmi": {
+          "initial": 1.1473,
+          "rigid": 1.1941,
+          "affine": 1.2146,
+          "final": 1.2333
+        },
+        "stages": {
+          "start": {
+            "meanErrorMm": 6.79,
+            "meanErrorVoxels": 11.32
+          },
+          "rigid": {
+            "meanErrorMm": 1.88,
+            "meanErrorVoxels": 3.12
+          },
+          "affine": {
+            "meanErrorMm": 1.72,
+            "meanErrorVoxels": 2.87
+          },
+          "final": {
+            "meanErrorMm": 1.79,
+            "meanErrorVoxels": 2.98
+          }
+        }
+      },
+      "noWarp": {
+        "options": {
+          "deformable": false
+        },
+        "warpKept": false,
+        "plane": {
+          "offsetMm": -0.3,
+          "tiltDegrees": [
+            0,
+            1
+          ]
+        },
+        "nmi": {
+          "initial": 1.1473,
+          "rigid": 1.1941,
+          "affine": 1.2152,
+          "final": 1.2152
+        },
+        "stages": {
+          "start": {
+            "meanErrorMm": 6.79,
+            "meanErrorVoxels": 11.32
+          },
+          "rigid": {
+            "meanErrorMm": 1.88,
+            "meanErrorVoxels": 3.12
+          },
+          "affine": {
+            "meanErrorMm": 1.83,
+            "meanErrorVoxels": 3.05
+          },
+          "final": {
+            "meanErrorMm": 1.83,
+            "meanErrorVoxels": 3.05
+          }
+        }
+      },
+      "linearOnly": {
+        "options": {
+          "refinePlane": false,
+          "deformable": false
+        },
+        "warpKept": false,
+        "plane": {
+          "offsetMm": 0,
+          "tiltDegrees": [
+            0,
+            0
+          ]
+        },
+        "nmi": {
+          "initial": 1.1473,
+          "rigid": 1.1941,
+          "affine": 1.2146,
+          "final": 1.2146
+        },
+        "stages": {
+          "start": {
+            "meanErrorMm": 6.79,
+            "meanErrorVoxels": 11.32
+          },
+          "rigid": {
+            "meanErrorMm": 1.88,
+            "meanErrorVoxels": 3.12
+          },
+          "affine": {
+            "meanErrorMm": 1.72,
+            "meanErrorVoxels": 2.87
+          },
+          "final": {
+            "meanErrorMm": 1.72,
+            "meanErrorVoxels": 2.87
+          }
+        }
+      }
+    }
   }
 }

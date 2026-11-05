@@ -76,7 +76,7 @@
               </div>
               <div class="nd-field">
                 <label for="pixelSize">Section pixel size <small>µm</small>
-                  <span class="nd-info-icon" tabindex="0" aria-label="About the pixel size">i<span class="nd-info-tooltip">Leave empty to estimate it from the tissue area, which also absorbs shrinkage. The affine registration refines the scale either way.</span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the pixel size">i<span class="nd-info-tooltip">An OME-TIFF fills in its recorded pixel size; TIFF resolution tags are ignored, as they are often a nominal 72 or 300 dpi. Leave empty to estimate it from the tissue area, which also absorbs shrinkage. The affine registration refines the scale either way.</span></span>
                 </label>
                 <input id="pixelSize" type="number" min="0" step="any" placeholder="Estimate" />
               </div>
@@ -137,7 +137,7 @@
 
     <template id="aboutContent">
       <p>Registers 2D histology sections to an MRI volume. You give the approximate slice; the app samples the MRI on that plane, finds the section's orientation, registers it rigidly, then affinely, with normalized mutual information in Greedy, optionally searches a few slices and degrees of tilt for the plane that fits best, and finishes with a deformable Greedy registration. Results are the section warped onto the MRI plane, the sections drawn into the MRI grid as a colour overlay, and Greedy-compatible affine and warp files in world coordinates.</p>
-      <p>Greedy is three-dimensional, so each section is registered as a thin slab whose out-of-plane terms are removed. On a synthetic test (an MRI slice deformed by a known affine and smooth warp and re-coloured as H&amp;E) the mean landmark error is 0.35 MRI voxels; on the AHEAD example it is 1.8 mm at six manual landmarks. Large tears, missing pieces and strong non-linear distortion of a section are not modelled.</p>
+      <p>Greedy is three-dimensional, so each section is registered as a thin slab whose out-of-plane terms are removed. On a synthetic test (an MRI slice deformed by a known affine and smooth warp and re-coloured as H&amp;E) the mean landmark error falls from 7.5 mm (12.5 MRI voxels of 0.6 mm) at the start to 0.21 mm (0.35 voxels). On the AHEAD example, at six manual landmarks, it falls from 6.8 mm (11.3 voxels) to 1.8 mm (3.0 voxels); there the plane search and the warp did not reduce it (the affine alone gives 1.7 mm, 2.9 voxels). Large tears, missing pieces and strong non-linear distortion of a section are not modelled.</p>
     </template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
 

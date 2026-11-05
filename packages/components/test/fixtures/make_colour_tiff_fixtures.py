@@ -45,6 +45,12 @@ def main(out):
     tifffile.imwrite(f"{out}/colour-rgb.ome.tif", ramp(4, 5, np.uint8, 3), photometric="rgb", ome=True,
                      metadata={"axes": "YXS", "PhysicalSizeX": 2.5, "PhysicalSizeXUnit": "µm",
                                "PhysicalSizeY": 2500, "PhysicalSizeYUnit": "nm"})
+    # CMYK (separated) pixels: pure red, pure green and black, at 8 and at 16 bits.
+    for dtype in (np.uint8, np.uint16):
+        top = np.iinfo(dtype).max
+        cmyk = np.array([[[0, top, top, 0], [top, 0, top, 0], [0, 0, 0, top]]], dtype)
+        tifffile.imwrite(f"{out}/colour-cmyk-uint{8 * np.dtype(dtype).itemsize}.tif", cmyk,
+                         photometric="separated", metadata=None)
 
 
 if __name__ == "__main__":

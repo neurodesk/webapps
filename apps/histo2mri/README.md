@@ -7,7 +7,12 @@ run (`src/worker.js`); cancelling terminates the worker.
 1. **Inputs**: one 3D NIfTI MRI and one or more sections: RGB or greyscale TIFF
    (`@neurodesk/webapp-components/file-io/tiff`, `readTiffImage`), PNG or JPEG
    (`file-io/raster-image`). Several sections are taken in file-name order, `Slices between
-   sections` apart. NaN or infinite MRI voxels are refused.
+   sections` apart. NaN or infinite MRI voxels are refused, and an MRI in metres or
+   micrometres is converted to millimetres (`src/core/nifti.js`, `mriVolume`). An OME-TIFF's
+   physical pixel size fills in the section pixel size; TIFF resolution tags are ignored.
+   Before the first registration every section's working memory is estimated from its grid
+   sizes (`workingMemory`) and a run above 2 GB is refused. When the MRI grid's colour copy
+   would exceed 1 GB, it is left out with a warning and the per-section files are still written.
 2. **Plane** (`src/core/plane.js`): the slice along a voxel axis, optionally offset along its
    normal and tilted about its two in-plane axes, sampled trilinearly on a square grid of the
    slice's smallest in-plane voxel size.
@@ -49,20 +54,27 @@ through takes the warped section's colour.
 ## Validation
 
 `node validation/run.mjs` (Greedy's single-threaded build in Node, the bytes the browser
-runs) writes `validation/results.json`:
+runs) writes `validation/results.json`, with the landmark error after each stage (start, rigid,
+affine, final) in mm and in MRI voxels (0.6 mm in both experiments):
 
 - **Synthetic**: the example MRI's slice 50 deformed by a known similarity with anisotropic
   shrinkage and a smooth warp of up to 1.2 mm, re-coloured as an H&E brightfield slide
   (`validation/synthetic.js`). At 361 landmarks on a 6-voxel grid inside tissue the mean error
-  is 0.35 MRI voxels (median 0.32, maximum 1.73) after the deformable stage and 0.49 after the
-  affine. `test/register.test.js` repeats this on a phantom slice and requires a mean below
+  is 7.52 mm (12.5 voxels) at the start, 1.77 mm (2.9) after the rigid stage, 0.29 mm (0.49)
+  after the affine and 0.21 mm (0.35; median 0.19 mm, maximum 1.04 mm) after the deformable
+  stage. `test/register.test.js` repeats this on a phantom slice and requires a mean below
   one voxel, and checks the orientation search (a flipped, rotated section) and the plane search
   (it finds a section cut one slice off and tilted 2°).
 - **Example**: six landmarks placed by eye, independently on the MRI and on the section
-  (`validation/example-landmarks.json`, one marked low confidence). The mean error is 1.8 mm
-  (3.0 voxels of 0.6 mm; 0.96–2.37 mm). The landmarks' own placement error and the difference
-  between the section and any MRI plane (cutting and mounting distortion) are both in this
-  number; how they split is not measured.
+  (`validation/example-landmarks.json`, one marked low confidence). The mean error is 6.79 mm
+  (11.3 voxels) at the start, 1.88 mm (3.1) after the rigid stage, and with the default settings
+  1.83 mm (3.05) after the affine and plane search and 1.80 mm (3.0; 0.96–2.37 mm per landmark)
+  after the warp. On this one real example neither the plane search nor the warp reduced the
+  landmark error: without either, the affine gives 1.72 mm (2.87 voxels); the plane search alone
+  gives 1.83 mm and the warp alone 1.79 mm. Both raise NMI, so they stay on by default, but
+  one section cannot show that they help. The landmarks' own placement error and the difference
+  between the section and any MRI plane (cutting and mounting distortion) are both in these
+  numbers; how they split is not measured.
 
 The colour deconvolution equals scikit-image 0.24 `rgb2hed` to 1e-9 (`test/colour.test.js`).
 

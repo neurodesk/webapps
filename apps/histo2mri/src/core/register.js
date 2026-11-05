@@ -42,6 +42,23 @@ const MAX_SEARCH_ROUNDS = 4;
 /** Longest side of the image the tissue moments are measured on. */
 const ANALYSIS_SIZE = 1024;
 
+/** Working memory one section's registration and its output files may take (bytes). */
+export const MAX_WORKING_BYTES = 2 * 1024 ** 3;
+
+// Estimated bytes per pixel of each grid a registration allocates, rounded up.
+// Plane pixel: the fixed image, its tissue mask and NIfTI, the search's samples (~20 B); the
+// deformable stage's three-slice fixed slab and mask with their NIfTI copies (48 B); Greedy's
+// vector fields on that slab (~8 fields × 3 slices × 3 components × 4 B = 288 B); the warp as
+// returned, read and kept, and the world warp and plane files (~100 B).
+const PLANE_PIXEL_BYTES = 456;
+// Working (moving) pixel: the block average (float64 sums, counts, float32 planes: 12 B per
+// channel + 4), contrast and tissue (~10 B), the three-slice moving slab, its NIfTI and Greedy's
+// copy (36 B), the section output image (~14 B).
+const workingPixelBytes = (channels) => 12 * channels + 64;
+// Output pixel: the warped RGBA, its mask and one resliced channel at a time (~14 B), and its
+// float copies when the sections are drawn into the MRI grid (16 B).
+const OUTPUT_PIXEL_BYTES = 32;
+
 function abortable(signal) {
   signal?.throwIfAborted();
 }
@@ -132,32 +149,87 @@ function blockFor(target, fullSpacing) {
   return Math.max(1, Math.round(target / fullSpacing));
 }
 
+const megabytes = (bytes) => `${Math.round(bytes / 1024 ** 2)} MB`;
+
 /**
- * Registers one section. `volume` is { dims, affine, data } (MRI, x fastest), `section`
- * { width, height, channels, data, maxValue, pixelSize } (interleaved, as read). `plane` is
- * { axis, index, offset?, tilt? }. Returns the transforms in the plane's local frame and what
- * the outputs need; outputs.js turns them into files.
+ * Estimated working memory (bytes) of registering `section` ({ width, height, channels }) on
+ * `plane` and writing its outputs, from the grid sizes alone. Without `fullSpacing` (mm) the
+ * section's part is the tissue analysis image only.
  */
-export async function registerSection({ volume, section, plane: start, options = {}, greedy, onProgress = () => {}, signal }) {
-  const settings = { ...DEFAULTS, ...options };
-  abortable(signal);
+export function workingMemory(plane, section, fullSpacing = null) {
+  const planePixels = plane.nu * plane.nv;
+  const blocked = (block) => Math.ceil(section.width / block) * Math.ceil(section.height / block);
+  const analysisBlock = Math.max(1, Math.ceil(Math.max(section.width, section.height) / ANALYSIS_SIZE));
+  let sectionBytes = blocked(analysisBlock) * workingPixelBytes(section.channels);
+  if (fullSpacing) {
+    const factor = Math.max(1, Math.min(4, Math.round(plane.spacing / fullSpacing)));
+    const outputPixels = ((plane.nu - 1) * factor + 1) * ((plane.nv - 1) * factor + 1);
+    const outputBlock = blockFor(plane.spacing / factor, fullSpacing);
+    sectionBytes += blocked(blockFor(plane.spacing, fullSpacing)) * workingPixelBytes(section.channels)
+      + blocked(outputBlock) * workingPixelBytes(section.channels)
+      + outputPixels * OUTPUT_PIXEL_BYTES;
+  }
+  return planePixels * PLANE_PIXEL_BYTES + sectionBytes;
+}
+
+/** Refuses a registration whose estimated working memory is above `maxBytes`, before allocating it. */
+function assertWorkingMemory(plane, section, fullSpacing, maxBytes) {
+  const bytes = workingMemory(plane, section, fullSpacing);
+  if (bytes <= maxBytes) return;
+  const pixel = fullSpacing ? ` at ${Number((fullSpacing * 1000).toPrecision(3))} µm per pixel` : '';
+  throw new Error(`This registration needs about ${megabytes(bytes)} of working memory, above the ${megabytes(maxBytes)} limit (MRI plane ${plane.nu} × ${plane.nv} pixels of ${Number(plane.spacing.toPrecision(3))} mm, section ${section.width} × ${section.height} pixels${pixel}). Use a coarser MRI or section, or a larger section pixel size.`);
+}
+
+/**
+ * The plane, the MRI on it and the section's full-resolution pixel size (mm), each memory check
+ * made before the arrays it covers are allocated.
+ */
+function measureSection({ volume, section, start, settings, maxBytes, onProgress }) {
   onProgress('Sampling the MRI on the section plane', 0.02);
-  let plane = slicePlane(volume, start);
-  let fixed = samplePlane(volume, plane);
+  const plane = slicePlane(volume, start);
+  const givenSpacing = settings.pixelSize ? settings.pixelSize / 1000 : null;
+  assertWorkingMemory(plane, section, givenSpacing, maxBytes);
+  const fixed = samplePlane(volume, plane);
   const fixedTissue = foreground(fixed);
   const fixedMoments = maskMoments(fixedTissue, plane.nu, plane.nv);
 
   onProgress('Measuring the section', 0.05);
   const analysisBlock = Math.max(1, Math.ceil(Math.max(section.width, section.height) / ANALYSIS_SIZE));
   const analysis = blockAverage(section, analysisBlock);
-  const analysisContrast = toContrast(analysis.planes, analysis.width, analysis.height, settings.contrast);
-  const tissue = maskMoments(foreground(analysisContrast.data), analysis.width, analysis.height);
   // Pixel size (mm) of the full-resolution section: given, or the size at which the section's
   // tissue area equals the MRI slice's.
-  const fullSpacing = settings.pixelSize
-    ? settings.pixelSize / 1000
-    : (plane.spacing * Math.sqrt(fixedMoments.area / tissue.area)) / analysisBlock;
-  if (!(fullSpacing > 0) || !Number.isFinite(fullSpacing)) throw new Error('The section pixel size could not be estimated.');
+  let fullSpacing = givenSpacing;
+  if (!fullSpacing) {
+    const analysisContrast = toContrast(analysis.planes, analysis.width, analysis.height, settings.contrast);
+    const tissue = maskMoments(foreground(analysisContrast.data), analysis.width, analysis.height);
+    fullSpacing = (plane.spacing * Math.sqrt(fixedMoments.area / tissue.area)) / analysisBlock;
+    if (!(fullSpacing > 0) || !Number.isFinite(fullSpacing)) throw new Error('The section pixel size could not be estimated.');
+    assertWorkingMemory(plane, section, fullSpacing, maxBytes);
+  }
+  return { plane, fixed, fixedTissue, fixedMoments, analysis, analysisBlock, fullSpacing };
+}
+
+/**
+ * Checks, before any registration starts, that a section fits the working-memory limit; it
+ * measures the section (and samples the MRI plane) as registerSection does. Throws if it does not.
+ */
+export function preflightSection({ volume, section, plane, options = {}, maxBytes = MAX_WORKING_BYTES }) {
+  measureSection({ volume, section, start: plane, settings: { ...DEFAULTS, ...options }, maxBytes, onProgress: () => {} });
+}
+
+/**
+ * Registers one section. `volume` is { dims, affine, data } (MRI, x fastest), `section`
+ * { width, height, channels, data, maxValue, pixelSize } (interleaved, as read). `plane` is
+ * { axis, index, offset?, tilt? }. Returns the transforms in the plane's local frame and what
+ * the outputs need; outputs.js turns them into files. Refuses, before allocating them, grids
+ * whose estimated working memory (workingMemory) is above `maxBytes`.
+ */
+export async function registerSection({ volume, section, plane: start, options = {}, greedy, onProgress = () => {}, signal, maxBytes = MAX_WORKING_BYTES }) {
+  const settings = { ...DEFAULTS, ...options };
+  abortable(signal);
+  const measured = measureSection({ volume, section, start, settings, maxBytes, onProgress });
+  let { plane, fixed } = measured;
+  const { fixedTissue, fixedMoments, analysis, analysisBlock, fullSpacing } = measured;
   const block = blockFor(plane.spacing, fullSpacing);
   const working = block === analysisBlock ? analysis : blockAverage(section, block);
   abortable(signal);
@@ -264,6 +336,7 @@ export async function registerSection({ volume, section, plane: start, options =
   onProgress('Registration complete', 0.9);
   return {
     plane,
+    initialPlane: measured.plane,
     start,
     fixed,
     fixedTissue,
@@ -279,6 +352,20 @@ export async function registerSection({ volume, section, plane: start, options =
     nmi: { initial: initialNmi, rigid: best.nmi, affine: linearScore, final: final.value },
     warpRejected,
     search,
+  };
+}
+
+/**
+ * The registration as it stood after each stage, for scoring: `start` (the initial placement on
+ * the requested plane), `rigid`, `affine` (the linear result, on the searched plane when the
+ * search ran) and `final` (with the warp). Each can stand for `result` in sectionPixelAt.
+ */
+export function registrationStages(result) {
+  return {
+    start: { ...result, plane: result.initialPlane, affine: identity(), warp: null },
+    rigid: { ...result, plane: result.initialPlane, affine: result.rigid, warp: null },
+    affine: { ...result, warp: null },
+    final: result,
   };
 }
 

@@ -39,3 +39,15 @@ test("run settings check the slice range, section spacing and options", () => {
   assert.throws(() => runSettings({ axis: 2, index: 1, contrast: "red" }, dims), /Unknown contrast/);
   assert.throws(() => runSettings({ axis: 4, index: 1 }, dims), /i, j or k/);
 });
+
+test("an MRI grid above the colour-copy limit leaves out only that output, with a warning", () => {
+  const dims = [100, 80, 60];
+  const full = runSettings({ axis: 2, index: 30 }, dims);
+  assert.equal(full.volumeOutput, true);
+  assert.deepEqual(full.warnings, []);
+  const limited = runSettings({ axis: 2, index: 30 }, dims, 1, { maxVolumeBytes: 100 * 80 * 60 * 4 - 1 });
+  assert.equal(limited.volumeOutput, false);
+  assert.match(limited.warnings[0], /too large for a colour copy.*written without it/);
+  assert.deepEqual(limited.plane, full.plane);
+  assert.deepEqual(limited.options, full.options);
+});

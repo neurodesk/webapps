@@ -72,3 +72,13 @@ test('an image above the memory budget is refused before decoding', async () => 
   controller.abort();
   await assert.rejects(readTiffImage(fixture('colour-rgb-deflate-uint8.tif'), { signal: controller.signal }), { name: 'AbortError' });
 });
+
+test('8-bit CMYK converts to RGB and 16-bit CMYK is refused before decoding', async () => {
+  const eight = await readTiffImage(fixture('colour-cmyk-uint8.tif'));
+  assert.equal(eight.channels, 3);
+  const [red, green, black] = [0, 1, 2].map((i) => Array.from(eight.data.subarray(3 * i, 3 * i + 3)));
+  assert.ok(red[0] > 250 && red[1] === 0 && red[2] === 0, `red ${red}`);
+  assert.ok(green[1] > 250 && green[0] === 0 && green[2] === 0, `green ${green}`);
+  assert.deepEqual(black, [0, 0, 0]);
+  await assert.rejects(readTiffImage(fixture('colour-cmyk-uint16.tif')), /16-bit CMYK TIFF cannot be converted/);
+});
