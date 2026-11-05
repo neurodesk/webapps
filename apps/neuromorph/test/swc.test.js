@@ -149,3 +149,90 @@ test("a neurite's zero radius never borrows the soma's", () => {
   const { samples } = readSwc(swc("1 1 0 0 0 5 -1", "2 2 0 5 0 0 1", "3 2 0 10 0 1.5 2"));
   assert.equal(samples.find((s) => s.id === 2).r, 1.5);
 });
+
+test("repairing a long chain of zero radii takes linear time", () => {
+  const rows = ["1 1 0 0 0 5 -1"];
+  // No positive radius anywhere in the dendrite: every sample searches and finds nothing.
+  for (let id = 2; id <= 50001; id++) rows.push(`${id} 3 ${id} 0 0 0 ${id - 1}`);
+  const text = rows.join("\n");
+  // The fastest of two reads with and without repair; the difference is the repair's cost.
+  const time = (repair) => Math.min(...[0, 1].map(() => {
+    const start = performance.now();
+    readSwc(text, { repair });
+    return performance.now() - start;
+  }));
+  const extra = time(true) - time(false);
+  assert.ok(extra < 500, `repairing 50,000 zero radii added ${Math.round(extra)} ms`);
+  const { issues } = readSwc(text);
+  assert.deepEqual(issues.map(({ code, repaired }) => [code, repaired]), [["nonpositive-radius", false]]);
+  const tip = readSwc(`${text}\n50002 3 50002 0 0 0.5 50001`).samples;
+  assert.ok(tip.filter((s) => s.type === 3).every((s) => s.r === 0.5), "with a positive tip, each takes its radius from below");
+});
+
+test("repair takes the nearest positive radius above, else the nearest below", () => {
+  // 2 (0) -> 3 (0) -> {4 (0) -> 6 (3), 5 (2)}: nothing above, so 2 and 3 take 5's radius, one step nearer than 6's.
+  const text = swc("1 1 0 0 0 5 -1", "2 3 1 0 0 0 1", "3 3 2 0 0 0 2", "4 3 3 1 0 0 3", "5 3 3 -1 0 2 3", "6 3 4 1 0 3 4", "7 3 5 1 0 0 6");
+  const radius = Object.fromEntries(readSwc(text).samples.map((s) => [s.id, s.r]));
+  assert.deepEqual(radius, { 1: 5, 2: 2, 3: 2, 4: 3, 5: 2, 6: 3, 7: 3 });
+});
+
+for (const [kind, radius] of [["zero", "0"], ["negative", "-1"]]) {
+  test(`a neurite of only ${kind} radii stays unrepaired, reported, with area and volume blank`, () => {
+    const { samples, issues } = readSwc(swc("1 1 0 0 0 5 -1", `2 3 5 0 0 ${radius} 1`, `3 3 10 0 0 ${radius} 2`));
+    const unrepaired = issues.filter((issue) => issue.code === "nonpositive-radius");
+    assert.equal(unrepaired.length, 1);
+    assert.equal(unrepaired[0].repaired, false);
+    assert.deepEqual(unrepaired[0].lines, [2, 3]);
+    assert.match(unrepaired[0].message, /left blank/);
+    const analysis = analyse(buildMorphology(samples), 5, { unknownZeroRadii: true });
+    assert.equal(analysis.features.all.surfaceArea, null);
+    assert.equal(analysis.features.basal.volume, null);
+    assert.equal(analysis.features.all.totalLength, 5, "length does not depend on radius");
+    const row = morphometricsCsv([{ name: "x.swc", analysis }]).split("\n")[1].split(",");
+    assert.deepEqual([row[8], row[9]], ["", ""], "surface_area_um2 and volume_um3 are blank");
+  });
+}
+
+test("without repair a zero radius is measured as NeuroM does, a negative one is not", () => {
+  const zero = readSwc(swc("1 1 0 0 0 5 -1", "2 3 5 0 0 0 1", "3 3 10 0 0 1 2"), { repair: false });
+  assert.equal(measure(buildMorphology(zero.samples)).surfaceArea, Math.PI * Math.hypot(1, 5));
+  assert.doesNotMatch(zero.issues.find((issue) => issue.code === "nonpositive-radius").message, /blank/);
+  const negative = readSwc(swc("1 1 0 0 0 5 -1", "2 3 5 0 0 -1 1", "3 3 10 0 0 1 2"), { repair: false });
+  assert.equal(measure(buildMorphology(negative.samples)).surfaceArea, null);
+  assert.match(negative.issues.find((issue) => issue.code === "nonpositive-radius").message, /left blank/);
+});
+
+test("the header comments are kept for the repaired file, before the repair note", () => {
+  const text = swc("# ORIGINAL_SOURCE Neurolucida", "# CONTRIBUTOR Turner_DA", "#REFERENCE doi:10.0/x", "1 1 0 0 0 5 -1", "2 3 5 0 0 0 1", "3 3 10 0 0 1 2  # inline");
+  const { samples, header } = readSwc(text);
+  assert.deepEqual(header, ["# ORIGINAL_SOURCE Neurolucida", "# CONTRIBUTOR Turner_DA", "#REFERENCE doi:10.0/x"]);
+  const written = writeSwc(samples, [...header, "Repaired by NeuroMorph"]);
+  assert.match(written, /^# ORIGINAL_SOURCE Neurolucida\n# CONTRIBUTOR Turner_DA\n#REFERENCE doi:10\.0\/x\n# Repaired by NeuroMorph\n1 1 0 0 0 5 -1\n/);
+});
+
+test("Sholl counts match counting every radius for every segment", () => {
+  // A random walk that wanders in and out, with segment ends landing exactly on spheres.
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const rows = ["1 1 0 0 0 1 -1"];
+  for (let id = 2; id < 400; id++) {
+    const parent = id === 2 ? 1 : 2 + Math.floor(random() * (id - 2));
+    const step = () => Math.round((random() - 0.5) * 60);
+    rows.push(`${id} ${2 + (id % 3)} ${step()} ${step()} ${step()} 1 ${parent}`);
+  }
+  const morphology = buildMorphology(readSwc(rows.join("\n")).samples);
+  const radii = Array.from({ length: 60 }, (_, k) => k + 1);
+  const brute = new Array(radii.length).fill(0);
+  const [cx, cy, cz] = morphology.center;
+  const d2 = (p) => (p[0] - cx) ** 2 + (p[1] - cy) ** 2 + (p[2] - cz) ** 2;
+  for (const neurite of morphology.neurites) {
+    for (const { points } of neurite.sections) {
+      for (let k = 1; k < points.length; k++) {
+        const [low, high] = [Math.min(d2(points[k - 1]), d2(points[k])), Math.max(d2(points[k - 1]), d2(points[k]))];
+        radii.forEach((r, i) => { if (low <= r * r && r * r <= high) brute[i]++; });
+      }
+    }
+  }
+  assert.deepEqual(shollCrossings(morphology, radii), brute);
+  assert.ok(brute.some((count) => count > 0));
+});

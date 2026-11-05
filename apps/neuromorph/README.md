@@ -3,7 +3,10 @@
 Neuron morphology from SWC reconstructions, in the browser. NeuroMorph reads one or more
 `.swc` files (or a folder), checks and repairs common SWC faults, draws each neuron as tubes
 coloured by neurite type, and measures it with NeuroM's definitions. It runs on the CPU and
-uploads nothing.
+uploads nothing. Reading and measuring run in a module worker (`src/worker.js`), one per run,
+which the footer × terminates. Each reconstruction is named by its path within the chosen
+folder, so files of one name in two folders stay apart; a file that cannot be read is
+skipped and named.
 
 The science is in `src/morph`, pure modules with no DOM:
 
@@ -63,10 +66,14 @@ These are deliberate, and none applies to the examples:
    sample, a missing parent makes the sample the root of a new tree, and a parent cycle is
    cut where it closes.
 4. **Optional repairs** (on by default). A zero or negative radius takes the nearest positive
-   radius in the same neurite, searching up the tree first and then down. A sample at its
-   parent's position is merged into the parent. Turn the option off to measure a file
-   exactly as NeuroM does. NeuroM's `simple.swc` fixture has zero radii and is checked with
-   the option off.
+   radius in the same neurite, searching up the tree first and then down (fewest steps). A
+   sample at its parent's position is merged into the parent. A radius left nonpositive
+   (no positive radius in its neurite) is reported as unrepaired, and the surface area and
+   volume of the neurites holding it are blank. Turn the option off to measure a file
+   exactly as NeuroM does: zero radii are then measured as points, and only a negative
+   radius blanks area and volume. NeuroM's `simple.swc` fixture has zero radii and is checked
+   with the option off. The repaired SWC keeps the original `#` header lines (NeuroMorpho.Org's
+   carry the CC BY attribution) and adds a repair note.
 5. **No soma.** NeuroM's Sholl and radial distances need a soma. NeuroMorph measures them
    from the first sample and reports the file.
 
@@ -78,15 +85,17 @@ parent.
 ## Validation
 
 `validation/neurom_reference.py` records NeuroM 4.0.6's numbers (MorphIO 3.5.1, NumPy 2.5.4,
-Python 3.13) for both hosted examples and three of NeuroM's own BSD test morphologies,
-`Neuron.swc`, `strahler.swc` and `simple.swc` (committed under `test/fixtures/neurom`). The
+Python 3.13) for both hosted examples, three of NeuroM's own BSD test morphologies,
+`Neuron.swc`, `strahler.swc` and `simple.swc` (committed under `test/fixtures/neurom`), and
+`test/fixtures/trifurcation.swc`, a small file with a three-way branch point. The
 numbers are in `validation/neurom-reference.json`. To record them again:
 
 ```sh
 python -m venv venv && venv/bin/pip install -r validation/requirements.txt
 venv/bin/python validation/neurom_reference.py --step 10 validation/neurom-reference.json \
   n120.CNG.swc 5-27-11cell1-nonFS-BC.CNG.swc \
-  test/fixtures/neurom/Neuron.swc test/fixtures/neurom/strahler.swc test/fixtures/neurom/simple.swc
+  test/fixtures/neurom/Neuron.swc test/fixtures/neurom/strahler.swc test/fixtures/neurom/simple.swc \
+  test/fixtures/trifurcation.swc
 ```
 
 Every neurite type (all, axon, basal, apical) is compared for neurite, section, bifurcation,
@@ -95,7 +104,8 @@ radial distance, maximum branch and Strahler order, every local and remote bifur
 angle, and every Sholl count.
 
 - `test/neurom-parity.test.js` checks the fixtures in Node. Counts and orders must be equal,
-  every other value within 1e-6 relative, and Sholl counts identical.
+  every other value within 1e-6 relative (angles also within 1e-7 rad absolute), and Sholl
+  counts identical.
 - `e2e/smoke.spec.js` loads each hosted example in Chromium, downloads the tables and holds
   them to the same reference.
 

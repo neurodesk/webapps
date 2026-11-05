@@ -125,8 +125,10 @@ export function neuritesOf(morphology, type) {
  * The morphometrics of the neurites of one type (NeuroM's names in brackets).
  * @param {Morphology} morphology
  * @param {number | null} type NEURITE_TYPES value
+ * @param {{ unknownZeroRadii?: boolean }} [options] true after repair: a radius still 0 is missing,
+ *   so surface area and volume are null rather than measured with it
  */
-export function measure(morphology, type = null) {
+export function measure(morphology, type = null, { unknownZeroRadii = false } = {}) {
   const result = {
     neurites: 0, // number_of_neurites
     sections: 0, // number_of_sections
@@ -134,8 +136,10 @@ export function measure(morphology, type = null) {
     forkingPoints: 0, // number_of_forking_points: two or more children
     terminals: 0, // number_of_leaves
     totalLength: 0, // total_length
-    surfaceArea: 0, // total_area: lateral surface of each segment's frustum
-    volume: 0, // total_volume: each segment's frustum
+    surfaceArea: 0, // total_area: lateral surface of each segment's frustum; null when undefined (below)
+    volume: 0, // total_volume: each segment's frustum; null when undefined (below)
+    zeroRadii: 0, // points with radius 0
+    negativeRadii: 0, // points with a negative radius
     maxPathDistance: 0, // max(section_path_distances), from the neurite's first sample
     maxRadialDistance: 0, // max_radial_distance: from the soma centre to each terminal
     maxBranchOrder: 0, // max(section_branch_orders)
@@ -150,6 +154,10 @@ export function measure(morphology, type = null) {
     for (const section of neurite.sections) {
       result.sections++;
       const { points, children } = section;
+      for (let k = section.branchOrder ? 1 : 0; k < points.length; k++) {
+        if (points[k][3] === 0) result.zeroRadii++;
+        else if (points[k][3] < 0) result.negativeRadii++;
+      }
       for (let k = 1; k < points.length; k++) {
         const [r0, r1] = [points[k - 1][3], points[k][3]];
         const h = distance(points[k - 1], points[k]);
@@ -183,6 +191,13 @@ export function measure(morphology, type = null) {
       }
     }
   }
+  result.nonpositiveRadii = result.zeroRadii + result.negativeRadii;
+  // A negative radius has no frustum. A zero radius is a point, which NeuroM measures as
+  // written; after repair it is a radius that could not be recovered, so it is unknown.
+  if (result.negativeRadii || (unknownZeroRadii && result.zeroRadii)) {
+    result.surfaceArea = null;
+    result.volume = null;
+  }
   return result;
 }
 
@@ -205,10 +220,22 @@ export function shollRadii(morphology, step) {
   return Array.from({ length: count }, (_, k) => step * (k + 1));
 }
 
+/** The first index of the ascending `values` whose value is at least `bound`; the length if none is. */
+function firstAtLeast(values, bound) {
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (values[middle] < bound) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
 /**
  * Sholl crossings as NeuroM's sholl_crossings counts them: a segment crosses radius r
  * when r² lies between the squared distances of its ends from the centre, inclusively,
- * so a branch that bends back crosses again.
+ * so a branch that bends back crosses again. Each segment visits only the radii between its ends.
  */
 export function shollCrossings(morphology, radii, type = null) {
   const counts = new Array(radii.length).fill(0);
@@ -222,7 +249,7 @@ export function shollCrossings(morphology, radii, type = null) {
         const current = (points[k][0] - cx) ** 2 + (points[k][1] - cy) ** 2 + (points[k][2] - cz) ** 2;
         const low = Math.min(previous, current);
         const high = Math.max(previous, current);
-        for (let i = 0; i < squared.length; i++) if (low <= squared[i] && squared[i] <= high) counts[i]++;
+        for (let i = firstAtLeast(squared, low); i < squared.length && squared[i] <= high; i++) counts[i]++;
         previous = current;
       }
     }
@@ -230,13 +257,13 @@ export function shollCrossings(morphology, radii, type = null) {
   return counts;
 }
 
-/** Everything the app reports for one morphology. */
-export function analyse(morphology, step) {
+/** Everything the app reports for one morphology; `options` as for measure. */
+export function analyse(morphology, step, options = {}) {
   const radii = shollRadii(morphology, step);
   const features = {};
   const crossings = {};
   for (const [name, type] of Object.entries(NEURITE_TYPES)) {
-    features[name] = measure(morphology, type);
+    features[name] = measure(morphology, type, options);
     crossings[name] = shollCrossings(morphology, radii, type);
   }
   return { center: morphology.center, features, sholl: { step, radii, crossings } };

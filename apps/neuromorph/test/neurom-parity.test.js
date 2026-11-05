@@ -1,6 +1,6 @@
 // The morphometrics against NeuroM 4.0.6 (validation/neurom-reference.json, recorded by
 // validation/neurom_reference.py). NeuroM's own BSD test morphologies are committed under
-// test/fixtures/neurom; the hosted examples are checked in the browser (e2e/workflow.spec.js).
+// test/fixtures/neurom, and test/fixtures/trifurcation.swc covers a three-way branch point; the hosted examples are checked in the browser (e2e/smoke.spec.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -10,6 +10,8 @@ import { analyse, buildMorphology } from "../src/morph/morphometrics.js";
 
 const reference = JSON.parse(readFileSync(new URL("../validation/neurom-reference.json", import.meta.url), "utf8"));
 const RELATIVE_TOLERANCE = 1e-6;
+/** Angles also pass within this absolute error, in radians: near 0 a relative error says nothing. */
+const ANGLE_TOLERANCE = 1e-7;
 
 /** Every scalar, angle and Sholl count of `mine` against NeuroM's `expected`; returns the worst relative error. */
 function compareWithNeuroM(mine, expected) {
@@ -22,9 +24,10 @@ function compareWithNeuroM(mine, expected) {
         assert.equal(got.length, value.length, `${type}.${name} count`);
         const sorted = [...got].sort((a, b) => a - b);
         value.forEach((v, k) => {
-          const error = Math.abs(sorted[k] - v) / Math.max(Math.abs(v), 1e-9);
+          const absolute = Math.abs(sorted[k] - v);
+          const error = absolute / Math.max(Math.abs(v), 1e-9);
           worst = Math.max(worst, error);
-          assert.ok(error <= RELATIVE_TOLERANCE, `${type}.${name}[${k}]: ${sorted[k]} vs NeuroM ${v}`);
+          assert.ok(error <= RELATIVE_TOLERANCE || absolute <= ANGLE_TOLERANCE, `${type}.${name}[${k}]: ${sorted[k]} vs NeuroM ${v}`);
         });
       } else if (Number.isInteger(value) && !name.match(/Length|Area|volume|Distance/)) {
         assert.equal(got, value, `${type}.${name}`);
@@ -40,9 +43,10 @@ function compareWithNeuroM(mine, expected) {
   return worst;
 }
 
-for (const name of ["Neuron.swc", "strahler.swc", "simple.swc"]) {
+for (const path of ["neurom/Neuron.swc", "neurom/strahler.swc", "neurom/simple.swc", "trifurcation.swc"]) {
+  const name = path.split("/").at(-1);
   test(`${name} matches NeuroM to 1e-6 and its Sholl counts exactly`, () => {
-    const bytes = readFileSync(new URL(`fixtures/neurom/${name}`, import.meta.url));
+    const bytes = readFileSync(new URL(`fixtures/${path}`, import.meta.url));
     const expected = reference.morphologies.find((m) => m.file === name);
     assert.equal(createHash("sha256").update(bytes).digest("hex"), expected.sha256);
     // NeuroM measures the file as written, so the comparison does not repair radii.

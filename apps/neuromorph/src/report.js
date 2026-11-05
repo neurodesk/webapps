@@ -70,7 +70,7 @@ export function renderMorphometricsReport(section, neuron) {
   const all = neuron.analysis.features.all;
   const lead = element("p", {
     className: "nd-report-lead",
-    textContent: `${neuron.name}: ${all.neurites} neurites, ${format(all.totalLength)} µm total length, ${all.bifurcations} bifurcations.`,
+    textContent: `${neuron.id}: ${all.neurites} neurites, ${format(all.totalLength)} µm total length, ${all.bifurcations} bifurcations.`,
   });
   const checks = neuron.issues.length
     ? table(["Check", "Lines"], neuron.issues.map((issue) => [`${issue.repaired ? "Repaired: " : ""}${issue.message}`, issue.lines.slice(0, 5).join(", ") + (issue.lines.length > 5 ? ", …" : "")]), "SWC checks")
@@ -78,6 +78,9 @@ export function renderMorphometricsReport(section, neuron) {
   const notes = element("div", { className: "nd-report-notes" }, [
     element("p", { textContent: "Definitions follow NeuroM 4: lengths exclude the soma and the gap from the soma to each neurite; angles are measured at bifurcations with exactly two branches." }),
   ]);
+  if (all.nonpositiveRadii) {
+    notes.append(element("p", { textContent: `Surface area and volume are blank: ${all.nonpositiveRadii} neurite point${all.nonpositiveRadii === 1 ? " has" : "s have"} a zero or negative radius.` }));
+  }
   section.replaceChildren(lead, table(["Measure", ...types.map((type) => TYPE_HEADINGS[type])], rows, "Morphometrics"), checks, notes);
 }
 
@@ -88,7 +91,7 @@ export function renderShollReport(section, neuron) {
   const at = sholl.radii[sholl.crossings.all.indexOf(peak)];
   const lead = element("p", {
     className: "nd-report-lead",
-    textContent: peak ? `${neuron.name}: at most ${peak} intersections, at ${format(at)} µm (step ${format(sholl.step)} µm).` : `${neuron.name}: no intersections at a ${format(sholl.step)} µm step.`,
+    textContent: peak ? `${neuron.id}: at most ${peak} intersections, at ${format(at)} µm (step ${format(sholl.step)} µm).` : `${neuron.id}: no intersections at a ${format(sholl.step)} µm step.`,
   });
   const figure = element("figure", { className: "nd-chart-figure" });
   figure.append(new DOMParser().parseFromString(shollChart(sholl), "image/svg+xml").documentElement);

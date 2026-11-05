@@ -22,13 +22,14 @@ function issue(issues, code, severity, message, lines, repaired) {
 }
 
 /** Parse the lines into samples; malformed lines and repeated ids are reported and dropped. */
-function readSamples(text, issues) {
+function readSamples(text, issues, header) {
   const samples = [];
   const malformed = [];
   const repeated = [];
   const seen = new Set();
   const lines = text.split(/\r\n|\n|\r/);
   for (let index = 0; index < lines.length; index++) {
+    if (lines[index].trimStart().startsWith("#")) header.push(lines[index].trimEnd());
     const content = lines[index].replace(/#.*/, "").trim();
     if (!content) continue;
     const fields = content.split(/\s+/);
@@ -114,26 +115,39 @@ function childMap(samples) {
 }
 
 /**
- * Nonpositive radii take the nearest positive radius above them, else below them,
- * looking only at samples of the same kind (soma or neurite), so a dendrite never
- * borrows the soma's radius.
+ * Nonpositive radii take the nearest positive radius above them, else the nearest below
+ * them (fewest steps, first child first), looking only at samples of the same kind (soma
+ * or neurite), so a dendrite never borrows the soma's radius. Two linear passes over the
+ * parents-first order, both on the radii as read. Returns the lines it fixed.
  */
 function repairRadii(samples, byId, children) {
+  const sameKind = (a, b) => (a.type === SOMA) === (b.type === SOMA);
+  const above = new Map();
+  for (const s of samples) {
+    const parent = byId.get(s.parent);
+    if (!parent || !sameKind(parent, s)) continue;
+    const r = parent.r > 0 ? parent.r : above.get(parent.id);
+    if (r !== undefined) above.set(s.id, r);
+  }
+  const below = new Map();
+  for (let k = samples.length - 1; k >= 0; k--) {
+    const s = samples[k];
+    let best;
+    for (const child of children.get(s.id) ?? []) {
+      if (!sameKind(child, s)) continue;
+      const deeper = below.get(child.id);
+      const candidate = child.r > 0 ? { steps: 1, r: child.r } : deeper && { steps: deeper.steps + 1, r: deeper.r };
+      if (candidate && (!best || candidate.steps < best.steps)) best = candidate;
+    }
+    if (best) below.set(s.id, best);
+  }
   const fixed = [];
   for (const s of samples) {
     if (s.r > 0) continue;
-    const sameKind = (other) => other && (other.type === SOMA) === (s.type === SOMA);
-    let source = byId.get(s.parent);
-    while (sameKind(source) && !(source.r > 0)) source = byId.get(source.parent);
-    if (!sameKind(source)) {
-      const queue = (children.get(s.id) ?? []).filter(sameKind);
-      while (queue.length && !(queue[0].r > 0)) queue.push(...(children.get(queue.shift().id) ?? []).filter(sameKind));
-      source = queue[0];
-    }
-    if (source) {
-      s.r = source.r;
-      fixed.push(s.line);
-    }
+    const r = above.get(s.id) ?? below.get(s.id)?.r;
+    if (r === undefined) continue;
+    s.r = r;
+    fixed.push(s.line);
   }
   return fixed;
 }
@@ -211,9 +225,13 @@ function inspect(samples, issues, repaired) {
   if (jumps.length) {
     issue(issues, "z-jump", "warning", `${plural(jumps.length, "step")} longer than ${Z_JUMP} µm along z, often a section alignment error`, jumps.map((s) => s.line), false);
   }
+  const zero = samples.filter((s) => !(s.r > 0));
+  if (zero.length) {
+    const what = repaired ? "with zero or negative radius and no positive radius in its neurite or soma to copy" : "with zero or negative radius";
+    const blank = zero.some((s) => s.type !== SOMA && (repaired || s.r < 0));
+    issue(issues, "nonpositive-radius", "warning", `${plural(zero.length, "sample")} ${what}${blank ? "; surface area and volume are left blank" : ""}`, zero.map((s) => s.line), false);
+  }
   if (!repaired) {
-    const zero = samples.filter((s) => !(s.r > 0));
-    if (zero.length) issue(issues, "nonpositive-radius", "warning", `${plural(zero.length, "sample")} with zero or negative radius`, zero.map((s) => s.line), false);
     const duplicates = samples.filter((s) => {
       const parent = byId.get(s.parent);
       return parent && s.type !== SOMA && parent.type === s.type && s.x === parent.x && s.y === parent.y && s.z === parent.z;
@@ -228,11 +246,13 @@ function inspect(samples, issues, repaired) {
  * `repair`, nonpositive radii and samples duplicating their parent's position are fixed too.
  * @param {string} text
  * @param {{ repair?: boolean }} [options]
- * @returns {{ samples: Sample[], issues: Issue[] }}
+ * @returns {{ samples: Sample[], issues: Issue[], header: string[] }} `header` holds the file's
+ *   comment lines as written, which carry its provenance and licence attribution.
  */
 export function readSwc(text, { repair = true } = {}) {
   const issues = [];
-  let samples = readSamples(text, issues);
+  const header = [];
+  let samples = readSamples(text, issues, header);
   if (!samples.length) throw new Error("The file has no SWC samples.");
   connect(samples, issues);
   samples = sortSamples(samples, issues);
@@ -246,10 +266,10 @@ export function readSwc(text, { repair = true } = {}) {
     if (fixed.length) issue(issues, "nonpositive-radius", "warning", `${plural(fixed.length, "zero or negative radius")} replaced by the nearest positive radius`, fixed, true);
   }
   inspect(samples, issues, repair);
-  return { samples, issues };
+  return { samples, issues, header };
 }
 
-/** The samples as SWC text, parents first. */
+/** The samples as SWC text, parents first. Header lines starting with # are written as they are; others become comments. */
 export function writeSwc(samples, header = []) {
   const format = (value) => {
     for (let digits = 1; digits < 17; digits++) {
@@ -258,7 +278,7 @@ export function writeSwc(samples, header = []) {
     }
     return String(value);
   };
-  const lines = header.map((line) => `# ${line}`);
+  const lines = header.map((line) => (line.startsWith("#") ? line : `# ${line}`));
   for (const s of samples) lines.push([s.id, s.type, format(s.x), format(s.y), format(s.z), format(s.r), s.parent].join(" "));
   return `${lines.join("\n")}\n`;
 }

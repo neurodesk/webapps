@@ -1678,6 +1678,130 @@
      "apical": []
     }
    }
+  },
+  {
+   "file": "trifurcation.swc",
+   "sha256": "fd8122e241d26e145bda5a94c9f500bb8121d532ee4da98e3da96d0df854aacd",
+   "somaCenter": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "features": {
+    "all": {
+     "neurites": 2,
+     "sections": 9,
+     "bifurcations": 2,
+     "forkingPoints": 3,
+     "terminals": 6,
+     "totalLength": 148.16814422607422,
+     "surfaceArea": 722.0056457519531,
+     "volume": 307.6922912597656,
+     "maxPathDistance": 39.8533935546875,
+     "maxRadialDistance": 43.874820709228516,
+     "maxBranchOrder": 2,
+     "maxStrahlerOrder": 2,
+     "localBifurcationAngles": [
+      1.0450491446214578,
+      1.2322907663727074
+     ],
+     "remoteBifurcationAngles": [
+      1.0450491446214578,
+      2.3706625612673515
+     ]
+    },
+    "axon": {
+     "neurites": 1,
+     "sections": 3,
+     "bifurcations": 1,
+     "forkingPoints": 1,
+     "terminals": 2,
+     "totalLength": 67.95381927490234,
+     "surfaceArea": 286.3840637207031,
+     "volume": 102.76492309570312,
+     "maxPathDistance": 39.8533935546875,
+     "maxRadialDistance": 43.874820709228516,
+     "maxBranchOrder": 1,
+     "maxStrahlerOrder": 2,
+     "localBifurcationAngles": [
+      1.2322907663727074
+     ],
+     "remoteBifurcationAngles": [
+      2.3706625612673515
+     ]
+    },
+    "basal": {
+     "neurites": 1,
+     "sections": 6,
+     "bifurcations": 1,
+     "forkingPoints": 2,
+     "terminals": 4,
+     "totalLength": 80.21432495117188,
+     "surfaceArea": 435.62158203125,
+     "volume": 204.9273681640625,
+     "maxPathDistance": 30.97361183166504,
+     "maxRadialDistance": 33.911651611328125,
+     "maxBranchOrder": 2,
+     "maxStrahlerOrder": 2,
+     "localBifurcationAngles": [
+      1.0450491446214578
+     ],
+     "remoteBifurcationAngles": [
+      1.0450491446214578
+     ]
+    },
+    "apical": {
+     "neurites": 0,
+     "sections": 0,
+     "bifurcations": 0,
+     "forkingPoints": 0,
+     "terminals": 0,
+     "totalLength": 0.0,
+     "surfaceArea": 0.0,
+     "volume": 0.0,
+     "maxPathDistance": 0.0,
+     "maxRadialDistance": 0.0,
+     "maxBranchOrder": 0,
+     "maxStrahlerOrder": 0,
+     "localBifurcationAngles": [],
+     "remoteBifurcationAngles": []
+    }
+   },
+   "sholl": {
+    "step": 10.0,
+    "radii": [
+     10.0,
+     20.0,
+     30.0,
+     40.0
+    ],
+    "crossings": {
+     "all": [
+      2,
+      6,
+      5,
+      1
+     ],
+     "axon": [
+      1,
+      3,
+      1,
+      1
+     ],
+     "basal": [
+      1,
+      3,
+      4,
+      0
+     ],
+     "apical": [
+      0,
+      0,
+      0,
+      0
+     ]
+    }
+   }
   }
  ]
 }

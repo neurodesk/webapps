@@ -18,8 +18,8 @@ import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { writeMz3 } from "@neurodesk/webapp-components/file-io/mesh";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { APP } from "./config.js";
-import { readSwc, writeSwc } from "./morph/swc.js";
-import { analyse, buildMorphology, extent } from "./morph/morphometrics.js";
+import { writeSwc } from "./morph/swc.js";
+import { extent } from "./morph/morphometrics.js";
 import { morphologyMesh, TYPE_COLORS, TYPE_LABELS } from "./morph/tubes.js";
 import { bifurcationsCsv, morphometricsCsv, shollCsv, summary } from "./morph/outputs.js";
 import { renderMorphometricsReport, renderShollReport } from "./report.js";
@@ -28,6 +28,9 @@ import examples from "../examples.json";
 const $ = (id) => document.getElementById(id);
 const isSwc = (file) => /\.swc$/i.test(file.name);
 const stem = (name) => name.replace(/\.swc$/i, "");
+const basename = (path) => path.slice(path.lastIndexOf("/") + 1);
+/** A file's path within a dropped or chosen folder, else its name. */
+const relativePath = (file) => file.webkitRelativePath || file._webkitRelativePath || file.name;
 
 const workspace = mountImagingWorkspace({
   controls: "#controls",
@@ -80,15 +83,87 @@ function viewerReady() {
 }
 
 /**
- * The loaded reconstructions. Each keeps its text so the repair option can be changed
- * without reading the files again.
- * @type {{ name: string, text: string, samples: import("./morph/swc.js").Sample[], issues: import("./morph/swc.js").Issue[], morphology: import("./morph/morphometrics.js").Morphology, analysis?: ReturnType<typeof analyse> }[]}
+ * The loaded reconstructions. `id` is the file's relative path, unique within the batch; it
+ * names the neuron in the selector, the tables, the downloads and automation. Each keeps its
+ * text so the repair option can be changed without reading the files again.
+ * @type {{ id: string, text: string, samples: import("./morph/swc.js").Sample[], issues: import("./morph/swc.js").Issue[], header: string[], morphology: import("./morph/morphometrics.js").Morphology, analysis?: ReturnType<typeof import("./morph/morphometrics.js").analyse> }[]}
  */
 let neurons = [];
 let selected = 0;
 let measured = false;
-let loading = null;
+/** The files the last load could not read ({ id, error }), reported with the measurements. */
+let lastSkipped = [];
+/** The AbortController of the run in progress (reading or measuring), else null. */
 let running = null;
+
+/**
+ * Run one job in its own module worker (src/worker.js), terminated when it ends or when
+ * `signal` aborts, so cancelling stops even a single long reconstruction.
+ */
+function runWorker(job, signal, onProgress) {
+  return new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+    const stop = () => {
+      worker.terminate();
+      signal.removeEventListener("abort", abort);
+    };
+    const abort = () => {
+      stop();
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    worker.onmessage = ({ data }) => {
+      if (data.progress !== undefined) return onProgress(data.progress);
+      stop();
+      if (data.error) reject(new Error(data.error));
+      else resolve(data.results);
+    };
+    worker.onerror = (event) => {
+      event.preventDefault();
+      stop();
+      reject(new Error(event.message || "The NeuroMorph worker failed."));
+    };
+    worker.postMessage(job);
+  });
+}
+
+/** Hold the app busy for `work(signal)`, cancellable from the footer × and from `signal`. */
+async function exclusive(message, signal, work) {
+  if (running) throw new Error("NeuroMorph is busy. Wait or cancel, then retry.");
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.throwIfAborted();
+  signal?.addEventListener("abort", abort, { once: true });
+  running = controller;
+  setBusy(true);
+  progress.begin(message);
+  try {
+    return await work(controller.signal);
+  } finally {
+    signal?.removeEventListener("abort", abort);
+    running = null;
+    setBusy(false);
+    progress.stopTimer();
+    progress.setCancellable(false);
+  }
+}
+
+/** Read `entries` ({ id, text }) in a worker; returns the neurons and the per-file errors. */
+async function readEntries(entries, signal) {
+  const results = await runWorker(
+    { op: "read", items: entries, repair: $("repair").checked },
+    signal,
+    (fraction) => progress.setProgress(fraction, "Reading reconstructions…"),
+  );
+  const loaded = [];
+  const failed = [];
+  results.forEach((result, k) => {
+    if (result.error) failed.push({ id: entries[k].id, error: result.error });
+    else loaded.push({ ...entries[k], ...result });
+  });
+  return { loaded, failed };
+}
 
 function status(message, error = false) {
   $("statusText").textContent = message;
@@ -128,13 +203,6 @@ function clearResults() {
   showView("render");
 }
 
-function parse(name, text) {
-  const { samples, issues } = readSwc(text, { repair: $("repair").checked });
-  const morphology = buildMorphology(samples);
-  if (!morphology.neurites.length) throw new Error(`${name} has no neurites to measure.`);
-  return { name, text, samples, issues, morphology };
-}
-
 function renderChecks() {
   const neuron = neurons[selected];
   const messages = (neuron?.issues ?? []).filter((issue) => issue.severity !== "info");
@@ -164,15 +232,15 @@ function showNeuron(index) {
     if (!neuron) return;
     await viewerReady();
     const mesh = morphologyMesh(neuron.morphology, 2 * extent(neuron.morphology));
-    await viewer.loadMeshes([{ url: new File([writeMz3(mesh.vertices, mesh.faces, mesh.colors)], `${stem(neuron.name)}.mz3`), name: neuron.name }]);
+    await viewer.loadMeshes([{ url: new File([writeMz3(mesh.vertices, mesh.faces, mesh.colors)], `${stem(basename(neuron.id))}.mz3`), name: neuron.id }]);
     // Orbit about the middle of the neuron rather than the origin, which is usually the soma.
     viewer.renderPivotMM = boundsCentre(mesh.vertices);
     $("emptyState").hidden = true;
     legend.render(mesh.types.map((type, k) => ({ index: k, name: TYPE_LABELS[type], color: TYPE_COLORS[type] })));
     $("legendSection").open = true;
     const all = neuron.morphology.neurites;
-    $("viewLabel").textContent = `${neuron.name} · ${neuron.samples.length} samples · ${all.length} neurite${all.length === 1 ? "" : "s"}`;
-    log.log(`Displayed ${neuron.name}: ${mesh.vertices.length / 3} vertices`);
+    $("viewLabel").textContent = `${neuron.id} · ${neuron.samples.length} samples · ${all.length} neurite${all.length === 1 ? "" : "s"}`;
+    log.log(`Displayed ${neuron.id}: ${mesh.vertices.length / 3} vertices`);
     showView(toolbar.querySelector(".nd-view-tab.active")?.dataset.view ?? "render");
   });
   return showing;
@@ -187,49 +255,51 @@ function setBusy(busy) {
   exampleControl.setDisabled(busy);
 }
 
-async function loadFiles(filesPromise, signal) {
-  if (loading || running) throw new Error("NeuroMorph is busy. Wait or cancel, then retry.");
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  signal?.throwIfAborted();
-  signal?.addEventListener("abort", abort, { once: true });
-  loading = controller;
-  setBusy(true);
-  progress.begin("Reading reconstructions…");
-  try {
-    const files = await filesPromise;
-    const swc = files.filter(isSwc).sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name));
-    if (!swc.length) throw new Error("Choose one or more .swc reconstructions.");
-    const loaded = [];
-    for (const [k, file] of swc.entries()) {
-      controller.signal.throwIfAborted();
-      progress.setProgress(k / swc.length, `Reading ${file.name}…`);
-      loaded.push(parse(file.name, await file.text()));
-    }
-    controller.signal.throwIfAborted();
-    neurons = loaded;
-    clearResults();
-    const select = $("neuronSelect");
-    select.replaceChildren(...neurons.map((neuron, k) => new Option(neuron.name, String(k))));
-    $("neuronField").hidden = neurons.length < 2;
-    const skipped = files.length - swc.length;
-    $("fileInfo").hidden = false;
-    $("fileInfo").textContent = `${neurons.length === 1 ? neurons[0].name : `${neurons.length} reconstructions`}${skipped ? ` · ${skipped} other file${skipped === 1 ? "" : "s"} skipped` : ""}`;
-    $("dropZone").classList.add("has-files");
-    for (const neuron of neurons) {
-      log.log(`${neuron.name}: ${neuron.samples.length} samples, ${neuron.morphology.neurites.length} neurites`);
-      for (const issue of neuron.issues) log.log(`${neuron.name}: ${issue.message}${issue.lines.length ? ` (lines ${issue.lines.slice(0, 10).join(", ")})` : ""}`, issue.severity === "info" ? "info" : "warn");
-    }
-    await showNeuron(0);
-    progress.reset();
-    status(`${neurons.length === 1 ? neurons[0].name : `${neurons.length} reconstructions`} loaded`);
-  } finally {
-    signal?.removeEventListener("abort", abort);
-    loading = null;
-    setBusy(false);
-    progress.stopTimer();
-    progress.setCancellable(false);
+/** Neurons for the loaded files and the skipped files, shown in the input and the log. */
+async function adopt(loaded, failed, others) {
+  neurons = loaded;
+  clearResults();
+  const select = $("neuronSelect");
+  select.replaceChildren(...neurons.map((neuron, k) => new Option(neuron.id, String(k))));
+  $("neuronField").hidden = neurons.length < 2;
+  const notes = [
+    others ? ` · ${others} other file${others === 1 ? "" : "s"} skipped` : "",
+    failed.length ? ` · ${failed.length} unreadable file${failed.length === 1 ? "" : "s"} skipped` : "",
+  ];
+  $("fileInfo").hidden = false;
+  $("fileInfo").textContent = `${neurons.length === 1 ? neurons[0].id : `${neurons.length} reconstructions`}${notes.join("")}`;
+  $("dropZone").classList.add("has-files");
+  for (const { error } of failed) log.log(`Skipped ${error}`, "error");
+  for (const neuron of neurons) {
+    log.log(`${neuron.id}: ${neuron.samples.length} samples, ${neuron.morphology.neurites.length} neurites`);
+    for (const issue of neuron.issues) log.log(`${neuron.id}: ${issue.message}${issue.lines.length ? ` (lines ${issue.lines.slice(0, 10).join(", ")})` : ""}`, issue.severity === "info" ? "info" : "warn");
   }
+  await showNeuron(0);
+  progress.reset();
+  const message = `${neurons.length === 1 ? neurons[0].id : `${neurons.length} reconstructions`} loaded`;
+  status(failed.length ? `${message}; skipped ${failed.map(({ error }) => error).join(" ")}` : message, failed.length > 0);
+}
+
+/** Read the files; ids are their relative paths, made unique if two files share one. */
+async function loadFiles(filesPromise, signal) {
+  return exclusive("Reading reconstructions…", signal, async (aborted) => {
+    const files = await filesPromise;
+    const swc = files.filter(isSwc).sort((a, b) => relativePath(a).localeCompare(relativePath(b)));
+    if (!swc.length) throw new Error("Choose one or more .swc reconstructions.");
+    const ids = new Set();
+    const entries = [];
+    for (const file of swc) {
+      let id = relativePath(file);
+      for (let n = 2; ids.has(id); n++) id = `${relativePath(file)} (${n})`;
+      ids.add(id);
+      entries.push({ id, text: await file.text() });
+      aborted.throwIfAborted();
+    }
+    const { loaded, failed } = await readEntries(entries, aborted);
+    if (!loaded.length) throw new Error(failed.map(({ error }) => error).join(" "));
+    lastSkipped = failed;
+    await adopt(loaded, failed, files.length - swc.length);
+  });
 }
 
 function report(error) {
@@ -267,13 +337,19 @@ $("shollStep").addEventListener("input", () => {
 });
 $("repair").addEventListener("change", () => {
   if (!neurons.length) return;
-  try {
-    neurons = neurons.map((neuron) => parse(neuron.name, neuron.text));
+  const entries = neurons.map(({ id, text }) => ({ id, text }));
+  void exclusive("Reading reconstructions…", undefined, async (aborted) => {
+    const { loaded, failed } = await readEntries(entries, aborted);
+    if (failed.length) throw new Error(failed.map(({ error }) => error).join(" "));
+    neurons = loaded;
     clearResults();
-    void showNeuron(selected).catch(report);
-  } catch (error) {
+    await showNeuron(Math.min(selected, neurons.length - 1));
+    progress.reset();
+    status(`Reconstructions read ${$("repair").checked ? "with" : "without"} repair`);
+  }).catch((error) => {
+    $("repair").checked = !$("repair").checked;
     report(error);
-  }
+  });
 });
 
 function shollStep() {
@@ -287,28 +363,32 @@ function shollStep() {
 }
 
 function outputName(kind) {
-  return `${neurons.length === 1 ? stem(neurons[0].name) : "neuromorph"}_${kind}.csv`;
+  return `${neurons.length === 1 ? stem(basename(neurons[0].id)) : "neuromorph"}_${kind}.csv`;
 }
 
-/** Measure every loaded neuron, yielding between neurons so a long batch can be cancelled. */
+/** A download name for a repaired file: its path with folders joined by "_", unique in the batch. */
+function repairedName(id, taken) {
+  const base = stem(id.replace(/ \((\d+)\)$/, "_$1")).replaceAll("/", "_");
+  let name = `${base}_repaired.swc`;
+  for (let n = 2; taken.has(name); n++) name = `${base}_${n}_repaired.swc`;
+  taken.add(name);
+  return name;
+}
+
+/** Measure every loaded neuron in a worker, terminated on cancel. */
 async function measureAll(signal, step = shollStep()) {
-  if (!neurons.length || loading || running) throw new Error("Load SWC reconstructions before measuring them.");
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  signal?.throwIfAborted();
-  signal?.addEventListener("abort", abort, { once: true });
-  running = controller;
-  setBusy(true);
-  progress.begin("Measuring…");
-  try {
-    for (const [k, neuron] of neurons.entries()) {
-      await new Promise((resolve) => setTimeout(resolve));
-      controller.signal.throwIfAborted();
-      progress.setProgress(k / neurons.length, `Measuring ${neuron.name}…`);
-      neuron.analysis = analyse(neuron.morphology, step);
-    }
-    controller.signal.throwIfAborted();
-    const measuredNeurons = neurons.map(({ name, analysis }) => ({ name, analysis }));
+  if (!neurons.length || running) throw new Error("Load SWC reconstructions before measuring them.");
+  return exclusive("Measuring…", signal, async (aborted) => {
+    const analyses = await runWorker(
+      { op: "measure", items: neurons.map(({ id, morphology, repair }) => ({ id, morphology, repair })), step },
+      aborted,
+      (fraction) => progress.setProgress(fraction, "Measuring…"),
+    );
+    aborted.throwIfAborted();
+    neurons.forEach((neuron, k) => {
+      neuron.analysis = analyses[k];
+    });
+    const measuredNeurons = neurons.map(({ id, analysis }) => ({ name: id, analysis }));
     const files = {
       morphometrics: new File([morphometricsCsv(measuredNeurons)], outputName("morphometrics"), { type: "text/csv" }),
       sholl: new File([shollCsv(measuredNeurons)], outputName("sholl"), { type: "text/csv" }),
@@ -320,10 +400,13 @@ async function measureAll(signal, step = shollStep()) {
       bifurcations: { description: "Bifurcation angles", file: files.bifurcations, viewable: false },
     };
     const repaired = [];
+    const taken = new Set();
     for (const neuron of neurons) {
       if (!neuron.issues.some((issue) => issue.repaired)) continue;
-      const file = new File([writeSwc(neuron.samples, [`Repaired by NeuroMorph ${APP.version} from ${neuron.name}`])], `${stem(neuron.name)}_repaired.swc`, { type: "text/plain" });
-      rows[`repaired-${repaired.length}`] = { description: `Repaired SWC · ${neuron.name}`, file, viewable: false };
+      // The original comments first: NeuroMorpho.Org's carry the CC BY attribution.
+      const header = [...neuron.header, `Repaired by NeuroMorph ${APP.version} from ${neuron.id}`];
+      const file = new File([writeSwc(neuron.samples, header)], repairedName(neuron.id, taken), { type: "text/plain" });
+      rows[`repaired-${repaired.length}`] = { description: `Repaired SWC · ${neuron.id}`, file, viewable: false };
       repaired.push(file);
     }
     measured = true;
@@ -331,8 +414,8 @@ async function measureAll(signal, step = shollStep()) {
     $("outputSection").open = true;
     viewTabs(true);
     showView("morphometrics");
-    for (const neuron of neurons) log.log(`${neuron.name}: ${JSON.stringify(summary(neuron.analysis))}`);
-    const message = `${neurons.length === 1 ? neurons[0].name : `${neurons.length} reconstructions`} measured`;
+    for (const neuron of neurons) log.log(`${neuron.id}: ${JSON.stringify(summary(neuron.analysis))}`);
+    const message = `${neurons.length === 1 ? neurons[0].id : `${neurons.length} reconstructions`} measured`;
     progress.end(message);
     status(message);
     return {
@@ -342,16 +425,17 @@ async function measureAll(signal, step = shollStep()) {
         { role: "bifurcations", file: files.bifurcations },
         ...repaired.map((file) => ({ role: "repaired", file })),
       ],
-      provenance: { method: "NeuroM 4 morphometrics", app: APP.id, version: APP.version, shollStepUm: step, repair: $("repair").checked },
-      measurements: Object.fromEntries(neurons.map((neuron) => [neuron.name, summary(neuron.analysis)])),
+      provenance: {
+        method: "NeuroM 4 morphometrics",
+        app: APP.id,
+        version: APP.version,
+        shollStepUm: step,
+        repair: $("repair").checked,
+        ...(lastSkipped.length && { skipped: Object.fromEntries(lastSkipped.map(({ id, error }) => [id, error])) }),
+      },
+      measurements: Object.fromEntries(neurons.map((neuron) => [neuron.id, summary(neuron.analysis)])),
     };
-  } finally {
-    signal?.removeEventListener("abort", abort);
-    running = null;
-    setBusy(false);
-    progress.stopTimer();
-    progress.setCancellable(false);
-  }
+  });
 }
 
 $("runButton").addEventListener("click", () => {
@@ -366,7 +450,6 @@ $("runButton").addEventListener("click", () => {
 });
 $("cancelButton").onclick = () => {
   exampleControl.cancel();
-  loading?.abort();
   running?.abort();
 };
 
@@ -383,7 +466,6 @@ registerAppAutomation({
 });
 window.addEventListener("pagehide", () => {
   exampleControl.destroy();
-  loading?.abort();
   running?.abort();
 });
 
