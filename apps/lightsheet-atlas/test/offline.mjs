@@ -11,7 +11,7 @@ export async function verifyOffline(page, { download }) {
   await page.locator('#runButton').click();
   await expect(page.locator('#statusText')).toHaveText('38 cell candidates', { timeout: 300000 });
   const result = await download('#resultList .nd-volume-toggle:has-text("Cell candidates") .nd-download-btn');
-  assert.equal(result.filename, 'cellfinder-crop_cells.csv');
+  assert.equal(result.filename, 'cellfinder-crop_candidates.csv');
   const rows = result.bytes.toString('utf8').trim().split('\n').slice(1).map((line) => line.split(',').slice(0, 3).join(','));
   assert.deepEqual(rows.sort(), reference.cells.map((cell) => cell.slice(0, 3).join(',')).sort());
   return { filename: result.filename, cells: rows.length };

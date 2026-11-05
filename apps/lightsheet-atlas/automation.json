@@ -60,7 +60,7 @@
           "minimum": 0,
           "maximum": 1
         },
-        "cells": {
+        "candidates": {
           "type": "neuro:table",
           "mediaType": "text/csv",
           "minimum": 0,

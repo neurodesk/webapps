@@ -14,10 +14,14 @@ Registers a cleared mouse brain to the Allen Mouse Brain Common Coordinate Frame
 | Affine (NMI, `100x50x10`, from image centres) and deformable (SVF, NCC 2×2×2, `100x50x0`) registration, atlas template moving | `src/registration.js`, `@neurodesk/greedy` single-threaded WebAssembly | brainreg 1.0.16 (NiftyReg) |
 | Atlas labels on the sample (nearest neighbour) and each sample voxel's atlas coordinate (linear resampling of coordinate images, as brainreg's `deformation_field_*`) | `src/registration.js` | |
 | Cell candidate detection | `src/detect.js`, a port of cellfinder 1.10.1's classical detection (BSD-3-Clause) | `cellfinder.core.detect.detect.main` |
-| Cells to atlas regions; per-region counts, volumes and densities | `src/regions.js` | brainreg's `volumes.csv` |
+| Candidates to atlas regions; per-region counts, volumes and densities | `src/regions.js` | brainreg's `volumes.csv` |
 
-`src/pipeline.js` runs the steps; `src/worker.js` runs it in a module worker (cancel terminates
-the worker) and `validation/run-example.mjs` runs it in Node with the same WebAssembly bytes.
+`src/pipeline.js` runs the steps and `src/outputs.js` writes the files; `src/worker.js` runs them
+in a module worker (cancel terminates the worker) and `validation/run-example.mjs` runs the
+pipeline in Node with the same WebAssembly bytes. A registration-only run of an OME-Zarr image
+reads its coarsest level with voxels of at most 50 µm. Runs whose registration grid is larger
+than four atlases (a voxel size in the wrong unit) or whose buffers need more than 3 GB are
+refused before reading.
 
 ## Outputs
 
@@ -25,11 +29,15 @@ the worker) and `validation/run-example.mjs` runs it in Node with the same WebAs
   on the display grid (detection-only runs).
 - `<name>_registered-atlas.nii.gz`: Allen structure ids (uint32) on that grid, as brainreg's
   `registered_atlas.tiff`.
-- `<name>_cells.csv`: each candidate's stack voxel (x, y, z), and when registered its atlas position
-  (µm along the asr axes), structure and hemisphere.
-- `<name>_regions.csv`: per structure and hemisphere: acronym, name, Allen id, candidate count,
-  volume in the sample (mm³, from the registered labels at 50 µm) and density (candidates/mm³).
-  Without detection the count and density columns are empty.
+- `<name>_candidates.csv`: each cell candidate's stack voxel (x, y, z), and when registered its
+  atlas position (µm along the asr axes), structure and hemisphere.
+- `<name>_candidates.nii.gz`: the candidates marked on the grid, for display.
+- `<name>_regions.csv`: per structure and hemisphere: acronym, name, Allen id,
+  `candidate_count`, volume in the sample (mm³, from the registered labels at 50 µm) and
+  `candidates_per_mm3`. Without detection the count and density columns are empty.
+
+Counts are of cell candidates: no classifier runs, and no count has been compared with cells
+counted another way on the same brain.
 
 ## Validation
 
@@ -46,6 +54,17 @@ the worker) and `validation/run-example.mjs` runs it in Node with the same WebAs
   (p90 168 µm) inside the brain, about two atlas voxels. The app's brain extends further
   caudally than brainreg's (medulla 38.0 vs 31.5 mm³), so it labels more of the cut brainstem.
   The tests hold the app's labels and region table to the recorded sha256 in Node and in Chromium.
+  Dice against brainreg measures how far two registration methods agree, not accuracy.
+- **Against brainreg's outputs** (`test/brainreg.test.js`; brainreg's `registered_atlas` and
+  `deformation_field_*` for the example are pinned on Hugging Face in
+  `validation/brainreg-reference.json`, under the Allen terms): the whole-brain Dice is at least
+  0.97 and the median distance between the two maps at most 100 µm. 8,631 stack points inside
+  brainreg's brain are injected as candidates (`runPipeline`'s `cells`) through the whole
+  register, map and assign path: their atlas coordinates lie a median of 1.9 atlas voxels from
+  brainreg's deformation field at the same voxels, 98 % get brainreg's hemisphere, and of those at
+  least two voxels inside a major division 99.8 % get brainreg's division (the test requires a
+  median of at most 2 voxels and 95 %). The same stack reoriented to `ras` (40 × 50 × 40 µm) maps
+  the same points to the same place.
 
 ## Deliberate divergences
 
@@ -63,7 +82,12 @@ the worker) and `validation/run-example.mjs` runs it in Node with the same WebAs
   spans two pixels; coarser stacks are refused. A crop cannot be registered to the whole-brain
   atlas, so its example runs detection only, and the whole-brain example (50 × 40 × 40 µm) runs
   registration only. No openly licensed whole brain small enough for a browser has both
-  resolvable cells and a known registration, so the combined count is tested with the unit tests.
+  resolvable cells and a known registration, so the combined path is tested by injecting
+  candidates into the whole-brain example (above).
+- cellfinder filters uint32, int32 and float64 stacks in float64; this port filters in float32
+  only, so detection refuses those types (registration accepts them). For 8- and 16-bit and float32
+  stacks the clipping, threshold and soma values follow the sample type as in cellfinder's
+  `DetectionSettings`.
 
 ## Data
 
@@ -71,9 +95,12 @@ the worker) and `validation/run-example.mjs` runs it in Node with the same WebAs
   unchanged, repacked as OME-TIFF on `neurodeskorg/webapps` (`lightsheet-atlas/example/`).
 - Atlas: Allen CCFv3 2017 via the BrainGlobe Atlas API (`allen_mouse_50um` 3.1), written by
   `validation/prepare_atlas.py` and pinned in `models/lightsheet-atlas.manifest.json`.
-  © 2015–2017 Allen Institute for Brain Science, redistributed for noncommercial research use
-  under the [Allen Institute terms of use](https://alleninstitute.org/terms-of-use/); cite
-  Wang et al. 2020, Cell.
+  © 2015–2017 Allen Institute for Brain Science. Both offline asset inventories bundle it. It is
+  redistributed for research and noncommercial use only under the
+  [Allen Institute terms of use](https://alleninstitute.org/terms-of-use/); commercial
+  redistribution of an offline bundle needs the Allen Institute's written permission. Cite the
+  dataset (Allen Institute for Brain Science (2017), Allen Mouse Brain Common Coordinate
+  Framework, version 3 [dataset], atlas.brain-map.org) and Wang et al. 2020, Cell.
 
 ## Licence
 

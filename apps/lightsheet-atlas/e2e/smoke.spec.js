@@ -1,7 +1,8 @@
 // Browser tests against the production build: both examples run their real analysis on the
 // hosted bytes, and the downloads match the references the Node tests hold the pipeline to.
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { fetchPinned } from "../validation/run-example.mjs";
@@ -55,10 +56,52 @@ test("the cellfinder crop example finds cellfinder's 38 candidates", async ({ pa
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toHaveText("38 cell candidates", { timeout: 200000 });
   const cells = await downloadRow(page, "Cell candidates");
-  expect(cells.name).toBe("cellfinder-crop_cells.csv");
+  expect(cells.name).toBe("cellfinder-crop_candidates.csv");
   const rows = cells.bytes.toString().trim().split("\n").slice(1).map((line) => line.split(",").slice(0, 3).map(Number));
   const expected = cellfinder.cells.map((cell) => cell.slice(0, 3));
   expect(rows.sort((a, b) => a[2] - b[2] || a[1] - b[1] || a[0] - b[0])).toEqual(expected.sort((a, b) => a[2] - b[2] || a[1] - b[1] || a[0] - b[0]));
+});
+
+test("the detection threshold set in the form reaches the worker", async ({ page }) => {
+  test.setTimeout(240000);
+  await page.goto("/");
+  await page.locator("select[data-neurodesk-example]").selectOption("cellfinder-crop");
+  await expect(page.locator("#runButton")).toBeEnabled({ timeout: 120000 });
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#nSdsAboveMeanThresh").fill("20");
+  await page.locator("#runButton").click();
+  // cellfinder's default 10 SD gives 38 candidates on the crop; 20 SD gives 10 (Node pipeline).
+  await expect(page.locator("#statusText")).toHaveText("10 cell candidates", { timeout: 200000 });
+});
+
+// A two-chunk OME-Zarr 0.4 image (zarr v2, uncompressed uint16), 6 planes of 24 × 32 at 5 × 2 × 2 µm.
+function writeOmeZarr(root) {
+  const shape = [6, 24, 32];
+  mkdirSync(join(root, "0"), { recursive: true });
+  writeFileSync(join(root, ".zgroup"), JSON.stringify({ zarr_format: 2 }));
+  const axes = ["z", "y", "x"].map((name) => ({ name, type: "space", unit: "micrometer" }));
+  writeFileSync(join(root, ".zattrs"), JSON.stringify({ multiscales: [{ version: "0.4", axes, datasets: [{ path: "0", coordinateTransformations: [{ type: "scale", scale: [5, 2, 2] }] }] }] }));
+  writeFileSync(join(root, "0", ".zarray"), JSON.stringify({ zarr_format: 2, shape, chunks: [3, 24, 32], dtype: "<u2", compressor: null, fill_value: 0, order: "C", filters: null }));
+  for (const chunk of [0, 1]) {
+    const data = Uint16Array.from({ length: 3 * 24 * 32 }, (_, i) => 100 + ((i + chunk) % 7));
+    writeFileSync(join(root, "0", `${chunk}.0.0`), Buffer.from(data.buffer));
+  }
+}
+
+test("an OME-Zarr folder chosen with the folder picker loads and runs", async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  const root = testInfo.outputPath("sample.ome.zarr");
+  writeOmeZarr(root);
+  await page.goto("/");
+  await page.locator("#folderInput").setInputFiles(root);
+  await expect(page.locator("#fileInfo")).toHaveText("sample.ome.zarr · 6 × 24 × 32 (z × y × x) · uint16", { timeout: 60000 });
+  await expect(page.locator("#voxelZ")).toHaveValue("5");
+  await expect(page.locator("#voxelX")).toHaveValue("2");
+  await page.locator("#orientation").fill("asr");
+  await page.locator("#register").uncheck();
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("0 cell candidates", { timeout: 60000 });
+  await expect(page.locator("#resultList")).toContainText("Cell candidates · 0");
 });
 
 test("the whole-brain example registers to the Allen atlas as the Node pipeline does", async ({ page }) => {

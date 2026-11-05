@@ -13,9 +13,20 @@ The orientation notation and the registration outputs follow brainreg
 
 Registration runs Greedy through @neurodesk/greedy (Apache-2.0; see packages/greedy/NOTICE).
 
-The Allen Mouse Brain Common Coordinate Framework v3 (c) 2015-2017 Allen Institute for Brain
-Science is downloaded at run time, not bundled; it is redistributed for noncommercial
-research use under the Allen Institute terms of use (https://alleninstitute.org/terms-of-use/).
+The Allen Mouse Brain Common Coordinate Framework v3, (c) 2015-2017 Allen Institute for Brain
+Science, is not part of this source. The web app downloads it at run time from the Neurodesk
+dataset on Hugging Face, and the offline (Standalone) bundles include it in their asset
+inventories. It is redistributed for research and noncommercial use only, under the Allen
+Institute terms of use (https://alleninstitute.org/terms-of-use/). Commercial use, including
+commercial redistribution of an offline bundle that contains it, needs the Allen Institute's
+prior written permission.
+
+Cite the atlas as:
+Allen Institute for Brain Science (2017). Allen Mouse Brain Common Coordinate Framework,
+version 3 [dataset]. Available from atlas.brain-map.org.
+Wang Q, Ding SL, Li Y, et al. The Allen Mouse Brain Common Coordinate Framework: a 3D reference
+atlas. Cell. 2020;181(4):936-953.e20. doi:10.1016/j.cell.2020.04.007
+
 BSD 3-Clause License
 
 Copyright (c) 2020, Adam Tyson, University College London

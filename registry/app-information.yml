@@ -2340,6 +2340,10 @@ apps:
         reference: "Wang Q, Ding SL, Li Y, et al. The Allen Mouse Brain Common Coordinate Framework: a 3D reference atlas. Cell. 2020;181(4):936-953.e20."
         doi: 10.1016/j.cell.2020.04.007
       - group: Atlas
+        title: Allen Mouse Brain Common Coordinate Framework, version 3 (dataset)
+        reference: "Allen Institute for Brain Science (2017). Allen Mouse Brain Common Coordinate Framework, version 3 [dataset]. Available from atlas.brain-map.org."
+        url: https://atlas.brain-map.org
+      - group: Atlas
         title: BrainGlobe Atlas API
         reference: "Claudi F, Petrucco L, Tyson AL, Branco T, Margrie TW, Portugues R. BrainGlobe Atlas API: a common interface for neuroanatomical atlases. Journal of Open Source Software. 2020;5(54):2668."
         doi: 10.21105/joss.02668

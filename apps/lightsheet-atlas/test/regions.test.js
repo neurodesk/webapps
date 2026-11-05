@@ -37,7 +37,7 @@ test('the region table gives counts, volumes and densities, empty without cells'
   const voxels = new Map([['1:left', 8], ['2:right', 2]]);
   const cells = [{ index: 1, hemisphere: 'left' }, { index: 1, hemisphere: 'left' }, { index: 0, hemisphere: null }];
   const rows = regionReport({ voxels, cells, table, voxelVolumeMm3: 0.5 });
-  assert.equal(regionCsv(rows), 'acronym,name,structure_id,hemisphere,cell_count,volume_mm3,cells_per_mm3\n'
+  assert.equal(regionCsv(rows), 'acronym,name,structure_id,hemisphere,candidate_count,volume_mm3,candidates_per_mm3\n'
     + 'Isocortex,Isocortex,315,left,2,4,0.5\n'
     + 'TH,"Thalamus, sensory, motor",549,right,0,1,0\n');
   const volumesOnly = regionCsv(regionReport({ voxels, table, voxelVolumeMm3: 0.5 }));

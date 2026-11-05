@@ -27,8 +27,27 @@ export const DEFAULT_SETTINGS = Object.freeze({
   nSplittingIter: 10,
 });
 
-const UINT16_MAX = 65535;
 const FLOAT32_MAX_INT = 2 ** 24;
+/** Soma voxels that may be held in open structures at once (12 bytes each). */
+export const MAX_OPEN_POINTS = 50_000_000;
+
+// get_max_possible_int_value for the sample types that cellfinder filters in float32: the
+// integer maximum, or 2 ** nmant for float32.
+const FLOAT32_FILTERED_MAX = { uint8: 255, int8: 127, uint16: 65535, int16: 32767, float32: 2 ** 23 };
+
+/**
+ * cellfinder 1.10.1's DetectionSettings values for the stack's sample type (setup_filters.py):
+ * input is clipped to max - 2, thresholded voxels become max - 1 and soma voxels max, where max
+ * is the largest integer the type holds. Types cellfinder filters in float64 (uint32, int32,
+ * float64) are refused: this port filters in float32 only.
+ */
+export function dtypeLimits(dtype) {
+  const max = FLOAT32_FILTERED_MAX[dtype];
+  if (max === undefined) {
+    throw new Error(`Cell detection reads 8- and 16-bit integer and float32 stacks; this stack is ${dtype}. Convert it to uint16 for detection; registration accepts it as it is.`);
+  }
+  return { clippingValue: max - 2, thresholdValue: max - 1, somaValue: max };
+}
 
 function roundHalfEven(value) {
   const floor = Math.floor(value);
@@ -162,7 +181,7 @@ export function median3x3(src, height, width) {
 }
 
 /** The thresholded plane (threshold value or 0) and the in-brain tile mask of one plane. */
-export function filterPlane(rawPlane, height, width, settings, { clippingValue = UINT16_MAX - 2, thresholdValue = UINT16_MAX - 1 } = {}) {
+export function filterPlane(rawPlane, height, width, settings, { clippingValue, thresholdValue } = dtypeLimits('uint16')) {
   const n = height * width;
   const plane = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -269,9 +288,50 @@ export function ballKernel(xy, z) {
   return kernel;
 }
 
-/** Connected structures over consecutive planes, as cellfinder's CellDetector (6-connectivity). */
+/** A structure's voxels, in the order they were added: x, y, z triples in a growing Uint32Array. */
+export class PointList {
+  constructor() {
+    this.data = new Uint32Array(48);
+    this.length = 0;
+  }
+
+  reserve(extra) {
+    const needed = (this.length + extra) * 3;
+    if (needed <= this.data.length) return;
+    const grown = new Uint32Array(Math.max(needed, this.data.length * 2));
+    grown.set(this.data.subarray(0, this.length * 3));
+    this.data = grown;
+  }
+
+  push(x, y, z) {
+    this.reserve(1);
+    const i = this.length * 3;
+    this.data[i] = x;
+    this.data[i + 1] = y;
+    this.data[i + 2] = z;
+    this.length++;
+  }
+
+  append(other) {
+    this.reserve(other.length);
+    this.data.set(other.data.subarray(0, other.length * 3), this.length * 3);
+    this.length += other.length;
+  }
+
+  forEach(visit) {
+    const { data } = this;
+    for (let i = 0; i < this.length; i++) visit(data[3 * i], data[3 * i + 1], data[3 * i + 2]);
+  }
+}
+
+/**
+ * Connected structures over consecutive planes, as cellfinder's CellDetector (6-connectivity).
+ * With `onClose(id, points)`, a structure that gained no voxel on the latest plane can no longer
+ * grow; it is handed over and dropped, so only structures touching the latest plane stay in
+ * memory. Structure ids rise in the order cellfinder's dict holds them.
+ */
 export class StructureDetector {
-  constructor(height, width, startZ) {
+  constructor(height, width, startZ, { onClose = null, maxOpenPoints = MAX_OPEN_POINTS } = {}) {
     this.height = height;
     this.width = width;
     this.z = startZ;
@@ -279,6 +339,9 @@ export class StructureDetector {
     this.obsolete = new Map();
     this.structures = new Map();
     this.previous = null;
+    this.onClose = onClose;
+    this.maxOpenPoints = maxOpenPoints;
+    this.openPoints = 0;
   }
 
   resolve(id) {
@@ -305,21 +368,49 @@ export class StructureDetector {
           neighbours[k] = this.resolve(neighbours[k]);
           if (neighbours[k] !== 0 && neighbours[k] < updated) updated = neighbours[k];
         }
-        if (!this.structures.has(updated)) this.structures.set(updated, []);
+        if (!this.structures.has(updated)) this.structures.set(updated, new PointList());
         const target = this.structures.get(updated);
         for (const id of [...new Set(neighbours)].sort((p, q) => p - q)) {
           if (id > updated) {
-            for (const point of this.structures.get(id)) target.push(point);
+            target.append(this.structures.get(id));
             this.structures.delete(id);
             this.obsolete.set(id, updated);
           }
         }
-        target.push([x, y, this.z]);
+        target.push(x, y, this.z);
         ids[i] = updated;
+        if (++this.openPoints > this.maxOpenPoints) {
+          throw new RangeError(`More than ${this.maxOpenPoints.toLocaleString('en')} soma voxels are in open structures at plane ${this.z}: raise the detection threshold or crop the stack.`);
+        }
       }
     }
+    // Later voxels of the plane can merge structures earlier voxels were labelled with: resolve
+    // the plane's ids once, so the merge chains are no longer needed.
+    const live = new Set();
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i] === 0) continue;
+      ids[i] = this.resolve(ids[i]);
+      live.add(ids[i]);
+    }
+    this.obsolete.clear();
     this.previous = ids;
     this.z += 1;
+    if (this.onClose) {
+      for (const [id, points] of this.structures) {
+        if (!live.has(id)) this.close(id, points);
+      }
+    }
+  }
+
+  close(id, points) {
+    this.structures.delete(id);
+    this.openPoints -= points.length;
+    this.onClose(id, points);
+  }
+
+  /** Hand over every structure still open (with `onClose`). */
+  flush() {
+    for (const [id, points] of [...this.structures]) this.close(id, points);
   }
 
   /** split_cells' get_cell_centres: the per-point running mean (a / n summed), rounded half to even. */
@@ -330,11 +421,11 @@ export class StructureDetector {
       let a = 0;
       let b = 0;
       let c = 0;
-      for (const [x, y, z] of points) {
+      points.forEach((x, y, z) => {
         a += x / n;
         b += y / n;
         c += z / n;
-      }
+      });
       result.push([roundHalfEven(a), roundHalfEven(b), roundHalfEven(c)]);
     }
     return result;
@@ -346,11 +437,11 @@ function structureCentre(points) {
   let a = 0;
   let b = 0;
   let c = 0;
-  for (const [x, y, z] of points) {
+  points.forEach((x, y, z) => {
     a += x;
     b += y;
     c += z;
-  }
+  });
   const n = points.length;
   return [roundHalfEven(a / n), roundHalfEven(b / n), roundHalfEven(c / n)];
 }
@@ -463,11 +554,11 @@ function splitCluster(points, settings) {
   const padZ = [(ball.z - 1) >> 1, ball.z - 1 - ((ball.z - 1) >> 1)];
   let [minX, minY, minZ] = [Infinity, Infinity, Infinity];
   let [maxX, maxY, maxZ] = [-Infinity, -Infinity, -Infinity];
-  for (const [x, y, z] of points) {
+  points.forEach((x, y, z) => {
     minX = Math.min(minX, x); maxX = Math.max(maxX, x);
     minY = Math.min(minY, y); maxY = Math.max(maxY, y);
     minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
-  }
+  });
   const shape = [maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1];
   const X = shape[0] + pad[0] + pad[1];
   const Y = shape[1] + pad[0] + pad[1];
@@ -475,7 +566,9 @@ function splitCluster(points, settings) {
   const threshold = FLOAT32_MAX_INT - 1;
   const soma = FLOAT32_MAX_INT;
   const volume = Array.from({ length: Z }, () => new Float32Array(X * Y));
-  for (const [x, y, z] of points) volume[z - minZ + padZ[0]][(y - minY + pad[0]) * X + (x - minX + pad[0])] = threshold;
+  points.forEach((x, y, z) => {
+    volume[z - minZ + padZ[0]][(y - minY + pad[0]) * X + (x - minX + pad[0])] = threshold;
+  });
   const original = structureCentre(points);
   const detectors = [];
   for (let iter = 0; iter < settings.nSplittingIter; iter++) {
@@ -513,33 +606,38 @@ function splitCluster(points, settings) {
 
 /**
  * Streaming detector. Feed planes in z order with `push(plane)`; `finish()` returns
- * { cells: [[x, y, z], ...], artifacts: [...] } in voxel indices of the input stack.
+ * { cells: [[x, y, z], ...], artifacts: [...] } in voxel indices of the input stack. `dtype` is the
+ * stack's sample type, which sets the clipping, threshold and soma values as in cellfinder.
+ * Structures are classified (cell, split cluster or artefact) as soon as they close, and reported
+ * in cellfinder's order.
  */
-export function createDetector({ height, width, voxelSizesUm, options = {} }) {
+export function createDetector({ height, width, voxelSizesUm, dtype = 'uint16', options = {}, maxOpenPoints = MAX_OPEN_POINTS }) {
   const settings = deriveSettings(voxelSizesUm, options);
-  const threshold = UINT16_MAX - 1;
-  const soma = UINT16_MAX;
-  const filter = new BallFilter(height, width, settings.ball, settings.ballOverlapFraction, threshold, soma);
-  const detector = new StructureDetector(height, width, filter.firstValidPlane);
+  const limits = dtypeLimits(dtype);
+  const filter = new BallFilter(height, width, settings.ball, settings.ballOverlapFraction, limits.thresholdValue, limits.somaValue);
+  const found = [];
+  const classify = (id, points) => {
+    const volume = points.length;
+    if (volume < settings.maxCellVolume) found.push({ id, cells: [structureCentre(points)] });
+    else if (volume < settings.maxClusterSize) found.push({ id, cells: splitCluster(points, settings) });
+    else found.push({ id, artifact: structureCentre(points) });
+  };
+  const detector = new StructureDetector(height, width, filter.firstValidPlane, { onClose: classify, maxOpenPoints });
   let planes = 0;
   return {
-    settings,
+    settings: { ...settings, ...limits, dtype },
     push(rawPlane) {
       if (rawPlane.length !== height * width) throw new Error(`Plane ${planes} has ${rawPlane.length} pixels; expected ${height * width}.`);
-      const { plane, tiles } = filterPlane(rawPlane, height, width, settings);
+      const { plane, tiles } = filterPlane(rawPlane, height, width, settings, limits);
       planes++;
       const centre = filter.push(plane, tiles);
-      if (centre) detector.process((i) => centre[i] === soma);
+      if (centre) detector.process((i) => centre[i] === limits.somaValue);
     },
     finish() {
-      const cells = [];
-      const artifacts = [];
-      for (const points of detector.structures.values()) {
-        const volume = points.length;
-        if (volume < settings.maxCellVolume) cells.push(structureCentre(points));
-        else if (volume < settings.maxClusterSize) cells.push(...splitCluster(points, settings));
-        else artifacts.push(structureCentre(points));
-      }
+      detector.flush();
+      found.sort((p, q) => p.id - q.id);
+      const cells = found.flatMap((entry) => entry.cells ?? []);
+      const artifacts = found.filter((entry) => entry.artifact).map((entry) => entry.artifact);
       return { cells, artifacts, planes };
     },
   };

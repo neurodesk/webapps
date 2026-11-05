@@ -4,9 +4,11 @@
 //
 // The sample is Greedy's fixed image and the atlas template its moving image, so one transform
 // both carries labels into the sample and maps sample points (cells) into the atlas.
-// `api` is the Greedy WebAssembly module (@neurodesk/greedy, wasm-single build).
+// `api` is the Greedy WebAssembly module (@neurodesk/greedy, wasm-single build), driven through
+// @neurodesk/greedy's wrappers.
 
 import { createNiftiFromData, createNiftiHeaderFromVolume, readNiftiImageData } from '@neurodesk/webapp-components/file-io/nifti';
+import { registerAffineGreedy, registerSvfGreedy, resliceGreedy } from '@neurodesk/greedy';
 
 export const REGISTRATION = Object.freeze({
   affineIterations: '100x50x10',
@@ -50,17 +52,17 @@ export function registerToAtlas({ api, sample, shape, atlas, onStage = () => {},
   const sampleNifti = gridNifti(sample, shape, atlas.template);
   const moving = bytes(atlas.template);
   onStage('affine');
-  const matrix = api.register_affine_masked_wasm(sampleNifti, moving, null, 'NMI', settings.affineIterations, true, null);
+  const matrix = registerAffineGreedy({ api, fixed: sampleNifti, moving, iterations: settings.affineIterations });
   onStage('deformable');
-  const warp = api.register_svf_masked_wasm(sampleNifti, moving, null, matrix, settings.deformableMetric, settings.deformableIterations);
+  const warp = registerSvfGreedy({ api, fixed: sampleNifti, moving, matrix, metric: settings.deformableMetric, iterations: settings.deformableIterations });
   onStage('labels');
-  const resample = (image, nearest, fill) => readNiftiImageData(
-    api.reslice_warp_affine_options(sampleNifti, image, warp, matrix, null, nearest, fill),
+  const resample = (image, interpolation, fill) => readNiftiImageData(
+    resliceGreedy({ api, fixed: sampleNifti, moving: image, registration: { matrix, warp }, interpolation, fill }),
   ).data;
-  const labelValues = resample(bytes(atlas.annotation), true, 0);
+  const labelValues = resample(bytes(atlas.annotation), 'nearest', 0);
   const labels = Uint16Array.from(labelValues, (v) => Math.round(v));
   onStage('coordinates');
-  const coordinates = [0, 1, 2].map((axis) => resample(gridNifti(coordinateImage(atlas.shape, axis), atlas.shape, atlas.template), false, -1));
+  const coordinates = [0, 1, 2].map((axis) => resample(gridNifti(coordinateImage(atlas.shape, axis), atlas.shape, atlas.template), 'linear', -1));
   return { matrix, warp, labels, coordinates, sampleNifti };
 }
 

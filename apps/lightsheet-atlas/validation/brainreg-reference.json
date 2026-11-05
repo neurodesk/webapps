@@ -4,7 +4,40 @@
   "version": "brainreg 1.0.16 (NiftyReg backend), brainglobe-atlasapi 3.0.2",
   "command": "brainreg brain/ out/ -v 50 40 40 --orientation psl --atlas allen_mouse_50um --brain_geometry full",
   "settings": "defaults: affine 6 steps (5 used), freeform 6 steps (4 used), bending energy 0.95, grid spacing -10, 128 histogram bins, default preprocessing",
-  "input": "BrainGlobe test data (CC0) brainreg/brainreg-test-data.zip::input/brain, the example's planes"
+  "input": "BrainGlobe test data (CC0) brainreg/brainreg-test-data.zip::input/brain, the example's planes",
+  "outputs": {
+   "description": "brainreg's registered_atlas.tiff (Allen ids, uint32) and deformation_field_0-2.tiff (atlas coordinate in mm per asr axis, float32) on the 270 x 154 x 217 sample grid, as gzipped NIfTI with voxels unchanged (axis 0 fastest). Derived from the Allen CCFv3: Allen Institute terms of use, research and noncommercial use only.",
+   "files": [
+    {
+     "id": "registered_atlas",
+     "filename": "registered_atlas.nii.gz",
+     "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/600261b6cafc6a94175604cd5a98164f924685c2/lightsheet-atlas/validation/brainreg-test-brain/registered_atlas.nii.gz",
+     "sha256": "e98034793792af3a663211176820a634d58034fb24be431fe9154ce653fb2bdd",
+     "bytes": 915874
+    },
+    {
+     "id": "deformation_field_0",
+     "filename": "deformation_field_0.nii.gz",
+     "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/600261b6cafc6a94175604cd5a98164f924685c2/lightsheet-atlas/validation/brainreg-test-brain/deformation_field_0.nii.gz",
+     "sha256": "eeba9b1a2b7f6e64e0b722dfdf9ffedd8b5c6cf146a70dc0ea8e1e4dffecb635",
+     "bytes": 31937262
+    },
+    {
+     "id": "deformation_field_1",
+     "filename": "deformation_field_1.nii.gz",
+     "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/600261b6cafc6a94175604cd5a98164f924685c2/lightsheet-atlas/validation/brainreg-test-brain/deformation_field_1.nii.gz",
+     "sha256": "0d9ccec7e42c912adaccd6088abc16f7b70f989955327ab62b2bd79cd84443fa",
+     "bytes": 30824597
+    },
+    {
+     "id": "deformation_field_2",
+     "filename": "deformation_field_2.nii.gz",
+     "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/600261b6cafc6a94175604cd5a98164f924685c2/lightsheet-atlas/validation/brainreg-test-brain/deformation_field_2.nii.gz",
+     "sha256": "5f1bc933d558f36d1c592dd851af145bb17f6f1650a8749606d83c4b76c47925",
+     "bytes": 27923087
+    }
+   ]
+  }
  },
  "app": {
   "registration": "Greedy (@neurodesk/greedy wasm-single): affine NMI 100x50x10 from image centres, then SVF NCC 2x2x2 100x50x0; atlas template moving",
@@ -99,7 +132,7 @@
  },
  "ours": {
   "registeredAtlasSha256": "8d45dc471b080754dfbc5cd403aefaa83ae591348bfa9852a90672a143aac2d1",
-  "regionsCsvSha256": "0afd633c1087400230d1cddb9e2acd5f0df03a8265a9f395bdcf3587d18f5c4f",
+  "regionsCsvSha256": "f904eb989640a22e07137e1c18584f2fcf823ed18799c514f781d862bd469989",
   "regionRows": 1365
  }
 }

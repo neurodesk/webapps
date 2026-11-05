@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "app": "lightsheet-atlas",
-  "license": "Allen Institute terms of use (noncommercial redistribution with citation)",
+  "license": "Allen Institute terms of use: research and noncommercial use only, with citation; commercial redistribution needs the Allen Institute's written permission",
   "preprocessing_contract": "apps/lightsheet-atlas/validation/prepare_atlas.py: BrainGlobe allen_mouse_50um 3.1, asr axis order, annotation as uint16 indices into the structures file",
   "atlas": {
     "name": "Allen Mouse Brain Common Coordinate Framework v3 (2017), 50 µm",
@@ -9,6 +9,7 @@
     "source_url": "https://brainglobe.s3.us-west-2.amazonaws.com/atlas/",
     "citation": "Wang Q, Ding SL, Li Y, et al. The Allen Mouse Brain Common Coordinate Framework: a 3D reference atlas. Cell. 2020;181(4):936-953.e20.",
     "doi": "10.1016/j.cell.2020.04.007",
+    "dataset_citation": "Allen Institute for Brain Science (2017). Allen Mouse Brain Common Coordinate Framework, version 3 [dataset]. Available from atlas.brain-map.org.",
     "terms": "https://alleninstitute.org/terms-of-use/",
     "shape": [264, 160, 228],
     "resolution_um": 50,

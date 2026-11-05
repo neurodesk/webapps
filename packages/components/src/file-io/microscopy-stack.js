@@ -8,6 +8,7 @@
 // TIFF decoding is geotiff (MIT); OME-Zarr is zarrita (MIT). Both load on first use.
 
 const PLANE_LIMIT_BYTES = 1024 * 1024 * 1024;
+const SLAB_LIMIT_BYTES = 512 * 1024 * 1024;
 
 const DTYPES = {
   '1:8': 'uint8', '1:16': 'uint16', '1:32': 'uint32',
@@ -22,9 +23,12 @@ const UNIT_TO_UM = new Map([
   ['cm', 1e4], ['m', 1e6], ['meter', 1e6], ['metre', 1e6],
 ]);
 
-/** Microns per `unit` (OME, ImageJ and NGFF spellings), or null for an unknown unit. */
+/**
+ * Microns per `unit` (OME, ImageJ and NGFF spellings), or null for an unknown or missing unit:
+ * a size without a unit is not assumed to be in microns.
+ */
 export function micronsPerUnit(unit) {
-  if (unit === undefined || unit === null || unit === '') return 1;
+  if (unit === undefined || unit === null || unit === '') return null;
   const key = String(unit).trim().toLowerCase().replace('\\u00b5', 'µ');
   return UNIT_TO_UM.get(key) ?? UNIT_TO_UM.get(String(unit).trim()) ?? null;
 }
@@ -49,7 +53,8 @@ export function parseOmeXml(description) {
   const size = (axis) => {
     const value = attribute(tag, `PhysicalSize${axis}`);
     if (value === undefined) return null;
-    const scale = micronsPerUnit(attribute(tag, `PhysicalSize${axis}Unit`));
+    // The OME schema's default unit is the micrometre.
+    const scale = micronsPerUnit(attribute(tag, `PhysicalSize${axis}Unit`) ?? 'µm');
     const number = Number(value);
     return scale === null || !(number > 0) ? null : number * scale;
   };
@@ -90,13 +95,16 @@ async function tag(image, name) {
   return directory.loadValue(name);
 }
 
+// ExtraSamples values 1 (associated) and 2 (unassociated) are alpha; 0 is an unspecified channel.
+const isAlpha = (value) => value === 1 || value === 2;
+
 async function describePage(image, name) {
   const samples = image.getSamplesPerPixel();
   const extra = (await tag(image, 'ExtraSamples')) ?? [];
-  const extraCount = Array.isArray(extra) || ArrayBuffer.isView(extra) ? extra.length : 1;
+  const alphaCount = (Array.isArray(extra) || ArrayBuffer.isView(extra) ? [...extra] : [extra]).filter(isAlpha).length;
   const photometric = await tag(image, 'PhotometricInterpretation');
   if (photometric === 3) throw new Error(`${name} is a palette (indexed colour) TIFF; save the channel as greyscale.`);
-  if (samples - extraCount !== 1) {
+  if (samples - alphaCount !== 1) {
     throw new Error(`${name} has ${samples} samples per pixel (${photometric === 2 ? 'RGB' : 'several channels'}); save one greyscale channel per stack.`);
   }
   const bits = image.getBitsPerSample(0);
@@ -184,7 +192,7 @@ export async function openTiffStack(files, { maxPlaneBytes = PLANE_LIMIT_BYTES }
         throw new Error(`${name} plane ${z} is ${current.width} × ${current.height} ${current.dtype}; the stack is ${page.width} × ${page.height} ${page.dtype}.`);
       }
       const [data] = await image.readRasters({ samples: [0] });
-      return page.whiteIsZero ? invertWhiteIsZero(data, page.dtype) : data;
+      return current.whiteIsZero ? invertWhiteIsZero(data, current.dtype) : data;
     },
   };
 }
@@ -234,7 +242,7 @@ export function ngffLevels(multiscale) {
  * Open an OME-Zarr image from the files of its folder (picked or dropped, with relative paths).
  * Non-spatial axes (t, c) must have length 1, or `channel` picks one channel.
  */
-export async function openOmeZarrStack(files, { channel = 0, maxPlaneBytes = PLANE_LIMIT_BYTES } = {}) {
+export async function openOmeZarrStack(files, { channel = 0, maxPlaneBytes = PLANE_LIMIT_BYTES, maxSlabBytes = SLAB_LIMIT_BYTES } = {}) {
   const list = [...files];
   const paths = list.map(fileName);
   const marker = paths.map((path) => /(^|\/)(\.zattrs|zarr\.json)$/.exec(path) && path).filter(Boolean)
@@ -266,6 +274,7 @@ export async function openOmeZarrStack(files, { channel = 0, maxPlaneBytes = PLA
   const [, height, width] = described[0].shape;
   const bytes = arrays[0].dtype === 'float64' ? 8 : arrays[0].dtype.endsWith('32') ? 4 : arrays[0].dtype.endsWith('16') ? 2 : 1;
   if (height * width * bytes > maxPlaneBytes) throw new Error(`A ${width} × ${height} plane needs more than ${Math.round(maxPlaneBytes / 2 ** 20)} MB.`);
+  let slab = null;
   return {
     kind: 'ome-zarr',
     name: root.replace(/\/$/, '') || list[0]?.name || 'OME-Zarr',
@@ -273,14 +282,27 @@ export async function openOmeZarrStack(files, { channel = 0, maxPlaneBytes = PLA
     dtype,
     voxelSizeUm: described[0].voxelSizeUm,
     levels: described,
+    // Planes are read from the z-chunk slab that holds them, and the last slab is kept, so a
+    // chunk several planes deep is decoded once rather than once per plane.
     async readPlane(z, level = 0) {
-      const selection = axes.map((name) => (name === 'z' ? z : name === 'c' ? channel : ['y', 'x'].includes(name) ? null : 0));
-      const chunk = await zarr.get(arrays[level], selection);
-      const yFirst = index('y') < index('x');
-      if (yFirst) return chunk.data;
-      const [lh, lw] = described[level].shape.slice(1);
+      const [depth, lh, lw] = described[level].shape;
+      if (!Number.isInteger(z) || z < 0 || z >= depth) throw new RangeError(`Plane ${z} is outside 0-${depth - 1}.`);
+      const chunkDepth = arrays[level].chunks[index('z')];
+      const z0 = Math.floor(z / chunkDepth) * chunkDepth;
+      const z1 = Math.min(depth, z0 + chunkDepth);
+      const cached = slab && slab.level === level && z >= slab.z0 && z < slab.z1;
+      if (!cached) {
+        const fits = (z1 - z0) * lh * lw * bytes <= maxSlabBytes;
+        const [from, to] = fits ? [z0, z1] : [z, z + 1];
+        const selection = axes.map((name) => (name === 'z' ? zarr.slice(from, to) : name === 'c' ? channel : ['y', 'x'].includes(name) ? null : 0));
+        slab = { level, z0: from, z1: to, chunk: await zarr.get(arrays[level], selection) };
+      }
+      const { chunk } = slab;
+      const kept = axes.filter((name) => ['z', 'y', 'x'].includes(name));
+      const stride = Object.fromEntries(kept.map((name, i) => [name, chunk.stride[i]]));
+      const base = (z - slab.z0) * stride.z;
       const out = new chunk.data.constructor(lh * lw);
-      for (let x = 0; x < lw; x++) for (let y = 0; y < lh; y++) out[y * lw + x] = chunk.data[x * lh + y];
+      for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) out[y * lw + x] = chunk.data[base + y * stride.y + x * stride.x];
       return out;
     },
   };

@@ -72,8 +72,8 @@ export function outputNames(inputName) {
   return {
     sample: `${stem}_atlas-grid.nii.gz`,
     registeredAtlas: `${stem}_registered-atlas.nii.gz`,
-    marks: `${stem}_cells.nii.gz`,
-    cells: `${stem}_cells.csv`,
+    marks: `${stem}_candidates.nii.gz`,
+    candidates: `${stem}_candidates.csv`,
     regions: `${stem}_regions.csv`,
   };
 }

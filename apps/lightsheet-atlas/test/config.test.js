@@ -29,6 +29,7 @@ test('form values become run settings, and errors name their field', () => {
 });
 
 test('outputs are named after the input', () => {
-  assert.equal(outputNames('cellfinder-crop.ome.tif').cells, 'cellfinder-crop_cells.csv');
+  assert.equal(outputNames('cellfinder-crop.ome.tif').candidates, 'cellfinder-crop_candidates.csv');
+  assert.equal(outputNames('cellfinder-crop.ome.tif').marks, 'cellfinder-crop_candidates.nii.gz');
   assert.equal(outputNames('my brain.zarr').registeredAtlas, 'my_brain_registered-atlas.nii.gz');
 });

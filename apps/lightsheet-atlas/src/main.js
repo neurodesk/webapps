@@ -1,4 +1,4 @@
-// Light-sheet atlas: register a cleared mouse brain to the Allen CCFv3 and count cells per region.
+// Light-sheet atlas: register a cleared mouse brain to the Allen CCFv3 and count cell candidates per region.
 // The page owns the form, the viewer and the results; src/worker.js runs the science.
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import NiiVue, { SLICE_TYPE } from "@niivue/niivue";
@@ -28,7 +28,7 @@ const workspace = mountImagingWorkspace({
   viewer: "#viewer",
   status: "#status",
   title: APP.title,
-  subtitle: "Allen atlas registration and cell counts",
+  subtitle: "Allen atlas registration and candidate counts",
   controlsContract: { about: "#aboutBtn", privacy: "#privacyBtn" },
 });
 
@@ -89,17 +89,17 @@ async function show(sample, overlay) {
   $("emptyState").hidden = true;
   const layers = [{ url: sample.file, name: sample.file.name }];
   if (overlay?.kind === "labels") layers.push({ url: overlay.file, name: overlay.file.name, opacity: 0.35 });
-  if (overlay?.kind === "cells") layers.push({ url: overlay.file, name: overlay.file.name, colormap: "red", calMin: 0.5, calMax: 1, isTransparentBelowCalMin: true, opacity: 1 });
+  if (overlay?.kind === "candidates") layers.push({ url: overlay.file, name: overlay.file.name, colormap: "red", calMin: 0.5, calMax: 1, isTransparentBelowCalMin: true, opacity: 1 });
   await viewer.loadVolumes(layers);
   if (overlay?.kind === "labels") await viewer.setColormapLabel(1, overlay.colormap);
   shown = overlay?.stage ?? "sample";
 }
 
-// The overlay a result row shows over the sample: atlas labels or cell marks.
+// The overlay a result row shows over the sample: atlas labels or candidate marks.
 function overlayOf(stage) {
   const entry = outputs[stage];
   if (entry?.kind === "labels") return { kind: "labels", file: entry.display, colormap: entry.colormap, stage };
-  if (entry?.kind === "cells") return { kind: "cells", file: entry.marks, stage };
+  if (entry?.kind === "candidates") return { kind: "candidates", file: entry.marks, stage };
   return null;
 }
 
@@ -118,7 +118,7 @@ function clearOutputs() {
   $("outputSection").open = false;
 }
 
-const FORM_IDS = ["imageInput", "voxelZ", "voxelY", "voxelX", "orientation", "register", "detect", ...Object.keys(DETECTION_FIELDS)];
+const FORM_IDS = ["imageInput", "folderInput", "voxelZ", "voxelY", "voxelX", "orientation", "register", "detect", ...Object.keys(DETECTION_FIELDS)];
 function setBusy(busy) {
   results.inert = busy;
   for (const id of FORM_IDS) $(id).disabled = busy;
@@ -247,23 +247,23 @@ async function analyse(signal, settings = formSettings()) {
       next.labels = { description: "Allen atlas labels on the sample", file: await nifti(result.files.registeredAtlas, names.registeredAtlas), kind: "labels", colormap: result.labelColormap };
       next.labels.display = await nifti(result.files.labels, `display-${names.registeredAtlas}`);
     }
-    if (result.files.marks) next.cells = { description: `Cell candidates · ${result.cellCount}`, file: csv(result.files.cells, names.cells), kind: "cells", marks: await nifti(result.files.marks, names.marks) };
+    if (result.files.marks) next.candidates = { description: `Cell candidates · ${result.candidateCount}`, file: csv(result.files.candidates, names.candidates), kind: "candidates", marks: await nifti(result.files.marks, names.marks) };
     if (result.files.regions) next.regions = { description: `Regions · ${result.regionRows} rows`, file: csv(result.files.regions, names.regions), viewable: false };
     current.throwIfAborted();
     outputs = next;
-    await show(next.sample, overlayOf(next.labels ? "labels" : next.cells ? "cells" : "sample"));
+    await show(next.sample, overlayOf(next.labels ? "labels" : next.candidates ? "candidates" : "sample"));
     results.render(next);
     $("outputSection").open = true;
     const seconds = (performance.now() - started) / 1000;
-    if (settings.detect) log.log(`${result.cellCount} cell candidates${result.assignedCells !== null && result.assignedCells !== undefined ? `, ${result.assignedCells} inside atlas regions` : ""}`, "info", "analysis");
+    if (settings.detect) log.log(`${result.candidateCount} cell candidates${result.assignedCandidates !== null && result.assignedCandidates !== undefined ? `, ${result.assignedCandidates} inside atlas regions` : ""}`, "info", "analysis");
     if (result.matrix) log.log(`Affine (sample to atlas, RAS):\n${result.matrix.trim()}`, "info", "technical");
-    const summary = settings.register ? `Registered to the Allen atlas${settings.detect ? ` · ${result.cellCount} cells` : ""}` : `${result.cellCount} cell candidates`;
+    const summary = settings.register ? `Registered to the Allen atlas${settings.detect ? ` · ${result.candidateCount} candidates` : ""}` : `${result.candidateCount} cell candidates`;
     log.log(`${summary} in ${seconds.toFixed(0)} s`, "info", "analysis");
     progress.end(summary);
     status(summary);
     return {
       artifacts: Object.entries(next).map(([role, value]) => ({ role, file: value.file })),
-      provenance: { ...settings, seconds: Number(seconds.toFixed(1)), cellCount: result.cellCount, gridShape: result.gridShape },
+      provenance: { ...settings, seconds: Number(seconds.toFixed(1)), candidateCount: result.candidateCount, gridShape: result.gridShape },
     };
   } catch (error) {
     progress.reset();
@@ -288,13 +288,13 @@ $("cancelButton").onclick = () => {
   loading?.abort();
   running?.abort();
 };
-$("imageInput").addEventListener("change", (event) => {
+for (const id of ["imageInput", "folderInput"]) $(id).addEventListener("change", (event) => {
   const files = Array.from(event.target.files);
   event.target.value = "";
   if (files.length) void importFiles(Promise.resolve(files));
 });
 bindFileDrop($("dropZone"), importFiles);
-for (const id of FORM_IDS.slice(1)) $(id).addEventListener("change", () => {
+for (const id of FORM_IDS.slice(2)) $(id).addEventListener("change", () => {
   if (Object.keys(outputs).length) {
     clearOutputs();
     status("Settings changed · run again for new results");

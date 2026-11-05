@@ -19,7 +19,7 @@ export function encodeTiff(pages, { littleEndian = true } = {}) {
     if (description) size += description.length + (description.length % 2);
     const resolutionOffset = size;
     size += 16;
-    const entries = 13;
+    const entries = 13 + (page.extraSamples ? 1 : 0);
     const ifdOffset = size;
     size += 2 + entries * 12 + 4;
     return { page, bytes, dataOffset, description, descriptionOffset, resolutionOffset, ifdOffset };
@@ -43,7 +43,7 @@ export function encodeTiff(pages, { littleEndian = true } = {}) {
     const tags = [
       [256, TYPE.LONG, 1, page.width],
       [257, TYPE.LONG, 1, page.height],
-      [258, TYPE.SHORT, 1, bits],
+      samples === 2 ? [258, TYPE.SHORT, 2, [bits, bits]] : [258, TYPE.SHORT, 1, bits],
       [259, TYPE.SHORT, 1, 1],
       [262, TYPE.SHORT, 1, page.photometric ?? 1],
       [270, TYPE.ASCII, entry.description?.length ?? 1, entry.description ? entry.descriptionOffset : 0],
@@ -53,6 +53,7 @@ export function encodeTiff(pages, { littleEndian = true } = {}) {
       [279, TYPE.LONG, 1, bytes.length],
       [282, TYPE.RATIONAL, 1, entry.resolutionOffset],
       [283, TYPE.RATIONAL, 1, entry.resolutionOffset + 8],
+      ...(page.extraSamples ? [[338, TYPE.SHORT, page.extraSamples.length, page.extraSamples]] : []),
       [339, TYPE.SHORT, 1, page.sampleFormat ?? 1],
     ];
     let p = entry.ifdOffset;
@@ -62,7 +63,10 @@ export function encodeTiff(pages, { littleEndian = true } = {}) {
       view.setUint16(p, tag, littleEndian);
       view.setUint16(p + 2, type, littleEndian);
       view.setUint32(p + 4, count, littleEndian);
-      if (type === TYPE.SHORT && count === 1) view.setUint16(p + 8, value, littleEndian);
+      if (Array.isArray(value)) {
+        if (type !== TYPE.SHORT || count > 2) throw new Error('Only up to two inline SHORT values are supported.');
+        value.forEach((v, i) => view.setUint16(p + 8 + 2 * i, v, littleEndian));
+      } else if (type === TYPE.SHORT && count === 1) view.setUint16(p + 8, value, littleEndian);
       else if (type === TYPE.ASCII && count <= 4 && !entry.description) view.setUint32(p + 8, 0, littleEndian);
       else view.setUint32(p + 8, value, littleEndian);
       p += 12;

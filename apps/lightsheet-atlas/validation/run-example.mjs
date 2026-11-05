@@ -44,16 +44,26 @@ export async function loadAtlas() {
   return { template, annotation, structures, annotationData: readNiftiImageData(annotation, Uint16Array).data };
 }
 
-/** Run one example as its page settings do; returns the pipeline result. */
-export async function runExample(id, { onLog = () => {} } = {}) {
+/** The example's stack (TIFF bytes checked against their sha256) and its voxel size [z, y, x]. */
+export async function openExample(id) {
   const example = examples.find((entry) => entry.id === id);
   const file = example.files[0];
   const bytes = await fetchPinned(file);
   const stack = await openMicroscopyStack([new File([bytes], file.name)]);
+  return { stack, voxelSizeUm: [stack.voxelSizeUm.z, stack.voxelSizeUm.y, stack.voxelSizeUm.x] };
+}
+
+/**
+ * Run one example as its page settings do; returns the pipeline result. `stack`, `voxelSizeUm`
+ * and `orientation` replace the example's own (a reoriented copy); `cells` are stack points
+ * mapped instead of detected candidates.
+ */
+export async function runExample(id, { onLog = () => {}, cells = null, ...override } = {}) {
   const settings = EXAMPLE_SETTINGS[id];
-  const voxelSizeUm = [stack.voxelSizeUm.z, stack.voxelSizeUm.y, stack.voxelSizeUm.x];
+  const { stack, voxelSizeUm } = { ...(override.stack ? {} : await openExample(id)), ...override };
+  const orientation = override.orientation ?? settings.orientation;
   const greedy = settings.register ? await loadGreedySingleThread() : null;
-  const result = await runPipeline({ stack, voxelSizeUm, orientation: settings.orientation, register: settings.register, detect: settings.detect, loadAtlas, greedy, onLog });
+  const result = await runPipeline({ stack, voxelSizeUm, orientation, register: settings.register, detect: settings.detect, cells, loadAtlas, greedy, onLog });
   return { ...result, voxelSizeUm };
 }
 

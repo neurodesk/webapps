@@ -128,3 +128,59 @@ test('an OME-Zarr folder lists its levels in microns and reads planes', async ()
 test('NGFF levels need spatial axes', () => {
   assert.throws(() => ngffLevels({ axes: [{ name: 't' }, { name: 'y' }, { name: 'x' }], datasets: [] }), /z, y and x/);
 });
+
+test('extra samples drop out only when they are alpha', async () => {
+  const twoSamples = (extraSamples) => encodeTiff([{ width: 2, height: 1, data: Uint8Array.from([10, 255, 20, 255]), samples: 2, extraSamples }]);
+  const alpha = await openTiffStack([file(twoSamples([2]), 'alpha.tif')]);
+  assert.deepEqual([...(await alpha.readPlane(0))], [10, 20]);
+  const associated = await openTiffStack([file(twoSamples([1]), 'associated.tif')]);
+  assert.deepEqual([...(await associated.readPlane(0))], [10, 20]);
+  // ExtraSamples 0 is an unspecified channel, not alpha: two channels.
+  await assert.rejects(openTiffStack([file(twoSamples([0]), 'two-channels.tif')]), /2 samples per pixel \(several channels\)/);
+});
+
+test('WhiteIsZero is decided for each page', async () => {
+  const bytes = encodeTiff([
+    { width: 2, height: 1, data: Uint8Array.from([0, 200]) },
+    { width: 2, height: 1, data: Uint8Array.from([0, 200]), photometric: 0 },
+  ]);
+  const stack = await openTiffStack([file(bytes, 'mixed.tif')]);
+  assert.deepEqual([...(await stack.readPlane(0))], [0, 200]);
+  assert.deepEqual([...(await stack.readPlane(1))], [255, 55]);
+  const reversed = await openTiffStack([file(encodeTiff([
+    { width: 2, height: 1, data: Uint8Array.from([0, 200]), photometric: 0 },
+    { width: 2, height: 1, data: Uint8Array.from([0, 200]) },
+  ]), 'reversed.tif')]);
+  assert.deepEqual([...(await reversed.readPlane(0))], [255, 55]);
+  assert.deepEqual([...(await reversed.readPlane(1))], [0, 200]);
+});
+
+test('a size without a unit is not assumed to be in microns', async () => {
+  assert.equal(micronsPerUnit(undefined), null);
+  assert.equal(micronsPerUnit(''), null);
+  const bytes = encodeTiff([{ width: 2, height: 2, data: plane(2, 2, 0), description: 'ImageJ=1.52n\nspacing=5\n', xResolution: [1, 2], yResolution: [1, 2] }]);
+  const stack = await openTiffStack([file(bytes, 'no-unit.tif')]);
+  assert.deepEqual(stack.voxelSizeUm, { z: null, y: null, x: null });
+  // OME's schema default is the micrometre.
+  assert.deepEqual(parseOmeXml(OME.replace(/ PhysicalSize[XYZ]Unit="[^"]*"/g, '')).voxelSizeUm, { z: 0.005, y: 650, x: 0.65 });
+});
+
+test('an OME-Zarr chunk several planes deep is decoded once for all its planes', async () => {
+  const axes = [{ name: 'z', type: 'space', unit: 'micrometer' }, { name: 'x', type: 'space', unit: 'micrometer' }, { name: 'y', type: 'space', unit: 'micrometer' }];
+  // Stored z, x, y: plane z holds x * 2 + y + 10 * z at [x][y].
+  const data = Uint16Array.from({ length: 2 * 3 * 2 }, (_, i) => i);
+  const files = zarrFiles('xy.ome.zarr', { axes, levels: [{ shape: [2, 3, 2], scale: [5, 2, 2], data }] });
+  const chunk = files.at(-1);
+  let reads = 0;
+  const read = chunk.arrayBuffer.bind(chunk);
+  chunk.arrayBuffer = () => {
+    reads++;
+    return read();
+  };
+  const stack = await openOmeZarrStack(files);
+  assert.deepEqual(stack.shape, [2, 2, 3]);
+  // Rows are y, columns x: plane[y * 3 + x] = stored[z][x][y].
+  assert.deepEqual([...(await stack.readPlane(0))], [0, 2, 4, 1, 3, 5]);
+  assert.deepEqual([...(await stack.readPlane(1))], [6, 8, 10, 7, 9, 11]);
+  assert.equal(reads, 1);
+});

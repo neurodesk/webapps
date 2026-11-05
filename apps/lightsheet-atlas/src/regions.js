@@ -1,5 +1,6 @@
-// Regions: the Allen structure table, per-hemisphere region volumes in the sample, cell
-// assignment through the atlas coordinates, and the CSV report.
+// Regions: the Allen structure table, per-hemisphere region volumes in the sample, candidate
+// assignment through the atlas coordinates, and the CSV report. Detected structures are cell
+// candidates (no classifier runs), so the report counts candidates.
 
 import { sampleTrilinear } from './registration.js';
 
@@ -57,8 +58,8 @@ const csvField = (value) => {
 const format = (value, digits) => (Number.isFinite(value) ? Number(value.toFixed(digits)).toString() : '');
 
 /**
- * One row per region and hemisphere present in the sample: acronym, name, hemisphere, cell
- * count, region volume (mm^3, in the sample) and density (cells/mm^3). Without detected cells
+ * One row per region and hemisphere present in the sample: acronym, name, hemisphere, candidate
+ * count, region volume (mm^3, in the sample) and density (candidates/mm^3). Without detection
  * the count and density columns are empty.
  */
 export function regionReport({ voxels, cells = null, table, voxelVolumeMm3 }) {
@@ -91,7 +92,7 @@ export function regionReport({ voxels, cells = null, table, voxelVolumeMm3 }) {
 }
 
 export function regionCsv(rows) {
-  const header = 'acronym,name,structure_id,hemisphere,cell_count,volume_mm3,cells_per_mm3';
+  const header = 'acronym,name,structure_id,hemisphere,candidate_count,volume_mm3,candidates_per_mm3';
   const lines = rows.map((row) => [
     row.acronym, row.name, row.id, row.hemisphere,
     row.count ?? '', format(row.volumeMm3, 6), row.density === null ? '' : format(row.density, 3),
@@ -99,7 +100,7 @@ export function regionCsv(rows) {
   return `${header}\n${lines.join('\n')}\n`;
 }
 
-/** cells.csv: stack voxel (x, y, z), atlas position (µm, asr axes), region and hemisphere. */
+/** The candidates CSV: stack voxel (x, y, z), atlas position (µm, asr axes), region and hemisphere. */
 export function cellCsv(cells, assigned, table) {
   const header = 'x,y,z,atlas_ap_um,atlas_si_um,atlas_rl_um,acronym,structure_id,hemisphere';
   const res = table.resolutionUm;
