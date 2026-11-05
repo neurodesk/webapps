@@ -6,7 +6,8 @@ import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { compareNames, parseTileConfiguration, positionsFromConfiguration } from "../src/core/tile-layout.js";
 import { maxPositionDifference } from "../src/core/pipeline.js";
-import { example, exampleFileBytes, reference, sha256, syntheticTiles } from "./fixtures.mjs";
+import { readTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
+import { example, exampleFileBytes, readOmeZarrArchive, reference, sha256, syntheticTiles } from "./fixtures.mjs";
 
 const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));
 const fiji = readFileSync(new URL("../validation/fiji/TileConfiguration.registered.txt", import.meta.url), "utf8");
@@ -44,7 +45,7 @@ test("app boots on the workspace with the shared bar and About", async ({ page }
   await bar.getByRole("button", { name: "About", exact: true }).click();
   const about = page.locator("#infoDialog");
   await expect(about.getByRole("heading", { name: `About ${automation.title}`, exact: true })).toBeVisible();
-  for (const guidance of ["Preibisch", "not from Fiji's GPL code", "2.5 × the mean residual", "Linear blending", "0.33 px"]) {
+  for (const guidance of ["Preibisch", "not from Fiji's GPL code", "2.5 × the mean residual", "r × overlapping pixels", "Linear blending", "0.31 px", "0.73 px", "0.17 px"]) {
     await expect(about).toContainText(guidance);
   }
 });
@@ -112,10 +113,10 @@ test("a 3 × 2 grid mosaic with a snake order is recovered within 0.5 px", async
 
 test("a 2 × 2 mosaic of 3D stacks is recovered within 0.5 voxel and fused as a z stack", async ({ page }) => {
   test.setTimeout(240000);
-  const { files, truth, grid } = syntheticTiles({ columns: 2, rows: 2, shape: [96, 80, 24], overlap: 0.25, jitter: 4, depth: 2, seed: 8 });
+  const { files, truth, grid } = syntheticTiles({ columns: 2, rows: 2, shape: [96, 80, 24], overlap: 0.25, jitter: 4, depth: 2, seed: 8, pixelSize: { x: 0.65, y: 0.75 } });
   await page.goto("/");
   await page.locator("#tileInput").setInputFiles(files);
-  await expect(page.locator("#fileInfo")).toHaveText("4 tiles · 96 × 80 × 24 · uint16", { timeout: 60000 });
+  await expect(page.locator("#fileInfo")).toHaveText("4 tiles · 96 × 80 × 24 · uint16 · 0.65 µm", { timeout: 60000 });
   await setGrid(page, grid);
   await stitchAndWait(page, 180000);
   const configuration = await downloadRow(page, "TileConfiguration.registered.txt");
@@ -124,6 +125,20 @@ test("a 2 × 2 mosaic of 3D stacks is recovered within 0.5 voxel and fused as a 
   expect(maxPositionDifference(positions, truth)).toBeLessThan(0.5);
   const fused = await downloadRow(page, "Fused image · ");
   expect(fused.bytes.toString("latin1", 0, 400)).toMatch(/slices=2[4-9]/);
+
+  // The OME-Zarr archive holds the TIFF's pixels and keeps the known XY pixel size although
+  // the z spacing is unknown.
+  const tiff = await readTiffStack(new Uint8Array(fused.bytes).buffer);
+  const archive = await readOmeZarrArchive((await downloadRow(page, "OME-Zarr")).bytes);
+  expect(archive.shape).toEqual([tiff.pages, tiff.height, tiff.width]);
+  expect(archive.data.constructor).toBe(Uint16Array);
+  expect(Buffer.from(archive.data.buffer, archive.data.byteOffset, archive.data.byteLength).equals(Buffer.from(tiff.data.buffer, tiff.data.byteOffset, tiff.data.byteLength))).toBe(true);
+  expect(archive.axes.map((axis) => [axis.name, axis.unit ?? null])).toEqual([["z", null], ["y", "micrometer"], ["x", "micrometer"]]);
+  expect(archive.scale[0]).toBe(1);
+  expect(archive.scale[1]).toBeCloseTo(0.75, 6);
+  expect(archive.scale[2]).toBeCloseTo(0.65, 6);
+  expect(tiff.metadata.pixelSize.x).toBeCloseTo(archive.scale[2], 6);
+  expect(tiff.metadata.pixelSize.y).toBeCloseTo(archive.scale[1], 6);
 });
 
 test("refusals: one tile, an RGB tile, mixed sample types and a grid that does not fit", async ({ page }) => {

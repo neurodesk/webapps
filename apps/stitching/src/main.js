@@ -21,6 +21,7 @@ import { compareNames, gridPositions, parseTileConfiguration, positionsFromConfi
 import { planPairs } from "./core/pipeline.js";
 import { optimisePositions } from "./core/global.js";
 import { fusedGeometry } from "./core/fusion.js";
+import { checkFusionMemory, registrationWorkers } from "./core/memory.js";
 import { linksCsv, outputStem, provenance, registeredConfiguration, summarise } from "./outputs.js";
 import { displayNifti, displaySpacing } from "./display.js";
 import examples from "../examples.json";
@@ -30,6 +31,9 @@ const SETTING_IDS = ["layout", "columns", "rows", "overlap", "gridType", "gridSt
 const ADVANCED = new Set(["peaks", "threshold", "maxRatio", "maxAbsolute"]);
 const TIFF = /\.tiff?$/i;
 const LAYOUT_FILE = /\.txt$/i;
+// Cross-origin isolated pages decode tiles into SharedArrayBuffers that every worker reads
+// without a copy.
+const SHARED = globalThis.crossOriginIsolated === true && typeof SharedArrayBuffer === "function";
 
 const workspace = mountImagingWorkspace({
   controls: "#controls",
@@ -198,7 +202,7 @@ async function loadTiles(files, signal) {
     const buffers = [];
     for (const file of tiffs) buffers.push({ name: file.name, buffer: await file.arrayBuffer() });
     current.throwIfAborted();
-    const decoded = await callWorker({ type: "decode", files: buffers, maxBytes: MAX_TILE_BYTES }, {
+    const decoded = await callWorker({ type: "decode", files: buffers, maxBytes: MAX_TILE_BYTES, shared: SHARED }, {
       signal: current,
       transfer: buffers.map((entry) => entry.buffer),
       onProgress: (fraction) => progress.setProgress(fraction * 0.6, "Reading tiles…"),
@@ -223,7 +227,7 @@ async function loadTiles(files, signal) {
     $("fileInfo").textContent = tileSummary();
     $("dropZone").classList.add("has-files");
     const pixel = tiles[0].pixelSize;
-    technical(`Decoded ${tiles.length} ${tiles[0].kind} TIFF tiles, ${tiles[0].shape.join(" × ")} ${tiles[0].dtype}; pixel size ${pixel?.x ? `${pixel.x} × ${pixel.y}${pixel.z ? ` × ${pixel.z}` : ""} µm` : "not recorded"}`);
+    technical(`Decoded ${tiles.length} ${tiles[0].kind} TIFF tiles, ${tiles[0].shape.join(" × ")} ${tiles[0].dtype}, ${SHARED ? "shared memory" : "copied to each worker"}; pixel size ${pixel?.x ? `${pixel.x} × ${pixel.y}${pixel.z ? ` × ${pixel.z}` : ""} µm` : "not recorded"}`);
     if (others.length) technical(`Ignored ${others.length} file${others.length > 1 ? "s" : ""} that are neither TIFF nor .txt: ${others.slice(0, 3).map((file) => file.name).join(", ")}`);
     if (tiles.every((tile) => tile.stagePosition) && !layouts.length) setLayout("stage");
     await showPreview(current, 0.6);
@@ -272,9 +276,11 @@ function approximatePositions(settings) {
 }
 
 function checkFusedSize(positions) {
-  const { shape } = fusedGeometry(tiles.map((tile) => tile.shape), positions);
+  const shapes = tiles.map((tile) => tile.shape);
+  const { shape } = fusedGeometry(shapes, positions);
   const pixels = shape.reduce((a, b) => a * b, 1);
   if (pixels > MAX_FUSED_PIXELS) throw new Error(`The fused image would be ${shape.join(" × ")} pixels, more than this app's ${MAX_FUSED_PIXELS / 1e6} million; check the layout.`);
+  checkFusionMemory({ shapes, dtype: tiles[0].dtype, shape, shared: SHARED });
   return shape;
 }
 
@@ -391,7 +397,8 @@ async function stitchTiles(signal, settings) {
     checkFusedSize(approximate);
     const pairs = planPairs(tiles.map((tile) => tile.shape), approximate);
     if (!pairs.length) throw new Error("No tiles overlap under this layout; check the grid size, order and overlap.");
-    const threads = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1, pairs.length));
+    const wanted = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1, pairs.length));
+    const threads = registrationWorkers({ shapes: tiles.map((tile) => tile.shape), dtype: tiles[0].dtype, pairs, names: tiles.map((tile) => tile.name), shared: SHARED, wanted });
     technical(`Registering ${pairs.length} overlapping pairs in ${threads} worker${threads > 1 ? "s" : ""}`);
     const shares = Array.from({ length: threads }, () => []);
     pairs.forEach((pair, k) => shares[k % threads].push(pair));

@@ -140,9 +140,16 @@ export function positionsFromStage(stages, pixelSizes, dims) {
   const sizes = pixelSizes.map((size) => size ?? {});
   if (sizes.some((size) => !(size.x > 0 && size.y > 0))) throw new Error('Stage positions need the pixel size of every tile.');
   if (dims > 2 && sizes.some((size) => !(size.z > 0))) throw new Error('3D stage positions need the z spacing of every tile.');
+  // Stacks are placed at z 0 when no tile records a stage z; a z for some tiles only is refused
+  // rather than putting the others at stage z 0.
+  const withZ = stages.filter((stage) => Number.isFinite(stage.z)).length;
+  if (dims > 2 && withZ > 0 && withZ < stages.length) {
+    const first = stages.findIndex((stage) => !Number.isFinite(stage.z));
+    throw new Error(`Tile ${first + 1} has no stage z position but other tiles do; give every tile a z or none.`);
+  }
   const raw = stages.map((stage, k) => {
     const position = [stage.x / sizes[k].x, stage.y / sizes[k].y];
-    if (dims > 2) position.push((stage.z ?? 0) / sizes[k].z);
+    if (dims > 2) position.push(withZ ? stage.z / sizes[k].z : 0);
     return position;
   });
   const minimum = raw[0].map((_, d) => Math.min(...raw.map((p) => p[d])));

@@ -100,12 +100,12 @@
               <div class="nd-row">
                 <div class="nd-field">
                   <label for="maxRatio">Max/mean residual
-                    <span class="nd-info-icon" tabindex="0" aria-label="About outlier links">i<span class="nd-info-tooltip">After each solve, the pair with the largest residual is dropped while that residual is above this many times the mean and above the absolute limit.</span></span>
+                    <span class="nd-info-icon" tabindex="0" aria-label="About outlier links">i<span class="nd-info-tooltip">After each solve, the pair with the largest residual is dropped while that residual is above this many times the mean (and 0.95 px), or while the mean residual is above the next limit.</span></span>
                   </label>
                   <input id="maxRatio" type="number" min="1" max="100" step="any" value="2.5" inputmode="decimal" />
                 </div>
                 <div class="nd-field">
-                  <label for="maxAbsolute">Absolute residual <small>px</small></label>
+                  <label for="maxAbsolute">Mean residual limit <small>px</small></label>
                   <input id="maxAbsolute" type="number" min="0" max="10000" step="any" value="3.5" inputmode="decimal" />
                 </div>
               </div>
@@ -150,9 +150,9 @@
       <p>Stitches a mosaic of overlapping 2D or 3D microscopy tiles into one image, on the CPU in web workers. Tiles are greyscale TIFF or OME-TIFF files, one tile per file (a 3D tile is a z stack), all of the same sample type.</p>
       <p><strong>Layout.</strong> Tiles start from an approximate layout: a regular grid in file-name order (rows, columns, overlap and acquisition order, as in Fiji's Grid/Collection stitching), a Fiji TileConfiguration.txt in pixels, or the OME stage positions divided by the pixel size. Every pair of tiles that overlaps under that layout is registered, diagonal neighbours included.</p>
       <p><strong>Pairwise registration.</strong> Written from Preibisch, Saalfeld &amp; Tomancak (2009), not from Fiji's GPL code. The two tiles are cut to the region they share under the layout, and the phase correlation of the two regions gives candidate translations. Each of the strongest peaks stands for 2<sup>d</sup> translations (the correlation is periodic); each is scored by the Pearson cross-correlation of the overlapping pixels and the best one kept. It is then moved uphill in cross-correlation to its integer maximum, and a parabola through the correlation at that maximum and its neighbours gives the sub-pixel translation.</p>
-      <p><strong>Global optimisation.</strong> Tile translations minimise the correlation-weighted squared differences between the measured and implied pairwise offsets (least squares, the first tile fixed). Pairs with r below the threshold are not used; after each solve the pair with the largest residual is dropped while it exceeds 2.5 × the mean residual and 3.5 px, the defaults of Fiji's Grid/Collection stitching. A tile left without any usable pair keeps its layout position, moved with the rest.</p>
+      <p><strong>Global optimisation.</strong> Tile translations minimise the squared differences between the measured and implied pairwise offsets, each pair weighted by r × overlapping pixels (least squares, the first tile fixed). Pairs with r below the threshold are not used; after each solve the pair with the largest residual is dropped while it exceeds 2.5 × the mean residual and 0.95 px, or while the mean residual exceeds 3.5 px, as Fiji's Grid/Collection stitching does with its defaults. A tile left without any usable pair keeps its layout position, moved with the rest.</p>
       <p><strong>Fusion.</strong> Linear blending: each output pixel is the mean of the tiles covering it, sampled by linear interpolation at sub-pixel positions and weighted by the distance to each tile's nearest edge. The fused image keeps the tiles' sample type.</p>
-      <p><strong>Validation.</strong> On the NIST MIST example the registered positions are within 0.33 px of Fiji's Grid/Collection stitching (Stitching 3.1.8). On a synthetic 3 × 3 mosaic cut from a real tile with known sub-pixel positions, with the layout up to 25 px off, every tile was found within 0.15 px.</p>
+      <p><strong>Validation.</strong> On the NIST MIST example the registered positions are within 0.31 px of Fiji's Grid/Collection stitching (Stitching 3.1.8) and every pair offset within 0.73 px. On a synthetic 3 × 3 mosaic cut from a real tile with known sub-pixel positions, with the layout up to 25 px off, every tile was found within 0.17 px.</p>
       <p>Outputs: the fused image as TIFF and as zipped OME-Zarr (.ozx), Fiji's TileConfiguration.registered.txt, the table of pairs (CSV) and provenance (JSON). Not in this version: illumination correction, multi-channel and time-lapse tiles, rotation or affine models.</p>
     </template>
     <template id="privacyContent"><p>Tiles are processed locally in this browser and are never uploaded. Only the example is downloaded, from the Neurodesk dataset on Hugging Face.</p></template>

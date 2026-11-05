@@ -181,15 +181,35 @@ test('readTiffStack decodes into a caller-chosen type, optionally shared, with m
   await assert.rejects(readTiffStack(fixture('stack-deflate-uint16.ome.tif'), { Type: Array }), /Cannot read a TIFF stack into Array/);
 });
 
-test('OME stage positions are read in micrometres from the first plane that records one', () => {
-  const xml = `<?xml version="1.0"?><ome:OME xmlns:ome="http://www.openmicroscopy.org/Schemas/OME/2016-06"><ome:Image ID='Image:0' Name="tile &amp; 1"><ome:Pixels ID='Pixels:0' DimensionOrder='XYZCT' SizeX='4' SizeY='3' SizeZ='2' SizeC='1' SizeT='1' PhysicalSizeX='650' PhysicalSizeXUnit='nm' PhysicalSizeY="0.65"><ome:Plane TheZ="0" TheC="0" TheT="0"/><ome:Plane TheZ='1' TheC='0' TheT='0' PositionX='1520.5' PositionXUnit='µm' PositionY="-2.5" PositionYUnit="mm" PositionZ='3000' PositionZUnit='nm'/></ome:Pixels></ome:Image></ome:OME>`;
+test('OME stage positions are read in micrometres from the first plane, TheZ 0', () => {
+  const xml = `<?xml version="1.0"?><ome:OME xmlns:ome="http://www.openmicroscopy.org/Schemas/OME/2016-06"><ome:Image ID='Image:0' Name="tile &amp; 1"><ome:Pixels ID='Pixels:0' DimensionOrder='XYZCT' SizeX='4' SizeY='3' SizeZ='2' SizeC='1' SizeT='1' PhysicalSizeX='650' PhysicalSizeXUnit='nm' PhysicalSizeY="0.65"><ome:Plane TheZ='1' TheC='0' TheT='0' PositionX='9' PositionY='9'/><ome:Plane TheZ="0" TheC="0" TheT="0" PositionX='1520.5' PositionXUnit='µm' PositionY="-2.5" PositionYUnit="mm" PositionZ='3000' PositionZUnit='nm'/></ome:Pixels></ome:Image></ome:OME>`;
   const metadata = parseOmeDescription(xml);
   assert.equal(metadata.sizeZ, 2);
   assert.deepEqual(metadata.pixelSize, { x: 0.65, y: 0.65, z: null });
   assert.deepEqual(metadata.stagePosition, { x: 1520.5, y: -2500, z: 3 });
 });
 
-test('an OME description without plane positions has no stage position', () => {
+test('a position recorded only at a later z plane is not the stack origin', () => {
+  // Two tiles whose stage origins differ, one recording its position at Z = 0 and the other
+  // only at Z = 1: taking any plane would give both the same origin.
+  const tile = (planes) => `<OME><Image ID="Image:0"><Pixels SizeX="2" SizeY="2" SizeZ="2" SizeC="1" SizeT="1">${planes}</Pixels></Image></OME>`;
+  assert.deepEqual(parseOmeDescription(tile('<Plane TheZ="0" TheC="0" TheT="0" PositionX="100" PositionY="5" PositionZ="0"/>')).stagePosition, { x: 100, y: 5, z: 0 });
+  assert.equal(parseOmeDescription(tile('<Plane TheZ="0" TheC="0" TheT="0"/><Plane TheZ="1" TheC="0" TheT="0" PositionX="100" PositionY="5" PositionZ="2"/>')).stagePosition, null);
+  // Absent indices are 0, the OME default.
+  assert.deepEqual(parseOmeDescription(tile('<Plane PositionX="7" PositionY="8"/>')).stagePosition, { x: 7, y: 8, z: null });
+});
+
+test('another image\'s stage position is never assigned to the first image', () => {
+  const xml = '<OME><Image ID="Image:0"><Pixels SizeX="2" SizeY="2" SizeZ="1" SizeC="1" SizeT="1"><Plane TheZ="0" TheC="0" TheT="0"/></Pixels></Image><Image ID="Image:1"><Pixels SizeX="2" SizeY="2" SizeZ="1" SizeC="1" SizeT="1"><Plane TheZ="0" TheC="0" TheT="0" PositionX="40" PositionY="50"/></Pixels></Image></OME>';
+  const metadata = parseOmeDescription(xml);
+  assert.equal(metadata.images, 2);
+  assert.equal(metadata.stagePosition, null);
+  const selfClosing = '<OME><Image ID="Image:0"><Pixels SizeX="2" SizeY="2" SizeZ="1" SizeC="1" SizeT="1"/></Image><Image ID="Image:1"><Pixels SizeX="2" SizeY="2"><Plane PositionX="40" PositionY="50"/></Pixels></Image></OME>';
+  assert.equal(parseOmeDescription(selfClosing).stagePosition, null);
+});
+
+test('an OME description without plane positions has no stage position, and other kinds record null', () => {
   const xml = '<OME><Image ID="Image:0"><Pixels SizeX="2" SizeY="2" SizeZ="1" SizeC="1" SizeT="1"><Plane TheZ="0" PositionX="1"/></Pixels></Image></OME>';
   assert.equal(parseOmeDescription(xml).stagePosition, null);
+  assert.equal(parseImagejDescription('ImageJ=1.54f\nimages=1\n').stagePosition, null);
 });

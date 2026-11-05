@@ -39,6 +39,23 @@ export function registeredConfiguration(names, positions) {
 
 const AXES = ["x", "y", "z"];
 
+/**
+ * The OME-Zarr spacing (x first) and units per axis: an axis whose pixel size the tiles record
+ * is in micrometres, any other axis is in pixels with no unit, so a known XY pixel size is kept
+ * when the z spacing is unknown.
+ */
+export function omeZarrCalibration(pixelSize, dimension) {
+  const spacing = [];
+  const units = {};
+  for (const axis of AXES.slice(0, dimension)) {
+    const size = pixelSize?.[axis];
+    const known = Number.isFinite(size) && size > 0;
+    spacing.push(known ? size : 1);
+    if (known) units[axis] = "micrometer";
+  }
+  return { spacing, units };
+}
+
 function decimal(value, digits = 4) {
   return Number(value.toFixed(digits)).toString();
 }
@@ -80,7 +97,7 @@ export function provenance({ app, names, dims, dtype, pixelSize, settings, appro
     app: { id: app.id, version: app.version },
     method: {
       pairwise: "Phase correlation of the layout's overlap region, peaks checked by cross-correlation, sub-pixel by a parabola through the cross-correlation (after Preibisch, Saalfeld & Tomancak 2009)",
-      global: "Correlation-weighted least squares of translations with iterative removal of the worst link",
+      global: "Least squares of translations, each pair weighted by r × overlapping pixels, with iterative removal of the worst link by Fiji's rule (worst > 2.5 × mean and > 0.95 px, or mean > 3.5 px, at the default settings)",
       fusion: "Linear blending with linear interpolation at sub-pixel positions",
     },
     input: { tiles: names.length, dims, sampleType: dtype, pixelSizeMicrometres: pixelSize },

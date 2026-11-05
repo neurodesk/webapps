@@ -50,3 +50,25 @@ test('integer sample types are rounded and clamped', () => {
   assert.deepEqual(Array.from(toSampleType(Float32Array.from([-3, 1.5, 70000]), 'uint16')), [0, 2, 65535]);
   assert.ok(toSampleType(Float32Array.from([1.5]), 'float32') instanceof Float32Array);
 });
+
+test('32-bit integer and float tiles keep their values exactly where one tile covers a pixel', () => {
+  const cases = [
+    ['uint32', Uint32Array.from([16777217, 4294967295, 0, 7])],
+    ['int32', Int32Array.from([-16777217, 2147483647, -2147483648, 3])],
+    ['float32', Float32Array.from([3e38, -3e38, 1.5, 1e-30])],
+    ['float64', Float64Array.from([1e100, -1e300, 0.1, 16777217.25])],
+  ];
+  for (const [dtype, data] of cases) {
+    const fused = fuseTiles([{ shape: [2, 2], data }], [[3, 4]]);
+    assert.ok(fused.data instanceof Float64Array, dtype);
+    assert.deepEqual(Array.from(toSampleType(fused.data, dtype)), Array.from(data), dtype);
+  }
+});
+
+test('32-bit tiles blend in float64: overlapping uint32 and float32 tiles keep their common value', () => {
+  for (const data of [new Uint32Array(24).fill(16777217), new Float32Array(24).fill(3e38)]) {
+    const tile = { shape: [6, 4], data };
+    const { data: fused } = fuseTiles([tile, tile], [[0, 0], [2.5, 1]]);
+    for (let i = 0; i < fused.length; i++) if (fused[i] !== 0) assert.ok(Math.abs(fused[i] - data[0]) / data[0] < 1e-12, `pixel ${i}: ${fused[i]}`);
+  }
+});

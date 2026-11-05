@@ -215,6 +215,9 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
   'calcium-imaging': [
     { file: 'apps/calcium-imaging/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],
+  stitching: [
+    { file: 'apps/stitching/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
   dwicorrect: [
     { file: 'apps/dwicorrect/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],

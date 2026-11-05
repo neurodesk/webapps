@@ -4,6 +4,12 @@
 // nearest edge (in pixels, from 1 at the outermost pixel), so seams fade across the overlap.
 // Pixels no tile covers are 0.
 //
+// 8- and 16-bit tiles accumulate the weighted sum and the weights in float32, which holds every
+// value of those types exactly. 32-bit integer and float tiles accumulate in float64 as a running
+// weighted mean (mean += w / W · (value − mean)), so a pixel one tile covers keeps its value
+// exactly (uint32 16777217 stays 16777217) and no weighted sum can overflow (float32 3e38,
+// float64 1e100).
+//
 // Positions are pixel coordinates of each tile's first pixel; the fused image starts at the
 // floor of the smallest position along each axis.
 
@@ -50,19 +56,34 @@ function axisSampling(position, origin, outSize, size) {
   return { first, count, index, fraction, weight };
 }
 
+const NARROW = [Uint8Array, Uint16Array, Int8Array, Int16Array];
+
+/** Whether tiles of this typed array accumulate in float64 (32-bit integers and floats). */
+export function accumulatesInFloat64(data) {
+  return !NARROW.some((Type) => data instanceof Type);
+}
+
+/** Whether tiles of this sample type accumulate in float64. */
+export function accumulatesInFloat64Type(dtype) {
+  return !['uint8', 'uint16', 'int8', 'int16'].includes(dtype);
+}
+
 /**
  * @param {{ shape: number[], data: ArrayLike<number> }[]} tiles
  * @param {number[][]} positions
  * @param {{ onProgress?: (done: number, total: number) => void, signal?: AbortSignal }} [options]
- * @returns {{ data: Float32Array, shape: number[], origin: number[] }}
+ * @returns {{ data: Float32Array | Float64Array, shape: number[], origin: number[] }}
+ *   Float32Array for 8- and 16-bit tiles, Float64Array otherwise.
  */
 export function fuseTiles(tiles, positions, { onProgress, signal } = {}) {
   const shapes = tiles.map((tile) => tile.shape);
   const { origin, shape } = fusedGeometry(shapes, positions);
   const [ox, oy = 1, oz = 1] = shape;
   const total = ox * oy * oz;
-  const sum = new Float32Array(total);
-  const weights = new Float32Array(total);
+  const wide = tiles.some((tile) => accumulatesInFloat64(tile.data));
+  const Accumulator = wide ? Float64Array : Float32Array;
+  const sum = new Accumulator(total);
+  const weights = new Accumulator(total);
   tiles.forEach((tile, t) => {
     signal?.throwIfAborted();
     const [nx, ny = 1, nz = 1] = tile.shape;
@@ -100,14 +121,23 @@ export function fuseTiles(tiles, positions, { onProgress, signal } = {}) {
             value += fz * (c10 + fy * (c11 - c10) - value);
           }
           const w = wzy * ax.weight[kx];
-          sum[outRow + kx] += w * value;
-          weights[outRow + kx] += w;
+          const o = outRow + kx;
+          if (wide) {
+            const covered = weights[o] + w;
+            weights[o] = covered;
+            sum[o] += (w / covered) * (value - sum[o]);
+          } else {
+            sum[o] += w * value;
+            weights[o] += w;
+          }
         }
       }
     }
     onProgress?.(t + 1, tiles.length);
   });
-  for (let i = 0; i < total; i++) sum[i] = weights[i] > 0 ? sum[i] / weights[i] : 0;
+  if (!wide) for (let i = 0; i < total; i++) sum[i] = weights[i] > 0 ? sum[i] / weights[i] : 0;
+  // Only float64 values beyond ±9e307 can overflow the running mean's difference.
+  else for (let i = 0; i < total; i++) if (!Number.isFinite(sum[i])) throw new Error('The tiles hold values too large to blend (beyond ±9e307); rescale them before stitching.');
   return { data: sum, shape, origin };
 }
 
@@ -125,7 +155,7 @@ const TYPES = { uint8: Uint8Array, uint16: Uint16Array, uint32: Uint32Array, int
 export function toSampleType(data, dtype) {
   const Type = TYPES[dtype];
   if (!Type) throw new Error(`Unknown sample type ${dtype}.`);
-  if (Type === Float32Array) return data;
+  if (data instanceof Type) return data;
   const out = new Type(data.length);
   const range = RANGES[dtype];
   if (!range) {

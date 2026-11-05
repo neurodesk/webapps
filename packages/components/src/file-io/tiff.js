@@ -110,23 +110,30 @@ export function parseOmeDescription(description) {
 }
 
 /**
- * The stage position of the first OME `Plane` that records one, in micrometres (z is null
- * when absent). A position without a unit is taken as micrometres.
+ * The stage position of the first image's first plane (TheZ, TheC and TheT 0, the OME
+ * default when absent), in micrometres (z is null when absent), or null when that plane does
+ * not record x and y. Positions of other planes or other images are never used: a position
+ * recorded only at a later z plane is not the stack's origin. A position without a unit is
+ * taken as micrometres.
  */
 function omeStagePosition(text) {
-  for (const plane of text.match(/<(?:[\w.-]+:)?Plane\b[^>]*>/g) ?? []) {
-    const axis = (name) => {
-      const raw = xmlAttribute(plane, `Position${name}`);
-      if (raw === undefined || raw.trim() === '') return null;
-      const value = Number(raw);
-      const scale = micrometresPerUnit(xmlAttribute(plane, `Position${name}Unit`) ?? 'µm');
-      return Number.isFinite(value) && scale ? value * scale : null;
-    };
-    const x = axis('X');
-    const y = axis('Y');
-    if (x !== null && y !== null) return { x, y, z: axis('Z') };
-  }
-  return null;
+  const image = text.match(/<(?:[\w.-]+:)?Image\b[\s\S]*?<\/(?:[\w.-]+:)?Image\s*>/)?.[0];
+  const pixels = image?.match(/<(?:[\w.-]+:)?Pixels\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:[\w.-]+:)?Pixels\s*>)/)?.[0];
+  if (!pixels) return null;
+  const index = (plane, name) => Number(xmlAttribute(plane, name) ?? 0);
+  const first = (pixels.match(/<(?:[\w.-]+:)?Plane\b[^>]*>/g) ?? [])
+    .find((plane) => index(plane, 'TheZ') === 0 && index(plane, 'TheC') === 0 && index(plane, 'TheT') === 0);
+  if (!first) return null;
+  const axis = (name) => {
+    const raw = xmlAttribute(first, `Position${name}`);
+    if (raw === undefined || raw.trim() === '') return null;
+    const value = Number(raw);
+    const scale = micrometresPerUnit(xmlAttribute(first, `Position${name}Unit`) ?? 'µm');
+    return Number.isFinite(value) && scale ? value * scale : null;
+  };
+  const x = axis('X');
+  const y = axis('Y');
+  return x !== null && y !== null ? { x, y, z: axis('Z') } : null;
 }
 
 /** ImageJ's `ImageJ=…` description: hyperstack sizes, z spacing, frame interval and unit. */
@@ -148,6 +155,7 @@ export function parseImagejDescription(description, resolution = [null, null]) {
     sizeT: Number(field('frames') ?? 1),
     pixelSize: scale ? { x: x ? x * scale : null, y: y ? y * scale : null, z: spacing ? spacing * scale : null } : { x: null, y: null, z: null },
     frameInterval: interval && timeScale ? interval * timeScale : fps ? 1 / fps : null,
+    stagePosition: null,
   };
 }
 
@@ -179,7 +187,7 @@ async function openStack(buffer) {
   const resolution = [rational(first.fileDirectory.getValue('XResolution')), rational(first.fileDirectory.getValue('YResolution'))];
   const metadata = parseOmeDescription(description)
     ?? parseImagejDescription(description, resolution)
-    ?? { kind: 'baseline', images: 1, sizeC: 1, sizeZ: 1, sizeT: pages, pixelSize: { x: null, y: null, z: null }, frameInterval: null };
+    ?? { kind: 'baseline', images: 1, sizeC: 1, sizeZ: 1, sizeT: pages, pixelSize: { x: null, y: null, z: null }, frameInterval: null, stagePosition: null };
   if (metadata.images > 1) throw new Error(`This OME-TIFF holds ${metadata.images} image series; save the one you need as its own file.`);
   const declared = metadata.kind === 'imagej' ? Number(description.match(/^images=(\d+)\s*$/m)?.[1]) : NaN;
   if (declared && declared !== pages) throw new Error(`This ImageJ TIFF declares ${declared} images but holds ${pages} pages; save it again from ImageJ or Fiji.`);

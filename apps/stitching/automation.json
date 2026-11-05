@@ -105,14 +105,14 @@
           "minimum": 1,
           "maximum": 100,
           "default": 2.5,
-          "description": "A pair is an outlier when its residual is above this many times the mean residual"
+          "description": "The worst pair is an outlier when its residual is above this many times the mean residual and above 0.95 px"
         },
         "maxAbsolute": {
           "type": "number",
           "minimum": 0,
           "maximum": 10000,
           "default": 3.5,
-          "description": "A pair is an outlier only when its residual is also above this many pixels"
+          "description": "The worst pair is also an outlier whenever the mean residual is above this many pixels"
         }
       },
       "artifacts": {

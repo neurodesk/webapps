@@ -2,10 +2,12 @@
 // translations that minimise the weighted sum of squared differences between each link's
 // measured offset and the offset the positions imply, solved exactly by least squares per
 // connected component. A link's weight is its cross-correlation r times the number of pixels
-// it was measured on, so a small diagonal overlap cannot pull tiles as hard as a full edge. Links below the correlation threshold are left out. After
-// each solve the link with the largest residual is removed when that residual exceeds both
-// `maxAbsolute` pixels and `maxRatio` times the mean residual, and the system is solved again,
-// until no link qualifies.
+// it was measured on, so a small diagonal overlap cannot pull tiles as hard as a full edge.
+// Links below the correlation threshold are left out. After each solve the link with the
+// largest residual is removed, and the system solved again, while Fiji's Grid/Collection
+// stitching (Stitching 3.1.8) would remove one: when that residual is above `maxRatio` times
+// the mean residual and above 0.95 px, or when the mean residual itself is above `maxAbsolute`
+// pixels.
 //
 // One tile per component is fixed: the lowest-numbered tile of the largest component stays at
 // its approximate position. Every other component (a tile whose links were all rejected, or a
@@ -15,11 +17,19 @@
 export const GLOBAL_DEFAULTS = Object.freeze({
   /** Links whose cross-correlation is below this are not used (Fiji's default is 0.3). */
   threshold: 0.3,
-  /** A link is an outlier when its residual is above maxRatio × the mean residual … */
+  /** The worst link is an outlier when its residual is above maxRatio × the mean residual (and 0.95 px) … */
   maxRatio: 2.5,
-  /** … and above this many pixels (Fiji's defaults are 2.5 and 3.5). */
+  /** … or when the mean residual is above this many pixels (Fiji's defaults are 2.5 and 3.5). */
   maxAbsolute: 3.5,
 });
+
+/** The worst residual must also exceed this for the ratio test, as in Fiji. */
+export const MIN_OUTLIER_RESIDUAL = 0.95;
+
+/** Fiji's condition for removing the worst link after a solve. */
+export function isOutlierStep(worst, average, { maxRatio, maxAbsolute }) {
+  return (average * maxRatio < worst && worst > MIN_OUTLIER_RESIDUAL) || average > maxAbsolute;
+}
 
 function components(count, links) {
   const parent = Array.from({ length: count }, (_, i) => i);
@@ -142,7 +152,7 @@ export function optimisePositions(approximate, measured, options = {}) {
     if (!used.length) break;
     const average = used.reduce((sum, link) => sum + link.residual, 0) / used.length;
     const worst = used.reduce((a, b) => (b.residual > a.residual ? b : a));
-    if (worst.residual > maxAbsolute && worst.residual > maxRatio * average) worst.status = 'outlier';
+    if (isOutlierStep(worst.residual, average, { maxRatio, maxAbsolute })) worst.status = 'outlier';
     else break;
   }
   return {

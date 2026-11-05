@@ -1,18 +1,18 @@
 // The fused image as a zipped OME-Zarr (.ozx, OME-Zarr 0.5, one scale), written with
-// ngff-zarr as apps/elastix does. Axes are z?, y, x in micrometres when the tiles record a
-// pixel size, else in pixels with no unit.
+// ngff-zarr as apps/elastix does. Axes are z?, y, x; each axis whose pixel size the tiles record
+// is in micrometres, any other in pixels with no unit (omeZarrCalibration in outputs.js).
 import { NgffImage, itkImageToNgffImage, toMultiscales, toOmeZarrOzx } from "@fideus-labs/ngff-zarr/browser";
+import { omeZarrCalibration } from "./outputs.js";
 
 export async function writeFusedOmeZarr({ data, shape, pixelSize, dtype }, name) {
   const dimension = shape.length;
-  const spacing = shape.map((_, d) => [pixelSize?.x, pixelSize?.y, pixelSize?.z][d] || 1);
-  const micrometres = Boolean(pixelSize?.x && pixelSize?.y && (dimension < 3 || pixelSize?.z));
+  const { spacing, units } = omeZarrCalibration(pixelSize, dimension);
   const image = await itkImageToNgffImage(
     {
       imageType: { dimension, componentType: dtype, pixelType: "Scalar", components: 1 },
       name: "fused",
       origin: new Array(dimension).fill(0),
-      spacing: micrometres ? spacing : new Array(dimension).fill(1),
+      spacing,
       direction: Float64Array.from({ length: dimension * dimension }, (_, k) => (k % (dimension + 1) === 0 ? 1 : 0)),
       size: [...shape],
       metadata: new Map(),
@@ -26,7 +26,7 @@ export async function writeFusedOmeZarr({ data, shape, pixelSize, dtype }, name)
     scale: image.scale,
     translation: image.translation,
     name: "fused",
-    axesUnits: micrometres ? Object.fromEntries(image.dims.map((axis) => [axis, "micrometer"])) : undefined,
+    axesUnits: Object.keys(units).length ? units : undefined,
     axesOrientations: undefined,
     axesTypes: image.axesTypes,
     computedCallbacks: [],

@@ -3,6 +3,8 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
+import ZipFileStore from "@zarrita/storage/zip";
+import * as zarr from "zarrita";
 import { syntheticMosaic } from "../test/synthetic.js";
 
 const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));
@@ -27,13 +29,26 @@ export async function exampleFileBytes(file) {
  * A synthetic mosaic as Playwright file payloads: tiles tile_<row>_<column>.tif in row-by-row
  * order, their true positions, and the grid that approximates them.
  */
-export function syntheticTiles({ columns = 2, rows = 2, shape = [160, 128], overlap = 0.2, jitter = 6, depth = 0, seed = 3 } = {}) {
+export function syntheticTiles({ columns = 2, rows = 2, shape = [160, 128], overlap = 0.2, jitter = 6, depth = 0, seed = 3, pixelSize = null } = {}) {
   const mosaic = syntheticMosaic({ columns, rows, shape, overlap, jitter, depth, seed });
-  const [width, height] = shape;
+  const [width, height, slices = 1] = shape;
+  // With `pixelSize` ({ x, y } micrometres) the tiles are ImageJ TIFFs that record XY but no z spacing.
+  const description = pixelSize ? `ImageJ=1.11a\nimages=${slices}\n${slices > 1 ? `slices=${slices}\n` : ""}unit=micron\n` : "";
   const files = mosaic.tiles.map((tile, k) => {
     const data = Uint16Array.from(tile.data, (v) => Math.max(0, Math.min(65535, Math.round(v * 20))));
     const name = `tile_${Math.floor(k / columns) + 1}_${(k % columns) + 1}.tif`;
-    return { name, mimeType: "image/tiff", buffer: Buffer.from(writeTiffStack({ width, height, data })) };
+    return { name, mimeType: "image/tiff", buffer: Buffer.from(writeTiffStack({ width, height, data, description, pixelSize })) };
   });
   return { files, truth: mosaic.truth, grid: { columns, rows, overlap: overlap * 100 } };
+}
+
+/** The .ozx archive's first multiscale image: its pixels, shape (z?, y, x), axes and scale. */
+export async function readOmeZarrArchive(bytes) {
+  const store = ZipFileStore.fromBlob(new Blob([bytes]));
+  const root = await zarr.open(zarr.root(store), { kind: "group" });
+  const [multiscales] = root.attrs.ome.multiscales;
+  const [dataset] = multiscales.datasets;
+  const { data, shape } = await zarr.get(await zarr.open(root.resolve(dataset.path), { kind: "array" }));
+  const scale = dataset.coordinateTransformations.find((transform) => transform.type === "scale").scale;
+  return { data, shape, axes: multiscales.axes, scale };
 }

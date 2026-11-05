@@ -24,7 +24,7 @@ are GPL-2.0; neither was read or copied, and Fiji ran only as an external refere
 3. **Global optimisation** (`src/core/global.js`): weighted least squares of translations
    (weight = r × overlapping pixels), the first tile fixed. Pairs with r < 0.3 are not used;
    after each solve the worst pair is dropped while its residual is above 2.5 × the mean and
-   3.5 px (Fiji's defaults). A tile group without usable pairs keeps its layout, moved by the
+   0.95 px, or while the mean residual is above 3.5 px (Fiji 3.1.8's rule with its defaults). A tile group without usable pairs keeps its layout, moved by the
    main group's mean correction.
 4. **Fusion** (`src/core/fusion.js`): linear blending, weight = product over axes of the distance
    to the tile's nearest edge, linear interpolation at sub-pixel positions, in the tiles' sample
@@ -40,8 +40,9 @@ provenance (JSON).
   peak: a fit to the phase-correlation peak was biased by up to a pixel on synthetic pairs with
   partial overlap (measured, `validation/` and `test/pairwise.test.js`).
 - Pair weights include the number of overlapping pixels, so a small diagonal overlap cannot pull
-  tiles as hard as a full edge. On a synthetic 3 × 2 mosaic a wrong diagonal measurement
-  (r = 0.58) moved tiles by 1.4 px with r-only weights and 0.09 px with these.
+  tiles as hard as a full edge. On a 3 × 2 grid of 512 px tiles with 51 px overlaps, a diagonal
+  measured 5.7 px wrong (r = 0.58) moved tiles by 1.09 px with r-only weights and 0.16 px with
+  these, outlier removal off (`test/global.test.js`).
 - A tile without usable pairs keeps its layout position (moved with the rest). Fiji 3.1.8 put
   such tiles at (0, 0) on the sparse Cy5 MIST set.
 
@@ -69,5 +70,6 @@ Rows 1-4, columns 1-4 of NIST MIST's `Small_Phase_Test_Dataset` (phase contrast,
 uint16, stem cell colonies), losslessly re-compressed, with the TileConfiguration Fiji writes
 for an 18 % grid. Source: https://github.com/usnistgov/MIST (Chalfoun et al. 2017, Sci Rep
 7:4988). A work of the US Government (NIST), distributed under the NIST notice; acknowledge
-NIST as the source. The README beside the files on Hugging Face (`stitching/example/`) records
-creators, licence and modifications.
+NIST as the source. MIST's `LICENSE.txt` (the NIST notice, verbatim from
+usnistgov/MIST@26481de8) sits beside the tiles on Hugging Face (`stitching/example/`) and ships
+in the offline bundle; the README there records creators, licence and modifications.

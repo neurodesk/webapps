@@ -21,7 +21,7 @@ function checkFinite(name, data) {
   }
 }
 
-async function decode({ files, maxBytes }) {
+async function decode({ files, maxBytes, shared }) {
   const infos = [];
   let total = 0;
   for (const { name, buffer } of files) {
@@ -35,7 +35,7 @@ async function decode({ files, maxBytes }) {
   if (total > maxBytes) throw new InputTooLargeError(total, maxBytes, { subject: "The decoded tiles" });
   const tiles = [];
   for (const [k, { name, buffer }] of files.entries()) {
-    const stack = await readTiffStack(buffer, { maxBytes });
+    const stack = await readTiffStack(buffer, { maxBytes, shared });
     checkFinite(name, stack.data);
     const shape = stack.pages > 1 ? [stack.width, stack.height, stack.pages] : [stack.width, stack.height];
     tiles.push({
@@ -44,7 +44,7 @@ async function decode({ files, maxBytes }) {
       dtype: stack.dtype,
       data: stack.data,
       pixelSize: stack.metadata.pixelSize,
-      stagePosition: stack.metadata.stagePosition ?? null,
+      stagePosition: stack.metadata.stagePosition,
       kind: stack.metadata.kind,
     });
     self.postMessage({ progress: (k + 1) / files.length });
@@ -75,7 +75,7 @@ self.onmessage = async ({ data: message }) => {
       transfer.push(result.data.buffer);
       if (result.tiff) transfer.push(result.tiff.buffer);
     }
-    self.postMessage({ result }, transfer.filter((buffer) => !(buffer instanceof SharedArrayBuffer)));
+    self.postMessage({ result }, transfer.filter((buffer) => !(typeof SharedArrayBuffer === "function" && buffer instanceof SharedArrayBuffer)));
   } catch (error) {
     self.postMessage({ error: error?.message ?? String(error) });
   }

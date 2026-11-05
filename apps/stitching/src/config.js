@@ -8,7 +8,7 @@ import { PAIRWISE_DEFAULTS } from "./core/pairwise.js";
 export const APP = Object.freeze({
   id: "stitching",
   title: automation.title,
-  version: "0.0.0",
+  version: "0.0.20261105",
 });
 
 export const LAYOUTS = Object.freeze({
@@ -19,7 +19,11 @@ export const LAYOUTS = Object.freeze({
 
 /** Decoded tiles above this many bytes in total are refused before decoding. */
 export const MAX_TILE_BYTES = 1.5e9;
-/** Fused images above this many pixels are refused (the sum and weight buffers take 8 bytes each). */
+/**
+ * Fused images above this many pixels are refused. The sum and weight buffers take 4 bytes each
+ * per pixel (Float32) for 8- and 16-bit tiles and 8 bytes each (Float64) for 32- and 64-bit
+ * tiles; src/core/memory.js checks the whole fusion against the working-memory budget.
+ */
 export const MAX_FUSED_PIXELS = 150e6;
 
 export class SettingsError extends Error {
@@ -60,7 +64,7 @@ export function readSettings(values) {
     global: {
       threshold: number(values, "threshold", "Correlation threshold", { min: 0, max: 1 }),
       maxRatio: number(values, "maxRatio", "Max/mean residual", { min: 1, max: 100 }),
-      maxAbsolute: number(values, "maxAbsolute", "Absolute residual", { min: 0, max: 10000 }),
+      maxAbsolute: number(values, "maxAbsolute", "Mean residual limit", { min: 0, max: 10000 }),
     },
   };
   if (layout === "grid") {

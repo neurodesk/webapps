@@ -63,6 +63,13 @@ test('stage positions become pixel positions relative to the first corner', () =
   assert.throws(() => positionsFromStage([{ x: 1, y: 1 }], [{ x: null, y: 1 }], 2), /pixel size/);
 });
 
+test('3D stage positions use every tile\'s z, or none, never z 0 for a tile that lacks one', () => {
+  const sizes = [{ x: 1, y: 1, z: 2 }, { x: 1, y: 1, z: 2 }];
+  assert.deepEqual(positionsFromStage([{ x: 0, y: 0, z: 10 }, { x: 90, y: 0, z: 14 }], sizes, 3), [[0, 0, 0], [90, 0, 2]]);
+  assert.deepEqual(positionsFromStage([{ x: 0, y: 0, z: null }, { x: 90, y: 0, z: null }], sizes, 3), [[0, 0, 0], [90, 0, 0]]);
+  assert.throws(() => positionsFromStage([{ x: 0, y: 0, z: 10 }, { x: 90, y: 0, z: null }], sizes, 3), /Tile 2 has no stage z position/);
+});
+
 test('only overlapping pairs are registered, diagonal neighbours included', () => {
   const shapes = Array(4).fill([100, 80]);
   assert.deepEqual(overlappingPairs(shapes, [[0, 0], [90, 0], [0, 70], [90, 70]]), [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]);
