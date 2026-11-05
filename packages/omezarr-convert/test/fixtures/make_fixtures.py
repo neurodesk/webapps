@@ -27,6 +27,9 @@ tifffile.imwrite(
 # Float32, ZYX, no physical sizes.
 tifffile.imwrite('zyx-float.ome.tif', (planes((1, 1, 3, 4, 7), np.float32) / 3)[0, 0], ome=True, metadata={'axes': 'ZYX'})
 
+# Min-is-white OME-TIFF: stored samples 0, 255, 32, 192 (white is zero).
+tifffile.imwrite('miniswhite.ome.tif', np.array([[0, 255], [32, 192]], np.uint8), ome=True, photometric='miniswhite', metadata={'axes': 'YX'})
+
 # A 16-bit greyscale PNG of 4 x 3 with pHYs 2,000,000 px/m in x and 1,000,000 in y (Pillow).
 from PIL import Image  # noqa: E402
 

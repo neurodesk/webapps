@@ -340,8 +340,12 @@ async function convert(signal, settings = settingsFromForm(), overrides = metada
     results.render(rows);
     $("outputSection").open = true;
     log.log(`Wrote ${written.chunksWritten} chunks (${formatBytes(written.bytesWritten)}) in ${seconds.toFixed(1)} s${folder ? ` to ${folder.name}/${stem}.ome.zarr` : ""}`, "info");
-    await showOutput(output, current);
-    current.throwIfAborted();
+    // The store is complete from here: a preview that fails or is cancelled keeps the outputs.
+    try {
+      await showOutput(output, current);
+    } catch (error) {
+      log.log(`The written OME-Zarr was not previewed: ${error.name === "AbortError" ? "cancelled" : error.message}`, "error");
+    }
     const done = folder ? `Saved to ${folder.name}/${stem}.ome.zarr` : "OME-Zarr ready";
     progress.end(done);
     status(done);

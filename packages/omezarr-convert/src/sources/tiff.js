@@ -67,6 +67,9 @@ async function omeTiffSource(file, stack) {
     notes.push(note("File's reduced resolutions recomputed", `The file's own ${store.levels - 1} reduced resolutions are recomputed, not copied.`));
   }
   if (pixels.channels.some((channel) => channel.samplesPerPixel > 1)) throw new Error("OME channels with several samples per pixel (RGB channels) are not supported.");
+  // White-is-zero keeps its stored values; the channels are marked inverted, as for plain TIFF.
+  const inverted = stack.photometric === "min-is-white";
+  if (inverted) notes.push(note("Min-is-white: shown inverted", "The TIFF stores white as zero. The stored values are kept and omero marks the channel inverted, so viewers show it as the file intends."));
   // TimeIncrement comes from the shared OME parser, in seconds, decoded like the other attributes.
   const interval = stack.metadata?.frameInterval ?? null;
   const scale = { t: interval, z: physical(pixels.physicalSizeZ), y: physical(pixels.physicalSizeY), x: physical(pixels.physicalSizeX) };
@@ -87,6 +90,7 @@ async function omeTiffSource(file, stack) {
     channels: Array.from({ length: shape.c }, (_, index) => ({
       label: pixels.channels[index]?.name ? decodeXml(pixels.channels[index].name) : null,
       color: rgbaColour(pixels.channels[index]?.color),
+      inverted,
     })),
     notes,
     async readPlane(t, c, z, { signal: planeSignal } = {}) {

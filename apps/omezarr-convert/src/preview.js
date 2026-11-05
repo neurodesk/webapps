@@ -4,6 +4,7 @@
 // top (the y axis is negated), as microscopy viewers show it.
 import { createNiftiFromData, createNiftiHeaderFromVolume } from "@neurodesk/webapp-components/file-io/nifti";
 import { isSpaceUnit, millimetresPer } from "@neurodesk/omezarr-convert/units";
+import { pacer } from "@neurodesk/omezarr-convert/pacing";
 
 export const PREVIEW_MAX_PIXELS = 1024;
 
@@ -71,9 +72,12 @@ export async function readSourcePreview(source, { signal, max = PREVIEW_MAX_PIXE
   const width = Math.ceil(x / stride);
   const volumes = [];
   for (let c = 0; c < channels; c += 1) volumes.push({ data: null, range: [Infinity, -Infinity] });
+  // NIfTI and PNG planes are read synchronously: give the page a turn between planes, so the
+  // footer's cancel and the progress bar work while a large input loads.
+  const pace = pacer(signal);
   for (let z = 0; z < depth; z += 1) {
     for (let c = 0; c < channels; c += 1) {
-      signal?.throwIfAborted();
+      await pace();
       const plane = await source.readPlane(0, c, z, { signal });
       const volume = volumes[c];
       volume.data ??= new plane.constructor(depth * height * width);

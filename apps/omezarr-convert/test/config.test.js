@@ -174,3 +174,31 @@ test("the preview geometry is scaled to 100 mm and locations map back to microme
   const [x, y, z] = trueMicrometres([10 * geometry.spacing[2], geometry.top - 4 * geometry.spacing[1], 3 * geometry.spacing[0]], geometry);
   assert.ok(Math.abs(x - 0.229) < 1e-9 && Math.abs(y - 4 * 0.0229) < 1e-9 && Math.abs(z - 0.6) < 1e-9);
 });
+
+test("loading the input preview gives the page turns between synchronous planes", async () => {
+  const busy = (ms) => {
+    const end = performance.now() + ms;
+    while (performance.now() < end);
+  };
+  const source = {
+    dtype: "uint8",
+    shape: { t: 1, c: 1, z: 30, y: 8, x: 8 },
+    scale: { z: 1, y: 1, x: 1 },
+    units: { z: null, y: null, x: null },
+    // Like the NIfTI and PNG sources: each plane is ready at once, after some work.
+    readPlane() {
+      busy(5);
+      return new Uint8Array(64);
+    },
+  };
+  let turns = 0;
+  let stop = false;
+  const tick = () => {
+    turns += 1;
+    if (!stop) setImmediate(tick);
+  };
+  setImmediate(tick);
+  await readSourcePreview(source);
+  stop = true;
+  assert.ok(turns >= 3, `the page got ${turns} turns during a 150 ms load`);
+});

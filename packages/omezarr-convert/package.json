@@ -16,7 +16,8 @@
     "./writer": "./src/writer.js",
     "./sources": "./src/sources/index.js",
     "./zip": "./src/zip.js",
-    "./readback": "./src/readback.js"
+    "./readback": "./src/readback.js",
+    "./pacing": "./src/pacing.js"
   },
   "scripts": {
     "test": "node --test test/*.test.js",

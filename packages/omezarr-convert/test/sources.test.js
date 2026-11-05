@@ -28,7 +28,7 @@ test("an OME-TIFF keeps T, C, Z, per-axis units, channel names and colours", asy
   assert.equal(source.dtype, "uint16");
   assert.deepEqual(source.scale, { t: null, z: 0.3, y: 65, x: 65 });
   assert.deepEqual(source.units, { t: null, z: "micrometer", y: "nanometer", x: "nanometer" });
-  assert.deepEqual(source.channels, [{ label: "DAPI", color: "0000FF" }, { label: "GFP", color: "00FF00" }, { label: "mCherry", color: "FF0000" }]);
+  assert.deepEqual(source.channels, [{ label: "DAPI", color: "0000FF", inverted: false }, { label: "GFP", color: "00FF00", inverted: false }, { label: "mCherry", color: "FF0000", inverted: false }]);
   for (const { t, c, z, plane } of await planes(source)) {
     assert.ok(plane instanceof Uint16Array);
     assert.deepEqual(Array.from(plane), Array.from({ length: 30 }, (_, i) => omeValue(t, c, z, Math.floor(i / 6), i % 6)), `plane t${t} c${c} z${z}`);
@@ -57,7 +57,7 @@ test("OME-XML with a namespace prefix is read through fiff", async () => {
   assert.equal(source.format, "OME-TIFF");
   assert.equal(source.name, "prefixed");
   assert.deepEqual(source.shape, { t: 1, c: 1, z: 2, y: 2, x: 3 });
-  assert.deepEqual(source.channels, [{ label: "DAPI", color: null }]);
+  assert.deepEqual(source.channels, [{ label: "DAPI", color: null, inverted: false }]);
   assert.deepEqual([source.scale.x, source.units.x], [0.5, "nanometer"]);
 });
 
@@ -66,7 +66,7 @@ test("single-quoted OME-XML with entities is read through fiff", async () => {
   assert.equal(source.format, "OME-TIFF");
   assert.equal(source.name, "cells & nuclei");
   assert.deepEqual(source.shape, { t: 1, c: 1, z: 2, y: 2, x: 3 });
-  assert.deepEqual(source.channels, [{ label: "DAPI", color: null }]);
+  assert.deepEqual(source.channels, [{ label: "DAPI", color: null, inverted: false }]);
   assert.deepEqual([source.scale.x, source.units.x], [0.5, "nanometer"]);
 });
 
@@ -115,6 +115,14 @@ test("a white-is-zero TIFF keeps its samples and marks the channel inverted; mas
   assert.deepEqual(Array.from(await white.readPlane(0, 0, 0)), Array.from({ length: 6 }, (_, i) => (Math.floor(i / 3) * 7 + (i % 3) * 3) % 251));
   const masked = await openSource([await file(here("../../components/test/fixtures/tiff/with-mask.tif"))]);
   assert.deepEqual(masked.shape, { t: 1, c: 1, z: 2, y: 3, x: 4 });
+});
+
+test("a white-is-zero OME-TIFF keeps its samples and marks the channel inverted", async () => {
+  const white = await openSource([await file(here("fixtures/miniswhite.ome.tif"))]);
+  assert.equal(white.format, "OME-TIFF");
+  assert.equal(white.channels[0].inverted, true);
+  assert.ok(white.notes.some(({ summary }) => summary === "Min-is-white: shown inverted"));
+  assert.deepEqual(Array.from(await white.readPlane(0, 0, 0)), [0, 255, 32, 192]);
 });
 
 test("a plain multi-page TIFF is a Z stack calibrated from its centimetre resolution", async () => {
