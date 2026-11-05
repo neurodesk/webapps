@@ -1363,6 +1363,7 @@ apps:
       release: false
   - id: stardist
     path: stardist
+    catalog: neuro
     title: StarDist
     description: Segment cell nuclei in 2D fluorescence microscopy.
     categories: [segmentation]
