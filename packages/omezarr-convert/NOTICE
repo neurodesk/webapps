@@ -1,0 +1,16 @@
+OME-Zarr conversion library (@neurodesk/omezarr-convert)
+Copyright 2026 Neurodesk contributors
+Apache-2.0 (LICENSE)
+
+schemas/0.4 and schemas/0.5 are the OME-NGFF JSON schemas copied unchanged from
+https://github.com/ome/ngff at tag 0.5.2 (commit 5cdf83b6806b5e500477c7af69dae9ed2adcf77d),
+Copyright (c) Open Microscopy Environment, under the W3C Software and Document License
+(https://www.w3.org/copyright/software-license-2023/), as ome/ngff LICENSE.md states for its
+reports. They are used only by the tests and validation.
+
+Runtime dependencies (MIT unless stated): @fideus-labs/fiff, @fideus-labs/ngff-zarr,
+geotiff (geotiff.js), zarrita, fflate, fast-png, jpeg-js (BSD-3-Clause).
+
+validation/ uses bioformats2raw 0.14.0 (GPL-2.0, Glencoe Software) and ome-zarr-py
+(BSD-2-Clause) only as external references run outside this package; no code of either
+is included.

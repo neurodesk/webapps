@@ -409,6 +409,13 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Optional-output warnings come only from the core (v0.3.2 matches the removed builder check on every catalog binding).
 - Open: `bindNewWorkflowInput` drops item bounds; carrying `minItems`/`maxItems` needs the generator to emit them and a 0.1.2 document. If it does, the core's item-count issue will duplicate the builder's `input-count` warning.
 
+## omezarr-convert
+
+- The readers, XY pyramid and OME-NGFF 0.4/0.5 writer live in `packages/omezarr-convert` and run in Node; the app adds the form, the archive or folder store and the preview. Change outputs in the package.
+- TIFF goes through `openTiffPages` in the shared `@neurodesk/webapp-components/file-io/tiff` (from #695). OME-TIFF goes to fiff on that geotiff instance, with `omeXml` rewriting prefixed and single-quoted OME-XML, which fiff 0.8.2 does not parse, and names decoded with `decodeEntities`; plain, ImageJ and sequence TIFFs use the pages and #695's ImageJ calibration. fiff alone reads only page 0 of a non-OME stack.
+- `validation/example-reference.json` is bioformats2raw 0.14.0 (SIMPLE, 256 px tiles, `--target-min-size=256`) on the example, read by zarr-python, plus the NumPy mean pyramid; `test/synthetic-reference.json` comes from `validation/synthetic_reference.py`. `nearest` must equal bioformats2raw byte for byte and `mean` NumPy; rerecord both when the pyramid rules change and say why in the package README.
+- The vendored schemas (`schemas/`, ome/ngff tag 0.5.2) are test-only; every conversion in the tests and the e2e downloads must pass the strict image schema of its version.
+
 ## Native executables (exes/)
 
 A `packages/<app>/release.json` with a `tag` is an external release: another repository builds and releases it, and `externalCatalog` (`scripts/lib/native-releases.mjs`) turns its pinned assets into the app's `registry/standalone.json` entry, which `test/standalone.test.mjs` holds equal. Nothing here builds, dispatches or imports it. To move to a new release, update the pins and run `node scripts/desktop/import-native-releases.mjs`, which rewrites external entries from their pins without fetching them.

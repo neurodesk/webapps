@@ -5242,6 +5242,13 @@
       "contentType": "image/tiff",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/34cb2e8c741240765ed75b48328ffe8676cbba24/omezarr-convert/example/retina-crop.ome.tif": {
+      "sha256": "a76758337ac07c0ffd2fa9f423409a31e576eb820e91c8b0830b221b6bdb8225",
+      "bytes": 1842339,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6592,6 +6599,9 @@
     "structure-tensor": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif"
+    ],
+    "omezarr-convert": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/34cb2e8c741240765ed75b48328ffe8676cbba24/omezarr-convert/example/retina-crop.ome.tif"
     ]
   }
 }

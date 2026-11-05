@@ -1,12 +1,13 @@
 // Multi-page greyscale TIFF stacks (baseline, ImageJ and OME-TIFF): read with geotiff, written
 // as uncompressed little-endian baseline TIFF that ImageJ, Fiji, tifffile and geotiff open.
+// `openTiffPages` (at the end) reads page by page and keeps RGB samples apart instead.
 //
 // A stack is one plane per page, in page order, all the same size and sample type. The reader
 // refuses multi-sample pages (RGB, grey + alpha, extra samples) and palette images rather than
 // guessing a channel, and refuses a stack whose decoded size is above `maxBytes` from the page
 // directories alone, before any pixel is decoded. `rgb: 'mean'` reads RGB pages as the mean of
 // their red, green and blue samples instead, as ImageJ converts RGB to 8-bit.
-import { GeoTIFF, fromArrayBuffer } from 'geotiff';
+import { GeoTIFF, fromArrayBuffer, fromBlob } from 'geotiff';
 import { InputTooLargeError, MAX_INPUT_BYTES } from './input-limits.js';
 
 const TYPES = {
@@ -69,7 +70,7 @@ function rational(value) {
 const ENTITIES = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
 
 /** XML character and predefined entity references decoded (`&#181;m` is `µm`). */
-function decodeXml(value) {
+export function decodeXml(value) {
   return value.replace(/&(?:#x([\da-f]+)|#(\d+)|(\w+));/gi, (reference, hex, decimal, name) => {
     if (hex || decimal) return String.fromCodePoint(parseInt(hex ?? decimal, hex ? 16 : 10));
     return ENTITIES[name] ?? reference;
@@ -385,4 +386,130 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
     out.set(source.subarray(page * planeBytes, (page + 1) * planeBytes), strip);
   }
   return out;
+}
+
+// Page-wise reading, for readers that keep samples apart (RGB as channels) or stream page by
+// page rather than holding the whole stack, and for OME readers (fiff) that map planes
+// themselves from the geotiff instance.
+
+const OME_NAMESPACE = 'http://www.openmicroscopy.org/Schemas/OME/';
+const PHOTOMETRIC_NAMES = { 0: 'min-is-white', 1: 'min-is-black', 2: 'rgb', 3: 'palette', 4: 'mask', 5: 'separated', 6: 'ycbcr', 8: 'cielab' };
+
+/**
+ * The OME-XML in an ImageDescription as regex-based OME readers such as fiff expect it: a
+ * namespace prefix (`<ome:OME xmlns:ome=…>`) moved to the default namespace and single-quoted
+ * attributes double-quoted. Null when the description is not OME-XML.
+ */
+export function omeXml(description) {
+  if (typeof description !== 'string') return null;
+  let text = description.replace(/\0+$/, '');
+  const root = text.match(/<([A-Za-z_][\w.-]*:)?OME[\s>]/);
+  if (!root || !text.includes(OME_NAMESPACE)) return null;
+  const prefix = root[1]?.slice(0, -1);
+  if (prefix) {
+    text = text
+      .replace(new RegExp(`<(/?)${prefix}:`, 'g'), '<$1')
+      .replace(new RegExp(`xmlns:${prefix}=`, 'g'), 'xmlns=');
+  }
+  // Inside start tags only: single-quoted values become double-quoted, their quotes escaped.
+  return text.replace(/<[^!?/][^>]*>/g, (tag) => tag.replace(/(\s[\w:.-]+\s*=\s*)'([^']*)'/g, (_, name, value) => `${name}"${value.replace(/"/g, '&quot;')}"`));
+}
+
+/**
+ * The role of each sample in a pixel: 'red', 'green', 'blue' for the first three samples of
+ * an RGB image, 'alpha' for an ExtraSamples entry of 1 or 2, otherwise 'value' (one channel
+ * each). Palette, YCbCr, CMYK and CIELab images return null: their samples are not intensities.
+ */
+export function sampleRoles(photometric, samplesPerPixel, extraSamples = []) {
+  if (![0, 1, 2].includes(photometric)) return null;
+  // The base samples (three for RGB, one for greyscale) come first; ExtraSamples describes the rest.
+  const base = photometric === 2 ? 3 : 1;
+  if (samplesPerPixel < base) return null;
+  const roles = [];
+  for (let sample = 0; sample < samplesPerPixel; sample += 1) {
+    if (photometric === 2 && sample < base) roles.push(['red', 'green', 'blue'][sample]);
+    else if (sample < base) roles.push('value');
+    else roles.push([1, 2].includes(extraSamples[sample - base]) ? 'alpha' : 'value');
+  }
+  return roles;
+}
+
+const tagValue = async (image, name) => (image.fileDirectory.hasTag(name) ? image.fileDirectory.loadValue(name) : undefined);
+
+async function describePage(image) {
+  const format = image.getSampleFormat() ?? 1;
+  const bits = image.getBitsPerSample();
+  return {
+    width: image.getWidth(),
+    height: image.getHeight(),
+    samplesPerPixel: image.getSamplesPerPixel(),
+    bitsPerSample: bits,
+    Type: TYPES[`${format}:${bits}`] ?? null,
+    photometric: Number(await tagValue(image, 'PhotometricInterpretation') ?? 1),
+    extraSamples: Array.from(await tagValue(image, 'ExtraSamples') ?? []).map(Number),
+    reduced: Boolean(Number(await tagValue(image, 'NewSubfileType') ?? 0) & 1),
+  };
+}
+
+/**
+ * Open a TIFF (Blob or ArrayBuffer) as its full-resolution pages, without decoding pixels.
+ * Reduced-resolution pages (thumbnails, flat pyramids) are skipped; the others must share size,
+ * samples and sample type. `maxBytes` refuses a stack whose decoded pages would exceed it.
+ * `metadata` is the OME or ImageJ calibration (parseOmeDescription, parseImagejDescription),
+ * null for a baseline TIFF; `resolution` is X/YResolution in pixels per ResolutionUnit.
+ */
+export async function openTiffPages(source, { signal, maxBytes = Infinity } = {}) {
+  signal?.throwIfAborted();
+  // A Blob is read in slices where the browser's FileReader exists, whole elsewhere (Node).
+  const tiff = source instanceof Blob && typeof FileReader === 'function'
+    ? await fromBlob(source, signal)
+    : await fromArrayBuffer(source instanceof Blob ? await source.arrayBuffer() : source, signal);
+  const count = await tiff.getImageCount();
+  const pages = [];
+  let first = null;
+  for (let index = 0; index < count; index += 1) {
+    signal?.throwIfAborted();
+    const image = await tiff.getImage(index);
+    const page = await describePage(image);
+    if (page.reduced) continue;
+    first ??= { ...page, image };
+    for (const key of ['width', 'height', 'samplesPerPixel', 'bitsPerSample', 'Type', 'photometric']) {
+      if (page[key] !== first[key]) throw new Error(`TIFF page ${index + 1} differs from page 1 in ${key === 'Type' ? 'sample type' : key}; only stacks of equal pages can be read.`);
+    }
+    pages.push(image);
+  }
+  if (!first) throw new Error('The TIFF has no full-resolution page.');
+  if (!first.Type) throw new Error(`TIFF samples of ${first.bitsPerSample} bits are not supported; use 8, 16 or 32-bit integer or 32/64-bit float samples.`);
+  const roles = sampleRoles(first.photometric, first.samplesPerPixel, first.extraSamples);
+  if (!roles) throw new Error(`TIFF ${PHOTOMETRIC_NAMES[first.photometric] ?? `photometric ${first.photometric}`} images are not supported; save them as greyscale or RGB.`);
+  const bytes = pages.length * first.samplesPerPixel * first.width * first.height * first.Type.BYTES_PER_ELEMENT;
+  if (bytes > maxBytes) throw new InputTooLargeError(bytes, maxBytes, { subject: 'The decoded TIFF stack' });
+  const description = await tagValue(first.image, 'ImageDescription');
+  const text = typeof description === 'string' ? description : null;
+  const resolutionUnit = Number(await tagValue(first.image, 'ResolutionUnit') ?? 2);
+  const x = rational(await tagValue(first.image, 'XResolution'));
+  const y = rational(await tagValue(first.image, 'YResolution'));
+  const resolution = Number.isFinite(x) && x > 0 && Number.isFinite(y) && y > 0
+    ? { x, y, unit: { 1: null, 2: 'inch', 3: 'centimeter' }[resolutionUnit] ?? null }
+    : null;
+  const ome = omeXml(text) !== null;
+  return {
+    /** The geotiff instance the pages come from. */
+    tiff,
+    pageCount: pages.length,
+    width: first.width,
+    height: first.height,
+    samplesPerPixel: first.samplesPerPixel,
+    dtype: dtypeName(first.Type),
+    photometric: PHOTOMETRIC_NAMES[first.photometric],
+    sampleRoles: roles,
+    description: text,
+    ome,
+    metadata: ome ? parseOmeDescription(text) : parseImagejDescription(text, resolution ? [resolution.x, resolution.y] : [null, null]),
+    resolution,
+    /** The samples of one page as separate row-major planes. */
+    async readPage(index, { signal: pageSignal } = {}) {
+      return Array.from(await pages[index].readRasters({ interleave: false, signal: pageSignal }));
+    },
+  };
 }

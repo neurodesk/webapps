@@ -1584,3 +1584,27 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: omezarr-convert
+    path: omezarr-convert
+    title: OME-Zarr Converter
+    description: Convert microscopy TIFF and NIfTI images to OME-Zarr.
+    categories: [image-processing]
+    keywords: [OME-Zarr, OME-NGFF, conversion, OME-TIFF, TIFF, microscopy, multiscale, pyramid, Zarr, bioformats2raw, ImageJ, NIfTI]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff, nifti]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

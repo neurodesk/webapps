@@ -893,6 +893,38 @@ try {
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
     await expect(page.locator('#neuronField')).toBeHidden();
   });
+  await check('omezarr-convert', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t1.nii'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-t1.nii · 1 ch × 16 × 16 × 16 · uint8');
+    // The NIfTI states no unit, so the voxel size fields open; what is typed survives closing them.
+    const metadata = page.locator('#metadataSettings > summary');
+    await expect(page.locator('#metadataSettings')).toHaveAttribute('open', '');
+    await page.locator('#sizeX').fill('0.5');
+    await page.locator('#sizeY').fill('0.5');
+    await page.locator('#sizeZ').fill('2');
+    await page.locator('#channelName0').fill('Nuclei');
+    await metadata.tap();
+    await expect(page.locator('#sizeZ')).toBeHidden();
+    await metadata.tap();
+    await expect(page.locator('#sizeZ')).toHaveValue('2');
+    await expect(page.locator('#channelName0')).toHaveValue('Nuclei');
+    await page.locator('#method').selectOption('nearest');
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#method')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#method')).toHaveValue('nearest');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('OME-Zarr ready', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('OME-Zarr 0.5 · 1 level');
+    // A new image withdraws the result of the old one.
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t2.nii', 40));
+    await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
   await check('sdc', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);

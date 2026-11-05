@@ -7378,6 +7378,15 @@
         "bytes": 532360,
         "kind": "example"
       }
+    ],
+    "omezarr-convert": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/34cb2e8c741240765ed75b48328ffe8676cbba24/omezarr-convert/example/retina-crop.ome.tif",
+        "sha256": "a76758337ac07c0ffd2fa9f423409a31e576eb820e91c8b0830b221b6bdb8225",
+        "bytes": 1842339,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      }
     ]
   },
   "exclusions": [],

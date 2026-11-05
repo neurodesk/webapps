@@ -65,3 +65,33 @@ export function readTiffStack<Data extends TiffSampleArray = TiffSampleArray>(bu
 export function imagejDescription(options: { frames: number; frameInterval?: number | null; unit?: string | null; min?: number | null; max?: number | null }): string;
 /** Uncompressed little-endian baseline TIFF, one strip per page; `rgb` writes Uint8Array red, green, blue triplets as RGB pages. */
 export function writeTiffStack(stack: { width: number; height: number; data: TiffSampleArray; description?: string; pixelSize?: { x: number; y: number } | null; rgb?: boolean }): Uint8Array;
+
+export type TiffSampleRole = 'red' | 'green' | 'blue' | 'alpha' | 'value';
+
+export interface TiffPages {
+  /** The geotiff instance the pages come from. */
+  tiff: import('geotiff').GeoTIFF;
+  pageCount: number;
+  width: number;
+  height: number;
+  samplesPerPixel: number;
+  dtype: TiffStackInfo['dtype'];
+  photometric: string;
+  sampleRoles: TiffSampleRole[];
+  description: string | null;
+  /** True when the description holds OME-XML (with or without a namespace prefix). */
+  ome: boolean;
+  /** OME or ImageJ calibration; null for a baseline TIFF. */
+  metadata: Omit<TiffStackMetadata, 'description'> | null;
+  /** Pixels per unit as stored in XResolution/YResolution and ResolutionUnit. */
+  resolution: { x: number; y: number; unit: 'inch' | 'centimeter' | null } | null;
+  readPage(index: number, options?: { signal?: AbortSignal }): Promise<TiffSampleArray[]>;
+}
+
+/** OME-XML with a namespace prefix moved to the default namespace and attributes double-quoted, or null. */
+export function omeXml(description: unknown): string | null;
+export function sampleRoles(photometric: number, samplesPerPixel: number, extraSamples?: number[]): TiffSampleRole[] | null;
+/** A TIFF's full-resolution pages, read one at a time, samples kept apart. */
+export function openTiffPages(source: Blob | ArrayBuffer, options?: { signal?: AbortSignal; maxBytes?: number }): Promise<TiffPages>;
+/** XML text with its predefined and numeric character references decoded. */
+export function decodeXml(value: string): string;

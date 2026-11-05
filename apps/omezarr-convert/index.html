@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OME-Zarr Converter — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF, OME-TIFF, PNG or JPEG sequence, or NIfTI image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a TIFF, OME-TIFF, PNG/JPEG sequence or NIfTI</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Conversion</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="ngffVersion">Format
+              <span class="nd-info-icon" tabindex="0" aria-label="About the OME-Zarr version">i<span class="nd-info-tooltip">OME-Zarr 0.5 is Zarr v3, downloaded as one .ozx archive (RFC-9). OME-Zarr 0.4 is Zarr v2, which older readers such as napari-ome-zarr before 0.6, Fiji's n5-zarr and OMERO need.</span></span>
+            </label>
+            <select id="ngffVersion">
+              <option value="0.5" selected>OME-Zarr 0.5 (Zarr v3)</option>
+              <option value="0.4">OME-Zarr 0.4 (Zarr v2)</option>
+            </select>
+          </div>
+          <div class="nd-field">
+            <label for="method">Pyramid
+              <span class="nd-info-icon" tabindex="0" aria-label="About the pyramid">i<span class="nd-info-tooltip">Each level halves Y and X until the image fits one chunk; Z, channels and time keep their size. Mean averages each 2 × 2 block, for intensity images. Nearest keeps every second pixel, as bioformats2raw does by default; use it for label images, whose values must not mix.</span></span>
+            </label>
+            <select id="method">
+              <option value="mean" selected>Mean of 2 × 2 (intensity)</option>
+              <option value="nearest">Nearest (labels)</option>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="metadataSettings">
+            <summary class="nd-section-title">Voxel size and channels</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="sizeX">X</label>
+                  <input id="sizeX" type="number" min="0" step="any" inputmode="decimal" />
+                </div>
+                <div class="nd-field">
+                  <label for="sizeY">Y</label>
+                  <input id="sizeY" type="number" min="0" step="any" inputmode="decimal" />
+                </div>
+                <div class="nd-field">
+                  <label for="sizeZ">Z</label>
+                  <input id="sizeZ" type="number" min="0" step="any" inputmode="decimal" />
+                </div>
+              </div>
+              <div class="nd-field">
+                <label for="sizeUnit">Unit
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the voxel size">i<span class="nd-info-tooltip">Filled in from the file where it states a voxel size. Leave all three empty to keep the file's own sizes and units (or none). Entering any one sets X, Y and Z in this unit.</span></span>
+                </label>
+                <select id="sizeUnit">
+                  <option value="nanometer">nm</option>
+                  <option value="micrometer" selected>µm</option>
+                  <option value="millimeter">mm</option>
+                </select>
+              </div>
+              <div id="channelNames"></div>
+            </div>
+          </details>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="chunkSize">Chunk <small>pixels</small></label>
+                  <select id="chunkSize">
+                    <option value="128">128</option>
+                    <option value="256" selected>256</option>
+                    <option value="512">512</option>
+                    <option value="1024">1024</option>
+                  </select>
+                </div>
+                <div class="nd-field">
+                  <label for="compression">Compression <small>0–9</small></label>
+                  <input id="compression" type="number" min="0" max="9" step="1" value="6" inputmode="numeric" />
+                </div>
+              </div>
+              <div class="nd-field" id="destinationField" hidden>
+                <label for="destination">Save to
+                  <span class="nd-info-icon" tabindex="0" aria-label="About saving to a folder">i<span class="nd-info-tooltip">A folder write saves each chunk as a file while converting, so the archive never has to fit in memory. Use it for images larger than about 2 GB.</span></span>
+                </label>
+                <select id="destination">
+                  <option value="archive" selected>Download archive</option>
+                  <option value="folder">Folder on this computer</option>
+                </select>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Convert to OME-Zarr</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Conversion progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel conversion" aria-label="Cancel conversion" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent"><p>Images are converted locally in this browser and are never uploaded. A folder write saves only into the folder you choose.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
