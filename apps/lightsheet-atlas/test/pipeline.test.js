@@ -57,9 +57,9 @@ test('the level choice follows the declared OME-Zarr scales, not the shape ratio
   // An odd-sized pyramid: 101³ at 10.2 µm and 21³ at 51 µm. The shape ratio makes level 1
   // 49.06 µm, but its declared voxels are 51 µm, coarser than the atlas.
   const levels = [
-    { shape: [101, 101, 101], voxelSizeUm: { z: 10.2, y: 10.2, x: 10.2 } },
-    { shape: [51, 51, 51], voxelSizeUm: { z: 20.4, y: 20.4, x: 20.4 } },
-    { shape: [21, 21, 21], voxelSizeUm: { z: 51, y: 51, x: 51 } },
+    { shape: [101, 101, 101], scale: { z: 10.2, y: 10.2, x: 10.2 } },
+    { shape: [51, 51, 51], scale: { z: 20.4, y: 20.4, x: 20.4 } },
+    { shape: [21, 21, 21], scale: { z: 51, y: 51, x: 51 } },
   ];
   const chosen = chooseLevel({ shape: levels[0].shape, levels }, [10.2, 10.2, 10.2]);
   assert.equal(chosen.level, 1);
@@ -68,6 +68,28 @@ test('the level choice follows the declared OME-Zarr scales, not the shape ratio
   const recalibrated = chooseLevel({ shape: levels[0].shape, levels }, [8, 8, 8]);
   assert.equal(recalibrated.level, 2);
   assert.deepEqual(recalibrated.voxelSizeUm.map((v) => Number(v.toFixed(9))), [40, 40, 40]);
+});
+
+test('declared scales without axis units still set the level choice, read through the OME-Zarr reader', async () => {
+  // 101³ then 21³ with declared scales 10.2 and 51 but no axis unit: the scale ratio is 5, so at
+  // a 10.2 µm calibration level 1 is 51 µm, coarser than the atlas, and level 0 is read.
+  const { openOmeZarrStack } = await import('../../../packages/components/src/file-io/microscopy-stack.js');
+  const files = [];
+  const add = (path, value) => {
+    const file = new File([JSON.stringify(value)], path.split('/').at(-1));
+    Object.defineProperty(file, 'webkitRelativePath', { value: `sample.zarr/${path}` });
+    files.push(file);
+  };
+  add('.zgroup', { zarr_format: 2 });
+  add('.zattrs', { multiscales: [{ version: '0.4', axes: ['z', 'y', 'x'].map((name) => ({ name, type: 'space' })), datasets: [
+    { path: '0', coordinateTransformations: [{ type: 'scale', scale: [10.2, 10.2, 10.2] }] },
+    { path: '1', coordinateTransformations: [{ type: 'scale', scale: [51, 51, 51] }] },
+  ] }] });
+  for (const [i, size] of [101, 21].entries()) add(`${i}/.zarray`, { zarr_format: 2, shape: [size, size, size], chunks: [1, size, size], dtype: '<u2', compressor: null, fill_value: 0, order: 'C', filters: null });
+  const stack = await openOmeZarrStack(files);
+  assert.equal(stack.levels[1].voxelSizeUm.z, null);
+  assert.equal(chooseLevel(stack, [10.2, 10.2, 10.2]).level, 0);
+  assert.equal(chooseLevel(stack, [9, 9, 9]).level, 1);
 });
 
 test('oversized grids and runs are refused before any plane is read', async () => {

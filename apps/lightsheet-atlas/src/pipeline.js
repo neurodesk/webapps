@@ -32,8 +32,9 @@ export function chooseLevel(stack, voxelSizeUm) {
   const axes = ['z', 'y', 'x'];
   stack.levels?.forEach((level, index) => {
     const spacing = voxelSizeUm.map((v, k) => {
-      const declared = level.voxelSizeUm?.[axes[k]];
-      const base = top.voxelSizeUm?.[axes[k]];
+      // Declared NGFF scales, whatever their unit: only their ratio to level 0 is used.
+      const declared = level.scale?.[axes[k]];
+      const base = top.scale?.[axes[k]];
       return declared > 0 && base > 0 ? (v * declared) / base : (v * top.shape[k]) / level.shape[k];
     });
     if (index > 0 && spacing.every((v) => v <= ATLAS_RESOLUTION_UM)) chosen = { level: index, shape: level.shape, voxelSizeUm: spacing };
