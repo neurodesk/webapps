@@ -7432,6 +7432,14 @@
         "sha256": "123d411889e6259ec176942ada14c49b0bd43fddd371b944a76e5aed888367da",
         "bytes": 2657
       }
+    ],
+    "deconvolution": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/726eee4a192bf75315b80ed693b64d158b07b703/deconvolution/example/hela-phalloidin488-confocal.tif",
+        "sha256": "a79ed0b43b7ed37fa6b70eed6a2b72202daf67e528db871533d77c9b6ae8f266",
+        "bytes": 2782466,
+        "kind": "example"
+      }
     ]
   },
   "exclusions": [],

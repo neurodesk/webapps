@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Deconvolution — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input stack</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF, OME-TIFF or NIfTI stack" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a TIFF, OME-TIFF or NIfTI stack</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="spacingXY">Pixel size <small>µm</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About the voxel size">i<span class="nd-info-tooltip">Read from the file's OME-XML, ImageJ calibration or NIfTI header when it has one. Correct it here if the file is uncalibrated: the PSF is computed on this grid.</span></span>
+              </label>
+              <input id="spacingXY" type="number" min="0.001" max="100" step="any" />
+            </div>
+            <div class="nd-field">
+              <label for="spacingZ">Z step <small>µm</small></label>
+              <input id="spacingZ" type="number" min="0.001" max="100" step="any" />
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Deconvolution</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="modality">Microscope
+              <span class="nd-info-icon" tabindex="0" aria-label="About the microscope type">i<span class="nd-info-tooltip">Widefield uses the emission PSF. Confocal multiplies the excitation and emission PSFs, which assumes a pinhole much smaller than one Airy unit; with a pinhole of about one Airy unit the true PSF is somewhat wider.</span></span>
+            </label>
+            <select id="modality">
+              <option value="widefield" selected>Widefield</option>
+              <option value="confocal">Confocal</option>
+            </select>
+          </div>
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="na">NA</label>
+              <input id="na" type="number" min="0.05" max="1.7" step="0.01" value="1.4" />
+            </div>
+            <div class="nd-field">
+              <label for="immersionIndex">Immersion index
+                <span class="nd-info-icon" tabindex="0" aria-label="About the immersion index">i<span class="nd-info-tooltip">Refractive index of the immersion medium the objective is designed for: 1.0 air, 1.333 water, 1.518 oil.</span></span>
+              </label>
+              <input id="immersionIndex" type="number" min="1" max="2" step="0.001" value="1.518" />
+            </div>
+          </div>
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="emission">Emission <small>nm</small></label>
+              <input id="emission" type="number" min="300" max="1500" step="1" value="520" />
+            </div>
+            <div class="nd-field">
+              <label for="excitation">Excitation <small>nm</small></label>
+              <input id="excitation" type="number" min="300" max="1500" step="1" value="488" disabled />
+            </div>
+          </div>
+          <div class="nd-field">
+            <label for="method">Method
+              <span class="nd-info-icon" tabindex="0" aria-label="About the method">i<span class="nd-info-tooltip">Richardson-Lucy as scikit-image runs it, starting from a flat estimate with zero outside the image. More iterations sharpen further and amplify noise. Total variation (Dey et al. 2006) damps that noise while keeping edges.</span></span>
+            </label>
+            <select id="method">
+              <option value="rl" selected>Richardson-Lucy</option>
+              <option value="rltv">Richardson-Lucy with total variation</option>
+            </select>
+          </div>
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="iterations">Iterations</label>
+              <input id="iterations" type="number" min="1" max="500" step="1" value="20" />
+            </div>
+            <div class="nd-field">
+              <label for="tvWeight">TV weight
+                <span class="nd-info-icon" tabindex="0" aria-label="About the TV weight">i<span class="nd-info-tooltip">The regularisation weight lambda. Dey et al. suggest 0.002; larger values smooth more. At most 0.1.</span></span>
+              </label>
+              <input id="tvWeight" type="number" min="0.0001" max="0.1" step="0.001" value="0.002" disabled />
+            </div>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="psfInput">Measured PSF <small>optional</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About a measured PSF">i<span class="nd-info-tooltip">A bead stack on the image's voxel size replaces the theoretical PSF. Its border median is subtracted as background, and it is cropped to an odd box centred on its brightest voxel.</span></span>
+                </label>
+                <div id="psfField"></div>
+              </div>
+              <button id="clearPsf" class="nd-btn nd-btn-secondary" type="button" hidden>Use the theoretical PSF</button>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="sampleIndex">Sample index
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the sample index">i<span class="nd-info-tooltip">Refractive index of the sample or mounting medium. With a depth above 0, a mismatch with the immersion index adds spherical aberration.</span></span>
+                  </label>
+                  <input id="sampleIndex" type="number" min="1" max="2" step="0.001" value="1.47" />
+                </div>
+                <div class="nd-field">
+                  <label for="depth">Depth <small>µm</small>
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the depth">i<span class="nd-info-tooltip">Depth of the imaged plane below the coverslip. The PSF is computed for this one depth.</span></span>
+                  </label>
+                  <input id="depth" type="number" min="0" max="200" step="0.1" value="0" />
+                </div>
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="psfXY">PSF width <small>voxels</small>
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the PSF size">i<span class="nd-info-tooltip">Odd sizes of the theoretical PSF. Leave empty for the automatic size: six Airy radii laterally plus the widefield cone, four depths of field axially for confocal and the whole stack for widefield, at most 129.</span></span>
+                  </label>
+                  <input id="psfXY" type="number" min="1" max="129" step="2" placeholder="Auto" />
+                </div>
+                <div class="nd-field">
+                  <label for="psfZ">PSF depth <small>voxels</small></label>
+                  <input id="psfZ" type="number" min="1" max="129" step="2" placeholder="Auto" />
+                </div>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Deconvolve stack</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a stack anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Deconvolution progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel deconvolution" aria-label="Cancel deconvolution" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Deconvolution sharpens a widefield or confocal fluorescence stack by Richardson-Lucy iterations with a point spread function (PSF): a theoretical Gibson-Lanni PSF computed for the objective, or a measured bead stack, optionally with total-variation regularisation. Everything runs in this browser in WebAssembly; the licence notices of the bundled code are in <a href="licenses/deconvolution-NOTICE.txt">licenses/</a>.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

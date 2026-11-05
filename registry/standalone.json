@@ -2234,6 +2234,13 @@
         "runner": "slurm",
         "documentation": "https://github.com/neurodesk/webapps/tree/main/exes/compute-server#hpc-single-owner-mode-and-slurm"
       }
+    },
+    "deconvolution": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

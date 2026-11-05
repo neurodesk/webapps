@@ -1,0 +1,44 @@
+Deconvolution library
+Copyright 2026 Neurodesk contributors
+
+The WebAssembly module wasm/deconvolution_wasm_bg.wasm is built from the Rust
+crates exes/deconvolution/core and exes/deconvolution/wasm (MIT, LICENSE) by
+scripts/build-wasm.sh. The Gibson-Lanni PSF, the FFT convolution and the
+Richardson-Lucy and RL-TV iterations are written for this package from the
+publications cited in README.md; no code of psfmodels, scikit-image or
+DeconvolutionLab2 is included. Those tools are used only as external
+references by validation/.
+
+The module statically links these Rust crates, each under the licence shown:
+
+  rustfft 6.4.1                             MIT OR Apache-2.0 (used under MIT),
+                                            Copyright (c) 2015 The RustFFT Developers
+  num-complex 0.4.6, num-traits 0.2.19, num-integer 0.1.47, primal-check
+  0.3.4, strength_reduce 0.2.4, transpose 0.2.3, cfg-if 1.0.5,
+  wasm-bindgen 0.2.130                      MIT OR Apache-2.0 (used under MIT),
+                                            by their respective authors
+  realfft 3.5.1                             MIT, Copyright (c) 2020 Henrik
+                                            Enquist and RealFFT contributors
+  libm 0.2.16                               MIT, the rust-lang/libm contributors
+
+Under the MIT licence each requires this permission notice in copies:
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to
+  deal in the Software without restriction, including without limitation the
+  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+  sell copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions: The above copyright
+  notice and this permission notice shall be included in all copies or
+  substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+  WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+
+libm's Bessel functions j0 and j1 are ported from FreeBSD msun (e_j0.c,
+e_j1.c), which carry this notice:
+
+  Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+  Developed at SunSoft, a Sun Microsystems, Inc. business.
+  Permission to use, copy, modify, and distribute this
+  software is freely granted, provided that this notice
+  is preserved.

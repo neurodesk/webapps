@@ -5293,6 +5293,13 @@
       "contentType": "application/zip",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/726eee4a192bf75315b80ed693b64d158b07b703/deconvolution/example/hela-phalloidin488-confocal.tif": {
+      "sha256": "a79ed0b43b7ed37fa6b70eed6a2b72202daf67e528db871533d77c9b6ae8f266",
+      "bytes": 2782466,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6656,6 +6663,9 @@
     ],
     "cryo-em": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/607388b20e8c7e0000ec8498d19ac7e3c35d6472/cryo-em/relion-tutorial/SHA256SUMS"
+    ],
+    "deconvolution": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/726eee4a192bf75315b80ed693b64d158b07b703/deconvolution/example/hela-phalloidin488-confocal.tif"
     ]
   }
 }

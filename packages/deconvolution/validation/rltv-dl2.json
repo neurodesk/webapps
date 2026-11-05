@@ -1,0 +1,48 @@
+{
+ "generator": "packages/deconvolution/validation/dl2/run.sh",
+ "reference": "DeconvolutionLab2 (DeconvolutionLab_2.jar sha256 37ade1a1\u2026, ImageJ 1.54p), -norm 1",
+ "region": "voxels at least one PSF half-width from the border",
+ "inputRmse": 8.054880142144164,
+ "runs": [
+  {
+   "run": "RL_30",
+   "iterations": 30,
+   "tvWeight": 0,
+   "correlation": 0.966,
+   "rmseOurs": 4.742,
+   "rmseDeconvolutionLab2": 5.702
+  },
+  {
+   "run": "RLTV_30_0.002",
+   "iterations": 30,
+   "tvWeight": 0.002,
+   "correlation": 0.9683,
+   "rmseOurs": 4.618,
+   "rmseDeconvolutionLab2": 5.59
+  },
+  {
+   "run": "RLTV_30_0.01",
+   "iterations": 30,
+   "tvWeight": 0.01,
+   "correlation": 0.9619,
+   "rmseOurs": 4.441,
+   "rmseDeconvolutionLab2": 5.498
+  },
+  {
+   "run": "RL_200",
+   "iterations": 200,
+   "tvWeight": 0,
+   "correlation": 0.8842,
+   "rmseOurs": 7.903,
+   "rmseDeconvolutionLab2": 9.049
+  },
+  {
+   "run": "RLTV_200_0.01",
+   "iterations": 200,
+   "tvWeight": 0.01,
+   "correlation": 0.8577,
+   "rmseOurs": 3.484,
+   "rmseDeconvolutionLab2": 7.277
+  }
+ ]
+}
