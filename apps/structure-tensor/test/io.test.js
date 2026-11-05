@@ -2,8 +2,7 @@
 // any voxels are decoded, and non-finite samples refused at load.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rasterSize, readImages, withoutExif } from "../src/io.js";
-import { tiffLayout, writeTiff } from "../src/tiff.js";
+import { rasterSize, readImages, tiffLayout, withoutExif, writeTiff } from "../src/io.js";
 import { MAX_VOXELS } from "../src/config.js";
 import { buildTiff, omeXml } from "./tiff-fixtures.mjs";
 

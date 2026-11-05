@@ -4,8 +4,9 @@
 // A stack is one plane per page, in page order, all the same size and sample type. The reader
 // refuses multi-sample pages (RGB, grey + alpha, extra samples) and palette images rather than
 // guessing a channel, and refuses a stack whose decoded size is above `maxBytes` from the page
-// directories alone, before any pixel is decoded.
-import { fromArrayBuffer } from 'geotiff';
+// directories alone, before any pixel is decoded. `rgb: 'mean'` reads RGB pages as the mean of
+// their red, green and blue samples instead, as ImageJ converts RGB to 8-bit.
+import { GeoTIFF, fromArrayBuffer } from 'geotiff';
 import { InputTooLargeError, MAX_INPUT_BYTES } from './input-limits.js';
 
 const TYPES = {
@@ -163,9 +164,14 @@ export function parseImagejDescription(description, resolution = [null, null]) {
   };
 }
 
-function describeRefusal(image) {
+function isRgb(image) {
+  return image.fileDirectory.getValue('PhotometricInterpretation') === 2 && image.getSamplesPerPixel() >= 3;
+}
+
+function describeRefusal(image, rgb) {
   const samples = image.getSamplesPerPixel();
   const photometric = image.fileDirectory.getValue('PhotometricInterpretation');
+  if (rgb === 'mean' && isRgb(image)) return null;
   if (photometric === 3) return 'This TIFF is a palette (indexed colour) image; save it as greyscale.';
   if (samples > 1) {
     const kind = PHOTOMETRIC[photometric] ?? 'multi-sample';
@@ -176,11 +182,23 @@ function describeRefusal(image) {
   return null;
 }
 
-async function openStack(buffer) {
-  const tiff = await fromArrayBuffer(buffer);
+/**
+ * A geotiff source that reads only the byte ranges geotiff asks for, so the page directories
+ * of a File are parsed without reading its pixels. geotiff's `fromBlob` needs FileReader.
+ */
+function blobSource(blob) {
+  return {
+    fileSize: blob.size,
+    fetch: (slices) => Promise.all(slices.map(({ offset, length }) => blob.slice(offset, offset + length).arrayBuffer())),
+    close() {},
+  };
+}
+
+async function openStack(source, rgb) {
+  const tiff = source instanceof Blob ? await GeoTIFF.fromSource(blobSource(source)) : await fromArrayBuffer(source);
   const pages = await tiff.getImageCount();
   const first = await tiff.getImage(0);
-  const refusal = describeRefusal(first);
+  const refusal = describeRefusal(first, rgb);
   if (refusal) throw new Error(refusal);
   const format = first.getSampleFormat();
   const bits = first.getBitsPerSample();
@@ -195,17 +213,19 @@ async function openStack(buffer) {
   if (metadata.images > 1) throw new Error(`This OME-TIFF holds ${metadata.images} image series; save the one you need as its own file.`);
   const declared = metadata.kind === 'imagej' ? Number(description.match(/^images=(\d+)\s*$/m)?.[1]) : NaN;
   if (declared && declared !== pages) throw new Error(`This ImageJ TIFF declares ${declared} images but holds ${pages} pages; save it again from ImageJ or Fiji.`);
-  const info = { width: first.getWidth(), height: first.getHeight(), pages, dtype: dtypeName(Type), bytesPerSample: Type.BYTES_PER_ELEMENT, metadata: { ...metadata, description } };
+  const info = { width: first.getWidth(), height: first.getHeight(), pages, dtype: dtypeName(Type), bytesPerSample: Type.BYTES_PER_ELEMENT, samplesPerPixel: first.getSamplesPerPixel(), metadata: { ...metadata, description } };
   return { tiff, first, format, bits, Type, info };
 }
 
 /**
  * The size, sample type and metadata of a greyscale TIFF stack, from its page directories
- * alone (no pixel is decoded).
- * @param {ArrayBuffer} buffer
+ * alone (no pixel is decoded). A Blob or File is read range by range, only as far as its
+ * page directories and description.
+ * @param {ArrayBuffer | Blob} source
+ * @param {{ rgb?: 'refuse' | 'mean' }} [options]
  */
-export async function inspectTiffStack(buffer) {
-  return (await openStack(buffer)).info;
+export async function inspectTiffStack(source, { rgb = 'refuse' } = {}) {
+  return (await openStack(source, rgb)).info;
 }
 
 /**
@@ -216,11 +236,11 @@ export async function inspectTiffStack(buffer) {
  * Conversion follows TypedArray assignment: an integer `Type` truncates and wraps values it
  * cannot hold (a negative float becomes a large uint16), so convert floats only to a float Type.
  * @param {ArrayBuffer} buffer
- * @param {{ signal?: AbortSignal, maxBytes?: number, Type?: Function, shared?: boolean, onProgress?: (done: number, total: number) => void }} [options]
+ * @param {{ signal?: AbortSignal, maxBytes?: number, Type?: Function, shared?: boolean, rgb?: 'refuse' | 'mean', onProgress?: (done: number, total: number) => void }} [options]
  */
-export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES, Type: OutputType, shared = false, onProgress } = {}) {
+export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES, Type: OutputType, shared = false, rgb = 'refuse', onProgress } = {}) {
   signal?.throwIfAborted();
-  const { tiff, first, format, bits, Type, info } = await openStack(buffer);
+  const { tiff, first, format, bits, Type, info } = await openStack(buffer, rgb);
   const { width, height, pages } = info;
   const Output = OutputType ?? Type;
   if (!SAMPLE[Output.name]) throw new Error(`Cannot read a TIFF stack into ${Output.name}.`);
@@ -233,10 +253,15 @@ export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES
     const image = page === 0 ? first : await tiff.getImage(page);
     if (image.getWidth() !== width || image.getHeight() !== height) throw new Error(`TIFF page ${page + 1} is ${image.getWidth()} × ${image.getHeight()}, not ${width} × ${height} like page 1.`);
     if (image.getSampleFormat() !== format || image.getBitsPerSample() !== bits) throw new Error(`TIFF page ${page + 1} has a different sample type from page 1.`);
-    const pageRefusal = describeRefusal(image);
+    const pageRefusal = describeRefusal(image, rgb);
     if (pageRefusal) throw new Error(`TIFF page ${page + 1}: ${pageRefusal}`);
-    const [raster] = await image.readRasters({ interleave: false, signal });
-    data.set(raster, page * plane);
+    if (isRgb(image)) {
+      const [red, green, blue] = await image.readRasters({ interleave: false, samples: [0, 1, 2], signal });
+      for (let i = 0; i < plane; i++) data[page * plane + i] = (red[i] + green[i] + blue[i]) / 3;
+    } else {
+      const [raster] = await image.readRasters({ interleave: false, signal });
+      data.set(raster, page * plane);
+    }
     onProgress?.(page + 1, pages);
   }
   return { ...info, data };
@@ -270,13 +295,16 @@ export function imagejDescription({ frames, frameInterval = null, unit = null, m
 /**
  * Writes a stack as an uncompressed little-endian baseline TIFF, one strip per page.
  * `pixelSize` (micrometres) becomes X/YResolution with ImageJ's `unit=micron` convention.
- * @param {{ width: number, height: number, data: ArrayBufferView, description?: string, pixelSize?: { x: number, y: number } | null }} stack
+ * `rgb` writes a Uint8Array of red, green, blue triplets as RGB pages.
+ * @param {{ width: number, height: number, data: ArrayBufferView, description?: string, pixelSize?: { x: number, y: number } | null, rgb?: boolean }} stack
  * @returns {Uint8Array}
  */
-export function writeTiffStack({ width, height, data, description = '', pixelSize = null }) {
+export function writeTiffStack({ width, height, data, description = '', pixelSize = null, rgb = false }) {
   const sample = SAMPLE[data.constructor.name];
   if (!sample) throw new Error(`Cannot write ${data.constructor.name} to TIFF.`);
-  const plane = width * height;
+  if (rgb && !(data instanceof Uint8Array)) throw new Error('RGB TIFF data must be a Uint8Array.');
+  const samples = rgb ? 3 : 1;
+  const plane = width * height * samples;
   if (!plane || data.length % plane) throw new Error(`TIFF data length ${data.length} is not a whole number of ${width} × ${height} pages.`);
   const pages = data.length / plane;
   const planeBytes = plane * data.BYTES_PER_ELEMENT;
@@ -285,9 +313,11 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
   // TIFF 6.0: a value of 4 bytes or fewer sits in the entry itself, not at an offset.
   const inlineText = text.length <= 4;
   const hasResolution = Boolean(pixelSize?.x && pixelSize?.y);
-  const entries = 11 + (hasText ? 1 : 0) + (hasResolution ? 3 : 0);
+  const entries = (rgb ? 10 : 11) + (hasText ? 1 : 0) + (hasResolution ? 3 : 0);
   const ifdBytes = 2 + entries * 12 + 4;
-  const extraBytes = hasResolution ? 16 : 0;
+  // Resolution rationals, then the three RGB BitsPerSample values, after each IFD.
+  const bitsAt = hasResolution ? 16 : 0;
+  const extraBytes = bitsAt + (rgb ? 6 : 0);
   // Every IFD starts on a word boundary, so an odd plane is padded by one byte.
   const pageBytes = ifdBytes + extraBytes + planeBytes + (planeBytes % 2);
   const headerBytes = 8 + (hasText && !inlineText ? text.length + (text.length % 2) : 0);
@@ -308,16 +338,17 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
       [254, 4, 1, 0],
       [256, 4, 1, width],
       [257, 4, 1, height],
-      [258, 3, 1, sample[1]],
+      [258, 3, samples, rgb ? extra + bitsAt : sample[1]],
       [259, 3, 1, 1],
-      [262, 3, 1, 1],
+      [262, 3, 1, rgb ? 2 : 1],
       ...(hasText ? [[270, 2, text.length, 8]] : []),
       [273, 4, 1, strip],
-      [277, 3, 1, 1],
+      [277, 3, 1, samples],
       [278, 4, 1, height],
       [279, 4, 1, planeBytes],
       ...(hasResolution ? [[282, 5, 1, extra], [283, 5, 1, extra + 8], [296, 3, 1, 1]] : []),
-      [339, 3, 1, sample[0]],
+      // Unsigned integer is the default SampleFormat, which RGB pages leave out.
+      ...(rgb ? [] : [[339, 3, 1, sample[0]]]),
     ];
     view.setUint16(ifd, tags.length, true);
     tags.forEach(([tag, type, count, value], index) => {
@@ -326,7 +357,7 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
       view.setUint16(at + 2, type, true);
       view.setUint32(at + 4, count, true);
       if (tag === 270 && inlineText) out.set(text, at + 8);
-      else if (type === 3) view.setUint16(at + 8, value, true);
+      else if (type === 3 && count === 1) view.setUint16(at + 8, value, true);
       else view.setUint32(at + 8, value, true);
     });
     view.setUint32(ifd + 2 + tags.length * 12, page + 1 < pages ? ifd + pageBytes : 0, true);
@@ -336,6 +367,7 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
         view.setUint32(extra + index * 8 + 4, 1e6, true);
       }
     }
+    if (rgb) for (let k = 0; k < 3; k++) view.setUint16(extra + bitsAt + 2 * k, 8, true);
     out.set(source.subarray(page * planeBytes, (page + 1) * planeBytes), strip);
   }
   return out;

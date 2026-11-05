@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 import { createNiftiFromData, createNiftiHeaderFromVolume } from "@neurodesk/webapp-components/file-io";
-import { readTiff, writeTiff } from "../src/tiff.js";
+import { readTiff, writeTiff } from "../src/io.js";
 import { cylinders3d, grating2d } from "../test/synthetic.mjs";
 
 export const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));

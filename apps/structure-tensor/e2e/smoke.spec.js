@@ -19,7 +19,7 @@ import {
   sha256,
 } from "./fixtures.mjs";
 import { buildTiff, omeXml } from "../test/tiff-fixtures.mjs";
-import { writeTiff } from "../src/tiff.js";
+import { writeTiff } from "../src/io.js";
 
 const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));
 const [shg, synthetic] = examples;

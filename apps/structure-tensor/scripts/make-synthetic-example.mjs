@@ -5,7 +5,7 @@
 //
 //   node scripts/make-synthetic-example.mjs <output.tif>
 import { writeFile } from "node:fs/promises";
-import { writeTiff } from "../src/tiff.js";
+import { writeTiff } from "../src/io.js";
 import { cylinders3d } from "../test/synthetic.mjs";
 
 export const DOMAINS = [

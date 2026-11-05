@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { APP, MAX_VOXELS, analysisSettings, baseName, imageRefusal, inputKind, outputPlan } from "../src/config.js";
-import { readTiff, writeTiff } from "../src/tiff.js";
+import { readTiff, writeTiff } from "../src/io.js";
 
 test("app id is lowercase kebab-case and the config is frozen", () => {
   assert.match(APP.id, /^[a-z][a-z0-9-]*$/);

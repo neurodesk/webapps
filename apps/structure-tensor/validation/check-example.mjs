@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { analyse } from "../src/tensor.js";
-import { readTiff } from "../src/tiff.js";
+import { readTiff } from "../src/io.js";
 
 const reference = JSON.parse(await readFile(new URL("./reference.json", import.meta.url), "utf8")).example;
 

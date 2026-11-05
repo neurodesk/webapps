@@ -216,3 +216,38 @@ test('an OME description without plane positions has no stage position, and othe
   assert.equal(parseOmeDescription(xml).stagePosition, null);
   assert.equal(parseImagejDescription('ImageJ=1.54f\nimages=1\n').stagePosition, null);
 });
+
+test('inspectTiffStack reads a File range by range, only its page directories and description', async () => {
+  const bytes = fixture('stack-deflate-uint16.ome.tif');
+  const ranges = [];
+  class HeaderOnlyFile extends File {
+    slice(start, end, type) {
+      ranges.push([start, end]);
+      return super.slice(start, end, type);
+    }
+    arrayBuffer() {
+      throw new Error('the whole file was read');
+    }
+  }
+  const info = await inspectTiffStack(new HeaderOnlyFile([bytes], 'stack.ome.tif'));
+  assert.deepEqual(info, await inspectTiffStack(bytes));
+  assert.ok(ranges.length > 0);
+});
+
+test('rgb: mean reads RGB pages as the mean of their three samples, as ImageJ converts RGB to 8-bit', async () => {
+  const rgb = Uint8Array.from({ length: 2 * 3 * 2 * 3 }, (_, i) => (i * 37) % 256);
+  const bytes = buffer(writeTiffStack({ width: 3, height: 2, data: rgb, rgb: true, pixelSize: { x: 0.5, y: 0.5 }, description: 'ImageJ=1.11a\nimages=2\nslices=2\nunit=micron\n' }));
+  await assert.rejects(readTiffStack(bytes), /3 samples per pixel \(RGB\)/);
+  const info = await inspectTiffStack(bytes, { rgb: 'mean' });
+  assert.deepEqual([info.width, info.height, info.pages, info.dtype, info.samplesPerPixel], [3, 2, 2, 'uint8', 3]);
+  const stack = await readTiffStack(bytes, { rgb: 'mean', Type: Float64Array });
+  assert.deepEqual(Array.from(stack.data), Array.from({ length: 12 }, (_, i) => (rgb[3 * i] + rgb[3 * i + 1] + rgb[3 * i + 2]) / 3));
+  assert.equal(stack.metadata.pixelSize.x, 0.5);
+  const fromTifffile = await readTiffStack(fixture('rgb-uint8.tif'), { rgb: 'mean', Type: Float32Array });
+  assert.equal(fromTifffile.dtype, 'uint8');
+});
+
+test('writeTiffStack refuses RGB data that is not Uint8Array triplets', () => {
+  assert.throws(() => writeTiffStack({ width: 2, height: 2, data: new Float32Array(12), rgb: true }), /Uint8Array/);
+  assert.throws(() => writeTiffStack({ width: 2, height: 2, data: new Uint8Array(4), rgb: true }), /whole number/);
+});

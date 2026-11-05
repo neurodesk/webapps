@@ -3,7 +3,7 @@
 // viewer and the NIfTI outputs (the input's own for NIfTI, one built from the TIFF otherwise).
 import { createNiftiFromData, createNiftiHeaderFromVolume, createRgb24Nifti, decodeNiftiBuffer, parseNiftiVolume, readNiftiHeader } from "@neurodesk/webapp-components/file-io";
 import { gzipFile } from "@neurodesk/webapp-components/file-io/bids-derivatives";
-import { readTiffPages, tiffLayout, writeTiff } from "./tiff.js";
+import { inspectTiffStack, readTiffStack, writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { inputKind, outputPlan, summary, voxelRefusal } from "./config.js";
 import { distributionCsv, nonFiniteRefusal } from "./tensor.js";
 
@@ -20,6 +20,58 @@ function rasterHeader(dims, spacing) {
       affine: [[dx, 0, 0, 0], [0, -dy, 0, (dims[1] - 1) * dy], [0, 0, dz, 0], [0, 0, 0, 1]],
     },
   });
+}
+
+/**
+ * The layout of a TIFF (a File, read range by range, or an ArrayBuffer) from its headers alone:
+ * { dims, spacing, unit }. Calibrated sizes are micrometres, named as the file names them
+ * (ImageJ's "micron", OME's "µm"). Hyperstacks with several channels or time points and
+ * OME-TIFFs whose planes are in other files are refused.
+ */
+export async function tiffLayout(source) {
+  const { width, height, pages, samplesPerPixel, metadata } = await inspectTiffStack(source, { rgb: "mean" });
+  const { kind, sizeZ, pixelSize } = metadata;
+  // An OME colour image is one channel with several samples per pixel; a plain TIFF's pages are slices.
+  const channels = kind === "ome" && metadata.sizeC === samplesPerPixel ? 1 : metadata.sizeC;
+  const sizeT = kind === "baseline" ? 1 : metadata.sizeT;
+  if (channels > 1 || sizeT > 1) {
+    const parts = [channels > 1 ? `${channels} channels` : null, sizeT > 1 ? `${sizeT} time points` : null].filter(Boolean).join(" and ");
+    throw new Error(`This TIFF is a hyperstack with ${parts}. In Fiji, use Image › Duplicate with one channel and one time point, save it as TIFF and load that.`);
+  }
+  if (kind === "ome" && pages < sizeZ) {
+    throw new Error(`This OME-TIFF declares ${sizeZ} planes but holds ${pages}; its other planes are in other files. Save the stack as one TIFF.`);
+  }
+  const dx = pixelSize.x ?? 1;
+  const spacing = [dx, pixelSize.y ?? dx, pixelSize.z ?? dx];
+  const unit = pixelSize.x === null ? "pixel" : kind === "imagej" ? "micron" : "\u00b5m";
+  return { dims: [width, height, pages], spacing, unit };
+}
+
+/**
+ * One greyscale image or stack from TIFF bytes: { data: Float64Array, dims, spacing, unit }.
+ * Colour pages become the mean of their channels (ImageJ's RGB to 8-bit conversion).
+ */
+export async function readTiff(buffer) {
+  const layout = await tiffLayout(buffer);
+  const { data } = await readTiffStack(buffer, { rgb: "mean", Type: Float64Array, maxBytes: Infinity });
+  return { data, ...layout };
+}
+
+/**
+ * A little-endian TIFF ArrayBuffer of float32 voxels, or of RGB triplets from a Uint8Array
+ * (`rgb: true`), one page per z, with an ImageJ stack description and the voxel size.
+ */
+export function writeTiff({ data, dims, spacing = [1, 1, 1], unit = "pixel", rgb = false }) {
+  const [nx, ny, nz] = dims;
+  const description = [
+    "ImageJ=1.54f",
+    `images=${nz}`,
+    ...(nz > 1 ? [`slices=${nz}`, `spacing=${spacing[2]}`] : []),
+    `unit=${unit === "pixel" ? "pixel" : "micron"}`,
+    "",
+  ].join("\n");
+  const samples = rgb || data instanceof Float32Array ? data : Float32Array.from(data);
+  return writeTiffStack({ width: nx, height: ny, data: samples, description, pixelSize: { x: spacing[0], y: spacing[1] }, rgb }).buffer;
 }
 
 const readView = async (file, at, length) => new DataView(await file.slice(at, at + length).arrayBuffer());
@@ -160,7 +212,7 @@ async function decode({ file, kind, dims }) {
   let image;
   try {
     // The probe read only headers; pixels come from one read, not one slice per strip.
-    image = kind === "tiff" ? await readTiffPages(await tiffLayout(await file.arrayBuffer())) : await readRaster(file, dims);
+    image = kind === "tiff" ? await readTiff(await file.arrayBuffer()) : await readRaster(file, dims);
   } catch (error) {
     throw new Error(`${file.name} could not be read: ${error.message}`);
   }
