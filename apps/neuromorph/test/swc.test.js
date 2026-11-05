@@ -293,3 +293,12 @@ test("text a spreadsheet would run as a formula is neutralised in every table", 
   const negative = morphometricsCsv([{ name: "n", analysis: { features: { ...analysis.features, all: { ...analysis.features.all, totalLength: -2.5 } } } }]);
   assert.match(negative.split("\n")[1], /,-2\.5,/);
 });
+
+test("a long chain of repeated zero-radius points with one usable radius reads in linear time", () => {
+  // Soma, then 80,000 neurite samples all at one position with radius 0 except the last.
+  const lines = ["1 1 0 0 0 5 -1", "2 3 10 0 0 0 1"];
+  for (let id = 3; id <= 80001; id++) lines.push(`${id} 3 10 0 0 ${id === 80001 ? 1 : 0} ${id - 1}`);
+  const started = performance.now();
+  readSwc(lines.join("\n"));
+  assert.ok(performance.now() - started < 2000, `took ${Math.round(performance.now() - started)} ms`);
+});

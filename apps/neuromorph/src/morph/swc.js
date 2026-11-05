@@ -286,7 +286,8 @@ export function readSwc(text, { repair = true } = {}) {
     if (merged.merged.length) {
       issue(issues, "zero-length-segment", "warning", `${plural(merged.merged.length, "sample")} at their parent's position merged into it`, merged.merged, true);
     }
-    const fixed = repairedLines.filter((line) => !merged.merged.includes(line));
+    const mergedLines = new Set(merged.merged);
+    const fixed = repairedLines.filter((line) => !mergedLines.has(line));
     if (fixed.length) issue(issues, "nonpositive-radius", "warning", `${plural(fixed.length, "zero or negative radius")} replaced by the nearest positive radius`, fixed, true);
   }
   inspect(samples, issues, repair);
