@@ -2522,3 +2522,35 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  microscope-qc:
+    packages:
+      - { name: Microscope QC numerics, url: https://github.com/neurodesk/webapps/tree/main/apps/microscope-qc/src/core, role: "bead detection, Gaussian profile fits and field-illumination metrics, written from MetroloJ_QC's published definitions" }
+      - { name: ImageJ GaussianBlur, url: https://github.com/imagej/ImageJ, role: "σ = 2 px blur of field images, ported from ImageJ 1 (public domain)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Quality control metrics
+        title: MetroloJ_QC
+        reference: "Faklaris O, Bancel-Vallée L, Mauvais A, et al. Quality assessment in light microscopy for routine use through simple tools and robust metrics. Journal of Cell Biology. 2022;221(11):e202107093."
+        doi: 10.1083/jcb.202107093
+      - group: Quality control metrics
+        title: QUAREP-LiMi
+        reference: "Nelson G, Boehm U, Bagley S, et al. QUAREP-LiMi: a community-driven initiative to establish guidelines for quality assessment and reproducibility for instruments and images in light microscopy. Journal of Microscopy. 2021;284(1):56–73."
+        doi: 10.1111/jmi.13041
+      - group: Quality control metrics
+        title: PSFj
+        reference: "Theer P, Mongis C, Knop M. PSFj: know your fluorescence microscope. Nature Methods. 2014;11(10):981–982."
+        doi: 10.1038/nmeth.3102
+      - group: Example data
+        title: 100 nm bead z-stacks, NA 0.95 (Zenodo 10522322)
+        reference: "Miora RHD, Senftleben M, Abrahamsson S. Experimental validation of numerical point spread function calculation including aberration estimation [Data set]. Zenodo; 2024. CC BY 4.0."
+        doi: 10.5281/zenodo.10522322
+      - group: Validation reference
+        title: ImageJ
+        reference: "Schneider CA, Rasband WS, Eliceiri KW. NIH Image to ImageJ: 25 years of image analysis. Nature Methods. 2012;9(7):671–675."
+        doi: 10.1038/nmeth.2089
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

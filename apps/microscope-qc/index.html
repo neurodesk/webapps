@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Microscope QC — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF or OME-TIFF image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a bead z-stack or a field image (TIFF, OME-TIFF)</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Quality control</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="analysis">Analysis
+              <span class="nd-info-icon" tabindex="0" aria-label="About the analyses">i<span class="nd-info-tooltip">PSF: FWHM of sub-resolution beads in a z-stack, against the theoretical resolution. Field illumination: uniformity and centring of one image of a uniform slide.</span></span>
+            </label>
+            <select id="analysis">
+              <option value="psf" selected>PSF from beads</option>
+              <option value="field">Field illumination</option>
+            </select>
+          </div>
+          <div id="psfFields">
+            <div class="nd-field">
+              <label for="microscope">Microscope</label>
+              <select id="microscope">
+                <option value="widefield" selected>Widefield</option>
+                <option value="confocal">Point-scanning confocal</option>
+                <option value="spinning">Spinning disk</option>
+                <option value="multiphoton">Multiphoton</option>
+              </select>
+            </div>
+            <div class="nd-row">
+              <div class="nd-field">
+                <label for="na">NA</label>
+                <input id="na" type="number" min="0.01" max="1.7" step="any" inputmode="decimal" />
+              </div>
+              <div class="nd-field">
+                <label for="refractiveIndex">Immersion <small>n</small></label>
+                <input id="refractiveIndex" type="number" min="1" max="2" step="any" inputmode="decimal" />
+              </div>
+            </div>
+            <div class="nd-row">
+              <div class="nd-field">
+                <label for="emission">Emission <small>nm</small></label>
+                <input id="emission" type="number" min="200" max="2000" step="any" inputmode="decimal" />
+              </div>
+              <div class="nd-field">
+                <label for="excitation">Excitation <small>nm</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the wavelengths">i<span class="nd-info-tooltip">Widefield and spinning disk resolution uses the emission wavelength; point-scanning confocal and multiphoton use the excitation wavelength.</span></span>
+                </label>
+                <input id="excitation" type="number" min="200" max="2000" step="any" inputmode="decimal" />
+              </div>
+            </div>
+            <div class="nd-row">
+              <div class="nd-field">
+                <label for="pixelX">Pixel x <small>µm</small></label>
+                <input id="pixelX" type="number" min="0.001" step="any" inputmode="decimal" />
+              </div>
+              <div class="nd-field">
+                <label for="pixelY">Pixel y <small>µm</small></label>
+                <input id="pixelY" type="number" min="0.001" step="any" inputmode="decimal" />
+              </div>
+              <div class="nd-field">
+                <label for="zStep">z step <small>µm</small></label>
+                <input id="zStep" type="number" min="0.001" step="any" inputmode="decimal" />
+              </div>
+            </div>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div id="psfAdvanced">
+                <div class="nd-row">
+                  <div class="nd-field">
+                    <label for="boxRadius">Box radius <small>µm</small>
+                      <span class="nd-info-icon" tabindex="0" aria-label="About the bead box">i<span class="nd-info-tooltip">Half-width of the crop around each bead; the x and y profiles span it. Empty: four theoretical lateral FWHMs.</span></span>
+                    </label>
+                    <input id="boxRadius" type="number" min="0.01" step="any" inputmode="decimal" placeholder="auto" />
+                  </div>
+                  <div class="nd-field">
+                    <label for="prominence">Prominence
+                      <span class="nd-info-icon" tabindex="0" aria-label="About the prominence">i<span class="nd-info-tooltip">A bead must rise this far (in grey levels) above the level where it joins a brighter one in the maximum projection. Empty: 10 background standard deviations.</span></span>
+                    </label>
+                    <input id="prominence" type="number" min="0.001" step="any" inputmode="decimal" placeholder="auto" />
+                  </div>
+                  <div class="nd-field">
+                    <label for="minR2">Min R²
+                      <span class="nd-info-icon" tabindex="0" aria-label="About the fit threshold">i<span class="nd-info-tooltip">Beads whose x, y or z fit has a lower adjusted R² are listed but left out of the summary (QUAREP-LiMi recommends 0.95).</span></span>
+                    </label>
+                    <input id="minR2" type="number" min="0" max="1" step="any" value="0.95" inputmode="decimal" />
+                  </div>
+                </div>
+                <label class="nd-check"><input id="excludeSaturated" type="checkbox" checked /> Reject beads with saturated voxels</label>
+              </div>
+              <div id="fieldAdvanced" hidden>
+                <div class="nd-field">
+                  <label for="step">Iso-intensity step <small>%</small></label>
+                  <input id="step" type="number" min="1" max="50" step="any" value="10" inputmode="decimal" />
+                </div>
+                <label class="nd-check"><input id="blur" type="checkbox" checked /> Gaussian blur, σ = 2 px, before measuring</label>
+                <label class="nd-check"><input id="referenceZone" type="checkbox" checked /> Centre on the top zone, not the brightest pixel</label>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run quality control</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a bead stack or field image anywhere, or choose an example.</p>
+        <section id="report" class="nd-viewer-report" aria-label="Report" hidden></section>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Microscope quality control in the browser, with the definitions of MetroloJ_QC and the QUAREP-LiMi community (Faklaris et al. 2022): resolution from sub-resolution beads and the flatness of the illumination field. Everything runs on the CPU in a web worker.</p>
+      <p><strong>PSF from beads.</strong> Beads are maxima of the z maximum-intensity projection that rise at least the prominence above the level where they join a brighter maximum. A bead is rejected when its crop box leaves the image, holds another bead or a saturated voxel, or its focus is the first or last plane. Its centre is the brightest pixel of the box's projection and the brightest plane there. The x and y profiles run through that voxel across the box, the z profile through the whole stack, and each is fitted with y = a + (b − a)·exp(−(x − c)²/(2d²)), ImageJ's Gaussian, by least squares; FWHM = 2·√(2 ln 2)·d. Beads whose fits have an adjusted R² below the threshold are listed but left out of the summary. The theoretical FWHMs are those of Faklaris et al. (widefield: 0.51 λem/NA and 1.77 n λem/NA²); a mean above 1.5 times theory is flagged, as MetroloJ_QC does. Measured widths include the bead's own size and the stage step, and the axial width is in stage coordinates, without a focal-shift correction.</p>
+      <p><strong>Field illumination.</strong> The image is blurred with ImageJ's Gaussian (σ = 2 px), then uniformity = 100·min/max, field uniformity = 100 − 100·SD(corners and edge midpoints)/max, and centering accuracy = 100 − 200·d/diagonal, d the distance from the centroid of the 90–100 % iso-intensity zone to the image centre. Profiles run along both diagonals and through the centre.</p>
+      <p>On the bead example, the app's FWHMs match MetroloJ_QC's Gaussian fitter in Fiji on the same profiles, and on the synthetic field image its metrics equal the ImageJ reference; the README gives the numbers. Outputs: bead and summary tables, profiles with their fits, field metrics and profiles (CSV), the iso-intensity map (TIFF) and a JSON report.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. Only the examples are downloaded, from the Neurodesk dataset on Hugging Face.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

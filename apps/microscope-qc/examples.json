@@ -1,0 +1,32 @@
+[
+  {
+    "id": "evos-beads",
+    "label": "100 nm beads, widefield 40×/0.95 (81 planes)",
+    "description": "TetraSpeck beads imaged through a 40×/0.95 air objective on an EVOS M5000 widefield microscope (Miora, Senftleben & Abrahamsson, Zenodo 10522322, CC BY 4.0): 512 × 512 × 81, 0.126 µm pixels, 0.133 µm z step.",
+    "expectedResult": "About 60 beads detected; the well-fitted ones give lateral FWHM near 0.38 µm (1.4 × the 0.28 µm theory) and axial near 2.3 µm, flagged at over 2 × the 1.03 µm theory.",
+    "files": [
+      {
+        "role": "image",
+        "name": "evos-40x-na095-tetraspeck-100nm.ome.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
+        "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
+        "bytes": 12590015
+      }
+    ]
+  },
+  {
+    "id": "synthetic-field",
+    "label": "Synthetic field illumination (640 × 480)",
+    "description": "Synthetic: an off-centre Gaussian illumination profile with Poisson noise, a stand-in for an image of a uniform fluorescent slide. It demonstrates the metrics, not a real microscope.",
+    "expectedResult": "Uniformity 45.0 %, field uniformity 88.1 % and centering accuracy 91.4 %, with the 90–100 % zone right of and above the centre.",
+    "files": [
+      {
+        "role": "image",
+        "name": "synthetic-field-illumination.ome.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif",
+        "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
+        "bytes": 461646
+      }
+    ]
+  }
+]
