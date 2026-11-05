@@ -82,19 +82,32 @@ export function axisScales(scale, spacing, is3d) {
   return [scale, scale * dx / dy, is3d ? scale * dx / dz : 0];
 }
 
+/** Why an image's samples cannot be analysed (a NaN or an infinity), or null. */
+export function nonFiniteRefusal({ data, dims }) {
+  for (let i = 0; i < data.length; i++) {
+    if (Number.isFinite(data[i])) continue;
+    const [nx, ny] = dims;
+    const at = `x ${i % nx}, y ${Math.floor(i / nx) % ny}${dims[2] > 1 ? `, slice ${Math.floor(i / (nx * ny))}` : ""}`;
+    return `it has a ${Number.isNaN(data[i]) ? "NaN" : "infinite"} value at ${at}. Replace NaN and infinite values (in Fiji, Process › Math › Remove NaNs) and load it again.`;
+  }
+  return null;
+}
+
 function checkImage({ data, dims, spacing }) {
   if (dims.length !== 3 || dims.some((n) => !Number.isInteger(n) || n < 1)) throw new Error("Image dimensions must be three positive integers.");
   if (data.length !== dims[0] * dims[1] * dims[2]) throw new Error("Image data do not match its dimensions.");
   if (spacing.some((s) => !(s > 0))) throw new Error("Voxel spacing must be positive.");
   if (dims[0] < 2 || dims[1] < 2) throw new Error("The image must be at least 2 pixels wide and high.");
+  const refusal = nonFiniteRefusal({ data, dims });
+  if (refusal) throw new Error(`The image cannot be analysed: ${refusal}`);
 }
 
 /**
  * The smoothed structure tensor. Returns { components, names } where components are Float64Arrays
  * Jxx, Jxy, Jyy (2D) or Jxx, Jxy, Jxz, Jyy, Jyz, Jzz (3D), gradients in units of x spacing.
- * `onProgress(fraction)` is called between passes; `signal` aborts between passes.
+ * `onProgress(fraction)` is called between passes.
  */
-export function structureTensor(image, { sigma, rho, onProgress, signal } = {}) {
+export function structureTensor(image, { sigma, rho, onProgress } = {}) {
   checkImage(image);
   const { data, dims, spacing } = image;
   const is3d = dims[2] > 1;
@@ -105,10 +118,7 @@ export function structureTensor(image, { sigma, rho, onProgress, signal } = {}) 
   const window = win.map((s, axis) => (axis < nd ? gaussianKernel(s, 0) : null));
   const passes = nd + (nd * (nd + 1)) / 2;
   let done = 0;
-  const step = () => {
-    signal?.throwIfAborted();
-    onProgress?.(++done / passes);
-  };
+  const step = () => onProgress?.(++done / passes);
   const gradients = [];
   for (let axis = 0; axis < nd; axis++) {
     const kernels = smooth.slice();
@@ -201,16 +211,19 @@ export function eigenSymmetric3(a, b, c, d, e, f) {
  * The 3D maps. The fibre direction is the eigenvector of the smallest eigenvalue, signed so its
  * azimuth lies in (-90, 90]; azimuth is the 2D orientation of its xy projection and elevation
  * its signed angle from the xy plane. Fibre coherency is (l2 - l3) / (l2 + l3) with
- * l1 >= l2 >= l3: 1 for a fibre, 0 for a sheet or isotropic texture. Energy is the trace.
+ * l1 >= l2 >= l3: 1 for a fibre, 0 for a sheet or isotropic texture (defined by this app;
+ * OrientationJ is 2D). Energy is the trace. `onProgress(fraction)` is called about every 5% of voxels.
  */
-export function maps3d([jxx, jxy, jxz, jyy, jyz, jzz]) {
+export function maps3d([jxx, jxy, jxz, jyy, jyz, jzz], { onProgress } = {}) {
   const n = jxx.length;
   const azimuth = new Float64Array(n);
   const elevation = new Float64Array(n);
   const coherency = new Float64Array(n);
   const energy = new Float64Array(n);
   const vectors = new Float64Array(3 * n);
+  const every = Math.max(1, Math.ceil(n / 20));
   for (let i = 0; i < n; i++) {
+    if (onProgress && i > 0 && i % every === 0) onProgress(i / n);
     const { values, vectors: eig } = eigenSymmetric3(jxx[i], jxy[i], jxz[i], jyy[i], jyz[i], jzz[i]);
     let [x, y, z] = eig[2];
     // Visual up is -y: canonical vectors point right, or straight up when vertical in-plane.
@@ -230,6 +243,7 @@ export function maps3d([jxx, jxy, jxz, jyy, jyz, jzz]) {
     coherency[i] = l2 + l3 > 0 ? (l2 - l3) / (l2 + l3) : 0;
     energy[i] = jxx[i] + jyy[i] + jzz[i];
   }
+  onProgress?.(1);
   return { azimuth, elevation, coherency, energy, vectors };
 }
 
@@ -325,11 +339,15 @@ export function directionColours(vectors, coherency) {
 /**
  * The whole analysis of one image. Returns the maps, the selection-based distributions and the
  * dominant direction; `settings` is { sigma, rho, minCoherency, minEnergy }.
+ * `onProgress(fraction)` covers the tensor and, in 3D, the per-voxel eigen-decomposition.
  */
-export function analyse(image, settings, { onProgress, signal } = {}) {
-  const tensor = structureTensor(image, { sigma: settings.sigma, rho: settings.rho, onProgress, signal });
+export function analyse(image, settings, { onProgress } = {}) {
+  const is3d = image.dims[2] > 1;
+  // In 3D the eigen-decompositions take about as long as the filtering.
+  const tensorShare = is3d ? 0.5 : 1;
+  const tensor = structureTensor(image, { sigma: settings.sigma, rho: settings.rho, onProgress: onProgress && ((f) => onProgress(tensorShare * f)) });
   const dominant = dominantDirection(tensor.components);
-  if (image.dims[2] === 1) {
+  if (!is3d) {
     const maps = maps2d(tensor.components);
     const selected = selection(maps, settings);
     return {
@@ -340,7 +358,7 @@ export function analyse(image, settings, { onProgress, signal } = {}) {
       colour: hsbComposite(maps.orientation, maps.coherency, image.data),
     };
   }
-  const maps = maps3d(tensor.components);
+  const maps = maps3d(tensor.components, { onProgress: onProgress && ((f) => onProgress(tensorShare + (1 - tensorShare) * f)) });
   const selected = selection(maps, settings);
   return {
     dimensions: 3,

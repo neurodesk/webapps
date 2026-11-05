@@ -194,7 +194,7 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 ## structure-tensor
 
 - The numerics are `apps/structure-tensor/src/tensor.js`: pure, float64, run in a module worker (one per run, terminated on cancel) and under Node in the tests. Its kernels and borders are scipy.ndimage's on purpose: `validation/scipy-reference.py` writes `validation/reference.json`, the unit tests compare with it at 1e-9°, and the browser test compares the example's downloaded float32 maps with it. Regenerate the reference after any change to the kernels, the window or the maps.
-- OrientationJ is GPL-3.0: never copy its code. It is only an external check (`validation/orientationj/`); its recursive Gaussian window explains the 1.7° median difference on the example.
+- OrientationJ is GPL-3.0: never copy its code. It is only an external check (`validation/orientationj/`). Its `tensor` setting is a window √3 times wider than this app's ρ; `fit-window.py` records the match at ρ 5 for tensor 3.
 - Angles use OrientationJ's convention: counterclockwise from +x with rows pointing down. TIFFs are shown upright through a NIfTI header whose y axis runs down the rows (`rasterHeader` in `src/io.js`). σ must be at least one voxel along every axis (`imageRefusal`), because thinner sampled derivative kernels lose gain and bias 3D angles.
 
 ## brainqcnet

@@ -18,6 +18,7 @@ import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { APP, analysisSettings, baseName, imageRefusal } from "./config.js";
 import { buildOutputs, niftiFile, readImages } from "./io.js";
+import { showCommitted } from "./preview.js";
 import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
@@ -165,8 +166,7 @@ async function loadFiles(filesPromise, signal) {
     // A stack of slices is named after its first slice; its input row downloads the stack.
     const file = files.length === 1 ? files[0] : new File([niftiFile(image.data, image, "stack.nii")], `${baseName(name)}_stack.nii`);
     const view = { file: niftiFile(image.data, image, `${name}.nii`), colormap: "gray" };
-    await show(view, { signal: current });
-    current.throwIfAborted();
+    await showCommitted(show, view, input?.view ?? null, current);
     // A 2D image has one plane to show; a stack starts on all three.
     const plane = image.dims[2] > 1 ? "multiplanar" : "axial";
     toolbar.setActive(plane);
@@ -254,8 +254,7 @@ async function analyse(signal, settings = formSettings()) {
     progress.setProgress(0.95);
     const built = await buildOutputs({ name: input.file.name, image: input.image, settings, result, signal: current });
     current.throwIfAborted();
-    await show(built.outputs.colour.view, { signal: current });
-    current.throwIfAborted();
+    await showCommitted(show, built.outputs.colour.view, input.view, current);
     outputs = built.outputs;
     results.render({ input: { description: "Input image", file: input.file, view: input.view, viewable: true }, ...outputs });
     $("outputSection").open = true;

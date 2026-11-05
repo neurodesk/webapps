@@ -31,11 +31,18 @@ export function analysisSettings(values = {}) {
   return settings;
 }
 
+/** Why an image of these dimensions is too large to hold, or null. */
+export function voxelRefusal(dims) {
+  const voxels = dims.reduce((product, n) => product * n, 1);
+  if (voxels > MAX_VOXELS) return `The image has ${voxels.toLocaleString("en")} voxels; crop or bin it to at most ${MAX_VOXELS.toLocaleString("en")}.`;
+  return null;
+}
+
 /** Why an image cannot be analysed with these settings, or null. */
 export function imageRefusal({ dims, spacing }, settings) {
-  const voxels = dims[0] * dims[1] * dims[2];
   if (dims[0] < 8 || dims[1] < 8) return "The image must be at least 8 × 8 pixels.";
-  if (voxels > MAX_VOXELS) return `The image has ${voxels.toLocaleString("en")} voxels; crop or bin it to at most ${MAX_VOXELS.toLocaleString("en")}.`;
+  const tooLarge = voxelRefusal(dims);
+  if (tooLarge) return tooLarge;
   const is3d = dims[2] > 1;
   const scales = axisScales(settings.sigma, spacing, is3d);
   const names = ["x", "y", "z"];

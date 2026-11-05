@@ -18,6 +18,8 @@ import {
   reference,
   sha256,
 } from "./fixtures.mjs";
+import { buildTiff, omeXml } from "../test/tiff-fixtures.mjs";
+import { writeTiff } from "../src/tiff.js";
 
 const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));
 const [shg, synthetic] = examples;
@@ -175,6 +177,25 @@ test("several 2D slices load as one stack in name order and are analysed in 3D",
   expect(azimuth.name).toBe("slice_1_stack_azimuth.tif");
   await page.locator("#imageInput").setInputFiles([gratingTiff(20, 32, "a.tif"), gratingTiff(20, 16, "b.tif")]);
   await expect(page.locator("#statusText")).toHaveText("b.tif is 16 × 16; every slice must match a.tif.");
+});
+
+test("over-limit, non-finite and multi-channel TIFFs are refused at load, keeping the loaded image", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles(gratingTiff(20, 32, "kept.tif"));
+  await expect(page.locator("#statusText")).toHaveText("kept.tif loaded");
+  const tiff = (name, buffer) => ({ name, mimeType: "image/tiff", buffer: Buffer.from(buffer) });
+  const side = 4096;
+  await page.locator("#imageInput").setInputFiles(tiff("big.tif", buildTiff({ width: side, height: side, pages: [new Uint8Array(side * side)], deflate: true })));
+  await expect(page.locator("#statusText")).toHaveText("big.tif: The image has 16,777,216 voxels; crop or bin it to at most 8,388,608.");
+  const data = new Float32Array(16 * 16).fill(1);
+  data[16 * 3 + 5] = Number.NaN;
+  await page.locator("#imageInput").setInputFiles(tiff("nan.tif", writeTiff({ data, dims: [16, 16, 1] })));
+  await expect(page.locator("#statusText")).toContainText("nan.tif: it has a NaN value at x 5, y 3.");
+  const pages = Array.from({ length: 6 }, () => new Uint8Array(16 * 16));
+  await page.locator("#imageInput").setInputFiles(tiff("two.ome.tif", buildTiff({ width: 16, height: 16, pages, description: omeXml({ prefix: "ome", channels: 2, SizeX: 16, SizeY: 16, SizeZ: 3, SizeC: 2 }) })));
+  await expect(page.locator("#statusText")).toContainText("hyperstack with 2 channels");
+  await expect(page.locator("#fileInfo")).toHaveText("kept.tif · 2D 32 × 32");
+  await expect(page.locator("#runButton")).toBeEnabled();
 });
 
 test("a file that is not an image is refused and the previous state is kept", async ({ page }) => {

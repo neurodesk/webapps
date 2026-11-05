@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import {
   analyse,
   convolveAxis,
+  directionColours,
   distributionCsv,
   eigenSymmetric3,
   gaussianKernel,
@@ -149,4 +150,37 @@ test("HSB colours match java.awt.Color.HSBtoRGB", () => {
 test("the reference example's settings and histogram length are consistent", () => {
   assert.equal(reference.example.histogram.length, 180);
   assert.equal(reference.example.histogram.reduce((a, b) => a + b), reference.example.counted);
+});
+
+test("NaN or infinite samples are refused instead of giving all-NaN maps", () => {
+  const image = grating2d({ degrees: 30 });
+  image.data[100] = Number.NaN;
+  assert.throws(() => analyse(image, { sigma: 1, rho: 3, minCoherency: 0.2, minEnergy: 0.01 }), /NaN value at x 36, y 1/);
+  image.data[100] = Number.NEGATIVE_INFINITY;
+  assert.throws(() => structureTensor(image, { sigma: 1, rho: 3 }), /infinite value/);
+});
+
+test("the distribution counts a pixel whose coherency equals the minimum exactly", () => {
+  const maps = { coherency: Float64Array.of(0.2, 0.2 - 1e-12), energy: Float64Array.of(1, 1) };
+  assert.deepEqual(Array.from(selection(maps, { minCoherency: 0.2, minEnergy: 0 })), [1, 0]);
+});
+
+test("the direction map scales |v| by fibre coherency, rounding half up", () => {
+  const rgb = directionColours(Float64Array.of(1, 0, 0, 0.6, -0.8, 0), Float64Array.of(0.5, 0.5));
+  assert.deepEqual(Array.from(rgb), [128, 0, 0, 77, 102, 0]);
+});
+
+test("3D maps report progress through the eigen-decomposition, not only after it", () => {
+  const n = 1000;
+  const ones = new Float64Array(n).fill(1);
+  const zeros = new Float64Array(n);
+  const fractions = [];
+  maps3d([ones, zeros, zeros, ones, zeros, zeros], { onProgress: (f) => fractions.push(f) });
+  assert.ok(fractions.length >= 19, `${fractions.length} updates`);
+  assert.ok(fractions.every((f, k) => k === 0 || f > fractions[k - 1]));
+  assert.equal(fractions.at(-1), 1);
+  const overall = [];
+  const example = syntheticExample();
+  analyse({ ...example, data: Float64Array.from(example.data) }, { sigma: 1, rho: 3, minCoherency: 0.2, minEnergy: 0.01 }, { onProgress: (f) => overall.push(f) });
+  assert.ok(overall.filter((f) => f > 0.5 && f < 1).length >= 10, "progress moves while the eigenvectors are computed");
 });

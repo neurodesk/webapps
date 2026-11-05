@@ -20,20 +20,62 @@ function rational(value) {
   return Number(value) || 0;
 }
 
+// Lengths in micrometres, for converting OME-XML physical sizes to one unit.
+const MICROMETRES = { pm: 1e-6, nm: 1e-3, "µm": 1, "μm": 1, um: 1, micron: 1, mm: 1e3, cm: 1e4, m: 1e6 };
+
+function xmlAttributes(text) {
+  const attributes = {};
+  for (const [, name, value] of text.matchAll(/([\w:.-]+)\s*=\s*"([^"]*)"/g)) attributes[name.replace(/^\w+:/, "")] = value;
+  return attributes;
+}
+
 /**
- * One greyscale image or stack from a TIFF: { data: Float64Array, dims, spacing, unit }.
- * Colour pages become the mean of their channels (ImageJ's RGB to 8-bit conversion);
- * ImageJ hyperstacks with several channels or frames are refused.
+ * The image layout an OME-XML description declares: { channels, frames, slices, spacing, unit }.
+ * Element names may carry any namespace prefix (`<ome:Pixels>`). Returns null for other text.
  */
-export async function readTiff(buffer) {
+export function omeDescription(text) {
+  if (typeof text !== "string" || !/<(?:\w+:)?OME[\s>]/.test(text)) return null;
+  const pixels = text.match(/<(?:\w+:)?Pixels\b([^>]*)>/);
+  if (!pixels) return null;
+  const attributes = xmlAttributes(pixels[1]);
+  const size = (name) => Number(attributes[name]) || 1;
+  // A colour image is one Channel element with several samples per pixel.
+  const channelElements = [...text.matchAll(/<(?:\w+:)?Channel\b/g)].length;
+  const lengths = ["X", "Y", "Z"].map((axis) => {
+    const value = Number(attributes[`PhysicalSize${axis}`]);
+    return value > 0 ? { value, unit: attributes[`PhysicalSize${axis}Unit`] ?? "µm" } : null;
+  });
+  const unit = lengths[0]?.unit ?? null;
+  const inUnit = (length) => (length.unit === unit ? length.value : length.value * (MICROMETRES[length.unit] ?? NaN) / (MICROMETRES[unit] ?? NaN));
+  const spacing = lengths.map((length) => (length && unit ? inUnit(length) : null));
+  return {
+    channels: channelElements || size("SizeC"),
+    frames: size("SizeT"),
+    slices: size("SizeZ"),
+    spacing: spacing.map((value) => (value > 0 ? value : null)),
+    unit,
+  };
+}
+
+/**
+ * The layout of a TIFF from its headers alone, without decoding pixels:
+ * { dims, spacing, unit, pages } where `pages` are the geotiff images of the stack.
+ * Hyperstacks with several channels or time points (ImageJ or OME-XML) are refused.
+ */
+export async function tiffLayout(buffer) {
   const tiff = await fromArrayBuffer(buffer);
   const first = await tiff.getImage(0);
   const nx = first.getWidth();
   const ny = first.getHeight();
   const tag = (name) => first.fileDirectory.loadValue(name);
-  const description = imageJDescription(await tag("ImageDescription"));
-  if (description && (Number(description.channels) > 1 || Number(description.frames) > 1)) {
-    throw new Error("This TIFF is a hyperstack with several channels or time points. Save one channel and one time point as a stack.");
+  const text = await tag("ImageDescription");
+  const imagej = imageJDescription(text);
+  const ome = omeDescription(text);
+  const channels = ome?.channels ?? Number(imagej?.channels ?? 1);
+  const frames = ome?.frames ?? Number(imagej?.frames ?? 1);
+  if (channels > 1 || frames > 1) {
+    const parts = [channels > 1 ? `${channels} channels` : null, frames > 1 ? `${frames} time points` : null].filter(Boolean).join(" and ");
+    throw new Error(`This TIFF is a hyperstack with ${parts}. In Fiji, use Image › Duplicate with one channel and one time point, save it as TIFF and load that.`);
   }
   const count = await tiff.getImageCount();
   const pages = [];
@@ -43,7 +85,29 @@ export async function readTiff(buffer) {
     if (image.getWidth() !== nx || image.getHeight() !== ny) continue;
     pages.push(image);
   }
-  const nz = pages.length;
+  if (ome && pages.length < ome.slices) {
+    throw new Error(`This OME-TIFF declares ${ome.slices} planes but holds ${pages.length}; its other planes are in other files. Save the stack as one TIFF.`);
+  }
+  if (ome) pages.length = ome.slices;
+  const xResolution = rational(await tag("XResolution"));
+  const yResolution = rational(await tag("YResolution"));
+  let dx = xResolution > 0 ? 1 / xResolution : 1;
+  let dy = yResolution > 0 ? 1 / yResolution : dx;
+  let dz = Number(imagej?.spacing) > 0 ? Math.abs(Number(imagej.spacing)) : dx;
+  let unit = imagej?.unit ?? (xResolution > 0 ? RESOLUTION_UNITS[await tag("ResolutionUnit")] : null) ?? "pixel";
+  if (ome?.unit && ome.spacing[0]) {
+    [dx, dy, dz] = [ome.spacing[0], ome.spacing[1] ?? ome.spacing[0], ome.spacing[2] ?? ome.spacing[0]];
+    unit = ome.unit;
+  }
+  return { dims: [nx, ny, pages.length], spacing: [dx, dy, dz], unit, pages };
+}
+
+/**
+ * One greyscale image or stack from a TIFF layout (`tiffLayout`): { data: Float64Array, dims, spacing, unit }.
+ * Colour pages become the mean of their channels (ImageJ's RGB to 8-bit conversion).
+ */
+export async function readTiffPages({ dims, spacing, unit, pages }) {
+  const [nx, ny, nz] = dims;
   const data = new Float64Array(nx * ny * nz);
   for (let z = 0; z < nz; z++) {
     const samples = pages[z].getSamplesPerPixel();
@@ -56,13 +120,12 @@ export async function readTiff(buffer) {
       data[offset + i] = sum / channels;
     }
   }
-  const xResolution = rational(await tag("XResolution"));
-  const yResolution = rational(await tag("YResolution"));
-  const dx = xResolution > 0 ? 1 / xResolution : 1;
-  const dy = yResolution > 0 ? 1 / yResolution : dx;
-  const dz = Number(description?.spacing) > 0 ? Math.abs(Number(description.spacing)) : dx;
-  const unit = description?.unit ?? (xResolution > 0 ? RESOLUTION_UNITS[await tag("ResolutionUnit")] : null) ?? "pixel";
-  return { data, dims: [nx, ny, nz], spacing: [dx, dy, dz], unit };
+  return { data, dims, spacing, unit };
+}
+
+/** One greyscale image or stack from TIFF bytes; see `tiffLayout` and `readTiffPages`. */
+export async function readTiff(buffer) {
+  return readTiffPages(await tiffLayout(buffer));
 }
 
 const TYPE = { SHORT: 3, LONG: 4, RATIONAL: 5, ASCII: 2 };

@@ -24,7 +24,7 @@ used only as an external validation reference.
 - **3D.** The tensor is a 3 × 3 matrix, decomposed by cyclic Jacobi rotations. The fibre
   direction is the eigenvector of the smallest eigenvalue. It is reported as azimuth (the 2D
   convention applied to its xy projection) and elevation (signed angle from the xy plane towards
-  +z). Fibre coherency is `(λ2 − λ3)/(λ2 + λ3)`, which is 1 for tubes and 0 for sheets and
+  +z). Fibre coherency, defined by this app, is `(λ2 − λ3)/(λ2 + λ3)`, which is 1 for tubes and 0 for sheets and
   isotropic texture. The direction map is `|v|·coherency` as RGB, as in DTI colour maps.
 - **Voxel size.** σ and ρ are scaled to each axis by the voxel size, so the filters are isotropic
   in space, and gradients are expressed per x pixel. The app refuses any setting where σ is under
@@ -39,12 +39,16 @@ used only as an external validation reference.
 
 - TIFF, grey or RGB, single page or stack, read with geotiff.js. Colour channels are averaged, as
   in ImageJ's RGB to 8-bit conversion. Voxel size comes from the resolution tags and ImageJ's
-  `spacing=`. Hyperstacks with several channels or time points are refused.
+  `spacing=`, or from an OME-XML description's `PhysicalSize*` attributes, which also set the
+  number of slices. Hyperstacks with several channels or time points (ImageJ or OME) are refused,
+  and so are OME-TIFFs whose planes are in other files.
 - NIfTI, 3D. Its angles are measured on the voxel grid with the second index pointing down, as
   for TIFF rows. A NIfTI displayed with +y up therefore shows mirrored angles.
 - PNG and JPEG, and several 2D slices of one size, which are stacked in name order with cubic
   voxels.
-- Inputs are limited to 2²³ voxels, because 3D runs hold up to nine float64 working arrays.
+- Inputs are limited to 2²³ voxels, because 3D runs hold up to nine float64 working arrays. The
+  limit is checked from the file headers (all slices together) before any voxels are decoded.
+- Samples must be finite: an image with a NaN or an infinity is refused when it is loaded.
 - Maps are written as float32 TIFF stacks with an ImageJ description for TIFF and raster input,
   and as gzipped NIfTI for NIfTI input. The 3D direction map is RGB TIFF or RGB24 NIfTI. The
   fibre vectors are always a 3-frame NIfTI. The colour survey is a PNG. The distribution is a CSV
@@ -58,7 +62,7 @@ used only as an external validation reference.
   to 160°. SHG brightness depends on the angle between a fibre and the polarisation, so a single
   polarisation would bias the distribution. `validation/make-example.py` builds it. The file is
   512 × 512, 0.5 MB, and is pinned on `neurodeskorg/webapps` at
-  `721c75e0487ba5a812ee2d899ae567786672a371`.
+  `09b7e0aa259ccfda6c5044a5a640e91f231ab49d`, with a README carrying the CC BY 4.0 notice.
 - **Synthetic 3D fibres.** A 64 × 64 × 32 float32 stack written by
   `scripts/make-synthetic-example.mjs`. It holds two cosine lattices of cylinders: azimuth 30°,
   elevation 0° for x < 32, and azimuth −45°, elevation 40° beyond. It is a software check, not
@@ -79,19 +83,25 @@ used only as an external validation reference.
 - `validation/orientationj/` holds the cross-check against OrientationJ 2.2.0. It ran in
   ImageJ 1.54f headless under Xvfb in `eclipse-temurin:21-jre`; jar hashes are in
   `results.json`.
-  - On 128 × 128 gratings, OrientationJ also recovers each angle within 0.001°, with the same
-    sign convention.
+  - On 128 × 128 gratings, OrientationJ also recovers each angle to about 0.001° (largest error
+    0.001045°), with the same sign convention.
   - On the SHG example with tensor = 3 and its Gaussian gradient, its orientation differs from
     this app's σ 1, ρ 3 by a median of 1.7° (95th percentile 9.6°) on coherent pixels.
-    Coherency differs by a median of 0.024. OrientationJ smooths the tensor with a recursive
-    (IIR) approximation of the Gaussian, not a sampled kernel. Its energy has a different scale,
-    and correlates at 0.965.
+    Coherency differs by a median of 0.024. Its energy has a different scale, and correlates at
+    0.965.
+  - Most of the difference is the window's width. OrientationJ's recursive Gaussian makes nine passes
+    of a filter whose pole is set so that three passes have standard deviation `tensor`, so its
+    window is √3 · `tensor` wide: 5.2 px at tensor = 3 (the impulse response, computed
+    numerically). `fit-window.py` searched σ and ρ: σ 1, ρ 5 matches OrientationJ with a median
+    difference of 0.08° (95th percentile 0.55°, coherency 0.001).
 
 ## Deliberate differences from OrientationJ
 
 - The gradient is a Gaussian derivative at a chosen σ. OrientationJ's default is a cubic spline,
   and its Gaussian option fixes σ = 1.
-- The tensor window is a sampled Gaussian (scipy), not OrientationJ's recursive filter.
+- The tensor window is a sampled Gaussian (scipy) whose ρ is its standard deviation.
+  OrientationJ's `tensor` setting gives a window √3 times wider, so ρ ≈ 1.7 × `tensor` here
+  reproduces an OrientationJ analysis.
 - Energy is the unscaled trace.
 - The 3D analysis, fibre coherency and direction map are not part of OrientationJ, which is 2D.
 - Laplacian-of-Gaussian prefiltering, Harris corners, vector fields and k-means clustering are not

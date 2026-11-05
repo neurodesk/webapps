@@ -3,7 +3,7 @@
  "imagej": "net.imagej:ij:1.54f, sha256 e5ee9b846e3c2f819d945e6d3fca5641ca690b1ef28591415ae0dc7c6d82fcd9",
  "runtime": "eclipse-temurin:21-jre with xvfb-run",
  "gratings": {
-  "description": "128 x 128 float32 gratings, period 8 px; OrientationJ tensor=3 gradient=4 (Gaussian); largest |error| in degrees over the central 64 x 64 pixels",
+  "description": "128 x 128 float32 gratings, period 8 px; OrientationJ tensor=3 gradient=4 (Gaussian); largest |error| in degrees, rounded to 0.0001 (the largest unrounded error was 0.001045) over the central 64 x 64 pixels",
   "maxAbsErrorDeg": {
    "-75": 0.001,
    "-30": 0.001,
@@ -45,6 +45,55 @@
     "energy_correlation": 0.9306359919569721,
     "energy_ratio_median": 1.3373692605316021e-05
    }
+  }
+ },
+ "windowFit": {
+  "description": "fit-window.py: this app's tensor at a grid of sigma and rho against OrientationJ tensor=3 with its Gaussian gradient on the SHG example, on the pixels of example.results. OrientationJ's recursive Gaussian applies nine causal and anticausal first-order passes with a pole chosen so that three passes have variance tensor^2; nine passes have standard deviation sqrt(3) * tensor, 5.196 px at tensor=3 (impulse response computed numerically).",
+  "effectiveWindowSigmaPx": 5.196,
+  "pixels": 102756,
+  "best": [
+   {
+    "sigma": 1.0,
+    "rho": 5.0,
+    "orientationMedianDeg": 0.0837,
+    "orientationP95Deg": 0.546,
+    "coherencyMedian": 0.00116
+   },
+   {
+    "sigma": 1.0,
+    "rho": 5.1,
+    "orientationMedianDeg": 0.086,
+    "orientationP95Deg": 0.4602,
+    "coherencyMedian": 0.00113
+   },
+   {
+    "sigma": 1.0,
+    "rho": 5.2,
+    "orientationMedianDeg": 0.113,
+    "orientationP95Deg": 0.5817,
+    "coherencyMedian": 0.00151
+   },
+   {
+    "sigma": 1.0,
+    "rho": 4.9,
+    "orientationMedianDeg": 0.1153,
+    "orientationP95Deg": 0.7903,
+    "coherencyMedian": 0.00165
+   },
+   {
+    "sigma": 1.0,
+    "rho": 5.3,
+    "orientationMedianDeg": 0.1582,
+    "orientationP95Deg": 0.8098,
+    "coherencyMedian": 0.00211
+   }
+  ],
+  "appDefault": {
+   "sigma": 1.0,
+   "rho": 3.0,
+   "orientationMedianDeg": 1.676,
+   "orientationP95Deg": 9.6337,
+   "coherencyMedian": 0.02394
   }
  }
 }
