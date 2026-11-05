@@ -65,3 +65,21 @@ export function readTiffStack<Data extends TiffSampleArray = TiffSampleArray>(bu
 export function imagejDescription(options: { frames: number; frameInterval?: number | null; unit?: string | null; min?: number | null; max?: number | null }): string;
 /** Uncompressed little-endian baseline TIFF, one strip per page; `rgb` writes Uint8Array red, green, blue triplets as RGB pages. */
 export function writeTiffStack(stack: { width: number; height: number; data: TiffSampleArray; description?: string; pixelSize?: { x: number; y: number } | null; rgb?: boolean }): Uint8Array;
+
+export interface TiffImage {
+  width: number;
+  height: number;
+  /** 1 for greyscale, 3 for RGB. */
+  channels: 1 | 3;
+  bitsPerSample: 8 | 16;
+  /** 255 or 65535. */
+  maxValue: number;
+  /** Interleaved samples in row, column, channel order. */
+  data: Uint8Array | Uint16Array;
+  /** Micrometres; null when the file does not record a physical size. */
+  pixelSize: { x: number; y: number } | null;
+  metadata: { kind: 'ome' | 'imagej' | 'baseline'; description: string };
+}
+
+/** One 2-D greyscale or RGB image (a section or slide overview); refuses stacks, channel stacks and over-budget images before decoding. */
+export function readTiffImage(buffer: ArrayBuffer, options?: { signal?: AbortSignal; maxBytes?: number }): Promise<TiffImage>;

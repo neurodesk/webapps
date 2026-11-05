@@ -1,0 +1,28 @@
+[
+  {
+    "id": "ahead-152017-section150",
+    "label": "Thionin section and 7 T R1 map (AHEAD)",
+    "description": "A coronal thionin (Nissl) section of the frontal lobe and the same brain's post-mortem 7 T R1 map at 0.6 mm (AHEAD brain 152017, Alkemade et al. 2022, CC BY 4.0).",
+    "expectedResult": "The section is registered near coronal slice 50 and shown on the MRI with adjustable opacity; download the warped section, its place in the MRI grid and the Greedy transforms.",
+    "files": [
+      {
+        "role": "mri",
+        "name": "ahead152017_r1_0.6mm_anterior.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_r1_0.6mm_anterior.nii.gz",
+        "sha256": "561fd1e5943ae1a231c0c43523a3445520316e91355895bcd8a4b6995b95dfc0",
+        "bytes": 4089034
+      },
+      {
+        "role": "section",
+        "name": "ahead152017_thionin_section150_85um.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_thionin_section150_85um.tif",
+        "sha256": "8a35fb01f446c2306fdbb81c163368057137fc34bb61445bdcacfd5677af5839",
+        "bytes": 1724747
+      }
+    ],
+    "parameters": {
+      "axis": 2,
+      "index": 50
+    }
+  }
+]

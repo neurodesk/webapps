@@ -5242,6 +5242,20 @@
       "contentType": "image/tiff",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_thionin_section150_85um.tif": {
+      "sha256": "8a35fb01f446c2306fdbb81c163368057137fc34bb61445bdcacfd5677af5839",
+      "bytes": 1724747,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_r1_0.6mm_anterior.nii.gz": {
+      "sha256": "561fd1e5943ae1a231c0c43523a3445520316e91355895bcd8a4b6995b95dfc0",
+      "bytes": 4089034,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6592,6 +6606,10 @@
     "structure-tensor": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif"
+    ],
+    "histo2mri": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_r1_0.6mm_anterior.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_thionin_section150_85um.tif"
     ]
   }
 }

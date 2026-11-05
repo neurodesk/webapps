@@ -2199,6 +2199,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "histo2mri": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

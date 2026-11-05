@@ -2522,3 +2522,39 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  histo2mri:
+    packages:
+      - { name: histo2mri pipeline, url: https://github.com/neurodesk/webapps/tree/main/apps/histo2mri/src/core, role: "section plane sampling, orientation and plane search, colour deconvolution, Greedy-compatible outputs" }
+      - { name: greedy-rs (Rust → WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: "NMI rigid, affine and stationary-velocity deformable registration (single-threaded build)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Registration
+        title: Greedy
+        reference: "Greedy was created by Paul Yushkevich at the Penn Image Computing and Science Lab and is maintained by contributors to the Greedy C++ project [Computer software]."
+        url: https://sites.google.com/view/greedyreg/about
+      - group: Registration
+        title: Fast deformable registration with Greedy
+        reference: "Yushkevich PA, Pluta J, Wang H, Wisse LEM, Das S, Wolk D. Fast automatic segmentation of hippocampal subfields and medial temporal lobe subregions in 3 Tesla and 7 Tesla T2-weighted MRI. Alzheimer's & Dementia. 2016;12(7S):P126–P127."
+        doi: 10.1016/j.jalz.2016.06.205
+      - group: Registration
+        title: Normalized mutual information
+        reference: "Studholme C, Hill DLG, Hawkes DJ. An overlap invariant entropy measure of 3D medical image alignment. Pattern Recognition. 1999;32(1):71–86."
+        doi: 10.1016/S0031-3203(98)00091-0
+      - group: Section contrast
+        title: Colour deconvolution
+        reference: "Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution. Analytical and Quantitative Cytology and Histology. 2001;23(4):291–299."
+        url: https://pubmed.ncbi.nlm.nih.gov/11531144/
+      - group: Section contrast
+        title: Otsu threshold (tissue masks)
+        reference: "Otsu N. A threshold selection method from gray-level histograms. IEEE Transactions on Systems, Man, and Cybernetics. 1979;9(1):62–66."
+        doi: 10.1109/TSMC.1979.4310076
+      - group: Example data
+        title: AHEAD brain 152017 (CC BY 4.0)
+        reference: "Alkemade A, Bazin P-L, Balesar R, et al. A unified 3D map of microscopic architecture and MRI of the human brain. Science Advances. 2022;8(17):eabj7892. Data: Ahead Brain 152017, original stains and 3D reconstructions, University of Amsterdam figshare, CC BY 4.0."
+        doi: 10.1126/sciadv.abj7892
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

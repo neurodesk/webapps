@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { gzip, gunzip, isGzip, registerAffineGreedy, registerGreedy, resliceAffineGreedy, resliceGreedy } from "../src/index.js";
+import { gzip, gunzip, isGzip, registerAffineGreedy, registerGreedy, registerRigidGreedy, resliceAffineGreedy, resliceGreedy } from "../src/index.js";
 
 const api = {
   register_affine_wasm: (_fixed, _moving, _metric, _iterations, imageCenters) => (imageCenters ? "matrix" : "identity-start"),
@@ -9,6 +9,8 @@ const api = {
   reslice_warp_affine: (_fixed, _moving, warp) => Uint8Array.of(warp[0], 2),
   reslice_warp_affine_options: (_fixed, _moving, warp, _matrix, preceding, nearest, fill) => Uint8Array.of(warp[0], preceding ? 1 : 0, nearest ? 1 : 0, fill),
   reslice_affine_options: (_fixed, _moving, _matrix, nearest, fill) => Uint8Array.of(nearest ? 1 : 0, fill),
+  register_affine_masked_wasm: (_fixed, _moving, mask, metric, iterations, imageCenters, initial) => `affine ${mask} ${metric} ${iterations} ${imageCenters} ${initial}`,
+  register_rigid_masked_wasm: (_fixed, _moving, mask, metric, iterations, imageCenters, initial) => `rigid ${mask} ${metric} ${iterations} ${imageCenters} ${initial}`,
 };
 
 test("affine registration returns the resliced image and matrix", () => {
@@ -29,6 +31,13 @@ test("registration transforms can be reused for scalar and lesion reslicing", ()
   const registration = { matrix: "matrix", warp: Uint8Array.of(7) };
   assert.deepEqual(resliceGreedy({ api, fixed: Uint8Array.of(1), moving: Uint8Array.of(2), registration, precedingMatrix: "path", interpolation: "nearest", fill: -2 }), Uint8Array.of(7, 1, 1, 254));
   assert.deepEqual(resliceAffineGreedy({ api, fixed: Uint8Array.of(1), moving: Uint8Array.of(2), matrix: "path", fill: 3 }), Uint8Array.of(0, 3));
+});
+
+test("linear registrations start from an initial matrix when one is given", () => {
+  const images = { api, fixed: Uint8Array.of(1), moving: Uint8Array.of(2) };
+  assert.equal(registerAffineGreedy({ ...images, iterations: "10x0x0", initial: "start" }), "affine null NMI 10x0x0 false start");
+  assert.equal(registerRigidGreedy(images), "rigid null NMI 100x50x10 false null");
+  assert.equal(registerRigidGreedy({ ...images, initial: "start" }), "rigid null NMI 100x50x10 false start");
 });
 
 test("gzip helpers round trip bytes", async () => {

@@ -30,15 +30,18 @@ export function registerGreedy({ api, fixed, moving, mode = "affine", iterations
   return { image: api.reslice_warp_affine(fixedBytes, movingBytes, warp, matrix), matrix, warp };
 }
 
-export function registerAffineGreedy({ api, fixed, moving, iterations = "100x50x10" }) {
+// `initial`, the text of a Greedy `-ia` matrix, replaces the image-centre start.
+export function registerAffineGreedy({ api, fixed, moving, iterations = "100x50x10", initial = null }) {
   if (!api) throw new Error("Greedy WebAssembly is not initialized.");
+  if (initial !== null) return api.register_affine_masked_wasm(bytes(fixed), bytes(moving), null, "NMI", iterations, false, initial);
   return api.register_affine_wasm(bytes(fixed), bytes(moving), "NMI", iterations, true);
 }
 
-// A rigid (6 DOF) NMI registration from the identity, so from the scanner alignment.
-export function registerRigidGreedy({ api, fixed, moving, iterations = "100x50x10" }) {
+// A rigid (6 DOF) NMI registration from the identity, so from the scanner alignment, or from
+// `initial`, the text of a Greedy `-ia` matrix.
+export function registerRigidGreedy({ api, fixed, moving, iterations = "100x50x10", initial = null }) {
   if (!api) throw new Error("Greedy WebAssembly is not initialized.");
-  return api.register_rigid_masked_wasm(bytes(fixed), bytes(moving), null, "NMI", iterations, false, null);
+  return api.register_rigid_masked_wasm(bytes(fixed), bytes(moving), null, "NMI", iterations, false, initial);
 }
 
 // `greedy -sv -m METRIC [-gm MASK] -it MATRIX`: the stationary-velocity warp (raw .nii, physical

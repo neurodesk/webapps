@@ -58,6 +58,10 @@
       "types": "./src/file-io/tiff.d.ts",
       "default": "./src/file-io/tiff.js"
     },
+    "./file-io/raster-image": {
+      "types": "./src/file-io/raster-image.d.ts",
+      "default": "./src/file-io/raster-image.js"
+    },
     "./fetch": {
       "types": "./src/net/fetchWithRetry.d.ts",
       "default": "./src/net/fetchWithRetry.js"

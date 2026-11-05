@@ -386,3 +386,106 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
   }
   return out;
 }
+
+// TIFF 6.0 ResolutionUnit: 2 is the inch, 3 the centimetre (1, no unit, gives no size).
+const RESOLUTION_UNIT_MICROMETRES = { 2: 25400, 3: 10000 };
+
+// PhotometricInterpretation values readTiffImage converts to RGB through geotiff's readRGB.
+const CONVERTED_TO_RGB = new Set([3, 5, 6, 8]);
+
+function reducedResolution(image) {
+  return (Number(image.fileDirectory.getValue('NewSubfileType') ?? 0) & 1) === 1;
+}
+
+function imagePixelSize(image, metadata) {
+  const ome = metadata?.kind === 'ome' || metadata?.kind === 'imagej' ? metadata.pixelSize : null;
+  if (ome?.x && ome?.y) return { x: ome.x, y: ome.y };
+  const unit = RESOLUTION_UNIT_MICROMETRES[image.fileDirectory.getValue('ResolutionUnit') ?? 2];
+  const x = rational(image.fileDirectory.getValue('XResolution'));
+  const y = rational(image.fileDirectory.getValue('YResolution'));
+  if (!unit || !(x > 0) || !(y > 0)) return null;
+  return { x: unit / x, y: unit / y };
+}
+
+/** How a single TIFF image's samples become grey or RGB, or why they cannot. */
+function colourLayout(image) {
+  const samples = image.getSamplesPerPixel();
+  const photometric = image.fileDirectory.getValue('PhotometricInterpretation') ?? 1;
+  const extra = Array.from(image.fileDirectory.getValue('ExtraSamples') ?? []);
+  // ExtraSamples 1 and 2 are alpha; 0 (unspecified) marks further data channels.
+  const alpha = extra.filter((kind) => kind === 1 || kind === 2).length;
+  if (photometric === 2) {
+    if (samples - extra.length !== 3) throw new Error(`This RGB TIFF has ${samples - extra.length} colour samples per pixel, not 3; save it as 8 or 16-bit RGB.`);
+    return { channels: 3, samples: [0, 1, 2], invert: false, convert: false };
+  }
+  if (photometric === 0 || photometric === 1) {
+    if (samples - alpha !== 1) {
+      throw new Error(`This TIFF stores ${samples} greyscale samples per pixel, a channel stack rather than a colour image; save one channel or an RGB image.`);
+    }
+    return { channels: 1, samples: [0], invert: photometric === 0, convert: false };
+  }
+  if (CONVERTED_TO_RGB.has(photometric)) return { channels: 3, samples: null, invert: false, convert: true };
+  throw new Error(`This TIFF's photometric interpretation (${PHOTOMETRIC[photometric] ?? photometric}) is not greyscale or colour.`);
+}
+
+/**
+ * Reads one 2-D image from a TIFF as greyscale or RGB: a histology section or a slide overview.
+ * The first page is the image; further pages are accepted only when they are reduced-resolution
+ * copies of it (pyramids, thumbnails), and a stack of full-size pages or several OME series is
+ * refused. PhotometricInterpretation decides the channels: RGB (alpha and other extra samples
+ * dropped), black- or white-is-zero greyscale (white-is-zero is inverted), and palette, YCbCr,
+ * CMYK or CIELab converted to 8-bit RGB by geotiff. Several samples on a greyscale image are a
+ * channel stack and are refused. Samples are 8 or 16-bit unsigned integers, interleaved
+ * (row, column, channel). The decoded size is checked against `maxBytes` from the page directory
+ * before any pixel is decoded. `pixelSize` (micrometres) comes from OME-XML, ImageJ or the
+ * resolution tags when they give a unit, else it is null.
+ * @param {ArrayBuffer} buffer
+ * @param {{ signal?: AbortSignal, maxBytes?: number }} [options]
+ */
+export async function readTiffImage(buffer, { signal, maxBytes = MAX_INPUT_BYTES } = {}) {
+  signal?.throwIfAborted();
+  const tiff = await fromArrayBuffer(buffer);
+  const pages = await tiff.getImageCount();
+  const image = await tiff.getImage(0);
+  const width = image.getWidth();
+  const height = image.getHeight();
+  for (let page = 1; page < pages; page++) {
+    const other = await tiff.getImage(page);
+    if (!reducedResolution(other) && (other.getWidth() >= width || other.getHeight() >= height)) {
+      throw new Error(`This TIFF holds ${pages} full-size pages, a stack rather than one image; save the section you need as its own file.`);
+    }
+  }
+  const description = String((await image.fileDirectory.loadValue('ImageDescription')) ?? '').replace(/\0+$/, '');
+  const resolution = [rational(image.fileDirectory.getValue('XResolution')), rational(image.fileDirectory.getValue('YResolution'))];
+  const metadata = parseOmeDescription(description) ?? parseImagejDescription(description, resolution);
+  if (metadata?.images > 1) throw new Error(`This OME-TIFF holds ${metadata.images} image series; save the one you need as its own file.`);
+  if (metadata && (metadata.sizeZ > 1 || metadata.sizeT > 1)) throw new Error(`This TIFF is a ${metadata.sizeZ > 1 ? 'z-stack' : 'time series'}, not one image; save the section you need as its own file.`);
+  const layout = colourLayout(image);
+  const format = image.getSampleFormat();
+  const bits = image.getBitsPerSample();
+  if (format !== 1 || (bits !== 8 && bits !== 16)) throw new Error(`TIFF sample type (format ${format}, ${bits} bits) is not 8 or 16-bit unsigned; save the image as 8 or 16-bit.`);
+  const outputBits = layout.convert ? 8 : bits;
+  const bytes = width * height * layout.channels * (outputBits / 8);
+  if (bytes > maxBytes) throw new InputTooLargeError(bytes, maxBytes, { subject: 'Decoded TIFF image' });
+  let data;
+  if (layout.convert) {
+    data = await image.readRGB({ interleave: true, enableAlpha: false, signal });
+  } else {
+    data = await image.readRasters({ interleave: true, samples: layout.samples, signal });
+    if (layout.invert) {
+      const max = 2 ** bits - 1;
+      for (let i = 0; i < data.length; i++) data[i] = max - data[i];
+    }
+  }
+  const Output = outputBits === 8 ? Uint8Array : Uint16Array;
+  return {
+    width,
+    height,
+    channels: layout.channels,
+    bitsPerSample: outputBits,
+    maxValue: 2 ** outputBits - 1,
+    data: data instanceof Output ? data : Output.from(data),
+    pixelSize: imagePixelSize(image, metadata),
+    metadata: { kind: metadata?.kind ?? 'baseline', description },
+  };
+}

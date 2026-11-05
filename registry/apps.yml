@@ -1584,3 +1584,27 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: histo2mri
+    path: histo2mri
+    title: Histology to MRI
+    description: Register 2D histology sections to an MRI volume
+    categories: [registration]
+    keywords: [histology, microscopy, section, slide, MRI, registration, Greedy, NMI, mutual information, slice-to-volume, colour deconvolution, H&E, Nissl, thionin, ex vivo, post-mortem, BigBrain, AHEAD]
+    anatomy: [brain]
+    modalities: [microscopy, mri]
+    inputs: [nifti, tiff]
+    hardware: cpu
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

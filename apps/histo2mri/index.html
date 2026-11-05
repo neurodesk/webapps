@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Histology to MRI — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="mriInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose an MRI volume and histology sections" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop an MRI (NIfTI) and histology sections</span>
+          </label>
+          <p id="mriInfo" class="nd-file-info" hidden></p>
+          <div id="sectionField"></div>
+          <p id="sectionInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Section plane</summary>
+        <div class="nd-section-content">
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="axis">Slice axis</label>
+              <select id="axis">
+                <option value="0">i</option>
+                <option value="1">j</option>
+                <option value="2" selected>k</option>
+              </select>
+            </div>
+            <div class="nd-field">
+              <label for="sliceIndex">Slice
+                <span class="nd-info-icon" tabindex="0" aria-label="About the slice">i<span class="nd-info-tooltip">The MRI slice nearest the first section, by voxel index along the slice axis. The registration searches a few slices either side.</span></span>
+              </label>
+              <input id="sliceIndex" type="number" min="0" step="1" value="0" />
+            </div>
+          </div>
+          <div class="nd-field" id="stepField" hidden>
+            <label for="sliceStep">Slices between sections</label>
+            <input id="sliceStep" type="number" step="0.5" value="1" />
+            <p class="nd-hint">Sections are taken in file-name order.</p>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="contrast">Section contrast
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the section contrast">i<span class="nd-info-tooltip">Brightness works for any stain and inverts brightfield slides so the background is dark. The stain channels use colour deconvolution (Ruifrok and Johnston 2001).</span></span>
+                </label>
+                <select id="contrast">
+                  <option value="auto" selected>Brightness</option>
+                  <option value="haematoxylin">Haematoxylin</option>
+                  <option value="eosin">Eosin</option>
+                  <option value="dab">DAB</option>
+                </select>
+              </div>
+              <div class="nd-field">
+                <label for="orientation">Section orientation</label>
+                <select id="orientation">
+                  <option value="auto" selected>Automatic</option>
+                  <option value="0">As scanned</option>
+                  <option value="1">Rotated 90°</option>
+                  <option value="2">Rotated 180°</option>
+                  <option value="3">Rotated 270°</option>
+                  <option value="4">Flipped</option>
+                  <option value="5">Flipped, rotated 90°</option>
+                  <option value="6">Flipped, rotated 180°</option>
+                  <option value="7">Flipped, rotated 270°</option>
+                </select>
+              </div>
+              <div class="nd-field">
+                <label for="pixelSize">Section pixel size <small>µm</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the pixel size">i<span class="nd-info-tooltip">Leave empty to estimate it from the tissue area, which also absorbs shrinkage. The affine registration refines the scale either way.</span></span>
+                </label>
+                <input id="pixelSize" type="number" min="0" step="any" placeholder="Estimate" />
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="tiltA">Tilt 1 <small>°</small></label>
+                  <input id="tiltA" type="number" min="-30" max="30" step="0.5" value="0" />
+                </div>
+                <div class="nd-field">
+                  <label for="tiltB">Tilt 2 <small>°</small></label>
+                  <input id="tiltB" type="number" min="-30" max="30" step="0.5" value="0" />
+                </div>
+              </div>
+              <label class="nd-check"><input id="refinePlane" type="checkbox" checked /> Refine the plane</label>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="searchOffset">Offset ± <small>slices</small></label>
+                  <input id="searchOffset" type="number" min="0" max="10" step="0.5" value="2" />
+                </div>
+                <div class="nd-field">
+                  <label for="searchTilt">Tilt ± <small>°</small></label>
+                  <input id="searchTilt" type="number" min="0" max="10" step="1" value="4" />
+                </div>
+              </div>
+              <label class="nd-check"><input id="deformable" type="checkbox" checked /> Deformable registration</label>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Register sections</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an MRI and a histology section anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Registers 2D histology sections to an MRI volume. You give the approximate slice; the app samples the MRI on that plane, finds the section's orientation, registers it rigidly, then affinely, with normalized mutual information in Greedy, optionally searches a few slices and degrees of tilt for the plane that fits best, and finishes with a deformable Greedy registration. Results are the section warped onto the MRI plane, the sections drawn into the MRI grid as a colour overlay, and Greedy-compatible affine and warp files in world coordinates.</p>
+      <p>Greedy is three-dimensional, so each section is registered as a thin slab whose out-of-plane terms are removed. On a synthetic test (an MRI slice deformed by a known affine and smooth warp and re-coloured as H&amp;E) the mean landmark error is 0.35 MRI voxels; on the AHEAD example it is 1.8 mm at six manual landmarks. Large tears, missing pieces and strong non-linear distortion of a section are not modelled.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

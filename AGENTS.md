@@ -298,6 +298,13 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Raw ±4096 phase needs the VENC from the user; velocity-scaled phase does not. Aliasing is not unwrapped.
 - The detection, series reading and output naming live in `packages/carotid-flow`, which the app and the `carotid-flow` command line both import. Change the outputs there, not in the app, so the command line keeps writing the app's downloads byte for byte. `validation/pcmcalculator.json` holds the example's pins for both the open-example unit test and the command line's release check.
 
+## histo2mri
+
+- The pipeline (`apps/histo2mri/src/core`) is pure JavaScript with Greedy injected (`greedy.rigid`, `.affine`, `.svf`); the worker runs it on `@neurodesk/greedy/wasm-single`, the Node tests and `validation/run.mjs` on `@neurodesk/greedy/single`, the same committed bytes.
+- Greedy is 3D, so sections are registered in the plane's local frame: the moving image is a three-slice slab 1 m apart and linear results keep only in-plane terms. The deformable stage needs a three-slice fixed image masked on the middle slice and full-resolution iterations only: on a one-slice fixed image Greedy's across-plane NMI gradient dominates its normalised update and the warp stays near zero. Keep that if the Greedy call changes.
+- NMI scores for choosing an orientation or keeping a plane use the whole plane with the section's outside as background; overlap-only NMI picked placements far off the tissue.
+- `validation/results.json` holds the synthetic and example landmark errors; rerun `node validation/run.mjs` after changing the pipeline or Greedy and update the numbers in the README and About.
+
 ## mri2vid
 
 - DICOM pixels come from dcm2niix (`@niivue/dcm2niix` JPEG build, pinned exactly; staged into `web/vendor/dcm2niix` for the app, `@neurodesk/node-drivers/dcm2niix` for the command line). The header parser in `readers/dicom.js` only groups series, so compressed files group too. `readDicomSeries` permutes dcm2niix's volume back to `MRI2vid.py`'s [rows, cols, slices] layout from the series' ImageOrientationPatient; the parity goldens (`tools/test/pipeline_parity.test.mjs`, also run on an RLE copy) hold it bit for bit. dcm2niix reads mosaic tags only from a SIEMENS file, so phantoms must say so. A series without ImageOrientationPatient keeps dcm2niix's stored layout (rows flipped back), not an assumed orientation. A mosaic run (the files tiled and acquired like the first by name: same TE, TR, TI and flip angle, so a second echo is left out) is converted only as far as the reduction needs: one file for `first`, 256 MB batches for `mean` and `max`, the mean's float64 sum carried across batches (`readNifti`'s `total`) so batching cannot change a pixel.
