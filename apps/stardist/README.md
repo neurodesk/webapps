@@ -38,18 +38,27 @@ python -I reference.py <out>/2D_versatile_fluo img2d.tif mask2d.tif reference.js
   3.8e-5 pixels (distances).
 - Unit tests (`test/stardist.test.js`): percentiles equal numpy's; tiles equal csbdeep's for 25
   sizes and tile counts; on a 160 × 160 crop of the example, NMS keeps the same 9 of 369
-  candidates and the label image has the same SHA-256 as StarDist's; labels drawn from the
-  example's 118 polygons hash identically; areas and centroids equal regionprops.
-- Browser (`e2e/workflow.spec.js`, production build, Chromium): the example gives 118 nuclei,
-  the same as Python, with IoU-matched F1 1.0 untiled and with 2 × 2 tiles; the label image is
-  identical pixel for pixel, and `stardist.matching` on the downloaded TIFFs agrees. The table's
-  centroids, areas and mean intensities equal regionprops'. The test requires F1 ≥ 0.99 and a
-  count within 1 %.
+  candidates and the label image has the same SHA-256 as StarDist's; padding equals
+  `numpy.pad(mode="reflect")` for four shapes; on a 157 × 203 crop (not a multiple of 16), NMS
+  keeps the same 13 of 548 candidates and the labels hash as `predict_instances`'; labels drawn
+  from the example's 118 polygons hash identically; areas and centroids equal regionprops.
+- Browser (`e2e/workflow.spec.js`, production build, Chromium): the downloaded label image has
+  the SHA-256 of Python's, untiled and with 2 × 2 tiles (118 nuclei), and on the 157 × 203 crop,
+  which goes through the padding (548 candidates, 13 nuclei). The table's centroids, areas and
+  mean intensities equal regionprops'. The IoU-matched F1 is logged to size a failure.
 - Against the DSB 2018 annotation (125 nuclei) both give F1 0.971 at IoU 0.5 (precision 1.0,
   recall 0.944): the model leaves a few saturated, bright nuclei unsegmented.
 
 Tied probabilities are the only known source of difference: numpy's unstable `argsort` orders
 equal candidates arbitrarily, the port by index. None occurred on the example.
+
+Inputs of `reference.py`, pinned in `validation/reference.json` (image and mask):
+
+| File | URL | SHA-256 |
+| --- | --- | --- |
+| Image | `https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/example/dsb2018-nuclei-2d.tif` | `f9ccc1571b92c861ff87e28463068b43f61bd47357ed0503f711e5cd1eb97750` |
+| Mask | `https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/validation/dsb2018-nuclei-2d-mask.tif` | `59ad5e820b7982ca9d13e946fa6e7f64e2714899e00a2ae6c69aa79aad53d46f` |
+| Model | `https://github.com/stardist/stardist-models/releases/download/v0.1/python_2D_versatile_fluo.zip` | `4ad678d0758eed6e55625f1b5ae30771e59adb79f1239e09b9772eac8846c3dd` |
 
 ## Data and licences
 
@@ -61,7 +70,8 @@ equal candidates arbitrarily, the port by index. None occurred on the example.
   from the 2018 Data Science Bowl (BBBC038v1, CC0 1.0; Caicedo et al., Nature Methods 2019). Its
   annotation is pinned beside it under `stardist/validation/` on Hugging Face.
 - Ported code: StarDist and CSBDeep are BSD-3-Clause; `clipper-lib` is the Boost Software
-  License. This app is BSD-3-Clause.
+  License. This app is BSD-3-Clause (`LICENSE`); `NOTICE` holds the attributions and the Boost
+  licence, and the build ships both at the app's root.
 
 ## Not in v1
 

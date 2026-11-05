@@ -1,12 +1,17 @@
 // 2D microscopy image input (TIFF, OME-TIFF, PNG) and the label TIFF the app writes.
 // DOM-free so the Node tests and the worker can use it.
 import { fromArrayBuffer } from "geotiff";
-import { decode as decodePng } from "fast-png";
+import { convertIndexedToRgb, decode as decodePng } from "fast-png";
 
 /** The largest image the app segments: a 2D image of at most 64 megapixels. */
 export const MAX_PIXELS = 8192 * 8192;
+/** The most decoded sample bytes a file may hold across its pages, checked before decoding. */
+export const MAX_DECODED_BYTES = 2 ** 30;
 const MAX_PLANES = 256;
-const RGB = ["red", "green", "blue", "alpha"];
+const RGB = ["red", "green", "blue"];
+const PHOTOMETRIC_RGB = 2;
+// ExtraSamples values 1 and 2 are associated and unassociated alpha; 0 is unspecified data.
+const ALPHA = new Set([1, 2]);
 
 function isPng(bytes) {
   return bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
@@ -51,21 +56,61 @@ async function readTiff(name, buffer) {
   const first = pages[0].fileDirectory;
   const xml = first.hasTag("ImageDescription") ? String(await first.loadValue("ImageDescription")) : null;
   const names = omeChannelNames(xml, pages.length);
-  const planes = [];
-  for (const [index, image] of pages.entries()) {
+  let bytes = 0;
+  for (const image of pages) {
     if (image.getWidth() !== width || image.getHeight() !== height) {
       throw new Error(`${name} has pages of different sizes; save the plane to segment as its own image.`);
     }
+    bytes += width * height * image.getBytesPerPixel();
+  }
+  if (bytes > MAX_DECODED_BYTES) {
+    throw new Error(`${name} holds ${(bytes / 2 ** 30).toFixed(1)} GB of pixels in ${pages.length} pages; save the plane to segment as its own image.`);
+  }
+  const planes = [];
+  for (const [index, image] of pages.entries()) {
+    const kinds = await sampleKinds(image);
     const samples = await image.readRasters({ interleave: false });
-    const rgb = samples.length >= 3;
+    const kept = kinds.filter((kind) => kind !== "alpha").length;
     samples.forEach((data, sample) => {
-      if (rgb && sample === 3) return;
+      if (kinds[sample] === "alpha") return;
       const page = names?.[index] ?? (pages.length > 1 ? `Page ${index + 1}` : "");
-      const part = samples.length > 1 ? (rgb ? RGB[sample] : `sample ${sample + 1}`) : "";
+      const part = kept > 1 ? kinds[sample] : "";
       planes.push({ label: [page, part].filter(Boolean).join(" · ") || "Intensity", data });
     });
   }
   return { width, height, format: xml?.includes("<OME") ? "OME-TIFF" : "TIFF", planes };
+}
+
+/**
+ * What each sample of a TIFF page is: red, green and blue for the first three samples of an RGB
+ * page, "alpha" for an ExtraSamples alpha, and "sample N" for every other sample, which is a
+ * channel of its own (a MinIsBlack page with four fluorescence samples has four channels).
+ */
+async function sampleKinds(image) {
+  const directory = image.fileDirectory;
+  const count = image.getSamplesPerPixel();
+  const photometric = directory.hasTag("PhotometricInterpretation") ? Number(await directory.loadValue("PhotometricInterpretation")) : 1;
+  const base = photometric === PHOTOMETRIC_RGB && count >= 3 ? 3 : Math.min(1, count);
+  const extra = directory.hasTag("ExtraSamples") ? Array.from([await directory.loadValue("ExtraSamples")].flat(), Number) : [];
+  return Array.from({ length: count }, (_, sample) => {
+    if (sample < base) return base === 3 ? RGB[sample] : "sample 1";
+    return ALPHA.has(extra[sample - base]) ? "alpha" : `sample ${sample + 1}`;
+  });
+}
+
+/** PNG samples below 8 bits, packed from the high bit and padded to a byte per row, as bytes. */
+function unpackBits(png) {
+  const { width, height, depth, data } = png;
+  const rowBytes = Math.ceil((width * depth) / 8);
+  const mask = (1 << depth) - 1;
+  const out = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const bit = x * depth;
+      out[y * width + x] = (data[y * rowBytes + (bit >> 3)] >> (8 - depth - (bit & 7))) & mask;
+    }
+  }
+  return out;
 }
 
 function readPng(name, buffer) {
@@ -73,10 +118,10 @@ function readPng(name, buffer) {
   checkSize(name, png.width, png.height);
   let { data, channels } = png;
   if (png.palette) {
-    const rgb = new Uint8Array(png.width * png.height * 3);
-    for (let i = 0; i < png.width * png.height; i++) rgb.set(png.palette[data[i]].slice(0, 3), 3 * i);
-    data = rgb;
-    channels = 3;
+    data = convertIndexedToRgb(png);
+    channels = png.palette[0].length;
+  } else if (png.depth < 8) {
+    data = unpackBits(png);
   }
   const colour = channels >= 3;
   const kept = colour ? 3 : 1;

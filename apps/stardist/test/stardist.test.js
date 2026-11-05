@@ -9,6 +9,7 @@ import {
   descendingOrder,
   measureNuclei,
   normalize,
+  padImage,
   percentile,
   polygonCoordinates,
   predictCandidates,
@@ -61,12 +62,11 @@ test("tiles are csbdeep's Tiling.for_n_tiles slices", () => {
   }
 });
 
-test("NMS keeps the polygons StarDist's c_non_max_suppression_inds keeps", () => {
-  const { nms } = reference;
-  const prob = decode(nms.prob, Float32Array);
-  const dist = decode(nms.dist, Float32Array);
-  const points = decode(nms.points, Int32Array);
-  assert.equal(prob.length, nms.count);
+/** NMS and labels on recorded predict_sparse candidates, as segment() runs them. */
+function suppressAndDraw({ prob: probText, dist: distText, points: pointsText }, height, width) {
+  const prob = decode(probText, Float32Array);
+  const dist = decode(distText, Float32Array);
+  const points = decode(pointsText, Int32Array);
   const order = descendingOrder(prob);
   const sortedDist = new Float32Array(dist.length);
   const sortedPoints = new Int32Array(points.length);
@@ -75,8 +75,6 @@ test("NMS keeps the polygons StarDist's c_non_max_suppression_inds keeps", () =>
     sortedPoints.set(points.subarray(2 * from, 2 * from + 2), 2 * to);
   });
   const kept = suppress(sortedDist, sortedPoints, N_RAYS, reference.thresholds.nms).map((i) => order[i]);
-  assert.deepEqual(kept, nms.kept);
-
   const keptDist = new Float32Array(kept.length * N_RAYS);
   const keptPoints = new Int32Array(kept.length * 2);
   const keptProb = new Float32Array(kept.length);
@@ -85,10 +83,38 @@ test("NMS keeps the polygons StarDist's c_non_max_suppression_inds keeps", () =>
     keptPoints.set(points.subarray(2 * from, 2 * from + 2), 2 * to);
     keptProb[to] = prob[from];
   });
-  const [[r0, r1], [c0, c1]] = nms.crop;
   const coord = polygonCoordinates(keptDist, keptPoints, N_RAYS);
-  const labels = renderLabels(coord, keptProb, N_RAYS, r1 - r0, c1 - c0);
+  return { count: prob.length, kept, labels: renderLabels(coord, keptProb, N_RAYS, height, width) };
+}
+
+test("NMS keeps the polygons StarDist's c_non_max_suppression_inds keeps", () => {
+  const { nms } = reference;
+  const [[r0, r1], [c0, c1]] = nms.crop;
+  const { count, kept, labels } = suppressAndDraw(nms, r1 - r0, c1 - c0);
+  assert.equal(count, nms.count);
+  assert.deepEqual(kept, nms.kept);
   assert.equal(labelHash(labels), nms.labels_sha256);
+});
+
+test("padding reflects at the end of each axis as numpy.pad(mode='reflect') does", () => {
+  for (const { shape: [height, width], padded_shape: paddedShape, sha256 } of reference.padding) {
+    const values = Float32Array.from({ length: height * width }, (_, i) => i);
+    const padded = padImage(values, height, width, MODEL.divBy);
+    assert.deepEqual([padded.height, padded.width], paddedShape);
+    assert.equal(labelHash(Float32Array.from(padded.data)), sha256, `${height} × ${width}`);
+  }
+});
+
+test("on a crop that is not a multiple of 16, NMS and labels equal predict_instances'", () => {
+  const crop = reference.padded_crop;
+  const [[r0, r1], [c0, c1]] = crop.crop;
+  assert.notEqual((r1 - r0) % MODEL.divBy, 0);
+  assert.notEqual((c1 - c0) % MODEL.divBy, 0);
+  const { count, kept, labels } = suppressAndDraw(crop, r1 - r0, c1 - c0);
+  assert.equal(count, crop.candidates);
+  assert.deepEqual(kept, crop.kept);
+  assert.equal(labelHash(labels), crop.labels_sha256);
+  assert.equal(labels.reduce((max, label) => Math.max(max, label), 0), crop.count);
 });
 
 test("labels drawn from the example's polygons equal polygons_to_label's", () => {

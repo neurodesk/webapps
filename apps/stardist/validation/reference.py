@@ -12,6 +12,11 @@ the browser test read:
 - percentiles: numpy percentiles of a deterministic array, for the unit test
 - tiling: csbdeep tile_iterator_1d slices for several sizes and tile counts
 - nms: a crop's candidates, StarDist's surviving indices and label image hash
+- padding: numpy.pad(..., mode="reflect") at the end to a multiple of 16, as
+  StarDistPadAndCropResizer pads, for deterministic arrays of several shapes
+- padded_crop: a 157 x 203 crop (not a multiple of 16), normalized on its own
+  as the app normalizes a dropped image: predict_sparse's candidates and
+  predict_instances' polygons and label image hash
 - example: predict_instances with n_tiles (1, 1) and (2, 2): the surviving
   polygons, the label image hash, per-nucleus statistics and matching scores
 
@@ -37,6 +42,9 @@ from stardist.nms import non_maximum_suppression_sparse
 
 PMIN, PMAX = 1, 99.8
 CROP = (slice(160, 320), slice(96, 256))
+PADDED_CROP = (slice(160, 317), slice(96, 299))
+PAD_SHAPES = ((157, 203), (5, 3), (16, 33), (1, 18))
+SOURCE = "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/"
 
 
 def f32(values):
@@ -63,6 +71,35 @@ def tiling_cases(model):
             ]
             cases.append({"size": n, "n_tiles": n_tiles, "block": 16, "overlap_blocks": overlap, "tiles": tiles})
     return cases
+
+
+def padding_cases():
+    cases = []
+    for shape in PAD_SHAPES:
+        values = np.arange(shape[0] * shape[1], dtype=np.float32).reshape(shape)
+        pad = tuple((0, (16 - s % 16) % 16) for s in shape)
+        padded = np.pad(values, pad, mode="reflect")
+        cases.append({"shape": list(shape), "padded_shape": list(padded.shape), "sha256": hashlib.sha256(np.ascontiguousarray(padded, "<f4").tobytes()).hexdigest()})
+    return cases
+
+
+def padded_crop_case(model, image):
+    raw = image[PADDED_CROP]
+    x = normalize(raw, PMIN, PMAX)
+    prob, dist, points = model.predict_sparse(x)
+    _, _, _, kept = non_maximum_suppression_sparse(dist, prob, points, nms_thresh=model.thresholds.nms)
+    labels, details = model.predict_instances(x, show_tile_progress=False)
+    return {
+        "crop": [[PADDED_CROP[0].start, PADDED_CROP[0].stop], [PADDED_CROP[1].start, PADDED_CROP[1].stop]],
+        "raw_sha256": hashlib.sha256(np.ascontiguousarray(raw, "<u2").tobytes()).hexdigest(),
+        "candidates": int(len(prob)),
+        "prob": f32(prob),
+        "dist": f32(dist),
+        "points": i32(points),
+        "kept": [int(i) for i in kept],
+        "count": int(labels.max()),
+        "labels_sha256": label_hash(labels),
+    }
 
 
 def nucleus_table(labels, image):
@@ -118,16 +155,20 @@ def main(model_dir, image_path, mask_path, out_path, *browser):
     example["2x2"]["vs_1x1"] = {"f1": float(tiled.f1), "mean_matched_iou": float(tiled.mean_matched_score)}
 
     reference = {
-        "image_sha256": hashlib.sha256(Path(image_path).read_bytes()).hexdigest(),
+        "image": {"url": SOURCE + "example/dsb2018-nuclei-2d.tif", "sha256": hashlib.sha256(Path(image_path).read_bytes()).hexdigest()},
+        "mask": {"url": SOURCE + "validation/dsb2018-nuclei-2d-mask.tif", "sha256": hashlib.sha256(Path(mask_path).read_bytes()).hexdigest()},
         "shape": list(image.shape),
         "normalization": {"pmin": PMIN, "pmax": PMAX, "low": float(np.float32(mi)), "high": float(np.float32(ma))},
         "thresholds": {"prob": float(model.thresholds.prob), "nms": float(model.thresholds.nms)},
         "percentiles": percentiles,
         "tiling": tiling_cases(model),
         "nms": nms,
+        "padding": padding_cases(),
+        "padded_crop": padded_crop_case(model, image),
         "example": example,
     }
     Path(out_path).write_text(json.dumps(reference, indent=1) + "\n")
+    print("padded_crop", {k: reference["padded_crop"][k] for k in ("candidates", "count", "labels_sha256")})
     for key in example:
         print(key, {k: v for k, v in example[key].items() if k in ("count", "labels_sha256", "vs_ground_truth", "vs_1x1")})
     for path in browser:

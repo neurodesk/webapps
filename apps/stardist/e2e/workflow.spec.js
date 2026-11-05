@@ -1,8 +1,10 @@
-// StarDist on the pinned example, end to end in the production build: the labels must match
-// Python StarDist 0.9.1's (validation/reference.json) with IoU-matched F1 >= 0.99 and a nucleus
-// count within 1 %, with and without tiling; cancelling a run and the automation contract.
+// StarDist on the pinned example, end to end in the production build: the label image must be
+// Python StarDist 0.9.1's (validation/reference.json) pixel for pixel, with and without tiling and
+// on a crop that needs padding; cancelling a run and the automation contract.
 import { test, expect } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
+import { writeLabelTiff } from "../src/image-io.js";
 import { MODEL } from "../src/config.js";
 import { examples, matchLabels, readLabelTiff, reference, referenceLabels } from "./reference.mjs";
 
@@ -23,19 +25,20 @@ async function download(page, stage) {
   return { name: file.suggestedFilename(), bytes: readFileSync(await file.path()) };
 }
 
-async function checkAgainstPython(page, label) {
+const labelHash = (labels) => createHash("sha256").update(new Uint8Array(labels.buffer, labels.byteOffset, labels.byteLength)).digest("hex");
+
+async function checkAgainstPython(page, label, key) {
   await expect(page.locator("#statusText")).toHaveText(/^\d+ nuclei segmented$/, { timeout: 120000 });
   const labelsFile = await download(page, "Nucleus labels");
   expect(labelsFile.name).toBe("dsb2018-nuclei-2d_stardist_labels.tif");
   const { width, height, labels } = await readLabelTiff(labelsFile.bytes);
   expect([height, width]).toEqual(reference.shape);
   if (process.env.STARDIST_BROWSER_LABELS) writeFileSync(`${process.env.STARDIST_BROWSER_LABELS}-${label}.tif`, labelsFile.bytes);
-  const python = referenceLabels();
-  const score = matchLabels(python, labels);
-  const identical = python.every((value, i) => value === labels[i]);
-  console.log(`${label}: ${score.nPred} nuclei, Python ${score.nTrue}; F1 ${score.f1.toFixed(4)}, mean matched IoU ${score.meanMatchedIou.toFixed(4)}; identical: ${identical}`);
-  expect(score.f1).toBeGreaterThanOrEqual(0.99);
-  expect(Math.abs(score.nPred - expectedCount) / expectedCount).toBeLessThanOrEqual(0.01);
+  const score = matchLabels(referenceLabels(), labels);
+  console.log(`${label}: ${score.nPred} nuclei, Python ${score.nTrue}; F1 ${score.f1.toFixed(4)}, mean matched IoU ${score.meanMatchedIou.toFixed(4)}`);
+  // The label image is Python StarDist's predict_instances output byte for byte; the score above
+  // only says how far off a failure is.
+  expect(labelHash(labels)).toBe(reference.example[key].labels_sha256);
 
   const table = await download(page, "Nucleus table");
   expect(table.name).toBe("dsb2018-nuclei-2d_stardist_nuclei.csv");
@@ -44,17 +47,16 @@ async function checkAgainstPython(page, label) {
   expect(rows.length - 1).toBe(score.nPred);
   const area = rows.slice(1).reduce((sum, row) => sum + Number(row.split(",")[3]), 0);
   expect(area).toBe(labels.filter(Boolean).length);
-  if (identical) {
-    // The same labels give skimage regionprops' centroids, areas and mean intensities.
-    rows.slice(1).forEach((row, index) => {
-      const [id, x, y, pixels, mean] = row.split(",").map(Number);
-      const [wantId, wantX, wantY, wantArea, wantMean] = reference.example["1x1"].nuclei[index];
-      expect([id, pixels]).toEqual([wantId, wantArea]);
-      expect(Math.abs(x - wantX)).toBeLessThan(5e-4);
-      expect(Math.abs(y - wantY)).toBeLessThan(5e-4);
-      expect(Math.abs(mean - wantMean) / wantMean).toBeLessThan(1e-6);
-    });
-  }
+  // The same labels give skimage regionprops' centroids, areas and mean intensities.
+  expect(rows.length - 1).toBe(reference.example["1x1"].nuclei.length);
+  rows.slice(1).forEach((row, index) => {
+    const [id, x, y, pixels, mean] = row.split(",").map(Number);
+    const [wantId, wantX, wantY, wantArea, wantMean] = reference.example["1x1"].nuclei[index];
+    expect([id, pixels]).toEqual([wantId, wantArea]);
+    expect(Math.abs(x - wantX)).toBeLessThan(5e-4);
+    expect(Math.abs(y - wantY)).toBeLessThan(5e-4);
+    expect(Math.abs(mean - wantMean) / wantMean).toBeLessThan(1e-6);
+  });
   return labels;
 }
 
@@ -62,7 +64,7 @@ test("the example's nuclei match Python StarDist's", async ({ page }) => {
   test.setTimeout(240000);
   await loadExample(page);
   await page.locator("#runButton").click();
-  await checkAgainstPython(page, "untiled");
+  await checkAgainstPython(page, "untiled", "1x1");
   await expect(page.locator("#outputSection")).toHaveAttribute("open", "");
   // The views switch between filled labels, outlines and the image alone.
   await page.locator("nd-viewer-toolbar").getByRole("button", { name: "Outlines", exact: true }).click();
@@ -77,7 +79,29 @@ test("tiled prediction gives the same nuclei", async ({ page }) => {
   await page.locator("#tiles").selectOption("2");
   await page.locator("#runButton").click();
   await expect(page.locator("#technicalLog")).toContainText("2 × 2 tiles");
-  await checkAgainstPython(page, "tiled");
+  await checkAgainstPython(page, "tiled", "2x2");
+});
+
+test("a crop that is not a multiple of 16 is padded as StarDist pads it", async ({ page }) => {
+  test.setTimeout(240000);
+  const crop = reference.padded_crop;
+  const [[r0, r1], [c0, c1]] = crop.crop;
+  const [height, width] = [r1 - r0, c1 - c0];
+  const response = await fetch(exampleFile.url);
+  const { width: fullWidth, labels: full } = await readLabelTiff(Buffer.from(await response.arrayBuffer()));
+  const raw = new Uint16Array(height * width);
+  for (let y = 0; y < height; y++) raw.set(full.subarray((r0 + y) * fullWidth + c0, (r0 + y) * fullWidth + c1), y * width);
+  expect(labelHash(raw)).toBe(crop.raw_sha256);
+  await page.goto("./");
+  await page.locator("#imageInput").setInputFiles({ name: "crop.tif", mimeType: "image/tiff", buffer: Buffer.from(writeLabelTiff(raw, width, height)) });
+  await expect(page.locator("#fileInfo")).toContainText(`${width} × ${height}`);
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText(`${crop.count} nuclei segmented`, { timeout: 120000 });
+  await expect(page.locator("#technicalLog")).toContainText(`${crop.candidates} candidate polygons above probability`);
+  const labelsFile = await download(page, "Nucleus labels");
+  const result = await readLabelTiff(labelsFile.bytes);
+  expect([result.height, result.width]).toEqual([height, width]);
+  expect(labelHash(result.labels)).toBe(crop.labels_sha256);
 });
 
 test("cancelling a run stops its worker, leaves no output and permits a retry", async ({ page }) => {

@@ -7,7 +7,10 @@ const f32 = Math.fround;
 
 /** numpy.percentile(values, p) with the default linear method (numpy 1.26 `_lerp`). */
 export function percentile(values, p) {
-  const sorted = Float64Array.from(values).sort();
+  return sortedPercentile(Float64Array.from(values).sort(), p);
+}
+
+function sortedPercentile(sorted, p) {
   const index = (p / 100) * (sorted.length - 1);
   const below = Math.floor(index);
   const above = Math.min(below + 1, sorted.length - 1);
@@ -23,8 +26,9 @@ export function percentile(values, p) {
  * percentiles of the whole image.
  */
 export function normalize(values, pmin, pmax) {
-  const low = f32(percentile(values, pmin));
-  const high = f32(percentile(values, pmax));
+  const sorted = Float64Array.from(values).sort();
+  const low = f32(sortedPercentile(sorted, pmin));
+  const high = f32(sortedPercentile(sorted, pmax));
   const scale = f32(f32(high - low) + f32(1e-20));
   const out = new Float32Array(values.length);
   for (let i = 0; i < values.length; i++) out[i] = f32(f32(values[i]) - low) / scale;
@@ -120,7 +124,7 @@ export function automaticTiles(height, width, maxTile = 1024) {
  * (height / grid) × (width / grid) values and dist nRays per grid pixel (NHWC).
  */
 export async function predictCandidates(image, height, width, model, options) {
-  const { probThresh, nTiles = [1, 1], run, onTile = () => {}, signal } = options;
+  const { probThresh, nTiles = [1, 1], run, onTile = () => {} } = options;
   const { grid, divBy, tileOverlap, nRays } = model;
   const padded = padImage(image, height, width, divBy);
   const overlapBlocks = tileOverlap.map((overlap) => Math.ceil(overlap / divBy));
@@ -136,7 +140,6 @@ export async function predictCandidates(image, height, width, model, options) {
   let done = 0;
   for (const ty of tilesY) {
     for (const tx of tilesX) {
-      signal?.throwIfAborted();
       const tileHeight = ty.read[1] - ty.read[0];
       const tileWidth = tx.read[1] - tx.read[0];
       const input = new Float32Array(tileHeight * tileWidth);
@@ -217,7 +220,7 @@ function intersectionArea(a, b) {
  * `threshold`. `dist` (n × nRays) and `points` (n × 2, row then column) must already be in
  * descending probability order. Returns the indices that survive, in that order.
  */
-export function suppress(dist, points, nRays, threshold, { signal } = {}) {
+export function suppress(dist, points, nRays, threshold) {
   const n = points.length / 2;
   const angle = f32((2 * Math.PI) / nRays);
   const paths = new Array(n);
@@ -268,7 +271,6 @@ export function suppress(dist, points, nRays, threshold, { signal } = {}) {
   const limit = f32(threshold);
   for (let i = 0; i < n - 1; i++) {
     if (suppressed[i]) continue;
-    if ((i & 255) === 0) signal?.throwIfAborted();
     const reach = f32(maxRadius + radius[i]);
     const reach2 = f32(reach * reach);
     const cy = Math.floor(points[2 * i] / cell);
@@ -396,7 +398,7 @@ export function measureNuclei(labels, image, width, count) {
 
 /** The full StarDist 2D instance segmentation: predictCandidates, NMS, labels and measurements. */
 export async function segment(raw, height, width, model, options) {
-  const { pmin = 1, pmax = 99.8, probThresh = model.thresholds.prob, nmsThresh = model.thresholds.nms, onStage = () => {}, signal } = options;
+  const { pmin = 1, pmax = 99.8, probThresh = model.thresholds.prob, nmsThresh = model.thresholds.nms, onStage = () => {} } = options;
   const normalized = normalize(raw, pmin, pmax);
   const candidates = await predictCandidates(normalized.data, height, width, model, { ...options, probThresh });
   onStage("nms", candidates.prob.length);
@@ -409,7 +411,7 @@ export async function segment(raw, height, width, model, options) {
     points[2 * to] = candidates.points[2 * from];
     points[2 * to + 1] = candidates.points[2 * from + 1];
   });
-  const kept = suppress(dist, points, nRays, nmsThresh, { signal });
+  const kept = suppress(dist, points, nRays, nmsThresh);
   const keptDist = new Float32Array(kept.length * nRays);
   const keptPoints = new Int32Array(kept.length * 2);
   const keptProb = new Float32Array(kept.length);
@@ -428,8 +430,6 @@ export async function segment(raw, height, width, model, options) {
     nuclei,
     count: kept.length,
     candidates: candidates.prob.length,
-    tiles: candidates.tiles,
     normalization: { low: normalized.low, high: normalized.high },
-    polygons: { points: keptPoints, prob: keptProb, coord },
   };
 }
