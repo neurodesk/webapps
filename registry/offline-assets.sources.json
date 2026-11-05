@@ -7069,6 +7069,21 @@
         "kind": "model",
         "license": "MIT"
       }
+    ],
+    "stardist": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/example/dsb2018-nuclei-2d.tif",
+        "sha256": "f9ccc1571b92c861ff87e28463068b43f61bd47357ed0503f711e5cd1eb97750",
+        "bytes": 524544,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/models/stardist-2d-versatile-fluo.onnx",
+        "sha256": "cc5cb72c2b47ebdf55296fdb03cca87a512f458ee1defb0169cfe2506de5f0d3",
+        "bytes": 5715335,
+        "kind": "model",
+        "license": "BSD-3-Clause"
+      }
     ]
   },
   "exclusions": [],

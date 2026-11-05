@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "app": "stardist",
+  "repository": "neurodeskorg/webapps",
+  "revision": "e76a7bbd831da2bfdae49058700da81d6cca577c",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/models/",
+  "license": "BSD-3-Clause",
+  "license_note": "StarDist's pretrained models (github.com/stardist/stardist-models) are BSD-3-Clause, Copyright (c) 2018-2024, Uwe Schmidt, Martin Weigert.",
+  "model": {
+    "name": "2D_versatile_fluo",
+    "axes": "YXC",
+    "input": "input",
+    "outputs": ["prob", "dist"],
+    "n_rays": 32,
+    "grid": 2,
+    "div_by": 16,
+    "tile_overlap": [94, 94],
+    "thresholds": { "prob": 0.479071463157368, "nms": 0.3 },
+    "normalization": { "pmin": 1, "pmax": 99.8 }
+  },
+  "assets": [
+    {
+      "filename": "stardist-2d-versatile-fluo.onnx",
+      "bytes": 5715335,
+      "sha256": "cc5cb72c2b47ebdf55296fdb03cca87a512f458ee1defb0169cfe2506de5f0d3",
+      "source_url": "https://github.com/stardist/stardist-models/releases/download/v0.1/python_2D_versatile_fluo.zip",
+      "source_sha256": "4ad678d0758eed6e55625f1b5ae30771e59adb79f1239e09b9772eac8846c3dd",
+      "weights_sha256": "42202bd269c8106782316f1a2c75afb3f5ffa65e525c2e155ee0ced3a95da349",
+      "converter": "apps/stardist/validation/convert_model.py",
+      "conversion": "tf2onnx 1.16.1 from_keras, opset 17 (tensorflow-cpu 2.15.1, stardist 0.9.1)",
+      "keras_vs_onnx_max_abs_diff": { "prob": 1.27e-7, "dist": 3.84e-5 }
+    }
+  ]
+}

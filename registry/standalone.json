@@ -2065,6 +2065,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "stardist": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }
