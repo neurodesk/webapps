@@ -153,6 +153,7 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
           const escapedName = basename(sourcePath).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           // Match the declared filename so empty strings in minified workers cannot consume its opening quote.
           const assetReference = new RegExp(`(['"])([^'"\\n]*${escapedName})\\1`, 'g');
+          const appRoot = join(siteDist, app.path);
           let references = 0;
           for (const file of appFiles.filter(file => !claimed.has(file) && TEXT_EXTENSIONS.has(extname(file)))) {
             const original = await readFile(file, 'utf8');
@@ -160,9 +161,18 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
               const referencedPath = reference.startsWith('/')
                 ? resolve(siteDist, `.${reference}`)
                 : resolve(dirname(file), reference);
-              if (referencedPath !== sourcePath) return match;
-              references++;
-              return `${quote}${moduleReference(file, targetPath)}${quote}`;
+              if (referencedPath === sourcePath) {
+                references++;
+                return `${quote}${moduleReference(file, targetPath)}${quote}`;
+              }
+              // Vite's preload helper prefixes the app base to each `__vite__mapDeps` entry.
+              if (extname(file) !== '.html' && resolve(appRoot, reference) === sourcePath) {
+                references++;
+                return `${quote}${posix(relative(appRoot, targetPath))}${quote}`;
+              }
+              // A hashed stylesheet name is unique, so a reference that resolves nowhere would break once the copy is removed.
+              if (byContent) throw new Error(`Unresolved reference ${reference} to deduplicated ${sourcePath} in ${file}`);
+              return match;
             });
             if (rewritten !== original) await writeFile(file, rewritten);
           }

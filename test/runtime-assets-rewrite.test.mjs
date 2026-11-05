@@ -391,3 +391,60 @@ test('identical workspace styles share one file while different app CSS stays lo
     }
   }
 });
+
+test('lazy chunks preload a deduplicated stylesheet from the shared store', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'workspace-css-preload-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families: [] }));
+  const css = '.nd-field { display: block; }';
+  const hash = createHash('sha256').update(css).digest('hex');
+  const apps = ['brainchop', 'other'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
+  for (const app of apps) {
+    const assets = join(siteDist, app.path, 'assets');
+    await mkdir(assets, { recursive: true });
+    await writeFile(join(assets, 'index-DO8KcUF6.css'), css);
+    await writeFile(join(siteDist, app.path, 'index.html'), `<html><head><link rel="stylesheet" crossorigin href="/${app.path}/assets/index-DO8KcUF6.css"><script type="module" src="/${app.path}/assets/index-Abcd1234.js"></script></head></html>`);
+    // Vite with base `/<app>/`: deps are base-relative and the helper prefixes the base.
+    await writeFile(join(assets, 'index-Abcd1234.js'), [
+      'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/decoder-Efgh5678.js","assets/index-DO8KcUF6.css"])))=>i.map(i=>d[i]);',
+      `const preloadUrl=function(e){return"/${app.path}/"+e};`,
+      'export const deps = __vite__mapDeps([0,1]).map(preloadUrl);',
+    ].join('\n'));
+    await writeFile(join(assets, 'decoder-Efgh5678.js'), 'export {};');
+  }
+  await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  for (const app of apps) {
+    assert.deepEqual((await readdir(join(siteDist, app.path, 'assets'))).sort(), ['decoder-Efgh5678.js', 'index-Abcd1234.js']);
+    const chunk = await readFile(join(siteDist, app.path, 'assets', 'index-Abcd1234.js'), 'utf8');
+    const context = {};
+    vm.runInNewContext(chunk.replace('export const deps', 'globalThis.deps'), context);
+    const origin = 'https://example.test';
+    assert.deepEqual(Array.from(context.deps, dep => new URL(dep, origin).href), [
+      `${origin}/${app.path}/assets/decoder-Efgh5678.js`,
+      `${origin}/_runtime/styles/${hash}/shared.css`,
+    ]);
+  }
+});
+
+test('a deduplicated stylesheet reference that resolves nowhere fails the site build', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'workspace-css-unresolved-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families: [] }));
+  const apps = ['brainchop', 'other'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
+  for (const app of apps) {
+    await mkdir(join(siteDist, app.path, 'assets'), { recursive: true });
+    await writeFile(join(siteDist, app.path, 'assets', 'index-DO8KcUF6.css'), '.nd-field { display: block; }');
+    await writeFile(join(siteDist, app.path, 'index.html'), `<link rel="stylesheet" href="./assets/index-DO8KcUF6.css">`);
+  }
+  await writeFile(join(siteDist, 'other', 'assets', 'lazy-Abcd1234.js'), 'export const css = "styles/index-DO8KcUF6.css";');
+  await assert.rejects(
+    assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } }),
+    /Unresolved reference styles\/index-DO8KcUF6\.css/,
+  );
+});
