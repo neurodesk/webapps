@@ -7,6 +7,7 @@ import { serveSite } from '../test-utils/serve-site.mjs';
 import { dicomSeries } from '../test-utils/dicom-fixture.mjs';
 import { bidsTree, dropFolder } from '../test-utils/bids-folder-drop.mjs';
 import { imagejDescription, writeTiffStack } from '../packages/components/src/file-io/tiff.js';
+import { syntheticMosaic } from '../apps/stitching/test/synthetic.js';
 
 function nifti(name, value = 20) {
   const buffer = Buffer.alloc(352 + 4096, 0);
@@ -73,6 +74,15 @@ function calciumMovie(name) {
   }
   const description = imagejDescription({ frames, frameInterval: 0.1 });
   return { name, mimeType: 'image/tiff', buffer: Buffer.from(writeTiffStack({ width, height, data, description })) };
+}
+// A 2 × 1 mosaic of 128 × 96 uint16 tiles with 25 % overlap, as two TIFF files.
+function stitchingTiles() {
+  const { tiles } = syntheticMosaic({ columns: 2, rows: 1, shape: [128, 96], overlap: 0.25, jitter: 3 });
+  return tiles.map((tile, k) => ({
+    name: `interface_tile_${k + 1}.tif`,
+    mimeType: 'image/tiff',
+    buffer: Buffer.from(writeTiffStack({ width: 128, height: 96, data: Uint16Array.from(tile.data, (v) => Math.round(v * 20)) })),
+  }));
 }
 const apps = (await loadAppsRegistry()).apps;
 const site = await serveSite(join(repoRoot, 'dist'));
@@ -651,6 +661,37 @@ try {
     await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
     await expect(page.locator('#maskField')).toContainText('Drop a mask on the image grid');
+  });
+  await check('stitching', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#tileInput').setInputFiles(stitchingTiles());
+    await expect(page.locator('#fileInfo')).toHaveText('2 tiles · 128 × 96 · uint16', { timeout: 60000 });
+    await expect(page.locator('#columns')).toHaveValue('2');
+    await page.locator('#overlap').fill('25');
+    // Values chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#threshold')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#threshold').fill('0.4');
+    await advanced.tap();
+    await expect(page.locator('#threshold')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#overlap')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#threshold')).toHaveValue('0.4');
+    await expect(page.locator('#overlap')).toHaveValue('25');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toContainText('Stitched 2 tiles', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('TileConfiguration.registered.txt');
+    // New tiles withdraw the results of the old ones.
+    await page.locator('#tileInput').setInputFiles(stitchingTiles().map((file) => ({ ...file, name: `again_${file.name}` })));
+    await expect(page.locator('#fileInfo')).toHaveText('2 tiles · 128 × 96 · uint16');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
   await check('calcium-imaging', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });

@@ -1,0 +1,129 @@
+[
+  {
+    "id": "nist-mist-phase-4x4",
+    "label": "Stem cell colonies, phase contrast (4 × 4 tiles)",
+    "description": "Sixteen 1392 × 1040 phase-contrast tiles of stem cell colonies from NIST's MIST test data (US Government work; acknowledge NIST), with Fiji's 18 % grid layout.",
+    "expectedResult": "A seamless 4806 × 3601 mosaic. All 42 overlapping pairs, diagonals included, register with r above 0.8, and every tile lands within 0.4 px of Fiji's Grid/Collection stitching.",
+    "files": [
+      {
+        "role": "tile",
+        "name": "img_r001_c001.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r001_c001.tif",
+        "sha256": "c5ffd7bd182478d269804226516a0f922014e7d89e01671848e474e360bfed5f",
+        "bytes": 1940855
+      },
+      {
+        "role": "tile",
+        "name": "img_r001_c002.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r001_c002.tif",
+        "sha256": "09c16a74fa50a2a0da2de92103ae422da259c81aaeef674846538f68ebf798fa",
+        "bytes": 1943585
+      },
+      {
+        "role": "tile",
+        "name": "img_r001_c003.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r001_c003.tif",
+        "sha256": "8c6ced9dac8c65259750d65a150e448b946f13ab1f25fc8e0b7ab42bd137588e",
+        "bytes": 1927940
+      },
+      {
+        "role": "tile",
+        "name": "img_r001_c004.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r001_c004.tif",
+        "sha256": "d803b7a2e8c7a92bcdfc87f9a01499417a3d1e588d4fd563f00e1848cc8b4e84",
+        "bytes": 1931632
+      },
+      {
+        "role": "tile",
+        "name": "img_r002_c001.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r002_c001.tif",
+        "sha256": "d1347b92cb9c9fd8e79ad22710caf20a54f996b2b1841f96274c2c2bcc588436",
+        "bytes": 1937761
+      },
+      {
+        "role": "tile",
+        "name": "img_r002_c002.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r002_c002.tif",
+        "sha256": "81f5b94d1cba17c4b335a9172c67d6e26b27ddde791639763f2d0d091878ec60",
+        "bytes": 1953883
+      },
+      {
+        "role": "tile",
+        "name": "img_r002_c003.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r002_c003.tif",
+        "sha256": "144205fa09e6175302861128bb59dee299e990fd8a7a9ca79c3a1fd0cf415d0e",
+        "bytes": 1963977
+      },
+      {
+        "role": "tile",
+        "name": "img_r002_c004.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r002_c004.tif",
+        "sha256": "1ccf92b6a9d2786cd0d6ea2beeeca5b023fb436ba3a415f2bb7fe7d41db5ec8f",
+        "bytes": 1967564
+      },
+      {
+        "role": "tile",
+        "name": "img_r003_c001.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r003_c001.tif",
+        "sha256": "c702a6ee0a0b9e44a8fe6f6773cdb784894009976e8e4cb3fb53f3dfa817c6fa",
+        "bytes": 1959796
+      },
+      {
+        "role": "tile",
+        "name": "img_r003_c002.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r003_c002.tif",
+        "sha256": "dc2fe872f1b5eaf56a7b11167ef4dcaecd2e4c007bd3c7e5fd831bb9cbf0b615",
+        "bytes": 1933754
+      },
+      {
+        "role": "tile",
+        "name": "img_r003_c003.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r003_c003.tif",
+        "sha256": "50062768508a9de75bf6a13accec1528d383133d9bb6e1aba6ed22cec8b08be8",
+        "bytes": 1958045
+      },
+      {
+        "role": "tile",
+        "name": "img_r003_c004.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r003_c004.tif",
+        "sha256": "060ffd2c33c80b6490ad20ce0e8970b2ced833514c5906715bf921f17d810932",
+        "bytes": 1939298
+      },
+      {
+        "role": "tile",
+        "name": "img_r004_c001.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r004_c001.tif",
+        "sha256": "7a8abfbc8fa44d11b13905074250e9c09b3f51d397dabae9c1423017b1ecd703",
+        "bytes": 1936031
+      },
+      {
+        "role": "tile",
+        "name": "img_r004_c002.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r004_c002.tif",
+        "sha256": "874034866d03d849464a2457a6a257a513f24c526f22da7e0aa8bfcef2520b3d",
+        "bytes": 1933222
+      },
+      {
+        "role": "tile",
+        "name": "img_r004_c003.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r004_c003.tif",
+        "sha256": "5d0ee1b05f226fb5e893059b4bde53f42c090e1435a324d82968d017a5849ac3",
+        "bytes": 1934981
+      },
+      {
+        "role": "tile",
+        "name": "img_r004_c004.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/img_r004_c004.tif",
+        "sha256": "6a0e8f25674a8e7cefd3d4daf082496649d67592171f8045ee267e985c856f30",
+        "bytes": 1979616
+      },
+      {
+        "role": "layout",
+        "name": "TileConfiguration.txt",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d4ab9153c5834adda5ad0fffd87e7551aaa9b764/stitching/example/TileConfiguration.txt",
+        "sha256": "90e9868dc6e6c4cf4befe2da9d9d7ef792421aa93f1c4305dac9ceddaa6d94fc",
+        "bytes": 672
+      }
+    ]
+  }
+]

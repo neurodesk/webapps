@@ -11,6 +11,8 @@ export interface TiffStackMetadata {
   pixelSize: { x: number | null; y: number | null; z: number | null };
   /** Seconds between frames; null when the file does not record it. */
   frameInterval: number | null;
+  /** OME stage position of the first plane that records one, in micrometres; absent otherwise. */
+  stagePosition?: { x: number; y: number; z: number | null } | null;
   description?: string;
 }
 

@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 2,
+  "app": "stitching",
+  "title": "Tile stitching",
+  "description": "Stitches overlapping 2D or 3D microscopy tiles: phase-correlation pairwise registration checked by cross-correlation, least-squares global optimisation with outlier rejection, and linear-blending fusion.",
+  "defaultOperation": "stitch",
+  "operations": {
+    "stitch": {
+      "title": "Stitch tiles",
+      "description": "Register every overlapping pair of tiles under an approximate layout (grid, Fiji TileConfiguration or OME stage positions), optimise the tile positions and fuse them into one image.",
+      "mode": "batch",
+      "inputs": {
+        "tiles": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tiff",
+            "ome-tiff"
+          ],
+          "description": "Greyscale TIFF tiles of one mosaic, one tile per file (a 3D tile is a z stack), in acquisition order by file name",
+          "minimum": 2,
+          "maximum": 10000
+        },
+        "layout": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "txt"
+          ],
+          "description": "Optional Fiji TileConfiguration.txt with the approximate tile positions in pixels",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "layout": {
+          "type": "string",
+          "enum": [
+            "grid",
+            "file",
+            "stage"
+          ],
+          "default": "grid",
+          "description": "Approximate layout: a regular grid, the TileConfiguration file, or the OME stage positions"
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 2,
+          "description": "Grid columns"
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 2,
+          "description": "Grid rows"
+        },
+        "overlap": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 95,
+          "default": 10,
+          "description": "Overlap between neighbouring grid tiles, in percent of the tile size"
+        },
+        "gridType": {
+          "type": "string",
+          "enum": [
+            "row",
+            "column",
+            "snake-row",
+            "snake-column"
+          ],
+          "default": "row",
+          "description": "Acquisition order of the grid: row by row, column by column, or snake by rows or columns"
+        },
+        "gridStart": {
+          "type": "string",
+          "enum": [
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right"
+          ],
+          "default": "top-left",
+          "description": "Corner of the first tile"
+        },
+        "peaks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 5,
+          "description": "Phase-correlation peaks checked by cross-correlation per pair"
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.3,
+          "description": "Pairs with a cross-correlation below this are not used"
+        },
+        "maxRatio": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 2.5,
+          "description": "A pair is an outlier when its residual is above this many times the mean residual"
+        },
+        "maxAbsolute": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000,
+          "default": 3.5,
+          "description": "A pair is an outlier only when its residual is also above this many pixels"
+        }
+      },
+      "artifacts": {
+        "fused": {
+          "type": "neuro:volume",
+          "mediaType": "image/tiff",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "omeZarr": {
+          "type": "neuro:volume",
+          "mediaType": "application/zip",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "configuration": {
+          "type": "neuro:metadata",
+          "mediaType": "text/plain",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "links": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "provenance": {
+          "type": "neuro:provenance",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

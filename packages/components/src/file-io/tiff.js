@@ -105,7 +105,28 @@ export function parseOmeDescription(description) {
     sizeT: Number(attribute('SizeT') ?? 1),
     pixelSize: { x: size('X'), y: size('Y'), z: size('Z') },
     frameInterval: increment && timeScale ? increment * timeScale : null,
+    stagePosition: omeStagePosition(text),
   };
+}
+
+/**
+ * The stage position of the first OME `Plane` that records one, in micrometres (z is null
+ * when absent). A position without a unit is taken as micrometres.
+ */
+function omeStagePosition(text) {
+  for (const plane of text.match(/<(?:[\w.-]+:)?Plane\b[^>]*>/g) ?? []) {
+    const axis = (name) => {
+      const raw = xmlAttribute(plane, `Position${name}`);
+      if (raw === undefined || raw.trim() === '') return null;
+      const value = Number(raw);
+      const scale = micrometresPerUnit(xmlAttribute(plane, `Position${name}Unit`) ?? 'µm');
+      return Number.isFinite(value) && scale ? value * scale : null;
+    };
+    const x = axis('X');
+    const y = axis('Y');
+    if (x !== null && y !== null) return { x, y, z: axis('Z') };
+  }
+  return null;
 }
 
 /** ImageJ's `ImageJ=…` description: hyperstack sizes, z spacing, frame interval and unit. */

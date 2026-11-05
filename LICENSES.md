@@ -21,6 +21,9 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/calcium-imaging`: MIT (`apps/calcium-imaging/LICENSE`); its motion correction, ROI, ΔF/F and
   OASIS code is written from the papers. CaImAn (GPL-2.0), OASIS (GPL-3.0) and scikit-image ran only
   as external validation references; their outputs, not their code, are in `apps/calcium-imaging/test/fixtures`
+- `apps/stitching`: MIT (`apps/stitching/LICENSE`); its registration, optimisation and fusion code is
+  written from Preibisch et al. 2009. Fiji's Stitching plugin (GPL-2.0) ran only as an external validation
+  reference; its outputs, not its code, are in `apps/stitching/validation`
 - `packages/degibbs`: MPL-2.0 (`packages/degibbs/LICENSE`), as the MRtrix3 `mrdegibbs` source it ports;
   attribution in `packages/degibbs/NOTICE`. It holds the degibbs WebAssembly module and command line
 - `packages/n4`: Apache-2.0 AND MPL-2.0 (`packages/n4/LICENSE`): ANTs N4 in WebAssembly (Apache-2.0) and the

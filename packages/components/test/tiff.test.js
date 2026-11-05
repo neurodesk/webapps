@@ -180,3 +180,16 @@ test('readTiffStack decodes into a caller-chosen type, optionally shared, with m
   await assert.rejects(readTiffStack(fixture('stack-deflate-uint16.ome.tif'), { Type: Float32Array, maxBytes: 239 }), InputTooLargeError);
   await assert.rejects(readTiffStack(fixture('stack-deflate-uint16.ome.tif'), { Type: Array }), /Cannot read a TIFF stack into Array/);
 });
+
+test('OME stage positions are read in micrometres from the first plane that records one', () => {
+  const xml = `<?xml version="1.0"?><ome:OME xmlns:ome="http://www.openmicroscopy.org/Schemas/OME/2016-06"><ome:Image ID='Image:0' Name="tile &amp; 1"><ome:Pixels ID='Pixels:0' DimensionOrder='XYZCT' SizeX='4' SizeY='3' SizeZ='2' SizeC='1' SizeT='1' PhysicalSizeX='650' PhysicalSizeXUnit='nm' PhysicalSizeY="0.65"><ome:Plane TheZ="0" TheC="0" TheT="0"/><ome:Plane TheZ='1' TheC='0' TheT='0' PositionX='1520.5' PositionXUnit='µm' PositionY="-2.5" PositionYUnit="mm" PositionZ='3000' PositionZUnit='nm'/></ome:Pixels></ome:Image></ome:OME>`;
+  const metadata = parseOmeDescription(xml);
+  assert.equal(metadata.sizeZ, 2);
+  assert.deepEqual(metadata.pixelSize, { x: 0.65, y: 0.65, z: null });
+  assert.deepEqual(metadata.stagePosition, { x: 1520.5, y: -2500, z: 3 });
+});
+
+test('an OME description without plane positions has no stage position', () => {
+  const xml = '<OME><Image ID="Image:0"><Pixels SizeX="2" SizeY="2" SizeZ="1" SizeC="1" SizeT="1"><Plane TheZ="0" PositionX="1"/></Pixels></Image></OME>';
+  assert.equal(parseOmeDescription(xml).stagePosition, null);
+});
