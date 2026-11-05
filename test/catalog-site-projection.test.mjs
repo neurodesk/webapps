@@ -110,6 +110,7 @@ test('the hub site holds the hub page and nothing it does not load', async (t) =
 test('the Worker-hosted sites deploy as assets-only Workers on their own domains', () => {
   assert.deepEqual(workerSites(full), [
     { host: 'mskapps.sciget.org', site: 'msk' },
+    { host: 'microscopyapps.sciget.org', site: 'microscopy' },
     { host: 'webapps.sciget.org', site: 'hub' },
   ]);
   assert.deepEqual(workerConfig('mskapps.sciget.org', 'msk'), {

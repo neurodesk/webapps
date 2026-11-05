@@ -81,7 +81,7 @@ test('each catalogue lists only its own apps under its own brand', async () => {
   const { catalogApps, findCatalog } = await import('../scripts/lib/apps-registry.mjs');
   const registry = await loadAppsRegistry();
   const standalone = await loadStandalone(registry);
-  for (const id of ['neuro', 'msk']) {
+  for (const id of ['neuro', 'msk', 'microscopy']) {
     const catalog = findCatalog(registry, id);
     const apps = catalogApps(registry, catalog);
     const html = renderLandingPage({ ...registry, apps }, standalone, catalog);

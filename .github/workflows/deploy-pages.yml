@@ -73,6 +73,8 @@ jobs:
           path: |
             dist-sites/msk
             dist-sites/msk.wrangler.json
+            dist-sites/microscopy
+            dist-sites/microscopy.wrangler.json
             dist-sites/hub
             dist-sites/hub.wrangler.json
           if-no-files-found: error
@@ -116,7 +118,7 @@ jobs:
           BASE_URL: ${{ steps.deployment.outputs.page_url }}
           SITE_CATALOG: neuro
 
-  # mskapps.sciget.org and the webapps.sciget.org hub are assets-only Cloudflare
+  # mskapps.sciget.org, microscopyapps.sciget.org and the webapps.sciget.org hub are assets-only Cloudflare
   # Workers on custom domains (dist-sites/<site>.wrangler.json, written by the build).
   deploy-workers:
     runs-on: ubuntu-latest
@@ -127,6 +129,8 @@ jobs:
         include:
           - site: msk
             url: https://mskapps.sciget.org/
+          - site: microscopy
+            url: https://microscopyapps.sciget.org/
           - site: hub
             url: https://webapps.sciget.org/
     env:
@@ -151,7 +155,7 @@ jobs:
         if: matrix.site == 'hub'
         run: |
           page="$(curl --fail --silent --show-error --retry 5 --retry-all-errors ${{ matrix.url }})"
-          for host in webapps.neurodesk.org mskapps.sciget.org; do
+          for host in webapps.neurodesk.org mskapps.sciget.org microscopyapps.sciget.org; do
             grep -q "href=\"https://$host/\"" <<< "$page" || { echo "hub does not link $host"; exit 1; }
           done
 
@@ -166,6 +170,8 @@ jobs:
         include:
           - site: msk
             url: https://mskapps.sciget.org/
+          - site: microscopy
+            url: https://microscopyapps.sciget.org/
     env:
       BASE_URL: ${{ matrix.url }}
       SITE_CATALOG: ${{ matrix.site }}

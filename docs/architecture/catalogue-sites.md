@@ -7,6 +7,7 @@ app belongs to exactly one catalogue.
 | --- | --- | --- | --- |
 | `webapps.neurodesk.org` | `neuro` | GitHub Pages | every app not listed below |
 | `mskapps.sciget.org` | `msk` | Cloudflare Worker, assets only | MuscleMap, SeedSeg, Carotid Flow |
+| `microscopyapps.sciget.org` | `microscopy` | Cloudflare Worker, assets only | StarDist, ZARRo |
 | `webapps.sciget.org` | hub | Cloudflare Worker, assets only | none: one card per catalogue |
 
 `neurodesk.org` DNS is on AWS Route 53, so the neuro catalogue stays on GitHub
@@ -90,7 +91,7 @@ keeps every handoff.
 `.github/workflows/deploy-pages.yml` builds once, then:
 
 - uploads `dist-sites/neuro` to GitHub Pages;
-- deploys `dist-sites/msk` and `dist-sites/hub` with
+- deploys `dist-sites/msk`, `dist-sites/microscopy` and `dist-sites/hub` with
   `wrangler deploy --config dist-sites/<site>.wrangler.json`, using the
   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets;
 - runs the deployed checks (`pnpm test:deployed`,
