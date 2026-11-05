@@ -1,7 +1,8 @@
 // DOM-independent app logic: the settings and metadata the form gives, how a source is
 // described, and the conversion report. Kept pure for test/config.test.js.
 import automation from "../automation.json" with { type: "json" };
-import { conversionOptions, GENERATOR } from "@neurodesk/omezarr-convert/writer";
+import { archiveBudget, conversionOptions, GENERATOR } from "@neurodesk/omezarr-convert/writer";
+import { ZIP_MAX_ENTRIES } from "@neurodesk/omezarr-convert/zip";
 import { isSpaceUnit, millimetresPer } from "@neurodesk/omezarr-convert/units";
 import { ARRAY_TYPES } from "@neurodesk/omezarr-convert/pyramid";
 
@@ -63,6 +64,43 @@ export function rawBytes({ shape, dtype }) {
   return shape.t * shape.c * shape.z * shape.y * shape.x * ARRAY_TYPES[dtype].BYTES_PER_ELEMENT;
 }
 
+/**
+ * The largest store an archive may hold: the padded pyramid chunks at their worst case (no
+ * compression). An archive is assembled in memory, and the README states the peak measured
+ * at this size; a larger image goes to a folder.
+ */
+export const ARCHIVE_MAX_BYTES = 1024 ** 3;
+
+/** Why the source cannot be converted to an archive with these settings, or null. */
+export function archiveRefusal(source, settings) {
+  const { bytes, entries } = archiveBudget(source.shape, source.dtype, settings);
+  if (entries > ZIP_MAX_ENTRIES) return `The OME-Zarr would have ${entries} files; a zip holds at most ${ZIP_MAX_ENTRIES}. Save to a folder or choose larger chunks.`;
+  if (bytes > ARCHIVE_MAX_BYTES) return `The OME-Zarr can reach ${formatGiB(bytes)} before compression; an archive is built in memory and holds at most ${formatGiB(ARCHIVE_MAX_BYTES)}. Save to a folder instead.`;
+  return null;
+}
+
+const formatGiB = (bytes) => `${Number((bytes / 1024 ** 3).toPrecision(3))} GiB`;
+
+/** The base name of the outputs: the input file's stem (a sequence's shared stem), made safe for file names. */
+export function outputStem(source) {
+  return String(source.stem ?? "").replace(/[\\/:*?"<>|]+/g, "_").trim() || "image";
+}
+
+export const NOTE_LINE_CHARACTERS = 90;
+
+/**
+ * The reader's notes as one visible line of at most 90 characters (their summaries, then
+ * "+N more") and the full text for its tooltip. Null when there are none.
+ */
+export function noteLine(notes) {
+  if (!notes.length) return null;
+  const summaries = notes.map(({ summary }) => summary);
+  let shown = summaries.length;
+  const line = (count) => `${summaries.slice(0, count).join(" · ")}${count < summaries.length ? ` · +${summaries.length - count} more` : ""}`;
+  while (shown > 1 && line(shown).length > NOTE_LINE_CHARACTERS) shown -= 1;
+  return { text: line(shown).slice(0, NOTE_LINE_CHARACTERS), detail: notes.map(({ detail }) => detail).join(" ") };
+}
+
 const size = (value, unit) => `${Number(value.toPrecision(4))} ${SYMBOLS[unit] ?? unit ?? ""}`.trim();
 
 /** The one-line description under the input menu. */
@@ -75,10 +113,10 @@ export function describeSource(source, files) {
 }
 
 /** The JSON report downloaded with each conversion. */
-export function conversionReport({ source, files, settings, written, seconds }) {
+export function conversionReport({ source, files, settings, written, seconds, attribution = null }) {
   return {
     generator: GENERATOR,
-    input: { files, format: source.format, dtype: source.dtype, shape: source.shape, notes: source.notes },
+    input: { files, format: source.format, dtype: source.dtype, shape: source.shape, notes: source.notes.map(({ detail }) => detail), ...(attribution ? { attribution } : {}) },
     settings: { version: settings.version, method: settings.method, chunk: settings.chunk, compressionLevel: settings.compressionLevel },
     levels: written.plan.map(({ shape, chunks }, level) => ({ path: String(level), shape, chunks })),
     multiscales: written.multiscales,

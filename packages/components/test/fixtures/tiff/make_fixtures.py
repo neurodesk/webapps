@@ -49,3 +49,28 @@ tifffile.imwrite('prefixed-ome.tif', planes(2, 1, 2, 3, np.uint8, 251)[:, 0], ph
 # The same OME-XML with single-quoted attributes and an entity in the image name.
 tifffile.imwrite('prefixed-ome-single-quoted.tif', planes(2, 1, 2, 3, np.uint8, 251)[:, 0], photometric='minisblack',
                  description=xml.replace('"', "'").replace("Name='prefixed'", "Name='cells &amp; nuclei'"), metadata=None)
+
+# with-mask, miniswhite and two-images were written with tifffile 2024.2.12.
+# Two greyscale pages, then a transparency mask page (NewSubfileType 4) the reader skips.
+with tifffile.TiffWriter('with-mask.tif') as tif:
+    for page in planes(2, 1, 3, 4, np.uint8, 251)[:, 0]:
+        tif.write(page, metadata=None)
+    tif.write(np.ones((3, 4), bool), subfiletype=4, photometric='mask', metadata=None)
+
+# One white-is-zero page (PhotometricInterpretation 0).
+tifffile.imwrite('miniswhite.tif', planes(1, 1, 2, 3, np.uint8, 251)[0, 0], photometric='miniswhite', metadata=None)
+
+# An OME-TIFF with two images of different sizes: 2 planes of 4 x 5, then 1 plane of 3 x 3.
+two = ('<?xml version="1.0" encoding="UTF-8"?>'
+       '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">'
+       '<Image ID="Image:0" Name="large"><Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint8" '
+       'SizeX="5" SizeY="4" SizeZ="2" SizeC="1" SizeT="1"><Channel ID="Channel:0:0" SamplesPerPixel="1"/>'
+       '<TiffData IFD="0" PlaneCount="2"/></Pixels></Image>'
+       '<Image ID="Image:1" Name="label"><Pixels ID="Pixels:1" DimensionOrder="XYZCT" Type="uint8" '
+       'SizeX="3" SizeY="3" SizeZ="1" SizeC="1" SizeT="1"><Channel ID="Channel:1:0" SamplesPerPixel="1"/>'
+       '<TiffData IFD="2" PlaneCount="1"/></Pixels></Image></OME>')
+with tifffile.TiffWriter('two-images.ome.tif') as tif:
+    pages = planes(2, 1, 4, 5, np.uint8, 251)[:, 0]
+    tif.write(pages[0], description=two, metadata=None)
+    tif.write(pages[1], metadata=None)
+    tif.write(np.full((3, 3), 7, np.uint8), metadata=None)

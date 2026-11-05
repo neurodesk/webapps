@@ -1,11 +1,13 @@
-// NIfTI-1 sources. The stored voxel values are kept (scl_slope and scl_inter are reported,
-// not applied) so the conversion is lossless. NIfTI's i, j, k run along x, y, z, x fastest,
+// NIfTI-1 sources. Without intensity scaling the stored samples are written unchanged. With
+// scl_slope (not 0 or 1) or scl_inter (not 0), the values are scaled as NIfTI defines them
+// (stored × scl_slope + scl_inter) into float32, or float64 for 32-bit integers and float64,
+// whose range float32 cannot hold exactly. NIfTI's i, j, k run along x, y, z, x fastest,
 // which is the row-major (z, y, x) order of an OME-Zarr plane stack, so no voxel moves.
 import { decodeNiftiBuffer, parseNiftiHeader } from "@neurodesk/webapp-components/file-io/nifti";
 import { assertInputSize, MAX_INPUT_BYTES } from "@neurodesk/webapp-components/file-io/input-limits";
 import { ARRAY_TYPES } from "../pyramid.js";
 import { niftiUnits } from "../units.js";
-import { imageStem } from "./source.js";
+import { imageStem, note } from "./source.js";
 
 const TYPES = { 2: "uint8", 4: "int16", 8: "int32", 16: "float32", 64: "float64", 256: "int8", 512: "uint16", 768: "uint32" };
 
@@ -39,16 +41,34 @@ export async function openNiftiSource(file, { signal } = {}) {
   if (start + shape.t * shape.z * planeVoxels * bytesPer > buffer.byteLength) throw new Error("The NIfTI file is shorter than its header says.");
   const units = niftiUnits(header.xyztUnits);
   const spacing = (value) => (Number.isFinite(value) && value !== 0 ? float32Decimal(Math.abs(value)) : null);
-  const notes = ["OME-NGFF 0.4 and 0.5 have no orientation: the NIfTI affine is not carried over; voxels keep their stored order."];
-  if ((header.sclSlope !== 0 && header.sclSlope !== 1) || header.sclInter !== 0) {
-    notes.push(`Stored values are kept; scale them by scl_slope ${header.sclSlope} and scl_inter ${header.sclInter} for physical values.`);
+  const notes = [note("NIfTI orientation dropped", "OME-NGFF 0.4 and 0.5 have no orientation: the NIfTI affine is not carried over; voxels keep their stored order.")];
+  // NIfTI: a slope of 0 (or not finite) means the stored values are the values.
+  const active = Number.isFinite(header.sclSlope) && header.sclSlope !== 0;
+  const slope = active ? header.sclSlope : 1;
+  const intercept = active && Number.isFinite(header.sclInter) ? header.sclInter : 0;
+  const scaled = slope !== 1 || intercept !== 0;
+  const outputType = scaled ? (["int32", "uint32", "float64"].includes(dtype) ? "float64" : "float32") : dtype;
+  if (scaled) {
+    notes.push(note(`Scaled to ${outputType} (scl_slope)`, `Values are stored × scl_slope ${slope} + scl_inter ${intercept}, written as ${outputType}; the stored ${dtype} samples are not kept.`));
   }
   const scale = { t: shape.t > 1 ? spacing(header.pixDims[4]) : null, z: spacing(header.pixDims[3]), y: spacing(header.pixDims[2]), x: spacing(header.pixDims[1]) };
   const view = new DataView(buffer);
+  const storedPlane = (t, z) => {
+    const offset = start + (t * shape.z + z) * planeVoxels * bytesPer;
+    const plane = new ArrayType(planeVoxels);
+    if (header.littleEndian || bytesPer === 1) {
+      new Uint8Array(plane.buffer).set(new Uint8Array(buffer, offset, planeVoxels * bytesPer));
+      return plane;
+    }
+    const getter = `get${{ int16: "Int16", uint16: "Uint16", int32: "Int32", uint32: "Uint32", float32: "Float32", float64: "Float64" }[dtype]}`;
+    for (let i = 0; i < planeVoxels; i += 1) plane[i] = view[getter](offset + i * bytesPer, false);
+    return plane;
+  };
   return {
     name: imageStem(file.name ?? "image"),
+    stem: imageStem(file.name ?? "image") || "image",
     format: "NIfTI",
-    dtype,
+    dtype: outputType,
     shape,
     scale,
     units: {
@@ -60,14 +80,10 @@ export async function openNiftiSource(file, { signal } = {}) {
     channels: [{ label: null, color: null }],
     notes,
     async readPlane(t, _c, z) {
-      const offset = start + (t * shape.z + z) * planeVoxels * bytesPer;
-      const plane = new ArrayType(planeVoxels);
-      if (header.littleEndian || bytesPer === 1) {
-        new Uint8Array(plane.buffer).set(new Uint8Array(buffer, offset, planeVoxels * bytesPer));
-        return plane;
-      }
-      const getter = `get${{ int16: "Int16", uint16: "Uint16", int32: "Int32", uint32: "Uint32", float32: "Float32", float64: "Float64" }[dtype]}`;
-      for (let i = 0; i < planeVoxels; i += 1) plane[i] = view[getter](offset + i * bytesPer, false);
+      const stored = storedPlane(t, z);
+      if (!scaled) return stored;
+      const plane = new ARRAY_TYPES[outputType](planeVoxels);
+      for (let i = 0; i < planeVoxels; i += 1) plane[i] = stored[i] * slope + intercept;
       return plane;
     },
   };

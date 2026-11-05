@@ -11,6 +11,7 @@ import { readBackLevels, rootAttributes, schemaErrors } from "../validation/chec
 
 const here = (path) => new URL(path, import.meta.url);
 const file = async (url, name = url.pathname.split("/").at(-1)) => new File([await readFile(url)], name);
+const noteText = (source) => source.notes.map(({ summary, detail }) => `${summary}: ${detail}`).join(" ");
 const omeValue = (t, c, z, y, x) => (t * 1000 + c * 100 + z * 10 + y * 3 + x) % 251;
 
 async function planes(source) {
@@ -69,6 +70,53 @@ test("single-quoted OME-XML with entities is read through fiff", async () => {
   assert.deepEqual([source.scale.x, source.units.x], [0.5, "nanometer"]);
 });
 
+test("a renamed single-file OME-TIFF opens: its TiffData UUIDs are the root UUID", async () => {
+  const source = await openSource([await file(here("./fixtures/bioformats-style.ome.tif"), "renamed after export.ome.tif")]);
+  assert.equal(source.format, "OME-TIFF");
+  assert.equal(source.name, "cells");
+  assert.equal(source.stem, "renamed after export");
+  assert.deepEqual(source.shape, { t: 1, c: 1, z: 2, y: 2, x: 3 });
+  assert.deepEqual(Array.from(await source.readPlane(0, 0, 1)), Array.from({ length: 6 }, (_, i) => omeValue(0, 0, 1, Math.floor(i / 3), i % 3)));
+});
+
+test("one file of a multi-file OME-TIFF is refused, whatever its name", async () => {
+  for (const name of ["multifile-part0.ome.tif", "part0.ome.tif"]) {
+    await assert.rejects(openSource([await file(here("./fixtures/multifile-part0.ome.tif"), name)]), /one file of a multi-file dataset \(part1\.ome\.tif holds other planes\)/);
+  }
+});
+
+test("OME units written as character references and the time increment are kept", async () => {
+  const source = await openSource([await file(here("./fixtures/calibrated-entities.ome.tif"))]);
+  assert.deepEqual(source.shape, { t: 2, c: 1, z: 1, y: 2, x: 3 });
+  assert.deepEqual(source.scale, { t: 0.0025, z: 2, y: 0.5, x: 0.5 });
+  assert.deepEqual(source.units, { t: "second", z: "nanometer", y: "micrometer", x: "micrometer" });
+  const map = new Map();
+  await writeOmeZarr(source, { set: (key, bytes) => map.set(key, bytes) }, { version: "0.5" });
+  const [image] = rootAttributes(map, "0.5").ome.multiscales;
+  assert.deepEqual(image.axes.map(({ unit }) => unit ?? null), ["second", null, "nanometer", "micrometer", "micrometer"]);
+  assert.deepEqual(image.datasets[0].coordinateTransformations[0].scale, [0.0025, 1, 2, 0.5, 0.5]);
+});
+
+test("an OME-TIFF of two differently sized images converts the first and says so", async () => {
+  const source = await openSource([await file(here("../../components/test/fixtures/tiff/two-images.ome.tif"))]);
+  assert.equal(source.name, "large");
+  assert.deepEqual(source.shape, { t: 1, c: 1, z: 2, y: 4, x: 5 });
+  assert.deepEqual(source.notes.map(({ summary }) => summary), ["Converts image 1 of 2"]);
+  assert.match(noteText(source), /only the first, large, is converted/);
+  assert.doesNotMatch(noteText(source), /reduced resolutions/);
+  const value = (page, y, x) => (page * 37 + y * 7 + x * 3) % 251;
+  assert.deepEqual(Array.from(await source.readPlane(0, 0, 1)), Array.from({ length: 20 }, (_, i) => value(1, Math.floor(i / 5), i % 5)));
+});
+
+test("a white-is-zero TIFF keeps its samples and marks the channel inverted; mask pages are skipped", async () => {
+  const white = await openSource([await file(here("../../components/test/fixtures/tiff/miniswhite.tif"))]);
+  assert.deepEqual(white.channels, [{ label: null, color: null, inverted: true }]);
+  assert.deepEqual(white.notes.map(({ summary }) => summary), ["Min-is-white: shown inverted"]);
+  assert.deepEqual(Array.from(await white.readPlane(0, 0, 0)), Array.from({ length: 6 }, (_, i) => (Math.floor(i / 3) * 7 + (i % 3) * 3) % 251));
+  const masked = await openSource([await file(here("../../components/test/fixtures/tiff/with-mask.tif"))]);
+  assert.deepEqual(masked.shape, { t: 1, c: 1, z: 2, y: 3, x: 4 });
+});
+
 test("a plain multi-page TIFF is a Z stack calibrated from its centimetre resolution", async () => {
   const source = await openSource([await file(here("../../components/test/fixtures/tiff/stack-u16.tif"))]);
   assert.equal(source.format, "TIFF");
@@ -95,12 +143,12 @@ test("an RGBA TIFF becomes red, green and blue channels without alpha", async ()
   const source = await openSource([await file(here("../../components/test/fixtures/tiff/rgba.tif"))]);
   assert.deepEqual(source.shape.c, 3);
   assert.deepEqual(source.channels.map(({ label, color }) => `${label} ${color}`), ["Red FF0000", "Green 00FF00", "Blue 0000FF"]);
-  assert.match(source.notes.join(" "), /alpha/);
+  assert.match(noteText(source), /alpha/);
   const blue = await source.readPlane(0, 2, 0);
   assert.deepEqual(Array.from(blue), Array.from({ length: 12 }, (_, i) => (2 * 101 + Math.floor(i / 4) * 7 + (i % 4) * 3) % 251));
 });
 
-function nifti({ dims, datatype, bitpix, pixdim, units, values, littleEndian = true, slope = 1 }) {
+function nifti({ dims, datatype, bitpix, pixdim, units, values, littleEndian = true, slope = 1, inter = 0 }) {
   const header = new DataView(new ArrayBuffer(352));
   header.setInt32(0, 348, littleEndian);
   header.setInt16(40, dims.length, littleEndian);
@@ -110,27 +158,50 @@ function nifti({ dims, datatype, bitpix, pixdim, units, values, littleEndian = t
   [1, ...pixdim].forEach((value, i) => header.setFloat32(76 + 4 * i, value, littleEndian));
   header.setFloat32(108, 352, littleEndian);
   header.setFloat32(112, slope, littleEndian);
+  header.setFloat32(116, inter, littleEndian);
   header.setUint8(123, units);
   header.setUint8(344, 0x6e);
   header.setUint8(345, 0x2b);
   header.setUint8(346, 0x31);
   const data = new DataView(new ArrayBuffer(values.length * (bitpix / 8)));
-  values.forEach((value, i) => data.setInt16(i * 2, value, littleEndian));
+  values.forEach((value, i) => (bitpix === 32 ? data.setInt32(i * 4, value, littleEndian) : data.setInt16(i * 2, value, littleEndian)));
   return new File([header.buffer, data.buffer], "volume.nii");
 }
 
-test("a NIfTI image keeps its stored values, x fastest, with µm spacing and seconds", async () => {
+test("a NIfTI image without scaling keeps its stored samples, x fastest, with µm spacing and seconds", async () => {
   // 3 x 2 x 2 voxels, 2 frames, int16, xyzt_units 3 (µm) + 8 (s).
   const values = Array.from({ length: 24 }, (_, i) => i * 100 - 1000);
-  for (const littleEndian of [true, false]) {
-    const source = await openSource([nifti({ dims: [3, 2, 2, 2], datatype: 4, bitpix: 16, pixdim: [0.4, 0.5, 2, 1.5], units: 11, values, littleEndian, slope: 2 })]);
+  for (const [littleEndian, slope] of [[true, 1], [false, 0]]) {
+    const source = await openSource([nifti({ dims: [3, 2, 2, 2], datatype: 4, bitpix: 16, pixdim: [0.4, 0.5, 2, 1.5], units: 11, values, littleEndian, slope })]);
     assert.deepEqual(source.shape, { t: 2, c: 1, z: 2, y: 2, x: 3 });
+    assert.equal(source.dtype, "int16");
+    assert.equal(source.stem, "volume");
     assert.deepEqual(source.scale, { t: 1.5, z: 2, y: 0.5, x: 0.4 });
     assert.deepEqual(source.units, { t: "second", z: "micrometer", y: "micrometer", x: "micrometer" });
-    assert.match(source.notes.join(" "), /scl_slope 2/);
+    assert.doesNotMatch(noteText(source), /scl_slope/);
+    assert.match(noteText(source), /^NIfTI orientation dropped: .*affine is not carried over/);
     assert.deepEqual(Array.from(await source.readPlane(1, 0, 1)), values.slice(18, 24));
     assert.ok((await source.readPlane(0, 0, 0)) instanceof Int16Array);
   }
+});
+
+test("NIfTI scl_slope and scl_inter are applied into float32, or float64 for 32-bit integers", async () => {
+  const values = Array.from({ length: 12 }, (_, i) => i * 100 - 600);
+  for (const littleEndian of [true, false]) {
+    const source = await openSource([nifti({ dims: [3, 2, 2, 1], datatype: 4, bitpix: 16, pixdim: [1, 1, 1], units: 3, values, littleEndian, slope: 0.5, inter: 3 })]);
+    assert.equal(source.dtype, "float32");
+    assert.match(noteText(source), /^NIfTI orientation dropped.*Scaled to float32 \(scl_slope\): Values are stored × scl_slope 0\.5 \+ scl_inter 3/);
+    const plane = await source.readPlane(0, 0, 1);
+    assert.ok(plane instanceof Float32Array);
+    assert.deepEqual(Array.from(plane), values.slice(6, 12).map((value) => value * 0.5 + 3));
+    const map = new Map();
+    await writeOmeZarr(source, { set: (key, bytes) => map.set(key, bytes) }, { version: "0.5" });
+    const { levels } = await readBackLevels(map);
+    assert.equal(levels[0].dtype, "float32");
+  }
+  const wide = await openSource([nifti({ dims: [2, 2, 1], datatype: 8, bitpix: 32, pixdim: [1, 1], units: 3, values: [1, -2, 3, 2147483647], slope: 1, inter: 0.25 })]);
+  assert.equal(wide.dtype, "float64");
+  assert.deepEqual(Array.from(await wide.readPlane(0, 0, 0)), [1.25, -1.75, 3.25, 2147483647.25]);
 });
 
 test("an RGB NIfTI is refused", async () => {
@@ -167,7 +238,7 @@ test("PNG: grey RGB collapses to one channel, alpha is dropped, colour keeps thr
   const source = await openSource([grey]);
   assert.equal(source.shape.c, 1);
   assert.deepEqual(Array.from(await source.readPlane(0, 0, 0)), [7, 9]);
-  assert.match(source.notes.join(" "), /alpha/);
+  assert.match(noteText(source), /alpha/);
   const colour = png("b.png", { width: 2, height: 1, depth: 8, channels: 3, data: new Uint8Array([1, 2, 3, 4, 5, 6]) });
   const rgb = await openSource([colour]);
   assert.equal(rgb.shape.c, 3);
@@ -191,7 +262,7 @@ test("a JPEG sequence decodes greyscale JPEG to one channel and notes that JPEG 
   const source = await openSource([new File([encoded], "frame1.jpg"), new File([encoded], "frame2.jpg")]);
   assert.equal(source.format, "JPEG sequence");
   assert.deepEqual(source.shape, { t: 1, c: 1, z: 2, y: 8, x: 8 });
-  assert.match(source.notes.join(" "), /lossy/);
+  assert.match(noteText(source), /lossy/);
   const plane = await source.readPlane(0, 0, 1);
   assert.ok(Math.abs(plane[0] - 40) <= 2 && Math.abs(plane[63] - 200) <= 2);
 });

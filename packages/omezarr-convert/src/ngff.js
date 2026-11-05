@@ -24,7 +24,10 @@ export function levelScale(scale, level) {
 
 const DEFAULT_COLOURS = ["FF0000", "00FF00", "0000FF", "FF00FF", "00FFFF", "FFFF00", "FFFFFF"];
 
-/** The omero rendering block: one entry per channel, its window the channel's level-0 range. */
+/**
+ * The omero rendering block: one entry per channel, its window the channel's level-0 range
+ * (finite numbers; [0, 0] when a channel has none), inverted for min-is-white channels.
+ */
 export function omeroMetadata(channels, windows, depth) {
   return {
     channels: channels.map((channel, index) => {
@@ -34,7 +37,7 @@ export function omeroMetadata(channels, windows, depth) {
         coefficient: 1,
         color: channel.color ?? (channels.length === 1 ? "FFFFFF" : DEFAULT_COLOURS[index % DEFAULT_COLOURS.length]),
         family: "linear",
-        inverted: false,
+        inverted: channel.inverted === true,
         label: channel.label ?? `Channel ${index}`,
         window: { min, max, start: min, end: max },
       };

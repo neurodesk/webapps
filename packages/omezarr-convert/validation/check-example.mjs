@@ -22,7 +22,7 @@ for (const version of ["0.4", "0.5"]) {
     await writeOmeZarr(source, { set: (key, value) => map.set(key, value) }, { version, method });
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     // Check what a user downloads: the archive, unpacked again.
-    const problems = await checkExample(archiveStore(unzipSync(zipStore(map, version))), version, method);
+    const problems = await checkExample(archiveStore(unzipSync(new Uint8Array(await (await zipStore(map, version)).arrayBuffer()))), version, method);
     failed ||= problems.length > 0;
     console.log(`NGFF ${version} ${method}: ${problems.length ? problems.join("; ") : "matches the reference"} (${seconds} s)`);
   }

@@ -92,6 +92,6 @@ export interface TiffPages {
 export function omeXml(description: unknown): string | null;
 export function sampleRoles(photometric: number, samplesPerPixel: number, extraSamples?: number[]): TiffSampleRole[] | null;
 /** A TIFF's full-resolution pages, read one at a time, samples kept apart. */
-export function openTiffPages(source: Blob | ArrayBuffer, options?: { signal?: AbortSignal; maxBytes?: number }): Promise<TiffPages>;
+export function openTiffPages(source: Blob | ArrayBuffer, options?: { signal?: AbortSignal; maxBytes?: number; /** Let an OME-TIFF's pages differ in size (its OME-XML maps them). */ unequalOme?: boolean }): Promise<TiffPages>;
 /** XML text with its predefined and numeric character references decoded. */
 export function decodeXml(value: string): string;

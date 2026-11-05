@@ -62,7 +62,8 @@ export function archiveStore(entries) {
 
 /**
  * Check a conversion of the example against example-reference.json: the schema, level 0 equal
- * to the source, the pyramid equal to bioformats2raw's (`nearest`) or numpy's (`mean`), the
+ * to the source, the pyramid equal to bioformats2raw's levels of the same NGFF version
+ * (`nearest`) or numpy's (`mean`), the
  * array layout and the metadata bioformats2raw writes. Returns the problems found.
  */
 export async function checkExample(map, version, method) {
@@ -72,7 +73,8 @@ export async function checkExample(map, version, method) {
   for (const error of schemaErrors(attributes, version)) problems.push(`schema: ${error}`);
   const { image, levels } = await readBackLevels(map);
   if (levels[0]?.sha256 !== REFERENCE.source.sha256) problems.push("level 0 differs from the source pixels");
-  const expected = REFERENCE[method];
+  // nearest is held to bioformats2raw's own levels of this version; mean to NumPy's pyramid.
+  const expected = method === "nearest" ? reference.levels : REFERENCE.mean;
   levels.forEach((level, index) => {
     if (JSON.stringify(level.shape) !== JSON.stringify(expected[index]?.shape)) problems.push(`level ${index} shape ${level.shape} != ${expected[index]?.shape}`);
     if (level.sha256 !== expected[index]?.sha256) problems.push(`level ${index} pixels differ from the ${method} reference`);

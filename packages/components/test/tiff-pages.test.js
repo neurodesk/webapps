@@ -87,3 +87,27 @@ test('single-quoted OME attributes are read and rewritten double-quoted, entitie
   assert.match(xml, /<Pixels SizeC="2" SizeZ="3" PhysicalSizeX="65" PhysicalSizeXUnit="nm"\/>/);
   assert.match(xml, /^<\?xml version='1.0'\?>/, 'the declaration is not a start tag');
 });
+
+test('a transparency mask page (NewSubfileType 4) is skipped like a thumbnail', async () => {
+  const stack = await openTiffPages(await fixture('with-mask.tif'));
+  assert.equal(stack.pageCount, 2);
+  const [plane] = await stack.readPage(1);
+  assert.deepEqual(Array.from(plane), expected(1, 0, 3, 4, 251));
+});
+
+test('a white-is-zero page reads as one value sample and says so', async () => {
+  const stack = await openTiffPages(await fixture('miniswhite.tif'));
+  assert.equal(stack.photometric, 'min-is-white');
+  assert.deepEqual(stack.sampleRoles, ['value']);
+});
+
+test('OME-TIFF pages of different sizes open only when the caller maps them through OME-XML', async () => {
+  await assert.rejects(openTiffPages(await fixture('two-images.ome.tif')), /page 3 differs from page 1 in width/);
+  const stack = await openTiffPages(await fixture('two-images.ome.tif'), { unequalOme: true });
+  assert.equal(stack.ome, true);
+  assert.deepEqual([stack.width, stack.height, stack.pageCount], [5, 4, 3]);
+  assert.equal(stack.metadata.images, 2);
+  // The option does not relax plain stacks.
+  const plain = await openTiffPages(await fixture('with-thumbnail.tif'), { unequalOme: true });
+  assert.equal(plain.pageCount, 2);
+});

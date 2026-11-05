@@ -7,10 +7,20 @@ import { isSpaceUnit, millimetresPer } from "@neurodesk/omezarr-convert/units";
 
 export const PREVIEW_MAX_PIXELS = 1024;
 
-/** The index of the largest level whose Y and X both fit in `max` pixels (else the smallest). */
-export function previewLevel(shapes, max = PREVIEW_MAX_PIXELS) {
+/** Bytes above which an image is not read for a preview, before or after conversion. */
+export const SOURCE_PREVIEW_BYTES = 1024 ** 3;
+
+/**
+ * The level the output preview reads: the largest whose Y and X fit in `max` pixels (else the
+ * smallest) and whose volume at t = 0 (C × Z × Y × X samples) fits in SOURCE_PREVIEW_BYTES.
+ * -1 when even the smallest level is too large, as a deep Z stack can be.
+ */
+export function previewLevel(shapes, bytesPerSample, { max = PREVIEW_MAX_PIXELS, maxBytes = SOURCE_PREVIEW_BYTES } = {}) {
+  const fits = (shape) => shape.slice(-4).reduce((product, size) => product * size, bytesPerSample) <= maxBytes;
   const index = shapes.findIndex((shape) => Math.max(shape.at(-1), shape.at(-2)) <= max);
-  return index < 0 ? shapes.length - 1 : index;
+  const first = index < 0 ? shapes.length - 1 : index;
+  for (let level = first; level < shapes.length; level += 1) if (fits(shapes[level])) return level;
+  return -1;
 }
 
 /** Millimetres per voxel along z, y, x of one level, from its NGFF axes and scale. */
@@ -46,9 +56,6 @@ export function channelColormap(color) {
   return COLORMAPS[String(color).toUpperCase()] ?? "gray";
 }
 
-/** Bytes above which the input is not read for a preview before conversion. */
-export const SOURCE_PREVIEW_BYTES = 1024 ** 3;
-
 /**
  * The input at t = 0 for the viewer before conversion: every Z plane of each channel, Y and X
  * subsampled by the power of two that fits `max` pixels, with each channel's range. Returns
@@ -74,6 +81,8 @@ export async function readSourcePreview(source, { signal, max = PREVIEW_MAX_PIXE
         for (let column = 0; column < width; column += 1) {
           const value = plane[row * stride * x + column * stride];
           volume.data[(z * height + row) * width + column] = value;
+          // The display range covers finite values; NaN and ±Infinity would break the window.
+          if (!Number.isFinite(value)) continue;
           if (value < volume.range[0]) volume.range[0] = value;
           if (value > volume.range[1]) volume.range[1] = value;
         }
@@ -81,6 +90,7 @@ export async function readSourcePreview(source, { signal, max = PREVIEW_MAX_PIXE
       onPlane?.((z * channels + c + 1) / (depth * channels));
     }
   }
+  for (const volume of volumes) if (volume.range[0] > volume.range[1]) volume.range = [0, 0];
   const unit = (axis) => (isSpaceUnit(source.units[axis] ?? "") ? millimetresPer(source.units[axis]) : 1);
   const spacing = [(source.scale.z ?? 1) * unit("z"), (source.scale.y ?? 1) * unit("y") * stride, (source.scale.x ?? 1) * unit("x") * stride];
   return { shape: [depth, height, width], spacing, stride, volumes };

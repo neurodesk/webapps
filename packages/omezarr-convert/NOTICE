@@ -4,9 +4,10 @@ Apache-2.0 (LICENSE)
 
 schemas/0.4 and schemas/0.5 are the OME-NGFF JSON schemas copied unchanged from
 https://github.com/ome/ngff at tag 0.5.2 (commit 5cdf83b6806b5e500477c7af69dae9ed2adcf77d),
-Copyright (c) Open Microscopy Environment, under the W3C Software and Document License
-(https://www.w3.org/copyright/software-license-2023/), as ome/ngff LICENSE.md states for its
-reports. They are used only by the tests and validation.
+copyright the OME-NGFF contributors, under the W3C Software and Document License (2015,
+https://www.w3.org/copyright/software-license-2015/), as ome/ngff LICENSE.md states for its
+reports. schemas/LICENSE.md holds that notice and the licence's full text. They are used only
+by the tests and validation.
 
 Runtime dependencies (MIT unless stated): @fideus-labs/fiff, @fideus-labs/ngff-zarr,
 geotiff (geotiff.js), zarrita, fflate, fast-png, jpeg-js (BSD-3-Clause).

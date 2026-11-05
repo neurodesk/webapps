@@ -4,7 +4,7 @@
 import { decode as decodePng } from "fast-png";
 import jpeg from "jpeg-js";
 import { ARRAY_TYPES } from "../pyramid.js";
-import { CHANNEL_COLOURS, imageStem } from "./source.js";
+import { CHANNEL_COLOURS, imageStem, note } from "./source.js";
 
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 export const naturalOrder = (a, b) => collator.compare(a.name, b.name);
@@ -68,13 +68,15 @@ export async function openRasterSequence(files, { signal } = {}) {
   const grey = isGrey(first);
   const channels = grey ? 1 : 3;
   const notes = [];
-  if (first.alpha) notes.push("The alpha channel is transparency, not intensity, and is left out.");
-  if (grey && first.samples === 3) notes.push("Red, green and blue are equal in the first image, so the sequence is one greyscale channel.");
-  if (isJpeg(ordered[0].name)) notes.push("JPEG is lossy: the values are those of the decoded JPEG, not of the original acquisition.");
+  if (first.alpha) notes.push(note("Alpha dropped", "The alpha channel is transparency, not intensity, and is left out."));
+  if (grey && first.samples === 3) notes.push(note("Grey RGB read as one channel", "Red, green and blue are equal in the first image, so the sequence is one greyscale channel."));
+  if (isJpeg(ordered[0].name)) notes.push(note("JPEG is lossy", "JPEG is lossy: the values are those of the decoded JPEG, not of the original acquisition."));
   const micrometres = first.ppm ? { y: 1e6 / first.ppm.y, x: 1e6 / first.ppm.x } : null;
   let cached = { index: 0, image: first };
+  const name = imageStem(ordered[0].name).replace(/[_\-. ]*\d+$/, "") || imageStem(ordered[0].name);
   return {
-    name: imageStem(ordered[0].name).replace(/[_\-. ]*\d+$/, "") || imageStem(ordered[0].name),
+    name,
+    stem: name,
     format: isJpeg(ordered[0].name) ? "JPEG sequence" : "PNG sequence",
     dtype: first.dtype,
     shape: { t: 1, c: channels, z: ordered.length, y: first.height, x: first.width },

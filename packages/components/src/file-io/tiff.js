@@ -447,52 +447,59 @@ async function describePage(image) {
     Type: TYPES[`${format}:${bits}`] ?? null,
     photometric: Number(await tagValue(image, 'PhotometricInterpretation') ?? 1),
     extraSamples: Array.from(await tagValue(image, 'ExtraSamples') ?? []).map(Number),
+    // NewSubfileType bit 0 marks a reduced-resolution page, bit 2 a transparency mask.
     reduced: Boolean(Number(await tagValue(image, 'NewSubfileType') ?? 0) & 1),
+    mask: Boolean(Number(await tagValue(image, 'NewSubfileType') ?? 0) & 4),
   };
 }
 
 /**
  * Open a TIFF (Blob or ArrayBuffer) as its full-resolution pages, without decoding pixels.
- * Reduced-resolution pages (thumbnails, flat pyramids) are skipped; the others must share size,
- * samples and sample type. `maxBytes` refuses a stack whose decoded pages would exceed it.
+ * Reduced-resolution pages (thumbnails, flat pyramids) and transparency masks are skipped; the
+ * others must share size, samples and sample type, except in an OME-TIFF when `unequalOme` is
+ * set: its OME-XML maps the pages (several images of different sizes), so only the first page
+ * is described. `maxBytes` refuses a stack whose decoded pages would exceed it.
  * `metadata` is the OME or ImageJ calibration (parseOmeDescription, parseImagejDescription),
  * null for a baseline TIFF; `resolution` is X/YResolution in pixels per ResolutionUnit.
  */
-export async function openTiffPages(source, { signal, maxBytes = Infinity } = {}) {
+export async function openTiffPages(source, { signal, maxBytes = Infinity, unequalOme = false } = {}) {
   signal?.throwIfAborted();
   // A Blob is read in slices where the browser's FileReader exists, whole elsewhere (Node).
   const tiff = source instanceof Blob && typeof FileReader === 'function'
     ? await fromBlob(source, signal)
     : await fromArrayBuffer(source instanceof Blob ? await source.arrayBuffer() : source, signal);
   const count = await tiff.getImageCount();
+  const description = await tagValue(await tiff.getImage(0), 'ImageDescription');
+  const text = typeof description === 'string' ? description : null;
+  const ome = omeXml(text) !== null;
   const pages = [];
   let first = null;
+  let bytes = 0;
   for (let index = 0; index < count; index += 1) {
     signal?.throwIfAborted();
     const image = await tiff.getImage(index);
     const page = await describePage(image);
-    if (page.reduced) continue;
+    if (page.reduced || page.mask) continue;
     first ??= { ...page, image };
-    for (const key of ['width', 'height', 'samplesPerPixel', 'bitsPerSample', 'Type', 'photometric']) {
-      if (page[key] !== first[key]) throw new Error(`TIFF page ${index + 1} differs from page 1 in ${key === 'Type' ? 'sample type' : key}; only stacks of equal pages can be read.`);
+    if (!(ome && unequalOme)) {
+      for (const key of ['width', 'height', 'samplesPerPixel', 'bitsPerSample', 'Type', 'photometric']) {
+        if (page[key] !== first[key]) throw new Error(`TIFF page ${index + 1} differs from page 1 in ${key === 'Type' ? 'sample type' : key}; only stacks of equal pages can be read.`);
+      }
     }
+    bytes += page.samplesPerPixel * page.width * page.height * (page.Type?.BYTES_PER_ELEMENT ?? 0);
     pages.push(image);
   }
   if (!first) throw new Error('The TIFF has no full-resolution page.');
   if (!first.Type) throw new Error(`TIFF samples of ${first.bitsPerSample} bits are not supported; use 8, 16 or 32-bit integer or 32/64-bit float samples.`);
   const roles = sampleRoles(first.photometric, first.samplesPerPixel, first.extraSamples);
   if (!roles) throw new Error(`TIFF ${PHOTOMETRIC_NAMES[first.photometric] ?? `photometric ${first.photometric}`} images are not supported; save them as greyscale or RGB.`);
-  const bytes = pages.length * first.samplesPerPixel * first.width * first.height * first.Type.BYTES_PER_ELEMENT;
   if (bytes > maxBytes) throw new InputTooLargeError(bytes, maxBytes, { subject: 'The decoded TIFF stack' });
-  const description = await tagValue(first.image, 'ImageDescription');
-  const text = typeof description === 'string' ? description : null;
   const resolutionUnit = Number(await tagValue(first.image, 'ResolutionUnit') ?? 2);
   const x = rational(await tagValue(first.image, 'XResolution'));
   const y = rational(await tagValue(first.image, 'YResolution'));
   const resolution = Number.isFinite(x) && x > 0 && Number.isFinite(y) && y > 0
     ? { x, y, unit: { 1: null, 2: 'inch', 3: 'centimeter' }[resolutionUnit] ?? null }
     : null;
-  const ome = omeXml(text) !== null;
   return {
     /** The geotiff instance the pages come from. */
     tiff,

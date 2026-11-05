@@ -17,6 +17,7 @@
             <span>Drop a TIFF, OME-TIFF, PNG/JPEG sequence or NIfTI</span>
           </label>
           <p id="fileInfo" class="nd-file-info" hidden></p>
+          <p id="fileNotes" class="nd-message warning" hidden></p>
         </div>
       </details>
 
@@ -91,7 +92,7 @@
               </div>
               <div class="nd-field" id="destinationField" hidden>
                 <label for="destination">Save to
-                  <span class="nd-info-icon" tabindex="0" aria-label="About saving to a folder">i<span class="nd-info-tooltip">A folder write saves each chunk as a file while converting, so the archive never has to fit in memory. Use it for images larger than about 2 GB.</span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About saving to a folder">i<span class="nd-info-tooltip">A folder write saves each chunk as a file while converting, so the archive never has to fit in memory. Use it when an archive would pass 1 GiB.</span></span>
                 </label>
                 <select id="destination">
                   <option value="archive" selected>Download archive</option>

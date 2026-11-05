@@ -2,16 +2,24 @@
 //
 // {
 //   name: string,                      the image name written to the multiscales metadata
+//   stem: string,                      the input file's stem, for output file names
 //   format: string,                    what it was read from, for the log
 //   dtype: "uint8" | … | "float64",
 //   shape: { t, c, z, y, x },          sizes; absent axes are 1
 //   scale: { t, z, y, x },             physical size per pixel, null when the file has none
 //   units: { t, z, y, x },             NGFF unit names, null when the file has none
-//   channels: [{ label, color }],      label and "RRGGBB" colour, null when the file has none
-//   notes: string[],                   what the reader assumed or left out
+//   channels: [{ label, color, inverted }],  label and "RRGGBB" colour, null when the file has
+//                                      none; inverted when low values are white (min-is-white)
+//   notes: [{ summary, detail }],      what the reader assumed, changed or left out: a short
+//                                      summary for the input line and the full detail
 //   readPlane(t, c, z, { signal }) →   Promise of one row-major Y × X plane of `dtype`
 // }
 import { isSpaceUnit } from "../units.js";
+
+/** A reader's note: `summary` fits the input line (≤ 40 characters), `detail` explains it. */
+export function note(summary, detail) {
+  return { summary, detail };
+}
 
 export const CHANNEL_COLOURS = { red: "FF0000", green: "00FF00", blue: "0000FF" };
 

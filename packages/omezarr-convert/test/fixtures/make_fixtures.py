@@ -32,3 +32,36 @@ from PIL import Image  # noqa: E402
 
 image = Image.fromarray(np.arange(12, dtype=np.uint16).reshape(3, 4) * 4000)
 image.save('phys-16bit.png', dpi=(50800, 25400))
+
+# The fixtures below are written with tifffile 2024.2.12 from hand-written OME-XML.
+OME = 'http://www.openmicroscopy.org/Schemas/OME/2016-06'
+
+
+def ome_xml(root_uuid, pixels_attributes, tiff_data):
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            f'<OME xmlns="{OME}" UUID="{root_uuid}">'
+            '<Image ID="Image:0" Name="cells"><Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint8" '
+            f'SizeX="3" SizeY="2" {pixels_attributes}><Channel ID="Channel:0:0" SamplesPerPixel="1"/>'
+            f'{tiff_data}</Pixels></Image></OME>')
+
+
+# Bio-Formats style: the root UUID and each TiffData's UUID name the file as it was written
+# (original.ome.tif). The test opens it under another name.
+own = 'urn:uuid:0b4bd2e3-8f8c-4c8e-9a38-1d1c0d6f0001'
+xml = ome_xml(own, 'SizeZ="2" SizeC="1" SizeT="1"',
+              f'<TiffData FirstZ="0" IFD="0" PlaneCount="1"><UUID FileName="original.ome.tif">{own}</UUID></TiffData>'
+              f'<TiffData FirstZ="1" IFD="1" PlaneCount="1"><UUID FileName="original.ome.tif">{own}</UUID></TiffData>')
+tifffile.imwrite('bioformats-style.ome.tif', planes((1, 1, 2, 2, 3), np.uint8)[0, 0], photometric='minisblack', description=xml, metadata=None)
+
+# One file of a two-file dataset: Z 1 is in another file (another UUID).
+other = 'urn:uuid:0b4bd2e3-8f8c-4c8e-9a38-1d1c0d6f0002'
+xml = ome_xml(own, 'SizeZ="2" SizeC="1" SizeT="1"',
+              f'<TiffData FirstZ="0" IFD="0" PlaneCount="1"><UUID FileName="part0.ome.tif">{own}</UUID></TiffData>'
+              f'<TiffData FirstZ="1" IFD="0" PlaneCount="1"><UUID FileName="part1.ome.tif">{other}</UUID></TiffData>')
+tifffile.imwrite('multifile-part0.ome.tif', planes((1, 1, 1, 2, 3), np.uint8)[0, 0, 0], photometric='minisblack', description=xml, metadata=None)
+
+# Units as character references (&#181;m, &#xB5;m) and a time increment in milliseconds.
+xml = ome_xml(own, 'SizeZ="1" SizeC="1" SizeT="2" PhysicalSizeX="0.5" PhysicalSizeXUnit="&#181;m" '
+              'PhysicalSizeY="0.5" PhysicalSizeYUnit="&#xB5;m" PhysicalSizeZ="2" PhysicalSizeZUnit="nm" '
+              'TimeIncrement="2.5" TimeIncrementUnit="ms"', '<TiffData IFD="0" PlaneCount="2"/>')
+tifffile.imwrite('calibrated-entities.ome.tif', planes((2, 1, 1, 2, 3), np.uint8)[:, 0, 0], photometric='minisblack', description=xml, metadata=None)

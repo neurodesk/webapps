@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { gunzipSync, unzipSync, unzlibSync } from "fflate";
-import { conversionPlan, writeOmeZarr } from "../src/writer.js";
+import { archiveBudget, conversionPlan, writeOmeZarr } from "../src/writer.js";
+import { readOzxVersion } from "@fideus-labs/ngff-zarr";
 import { ARRAY_TYPES } from "../src/pyramid.js";
-import { archiveName, zipStore } from "../src/zip.js";
+import { archiveName, ZIP_MAX_ENTRIES, zipStore } from "../src/zip.js";
 import { readBackLevels, rootAttributes, schemaErrors, sha256 } from "../validation/checks.mjs";
 
 // The numpy pyramids of these images (validation/synthetic_reference.py).
@@ -160,22 +161,113 @@ test("the schemas reject metadata that breaks the specification", async () => {
   }
 });
 
+const bytesOf = async (blob) => new Uint8Array(await blob.arrayBuffer());
+
 test("archives: 0.5 is an RFC-9 .ozx with zarr.json first; 0.4 a stored zip with metadata first", async () => {
   const source = syntheticSource({ dtype: "uint16", shape: [1, 2, 2, 20, 20] });
   const v5 = await convert(source, { version: "0.5", chunk: 16, target: 16 });
-  const ozx = zipStore(v5.map, "0.5");
+  const blob = await zipStore(v5.map, "0.5");
+  assert.ok(blob instanceof Blob);
+  const ozx = await bytesOf(blob);
+  assert.equal(readOzxVersion(ozx), "0.5");
   const comment = new TextDecoder().decode(ozx.subarray(ozx.length - 200)).match(/\{.*\}/s)[0];
-  assert.equal(JSON.parse(comment).ome.version, "0.5");
+  assert.equal(JSON.parse(comment).ome.zipFile.centralDirectory.jsonFirst, true);
   const entries = unzipSync(ozx);
   assert.equal(Object.keys(entries)[0], "zarr.json");
+  assert.deepEqual(Object.keys(entries).slice(0, 3).sort(), ["0/zarr.json", "1/zarr.json", "zarr.json"]);
   assert.deepEqual(Object.keys(entries).sort(), [...v5.map.keys()].sort());
   for (const [key, bytes] of Object.entries(entries)) assert.equal(sha256(bytes), sha256(v5.map.get(key)));
   const v4 = await convert(source, { version: "0.4", chunk: 16, target: 16 });
-  const zip = unzipSync(zipStore(v4.map, "0.4"));
+  const zip = unzipSync(await bytesOf(await zipStore(v4.map, "0.4")));
   assert.deepEqual(Object.keys(zip).slice(0, 2), [".zattrs", ".zgroup"]);
   assert.deepEqual(Object.keys(zip).sort(), [...v4.map.keys()].sort());
   assert.equal(archiveName("cells", "0.5"), "cells.ozx");
   assert.equal(archiveName("cells", "0.4"), "cells.ome.zarr.zip");
+});
+
+test("a store with more files than a zip can hold is refused before any archive is built", async () => {
+  const map = new Map(Array.from({ length: ZIP_MAX_ENTRIES + 1 }, (_, index) => [`0/${index}`, new Uint8Array(0)]));
+  await assert.rejects(zipStore(map, "0.4"), /at most 65535/);
+});
+
+/** Bytes no codec can shrink (xorshift32), so the store is as large as it can get. */
+function noiseSource(shape, dtype = "uint16") {
+  const [, C, , Y, X] = shape;
+  return syntheticSource({ dtype, shape }, {
+    async readPlane(t, c, z) {
+      let state = (t * 7919 + c * 104729 + z * 1299709 + 1) >>> 0;
+      const bytes = new Uint8Array(Y * X * ARRAY_TYPES[dtype].BYTES_PER_ELEMENT);
+      for (let i = 0; i < bytes.length; i += 1) {
+        state ^= state << 13;
+        state ^= state >>> 17;
+        state ^= state << 5;
+        bytes[i] = state >>> 24;
+      }
+      return new ARRAY_TYPES[dtype](bytes.buffer);
+    },
+    channels: Array.from({ length: C }, () => ({ label: null, color: null })),
+  });
+}
+
+test("the archive budget bounds the store and its zip, even for incompressible pixels", async () => {
+  for (const [version, shape, chunk] of [["0.5", [1, 2, 3, 70, 90], 32], ["0.4", [2, 1, 2, 33, 129], 16]]) {
+    const options = { version, chunk, target: chunk, compressionLevel: 9 };
+    const { map } = await convert(noiseSource(shape), options);
+    const budget = archiveBudget({ t: shape[0], c: shape[1], z: shape[2], y: shape[3], x: shape[4] }, "uint16", options);
+    const archive = await zipStore(map, version);
+    assert.equal(budget.entries, map.size, `${version}: every store file is counted`);
+    assert.ok(archive.size <= budget.bytes, `${version}: archive ${archive.size} within budget ${budget.bytes}`);
+  }
+});
+
+test("a store that passes maxBytes stops the conversion", async () => {
+  const map = new Map();
+  const source = noiseSource([1, 1, 4, 64, 64]);
+  await assert.rejects(writeOmeZarr(source, { set: (key, bytes) => map.set(key, bytes) }, { chunk: 32, target: 32 }, { maxBytes: 20000 }), /passed its limit of 20000 bytes/);
+  assert.ok([...map.values()].reduce((sum, bytes) => sum + bytes.byteLength, 0) <= 20000);
+  assert.ok(!map.has("zarr.json"));
+});
+
+test("windows ignore NaN and ±Infinity; an all-NaN channel gets a finite window", async () => {
+  const values = [NaN, Infinity, -Infinity, 2.5, -1.25, 7];
+  const source = syntheticSource({ dtype: "float32", shape: [1, 2, 2, 2, 3] }, {
+    async readPlane(_t, c, z) {
+      return Float32Array.from(c === 1 ? values.map(() => NaN) : values.map((value) => (Number.isFinite(value) ? value * (z + 1) : value)));
+    },
+  });
+  for (const version of ["0.4", "0.5"]) {
+    const { map, result } = await convert(source, { version });
+    const attributes = rootAttributes(map, version);
+    const omero = version === "0.4" ? attributes.omero : attributes.ome.omero;
+    assert.deepEqual(omero.channels[0].window, { min: -2.5, max: 14, start: -2.5, end: 14 });
+    assert.deepEqual(omero.channels[1].window, { min: 0, max: 0, start: 0, end: 0 });
+    assert.deepEqual(result.ranges, [[-2.5, 14], [0, 0]]);
+    assert.deepEqual(schemaErrors(attributes, version), [], `${version} strict schema`);
+  }
+});
+
+test("the conversion hands the thread back: a timer and an abort run while it writes", async () => {
+  const source = noiseSource([1, 1, 24, 512, 512]);
+  let ticks = 0;
+  const timer = setInterval(() => { ticks += 1; }, 1);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 40);
+  const map = new Map();
+  try {
+    await assert.rejects(writeOmeZarr(source, { set: (key, bytes) => map.set(key, bytes) }, { compressionLevel: 9 }, { signal: controller.signal }), { name: "AbortError" });
+  } finally {
+    clearInterval(timer);
+  }
+  assert.ok(ticks > 0, "timers ran during the conversion");
+  assert.ok(!map.has("zarr.json"), "it stopped before the metadata");
+});
+
+test("min-is-white channels are marked inverted in omero", async () => {
+  const source = syntheticSource({ dtype: "uint8", shape: [1, 1, 1, 4, 4] }, { channels: [{ label: null, color: null, inverted: true }] });
+  const { map } = await convert(source, { version: "0.5" });
+  const { omero } = rootAttributes(map, "0.5").ome;
+  assert.equal(omero.channels[0].inverted, true);
+  assert.deepEqual(schemaErrors(rootAttributes(map, "0.5"), "0.5"), []);
 });
 
 test("the plan follows the target: levels halve while the larger side exceeds it", () => {

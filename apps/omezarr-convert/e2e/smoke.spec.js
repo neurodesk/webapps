@@ -2,7 +2,9 @@
 // each NGFF version and downloaded; the archive is unpacked in Node and checked against the
 // bioformats2raw reference and the vendored OME-NGFF schemas (packages/omezarr-convert/validation).
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 import { encode as encodePng } from "fast-png";
@@ -19,6 +21,7 @@ async function loadExample(page) {
   await page.goto("/");
   await picker(page).selectOption(example.id);
   await expect(page.locator("#fileInfo")).toHaveText("retina-crop.ome.tif · 2 ch × 32 × 515 × 771 · uint8 · 0.02291 µm", { timeout: 120000 });
+  await expect(page.locator("#fileNotes")).toBeHidden();
   await expect(page.locator("#runButton")).toBeEnabled();
 }
 
@@ -42,7 +45,7 @@ test("the example converts to OME-Zarr 0.5 and 0.4 that match bioformats2raw and
   await expect(page.locator("#resultList")).toContainText("OME-Zarr 0.5 · 3 levels");
   await expect(page.locator("#emptyState")).toBeHidden();
   const ozx = await downloadArchive(page);
-  expect(ozx.name).toBe("retina_large crop.ozx");
+  expect(ozx.name).toBe("retina-crop.ozx");
   expect(await checkExample(archiveStore(unzipSync(ozx.bytes)), "0.5", "mean")).toEqual([]);
 
   await page.locator("#ngffVersion").selectOption("0.4");
@@ -50,7 +53,7 @@ test("the example converts to OME-Zarr 0.5 and 0.4 that match bioformats2raw and
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toHaveText("OME-Zarr ready", { timeout: 120000 });
   const zip = await downloadArchive(page);
-  expect(zip.name).toBe("retina_large crop.ome.zarr.zip");
+  expect(zip.name).toBe("retina-crop.ome.zarr.zip");
   // Nearest is bioformats2raw's SIMPLE pyramid: pixels, chunks and metadata equal its output.
   expect(await checkExample(archiveStore(unzipSync(zip.bytes)), "0.4", "nearest")).toEqual([]);
 
@@ -59,6 +62,9 @@ test("the example converts to OME-Zarr 0.5 and 0.4 that match bioformats2raw and
   const json = JSON.parse(readFileSync(await (await report).path(), "utf8"));
   expect(json.settings).toEqual({ version: "0.4", method: "nearest", chunk: 256, compressionLevel: 6 });
   expect(json.levels.map(({ shape }) => shape)).toEqual([[1, 2, 32, 515, 771], [1, 2, 32, 257, 385], [1, 2, 32, 128, 192]]);
+  // The example's licence travels with what was made from it.
+  expect(json.input.attribution).toEqual(example.attribution);
+  expect(json.input.attribution.license).toBe("CC-BY-4.0");
 });
 
 test("edited voxel sizes and channel names reach the metadata", async ({ page }) => {
@@ -125,11 +131,11 @@ test("folder output writes the store file by file into a new subfolder", async (
   await expect(page.locator("#destinationField")).toBeVisible();
   await page.locator("#destination").selectOption("folder");
   await page.locator("#runButton").click();
-  await expect(page.locator("#statusText")).toHaveText("Saved to chosen/retina_large crop.ome.zarr", { timeout: 120000 });
+  await expect(page.locator("#statusText")).toHaveText("Saved to chosen/retina-crop.ome.zarr", { timeout: 120000 });
   await expect(page.locator("#resultList")).toContainText("Conversion report");
   await expect(page.locator("#resultList")).not.toContainText("OME-Zarr 0.5 ·");
   const written = await page.evaluate(async () => {
-    const root = await (await (await navigator.storage.getDirectory()).getDirectoryHandle("chosen")).getDirectoryHandle("retina_large crop.ome.zarr");
+    const root = await (await (await navigator.storage.getDirectory()).getDirectoryHandle("chosen")).getDirectoryHandle("retina-crop.ome.zarr");
     const read = async (path) => {
       let folder = root;
       const parts = path.split("/");
@@ -150,7 +156,98 @@ test("folder output writes the store file by file into a new subfolder", async (
   expect(await checkExample(map, "0.5", "mean")).toEqual([]);
   // A second conversion into the same folder is refused instead of overwriting it.
   await page.locator("#runButton").click();
-  await expect(page.locator("#statusText")).toHaveText("chosen already holds retina_large crop.ome.zarr; choose another folder or remove it.");
+  await expect(page.locator("#statusText")).toHaveText("chosen already holds retina-crop.ome.zarr; choose another folder or remove it.");
+});
+
+// A noise NIfTI (uint16, 128 × 1024 × 1024, 256 MB) whose planes are read synchronously, so
+// only the writer's pacing lets the page take a click while it converts.
+let noisePath = null;
+function noiseNifti() {
+  if (noisePath) return noisePath;
+  const [nx, ny, nz] = [1024, 1024, 128];
+  const header = Buffer.alloc(352);
+  header.writeInt32LE(348, 0);
+  [3, nx, ny, nz, 1, 1, 1, 1].forEach((size, i) => header.writeInt16LE(size, 40 + 2 * i));
+  header.writeInt16LE(512, 70);
+  header.writeInt16LE(16, 72);
+  [1, 0.5, 0.5, 2].forEach((value, i) => header.writeFloatLE(value, 76 + 4 * i));
+  header.writeFloatLE(352, 108);
+  header.writeUInt8(3, 123);
+  header.write("n+1\0", 344, "latin1");
+  const data = Buffer.alloc(nx * ny * nz * 2);
+  let state = 2463534242;
+  for (let i = 0; i < data.length; i += 4) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    data.writeUInt32LE(state >>> 0, i);
+  }
+  noisePath = join(mkdtempSync(join(tmpdir(), "omezarr-noise-")), "noise.nii");
+  writeFileSync(noisePath, Buffer.concat([header, data]));
+  return noisePath;
+}
+
+test("a NIfTI archive conversion shows progress and cancels while it runs; its notes are visible", async ({ page }) => {
+  test.setTimeout(240000);
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles(noiseNifti());
+  await expect(page.locator("#fileInfo")).toHaveText("noise.nii · 1 ch × 128 × 1024 × 1024 · uint16 · 0.5 µm", { timeout: 120000 });
+  await expect(page.locator("#fileNotes")).toBeVisible();
+  await expect(page.locator("#fileNotes")).toContainText("NIfTI orientation dropped");
+  // The slowest compression keeps the conversion running long enough to cancel.
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#compression").fill("9");
+  await page.locator("#runButton").click();
+  const started = Date.now();
+  await expect(page.locator("#statusText")).toContainText("Converting… plane", { timeout: 30000 });
+  // Progress moves while the conversion holds the page's thread between chunks.
+  await expect.poll(() => page.locator("#progress").evaluate((bar) => bar.value), { timeout: 30000 }).toBeGreaterThan(0.05);
+  expect(await page.locator("#progress").evaluate((bar) => bar.value)).toBeLessThan(0.9);
+  const clicked = Date.now();
+  await page.locator("#cancelButton").click();
+  await expect(page.locator("#statusText")).toHaveText("Cancelled", { timeout: 5000 });
+  expect(Date.now() - clicked).toBeLessThan(5000);
+  await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
+  await expect(page.locator("#runButton")).toBeEnabled();
+  console.log(`NIfTI conversion cancelled ${Date.now() - started} ms after it started`);
+});
+
+test("an OME-TIFF of two images says before conversion that only the first is converted", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles(new URL("../../../packages/components/test/fixtures/tiff/two-images.ome.tif", import.meta.url).pathname);
+  await expect(page.locator("#fileInfo")).toHaveText("two-images.ome.tif · 1 ch × 2 × 4 × 5 · uint8");
+  await expect(page.locator("#fileNotes > span:first-child")).toHaveText("Converts image 1 of 2");
+  const tooltip = page.locator("#fileNotes .nd-info-tooltip");
+  await expect(tooltip).toHaveText(/only the first, large, is converted/);
+  await page.locator("#fileNotes .nd-info-icon").focus();
+  await expect(tooltip).toBeVisible();
+});
+
+test("a cancelled folder conversion removes its subfolder, so the same folder takes a retry", async ({ page }) => {
+  test.setTimeout(240000);
+  await page.addInitScript(() => {
+    window.showDirectoryPicker = async () => {
+      const root = await navigator.storage.getDirectory();
+      return root.getDirectoryHandle("retry", { create: true });
+    };
+  });
+  await loadExample(page);
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#destination").selectOption("folder");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Converting… plane", { timeout: 30000 });
+  await page.locator("#cancelButton").click();
+  await expect(page.locator("#statusText")).toHaveText("Cancelled");
+  const entries = () => page.evaluate(async () => {
+    const folder = await (await navigator.storage.getDirectory()).getDirectoryHandle("retry");
+    const names = [];
+    for await (const name of folder.keys()) names.push(name);
+    return names;
+  });
+  await expect.poll(entries).toEqual([]);
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("Saved to retry/retina-crop.ome.zarr", { timeout: 120000 });
+  expect(await entries()).toEqual(["retina-crop.ome.zarr"]);
 });
 
 test("cancelling a conversion leaves no output and a rerun completes", async ({ page }) => {

@@ -4,13 +4,20 @@
     "label": "Retina z-stack (OME-TIFF, 2 channels)",
     "description": "A two-channel confocal z-stack of retina (32 × 515 × 771 pixels, uint8), cropped from the OME Consortium's retina_large sample, with its micrometre voxel sizes and channel colours.",
     "expectedResult": "Convert it to a three-level OME-Zarr pyramid that keeps the 0.0229 × 0.0229 × 0.2 µm voxel size and both channels, view it, and download it as an .ozx archive.",
+    "attribution": {
+      "source": "Cropped from the OME Consortium sample sub-resolutions/Z-stack/retina_large.ome.tiff (from a Bitplane Imaris sample)",
+      "page": "https://downloads.openmicroscopy.org/images/OME-TIFF/2016-06/sub-resolutions/Z-stack/",
+      "license": "CC-BY-4.0",
+      "copyright": "© OME Consortium"
+    },
     "files": [
       {
         "role": "image",
         "name": "retina-crop.ome.tif",
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/34cb2e8c741240765ed75b48328ffe8676cbba24/omezarr-convert/example/retina-crop.ome.tif",
         "sha256": "a76758337ac07c0ffd2fa9f423409a31e576eb820e91c8b0830b221b6bdb8225",
-        "bytes": 1842339
+        "bytes": 1842339,
+        "license": "CC-BY-4.0"
       }
     ]
   }
