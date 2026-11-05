@@ -136,6 +136,13 @@ test("a TIFF whose pages would decode past the budget is refused before decoding
   await assert.rejects(readImage("stack.tif", tiff(pages)), /GB of pixels in 5 pages; save the plane/);
 });
 
+test("float16 TIFF pages count at their decoded float32 size against the budget", async () => {
+  // Stored as 2 bytes a sample, decoded to 4: five 8192² pages are 0.6 GiB on disk, 1.25 GiB decoded.
+  const page = { width: 8192, height: 8192, bits: 16, samples: [], tags: { 277: [1], 339: [3] } };
+  const pages = Array.from({ length: 5 }, () => page);
+  await assert.rejects(readImage("half.tif", tiff(pages)), /GB of pixels in 5 pages; save the plane/);
+});
+
 test("PNGs below 8 bits are unpacked: 1, 2 and 4-bit grey and indexed colour", async () => {
   for (const depth of [1, 2, 4]) {
     const width = 19;

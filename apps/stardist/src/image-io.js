@@ -61,7 +61,10 @@ async function readTiff(name, buffer) {
     if (image.getWidth() !== width || image.getHeight() !== height) {
       throw new Error(`${name} has pages of different sizes; save the plane to segment as its own image.`);
     }
-    bytes += width * height * image.getBytesPerPixel();
+    // Decoded size, not stored size: geotiff widens some samples (float16 to Float32Array).
+    for (let sample = 0; sample < image.getSamplesPerPixel(); sample++) {
+      bytes += width * height * image.getArrayForSample(sample, 1).BYTES_PER_ELEMENT;
+    }
   }
   if (bytes > MAX_DECODED_BYTES) {
     throw new Error(`${name} holds ${(bytes / 2 ** 30).toFixed(1)} GB of pixels in ${pages.length} pages; save the plane to segment as its own image.`);
