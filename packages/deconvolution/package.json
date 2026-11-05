@@ -1,0 +1,37 @@
+{
+  "name": "@neurodesk/deconvolution",
+  "version": "0.1.20261105",
+  "description": "Widefield and confocal 3D deconvolution in WebAssembly: a Gibson-Lanni PSF and Richardson-Lucy with optional total-variation regularisation",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./node": "./src/node.js",
+    "./worker": "./src/worker.js",
+    "./wasm": "./wasm/deconvolution_wasm.js",
+    "./LICENSE": "./LICENSE",
+    "./NOTICE": "./NOTICE",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "wasm",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/index.js && node --check src/node.js && node --check src/worker.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/deconvolution"
+  }
+}

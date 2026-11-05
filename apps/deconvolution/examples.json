@@ -1,0 +1,17 @@
+[
+  {
+    "id": "hela-phalloidin-confocal",
+    "label": "HeLa actin, confocal",
+    "description": "Confocal stack of HeLa cells with phalloidin-488 actin (Zeiss LSM 710, 63×/1.4 oil, 488 nm excitation, 525 nm emission), 256 × 256 × 41 at 66 nm × 130 nm. Romain Guiet, EPFL BIOP, Zenodo 5101351, CC BY 4.0.",
+    "expectedResult": "In about 30 seconds, a sharper stack with thinner actin fibres and less axial haze, and the confocal PSF used, as TIFF and NIfTI.",
+    "files": [
+      {
+        "role": "image",
+        "name": "hela-phalloidin488-confocal.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/726eee4a192bf75315b80ed693b64d158b07b703/deconvolution/example/hela-phalloidin488-confocal.tif",
+        "sha256": "a79ed0b43b7ed37fa6b70eed6a2b72202daf67e528db871533d77c9b6ae8f266",
+        "bytes": 2782466
+      }
+    ]
+  }
+]

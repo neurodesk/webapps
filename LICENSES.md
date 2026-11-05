@@ -36,6 +36,11 @@ for each app are recorded in `registry/apps.yml`.
   the bundled `clipper-lib`, in `apps/stardist/NOTICE`. The build ships both files at the app's root
 - `apps/spot-detection`: BSD-3-Clause (`apps/spot-detection/LICENSE`), as the Big-FISH 0.6.2 source it ports;
   attribution, and the fdlibm notice of its erf, in `apps/spot-detection/NOTICE`. The build copies both into the app
+- `packages/deconvolution`: MIT (`packages/deconvolution/LICENSE`); the WebAssembly build of
+  `exes/deconvolution` (MIT), statically linking RustFFT, RealFFT and libm (MIT), whose Bessel
+  functions carry the FreeBSD msun / Sun Microsystems notice (`packages/deconvolution/NOTICE`).
+  `apps/deconvolution` stages both files in its build under `licenses/`.
+- `packages/microscopy-tiff`: MIT (`packages/microscopy-tiff/LICENSE`); decodes with geotiff.js (MIT)
 - `packages/shoreline`: Apache-2.0 AND BSD-3-Clause (`packages/shoreline/LICENSE`,
   `packages/shoreline/NOTICE`); the WebAssembly build of `exes/dwi/shoreline`, whose 3dSHORE
   and topup displacement crates port QSIPrep and DIPY code (BSD-3-Clause)

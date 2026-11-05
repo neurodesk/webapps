@@ -5242,6 +5242,13 @@
       "contentType": "image/tiff",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/726eee4a192bf75315b80ed693b64d158b07b703/deconvolution/example/hela-phalloidin488-confocal.tif": {
+      "sha256": "a79ed0b43b7ed37fa6b70eed6a2b72202daf67e528db871533d77c9b6ae8f266",
+      "bytes": 2782466,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6592,6 +6599,9 @@
     "structure-tensor": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif"
+    ],
+    "deconvolution": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/726eee4a192bf75315b80ed693b64d158b07b703/deconvolution/example/hela-phalloidin488-confocal.tif"
     ]
   }
 }
