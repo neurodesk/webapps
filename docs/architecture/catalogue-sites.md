@@ -106,6 +106,6 @@ attach the custom domains.
 1. Add an entry to `site.catalogs` with `hosting: worker`, and add its logo to
    `site/` if it has a new brand.
 2. Set `catalog:` on its apps.
-3. Add its host to the `deploy-workers` matrix in `deploy-pages.yml`.
+3. Add its host to the `deploy-workers` and `verify-workers` matrices in `deploy-pages.yml`. The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
 4. Build, then run `node --test test/catalog-sites.test.mjs` and
    `pnpm audit:artifacts`.
