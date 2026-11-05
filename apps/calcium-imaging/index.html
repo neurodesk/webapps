@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calcium imaging — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input movie</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="movieInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF movie" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a multi-page or OME-TIFF movie</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div class="nd-field">
+            <label for="frameRate">Frame rate <small>Hz</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the frame rate">i<span class="nd-info-tooltip">Read from OME TimeIncrement or ImageJ finterval when the file records it. It sets the baseline window and the time axis.</span></span>
+            </label>
+            <input id="frameRate" type="number" min="0.01" step="any" inputmode="decimal" />
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Preprocessing</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="motion">Motion correction
+              <span class="nd-info-icon" tabindex="0" aria-label="About motion correction">i<span class="nd-info-tooltip">Rigid: one sub-pixel translation per frame. Piecewise rigid: NoRMCorre-style overlapping patches, each limited to a few pixels from the rigid shift.</span></span>
+            </label>
+            <select id="motion">
+              <option value="rigid" selected>Rigid</option>
+              <option value="piecewise">Piecewise rigid</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div class="nd-field">
+            <label for="diameter">Cell diameter <small>px</small></label>
+            <input id="diameter" type="number" min="3" max="100" step="any" value="10" inputmode="decimal" />
+          </div>
+          <label class="nd-check"><input id="deconvolution" type="checkbox" checked /> Deconvolve spikes (OASIS AR(1))</label>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="maxShift">Max shift <small>px</small></label>
+                  <input id="maxShift" type="number" min="0" max="200" step="1" value="10" />
+                </div>
+                <div class="nd-field">
+                  <label for="upsample">Upsampling
+                    <span class="nd-info-icon" tabindex="0" aria-label="About upsampling">i<span class="nd-info-tooltip">Shifts are refined on a 1/upsampling pixel grid (Guizar-Sicairos et al. 2008); 10 gives 0.1 px steps.</span></span>
+                  </label>
+                  <input id="upsample" type="number" min="1" max="100" step="1" value="10" />
+                </div>
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="normalization">Estimator</label>
+                  <select id="normalization">
+                    <option value="none" selected>Cross-correlation</option>
+                    <option value="phase">Phase correlation</option>
+                  </select>
+                </div>
+                <div class="nd-field">
+                  <label for="templatePasses">Template passes
+                    <span class="nd-info-icon" tabindex="0" aria-label="About template passes">i<span class="nd-info-tooltip">The first template is the median of 10-frame means. Each extra pass registers to the mean of the previous pass's registered frames.</span></span>
+                  </label>
+                  <input id="templatePasses" type="number" min="1" max="5" step="1" value="2" />
+                </div>
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="patchSize">Patch <small>px</small></label>
+                  <input id="patchSize" type="number" min="16" max="1024" step="1" value="64" />
+                </div>
+                <div class="nd-field">
+                  <label for="patchOverlap">Overlap <small>px</small></label>
+                  <input id="patchOverlap" type="number" min="0" max="1023" step="1" value="32" />
+                </div>
+                <div class="nd-field">
+                  <label for="maxDeviation">Deviation <small>px</small>
+                    <span class="nd-info-icon" tabindex="0" aria-label="About patch deviation">i<span class="nd-info-tooltip">Piecewise rigid only: the largest shift of a patch away from the frame's rigid shift.</span></span>
+                  </label>
+                  <input id="maxDeviation" type="number" min="0" max="50" step="1" value="3" />
+                </div>
+              </div>
+              <div class="nd-field">
+                <label for="seedZ">ROI seed threshold <small>robust z</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the seed threshold">i<span class="nd-info-tooltip">Seeds are local maxima of the correlation image at least z × 1.4826 × MAD above its median. Lower finds more, weaker ROIs.</span></span>
+                </label>
+                <input id="seedZ" type="number" min="0.5" max="50" step="any" value="4" />
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="neuropilCoefficient">Neuropil <small>r</small>
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the neuropil coefficient">i<span class="nd-info-tooltip">Fc = F − r · Fneu, with r = 0.7 as in Chen et al. 2013 and Suite2p.</span></span>
+                  </label>
+                  <input id="neuropilCoefficient" type="number" min="0" max="1.5" step="any" value="0.7" />
+                </div>
+                <div class="nd-field">
+                  <label for="baselineWindow">Baseline <small>s</small>
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the baseline">i<span class="nd-info-tooltip">F0 is a running percentile of Fc over a centred window of this length, shorter at the ends.</span></span>
+                  </label>
+                  <input id="baselineWindow" type="number" min="1" step="any" value="60" />
+                </div>
+                <div class="nd-field">
+                  <label for="baselinePercentile">Percentile</label>
+                  <input id="baselinePercentile" type="number" min="0" max="100" step="any" value="8" />
+                </div>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run preprocessing</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="roiSection">
+        <summary class="nd-section-title">ROIs</summary>
+        <div class="nd-section-content">
+          <p id="roiInfo" class="nd-hint">Click a cell in the viewer, then add or remove its ROI.</p>
+          <div class="nd-row">
+            <button id="addRoi" class="nd-btn nd-btn-secondary" type="button" disabled>Add ROI at cursor</button>
+            <button id="removeRoi" class="nd-btn nd-btn-secondary" type="button" disabled>Remove ROI at cursor</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a TIFF movie anywhere, or choose an example.</p>
+        <section id="traceReport" class="nd-viewer-report" aria-label="Traces" hidden></section>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Two-photon calcium imaging preprocessing in the browser: motion correction, summary images, ROIs, neuropil-corrected ΔF/F and spike deconvolution, all on the CPU in web workers.</p>
+      <p><strong>Motion correction.</strong> Each frame is registered to a template by the Fourier cross-correlation (or, optionally, phase correlation) refined to 1/upsampling of a pixel with the matrix-multiply DFT of Guizar-Sicairos et al. 2008. The first template is the median of 10-frame means; later passes use the mean of the registered frames. Piecewise rigid splits the frame into overlapping patches as NoRMCorre does (Pnevmatikakis &amp; Giovannucci 2017), limits each patch to a few pixels from the rigid shift and interpolates the patch shifts bilinearly to every pixel. Frames are resampled bilinearly with replicated borders. On the example the rigid shifts equal CaImAn's register_translation for every frame given the same template.</p>
+      <p><strong>Summary images.</strong> Mean, maximum and the local correlation image: the mean Pearson correlation of each pixel with its eight neighbours (Smith &amp; Häusser 2010).</p>
+      <p><strong>ROIs.</strong> A simple, documented detector that is not Suite2p's or CNMF's: local maxima of the correlation image at least z robust standard deviations above its median seed a watershed limited to one cell diameter. It finds cells that are active during the recording; add silent cells with Add ROI at cursor, which places a disc of one cell diameter.</p>
+      <p><strong>ΔF/F.</strong> F is the ROI mean, the neuropil the surrounding ring (from 2 px outside the ROI, at least 200 px, excluding pixels near any ROI), Fc = F − 0.7 · Fneu, F0 a running 8th percentile of Fc over 60 s, and ΔF/F = (Fc − F0)/F0. Where F0 is not positive ΔF/F is undefined, so that ROI is flagged and not deconvolved.</p>
+      <p><strong>Deconvolution.</strong> OASIS for an AR(1) model with an L1 penalty (Friedrich et al. 2017), with λ chosen so the residual matches the noise, the noise from the high-frequency power spectrum and the decay from the autocovariance. It is written from the paper and matches the OASIS reference implementation on test traces.</p>
+      <p>Outputs: the registered movie (TIFF, input sample type), shifts (CSV), the summary images and ROI labels (TIFF), traces and ROI tables (CSV), the trace plot (SVG) and provenance (JSON).</p>
+    </template>
+    <template id="privacyContent"><p>Movies are processed locally in this browser and are never uploaded. Only the example is downloaded, from the Neurodesk dataset on Hugging Face.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

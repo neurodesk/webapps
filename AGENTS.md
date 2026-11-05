@@ -182,6 +182,14 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - `e2e/workflow.spec.js` runs each example on WebAssembly and requires every table to equal the original container's (`packages/brainqcnet/validation/references`) byte for byte, except tot_df.csv's `t`, the processing time. The still example is the untagged run (3.4 minutes on 8 cores, longer on hosted runners); the motion example is `@slow`.
 - The app has no command line of its own: the Standalone dialog lists the authors' `garciaml/brainqcnetcpu` image at tag 1.0.1 (`registry/standalone-exceptions.json`); the validation pins its digest. The deployed-site check rejects a digest in the dialog.
 
+## calcium-imaging
+
+- The numerics are pure JavaScript in `apps/calcium-imaging/src/core` (registration, FFT, images, ROIs, traces, OASIS, pipeline), written from the papers. CaImAn (GPL-2), Suite2p and OASIS (GPL-3) are external validation references only: never copy their code. `validation/*.py` record their outputs into `test/fixtures` and `validation/caiman-rigid-shifts.json`; rerun them (README lists the environment) instead of loosening a tolerance.
+- Shifts are `[dy, dx]` applied to a frame to register it. The default estimator is the plain Fourier cross-correlation because that is what NoRMCorre and CaImAn compute; with one template pass the example's shifts equal CaImAn's `register_translation` on every frame, and `e2e/smoke.spec.js` holds the browser to that and to the Node pipeline. Keep both.
+- TIFF stacks are read and written only through `@neurodesk/webapp-components/file-io/tiff`; do not add an app-local TIFF reader or writer.
+- The worker pool shares the movie through SharedArrayBuffer (the page is cross-origin isolated) and falls back to one worker with copies. Each task gets a fresh worker, terminated on cancel.
+- ROI detection is deliberately simple (correlation-image seeds and watershed) and is not Suite2p's or CNMF's; About and the README say so. It leaves out the border band that resampling filled from the edge.
+
 ## nesvor and the compute server
 
 - `apps/nesvor` is the first app whose method runs outside the browser: NeSVoR needs CUDA, so the

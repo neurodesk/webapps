@@ -2277,3 +2277,52 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  calcium-imaging:
+    packages:
+      - { name: Calcium imaging pipeline, url: https://github.com/neurodesk/webapps/tree/main/apps/calcium-imaging/src/core, role: "motion correction, summary images, ROIs, ΔF/F and OASIS AR(1) deconvolution, written from the papers below" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Motion correction
+        title: Efficient subpixel image registration
+        reference: "Guizar-Sicairos M, Thurman ST, Fienup JR. Efficient subpixel image registration algorithms. Optics Letters. 2008;33(2):156–158."
+        doi: 10.1364/OL.33.000156
+      - group: Motion correction
+        title: NoRMCorre
+        reference: "Pnevmatikakis EA, Giovannucci A. NoRMCorre: An online algorithm for piecewise rigid motion correction of calcium imaging data. Journal of Neuroscience Methods. 2017;291:83–94."
+        doi: 10.1016/j.jneumeth.2017.07.031
+      - group: Summary images and ROIs
+        title: Local correlation image
+        reference: "Smith SL, Häusser M. Parallel processing of visual space by neighboring neurons in mouse visual cortex. Nature Neuroscience. 2010;13(9):1144–1149."
+        doi: 10.1038/nn.2620
+      - group: Summary images and ROIs
+        title: Watershed by flooding
+        reference: "Meyer F. Topographic distance and watershed lines. Signal Processing. 1994;38(1):113–125."
+        doi: 10.1016/0165-1684(94)90060-4
+      - group: ΔF/F
+        title: Neuropil subtraction (r = 0.7)
+        reference: "Chen TW, Wardill TJ, Sun Y, et al. Ultrasensitive fluorescent proteins for imaging neuronal activity. Nature. 2013;499(7458):295–300."
+        doi: 10.1038/nature12354
+      - group: Deconvolution
+        title: OASIS
+        reference: "Friedrich J, Zhou P, Paninski L. Fast online deconvolution of calcium imaging data. PLoS Computational Biology. 2017;13(3):e1005423."
+        doi: 10.1371/journal.pcbi.1005423
+      - group: Deconvolution
+        title: Noise and AR coefficient estimation
+        reference: "Pnevmatikakis EA, Soudry D, Gao Y, et al. Simultaneous denoising, deconvolution, and demixing of calcium imaging data. Neuron. 2016;89(2):285–299."
+        doi: 10.1016/j.neuron.2015.11.037
+      - group: Validation reference
+        title: CaImAn
+        reference: "Giovannucci A, Friedrich J, Gunn P, et al. CaImAn an open source tool for scalable calcium imaging data analysis. eLife. 2019;8:e38173."
+        doi: 10.7554/eLife.38173
+        code: https://github.com/flatironinstitute/CaImAn
+      - group: Example data
+        title: Mouse auditory cortex two-photon imaging (DANDI 000249)
+        reference: "Schiavo JK, Valtcheva S, Bair-Marshall CJ, Song SC, Martin KA, Froemke RC. Innate and plastic mechanisms for maternal behaviour in auditory cortex. Nature. 2020;587(7834):426–431. Data: DANDI archive 000249, version 0.230423.1416, CC-BY-4.0."
+        doi: 10.1038/s41586-020-2807-6
+        url: https://doi.org/10.48324/dandi.000249/0.230423.1416
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

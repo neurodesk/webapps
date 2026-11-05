@@ -4923,6 +4923,13 @@
         "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/isles2022/sub-strokecase0001_ses-0001_adc.json",
         "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/isles2022/sub-strokecase0001_ses-0001_dwi.json"
       ]
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dfeaa34dfe99f74bfbeb4b716235235dac7cd6d6/calcium-imaging/example/froemke-nv60-a1-gcamp-400frames.ome.tif": {
+      "sha256": "574bb8e15f4ddf8308731b8a15f51b5e04e11ba3dfed6986233b529aedfa1c6e",
+      "bytes": 41783273,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6216,6 +6223,9 @@
       "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/group1-shard1of1.bin",
       "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/model.json",
       "https://raw.githubusercontent.com/neuroneural/brainchop/4c87885f3a2a8835e260d521dcec922b58d91d41/public/models/model21_104class/model_D95.json"
+    ],
+    "calcium-imaging": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dfeaa34dfe99f74bfbeb4b716235235dac7cd6d6/calcium-imaging/example/froemke-nv60-a1-gcamp-400frames.ome.tif"
     ]
   }
 }

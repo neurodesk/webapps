@@ -6,6 +6,7 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 import { dicomSeries } from '../test-utils/dicom-fixture.mjs';
 import { bidsTree, dropFolder } from '../test-utils/bids-folder-drop.mjs';
+import { imagejDescription, writeTiffStack } from '../packages/components/src/file-io/tiff.js';
 
 function nifti(name, value = 20) {
   const buffer = Buffer.alloc(352 + 4096, 0);
@@ -55,6 +56,23 @@ async function checkBidsRun(page) {
   await expect(page.locator('#runSelect')).toBeHidden();
   await input.tap();
   await expect(page.locator('#runSelect')).toHaveValue('1');
+}
+// A 32 × 24 uint16 movie of 30 frames at 10 Hz with one blinking blob, as an ImageJ TIFF.
+function calciumMovie(name) {
+  const width = 32;
+  const height = 24;
+  const frames = 30;
+  const data = new Uint16Array(frames * width * height);
+  for (let f = 0; f < frames; f++) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const blob = Math.exp(-((y - 12) ** 2 + (x - 16) ** 2) / 8) * (f % 10 < 3 ? 400 : 100);
+        data[(f * height + y) * width + x] = Math.round(200 + blob + ((f * 31 + y * 7 + x * 13) % 17));
+      }
+    }
+  }
+  const description = imagejDescription({ frames, frameInterval: 0.1 });
+  return { name, mimeType: 'image/tiff', buffer: Buffer.from(writeTiffStack({ width, height, data, description })) };
 }
 const apps = (await loadAppsRegistry()).apps;
 const site = await serveSite(join(repoRoot, 'dist'));
@@ -633,6 +651,39 @@ try {
     await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
     await expect(page.locator('#maskField')).toContainText('Drop a mask on the image grid');
+  });
+  await check('calcium-imaging', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#movieInput').setInputFiles(calciumMovie('interface-movie.tif'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-movie.tif · 32 × 24 · 30 frames · uint16 · 10.00 Hz');
+    await expect(page.locator('#frameRate')).toHaveValue('10');
+    await page.locator('#motion').selectOption('none');
+    // Values chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#seedZ')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#seedZ').fill('3');
+    await page.locator('#baselineWindow').fill('2');
+    await advanced.tap();
+    await expect(page.locator('#seedZ')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#motion')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#seedZ')).toHaveValue('3');
+    await expect(page.locator('#baselineWindow')).toHaveValue('2');
+    await expect(page.locator('#motion')).toHaveValue('none');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toContainText('Preprocessing complete', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Registered movie · None');
+    // A new movie withdraws the results of the old one.
+    await page.locator('#movieInput').setInputFiles(calciumMovie('interface-movie-2.tif'));
+    await expect(page.locator('#fileInfo')).toContainText('interface-movie-2.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
   await check('brainqcnet', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });

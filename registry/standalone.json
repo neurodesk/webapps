@@ -2057,6 +2057,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "calcium-imaging": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }
