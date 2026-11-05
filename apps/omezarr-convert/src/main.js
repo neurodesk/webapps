@@ -344,7 +344,10 @@ async function convert(signal, settings = settingsFromForm(), overrides = metada
     try {
       await showOutput(output, current);
     } catch (error) {
-      log.log(`The written OME-Zarr was not previewed: ${error.name === "AbortError" ? "cancelled" : error.message}`, "error");
+      const cancelled = error.name === "AbortError";
+      log.log(`The written OME-Zarr was not previewed: ${cancelled ? "cancelled" : error.message}`, cancelled ? "info" : "error");
+      // The viewer must not go on showing the input as if it were the output.
+      await showNoPreview(`The OME-Zarr was written; its preview was ${cancelled ? "cancelled" : "not possible"}.`).catch(() => {});
     }
     const done = folder ? `Saved to ${folder.name}/${stem}.ome.zarr` : "OME-Zarr ready";
     progress.end(done);
