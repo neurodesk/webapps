@@ -1,7 +1,7 @@
 {
-  "version": "10.0.0",
-  "qsmCore": "v0.39.0",
-  "source": "https://github.com/QSMxT/QSMxT/tree/544ef94708904ec84e4f20128a22e99568e08687",
+  "version": "0.0.0",
+  "qsmCore": "v0.40.0",
+  "source": "https://github.com/QSMxT/QSMxT/tree/999445010a067d9597299f217a9a1165d4b7d62d",
   "license": "GPL-3.0-only",
   "targets": {
     "linux-x64": {
@@ -67,5 +67,11 @@
   "exampleRegistry": {
     "url": "https://raw.githubusercontent.com/QSMxT/QSMxT/544ef94708904ec84e4f20128a22e99568e08687/src/example/mod.rs",
     "sha256": "8b36ec302028b9ed774d0572024a53a1e474ac30274bc52f0dac24f4171279d5"
+  },
+  "build": {
+    "commit": "999445010a067d9597299f217a9a1165d4b7d62d",
+    "url": "https://api.github.com/repos/QSMxT/QSMxT/tarball/999445010a067d9597299f217a9a1165d4b7d62d",
+    "sha256": "b387365544408385f5de972db949d518be91509649617d8bf4f721c4f14fcec1",
+    "toolchain": "1.98.1"
   }
 }

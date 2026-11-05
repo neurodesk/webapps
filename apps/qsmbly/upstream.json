@@ -1,8 +1,8 @@
 {
   "repository": "https://github.com/astewartau/qsmbly",
-  "previousCommit": "cf88ee361e315c48d867156fd9b6de5599dc62cd",
-  "commit": "0b6e3d3cf4c71a0d45d126f60fb2bf949bed35d3",
-  "qsmCore": "95be94b83b43e80329b4ecfe8a74cf8114ea927a",
+  "previousCommit": "0b6e3d3cf4c71a0d45d126f60fb2bf949bed35d3",
+  "commit": "dab1846f41d69af9111ffa91d21457a1cf40f4d7",
+  "qsmCore": "046e2e3bd21b1f35ce2760c115145c52956645a2",
   "integration": [
     "Keep the monorepo shell, design system, shared dialogs and real-brain example manifest.",
     "Adapt PipelineExecutor to QsmPipelineController and the shared WorkerSession protocol.",
@@ -18,7 +18,8 @@
     "Keep the canonical Neurodesk workspace and shared controls. The upstream next.html/Preact preview is not imported; run its engine oracle separately against the pinned source when validating scientific changes.",
     "Load dicompare's embed, worker and schemas from https://webapps.neurodesk.org/dicompare/ (this repository's deployment of apps/dicompare/public), not dicompare.neurodesk.org, whose GitHub Pages site stopped serving in October 2026; the rewrite keeps upstream's URLs pointed there.",
     "The run worker's describeFailure comes from js/worker/utils/EngineFailure.js, the part of upstream's ignored js/next/engine/engine-call.js it uses; the rewrite points upstream's import there. Port changes to describeFailure by hand.",
-    "rust-wasm/src/lib.rs apply_mask_section sets masking.recipe_chosen so a QSMART export keeps the browser's mask recipe (QSMxT 1f72772 swaps an unchosen general default for QSMART's BET). Upstream has no such line: by QSMxT 9994450, which upstream pins, \"Never change one setting to suit a method\" removed the field and the swap. When the pin moves past it, delete both recipe_chosen lines and the test's !recipe_chosen assertion; keep the test's command and round-trip assertions."
+    "rust-wasm/src/lib.rs apply_mask_section sets masking.recipe_chosen so a QSMART export keeps the browser's mask recipe (QSMxT 1f72772 swaps an unchosen general default for QSMART's BET). Upstream has no such line: by QSMxT 9994450, which upstream pins, \"Never change one setting to suit a method\" removed the field and the swap. When the pin moves past it, delete both recipe_chosen lines and the test's !recipe_chosen assertion; keep the test's command and round-trip assertions.",
+    "Preserve the build.sh DL-only wasm-opt -Oz post-pass and its required-tool check. Keep threads, bulk-memory, mutable-globals and SIMD enabled, and validate real DL inference before accepting optimizer changes. This monorepo adaptation keeps the delivered module under the unchanged 25 MiB host limit."
   ],
   "branch": "main",
   "rewrite": {
@@ -68,5 +69,5 @@
     "selector": "#citationsModal",
     "output": "upstream-citations.json"
   },
-  "qsmxtEngine": "1f72772d4ae1ed7264a19c65ce1053ca05a8663d"
+  "qsmxtEngine": "999445010a067d9597299f217a9a1165d4b7d62d"
 }

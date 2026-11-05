@@ -296,10 +296,10 @@ pub fn tgv_qsm_wasm_with_progress(
     let params = qsm_core::inversion::tgv::TgvParams {
         alpha0: alpha0 as f32,
         alpha1: alpha1 as f32,
-        iterations,
+        iterations: Some(iterations),
         erosions,
         step_size: 3.0,
-        tol: 1e-5,
+        ..Default::default()
     };
 
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
@@ -326,7 +326,7 @@ pub fn tgv_qsm_wasm_with_progress(
 /// Returns [alpha0, alpha1]
 #[wasm_bindgen]
 pub fn tgv_get_default_alpha_wasm(regularization: u8) -> Vec<f64> {
-    let (alpha0, alpha1) = qsm_core::inversion::tgv::get_default_alpha(regularization);
+    let (alpha0, alpha1) = qsm_core::inversion::tgv::get_default_alpha(f32::from(regularization));
     vec![alpha0 as f64, alpha1 as f64]
 }
 
@@ -828,7 +828,8 @@ pub fn makehomogeneous_wasm(
     }
 
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
-    let result = qsm_core::utils::bias_correction::makehomogeneous(mag, &grid, sigma_clamped, nbox);
+    let result = qsm_core::utils::bias_correction::makehomogeneous(mag, &grid, sigma_clamped, nbox)
+        .map_err(js_err)?;
 
     console_log!("WASM makehomogeneous complete");
     Ok(result)
@@ -887,7 +888,8 @@ pub fn vasculature_mask_wasm_with_progress(
         &grid,
         &params,
         js_progress(progress_callback),
-    );
+    )
+    .map_err(js_err)?;
 
     console_log!("WASM vasculature_mask complete");
     Ok(result)
@@ -1056,11 +1058,11 @@ config_defaults!(get_tfi_defaults, qsmxt_engine::config::TfiConfig);
 config_defaults!(get_qsmart_defaults, qsmxt_engine::config::QsmartConfig);
 config_defaults!(get_romeo_defaults, qsmxt_engine::config::RomeoConfig);
 
-/// MCPC-3D-S defaults, `{"sigma": [x, y, z]}`. qsmxt-engine folded its MCPC-3D-S section into
-/// `[field_mapping]` (`phase_offset_sigma`); this keeps the shape the UI reads.
+/// MCPC-3D-S defaults, `{"sigma": [x, y, z]}` in mm. qsmxt-engine folded its MCPC-3D-S section
+/// into `[field_mapping]` (`phase_offset_sigma_mm`); this keeps the shape the UI reads.
 #[wasm_bindgen]
 pub fn get_mcpc3ds_defaults() -> String {
-    let sigma = qsmxt_engine::config::FieldMappingConfig::default().phase_offset_sigma;
+    let sigma = qsmxt_engine::config::FieldMappingConfig::default().phase_offset_sigma_mm;
     serde_json::json!({ "sigma": sigma }).to_string()
 }
 
@@ -1105,7 +1107,7 @@ mod tests {
 
     #[test]
     fn magnitude_only_relaxometry_preserves_hertz_seconds_and_mask() {
-        let tes = [0.01, 0.02, 0.03];
+        let tes = [0.03, 0.01, 0.02];
         let magnitudes: Vec<f64> = tes
             .iter()
             .map(|te| 100.0 * (-20.0_f64 * te).exp())
@@ -1309,20 +1311,17 @@ mod tests {
     }
 
     // The browser made its mask with this recipe, so exports must describe it even where it
-    // equals the general default and the inversion (QSMART) has a default mask of its own.
+    // equals the general default. QSMART no longer substitutes its own default mask.
     #[test]
     fn a_qsmart_export_keeps_the_mask_recipe_the_browser_used() {
         let mut config = qsmxt_engine::PipelineConfig::default();
         config.inversion.algorithm = qsmxt_engine::QsmAlgorithm::Qsmart;
         apply_mask_section(&mut config, "phase-quality,threshold:otsu,dilate:1,fill-holes:0,erode:1").unwrap();
         let command = qsmxt_engine::generate_command(&config);
-        assert!(command.contains("--mask-preset robust-threshold"), "{command}");
+        assert_eq!(config.normalised().0.masking.sections, config.masking.sections);
+        assert_eq!(command, "qsmxt run <bids_dir> --qsm-algorithm qsmart");
         let back = qsmxt_engine::PipelineConfig::from_toml(&config.to_toml().unwrap()).unwrap();
         assert_eq!(back.normalised().0.masking.sections, config.masking.sections);
-        // Where the mark decides nothing it is not set, so the settings file does not carry it.
-        let mut rts = qsmxt_engine::PipelineConfig::default();
-        apply_mask_section(&mut rts, "phase-quality,threshold:otsu,dilate:1,fill-holes:0,erode:1").unwrap();
-        assert!(!rts.masking.recipe_chosen);
     }
 
     #[test]
@@ -1453,11 +1452,6 @@ fn apply_mask_section(
         generator,
         refinements: ops,
     }];
-    // The browser made its mask with this recipe, so it is chosen: without the mark the engine
-    // swaps the general default for the inversion's own (QSMART's BET) in command and methods.
-    // Keep the mark only where normalising does, so other runs' settings files do not carry it.
-    config.masking.recipe_chosen = true;
-    config.masking.recipe_chosen = config.normalised().0.masking.recipe_chosen;
     Ok(())
 }
 
@@ -1486,7 +1480,9 @@ pub fn validate_config_wasm(toml_string: &str) -> String {
 // Shared pipeline stage functions (guaranteed identical to qsmxt.rs)
 // =========================================================================
 
-/// Run background removal: total field → local field (ppm).
+/// Run background removal: total field → local field (ppm). `echo_times` (s) and `magnitude` are
+/// what a magnitude-weighted method reads (PDF: every echo's magnitude, the echo slowest, at
+/// evenly spaced echo times); either may be empty for the others.
 ///
 /// Returns [local_field_ppm, eroded_mask_f64].
 #[wasm_bindgen]
@@ -1500,6 +1496,8 @@ pub fn run_bg_removal_wasm(
     vsy: f64,
     vsz: f64,
     field_strength: f64,
+    echo_times: &[f64],
+    magnitude: &[f64],
     config_toml: &str,
     progress_callback: &js_sys::Function,
 ) -> Result<Vec<f64>, JsValue> {
@@ -1512,16 +1510,18 @@ pub fn run_bg_removal_wasm(
     let meta = qsmxt_engine::to_scan_metadata(
         (nx, ny, nz),
         (vsx, vsy, vsz),
-        &[],
+        echo_times,
         field_strength,
         (0.0, 0.0, 1.0),
         None,
     );
+    let magnitude = (!magnitude.is_empty()).then_some(magnitude);
     let result = qsm_core::pipeline::run_bg_removal(
         field_ppm,
         mask,
         &meta,
         &bg_config,
+        magnitude,
         &mut js_progress(progress_callback),
     );
 
@@ -1654,11 +1654,23 @@ fn magnitude_relaxometry(
     if magnitudes.iter().any(|v| !v.is_finite()) {
         return Err("magnitude contains non-finite values".into());
     }
-    let [nx, ny, nz] = dims;
-    let [vx, vy, vz] = voxel_size;
-    let grid = qsm_core::Grid::new(nx, ny, nz, vx, vy, vz);
-    let (mut r2star, _) = qsm_core::r2star::r2star_arlo(magnitudes, mask, echo_times, &grid)
+    let n_echoes = echo_times.len();
+    let mut order: Vec<usize> = (0..n_echoes).collect();
+    order.sort_by(|&a, &b| echo_times[a].total_cmp(&echo_times[b]));
+    let sorted_times: Vec<f64> = order.iter().map(|&e| echo_times[e]).collect();
+    let mut echo_volumes = vec![0.0; magnitudes.len()];
+    for (e, &source) in order.iter().enumerate() {
+        for v in 0..count {
+            echo_volumes[e * count + v] = magnitudes[v * n_echoes + source];
+        }
+    }
+    let mut r2star = qsm_core::r2star::arlo(&echo_volumes, &sorted_times, count)
         .map_err(|e| e.to_string())?;
+    for (value, &included) in r2star.iter_mut().zip(mask) {
+        if included == 0 {
+            *value = 0.0;
+        }
+    }
     let t2star = qsm_core::r2star::t2star_from_r2star(&r2star);
     r2star.extend(t2star);
     Ok(r2star)

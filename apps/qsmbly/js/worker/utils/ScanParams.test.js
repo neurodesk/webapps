@@ -15,8 +15,9 @@ describe('requireFieldStrength', () => {
 });
 
 describe('echoTimeDependentStep', () => {
-  test('TGV and MEDI depend on the echo time', () => {
+  test('TGV, MEDI and PDF depend on the echo time', () => {
     expect(echoTimeDependentStep({ combined_method: 'tgv' })).toBe('TGV');
+    expect(echoTimeDependentStep({ bf_algorithm: 'pdf' })).toBe('PDF');
     expect(echoTimeDependentStep({ dipole_inversion: 'medi' })).toBe('MEDI');
     expect(echoTimeDependentStep({ combined_method: 'qsmart', qsmart: { inversion_algorithm: 'medi' } }))
       .toMatch(/MEDI/);

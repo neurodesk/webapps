@@ -40,7 +40,7 @@ const DERIVED = {
   },
   TGV_DEFAULTS: {
     from: 'TGV_DEFAULTS',
-    keys: ['alpha0', 'alpha1', 'iterations', 'erosions', 'step_size', 'tol'],
+    keys: ['alpha0', 'alpha1', 'iterations', 'erosions', 'step_size'],
     extras: { regularization: 'number' },
   },
   SWI_DEFAULTS: { from: 'SWI_DEFAULTS', keys: ['hp_sigma', 'scaling', 'strength', 'mip_window'] },
@@ -65,7 +65,7 @@ const DERIVED = {
     from: 'DL_TILING_DEFAULTS',
     keys: ['tile_core', 'tile_halo', 'tileable', 'off_design', 'native'],
   },
-  NLTV_DEFAULTS: { from: 'NLTV_DEFAULTS', keys: ['lambda', 'mu', 'max_iter', 'tol', 'newton_max_iter:newton_iter'] },
+  NLTV_DEFAULTS: { from: 'NLTV_DEFAULTS', keys: ['lambda', 'mu', 'max_iter', 'tol', 'newton_max_iter:max_iter_newton'] },
   NDI_DEFAULTS: { from: 'NDI_DEFAULTS', keys: ['tau', 'alpha', 'max_iter'] },
   FANSI_DEFAULTS: { from: 'FANSI_DEFAULTS', keys: ['alpha1', 'mu1', 'mu2', 'alpha0', 'mu0', 'max_iter', 'tol_update'] },
   L1QSM_DEFAULTS: { from: 'L1QSM_DEFAULTS', keys: ['alpha1', 'mu1', 'mu2', 'mu3', 'lambda', 'max_iter', 'tol_update'] },
@@ -89,8 +89,9 @@ const splitKey = (k) => {
 };
 
 // A generated value is whatever serde_json emits for a qsmxt-engine field.
+// null: a value qsm-core works out from the scan at run time (TV's rho, TGV's iterations, ...).
 const isJsonScalarOrArray = (v) =>
-  ['number', 'boolean', 'string'].includes(typeof v) ||
+  v === null || ['number', 'boolean', 'string'].includes(typeof v) ||
   (Array.isArray(v) && v.every(x => ['number', 'string'].includes(typeof x)));
 
 describe('Config Module', () => {

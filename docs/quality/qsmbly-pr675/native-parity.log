@@ -1,0 +1,50 @@
+qsmbly run <repository>/parity-4276acff-20261104/native-retry/bids <repository>/parity-4276acff-20261104/native-retry/out --mask phase-quality,threshold:otsu,dilate:1,fill-holes:0,erode:2 --vsharp-max-radius 18 --qsm-algorithm rts
+{
+  "seconds": 106,
+  "metrics": {
+    "identical": false,
+    "maskVoxelRatio": 1.001523,
+    "supportRatio": 1.087443,
+    "blocksCompared": 1,
+    "blockCorrelation": 0.983685,
+    "blockRmsPpm": 0.001756,
+    "blockMaxAbsPpm": 0.01,
+    "meanDifferencePpm": 0,
+    "sdRatio": 1.146517,
+    "percentileMaxAbsPpm": 0.010132
+  }
+}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: CLI χ map differs from the browser's qsmbly 0.31.20261103 run
++ actual - expected
+
++ [
++   'supportRatio 1.087443 outside [0.995, 1.005]',
++   'blockCorrelation 0.983685 outside [0.999, Infinity]',
++   'blockRmsPpm 0.001756 outside [-Infinity, 0.001]',
++   'blockMaxAbsPpm 0.01 outside [-Infinity, 0.006]',
++   'sdRatio 1.146517 outside [0.99, 1.01]',
++   'percentileMaxAbsPpm 0.010132 outside [-Infinity, 0.001]'
++ ]
+- []
+
+    at file://<repository>/packages/qsmbly/validation/cli-check.mjs:93:10 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [
+    'supportRatio 1.087443 outside [0.995, 1.005]',
+    'blockCorrelation 0.983685 outside [0.999, Infinity]',
+    'blockRmsPpm 0.001756 outside [-Infinity, 0.001]',
+    'blockMaxAbsPpm 0.01 outside [-Infinity, 0.006]',
+    'sdRatio 1.146517 outside [0.99, 1.01]',
+    'percentileMaxAbsPpm 0.010132 outside [-Infinity, 0.001]'
+  ],
+  expected: [],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.19.0

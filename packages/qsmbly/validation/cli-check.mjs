@@ -3,7 +3,7 @@
 //   node packages/qsmbly/validation/cli-check.mjs [--executable PATH] [--output DIR]
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -64,7 +64,9 @@ try {
   await rm(bids, { recursive: true, force: true });
   await rm(output, { recursive: true, force: true });
   const { subject, session } = await stageBids(await pinnedExample(), bids);
-  const args = ['run', bids, output, ...exported.slice(3)];
+  const config = join(work, 'browser-export.toml');
+  await writeFile(config, reference.configToml);
+  const args = ['run', bids, output, '--config', config, ...exported.slice(3)];
   console.log(`qsmbly ${args.join(' ')}`);
   const started = Date.now();
   // Every hosted native weight is verified locally before this process starts.

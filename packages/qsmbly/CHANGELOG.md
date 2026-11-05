@@ -2,6 +2,10 @@
 
 ## 0.31.20261104
 
+### Patch Changes
+
+- Build the native comparator from the browser's pinned QSMxT source and replay the complete exported schema-v2 configuration, preserving the V-SHARP radius step.
+
 ## 0.31.20261103
 
 ## 0.31.20261031

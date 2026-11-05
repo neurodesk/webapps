@@ -1,33 +1,22 @@
 # QSMbly command line
 
-QSMbly's portable command line is the published QSMxT 10.0.0 release. Replace
-`qsmxt` with `qsmbly` in the command exported by the browser. The browser uses
-QSMxT's shared engine at commit `1f72772d4ae1ed7264a19c65ce1053ca05a8663d`
-with QSM.rs `95be94b83b43e80329b4ecfe8a74cf8114ea927a`; the published native
-release uses QSM.rs v0.39.0. Their real-brain RTS reconstruction is compared
-under the unchanged numerical tolerances in `validation/browser-reference.json`.
-The reference records both browser commits and the native version and measurements.
+QSMbly builds QSMxT commit `999445010a067d9597299f217a9a1165d4b7d62d`
+with QSM.rs `046e2e3bd21b1f35ce2760c115145c52956645a2`, matching the browser.
+Upstream reports version `0.0.0`; this is not the published 10.0.0 executable.
+Use the exported command together with its exported TOML configuration.
+The schema version and V-SHARP radius step must be preserved: legacy migration
+otherwise selects a different radius step.
 
-Both paths derive B0 from the image affine unless a phase sidecar supplies
-`B0_dir`, and use V-SHARP without deconvolution by default. This intentionally
-changes the previous browser's image-+z assumption and deconvolved V-SHARP map.
-QSMxT 9.22.0 fails the existing tolerances against the new browser (regional
-correlation 0.889199; RMS 0.006055 ppm). The exact exported command on QSMxT
-10.0.0 passes them (correlation 0.999293; RMS 0.000362 ppm), without a B0 override.
+The packaged default-feature build passes the unchanged reference bounds (correlation
+0.999548, RMS 0.000283 ppm). The portable packaging check repeats the comparison on each target.
 
-The package does not compile QSMxT. `qsmxt.json` pins QSMxT's own release
-archive for each target by SHA-256, and `pnpm --filter @neurodesk/qsmbly build`
-stages the host's archive in `native/`. Every build verifies and re-extracts
-the pinned archive; existing binaries and their stamp are not trusted.
-`npm pack` runs the same staging automatically. Its tarball contains native
-binaries for the packing host, so use it on that platform; the portable
-release archives are also built separately on each target:
+`qsmxt.json` pins the source archive checksum and Rust toolchain. Staging builds
+with `cargo build --locked --release` on each target. The checksum-pinned 10.0.0
+archives supply dcm2niix and its license only; staging replaces qsmxt with the
+source build and records `native/source.json`. Linux builds require the build
+host's glibc baseline (CI uses Ubuntu 22.04). Windows and macOS build natively.
+`npm pack` runs staging too.
 
-| Target | QSMxT archive |
-| --- | --- |
-| linux-x64 | `x86_64-unknown-linux-musl`: static, unlike the glibc build, which needs glibc 2.39 |
-| windows-x64 | `x86_64-pc-windows-msvc` |
-| macos-arm64 | `aarch64-apple-darwin`, re-signed with the release's Developer ID |
 
 `bin/qsmbly.js` adds two commands and guards native QSMxT execution:
 
