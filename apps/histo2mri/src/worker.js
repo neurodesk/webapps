@@ -59,10 +59,10 @@ self.onmessage = async ({ data: { volume, sections, plane, options, version, axi
         { kind: 'section', name: names.section, bytes: await gzip(images.section) },
         { kind: 'affine', name: names.affine, bytes: text(transforms.matrix) },
         ...(result.warp ? [{ kind: 'warp', name: names.warp, bytes: await gzip(transforms.warp) }] : []),
-        { kind: 'report', name: names.report, bytes: text(`${JSON.stringify(report, null, 2)}\n`) },
+        { kind: 'registration', name: names.report, bytes: text(`${JSON.stringify(report, null, 2)}\n`) },
       ];
       self.postMessage({ type: 'section', index: n, name, files, report }, files.map((file) => file.bytes.buffer));
-      registered.push({ result, warped });
+      if (volumeOutput) registered.push({ result: { plane: result.plane }, warped });
     }
     if (!volumeOutput) {
       self.postMessage({ type: 'done', written: 0, files: [] });

@@ -6,8 +6,9 @@ import { createNiftiFromData, createNiftiHeaderFromVolume, parseNiftiHeader } fr
 const SPATIAL_UNIT_MM = { 0: 1, 1: 1000, 2: 1, 3: 0.001 };
 
 /**
- * The MRI from a parsed NIfTI (`parseNiftiVolume`) as { dims, affine, data }, with the affine,
- * translations included, in millimetres whatever unit the header gives. Refuses images that are
+ * The MRI from a parsed NIfTI (`parseNiftiVolume`) as { dims, affine, data, unitScale }, with the
+ * affine, translations included, in millimetres whatever unit the header gives (`unitScale`
+ * millimetres per header unit). Refuses images that are
  * not 3-D, an unknown spatial unit, and NaN or infinite voxels.
  */
 export function mriVolume(parsed, name = 'The MRI') {
@@ -20,7 +21,18 @@ export function mriVolume(parsed, name = 'The MRI') {
     if (!Number.isFinite(data[i])) throw new Error(`${name} has NaN or infinite voxels; replace them (for example with 0) and load it again.`);
   }
   const affine = Array.from(parsed.affine, (row, r) => Array.from(row, (value) => (r < 3 ? value * scale : value)));
-  return { dims: parsed.dims, affine, data };
+  return { dims: parsed.dims, affine, data, unitScale: scale };
+}
+
+/**
+ * The MRI file the viewer shows: `file` when its header is in millimetres, else a float32 copy
+ * with the millimetre affine. NiiVue ignores xyzt_units, so a metre or micrometre header would
+ * put the outputs, all in millimetres, 1000 times off it.
+ */
+export function mriViewerFile(file, volume) {
+  if (volume.unitScale === 1) return file;
+  const stem = file.name.replace(/\.nii(\.gz)?$/i, '');
+  return new File([scalarNifti(volume.data, volume.dims, volume.affine)], `${stem}_mm.nii`);
 }
 
 function spacingOf(sform) {

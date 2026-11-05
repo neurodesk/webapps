@@ -79,3 +79,22 @@ export function runSettings(values, dims, sectionCount = 1, { maxVolumeBytes = M
     },
   };
 }
+
+/**
+ * The MRI as posted to a run's worker, with the buffers to transfer: shared voxels go as they
+ * are, anything else as a copy the worker takes over. SharedArrayBuffer is undefined on a page
+ * that is not cross-origin isolated.
+ */
+export function workerVolume(volume) {
+  if (typeof SharedArrayBuffer !== "undefined" && volume.data.buffer instanceof SharedArrayBuffer) return { volume, transfer: [] };
+  const data = volume.data.slice();
+  return { volume: { ...volume, data }, transfer: [data.buffer] };
+}
+
+/** The status-bar line at the end of a run: the final NMI per section and any output left out. */
+export function runSummary(reports, settings) {
+  const count = `${reports.length} section${reports.length > 1 ? "s" : ""}`;
+  const nmi = reports.map((report) => report.nmi.final.toFixed(3)).join(", ");
+  const skipped = settings.volumeOutput ? "" : "; MRI grid too large, its colour copy was skipped";
+  return `Registered ${count}; NMI ${nmi}${skipped}`;
+}

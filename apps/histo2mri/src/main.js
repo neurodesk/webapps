@@ -23,8 +23,8 @@ import { decodeRasterImage } from "@neurodesk/webapp-components/file-io/raster-i
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { axisPlanes } from "./core/plane.js";
 import { apply, invert } from "./core/matrix.js";
-import { mriVolume } from "./core/nifti.js";
-import { APP, classifyFiles, runSettings } from "./config.js";
+import { mriViewerFile, mriVolume } from "./core/nifti.js";
+import { APP, classifyFiles, runSettings, runSummary, workerVolume } from "./config.js";
 import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
@@ -82,8 +82,9 @@ $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 const sectionField = createFileField({ id: "sectionInput", label: "Histology sections", kind: "image", text: "Drop TIFF, PNG or JPEG sections" });
 $("sectionField").append(sectionField);
 
-// The loaded MRI ({ file, volume }), the sections ([{ file, image }]), the controller of a load
-// or run in progress, and the last run's result rows.
+// The loaded MRI ({ file, viewerFile, volume }; the viewer shows viewerFile, in millimetres), the
+// sections ([{ file, image }]), the controller of a load or run in progress, and the last run's
+// result rows.
 let mri = null;
 let sections = [];
 let loading = null;
@@ -239,7 +240,8 @@ async function loadInputs(filesPromise, signal, { parameters = null } = {}) {
   try {
     const { mri: mriFile, sections: sectionFiles } = classifyFiles(await filesPromise);
     if (!mriFile && !sectionFiles.length) throw new Error("Choose a NIfTI MRI or TIFF, PNG or JPEG sections.");
-    const nextMri = mriFile ? { file: mriFile, volume: await readMri(mriFile, current) } : mri;
+    const volume = mriFile ? await readMri(mriFile, current) : null;
+    const nextMri = mriFile ? { file: mriFile, viewerFile: mriViewerFile(mriFile, volume), volume } : mri;
     const nextSections = [];
     for (const file of sectionFiles) {
       current.throwIfAborted();
@@ -247,7 +249,7 @@ async function loadInputs(filesPromise, signal, { parameters = null } = {}) {
       nextSections.push({ file, image: await readSection(file, current) });
     }
     current.throwIfAborted();
-    if (mriFile) await showVolumes(mriFile);
+    if (mriFile) await showVolumes(nextMri.viewerFile);
     current.throwIfAborted();
     if (mriFile) {
       mri = nextMri;
@@ -337,9 +339,8 @@ function runWorker(message, signal, onMessage) {
         onMessage(data);
       }
     };
-    const shared = mri.volume.data.buffer instanceof SharedArrayBuffer;
-    const volume = shared ? mri.volume : { ...mri.volume, data: mri.volume.data.slice() };
-    worker.postMessage(message({ volume }), shared ? [] : [volume.data.buffer]);
+    const { volume, transfer } = workerVolume(mri.volume);
+    worker.postMessage(message({ volume }), transfer);
   });
 }
 
@@ -381,7 +382,7 @@ async function register(signal, values = formValues()) {
         for (const file of data.files) {
           const output = fileFrom(file.bytes, file.name);
           artifacts.push({ role: file.kind, file: output });
-          const label = { warped: "Warped section", plane: "MRI on the section plane", section: "Section contrast", affine: "Greedy affine", warp: "Greedy warp", report: "Registration report" }[file.kind];
+          const label = { warped: "Warped section", plane: "MRI on the section plane", section: "Section contrast", affine: "Greedy affine", warp: "Greedy warp", registration: "Registration report" }[file.kind];
           rows[`${data.index}:${file.kind}`] = {
             description: sections.length > 1 ? `${label} · ${data.name}` : label,
             file: output,
@@ -400,7 +401,7 @@ async function register(signal, values = formValues()) {
       }
       const output = fileFrom(volumeFile.bytes, volumeFile.name);
       artifacts.push({ role: "volume", file: output });
-      outputs = { volume: { description: "Sections in the MRI grid", file: output, base: mri.file, viewable: true }, ...rows };
+      outputs = { volume: { description: "Sections in the MRI grid", file: output, base: mri.viewerFile, viewable: true }, ...rows };
       log.log(`${data.written} MRI voxels take a section's colour`, "info");
     });
     current.throwIfAborted();
@@ -409,7 +410,7 @@ async function register(signal, values = formValues()) {
     const shown = outputs.volume ?? outputs["0:warped"];
     await showVolumes(shown.base, shown.file);
     progress.end("Registration complete");
-    status(`Registered ${sections.length} section${sections.length > 1 ? "s" : ""}; NMI ${reports.map((report) => report.nmi.final.toFixed(3)).join(", ")}`);
+    status(runSummary(reports, settings));
     return {
       artifacts,
       provenance: { app: APP.id, version: APP.version, method: "Greedy NMI rigid, affine and deformable registration in the section plane", reports },

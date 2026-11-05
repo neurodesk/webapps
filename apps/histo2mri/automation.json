@@ -135,7 +135,7 @@
           "mediaType": "application/gzip",
           "minimum": 0
         },
-        "report": {
+        "registration": {
           "type": "neuro:report",
           "mediaType": "application/json",
           "minimum": 1
@@ -144,7 +144,7 @@
           "type": "neuro:volume",
           "mediaType": "application/gzip",
           "space": "input",
-          "minimum": 1,
+          "minimum": 0,
           "maximum": 1
         }
       },

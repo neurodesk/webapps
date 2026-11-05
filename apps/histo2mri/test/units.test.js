@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseNiftiVolume } from '@neurodesk/webapp-components/file-io/nifti';
-import { mriVolume, scalarNifti } from '../src/core/nifti.js';
+import { mriViewerFile, mriVolume, scalarNifti } from '../src/core/nifti.js';
+import { apply, invert } from '../src/core/matrix.js';
 import { samplePlane, slicePlane } from '../src/core/plane.js';
 import { phantomSlice } from './helpers.js';
 
@@ -41,4 +42,32 @@ test('an unknown spatial unit, a 2-D image and NaN voxels are refused', () => {
   const nan = written(2, 1);
   nan.imageData[7] = NaN;
   assert.throws(() => mriVolume(nan), /NaN or infinite/);
+});
+
+// NiiVue's own reader, which ignores xyzt_units, on the file the page shows.
+async function viewerVolume(file) {
+  const [{ nii2volume }, fs, path, { pathToFileURL, fileURLToPath }] = await Promise.all([import('@niivue/niivue'), import('node:fs'), import('node:path'), import('node:url')]);
+  const niivue = path.dirname(fs.realpathSync(fileURLToPath(import.meta.resolve('@niivue/niivue'))));
+  let dir = niivue;
+  while (!fs.existsSync(path.join(dir, 'package.json')) || JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).name !== '@niivue/niivue') dir = path.dirname(dir);
+  const reader = fs.realpathSync(path.resolve(dir, '../../nifti-reader-js'));
+  const nifti = await import(pathToFileURL(path.join(reader, JSON.parse(fs.readFileSync(path.join(reader, 'package.json'), 'utf8')).main)));
+  const buffer = await file.arrayBuffer();
+  const header = nifti.readHeader(buffer);
+  return nii2volume(header, nifti.readImage(header, buffer));
+}
+
+test('the viewer shows a metre or micrometre MRI in millimetres, so the slice centre is its centre', async () => {
+  for (const [code, scale] of [[2, 1], [1, 0.001], [3, 1000]]) {
+    const parsed = written(code, scale);
+    const volume = mriVolume(parsed);
+    const original = new File([parsed.headerBytes, new Uint8Array(parsed.imageData.buffer)], 'mri.nii');
+    const shown = mriViewerFile(original, volume);
+    if (code === 2) assert.equal(shown, original);
+    else assert.match(shown.name, /^mri_mm\.nii$/);
+    const { frac2mm } = await viewerVolume(shown);
+    const rows = [0, 1, 2, 3].map((r) => [0, 1, 2, 3].map((c) => frac2mm[c * 4 + r]));
+    const fraction = apply(invert(rows), apply(volume.affine, [19.5, 17.5, 2]));
+    fraction.forEach((value) => assert.ok(Math.abs(value - 0.5) < 1e-5, `unit ${code}: centre at fraction ${fraction}`));
+  }
 });

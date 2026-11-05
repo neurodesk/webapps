@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { APP, classifyFiles, outputNames, runSettings } from "../src/config.js";
+import { APP, classifyFiles, outputNames, runSettings, runSummary, workerVolume } from "../src/config.js";
 
 const file = (name) => ({ name });
 
@@ -50,4 +50,29 @@ test("an MRI grid above the colour-copy limit leaves out only that output, with 
   assert.match(limited.warnings[0], /too large for a colour copy.*written without it/);
   assert.deepEqual(limited.plane, full.plane);
   assert.deepEqual(limited.options, full.options);
+});
+
+test("the worker gets shared voxels as they are and a transferred copy otherwise", (t) => {
+  const shared = new Float32Array(new SharedArrayBuffer(16));
+  const sharedVolume = { dims: [2, 2, 1], data: shared };
+  assert.deepEqual(workerVolume(sharedVolume), { volume: sharedVolume, transfer: [] });
+  const data = Float32Array.of(1, 2, 3, 4);
+  const posted = workerVolume({ dims: [2, 2, 1], data });
+  assert.notEqual(posted.volume.data, data);
+  assert.deepEqual(posted.transfer, [posted.volume.data.buffer]);
+  // A page that is not cross-origin isolated has no SharedArrayBuffer constructor.
+  const original = Object.getOwnPropertyDescriptor(globalThis, "SharedArrayBuffer");
+  delete globalThis.SharedArrayBuffer;
+  t.after(() => Object.defineProperty(globalThis, "SharedArrayBuffer", original));
+  const isolated = workerVolume({ dims: [2, 2, 1], data });
+  assert.deepEqual(Array.from(isolated.volume.data), [1, 2, 3, 4]);
+  assert.deepEqual(isolated.transfer, [isolated.volume.data.buffer]);
+});
+
+test("the end-of-run status says when the MRI-grid copy was skipped", () => {
+  const reports = [{ nmi: { final: 0.31234 } }, { nmi: { final: 0.25 } }];
+  const dims = [100, 80, 60];
+  assert.equal(runSummary(reports, runSettings({ axis: 2, index: 30 }, dims, 2)), "Registered 2 sections; NMI 0.312, 0.250");
+  const skipped = runSummary(reports.slice(0, 1), runSettings({ axis: 2, index: 30 }, dims, 1, { maxVolumeBytes: 1 }));
+  assert.match(skipped, /^Registered 1 section; NMI 0\.312; MRI grid too large, its colour copy was skipped$/);
 });
