@@ -4938,6 +4938,13 @@
       "kind": "model",
       "license": "BSD-3-Clause",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/54b983bf7ab16bd9d716008fd62ca4bdce63f72d/calcium-imaging/example/froemke-nv60-a1-gcamp-400frames.ome.tif": {
+      "sha256": "574bb8e15f4ddf8308731b8a15f51b5e04e11ba3dfed6986233b529aedfa1c6e",
+      "bytes": 41783273,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6235,6 +6242,9 @@
     "stardist": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/example/dsb2018-nuclei-2d.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/models/stardist-2d-versatile-fluo.onnx"
+    ],
+    "calcium-imaging": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/54b983bf7ab16bd9d716008fd62ca4bdce63f72d/calcium-imaging/example/froemke-nv60-a1-gcamp-400frames.ome.tif"
     ]
   }
 }

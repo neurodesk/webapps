@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 2,
+  "app": "calcium-imaging",
+  "title": "Calcium imaging",
+  "description": "Two-photon calcium imaging preprocessing: rigid or piecewise-rigid motion correction, summary images, ROIs, neuropil-corrected ΔF/F and OASIS AR(1) deconvolution.",
+  "defaultOperation": "preprocess",
+  "operations": {
+    "preprocess": {
+      "title": "Preprocess movie",
+      "description": "Motion-correct one TIFF movie, compute mean, max and local-correlation images, detect ROIs, extract neuropil-corrected ΔF/F and deconvolve spikes.",
+      "mode": "batch",
+      "inputs": {
+        "movie": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tiff",
+            "ome-tiff"
+          ],
+          "description": "One single-channel, single-plane TIFF movie (one frame per page)",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "frameRate": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 10000,
+          "description": "Frame rate in Hz; required when the TIFF does not record it"
+        },
+        "motion": {
+          "type": "string",
+          "enum": [
+            "rigid",
+            "piecewise",
+            "none"
+          ],
+          "default": "rigid",
+          "description": "Motion correction: rigid, piecewise rigid (NoRMCorre-style patches) or none"
+        },
+        "diameter": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 100,
+          "default": 10,
+          "description": "Cell diameter in pixels"
+        },
+        "deconvolution": {
+          "type": "boolean",
+          "default": true,
+          "description": "Deconvolve ΔF/F with OASIS AR(1)"
+        },
+        "maxShift": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200,
+          "default": 10,
+          "description": "Largest rigid shift in pixels"
+        },
+        "upsample": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10,
+          "description": "Sub-pixel refinement: shifts are multiples of 1/upsample pixel"
+        },
+        "normalization": {
+          "type": "string",
+          "enum": [
+            "none",
+            "phase"
+          ],
+          "default": "none",
+          "description": "Shift estimator: Fourier cross-correlation (none) or phase correlation (phase)"
+        },
+        "templatePasses": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "default": 2,
+          "description": "Template passes; later passes register to the mean of the previous pass"
+        },
+        "patchSize": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 1024,
+          "default": 64,
+          "description": "Piecewise rigid: patch size in pixels"
+        },
+        "patchOverlap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1023,
+          "default": 32,
+          "description": "Piecewise rigid: patch overlap in pixels"
+        },
+        "maxDeviation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 3,
+          "description": "Piecewise rigid: largest patch shift away from the rigid shift, in pixels"
+        },
+        "seedZ": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 50,
+          "default": 4,
+          "description": "ROI seed threshold in robust standard deviations of the correlation image"
+        },
+        "neuropilCoefficient": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.5,
+          "default": 0.7,
+          "description": "Neuropil coefficient r in Fc = F − r · Fneu"
+        },
+        "baselineWindow": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100000,
+          "default": 60,
+          "description": "Baseline window in seconds"
+        },
+        "baselinePercentile": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 8,
+          "description": "Baseline percentile"
+        }
+      },
+      "artifacts": {
+        "registered": {
+          "type": "neuro:volume",
+          "mediaType": "image/tiff",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "shifts": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "mean": {
+          "type": "neuro:volume",
+          "mediaType": "image/tiff",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "max": {
+          "type": "neuro:volume",
+          "mediaType": "image/tiff",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "correlation": {
+          "type": "neuro:volume",
+          "mediaType": "image/tiff",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "labels": {
+          "type": "neuro:label-map",
+          "mediaType": "image/tiff",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "traces": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "rois": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "plot": {
+          "type": "neuro:report",
+          "mediaType": "image/svg+xml",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "provenance": {
+          "type": "neuro:provenance",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

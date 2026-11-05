@@ -7084,6 +7084,15 @@
         "kind": "model",
         "license": "BSD-3-Clause"
       }
+    ],
+    "calcium-imaging": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/54b983bf7ab16bd9d716008fd62ca4bdce63f72d/calcium-imaging/example/froemke-nv60-a1-gcamp-400frames.ome.tif",
+        "sha256": "574bb8e15f4ddf8308731b8a15f51b5e04e11ba3dfed6986233b529aedfa1c6e",
+        "bytes": 41783273,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      }
     ]
   },
   "exclusions": [],
