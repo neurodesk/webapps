@@ -350,6 +350,17 @@ test('OME planes kept in another file are refused before decoding', async () => 
   await assert.rejects(readTiffStack(buffer(bytes)), /maps no page to plane 2/);
 });
 
+test('a sequential OME mapping that leaves a plane unmapped is refused before decoding', async () => {
+  // IFD 0 is plane 1 as in a complete file, but no TiffData maps plane 2; tifffile reads it as missing.
+  const incomplete = '<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="2" SizeY="2" SizeC="1" SizeZ="2" SizeT="1"><TiffData IFD="0" FirstZ="0" PlaneCount="1"/></Pixels></Image></OME>';
+  const bytes = writeTiffStack({ width: 2, height: 2, data: new Uint8Array([10, 10, 10, 10, 20, 20, 20, 20]), description: incomplete });
+  await assert.rejects(inspectTiffStack(buffer(bytes)), /maps no page to plane 2/);
+  await assert.rejects(readTiffStack(buffer(bytes)), /maps no page to plane 2/);
+  // A sequential mapping that names a page past the file's last is refused too.
+  const beyond = incomplete.replace('PlaneCount="1"', 'PlaneCount="3"').replace('SizeZ="2"', 'SizeZ="3"');
+  await assert.rejects(inspectTiffStack(buffer(writeTiffStack({ width: 2, height: 2, data: new Uint8Array(8), description: beyond }))), /names page 3, but the file has 2/);
+});
+
 test('imagejDescription labels a calibrated z stack that reads back as z planes', async () => {
   const description = imagejDescription({ slices: 4, spacing: 0.13, unit: 'micron', min: 0, max: 1 });
   assert.equal(description, 'ImageJ=1.11a\nimages=4\nslices=4\nhyperstack=true\nspacing=0.13\nunit=micron\nmin=0\nmax=1\n');

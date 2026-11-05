@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { readVolume } from "../src/input.js";
 import { EXAMPLE_OPTICS } from "../src/config.js";
-import { deconvolveInNode, sha256 } from "../src/reference.mjs";
+import { deconvolveInNode, sha256 } from "../e2e/reference.mjs";
 import examples from "../examples.json" with { type: "json" };
 
 const [example] = examples;

@@ -134,8 +134,6 @@ export function parseOmeDescription(description) {
     declaredSpacing: { x: finite(attribute('PhysicalSizeX')), y: finite(attribute('PhysicalSizeY')), z: finite(attribute('PhysicalSizeZ')), unit: attribute('PhysicalSizeXUnit') ?? 'µm' },
     frameInterval: increment && timeScale ? increment * timeScale : null,
     stagePosition: omeStagePosition(text),
-    uuid: xmlAttribute(root, 'UUID') ?? null,
-    tiffData: parseTiffData(text),
   };
 }
 
@@ -168,13 +166,14 @@ function omeStagePosition(text) {
 
 /**
  * The IFD of each plane, in the order of `DimensionOrder` (plane k is the k-th page of a
- * sequential file), or null when TiffData is absent or maps plane k to IFD k. Throws for planes
- * in another file, a mapping it cannot follow, and planes no TiffData maps.
+ * sequential file), or null when the description has no TiffData. Throws for planes in another
+ * file, a mapping it cannot follow, planes no TiffData maps and IFDs the file does not have.
  */
-function omePlaneIfds(ome, ifdCount) {
-  const blocks = ome.tiffData;
+function omePlaneIfds(ome, description, ifdCount) {
+  const blocks = parseTiffData(description);
   if (!blocks.length) return null;
-  const external = blocks.some((block) => block.uuid && block.uuid !== (ome.uuid ?? blocks[0].uuid));
+  const fileUuid = xmlAttribute(description.match(/<(?:[\w.-]+:)?OME\b[^>]*>/)[0], 'UUID') ?? blocks[0].uuid;
+  const external = blocks.some((block) => block.uuid && block.uuid !== fileUuid);
   if (external || new Set(blocks.map((block) => block.uuid)).size > 1) {
     throw new Error('This OME-TIFF keeps some of its planes in other files; open the companion file set in Fiji and save it as one OME-TIFF.');
   }
@@ -186,7 +185,6 @@ function omePlaneIfds(ome, ifdCount) {
   const planes = sizes.Z * sizes.C * sizes.T;
   const index = (first) => order.reduceRight((linear, axis) => linear * sizes[axis] + first[axis], 0);
   const map = new Array(planes).fill(-1);
-  let sequential = true;
   for (const [k, block] of blocks.entries()) {
     const values = [block.ifd ?? 0, block.planeCount ?? 0, block.first.Z, block.first.C, block.first.T];
     if (values.some((value) => !Number.isInteger(value) || value < 0) || order.some((axis) => block.first[axis] >= sizes[axis])) {
@@ -197,10 +195,8 @@ function omePlaneIfds(ome, ifdCount) {
     // is given, else every remaining plane.
     const ifd = block.ifd ?? 0;
     const count = block.planeCount ?? (block.ifd === null ? planes - start : 1);
-    if (start !== ifd) sequential = false;
     for (let j = 0; j < count && start + j < planes; j++) map[start + j] = ifd + j;
   }
-  if (sequential) return null;
   const missing = map.indexOf(-1);
   if (missing >= 0) throw new Error(`This OME-TIFF's TiffData maps no page to plane ${missing + 1}.`);
   const outside = map.find((ifd) => ifd >= ifdCount);
@@ -310,7 +306,7 @@ async function openStack(source, rgb) {
   if (!Type) throw new Error(`TIFF sample type (format ${format}, ${bits} bits) is not 8, 16 or 32-bit integer or 32/64-bit float.`);
   if (ome?.images > 1) throw new Error(`This OME-TIFF holds ${ome.images} image series; save the one you need as its own file.`);
   // The stack's pages: the OME planes' IFDs, else every full-resolution page in file order.
-  let ifds = ome ? omePlaneIfds(ome, ifdCount) : null;
+  let ifds = ome ? omePlaneIfds(ome, description, ifdCount) : null;
   if (!ifds) {
     ifds = [];
     for (let index = 0; index < ifdCount; index++) {
@@ -321,8 +317,6 @@ async function openStack(source, rgb) {
   const pages = ifds.length;
   // A plain TIFF does not say whether its pages are planes or time points.
   const metadata = ome ?? imagej ?? { kind: 'baseline', unlabelledStack: true, images: 1, sizeC: 1, sizeZ: null, sizeT: null, pixelSize: { x: null, y: null, z: null }, declaredSpacing: baselineSpacing(first, resolution), frameInterval: null, stagePosition: null };
-  delete metadata.tiffData;
-  delete metadata.uuid;
   const declared = imagej ? Number(description.match(/^images=(\d+)\s*$/m)?.[1]) : NaN;
   if (declared && declared !== pages) throw new Error(`This ImageJ TIFF declares ${declared} images but holds ${pages} pages; save it again from ImageJ or Fiji.`);
   const info = { width: first.getWidth(), height: first.getHeight(), pages, dtype: dtypeName(Type), bytesPerSample: Type.BYTES_PER_ELEMENT, samplesPerPixel: first.getSamplesPerPixel(), metadata: { ...metadata, description } };
