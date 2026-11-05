@@ -14,7 +14,8 @@ The model is exported in the state `micro_sam.util.get_sam_model` returns it, wi
 `train(False)` runs; MobileSAM's builder runs `eval()` before micro-sam loads the checkpoint, so
 micro-sam's PyTorch inference uses the cache computed from the initial (zero) biases. Calling
 `eval()` here, or exporting with torch's default `TrainingMode.EVAL`, would refresh the cache and
-export a model micro-sam does not run (README, "Attention biases").
+export a model micro-sam does not run (README, "Attention biases"). The script asserts the cache
+is zero, as the manifest records, so the export leaves the trained attention biases out.
 """
 import hashlib
 import json
@@ -43,6 +44,10 @@ def main(checkpoint, out_dir):
     assert not any(module.training for module in sam.modules())
     cached = [module.ab for module in sam.image_encoder.modules() if hasattr(module, "ab")]
     attention_bias_absmax = max(float(ab.abs().max()) for ab in cached)
+    # models/microsam.manifest.json records the zero cache (cached_attention_bias_absmax: 0): the
+    # exported encoder folds it in and leaves the checkpoint's trained attention_biases unused.
+    manifest = json.loads((Path(__file__).resolve().parents[3] / "models" / "microsam.manifest.json").read_text())
+    assert cached and attention_bias_absmax == 0 == manifest["model"]["cached_attention_bias_absmax"], attention_bias_absmax
 
     encoder_path = out / "microsam-vit-t-lm-encoder.onnx"
     image = torch.randn(1, 3, 1024, 1024)

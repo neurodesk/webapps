@@ -75,15 +75,24 @@ The app downloads microsam-vit-t-lm-encoder.onnx and microsam-vit-t-lm-decoder.o
 BioImage.IO faithful-chicken 1.1) by Anwai Archit, Constantin Pape and the micro-sam
 contributors, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Archit, A. et
 al. Segment Anything for Microscopy. Nature Methods 22, 579-591 (2025),
-https://doi.org/10.1038/s41592-024-02580-4. Converted to ONNX without changing the weights
-(validation/export_onnx.py).
+https://doi.org/10.1038/s41592-024-02580-4.
+
+Modified (CC BY 4.0 section 3(a)(1)(B)): converted to ONNX by validation/export_onnx.py. The
+encoder is exported as micro-sam's PyTorch path runs it: TinyViT's cached attention biases
+(Attention.ab) are the zero cache MobileSAM's builder computes before the checkpoint is loaded,
+and that cache is folded into the graph. The trained attention biases of the checkpoint
+(attention_biases) are therefore not used by the exported encoder; every other weight is the
+checkpoint's.
 
 The model is fine-tuned from MobileSAM, Copyright (c) Chaoning Zhang and contributors
 (https://github.com/ChaoningZhang/MobileSAM), itself distilled from Segment Anything,
 Copyright (c) Meta Platforms, Inc. and affiliates
 (https://github.com/facebookresearch/segment-anything). Both are licensed under the
-Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0). The decoder graph is
-MobileSAM's SamOnnxModel (mobile_sam/utils/onnx.py, from segment_anything/utils/onnx.py).
+Apache License, Version 2.0; the full text is in LICENSE-APACHE-2.0, shipped beside this file
+and beside the model files on Hugging Face. The encoder graph is MobileSAM's TinyViT and the
+decoder graph is MobileSAM's SamOnnxModel (mobile_sam/utils/onnx.py, from
+segment_anything/utils/onnx.py), both traced into the ONNX files; neither project ships a NOTICE
+file.
 
 Example data (CC0 1.0)
 ----------------------

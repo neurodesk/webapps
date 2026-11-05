@@ -6,7 +6,7 @@ micro-sam's light-microscopy generalist ViT-T model (`vit_t_lm`), then runs the 
 every positive or negative click and every box. Accepted objects form a label image (uncompressed
 16- or 32-bit TIFF) and a per-object CSV table (`id, area_px, centroid_x, centroid_y, bbox_x0,
 bbox_y0, bbox_x1, bbox_y1, mean_intensity` (or one mean per colour channel), `predicted_iou,
-prompt`). Input is one TIFF, OME-TIFF, ImageJ TIFF or PNG image of up to 16 megapixels.
+prompt`). Input is one TIFF, OME-TIFF, ImageJ TIFF or PNG image of up to 4096 × 4096 pixels (16 megapixels).
 
 ## Pipeline
 
@@ -26,14 +26,30 @@ embedding run. Decoding is serialised: a newer prompt supersedes an older answer
 
 ### Attention biases
 
-TinyViT caches its attention biases in `Attention.ab` whenever `train(False)` runs. MobileSAM's
-builder calls `eval()` before micro-sam loads the checkpoint, and `get_sam_model` does not call it
-again, so micro-sam's PyTorch inference runs with the cache computed from the initial biases, which
-are zeros (measured: `max |ab| = 0` on the loaded model). `validation/export_onnx.py` exports the model in
-exactly that state (`TrainingMode.PRESERVE`, no `eval()`), so the app reproduces what micro-sam
-users get. On the example, refreshing the cache with `eval()` gave mean IoU against the annotation
-of 0.927 (box prompts, 23 nuclei) and 0.837 (one click) against 0.930 and 0.846 for micro-sam's
-runtime state. Whether the trained biases were meant to be used is not established here.
+TinyViT caches its attention biases in `Attention.ab` whenever `train(False)` runs, and uses the
+cache, not the trained `attention_biases`, at inference. The app exports the model with the zero
+cache micro-sam's own inference runs with (`validation/export_onnx.py`: `TrainingMode.PRESERVE`,
+no `eval()`, asserting `max |ab| = 0`, which `models/microsam.manifest.json` records as
+`cached_attention_bias_absmax`). The upstream code paths disagree:
+
+- Inference leaves the cache at zero. MobileSAM's `build_sam_vit_t` calls `eval()` before it
+  loads a checkpoint ([`build_sam.py` L88, L92](https://github.com/ChaoningZhang/MobileSAM/blob/f706ad9c/mobile_sam/build_sam.py#L88-L92)); micro-sam's `get_sam_model`
+  builds the model through that registry entry and only then loads the checkpoint, without calling
+  `eval()` again ([`util.py` L441, L457](https://github.com/computational-cell-analytics/micro-sam/blob/cb88e8d6/micro_sam/util.py#L441-L457)).
+- Training and validation use the trained biases. `SamTrainer` calls `model.train()` for each
+  epoch and `model.eval()` before validation, which refreshes the cache from the biases being
+  trained ([`sam_trainer.py` L394, L449](https://github.com/computational-cell-analytics/micro-sam/blob/cb88e8d6/micro_sam/training/sam_trainer.py#L394-L449)), and the
+  BioImage.IO export calls `predictor.eval()` ([`model_export.py` L55](https://github.com/computational-cell-analytics/micro-sam/blob/cb88e8d6/micro_sam/bioimageio/model_export.py#L55)).
+- The published model matches the zero cache. The test embedding in BioImage.IO
+  `faithful-chicken` 1.1, the model as micro-sam distributes it, equals the zero-bias state, not
+  the refreshed one. This is the main reason for the choice: the app gives what micro-sam users
+  get from the published model.
+
+Mask IoUs against the example's annotation are no evidence either way: the example is from
+BBBC038 stage1_train, which is part of the light-microscopy generalist's training data, so those
+IoUs are in-sample. Which state upstream intends is open; an issue should be filed with micro-sam
+asking whether inference is meant to run with the trained attention biases. If upstream changes
+`get_sam_model`, re-export and rerecord `validation/reference.json`.
 
 ## Validation
 
@@ -61,11 +77,14 @@ python -I test/fixtures/make_fixtures.py test/fixtures
   no resize).
 - Browser (`e2e/workflow.spec.js`, production build, Chromium, WebAssembly): the embedding at 512
   fixed positions is within 9.8e-7 of PyTorch's, and all 24 masks have the SHA-256 of micro-sam's
-  PyTorch masks (the test requires the hashes and IoU >= 0.99). Clicking and boxing in the viewer
-  reproduce the reference masks in the downloaded label TIFF.
+  PyTorch masks (the test requires identical hashes; the IoU it also logs is a diagnostic).
+  Clicking and boxing in the viewer reproduce the reference masks in the downloaded label TIFF.
+  The hashes hold for the pinned ONNX Runtime Web 1.29.0 only: the export's mask logits differ
+  from PyTorch's by up to 6.2e-4 and some pixels lie within 3.9e-5 of the threshold, so another
+  ONNX Runtime version can flip them (AGENTS.md, "microsam", gives the procedure for a bump).
 - Against the BBBC038 annotation the reference masks reach IoU 0.64-0.97 per prompt
-  (`iou_annotation` in `validation/reference.json`); a negative click on a neighbouring nucleus
-  lowers the IoU of five of the six nuclei below the single click's.
+  (`iou_annotation` in `validation/reference.json`). These IoUs are in-sample (the example is in
+  the generalist's training data) and describe the prompts, not the model's accuracy.
 
 The annotation is pinned on Hugging Face beside the example (`microsam/validation/`).
 
@@ -74,13 +93,15 @@ The annotation is pinned on Hugging Face beside the example (`microsam/validatio
 - Model: micro-sam's "SAM LM Generalist (ViT-T)", BioImage.IO `faithful-chicken` 1.1
   (`vit_t.pt`, sha256 `32b92ab6…ec7b7a`), CC BY 4.0, by Anwai Archit, Constantin Pape and the
   micro-sam contributors; fine-tuned from MobileSAM (Apache-2.0), distilled from Segment Anything
-  (Apache-2.0). The ONNX files, with unchanged weights, are pinned in
-  `models/microsam.manifest.json` with a README on Hugging Face.
+  (Apache-2.0). The ONNX files are pinned in `models/microsam.manifest.json` with a README and the
+  Apache-2.0 text on Hugging Face. They keep every weight except the trained attention biases,
+  which the zero cache replaces (see "Attention biases"; the modification notice is in `NOTICE`).
 - Example: BBBC038v1 (2018 Data Science Bowl) stage1_train sample `1023509c…`, a 360 × 360
   fluorescence image of 23 nuclei, CC0 1.0 (Caicedo et al., Nature Methods 2019); first channel
   of the greyscale PNG saved as TIFF (`validation/make_example.py`), README beside it on Hugging Face.
 - Code: this app is MIT (`LICENSE`). It ports micro-sam (MIT) and Pillow's resampling (MIT-CMU);
-  `NOTICE` holds the attributions and the model licence, and the build ships both at the app's root.
+  `NOTICE` holds the attributions and the model licence, `LICENSE-APACHE-2.0` the Apache-2.0 text
+  for the traced MobileSAM and Segment Anything graphs, and the build ships all three at the app's root.
 
 ## Not in v1
 

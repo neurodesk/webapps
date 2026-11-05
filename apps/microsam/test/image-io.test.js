@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fromArrayBuffer } from "geotiff";
-import { channelChoices, describedLayout, readImage, writeLabelTiff } from "../src/image-io.js";
+import { channelChoices, describedLayout, extraSamples, MAX_PIXELS, readImage, writeLabelTiff } from "../src/image-io.js";
 import { channelToUint8 } from "../src/preprocess.js";
 
 const fixture = (name) => {
@@ -31,6 +31,20 @@ test("an alpha sample is left out; an unspecified extra sample is its own channe
   assert.deepEqual(channelChoices(two).map((item) => item.id), ["0", "1"]);
 });
 
+test("ExtraSamples is read as a number, an array or a typed array, in either order", async () => {
+  assert.deepEqual(extraSamples(null), []);
+  assert.deepEqual(extraSamples(2), [2]);
+  assert.deepEqual(extraSamples(Uint16Array.of(0, 2)), [0, 2]);
+  assert.deepEqual(extraSamples([2, 0]), [2, 0]);
+  // red, green, blue = base + 0..2; the unspecified sample is base + 3; alpha is 255.
+  for (const name of ["extras-0-2.tif", "extras-2-0.tif"]) {
+    const image = await readImage(name, fixture(name));
+    assert.deepEqual(image.planes.map((plane) => plane.label), ["red", "green", "blue", "sample 4"].map((label, i) => (name === "extras-2-0.tif" && i === 3 ? "sample 5" : label)), name);
+    assert.equal(image.planes[3].data[1], base(1, 0) + 3, name);
+    assert.deepEqual(channelChoices(image).map((item) => item.label), ["Colour (RGB)", ...image.planes.map((plane) => plane.label)], name);
+  }
+});
+
 test("16-bit and float TIFFs keep their values", async () => {
   const image = await readImage("uint16.tif", fixture("uint16.tif"));
   assert.ok(image.planes[0].data instanceof Uint16Array);
@@ -56,13 +70,34 @@ test("OME-TIFF channels take their names; Z-stacks and ImageJ stacks are refused
   assert.deepEqual(hyperstack.planes.map((plane) => plane.label), ["Channel 1", "Channel 2"]);
 });
 
+test("OME-TIFF channel names follow TiffData, not IFD order", async () => {
+  // IFD 0 holds GFP (base * 2) and IFD 1 DAPI (base).
+  const image = await readImage("mapped.ome.tif", fixture("mapped.ome.tif"));
+  assert.deepEqual(image.planes.map((plane) => [plane.label, plane.data[1]]), [["GFP", base(1, 0) * 2], ["DAPI", base(1, 0)]]);
+});
+
+test("TiffData layouts the reader cannot follow are refused", () => {
+  const xml = (tiffData, uuid = "") => `<OME UUID="urn:uuid:a"><Image ID="Image:0"><Pixels SizeC="2" SizeZ="1" SizeT="1">`
+    + `<Channel Name="A" SamplesPerPixel="1"/><Channel Name="B" SamplesPerPixel="1"/>${tiffData}${uuid}</Pixels></Image></OME>`;
+  assert.deepEqual(describedLayout("x", xml('<TiffData IFD="0" PlaneCount="2"/>'), [0, 1]).names, ["A", "B"]);
+  assert.deepEqual(describedLayout("x", xml(""), [0, 1]).names, ["A", "B"]);
+  assert.deepEqual(describedLayout("x", xml('<TiffData IFD="0" FirstC="1"/><TiffData IFD="1"/>'), [0, 1]).names, ["B", "A"]);
+  assert.deepEqual(describedLayout("x", xml('<TiffData IFD="0"><UUID FileName="x.ome.tif">urn:uuid:a</UUID></TiffData><TiffData IFD="1" FirstC="1"/>'), [0, 1]).names, ["A", "B"]);
+  assert.throws(() => describedLayout("x", xml('<TiffData IFD="0"><UUID FileName="y.ome.tif">urn:uuid:b</UUID></TiffData><TiffData IFD="1" FirstC="1"/>'), [0, 1]), /another file/);
+  assert.throws(() => describedLayout("x", xml('<TiffData IFD="0"/><TiffData IFD="1"/>'), [0, 1]), /a channel in two IFDs/);
+  assert.throws(() => describedLayout("x", xml('<TiffData IFD="0" PlaneCount="2"/><TiffData IFD="1" FirstC="1"/>'), [0, 1]), /IFD 1 named twice/);
+  assert.throws(() => describedLayout("x", xml('<TiffData IFD="0" FirstC="2"/>'), [0, 1]), /channel 3 of 2/);
+  assert.throws(() => describedLayout("x", xml('<TiffData IFD="0" FirstZ="1"/>'), [0, 1]), /beyond Z 0/);
+  assert.throws(() => describedLayout("x", xml('<TiffData IFD="2" PlaneCount="2"/>'), [0, 1]), /IFD 0\) its OME-XML assigns to no channel/);
+});
+
 test("OME-XML with a namespace prefix, single quotes and entities is understood", () => {
   const xml = `<?xml version="1.0"?><ome:OME xmlns:ome="http://www.openmicroscopy.org/Schemas/OME/2016-06"><ome:Image ID='Image:0'>`
     + `<ome:Pixels SizeC='2' SizeZ="1" SizeT='1'><ome:Channel Name='A &amp; B'/><ome:Channel Name="&#67;y5"/></ome:Pixels></ome:Image></ome:OME>`;
-  assert.deepEqual(describedLayout("x.ome.tif", xml, 2), { format: "OME-TIFF", names: ["A & B", "Cy5"] });
-  assert.throws(() => describedLayout("x.ome.tif", xml.replace("SizeZ=\"1\"", "SizeZ='4'"), 2), /Z-stack/);
+  assert.deepEqual(describedLayout("x.ome.tif", xml, [0, 1]), { format: "OME-TIFF", names: ["A & B", "Cy5"] });
+  assert.throws(() => describedLayout("x.ome.tif", xml.replace("SizeZ=\"1\"", "SizeZ='4'"), [0, 1]), /Z-stack/);
   const two = xml.replace("</ome:OME>", "<ome:Image ID='Image:1'><ome:Pixels SizeC='1'/></ome:Image></ome:OME>");
-  assert.throws(() => describedLayout("x.ome.tif", two, 2), /holds 2 OME images/);
+  assert.throws(() => describedLayout("x.ome.tif", two, [0, 1]), /holds 2 OME images/);
 });
 
 test("palette, 1-bit and 16-bit PNGs are unpacked", async () => {
@@ -80,6 +115,19 @@ test("palette, 1-bit and 16-bit PNGs are unpacked", async () => {
 
 test("other files and tiny images are refused", async () => {
   await assert.rejects(readImage("x.nii", new Uint8Array(16).buffer), /not a TIFF, OME-TIFF or PNG/);
+});
+
+test("images over 4096 × 4096 pixels are refused before decoding", async () => {
+  assert.equal(MAX_PIXELS, 4096 * 4096);
+  const header = (width, height) => {
+    const bytes = writeLabelTiff(new Uint32Array(64), 8, 8);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(8 + 2 + 8, width, true);
+    view.setUint32(8 + 2 + 12 + 8, height, true);
+    return bytes.buffer;
+  };
+  await assert.rejects(readImage("big.tif", header(4097, 4096)), /4097 × 4096; split images over 16 megapixels \(4096 × 4096\) into tiles first/);
+  await assert.rejects(readImage("big.tif", header(4096, 4096)), (error) => !/megapixels/.test(error.message));
 });
 
 test("the label TIFF round-trips through geotiff at 16 and 32 bits", async () => {

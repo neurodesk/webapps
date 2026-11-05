@@ -1,6 +1,6 @@
 // micro-sam on the pinned example in the production build. The ONNX encoder and decoder on
 // ONNX Runtime Web must give micro-sam's PyTorch masks for 24 fixed prompts
-// (validation/reference.json, mask IoU >= 0.99) and its embedding; the clicked workflow, undo,
+// (validation/reference.json, identical SHA-256) and its embedding; the clicked workflow, undo,
 // the downloads, cancelling the embedding and a failed example download are checked too.
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";

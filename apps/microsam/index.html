@@ -38,7 +38,6 @@
               <button id="positiveTool" class="nd-tool-btn" type="button" aria-pressed="true" disabled>Positive</button>
               <button id="negativeTool" class="nd-tool-btn" type="button" aria-pressed="false" disabled>Negative</button>
             </div>
-            <p class="nd-hint">Drag on the image to draw a box around an object.</p>
           </div>
           <div class="nd-row">
             <button id="acceptButton" class="nd-btn nd-btn-secondary" type="button" disabled>Accept object</button>
@@ -100,11 +99,11 @@
       <p>The preprocessing, mask choice and prompt handling follow micro-sam's own
         <code>precompute_image_embeddings</code> and <code>segment_from_points</code>,
         <code>segment_from_box</code> and <code>segment_from_box_and_points</code>. On the example,
-        24 fixed prompts give the same masks as micro-sam in PyTorch (mask IoU 1.0 in Python's ONNX
-        Runtime; the browser test requires at least 0.99). A single positive click keeps the best of
+        24 fixed prompts give micro-sam's PyTorch masks pixel for pixel, in Python's ONNX Runtime and in
+        this browser (the browser test requires identical masks). A single positive click keeps the best of
         SAM's three masks by predicted IoU; any other prompt keeps the single-mask output. A new object
         never takes pixels that an accepted object already has.</p>
-      <p>Version 1 segments one 2D image of up to 16 megapixels without tiling. SAM sees the image at
+      <p>Version 1 segments one 2D image of up to 4096 × 4096 pixels without tiling. SAM sees the image at
         1024 pixels along its longest side, so very small objects in large images are hard to
         prompt; crop large images first. micro-sam's automatic instance segmentation, tracking and
         3D segmentation are not included.</p>

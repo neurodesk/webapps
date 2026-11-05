@@ -18,7 +18,7 @@ import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import workerUrl from "./worker.js?worker&url";
 import { APP, MODEL } from "./config.js";
-import { channelChoices, readImage, writeLabelTiff, MAX_PIXELS } from "./image-io.js";
+import { channelChoices, readImage, writeLabelTiff } from "./image-io.js";
 import { channelToUint8, encoderTensor, resizedChannels, threeChannels } from "./preprocess.js";
 import {
   boxFromCorners,
@@ -212,7 +212,7 @@ function ready() {
 }
 
 function updateControls() {
-  const busy = Boolean(loading || embedRun);
+  const busy = Boolean(loading || embedRun || decoding);
   const prompting = ready();
   $("imageInput").disabled = busy;
   $("channel").disabled = busy;
@@ -262,7 +262,7 @@ function resetPrompt() {
 
 function resetSession() {
   embedRun?.abort();
-  embedding?.worker.terminate();
+  stopWorker(embedding?.worker);
   embedding = null;
   resetPrompt();
   objects = [];
@@ -305,7 +305,6 @@ async function loadFiles(filesPromise, signal) {
     if (!file.size) throw new Error(`${file.name} is empty.`);
     const image = await readImage(file.name, await file.arrayBuffer());
     current.throwIfAborted();
-    if (image.width * image.height > MAX_PIXELS) throw new Error(`${file.name} is too large.`);
     const choices = channelChoices(image);
     input = null;
     resetSession();
@@ -336,6 +335,18 @@ async function loadFiles(filesPromise, signal) {
 let messageId = 0;
 const replies = new Map();
 
+/** Terminates a session's worker, rejecting what it still owes so no prompt waits on it. */
+function stopWorker(worker) {
+  if (!worker) return;
+  worker.terminate();
+  for (const [id, reply] of replies) {
+    if (reply.worker !== worker) continue;
+    replies.delete(id);
+    reply.reject(new DOMException("The image session ended", "AbortError"));
+  }
+  decoding = null;
+}
+
 function startWorker() {
   const worker = new Worker(workerUrl, { type: "module" });
   worker.onmessage = ({ data }) => {
@@ -354,8 +365,11 @@ function startWorker() {
     else reply.resolve(data);
   };
   worker.onerror = (event) => {
-    for (const reply of replies.values()) reply.reject(new Error(event.message || "The micro-sam worker failed."));
-    replies.clear();
+    for (const [id, reply] of replies) {
+      if (reply.worker !== worker) continue;
+      replies.delete(id);
+      reply.reject(new Error(event.message || "The micro-sam worker failed."));
+    }
   };
   return worker;
 }
@@ -363,7 +377,7 @@ function startWorker() {
 function call(worker, message, transfer = [], signal = null) {
   return new Promise((resolve, reject) => {
     const id = ++messageId;
-    replies.set(id, { resolve, reject });
+    replies.set(id, { worker, resolve, reject });
     signal?.addEventListener("abort", () => {
       replies.delete(id);
       reject(signal.reason ?? new DOMException("Cancelled", "AbortError"));
@@ -384,14 +398,14 @@ async function computeEmbedding(signal, requested = $("backend").value) {
   embedRun = operation.controller;
   const current = operation.controller.signal;
   const selected = choice();
-  embedding?.worker.terminate();
+  stopWorker(embedding?.worker);
   embedding = null;
   resetPrompt();
   refreshOverlay();
   draw();
   updateControls();
   const worker = startWorker();
-  const abort = () => worker.terminate();
+  const abort = () => stopWorker(worker);
   current.addEventListener("abort", abort, { once: true });
   try {
     const backend = await resolveBackend(requested);
@@ -405,7 +419,7 @@ async function computeEmbedding(signal, requested = $("backend").value) {
     status(`Embeddings ready in ${result.seconds.toFixed(1)} s · click or drag on the image`);
     return embedding;
   } catch (error) {
-    worker.terminate();
+    stopWorker(worker);
     progress.reset(input ? "Ready" : undefined);
     throw error;
   } finally {
@@ -446,7 +460,10 @@ function promptChanged() {
   });
   decoding = run;
   updateControls();
-  run.catch(report).finally(() => {
+  // A decode outrun by a newer prompt or ended with its session is not the user's error.
+  run.catch((error) => {
+    if (version === promptVersion) report(error);
+  }).finally(() => {
     if (decoding === run) decoding = null;
     updateControls();
   });
@@ -466,14 +483,11 @@ function setBox(box) {
 }
 
 async function accept() {
-  if (decoding) await decoding;
+  if (decoding) await decoding.catch(() => null);
   if (!pending || !ready()) return null;
   const id = nextId;
   const claimed = commitObject(labels, pending.mask, id);
-  if (!claimed.length) {
-    status("This mask lies inside accepted objects; prompt a new object or undo one", true);
-    return null;
-  }
+  if (!claimed.length) throw new Error("This mask lies inside accepted objects; prompt a new object or undo one.");
   nextId++;
   const digest = await crypto.subtle.digest("SHA-256", pending.mask);
   const object = {
@@ -584,7 +598,7 @@ document.addEventListener("keydown", (event) => {
 
 $("embedButton").onclick = () => void computeEmbedding().catch(report);
 $("channel").addEventListener("change", () => {
-  embedding?.worker.terminate();
+  stopWorker(embedding?.worker);
   embedding = null;
   resetPrompt();
   refreshBase();
@@ -668,7 +682,7 @@ window.addEventListener("pagehide", () => {
   exampleControl.destroy();
   loading?.abort();
   embedRun?.abort();
-  embedding?.worker.terminate();
+  stopWorker(embedding?.worker);
 });
 
 updateControls();

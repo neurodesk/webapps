@@ -38,4 +38,7 @@ test("the build ships the licence notices", async ({ request }) => {
   const text = await notice.text();
   for (const name of ["micro-sam (MIT)", "Pillow (MIT-CMU)", "CC BY 4.0", "Apache License, Version 2.0"]) expect(text).toContain(name);
   expect((await request.get("LICENSE")).ok()).toBe(true);
+  const apache = await request.get("LICENSE-APACHE-2.0");
+  expect(apache.ok()).toBe(true);
+  for (const line of ["Apache License", "Version 2.0, January 2004", "END OF TERMS AND CONDITIONS"]) expect(await apache.text()).toContain(line);
 });
