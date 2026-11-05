@@ -88,7 +88,7 @@ async function show(sample, overlay) {
   await viewerReady();
   $("emptyState").hidden = true;
   const layers = [{ url: sample.file, name: sample.file.name }];
-  if (overlay?.kind === "labels") layers.push({ url: overlay.file, name: overlay.file.name, opacity: 0.45 });
+  if (overlay?.kind === "labels") layers.push({ url: overlay.file, name: overlay.file.name, opacity: 0.35 });
   if (overlay?.kind === "cells") layers.push({ url: overlay.file, name: overlay.file.name, colormap: "red", calMin: 0.5, calMax: 1, isTransparentBelowCalMin: true, opacity: 1 });
   await viewer.loadVolumes(layers);
   if (overlay?.kind === "labels") await viewer.setColormapLabel(1, overlay.colormap);
@@ -166,6 +166,7 @@ async function loadFiles(filesPromise, signal) {
     $("fileInfo").hidden = false;
     $("fileInfo").textContent = `${stack.name} · ${stack.shape.join(" × ")} (z × y × x) · ${stack.dtype}`;
     $("dropZone").classList.add("has-files");
+    if (!shown) $("emptyState").textContent = "Run the analysis to show the stack here.";
     progress.setProgress(0);
     const missing = [size.z, size.y, size.x].some((v) => v === null);
     status(missing ? `${stack.name} loaded · enter the voxel size` : `${stack.name} loaded`);

@@ -6,11 +6,11 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   webServer: {
-    command: withBrowserBuild("pnpm preview --port 4173 --strictPort"),
-    url: "http://localhost:4173",
+    command: withBrowserBuild("pnpm preview --port 4291 --strictPort"),
+    url: "http://localhost:4291",
     reuseExistingServer: !process.env.CI,
   },
   // The cross-origin isolation service worker hides requests from page.route; the preview
   // server sends COOP/COEP itself.
-  use: { baseURL: "http://localhost:4173", serviceWorkers: "block" },
+  use: { baseURL: "http://localhost:4291", serviceWorkers: "block" },
 });

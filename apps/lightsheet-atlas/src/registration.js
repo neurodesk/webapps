@@ -17,8 +17,8 @@ export const REGISTRATION = Object.freeze({
 const bytes = (buffer) => new Uint8Array(buffer);
 
 /** NIfTI bytes of `data` on an atlas-orientation grid of `shape`, with the atlas header's affine. */
-export function gridNifti(data, shape, atlasHeader) {
-  return bytes(createNiftiFromData(data, atlasHeader, { dims: shape, range: 'auto' }));
+export function gridNifti(data, shape, atlasHeader, options = { range: 'auto' }) {
+  return bytes(createNiftiFromData(data, atlasHeader, { dims: shape, ...options }));
 }
 
 /**
