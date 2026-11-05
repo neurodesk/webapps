@@ -60,6 +60,7 @@ test("voxel sizes from file metadata are rounded as the form shows them; missing
 
 test("thresholds display whole or to four significant digits", () => {
   assert.equal(formatThreshold(355), "355");
+  assert.equal(formatThreshold(null), "none");
   assert.equal(formatThreshold(0.123456789), "0.1235");
   assert.equal(formatThreshold(1234.5678), "1235");
 });

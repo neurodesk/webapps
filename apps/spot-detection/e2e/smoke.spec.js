@@ -172,6 +172,16 @@ test("cancelling an example download permits retry", async ({ page }) => {
   expect(attempts).toBe(2);
 });
 
+test("an image without spots finishes with zero spots and no threshold", async ({ page }) => {
+  await page.goto("/");
+  const blank = writeTiffStack({ data: new Uint16Array(20 * 20), shape: [20, 20] });
+  await page.locator("#imageInput").setInputFiles({ name: "blank.tif", mimeType: "image/tiff", buffer: blank });
+  await expect(page.locator("#fileInfo")).toContainText("20 × 20");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("0 spots detected");
+  await expect(page.locator("#resultList")).toContainText("Spots · 0 at threshold none");
+});
+
 test("3D cell labels with the maximum projection are refused before a worker starts", async ({ page }) => {
   await page.goto("/");
   await page.locator("#imageInput").setInputFiles({ name: "synthetic.tif", mimeType: "image/tiff", buffer: syntheticTiff });

@@ -47,3 +47,26 @@ test("multichannel OME-TIFFs are refused whatever their namespace prefix", async
   const timeSeries = prefixedOme(1).replace('SizeT="1"', 'SizeT="4"');
   await assert.rejects(readTiffStack(arrayBuffer(writeTiffStack({ data: new Uint16Array(4 * 4), shape: [4, 2, 2] }, { description: timeSeries }))), /time points/);
 });
+
+test("a TIFF whose header declares more than the memory budget is refused before any pixel is allocated", async () => {
+  const buffer = writeTiffStack({ data: new Uint16Array(4), shape: [2, 1, 2] });
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  // Rewrite ImageWidth and ImageLength in every IFD to 32768.
+  for (let ifd = view.getUint32(4, true); ifd; ) {
+    const entries = view.getUint16(ifd, true);
+    for (let i = 0; i < entries; i++) {
+      const at = ifd + 2 + i * 12;
+      if (view.getUint16(at, true) === 256 || view.getUint16(at, true) === 257) view.setUint32(at + 8, 32768, true);
+    }
+    ifd = view.getUint32(ifd + 2 + entries * 12, true);
+  }
+  const allocate = Uint16Array;
+  let largest = 0;
+  globalThis.Uint16Array = new Proxy(allocate, { construct(target, args) { if (typeof args[0] === "number") largest = Math.max(largest, args[0]); return new target(...args); } });
+  try {
+    await assert.rejects(readTiffStack(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)), /2 × 32768 × 32768 uint16 image needs about 78\.0 GB/);
+  } finally {
+    globalThis.Uint16Array = allocate;
+  }
+  assert.ok(largest < 1e6, `allocated ${largest} elements before refusing`);
+});

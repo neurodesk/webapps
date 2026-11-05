@@ -1,6 +1,7 @@
 // One-channel TIFF stack (one page per z plane) read with geotiff, plus the voxel
 // size in nanometres when ImageJ or OME metadata records it.
 import { fromArrayBuffer } from "geotiff";
+import { checkSize } from "./config.js";
 
 const UNIT_NM = { nm: 1, nanometer: 1, nanometre: 1, µm: 1000, um: 1000, micron: 1000, microns: 1000, micrometer: 1000, micrometre: 1000, mm: 1e6, millimeter: 1e6 };
 const TYPES = { "1:8": "uint8", "1:16": "uint16", "3:32": "float32", "3:64": "float64" };
@@ -53,6 +54,8 @@ export async function readTiffStack(buffer, { signal } = {}) {
   const description = String((await first.fileDirectory.loadValue("ImageDescription")) ?? "");
   const resolution = [first.fileDirectory.getValue("XResolution"), first.fileDirectory.getValue("YResolution")].map((r) => (Array.isArray(r) || ArrayBuffer.isView(r) ? r[0] / r[1] : r));
   const voxelSize = OME_ROOT.test(description) ? omeVoxelSize(description) : description.startsWith("ImageJ=") ? imagejVoxelSize(description, resolution) : null;
+  const shape = count > 1 ? [count, height, width] : [height, width];
+  checkSize(shape, dtype);
   const Data = { uint8: Uint8Array, uint16: Uint16Array, float32: Float32Array, float64: Float64Array }[dtype];
   const data = new Data(count * width * height);
   for (let page = 0; page < count; page++) {
@@ -64,6 +67,5 @@ export async function readTiffStack(buffer, { signal } = {}) {
     const [plane] = await image.readRasters({ signal });
     data.set(plane, page * width * height);
   }
-  const shape = count > 1 ? [count, height, width] : [height, width];
   return { data, shape, dtype, voxelSize };
 }

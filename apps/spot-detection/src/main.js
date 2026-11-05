@@ -420,7 +420,7 @@ registerAppAutomation({
       await loadFiles(Promise.resolve(inputs.image), signal);
       if (inputs.labels?.length) await loadLabels(Promise.resolve(inputs.labels), signal);
       // A voxel size the parameters leave out comes from the TIFF's metadata, as in the form.
-      const given = Object.fromEntries(Object.entries(parameters).filter(([, value]) => value !== undefined));
+      const given = Object.fromEntries(Object.entries(parameters).filter(([, value]) => value != null));
       const settings = detectionSettings({ ...DEFAULTS, ...voxelFromFile(input.image.voxelSize), ...given });
       showSettings(settings);
       return detect(signal, settings);

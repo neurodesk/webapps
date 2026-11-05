@@ -63,16 +63,24 @@ export function checkRun(image, settings, labels = null) {
   if (labels?.shape.length === 3 && image.shape.length === 3 && settings.projection) {
     throw new Error("3D cell labels cannot count spots found in the 2D maximum projection; detect in the 3D stack, or load one y × x label plane.");
   }
-  const voxels = image.shape.reduce((a, b) => a * b, 1);
-  const bytes = voxels * WORKING_BYTES[image.dtype];
+  checkSize(image.shape, image.dtype);
+}
+
+// Refuses an image whose working memory is above the budget; the TIFF reader calls it
+// with the header's dimensions before it allocates or decodes a pixel.
+export function checkSize(shape, dtype) {
+  const voxels = shape.reduce((a, b) => a * b, 1);
+  const bytes = voxels * WORKING_BYTES[dtype];
   if (bytes > MEMORY_BUDGET) {
     const gb = (n) => (n / 1024 ** 3).toFixed(1);
-    throw new Error(`This ${image.shape.join(" × ")} ${image.dtype} image needs about ${gb(bytes)} GB of working memory, above the ${gb(MEMORY_BUDGET)} GB limit; crop it or keep fewer planes.`);
+    throw new Error(`This ${shape.join(" × ")} ${dtype} image needs about ${gb(bytes)} GB of working memory, above the ${gb(MEMORY_BUDGET)} GB limit; crop it or keep fewer planes.`);
   }
 }
 
 // A threshold as the results and the log show it: integers whole, others to 4 significant digits.
+// No threshold (an image without spots) shows as "none".
 export function formatThreshold(threshold) {
+  if (threshold === null || !Number.isFinite(threshold)) return "none";
   return Number.isInteger(threshold) ? String(threshold) : String(Number(threshold.toPrecision(4)));
 }
 
