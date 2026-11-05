@@ -179,6 +179,25 @@ test("several 2D slices load as one stack in name order and are analysed in 3D",
   await expect(page.locator("#statusText")).toHaveText("b.tif is 16 × 16; every slice must match a.tif.");
 });
 
+test("EXIF-rotated JPEG slices stack on their stored grid, as ImageJ reads them", async ({ page }) => {
+  await page.goto("/");
+  // A 64 × 32 JPEG from the browser's encoder with an EXIF APP1 (orientation 6: shown 32 × 64) after SOI.
+  const bytes = await page.evaluate(async () => {
+    const canvas = new OffscreenCanvas(64, 32);
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, 64, 32);
+    context.fillStyle = "#000";
+    context.fillRect(0, 0, 32, 32);
+    const encoded = new Uint8Array(await (await canvas.convertToBlob({ type: "image/jpeg", quality: 1 })).arrayBuffer());
+    const exif = [0x45, 0x78, 0x69, 0x66, 0, 0, 0x4d, 0x4d, 0, 0x2a, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0, 0, 0, 0, 0];
+    return [0xff, 0xd8, 0xff, 0xe1, 0, exif.length + 2, ...exif, ...encoded.subarray(2)];
+  });
+  const jpeg = (name) => ({ name, mimeType: "image/jpeg", buffer: Buffer.from(bytes) });
+  await page.locator("#imageInput").setInputFiles([jpeg("rotated_1.jpg"), jpeg("rotated_2.jpg")]);
+  await expect(page.locator("#fileInfo")).toHaveText("2 slices from rotated_1.jpg · 3D 64 × 32 × 2");
+});
+
 test("over-limit, non-finite and multi-channel TIFFs are refused at load, keeping the loaded image", async ({ page }) => {
   await page.goto("/");
   await page.locator("#imageInput").setInputFiles(gratingTiff(20, 32, "kept.tif"));
@@ -255,12 +274,13 @@ test("cancelling during image reading prevents a late commit and permits retry",
   await page.route(shg.files[0].url, (route) => route.fulfill({ body: bytes }));
   await page.goto("/");
   await page.evaluate(() => {
-    const read = File.prototype.arrayBuffer;
-    File.prototype.arrayBuffer = function () {
+    // TIFF headers are read through Blob slices.
+    const read = Blob.prototype.arrayBuffer;
+    Blob.prototype.arrayBuffer = function () {
       const file = this;
       return new Promise((resolve, reject) => {
         window.finishExampleRead = () => {
-          File.prototype.arrayBuffer = read;
+          Blob.prototype.arrayBuffer = read;
           read.call(file).then(resolve, reject);
         };
       });

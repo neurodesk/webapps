@@ -22,32 +22,86 @@ function rasterHeader(dims, spacing) {
   });
 }
 
-/** Width and height of a PNG (IHDR) or JPEG (first SOF marker) from its header bytes, or null. */
-export function rasterSize(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.length >= 24 && view.getUint32(0) === 0x89504e47) return [view.getUint32(16), view.getUint32(20)];
-  if (bytes.length < 4 || view.getUint16(0) !== 0xffd8) return null;
+const readView = async (file, at, length) => new DataView(await file.slice(at, at + length).arrayBuffer());
+
+/**
+ * The marker segments of a JPEG before its scan, read with small slices so large APP segments
+ * (ICC profiles, EXIF thumbnails) cost no more than their headers. Yields
+ * { at, marker, length, view } with `view` the segment's first 12 bytes; stops at a
+ * start of frame, a scan, the end of the file or a byte that is not a marker.
+ */
+async function* jpegSegments(file) {
   let at = 2;
-  while (at + 9 <= bytes.length) {
-    if (bytes[at] !== 0xff) return null;
-    const marker = bytes[at + 1];
+  while (at + 4 <= file.size) {
+    const view = await readView(file, at, 12);
+    if (view.getUint8(0) !== 0xff) return;
+    const marker = view.getUint8(1);
+    // Fill bytes before a marker, and markers without a length (TEM, RSTn).
+    if (marker === 0xff) {
+      at += 1;
+      continue;
+    }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      at += 2;
+      continue;
+    }
+    if (marker === 0xd9 || marker === 0xda) return;
+    const length = 2 + view.getUint16(2);
+    yield { at, marker, length, view };
     // Start-of-frame markers, except DHT (C4), JPG (C8) and DAC (CC).
-    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return [view.getUint16(at + 7), view.getUint16(at + 5)];
-    at += 2 + view.getUint16(at + 2);
+    if (isFrameStart(marker)) return;
+    at += length;
+  }
+}
+
+const isFrameStart = (marker) => marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+
+const isJpeg = async (file) => file.size >= 4 && (await readView(file, 0, 2)).getUint16(0) === 0xffd8;
+
+/** Width and height of a PNG (IHDR) or JPEG (first start-of-frame segment) from its header, or null. */
+export async function rasterSize(file) {
+  const head = await readView(file, 0, 24);
+  if (head.byteLength >= 24 && head.getUint32(0) === 0x89504e47) return [head.getUint32(16), head.getUint32(20)];
+  if (!(await isJpeg(file))) return null;
+  for await (const { marker, view } of jpegSegments(file)) {
+    if (isFrameStart(marker)) return view.byteLength < 9 ? null : [view.getUint16(7), view.getUint16(5)];
   }
   return null;
 }
 
-async function readRaster(file) {
-  const bitmap = await createImageBitmap(file);
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+/** The JPEG without its EXIF segments, so no decoder can apply their orientation. */
+async function withoutExif(file) {
+  if (!(await isJpeg(file))) return file;
+  const parts = [];
+  let kept = 0;
+  for await (const { at, marker, length, view } of jpegSegments(file)) {
+    const exif = marker === 0xe1 && view.byteLength >= 10 && view.getUint32(4) === 0x45786966 && view.getUint16(8) === 0;
+    if (!exif) continue;
+    parts.push(file.slice(kept, at));
+    kept = at + length;
+  }
+  return kept ? new Blob([...parts, file.slice(kept)], { type: file.type }) : file;
+}
+
+/**
+ * Decodes a PNG or JPEG to greyscale on its stored grid (`dims`, from the header): EXIF
+ * orientation is ignored, as ImageJ ignores it. A decoder that rotates anyway is refused.
+ */
+async function readRaster(file, [nx, ny]) {
+  const bitmap = await createImageBitmap(await withoutExif(file), { imageOrientation: "none" });
+  const { width, height } = bitmap;
+  if (width !== nx || height !== ny) {
+    bitmap.close();
+    throw new Error(`it decodes to ${width} × ${height}, not the ${nx} × ${ny} its header gives (EXIF rotation?). Save it without rotation.`);
+  }
+  const canvas = new OffscreenCanvas(nx, ny);
   const context = canvas.getContext("2d");
   context.drawImage(bitmap, 0, 0);
   bitmap.close();
-  const { data: rgba } = context.getImageData(0, 0, canvas.width, canvas.height);
-  const data = new Float64Array(canvas.width * canvas.height);
+  const { data: rgba } = context.getImageData(0, 0, nx, ny);
+  const data = new Float64Array(nx * ny);
   for (let i = 0; i < data.length; i++) data[i] = (rgba[4 * i] + rgba[4 * i + 1] + rgba[4 * i + 2]) / 3;
-  return { data, dims: [canvas.width, canvas.height, 1], spacing: [1, 1, 1], unit: "pixel" };
+  return { data, dims: [nx, ny, 1], spacing: [1, 1, 1], unit: "pixel" };
 }
 
 /**
@@ -60,7 +114,7 @@ async function probe(file) {
   if (!file.size) throw new Error(`${file.name} is empty.`);
   try {
     if (kind === "tiff") {
-      const layout = await tiffLayout(await file.arrayBuffer());
+      const layout = await tiffLayout(file);
       return { file, kind, dims: layout.dims, layout };
     }
     if (kind === "nifti") {
@@ -68,7 +122,7 @@ async function probe(file) {
       const rank = Math.max(1, Math.min(7, dims[0]));
       return { file, kind, dims: Array.from({ length: rank }, (_, k) => Math.max(1, dims[k + 1])) };
     }
-    const size = rasterSize(new Uint8Array(await file.slice(0, 65536).arrayBuffer()));
+    const size = await rasterSize(file);
     if (!size) throw new Error("its header gives no image size");
     return { file, kind, dims: [...size, 1] };
   } catch (error) {
@@ -77,14 +131,14 @@ async function probe(file) {
 }
 
 /** Decodes a probed file's voxels. */
-async function decode({ file, kind, layout }) {
+async function decode({ file, kind, dims, layout }) {
   if (kind === "nifti") {
     const volume = parseNiftiVolume(await decodeNiftiBuffer(await file.arrayBuffer()), { OutputCtor: Float64Array });
     return { data: volume.imageData, dims: volume.dims, spacing: volume.voxelSize, unit: "mm", kind, header: volume.headerBytes };
   }
   let image;
   try {
-    image = kind === "tiff" ? await readTiffPages(layout) : await readRaster(file);
+    image = kind === "tiff" ? await readTiffPages(layout) : await readRaster(file, dims);
   } catch (error) {
     throw new Error(`${file.name} could not be read: ${error.message}`);
   }

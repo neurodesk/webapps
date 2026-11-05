@@ -1,7 +1,7 @@
 // TIFF input and output. Reading is geotiff's; writing is a small baseline TIFF writer for the
 // maps (float32 or RGB 8-bit, one uncompressed strip per page, ImageJ stack description), so
 // Fiji opens a map as a stack with its voxel size.
-import { fromArrayBuffer } from "geotiff";
+import { GeoTIFF, fromArrayBuffer } from "geotiff";
 
 const RESOLUTION_UNITS = { 2: "inch", 3: "cm" };
 
@@ -23,9 +23,19 @@ function rational(value) {
 // Lengths in micrometres, for converting OME-XML physical sizes to one unit.
 const MICROMETRES = { pm: 1e-6, nm: 1e-3, "µm": 1, "μm": 1, um: 1, micron: 1, mm: 1e3, cm: 1e4, m: 1e6 };
 
+const XML_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+function xmlText(value) {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (entity, name) => {
+    if (name[0] !== "#") return XML_ENTITIES[name] ?? entity;
+    const code = name[1] === "x" || name[1] === "X" ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+    return String.fromCodePoint(code);
+  });
+}
+
 function xmlAttributes(text) {
   const attributes = {};
-  for (const [, name, value] of text.matchAll(/([\w:.-]+)\s*=\s*"([^"]*)"/g)) attributes[name.replace(/^\w+:/, "")] = value;
+  for (const [, name, , value] of text.matchAll(/([\w:.-]+)\s*=\s*(["'])(.*?)\2/gs)) attributes[name.replace(/^\w+:/, "")] = xmlText(value);
   return attributes;
 }
 
@@ -35,12 +45,14 @@ function xmlAttributes(text) {
  */
 export function omeDescription(text) {
   if (typeof text !== "string" || !/<(?:\w+:)?OME[\s>]/.test(text)) return null;
-  const pixels = text.match(/<(?:\w+:)?Pixels\b([^>]*)>/);
+  const images = [...text.matchAll(/<(?:\w+:)?Image\b[^>]*>/g)].length;
+  if (images > 1) throw new Error(`This OME-TIFF holds ${images} image series. In Fiji, open the series you want, save it as TIFF and load that.`);
+  const pixels = text.match(/<(?:\w+:)?Pixels\b((?:[^>"']|"[^"]*"|'[^']*')*?)(\/>|>([\s\S]*?)<\/(?:\w+:)?Pixels>)/);
   if (!pixels) return null;
   const attributes = xmlAttributes(pixels[1]);
   const size = (name) => Number(attributes[name]) || 1;
   // A colour image is one Channel element with several samples per pixel.
-  const channelElements = [...text.matchAll(/<(?:\w+:)?Channel\b/g)].length;
+  const channelElements = [...(pixels[3] ?? "").matchAll(/<(?:\w+:)?Channel\b/g)].length;
   const lengths = ["X", "Y", "Z"].map((axis) => {
     const value = Number(attributes[`PhysicalSize${axis}`]);
     return value > 0 ? { value, unit: attributes[`PhysicalSize${axis}Unit`] ?? "µm" } : null;
@@ -58,12 +70,24 @@ export function omeDescription(text) {
 }
 
 /**
- * The layout of a TIFF from its headers alone, without decoding pixels:
- * { dims, spacing, unit, pages } where `pages` are the geotiff images of the stack.
- * Hyperstacks with several channels or time points (ImageJ or OME-XML) are refused.
+ * A geotiff source that reads only the byte ranges geotiff asks for, so headers are parsed
+ * without reading the file. geotiff's `fromBlob` does the same through FileReader, which Node lacks.
  */
-export async function tiffLayout(buffer) {
-  const tiff = await fromArrayBuffer(buffer);
+function blobSource(blob) {
+  return {
+    fileSize: blob.size,
+    fetch: (slices) => Promise.all(slices.map(({ offset, length }) => blob.slice(offset, offset + length).arrayBuffer())),
+    close() {},
+  };
+}
+
+/**
+ * The layout of a TIFF (a Blob, read range by range, or an ArrayBuffer) from its headers alone,
+ * without decoding pixels: { dims, spacing, unit, pages } where `pages` are the geotiff images
+ * of the stack. Hyperstacks with several channels or time points (ImageJ or OME-XML) are refused.
+ */
+export async function tiffLayout(source) {
+  const tiff = source instanceof Blob ? await GeoTIFF.fromSource(blobSource(source)) : await fromArrayBuffer(source);
   const first = await tiff.getImage(0);
   const nx = first.getWidth();
   const ny = first.getHeight();

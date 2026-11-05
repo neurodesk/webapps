@@ -49,11 +49,19 @@ export function buildTiff({ width, height, pages, description = null, deflate = 
   return buffer;
 }
 
-/** An OME-XML description with the given Pixels attributes and `channels` Channel elements, under a prefix. */
-export function omeXml({ prefix = "", channels = 1, ...pixels }) {
+/**
+ * An OME-XML description with the given Pixels attributes and `channels` Channel elements, under
+ * a prefix, with attribute values in `quote`s. `images` repeats the Image element (a multi-series file).
+ */
+export function omeXml({ prefix = "", channels = 1, images = 1, quote = '"', ...pixels }) {
   const p = prefix ? `${prefix}:` : "";
   const ns = prefix ? `xmlns:${prefix}` : "xmlns";
-  const attributes = Object.entries({ DimensionOrder: "XYZCT", Type: "uint8", ...pixels }).map(([k, v]) => `${k}="${v}"`).join(" ");
-  const channelElements = Array.from({ length: channels }, (_, c) => `<${p}Channel ID="Channel:0:${c}" SamplesPerPixel="1"/>`).join("");
-  return `<?xml version="1.0" encoding="UTF-8"?><${p}OME ${ns}="http://www.openmicroscopy.org/Schemas/OME/2016-06"><${p}Image ID="Image:0"><${p}Pixels ID="Pixels:0" ${attributes}>${channelElements}<${p}TiffData/></${p}Pixels></${p}Image></${p}OME>`;
+  const q = (value) => `${quote}${value}${quote}`;
+  const attributes = Object.entries({ DimensionOrder: "XYZCT", Type: "uint8", ...pixels }).map(([k, v]) => `${k}=${q(v)}`).join(" ");
+  const image = (i) => {
+    const channelElements = Array.from({ length: channels }, (_, c) => `<${p}Channel ID=${q(`Channel:${i}:${c}`)} SamplesPerPixel=${q(1)}/>`).join("");
+    return `<${p}Image ID=${q(`Image:${i}`)}><${p}Pixels ID=${q(`Pixels:${i}`)} ${attributes}>${channelElements}<${p}TiffData/></${p}Pixels></${p}Image>`;
+  };
+  const body = Array.from({ length: images }, (_, i) => image(i)).join("");
+  return `<?xml version=${q("1.0")} encoding=${q("UTF-8")}?><${p}OME ${ns}=${q("http://www.openmicroscopy.org/Schemas/OME/2016-06")}>${body}</${p}OME>`;
 }
