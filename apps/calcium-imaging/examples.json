@@ -2,7 +2,7 @@
   {
     "id": "froemke-a1-gcamp",
     "label": "Mouse auditory cortex, GCaMP (400 frames)",
-    "description": "Raw, unaligned two-photon movie of layer 2/3 excitatory neurons in mouse auditory cortex (Schiavo et al. 2023, DANDI 000249, CC-BY-4.0), excerpt (frames 400–799, converted to OME-TIFF): 256 × 256 pixels, 400 frames at 3.9 Hz.",
+    "description": "Raw, unaligned two-photon movie of layer 2/3 excitatory neurons in mouse auditory cortex (Schiavo et al. 2020 data, DANDI 000249, CC-BY-4.0), excerpt (frames 400–799, converted to OME-TIFF): 256 × 256 pixels, 400 frames at 3.9 Hz.",
     "expectedResult": "Rigid shifts of up to about 2.5 px around frame 100, a correlation image with the active cells, their ROIs, ΔF/F traces and OASIS spike estimates.",
     "files": [
       {

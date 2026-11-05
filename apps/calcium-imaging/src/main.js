@@ -464,7 +464,15 @@ async function preprocess(signal, settings) {
     current.throwIfAborted();
     progress.end("Preprocessing complete");
     status(`Preprocessing complete · ${analysis.cells.length} ROIs · ${seconds.toFixed(1)} s`);
-    return { artifacts: Object.entries(run.files).map(([role, { file }]) => ({ role, file })), provenance: record };
+    // Each artifact's file is built only when read: the registered movie TIFF is large.
+    const files = run.files;
+    const artifacts = Object.keys(files).map((role) => ({
+      role,
+      get file() {
+        return files[role].file;
+      },
+    }));
+    return { artifacts, provenance: record };
   } catch (error) {
     if (!run) clearRun();
     progress.reset();

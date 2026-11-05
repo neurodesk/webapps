@@ -247,6 +247,27 @@ test("a frame rate entered over the file's sets the movie TIFF's frame interval,
   expect(traces[2].split(",")[1]).toBe("0.05");
 });
 
+test("the registered movie TIFF is built only when it is downloaded", async ({ page }) => {
+  test.setTimeout(180000);
+  await page.addInitScript(() => {
+    const Native = File;
+    globalThis.__builtFiles = [];
+    globalThis.File = class extends Native {
+      constructor(parts, name, options) {
+        super(parts, name, options);
+        globalThis.__builtFiles.push(name);
+      }
+    };
+  });
+  await page.goto("/");
+  await loadMovie(page, tiff("lazy.tif", syntheticMovie(40, { frameRate: 10 })));
+  await runAndWait(page);
+  const built = () => page.evaluate(() => globalThis.__builtFiles.filter((name) => name.endsWith("_registered.tif")));
+  expect(await built()).toEqual([]);
+  await downloadRow(page, "Registered movie");
+  expect(await built()).toHaveLength(1);
+});
+
 test("cancelling a run stops its workers, leaves no output and permits a complete retry", async ({ page }) => {
   test.setTimeout(420000);
   await page.goto("/");
