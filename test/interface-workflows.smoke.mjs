@@ -661,6 +661,37 @@ try {
     await expect(page.locator('#cancelButton')).toBeHidden();
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
+  await check('stardist', async page => {
+    const { syntheticNuclei } = await import('../apps/stardist/test/offline.mjs');
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(syntheticNuclei());
+    await expect(page.locator('#fileInfo')).toHaveText('synthetic-nuclei.tif · 160 × 160 · TIFF');
+    await expect(page.locator('#channelField')).toBeHidden();
+    // Thresholds and tiles chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#probThresh')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#probThresh').fill('0.6');
+    await page.locator('#tiles').selectOption('2');
+    await advanced.tap();
+    await expect(page.locator('#tiles')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#runButton')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#probThresh')).toHaveValue('0.6');
+    await expect(page.locator('#tiles')).toHaveValue('2');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('9 nuclei segmented', { timeout: 120000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Nucleus labels · 9 nuclei');
+    // A new image withdraws the result of the old one.
+    await page.locator('#imageInput').setInputFiles({ ...syntheticNuclei(), name: 'second.tif' });
+    await expect(page.locator('#fileInfo')).toContainText('second.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
   await check('sdc', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);

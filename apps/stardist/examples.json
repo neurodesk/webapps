@@ -1,0 +1,15 @@
+[
+  {
+    "id": "dsb2018-nuclei",
+    "label": "Fluorescent nuclei (DSB 2018)",
+    "description": "A 512 × 512 fluorescence image of cell nuclei from the 2018 Data Science Bowl (CC0).",
+    "expectedResult": "About 118 nuclei are outlined; download the label image and the per-nucleus table.",
+    "files": [
+      {
+        "role": "image",
+        "name": "dsb2018-nuclei-2d.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/example/dsb2018-nuclei-2d.tif"
+      }
+    ]
+  }
+]

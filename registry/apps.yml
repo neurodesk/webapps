@@ -1274,3 +1274,29 @@ apps:
       browser_test: true
       hardware_gpu: true
       release: false
+  - id: stardist
+    path: stardist
+    title: StarDist
+    description: Segment cell nuclei in 2D fluorescence microscopy.
+    categories: [segmentation]
+    keywords: [StarDist, nucleus segmentation, nuclei, cell segmentation, instance segmentation, star-convex polygons, fluorescence microscopy, DAPI, OME-TIFF, deep learning]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/stardist.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    handoff: none
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

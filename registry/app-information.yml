@@ -2277,3 +2277,35 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  stardist:
+    packages:
+      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo model (BSD-3-Clause); tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
+      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF and OME-TIFF reading }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Nucleus segmentation
+        title: StarDist
+        reference: "Schmidt U, Weigert M, Broaddus C, Myers G. Cell detection with star-convex polygons. Medical Image Computing and Computer Assisted Intervention (MICCAI 2018). Lecture Notes in Computer Science 11071. 2018:265–273."
+        doi: 10.1007/978-3-030-00934-2_30
+        code: https://github.com/stardist/stardist
+      - group: Nucleus segmentation
+        title: CSBDeep (normalization and tiled prediction)
+        reference: "Weigert M, Schmidt U, Boothe T, et al. Content-aware image restoration: pushing the limits of fluorescence microscopy. Nature Methods. 2018;15(12):1090–1097."
+        doi: 10.1038/s41592-018-0216-7
+        code: https://github.com/CSBDeep/CSBDeep
+      - group: Example data
+        title: 2018 Data Science Bowl (BBBC038)
+        reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
+        doi: 10.1038/s41592-019-0612-7
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

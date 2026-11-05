@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StarDist — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF, OME-TIFF or PNG image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a 2D TIFF, OME-TIFF or PNG image</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div class="nd-field" id="channelField" hidden>
+            <label for="channel">Channel
+              <span class="nd-info-icon" tabindex="0" aria-label="About the channel">i<span class="nd-info-tooltip">StarDist segments one channel. Choose the nuclear stain, for example DAPI or Hoechst.</span></span>
+            </label>
+            <select id="channel"></select>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Nucleus segmentation</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="model">Model</label>
+            <select id="model"><option value="2D_versatile_fluo">Versatile (fluorescent nuclei)</option></select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="probThresh">Probability threshold <small>0–1</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the probability threshold">i<span class="nd-info-tooltip">Higher values keep fewer, more certain nuclei. The default is the threshold tuned for this model.</span></span>
+                </label>
+                <input id="probThresh" type="number" min="0.01" max="0.99" step="0.01" value="0.479071463157368" />
+              </div>
+              <div class="nd-field">
+                <label for="nmsThresh">Overlap threshold <small>0–1</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the overlap threshold">i<span class="nd-info-tooltip">Non-maximum suppression drops a candidate whose overlap with a more probable one exceeds this fraction of the smaller area. Lower values merge more touching nuclei.</span></span>
+                </label>
+                <input id="nmsThresh" type="number" min="0.01" max="0.99" step="0.01" value="0.3" />
+              </div>
+              <div class="nd-field">
+                <label for="tiles">Tiles per axis
+                  <span class="nd-info-icon" tabindex="0" aria-label="About tiles">i<span class="nd-info-tooltip">Large images are predicted in overlapping tiles, as StarDist's n_tiles does. Automatic uses one tile per 1024 pixels; the result does not depend on it.</span></span>
+                </label>
+                <select id="tiles">
+                  <option value="0">Automatic</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="6">6</option>
+                  <option value="8">8</option>
+                </select>
+              </div>
+              <button id="resetSettings" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Model defaults</button>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Segment nuclei</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>StarDist finds cell nuclei in 2D fluorescence microscopy by predicting, for every pixel, the probability that it lies inside a nucleus and the distances to the nucleus boundary along 32 rays. Each candidate is a star-convex polygon; non-maximum suppression keeps the most probable polygon where candidates overlap.</p>
+      <p>This app runs StarDist's pretrained 2D_versatile_fluo model, trained on a subset of the 2018 Data Science Bowl, with the model's tuned thresholds. The image is normalized to its 1st and 99.8th percentiles as in the StarDist examples. The model was converted to ONNX and runs with ONNX Runtime on the CPU. Non-maximum suppression and label drawing are ports of StarDist's code. On the example, the labels equal Python StarDist 0.9.1 to the pixel.</p>
+      <p>The model expects one fluorescence channel with bright nuclei on a dark background, at roughly the pixel size of the training images (nuclei about 10 to 40 pixels across). It is not for brightfield or H&amp;E images, whole cells or 3D stacks. The table gives each nucleus's centroid in pixels (x to the right, y down), its area in pixels and its mean intensity in the segmented channel.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. The model is downloaded once from the Neurodesk dataset on Hugging Face and checked against its checksum.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
