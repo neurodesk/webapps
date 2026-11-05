@@ -35,6 +35,8 @@ CASES = [
     dict(id="water-1.2-depth", na=1.2, ni=1.333, ns=1.333, emission=0.52, excitation=0, dxy=0.1, dz=0.25, xy=25, nz=21, pz=2),
     dict(id="confocal-example", na=1.4, ni=1.518, ns=1.47, emission=0.52526, excitation=0.488, dxy=0.0658941, dz=0.13, xy=43, nz=31, pz=0),
     dict(id="low-na", na=0.3, ni=1.0, ns=1.33, emission=0.52, excitation=0, dxy=0.3, dz=1.0, xy=21, nz=15, pz=0),
+    # Oil into a sample of index 1.45, above the NA, 10 µm deep: index mismatch without evanescent light.
+    dict(id="oil-mismatch-depth-1.45", na=1.4, ni=1.515, ns=1.45, emission=0.52, excitation=0, dxy=0.1, dz=0.2, xy=25, nz=31, pz=10),
 ]
 
 

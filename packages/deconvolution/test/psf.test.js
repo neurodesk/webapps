@@ -35,8 +35,9 @@ for (const c of reference.cases) {
         worst = Math.max(worst, Math.abs(psf[(zi * c.xy + centre) * c.xy + x] - want));
       });
     });
-    // psfmodels' own integration error is about 2e-5 here, and 1.6e-3 where light is
-    // evanescent in the sample (ns < NA), which adaptive quadrature attributes to psfmodels.
+    // The module differs from psfmodels by at most 7.9e-5 of the peak here, and by 3.88e-3
+    // where light is evanescent in the sample (ns < NA); there psfmodels is itself 1.6e-3 off
+    // adaptive quadrature at the sampled points, which the module matches to 1.5e-7.
     if (c.evanescent) assert.ok(worst < 5e-3, `max |difference| ${worst}`);
     else assert.ok(worst < 1e-4, `max |difference| ${worst}`);
   });

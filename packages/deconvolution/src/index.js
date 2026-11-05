@@ -59,7 +59,8 @@ export function normaliseSum(values) {
 /**
  * A measured PSF (a bead stack) made usable: the median of its outermost voxels is subtracted as
  * background and negatives are set to 0, and it is cropped to the largest odd box centred on its
- * brightest voxel, so deconvolution does not shift the image. Returns `{ data, dims, peak,
+ * brightest voxel, so deconvolution does not shift the image. A peak on the stack's edge (along
+ * an axis longer than one voxel) is refused. Returns `{ data, dims, peak,
  * background }` with `data` summing to 1.
  */
 export function prepareMeasuredPsf(values, dims) {
@@ -82,6 +83,9 @@ export function prepareMeasuredPsf(values, dims) {
   const background = border.length ? border[Math.floor(border.length / 2)] : 0;
   const peak = [Math.floor(peakIndex / (ny * nx)), Math.floor(peakIndex / nx) % ny, peakIndex % nx];
   const half = peak.map((p, axis) => Math.min(p, dims[axis] - 1 - p));
+  // Cropped around a peak on an edge, the PSF would be one voxel thick along that axis.
+  const edges = ["z", "y", "x"].filter((_, axis) => dims[axis] > 1 && half[axis] === 0);
+  if (edges.length) throw new Error(`The PSF's brightest voxel is on the stack's edge (${edges.join(", ")}); use a bead stack with the bead inside it.`);
   const out = half.map((h) => 2 * h + 1);
   const cropped = new Float64Array(out[0] * out[1] * out[2]);
   for (let z = 0; z < out[0]; z += 1) {
@@ -124,11 +128,24 @@ export function nextFastLength(target) {
 export function memoryPlan(dims, psfDims, { tv = false } = {}) {
   const padded = dims.map((n, axis) => nextFastLength(n + psfDims[axis] - 1));
   const paddedVoxels = padded[0] * padded[1] * padded[2];
-  const spectrum = padded[0] * padded[1] * (Math.floor(padded[2] / 2) + 1);
+  const half = Math.floor(padded[2] / 2) + 1;
+  const spectrum = padded[0] * padded[1] * half;
   const voxels = dims[0] * dims[1] * dims[2];
-  // Real padded buffer, OTF and work spectrum (complex f64), image, estimate and ratio (f64),
-  // and for RL-TV three gradient fields and the divergence.
-  const bytes = paddedVoxels * 8 + spectrum * 32 + voxels * 8 * (3 + (tv ? 4 : 0));
+  const psfVoxels = psfDims[0] * psfDims[1] * psfDims[2];
+  // Kept for the run: the real padded buffer, the OTF and work spectrum (complex f64), and the
+  // image, estimate and ratio (f64).
+  const resident = paddedVoxels * 8 + spectrum * 32 + voxels * 8 * 3;
+  // The FFT's line buffer (one y-z plane of the half spectrum), plus its scratch and twiddles,
+  // bounded by four complex values per padded length.
+  const workspace = (half * Math.max(padded[0], padded[1]) + 4 * (padded[0] + padded[1] + padded[2])) * 16;
+  // wasm-bindgen copies the image and PSF arguments into the module while the constructor keeps
+  // its own image copy, and copies the estimate out again at the end.
+  const transient = (voxels + psfVoxels) * 8;
+  // RL-TV's three unit-gradient fields and the divergence, allocated each iteration.
+  const regularisation = tv ? voxels * 8 * 4 : 0;
+  // Measured on the module (test/helpers.test.js), the module's memory grows up to 1.02 times
+  // this sum (allocator rounding and 64 KiB pages), so the plan allows 1.25 times it.
+  const bytes = Math.ceil(1.25 * (resident + workspace + transient + regularisation));
   return { padded, paddedVoxels, bytes, fits: bytes <= MEMORY_BUDGET };
 }
 

@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNiftiHeader } from "@neurodesk/webapp-components/file-io";
-import { APP, SettingsError, provenance, readSettings } from "../src/config.js";
+import { APP, SettingsError, checkMovie, provenance, readSettings } from "../src/config.js";
+import { inspectTiffStack, writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { DEFAULTS } from "../src/core/pipeline.js";
 import { outputStem, parseShiftsCsv, roisCsv, shiftSvg, shiftsCsv, toInputType, traceSvg, tracesCsv } from "../src/outputs.js";
 import { displayNifti, displaySpacing, roiColormap } from "../src/display.js";
@@ -139,4 +140,13 @@ test("provenance records the method, the 0.7 coefficient and the baseline", () =
   const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert.equal(record.version, manifest.version);
   assert.match(record.version, /^\d+\.\d+\.\d{8}$/);
+});
+
+test("a plain TIFF's unlabelled pages are a movie's frames; OME z planes are not", async () => {
+  const bytes = writeTiffStack({ width: 4, height: 3, data: new Uint16Array(4 * 3 * 25) });
+  const info = await inspectTiffStack(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  assert.equal(info.metadata.kind, "baseline");
+  assert.deepEqual(checkMovie(info, "plain.tif"), { frames: 25 });
+  const zStack = { pages: 25, metadata: { kind: "ome", sizeC: 1, sizeZ: 25, sizeT: 1 } };
+  assert.throws(() => checkMovie(zStack, "z.ome.tif"), /Z-stack of 25 planes/);
 });

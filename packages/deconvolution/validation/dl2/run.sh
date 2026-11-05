@@ -6,7 +6,7 @@ python="${PYTHON:-python3}"
 work="$(mktemp -d -t deconvolution-dl2.XXXXXX)"
 trap 'rm -rf "$work"' EXIT
 
-curl -fsSL -o "$work/DeconvolutionLab_2.jar" http://bigwww.epfl.ch/deconvolution/deconvolutionlab2/DeconvolutionLab_2.jar
+curl -fsSL -o "$work/DeconvolutionLab_2.jar" https://bigwww.epfl.ch/deconvolution/deconvolutionlab2/DeconvolutionLab_2.jar
 curl -fsSL -o "$work/ij.jar" https://repo1.maven.org/maven2/net/imagej/ij/1.54p/ij-1.54p.jar
 echo "37ade1a14b7063b5a1c9b53d685379cc45b3704d023db1d10dbeae92b0a6762c  $work/DeconvolutionLab_2.jar" | sha256sum -c -
 

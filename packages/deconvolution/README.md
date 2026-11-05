@@ -54,8 +54,8 @@ lies in [−6, 6], so the module refuses `λ ≥ 1/6`; the app allows at most 0.
 
 | Check | Reference | Result |
 | --- | --- | --- |
-| PSF, six cases (oil, air, water, confocal, low NA, depth with index mismatch) | adaptive `scipy.integrate.quad` of the same integral (`psf_reference.py`) | max difference 1.5e-7 of the peak (2.9e-16 to 1.0e-13 without evanescent light) |
-| PSF, central row where psfmodels integrates exactly | psfmodels 0.3.3 `scalar_psf` (`sf=1, mode=0`) | 6.7e-6 to 6.7e-5 of the peak; 3.9e-3 in the evanescent case, see below |
+| PSF, seven cases (oil, air, water, confocal, low NA, index mismatch at 5 µm into ns 1.33 and at 10 µm into ns 1.45) | adaptive `scipy.integrate.quad` of the same integral (`psf_reference.py`) | max difference 1.5e-7 of the peak (2.9e-16 to 1.0e-13 without evanescent light) |
+| PSF, central row where psfmodels integrates exactly | psfmodels 0.3.3 `scalar_psf` (`sf=1, mode=0`) | 6.7e-6 to 7.9e-5 of the peak; 3.9e-3 in the evanescent case, see below |
 | Richardson-Lucy, odd sizes, Gibson-Lanni and even-sided PSFs, non-power-of-two grids | scikit-image 0.25.2 `richardson_lucy(..., clip=False)` (`rl_reference.py`) | max relative difference 1.8e-14 and 2.3e-14 |
 | RL-TV on a noisy phantom | DeconvolutionLab2 RLTV (`dl2/run.sh`, `rltv-dl2.json`) | qualitative, below |
 
@@ -106,5 +106,6 @@ The comparison is qualitative by design.
 - Li J, Xue F, Blu T (2017) J Opt Soc Am A 34:1029. doi:10.1364/JOSAA.34.001029 (evaluated, not used)
 - van der Walt S et al. (2014) PeerJ 2:e453. doi:10.7717/peerj.453
 
-Licence: MIT (`LICENSE`); bundled crates and the fdlibm notice of libm's Bessel functions are
-in `NOTICE`.
+Licence: MIT (`LICENSE`). The fdlibm notice of libm's Bessel functions is in `NOTICE`; the
+licence texts of every crate the module links are in `THIRD_PARTY_NOTICES.md`, generated from
+the Cargo lock by `scripts/deconvolution-third-party-notices.py` (`--check` in CI).

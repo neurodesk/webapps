@@ -5243,11 +5243,20 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/726eee4a192bf75315b80ed693b64d158b07b703/deconvolution/example/hela-phalloidin488-confocal.tif": {
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif": {
       "sha256": "a79ed0b43b7ed37fa6b70eed6a2b72202daf67e528db871533d77c9b6ae8f266",
       "bytes": 2782466,
       "contentType": "image/tiff",
       "kind": "example",
+      "license": "CC-BY-4.0",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/README.md": {
+      "sha256": "12660b5f8e5ae189fb1ca916a5bd3997192ec4c66701ebbd37bb19844c01a667",
+      "bytes": 760,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "attribution",
+      "license": "CC-BY-4.0",
       "dependencies": []
     }
   },
@@ -6601,7 +6610,8 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif"
     ],
     "deconvolution": [
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/726eee4a192bf75315b80ed693b64d158b07b703/deconvolution/example/hela-phalloidin488-confocal.tif"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/README.md"
     ]
   }
 }
