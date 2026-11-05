@@ -4,9 +4,11 @@ import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
-import { appInformationPayload, loadAppInformation } from './lib/app-information.mjs';
+import { loadAppInformation } from './lib/app-information.mjs';
+import { HUB_SITE, SITES_DIR, hostedThemeOptions, projectCatalogSite, projectHubSite } from './lib/catalog-sites.mjs';
 import { injectCompositeTheme } from './lib/composite-theme.mjs';
 import { renderLandingPage } from './lib/landing-page.mjs';
+import { loadNotFoundTemplate, renderNotFoundPage } from './lib/not-found-page.mjs';
 import { assembleRuntimeAssetStore } from './lib/runtime-assets.mjs';
 import { headersFile } from './lib/vite-app-config.mjs';
 import { loadStandalone, stageStandaloneAssets } from './lib/standalone.mjs';
@@ -14,8 +16,11 @@ import { loadStandalone, stageStandaloneAssets } from './lib/standalone.mjs';
 const registry = await loadAppsRegistry();
 const information = await loadAppInformation(registry);
 const standalone = await loadStandalone(registry);
+// dist/ is the all-app assembly the desktop suite reads; each catalogue's
+// deployable site is projected from it into dist-sites/<catalog id>.
 const siteDist = join(repoRoot, 'dist');
-const siteOrigin = `https://${registry.site.domain}`;
+const sitesDir = join(repoRoot, SITES_DIR);
+const notFoundTemplate = await loadNotFoundTemplate(repoRoot);
 
 // Standalone builds bake these files into app dist. Turbo can restore an app
 // build created before a shared file changed, so composite assembly refreshes
@@ -27,6 +32,7 @@ const sharedSiteAssets = [
   ['shell-adapters', join(repoRoot, 'site', 'shell-adapters')],
   ['analytics.js', join(repoRoot, 'packages', 'analytics', 'src', 'index.js')],
   ['neurodesk-logo.svg', join(repoRoot, 'site', 'neurodesk-logo.svg')],
+  ['sciget-logo.svg', join(repoRoot, 'site', 'sciget-logo.svg')],
   ['fonts', join(repoRoot, 'site', 'fonts')],
 ];
 await rm(siteDist, { recursive: true, force: true });
@@ -45,18 +51,9 @@ for (const app of registry.apps) {
   const indexPath = join(destination, 'index.html');
   const indexHtml = await readFile(indexPath, 'utf8');
   const appPackage = JSON.parse(await readFile(join(repoRoot, 'apps', app.id, 'package.json'), 'utf8'));
-  await writeFile(indexPath, injectCompositeTheme(indexHtml, {
-    appId: app.id,
-    shell: app.shell,
-    title: app.title,
-    description: app.description,
-    version: appPackage.version,
-    measurementId: registry.site.analytics.measurement_id,
-    url: `${siteOrigin}/${app.path}/`,
-    information: appInformationPayload(information, app.id),
-    standaloneHref: '../standalone.json',
-    componentsHref: '../shell-adapters/components/',
-  }));
+  await writeFile(indexPath, injectCompositeTheme(indexHtml, hostedThemeOptions({
+    registry, information, app, version: appPackage.version,
+  })));
   await rm(join(destination, 'standalone.json'), { force: true });
   await rm(join(destination, 'shell-adapters/components'), { recursive: true, force: true });
 }
@@ -74,6 +71,18 @@ for (const [name, sharedSource] of sharedSiteAssets) {
 await cp(join(repoRoot, 'site', 'analytics.json'), join(siteDist, 'analytics.json'));
 await stageStandaloneAssets(siteDist);
 await stageDicompareRoutes({ repoRoot, siteDist });
+await writeFile(join(siteDist, '404.html'), renderNotFoundPage(notFoundTemplate, { registry }));
 await writeFile(join(siteDist, '.nojekyll'), '');
 await writeFile(join(siteDist, '_headers'), headersFile);
 console.log(`Assembled ${registry.apps.length} apps at ${siteDist}`);
+
+await rm(sitesDir, { recursive: true, force: true });
+for (const catalog of registry.site.catalogs) {
+  const destination = join(sitesDir, catalog.id);
+  const site = await projectCatalogSite({
+    repoRoot, siteDist, destination, registry, catalog, information, standalone, notFoundTemplate,
+  });
+  console.log(`Projected ${site.apps.length} apps and ${site.families.length} runtime families for ${catalog.host} at ${destination}`);
+}
+await projectHubSite({ siteDist, destination: join(sitesDir, HUB_SITE), registry });
+console.log(`Wrote the ${registry.site.hub.host} hub at ${join(sitesDir, HUB_SITE)}`);

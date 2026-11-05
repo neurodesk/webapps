@@ -164,7 +164,7 @@ test('runtime wrappers have one tracked source and are generated for apps', asyn
 });
 
 test('every app that loads the staged dcm2niix module stages it before build', async () => {
-  const skip = new Set(['node_modules', 'dist', 'vendor', 'dcm2niix', 'e2e', 'test', 'tests']);
+  const skip = new Set(['node_modules', 'dist', 'dist-sites', 'vendor', 'dcm2niix', 'e2e', 'test', 'tests']);
   async function references(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       if (entry.isDirectory() && !skip.has(entry.name) && await references(join(directory, entry.name))) return true;

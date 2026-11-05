@@ -49,7 +49,7 @@ test('live upstreams are not legacy repositories; imported and renamed ones are'
 
 const SOURCE_EXTENSIONS = new Set(['.cff', '.css', '.html', '.js', '.md', '.toml', '.ts', '.tsx']);
 const SKIP_DIRECTORIES = new Set([
-  '.git', '.turbo', 'dist', 'legacy-ci', 'node_modules', 'niivue', 'test',
+  '.git', '.turbo', 'dist', 'dist-sites', 'legacy-ci', 'node_modules', 'niivue', 'test',
   'test-results', 'tests', 'vendor',
 ]);
 

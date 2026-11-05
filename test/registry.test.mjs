@@ -175,7 +175,7 @@ test('pnpm is the only workspace lockfile authority', async () => {
   const found = [];
   async function visit(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') continue;
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === 'dist-sites') continue;
       const path = join(directory, entry.name);
       if (entry.isDirectory()) await visit(path);
       else if (entry.name === 'package-lock.json') found.push(path.slice(repoRoot.length + 1));

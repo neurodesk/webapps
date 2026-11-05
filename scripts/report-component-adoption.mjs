@@ -8,7 +8,7 @@ import { join, relative } from 'node:path';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 
 const SKIP_DIRECTORIES = new Set([
-  '.git', '.tmp_model_env', '.turbo', 'coverage', 'dist', 'fixtures',
+  '.git', '.tmp_model_env', '.turbo', 'coverage', 'dist', 'dist-sites', 'fixtures',
   'legacy-ci', 'node_modules', 'test-results', 'vendor',
 ]);
 const SOURCE_EXTENSIONS = new Set(['.js', '.mjs', '.ts', '.tsx', '.html']);
