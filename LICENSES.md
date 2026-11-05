@@ -36,6 +36,9 @@ for each app are recorded in `registry/apps.yml`.
   the bundled `clipper-lib`, in `apps/stardist/NOTICE`. The build ships both files at the app's root
 - `apps/spot-detection`: BSD-3-Clause (`apps/spot-detection/LICENSE`), as the Big-FISH 0.6.2 source it ports;
   attribution, and the fdlibm notice of its erf, in `apps/spot-detection/NOTICE`. The build copies both into the app
+- `apps/microsam`: MIT (`apps/microsam/LICENSE`); it ports micro-sam 1.8.14 (MIT) and Pillow 13.0.0's bilinear
+  resampling (MIT-CMU) and downloads micro-sam's `vit_t_lm` model (CC BY 4.0, from Apache-2.0 MobileSAM and
+  Segment Anything); attribution in `apps/microsam/NOTICE`. The build ships both files at the app's root
 - `packages/shoreline`: Apache-2.0 AND BSD-3-Clause (`packages/shoreline/LICENSE`,
   `packages/shoreline/NOTICE`); the WebAssembly build of `exes/dwi/shoreline`, whose 3dSHORE
   and topup displacement crates port QSIPrep and DIPY code (BSD-3-Clause)

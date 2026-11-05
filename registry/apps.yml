@@ -1584,3 +1584,29 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: microsam
+    path: microsam
+    title: micro-sam
+    description: Segment cells in 2D microscopy from clicks and boxes.
+    categories: [segmentation]
+    keywords: [micro-sam, Segment Anything, SAM, interactive segmentation, cell segmentation, nucleus segmentation, instance segmentation, light microscopy, fluorescence microscopy, point prompts, box prompts, OME-TIFF, annotation]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/microsam.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    handoff: none
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

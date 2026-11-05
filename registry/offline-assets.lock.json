@@ -5242,6 +5242,29 @@
       "contentType": "image/tiff",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif": {
+      "sha256": "8fd1ed64bed1350597957b648b3b86a8c411b33c4b6733a7fbfe374243aad265",
+      "bytes": 129856,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/models/microsam-vit-t-lm-decoder.onnx": {
+      "sha256": "4681effe84d432165cd6f27fb5e10fbc77f80ce20ac82242da37f1ed847f3f6f",
+      "bytes": 16496933,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "CC-BY-4.0",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/models/microsam-vit-t-lm-encoder.onnx": {
+      "sha256": "9816b80db84179cbe643d9268717f74452b17abdc79493b22ca3d8a57ed933f9",
+      "bytes": 28045411,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "CC-BY-4.0",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6592,6 +6615,11 @@
     "structure-tensor": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif"
+    ],
+    "microsam": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/models/microsam-vit-t-lm-encoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/models/microsam-vit-t-lm-decoder.onnx"
     ]
   }
 }

@@ -1,0 +1,91 @@
+micro-sam web app
+=================
+
+This app is MIT-licensed (LICENSE). It ports code from, and runs a model derived from, the
+projects below.
+
+micro-sam (MIT)
+---------------
+src/preprocess.js and src/segmentation.js reimplement micro_sam.util._to_image and the prompt
+handling of micro_sam.prompt_based_segmentation (segment_from_points, segment_from_box,
+segment_from_box_and_points, _process_box), https://github.com/computational-cell-analytics/micro-sam
+
+  MIT License
+
+  Copyright (c) 2023 Computational Cell Analytics (Research Group of Prof. Dr. Constantin Pape)
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+Pillow (MIT-CMU)
+----------------
+resizeChannel in src/preprocess.js ports the bilinear resampling of Pillow's
+src/libImaging/Resample.c (Pillow 13.0.0), https://github.com/python-pillow/Pillow
+
+  The Python Imaging Library (PIL) is
+
+      Copyright © 1997-2011 by Secret Labs AB
+      Copyright © 1995-2011 by Fredrik Lundh and contributors
+
+  Pillow is the friendly PIL fork. It is
+
+      Copyright © 2010 by Jeffrey 'Alex' Clark and contributors
+
+  Like PIL, Pillow is licensed under the open source MIT-CMU License:
+
+  By obtaining, using, and/or copying this software and/or its associated
+  documentation, you agree that you have read, understood, and will comply
+  with the following terms and conditions:
+
+  Permission to use, copy, modify and distribute this software and its
+  documentation for any purpose and without fee is hereby granted,
+  provided that the above copyright notice appears in all copies, and that
+  both that copyright notice and this permission notice appear in supporting
+  documentation, and that the name of Secret Labs AB or the author not be
+  used in advertising or publicity pertaining to distribution of the software
+  without specific, written prior permission.
+
+  SECRET LABS AB AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS
+  SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS.
+  IN NO EVENT SHALL SECRET LABS AB OR THE AUTHOR BE LIABLE FOR ANY SPECIAL,
+  INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+  LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+  OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+  PERFORMANCE OF THIS SOFTWARE.
+
+The model (CC BY 4.0), MobileSAM and Segment Anything (Apache-2.0)
+-------------------------------------------------------------------
+The app downloads microsam-vit-t-lm-encoder.onnx and microsam-vit-t-lm-decoder.onnx
+(models/microsam.manifest.json): micro-sam's "SAM LM Generalist (ViT-T)" (vit_t_lm,
+BioImage.IO faithful-chicken 1.1) by Anwai Archit, Constantin Pape and the micro-sam
+contributors, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Archit, A. et
+al. Segment Anything for Microscopy. Nature Methods 22, 579-591 (2025),
+https://doi.org/10.1038/s41592-024-02580-4. Converted to ONNX without changing the weights
+(validation/export_onnx.py).
+
+The model is fine-tuned from MobileSAM, Copyright (c) Chaoning Zhang and contributors
+(https://github.com/ChaoningZhang/MobileSAM), itself distilled from Segment Anything,
+Copyright (c) Meta Platforms, Inc. and affiliates
+(https://github.com/facebookresearch/segment-anything). Both are licensed under the
+Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0). The decoder graph is
+MobileSAM's SamOnnxModel (mobile_sam/utils/onnx.py, from segment_anything/utils/onnx.py).
+
+Example data (CC0 1.0)
+----------------------
+The example image is from BBBC038v1 (2018 Data Science Bowl), Broad Bioimage Benchmark
+Collection, CC0 1.0. Caicedo, J. C. et al. Nature Methods 16, 1247-1253 (2019).

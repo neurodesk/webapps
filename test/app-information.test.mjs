@@ -73,6 +73,7 @@ const REQUIRED_METHODS = {
   fastprep: ['arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', '10.1038/s41592-018-0235-4', '10.52294/001c.94384', '10.1016/j.neuroimage.2026.122074', '10.1126/sciadv.add3607', '10.1016/j.neuroimage.2010.07.033', 'sites.google.com/view/greedyreg/cite', 'github.com/pyushkevich/greedy', '10.1016/j.neuroimage.2004.07.068', '10.1002/hbm.460020402', 'cowles.yale.edu/sites/default/files/2023-05/s-0383.pdf', '10.21105/joss.03669', '10.1016/j.neuroimage.2011.12.028', '10.1002/hbm.20359'],
   elastix: ['10.1109/TMI.2009.2035616', '10.3389/fninf.2013.00050', '10.1038/s41592-021-01326-w', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   brainqcnet: ['10.1162/imag_a_00300', 'github.com/cfchen-duke/ProtoPNet', '10.1109/CVPR.2016.90', '10.1038/s41597-022-01694-8', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  microsam: ['10.1038/s41592-024-02580-4', '10.1109/ICCV51070.2023.00371', '10.48550/arXiv.2306.14289', '10.1038/s41592-019-0612-7', 'onnxruntime.ai'],
   bison: ['10.1002/mrm.28547', '10.1016/j.neuroimage.2017.06.009', '10.1016/j.neuroimage.2010.07.033', '10.1016/S1053-8119(09)70884-5', 'sites.google.com/view/greedyreg/about', '10.1109/TMI.2010.2046908', '10.1002/jmri.22003', '10.52294/001c.94384', '10.18112/openneuro.ds007522.v2.0.1', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   gliomoda: ['10.1101/2025.11.12.25339968', '10.48550/arXiv.2507.09036', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01560-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
 };
@@ -82,7 +83,7 @@ test('every registered app has app information with packages and cited methods',
     const info = information.apps[app.id];
     assert.ok(info, `${app.id} has an app-information entry`);
     assert.ok(info.packages.length >= 1, `${app.id} lists what runs under the hood`);
-    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer/i.test(item.name)), `${app.id} names its runtime`);
+    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer|onnx runtime/i.test(item.name)), `${app.id} names its runtime`);
     const cited = info.citations.map((item) => `${item.doi ?? ''} ${item.url ?? ''} ${item.code ?? ''} ${item.title}`).join('\n');
     for (const method of REQUIRED_METHODS[app.id] ?? []) {
       assert.ok(cited.includes(method), `${app.id} must cite ${method}`);

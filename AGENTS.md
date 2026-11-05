@@ -218,6 +218,13 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Offsets are tile B's position minus tile A's, x first; positions are the pixel coordinates of each tile's first pixel. Pair weights are r × overlapping pixels; README lists this and the other deliberate differences from Fiji.
 - TIFF is read and written only through `@neurodesk/webapp-components/file-io/tiff`; OME stage positions come from its `stagePosition`.
 
+## microsam
+
+- Interactive 2D segmentation with micro-sam's `vit_t_lm` (CC BY 4.0) as two ONNX files pinned in `models/microsam.manifest.json`: the encoder runs once per image (WebGPU, else WebAssembly), the decoder once per prompt change (WebAssembly), in one worker per image (`src/worker.js`) that is terminated to cancel.
+- `src/preprocess.js` reproduces micro-sam's `_to_image` and SAM's resize, including a port of Pillow's bilinear `Resample.c`; `test/preprocess.test.js` holds the uint8 image, the resize and the encoder tensor to micro-sam's SHA-256 (`validation/preprocess_reference.py`). Change them together.
+- Export the model as `micro_sam.util.get_sam_model` returns it, without `eval()` and with `TrainingMode.PRESERVE` (`validation/export_onnx.py`): `train(False)` refreshes TinyViT's cached attention biases, which micro-sam's PyTorch inference leaves at zero, and the export would then no longer give micro-sam's masks.
+- `e2e/workflow.spec.js` requires the 24 masks of `validation/reference.json` (micro-sam's PyTorch outputs) byte for byte in the browser; rerecord with `validation/reference.py` after changing the model, the prompts' handling or the example.
+
 ## nesvor and the compute server
 
 - `apps/nesvor` is the first app whose method runs outside the browser: NeSVoR needs CUDA, so the

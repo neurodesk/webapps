@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>micro-sam — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF, OME-TIFF or PNG image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a 2D TIFF, OME-TIFF or PNG image</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div class="nd-field" id="channelField" hidden>
+            <label for="channel">Channel
+              <span class="nd-info-icon" tabindex="0" aria-label="About the channel">i<span class="nd-info-tooltip">micro-sam sees one channel as greyscale, or the red, green and blue planes together. Changing it needs a new embedding.</span></span>
+            </label>
+            <select id="channel"></select>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Segment</summary>
+        <div class="nd-section-content">
+          <button id="embedButton" class="nd-btn nd-btn-primary" type="button" disabled>Compute embeddings</button>
+          <div class="nd-field">
+            <span class="nd-viewer-label" id="toolLabel">Click adds
+              <span class="nd-info-icon" tabindex="0" aria-label="About prompts">i<span class="nd-info-tooltip">Click the image to add a point, drag to draw a box. Shift-click or right-click adds a negative point. Enter accepts the object, Escape clears its prompts and Ctrl+Z undoes.</span></span>
+            </span>
+            <div class="nd-tool-group" role="group" aria-labelledby="toolLabel">
+              <button id="positiveTool" class="nd-tool-btn" type="button" aria-pressed="true" disabled>Positive</button>
+              <button id="negativeTool" class="nd-tool-btn" type="button" aria-pressed="false" disabled>Negative</button>
+            </div>
+            <p class="nd-hint">Drag on the image to draw a box around an object.</p>
+          </div>
+          <div class="nd-row">
+            <button id="acceptButton" class="nd-btn nd-btn-secondary" type="button" disabled>Accept object</button>
+            <button id="clearButton" class="nd-btn nd-btn-secondary" type="button" disabled>Clear prompts</button>
+          </div>
+          <button id="undoButton" class="nd-btn nd-btn-secondary" type="button" disabled>Undo</button>
+          <p id="objectInfo" class="nd-file-info" hidden></p>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="backend">Encoder backend
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the backend">i<span class="nd-info-tooltip">Automatic uses WebGPU when the browser offers it and falls back to WebAssembly on the CPU. The prompt decoder always runs on the CPU.</span></span>
+                </label>
+                <select id="backend">
+                  <option value="auto">Automatic</option>
+                  <option value="webgpu">WebGPU</option>
+                  <option value="wasm">WebAssembly (CPU)</option>
+                </select>
+              </div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="canvas" class="microsam-canvas" aria-label="Image and prompts. Click to add a point, drag to draw a box."></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Interactive 2D segmentation of light-microscopy images with Segment Anything for
+        Microscopy (micro-sam). The app computes the image embedding once with micro-sam's
+        light-microscopy generalist ViT-T model (<code>vit_t_lm</code>); every click or box then runs
+        only the small prompt decoder, so masks update as you prompt. Accept an object to add it to
+        the label image; the label TIFF and a per-object CSV table are the outputs.</p>
+      <p>The preprocessing, mask choice and prompt handling follow micro-sam's own
+        <code>precompute_image_embeddings</code> and <code>segment_from_points</code>,
+        <code>segment_from_box</code> and <code>segment_from_box_and_points</code>. On the example,
+        24 fixed prompts give the same masks as micro-sam in PyTorch (mask IoU 1.0 in Python's ONNX
+        Runtime; the browser test requires at least 0.99). A single positive click keeps the best of
+        SAM's three masks by predicted IoU; any other prompt keeps the single-mask output. A new object
+        never takes pixels that an accepted object already has.</p>
+      <p>Version 1 segments one 2D image of up to 16 megapixels without tiling. SAM sees the image at
+        1024 pixels along its longest side, so very small objects in large images are hard to
+        prompt; crop large images first. micro-sam's automatic instance segmentation, tracking and
+        3D segmentation are not included.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. The model files are downloaded from Hugging Face and cached by the browser.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

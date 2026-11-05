@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "app": "microsam",
+  "repository": "neurodeskorg/webapps",
+  "revision": "5524b8b6e48334617904a6da19ac62a7bffff86b",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/models/",
+  "license": "CC-BY-4.0",
+  "license_note": "micro-sam's vit_t_lm (BioImage.IO faithful-chicken 1.1) is CC BY 4.0, by Anwai Archit, Constantin Pape and the micro-sam contributors (Archit et al., Nature Methods 2025). It is fine-tuned from MobileSAM (Apache-2.0), distilled from Segment Anything (Apache-2.0). The weights are unchanged; the ONNX conversion is apps/microsam/validation/export_onnx.py.",
+  "model": {
+    "name": "vit_t_lm",
+    "source_url": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/faithful-chicken/1.1/files/vit_t.pt",
+    "source_sha256": "32b92ab64959088878a1cc3e52b9b64aaa0ba4b24c98e9959746d7390bec7b7a",
+    "source_xxh128": "72ec5074774761a6e5c05a08942f981e",
+    "conversion": "torch.onnx.export opset 17, torch 2.5.1, micro-sam 1.8.14 (cb88e8d6), MobileSAM f706ad9c, the model as micro_sam.util.get_sam_model returns it (TrainingMode.PRESERVE)",
+    "image_size": 1024,
+    "embedding_shape": [1, 256, 64, 64]
+  },
+  "assets": [
+    {
+      "filename": "microsam-vit-t-lm-encoder.onnx",
+      "role": "encoder",
+      "bytes": 28045411,
+      "sha256": "9816b80db84179cbe643d9268717f74452b17abdc79493b22ca3d8a57ed933f9",
+      "input": "image",
+      "output": "image_embeddings",
+      "torch_vs_onnx_max_abs_diff": 2.62e-6
+    },
+    {
+      "filename": "microsam-vit-t-lm-decoder.onnx",
+      "role": "decoder",
+      "bytes": 16496933,
+      "sha256": "4681effe84d432165cd6f27fb5e10fbc77f80ce20ac82242da37f1ed847f3f6f",
+      "inputs": ["image_embeddings", "point_coords", "point_labels", "mask_input", "has_mask_input", "orig_im_size"],
+      "outputs": ["masks", "iou_predictions", "low_res_masks"],
+      "torch_vs_onnx_max_abs_diff": { "masks": 6.2e-4, "iou_predictions": 1.8e-7 }
+    }
+  ]
+}
