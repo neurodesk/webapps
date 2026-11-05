@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { isUrlWithinServiceWorkerScope } from './runtime-support.mjs';
@@ -14,6 +15,12 @@ function posix(path) {
 function moduleReference(fromFile, target) {
   const path = posix(relative(dirname(fromFile), target));
   return path.startsWith('.') ? path : `./${path}`;
+}
+
+// Vite emits `const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=[...])))=>...`; return each deps array's span.
+function viteMapDepsRanges(source) {
+  return [...source.matchAll(/__vite__mapDeps=\(i,m=__vite__mapDeps,d=\(m\.f\|\|\(m\.f=(\[[^\]]*\])/g)]
+    .map(match => [match.index + match[0].length - match[1].length, match.index + match[0].length]);
 }
 
 async function sha256(path) {
@@ -151,18 +158,39 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
             throw new Error(`Runtime asset checksum mismatch for ${sourcePath}: expected ${asset.sha256}, got ${actual}`);
           }
           const escapedName = basename(sourcePath).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          // Match the declared filename so empty strings in minified workers cannot consume its opening quote.
-          const assetReference = new RegExp(`(['"])([^'"\\n]*${escapedName})\\1`, 'g');
+          // Match the declared filename as a whole path segment, keeping any query or fragment, so empty strings
+          // in minified workers cannot consume its opening quote and `highlight-style.css` is not `style.css`.
+          const assetReference = new RegExp(`(['"])((?:[^'"\\n]*/)?${escapedName})([?#][^'"\\n]*)?\\1`, 'g');
+          const appRoot = join(siteDist, app.path);
           let references = 0;
           for (const file of appFiles.filter(file => !claimed.has(file) && TEXT_EXTENSIONS.has(extname(file)))) {
             const original = await readFile(file, 'utf8');
-            const rewritten = original.replace(assetReference, (match, quote, reference) => {
+            const mapDeps = viteMapDepsRanges(original);
+            const rewritten = original.replace(assetReference, (match, quote, reference, suffix = '', offset) => {
               const referencedPath = reference.startsWith('/')
                 ? resolve(siteDist, `.${reference}`)
                 : resolve(dirname(file), reference);
-              if (referencedPath !== sourcePath) return match;
-              references++;
-              return `${quote}${moduleReference(file, targetPath)}${quote}`;
+              if (referencedPath === sourcePath) {
+                references++;
+                return `${quote}${moduleReference(file, targetPath)}${suffix}${quote}`;
+              }
+              const inMapDeps = mapDeps.some(([start, end]) => offset > start && offset < end);
+              // Vite's preload helper prefixes the app base to each `__vite__mapDeps` entry.
+              if (inMapDeps && resolve(appRoot, reference) === sourcePath) {
+                references++;
+                return `${quote}${posix(relative(appRoot, targetPath))}${suffix}${quote}`;
+              }
+              // A hashed stylesheet name is unique, so an asset reference that resolves nowhere would break once the copy is removed.
+              // `new URL(x, import.meta.url)` is a module asset; `new URL(x, "https://…")` is not.
+              const moduleUrl = /new\s+URL\(\s*$/.test(original.slice(Math.max(0, offset - 32), offset))
+                && /^\s*,\s*import\.meta\.url\b/.test(original.slice(offset + match.length, offset + match.length + 48));
+              // A reference to another existing file of the same name (vendor/style.css beside a
+              // shared assets/style.css) stays local; only a reference that resolves nowhere fails.
+              const elsewhere = existsSync(referencedPath) || (inMapDeps && existsSync(resolve(appRoot, reference)));
+              if (byContent && (inMapDeps || moduleUrl) && !elsewhere) {
+                throw new Error(`Unresolved reference ${reference} to deduplicated ${sourcePath} in ${file}`);
+              }
+              return match;
             });
             if (rewritten !== original) await writeFile(file, rewritten);
           }
