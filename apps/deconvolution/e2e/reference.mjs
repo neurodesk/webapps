@@ -1,5 +1,5 @@
 // The deconvolution the app runs, in Node on the same WebAssembly module, for the browser
-// tests' expected outputs (scripts/record-reference.mjs, e2e/*.spec.js).
+// tests' expected outputs (scripts/record-reference.mjs, smoke.spec.js, test/offline.mjs).
 import { createHash } from "node:crypto";
 import { loadDeconvolution } from "@neurodesk/deconvolution/node";
 import { autoPsfSize, normaliseSum, opticsSettings, prepareImage, prepareMeasuredPsf } from "@neurodesk/deconvolution";

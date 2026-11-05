@@ -1,5 +1,5 @@
 // Browser tests against the built app (vite preview). Every deconvolution the browser runs is
-// compared byte for byte with the same WebAssembly module run in Node (src/reference.mjs) or
+// compared byte for byte with the same WebAssembly module run in Node (e2e/reference.mjs) or
 // with the hash recorded from it (e2e/expected.json).
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -7,7 +7,7 @@ import { gunzipSync } from "node:zlib";
 import { readTiffStack as readTiff } from "@neurodesk/webapp-components/file-io/tiff";
 import { DEFAULT_OPTICS, stackNifti, stackTiff } from "../src/config.js";
 import { readVolume } from "../src/input.js";
-import { deconvolveInNode, sha256 } from "../src/reference.mjs";
+import { deconvolveInNode, sha256 } from "./reference.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const expected = JSON.parse(readFileSync(new URL("./expected.json", import.meta.url), "utf8"));

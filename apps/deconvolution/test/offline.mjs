@@ -5,7 +5,7 @@ import { gunzipSync } from 'node:zlib';
 import { expect } from '@playwright/test';
 import { readVolume } from '../src/input.js';
 import { DEFAULT_OPTICS } from '../src/config.js';
-import { deconvolveInNode, sha256 } from '../src/reference.mjs';
+import { deconvolveInNode, sha256 } from '../e2e/reference.mjs';
 
 // The installed desktop app deconvolves the small NIfTI fixture (two iterations, default
 // widefield optics) and downloads the voxels the Node build of the same module computes.
