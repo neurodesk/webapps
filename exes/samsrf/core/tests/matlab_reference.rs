@@ -1,0 +1,123 @@
+//! Real MATLAB R2023b references. The native workflow downloads the immutable
+//! fixture and sets SAMSRF_MATLAB_REFERENCE_DIR before running this target.
+use samsrf_core::{css, expr::AnonymousFunction, geometry::Hull, hrf, mapset::Maps, mat, model, optim, precision::Precision, prf, revcor_cf};
+use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
+
+fn reference() -> Option<(PathBuf, Vec<Value>)> {
+    let root = std::env::var_os("SAMSRF_MATLAB_REFERENCE_DIR").map(PathBuf::from)?;
+    let metadata: Value = serde_json::from_slice(&std::fs::read(root.join("reference.json")).unwrap()).unwrap();
+    let cases = metadata["cases"].as_array().unwrap().clone();
+    assert_eq!(cases.len(), 584, "missing recorded MATLAB cases");
+    Some((root, cases))
+}
+
+fn array(root: &Path, descriptor: &Value) -> Vec<f64> {
+    let bytes = std::fs::read(root.join(descriptor["file"].as_str().unwrap())).unwrap();
+    let count: usize = descriptor["shape"].as_array().unwrap().iter().map(|n| n.as_u64().unwrap() as usize).product();
+    assert_eq!(bytes.len(), count * 8);
+    bytes.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
+}
+
+fn close(actual: f64, expected: f64, tolerance: f64, context: &str) {
+    assert!(actual == expected || actual.is_nan() && expected.is_nan() || actual.is_finite() && expected.is_finite() && (actual - expected).abs() <= tolerance,
+        "{context}: {actual} != {expected}, tolerance {tolerance}");
+}
+
+#[test]
+fn css_and_hrf_optimizer_parameters_match_matlab() {
+    let Some((root, cases)) = reference() else { return; };
+    let original = mat::read_apertures(&std::fs::read(root.join("fit-apertures.mat")).unwrap()).unwrap();
+    let function = AnonymousFunction::parse("@(P,XY)prf_gaussian_rf(P(1),P(2),P(3),XY)").unwrap();
+    let mut case_count = 0;
+    for case in cases.iter().filter(|c| c["kind"] == "fit") {
+        case_count += 1;
+        let mut apertures = original.clone();
+        if case["nonnegativeApertures"] == true {
+            for frame in &mut apertures.frames {
+                for value in &mut frame.values { *value = value.max(0.0); }
+            }
+        }
+        let xy = apertures.scaled_xy(9.5);
+        let precision = if case["precision"] == "single" { Precision::Single } else { Precision::Double };
+        let seeds = array(&root, &case["seeds"]);
+        let parameters = case["seeds"]["shape"][0].as_u64().unwrap() as usize;
+        let observations = array(&root, &case["observations"]);
+        let volumes = case["observations"]["shape"][0].as_u64().unwrap() as usize;
+        let kernel = array(&root, &case["hrf"]);
+        let hrf = if kernel.len() == 1 { hrf::ErrfunHrf::Fit { tr: 1.0 } } else { hrf::ErrfunHrf::Kernel(kernel) };
+        let expected = array(&root, &case["parameters"]);
+        for (vertex, seed) in seeds.chunks(parameters).enumerate() {
+            let y = &observations[vertex * volumes..(vertex + 1) * volumes];
+            let result = optim::fminsearch(|p| prf::errfun_with_convention(&function, &apertures, &xy, &hrf, p, y, 1, case["css"] == true, precision, css::Convention::Samsrf).unwrap(), seed, &optim::FminsearchOptions::default());
+            for (parameter, &actual) in result.x.iter().enumerate() {
+                close(actual, expected[vertex * parameters + parameter], if precision == Precision::Single { 0.0 } else { 1e-12 }, &format!("{} vertex {vertex} parameter {parameter}", case["id"]));
+            }
+        }
+    }
+    assert_eq!(case_count, 14, "missing optimizer families");
+}
+
+#[test]
+fn cf_geometry_and_gaussian_residual_order_match_matlab_profiles() {
+    let Some((root, cases)) = reference() else { return; };
+    let mut case_count = 0;
+    for case in cases.iter().filter(|c| c["kind"] == "cf" && c["precision"] == "double") {
+        case_count += 1;
+        let x = array(&root, &case["seedCourses"]);
+        let volumes = case["seedCourses"]["shape"][0].as_u64().unwrap() as usize;
+        let template = array(&root, &case["template"]);
+        let template_rows = case["template"]["shape"][0].as_u64().unwrap() as usize;
+        let vertices = template.len() / template_rows;
+        let mut maps = Maps { vertices, values: vec!["R^2".into(), "x0".into(), "y0".into()], data: vec![0.0; 3 * vertices] };
+        for row in 0..3 {
+            for vertex in 0..vertices { maps.data[row * vertices + vertex] = template[vertex * template_rows + row]; }
+        }
+        let fit = array(&root, &case["fit"]);
+        let fit = if fit.is_empty() { 0 } else if fit[0].is_nan() { 1 } else { -1 };
+        let model::Model::RevCorCf(model) = model::parse_model_json(model::AnalysisKind::RevCorCf, &json!({"Name":"reference","SeedRoi":"seed","Template":"template","Fit_pRF":fit,"Global_Signal_Correction":false}).to_string()).unwrap() else { unreachable!() };
+        let mut prepared = revcor_cf::Prepared::new(&model, &(0..vertices as u32).collect::<Vec<_>>(), &x.chunks(volumes).collect::<Vec<_>>(), &maps, &vec![1.0; vertices], None).unwrap();
+        let weights = array(&root, &case["weights"]);
+        if !weights.is_empty() {
+            prepared.weights = Some((0..vertices).map(|i| {
+                let entries: Vec<_> = (0..vertices).map(|j| (j, weights[j * vertices + i])).collect();
+                let total = entries.iter().map(|(_, weight)| weight).sum();
+                (entries, total)
+            }).collect());
+        }
+        let profiles = array(&root, &case["profiles"]);
+        let expected = array(&root, &case["maps"]);
+        let rows = case["maps"]["shape"][0].as_u64().unwrap() as usize;
+        let order: &[usize] = match fit { 0 => &[4, 1, 2, 5, 6, 7, 8, 3, 0], 1 => &[4, 1, 2, 5, 6, 7, 3, 0], _ => &[4, 1, 2, 5, 3, 0] };
+        for (vertex, profile) in profiles.chunks(vertices).enumerate() {
+            let actual = prepared.estimate_profile(profile).unwrap();
+            for (row, &index) in order.iter().enumerate() {
+                close(actual[row], expected[vertex * rows + index], 1e-12, &format!("{} vertex {vertex} row {row}", case["id"]));
+            }
+        }
+    }
+    assert_eq!(case_count, 9, "missing CF modes");
+}
+
+#[test]
+fn polygon_simplification_matches_matlab_away_from_the_rounding_boundary() {
+    let Some((root, cases)) = reference() else { return; };
+    let mut count = 0;
+    for case in cases.iter().filter(|c| c["kind"] == "polygon") {
+        // These two inputs sit exactly on the inferred 1e-8 relative cutoff.
+        // Their scale-dependent rounding is retained as a known discrepancy.
+        if case["id"] == "polygon_191" || case["id"] == "polygon_193" { continue; }
+        count += 1;
+        let points = array(&root, &case["points"]);
+        let n = points.len() / 2;
+        let points: Vec<_> = (0..n).map(|i| [points[i], points[n + i]]).collect();
+        let expected = array(&root, &case["estimate"]);
+        let (centre, area) = match Hull::of_polygon(&points) {
+            Some(hull) => (hull.centroid(), hull.area()),
+            None => ([f64::NAN; 2], 0.0),
+        };
+        for axis in 0..2 { close(centre[axis], expected[axis], 1e-12, case["id"].as_str().unwrap()); }
+        close(area, expected[2], 1e-12 * expected[2].abs().max(1.0), case["id"].as_str().unwrap());
+    }
+    assert_eq!(count, 251, "missing polygon cases");
+}

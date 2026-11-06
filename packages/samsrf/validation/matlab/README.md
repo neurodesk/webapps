@@ -128,3 +128,30 @@ against those pinned inputs. This isolates full-pipeline CSS optimizer paths,
 complex predictions, QR factors and least-squares coefficients without
 rerunning the entire participant matrix. It records actual MATLAB arithmetic;
 Octave is used only for a syntax check of the recorder.
+
+The source gate is now executable:
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-source-reference" packages/samsrf/validation/matlab/reference.json
+node packages/samsrf/validation/matlab/compare.mjs "$TMPDIR/samsrf-source-reference" "$TMPDIR/samsrf-matrix-input"
+SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_reference
+```
+
+The Node comparator verifies every archive file hash, requires each tested case,
+and checks individual vertices without map-wide error normalization. Its 105
+required gates cover preprocessing, Benson import, single-precision Gaussian
+forward pipelines and double-precision reverse-correlation pipelines. Fine-fit
+parameters and scores in the single mode must match exactly; coarse scores and
+least-squares coefficients have small absolute/per-value tolerances. No differing
+vertex quota is allowed.
+
+Native gates additionally cover all 14 raw optimizer cases, nine double-precision
+CF modes from identical recorded profiles, and 251 polygon cases. Two polygons
+(`polygon_191`, `polygon_193`) sit exactly on the inferred relative simplification
+cutoff and retain scale-dependent rounding differences; they are explicitly
+excluded from that assertion. CF checks from identical profiles isolate parameter
+estimation, and do not establish full single-precision CF pipeline parity.
+
+Full CSS pipeline fits, general double-precision fine-fit plateaus, and single
+reverse-correlation/CF arithmetic remain diagnostic cases. A successful source
+gate does not assert those paths, arbitrary-input parity, or a rebuilt container.

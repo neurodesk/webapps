@@ -78,7 +78,7 @@ function value = read_array(root, descriptor)
 fid = fopen(fullfile(root,descriptor.file),'r','ieee-le');
 assert(fid~=-1);
 cleanup = onCleanup(@() fclose(fid));
-value = reshape(fread(fid,Inf,'double'),descriptor.shape);
+value = reshape(fread(fid,Inf,'double'),descriptor.shape(:)');
 end
 
 function descriptor = array_file(name,value)
