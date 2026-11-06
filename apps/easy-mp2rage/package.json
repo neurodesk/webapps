@@ -1,6 +1,6 @@
 {
   "name": "easy-mp2rage",
-  "version": "0.8.20261104",
+  "version": "0.8.20261106",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-or-later",
@@ -12,8 +12,8 @@
     "lint": "node ../../scripts/check-app-js.mjs web",
     "pretest": "bash tools/stage_core.sh && pnpm runtime-support",
     "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
-    "test": "cargo test --release && node web/test/bids_test.mjs && node web/test/e2e_node.mjs && node --test web/test/examples_test.mjs web/test/orientation_test.mjs",
-    "test:examples": "node --test web/test/examples_test.mjs web/test/orientation_test.mjs",
+    "test": "cargo test --release && node web/test/bids_test.mjs && node web/test/e2e_node.mjs && node --test web/test/examples_test.mjs web/test/orientation_test.mjs web/test/run-state_test.mjs",
+    "test:examples": "node --test web/test/examples_test.mjs web/test/orientation_test.mjs web/test/run-state_test.mjs",
     "test:e2e": "node ../../test-utils/run-browser-tests.mjs \"playwright test && node ../../test/examples.smoke.mjs --app easy-mp2rage && node ../../test/easy-mp2rage-workspace.smoke.mjs\"",
     "predev": "pnpm run build"
   },
