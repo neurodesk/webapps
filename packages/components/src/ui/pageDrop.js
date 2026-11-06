@@ -206,6 +206,7 @@ export function bindPageDrop(doc = globalThis.document) {
     previous.set(input, [...files]);
     if (previous.get(input).length) occupied.add(input);
     else occupied.delete(input);
+    if (event.detail.cancelPending === true) supersede();
   }
 
   // Discard earlier picks when an example starts; its input owners can report newly loaded files.

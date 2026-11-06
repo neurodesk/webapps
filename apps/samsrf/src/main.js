@@ -106,9 +106,11 @@ function status(message, { error = false, channel = "technical" } = {}) {
 
 /** @type {import('./inputs.js').Inputs} */
 let inputs = emptyInputs();
+let inputGeneration = 0;
 /** @type {Record<string, unknown>} */
 let model = buildModel("example-gaussian");
 let modelFromPreset = true;
+let editableScalingFactor = DEFAULT_SETTINGS.scalingFactor;
 /** The finished analysis: its maps by name, its files, and the map on screen. */
 let result = null;
 /** The load or run in progress, cancelled by the status bar's ×. */
@@ -157,8 +159,9 @@ function renderInputs() {
 }
 
 /** Replace the slots the files fill. A whole folder fills them all. */
-async function addFiles(filesPromise, only) {
+async function addFiles(filesPromise, only, generation = inputGeneration) {
   const files = await filesPromise;
+  if (generation !== inputGeneration) return;
   const { filled, ignored } = sortFiles(files);
   if (only === "surfaces") {
     for (const slot of Object.keys(filled)) if (slot !== "surfaces") ignored.push(...[filled[slot]].flat().map((file) => file.name));
@@ -166,7 +169,8 @@ async function addFiles(filesPromise, only) {
   } else if (only) {
     await setInputs(mergeInputs(inputs, { [only]: only === "runs" ? [...files].sort(compareRunNames) : files[0] }));
   } else {
-    if (filled.model) await loadModelFile(filled.model);
+    if (filled.model) await loadModelFile(filled.model, generation);
+    if (generation !== inputGeneration) return;
     await setInputs(mergeInputs(inputs, filled));
   }
   if (ignored.length) status(`Not used: ${ignored.join(", ")}`, { error: true });
@@ -196,17 +200,27 @@ async function setInputs(next) {
 
 function importInto(slot) {
   return (filesPromise) => {
+    const generation = inputGeneration;
     exampleControl.cancel();
-    void addFiles(filesPromise, slot).catch((error) => status(error.message, { error: true }));
+    void addFiles(filesPromise, slot, generation).catch((error) => {
+      if (generation === inputGeneration) status(error.message, { error: true });
+    });
   };
 }
 fields.runs.onFiles(importInto(null));
 for (const slot of ["apertures", "roi", "surfaces", "template", "seed"]) fields[slot].onFiles(importInto(slot));
 fields.model.onFiles((filesPromise) => {
-  void filesPromise.then(([file]) => loadModelFile(file)).catch((error) => status(error.message, { error: true }));
+  const generation = inputGeneration;
+  void filesPromise.then(([file]) => loadModelFile(file, generation)).catch((error) => {
+    if (generation === inputGeneration) status(error.message, { error: true });
+  });
 });
 $("clearInputs").addEventListener("click", () => {
+  inputGeneration += 1;
   exampleControl.reset();
+  for (const field of Object.values(fields)) {
+    field.input.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [], cancelPending: true } }));
+  }
   void setInputs(emptyInputs()).catch(report);
 });
 
@@ -218,7 +232,7 @@ function fillPresets() {
 $("hrf").replaceChildren(...HRF_OPTIONS.map(({ value, label }) => new Option(label, value)));
 
 function settings() {
-  const scalingFactor = Number($("scalingFactor").value);
+  const scalingFactor = $("scalingFactor").readOnly ? editableScalingFactor : Number($("scalingFactor").value);
   const tr = Number($("tr").value);
   return {
     scalingFactor: scalingFactor > 0 ? scalingFactor : DEFAULT_SETTINGS.scalingFactor,
@@ -235,11 +249,17 @@ function resetModel() {
 /** Write the model into the JSON view and the controls that mirror its fields. */
 function renderModel() {
   const kind = analysis();
+  const fixedScale = modelFromPreset && PRESETS[presetId()]?.fixedScalingFactor !== undefined;
   $("modelJson").value = JSON.stringify(model, null, 2);
   $("modelJson").setCustomValidity("");
   if ("TR" in model) $("tr").value = String(model.TR);
-  if ("Scaling_Factor" in model) $("scalingFactor").value = String(model.Scaling_Factor);
-  $("scalingFactor").readOnly = modelFromPreset && PRESETS[presetId()]?.fixedScalingFactor !== undefined;
+  if ("Scaling_Factor" in model) {
+    $("scalingFactor").value = String(model.Scaling_Factor);
+    if (!fixedScale) editableScalingFactor = Number(model.Scaling_Factor);
+  } else {
+    $("scalingFactor").value = String(editableScalingFactor);
+  }
+  $("scalingFactor").readOnly = fixedScale;
   if ("Hrf" in model) {
     const value = hrfValue(model.Hrf);
     $("hrf").querySelector('option[value="custom"]')?.remove();
@@ -268,8 +288,10 @@ function editModel(change) {
   renderModel();
 }
 
-async function loadModelFile(file) {
-  const parsed = parseModel(await file.text(), analysis());
+async function loadModelFile(file, generation = inputGeneration) {
+  const text = await file.text();
+  if (generation !== inputGeneration) return;
+  const parsed = parseModel(text, analysis());
   modelFromPreset = false;
   editModel(() => withInputNames(parsed, analysis(), inputs));
   status(`Model ${parsed.Name} loaded from ${file.name}`);
@@ -540,7 +562,10 @@ function automationOperation(kind) {
     fillPresets();
     if (parameters.preset) $("preset").value = parameters.preset;
     if (parameters.tr) $("tr").value = String(parameters.tr);
-    if (parameters.scalingFactor) $("scalingFactor").value = String(parameters.scalingFactor);
+    if (parameters.scalingFactor) {
+      editableScalingFactor = parameters.scalingFactor;
+      $("scalingFactor").value = String(parameters.scalingFactor);
+    }
     resetModel();
     if (parameters.hrf) model = { ...model, Hrf: hrfModel(parameters.hrf) };
     if (typeof parameters.normalise === "boolean") $("normalise").checked = parameters.normalise;

@@ -1,5 +1,11 @@
 # @neurodesk/samsrf
 
+## 0.1.20261106
+
+### Patch Changes
+
+- Preserve the stimulus radius when leaving circular tuning, cancel pending folder imports when clearing inputs, and honor explicit command-line output prefixes.
+
 ## 0.1.20261105
 
 ### Patch Changes

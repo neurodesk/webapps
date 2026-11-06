@@ -138,7 +138,50 @@ test("custom model grids survive radius edits and circular tuning fixes its scal
   await expect(page.locator("#scalingFactor")).toHaveValue("1");
   await expect(page.locator("#scalingFactor")).toHaveAttribute("readonly", "");
   expect(JSON.parse(await editor.inputValue()).Scaling_Factor).toBe(1);
+  await page.locator("#preset").selectOption("gaussian");
+  await expect(page.locator("#scalingFactor")).toHaveValue("12");
+  expect(JSON.parse(await editor.inputValue()).Param2[0]).toBe(12 / 32);
+  await page.locator("#preset").selectOption("tuning-circular");
+  await page.locator("#analysis").selectOption("rc");
+  await expect(page.locator("#scalingFactor")).toHaveValue("12");
+  await page.locator("#analysis").selectOption("prf");
+  await page.locator("#preset").selectOption("tuning-circular");
+  await page.locator("#analysis").selectOption("cf");
+  await page.locator("#analysis").selectOption("prf");
+  await page.locator("#preset").selectOption("gaussian");
+  await expect(page.locator("#scalingFactor")).toHaveValue("12");
+  expect(JSON.parse(await editor.inputValue()).Param2[0]).toBe(12 / 32);
 });
+
+for (const target of ['#runsDrop label', 'body']) {
+  test(`Clear inputs abandons pending folder discovery on ${target}`, async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(target => {
+      const entry = { isFile: true, isDirectory: false, name: 'lh_old.gii', file: callback => {
+        globalThis.finishOldDrop = () => callback(new File(['x'], 'lh_old.gii'));
+      } };
+      let read = false;
+      const directory = { isDirectory: true, isFile: false, name: 'old', createReader: () => ({ readEntries: callback => {
+        callback(read ? [] : [entry]);
+        read = true;
+      } }) };
+      const event = new DragEvent('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], items: [{ kind: 'file', webkitGetAsEntry: () => directory }], files: [] } });
+      document.querySelector(target).dispatchEvent(event);
+    }, target);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.finishOldDrop)).toBe('function');
+    await page.getByRole('button', { name: 'Clear inputs', exact: true }).click();
+    await page.evaluate(async () => {
+      globalThis.finishOldDrop();
+      await new Promise(requestAnimationFrame);
+    });
+    await expect(page.locator('#runsInfo')).toBeHidden();
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#runsInput').setInputFiles(['rh_new.gii', 'aps.mat'].map(name => ({ name, mimeType: 'application/octet-stream', buffer: Buffer.from('x') })));
+    await expect(page.locator('#runsInfo')).toHaveText('rh_new.gii');
+    await expect(page.locator('#runButton')).toBeEnabled();
+  });
+}
 
 test("a folder with ambiguous anatomy is rejected without replacing inputs", async ({ page }) => {
   await page.goto("/");
@@ -252,6 +295,7 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   test.setTimeout(1800000);
   const roles = { runs: example.files.filter(({ role }) => role === "run").slice(0, 1), apertures: [example.files[6]], roi: [example.files[7]], surfaces: [example.files[10], example.files[11]] };
   await page.goto("/");
+  await page.locator("#preset").selectOption("tuning-circular");
   for (const [role, files] of Object.entries(roles)) {
     const paths = [];
     for (const file of files) {
@@ -267,4 +311,5 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
   expect(report.provenance.method).toBe("samsrf-rc");
   expect(report.provenance.model.Aperture_File).toBe("aps_Bars");
+  expect(report.provenance.model.Scaling_Factor).toBe(9.5);
 });

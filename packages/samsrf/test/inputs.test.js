@@ -12,6 +12,8 @@ test('hemisphere inference agrees across FreeSurfer, BIDS and template names', (
   assert.equal(hemisphereOf('lhrun.gii'), 'srf');
   assert.throws(() => resolveHemisphere(['functional.gii'], { required: true }), /known hemisphere/);
   assert.equal(resolveHemisphere(['functional.gii'], { hemisphere: 'rh', required: true }), 'rh');
+  assert.equal(resolveHemisphere(['lh_run.gii'], { hemisphere: 'srf' }), 'srf');
+  assert.throws(() => resolveHemisphere(['rh_run.gii'], { hemisphere: 'srf', required: true }), /known hemisphere/);
 });
 
 test('mixed hemispheres cannot be averaged or paired with the wrong template', () => {
@@ -19,4 +21,5 @@ test('mixed hemispheres cannot be averaged or paired with the wrong template', (
     assert.throws(() => resolveHemisphere(names), /different hemispheres/);
   }
   assert.throws(() => resolveHemisphere(['rh_run.gii'], { hemisphere: 'lh' }), /different hemispheres/);
+  assert.throws(() => resolveHemisphere(['lh_run.gii', 'rh_run.gii'], { hemisphere: 'srf' }), /different hemispheres/);
 });

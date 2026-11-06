@@ -198,6 +198,40 @@ test('an example supersedes a pending traversal before it can commit', async t =
   assert.equal(undo(), null);
 });
 
+test('ordinary empty auxiliary reports preserve Undo and pending traversal', async t => {
+  const { window, input, inputs, pick, drop, deferredDrop, undo } = dropSession('<input type="file" data-neurodesk-input="image"><input type="file" data-neurodesk-input="mask">', t);
+  const reportEmptyMask = () => inputs[1].dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+  pick('original.nii');
+  await drop('replacement.nii');
+  input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [...input.files] } }));
+  reportEmptyMask();
+  assert.ok(undo());
+  undo().click();
+  assert.deepEqual([...input.files].map(f => f.name), ['original.nii']);
+  const finishEarlier = deferredDrop('earlier.nii');
+  reportEmptyMask();
+  await finishEarlier();
+  assert.deepEqual([...input.files].map(f => f.name), ['earlier.nii']);
+});
+
+test('explicitly clearing inputs supersedes pending traversal and withdraws Undo', async t => {
+  const { window, input, pick, drop, deferredDrop, undo } = dropSession('<input type="file" data-neurodesk-input="image">', t);
+  const clear = () => {
+    input.files = [];
+    input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [], cancelPending: true } }));
+  };
+  pick('original.nii');
+  await drop('replacement.nii');
+  assert.ok(undo());
+  clear();
+  assert.equal(undo(), null);
+  const finishEarlier = deferredDrop('earlier.nii');
+  clear();
+  await finishEarlier();
+  assert.deepEqual([...input.files], []);
+  assert.equal(undo(), null);
+});
+
 test('destroying the drop binding prevents a pending traversal from committing', async t => {
   const { input, deferredDrop, binding } = dropSession('<input type="file" data-neurodesk-input="image">', t);
   const finishEarlier = deferredDrop('earlier.nii');

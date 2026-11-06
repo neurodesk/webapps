@@ -59,6 +59,7 @@ test('parseCommandLine reads an analysis, with the run files that follow --runs'
   assert.equal(rc.combine, 'average');
   assert.equal(rc.shards, 1);
   assert.equal(parseCommandLine(['rc', 'm.json', 'out', '--runs', 'run1.gii', '--apertures', 'aps.mat']).hemisphere, 'srf');
+  assert.equal(parseCommandLine(['rc', 'm.json', 'out', '--runs', 'lh_run.gii', '--apertures', 'aps.mat', '--hemisphere', 'srf']).hemisphere, 'srf');
 });
 
 test('hemisphereOf reads lh, rh or bi from the start of the file name', () => {

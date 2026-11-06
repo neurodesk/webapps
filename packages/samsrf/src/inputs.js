@@ -8,13 +8,13 @@ export function hemisphereOf(path) {
 
 /** Refuse mixed hemispheres before any files are averaged or template coordinates flipped. */
 export function resolveHemisphere(names, { hemisphere, required = false } = {}) {
-  if (hemisphere && !['lh', 'rh', 'bi', 'srf'].includes(hemisphere)) {
+  if (hemisphere !== undefined && !['lh', 'rh', 'bi', 'srf'].includes(hemisphere)) {
     throw new Error('Hemisphere must be lh, rh, bi or srf.');
   }
   const sides = new Set(names.filter(Boolean).map(hemisphereOf).filter(side => side !== 'srf'));
   if (hemisphere && hemisphere !== 'srf') sides.add(hemisphere);
   if (sides.size > 1) throw new Error('Inputs name different hemispheres. Load runs, labels, template and surfaces from one hemisphere.');
-  const side = sides.values().next().value ?? 'srf';
+  const side = hemisphere ?? sides.values().next().value ?? 'srf';
   if (required && side !== 'lh' && side !== 'rh') {
     throw new Error('Connective fields need a known hemisphere: use lh/rh or hemi-L/hemi-R file names, or --hemisphere lh/rh.');
   }
