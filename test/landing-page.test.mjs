@@ -117,6 +117,7 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
     'calcium-imaging': 'calcium-imaging',
     zarro: 'visualization',
     elastix: 'registration',
+    neuromorph: 'morphometry',
   };
   const cards = [...document.querySelectorAll('[data-app-card]')];
   assert.equal(cards.length, Object.keys(expected).length);

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "ca1-pyramidal",
+    "label": "Rat CA1 pyramidal cell",
+    "description": "NeuroMorpho.Org n120 (Turner archive, CC BY 4.0): a rat hippocampal CA1 pyramidal cell with basal and apical dendrites, 2,630 samples.",
+    "expectedResult": "Basal and apical dendrites in 3D; 11.9 mm of dendrite, 75 bifurcations and a Sholl peak of 46 intersections at 40 µm.",
+    "files": [
+      {
+        "role": "reconstructions",
+        "name": "n120.CNG.swc",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4c85eb64bb6df8ddbc6fc55287857604ef5b184/neuromorph/example/n120.CNG.swc",
+        "sha256": "6373be369f45dad69d36dd4b05fbee0991d3a6279b9c6a57dc10003f276e8a8c",
+        "bytes": 93864
+      }
+    ]
+  },
+  {
+    "id": "dg-basket",
+    "label": "Rat dentate gyrus basket cell",
+    "description": "NeuroMorpho.Org 5-27-11cell1-nonFS-BC (Santhakumar archive, CC BY 4.0): a rat dentate basket cell with dendrites and a complete axon.",
+    "expectedResult": "Axon and dendrites coloured apart; 7.8 mm of neurite, 51 bifurcations and a Sholl peak of 30 at 120 µm.",
+    "files": [
+      {
+        "role": "reconstructions",
+        "name": "5-27-11cell1-nonFS-BC.CNG.swc",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4c85eb64bb6df8ddbc6fc55287857604ef5b184/neuromorph/example/5-27-11cell1-nonFS-BC.CNG.swc",
+        "sha256": "cf59917cae264e397522be011e63701af5903f41f2a7fe6d7f3086e201ef60f0",
+        "bytes": 245320
+      }
+    ]
+  }
+]

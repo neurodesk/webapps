@@ -1,0 +1,21 @@
+# A small reconstruction written for NeuroMorph's tests: a three-point soma, a basal
+# dendrite that trifurcates (no angle is measured there) and then bifurcates once,
+# and an axon that bifurcates, with one branch bending back towards the soma.
+1 1 0 0 0 4 -1
+2 1 0 -4 0 4 1
+3 1 0 4 0 4 1
+4 3 6 0 0 1.5 1
+5 3 14 1 0 1.2 4
+6 3 24 9 2 0.8 5
+7 3 25 -1 -3 0.8 5
+8 3 22 -8 1 0.7 5
+9 3 30 14 2 0.5 6
+10 3 33 6 5 0.5 6
+11 3 32 -2 -4 0.6 7
+12 3 30 -15 1 0.4 8
+13 2 -5 1 0 1 1
+14 2 -15 2 1 0.9 13
+15 2 -27 10 0 0.6 14
+16 2 -26 -6 3 0.6 14
+17 2 -40 18 1 0.4 15
+18 2 -12 -9 4 0.4 16

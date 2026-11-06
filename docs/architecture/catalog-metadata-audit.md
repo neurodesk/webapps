@@ -125,6 +125,7 @@ Categories may contain a single app. Cross-list substantial tasks and scientific
 | conversion | Conversion | dcm2niix, ReproIn |
 | spot-detection | Spot Detection | Spot detection |
 | calcium-imaging | Calcium Imaging | Calcium imaging |
+| morphometry | Morphometry | NeuroMorph |
 
 ### Facets
 

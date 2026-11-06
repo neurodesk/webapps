@@ -2178,6 +2178,13 @@
           "apptainerName": "gliomoda_0.0.4_20261024"
         }
       ]
+    },
+    "neuromorph": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

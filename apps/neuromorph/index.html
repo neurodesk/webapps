@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NeuroMorph — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Reconstructions</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="swcInput" type="file" data-neurodesk-input="dataset" data-neurodesk-folder multiple aria-label="Choose SWC files" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop SWC files or a folder</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div class="nd-field" id="neuronField" hidden>
+            <label for="neuronSelect">Neuron</label>
+            <select id="neuronSelect"></select>
+          </div>
+          <div id="checks"></div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Morphometrics</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="shollStep">Sholl step <small>µm</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the Sholl step">i<span class="nd-info-tooltip">Spheres are centred on the soma at one step, two steps and so on out to the farthest point. Each segment that a sphere cuts counts as one intersection.</span></span>
+            </label>
+            <input id="shollStep" type="number" min="0.1" step="any" value="10" required />
+          </div>
+          <label class="nd-check"><input id="repair" type="checkbox" checked /> Repair zero radii and repeated points</label>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Measure morphology</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="legendSection">
+        <summary class="nd-section-title">Colours</summary>
+        <div class="nd-section-content">
+          <div id="legend"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Neuron viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop SWC reconstructions anywhere, or choose an example.</p>
+        <section id="morphometricsReport" class="nd-viewer-report" aria-label="Morphometrics" hidden></section>
+        <section id="shollReport" class="nd-viewer-report" aria-label="Sholl analysis" hidden></section>
+      </div>
+      <div class="nd-viewer-info"><span id="viewLabel" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>NeuroMorph checks SWC neuron reconstructions, draws them as tubes coloured by neurite type (soma, axon, basal and apical dendrites) and measures their morphology and Sholl profile with NeuroM's definitions. Thin branches are drawn at least 0.2 % of the neuron's span wide; measurements always use the file's radii. The examples are a rat CA1 pyramidal cell (n120, Turner archive) and a rat dentate gyrus basket cell (Santhakumar archive) from NeuroMorpho.Org, under CC BY 4.0.</p>
+    </template>
+    <template id="privacyContent"><p>Reconstructions are read and measured locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
