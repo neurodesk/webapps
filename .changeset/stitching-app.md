@@ -12,3 +12,5 @@ Compute Pearson correlation with stable incremental covariance so high-offset ui
 Reject source tile selections over the input budget before reading, check cancellation between file reads, and escape CSV fields so punctuation in filenames preserves report columns.
 
 Refresh the registered-position text reference after stable correlation changes its final floating-point digits; the example's fused TIFF and recorded Fiji accuracy comparison are unchanged.
+
+Require compatible tile calibration for translation-only stitching, allowing one part per million of metadata rounding, and convert relative stage displacement with a shared pixel size so absolute stage origins cannot distort placement.

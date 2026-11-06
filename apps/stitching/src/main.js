@@ -17,7 +17,7 @@ import {
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { APP, DEFAULT_VALUES, LAYOUTS, MAX_FUSED_PIXELS, MAX_TILE_BYTES, SettingsError, guessGrid, readSettings } from "./config.js";
-import { compareNames, gridPositions, parseTileConfiguration, positionsFromConfiguration, positionsFromStage } from "./core/tile-layout.js";
+import { checkPixelSizes, compareNames, gridPositions, parseTileConfiguration, positionsFromConfiguration, positionsFromStage } from "./core/tile-layout.js";
 import { planPairs } from "./core/pipeline.js";
 import { optimisePositions } from "./core/global.js";
 import { fusedGeometry } from "./core/fusion.js";
@@ -211,6 +211,7 @@ async function loadTiles(files, signal) {
     if (dtypes.size > 1) throw new Error(`The tiles mix sample types (${[...dtypes].join(", ")}); save them all with one type.`);
     const ranks = new Set(decoded.map((tile) => tile.shape.length));
     if (ranks.size > 1) throw new Error("The tiles mix 2D images and 3D stacks; stitch one kind at a time.");
+    checkPixelSizes(decoded.map((tile) => tile.pixelSize), decoded[0].shape.length);
     current.throwIfAborted();
     tiles = decoded;
     preview = null;

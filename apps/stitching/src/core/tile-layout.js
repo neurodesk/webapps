@@ -130,6 +130,24 @@ export function positionsFromConfiguration(configuration, names, dims) {
   return names.map((name) => [...byName.get(name)]);
 }
 
+/** Translation-only stitching requires one sampling grid; allow 1 ppm metadata rounding. */
+export function checkPixelSizes(pixelSizes, dims) {
+  const axes = ['x', 'y', 'z'].slice(0, dims);
+  const common = pixelSizes[0] ?? {};
+  for (const [index, size] of pixelSizes.entries()) {
+    for (const axis of axes) {
+      const value = size?.[axis];
+      const expected = common[axis];
+      if (value == null && expected == null) continue;
+      if (!(Number.isFinite(value) && value > 0 && Number.isFinite(expected) && expected > 0)
+        || Math.abs(value - expected) > expected * 1e-6) {
+        throw new Error(`Tile ${index + 1} has incompatible ${axis} pixel spacing. Stitch tiles with the same calibration.`);
+      }
+    }
+  }
+  return common;
+}
+
 /**
  * Positions (pixels) from OME stage positions (micrometres) and pixel sizes (micrometres),
  * relative to the smallest stage position. Stage axes are assumed to run with the image axes.
@@ -147,13 +165,15 @@ export function positionsFromStage(stages, pixelSizes, dims) {
     const first = stages.findIndex((stage) => !Number.isFinite(stage.z));
     throw new Error(`Tile ${first + 1} has no stage z position but other tiles do; give every tile a z or none.`);
   }
-  const raw = stages.map((stage, k) => {
-    const position = [stage.x / sizes[k].x, stage.y / sizes[k].y];
-    if (dims > 2) position.push(withZ ? stage.z / sizes[k].z : 0);
+  const common = checkPixelSizes(pixelSizes, dims);
+  const axes = ['x', 'y', 'z'].slice(0, dims);
+  const raw = stages.map((stage) => {
+    const position = [stage.x, stage.y];
+    if (dims > 2) position.push(withZ ? stage.z : 0);
     return position;
   });
   const minimum = raw[0].map((_, d) => Math.min(...raw.map((p) => p[d])));
-  return raw.map((p) => p.map((v, d) => v - minimum[d]));
+  return raw.map((p) => p.map((v, d) => (v - minimum[d]) / common[axes[d]]));
 }
 
 /**

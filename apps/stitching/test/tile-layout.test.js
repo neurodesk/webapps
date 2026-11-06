@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  checkPixelSizes,
   compareNames,
   formatTileConfiguration,
   gridCell,
@@ -74,4 +75,22 @@ test('only overlapping pairs are registered, diagonal neighbours included', () =
   const shapes = Array(4).fill([100, 80]);
   assert.deepEqual(overlappingPairs(shapes, [[0, 0], [90, 0], [0, 70], [90, 70]]), [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]);
   assert.deepEqual(overlappingPairs(shapes, [[0, 0], [100, 0], [0, 80], [100, 80]]), []);
+});
+
+test('stage displacement uses a common calibration and is invariant to the stage origin', () => {
+  const sizes = [{ x: 1, y: 1 }, { x: 1.0000005, y: 1 }];
+  for (const origin of [0, 10000, 1e8]) {
+    assert.deepEqual(positionsFromStage([{ x: origin, y: origin }, { x: origin + 90, y: origin }], sizes, 2), [[0, 0], [90, 0]]);
+  }
+  assert.throws(() => positionsFromStage([{ x: 10000, y: 10000 }, { x: 10090, y: 10000 }], [{ x: 1, y: 1 }, { x: 1.001, y: 1 }], 2), /Tile 2 has incompatible x pixel spacing/);
+});
+
+test('translation-only tiles reject incompatible or partially missing calibration on each active axis', () => {
+  checkPixelSizes([null, null], 3);
+  checkPixelSizes([{ x: 1, y: 1 }, { x: 1, y: 1 }], 3);
+  for (const axis of ['x', 'y', 'z']) {
+    for (const value of [2, null, Infinity, NaN, 0]) {
+      assert.throws(() => checkPixelSizes([{ x: 1, y: 1, z: 1 }, { x: 1, y: 1, z: 1, [axis]: value }], 3), /incompatible/);
+    }
+  }
 });
