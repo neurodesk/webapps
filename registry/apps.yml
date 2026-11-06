@@ -1402,6 +1402,7 @@ apps:
       release: false
   - id: calcium-imaging
     path: calcium-imaging
+    catalog: microscopy
     title: Calcium imaging
     description: Two-photon motion correction, ROIs, ΔF/F and spikes
     categories: [image-processing]
