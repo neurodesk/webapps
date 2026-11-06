@@ -2467,3 +2467,29 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  stitching:
+    packages:
+      - { name: Stitching pipeline, url: https://github.com/neurodesk/webapps/tree/main/apps/stitching/src/core, role: "phase-correlation pairwise registration, global optimisation and linear-blending fusion, written from the paper below (not from Fiji's GPL code)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: ngff-zarr, url: https://github.com/fideus-labs/ngff-zarr, role: "OME-Zarr writing" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Stitching
+        title: Globally optimal stitching of tiled 3D microscopic image acquisitions
+        reference: "Preibisch S, Saalfeld S, Tomancak P. Globally optimal stitching of tiled 3D microscopic image acquisitions. Bioinformatics. 2009;25(11):1463–1465."
+        doi: 10.1093/bioinformatics/btp184
+      - group: Validation reference
+        title: Fiji
+        reference: "Schindelin J, Arganda-Carreras I, Frise E, et al. Fiji: an open-source platform for biological-image analysis. Nature Methods. 2012;9(7):676–682."
+        doi: 10.1038/nmeth.2019
+        code: https://github.com/fiji/Stitching
+      - group: Example data
+        title: NIST MIST stitching test data
+        reference: "Chalfoun J, Majurski M, Blattner T, Bhadriraju K, Keyrouz W, Bajcsy P, Brady M. MIST: Accurate and Scalable Microscopy Image Stitching Tool with Stage Modeling and Error Minimization. Scientific Reports. 2017;7:4988. Data: Small_Phase_Test_Dataset from github.com/usnistgov/MIST, a US Government work of NIST, distributed under the NIST notice; acknowledge NIST as the source."
+        doi: 10.1038/s41598-017-04567-y
+        url: https://github.com/usnistgov/MIST
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

@@ -1529,3 +1529,30 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+
+  - id: stitching
+    catalog: microscopy
+    path: stitching
+    title: Tile stitching
+    description: Stitch overlapping 2D and 3D microscopy tiles
+    categories: [registration]
+    keywords: [stitching, tile stitching, mosaic, montage, tiles, grid, phase correlation, cross-correlation, global optimisation, linear blending, fusion, Grid/Collection stitching, TileConfiguration, OME-TIFF, OME-Zarr, microscopy]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff]
+    hardware: cpu
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    handoff: none
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
