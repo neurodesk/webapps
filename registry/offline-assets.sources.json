@@ -7222,6 +7222,20 @@
         "license": "CC-BY-4.0"
       }
     ],
+    "neuromorph": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4c85eb64bb6df8ddbc6fc55287857604ef5b184/neuromorph/example/n120.CNG.swc",
+        "sha256": "6373be369f45dad69d36dd4b05fbee0991d3a6279b9c6a57dc10003f276e8a8c",
+        "bytes": 93864,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4c85eb64bb6df8ddbc6fc55287857604ef5b184/neuromorph/example/5-27-11cell1-nonFS-BC.CNG.swc",
+        "sha256": "cf59917cae264e397522be011e63701af5903f41f2a7fe6d7f3086e201ef60f0",
+        "bytes": 245320,
+        "kind": "example"
+      }
+    ],
     "stitching": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r001_c001.tif",

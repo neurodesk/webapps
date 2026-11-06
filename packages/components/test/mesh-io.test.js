@@ -69,3 +69,16 @@ test('a FreeSurfer curvature file reads one big-endian float per vertex', () => 
   assert.throws(() => readFreeSurferCurv(bytes.subarray(0, 20)), /Truncated/);
   assert.throws(() => readFreeSurferCurv(new Uint8Array(20)), /Not a FreeSurfer/);
 });
+
+test('mz3 with colours carries one RGBA quadruple per vertex after the geometry', async () => {
+  const colors = Uint8Array.from([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 9, 9, 9, 128]);
+  const bytes = new Uint8Array(writeMz3(vertices, faces, colors));
+  const view = new DataView(bytes.buffer);
+  assert.equal(view.getUint16(2, true), 7);
+  assert.equal(bytes.byteLength, 16 + faces.length * 4 + vertices.length * 4 + colors.length);
+  assert.deepEqual(bytes.slice(-colors.length), colors);
+  const read = await readMz3(bytes);
+  assert.deepEqual(Array.from(read.vertices), Array.from(vertices));
+  assert.deepEqual(Array.from(read.faces), Array.from(faces));
+  assert.throws(() => writeMz3(vertices, faces, colors.slice(4)), /four bytes per vertex/);
+});

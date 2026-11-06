@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 2,
+  "app": "neuromorph",
+  "title": "NeuroMorph",
+  "description": "Check SWC neuron reconstructions and measure their morphology and Sholl profile with NeuroM's definitions.",
+  "defaultOperation": "measure",
+  "operations": {
+    "measure": {
+      "title": "Measure morphology",
+      "description": "Check and repair SWC reconstructions, then measure length, branching, path and radial distance, branch and Strahler order, bifurcation angles, surface area, volume and Sholl intersections of each.",
+      "mode": "batch",
+      "inputs": {
+        "reconstructions": {
+          "source": "files",
+          "type": "neuro:morphology",
+          "formats": [
+            "swc"
+          ],
+          "description": "One or more SWC neuron reconstructions",
+          "minimum": 1
+        }
+      },
+      "parameters": {
+        "shollStep": {
+          "type": "number",
+          "minimum": 0.1,
+          "default": 10,
+          "description": "Distance between Sholl spheres in µm"
+        },
+        "repair": {
+          "type": "boolean",
+          "default": true,
+          "description": "Replace zero radii with the nearest positive radius and merge samples repeating their parent's position"
+        }
+      },
+      "artifacts": {
+        "morphometrics": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "sholl": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "bifurcations": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "repaired": {
+          "type": "neuro:morphology",
+          "mediaType": "text/plain",
+          "minimum": 0
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

@@ -437,6 +437,18 @@ test('resolved upload scope exposes misplaced selectors to the interface audit',
   window.close();
 });
 
+test('a non-scan input offers Load folder only when it opts in', () => {
+  for (const [attributes, expected] of [['', ['Load files…']], [' data-neurodesk-folder', ['Load files…', 'Load folder…']]]) {
+    const { window } = new JSDOM(`<body><div id="scope"><label class="nd-file"><input type="file" data-neurodesk-input="dataset"${attributes}></label></div></body>`);
+    const scope = window.document.getElementById('scope');
+    const control = createExampleSelector({ examples, onLoad: async () => {}, scope }, window.document);
+    scope.prepend(control);
+    const actions = [...control.select.options].filter(option => option.dataset.action);
+    assert.deepEqual(actions.map(option => option.textContent), expected);
+    window.close();
+  }
+});
+
 test('the menu ends with file actions that open the scope input and hide its drop box', async () => {
   const { window } = new JSDOM('<body><div id="scope"><label class="nd-file"><input type="file" data-neurodesk-input="image"></label></div></body>');
   const scope = window.document.getElementById('scope');

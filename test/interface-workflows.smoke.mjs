@@ -825,6 +825,40 @@ try {
     await expect(page.locator('#fileInfo')).toContainText('second.tif');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
+  await check('neuromorph', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    const swc = (name, rows) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(rows.join('\n')) });
+    const fork = ['1 1 0 0 0 5 -1', '2 3 5 0 0 1 1', '3 3 10 0 0 1 2', '4 3 10 10 0 0.5 3', '5 3 20 0 0 0.5 3'];
+    await page.locator('#swcInput').setInputFiles([swc('fork.swc', fork), swc('orphan.swc', [...fork, '6 3 30 0 0 0 9'])]);
+    await expect(page.locator('#fileInfo')).toHaveText('2 reconstructions');
+    await page.locator('#neuronSelect').selectOption({ label: 'orphan.swc' });
+    await expect(page.locator('#checks')).toContainText('named a missing parent');
+    // The step and repair option must survive closing the task section, and the chosen neuron the input section.
+    await page.locator('#shollStep').fill('5');
+    await page.locator('#repair').uncheck();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#shollStep')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#shollStep')).toHaveValue('5');
+    await expect(page.locator('#repair')).not.toBeChecked();
+    const input = page.locator('#inputSection > summary');
+    await input.tap();
+    await input.tap();
+    await expect(page.locator('#neuronSelect')).toHaveValue('1');
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('2 reconstructions measured');
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Sholl intersections · 5 µm step');
+    await expect(page.locator('#resultList')).toContainText('Repaired SWC · orphan.swc');
+    // New files withdraw the old tables.
+    await page.locator('#swcInput').setInputFiles([swc('fork.swc', fork)]);
+    await expect(page.locator('#fileInfo')).toHaveText('fork.swc');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+    await expect(page.locator('#neuronField')).toBeHidden();
+  });
   await check('sdc', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
