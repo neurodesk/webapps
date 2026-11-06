@@ -10,3 +10,5 @@ Add Tile stitching, a browser app that stitches overlapping 2D or 3D microscopy 
 Compute Pearson correlation with stable incremental covariance so high-offset uint32 and float64 tiles retain correct matching scores.
 
 Reject source tile selections over the input budget before reading, check cancellation between file reads, and escape CSV fields so punctuation in filenames preserves report columns.
+
+Refresh the registered-position text reference after stable correlation changes its final floating-point digits; the example's fused TIFF and recorded Fiji accuracy comparison are unchanged.
