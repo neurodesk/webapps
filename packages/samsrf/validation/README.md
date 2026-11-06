@@ -1,5 +1,10 @@
 # SamSrf parity
 
+For actual MATLAB Runtime comparisons, see [the container harness](container/README.md).
+It distinguishes matched-precision fitting, legacy map exports and the residual
+differences from the container's default single precision. The results below
+are the separate Octave baseline.
+
 `parity.mjs` runs `@neurodesk/samsrf` on SamSrf's example subject X001 and
 compares every output with the reference that SamSrf's own `.m` files produced
 in Octave 9.2. It loads the committed WebAssembly module through `src/node.js`.

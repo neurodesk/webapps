@@ -1,5 +1,16 @@
 # samsrf
 
+## 0.2.20261106
+
+### Minor Changes
+
+- Add a legacy SamSrfX 10.003 map-export convention in advanced settings and model JSON, shared by the browser and CLI. Record actual MATLAB Runtime references and verify matched-precision fits and legacy exports in CI. Document the remaining default-single versus float64 fitting differences.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/samsrf@0.2.20261106
+
 ## 0.1.20261106
 
 ### Patch Changes

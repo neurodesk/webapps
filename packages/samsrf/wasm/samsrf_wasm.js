@@ -498,11 +498,12 @@ export function evaluateExpression(source, rows, cols, data) {
  * @param {Float64Array | number[]} data
  * @param {string} prefix
  * @param {string[] | null} [selection]
+ * @param {string | null} [convention]
  * @returns {Array<any>}
  */
-export function exportGiis(values, vertices, data, prefix, selection) {
-    const val5 = +vertices;
-    let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3;
+export function exportGiis(values, vertices, data, prefix, selection, convention) {
+    const val6 = +vertices;
+    let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4;
     try {
         ptr0 = passArrayJsValueToWasm0(values, wasm.__wbindgen_malloc);
         len0 = WASM_VECTOR_LEN;
@@ -512,14 +513,17 @@ export function exportGiis(values, vertices, data, prefix, selection) {
         len2 = WASM_VECTOR_LEN;
         ptr3 = isLikeNone(selection) ? 0 : passArrayJsValueToWasm0(selection, wasm.__wbindgen_malloc);
         len3 = WASM_VECTOR_LEN;
+        ptr4 = isLikeNone(convention) ? 0 : passStringToWasm0(convention, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len4 = WASM_VECTOR_LEN;
     } catch (e) {
+        if (ptr4) { wasm.__wbindgen_free(ptr4, len4 * 1, 1); }
         if (ptr3) { wasm.__externref_drop_slice(ptr3, len3); wasm.__wbindgen_free(ptr3, len3 * 4, 4); }
         if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
         if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 8, 8); }
         if (ptr0) { wasm.__externref_drop_slice(ptr0, len0); wasm.__wbindgen_free(ptr0, len0 * 4, 4); }
         throw e;
     }
-    const ret = wasm.exportGiis(ptr0, len0, val5, ptr1, len1, ptr2, len2, ptr3, len3);
+    const ret = wasm.exportGiis(ptr0, len0, val6, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -727,22 +731,26 @@ export function pearson(x, y) {
  * @param {string[]} values
  * @param {number} vertices
  * @param {Float64Array | number[]} data
+ * @param {string | null} [convention]
  * @returns {any}
  */
-export function polarAndEccentricity(values, vertices, data) {
-    const val3 = +vertices;
-    let ptr0, len0, ptr1, len1;
+export function polarAndEccentricity(values, vertices, data, convention) {
+    const val4 = +vertices;
+    let ptr0, len0, ptr1, len1, ptr2, len2;
     try {
         ptr0 = passArrayJsValueToWasm0(values, wasm.__wbindgen_malloc);
         len0 = WASM_VECTOR_LEN;
         ptr1 = passArrayF64ToWasm0(data, wasm.__wbindgen_malloc);
         len1 = WASM_VECTOR_LEN;
+        ptr2 = isLikeNone(convention) ? 0 : passStringToWasm0(convention, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len2 = WASM_VECTOR_LEN;
     } catch (e) {
+        if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
         if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 8, 8); }
         if (ptr0) { wasm.__externref_drop_slice(ptr0, len0); wasm.__wbindgen_free(ptr0, len0 * 4, 4); }
         throw e;
     }
-    const ret = wasm.polarAndEccentricity(ptr0, len0, val3, ptr1, len1);
+    const ret = wasm.polarAndEccentricity(ptr0, len0, val4, ptr1, len1, ptr2, len2);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }

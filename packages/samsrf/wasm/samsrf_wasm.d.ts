@@ -74,7 +74,7 @@ export function errfun(source: string, apertures: Apertures, xy: Float64Array | 
  */
 export function evaluateExpression(source: string, rows: Uint32Array | number[], cols: Uint32Array | number[], data: Float64Array | number[]): any;
 
-export function exportGiis(values: string[], vertices: number, data: Float64Array | number[], prefix: string, selection?: string[] | null): Array<any>;
+export function exportGiis(values: string[], vertices: number, data: Float64Array | number[], prefix: string, selection?: string[] | null, convention?: string | null): Array<any>;
 
 export function hrfConvolve(y: Float64Array | number[], kernel: Float64Array | number[], downsampling: number): Float64Array;
 
@@ -102,7 +102,7 @@ export function parseModel(kind: string, json: string): string;
 
 export function pearson(x: Float64Array | number[], y: Float64Array | number[]): number;
 
-export function polarAndEccentricity(values: string[], vertices: number, data: Float64Array | number[]): any;
+export function polarAndEccentricity(values: string[], vertices: number, data: Float64Array | number[], convention?: string | null): any;
 
 export function predictTimecourse(rfp: Float64Array | number[], apertures: Apertures): Float64Array;
 
@@ -159,7 +159,7 @@ export interface InitOutput {
     readonly detrend: (a: number, b: number) => [number, number];
     readonly errfun: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
     readonly evaluateExpression: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
-    readonly exportGiis: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
+    readonly exportGiis: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number];
     readonly hrfConvolve: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly hrfDeHaas: (a: number) => [number, number];
     readonly hrfDoublegamma: (a: number, b: number, c: number) => [number, number];
@@ -176,7 +176,7 @@ export interface InitOutput {
     readonly noiseCeiling: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly parseModel: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly pearson: (a: number, b: number, c: number, d: number) => number;
-    readonly polarAndEccentricity: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly polarAndEccentricity: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly predictTimecourse: (a: number, b: number, c: number) => [number, number];
     readonly prfProfileGrid: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly prfProfileXy: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];

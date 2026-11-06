@@ -171,16 +171,26 @@ export function removeNoise({ volumes, vertices, data }, covariates, nCovariates
   return core.removeNoise(volumes, vertices, data, covariates, nCovariates);
 }
 
-export function exportGiis({ values, vertices, data }, prefix, selection = null) {
-  return core.exportGiis(values, vertices, data, prefix, selection ?? undefined);
+export const EXPORT_CONVENTIONS = Object.freeze({
+  'samsrf-10.4': 'Geometric eccentricity (SamSrf 10.4)',
+  'samsrfx-10.003': 'Legacy SamSrfX 10.003 (radius − 0.5)',
+});
+
+export function exportConvention(value = 'samsrf-10.4') {
+  if (typeof value !== 'string' || !Object.hasOwn(EXPORT_CONVENTIONS, value)) throw new Error(`Unknown export convention ${JSON.stringify(value)}.`);
+  return value;
+}
+
+export function exportGiis({ values, vertices, data }, prefix, selection = null, convention) {
+  return core.exportGiis(values, vertices, data, prefix, selection ?? undefined, exportConvention(convention));
 }
 
 export function writeGiftiMap(values) {
   return core.writeGiftiMap(values);
 }
 
-export function polarAndEccentricity({ values, vertices, data }) {
-  return core.polarAndEccentricity(values, vertices, data);
+export function polarAndEccentricity({ values, vertices, data }, convention) {
+  return core.polarAndEccentricity(values, vertices, data, exportConvention(convention));
 }
 
 const ANALYSES = ['prf', 'rc', 'cf'];

@@ -12,6 +12,7 @@ import {
   analysisSpec,
   createJob,
   exportGiis,
+  exportConvention,
   predictTimecourse,
   prfProfile,
   readAnalysisInputs,
@@ -187,6 +188,7 @@ function runSharded(spec, shards, total, onProgress) {
 export async function analyse(options, { log = () => {}, progress = () => {} } = {}) {
   const started = performance.now();
   const model = readModel(options.model);
+  const convention = exportConvention(model.json.Export_Convention);
   checkOutput(options.output);
   log(`Reading and preprocessing ${options.runs.length} run${options.runs.length === 1 ? '' : 's'}`);
   const inputs = readAnalysisInputs(options);
@@ -210,7 +212,7 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
       merged = job.merge(await runSharded(spec, options.shards, total, onProgress));
     }
     const prefix = `${options.hemisphere}_${job.modelName}${job.outSuffix}`;
-    const files = exportGiis(merged.maps, prefix);
+    const files = exportGiis(merged.maps, prefix, null, convention);
     mkdirSync(options.output, { recursive: true });
     for (const { name, bytes } of files) writeFileSync(join(options.output, name), bytes);
     const inputFiles = [
@@ -225,6 +227,7 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
       source: 'SamSrf (Samuel Schwarzkopf, BSD-3-Clause), commit 41ed1e96, ported to Rust and WebAssembly',
       analysis: options.kind,
       model: model.json,
+      exportConvention: convention,
       options: { hemisphere: options.hemisphere, normalise: options.normalise, combine: options.combine, shards: options.shards },
       inputs: inputFiles.map(([role, path]) => ({ role, path, sha256: sha256(readFileSync(path)) })),
       analysedVertices: total,
