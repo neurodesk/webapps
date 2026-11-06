@@ -108,7 +108,7 @@ function validateCatalogs(registry, errors) {
     errors.push('exactly one catalog must use pages hosting, on site.domain');
   }
   for (const id of ids) {
-    if (!registry.apps?.some((app) => app?.catalog === id)) errors.push(`catalog ${id} has no apps`);
+    if (!registry.apps?.some((app) => app && appCatalogIds(app).includes(id))) errors.push(`catalog ${id} has no apps`);
   }
 }
 
@@ -157,9 +157,15 @@ export async function loadAppsRegistry(path = registryPath) {
       errors.push(`categories must be a non-empty array of unique declared category ids for ${app.id}`);
     }
     if (Object.hasOwn(app, 'category')) errors.push(`use categories instead of category for ${app.id}`);
-    // One home per app: its URL, its landing page and the handoff menu that lists it.
+    // One home per app: its canonical URL, the host its old links redirect to and
+    // the host its analytics count. `also_in` lists other catalogues that serve a copy.
     if (typeof app.catalog !== 'string' || !catalogIds.has(app.catalog)) {
       errors.push(`catalog for ${app.id} must be exactly one declared catalog id`);
+    }
+    if (app.also_in !== undefined && (!Array.isArray(app.also_in) || app.also_in.length === 0
+        || app.also_in.some((id) => !catalogIds.has(id) || id === app.catalog)
+        || new Set(app.also_in).size !== app.also_in.length)) {
+      errors.push(`also_in for ${app.id} must list other declared catalog ids, each once`);
     }
     if (app.former_paths !== undefined && (!Array.isArray(app.former_paths)
         || app.former_paths.some((path) => !ID.test(path) || formerPaths.has(path)))) {
@@ -294,13 +300,19 @@ export function primaryCatalog(registry) {
   return registry.site.catalogs.find((catalog) => catalog.host === registry.site.domain);
 }
 
-export function catalogApps(registry, catalog) {
-  return registry.apps.filter((app) => app.catalog === catalog.id);
+/** Every catalogue that serves an app: its home first, then `also_in`. */
+export function appCatalogIds(app) {
+  return [app.catalog, ...(app.also_in ?? [])];
 }
 
-/** The deployed URL of an app, on its catalogue's host. */
-export function appUrl(registry, app) {
-  return `https://${findCatalog(registry, app.catalog).host}/${app.path}/`;
+/** The apps a catalogue's host serves. */
+export function catalogApps(registry, catalog) {
+  return registry.apps.filter((app) => appCatalogIds(app).includes(catalog.id));
+}
+
+/** The deployed URL of an app on a host that serves it; its home host by default. */
+export function appUrl(registry, app, catalog = findCatalog(registry, app.catalog)) {
+  return `https://${catalog.host}/${app.path}/`;
 }
 
 export function findApp(registry, id) {

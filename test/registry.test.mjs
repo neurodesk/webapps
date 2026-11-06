@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { loadAppsRegistry, MAX_DESCRIPTION_LENGTH, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { MAX_DESCRIPTION_LENGTH, catalogApps, findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { validateAssetManifest } from '../scripts/lib/scientific-assets.mjs';
 
 test('catalog contains every app workspace without a repeated inventory', async () => {
@@ -282,6 +282,20 @@ test('registry rejects unknown, missing and repeated catalogue membership', asyn
   raw.apps[0].catalog = original;
   await writeFile(path, stringify(raw));
   await loadAppsRegistry(path);
+});
+
+test('also_in lists other declared catalogues, each once', async () => {
+  const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+  const path = join(await mkdtemp(join(tmpdir(), 'apps-also-in-')), 'apps.yml');
+  for (const alsoIn of [[], 'neuro', ['unknown'], [raw.apps[0].catalog], ['neuro', 'neuro']]) {
+    raw.apps[0].also_in = alsoIn;
+    await writeFile(path, stringify(raw));
+    await assert.rejects(loadAppsRegistry(path), /also_in for musclemap must list other declared catalog ids, each once/);
+  }
+  raw.apps[0].also_in = ['neuro'];
+  await writeFile(path, stringify(raw));
+  const registry = await loadAppsRegistry(path);
+  assert.ok(catalogApps(registry, findCatalog(registry, 'neuro')).some(({ id }) => id === 'musclemap'));
 });
 
 test('registry rejects duplicate catalogue hosts and ids, and catalogues without apps', async () => {

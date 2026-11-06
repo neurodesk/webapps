@@ -59,9 +59,11 @@ async function exists(path) {
   }
 }
 
-/** The theme options of an app on its catalogue's host; `siteAppIds` limits its handoff menu. */
-export function hostedThemeOptions({ registry, information, app, version, siteAppIds }) {
-  const catalog = findCatalog(registry, app.catalog);
+/**
+ * The theme options of an app on one host that serves it (its home catalogue by
+ * default); `siteAppIds` limits its handoff menu.
+ */
+export function hostedThemeOptions({ registry, information, app, version, siteAppIds, catalog = findCatalog(registry, app.catalog) }) {
   return {
     appId: app.id,
     shell: app.shell,
@@ -69,7 +71,7 @@ export function hostedThemeOptions({ registry, information, app, version, siteAp
     description: app.description,
     version,
     measurementId: registry.site.analytics.measurement_id,
-    url: appUrl(registry, app),
+    url: appUrl(registry, app, catalog),
     siteTitle: catalog.title,
     brandName: catalog.brand.name,
     moreAppsLabel: catalog.brand.more_apps,
@@ -171,7 +173,7 @@ export async function projectCatalogSite({ repoRoot, siteDist, destination, regi
     const indexPath = join(destination, app.path, 'index.html');
     const version = JSON.parse(await readFile(join(repoRoot, 'apps', app.id, 'package.json'), 'utf8')).version;
     await writeFile(indexPath, injectCompositeTheme(await readFile(indexPath, 'utf8'), hostedThemeOptions({
-      registry, information, app, version, siteAppIds,
+      registry, information, app, version, siteAppIds, catalog,
     })));
   }
 

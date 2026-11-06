@@ -39,6 +39,17 @@ site:
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
         more_apps: More SciGet MSK web apps
+    - id: microscopy
+      host: microscopyapps.sciget.org
+      hosting: worker
+      title: SciGet Microscopy Webapps
+      heading: Run Microscopy Tools in Your Browser
+      description: Segment nuclei and stream, view and measure large microscopy images in your browser without uploading your data.
+      brand:
+        name: SciGet
+        logo: sciget-logo.svg
+        home: https://webapps.sciget.org/
+        more_apps: More SciGet microscopy web apps
   analytics:
     measurement_id: G-4Z9774J59Y
     period_days: 30
@@ -421,7 +432,7 @@ apps:
       release: true
   - id: zarro
     path: zarro
-    catalog: neuro
+    catalog: microscopy
     title: ZARRo
     description: Stream, view and measure large OME-Zarr images.
     categories: [visualization]
@@ -868,6 +879,7 @@ apps:
   - id: elastix
     path: elastix
     catalog: neuro
+    also_in: [microscopy]
     title: elastix
     description: Rigid, affine and B-spline registration with elastix.
     categories: [registration]
@@ -1363,7 +1375,7 @@ apps:
       release: false
   - id: stardist
     path: stardist
-    catalog: neuro
+    catalog: microscopy
     title: StarDist
     description: Segment cell nuclei in 2D fluorescence microscopy.
     categories: [segmentation]

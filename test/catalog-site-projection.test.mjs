@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { findApp, findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
-import { SHARED_ROOT_FILES, projectCatalogSite, projectHubSite, runtimeReferences, workerConfig, workerSites } from '../scripts/lib/catalog-sites.mjs';
+import { SHARED_ROOT_FILES, hostedThemeOptions, projectCatalogSite, projectHubSite, runtimeReferences, workerConfig, workerSites } from '../scripts/lib/catalog-sites.mjs';
 import { loadNotFoundTemplate } from '../scripts/lib/not-found-page.mjs';
 import { loadStandalone } from '../scripts/lib/standalone.mjs';
 
@@ -110,6 +110,7 @@ test('the hub site holds the hub page and nothing it does not load', async (t) =
 test('the Worker-hosted sites deploy as assets-only Workers on their own domains', () => {
   assert.deepEqual(workerSites(full), [
     { host: 'mskapps.sciget.org', site: 'msk' },
+    { host: 'microscopyapps.sciget.org', site: 'microscopy' },
     { host: 'webapps.sciget.org', site: 'hub' },
   ]);
   assert.deepEqual(workerConfig('mskapps.sciget.org', 'msk'), {
@@ -133,4 +134,15 @@ test('the deploy workflow deploys every Worker site the registry declares', asyn
   for (const step of workflow.jobs.deploy.steps.filter((candidate) => candidate.env?.BASE_URL)) {
     assert.equal(step.env.SITE_CATALOG, primary.id, `${step.name} checks only the Pages catalogue`);
   }
+});
+
+test('an app copy takes the URL and brand of the host that serves it', () => {
+  const app = findApp(full, 'elastix');
+  const home = hostedThemeOptions({ registry: full, information, app, version: '1.0.0' });
+  const copy = hostedThemeOptions({ registry: full, information, app, version: '1.0.0', catalog: findCatalog(full, 'microscopy') });
+  assert.equal(home.url, 'https://webapps.neurodesk.org/elastix/');
+  assert.equal(home.brandName, 'Neurodesk');
+  assert.equal(copy.url, 'https://microscopyapps.sciget.org/elastix/');
+  assert.equal(copy.brandName, 'SciGet');
+  assert.equal(copy.siteTitle, 'SciGet Microscopy Webapps');
 });

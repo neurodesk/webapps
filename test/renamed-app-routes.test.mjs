@@ -10,6 +10,7 @@ const registry = await loadAppsRegistry();
 const template = await readFile(new URL('../site/404.html', import.meta.url), 'utf8');
 const neuro = findCatalog(registry, 'neuro');
 const msk = findCatalog(registry, 'msk');
+const microscopy = findCatalog(registry, 'microscopy');
 
 // Run the page's inline redirect at a URL on its host, as GitHub Pages or a Worker serves it.
 function visit(page, route, origin) {
@@ -58,11 +59,11 @@ for (const [page, route] of [
   });
 }
 
-test('every app outside a catalogue redirects to the host that serves it', () => {
+test('every app outside a catalogue redirects to its home host', () => {
   for (const catalog of registry.site.catalogs) {
     const routes = movedAppRoutes(registry, catalog);
     for (const app of registry.apps) {
-      if (app.catalog === catalog.id) {
+      if (catalogApps(registry, catalog).includes(app)) {
         assert.ok(!Object.hasOwn(routes, app.path), `${catalog.id} serves ${app.id} itself`);
       } else {
         assert.equal(routes[app.path], `https://${findCatalog(registry, app.catalog).host}/${app.path}`);
@@ -81,4 +82,12 @@ test('each 404 page names its catalogue and loads dicompare routing only where d
     assert.equal(Boolean(document.querySelector('script[src="/dicompare/dicompare-routes.js"]')), servesDicompare);
   }
   assert.ok(catalogApps(registry, neuro).some(({ id }) => id === 'dicompare'));
+});
+
+test('an app served by several catalogues stays on each of them and redirects elsewhere to its home', () => {
+  assert.ok(catalogApps(registry, microscopy).some(({ id }) => id === 'elastix'));
+  assert.ok(catalogApps(registry, neuro).some(({ id }) => id === 'elastix'));
+  assert.equal(movedAppRoutes(registry, microscopy).elastix, undefined);
+  assert.equal(movedAppRoutes(registry, neuro).elastix, undefined);
+  assert.equal(movedAppRoutes(registry, msk).elastix, 'https://webapps.neurodesk.org/elastix');
 });

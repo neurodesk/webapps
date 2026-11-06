@@ -3,7 +3,7 @@ import { createSign } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
+import { appCatalogIds, loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 
 const ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 const DEFAULT_OUTPUT = resolve(repoRoot, 'site', 'analytics.json');
@@ -169,12 +169,12 @@ async function metricsForFilter(context, filter) {
   };
 }
 
-// An app is counted on its catalogue's host and, for an app that moved off the
-// primary domain, on that domain too: its visits there predate the move, since
-// its old paths now serve only the 404 redirect, which loads no analytics.
+// An app is counted on every host that serves it and, for an app whose home moved
+// off the primary domain, on that domain too: its visits there predate the move,
+// since its old paths now serve only the 404 redirect, which loads no analytics.
 export function appHosts(registry, app) {
-  const host = registry.site.catalogs.find((catalog) => catalog.id === app.catalog).host;
-  return host === registry.site.domain ? [host] : [host, registry.site.domain];
+  const hosts = appCatalogIds(app).map((id) => registry.site.catalogs.find((catalog) => catalog.id === id).host);
+  return [...new Set([...hosts, registry.site.domain])];
 }
 
 export async function collectAnalytics({ registry, propertyId, serviceAccount }) {
