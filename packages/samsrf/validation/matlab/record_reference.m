@@ -1,14 +1,19 @@
-function record_reference(source, input, output)
+function record_reference(source, input, output, matrixInput, spmSource)
 % Record actual MATLAB arithmetic before deciding how to emulate it in WASM.
 % source is the pinned checkout with prepare.py's three declared repairs.
 arguments
     source (1,:) char
     input (1,:) char
     output (1,:) char
+    matrixInput (1,:) char = ''
+    spmSource (1,:) char = ''
 end
 assert(isfile(fullfile(output, 'source.json')), 'Run prepare.py first');
 assert(~isfile(fullfile(output, 'reference.json')), 'Use a fresh output directory');
 addpath(genpath(source));
+if ~isempty(spmSource)
+    addpath(spmSource);
+end
 previous = pwd;
 cleanup = onCleanup(@() cd(previous));
 cd(output);
@@ -38,13 +43,18 @@ if isempty(pool)
 end
 poolCleanup = onCleanup(@() delete(pool));
 cases = [cases, cf_cases()];
+cases = [cases, polygon_cases()];
+write_json('reference.json.partial', struct('cases', {cases}));
+if ~isempty(matrixInput)
+    cases = [cases, record_matrix(matrixInput, output, @array_file, @write_json)];
+end
 write_json('reference.json', struct('cases', {cases}));
 fprintf('Recorded %d actual MATLAB cases. No WASM equivalence claim is implied.\n', numel(cases));
 end
 
 function cases = correlation_cases(kind)
 cases = {};
-for n = [3 7 8 9 15 16 17 31 32 33 63 64 65 127 128 129 249 250 251 511 512 513]
+for n = [3 7 8 9 15 16 17 31:65 127:129 249:251 511:513 1023:1025 2048]
     t = (1:n)';
     for offset = [0 100]
         x = offset + sin(t * sqrt(2)) .* (1 + mod(t, 7)) * 0.1;
@@ -76,12 +86,18 @@ configs = {
     'fitted_hrf', false, -1, 6;
     'css', true, d.Hrf, 6;
     'css_fitted_hrf', true, -1, 6;
+    'css_nonnegative', true, d.Hrf, 6;
+    'css_nonnegative_fitted_hrf', true, -1, 6;
 };
 for k = 1:size(configs, 1)
     name = configs{k, 1};
     css = configs{k, 2};
     hrf = configs{k, 3};
     count = configs{k, 4};
+    frames = d.ApFrm;
+    if contains(name, 'nonnegative')
+        frames = max(frames, 0);
+    end
     id = ['fit_' kind '_' name];
     observations = cast(d.Ys(:, 1:count), kind);
     seeds = double(d.Seeds(:, 1:count));
@@ -109,7 +125,7 @@ for k = 1:size(configs, 1)
         if fittingHrf
             kernel = samsrf_doublegamma(1, p(end-4:end));
         end
-        prediction = prf_predict_timecourse(profile(p, d.ApXY), d.ApFrm);
+        prediction = prf_predict_timecourse(profile(p, d.ApXY), frames);
         corrected = prediction;
         if css
             % Preserve the pinned post-fit bug as evidence, alongside its correction.
@@ -123,7 +139,8 @@ for k = 1:size(configs, 1)
         correctedBetas(:, v) = flipud([ones(length(y), 1) corrected] \ y);
     end
     cases{end+1} = struct('id', id, 'kind', 'fit', 'precision', kind, ...
-        'css', css, 'hrf', array_file([id '_hrf'], hrf), ...
+        'css', css, 'nonnegativeApertures', contains(name, 'nonnegative'), ...
+        'hrf', array_file([id '_hrf'], hrf), ...
         'observations', array_file([id '_y'], observations), ...
         'seeds', array_file([id '_seeds'], seeds), ...
         'parameters', array_file([id '_parameters'], fits), ...
@@ -136,7 +153,7 @@ for k = 1:size(configs, 1)
 end
 
     function err = objective(p)
-        err = prf_errfun(profile, d.ApFrm, d.ApXY, hrf, p, y, 1, css);
+        err = prf_errfun(profile, frames, d.ApXY, hrf, p, y, 1, css);
         trace(end+1, :) = [p(:)' real(err) imag(err)];
     end
 end
@@ -193,6 +210,50 @@ for precision = {'double', 'single'}
     cases{end+1} = cf_case(['cf_' kind '_fit'], kind, X, Tc(:, 1:3), Temp, [], NaN); %#ok<AGROW>
     weights = exp(-pdist2(grid, grid).^2 / 2);
     cases{end+1} = cf_case(['cf_' kind '_smooth'], kind, X, Tc, Temp, weights, []); %#ok<AGROW>
+    faces = [1 2 4; 2 4 5; 2 3 5; 3 5 6; 4 5 7; 5 7 8; 5 6 8; 6 8 9];
+    vertices = [grid zeros(9, 1)];
+    distances = samsrf_geomatrix(vertices, faces, 1:9, 20);
+    weights = exp(-(distances.^2) / (2 * 1.5^2));
+    for fit = {[], NaN}
+        suffix = 'hull';
+        courses = Tc;
+        if ~isempty(fit{1})
+            suffix = 'fit';
+            courses = Tc(:, 1:3);
+        end
+        id = ['cf_' kind '_mesh_' suffix];
+        item = cf_case(id, kind, X, courses, Temp, weights, fit{1});
+        item.vertices = array_file([id '_vertices'], vertices);
+        item.faces = array_file([id '_faces'], faces);
+        item.distances = array_file([id '_distances'], distances);
+        item.smoothingSigma = 1.5;
+        cases{end+1} = item; %#ok<AGROW>
+    end
+end
+end
+
+function cases = polygon_cases()
+cases = {};
+points = {[-1 -1; 0 0; 0 1; 1 -1; 1 0; 1 1], ...
+    [0 0; 1 1; 0 1; 1 0], [0 0; 1 0; 1 0; 1 1; 0 1], ...
+    [0 0; 2 0; 1 0; 1 1; 0 1]};
+for scale = [1 1e-3 1e3]
+    for offset = [0 1e3]
+        for height = 10.^(-16:0)
+            points{end+1} = [0 0; 1 height; 2 0] * scale + offset; %#ok<AGROW>
+        end
+    end
+end
+for i = 1:numel(points)
+    id = sprintf('polygon_%d', i);
+    polygon = polyshape(points{i});
+    hull = convhull(polygon);
+    [x, y] = centroid(hull);
+    cases{end+1} = struct('id', id, 'kind', 'polygon', ...
+        'points', array_file([id '_points'], points{i}), ...
+        'simplified', array_file([id '_simplified'], polygon.Vertices), ...
+        'hull', array_file([id '_hull'], hull.Vertices), ...
+        'estimate', array_file([id '_estimate'], [x y area(hull)])); %#ok<AGROW>
 end
 end
 

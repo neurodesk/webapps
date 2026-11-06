@@ -45,6 +45,29 @@ pub struct Hull {
 }
 
 impl Hull {
+    /// Hull of a polygon after removing collinear boundary vertices, including
+    /// retraced spikes. SamSrf's CF path constructs a `polyshape` before taking
+    /// its hull; a zero-area spike is therefore not part of that hull.
+    pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
+        let mut boundary = points.to_vec();
+        loop {
+            let n = boundary.len();
+            if n < 3 {
+                return None;
+            }
+            let redundant = (0..n).find(|&i| {
+                let a = boundary[(i + n - 1) % n];
+                let b = boundary[i];
+                let c = boundary[(i + 1) % n];
+                (b[0] - a[0]) * (c[1] - b[1]) == (b[1] - a[1]) * (c[0] - b[0])
+            });
+            match redundant {
+                Some(i) => { boundary.remove(i); }
+                None => return Self::of(&boundary),
+            }
+        }
+    }
+
     /// The convex hull of `points` (Andrew's monotone chain), or `None` when the points
     /// span no area (fewer than three distinct points, or all collinear).
     pub fn of(points: &[[f64; 2]]) -> Option<Hull> {

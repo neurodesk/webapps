@@ -259,6 +259,8 @@ test('manual SamSrf MATLAB recording uses pinned source and cannot publish relea
   const recording = flow.jobs['matlab-reference'];
   const checkout = recording.steps.find(step => step.with?.repository === 'samsrf/samsrf');
   assert.equal(checkout.with.ref, source.commit);
+  const spm = recording.steps.find(step => step.with?.repository === 'spm/spm12');
+  assert.equal(spm.with.ref, source.spm.commit);
   const setup = recording.steps.find(step => step.uses?.startsWith('matlab-actions/setup-matlab@'));
   assert.equal(setup.with.release, source.release);
   assert.ok(!setup.with.products.includes('MATLAB_Compiler'));

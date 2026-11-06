@@ -133,7 +133,19 @@ jobs:
       - name: Prepare verified inputs and declared source repairs
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           python3 packages/samsrf/validation/matlab/prepare.py reference-source "$RUNNER_TEMP/samsrf-matlab"
+      - name: Check out the pinned SPM GIfTI readers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: spm/spm12
+          ref: 03ac9473cad402407b6472228377c0167fdc54b8
+          path: reference-spm
+          sparse-checkout: |
+            @gifti
+            @xmltree
+            @file_array
+          persist-credentials: false
       - name: Set up real MATLAB and required toolboxes
         uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3
         with:
@@ -142,7 +154,7 @@ jobs:
       - name: Record numerical intermediates and fitted maps
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'))
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'),fullfile(pwd,'reference-spm'))
       - name: Retain complete or partial reference for diagnosis
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

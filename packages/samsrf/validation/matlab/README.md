@@ -32,8 +32,27 @@ python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-input"
 python3 packages/samsrf/validation/matlab/prepare.py "$TMPDIR/samsrf-source" "$TMPDIR/samsrf-matlab"
 ```
 
-Then call `record_reference(SOURCE, INPUT, OUTPUT)` with absolute paths from
-MATLAB after adding this directory to its path. Each array is saved as
+Then call `record_reference(SOURCE, INPUT, OUTPUT, MATRIX_INPUT, SPM)` with
+absolute paths from MATLAB after adding this directory to its path. Each array is saved as
 little-endian float64 with its original class, dimensions and separate
 imaginary part recorded in JSON. This preserves nonfinite values and complex
 CSS results without JSON coercing them to null.
+
+`inputs.json` pins additional raw-data subsets from the public X001 dataset
+(left and right hemispheres) and the analyzePRF example participant. Download
+it with `python3 packages/samsrf/validation/container/download.py MATRIX_INPUT packages/samsrf/validation/matlab/inputs.json`. Its manifest
+records the original vertex indices, input hashes, timing and stimulus scale.
+The second dataset's four different stimulus sequences are concatenated for
+fitting; averaging is tested only as a preprocessing operation. Synthetic
+anatomy is clearly marked and used only to satisfy Benson's importer, not as
+evidence about cortical geometry. SPM's actual GIfTI readers are pinned in
+`source.json`; there are no replacement IO functions.
+
+The expanded recorder captures raw preprocessing, noise ceilings, coarse and
+fine maps, threshold selection, reverse correlation, Benson conversion, mesh
+distances and smoothed CFs in both precisions. CSS cases retain the original
+apertures and separately test a nonnegative control. Saved complex MAT values
+are recorded before `samsrf_expand_srf` discards their imaginary components
+for export. Polygon cases cover retraced edges, duplicates, self-intersections
+and thin triangles across scales. Recording any of these is still not a
+passing equivalence gate until its numerical comparison is implemented.
