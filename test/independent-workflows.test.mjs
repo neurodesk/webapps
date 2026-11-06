@@ -216,7 +216,8 @@ test('portable Node command lines build on target runners and publish through on
     const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
     // A release with a macOS installer is published only by signing it.
     const publishInput=installer?'sign_release':'publish_release';
-    assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs),[publishInput,...(name==='dwi2trx-native'?['tracking_only']:[])],name);
+    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab'] : [];
+    assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs), [publishInput, ...referenceInputs], name);
     assert.equal(flow.jobs.portable.with.publish_release,`\${{ github.event_name == 'workflow_dispatch' && inputs.${publishInput} }}`,name);
     assert.equal(flow.jobs.portable.with.sign_release,installer?"${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}":undefined,name);
     assert.equal(Object.keys(flow.jobs.portable.secrets||{}).length,installer?7:0,name);
@@ -249,6 +250,29 @@ test('manual DWI2TRX tracking diagnostics isolate Metal from reference and publi
       }
     }
   }
+});
+
+test('manual SamSrf MATLAB recording uses pinned source and cannot publish releases', async () => {
+  const flow = await workflow('samsrf-native');
+  const source = JSON.parse(await readFile(new URL('../packages/samsrf/validation/matlab/source.json', import.meta.url), 'utf8'));
+  assert.equal(flow.on.workflow_dispatch.inputs.record_matlab.default, false);
+  const recording = flow.jobs['matlab-reference'];
+  const checkout = recording.steps.find(step => step.with?.repository === 'samsrf/samsrf');
+  assert.equal(checkout.with.ref, source.commit);
+  const setup = recording.steps.find(step => step.uses?.startsWith('matlab-actions/setup-matlab@'));
+  assert.equal(setup.with.release, source.release);
+  assert.ok(!setup.with.products.includes('MATLAB_Compiler'));
+  assert.ok(recording.steps.some(step => step.if === 'always()' && step.uses?.startsWith('actions/upload-artifact@')));
+  for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
+    for (const only of [false, true]) {
+      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { record_matlab: only, sign_release: true } };
+      assert.equal(runInNewContext(recording.if, context), event === 'workflow_dispatch' && only);
+      for (const name of ['test', 'wasm-source']) {
+        assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !only);
+      }
+    }
+  }
+  assert.deepEqual(flow.jobs.portable.needs, ['test', 'wasm-source']);
 });
 
 test('pull requests build the portable packager on linux-x64, except the packager gate', async () => {
