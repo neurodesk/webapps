@@ -346,9 +346,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   ceilings are rounded before selection, the fitting objective uses mixed
   single/double arithmetic, and saved maps are rounded as in SamSrf. This
   option currently rejects reverse-correlation analyses. It does not promise
-  bit parity: coarse matrix BLAS and the final GLM can differ by single-
+  bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
   precision rounding, and the GLM uses a stable double solve on rounded
-  inputs with the single-precision rank threshold. SamSrf converts Srf data to
+  inputs with the single-precision rank threshold. The reduction order targets
+  the recorded R2023b compatible backend; MATLAB's AVX-512 path can itself
+  produce different fits on identical inputs. SamSrf converts Srf data to
   single precision (`samsrf_32bit_srf`). Its 64-bit opt-out tests
   `exist('SamSrfDefs.defs_64bit', 'var')`, a variable that never exists, so the
   conversion always happens. This can change coarse seeds and fine-fit optimizer

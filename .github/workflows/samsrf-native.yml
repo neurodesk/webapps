@@ -133,6 +133,8 @@ jobs:
     name: record actual MATLAB source reference
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    env:
+      MKL_CBWR: COMPATIBLE
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -166,7 +168,7 @@ jobs:
       - name: Set up real MATLAB and required toolboxes
         uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3
         with:
-          release: R2023b
+          release: R2023bU11
           products: Statistics_and_Machine_Learning_Toolbox Image_Processing_Toolbox Parallel_Computing_Toolbox
       - name: Record numerical intermediates and fitted maps
         if: '!inputs.diagnostics_only'

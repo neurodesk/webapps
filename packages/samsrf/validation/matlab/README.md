@@ -1,6 +1,6 @@
 # Real MATLAB source references
 
-This recorder runs the web port's pinned SamSrf source in MATLAB R2023b. It
+This recorder runs the web port's pinned SamSrf source in MATLAB R2023b Update 11. It
 uses MATLAB's own optimizers, correlation, single arithmetic and geometry.
 The existing [compiled container reference](../container/README.md) remains
 an independent baseline for the unmodified Neurodesk application.
@@ -23,6 +23,16 @@ Public GitHub Actions runs are [licensed by MathWorks](https://github.com/matlab
 for MATLAB and the required toolboxes. That grant excludes Compiler. A MATLAB Compiler license is needed
 only to package a new standalone Runtime application; it is not needed for
 this source-level comparison.
+
+The workflow pins `MKL_CBWR=COMPATIBLE` and records MATLAB's reported BLAS
+branch and CPU information. This matters even with an identical MATLAB release:
+[run 42199010165](https://github.com/neurodesk/webapps/actions/runs/42199010165)
+reported CNR `auto`, while
+[run 42201373392](https://github.com/neurodesk/webapps/actions/runs/42201373392)
+reported `AVX512_E1`; identical saved CSS inputs produced different optimizer
+traces and parameter estimates. Existing archives retain their original BLAS
+provenance. Reproducing one recorded backend does not imply bit parity with
+every MATLAB host.
 
 On a machine with MATLAB and the required toolboxes:
 
@@ -77,7 +87,7 @@ This recipe has not been executed with MATLAB Compiler. The source checks
 have been exercised locally; successful source recordings do not validate the
 compiled application or its container packaging.
 
-On a Linux x86-64 host with MATLAB R2023b, MATLAB Compiler, the Statistics,
+On a Linux x86-64 host with MATLAB R2023b Update 11, MATLAB Compiler, the Statistics,
 Image Processing and Parallel Computing toolboxes, and Docker:
 
 ```sh
@@ -91,7 +101,8 @@ The build uses MathWorks'
 and [Runtime image builder](https://www.mathworks.com/help/compiler/compiler.runtime.createdockerimage.html),
 then [packages the application](https://www.mathworks.com/help/compiler/compiler.package.docker.html).
 It selects the Runtime for the installed MATLAB build instead of reusing the
-older Neurodesk image's Runtime.
+older Neurodesk image's Runtime. The recipe sets `MKL_CBWR=COMPATIBLE` in both
+the build process and generated container.
 
 Run the image from a fresh writable results directory containing a copy of
 the generated `SamSrf_defaults.json`. Set its `def_64bit` field to `true` for

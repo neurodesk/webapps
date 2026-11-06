@@ -283,21 +283,27 @@ pub fn predict_timecourse(rfp: &[f64], apertures: &Apertures) -> Vec<f64> {
     if !finite || pixels == 0 {
         return vec![f64::NAN; apertures.volumes()];
     }
+    // MATLAB's mean reduces long vectors through four accumulators. Retain the
+    // dense pixel position even though zero aperture entries are stored sparsely:
+    // changing lanes can change the sign of a nearly cancelled CSS response.
+    let lane = |index: usize| if pixels >= 44 { index % 4 } else { 0 };
     let mut y: Vec<f64> = apertures
         .frames
         .iter()
         .map(|frame| {
-            let sum: f64 = frame
-                .indices
-                .iter()
-                .zip(&frame.values)
-                .map(|(index, value)| rfp.get(*index as usize).copied().unwrap_or(f64::NAN) * value)
-                .sum();
-            sum / pixels as f64
+            let mut sums = [0.0; 4];
+            for (&index, &value) in frame.indices.iter().zip(&frame.values) {
+                sums[lane(index as usize)] += rfp.get(index as usize).copied().unwrap_or(f64::NAN) * value;
+            }
+            sums.iter().sum::<f64>() / pixels as f64
         })
         .collect();
     if percent_overlap {
-        let mean_abs = rfp.iter().map(|value| value.abs()).sum::<f64>() / pixels as f64;
+        let mut sums = [0.0; 4];
+        for (index, value) in rfp.iter().enumerate() {
+            sums[lane(index)] += value.abs();
+        }
+        let mean_abs = sums.iter().sum::<f64>() / pixels as f64;
         for value in &mut y {
             *value = *value / mean_abs * 100.0;
         }

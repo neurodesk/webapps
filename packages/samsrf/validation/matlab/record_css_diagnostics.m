@@ -91,7 +91,9 @@ for precision = {'single','double'}
 end
 fid = fopen('diagnostics.json','w');
 assert(fid~=-1);
-fprintf(fid,'%s\n',jsonencode(struct('matlabVersion',version,'blas',version('-blas'),'cases',{cases}),'PrettyPrint',true));
+[~, cpu] = system('lscpu');
+fprintf(fid,'%s\n',jsonencode(struct('matlabVersion',version,'blas',version('-blas'), ...
+    'mklCbwr',getenv('MKL_CBWR'),'cpu',cpu,'cases',{cases}),'PrettyPrint',true));
 fclose(fid);
 
     function error = evaluate(p)

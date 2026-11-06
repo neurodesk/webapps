@@ -6,6 +6,7 @@ The build is local only: this script does not publish an image or a release.
 """
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -49,7 +50,8 @@ def main(source, spm, output):
     quote = lambda value: "'" + str(value).replace("'", "''") + "'"
     recorder = Path(__file__).resolve().parent
     command = f'addpath({quote(recorder)}); build_container({quote(source)},{quote(spm)},{quote(output)})'
-    subprocess.run(['matlab', '-batch', command], check=True)
+    subprocess.run(['matlab', '-batch', command], check=True,
+                   env={**os.environ, 'MKL_CBWR': SOURCE['mklCbwr']})
     image = json.loads(subprocess.check_output([
         'docker', 'image', 'inspect', 'samsrf-reference:41ed1e96-r2023b']))[0]
     (output / 'image.json').write_text(json.dumps({

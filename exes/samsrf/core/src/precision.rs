@@ -30,6 +30,23 @@ impl Precision {
     }
 }
 
+/// R2023b's mean reduction, measured across vector lengths 3 through 2048.
+pub(crate) fn mean_double(values: &[f64]) -> f64 {
+    let mut sums = [0.0; 4];
+    for (index, &value) in values.iter().enumerate() {
+        sums[if values.len() >= 44 { index % 4 } else { 0 }] += value;
+    }
+    sums.iter().sum::<f64>() / values.len() as f64
+}
+
+pub(crate) fn mean_complex(values: &[num_complex::Complex64]) -> num_complex::Complex64 {
+    let mut sums = [num_complex::Complex64::new(0.0, 0.0); 4];
+    for (index, &value) in values.iter().enumerate() {
+        sums[if values.len() >= 44 { index % 4 } else { 0 }] += value;
+    }
+    sums.iter().copied().sum::<num_complex::Complex64>() / values.len() as f64
+}
+
 fn sum_single(values: &[f32]) -> f32 {
     if values.len() < 44 {
         return values.iter().copied().fold(0.0, |sum, value| sum + value);
@@ -74,7 +91,7 @@ pub fn correlation_single(prediction: &[f64], observed: &[f64], observations_fir
     let observations: Vec<f32> = observed.iter().map(|&value| value as f32).collect();
     let mean_y = sum_single(&observations) / observations.len() as f32;
     let yc: Vec<f32> = observations.iter().map(|value| value - mean_y).collect();
-    let mean_x = prediction.iter().sum::<f64>() / prediction.len() as f64;
+    let mean_x = mean_double(prediction);
     let xc: Vec<f64> = prediction.iter().map(|value| value - mean_x).collect();
     let nx = xc.iter().map(|value| value * value).sum::<f64>().sqrt();
     let ny = yc.iter().map(|&value| f64::from(value).powi(2)).sum::<f64>().sqrt() as f32;
@@ -99,7 +116,7 @@ pub fn correlation_complex_single(x: &[num_complex::Complex64], y: &[f64]) -> nu
     let ys: Vec<f32> = y.iter().map(|&v| v as f32).collect();
     let my = sum_single(&ys) / ys.len() as f32;
     let yc: Vec<f32> = ys.iter().map(|&v| v - my).collect();
-    let mx = x.iter().copied().sum::<Complex64>() / x.len() as f64;
+    let mx = mean_complex(x);
     let xc: Vec<Complex64> = x.iter().map(|&v| v - mx).collect();
     let nx = xc.iter().map(|v| v.norm_sqr()).sum::<f64>().sqrt();
     let ny = yc.iter().map(|&v| f64::from(v).powi(2)).sum::<f64>().sqrt() as f32;

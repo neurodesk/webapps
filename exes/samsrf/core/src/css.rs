@@ -57,8 +57,8 @@ fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> Complex64 {
     if precision == Precision::Single {
         return precision::correlation_complex_single(x, y);
     }
-    let mx = x.iter().copied().sum::<Complex64>() / x.len() as f64;
-    let my = y.iter().sum::<f64>() / y.len() as f64;
+    let mx = precision::mean_complex(x);
+    let my = precision::mean_double(y);
     let mut dot = Complex64::new(0.0, 0.0);
     let mut nx = 0.0;
     let mut ny = 0.0;
@@ -76,7 +76,7 @@ fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> Complex64 {
     )
 }
 
-/// Complex least squares with the same pivot/rank convention as the real fit.
+/// Complex least squares with MATLAB's matrix-norm rank threshold.
 /// The exported map drops imaginary coefficients, as samsrf_expand_srf does.
 pub fn fit_betas(x: &[Complex64], y: &[f64], precision: Precision) -> (f64, f64) {
     let n = x.len() as f64;
@@ -111,7 +111,18 @@ pub fn fit_betas(x: &[Complex64], y: &[f64], precision: Precision) -> (f64, f64)
     } else {
         (raw_xx.sqrt(), (n * (sxx / raw_xx)).sqrt())
     };
-    let (beta, baseline) = if r22 <= n.max(2.0) * epsilon * r11 {
+    let tolerance = if x.iter().any(|value| value.im != 0.0) {
+        // R2023b's complex solve uses max(size(A))*eps(norm(A,1)); its real
+        // solve uses the leading QR diagonal. The recorded scale sweep covers
+        // both precisions and distinguishes these decisions at n=16 and n=250.
+        let norm = precision.round(n.max(x.iter().map(|value| value.norm()).sum()));
+        let exponent = ((norm.to_bits() >> 52) & 0x7ff) as i32 - 1023;
+        let mantissa = if precision == Precision::Single { 23 } else { 52 };
+        n.max(2.0) * 2.0f64.powi(exponent - mantissa)
+    } else {
+        n.max(2.0) * epsilon * r11
+    };
+    let (beta, baseline) = if r22 <= tolerance {
         if ones_first {
             (0.0, my)
         } else {
@@ -148,5 +159,25 @@ mod tests {
         let (beta, baseline) = fit_betas(&x, &[3.0, 5.0, 7.0], Precision::Double);
         assert_eq!(beta, 1.0);
         assert_eq!(baseline, 3.0);
+    }
+
+    #[test]
+    fn overflowing_css_correlation_is_invalid_instead_of_an_improving_objective() {
+        let predicted = [Complex64::new(-1e39, 0.0), Complex64::new(1e39, 0.0)];
+        assert!(objective(&predicted, &[-1.0, 1.0], Precision::Single).re.is_nan());
+    }
+
+    #[test]
+    fn complex_single_regression_uses_the_recorded_matrix_rank_threshold() {
+        for volumes in [16, 250] {
+            let x: Vec<_> = (1..=volumes).map(|t| Complex64::new((t as f64).sin(), 0.3 * (t as f64).cos()) * 1e-4).collect();
+            let y: Vec<_> = (1..=volumes).map(|t| 2.0 * (t as f64).sin() + 3.0).collect();
+            let (beta, _) = fit_betas(&x, &y, Precision::Single);
+            if volumes == 250 {
+                assert_eq!(beta, 0.0);
+            } else {
+                assert!(beta > 1e4);
+            }
+        }
     }
 }

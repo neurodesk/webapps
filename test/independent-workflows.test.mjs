@@ -257,6 +257,7 @@ test('manual SamSrf MATLAB recording uses pinned source and cannot publish relea
   const source = JSON.parse(await readFile(new URL('../packages/samsrf/validation/matlab/source.json', import.meta.url), 'utf8'));
   assert.equal(flow.on.workflow_dispatch.inputs.record_matlab.default, false);
   const recording = flow.jobs['matlab-reference'];
+  assert.equal(recording.env.MKL_CBWR, source.mklCbwr);
   const checkout = recording.steps.find(step => step.with?.repository === 'samsrf/samsrf');
   assert.equal(checkout.with.ref, source.commit);
   const spm = recording.steps.find(step => step.with?.repository === 'spm/spm12');
