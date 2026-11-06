@@ -46,7 +46,7 @@ GlioMODA 0.0.4 package with weights v1.0.2 and nnU-Net 2.5.2 on the CPU.
 `validation/container.sh` records its segmentation of the example (UPENN-GBM-00002, timepoint
 11) for every model with the container's `gliomoda` command, and for the four-sequence model
 without mirroring through `nnUNetPredictor(use_mirroring=False)`. The labels are committed in
-`validation/container/`.
+the Hugging Face dataset, pinned in `validation/container-reference.json`. Both parity and browser tests fetch these labels and verify their SHA-256 before comparing outputs.
 
 `validation/parity.mjs` runs this package with ONNX Runtime (Node, CPU) on the same files and
 writes the comparison to `validation/container-reference.json`. The browser tests in

@@ -2,7 +2,8 @@
   "container": {
     "image": "vnmd/gliomoda_0.0.4@sha256:aeaa0a4aa901667612ae811700123c3b1e3525b5e78a4bcaa262914d53ad0232",
     "recipe": "https://raw.githubusercontent.com/neurodesk/neurocontainers/722ce790ba985edd7fe18dfe918e24bc5ebbaa21/recipes/gliomoda/build.yaml",
-    "command": "validation/container.sh: gliomoda --device cpu --threads 8, and nnUNetPredictor(use_mirroring=False) for the _nomirror file"
+    "command": "validation/container.sh: gliomoda --device cpu --threads 8, and nnUNetPredictor(use_mirroring=False) for the _nomirror file",
+    "outputs": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/51f90f6c30c02722a0a3296b9c744cce5c88bb38/gliomoda/validation/container/"
   },
   "example": "apps/gliomoda/examples.json upenn-gbm-00002",
   "gates": {

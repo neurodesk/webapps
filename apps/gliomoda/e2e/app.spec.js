@@ -7,10 +7,12 @@ import { compareLabels } from "@neurodesk/gliomoda/results";
 import { MODELS } from "@neurodesk/gliomoda/models";
 import reference from "../../../packages/gliomoda/validation/container-reference.json" with { type: "json" };
 
+import { readContainerReference } from "../../../packages/gliomoda/validation/reference.mjs";
+
 const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));
 const example = examples[0];
 const defaultModel = MODELS.find(({ id }) => id === "t1c-t2f-t1n-t2w");
-const containerLabels = async (file) => readVolume(gunzipSync(await readFile(new URL(`../../../packages/gliomoda/validation/container/${file}`, import.meta.url))).buffer);
+const containerLabels = async (file) => readVolume(gunzipSync(await readContainerReference(file)).buffer);
 const bytesOf = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 
 async function loadExample(page) {

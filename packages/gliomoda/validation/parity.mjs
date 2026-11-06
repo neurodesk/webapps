@@ -1,5 +1,5 @@
 // Runs src/pipeline.js with ONNX Runtime (Node, CPU) on the example for every segmentation the
-// GlioMODA container recorded in validation/container (container.sh) and compares the labels.
+// GlioMODA container recorded on Hugging Face (container.sh) and compares the labels.
 //
 //   node validation/parity.mjs <onnx dir> <example dir> [model ...] [--threads=N] [--write]
 //
@@ -8,7 +8,7 @@
 // <model>.nii.gz ran with mirroring, <model>_nomirror.nii.gz without. Prints one JSON line per
 // run; --write stores them as the runs of container-reference.json, which the browser tests read,
 // and rewrites the table in README.md from them.
-import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -17,8 +17,8 @@ import { readVolume } from '@neurodesk/synthsr';
 import { segmentGlioma } from '../src/pipeline.js';
 import { compareLabels, labelCounts } from '../src/results.js';
 import { modelById } from '../src/models.js';
+import { readContainerReference } from './reference.mjs';
 
-const containerDir = new URL('./container/', import.meta.url);
 const referenceUrl = new URL('./container-reference.json', import.meta.url);
 const reference = JSON.parse(await readFile(referenceUrl, 'utf8'));
 const args = process.argv.slice(2);
@@ -27,10 +27,7 @@ const [onnxDir, exampleDir, ...only] = args.filter((a) => !a.startsWith('--'));
 const examples = JSON.parse(await readFile(new URL('../../../apps/gliomoda/examples.json', import.meta.url), 'utf8'));
 const files = Object.fromEntries(examples[0].files.map(({ role, name }) => [role, join(exampleDir, name)]));
 
-const recorded = (await readdir(containerDir)).filter((name) => name.endsWith('.nii.gz')).sort().map((file) => {
-  const stem = file.replace(/\.nii\.gz$/, '');
-  return { file, model: stem.replace(/_nomirror$/, ''), mirror: !stem.endsWith('_nomirror') };
-});
+const recorded = reference.runs.map(({ file, model, mirror }) => ({ file, model, mirror }));
 
 const runs = [];
 for (const run of recorded.filter(({ model }) => !only.length || only.includes(model))) {
@@ -45,7 +42,7 @@ for (const run of recorded.filter(({ model }) => !only.length || only.includes(m
     runPatch: async (tile) => (await session.run({ input: new ort.Tensor('float32', tile, [1, model.channels.length, ...model.patch]) })).logits.data,
   });
   await session.release();
-  const bytes = await readFile(new URL(run.file, containerDir));
+  const bytes = await readContainerReference(run.file);
   const container = Uint8Array.from(readVolume(gunzipSync(bytes).buffer).data);
   const { dice, differing } = compareLabels(labels, container);
   const result = {
