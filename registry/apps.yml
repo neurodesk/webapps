@@ -1499,9 +1499,10 @@ apps:
       release: true
   - id: neuromorph
     path: neuromorph
+    catalog: microscopy
     title: NeuroMorph
     description: Check SWC neurons and measure morphology and Sholl.
-    categories: [visualization]
+    categories: [microscopy]
     keywords: [neuron morphology, SWC, morphometrics, Sholl analysis, dendrites, axon, Strahler order, bifurcation angle, NeuroM, NeuroMorpho.Org, microscopy]
     anatomy: [brain]
     modalities: [microscopy]
