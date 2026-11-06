@@ -207,6 +207,7 @@ test('catalog assigns task categories and shares apps across related categories'
     'calcium-imaging': ['calcium-imaging'],
     stardist: ['segmentation'],
     neuromorph: ['morphometry'],
+    'structure-tensor': ['fibre-orientation'],
     'spot-detection': ['spot-detection'],
     zarro: ['visualization'],
     fastprep: ['preprocessing', 'functional-imaging', 'pipelines'],

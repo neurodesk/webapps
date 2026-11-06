@@ -93,6 +93,9 @@ site:
     - id: privacy
       title: Privacy
       description: Remove identifying facial features from images before sharing.
+    - id: fibre-orientation
+      title: Fibre Orientation
+      description: Map fibre orientation and coherency in tissue images.
     - id: morphometry
       title: Morphometry
       description: Measure neuronal shape, branching and Sholl profiles.
@@ -1558,9 +1561,10 @@ apps:
       release: false
   - id: structure-tensor
     path: structure-tensor
+    catalog: microscopy
     title: Structure Tensor
     description: Map fibre orientation and coherency in microscopy images.
-    categories: [image-processing]
+    categories: [fibre-orientation]
     keywords: [structure tensor, OrientationJ, fibre orientation, coherency, collagen, histology, microscopy, TIFF]
     anatomy: [any]
     modalities: [microscopy]
