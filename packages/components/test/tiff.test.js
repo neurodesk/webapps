@@ -85,6 +85,9 @@ test('ImageJ descriptions give frames, interval from finterval or fps, and calib
   assert.equal(imagej.sizeT, 30);
   assert.ok(Math.abs(imagej.frameInterval - 1 / 15) < 1e-12);
   assert.deepEqual(imagej.pixelSize, { x: 0.5, y: 0.25, z: null });
+  assert.equal(imagej.unlabelledStack, false);
+  assert.equal(parseImagejDescription('ImageJ=1.53t\nimages=30\nslices=30\n').unlabelledStack, true);
+  assert.equal(parseImagejDescription('ImageJ=1.53t\nimages=30\nslices=30\nhyperstack=true\n').unlabelledStack, false);
   assert.equal(micrometresPerUnit('\\u00B5m'), 1);
   assert.equal(micrometresPerUnit('μm'), 1);
   assert.equal(micrometresPerUnit('pixel'), null);

@@ -266,6 +266,15 @@ export function shiftField(grid, patchShifts, height, width) {
   return { fieldY, fieldX };
 }
 
+/** Bytes one registration holds for its patch template spectra (float64 real and imaginary). */
+export function patchSpectraBytes(height, width, size, overlap) {
+  const grid = patchGrid(height, width, size, overlap);
+  return grid.ys.length * grid.xs.length * grid.sizeY * grid.sizeX * 16;
+}
+
+/** Limit on one registration's patch spectra; each worker holds its own. */
+export const PATCH_SPECTRA_BUDGET = 256 * 1024 ** 2;
+
 /**
  * A motion-correction plan for one template: registers and resamples frames one at a time,
  * so a caller can shard frames across workers.
@@ -274,6 +283,9 @@ export function createRegistration(template, height, width, options = {}) {
   const { mode = 'rigid', maxShift = 10, upsample = 10, normalization = 'none', patchSize = 64, patchOverlap = 32, maxDeviation = 3 } = options;
   const whole = templateSpectrum(template, height, width);
   const grid = mode === 'piecewise' ? patchGrid(height, width, patchSize, patchOverlap) : null;
+  if (grid && patchSpectraBytes(height, width, patchSize, patchOverlap) > PATCH_SPECTRA_BUDGET) {
+    throw new Error(`Patches of ${patchSize} px overlapping by ${patchOverlap} px need too much memory for a ${width} × ${height} movie; use a larger patch size or less overlap.`);
+  }
   const patches = grid
     ? grid.ys.flatMap((y0) => grid.xs.map((x0) => ({ y0, x0, spectrum: templateSpectrum(crop(template, width, y0, x0, grid.sizeY, grid.sizeX), grid.sizeY, grid.sizeX) })))
     : [];

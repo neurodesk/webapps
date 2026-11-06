@@ -93,8 +93,12 @@ function deepFreeze(value) {
   return value;
 }
 
-/** The JSON payload the shell receives for one app. */
-export function appInformationPayload(information, appId) {
+/**
+ * The JSON payload the shell receives for one app. A handoff opens the receiving
+ * app in the same origin, so a hosted site passes the ids of the apps it serves
+ * (`siteAppIds`) and the handoff menu lists only those.
+ */
+export function appInformationPayload(information, appId, siteAppIds) {
   const info = information.apps[appId];
   if (!info) throw new Error(`No app information for ${appId}`);
   return {
@@ -105,6 +109,6 @@ export function appInformationPayload(information, appId) {
     about: info.about ?? [],
     packages: info.packages,
     citations: info.citations,
-    catalog: information.catalog ?? [],
+    catalog: (information.catalog ?? []).filter((entry) => !siteAppIds || siteAppIds.includes(entry.id)),
   };
 }

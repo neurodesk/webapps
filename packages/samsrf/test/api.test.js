@@ -410,6 +410,28 @@ test('polarAndEccentricity derives the maps from x0 and y0, masked by R^2', () =
   assert.equal(samsrf.polarAndEccentricity({ values: ['R^2', 'Beta', 'Sigma'], vertices: 1, data: Float64Array.of(1, 2, 3) }), null);
 });
 
+test('legacy SamSrfX exports reproduce the container eccentricity convention and float32 arithmetic', () => {
+  // Actual R2023b Runtime / SamSrfX 10.003 results, recorded by validation/container.
+  const maps = {
+    values: ['R^2', 'x0', 'y0'], vertices: 7,
+    data: Float64Array.of(
+      1, 1, 1, 1, 1, 0, 1e-100,
+      1.3698846784701462, 3, 0, 0.1, 2.85, 3, 3,
+      -4.835927063634957, 4, 0, 0.2, -4.9363448015713, 4, 4,
+    ),
+  };
+  const convention = 'samsrfx-10.003';
+  const expected = [4.5262088775634766, 4.5, -0.5, -0.27639317512512207, 5.1999998092651367, 0, 0];
+  const derived = samsrf.polarAndEccentricity(maps, convention);
+  assert.deepEqual(Array.from(derived.eccentricity), expected);
+  assert.deepEqual(Array.from(derived.polar).slice(0, 5), [-74.18403625488281, 53.130104064941406, 0, 63.43495178222656, -60]);
+  const files = samsrf.exportGiis(maps, 'lh_legacy', ['Eccentricity', 'Polar', 'x0'], convention);
+  assert.deepEqual(files.map(file => file.name), ['lh_legacy_pol.gii', 'lh_legacy_ecc.gii', 'lh_legacy_x0.gii']);
+  assert.deepEqual(Array.from(samsrf.readGifti(files[1].bytes).arrays[0].data), expected);
+  assert.deepEqual(Array.from(samsrf.readGifti(files[0].bytes).arrays[0].data), Array.from(derived.polar));
+  assert.throws(() => samsrf.exportGiis(maps, 'lh', null, 'unknown'), /export convention/i);
+});
+
 function jobSpec() {
   const apertures = movieApertures();
   const bytes = apertures.serialize();

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "bigfish-smfish",
+    "label": "smFISH stack with cell labels (Big-FISH)",
+    "description": "Big-FISH's example: a 23-plane smFISH stack of one field of view (300 × 103 × 103 nm voxels) and the two cells segmented from it with Big-FISH.",
+    "expectedResult": "771 spots at the automatic threshold 355, as Big-FISH finds, and the spots in each of the two cells.",
+    "files": [
+      {
+        "role": "image",
+        "name": "experiment_1_smfish_fov_1.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/baa8f47df751ce1e1d3158733ce17804cbcc761d/spot-detection/example/experiment_1_smfish_fov_1.tif",
+        "sha256": "bc6aec1f3da4c25f3c6b579c274584ce1e88112c7f980e5437b5ad5223bc8ff6",
+        "bytes": 14953308
+      },
+      {
+        "role": "labels",
+        "name": "experiment_1_cell_label.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/baa8f47df751ce1e1d3158733ce17804cbcc761d/spot-detection/example/experiment_1_cell_label.tif",
+        "sha256": "f37fbb7fdf0234445881fdfa6447dd315f3dee787d605316360ad65296543920",
+        "bytes": 5250
+      }
+    ]
+  }
+]

@@ -78,7 +78,9 @@ export function robustLevel(image, height = 1, width = image.length, margin = 0)
   if (!values.length) throw new Error("The border band left out of ROI detection covers the whole image.");
   const centre = median(values);
   const spread = 1.4826 * median(Float64Array.from(values, (value) => Math.abs(value - centre)));
-  return { median: centre, sigma: spread };
+  let max = -Infinity;
+  for (const value of values) if (value > max) max = value;
+  return { median: centre, sigma: spread, max };
 }
 
 /** Local maxima at or above `threshold`, strongest first, no two closer than `radius`. */
@@ -92,10 +94,12 @@ export function findSeeds(image, height, width, { threshold, radius, margin = 0 
       let peak = true;
       for (let dy = -r; dy <= r && peak; dy++) {
         const yy = y + dy;
-        if (yy < 0 || yy >= height) continue;
+        // Neighbours in the excluded border band (replicated edges after motion correction)
+        // must not suppress a seed just inside the usable area.
+        if (yy < margin || yy >= height - margin) continue;
         for (let dx = -r; dx <= r; dx++) {
           const xx = x + dx;
-          if (xx < 0 || xx >= width || (dx === 0 && dy === 0)) continue;
+          if (xx < margin || xx >= width - margin || (dx === 0 && dy === 0)) continue;
           if (image[yy * width + xx] > value) {
             peak = false;
             break;
@@ -170,8 +174,15 @@ export function labelAreas(labels) {
  */
 export function detectRois(correlation, height, width, { z, diameter, margin = 0 }) {
   const level = robustLevel(correlation, height, width, margin);
-  const threshold = level.median + z * level.sigma;
-  const floor = level.median + (z / 2) * level.sigma;
+  // A constant correlation image (a blank movie) has no cells to find.
+  if (!(level.max > level.median) && !(level.sigma > 0)) {
+    return { labels: new Uint16Array(height * width), threshold: level.median, floor: level.median, margin, seeds: 0 };
+  }
+  // With zero spread (a constant background over more than half the image) only pixels above
+  // that background can seed or grow cells: the levels sit just above the median.
+  const above = level.sigma > 0 ? 0 : Math.max(Math.abs(level.median), 1) * 1e-9;
+  const threshold = level.median + z * level.sigma + above;
+  const floor = level.median + (z / 2) * level.sigma + above;
   const seeds = findSeeds(correlation, height, width, { threshold, radius: diameter / 2, margin });
   const grown = watershed(correlation, height, width, seeds, { floor, maxDistance: diameter, margin });
   const areas = labelAreas(grown);

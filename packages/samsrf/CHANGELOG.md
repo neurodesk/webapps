@@ -1,5 +1,23 @@
 # @neurodesk/samsrf
 
+## 0.2.20261106
+
+### Minor Changes
+
+- Add a legacy SamSrfX 10.003 map-export convention in advanced settings and model JSON, shared by the browser and CLI. Record actual MATLAB Runtime references and verify matched-precision fits and legacy exports in CI. Document the remaining default-single versus float64 fitting differences.
+
+## 0.1.20261106
+
+### Patch Changes
+
+- Preserve the stimulus radius when leaving circular tuning, cancel pending folder imports when clearing inputs, and honor explicit command-line output prefixes.
+
+## 0.1.20261105
+
+### Patch Changes
+
+- Correct scalar HRF arrays and nearly constant prediction fits, validate hemisphere and anatomy inputs, preserve custom model grids, and align tuning presets and run ordering with SamSrf. Restore original whole-surface X001 example runs for connective-field global-signal correction and document remaining MATLAB differences with a single-precision reference mode.
+
 ## 0.1.20261104
 
 ## 0.1.20261103

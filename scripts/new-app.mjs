@@ -3,7 +3,7 @@
 // Scaffold an app wired to the repository's shared shell and components into
 // apps/<name>, then register it in registry/apps.yml (the deployment source of truth).
 //
-//   pnpm new-app <name> [--runtime <runtime>] [--shell <shell>] [--category <id>]
+//   pnpm new-app <name> [--runtime <runtime>] [--shell <shell>] [--category <id>] [--catalog <id>]
 //                       [--title <title>] [--description <text>] [--keywords a,b,c]
 //
 // The template imports @neurodesk/webapp-components/* by package name (not
@@ -23,6 +23,7 @@ import {
   SHELLS,
   addAppToRegistryText,
   loadAppsRegistry,
+  primaryCatalog,
 } from './lib/apps-registry.mjs';
 import { nextVersion, releaseDate } from './lib/app-versions.mjs';
 
@@ -40,6 +41,7 @@ function usage() {
     `  --runtime <runtime>      one of ${[...RUNTIMES].join(', ')} (default ${DEFAULTS.runtime})`,
     `  --shell <shell>          one of ${[...SHELLS].join(', ')} (default ${DEFAULTS.shell})`,
     `  --category <id>          a site category id from registry/apps.yml (default ${DEFAULTS.category})`,
+    '  --catalog <id>           the site catalogue that hosts the app (default: the primary catalogue)',
     '  --title <title>          catalog title (default: <name>)',
     '  --description <text>     catalog description (default: TODO describe <name>.)',
     '  --keywords <a,b,c>       comma-separated search keywords (default: TODO)',
@@ -60,6 +62,7 @@ try {
       runtime: { type: 'string' },
       shell: { type: 'string' },
       category: { type: 'string' },
+      catalog: { type: 'string' },
       title: { type: 'string' },
       description: { type: 'string' },
       keywords: { type: 'string' },
@@ -144,6 +147,11 @@ const categoryIds = current.site.categories.map(({ id }) => id);
 if (!categoryIds.includes(category)) {
   fail(`Invalid --category '${category}'. Expected one of: ${categoryIds.join(', ')}`);
 }
+const catalogIds = current.site.catalogs.map(({ id }) => id);
+const catalogId = args.values.catalog ?? primaryCatalog(current).id;
+if (!catalogIds.includes(catalogId)) {
+  fail(`Invalid --catalog '${catalogId}'. Expected one of: ${catalogIds.join(', ')}`);
+}
 
 // Build the registry entry. Local apps are always experimental: an active app
 // needs a pinned 40-character commit source, which a fresh scaffold cannot have.
@@ -151,6 +159,7 @@ const toolchains = runtime.includes('rust') ? ['node', 'rust-wasm'] : ['node'];
 const entry = {
   id: name,
   path: name,
+  catalog: catalogId,
   title,
   description,
   categories: [category],

@@ -1,6 +1,7 @@
 // File helpers for Node. Importing this module loads the WebAssembly synchronously.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveHemisphere } from './inputs.js';
 import {
   RunAccumulator,
   initSync,
@@ -101,10 +102,11 @@ export function readAnalysisInputs({
   template = null,
   white = null,
   area = null,
-  hemisphere = 'lh',
+  hemisphere,
   normalise = 'zscore',
   combine = 'average',
 }) {
+  const side = resolveHemisphere([...runs, roi, seed, template, white, area], { hemisphere, required: template !== null });
   const roiVertices = roi === null ? null : readLabelFile(roi).vertices;
   const seedVertices = seed === null ? null : readLabelFile(seed).vertices;
   const keep = roiVertices === null ? null : Uint32Array.from(new Set([...roiVertices, ...(seedVertices ?? [])])).sort();
@@ -125,7 +127,7 @@ export function readAnalysisInputs({
     noiseCeiling: data.noiseCeiling,
     globalSignal: data.globalSignal,
     apertures: serialised,
-    template: template === null ? null : fromFile(template, (bytes) => readBensonTemplate(bytes, hemisphere === 'rh' ? 'rh' : 'lh')),
+    template: template === null ? null : fromFile(template, (bytes) => readBensonTemplate(bytes, side)),
     area: area === null ? null : fromFile(area, readFreeSurferCurv),
     surface: surface && { vertices: surface.vertices, faces: surface.faces },
     totalVertices: data.totalVertices,

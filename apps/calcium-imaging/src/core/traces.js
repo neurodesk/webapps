@@ -144,7 +144,8 @@ export function runningPercentile(x, window, p) {
 
 /** Neuropil-corrected fluorescence, its running-percentile baseline and ΔF/F for one ROI. */
 export function deltaFOverF(F, Fneu, { coefficient = 0.7, window, percentile = 8 }) {
-  const corrected = Float64Array.from(F, (value, t) => value - coefficient * Fneu[t]);
+  // With subtraction off, an ROI without a neuropil ring (NaN Fneu) keeps its trace.
+  const corrected = Float64Array.from(F, (value, t) => (coefficient === 0 ? value : value - coefficient * Fneu[t]));
   const baseline = runningPercentile(corrected, window, percentile);
   let undefinedSamples = 0;
   const dff = Float64Array.from(corrected, (value, t) => {

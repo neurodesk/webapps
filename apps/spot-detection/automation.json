@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 2,
+  "app": "spot-detection",
+  "title": "Spot detection",
+  "description": "Detect smFISH spots with Big-FISH's LoG detector, automatic elbow threshold and Gaussian sub-pixel fit, and count them per cell.",
+  "defaultOperation": "detect-spots",
+  "operations": {
+    "detect-spots": {
+      "title": "Detect spots",
+      "description": "Detect spots in one TIFF image or stack and write a spots CSV, a NIfTI spot overlay and, with cell labels, spots per cell.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:image",
+          "formats": ["tiff"],
+          "description": "One one-channel TIFF image or stack (uint8, uint16, float32 or float64).",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "labels": {
+          "source": "files",
+          "type": "neuro:label-map",
+          "formats": ["tiff"],
+          "description": "Optional integer cell labels: one y × x plane or a stack of the image's size.",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "voxelZ": { "type": "number", "minimum": 0, "description": "Voxel size between planes, nm; omit to use the TIFF's metadata, else 300." },
+        "voxelYx": { "type": "number", "minimum": 0, "description": "Pixel size in y and x, nm; omit to use the TIFF's metadata, else 103." },
+        "radiusZ": { "type": "number", "default": 350, "minimum": 0, "description": "Spot radius along z, nm." },
+        "radiusYx": { "type": "number", "default": 150, "minimum": 0, "description": "Spot radius in y and x, nm." },
+        "threshold": { "type": "number", "minimum": 0, "description": "LoG threshold; omit for Big-FISH's automatic elbow threshold." },
+        "projection": { "type": "boolean", "default": false, "description": "Detect in the 2D maximum projection of a stack." },
+        "subpixel": { "type": "boolean", "default": true, "description": "Fit each spot with a Gaussian for its sub-pixel position." }
+      },
+      "artifacts": {
+        "spots": { "type": "neuro:table", "mediaType": "text/csv", "minimum": 1, "maximum": 1 },
+        "overlay": { "type": "neuro:volume", "mediaType": "application/gzip", "minimum": 1, "maximum": 1 },
+        "cells": { "type": "neuro:table", "mediaType": "text/csv", "minimum": 0, "maximum": 1 }
+      },
+      "engines": ["browser"]
+    }
+  }
+}

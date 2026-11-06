@@ -23,7 +23,7 @@ const FORK_ALIASES = new Map(Object.entries({
 }));
 
 const SKIP_DIRECTORIES = new Set([
-  '.git', '.tmp_model_env', '.turbo', 'coverage', 'dist', 'fixtures',
+  '.git', '.tmp_model_env', '.turbo', 'coverage', 'dist', 'dist-sites', 'fixtures',
   'legacy-ci', 'node_modules', 'test-results', 'vendor',
 ]);
 

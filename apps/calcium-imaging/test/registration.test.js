@@ -233,3 +233,11 @@ test("the initial template is the median of 10-frame bin means", () => {
   assert.deepEqual(Array.from(initialTemplate(movie, frames, 1, 1)), [5]);
   assert.deepEqual(Array.from(initialTemplate(movie.subarray(0, 4), 4, 1, 1)), [1]);
 });
+
+test("piecewise settings whose patch spectra exceed the budget are refused before any is built", async () => {
+  const { createRegistration, patchSpectraBytes, PATCH_SPECTRA_BUDGET } = await import("../src/core/registration.js");
+  // 512 × 512 with 64 px patches overlapping by 63 px: 201,601 patches, about 13 GB of spectra.
+  assert.ok(patchSpectraBytes(512, 512, 64, 63) > PATCH_SPECTRA_BUDGET);
+  assert.throws(() => createRegistration(new Float32Array(512 * 512), 512, 512, { mode: "piecewise", patchSize: 64, patchOverlap: 63 }), /too much memory/);
+  assert.ok(patchSpectraBytes(512, 512, 64, 32) < PATCH_SPECTRA_BUDGET);
+});

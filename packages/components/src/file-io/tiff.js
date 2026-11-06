@@ -147,8 +147,12 @@ export function parseImagejDescription(description, resolution = [null, null]) {
   const fps = finite(field('fps'));
   const timeScale = secondsPerUnit(field('tunit') ?? 's');
   const interval = finite(field('finterval'));
+  const hyperstack = /^hyperstack=true\s*$/m.test(text);
   return {
     kind: 'imagej',
+    // ImageJ writes `slices=N` for any stack it has not labelled; only a hyperstack or an
+    // explicit `frames=` says which axis the pages are on.
+    unlabelledStack: !hyperstack && field('frames') === undefined,
     images: 1,
     sizeC: Number(field('channels') ?? 1),
     sizeZ: Number(field('slices') ?? 1),
@@ -209,6 +213,8 @@ export async function inspectTiffStack(buffer) {
  * By default the array has the file's sample type. `Type` (e.g. Float32Array) converts each
  * page straight into an array of that type, and `shared` backs it with a SharedArrayBuffer,
  * so no second whole-stack copy is made. `maxBytes` limits the size of that output array.
+ * Conversion follows TypedArray assignment: an integer `Type` truncates and wraps values it
+ * cannot hold (a negative float becomes a large uint16), so convert floats only to a float Type.
  * @param {ArrayBuffer} buffer
  * @param {{ signal?: AbortSignal, maxBytes?: number, Type?: Function, shared?: boolean, onProgress?: (done: number, total: number) => void }} [options]
  */

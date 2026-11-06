@@ -43,7 +43,7 @@ const RESERVED_SELECTORS = [
 
 const COLOUR_LITERAL = /#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/gi;
 
-const SKIP_DIRECTORIES = new Set(['.git', '.turbo', 'coverage', 'dist', 'node_modules', 'test-results', 'vendor', 'public', 'e2e', 'test']);
+const SKIP_DIRECTORIES = new Set(['.git', '.turbo', 'coverage', 'dist', 'dist-sites', 'node_modules', 'test-results', 'vendor', 'public', 'e2e', 'test']);
 
 async function collect(directory, extensions) {
   const files = [];

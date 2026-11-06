@@ -1,6 +1,7 @@
 // SamSrf analyses and model presets. A model is the JSON object SamSrf reads
 // (Models/Json/*.json); presets reproduce the three example JSON files and the
-// standard models in SamSrf's Models/*.m at commit 41ed1e96.
+// standard models at commit 41ed1e96 (horizontal tuning follows the GUI .mod).
+import { exportConvention } from "@neurodesk/samsrf";
 
 /** @typedef {'prf' | 'rc' | 'cf'} Analysis */
 
@@ -19,8 +20,12 @@ export const HRF_OPTIONS = Object.freeze([
 ]);
 
 export function hrfValue(hrf) {
-  if (Array.isArray(hrf)) return "[]";
-  return String(hrf);
+  if (Array.isArray(hrf)) {
+    if (hrf.length === 0) return "[]";
+    if (hrf.length === 1 && (hrf[0] === 0 || hrf[0] === 1)) return String(hrf[0]);
+    return "custom";
+  }
+  return HRF_OPTIONS.some(option => option.value === String(hrf)) ? String(hrf) : "custom";
 }
 
 export function hrfModel(value) {
@@ -44,11 +49,13 @@ function round(value) {
   return Number(value.toPrecision(12));
 }
 
-function forward({ name, prf, params, scaled, positive, polar = true, grid, hookeJeeves, hrf = 0 }) {
+function forward({ name, prf, params, scaled, positive, polar = true, grid, hookeJeeves, hrf = 0, fixedScalingFactor }) {
   return {
     analysis: "prf",
     hookeJeeves,
+    fixedScalingFactor,
     build: ({ scalingFactor, tr }) => {
+      scalingFactor = fixedScalingFactor ?? scalingFactor;
       const model = {
         Name: name,
         Prf_Function: prf,
@@ -124,6 +131,7 @@ const PRESET_LIST = [
     grid: (sf) => [colon(0, 15, 345), powers(-5, 0.5, 1, sf), powers(-5.5, 0.5, 1, sf), colon(-10, 1, 10)],
   })],
   ["tuning-circular", "Circular tuning curve", forward({
+    fixedScalingFactor: 1,
     name: "pTC_cir",
     prf: "@(P,ApWidth)prf_gaussian_rf(cosd(P(1))/2,sind(P(1))/2,P(2),ApWidth)",
     params: ["Mu", "Sigma"],
@@ -142,7 +150,7 @@ const PRESET_LIST = [
     positive: [0, 1],
     polar: false,
     hookeJeeves: [0.01, 0.01],
-    grid: (sf) => [colon(-1.05, 0.05, 1.05).map((mu) => round(mu * sf)), powers(-5.6, 0.1, 1, sf)],
+    grid: (sf) => [colon(-1.05, 0.05, 1.05), powers(-5.6, 0.1, 1, sf)],
   })],
   ["tuning-vertical", "Vertical tuning curve", forward({
     name: "pTC_ver",
@@ -197,7 +205,17 @@ export const DEFAULT_SETTINGS = Object.freeze({ scalingFactor: 9.5, tr: 1 });
 export function buildModel(presetId, settings = DEFAULT_SETTINGS) {
   const preset = PRESETS[presetId];
   if (!preset) throw new Error(`Unknown model preset ${presetId}.`);
-  return preset.build({ ...DEFAULT_SETTINGS, ...settings });
+  const model = preset.build({ ...DEFAULT_SETTINGS, ...settings });
+  const convention = exportConvention(settings.exportConvention);
+  return convention === "samsrf-10.4" ? model : { ...model, Export_Convention: convention };
+}
+
+/** Imported or edited JSON owns its grids; only active presets regenerate theirs. */
+export function changeScalingFactor(model, scalingFactor, presetId = null) {
+  if (!presetId) return { ...model, Scaling_Factor: scalingFactor };
+  const preset = buildModel(presetId, { scalingFactor, tr: model.TR });
+  const grids = Object.entries(preset).filter(([key]) => /^Param\d+$/.test(key));
+  return { ...model, Scaling_Factor: preset.Scaling_Factor, ...Object.fromEntries(grids) };
 }
 
 // Oriented and summed-normalisation models list fewer Hooke-Jeeves steps than parameters in
@@ -241,6 +259,7 @@ export function parseModel(text, analysis) {
   }
   if (!model || typeof model !== "object" || Array.isArray(model)) throw new Error("The model JSON must be an object.");
   if (typeof model.Name !== "string" || !model.Name) throw new Error("The model needs a Name.");
+  exportConvention(model.Export_Convention);
   if (analysis === "prf") {
     for (const key of ["Prf_Function", "Param_Names", "Scaled_Param", "Only_Positive", "Scaling_Factor", "TR", "Hrf"]) {
       if (!(key in model)) throw new Error(`A forward-model pRF model needs ${key}.`);

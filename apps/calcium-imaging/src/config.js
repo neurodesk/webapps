@@ -26,8 +26,7 @@ export const MAX_MOVIE_BYTES = 500_000_000;
  * @returns {{ frames: number }}
  */
 export function checkMovie({ pages, metadata }, name) {
-  const description = metadata.description ?? "";
-  const plainImagejStack = metadata.kind === "imagej" && !/^hyperstack=true\s*$/m.test(description) && !/^frames=/m.test(description);
+  const plainImagejStack = metadata.kind === "imagej" && metadata.unlabelledStack === true;
   const sizeZ = plainImagejStack ? 1 : metadata.sizeZ;
   const sizeT = plainImagejStack ? pages / Math.max(1, metadata.sizeC) : metadata.sizeT;
   if (metadata.sizeC > 1) throw new Error(`${name} has ${metadata.sizeC} channels; save the calcium channel as its own movie.`);

@@ -5,10 +5,11 @@
 // SamSrf's file names, one value per surface vertex, fitted R², and a downloadable zip.
 // Numeric parity belongs to @neurodesk/samsrf's own tests.
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
 import { readGifti } from "@neurodesk/samsrf/node";
+import { serveSite } from "../../../test-utils/serve-site.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));
@@ -16,11 +17,24 @@ const example = examples[0];
 const local = process.env.SAMSRF_EXAMPLE_DIR;
 // lh.white and lh.inflated of the example both have this many vertices.
 const VERTICES = 134260;
+let dataServer;
+
+test.beforeAll(async () => {
+  if (local) {
+    const files = new Map(example.files.map(file => [`/${file.name}`, join(local, file.name)]));
+    dataServer = await serveSite(local, { files });
+  }
+});
+test.afterAll(async () => { await dataServer?.close(); });
 
 async function serveLocalExample(page) {
   if (!local) return;
   for (const file of example.files) {
-    await page.route(file.url, (route) => route.fulfill({ body: readFileSync(join(local, file.name)) }));
+    // Whole-surface runs exceed the DevTools base64 message limit; stream their bytes.
+    await page.route(file.url, route => route.fulfill({
+      status: 307, body: '',
+      headers: { location: `${dataServer.origin}/${file.name}`, 'access-control-allow-origin': '*' },
+    }));
   }
 }
 
@@ -68,11 +82,16 @@ async function useSmallRoi(page) {
 async function runEveryAnalysis(page, timeout) {
   for (const [analysis, expected] of Object.entries(RUNS)) {
     await page.locator("#analysis").selectOption(analysis);
+    await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
+    await page.locator("#exportConvention").selectOption("samsrfx-10.003");
     const run = page.locator("#runButton");
     await expect(run).toBeEnabled();
     await run.click();
+    await expect(page.locator("#exportConvention")).toBeDisabled();
     // The previous analysis leaves the output section open; its status line names the analysis.
     await expect(page.locator("#statusText")).toContainText(expected.outcome, { timeout });
+    await expect(page.locator("#exportConvention")).toBeEnabled();
+    await expect(page.locator("#exportConvention")).toHaveValue("samsrfx-10.003");
     await expect(page.locator("#outputSection")).toHaveAttribute("open", "");
     for (const label of ["Polar angle", "Eccentricity", "R²"]) {
       await expect(page.locator("#resultList")).toContainText(label);
@@ -95,6 +114,14 @@ async function runEveryAnalysis(page, timeout) {
     const r2 = giftiMap(entries[`${expected.outName}_r^2.gii`]);
     expect(r2).toHaveLength(VERTICES);
     expect(r2.filter((value) => value > 0).length, `${analysis}: vertices with R² > 0`).toBeGreaterThan(0);
+    const x = giftiMap(entries[`${expected.outName}_x0.gii`]);
+    const y = giftiMap(entries[`${expected.outName}_y0.gii`]);
+    const ecc = giftiMap(entries[`${expected.outName}_ecc.gii`]);
+    const mismatch = ecc.findIndex((value, v) => {
+      const radius = Math.fround(Math.sqrt(Math.fround(Math.fround(x[v] * x[v]) + Math.fround(y[v] * y[v]))));
+      return !Object.is(value, r2[v] === 0 ? 0 : Math.fround(radius - 0.5));
+    });
+    expect(mismatch, `${analysis}: legacy eccentricity at vertex ${mismatch}`).toBe(-1);
   }
 }
 
@@ -107,6 +134,119 @@ test("app boots on its workspace with the shared bar", async ({ page }) => {
   await expect(page.locator("#infoDialog").getByRole("heading", { name: `About ${automation.title}`, exact: true })).toBeVisible();
   await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
   expect(await page.evaluate(() => self.crossOriginIsolated === true)).toBe(true);
+});
+
+test("legacy export selection survives presets, disclosure and a saved model", async ({ page }) => {
+  await page.goto("/");
+  const advanced = page.getByText("Advanced settings", { exact: true });
+  await advanced.click();
+  const convention = page.getByLabel("Map export", { exact: true });
+  await expect(convention).toHaveValue("samsrf-10.4");
+  await convention.selectOption("samsrfx-10.003");
+  await advanced.click();
+  await page.locator("#analysis").selectOption("cf");
+  await advanced.click();
+  await expect(convention).toHaveValue("samsrfx-10.003");
+  const saved = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save model JSON" }).click();
+  const model = JSON.parse(readFileSync(await (await saved).path(), "utf8"));
+  expect(model.Export_Convention).toBe("samsrfx-10.003");
+  await convention.selectOption("samsrf-10.4");
+  await page.locator("#modelInput").setInputFiles({ name: "legacy.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(model)) });
+  await expect(convention).toHaveValue("samsrfx-10.003");
+});
+
+test("custom model grids survive radius edits and circular tuning fixes its scale", async ({ page }) => {
+  await page.goto("/");
+  await page.getByText("Advanced settings", { exact: true }).click();
+  const editor = page.locator("#modelJson");
+  const custom = { ...JSON.parse(await editor.inputValue()), Param1: [0.123, 0.456], Param2: [0.789], Param3: [1.234], Hrf: [0.2, 1, 0.5] };
+  await editor.fill(JSON.stringify(custom));
+  await editor.blur();
+  await expect(page.locator("#hrf")).toHaveValue("custom");
+  await page.locator("#scalingFactor").fill("12");
+  await page.locator("#scalingFactor").blur();
+  expect(JSON.parse(await editor.inputValue())).toMatchObject({ ...custom, Scaling_Factor: 12 });
+  await page.locator("#preset").selectOption("tuning-circular");
+  await expect(page.locator("#scalingFactor")).toHaveValue("1");
+  await expect(page.locator("#scalingFactor")).toHaveAttribute("readonly", "");
+  expect(JSON.parse(await editor.inputValue()).Scaling_Factor).toBe(1);
+  await page.locator("#preset").selectOption("gaussian");
+  await expect(page.locator("#scalingFactor")).toHaveValue("12");
+  expect(JSON.parse(await editor.inputValue()).Param2[0]).toBe(12 / 32);
+  await page.locator("#preset").selectOption("tuning-circular");
+  await page.locator("#analysis").selectOption("rc");
+  await expect(page.locator("#scalingFactor")).toHaveValue("12");
+  await page.locator("#analysis").selectOption("prf");
+  await page.locator("#preset").selectOption("tuning-circular");
+  await page.locator("#analysis").selectOption("cf");
+  await page.locator("#analysis").selectOption("prf");
+  await page.locator("#preset").selectOption("gaussian");
+  await expect(page.locator("#scalingFactor")).toHaveValue("12");
+  expect(JSON.parse(await editor.inputValue()).Param2[0]).toBe(12 / 32);
+});
+
+for (const target of ['#runsDrop label', 'body']) {
+  test(`Clear inputs abandons pending folder discovery on ${target}`, async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(target => {
+      const entry = { isFile: true, isDirectory: false, name: 'lh_old.gii', file: callback => {
+        globalThis.finishOldDrop = () => callback(new File(['x'], 'lh_old.gii'));
+      } };
+      let read = false;
+      const directory = { isDirectory: true, isFile: false, name: 'old', createReader: () => ({ readEntries: callback => {
+        callback(read ? [] : [entry]);
+        read = true;
+      } }) };
+      const event = new DragEvent('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], items: [{ kind: 'file', webkitGetAsEntry: () => directory }], files: [] } });
+      document.querySelector(target).dispatchEvent(event);
+    }, target);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.finishOldDrop)).toBe('function');
+    await page.getByRole('button', { name: 'Clear inputs', exact: true }).click();
+    await page.evaluate(async () => {
+      globalThis.finishOldDrop();
+      await new Promise(requestAnimationFrame);
+    });
+    await expect(page.locator('#runsInfo')).toBeHidden();
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#runsInput').setInputFiles(['rh_new.gii', 'aps.mat'].map(name => ({ name, mimeType: 'application/octet-stream', buffer: Buffer.from('x') })));
+    await expect(page.locator('#runsInfo')).toHaveText('rh_new.gii');
+    await expect(page.locator('#runButton')).toBeEnabled();
+  });
+}
+
+test("a folder with ambiguous anatomy is rejected without replacing inputs", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#runsInput").setInputFiles(['lh.area', 'rh.area'].map(name => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from('x') })));
+  await expect(page.locator("#statusText")).toContainText("ambiguous");
+  await expect(page.locator("#runButton")).toBeDisabled();
+});
+
+test("hemisphere replacements disable Run until consistent and inputs can be cleared", async ({ page }) => {
+  await page.goto("/");
+  const file = name => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from('x') });
+  await page.locator("#runsInput").setInputFiles(['lh_run.gii', 'aps.mat', 'lh.V123.label'].map(file));
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#runsInput").setInputFiles(file('rh_run.gii'));
+  await expect(page.locator("#runsInfo")).toHaveText('rh_run.gii');
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect(page.locator("#runHint")).toContainText('matching hemispheres');
+  await page.locator("#roiInput").setInputFiles(file('rh.V123.label'));
+  await expect(page.locator("#runButton")).toBeEnabled();
+  // The example retains CF files and anatomy even while pRF is selected.
+  await loadExample(page);
+  await page.locator("#runsInput").setInputFiles(file('rh_run.gii'));
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await page.getByRole('button', { name: 'Clear inputs', exact: true }).click();
+  await expect(page.locator("#runsInfo")).toBeHidden();
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "idle");
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  await page.locator("#runsInput").setInputFiles(['rh_run.gii', 'aps.mat', 'rh.V123.label'].map(file));
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#analysis").selectOption('cf');
+  await expect(page.locator("#templateDrop")).not.toContainText('lh_benson.gii');
+  await expect(page.locator("#seedDrop")).not.toContainText('lh.V1_seed.label');
 });
 
 test("the example runs every analysis on part of V1-V3 and downloads SamSrf's maps", async ({ page }) => {
@@ -184,14 +324,19 @@ test("a dropped folder fills every input slot", async ({ page }) => {
   await expect(page.locator("#runButton")).toBeEnabled();
 });
 
-test("automation runs a reverse-correlation analysis on the example's files", async ({ page }) => {
+test("automation runs a reverse-correlation analysis on the example's files", async ({ page }, testInfo) => {
   test.setTimeout(1800000);
   const roles = { runs: example.files.filter(({ role }) => role === "run").slice(0, 1), apertures: [example.files[6]], roi: [example.files[7]], surfaces: [example.files[10], example.files[11]] };
   await page.goto("/");
+  await page.locator("#preset").selectOption("tuning-circular");
   for (const [role, files] of Object.entries(roles)) {
-    const payloads = [];
-    for (const file of files) payloads.push({ name: file.name, mimeType: "application/octet-stream", buffer: await exampleBytes(file) });
-    await page.locator("#neurodesk-input-transfer").setInputFiles(payloads);
+    const paths = [];
+    for (const file of files) {
+      const path = local ? join(local, file.name) : testInfo.outputPath(file.name);
+      if (!local) writeFileSync(path, await exampleBytes(file));
+      paths.push(path);
+    }
+    await page.locator("#neurodesk-input-transfer").setInputFiles(paths);
     await page.evaluate((target) => globalThis.neurodeskAutomation.dispatch("adopt", { role: target }), role);
   }
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("start", { operation: "rc", parameters: { tr: 1, scalingFactor: 9.5 } }));
@@ -199,4 +344,5 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
   expect(report.provenance.method).toBe("samsrf-rc");
   expect(report.provenance.model.Aperture_File).toBe("aps_Bars");
+  expect(report.provenance.model.Scaling_Factor).toBe(9.5);
 });

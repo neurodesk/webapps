@@ -1,0 +1,32 @@
+{
+  "name": "stardist",
+  "version": "0.0.20261105",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app stardist",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "node ../../scripts/lint.mjs --workspace"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.33",
+    "clipper-lib": "6.4.2",
+    "fast-png": "8.0.0",
+    "geotiff": "3.0.5",
+    "onnxruntime-web": "1.29.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "vite": "^6.3.2"
+  },
+  "neurodeskWebapp": {
+    "static": {
+      "coiServiceWorker": true
+    }
+  },
+  "license": "BSD-3-Clause"
+}

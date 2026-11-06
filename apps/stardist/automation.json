@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 2,
+  "app": "stardist",
+  "title": "StarDist",
+  "description": "Segment cell nuclei in 2D fluorescence microscopy with StarDist's pretrained 2D_versatile_fluo model.",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Segment nuclei",
+      "description": "Run StarDist 2D_versatile_fluo on one 2D image channel and return the nucleus label image and a per-nucleus table.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:microscopy-image",
+          "formats": [
+            "tif",
+            "tiff",
+            "png"
+          ],
+          "description": "One 2D TIFF, OME-TIFF or PNG image of fluorescent nuclei",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "channel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256,
+          "default": 1,
+          "description": "Channel or page to segment, counting from 1"
+        },
+        "probThresh": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 0.99,
+          "default": 0.479071463157368,
+          "description": "Object probability threshold (the model's tuned value by default)"
+        },
+        "nmsThresh": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 0.99,
+          "default": 0.3,
+          "description": "Overlap threshold of non-maximum suppression (the model's tuned value by default)"
+        },
+        "tiles": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16,
+          "default": 0,
+          "description": "Tiles per image axis; 0 picks one tile per 1024 pixels"
+        }
+      },
+      "artifacts": {
+        "labels": {
+          "type": "neuro:label-map",
+          "mediaType": "image/tiff",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "table": {
+          "type": "file:nuclei-table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

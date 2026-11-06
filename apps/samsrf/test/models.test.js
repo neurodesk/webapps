@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PRESETS, buildModel, fineFit, hrfModel, hrfValue, parseModel, presetsFor, setFineFit, withInputNames } from "../src/models.js";
+import { PRESETS, buildModel, changeScalingFactor, fineFit, hrfModel, hrfValue, parseModel, presetsFor, setFineFit, withInputNames } from "../src/models.js";
 
 test("the 2D Gaussian example preset is SamSrf's Example_2D_Gaussian_pRF.json", () => {
   const model = withInputNames(buildModel("example-gaussian"), "prf", { apertures: { name: "aps_Bars.mat" } });
@@ -21,6 +21,7 @@ test("standard presets scale their search grids by the stimulus radius, as Model
   assert.equal(scaled.Param2[0], Number((2 ** -5 * 10).toPrecision(12)));
   assert.deepEqual(scaled.Param1, unit.Param1, "polar angles do not scale");
   assert.deepEqual(buildModel("tuning-circular", { scalingFactor: 10 }).Param2, buildModel("tuning-circular", { scalingFactor: 1 }).Param2);
+  assert.equal(buildModel("tuning-circular", { scalingFactor: 10 }).Scaling_Factor, 1);
 });
 
 test("every preset belongs to one analysis and the forward models have a grid per parameter", () => {
@@ -37,6 +38,16 @@ test("every preset belongs to one analysis and the forward models have a grid pe
 test("connective field models name the seed and template files", () => {
   const model = withInputNames(buildModel("example-cf"), "cf", { seed: { name: "lh.V1_seed.label" }, template: { name: "lh_benson.gii" } });
   assert.deepEqual(model, { Name: "CF_Rcp", SeedRoi: "lh.V1_seed", Template: "lh_benson" });
+});
+
+test("legacy exports persist in saved model JSON and invalid conventions are rejected", () => {
+  for (const preset of Object.values(PRESETS)) {
+    const model = buildModel(preset.id, { exportConvention: "samsrfx-10.003" });
+    assert.equal(model.Export_Convention, "samsrfx-10.003");
+    assert.deepEqual(parseModel(JSON.stringify(model), preset.analysis), model);
+    assert.throws(() => parseModel(JSON.stringify({ ...model, Export_Convention: "unknown" }), preset.analysis), /export convention/);
+    assert.throws(() => parseModel(JSON.stringify({ ...model, Export_Convention: ["samsrfx-10.003"] }), preset.analysis), /export convention/);
+  }
 });
 
 test("HRF settings round-trip, including concurrent fitting that JSON cannot write as Infinity", () => {
@@ -62,4 +73,26 @@ test("the JSON view rejects models SamSrf would reject, with the missing field n
   assert.throws(() => parseModel(JSON.stringify(model), "prf"), /Param3/);
   assert.throws(() => parseModel(JSON.stringify({ Name: "pRF" }), "rc"), /Scaling_Factor/);
   assert.deepEqual(parseModel(JSON.stringify(buildModel("example-cf")), "cf"), buildModel("example-cf"));
+});
+
+
+test("editing a custom model's radius preserves its grids and optimizer steps", () => {
+  const custom = { ...buildModel("dog"), Param1: [0, 90], Param2: [1, 3], Hooke_Jeeves_Steps: [1, 2, 3, 4, 5] };
+  assert.deepEqual(changeScalingFactor(custom, 12), { ...custom, Scaling_Factor: 12 });
+  const preset = buildModel("gaussian");
+  const changed = changeScalingFactor(preset, 12, "gaussian");
+  assert.deepEqual(changed.Param2, buildModel("gaussian", { scalingFactor: 12 }).Param2);
+  assert.equal(changeScalingFactor(buildModel("tuning-circular"), 12, "tuning-circular").Scaling_Factor, 1);
+});
+
+test("horizontal tuning keeps the MATLAB GUI's unscaled Mu grid", () => {
+  const model = buildModel("tuning-horizontal", { scalingFactor: 10 });
+  assert.equal(model.Param1[0], -1.05);
+  assert.equal(model.Param1.at(-1), 1.05);
+});
+
+test("a custom HRF kernel is not displayed as the de Haas preset", () => {
+  assert.equal(hrfValue([0]), "0");
+  assert.equal(hrfValue([1]), "1");
+  assert.equal(hrfValue([0, 0.5, 1]), "custom");
 });

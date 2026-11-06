@@ -4,7 +4,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { chromium } from '@playwright/test';
-import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { verifyMuscleMapFullPipeline } from './musclemap-full-pipeline-smoke.mjs';
 import { verifyDicompareRoutes } from '../test-utils/dicompare-routes.mjs';
 import { verifyMuscleMapThreads } from './multithreaded-ort-smoke.mjs';
@@ -445,7 +445,8 @@ try {
       }
     }
 
-    const moreApps = page.locator('[title="More Neurodesk web apps"]:visible').first();
+    // The shell labels the link with the brand of the catalogue that hosts the app.
+    const moreApps = page.locator(`[title="${findCatalog(registry, app.catalog).brand.more_apps}"]:visible`).first();
     if (await moreApps.count() !== 1) {
       failures.push(`${app.id}: More Apps link is missing`);
     } else {

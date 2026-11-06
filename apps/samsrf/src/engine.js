@@ -15,6 +15,7 @@
 import {
   createJob as createSamsrfJob,
   exportGiis,
+  exportConvention,
   init,
   polarAndEccentricity,
   readApertures,
@@ -26,6 +27,7 @@ import {
   readGiftiSurface,
   RunAccumulator,
 } from "@neurodesk/samsrf";
+import { resolveHemisphere } from "@neurodesk/samsrf/inputs";
 
 /** @typedef {import('./models.js').Analysis} Analysis */
 /** @typedef {import('./inputs.js').SurfaceRole} SurfaceRole */
@@ -84,13 +86,20 @@ export const ENGINE = Object.freeze({ stub: false, name: "SamSrf (@neurodesk/sam
  */
 export async function createJob(inputs, onProgress) {
   if (!inputs.runs.length) throw new Error("Add at least one run.");
+  const convention = exportConvention(inputs.model.Export_Convention);
+  const hemisphere = resolveHemisphere([
+    ...inputs.runs.map(file => file.name),
+    inputs.roi?.name,
+    inputs.seed?.name,
+    inputs.template?.name,
+    ...Object.values(inputs.surfaces).map(file => file.name),
+  ], { required: inputs.analysis === "cf" });
   await init();
   const started = Date.now();
   const roi = inputs.roi ? readLabel(inputs.roi) : null;
   const seed = inputs.analysis === "cf" && inputs.seed ? readLabel(inputs.seed) : null;
   const keep = roi ? Uint32Array.from(new Set([...roi, ...(seed ?? [])])).sort() : null;
   const data = preprocess(inputs.runs, keep, inputs);
-  const hemisphere = hemisphereOf(inputs.runs[0].name);
   const spec = {
     kind: inputs.analysis,
     model: JSON.stringify(inputs.model),
@@ -130,11 +139,13 @@ export async function createJob(inputs, onProgress) {
     units: job.vertexCount,
     vertexCount: data.totalVertices,
     outName: `${hemisphere}_${job.modelName}${job.outSuffix}`,
+    exportConvention: convention,
     summary: [
       `${inputs.runs.length} run${inputs.runs.length === 1 ? "" : "s"} of ${data.volumes} volumes on ${data.totalVertices} vertices${inputs.runs.length > 1 ? `, ${inputs.average ? "averaged" : "concatenated"}` : ""}${inputs.normalise ? ", detrended and z-scored" : ""} (${seconds(read - started)})`,
       roi ? `ROI ${inputs.roi.name}: ${roi.length} vertices` : "No ROI: every vertex is analysed",
       ...(seed ? [`Seed ${inputs.seed.name}: ${seed.length} vertices`] : []),
       `Analysis ${job.modelName}${job.outSuffix}: ${job.vertexCount} vertices, maps ${job.values.join(", ")}`,
+      `Map export: ${convention}; fitting precision: float64`,
       ...(gridPoints ? [`Search space: ${gridPoints} grid points per worker (${seconds(prepared - read)})`] : []),
     ],
     spec,
@@ -162,14 +173,14 @@ export async function mergeShards(job, shards) {
   const { maps } = handle.merge(shards);
   const vertices = maps.vertices;
   const rows = maps.values.map((name, row) => ({ name, values: Float32Array.from(maps.data.subarray(row * vertices, (row + 1) * vertices)) }));
-  const derived = polarAndEccentricity(maps);
+  const derived = polarAndEccentricity(maps, job.exportConvention);
   if (derived) {
     rows.push({ name: "Polar", values: Float32Array.from(derived.polar) }, { name: "Eccentricity", values: Float32Array.from(derived.eccentricity) });
   }
   const mapOfFile = new Map(rows.map(({ name }) => [giiName(job.outName, name), name]));
   mapOfFile.set(`${job.outName}_pol.gii`, "Polar");
   mapOfFile.set(`${job.outName}_ecc.gii`, "Eccentricity");
-  const files = exportGiis(maps, job.outName).map(({ name, bytes }) => ({ name, bytes, map: mapOfFile.get(name) }));
+  const files = exportGiis(maps, job.outName, null, job.exportConvention).map(({ name, bytes }) => ({ name, bytes, map: mapOfFile.get(name) }));
   return {
     outName: job.outName,
     vertexCount: vertices,
@@ -247,10 +258,6 @@ function apertureFormat(name) {
   if (/\.gif$/i.test(name)) return "gif";
   if (/\.nii(\.gz)?$/i.test(name)) return "nii";
   throw new Error(`${name}: apertures must be a .mat, NIfTI or GIF file.`);
-}
-
-function hemisphereOf(name) {
-  return /(^|[^a-z])(lh|rh|bi)([^a-z]|$)/i.exec(name)?.[2].toLowerCase() ?? "srf";
 }
 
 /** The file name samsrf_export_giis gives a map row. */

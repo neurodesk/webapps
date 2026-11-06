@@ -135,9 +135,15 @@ a u32 count, that many u32 pixel indices and that many f64 values.
 
 | Signature | Description |
 | --- | --- |
-| `exportGiis({ values, vertices, data }, prefix, selection = null) → [{ name, bytes }]` | `samsrf_export_giis`: one GIFTI per map row, named `{prefix}_{lower(name)}.gii` with spaces as `_` (`lh_pRF_Gaussian_r^2.gii`, `lh_pRF_Gaussian_noise_ceiling.gii`), preceded by `{prefix}_pol.gii` and `{prefix}_ecc.gii` when the maps hold `x0`. `selection` names the rows to export, case-insensitive; `'Polar'` and `'Eccentricity'` select the derived maps. |
+| `exportGiis({ values, vertices, data }, prefix, selection = null, convention = 'samsrf-10.4') → [{ name, bytes }]` | `samsrf_export_giis`: one GIFTI per map row, named `{prefix}_{lower(name)}.gii` with spaces as `_` (`lh_pRF_Gaussian_r^2.gii`, `lh_pRF_Gaussian_noise_ceiling.gii`), preceded by `{prefix}_pol.gii` and `{prefix}_ecc.gii` when the maps hold `x0`. `selection` names the rows to export, case-insensitive; `'Polar'` and `'Eccentricity'` select the derived maps. |
 | `writeGiftiMap(values) → Uint8Array` | One float32 per-vertex map as SPM's `gifti/save` writes it. |
-| `polarAndEccentricity({ values, vertices, data }) → { polar, eccentricity } \| null` | Polar angle in degrees and eccentricity from rows 2 and 3 (`x0`, `y0`), eccentricity 0 where row 1 (`R^2`) is 0; `null` without an `x0` row. |
+| `polarAndEccentricity({ values, vertices, data }, convention = 'samsrf-10.4') → { polar, eccentricity } \| null` | Polar angle in degrees and eccentricity from rows 2 and 3 (`x0`, `y0`), eccentricity 0 where row 1 (`R^2`) is 0; `null` without an `x0` row. |
+
+`convention: 'samsrfx-10.003'` reproduces the older Neurodesk container's
+float32 derived maps and eccentricity offset of −0.5. The app and CLI read
+`Export_Convention` from model JSON; the app also exposes it under Advanced
+settings. This affects map display/export, not fitting precision. The geometric
+default has no offset. See the [actual container comparison](validation/container/README.md).
 
 ### Analyses
 
@@ -211,7 +217,7 @@ re-exports the whole API, plus:
 | `readLabelFile(path)` | `readFreeSurferLabel` on a file. |
 | `readAnatomyFolder(dir, hemisphere)` | `readAnatomy` on `dir/<hemisphere>.white`, `.pial`, `.inflated`, `.sphere`, `.curv`, `.area` and, when present, `.thickness`. `hemisphere` is `'lh'` or `'rh'`. |
 | `preprocessRuns(paths, { keep, ...options }) → result` | Reads the runs one at a time into a `RunAccumulator`, freeing each, and returns `finish()`. |
-| `readAnalysisInputs({ runs, roi?, seed?, apertures?, template?, white?, area?, hemisphere = 'lh', normalise = 'zscore', combine = 'average' }) → inputs` | Reads an analysis's files as the web app does: the runs preprocessed keeping the ROI and seed vertices (every vertex without `roi`), with the noise ceiling and global signal; the serialised apertures; the Benson template (`x0` flipped for `'rh'`); the white surface and areas. Paths left out are `null`. |
+| `readAnalysisInputs({ runs, roi?, seed?, apertures?, template?, white?, area?, hemisphere?, normalise = 'zscore', combine = 'average' }) → inputs` | Reads an analysis's files as the web app does: the runs preprocessed keeping the ROI and seed vertices (every vertex without `roi`), with the noise ceiling and global signal; the serialised apertures; the Benson template (`x0` flipped for `'rh'`); the white surface and areas. Paths left out are `null`. |
 | `analysisSpec(inputs, kind, model, { roi }?) → spec` | The `createJob` spec for `kind` on `readAnalysisInputs` output. `model` is the JSON text or object; `roi` overrides the label's vertices. |
 | `runJob(job, shards = 1, onProgress?) → merged` | `job.run` over `[0, vertexCount)` in `shards` pieces in this thread, then `job.merge`. |
 | `shardRanges(total, shards) → [[start, end], ...]` | The ranges `runJob` and the command line split the vertices into. |
@@ -242,7 +248,7 @@ after `--runs` up to the next option is a run. The other options:
 | `--apertures FILE` | `.mat`, `.nii`, `.nii.gz` or `.gif` apertures; required by `prf` and `rc`. |
 | `--seed FILE`, `--template FILE` | Seed label and Benson template GIfTI; required by `cf`. |
 | `--surf DIR` | Reads `<hemisphere>.white` (for `Smoothing`) and `<hemisphere>.area` (for `cf`) from a FreeSurfer `surf` folder. `--white FILE` and `--area FILE` name them one by one. |
-| `--hemisphere NAME` | Output prefix and template side. Default `lh`, `rh` or `bi` from the start of the first run's file name, else `srf`. |
+| `--hemisphere NAME` | `lh`, `rh`, `bi` or `srf`. Inferred from matching FreeSurfer or BIDS names across runs, labels, template and anatomy. CF requires `lh` or `rh`; conflicting names are rejected. |
 | `--no-normalise` | Keeps each run as it is (`samsrf_gii2srf` with normalisation off); default detrend and z-score. |
 | `--concatenate` | Concatenates the runs; default average, with the noise ceiling for two or more runs. |
 | `--shards N` | Splits the vertices over N worker threads, each with its own module. The maps do not depend on N. |
@@ -273,6 +279,34 @@ into a cache under the temporary directory, or reads it from
 argument errors, `self-check` and, with `SAMSRF_WEBAPP_EXAMPLE_DIR`, a short
 sharded `rc` run.
 
+## Comparing with MATLAB
+
+Use the same input bytes, model JSON, normalization, run combination and run
+order. The app sorts selected runs lexically (`1, 10, 11, 2`), as MATLAB's
+`dir` does; the CLI and automation preserve an explicitly supplied order.
+Odd/even run splitting changes the noise ceiling when order changes. Mixed
+hemispheres cannot run and ambiguous folder slots are rejected. Individual
+inputs can be replaced while Run is disabled; Clear inputs starts a new dataset.
+Template, area and
+analysis surface vertex counts must match the functional runs.
+
+The bundled X001 example now contains the original whole-surface functional
+runs. Earlier releases zeroed vertices outside V1–V3: pRF inputs within that
+ROI were unchanged, but CF's global-signal regressor was different. Use the
+current pinned example when comparing CF maps.
+
+Presets follow SamSrf's model scripts except horizontal tuning, which follows
+the GUI `.mod` grid (unscaled Mu). Circular tuning fixes the scale at 1.
+Imported or manually edited JSON grids are preserved when the radius changes.
+Custom HRF kernels can be supplied in JSON; HRF file loading is not exposed by
+the app. Model wrapper scripts can additionally wrap angles or derive aspect
+ratio; this app implements the `SamSrfAnalysis` path without those wrappers.
+
+Run MATLAB in a fresh results directory. Its `src_<Name>.mat` search-space
+cache and `reg_<aperture>.mat` convolved-regressor cache validate dimensions,
+not all input contents and settings. Reusing those files after changing an
+aperture, grid, HRF, TR or scale can silently change the comparison.
+
 ## Building the WebAssembly module
 
 After changing `exes/samsrf/core` or `exes/samsrf/wasm`, rebuild and commit
@@ -300,13 +334,21 @@ example subject with SamSrf's own code run in Octave, and lists every check
 with its result and the native and WebAssembly errfun timings.
 [validation/octave/README.md](validation/octave/README.md) describes how the
 reference is produced.
+[validation/container/README.md](validation/container/README.md) adds actual
+MATLAB Runtime references, a controlled precision comparison and CI gates.
 
 ## Divergences from SamSrf
 
 - **Precision.** Every computation is in f64. SamSrf converts Srf data to
   single precision (`samsrf_32bit_srf`). Its 64-bit opt-out tests
   `exist('SamSrfDefs.defs_64bit', 'var')`, a variable that never exists, so the
-  conversion always happens.
+  conversion always happens. This can change coarse seeds and fine-fit optimizer
+  paths, not just the final rounding. The Octave harness defaults to double; its
+  `SAMSRF_REFERENCE_PRECISION=single` mode retains the upstream conversion.
+  Neither Octave mode establishes equivalence to an actual MATLAB run. A separate
+  compiled MATLAB Runtime probe now matches the web core's Gaussian fine-fit
+  parameters within 2.8e-14 on 20 vertices when observations use the same double
+  precision; the default-single container still differs by up to 0.001318° in y0.
 - **Detrending.** `detrend` solves the centred normal equations, where MATLAB
   uses QR. The two agree to about 1e-14 of the course's scale.
 - **Double gamma.** `samsrf_doublegamma` with more than seven parameters
@@ -329,8 +371,9 @@ reference is produced.
   vector for vertex-wise HRFs.
 - **Correlations and regressions.** `corr` is a dot product of centred,
   unit-norm courses and `[1 X] \ Y` solves the normal equations; MATLAB
-  uses QR. They agree to rounding. A rank-deficient GLM follows MATLAB's
-  pivoting rule and its rank tolerance (`max(m, n) * eps * |R(1,1)|`): a
+  uses QR. Well-conditioned cases agree to rounding; general QR equivalence
+  is not established. The two-column GLM uses centered variance to avoid
+  cancellation when deciding rank, with MATLAB's pivot order and rank tolerance (`max(m, n) * eps * |R(1,1)|`): a
   prediction that is constant, or constant to rounding, leaves the column with
   the larger norm its coefficient and the other 0. Octave's `\` uses no such
   tolerance, so on the example's coarse fit it reports amplitudes near 1e13 on
@@ -339,7 +382,10 @@ reference is produced.
   complex in MATLAB. Apertures that are not binary (X001's are resampled and
   ring to -0.074) make predictions dip to about -1e-6 in a third of the
   volumes, so SamSrf's fit then runs on complex numbers. The port takes those
-  volumes as zero, the response the nonlinearity models.
+  volumes as zero, the response the nonlinearity models. With concurrent HRF
+  fitting, the port uses the CSS `Exponent` for post-fit betas. The pinned
+  upstream `samsrf_fit_prf.m:527` instead uses the final parameter (`AmpRat`),
+  an apparent indexing bug. This correction is intentional and tested.
 - **Maps outside the ROI.** `samsrf_compress_srf` keeps the ROI's columns and
   `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside
   the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected
@@ -357,7 +403,10 @@ reference is produced.
   `polyshape` result SamSrf's own `catch` or `polyshape` produces: a zeroed
   column in `rc`, area 0 and NaN centroid in `cf`. A seed region whose template
   coordinates are all collinear makes `samsrf_revcor_cf` fail in MATLAB; here
-  the cluster is the peak alone.
+  the cluster is the peak alone. Cocircular or nearly cocircular template points
+  can also produce different valid Delaunay edges in Delaunator and MATLAB;
+  CF region growing depends on those edges. Actual MATLAB geometry parity
+  remains unverified.
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so

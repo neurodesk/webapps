@@ -1,10 +1,37 @@
 # SamSrf parity
 
+For actual MATLAB Runtime comparisons, see [the container harness](container/README.md).
+It distinguishes matched-precision fitting, legacy map exports and the residual
+differences from the container's default single precision. The results below
+are the separate Octave baseline.
+
 `parity.mjs` runs `@neurodesk/samsrf` on SamSrf's example subject X001 and
 compares every output with the reference that SamSrf's own `.m` files produced
 in Octave 9.2. It loads the committed WebAssembly module through `src/node.js`.
 [octave/README.md](octave/README.md) describes the Octave harness and each
 reference file. The reference is scratch data and is not committed.
+
+## What this validates
+
+These checks compare against Octave with replacement optimization and geometry
+functions and, by default, an identity shim for `samsrf_32bit_srf`. They do not
+establish parity with default single-precision MATLAB. Fine-fit checks allow up
+to 2% differing vertices and normalize errors by the largest value in the map;
+a passing row does not imply that every vertex agrees. CF summary and Gaussian
+fit modes lack successful upstream references. The numerical regression tests
+also cover scalar HRF arrays, nearly constant full-rank predictions and combined
+CSS/HRF fits; the latter intentionally corrects an upstream post-fit indexing bug.
+See the package README for all retained differences and comparison setup.
+
+On 2026-11-05, the corrected module passed 106/106 low-level checks and retained
+the same 101/111 analysis results below. The original whole-surface example also
+passed CLI/in-process byte equality for all three analyses and the browser's
+processing and download checks. A separate Octave run with the unmodified
+`samsrf_32bit_srf` completed successfully: compared with the double reference,
+maximum absolute differences were 1.19e-7 in averaged courses (1,774,750 finite
+values), 2.98e-8 in noise ceilings (7,013 finite values), 2.51e-6 in the global
+signal and 1.87e-5 after global-signal regression. These measure precision
+sensitivity in preprocessing; they are not MATLAB fit-error bounds.
 
 ## Run
 

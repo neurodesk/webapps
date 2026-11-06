@@ -212,3 +212,42 @@ test("the whole pipeline finds the synthetic cells of a shifted movie and deconv
     assert.ok(cell.deconvolution.s.some((value) => value > 0));
   }
 });
+
+test("a correlation image without contrast (a constant movie) yields no ROIs", () => {
+  const height = 40;
+  const width = 40;
+  const { labels, seeds } = detectRois(new Float32Array(height * width), height, width, { z: 3, diameter: 8 });
+  assert.equal(seeds, 0);
+  assert.equal(labels.reduce((a, b) => Math.max(a, b), 0), 0);
+});
+
+test("a seed just inside the margin is not suppressed by brighter pixels in the border band", () => {
+  const height = 20;
+  const width = 20;
+  const image = new Float32Array(height * width);
+  // A bright replicated border column at x = 1 (inside the 3-pixel margin), a cell at x = 4.
+  for (let y = 0; y < height; y++) image[y * width + 1] = 1;
+  image[10 * width + 4] = 0.5;
+  const seeds = findSeeds(image, height, width, { threshold: 0.2, radius: 4, margin: 3 });
+  assert.deepEqual(seeds.map(({ y, x }) => [y, x]), [[10, 4]]);
+});
+
+test("with neuropil subtraction off, an ROI without a neuropil ring keeps its trace", () => {
+  const F = Float64Array.from({ length: 50 }, (_, t) => 100 + (t % 10));
+  const Fneu = new Float64Array(50).fill(Number.NaN);
+  const { dff } = deltaFOverF(F, Fneu, { coefficient: 0, window: 20 });
+  assert.ok(dff.every(Number.isFinite));
+});
+
+test("a constant background over most of the image does not hide an active cell", () => {
+  const height = 40;
+  const width = 40;
+  const image = new Float32Array(height * width);
+  // A correlated 6 × 6 cell on a zero background: the median absolute deviation is 0.
+  for (let y = 17; y < 23; y++) for (let x = 17; x < 23; x++) image[y * width + x] = 0.95;
+  image[20 * width + 20] = 0.9999;
+  const { labels, seeds } = detectRois(image, height, width, { z: 3, diameter: 6 });
+  assert.equal(seeds, 1);
+  assert.equal(labels[20 * width + 20], 1);
+  assert.equal(labels[0], 0);
+});

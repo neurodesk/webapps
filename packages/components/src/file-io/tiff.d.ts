@@ -2,6 +2,8 @@ export type TiffSampleArray = Uint8Array | Uint16Array | Uint32Array | Int8Array
 
 export interface TiffStackMetadata {
   kind: 'ome' | 'imagej' | 'baseline';
+  /** ImageJ only: a stack without `hyperstack=true` or `frames=`, whose pages may be z or t. */
+  unlabelledStack?: boolean;
   images: number;
   dimensionOrder?: string | null;
   sizeC: number;

@@ -16,13 +16,16 @@ export async function mountAppShell({
   version = '1.2.3',
   sourceHref = `https://github.com/neurodesk/webapps/tree/main/apps/${appId}`,
   url = `https://webapps.neurodesk.org/${appId}/`,
+  brandName,
+  moreAppsLabel,
 }) {
+  const brand = `${brandName ? ` data-brand-name="${brandName}"` : ''}${moreAppsLabel ? ` data-more-apps-label="${moreAppsLabel}"` : ''}`;
   const informationScript = information
     ? `<script type="application/json" data-neurodesk-app-information>${JSON.stringify(information)}</script>`
     : '';
   const html = `<!doctype html><html data-neurodesk-app="${appId}" data-neurodesk-shell="imaging-workspace" data-neurodesk-theme="dark"><head>
     ${informationScript}
-    <script type="module" src="./app-shell.js" data-neurodesk-app-shell data-app-id="${appId}" data-app-shell="imaging-workspace" data-app-title="${title}" data-app-description="${description}" data-app-version="${version}" data-ga4-measurement-id="G-TEST" data-analytics-href="./analytics.js" data-more-apps-href="../" data-source-href="${sourceHref}"></script>
+    <script type="module" src="./app-shell.js" data-neurodesk-app-shell data-app-id="${appId}" data-app-shell="imaging-workspace" data-app-title="${title}" data-app-description="${description}" data-app-version="${version}" data-ga4-measurement-id="G-TEST" data-analytics-href="./analytics.js" data-more-apps-href="../" data-source-href="${sourceHref}"${brand}></script>
     </head><body>${bodyHtml}</body></html>`;
   const dom = new JSDOM(html, { url, pretendToBeVisual: true });
   const { window } = dom;
