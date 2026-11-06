@@ -70,6 +70,7 @@ const REQUIRED_METHODS = {
   elastix: ['10.1109/TMI.2009.2035616', '10.3389/fninf.2013.00050', '10.1038/s41592-021-01326-w', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   brainqcnet: ['10.1162/imag_a_00300', 'github.com/cfchen-duke/ProtoPNet', '10.1109/CVPR.2016.90', '10.1038/s41597-022-01694-8', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   bison: ['10.1002/mrm.28547', '10.1016/j.neuroimage.2017.06.009', '10.1016/j.neuroimage.2010.07.033', '10.1016/S1053-8119(09)70884-5', 'sites.google.com/view/greedyreg/about', '10.1109/TMI.2010.2046908', '10.1002/jmri.22003', '10.52294/001c.94384', '10.18112/openneuro.ds007522.v2.0.1', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  gliomoda: ['10.1101/2025.11.12.25339968', '10.48550/arXiv.2507.09036', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01560-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {

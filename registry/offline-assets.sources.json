@@ -7093,6 +7093,120 @@
         "kind": "example",
         "license": "CC-BY-4.0"
       }
+    ],
+    "gliomoda": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T1GD.nii.gz",
+        "sha256": "462062c55658b10cd28d50a8e09c76704ff6c3b33d69c234db4953c1ec6f87a0",
+        "bytes": 2151118,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_FLAIR.nii.gz",
+        "sha256": "43317039045422dc9005c494dbce3ed8e2fc147fc5768521f7b0e879a4f301f1",
+        "bytes": 1900090,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T1.nii.gz",
+        "sha256": "725cc586cc5e397e012ff563719382ae45ba98a67cc690f38429954d4aadd134",
+        "bytes": 2054596,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T2.nii.gz",
+        "sha256": "d38f1b5912c36b12a81dbfcb45044e802d7daafd5ffd3198137d683880ae6988",
+        "bytes": 1775300,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t2f-t1n-t2w.onnx",
+        "sha256": "eaf3f803cd9267cd39dee067bd17463ae742252c25c9b39c2b7e68d060535943",
+        "bytes": 62467807,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t2f-t1n-t2w_ResEncL.onnx",
+        "sha256": "69dfb12296c020abc92b08cd35067e66a990d2dd18fd1e4aae1dc60fa2ad4b0a",
+        "bytes": 204895126,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c.onnx",
+        "sha256": "6f3e31e648c534eeaec4c2a00353d78f5c5b2230ea88e7686e8a8801d4d28c2f",
+        "bytes": 61642436,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2f.onnx",
+        "sha256": "f32dcd451fd9de914ea13297ffaf8807c9183fce26296ccd91eb56120a83103a",
+        "bytes": 61642436,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2w.onnx",
+        "sha256": "df530622f6352cb0dc5aa7051a9568f4b5a305d41583016068d4cebae7a063f0",
+        "bytes": 61642436,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t1n.onnx",
+        "sha256": "5bf91370032191f712dea6a2e0cc89d2fe3db4fd678d0f567934cbc3fbdc0525",
+        "bytes": 61642589,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t2f.onnx",
+        "sha256": "3e5c4c9526a70bd3295c1920f6891c2eb33a71df4dc79c5f81918602cc76f183",
+        "bytes": 62464351,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t2w.onnx",
+        "sha256": "36789de5fcc0f48e90cb88e9216a039459a8cb4b038e3b670f588796baf09bf3",
+        "bytes": 61642589,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2f-t1n.onnx",
+        "sha256": "fced45d1a9ab006ddf137fccefcf60775d41f4513eb2e475727406fb14da7c7a",
+        "bytes": 61642589,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2f-t2w.onnx",
+        "sha256": "3c53153f17549565ad64179360edd6ff20d38f656b6080359f455d17cbdcba58",
+        "bytes": 61642589,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t1n-t2w.onnx",
+        "sha256": "e4783ae914cc582203b4482586d58adf1c40b1bfa2f4958148ccacaeaeed2e20",
+        "bytes": 61644317,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2f-t1n-t2w.onnx",
+        "sha256": "6a709bb1161f8cd5c3aa848fbb75bd034ab6b8f20c3c2673b8554bcb995882ff",
+        "bytes": 61644317,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      }
     ]
   },
   "exclusions": [],

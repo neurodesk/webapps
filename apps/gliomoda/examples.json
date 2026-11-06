@@ -1,0 +1,38 @@
+[
+  {
+    "id": "upenn-gbm-00002",
+    "label": "Glioblastoma, four sequences (UPENN-GBM)",
+    "description": "Pre-operative T1c, FLAIR, T1 and T2 of a glioblastoma, skull-stripped on the SRI24 grid (UPENN-GBM-00002, TCIA, CC BY 4.0).",
+    "expectedResult": "A BraTS label map with necrotic core, oedema and enhancing tumour around the lesion, and a volume table.",
+    "files": [
+      {
+        "role": "t1c",
+        "name": "UPENN-GBM-00002_11_T1GD.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T1GD.nii.gz",
+        "sha256": "462062c55658b10cd28d50a8e09c76704ff6c3b33d69c234db4953c1ec6f87a0",
+        "bytes": 2151118
+      },
+      {
+        "role": "t2f",
+        "name": "UPENN-GBM-00002_11_FLAIR.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_FLAIR.nii.gz",
+        "sha256": "43317039045422dc9005c494dbce3ed8e2fc147fc5768521f7b0e879a4f301f1",
+        "bytes": 1900090
+      },
+      {
+        "role": "t1n",
+        "name": "UPENN-GBM-00002_11_T1.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T1.nii.gz",
+        "sha256": "725cc586cc5e397e012ff563719382ae45ba98a67cc690f38429954d4aadd134",
+        "bytes": 2054596
+      },
+      {
+        "role": "t2w",
+        "name": "UPENN-GBM-00002_11_T2.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T2.nii.gz",
+        "sha256": "d38f1b5912c36b12a81dbfcb45044e802d7daafd5ffd3198137d683880ae6988",
+        "bytes": 1775300
+      }
+    ]
+  }
+]

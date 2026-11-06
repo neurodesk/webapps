@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GlioMODA — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input images</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose up to four NIfTI images of one case" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop the T1c, FLAIR, T1 and T2 NIfTI images</span>
+          </label>
+          <p class="nd-hint">Skull-stripped, on the 240 × 240 × 155 BraTS/SRI24 grid.
+            <span class="nd-info-icon" tabindex="0" aria-label="About the input grid">i<span class="nd-info-tooltip">GlioMODA was trained on BraTS images: co-registered, skull-stripped and resampled to the SRI24 atlas at 1 mm. BrainLesion's preprocessing package or the BraTS orchestrator produce them. GlioMODA has models for 11 combinations of the four sequences; the sidebar names the one it will use.</span></span>
+          </p>
+          <div id="sequenceFields" hidden></div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Tumour segmentation</summary>
+        <div class="nd-section-content">
+          <p id="modelHint" class="nd-hint">Load at least one of T1c, FLAIR, T1 or T2.</p>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <label class="nd-check"><input id="mirror" type="checkbox" checked /> Mirroring
+                <span class="nd-info-icon" tabindex="0" aria-label="About mirroring">i<span class="nd-info-tooltip">Like nnU-Net and the GlioMODA container, the network also runs on the 7 mirrored copies of each patch and averages them. Turning it off is 8 times faster and may change edge voxels.</span></span>
+              </label>
+              <label class="nd-check"><input id="resEncL" type="checkbox" disabled /> ResEncL model
+                <span class="nd-info-icon" tabindex="0" aria-label="About the ResEncL model">i<span class="nd-info-tooltip">GlioMODA's larger residual-encoder network, for all four sequences only. It downloads 200 MB instead of 62 MB and runs several times longer.</span></span>
+              </label>
+              <div class="nd-field">
+                <label for="backend">Processing</label>
+                <select id="backend">
+                  <option value="auto">Automatic</option>
+                  <option value="wasm">CPU</option>
+                </select>
+                <p class="nd-hint">Automatic uses the GPU through WebGPU when available.</p>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Segment tumour</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="labelLegend" aria-label="Tumour labels and volumes" hidden></div>
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a case's images anywhere, or choose an example.</p>
+        <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent">
+      <p>Images are processed locally in this browser and are never uploaded. The GlioMODA model is downloaded from Hugging Face, checked against its pinned checksum and cached in this browser.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
