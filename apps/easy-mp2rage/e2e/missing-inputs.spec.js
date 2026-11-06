@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
 for (const width of [1440, 390]) {
-  test(`missing inputs are visible and update at ${width}px`, async ({ page }) => {
+  test(`missing inputs are visible and update at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     const run = page.locator('#run');
@@ -13,7 +13,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator('#statusText')).toHaveText('Load UNI, SA2RAGE or B1 map to continue.');
     await run.scrollIntoViewIfNeeded();
     expect(await run.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    await page.screenshot({ path: `${process.env.TMPDIR}/mp2rage-missing-${width}.png` });
+    await page.screenshot({ path: testInfo.outputPath('missing-inputs.png') });
     await page.locator('#taskSel').selectOption('denoise');
     await expect(run).toHaveText('Missing: UNI, INV1');
     await page.locator('#file').setInputFiles(fileURLToPath(new URL('../tools/phantom/phantom_UNI.nii.gz', import.meta.url)));
