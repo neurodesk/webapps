@@ -61,8 +61,14 @@ site:
       title: Lesion Mapping
       description: Place lesions in a standard space and find the regions, networks and tracts they affect.
     - id: quantitative-mri
-      title: Quantitative MRI & Spectroscopy
-      description: Compute physical maps, flow curves and metabolite concentrations.
+      title: Quantitative MRI
+      description: Compute quantitative tissue maps and measure blood flow.
+    - id: spectroscopy
+      title: Spectroscopy
+      description: Estimate metabolite concentrations from MR spectra.
+    - id: functional-imaging
+      title: Functional Imaging
+      description: Map brain function and prepare functional MRI.
     - id: diffusion-imaging
       title: Diffusion & Tractography
       description: Fit diffusion models and reconstruct white-matter pathways.
@@ -70,14 +76,26 @@ site:
       title: Registration & Normalization
       description: Align images with each other or with a standard template.
     - id: reconstruction
-      title: Reconstruction & Synthesis
+      title: Super-resolution & Synthesis
       description: Build new images from motion-corrupted stacks or scans of another contrast.
+    - id: fetal-imaging
+      title: Fetal Imaging
+      description: Reconstruct fetal brain images from MRI stacks.
     - id: surfaces
       title: Surfaces & Meshes
       description: Reconstruct, annotate and 3D-print cortical surfaces and brain meshes.
-    - id: image-processing
-      title: Processing & Privacy
-      description: Apply image maths, extract the brain and remove identifying facial features.
+    - id: preprocessing
+      title: Preprocessing
+      description: Prepare images with correction, denoising, brain extraction and image maths.
+    - id: conversion
+      title: Conversion
+      description: Convert scanner DICOM files to NIfTI and BIDS datasets.
+    - id: privacy
+      title: Privacy
+      description: Remove identifying facial features from images before sharing.
+    - id: microscopy
+      title: Microscopy
+      description: Explore microscopy images, segment cells and analyse calcium signals.
     - id: visualization
       title: Visualization
       description: Explore large volumes and surfaces and make slice videos.
@@ -85,8 +103,8 @@ site:
       title: Quality Control
       description: Check image quality and compare acquisition protocols.
     - id: pipelines
-      title: Pipelines
-      description: Chain the apps into workflows to run on the desktop suite.
+      title: Workflows
+      description: Run preprocessing pipelines or compose workflows for the desktop suite.
 
 apps:
   - id: musclemap
@@ -280,7 +298,7 @@ apps:
     catalog: neuro
     title: Deface
     description: Remove facial features from head MRI for sharing.
-    categories: [image-processing]
+    categories: [privacy]
     keywords: [defacing, anonymisation, anonymization, de-identification, privacy, data sharing, MindGrab]
     anatomy: [brain]
     modalities: [mri]
@@ -331,7 +349,7 @@ apps:
     catalog: neuro
     title: NiiMath
     description: Apply image maths, filters and meshing with niimath.
-    categories: [image-processing]
+    categories: [preprocessing]
     keywords: [image maths, fslmaths, filtering, thresholding, smoothing, statistics, mesh, niimath]
     anatomy: [any]
     modalities: [mri, ct]
@@ -435,7 +453,7 @@ apps:
     catalog: microscopy
     title: ZARRo
     description: Stream, view and measure large OME-Zarr images.
-    categories: [visualization]
+    categories: [visualization, microscopy]
     keywords: [OME-Zarr, Zarr, microscopy, DANDI, multiscale, streaming, measurement, large volumes]
     anatomy: [any]
     modalities: [microscopy]
@@ -750,7 +768,7 @@ apps:
     catalog: neuro
     title: Brain extraction
     description: Remove the skull with BET, MindGrab or SynthStrip.
-    categories: [segmentation, image-processing]
+    categories: [segmentation, preprocessing]
     keywords: [skull stripping, brain extraction, brain mask, BET, MindGrab, SynthStrip]
     anatomy: [brain]
     modalities: [mri]
@@ -802,7 +820,7 @@ apps:
     catalog: neuro
     title: LCModel
     description: Measure brain metabolites from single-voxel MRS.
-    categories: [quantitative-mri]
+    categories: [spectroscopy]
     keywords: [MRS, spectroscopy, metabolites, LCModel, FID-A, MEGA-PRESS, GABA, NAA, basis set, twix, SPAR/SDAT, P-file]
     anatomy: [brain]
     modalities: [mrs]
@@ -828,7 +846,7 @@ apps:
     catalog: neuro
     title: White matter lesions
     description: Segment white matter lesions on FLAIR with FLAMeS.
-    categories: [segmentation, lesion-mapping]
+    categories: [segmentation]
     keywords: [FLAIR, white matter hyperintensities, WMH, multiple sclerosis, small vessel disease, lesion segmentation, FLAMeS, nnU-Net]
     anatomy: [brain]
     modalities: [mri]
@@ -854,7 +872,7 @@ apps:
     catalog: neuro
     title: NeSVoR
     description: Reconstruct a 3D fetal or neonatal brain from 2D MRI stacks.
-    categories: [reconstruction]
+    categories: [reconstruction, fetal-imaging]
     keywords: [fetal MRI, neonatal, slice-to-volume reconstruction, motion correction, super-resolution, SVoRT, NeSVoR]
     anatomy: [brain]
     modalities: [mri]
@@ -932,7 +950,7 @@ apps:
     catalog: neuro
     title: fastprep
     description: Preprocess fMRI BOLD runs in the style of fMRIPrep.
-    categories: [image-processing, pipelines]
+    categories: [preprocessing, functional-imaging, pipelines]
     keywords: [fMRI, functional MRI, BOLD, preprocessing, fMRIPrep, BIDS, motion correction, distortion correction, task activation, GLM]
     anatomy: [brain]
     modalities: [mri]
@@ -986,7 +1004,7 @@ apps:
     catalog: neuro
     title: Degibbs
     description: Remove Gibbs ringing from MRI scans.
-    categories: [image-processing, diffusion-imaging]
+    categories: [preprocessing, diffusion-imaging]
     keywords: [Gibbs ringing, mrdegibbs, MRtrix, diffusion MRI, preprocessing, WebAssembly]
     anatomy: [any]
     modalities: [mri]
@@ -1012,7 +1030,7 @@ apps:
     catalog: neuro
     title: N4
     description: Correct intensity bias fields in MRI scans.
-    categories: [image-processing, diffusion-imaging]
+    categories: [preprocessing]
     keywords: [bias field, N4, ANTs, dwibiascorrect, diffusion MRI, preprocessing, WebAssembly]
     anatomy: [any]
     modalities: [mri]
@@ -1038,7 +1056,7 @@ apps:
     catalog: neuro
     title: dcm2niix
     description: Convert scanner DICOM exports to anatomical and DWI BIDS.
-    categories: [image-processing]
+    categories: [conversion]
     keywords: [DICOM, NIfTI, BIDS, MRI, diffusion, conversion, dcm2niix]
     anatomy: [any]
     modalities: [mri]
@@ -1064,7 +1082,7 @@ apps:
     catalog: neuro
     title: Dwidenoise
     description: Denoise diffusion MRI with Patch2Self.
-    categories: [image-processing, diffusion-imaging]
+    categories: [preprocessing, diffusion-imaging]
     keywords: [denoising, Patch2Self, DIPY, diffusion MRI, preprocessing, WebAssembly]
     anatomy: [brain]
     modalities: [mri]
@@ -1089,7 +1107,7 @@ apps:
     catalog: neuro
     title: SDC
     description: Distortion correction from reverse-PE b0 or a T1w.
-    categories: [diffusion-imaging]
+    categories: [diffusion-imaging, preprocessing]
     keywords: [susceptibility distortion, topup, PyHySCO, reverse phase-encoding, SyN-SDC, sdcflows, fieldmap-less, diffusion MRI, field map, WebAssembly]
     anatomy: [brain]
     modalities: [mri]
@@ -1118,7 +1136,7 @@ apps:
     catalog: neuro
     title: ME-ICA
     description: Multi-echo fMRI denoising with tedana's ME-ICA.
-    categories: [image-processing]
+    categories: [preprocessing, functional-imaging]
     keywords: [multi-echo, fMRI, denoising, ICA, tedana, T2*, BOLD]
     anatomy: [brain]
     modalities: [mri]
@@ -1144,7 +1162,7 @@ apps:
     catalog: neuro
     title: DWI Correct
     description: Correct motion, eddy currents and distortion in DWI.
-    categories: [diffusion-imaging]
+    categories: [diffusion-imaging, preprocessing]
     keywords: [motion correction, eddy currents, susceptibility distortion, outlier replacement, slice-to-volume, topup, eddy, diffusion MRI, WebAssembly]
     anatomy: [brain]
     modalities: [mri]
@@ -1196,7 +1214,7 @@ apps:
     catalog: neuro
     title: HMC
     description: DWI head-motion correction with GP or b0-template targets.
-    categories: [image-processing]
+    categories: [preprocessing, diffusion-imaging]
     keywords: [diffusion, motion, registration]
     anatomy: [brain]
     modalities: [mri]
@@ -1223,7 +1241,7 @@ apps:
     catalog: neuro
     title: BISON tissue segmentation
     description: Segment brain tissue from a T1, and WMH with a FLAIR.
-    categories: [segmentation, lesion-mapping]
+    categories: [segmentation]
     keywords: [BISON, BISON-WMH, tissue segmentation, brain volumes, white matter hyperintensities, WMH, T1, FLAIR, random forest, ICBM 2009c]
     anatomy: [brain]
     modalities: [mri]
@@ -1249,7 +1267,7 @@ apps:
     catalog: neuro
     title: ANTs DenoiseImage
     description: Reduce noise in 3D MRI with ANTs adaptive non-local means.
-    categories: [image-processing]
+    categories: [preprocessing]
     keywords: [denoising, non-local means, DenoiseImage, ANTs, Rician noise, MRI, preprocessing, WebAssembly]
     anatomy: [brain]
     modalities: [mri]
@@ -1300,7 +1318,7 @@ apps:
     catalog: neuro
     title: ReproIn
     description: ReproIn DICOM to BIDS, on-device.
-    categories: [image-processing]
+    categories: [conversion]
     keywords: [dicom, bids, reproin, heudiconv, dcm2niix]
     anatomy: [any]
     modalities: [mri]
@@ -1326,7 +1344,7 @@ apps:
     catalog: neuro
     title: SamSrf
     description: Map population receptive fields on the cortex.
-    categories: [surfaces, quantitative-mri]
+    categories: [functional-imaging]
     keywords: [pRF, retinotopy, population receptive field, connective field, visual cortex, reverse correlation, SamSrf, GIfTI]
     anatomy: [brain]
     modalities: [mri, surface]
@@ -1352,7 +1370,7 @@ apps:
     catalog: neuro
     title: Brainchop
     description: Whole brain MRI tissue and atlas segmentation.
-    categories: [image-processing]
+    categories: [segmentation]
     keywords: [brain, segmentation, brainchop]
     anatomy: [brain]
     modalities: [mri]
@@ -1378,7 +1396,7 @@ apps:
     catalog: microscopy
     title: StarDist
     description: Segment cell nuclei in 2D fluorescence microscopy.
-    categories: [segmentation]
+    categories: [microscopy]
     keywords: [StarDist, nucleus segmentation, nuclei, cell segmentation, instance segmentation, star-convex polygons, fluorescence microscopy, DAPI, OME-TIFF, deep learning]
     anatomy: [any]
     modalities: [microscopy]
@@ -1404,7 +1422,7 @@ apps:
     path: calcium-imaging
     title: Calcium imaging
     description: Two-photon motion correction, ROIs, ΔF/F and spikes
-    categories: [image-processing]
+    categories: [microscopy]
     keywords: [calcium imaging, two-photon, 2P, GCaMP, motion correction, registration, NoRMCorre, piecewise rigid, correlation image, ROI, neuropil, dF/F, OASIS, spike deconvolution, OME-TIFF, microscopy]
     anatomy: [brain]
     modalities: [microscopy]

@@ -103,21 +103,27 @@ NeSVoR, SynthSR, MRI2VID, DICOM View, White matter lesions) it is kept.
 
 ### Categories
 
-Ten categories, each with at least two apps. Ids changed only where the meaning
-changed.
+Categories may contain a single app. Cross-list substantial tasks and scientific domains; input formats alone do not justify membership.
 
-| Id | Title | Apps (secondary in italics) |
+| Id | Title | Apps |
 | --- | --- | --- |
-| segmentation | Segmentation | MuscleMap, VesselBoost, Spinal Cord Toolbox, SeedSeg, SynthSeg, Brain extraction, White matter lesions |
-| lesion-mapping | Lesion Mapping | CALMaR, *SYNcro*, Disconnectome, *White matter lesions* |
-| quantitative-mri | Quantitative MRI & Spectroscopy | QSMbly, Easy MP2RAGE T1 Map, Carotid Flow, LCModel |
-| diffusion-imaging | Diffusion & Tractography | dwi2trx, *Disconnectome*, NODDI, *Degibbs*, *N4*, *Dwidenoise* |
+| segmentation | Segmentation | MuscleMap, VesselBoost, Spinal Cord Toolbox, SeedSeg, SynthSeg, Brain extraction, White matter lesions, BISON tissue segmentation, Brainchop |
+| lesion-mapping | Lesion Mapping | CALMaR, SYNcro, Disconnectome |
+| quantitative-mri | Quantitative MRI | QSMbly, Easy MP2RAGE T1 Map, Carotid Flow |
+| diffusion-imaging | Diffusion & Tractography | dwi2trx, Disconnectome, NODDI, Degibbs, Dwidenoise, SDC, DWI Correct, HMC |
 | registration | Registration & Normalization | SYNcro, EdgeReg, Greedy, ANTs, FireANTs, elastix |
-| reconstruction | Reconstruction & Synthesis | SynthSR, NeSVoR |
+| reconstruction | Super-resolution & Synthesis | SynthSR, NeSVoR |
 | surfaces | Surfaces & Meshes | SurfAnnotate, Brain2Print, TopoFit |
-| image-processing | Processing & Privacy | Deface, NiiMath, *Brain extraction*, fastprep, Degibbs, N4, DICOM to BIDS, Dwidenoise |
-| visualization | Visualization | MRI2VID, *SurfAnnotate*, ZARRo, DICOM View |
-| quality-control | Quality Control | dicompare, BrowserQC, *DICOM View* |
+| preprocessing | Preprocessing | NiiMath, Brain extraction, fastprep, Degibbs, N4, Dwidenoise, SDC, ME-ICA, DWI Correct, HMC, ANTs DenoiseImage |
+| visualization | Visualization | MRI2VID, SurfAnnotate, ZARRo, DICOM View |
+| quality-control | Quality Control | dicompare, BrowserQC, DICOM View, BrainQCNet |
+| pipelines | Workflows | fastprep, Pipeline builder |
+| functional-imaging | Functional Imaging | fastprep, ME-ICA, SamSrf |
+| spectroscopy | Spectroscopy | LCModel |
+| fetal-imaging | Fetal Imaging | NeSVoR |
+| privacy | Privacy | Deface |
+| conversion | Conversion | dcm2niix, ReproIn |
+| microscopy | Microscopy | ZARRo, StarDist, Calcium imaging |
 
 ### Facets
 

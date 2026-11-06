@@ -190,20 +190,38 @@ test('catalog assigns task categories and shares apps across related categories'
   const registry = await loadAppsRegistry();
   const expected = {
     dwi2trx: ['diffusion-imaging'],
-    niimath: ['image-processing'],
+    niimath: ['preprocessing'],
     syncro: ['registration', 'lesion-mapping'],
     disconnectome: ['lesion-mapping', 'diffusion-imaging'],
     mri2vid: ['visualization'],
     surfannotate: ['surfaces', 'visualization'],
     topofit: ['surfaces'],
-    lcmodel: ['quantitative-mri'],
+    samsrf: ['functional-imaging'],
+    lcmodel: ['spectroscopy'],
+    n4: ['preprocessing'],
+    nesvor: ['reconstruction', 'fetal-imaging'],
+    deface: ['privacy'],
+    brainchop: ['segmentation'],
+    dcm2niix: ['conversion'],
+    reproin: ['conversion'],
+    'calcium-imaging': ['microscopy'],
+    stardist: ['microscopy'],
+    zarro: ['visualization', 'microscopy'],
+    fastprep: ['preprocessing', 'functional-imaging', 'pipelines'],
+    'me-ica': ['preprocessing', 'functional-imaging'],
+    hmc: ['preprocessing', 'diffusion-imaging'],
+    sdc: ['diffusion-imaging', 'preprocessing'],
+    dwicorrect: ['diffusion-imaging', 'preprocessing'],
+    bison: ['segmentation'],
+    'white-matter-lesions': ['segmentation'],
+    degibbs: ['preprocessing', 'diffusion-imaging'],
   };
   for (const [id, categories] of Object.entries(expected)) {
     assert.deepEqual(registry.apps.find((app) => app.id === id).categories, categories);
   }
   for (const category of registry.site.categories) {
     const count = registry.apps.filter((app) => app.categories.includes(category.id)).length;
-    assert.ok(count >= 2, `${category.id} must hold at least two apps`);
+    assert.ok(count >= 1, `${category.id} must hold at least one app`);
   }
 });
 
