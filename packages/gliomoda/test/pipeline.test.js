@@ -163,3 +163,26 @@ test('the case name is the inputs’ shared stem', () => {
   assert.equal(caseName(['TCGA-DU-7294_t1c.nii.gz']), 'TCGA-DU-7294_t1c');
   assert.equal(caseName(['t1c.nii.gz', 'flair.nii.gz']), 'gliomoda');
 });
+
+test('segmentation refuses translated and reflected modalities before inference', async () => {
+  for (const alter of [
+    (a) => { a[0][3] += 100; },
+    (a) => { a[0][0] *= -1; },
+  ]) {
+    const shifted = structuredClone(atlasAffine);
+    alter(shifted);
+    const volume = { dims: [240, 240, 155], affine: atlasAffine };
+    await assert.rejects(segmentGlioma({
+      volumes: { t1c: volume, t2f: { ...volume, affine: shifted } },
+      model: { id: 't1c-t2f', channels: ['t1c', 't2f'] },
+      runPatch() { assert.fail('must not infer on misaligned channels'); },
+    }), /T2F image is not aligned with T1C/);
+  }
+});
+
+test('atlas grids reject non-finite and degenerate spatial transforms', () => {
+  for (const affine of [
+    [[NaN, 0, 0, 0], ...atlasAffine.slice(1)],
+    [[1, 1, 0, 0], [0, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+  ]) assert.throws(() => checkAtlasGrid('t2f', { dims: [240, 240, 155], affine }), /spatial transform/);
+});

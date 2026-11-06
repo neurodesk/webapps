@@ -34,6 +34,14 @@ export function checkAtlasGrid(role, volume) {
   if (volume.dims.some((n, a) => n !== ATLAS_DIMS[a])) {
     throw new Error(`The ${role.toUpperCase()} image is ${dims} voxels. GlioMODA needs skull-stripped images on the BraTS/SRI24 atlas grid, 240 × 240 × 155 at 1 mm.`);
   }
+  const a = volume.affine;
+  if (!a || a.length !== 4 || a.some((row) => row.length !== 4 || Array.from(row).some((value) => !Number.isFinite(value)))) {
+    throw new Error(`The ${role.toUpperCase()} image has an invalid spatial transform.`);
+  }
+  const determinant = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+    - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+    + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+  if (Math.abs(determinant) < 1e-6) throw new Error(`The ${role.toUpperCase()} image has a degenerate spatial transform.`);
   const spacing = [0, 1, 2].map((a) => Math.hypot(volume.affine[0][a], volume.affine[1][a], volume.affine[2][a]));
   if (spacing.some((s) => Math.abs(s - 1) > 1e-3)) {
     throw new Error(`The ${role.toUpperCase()} image has ${spacing.map((s) => s.toFixed(2)).join(' × ')} mm voxels. GlioMODA needs the 1 mm BraTS/SRI24 atlas grid.`);
@@ -353,6 +361,13 @@ export async function segmentGlioma({ volumes, model, runPatch, mirror = true, o
   for (const role of roles) {
     if (!volumes[role]) throw new Error(`The ${model.id} model needs a ${role.toUpperCase()} image.`);
     checkAtlasGrid(role, volumes[role]);
+  }
+  const reference = volumes[roles[0]].affine;
+  for (const role of roles.slice(1)) {
+    // NIfTI float32 header rounding is tolerated; displaced or reoriented grids are not.
+    if (volumes[role].affine.some((row, i) => Array.from(row).some((value, j) => Math.abs(value - reference[i][j]) > 1e-5))) {
+      throw new Error(`The ${role.toUpperCase()} image is not aligned with ${roles[0].toUpperCase()}. Register all sequences to the same atlas grid before segmentation.`);
+    }
   }
   const dims = volumes[roles[0]].dims;
   const shape = [dims[2], dims[1], dims[0]];
