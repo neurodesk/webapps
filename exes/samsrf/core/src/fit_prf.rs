@@ -406,7 +406,7 @@ pub fn fit_betas(x: &[f64], y: &[f64]) -> (f64, f64) {
     let (r11, r22) = if ones_first {
         (n.sqrt(), sxx.max(0.0).sqrt())
     } else {
-        (sxx_raw.sqrt(), (n - sx * sx / sxx_raw).max(0.0).sqrt())
+        (sxx_raw.sqrt(), (n * (sxx / sxx_raw)).sqrt())
     };
     if r22 <= tolerance * r11 {
         return if ones_first { (0.0, mean_y) } else { (sxy_raw / sxx_raw, 0.0) };
@@ -438,6 +438,15 @@ pub fn normr2(maps: &mut crate::mapset::Maps, known: &[bool]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parity_glm_preserves_small_full_rank_variation() {
+        let x: Vec<f64> = (0..64).map(|i| 100.0 * (1.0 + 1e-9 * ((i % 4) as f64 - 1.5))).collect();
+        let y: Vec<f64> = x.iter().map(|v| 2.0 * v - 197.0).collect();
+        let (amplitude, baseline) = fit_betas(&x, &y);
+        assert!((amplitude - 2.0).abs() < 1e-6, "amplitude {amplitude}");
+        assert!((baseline + 197.0).abs() < 1e-4, "baseline {baseline}");
+    }
 
     #[test]
     fn prctile_matches_matlab() {

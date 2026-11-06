@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/samsrf",
-  "version": "0.1.20261104",
+  "version": "0.1.20261106",
   "description": "Population receptive field and connective field mapping (a port of SamSrf) for browsers and the command line, one WebAssembly binary for both",
   "type": "module",
   "license": "BSD-3-Clause",
@@ -14,6 +14,7 @@
   "exports": {
     ".": "./src/index.js",
     "./node": "./src/node.js",
+    "./inputs": "./src/inputs.js",
     "./wasm": "./wasm/samsrf_wasm.js",
     "./package.json": "./package.json"
   },

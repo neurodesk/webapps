@@ -23,6 +23,7 @@ import {
   HRF_OPTIONS,
   PRESETS,
   buildModel,
+  changeScalingFactor,
   fineFit,
   hrfModel,
   hrfValue,
@@ -32,6 +33,7 @@ import {
   withInputNames,
 } from "./models.js";
 import { describeSurfaces, displaySurface, emptyInputs, mergeInputs, missingInputs, sortFiles } from "./inputs.js";
+import { compareRunNames } from "@neurodesk/samsrf/inputs";
 import { countShown, encodeOverlay, hemisphereOf, mapKind, mapLabel, mapOrder, mapStyle } from "./display.js";
 import examples from "../examples.json";
 
@@ -104,8 +106,11 @@ function status(message, { error = false, channel = "technical" } = {}) {
 
 /** @type {import('./inputs.js').Inputs} */
 let inputs = emptyInputs();
+let inputGeneration = 0;
 /** @type {Record<string, unknown>} */
 let model = buildModel("example-gaussian");
+let modelFromPreset = true;
+let editableScalingFactor = DEFAULT_SETTINGS.scalingFactor;
 /** The finished analysis: its maps by name, its files, and the map on screen. */
 let result = null;
 /** The load or run in progress, cancelled by the status bar's ×. */
@@ -154,16 +159,18 @@ function renderInputs() {
 }
 
 /** Replace the slots the files fill. A whole folder fills them all. */
-async function addFiles(filesPromise, only) {
+async function addFiles(filesPromise, only, generation = inputGeneration) {
   const files = await filesPromise;
+  if (generation !== inputGeneration) return;
   const { filled, ignored } = sortFiles(files);
   if (only === "surfaces") {
     for (const slot of Object.keys(filled)) if (slot !== "surfaces") ignored.push(...[filled[slot]].flat().map((file) => file.name));
     await setInputs(mergeInputs(inputs, { surfaces: filled.surfaces ?? {} }));
   } else if (only) {
-    await setInputs(mergeInputs(inputs, { [only]: only === "runs" ? files : files[0] }));
+    await setInputs(mergeInputs(inputs, { [only]: only === "runs" ? [...files].sort(compareRunNames) : files[0] }));
   } else {
-    if (filled.model) await loadModelFile(filled.model);
+    if (filled.model) await loadModelFile(filled.model, generation);
+    if (generation !== inputGeneration) return;
     await setInputs(mergeInputs(inputs, filled));
   }
   if (ignored.length) status(`Not used: ${ignored.join(", ")}`, { error: true });
@@ -193,14 +200,28 @@ async function setInputs(next) {
 
 function importInto(slot) {
   return (filesPromise) => {
+    const generation = inputGeneration;
     exampleControl.cancel();
-    void addFiles(filesPromise, slot).catch((error) => status(error.message, { error: true }));
+    void addFiles(filesPromise, slot, generation).catch((error) => {
+      if (generation === inputGeneration) status(error.message, { error: true });
+    });
   };
 }
 fields.runs.onFiles(importInto(null));
 for (const slot of ["apertures", "roi", "surfaces", "template", "seed"]) fields[slot].onFiles(importInto(slot));
 fields.model.onFiles((filesPromise) => {
-  void filesPromise.then(([file]) => loadModelFile(file)).catch((error) => status(error.message, { error: true }));
+  const generation = inputGeneration;
+  void filesPromise.then(([file]) => loadModelFile(file, generation)).catch((error) => {
+    if (generation === inputGeneration) status(error.message, { error: true });
+  });
+});
+$("clearInputs").addEventListener("click", () => {
+  inputGeneration += 1;
+  exampleControl.reset();
+  for (const field of Object.values(fields)) {
+    field.input.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [], cancelPending: true } }));
+  }
+  void setInputs(emptyInputs()).catch(report);
 });
 
 // ---- Model ----
@@ -211,7 +232,7 @@ function fillPresets() {
 $("hrf").replaceChildren(...HRF_OPTIONS.map(({ value, label }) => new Option(label, value)));
 
 function settings() {
-  const scalingFactor = Number($("scalingFactor").value);
+  const scalingFactor = $("scalingFactor").readOnly ? editableScalingFactor : Number($("scalingFactor").value);
   const tr = Number($("tr").value);
   return {
     scalingFactor: scalingFactor > 0 ? scalingFactor : DEFAULT_SETTINGS.scalingFactor,
@@ -220,6 +241,7 @@ function settings() {
 }
 
 function resetModel() {
+  modelFromPreset = true;
   model = withInputNames(buildModel(presetId(), settings()), analysis(), inputs);
   renderModel();
 }
@@ -227,11 +249,27 @@ function resetModel() {
 /** Write the model into the JSON view and the controls that mirror its fields. */
 function renderModel() {
   const kind = analysis();
+  const fixedScale = modelFromPreset && PRESETS[presetId()]?.fixedScalingFactor !== undefined;
   $("modelJson").value = JSON.stringify(model, null, 2);
   $("modelJson").setCustomValidity("");
   if ("TR" in model) $("tr").value = String(model.TR);
-  if ("Scaling_Factor" in model) $("scalingFactor").value = String(model.Scaling_Factor);
-  if ("Hrf" in model) $("hrf").value = hrfValue(model.Hrf);
+  if ("Scaling_Factor" in model) {
+    $("scalingFactor").value = String(model.Scaling_Factor);
+    if (!fixedScale) editableScalingFactor = Number(model.Scaling_Factor);
+  } else {
+    $("scalingFactor").value = String(editableScalingFactor);
+  }
+  $("scalingFactor").readOnly = fixedScale;
+  if ("Hrf" in model) {
+    const value = hrfValue(model.Hrf);
+    $("hrf").querySelector('option[value="custom"]')?.remove();
+    if (value === "custom") {
+      const option = new Option("Custom HRF (model JSON)", "custom");
+      option.disabled = true;
+      $("hrf").append(option);
+    }
+    $("hrf").value = value;
+  }
   $("fineFit").value = fineFit(model);
   $("fineFitThreshold").value = String(model.Fine_Fit_Threshold ?? 0.01);
   $("coarseOnly").checked = Boolean(model.Coarse_Fit_Only);
@@ -250,8 +288,11 @@ function editModel(change) {
   renderModel();
 }
 
-async function loadModelFile(file) {
-  const parsed = parseModel(await file.text(), analysis());
+async function loadModelFile(file, generation = inputGeneration) {
+  const text = await file.text();
+  if (generation !== inputGeneration) return;
+  const parsed = parseModel(text, analysis());
+  modelFromPreset = false;
   editModel(() => withInputNames(parsed, analysis(), inputs));
   status(`Model ${parsed.Name} loaded from ${file.name}`);
 }
@@ -267,13 +308,9 @@ $("preset").addEventListener("change", () => {
   resetModel();
 });
 $("tr").addEventListener("change", () => editModel((current) => ({ ...current, TR: settings().tr })));
-$("scalingFactor").addEventListener("change", () => editModel((current) => {
-  // A preset's search grid scales with the stimulus radius; regenerate only its ParamN grids.
-  const grids = Object.entries(buildModel(presetId(), settings())).filter(([key]) => /^Param\d+$/.test(key));
-  return { ...current, Scaling_Factor: settings().scalingFactor, ...Object.fromEntries(grids) };
-}));
+$("scalingFactor").addEventListener("change", () => editModel(current => changeScalingFactor(current, settings().scalingFactor, modelFromPreset ? presetId() : null)));
 $("hrf").addEventListener("change", () => editModel((current) => ({ ...current, Hrf: hrfModel($("hrf").value) })));
-$("fineFit").addEventListener("change", () => editModel((current) => setFineFit(current, $("fineFit").value, PRESETS[presetId()])));
+$("fineFit").addEventListener("change", () => editModel((current) => setFineFit(current, $("fineFit").value, modelFromPreset ? PRESETS[presetId()] : null)));
 $("fineFitThreshold").addEventListener("change", () => editModel((current) => ({ ...current, Fine_Fit_Threshold: Number($("fineFitThreshold").value) })));
 $("coarseOnly").addEventListener("change", () => editModel((current) => {
   const next = { ...current, Coarse_Fit_Only: true };
@@ -284,6 +321,7 @@ $("revcorThreshold").addEventListener("change", () => editModel((current) => ({ 
 $("modelJson").addEventListener("change", () => {
   try {
     model = parseModel($("modelJson").value, analysis());
+    modelFromPreset = false;
     clearResult();
     renderModel();
   } catch (error) {
@@ -411,7 +449,7 @@ function setBusy(controller) {
   busy = controller;
   const locked = Boolean(controller);
   for (const element of Object.values(fields)) element.disabled = locked;
-  for (const id of ["analysis", "preset", "tr", "scalingFactor", "hrf", "combine", "normalise", "fineFit", "fineFitThreshold", "coarseOnly", "revcorThreshold", "modelJson"]) $(id).disabled = locked;
+  for (const id of ["analysis", "preset", "tr", "scalingFactor", "hrf", "combine", "normalise", "fineFit", "fineFitThreshold", "coarseOnly", "revcorThreshold", "modelJson", "clearInputs"]) $(id).disabled = locked;
   exampleControl.setDisabled(locked);
   updateRunButton();
 }
@@ -524,7 +562,10 @@ function automationOperation(kind) {
     fillPresets();
     if (parameters.preset) $("preset").value = parameters.preset;
     if (parameters.tr) $("tr").value = String(parameters.tr);
-    if (parameters.scalingFactor) $("scalingFactor").value = String(parameters.scalingFactor);
+    if (parameters.scalingFactor) {
+      editableScalingFactor = parameters.scalingFactor;
+      $("scalingFactor").value = String(parameters.scalingFactor);
+    }
     resetModel();
     if (parameters.hrf) model = { ...model, Hrf: hrfModel(parameters.hrf) };
     if (typeof parameters.normalise === "boolean") $("normalise").checked = parameters.normalise;

@@ -2,9 +2,11 @@
 // only calls main; the tests call the parts.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Worker } from 'node:worker_threads';
+import { resolveHemisphere } from './inputs.js';
+export { hemisphereOf } from './inputs.js';
 import {
   Apertures,
   analysisSpec,
@@ -48,8 +50,8 @@ Inputs:
                          <hemisphere>.area from it
   --white FILE           White surface, for Smoothing
   --area FILE            Vertex areas (lh.area), for cf
-  --hemisphere NAME      Output prefix and template side (default: lh, rh or bi
-                         from the first run's file name, else srf)
+  --hemisphere NAME      Hemisphere (lh, rh, bi or srf); inferred from matching
+                         FreeSurfer/BIDS input names when omitted
 
 Preprocessing (samsrf_gii2srf):
   --no-normalise         Keep the raw time series (SamSrf -norm off); default
@@ -82,11 +84,6 @@ const OPTIONS = {
   shards: { type: 'string' },
   'cache-dir': { type: 'string' },
 };
-
-/** The hemisphere a run's file name starts with (lh_uBars1.gii, rh.run1.gii), else 'srf'. */
-export function hemisphereOf(path) {
-  return /^(lh|rh|bi)[._]/i.exec(basename(path))?.[1].toLowerCase() ?? 'srf';
-}
 
 /**
  * Parses the arguments after the executable. File names that follow --runs belong to it up to the next
@@ -123,8 +120,8 @@ export function parseCommandLine(argv) {
   if (command !== 'cf' && values.apertures === undefined) throw new Error(`${command} needs --apertures.`);
   if (command === 'cf' && (values.seed === undefined || values.template === undefined)) throw new Error('cf needs --seed and --template.');
   if (values.surf !== undefined && (values.white !== undefined || values.area !== undefined)) throw new Error('Give either --surf or --white and --area, not both.');
-  const hemisphere = values.hemisphere ?? hemisphereOf(runs[0]);
-  if (!/^[A-Za-z0-9_-]+$/.test(hemisphere)) throw new Error(`--hemisphere must be a plain name such as lh or rh, not ${JSON.stringify(hemisphere)}.`);
+  if (values.hemisphere && !/^[A-Za-z0-9_-]+$/.test(values.hemisphere)) throw new Error(`--hemisphere must be a plain name such as lh or rh, not ${JSON.stringify(values.hemisphere)}.`);
+  const hemisphere = resolveHemisphere([...runs, values.roi, values.seed, values.template, values.white, values.area], { hemisphere: values.hemisphere, required: command === 'cf' });
   if (values.surf !== undefined && hemisphere !== 'lh' && hemisphere !== 'rh') throw new Error(`--surf reads lh.* or rh.* files: give --hemisphere lh or rh (it is ${hemisphere}).`);
   const shards = values.shards === undefined ? 1 : Number(values.shards);
   if (!Number.isInteger(shards) || shards < 1 || shards > 256) throw new Error(`--shards must be a whole number from 1 to 256, not ${values.shards}.`);
