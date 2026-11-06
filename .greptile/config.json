@@ -1,0 +1,8 @@
+{
+  "autoReview": [],
+  "autoApprove": {
+    "enabled": false
+  },
+  "statusCheck": false,
+  "statusCommentsEnabled": false
+}
