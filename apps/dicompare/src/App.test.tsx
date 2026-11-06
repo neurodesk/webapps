@@ -6,22 +6,39 @@ import { log, resetTechnicalLog } from './utils/technicalLog';
 
 beforeEach(() => {
   resetTechnicalLog();
+  window.history.replaceState(null, '', '/');
 });
 
-test('the workspace is the first screen', async () => {
+const renderAt = async (path: string) => {
+  window.history.replaceState(null, '', path);
   await act(async () => {
     render(<App />);
   });
+};
+
+test('the landing page is the first screen and links to the workspace and schema library', async () => {
+  await renderAt('/');
+
+  expect(screen.getByRole('heading', { name: /mri protocol validation/i })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /open workspace/i })).toHaveAttribute('href', '/workspace');
+  const main = screen.getByRole('main');
+  expect(main.querySelector('a[href="/schema"]')).not.toBeNull();
+  const navigation = screen.getByRole('navigation', { name: 'dicompare' });
+  expect(navigation.querySelector('a[href="/schema"]')).not.toBeNull();
+  expect(navigation.textContent).toMatch(/dicompare-web v\d+\.\d+\.\d+/);
+});
+
+test('the workspace is at /workspace with the dicompare navigation', async () => {
+  await renderAt('/workspace');
 
   expect(screen.getByRole('heading', { name: /^workspace$/i })).toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: /open workspace/i })).not.toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /schema library/i })).toBeInTheDocument();
+  const navigation = screen.getByRole('navigation', { name: 'dicompare' });
+  expect(navigation.querySelector('a[href="/schema"]')).not.toBeNull();
+  expect(navigation.querySelector('a[href="/"]')).not.toBeNull();
 });
 
 test('status sits in the shared footer with elapsed time, progress and a hidden cancel', async () => {
-  await act(async () => {
-    render(<App />);
-  });
+  await renderAt('/workspace');
 
   const footer = document.querySelector('footer#status');
   expect(footer).not.toBeNull();
@@ -47,9 +64,7 @@ test('the technical log starts collapsed with Copy and Clear', async () => {
 });
 
 test('the technical log mirrors log entries and opens on errors', async () => {
-  await act(async () => {
-    render(<App />);
-  });
+  await renderAt('/workspace');
 
   const console = document.getElementById('technicalLog');
 

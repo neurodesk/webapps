@@ -27,6 +27,8 @@ for (const route of [
   '/dicompare/schema/uploaded_123/?acq=0#section',
   '/dicompare/schema/custom%20schema?x=%26%3D%2B&x=two+words#%E2%9C%93',
   '/dicompare/schema?url=https%3A%2F%2Fexample.org%2Fschema.json%3Fa%3D1%26b%3D2&acq=0#details',
+  '/dicompare/workspace',
+  '/dicompare/workspace/',
 ]) {
   test(`Pages round trip preserves ${route}`, () => {
     const first = visit(route);
@@ -39,7 +41,7 @@ for (const route of [
 }
 
 for (const route of [
-  '/', '/missing', '/dicompare/', '/dicompare/missing', '/dicompare/schema/a/b',
+  '/', '/missing', '/dicompare/', '/dicompare/missing', '/dicompare/schema/a/b', '/dicompare/workspace/a',
   '/dicompare/assets/missing.js', '/another/schema',
   '/dicompare/#__neurodesk_dicompare_route=%',
   '/dicompare/#__neurodesk_dicompare_route=https%3A%2F%2Fevil.example%2Fdicompare%2Fschema',

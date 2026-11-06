@@ -94,7 +94,7 @@ jobs:
           echo "$summary"
           echo "commits=$(jq .commits <<<"$summary")" >> "$GITHUB_OUTPUT"
           echo "conflicts=$(jq '.conflicts | length' <<<"$summary")" >> "$GITHUB_OUTPUT"
-          echo "target=$(jq -r .target <<<"$summary" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          echo "target=$(jq -r '.release // .target[0:7]' <<<"$summary")" >> "$GITHUB_OUTPUT"
           if jq -e '.conflicts | index("package.json") | not' <<<"$summary" >/dev/null \
             && ! git diff --quiet -- "apps/$APP/package.json"; then
             pnpm install --lockfile-only --no-frozen-lockfile
