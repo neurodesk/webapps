@@ -385,14 +385,15 @@ MATLAB Runtime references, a controlled precision comparison and CI gates.
   the larger norm its coefficient and the other 0. Octave's `\` uses no such
   tolerance, so on the example's coarse fit it reports amplitudes near 1e13 on
   9 vertices where the port reports 0.
-- **Compressive nonlinearity.** `Yp.^P(cssp)` on a prediction below zero is
-  complex in MATLAB. Apertures that are not binary (X001's are resampled and
-  ring to -0.074) make predictions dip to about -1e-6 in a third of the
-  volumes, so SamSrf's fit then runs on complex numbers. The port takes those
-  volumes as zero, the response the nonlinearity models. With concurrent HRF
-  fitting, the port uses the CSS `Exponent` for post-fit betas. The pinned
-  upstream `samsrf_fit_prf.m:527` instead uses the final parameter (`AmpRat`),
-  an apparent indexing bug. This correction is intentional and tested.
+- **Compressive nonlinearity.** `Css_Convention: "nonnegative"` (the default)
+  clips negative responses before the CSS power and uses the fitted Exponent
+  for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex
+  powers and its final-parameter post-fit formula: with concurrent HRF fitting
+  that parameter is AmpRat. Exported maps retain real components, as SamSrf
+  10.4's `samsrf_expand_srf` does. Raw optimizer cases now match the actual
+  MATLAB recordings in both precisions. Full CSS pipeline parity remains
+  under investigation, including weak fits and complex least-squares rank
+  decisions; this option does not imply arbitrary-input bit parity.
 - **Maps outside the ROI.** `samsrf_compress_srf` keeps the ROI's columns and
   `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside
   the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected
@@ -412,12 +413,16 @@ MATLAB Runtime references, a controlled precision comparison and CI gates.
   coordinates are all collinear makes `samsrf_revcor_cf` fail in MATLAB; here
   the cluster is the peak alone. Cocircular or nearly cocircular template points
   can also produce different valid Delaunay edges in Delaunator and MATLAB;
-  CF region growing depends on those edges. Actual MATLAB geometry parity
-  remains unverified.
+  CF region growing depends on those edges. Recorded MATLAB grid cases now
+  cover cocircular, nearly cocircular and duplicate coordinates. Thin polygon
+  simplification follows the measured relative cutoff; outcomes exactly at
+  that cutoff can still differ with rounding and scale.
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so
-  sums over every pair of seed vertices; `Vx` is the 1-based MATLAB index of
+  sums over every pair of seed vertices in the source order. This costs
+  quadratic work per objective evaluation in unsmoothed Gaussian mode;
+  smoothing uses an elementwise residual. `Vx` is the 1-based MATLAB index of
   the peak seed vertex. The template coordinates are single precision
   (MATLAB computes them on the GIFTI's `single` data) and every later step is
   f64 here where SamSrf stays in `single`.

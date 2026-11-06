@@ -53,6 +53,7 @@ pub enum FineFit {
 pub struct PrfModel {
     pub name: String,
     pub data_precision: Precision,
+    pub css_convention: crate::css::Convention,
     pub prf_function: AnonymousFunction,
     pub param_names: Vec<String>,
     pub scaled_param: Vec<bool>,
@@ -361,6 +362,11 @@ impl Fields {
         Ok(PrfModel {
             name,
             data_precision: self.precision()?,
+            css_convention: match self.string_or("Css_Convention", "nonnegative")?.as_str() {
+                "nonnegative" => crate::css::Convention::Nonnegative,
+                "samsrf" => crate::css::Convention::Samsrf,
+                _ => return Err(Error::Model("Css_Convention must be 'nonnegative' or 'samsrf'".into())),
+            },
             prf_function,
             param_names,
             scaled_param: scaled_param.iter().map(|value| *value != 0.0).collect(),
@@ -588,6 +594,7 @@ mod tests {
         let expected = PrfModel {
             name: "pRF_Gaussian".into(),
             data_precision: Precision::Double,
+            css_convention: crate::css::Convention::Nonnegative,
             prf_function: AnonymousFunction::parse("@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)").unwrap(),
             param_names: vec!["x0".into(), "y0".into(), "Sigma".into()],
             scaled_param: vec![true, true, true],

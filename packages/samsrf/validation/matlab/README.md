@@ -114,3 +114,17 @@ caches. Before publishing an image, run the same matrix through the compiled
 CLI, compare its saved maps with the source reference, and record its immutable
 registry digest. Until then, it is a build recipe, not a validated replacement
 for the existing Neurodesk container.
+
+## Recorded inputs and focused diagnosis
+
+`reference.json` pins the 584-case archive from runs
+[42187489864](https://github.com/neurodesk/webapps/actions/runs/42187489864) and
+[42194676865](https://github.com/neurodesk/webapps/actions/runs/42194676865).
+The archive manifest hashes every file and identifies the supplemental cases.
+It includes retained discrepancies; case count is not a passing-gate count.
+
+`record_matlab=true, diagnostics_only=true` runs `record_css_diagnostics`
+against those pinned inputs. This isolates full-pipeline CSS optimizer paths,
+complex predictions, QR factors and least-squares coefficients without
+rerunning the entire participant matrix. It records actual MATLAB arithmetic;
+Octave is used only for a syntax check of the recorder.

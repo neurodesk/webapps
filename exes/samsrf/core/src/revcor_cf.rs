@@ -164,9 +164,18 @@ impl Prepared {
 
     /// The output rows of one vertex.
     pub fn estimate(&self, y: &[f64]) -> Result<Vec<f64>> {
-        let rows = self.rows();
         let r = self.profile(y);
-        let max = nan_max(&r);
+        self.estimate_profile(&r)
+    }
+
+    /// Estimate parameters from an already correlated and smoothed seed profile.
+    /// This also lets reference validation isolate geometry from correlation.
+    pub fn estimate_profile(&self, r: &[f64]) -> Result<Vec<f64>> {
+        if r.len() != self.seed_vertices.len() {
+            return Err(Error::Shape("CF profile length differs from the seed region".into()));
+        }
+        let rows = self.rows();
+        let max = nan_max(r);
         let mut fwhm = 0.0;
         for (j, value) in r.iter().enumerate() {
             if *value > max / 2.0 {
@@ -222,7 +231,6 @@ impl Prepared {
         let n = r.len() as f64;
         let xy = xy_value(&self.seed_xy);
         let sum_r: f64 = r.iter().sum();
-        let sum_r2: f64 = r.iter().map(|value| value * value).sum();
         let mean = sum_r / n;
         let total: f64 = r.iter().map(|value| (value - mean) * (value - mean)).sum();
         let smoothed = self.weights.is_some();
@@ -239,15 +247,19 @@ impl Prepared {
                     residual * residual
                 }).sum(),
                 Ok(profile) => {
-                    // sum over i, j of (R_j - M_i)^2 with M = profile * beta + baseline.
-                    let mut sum_m = 0.0;
-                    let mut sum_m2 = 0.0;
-                    for value in &profile.data {
-                        let m = value * p[3] + p[4];
-                        sum_m += m;
-                        sum_m2 += m * m;
+                    // Preserve the source's column-major broadcast residuals.
+                    // Expanding this into moments changes rounding on flat fits.
+                    let predicted: Vec<f64> = profile.data.iter().map(|value| value * p[3] + p[4]).collect();
+                    let mut sums = [0.0; 4];
+                    let mut index = 0;
+                    for &observed in r {
+                        for &predicted in &predicted {
+                            let residual = observed - predicted;
+                            sums[if r.len() * r.len() < 44 { 0 } else { index % 4 }] += residual * residual;
+                            index += 1;
+                        }
                     }
-                    n * sum_r2 - 2.0 * sum_r * sum_m + n * sum_m2
+                    sums.iter().sum()
                 }
                 Err(error) => {
                     failure.get_or_insert(error);

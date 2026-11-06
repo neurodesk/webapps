@@ -8,6 +8,8 @@
 //! and the pRF-from-CF analysis (`SeedRoi` in a pRF model).
 
 use crate::apertures::Apertures;
+use crate::css;
+use num_complex::Complex64;
 use crate::error::{Error, Result};
 use crate::expr::Value;
 use crate::hrf::{self, ErrfunHrf, ResolvedHrf};
@@ -241,17 +243,22 @@ impl Prepared {
         let errfun_hrf = if self.fitting_hrf { ErrfunHrf::Fit { tr: model.tr } } else { ErrfunHrf::Kernel(self.coarse_hrf.clone()) };
         let (mut fp, mut fr) = if rimg >= model.fine_fit_threshold {
             let mut failure: Option<Error> = None;
-            let mut errfun = |p: &[f64]| match prf::errfun_with_precision(&model.prf_function, &self.apertures, &self.xy_points, &errfun_hrf, p, y, model.downsample_predictions, model.compressive_nonlinearity, model.data_precision) {
+            let mut errfun = |p: &[f64]| match prf::errfun_with_convention(&model.prf_function, &self.apertures, &self.xy_points, &errfun_hrf, p, y, model.downsample_predictions, model.compressive_nonlinearity, model.data_precision, model.css_convention) {
                 Ok(value) => value,
                 Err(error) => {
                     failure.get_or_insert(error);
-                    f64::NAN
+                    Complex64::new(f64::NAN, 0.0)
                 }
             };
             let (fp, err) = match &self.hooke_jeeves_steps {
                 Some(steps) => {
                     let only_positive: Vec<bool> = self.fine_only_positive.iter().map(|flag| *flag != 0).collect();
-                    optim::hooke_jeeves(&mut errfun, &seeds, steps, &only_positive, 15, 3)
+                    if model.compressive_nonlinearity && model.css_convention == css::Convention::Samsrf {
+                        let (params, value) = optim::hooke_jeeves(&mut errfun, &seeds, steps, &only_positive, 15, 3);
+                        (params, value.re)
+                    } else {
+                        optim::hooke_jeeves(|p| errfun(p).re, &seeds, steps, &only_positive, 15, 3)
+                    }
                 }
                 None => {
                     let tolerance = match &model.fine_fit {
@@ -259,8 +266,13 @@ impl Prepared {
                         _ => 1e-4,
                     };
                     let options = FminsearchOptions { tol_x: tolerance, stop_when_not_finite: true, ..Default::default() };
-                    let result = optim::fminsearch(&mut errfun, &seeds, &options);
-                    (result.x, result.fval)
+                    if model.compressive_nonlinearity && model.css_convention == css::Convention::Samsrf {
+                        let result = optim::fminsearch(&mut errfun, &seeds, &options);
+                        (result.x, result.fval.re)
+                    } else {
+                        let result = optim::fminsearch(|p| errfun(p).re, &seeds, &options);
+                        (result.x, result.fval)
+                    }
                 }
             };
             if let Some(error) = failure {
@@ -289,11 +301,17 @@ impl Prepared {
             }
         }
         let mut prediction = None;
+        let mut legacy_exponent = None;
         if good {
             let mut fx = self.predict(&fp)?;
             if model.compressive_nonlinearity {
-                let exponent = fp[model.param_names.len()];
-                prf::compress(&mut fx, exponent);
+                if model.css_convention == css::Convention::Samsrf {
+                    // Pinned samsrf_fit_prf uses the final parameter here. With a
+                    // fitted HRF this is AmpRat, unlike the optimizer's exponent.
+                    legacy_exponent = fp.last().copied();
+                } else {
+                    prf::compress(&mut fx, fp[model.param_names.len()]);
+                }
             }
             prediction = Some(fx);
         } else if model.replace_bad_fits {
@@ -307,8 +325,13 @@ impl Prepared {
         let (beta, baseline) = match prediction {
             Some(fx) => {
                 let kernel = if self.fitting_hrf { hrf::doublegamma(model.tr, &fp[fp.len() - 5..]) } else { self.coarse_hrf.clone() };
-                let fx = hrf::convolve(&fx, &kernel, model.downsample_predictions);
-                fit_betas_precision(&fx, y, model.data_precision)
+                if let Some(exponent) = legacy_exponent {
+                    let fx = css::predict(&fx, exponent, &kernel, model.downsample_predictions);
+                    css::fit_betas(&fx, y, model.data_precision)
+                } else {
+                    let fx = hrf::convolve(&fx, &kernel, model.downsample_predictions);
+                    fit_betas_precision(&fx, y, model.data_precision)
+                }
             }
             None => (0.0, 0.0),
         };

@@ -96,3 +96,15 @@ test("a custom HRF kernel is not displayed as the de Haas preset", () => {
   assert.equal(hrfValue([1]), "1");
   assert.equal(hrfValue([0, 0.5, 1]), "custom");
 });
+
+test("forward precision and CSS conventions survive JSON and radius edits", () => {
+  const model = buildModel("gaussian", { dataPrecision: "single", cssConvention: "samsrf" });
+  const changed = changeScalingFactor({ ...model, Compressive_Nonlinearity: true }, 12, "gaussian");
+  assert.equal(changed.Data_Precision, "single");
+  assert.equal(changed.Css_Convention, "samsrf");
+  assert.deepEqual(parseModel(JSON.stringify(changed), "prf"), changed);
+  assert.throws(() => parseModel(JSON.stringify({ ...model, Data_Precision: "unknown" }), "prf"), /Data_Precision/);
+  assert.throws(() => parseModel(JSON.stringify({ ...model, Css_Convention: "unknown" }), "prf"), /Css_Convention/);
+  assert.throws(() => parseModel(JSON.stringify({ ...buildModel("example-cf"), Data_Precision: "single" }), "cf"), /forward pRF/);
+  assert.equal(buildModel("example-cf", { dataPrecision: "single" }).Data_Precision, undefined);
+});

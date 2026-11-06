@@ -89,6 +89,30 @@ pub fn correlation_single(prediction: &[f64], observed: &[f64], observations_fir
     }
 }
 
+/// Mixed complex prediction and real single observations. MATLAB accumulates
+/// these two components in sequence, unlike its real vector dot product.
+pub fn correlation_complex_single(x: &[num_complex::Complex64], y: &[f64]) -> num_complex::Complex64 {
+    use num_complex::Complex64;
+    if x.iter().all(|v| v.im as f32 == 0.0) {
+        return Complex64::new(f64::from(correlation_single(&x.iter().map(|v| v.re).collect::<Vec<_>>(), y, false)), 0.0);
+    }
+    let ys: Vec<f32> = y.iter().map(|&v| v as f32).collect();
+    let my = sum_single(&ys) / ys.len() as f32;
+    let yc: Vec<f32> = ys.iter().map(|&v| v - my).collect();
+    let mx = x.iter().copied().sum::<Complex64>() / x.len() as f64;
+    let xc: Vec<Complex64> = x.iter().map(|&v| v - mx).collect();
+    let nx = xc.iter().map(|v| v.norm_sqr()).sum::<f64>().sqrt();
+    let ny = yc.iter().map(|&v| f64::from(v).powi(2)).sum::<f64>().sqrt() as f32;
+    let mut real = 0.0f32;
+    let mut imaginary = 0.0f32;
+    for (x, y) in xc.iter().zip(&yc) {
+        real += x.re as f32 * y;
+        imaginary -= x.im as f32 * y;
+    }
+    let divide = |dot: f32| f64::from((f64::from(dot) / nx) as f32 / ny);
+    Complex64::new(divide(real), divide(imaginary))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

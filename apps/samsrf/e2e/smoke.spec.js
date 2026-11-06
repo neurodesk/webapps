@@ -346,3 +346,29 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   expect(report.provenance.model.Aperture_File).toBe("aps_Bars");
   expect(report.provenance.model.Scaling_Factor).toBe(9.5);
 });
+
+test("MATLAB fit settings round-trip through JSON and remain in collapsed settings", async ({ page }) => {
+  await page.goto("./");
+  await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
+  await page.locator("#dataPrecision").selectOption("single");
+  const model = JSON.parse(await page.locator("#modelJson").inputValue());
+  model.Compressive_Nonlinearity = true;
+  await page.locator("#modelJson").fill(JSON.stringify(model));
+  await page.locator("#modelJson").dispatchEvent("change");
+  await expect(page.locator("#cssConvention")).toBeVisible();
+  await page.locator("#cssConvention").selectOption("samsrf");
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#advancedSettings > summary").click();
+  await expect(page.locator("#dataPrecision")).toHaveValue("single");
+  await expect(page.locator("#cssConvention")).toHaveValue("samsrf");
+  const downloading = page.waitForEvent("download");
+  await page.locator("#saveModel").click();
+  const download = await downloading;
+  const saved = JSON.parse(readFileSync(await download.path(), "utf8"));
+  expect(saved.Data_Precision).toBe("single");
+  expect(saved.Css_Convention).toBe("samsrf");
+  expect(saved.Compressive_Nonlinearity).toBe(true);
+  await page.locator("#analysis").selectOption("cf");
+  await expect(page.locator("#dataPrecision")).toBeHidden();
+  await expect(page.locator("#cssConvention")).toBeHidden();
+});

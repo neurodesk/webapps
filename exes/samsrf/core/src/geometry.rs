@@ -50,6 +50,14 @@ impl Hull {
     /// its hull; a zero-area spike is therefore not part of that hull.
     pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
         let mut boundary = points.to_vec();
+        // Inferred from recorded R2023b thin triangles at three scales. Points
+        // exactly at the relative cutoff remain sensitive to rounding.
+        let span = (0..2).map(|axis| {
+            let low = points.iter().map(|p| p[axis]).fold(f64::INFINITY, f64::min);
+            let high = points.iter().map(|p| p[axis]).fold(f64::NEG_INFINITY, f64::max);
+            high - low
+        }).fold(0.0, f64::max);
+        let tolerance = span * 1e-8;
         loop {
             let n = boundary.len();
             if n < 3 {
@@ -59,7 +67,8 @@ impl Hull {
                 let a = boundary[(i + n - 1) % n];
                 let b = boundary[i];
                 let c = boundary[(i + 1) % n];
-                (b[0] - a[0]) * (c[1] - b[1]) == (b[1] - a[1]) * (c[0] - b[0])
+                let cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+                cross == 0.0 || cross.abs() < tolerance * (c[0] - a[0]).hypot(c[1] - a[1])
             });
             match redundant {
                 Some(i) => { boundary.remove(i); }

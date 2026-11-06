@@ -40,6 +40,10 @@ on:
         description: Include the full participant pipeline matrix in a MATLAB recording
         type: boolean
         default: true
+      diagnostics_only:
+        description: Record focused CSS and regression diagnostics from pinned MATLAB inputs
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -139,6 +143,9 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           python3 packages/samsrf/validation/matlab/prepare.py reference-source "$RUNNER_TEMP/samsrf-matlab"
+      - name: Fetch pinned MATLAB inputs for focused diagnostics
+        if: inputs.diagnostics_only
+        run: python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json
       - name: Check out the pinned SPM GIfTI readers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -156,9 +163,15 @@ jobs:
           release: R2023b
           products: Statistics_and_Machine_Learning_Toolbox Image_Processing_Toolbox Parallel_Computing_Toolbox
       - name: Record numerical intermediates and fitted maps
+        if: '!inputs.diagnostics_only'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); if strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'))
+      - name: Record focused CSS and regression diagnostics
+        if: inputs.diagnostics_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_css_diagnostics(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-reference'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'))
       - name: Retain complete or partial reference for diagnosis
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
