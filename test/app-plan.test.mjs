@@ -1113,8 +1113,8 @@ test('only the composite build and its own tests read the composite-only site fi
     'scripts/lib/app-plan.mjs',
     ...SITE_ONLY_FILES,
   ]);
-  // Upstream copies naming their own landing.css and SPA 404 page.
-  const unrelated = new Set(['apps/qsmbly/upstream.json', 'apps/dicompare/legacy-ci/deploy.yml']);
+  // Upstream adaptation notes and copied deployment configuration are not runtime readers.
+  const unrelated = new Set(['apps/qsmbly/upstream.json', 'apps/dicompare/upstream.json', 'apps/dicompare/legacy-ci/deploy.yml']);
   const names = [...SITE_ONLY_FILES].map((path) => path.slice('site/'.length).replaceAll('.', '\\.'));
   for (const file of filesNaming(names.join('|'))) {
     if (file.startsWith('test/') || file.startsWith('site/easter-eggs/') || unrelated.has(file)) continue;
