@@ -1428,6 +1428,7 @@ apps:
       release: false
   - id: spot-detection
     path: spot-detection
+    catalog: microscopy
     title: Spot detection
     description: Detect smFISH spots in 2D and 3D microscopy images.
     categories: [image-processing]
