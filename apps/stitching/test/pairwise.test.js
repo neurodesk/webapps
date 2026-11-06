@@ -59,3 +59,21 @@ test('peaks are local maxima, strongest first, and correlation is Pearson over t
   assert.equal(shiftedCorrelation(a, b, [4, 3], [1, 0]).r, 1);
   assert.equal(shiftedCorrelation(a, b, [4, 3], [1, 0]).pixels, 9);
 });
+
+test('Pearson scores are invariant to large intensity offsets, including shifted uint32 tiles', () => {
+  const a = Float64Array.from({ length: 100 }, (_, i) => i % 7);
+  const b = Float64Array.from({ length: 100 }, (_, i) => (i + 2) % 7);
+  for (const Type of [Float64Array, Uint32Array]) {
+    const highA = Type.from(a, (v) => v + 1e9);
+    const highB = Type.from(b, (v) => v + 2e9);
+    assert.ok(Math.abs(shiftedCorrelation(highA, highA, [100, 1], [0, 0]).r - 1) < 1e-12);
+    for (const shift of [[0, 0], [2, 0], [-3, 0]]) {
+      const low = shiftedCorrelation(a, b, [100, 1], shift);
+      const high = shiftedCorrelation(highA, highB, [100, 1], shift);
+      assert.equal(high.pixels, low.pixels);
+      assert.ok(Math.abs(high.r - low.r) < 1e-12);
+    }
+  }
+  const constant = new Uint32Array(100).fill(1e9);
+  assert.equal(shiftedCorrelation(constant, constant, [100, 1], [0, 0]).r, 0);
+});

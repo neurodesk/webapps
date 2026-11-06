@@ -234,30 +234,31 @@ export function shiftedCorrelation(regionA, regionB, size, shift) {
   const z1 = Math.min(sz, sz + tz);
   if (x1 <= x0 || y1 <= y0 || z1 <= z0) return { r: -Infinity, pixels: 0 };
   let n = 0;
-  let sumA = 0;
-  let sumB = 0;
-  let sumAA = 0;
-  let sumBB = 0;
-  let sumAB = 0;
+  let meanA = 0;
+  let meanB = 0;
+  let varianceA = 0;
+  let varianceB = 0;
+  let covariance = 0;
+  const originA = regionA[(z0 * sy + y0) * sx + x0];
+  const originB = regionB[((z0 - tz) * sy + y0 - ty) * sx + x0 - tx];
   for (let z = z0; z < z1; z++) {
     for (let y = y0; y < y1; y++) {
       const rowA = (z * sy + y) * sx;
       const rowB = ((z - tz) * sy + (y - ty)) * sx - tx;
       for (let x = x0; x < x1; x++) {
-        const a = regionA[rowA + x];
-        const b = regionB[rowB + x];
+        const a = regionA[rowA + x] - originA;
+        const b = regionB[rowB + x] - originB;
         n++;
-        sumA += a;
-        sumB += b;
-        sumAA += a * a;
-        sumBB += b * b;
-        sumAB += a * b;
+        const deltaA = a - meanA;
+        const deltaB = b - meanB;
+        meanA += deltaA / n;
+        meanB += deltaB / n;
+        varianceA += deltaA * (a - meanA);
+        varianceB += deltaB * (b - meanB);
+        covariance += deltaA * (b - meanB);
       }
     }
   }
-  const covariance = sumAB - (sumA * sumB) / n;
-  const varianceA = sumAA - (sumA * sumA) / n;
-  const varianceB = sumBB - (sumB * sumB) / n;
   const denominator = Math.sqrt(varianceA * varianceB);
   return { r: denominator > 0 ? covariance / denominator : 0, pixels: n };
 }
