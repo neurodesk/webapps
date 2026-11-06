@@ -2162,6 +2162,22 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "gliomoda": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "gliomoda",
+          "label": "gliomoda 0.0.4 (20261024)",
+          "url": "https://hub.docker.com/r/vnmd/gliomoda_0.0.4",
+          "dockerImage": "vnmd/gliomoda_0.0.4:20261024",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/gliomoda_0.0.4_20261024.simg",
+          "apptainerName": "gliomoda_0.0.4_20261024"
+        }
+      ]
     }
   }
 }
