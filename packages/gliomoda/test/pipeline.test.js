@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   boundingBox,
   checkAtlasGrid,
+  f16round,
   flip,
   gaussianWeights,
   mirrorCombinations,
@@ -23,6 +24,22 @@ test('window origins follow compute_steps_for_sliding_window, halves rounding to
   assert.deepEqual(windowStarts(128, 128), [0]);
   assert.deepEqual(windowStarts(213, 128), [0, 42, 85]);
   assert.deepEqual(windowStarts(140, 128), [0, 12]);
+});
+
+test('float16 rounding is nearest, ties to even, with subnormals and overflow', () => {
+  assert.equal(f16round(1 + 2 ** -11), 1);
+  assert.equal(f16round(1 + 3 * 2 ** -11), 1 + 2 ** -9);
+  assert.equal(f16round(2 ** -25), 0);
+  assert.equal(f16round(3 * 2 ** -26), 2 ** -24);
+  assert.equal(f16round(65519), 65504);
+  assert.equal(f16round(-65520), -Infinity);
+  assert.equal(f16round(0.1), 0.0999755859375);
+  if (Math.f16round) {
+    for (let i = 0; i < 200000; i++) {
+      const x = (Math.random() - 0.5) * 2 ** (Math.random() * 40 - 28);
+      assert.equal(f16round(x), Math.f16round(x), String(x));
+    }
+  }
 });
 
 test('mirror passes come in nnU-Net order', () => {

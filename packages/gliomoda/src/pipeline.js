@@ -11,6 +11,23 @@ export const STEP = 0.5;
 
 const product = (shape) => shape[0] * shape[1] * shape[2];
 
+// The nearest float16 value, ties to even, as torch stores a half tensor. Math.f16round does this
+// but is missing before Node 24 and Chrome 135.
+export function f16round(x) {
+  const a = Math.abs(x);
+  if (!Number.isFinite(x) || a === 0) return x;
+  if (a >= 65520) return Math.sign(x) * Infinity;
+  let e = Math.max(Math.floor(Math.log2(a)), -14);
+  if (e > -14 && 2 ** e > a) e--;
+  else if (2 ** (e + 1) <= a) e++;
+  const quantum = 2 ** (e - 10);
+  const scaled = a / quantum;
+  const floor = Math.floor(scaled);
+  const rest = scaled - floor;
+  const steps = rest > 0.5 || (rest === 0.5 && floor % 2 === 1) ? floor + 1 : floor;
+  return Math.sign(x) * steps * quantum;
+}
+
 // The atlas grid is the model's only input contract, so a file off it is refused by name.
 export function checkAtlasGrid(role, volume) {
   const dims = volume.dims.join(' × ');
@@ -163,7 +180,7 @@ export function gaussianWeights(patch) {
   for (let z = 0; z < patch[0]; z++) {
     for (let y = 0; y < patch[1]; y++) {
       for (let x = 0; x < patch[2]; x++, o++) {
-        out[o] = Math.f16round(gz[z] * gy[y] * gx[x] * 10);
+        out[o] = f16round(gz[z] * gy[y] * gx[x] * 10);
         if (out[o] > 0) smallest = Math.min(smallest, out[o]);
       }
     }
@@ -291,7 +308,7 @@ export async function predictLogits({ image, channels, shape, patch, regions, mi
           const row = ((z0 + z) * padded.shape[1] + y0 + y) * padded.shape[2] + x0;
           for (let x = 0; x < patch[2]; x++, t++) {
             const value = Math.fround(Math.fround(prediction[r * voxels + t] / flips.length) * weights[t]);
-            sum[r * total + row + x] = Math.f16round(sum[r * total + row + x] + value);
+            sum[r * total + row + x] = f16round(sum[r * total + row + x] + value);
           }
         }
       }
@@ -300,7 +317,7 @@ export async function predictLogits({ image, channels, shape, patch, regions, mi
     for (let z = 0; z < patch[0]; z++) {
       for (let y = 0; y < patch[1]; y++) {
         const row = ((z0 + z) * padded.shape[1] + y0 + y) * padded.shape[2] + x0;
-        for (let x = 0; x < patch[2]; x++, t++) count[row + x] = Math.f16round(count[row + x] + weights[t]);
+        for (let x = 0; x < patch[2]; x++, t++) count[row + x] = f16round(count[row + x] + weights[t]);
       }
     }
   }
@@ -310,7 +327,7 @@ export async function predictLogits({ image, channels, shape, patch, regions, mi
     for (let z = 0; z < shape[0]; z++) {
       for (let y = 0; y < shape[1]; y++) {
         const row = ((z + padded.before[0]) * padded.shape[1] + y + padded.before[1]) * padded.shape[2] + padded.before[2];
-        for (let x = 0; x < shape[2]; x++, o++) out[o] = Math.f16round(sum[r * total + row + x] / count[row + x]);
+        for (let x = 0; x < shape[2]; x++, o++) out[o] = f16round(sum[r * total + row + x] / count[row + x]);
       }
     }
   }
