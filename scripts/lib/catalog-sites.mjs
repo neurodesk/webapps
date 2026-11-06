@@ -93,10 +93,17 @@ export function runtimeReferences(source, file, siteDir) {
     const path = literal.split(/[?#]/)[0];
     return path.startsWith('/') ? join(siteDir, path) : resolve(dirname(file), path);
   };
+  // Vite's preload table is relative to the app base, one level above assets/.
+  const preloadTables = [...source.matchAll(/__vite__mapDeps=\(i,m=__vite__mapDeps,d=\(m\.f\|\|\(m\.f=(\[[^\]]*\])/g)]
+    .map(match => [match.index + match[0].length - match[1].length, match.index + match[0].length]);
   const references = [];
   for (const match of source.matchAll(RUNTIME_LITERAL)) {
     if (match[2].includes('${')) throw new Error(`${label}: "${match[2]}" computes a _runtime path`);
-    references.push({ literal: match[2], target: target(match[2]) });
+    const preload = preloadTables.some(([start, end]) => match.index > start && match.index < end);
+    const resolved = preload && !match[2].startsWith('/')
+      ? resolve(dirname(file), '..', match[2].split(/[?#]/)[0])
+      : target(match[2]);
+    references.push({ literal: match[2], target: resolved });
   }
   const mentions = source.match(RUNTIME_MENTION)?.length ?? 0;
   const captured = references.reduce((count, { literal }) => count + (literal.match(RUNTIME_MENTION)?.length ?? 0), 0);
