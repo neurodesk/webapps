@@ -123,7 +123,7 @@ Categories may contain a single app. Cross-list substantial tasks and scientific
 | fetal-imaging | Fetal Imaging | NeSVoR |
 | privacy | Privacy | Deface |
 | conversion | Conversion | dcm2niix, ReproIn |
-| microscopy | Microscopy | ZARRo, StarDist, Calcium imaging |
+| microscopy | Microscopy | ZARRo, StarDist, Calcium imaging, NeuroMorph |
 
 ### Facets
 

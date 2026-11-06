@@ -170,7 +170,8 @@ export function defineExampleSelector(view = globalThis.window) {
       this.#actionsFor?.closest('.nd-file')?.classList.remove('nd-file-merged');
       this.#select.querySelectorAll('hr, option[data-action]').forEach(node => node.remove());
       this.#select.append(this.ownerDocument.createElement('hr'), this.#option('Load files…', '', 'files'));
-      if (input.dataset.neurodeskInput === 'image') this.#select.append(this.#option('Load folder…', '', 'folder'));
+      // Scans offer a folder; another input opts in with data-neurodesk-folder.
+      if (input.dataset.neurodeskInput === 'image' || input.hasAttribute('data-neurodesk-folder')) this.#select.append(this.#option('Load folder…', '', 'folder'));
       input.closest('.nd-file')?.classList.add('nd-file-merged');
       this.#actionsFor = input;
     };

@@ -185,6 +185,12 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - `e2e/expected.json` pins native ANTs 2.6.5 `DenoiseImage` on the example with one ITK thread (`scripts/native-reference.mjs`, Docker), and the browser tests must reproduce it byte for byte. Rerecord it after a module rebuild or an example change.
 - The radii stop at the largest pair checked against native (patch 2, search 3), and the shrink factor stays 1. The app has no command line of its own: the Standalone dialog lists the ANTs container (`registry/standalone-exceptions.json`).
 
+## neuromorph
+
+- The SWC checks, morphometrics, Sholl analysis and tables live in `apps/neuromorph/src/morph` (pure, no DOM); the app adds the UI and the NiiVue tube view. The definitions are NeuroM 4's, implemented cleanly; `README.md` lists them and every deliberate difference.
+- Samples are rounded to single precision as they are read, because MorphIO stores them that way; without it bifurcation angles drift from NeuroM by up to 1e-4 relative.
+- `validation/neurom-reference.json` holds NeuroM 4.0.6's numbers for both hosted examples and NeuroM's committed test morphologies (`test/fixtures/neurom`). `test/neurom-parity.test.js` and `e2e/smoke.spec.js` require 1e-6 relative and identical counts and Sholl intersections. Rerecord with `validation/neurom_reference.py` (pins in `validation/requirements.txt`) when a definition or an example changes.
+
 ## brainqcnet
 
 - The preprocessing, slice classification loop, summaries and CSV writers live in `packages/brainqcnet`; the app adds the UI, the ONNX Runtime Web worker (one per run, terminated on cancel) and the file names. Change numerics in the package only.

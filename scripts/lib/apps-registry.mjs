@@ -46,6 +46,7 @@ export const INPUT_FORMATS = new Map([
   ['mesh', 'STL/OBJ/PLY'],
   ['mrs-raw', 'Vendor MRS'],
   ['neuroflow', 'NeuroFlow workflow'],
+  ['swc', 'SWC'],
 ]);
 export const HARDWARE = new Map([
   ['cpu', 'No GPU needed'],
