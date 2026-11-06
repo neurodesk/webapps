@@ -2151,6 +2151,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "spot-detection": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }
