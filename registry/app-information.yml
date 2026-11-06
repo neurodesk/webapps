@@ -2229,7 +2229,7 @@ apps:
 
   samsrf:
     about:
-      - This port uses double precision and real-valued compressive responses. Results can differ from MATLAB, especially CSS fits; validation uses Octave rather than MATLAB. The example preserves the original whole-surface X001 runs for connective-field global-signal correction. For comparisons, match model settings and run order and use a fresh MATLAB results directory to avoid stale caches.
+      - This port uses double precision and real-valued compressive responses. Validation includes Octave and limited comparisons with the actual SamSrfX MATLAB Runtime container; default single-precision MATLAB fits can still differ. Advanced settings offers the older container's eccentricity export convention. The example preserves the original whole-surface X001 runs for connective-field global-signal correction. Match model settings and run order, and use a fresh MATLAB results directory to avoid stale caches.
     packages:
       - name: SamSrf X (Rust and WebAssembly port)
         url: https://github.com/samsrf/samsrf
@@ -2356,6 +2356,26 @@ apps:
         reference: "Schiavo JK, Valtcheva S, Bair-Marshall CJ, Song SC, Martin KA, Froemke RC. Innate and plastic mechanisms for maternal behaviour in auditory cortex. Nature. 2020;587(7834):426–431. Data: DANDI archive 000249, version 0.230423.1416, CC-BY-4.0."
         doi: 10.1038/s41586-020-2807-6
         url: https://doi.org/10.48324/dandi.000249/0.230423.1416
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  spot-detection:
+    about:
+      - "Spot detection finds diffraction-limited spots, such as single mRNA molecules in smFISH images, in one 2D image or 3D stack. It ports Big-FISH 0.6.2's detector to JavaScript: a Laplacian of Gaussian filter whose sigma is the spot radius in voxels, local maxima (voxels equal to the largest filtered value within sigma, rounded up, voxels along each axis), an automatic threshold at the elbow of the curve of log spot count against threshold, and a Gaussian fit of each spot for its sub-pixel position."
+      - "On Big-FISH's example stack the app finds the same 771 spots at the same automatic threshold (355) as Big-FISH 0.6.2, and the same 656 spots at threshold 203 in its maximum projection; its filtered image equals Big-FISH's voxel for voxel. The sub-pixel fit uses Levenberg-Marquardt on the same model where Big-FISH uses SciPy's trust-region-reflective solver: positions agree within 0.001 px except on 15 of the 771 spots, where Big-FISH's fit is degenerate."
+      - "Dense-region decomposition and cluster detection are not included. The input is one channel: save each channel of a multichannel TIFF as its own stack."
+    packages:
+      - { name: Big-FISH (port), url: https://github.com/fish-quant/big-fish, role: "LoG spot detection, elbow threshold and Gaussian sub-pixel fit, ported from Big-FISH 0.6.2 (BSD-3-Clause)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Spot detection
+        title: FISH-quant v2 (Big-FISH)
+        reference: "Imbert A, Ouyang W, Safieddine A, Coleno E, Zimmer C, Bertrand E, Walter T, Mueller F. FISH-quant v2: a scalable and modular tool for smFISH image analysis. RNA. 2022;28(6):786–795."
+        doi: 10.1261/rna.079073.121
+        code: https://github.com/fish-quant/big-fish
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

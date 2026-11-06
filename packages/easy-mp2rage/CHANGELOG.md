@@ -1,5 +1,7 @@
 # @neurodesk/easy-mp2rage
 
+## 0.8.20261106
+
 ## 0.8.20261104
 
 ### Patch Changes

@@ -7094,6 +7094,20 @@
         "license": "CC-BY-4.0"
       }
     ],
+    "spot-detection": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/baa8f47df751ce1e1d3158733ce17804cbcc761d/spot-detection/example/experiment_1_smfish_fov_1.tif",
+        "sha256": "bc6aec1f3da4c25f3c6b579c274584ce1e88112c7f980e5437b5ad5223bc8ff6",
+        "bytes": 14953308,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/baa8f47df751ce1e1d3158733ce17804cbcc761d/spot-detection/example/experiment_1_cell_label.tif",
+        "sha256": "f37fbb7fdf0234445881fdfa6447dd315f3dee787d605316360ad65296543920",
+        "bytes": 5250,
+        "kind": "example"
+      }
+    ],
     "gliomoda": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T1GD.nii.gz",

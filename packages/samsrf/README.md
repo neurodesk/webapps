@@ -135,9 +135,15 @@ a u32 count, that many u32 pixel indices and that many f64 values.
 
 | Signature | Description |
 | --- | --- |
-| `exportGiis({ values, vertices, data }, prefix, selection = null) → [{ name, bytes }]` | `samsrf_export_giis`: one GIFTI per map row, named `{prefix}_{lower(name)}.gii` with spaces as `_` (`lh_pRF_Gaussian_r^2.gii`, `lh_pRF_Gaussian_noise_ceiling.gii`), preceded by `{prefix}_pol.gii` and `{prefix}_ecc.gii` when the maps hold `x0`. `selection` names the rows to export, case-insensitive; `'Polar'` and `'Eccentricity'` select the derived maps. |
+| `exportGiis({ values, vertices, data }, prefix, selection = null, convention = 'samsrf-10.4') → [{ name, bytes }]` | `samsrf_export_giis`: one GIFTI per map row, named `{prefix}_{lower(name)}.gii` with spaces as `_` (`lh_pRF_Gaussian_r^2.gii`, `lh_pRF_Gaussian_noise_ceiling.gii`), preceded by `{prefix}_pol.gii` and `{prefix}_ecc.gii` when the maps hold `x0`. `selection` names the rows to export, case-insensitive; `'Polar'` and `'Eccentricity'` select the derived maps. |
 | `writeGiftiMap(values) → Uint8Array` | One float32 per-vertex map as SPM's `gifti/save` writes it. |
-| `polarAndEccentricity({ values, vertices, data }) → { polar, eccentricity } \| null` | Polar angle in degrees and eccentricity from rows 2 and 3 (`x0`, `y0`), eccentricity 0 where row 1 (`R^2`) is 0; `null` without an `x0` row. |
+| `polarAndEccentricity({ values, vertices, data }, convention = 'samsrf-10.4') → { polar, eccentricity } \| null` | Polar angle in degrees and eccentricity from rows 2 and 3 (`x0`, `y0`), eccentricity 0 where row 1 (`R^2`) is 0; `null` without an `x0` row. |
+
+`convention: 'samsrfx-10.003'` reproduces the older Neurodesk container's
+float32 derived maps and eccentricity offset of −0.5. The app and CLI read
+`Export_Convention` from model JSON; the app also exposes it under Advanced
+settings. This affects map display/export, not fitting precision. The geometric
+default has no offset. See the [actual container comparison](validation/container/README.md).
 
 ### Analyses
 
@@ -328,6 +334,8 @@ example subject with SamSrf's own code run in Octave, and lists every check
 with its result and the native and WebAssembly errfun timings.
 [validation/octave/README.md](validation/octave/README.md) describes how the
 reference is produced.
+[validation/container/README.md](validation/container/README.md) adds actual
+MATLAB Runtime references, a controlled precision comparison and CI gates.
 
 ## Divergences from SamSrf
 
@@ -337,7 +345,10 @@ reference is produced.
   conversion always happens. This can change coarse seeds and fine-fit optimizer
   paths, not just the final rounding. The Octave harness defaults to double; its
   `SAMSRF_REFERENCE_PRECISION=single` mode retains the upstream conversion.
-  Neither mode establishes equivalence to an actual MATLAB run.
+  Neither Octave mode establishes equivalence to an actual MATLAB run. A separate
+  compiled MATLAB Runtime probe now matches the web core's Gaussian fine-fit
+  parameters within 2.8e-14 on 20 vertices when observations use the same double
+  precision; the default-single container still differs by up to 0.001318° in y0.
 - **Detrending.** `detrend` solves the centred normal equations, where MATLAB
   uses QR. The two agree to about 1e-14 of the course's scale.
 - **Double gamma.** `samsrf_doublegamma` with more than seven parameters

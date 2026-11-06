@@ -1,5 +1,12 @@
 # easy-mp2rage
 
+## 0.8.20261106
+
+### Patch Changes
+
+- Name the missing images on the disabled action button and in the status bar for each task.
+  - @neurodesk/easy-mp2rage@0.8.20261106
+
 ## 0.8.20261104
 
 ### Patch Changes

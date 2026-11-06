@@ -16,7 +16,7 @@ import sourceParser from '@neurodesk/code-quality';
 const TOP_LEVEL = ['apps', 'packages', 'exes'];
 // Apps are leaves: a package that mentions an app does not use what that app uses.
 const TRAVERSABLE_WORKSPACE_GROUPS = new Set(['packages', 'exes']);
-const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'target', '.turbo', '.vite', 'coverage', 'test-results', 'playwright-report']);
+const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'dist-sites', 'target', '.turbo', '.vite', 'coverage', 'test-results', 'playwright-report']);
 const TEXT_FILE = /\.(?:[cm]?[jt]sx?|json|html|css|rs|toml|py|sh|ya?ml)$|^Makefile$/;
 const MAX_TEXT_BYTES = 1024 * 1024;
 // A relative path, or a root-relative string such as 'exes/compute-server/src/x.rs'

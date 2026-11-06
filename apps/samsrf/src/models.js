@@ -1,6 +1,7 @@
 // SamSrf analyses and model presets. A model is the JSON object SamSrf reads
 // (Models/Json/*.json); presets reproduce the three example JSON files and the
 // standard models at commit 41ed1e96 (horizontal tuning follows the GUI .mod).
+import { exportConvention } from "@neurodesk/samsrf";
 
 /** @typedef {'prf' | 'rc' | 'cf'} Analysis */
 
@@ -204,7 +205,9 @@ export const DEFAULT_SETTINGS = Object.freeze({ scalingFactor: 9.5, tr: 1 });
 export function buildModel(presetId, settings = DEFAULT_SETTINGS) {
   const preset = PRESETS[presetId];
   if (!preset) throw new Error(`Unknown model preset ${presetId}.`);
-  return preset.build({ ...DEFAULT_SETTINGS, ...settings });
+  const model = preset.build({ ...DEFAULT_SETTINGS, ...settings });
+  const convention = exportConvention(settings.exportConvention);
+  return convention === "samsrf-10.4" ? model : { ...model, Export_Convention: convention };
 }
 
 /** Imported or edited JSON owns its grids; only active presets regenerate theirs. */
@@ -256,6 +259,7 @@ export function parseModel(text, analysis) {
   }
   if (!model || typeof model !== "object" || Array.isArray(model)) throw new Error("The model JSON must be an object.");
   if (typeof model.Name !== "string" || !model.Name) throw new Error("The model needs a Name.");
+  exportConvention(model.Export_Convention);
   if (analysis === "prf") {
     for (const key of ["Prf_Function", "Param_Names", "Scaled_Param", "Only_Positive", "Scaling_Factor", "TR", "Hrf"]) {
       if (!(key in model)) throw new Error(`A forward-model pRF model needs ${key}.`);

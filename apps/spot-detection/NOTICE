@@ -1,0 +1,21 @@
+Spot detection web app
+Copyright 2026 Neurodesk contributors
+
+src/bigfish.js and src/subpixel.js port the spot detection and sub-pixel fit
+of Big-FISH 0.6.2 (https://github.com/fish-quant/big-fish),
+Copyright © 2020, Arthur Imbert, under the BSD 3-Clause licence (LICENSE).
+
+Imbert A, et al. FISH-quant v2: a scalable and modular tool for smFISH image
+analysis. RNA. 2022;28(6):786-795. doi:10.1261/rna.079073.121
+
+The erf in src/subpixel.js is translated from FreeBSD msun lib/msun/src/s_erf.c
+(fdlibm), which carries this notice:
+
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunPro, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================

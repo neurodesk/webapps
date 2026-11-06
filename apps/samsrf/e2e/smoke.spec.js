@@ -82,11 +82,16 @@ async function useSmallRoi(page) {
 async function runEveryAnalysis(page, timeout) {
   for (const [analysis, expected] of Object.entries(RUNS)) {
     await page.locator("#analysis").selectOption(analysis);
+    await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
+    await page.locator("#exportConvention").selectOption("samsrfx-10.003");
     const run = page.locator("#runButton");
     await expect(run).toBeEnabled();
     await run.click();
+    await expect(page.locator("#exportConvention")).toBeDisabled();
     // The previous analysis leaves the output section open; its status line names the analysis.
     await expect(page.locator("#statusText")).toContainText(expected.outcome, { timeout });
+    await expect(page.locator("#exportConvention")).toBeEnabled();
+    await expect(page.locator("#exportConvention")).toHaveValue("samsrfx-10.003");
     await expect(page.locator("#outputSection")).toHaveAttribute("open", "");
     for (const label of ["Polar angle", "Eccentricity", "R²"]) {
       await expect(page.locator("#resultList")).toContainText(label);
@@ -109,6 +114,14 @@ async function runEveryAnalysis(page, timeout) {
     const r2 = giftiMap(entries[`${expected.outName}_r^2.gii`]);
     expect(r2).toHaveLength(VERTICES);
     expect(r2.filter((value) => value > 0).length, `${analysis}: vertices with R² > 0`).toBeGreaterThan(0);
+    const x = giftiMap(entries[`${expected.outName}_x0.gii`]);
+    const y = giftiMap(entries[`${expected.outName}_y0.gii`]);
+    const ecc = giftiMap(entries[`${expected.outName}_ecc.gii`]);
+    const mismatch = ecc.findIndex((value, v) => {
+      const radius = Math.fround(Math.sqrt(Math.fround(Math.fround(x[v] * x[v]) + Math.fround(y[v] * y[v]))));
+      return !Object.is(value, r2[v] === 0 ? 0 : Math.fround(radius - 0.5));
+    });
+    expect(mismatch, `${analysis}: legacy eccentricity at vertex ${mismatch}`).toBe(-1);
   }
 }
 
@@ -121,6 +134,26 @@ test("app boots on its workspace with the shared bar", async ({ page }) => {
   await expect(page.locator("#infoDialog").getByRole("heading", { name: `About ${automation.title}`, exact: true })).toBeVisible();
   await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
   expect(await page.evaluate(() => self.crossOriginIsolated === true)).toBe(true);
+});
+
+test("legacy export selection survives presets, disclosure and a saved model", async ({ page }) => {
+  await page.goto("/");
+  const advanced = page.getByText("Advanced settings", { exact: true });
+  await advanced.click();
+  const convention = page.getByLabel("Map export", { exact: true });
+  await expect(convention).toHaveValue("samsrf-10.4");
+  await convention.selectOption("samsrfx-10.003");
+  await advanced.click();
+  await page.locator("#analysis").selectOption("cf");
+  await advanced.click();
+  await expect(convention).toHaveValue("samsrfx-10.003");
+  const saved = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save model JSON" }).click();
+  const model = JSON.parse(readFileSync(await (await saved).path(), "utf8"));
+  expect(model.Export_Convention).toBe("samsrfx-10.003");
+  await convention.selectOption("samsrf-10.4");
+  await page.locator("#modelInput").setInputFiles({ name: "legacy.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(model)) });
+  await expect(convention).toHaveValue("samsrfx-10.003");
 });
 
 test("custom model grids survive radius edits and circular tuning fixes its scale", async ({ page }) => {

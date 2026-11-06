@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spot detection — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a smFISH TIFF stack" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a one-channel TIFF stack</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Detection</summary>
+        <div class="nd-section-content">
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="voxelZ">Voxel z <small>nm</small></label>
+              <input id="voxelZ" type="number" min="1" step="any" value="300" />
+            </div>
+            <div class="nd-field">
+              <label for="voxelYx">Voxel yx <small>nm</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About the voxel size">i<span class="nd-info-tooltip">The physical size of one voxel. It is read from ImageJ or OME-TIFF metadata when the file has it. The example's values are those of the Big-FISH tutorial: 300 nm between planes, 103 nm pixels.</span></span>
+              </label>
+              <input id="voxelYx" type="number" min="1" step="any" value="103" />
+            </div>
+          </div>
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="radiusZ">Spot radius z <small>nm</small></label>
+              <input id="radiusZ" type="number" min="1" step="any" value="350" />
+            </div>
+            <div class="nd-field">
+              <label for="radiusYx">Spot radius yx <small>nm</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About the spot radius">i<span class="nd-info-tooltip">The expected spot radius, roughly the PSF width. Divided by the voxel size it gives the LoG filter's sigma and the minimum distance between spots in voxels, as Big-FISH's get_object_radius_pixel does.</span></span>
+              </label>
+              <input id="radiusYx" type="number" min="1" step="any" value="150" />
+            </div>
+          </div>
+          <div class="nd-field">
+            <label for="detectIn">Detect in</label>
+            <select id="detectIn" disabled>
+              <option value="stack">3D stack</option>
+              <option value="projection">2D maximum projection</option>
+              <option value="image" hidden>2D image</option>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="threshold">Threshold <small>LoG response</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the threshold">i<span class="nd-info-tooltip">Local maxima of the filtered image above this value are spots. Leave it empty for Big-FISH's automatic threshold: the elbow of the curve of log spot count against threshold. The Analysis log gives the threshold each run used.</span></span>
+                </label>
+                <input id="threshold" type="number" min="0" step="any" placeholder="Automatic" />
+              </div>
+              <label class="nd-check"><input id="subpixel" type="checkbox" checked /> Sub-pixel Gaussian fit</label>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Detect spots</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="labelSection">
+        <summary class="nd-section-title">Cell labels</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="labelInput">Labels <small>optional</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About cell labels">i<span class="nd-info-tooltip">An integer label image, 0 for background and one value per cell, either one plane of the image's y × x size (applied to every z) or a stack of the image's size. Each spot counts in the cell under its voxel.</span></span>
+            </label>
+            <div id="labelField"></div>
+          </div>
+          <button id="clearLabels" class="nd-btn nd-btn-secondary" type="button" hidden>Remove labels</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a TIFF stack anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Detection progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel" aria-label="Cancel" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

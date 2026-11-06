@@ -1,18 +1,19 @@
 import { chromium } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { navigateDeployed } from '../test-utils/deployed-navigation.mjs';
 import { waitForAppIsolation } from '../test-utils/deployed-isolation.mjs';
+import { siteUnderTest } from '../test-utils/site-catalog.mjs';
 import { verifyMuscleMapFullPipeline } from './musclemap-full-pipeline-smoke.mjs';
 import { verifyMuscleMapThreads } from './multithreaded-ort-smoke.mjs';
 
 const baseURL = process.env.BASE_URL;
 if (!baseURL) throw new Error('BASE_URL is required (for example https://example.github.io/webapps/)');
 
-const registry = await loadAppsRegistry();
+const { apps } = await siteUnderTest();
 const isolatedApps = [];
-for (const app of registry.apps) {
+for (const app of apps) {
   const packageJson = JSON.parse(await readFile(join(repoRoot, 'apps', app.id, 'package.json'), 'utf8'));
   if (packageJson.neurodeskWebapp?.coiServiceWorker || packageJson.neurodeskWebapp?.static?.coiServiceWorker) isolatedApps.push(app);
 }

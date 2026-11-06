@@ -91,8 +91,14 @@
                 <input id="revcorThreshold" type="number" min="0" max="1" step="0.01" value="0" />
               </div>
               <div class="nd-field">
+                <label for="exportConvention">Map export
+                  <span class="nd-info-icon" tabindex="0" aria-label="About map export conventions">i<span class="nd-info-tooltip">The Neurodesk v10.004 container reports SamSrf 10.003. Its legacy export subtracts 0.5 from eccentricity and derives maps in float32. This choice changes display and downloads; fitting remains float64.</span></span>
+                </label>
+                <select id="exportConvention"></select>
+              </div>
+              <div class="nd-field">
                 <label for="modelJson">Model JSON
-                  <span class="nd-info-icon" tabindex="0" aria-label="About the model JSON">i<span class="nd-info-tooltip">The model exactly as SamSrf reads it. Edits here are used for the run; the fields above update to match.</span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the model JSON">i<span class="nd-info-tooltip">SamSrf model fields plus Export_Convention for this app's map exports. Edits here are used for the run; the fields above update to match.</span></span>
                 </label>
                 <textarea id="modelJson" rows="10" spellcheck="false"></textarea>
               </div>
