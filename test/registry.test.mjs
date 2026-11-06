@@ -206,6 +206,7 @@ test('catalog assigns task categories and shares apps across related categories'
     reproin: ['conversion'],
     'calcium-imaging': ['microscopy'],
     stardist: ['microscopy'],
+    'spot-detection': ['microscopy'],
     zarro: ['visualization', 'microscopy'],
     fastprep: ['preprocessing', 'functional-imaging', 'pipelines'],
     'me-ica': ['preprocessing', 'functional-imaging'],
