@@ -339,7 +339,14 @@ MATLAB Runtime references, a controlled precision comparison and CI gates.
 
 ## Divergences from SamSrf
 
-- **Precision.** Every computation is in f64. SamSrf converts Srf data to
+- **Precision.** Double arithmetic remains the default. Forward-model JSON
+  can select `"Data_Precision": "single"`: processed courses and noise
+  ceilings are rounded before selection, the fitting objective uses mixed
+  single/double arithmetic, and saved maps are rounded as in SamSrf. This
+  option currently rejects reverse-correlation analyses. It does not promise
+  bit parity: coarse matrix BLAS and the final GLM can differ by single-
+  precision rounding, and the GLM uses a stable double solve on rounded
+  inputs with the single-precision rank threshold. SamSrf converts Srf data to
   single precision (`samsrf_32bit_srf`). Its 64-bit opt-out tests
   `exist('SamSrfDefs.defs_64bit', 'var')`, a variable that never exists, so the
   conversion always happens. This can change coarse seeds and fine-fit optimizer
@@ -390,10 +397,10 @@ MATLAB Runtime references, a controlled precision comparison and CI gates.
   `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside
   the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected
   `rc` model fit included; `nR^2` is 0 there too.
-- **Template precision.** `readBensonTemplate` rounds every step to single
-  precision as MATLAB does, but Rust's `cos` and `sin` are correctly rounded
-  where Octave's single-precision versions are not: about 0.1 % of the
-  template coordinates differ by one float32 ulp (4e-8 relative).
+- **Template precision.** `readBensonTemplate` retains double scalar constants
+  until each mixed operation is rounded to single, as MATLAB does. Its sine
+  and cosine implementation can still differ from MATLAB's by a few float32
+  ULPs. Both hemispheres are covered by the actual MATLAB importer fixture.
 - **`fminsearch` stop.** SamSrf stops a fine fit when its `OutputFcn` sees a
   non-finite best value; that can only be the first value (NaN sorts last), and
   the port does the same. MATLAB's exit flag for that case is not reproduced;

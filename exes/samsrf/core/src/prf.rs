@@ -11,6 +11,7 @@
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::expr::Value;
+use crate::precision::{self, Precision};
 
 /// The points a profile is evaluated at, with the parameter transform the grid branch applies.
 struct Domain {
@@ -358,6 +359,21 @@ pub fn errfun(
     downsampling: usize,
     css_nonlinearity: bool,
 ) -> Result<f64> {
+    errfun_with_precision(prf_function, apertures, xy, hrf, p, observed, downsampling, css_nonlinearity, Precision::Double)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn errfun_with_precision(
+    prf_function: &crate::expr::AnonymousFunction,
+    apertures: &Apertures,
+    xy: &[[f64; 2]],
+    hrf: &crate::hrf::ErrfunHrf,
+    p: &[f64],
+    observed: &[f64],
+    downsampling: usize,
+    css_nonlinearity: bool,
+    precision: Precision,
+) -> Result<f64> {
     use crate::hrf::ErrfunHrf;
     let n = p.len();
     let hrf_parameters = match hrf {
@@ -393,8 +409,16 @@ pub fn errfun(
         compress(&mut yp, exponent);
     }
     let yp = crate::hrf::convolve(&yp, &kernel, downsampling);
-    let r = pearson(&yp, observed);
-    Ok(1.0 - r * r)
+    Ok(match precision {
+        Precision::Double => {
+            let r = pearson(&yp, observed);
+            1.0 - r * r
+        }
+        Precision::Single => {
+            let r = precision::correlation_single(&yp, observed, false);
+            f64::from(1.0f32 - r * r)
+        }
+    })
 }
 
 #[cfg(test)]

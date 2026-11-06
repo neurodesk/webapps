@@ -33,6 +33,7 @@ for precision = {'double', 'single'}
     converted = samsrf_32bit_srf(struct('Data', [pi 1/3]));
     assert(strcmp(class(converted.Data), kind), 'Precision setting was not honored');
     cases = [cases, correlation_cases(kind)]; %#ok<AGROW>
+    cases = [cases, complex_correlation_cases(d, kind)]; %#ok<AGROW>
     cases = [cases, fit_cases(d, kind)]; %#ok<AGROW>
     write_json('reference.json.partial', struct('cases', {cases}));
 end
@@ -159,6 +160,47 @@ end
     end
 end
 
+function cases = complex_correlation_cases(d, kind)
+cases = {};
+for n = [50 64 250 600]
+    t = (1:n)';
+    y = cast(0.3*cos(t*sqrt(3)) + 0.7*sin(t*sqrt(2)), kind);
+    for scale = [0 1e-8 0.3]
+        x = sin(t*sqrt(2)).*(1+mod(t,7))*0.1 + 1i*scale*cos(t*sqrt(5));
+        id = sprintf('complex_corr_%s_n%d_scale%g', kind, n, scale);
+        cases{end+1} = complex_case(id, kind, x, y); %#ok<AGROW>
+    end
+end
+for vertex = 1:2
+    p = double(d.Seeds(:,vertex));
+    raw = prf_predict_timecourse(prf_gaussian_rf(p(1),p(2),p(3),d.ApXY), d.ApFrm);
+    y = cast(d.Ys(:,vertex), kind);
+    for exponent = [0.55 1 1.05]
+        x = prf_convolve_hrf(raw.^exponent, d.Hrf, 1);
+        id = sprintf('complex_css_%s_v%d_exponent%g', kind, vertex, exponent);
+        cases{end+1} = complex_case(id, kind, x, y); %#ok<AGROW>
+    end
+end
+end
+
+function item = complex_case(id, kind, x, y)
+xc = x - mean(x);
+yc = y - mean(y);
+product = xc' * yc;
+first = product / norm(xc);
+r = corr(x,y);
+values = {x, y, xc, yc, mean(x), mean(y), norm(xc), norm(yc), ...
+    product, first, first/norm(yc), r, 1-r.^2, ...
+    corr(single(x),single(y)), (xc/norm(xc))'*(yc/norm(yc))};
+names = {'x', 'y', 'xc', 'yc', 'meanX', 'meanY', 'normX', 'normY', ...
+    'mixedDot', 'firstDivision', 'secondDivision', 'correlation', 'objective', ...
+    'singleCorrelation', 'normalizedDot'};
+item = struct('id', id, 'kind', 'complex_correlation', 'precision', kind, 'realInput', isreal(x));
+for i = 1:numel(names)
+    item.(names{i}) = array_file([id '_' names{i}], values{i});
+end
+end
+
 function cases = css_cases(d)
 cases = {};
 profile = @(p, xy) prf_gaussian_rf(p(1), p(2), p(3), xy);
@@ -252,6 +294,11 @@ for height = 2.^(-29:-21)
         points{end+1} = triangle; %#ok<AGROW>
         rotation = [cos(0.7) -sin(0.7); sin(0.7) cos(0.7)];
         points{end+1} = triangle * rotation; %#ok<AGROW>
+    end
+end
+for height = (1.5:0.05:3) * 1e-8
+    for scale = [1e-3 1 1e3]
+        points{end+1} = [0 0; 1 height; 2 0] * scale; %#ok<AGROW>
     end
 end
 for i = 1:numel(points)

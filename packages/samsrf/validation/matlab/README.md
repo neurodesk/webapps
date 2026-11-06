@@ -18,7 +18,9 @@ optimizer is replaced. References from this repaired source must be labeled
 separately from stock container results.
 
 The manual `samsrf-native` workflow can record these cases with
-`record_matlab=true`. Public GitHub Actions runs are licensed by MathWorks
+`record_matlab=true`. Set `include_matrix=false` for a shorter diagnostic run
+that omits participant pipelines while retaining numerical primitive cases.
+Public GitHub Actions runs are licensed by MathWorks
 for MATLAB and the required toolboxes. A MATLAB Compiler license is needed
 only to package a new standalone Runtime application; it is not needed for
 this source-level comparison.
@@ -63,3 +65,52 @@ grid to the requested profile dimensions. The source recording therefore uses
 the original 100-pixel resolution. The failed 20-pixel run is evidence of an
 upstream execution limit, not a passing web-equivalence case. Each completed
 pipeline case also writes its own metadata so a later failure does not hide it.
+
+## Building a matching Runtime container
+
+`build_container.py` is the build recipe for the repaired, version-matched
+command-line reference. It verifies the SamSrf commit and exact repair bytes,
+rejects additional tracked changes, and checks the SPM commit before invoking
+MATLAB Compiler. It records the MATLAB environment and resulting local image
+ID. It does not publish the image.
+
+This recipe has not been executed with MATLAB Compiler. The source checks
+have been exercised locally; successful source recordings do not validate the
+compiled application or its container packaging.
+
+On a Linux x86-64 host with MATLAB R2023b, MATLAB Compiler, the Statistics,
+Image Processing and Parallel Computing toolboxes, and Docker:
+
+```sh
+python3 packages/samsrf/validation/matlab/build_container.py \
+  "$TMPDIR/samsrf-source" "$TMPDIR/spm12" "$TMPDIR/samsrf-container-build"
+```
+
+Use the prepared SamSrf checkout from above and SPM's commit in `source.json`.
+The build uses MathWorks'
+[standalone compiler](https://www.mathworks.com/help/compiler/compiler.build.standaloneapplication.html)
+and [Runtime image builder](https://www.mathworks.com/help/compiler/compiler.runtime.createdockerimage.html),
+then [packages the application](https://www.mathworks.com/help/compiler/compiler.package.docker.html).
+It selects the Runtime for the installed MATLAB build instead of reusing the
+older Neurodesk image's Runtime.
+
+Run the image from a fresh writable results directory containing a copy of
+the generated `SamSrf_defaults.json`. Set its `def_64bit` field to `true` for
+the double reference or `false` for the default single reference. The
+standalone application's defaults loader uses its starting directory. Mount
+input files separately and pass their absolute container paths:
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$INPUT:/input:ro" -v "$RESULTS:/results" -w /results \
+  samsrf-reference:41ed1e96-r2023b \
+  prf /input/model '/input/lh_*.gii' -outpath=/results
+```
+
+The model argument omits `.json`, as required by `SamSrfAnalysis`; aperture
+and other paths in that model must also resolve inside the container. Use a
+new results directory for each case to avoid MATLAB's source/regressor
+caches. Before publishing an image, run the same matrix through the compiled
+CLI, compare its saved maps with the source reference, and record its immutable
+registry digest. Until then, it is a build recipe, not a validated replacement
+for the existing Neurodesk container.

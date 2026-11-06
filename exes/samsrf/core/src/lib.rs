@@ -7,8 +7,8 @@
 //! in `fit_prf`, `samsrf_revcor_prf` in `revcor_prf`, `samsrf_revcor_cf` in
 //! `revcor_cf`) behind one `job::Job` that runs vertex ranges independently.
 //!
-//! Every computation is in f64. SamSrf converts its data to single precision
-//! (`samsrf_32bit_srf`); see packages/samsrf/README.md for the divergence list.
+//! Double arithmetic is the default. Forward fits also support SamSrf's mixed
+//! arithmetic with single observations; see `precision` and the package README.
 
 pub mod apertures;
 pub mod error;
@@ -27,6 +27,7 @@ pub mod mesh;
 pub mod model;
 pub mod nifti_aps;
 pub mod optim;
+pub mod precision;
 pub mod preprocess;
 pub mod prf;
 pub mod revcor_cf;

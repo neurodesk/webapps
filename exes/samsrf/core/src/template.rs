@@ -24,8 +24,10 @@ pub fn benson_template(polar: &[f32], eccentricity: &[f32], rois: &[f32], right_
     for v in 0..n {
         let roi = rois[v];
         let angle = -polar[v] + 90.0f32;
-        // single / double and single * double stay single in MATLAB.
-        let radians = angle / 180.0f32 * std::f32::consts::PI;
+        // A mixed scalar operation evaluates in double, then rounds to single.
+        // Rounding pi before the multiplication changes the atlas coordinates.
+        let turns = (f64::from(angle) / 180.0) as f32;
+        let radians = (f64::from(turns) * std::f64::consts::PI) as f32;
         let mut x0 = eccentricity[v] * radians.cos();
         let y0 = eccentricity[v] * radians.sin();
         if right_hemisphere {
@@ -67,5 +69,13 @@ mod tests {
         assert!(maps.row(3).iter().all(|value| value.is_nan()));
         let flipped = benson_template(&[90.0], &[2.0], &[1.0], true).unwrap();
         assert_eq!(flipped.row(1)[0], -2.0);
+    }
+
+    #[test]
+    fn benson_keeps_double_pi_until_the_product_is_rounded() {
+        // X001 LH vertex 64 in the independent MATLAB importer fixture.
+        let maps = benson_template(&[43.106476], &[58.12849], &[1.0], false).unwrap();
+        assert_eq!(maps.row(1)[0], 39.72247314453125);
+        assert_eq!(maps.row(2)[0], 42.43873977661133);
     }
 }
