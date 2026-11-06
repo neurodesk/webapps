@@ -2229,7 +2229,7 @@ apps:
 
   samsrf:
     about:
-      - This port uses double precision and real-valued compressive responses. Validation includes Octave and limited comparisons with the actual SamSrfX MATLAB Runtime container; default single-precision MATLAB fits can still differ. Advanced settings offers the older container's eccentricity export convention. The example preserves the original whole-surface X001 runs for connective-field global-signal correction. Match model settings and run order, and use a fresh MATLAB results directory to avoid stale caches.
+      - Map population receptive fields and connective fields from surface time series. Advanced settings offers MATLAB single precision for forward fits, SamSrf's complex CSS convention, and the older container's eccentricity export convention. Validation includes actual MATLAB source and SamSrfX Runtime references; these options do not guarantee identical results for every dataset and setting. The example preserves the original whole-surface X001 runs for connective-field global-signal correction. Match model settings and run order, and use a fresh MATLAB results directory to avoid stale caches.
     packages:
       - name: SamSrf X (Rust and WebAssembly port)
         url: https://github.com/samsrf/samsrf

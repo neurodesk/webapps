@@ -5,9 +5,8 @@ uses MATLAB's own optimizers, correlation, single arithmetic and geometry.
 The existing [compiled container reference](../container/README.md) remains
 an independent baseline for the unmodified Neurodesk application.
 
-The source recorder is under development. Recording successfully is not a
-parity assertion; its results must be compared with the web core before a
-compatibility mode or new tolerance is accepted.
+Recording successfully is not a parity assertion. The required comparisons
+and the diagnostic cases that retain differences are listed below.
 
 `prepare.py` requires the clean commit in `source.json` and applies three
 explicit repairs: make the documented double-precision setting work, omit
@@ -20,8 +19,8 @@ separately from stock container results.
 The manual `samsrf-native` workflow can record these cases with
 `record_matlab=true`. Set `include_matrix=false` for a shorter diagnostic run
 that omits participant pipelines while retaining numerical primitive cases.
-Public GitHub Actions runs are licensed by MathWorks
-for MATLAB and the required toolboxes. A MATLAB Compiler license is needed
+Public GitHub Actions runs are [licensed by MathWorks](https://github.com/matlab-actions/setup-matlab#licensing)
+for MATLAB and the required toolboxes. That grant excludes Compiler. A MATLAB Compiler license is needed
 only to package a new standalone Runtime application; it is not needed for
 this source-level comparison.
 

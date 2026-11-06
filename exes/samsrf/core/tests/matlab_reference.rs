@@ -47,12 +47,20 @@ fn css_and_hrf_optimizer_parameters_match_matlab() {
         let kernel = array(&root, &case["hrf"]);
         let hrf = if kernel.len() == 1 { hrf::ErrfunHrf::Fit { tr: 1.0 } } else { hrf::ErrfunHrf::Kernel(kernel) };
         let expected = array(&root, &case["parameters"]);
+        let objectives = array(&root, &case["objective"]);
+        let imaginary = match case["objective"]["imaginary"].as_str() {
+            Some(file) if !file.is_empty() => array(&root, &json!({"file":file,"shape":case["objective"]["shape"]})),
+            _ => vec![0.0; objectives.len()],
+        };
         for (vertex, seed) in seeds.chunks(parameters).enumerate() {
             let y = &observations[vertex * volumes..(vertex + 1) * volumes];
             let result = optim::fminsearch(|p| prf::errfun_with_convention(&function, &apertures, &xy, &hrf, p, y, 1, case["css"] == true, precision, css::Convention::Samsrf).unwrap(), seed, &optim::FminsearchOptions::default());
             for (parameter, &actual) in result.x.iter().enumerate() {
                 close(actual, expected[vertex * parameters + parameter], if precision == Precision::Single { 0.0 } else { 1e-12 }, &format!("{} vertex {vertex} parameter {parameter}", case["id"]));
             }
+            let tolerance = if precision == Precision::Single { 0.0 } else { 1e-9 };
+            close(result.fval.re, objectives[vertex], tolerance, &format!("{} vertex {vertex} objective real", case["id"]));
+            close(result.fval.im, imaginary[vertex], tolerance, &format!("{} vertex {vertex} objective imaginary", case["id"]));
         }
     }
     assert_eq!(case_count, 14, "missing optimizer families");

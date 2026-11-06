@@ -336,6 +336,8 @@ with its result and the native and WebAssembly errfun timings.
 reference is produced.
 [validation/container/README.md](validation/container/README.md) adds actual
 MATLAB Runtime references, a controlled precision comparison and CI gates.
+[validation/matlab/README.md](validation/matlab/README.md) adds the pinned
+MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
 
 ## Divergences from SamSrf
 

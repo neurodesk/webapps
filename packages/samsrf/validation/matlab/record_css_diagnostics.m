@@ -17,7 +17,7 @@ frames = aps.ApFrm;
 xy = aps.ApXY / max(abs(aps.ApXY(:))) * model.Scaling_Factor;
 profile = str2func(model.Prf_Function);
 cases = {};
-for vertex = [15 26 47 58 74 79 81 88]
+for vertex = [15 18 26 47 58 67 74 79 81 88 89]
     scores = correlations(vertex,:).^2;
     selected = scores >= prctile(scores,100);
     seed = [mean(grid(1:3,selected),2); 1];
@@ -59,6 +59,33 @@ for precision = {'single','double'}
                 'prediction',array_file([id '_prediction'],x), ...
                 'observations',array_file([id '_observations'],y), ...
                 'beta',array_file([id '_beta'],beta)); %#ok<AGROW>
+        end
+    end
+end
+% Bracket the complex regression rank decision independently of CSS fitting.
+for precision = {'single','double'}
+    kind = precision{1};
+    if strcmp(kind,'single')
+        exponents = [-4 -3.5 -3 -2.5 -2 2 2.5 3 3.5 4];
+    else
+        exponents = [-10 -9 -8 -7 -6 6 7 8 9 10];
+    end
+    for volumes = [16 250]
+        t = (1:volumes)';
+        y = cast(2*sin(t)+3,kind);
+        for exponent = exponents
+            for imaginary = [0 0.3]
+                x = 10^exponent*(sin(t)+1i*imaginary*cos(t));
+                design = [ones(size(x)) x];
+                beta = design \ y;
+                uniform = cast(design,kind) \ y;
+                id = sprintf('rank_%s_n%d_e%g_i%g',kind,volumes,exponent,imaginary);
+                cases{end+1} = struct('id',id,'kind','glm','precision',kind, ...
+                    'prediction',array_file([id '_prediction'],x), ...
+                    'observations',array_file([id '_observations'],y), ...
+                    'beta',array_file([id '_beta'],beta), ...
+                    'uniformBeta',array_file([id '_uniform_beta'],uniform)); %#ok<AGROW>
+            end
         end
     end
 end

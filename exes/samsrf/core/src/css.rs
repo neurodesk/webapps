@@ -37,6 +37,9 @@ pub fn predict(raw: &[f64], exponent: f64, kernel: &[f64], downsampling: usize) 
 
 pub fn objective(predicted: &[Complex64], observed: &[f64], precision: Precision) -> Complex64 {
     let r = correlation(predicted, observed, precision);
+    if !r.re.is_finite() || !r.im.is_finite() {
+        return Complex64::new(f64::NAN, 0.0);
+    }
     match precision {
         Precision::Double => Complex64::new(1.0 - (r.re * r.re - r.im * r.im), -2.0 * r.re * r.im),
         Precision::Single => {
