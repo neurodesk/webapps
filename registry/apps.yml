@@ -93,9 +93,15 @@ site:
     - id: privacy
       title: Privacy
       description: Remove identifying facial features from images before sharing.
-    - id: microscopy
-      title: Microscopy
-      description: Explore microscopy images, segment cells and analyse calcium signals.
+    - id: morphometry
+      title: Morphometry
+      description: Measure neuronal shape, branching and Sholl profiles.
+    - id: spot-detection
+      title: Spot Detection
+      description: Detect and count fluorescent spots in microscopy images.
+    - id: calcium-imaging
+      title: Calcium Imaging
+      description: Correct motion, extract cell signals and infer activity from calcium imaging.
     - id: visualization
       title: Visualization
       description: Explore large volumes and surfaces and make slice videos.
@@ -453,7 +459,7 @@ apps:
     catalog: microscopy
     title: ZARRo
     description: Stream, view and measure large OME-Zarr images.
-    categories: [visualization, microscopy]
+    categories: [visualization]
     keywords: [OME-Zarr, Zarr, microscopy, DANDI, multiscale, streaming, measurement, large volumes]
     anatomy: [any]
     modalities: [microscopy]
@@ -1396,7 +1402,7 @@ apps:
     catalog: microscopy
     title: StarDist
     description: Segment cell nuclei in 2D fluorescence microscopy.
-    categories: [microscopy]
+    categories: [segmentation]
     keywords: [StarDist, nucleus segmentation, nuclei, cell segmentation, instance segmentation, star-convex polygons, fluorescence microscopy, DAPI, OME-TIFF, deep learning]
     anatomy: [any]
     modalities: [microscopy]
@@ -1423,7 +1429,7 @@ apps:
     catalog: microscopy
     title: Calcium imaging
     description: Two-photon motion correction, ROIs, ΔF/F and spikes
-    categories: [microscopy]
+    categories: [calcium-imaging]
     keywords: [calcium imaging, two-photon, 2P, GCaMP, motion correction, registration, NoRMCorre, piecewise rigid, correlation image, ROI, neuropil, dF/F, OASIS, spike deconvolution, OME-TIFF, microscopy]
     anatomy: [brain]
     modalities: [microscopy]
@@ -1449,7 +1455,7 @@ apps:
     catalog: microscopy
     title: Spot detection
     description: Detect smFISH spots in 2D and 3D microscopy images.
-    categories: [microscopy]
+    categories: [spot-detection]
     keywords: [smFISH, spot detection, puncta, RNA, FISH-quant, Big-FISH, LoG, Laplacian of Gaussian, sub-pixel, microscopy, TIFF]
     anatomy: [any]
     modalities: [microscopy]
@@ -1502,7 +1508,7 @@ apps:
     catalog: microscopy
     title: NeuroMorph
     description: Check SWC neurons and measure morphology and Sholl.
-    categories: [microscopy]
+    categories: [morphometry]
     keywords: [neuron morphology, SWC, morphometrics, Sholl analysis, dendrites, axon, Strahler order, bifurcation angle, NeuroM, NeuroMorpho.Org, microscopy]
     anatomy: [brain]
     modalities: [microscopy]
