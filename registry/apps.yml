@@ -1401,6 +1401,7 @@ apps:
       browser_test: true
       release: false
   - id: calcium-imaging
+    catalog: neuro
     path: calcium-imaging
     title: Calcium imaging
     description: Two-photon motion correction, ROIs, ΔF/F and spikes
@@ -1426,6 +1427,7 @@ apps:
       browser_test: true
       release: false
   - id: spot-detection
+    catalog: neuro
     path: spot-detection
     title: Spot detection
     description: Detect smFISH spots in 2D and 3D microscopy images.
