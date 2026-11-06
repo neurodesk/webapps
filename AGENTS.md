@@ -32,6 +32,15 @@ Before changing UI, adding controls, or scaffolding an app, read [the design sys
 
 For catalog-wide work, use [the interface audit](docs/architecture/interface-audit.md) to track remaining changes per app. Update its findings when resolving them.
 
+## Catalogue sites
+
+Apps are served from several hosts: `webapps.neurodesk.org` (catalogue `neuro`, GitHub Pages), `mskapps.sciget.org` (`msk`, an assets-only Cloudflare Worker) and the `webapps.sciget.org` hub, which lists the catalogues and hosts no apps. Read [catalogue sites](docs/architecture/catalogue-sites.md) before changing hosting, the landing page or the build.
+
+- Every app names exactly one `catalog:` in `registry/apps.yml`; `site.catalogs` and `site.hub` hold the hosts and brands. A new app joins the primary catalogue unless `pnpm new-app --catalog <id>` says otherwise.
+- `dist/` stays the all-app assembly the desktop suite reads. `scripts/build-site.mjs` projects `dist-sites/<catalog>` and `dist-sites/hub` from it; `test/catalog-sites.test.mjs` (after a build) holds each site to its apps and to every file they reference.
+- A handoff only works within one host, so each site's DICOM View lists only that host's apps. A moved or renamed app keeps its old links through the 404 table generated from the registry (`former_paths`, other catalogues' apps); do not hand-edit `site/404.html` routes.
+- Reference shared runtime files (`_runtime/`) by plain string paths. The projection follows them and fails the build on a computed path.
+
 ## Working examples
 
 Every new app must offer a scientifically suitable example in its input section so users can try the main workflow without supplying files. Follow the example contract in [the interface standard](docs/architecture/interface-standard.md#examples): declare pinned data, register offline assets, and test selecting an example through processing and download. Include loading, failure, retry and cancellation behavior. Keep the generated example control and browser coverage when replacing template placeholders.

@@ -7,7 +7,7 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 async function sources(directory) {
   const result = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (['node_modules', 'dist', 'vendor', 'public', 'rust-wasm', 'niivue', 'dcm2niix', '.git'].includes(entry.name)) continue;
+    if (['node_modules', 'dist', 'dist-sites', 'vendor', 'public', 'rust-wasm', 'niivue', 'dcm2niix', '.git'].includes(entry.name)) continue;
     const path = join(directory, entry.name);
     if (entry.isDirectory()) result.push(...await sources(path));
     else if (/\.(?:js|ts)$/.test(entry.name)) result.push(path);

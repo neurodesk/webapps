@@ -76,3 +76,30 @@ test('app cards show data, hardware and command-line facts', async () => {
   assert.match(card('lcmodel'), /data-search="[^"]*vendor mrs[^"]*"/, 'facet labels are searchable');
   assert.match(card('brain-extraction'), /data-search="[^"]*skull stripping[^"]*"/, 'keywords stay searchable');
 });
+
+test('each catalogue lists only its own apps under its own brand', async () => {
+  const { catalogApps, findCatalog } = await import('../scripts/lib/apps-registry.mjs');
+  const registry = await loadAppsRegistry();
+  const standalone = await loadStandalone(registry);
+  for (const id of ['neuro', 'msk']) {
+    const catalog = findCatalog(registry, id);
+    const apps = catalogApps(registry, catalog);
+    const html = renderLandingPage({ ...registry, apps }, standalone, catalog);
+    const { document } = new JSDOM(html).window;
+    const listed = new Set([...document.querySelectorAll('[data-app-card]')].map(card => card.dataset.appId));
+    assert.deepEqual([...listed].sort(), apps.map(({ id: appId }) => appId).sort());
+    assert.equal(document.title, catalog.title);
+    assert.equal(document.querySelector('h1').textContent, catalog.heading);
+    assert.equal(document.querySelector('.brand img').getAttribute('src'), `./${catalog.brand.logo}`);
+    assert.equal(document.querySelector('.brand').getAttribute('href'), catalog.brand.home);
+    assert.ok(document.querySelector(`a[href="https://${registry.site.hub.host}/"]`), 'links to the hub');
+    for (const section of document.querySelectorAll('[data-category-section]')) {
+      assert.ok(section.querySelector('[data-app-card]'), `${id} shows no empty category`);
+    }
+    const primary = catalog.host === registry.site.domain;
+    assert.equal(Boolean(document.querySelector('#analytics')), primary, 'only the primary host reports usage');
+    assert.equal(Boolean(document.querySelector('a[href="./surf/"]')), primary, 'only the primary host serves the game');
+  }
+  const neuro = renderLandingPage({ ...registry, apps: catalogApps(registry, findCatalog(registry, 'neuro')) }, standalone, findCatalog(registry, 'neuro'));
+  for (const moved of ['musclemap', 'seedseg', 'carotid-flow']) assert.doesNotMatch(neuro, new RegExp(`data-app-id="${moved}"`));
+});

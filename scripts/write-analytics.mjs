@@ -18,12 +18,12 @@ function base64url(value) {
   return Buffer.from(value).toString('base64url');
 }
 
+// hostName is one host or a list of hosts.
 export function dimensionFilter({ hostName, pagePathPrefix, pagePathPrefixes = [] }) {
   const expressions = [{
-    filter: {
-      fieldName: 'hostName',
-      stringFilter: { matchType: 'EXACT', value: hostName, caseSensitive: false },
-    },
+    filter: Array.isArray(hostName)
+      ? { fieldName: 'hostName', inListFilter: { values: hostName, caseSensitive: false } }
+      : { fieldName: 'hostName', stringFilter: { matchType: 'EXACT', value: hostName, caseSensitive: false } },
   }];
   if (pagePathPrefix) {
     expressions.push({
@@ -169,6 +169,14 @@ async function metricsForFilter(context, filter) {
   };
 }
 
+// An app is counted on its catalogue's host and, for an app that moved off the
+// primary domain, on that domain too: its visits there predate the move, since
+// its old paths now serve only the 404 redirect, which loads no analytics.
+export function appHosts(registry, app) {
+  const host = registry.site.catalogs.find((catalog) => catalog.id === app.catalog).host;
+  return host === registry.site.domain ? [host] : [host, registry.site.domain];
+}
+
 export async function collectAnalytics({ registry, propertyId, serviceAccount }) {
   const token = await accessToken(serviceAccount);
   const context = {
@@ -176,15 +184,14 @@ export async function collectAnalytics({ registry, propertyId, serviceAccount })
     propertyId,
     periodDays: registry.site.analytics.period_days,
   };
-  const hostName = registry.site.domain;
   const totals = await metricsForFilter(context, dimensionFilter({
-    hostName,
+    hostName: [...new Set(registry.apps.flatMap((app) => appHosts(registry, app)))],
     pagePathPrefixes: registry.apps.map((app) => `/${app.path}/`),
   }));
   const apps = [];
   for (const app of registry.apps) {
     const appMetrics = await metricsForFilter(context, dimensionFilter({
-      hostName,
+      hostName: appHosts(registry, app),
       pagePathPrefix: `/${app.path}/`,
     }));
     apps.push({

@@ -16,8 +16,16 @@ function escapeAttribute(value) {
     .replaceAll('>', '&gt;');
 }
 
-export function hostedAppTitle(title) {
-  return `${title} | Neurodesk Webapps`;
+// Standalone builds and the dev server keep the Neurodesk brand; the composite
+// assembly passes the brand of the catalogue that hosts the app.
+export const DEFAULT_BRAND = Object.freeze({
+  siteTitle: 'Neurodesk Webapps',
+  brandName: 'Neurodesk',
+  moreAppsLabel: 'More Neurodesk web apps',
+});
+
+export function hostedAppTitle(title, siteTitle = DEFAULT_BRAND.siteTitle) {
+  return `${title} | ${siteTitle}`;
 }
 
 export function hasIconLink(html) {
@@ -38,6 +46,9 @@ export function injectCompositeTheme(html, {
   analyticsHref = '../analytics.js',
   moreAppsHref = '../',
   iconHref = '../neurodesk-logo.svg',
+  siteTitle = DEFAULT_BRAND.siteTitle,
+  brandName = DEFAULT_BRAND.brandName,
+  moreAppsLabel = DEFAULT_BRAND.moreAppsLabel,
   information,
   standaloneHref,
   componentsHref,
@@ -47,6 +58,7 @@ export function injectCompositeTheme(html, {
   if (typeof href !== 'string' || !href.trim()) throw new Error('Theme href must be a non-empty string');
   for (const [label, value] of Object.entries({
     title, description, version, shell, measurementId, themeHref, shellHref, analyticsHref, moreAppsHref, iconHref,
+    siteTitle, brandName, moreAppsLabel,
   })) {
     if (typeof value !== 'string' || !value.trim()) {
       throw new Error(`${label} must be a non-empty string`);
@@ -67,7 +79,7 @@ export function injectCompositeTheme(html, {
   const meta = (attribute, name, content) => (
     `<meta ${attribute}="${name}" content="${escapeAttribute(content)}">`
   );
-  const normalizedTitle = hostedAppTitle(title);
+  const normalizedTitle = hostedAppTitle(title, siteTitle);
   const metadataBlock = [
     `<title>${escapeAttribute(normalizedTitle)}</title>`,
     meta('name', 'description', description),
@@ -86,7 +98,11 @@ export function injectCompositeTheme(html, {
 
   // Apps without a favicon fall back to the shared site mark. A `data:,`
   // placeholder only suppresses the browser's favicon request, so it is
-  // treated as absent and dropped.
+  // treated as absent and dropped. A mark placed by an earlier run is replaced,
+  // so the catalogue that hosts the app decides it.
+  themed = themed.replace(/<link\b[^>]*\bdata-neurodesk-app-icon\b[^>]*>/gi, (tag) => (
+    tag.replace(/\bhref="[^"]*"/i, `href="${escapeAttribute(iconHref)}"`)
+  ));
   if (!hasIconLink(themed)) {
     themed = themed.replace(iconLinkPattern, '');
     themed = themed.replace(
@@ -128,10 +144,17 @@ export function injectCompositeTheme(html, {
   }
 
   // Composite builds may receive an already themed standalone app, restored from a cache keyed
-  // without the registry. Update its registry text and resource locations during assembly.
+  // without the registry, and theme each app again for the catalogue that hosts it. Update every
+  // registry and catalogue value and resource location on each run.
   for (const [name, value] of [
     ['app-title', title],
     ['app-description', description],
+    ['app-version', version],
+    ['ga4-measurement-id', measurementId],
+    ['more-apps-href', moreAppsHref],
+    ['brand-name', brandName],
+    ['more-apps-label', moreAppsLabel],
+    ['app-url', url],
     ['standalone-href', standaloneHref],
     ['components-href', componentsHref],
   ]) {

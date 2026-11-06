@@ -164,7 +164,7 @@ test('runtime wrappers have one tracked source and are generated for apps', asyn
 });
 
 test('every app that loads the staged dcm2niix module stages it before build', async () => {
-  const skip = new Set(['node_modules', 'dist', 'vendor', 'dcm2niix', 'e2e', 'test', 'tests']);
+  const skip = new Set(['node_modules', 'dist', 'dist-sites', 'vendor', 'dcm2niix', 'e2e', 'test', 'tests']);
   async function references(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       if (entry.isDirectory() && !skip.has(entry.name) && await references(join(directory, entry.name))) return true;
@@ -188,7 +188,7 @@ test('every app that loads the staged dcm2niix module stages it before build', a
 test('registry shell metadata drives adapters without app-id branches', async () => {
   const shell = await source('site', 'app-shell.js');
   const theme = await source('site', 'app-theme.css');
-  const build = await source('scripts', 'build-site.mjs');
+  const build = await source('scripts', 'lib', 'catalog-sites.mjs');
   assert.match(build, /shell:\s*app\.shell/);
   assert.match(shell, /metadata\.shell/);
   assert.doesNotMatch(shell, /\b(calmar|dicompare|qsmbly|surfannotate|easy-mp2rage|mri2vid)\b/);

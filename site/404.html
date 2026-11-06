@@ -5,11 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Page not found | Neurodesk Webapps</title>
   <script src="/dicompare/dicompare-routes.js"></script>
+  <!-- App paths this host no longer serves, from registry/apps.yml (scripts/lib/not-found-page.mjs):
+       a renamed app (dicom2vid became MRI2VID, neurodesk/webapps#387) or an app another catalogue hosts. -->
+  <script type="application/json" id="moved-apps">{"dicom2vid":"/mri2vid"}</script>
   <script>
-    // dicom2vid was renamed MRI2VID (neurodesk/webapps#387); keep old links working.
-    if (/^\/dicom2vid(\/|$)/.test(location.pathname)) {
-      location.replace('/mri2vid' + location.pathname.slice('/dicom2vid'.length) + location.search + location.hash);
-    }
+    // Keep old links working: send the rest of the path, the query and the fragment along.
+    (() => {
+      const moved = JSON.parse(document.getElementById('moved-apps').textContent);
+      const match = location.pathname.match(/^\/([^/]+)(\/.*)?$/);
+      if (match && Object.hasOwn(moved, match[1])) {
+        location.replace(moved[match[1]] + (match[2] ?? '') + location.search + location.hash);
+      }
+    })();
   </script>
 </head>
 <body>

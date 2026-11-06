@@ -71,10 +71,7 @@ test('composite staging copies the bridge and restores before app modules, idemp
     assert.ok(first.indexOf('<base ') < first.indexOf('./coi-serviceworker.js'));
     assert.equal((first.match(/<base /g) || []).length, 1);
     assert.match(first, /<base href="\/dicompare\/">/);
-    for (const [source, destination] of [['404.html', '404.html'], ['dicompare-routes.js', 'dicompare/dicompare-routes.js']]) {
-      assert.equal(await readFile(join(siteDist, destination), 'utf8'), await readFile(join(repoRoot, 'site', source), 'utf8'));
-    }
-    assert.match(await readFile(join(siteDist, '404.html'), 'utf8'), /src="\/dicompare\/dicompare-routes\.js"/);
+    assert.equal(await readFile(join(siteDist, 'dicompare/dicompare-routes.js'), 'utf8'), await readFile(join(repoRoot, 'site/dicompare-routes.js'), 'utf8'));
     await stageDicompareRoutes({ repoRoot, siteDist });
     assert.equal(await readFile(index, 'utf8'), first);
     await writeFile(index, '<html><head><base href="./"></head></html>');

@@ -257,3 +257,33 @@ test('NODDI About names the optional nonlinear fit and its validation scope', ()
   assert.match(about, /nonconverged and failed voxel counts/);
   assert.match(about, /full-brain validation outside that mask remains pending/);
 });
+
+test('a hosted site offers handoffs only to the apps it serves', () => {
+  const neuro = registry.apps.filter((app) => app.catalog === 'neuro').map(({ id }) => id);
+  const { catalog } = appInformationPayload(information, 'dicomview', neuro);
+  const ids = catalog.map(({ id }) => id);
+  for (const moved of ['musclemap', 'seedseg', 'carotid-flow']) assert.ok(!ids.includes(moved), `${moved} is served from another host`);
+  assert.ok(ids.includes('white-matter-lesions'));
+  assert.ok(ids.every((id) => neuro.includes(id)));
+});
+
+test('the shell names the hosting catalogue in its Privacy text and More Apps link', async () => {
+  const neurodesk = await mountShell('syncro');
+  neurodesk.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
+  assert.match(neurodesk.document.querySelector('.nd-app-dialog[data-dialog="privacy"]').textContent, /The Neurodesk hosting layer records page views only/);
+  assert.ok(neurodesk.document.querySelector('.nd-app-bar a[title="More Neurodesk web apps"]'));
+
+  const sciget = await mountAppShell({
+    appId: 'syncro',
+    information: appInformationPayload(information, 'syncro'),
+    brandName: 'SciGet',
+    moreAppsLabel: 'More SciGet MSK web apps',
+  });
+  sciget.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
+  const privacy = sciget.document.querySelector('.nd-app-dialog[data-dialog="privacy"]').textContent;
+  assert.match(privacy, /The SciGet hosting layer records page views only/);
+  assert.doesNotMatch(privacy, /Neurodesk hosting/);
+  assert.ok(sciget.document.querySelector('.nd-app-bar a[title="More SciGet MSK web apps"]'));
+  const cite = (sciget.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="cite"]').click(), sciget.document.querySelector('.nd-app-dialog[data-dialog="cite"]').textContent);
+  assert.match(cite, /Neurodesk \(\d{4}\)\. /, 'the citation keeps its factual Neurodesk attribution');
+});

@@ -63,6 +63,7 @@ test('default invocation (pnpm new-app <name>) scaffolds and validates', async (
   assert.equal(app.runtime, 'react-vite');
   assert.equal(app.shell, 'imaging-workspace');
   assert.deepEqual(app.categories, ['image-processing']);
+  assert.equal(app.catalog, 'neuro');
   assert.deepEqual([...app.inputs], ['dicom', 'nifti']);
   assert.equal(app.hardware, 'cpu');
   assert.equal(app.support_status, 'experimental');
@@ -116,6 +117,7 @@ test('flags select runtime, shell, category, and catalog text', async (t) => {
     '--runtime', 'vite-webgpu',
     '--shell', 'react',
     '--category', 'quality-control',
+    '--catalog', 'msk',
     '--title', 'Demo App',
     '--description', 'Demonstrates the scaffolder: flags, validation, and more.',
     '--keywords', 'demo, scaffold ,test',
@@ -127,6 +129,7 @@ test('flags select runtime, shell, category, and catalog text', async (t) => {
   assert.equal(app.runtime, 'vite-webgpu');
   assert.equal(app.shell, 'react');
   assert.deepEqual(app.categories, ['quality-control']);
+  assert.equal(app.catalog, 'msk');
   assert.equal(app.title, 'Demo App');
   const automation = JSON.parse(await readFile(join(root, 'apps/demo-app/automation.json'), 'utf8'));
   assert.equal(automation.title, app.title);

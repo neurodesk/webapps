@@ -5,7 +5,7 @@ import test from 'node:test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 const SOURCE_EXTENSIONS = new Set(['.html', '.js', '.mjs', '.cjs']);
-const SKIP_DIRECTORIES = new Set(['dist', 'legacy', 'node_modules', 'scripts', 'test', 'tests', 'tools']);
+const SKIP_DIRECTORIES = new Set(['dist', 'dist-sites', 'legacy', 'node_modules', 'scripts', 'test', 'tests', 'tools']);
 
 async function sourceFiles(directory) {
   const files = [];

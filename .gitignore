@@ -9,6 +9,7 @@ packages/desktop/release/
 
 # Build output
 dist/
+dist-sites/
 **/dist/
 **/target/
 .turbo/
