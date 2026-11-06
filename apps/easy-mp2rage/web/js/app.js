@@ -406,47 +406,44 @@ function refreshRunState() {
   const task = $("#taskSel").value;
   $("#regField").hidden = task !== "denoise";
   $("#parameterPanel").hidden = task === "denoise";
-  let ok = false,
-    status = "",
+  const required = task === "denoise"
+    ? [["UNI", uni], ["INV1", inv1], ["INV2", inv2]]
+    : task === "b1only"
+      ? [["UNI", uni], ["INV2", inv2], ["SA2RAGE", sa]]
+      : [["UNI", uni], ["SA2RAGE or B1 map", sa || b1]];
+  const missing = required.filter(([, file]) => !file).map(([name]) => name).join(", ");
+  const ok = !missing;
+  let status = "",
     mode = null,
     label = "Compute";
   if (task === "denoise") {
-    ok = !!(uni && inv1 && inv2);
     label = "Denoise UNI";
-    status = ok
-      ? "Ready: robust-combination denoising (UNI + INV1 + INV2)."
-      : "Denoise needs UNI, INV1 and INV2.";
+    status = "Ready: robust-combination denoising (UNI + INV1 + INV2).";
     $("#saBlock").hidden = true;
     $("#b1Block").hidden = true;
   } else if (task === "b1only") {
     mode = "sa2rage";
-    ok = !!(uni && inv2 && sa);
     label = "Compute B1 map";
-    status = ok
-      ? "Ready: relative B1 map from SA2RAGE."
-      : "SA2RAGE → B1 needs UNI, INV2 and SA2RAGE.";
+    status = "Ready: relative B1 map from SA2RAGE.";
     $("#saBlock").hidden = false;
     $("#b1Block").hidden = true;
   } else {
     mode = sa ? "sa2rage" : b1 ? "b1map" : null;
-    ok = !!(uni && mode);
     label = "Compute T1 map";
     $("#saBlock").hidden = mode !== "sa2rage";
     $("#b1Block").hidden = mode !== "b1map";
-    status = ok
-      ? `Ready: ${mode === "sa2rage" ? "SA2RAGE" : "B1-map"} correction${
+    status = `Ready: ${mode === "sa2rage" ? "SA2RAGE" : "B1-map"} correction${
           inv2 ? "" : " (no INV2 → mask from UNI)"
-        }.`
-      : uni || sa || b1
-        ? "Need a UNI and a B1 source (SA2RAGE or B1 map)."
-        : "Drag and drop files";
+        }.`;
     if (ok && sa && b1)
       status = `Ready: SA2RAGE correction${
         inv2 ? "" : " (mask from UNI)"
       }. Ignore SA2RAGE to use the B1 map.`;
   }
+  const hasInputs = !!(uni || inv1 || inv2 || sa || b1);
+  if (missing) status = hasInputs ? `Load ${missing} to continue.` : "Drag and drop files";
   $("#run").disabled = running || !ok;
-  $("#run").textContent = label;
+  $("#run").textContent = missing && hasInputs ? `Missing: ${missing}` : label;
   if (!running) $("#statusText").textContent = status;
   return { uni, inv1, inv2, sa, b1, mode, task };
 }
