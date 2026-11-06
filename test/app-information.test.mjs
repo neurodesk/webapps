@@ -30,6 +30,7 @@ const REQUIRED_METHODS = {
   degibbs: ['10.1002/mrm.26054', '10.1016/j.neuroimage.2019.116137', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   'calcium-imaging': ['10.1364/OL.33.000156', '10.1016/j.jneumeth.2017.07.031', '10.1038/nn.2620', '10.1016/0165-1684(94)90060-4', '10.1038/nature12354', '10.1371/journal.pcbi.1005423', '10.1016/j.neuron.2015.11.037', '10.7554/eLife.38173', '10.1038/s41586-020-2807-6', 'github.com/niivue/niivue'],
   'ants-denoise': ['10.1002/jmri.22003', '10.1038/s41598-021-87564-6', '10.1038/s41597-025-05250-y', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  'spot-detection': ['10.1261/rna.079073.121', 'github.com/niivue/niivue'],
   n4: ['10.1109/TMI.2010.2046908', '10.1016/j.neuroimage.2010.09.025', '10.1016/j.neuroimage.2019.116137', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   noddi: ['10.3389/fninf.2019.00064', '10.1016/S0006-3495(94)80775-1', '10.52294/001c.94384', '10.1016/j.neuroimage.2004.07.051', '10.1016/j.neuroimage.2012.03.072', '10.1016/j.neuroimage.2014.10.026', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   musclemap: ['10.3390/jimaging10110262', 'arxiv.org/abs/2211.02701', '10.1016/j.jneumeth.2016.03.001'],

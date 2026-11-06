@@ -1426,3 +1426,28 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: spot-detection
+    path: spot-detection
+    title: Spot detection
+    description: Detect smFISH spots in 2D and 3D microscopy images.
+    categories: [image-processing]
+    keywords: [smFISH, spot detection, puncta, RNA, FISH-quant, Big-FISH, LoG, Laplacian of Gaussian, sub-pixel, microscopy, TIFF]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff]
+    hardware: cpu
+    handoff: none
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
