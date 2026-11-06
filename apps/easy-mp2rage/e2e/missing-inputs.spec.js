@@ -9,8 +9,16 @@ for (const width of [1440, 390]) {
     await expect(run).toHaveText('Compute T1 map');
     await expect(run).toBeDisabled();
     await page.locator('#file').setInputFiles(fileURLToPath(new URL('../tools/phantom/phantom_INV2.nii.gz', import.meta.url)));
+    const role = page.getByRole('combobox', { name: 'Role for phantom_INV2.nii.gz', exact: true });
+    await role.selectOption('(ignore)');
     await expect(run).toHaveText('Missing: UNI, SA2RAGE or B1 map');
-    await expect(page.locator('#statusText')).toHaveText('Load UNI, SA2RAGE or B1 map to continue.');
+    await page.locator('#taskSel').selectOption('denoise');
+    await expect(run).toHaveText('Missing: UNI, INV1, INV2');
+    await expect(page.locator('#statusText')).toHaveText('Load or assign UNI, INV1, INV2 to continue.');
+    await role.selectOption('INV2');
+    await page.locator('#taskSel').selectOption('t1');
+    await expect(run).toHaveText('Missing: UNI, SA2RAGE or B1 map');
+    await expect(page.locator('#statusText')).toHaveText('Load or assign UNI, SA2RAGE or B1 map to continue.');
     await run.scrollIntoViewIfNeeded();
     expect(await run.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('missing-inputs.png') });

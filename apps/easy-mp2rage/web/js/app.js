@@ -440,8 +440,8 @@ function refreshRunState() {
         inv2 ? "" : " (mask from UNI)"
       }. Ignore SA2RAGE to use the B1 map.`;
   }
-  const hasInputs = !!(uni || inv1 || inv2 || sa || b1);
-  if (missing) status = hasInputs ? `Load ${missing} to continue.` : "Drag and drop files";
+  const hasInputs = state.files.length > 0;
+  if (missing) status = hasInputs ? `Load or assign ${missing} to continue.` : "Drag and drop files";
   $("#run").disabled = running || !ok;
   $("#run").textContent = missing && hasInputs ? `Missing: ${missing}` : label;
   if (!running) $("#statusText").textContent = status;
