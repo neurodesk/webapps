@@ -779,7 +779,11 @@
           "command": "Expand-Archive -Path .\\easy-mp2rage-0.8.20261103-windows-x64.zip -DestinationPath .\n.\\easy-mp2rage-0.8.20261103-windows-x64\\easy-mp2rage.exe correct --uni UNI.nii.gz --inv2 INV2.nii.gz --b1 B1.nii.gz --b1-type tfl --mp2rage TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,EFF results"
         }
       ],
-      "containers": []
+      "containers": [],
+      "openrecon": {
+        "recipe": "mp2ragedenoise",
+        "label": "MP2RAGE UNI denoising"
+      }
     },
     "niimath": {
       "desktop": true,
