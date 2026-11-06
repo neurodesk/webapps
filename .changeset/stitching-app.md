@@ -8,3 +8,5 @@ Add Tile stitching, a browser app that stitches overlapping 2D or 3D microscopy 
 `@neurodesk/webapp-components/file-io/tiff` now reads OME stage positions (`stagePosition`, micrometres, from the first image's first plane (TheZ = TheC = TheT = 0); null otherwise; always present).
 
 Compute Pearson correlation with stable incremental covariance so high-offset uint32 and float64 tiles retain correct matching scores.
+
+Reject source tile selections over the input budget before reading, check cancellation between file reads, and escape CSV fields so punctuation in filenames preserves report columns.

@@ -23,6 +23,7 @@ import { optimisePositions } from "./core/global.js";
 import { fusedGeometry } from "./core/fusion.js";
 import { checkFusionMemory, checkSolverMemory, registrationWorkers } from "./core/memory.js";
 import { linksCsv, outputStem, provenance, registeredConfiguration, summarise } from "./outputs.js";
+import { readTileFiles } from "./input.js";
 import { displayNifti, displaySpacing } from "./display.js";
 import examples from "../examples.json";
 
@@ -199,8 +200,7 @@ async function loadTiles(files, signal) {
   const empty = tiffs.find((file) => !file.size);
   if (empty) throw new Error(`${empty.name} is empty.`);
   await operation("Reading tiles…", signal, async (current) => {
-    const buffers = [];
-    for (const file of tiffs) buffers.push({ name: file.name, buffer: await file.arrayBuffer() });
+    const buffers = await readTileFiles(tiffs, current);
     current.throwIfAborted();
     const decoded = await callWorker({ type: "decode", files: buffers, maxBytes: MAX_TILE_BYTES, shared: SHARED }, {
       signal: current,

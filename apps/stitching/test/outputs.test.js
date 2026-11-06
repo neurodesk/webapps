@@ -37,3 +37,8 @@ test("OME-Zarr calibration is per axis: a known XY pixel size is kept when z is 
   assert.deepEqual(omeZarrCalibration({ x: null, y: null, z: null }, 2), { spacing: [1, 1], units: {} });
   assert.deepEqual(omeZarrCalibration(undefined, 2), { spacing: [1, 1], units: {} });
 });
+
+test("CSV preserves commas, quotes and line breaks in tile names", () => {
+  const csv = linksCsv(['sample,1.tif', 'sample"2\n.tif'], [{ i: 0, j: 1, approximateOffset: [90, 0], offset: [90.25, -1.5], r: 0.97, status: "used", residual: 0 }]);
+  assert.equal(csv, 'tile_a,tile_b,layout_dx,layout_dy,measured_dx,measured_dy,correlation,status,residual_px\n"sample,1.tif","sample""2\n.tif",90,0,90.25,-1.5,0.97,used,0\n');
+});

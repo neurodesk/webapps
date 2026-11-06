@@ -60,6 +60,11 @@ function decimal(value, digits = 4) {
   return Number(value.toFixed(digits)).toString();
 }
 
+function csvCell(value) {
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
 /** One row per registered pair: layout and measured offsets, correlation, status, residual. */
 export function linksCsv(names, links) {
   const dims = links[0]?.offset.length ?? 2;
@@ -74,7 +79,7 @@ export function linksCsv(names, links) {
     link.status,
     decimal(link.residual),
   ]);
-  return `${[header, ...rows].map((row) => row.join(",")).join("\n")}\n`;
+  return `${[header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n")}\n`;
 }
 
 /** Summary numbers of a run, for the log, the report and provenance. */
