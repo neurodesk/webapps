@@ -26,7 +26,7 @@ shows the workflow, not out-of-sample accuracy.
 - `test/config.test.js`: sequence names, assignment, model choice for all 15 combinations, the
   label colours.
 - `e2e/app.spec.js`: the example's assignment and model choice; refusal of an off-grid image; a
-  run without mirroring on the CPU after a failed WebGPU, held to the container's labels
-  (`packages/gliomoda/validation/container-reference.json`); the default run with mirroring
-  (`@slow`); model download failure and retry; cancelling a run and an example download.
+  run without mirroring on the CPU and the default run with mirroring, each held to the
+  container's labels (`packages/gliomoda/validation/container-reference.json`); model download
+  failure and retry; cancelling a run and an example download.
 - `test/offline.mjs`: the desktop build segments the bundled example offline.

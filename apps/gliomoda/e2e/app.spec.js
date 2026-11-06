@@ -109,7 +109,7 @@ test("automation segments the example without mirroring like the container", asy
 });
 
 // The container's own command line, mirroring included, on the four-sequence model.
-test("the default run with mirroring matches the container's command line", { tag: "@slow" }, async ({ page }) => {
+test("the default run with mirroring matches the container's command line", async ({ page }) => {
   test.setTimeout(240 * 60 * 1000);
   await loadExample(page);
   await page.locator("#advancedSettings summary").click();
