@@ -30,6 +30,7 @@ for precision = {'double', 'single'}
                 item.noiseCeiling = arrayFile([id '_ceiling'], Srf.Noise_Ceiling);
             end
             cases{end+1} = item; %#ok<AGROW>
+            writeJson([id '.json'], item);
 
             % analyzePRF has different stimulus sequences in each run. It may
             % be concatenated, but fitting their average would be meaningless.
@@ -64,7 +65,7 @@ for precision = {'double', 'single'}
             if startsWith(dataset.id, 'x001_') && average
                 RcModel = struct('Name', 'reference', 'Aperture_File', ...
                     fullfile(output, 'aps_x001_raw'), 'Scaling_Factor', dataset.radius, ...
-                    'TR', 1, 'Hrf', [], 'Rdim', 20, 'Prf_Function', 0, ...
+                    'TR', 1, 'Hrf', [], 'Rdim', 100, 'Prf_Function', 0, ...
                     'Save_Rmaps', true, 'Allow_Negative_Peaks', true);
                 cases{end+1} = fit_case(['pipeline_' kind '_' dataset.id '_rc'], ...
                     Srf, RcModel, defaults, output, arrayFile, writeJson, kind, id, 'revcor'); %#ok<AGROW>
@@ -81,9 +82,11 @@ for precision = {'double', 'single'}
             result = load([dataset.hemisphere '_benson.mat']);
             cd(previous);
             clear restore
-            cases{end+1} = struct('id', id, 'kind', 'benson', ...
+            item = struct('id', id, 'kind', 'benson', ...
                 'precision', kind, 'dataset', dataset.id, ...
-                'maps', arrayFile([id '_maps'], result.Srf.Data)); %#ok<AGROW>
+                'maps', arrayFile([id '_maps'], result.Srf.Data));
+            cases{end+1} = item; %#ok<AGROW>
+            writeJson([id '.json'], item);
         end
         writeJson('matrix.json.partial', struct('cases', {cases}));
     end
@@ -169,10 +172,18 @@ if strcmp(analysis, 'prf')
     search = load(fullfile(work, ['src_' id '.mat']));
     item.grid = arrayFile([id '_grid'], search.S);
     item.predictions = arrayFile([id '_predictions'], search.X);
+    convolved = zeros(size(Srf.Data, 1), size(search.X, 2));
+    for i = 1:size(search.X, 2)
+        convolved(:, i) = prf_convolve_hrf(search.X(:, i), result.Model.Hrf, ...
+            Model.Downsample_Predictions);
+    end
+    item.hrf = arrayFile([id '_hrf'], result.Model.Hrf);
+    item.coarseCorrelations = arrayFile([id '_coarse_correlations'], corr(Srf.Data, convolved));
 else
     item.profiles = arrayFile([id '_profiles'], result.Srf.Rmaps);
     item.regressors = arrayFile([id '_regressors'], result.Srf.Regs);
 end
+writeJson([id '.json'], item);
 fprintf('Recorded %s\n', id);
 end
 

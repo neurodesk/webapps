@@ -56,3 +56,10 @@ are recorded before `samsrf_expand_srf` discards their imaginary components
 for export. Polygon cases cover retraced edges, duplicates, self-intersections
 and thin triangles across scales. Recording any of these is still not a
 passing equivalence gate until its numerical comparison is implemented.
+
+The pinned source's reverse-correlation path cannot finish when `Rdim` differs
+from the aperture width: `samsrf_revcor_prf` line 368 reshapes the full coordinate
+grid to the requested profile dimensions. The source recording therefore uses
+the original 100-pixel resolution. The failed 20-pixel run is evidence of an
+upstream execution limit, not a passing web-equivalence case. Each completed
+pipeline case also writes its own metadata so a later failure does not hide it.

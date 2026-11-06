@@ -154,7 +154,8 @@ end
 
     function err = objective(p)
         err = prf_errfun(profile, frames, d.ApXY, hrf, p, y, 1, css);
-        trace(end+1, :) = [p(:)' real(err) imag(err)];
+        % Concatenating a single err would otherwise round the double p values.
+        trace(end+1, :) = [p(:)' double(real(err)) double(imag(err))];
     end
 end
 
@@ -242,6 +243,15 @@ for scale = [1 1e-3 1e3]
         for height = 10.^(-16:0)
             points{end+1} = [0 0; 1 height; 2 0] * scale + offset; %#ok<AGROW>
         end
+    end
+end
+% Distinguish a relative distance tolerance from angle-rounding collapse.
+for height = 2.^(-29:-21)
+    for apex = [0.1 1 1.9]
+        triangle = [0 0; apex height; 2 0];
+        points{end+1} = triangle; %#ok<AGROW>
+        rotation = [cos(0.7) -sin(0.7); sin(0.7) cos(0.7)];
+        points{end+1} = triangle * rotation; %#ok<AGROW>
     end
 end
 for i = 1:numel(points)
