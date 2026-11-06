@@ -33,6 +33,8 @@ export async function readVolume(file, { signal, maxBytes = MAX_INPUT_BYTES } = 
   const format = formatOf(file.name);
   if (!format) throw new Error(`${file.name} is not a TIFF or NIfTI file.`);
   if (!file.size) throw new Error(`${file.name} is empty.`);
+  signal?.throwIfAborted();
+  if (file.size > maxBytes) throw new Error(`${file.name} exceeds the input size limit.`);
   const bytes = await file.arrayBuffer();
   signal?.throwIfAborted();
   if (format === "tiff") {
@@ -50,8 +52,9 @@ export async function readVolume(file, { signal, maxBytes = MAX_INPUT_BYTES } = 
       niftiHeader: null,
     };
   }
-  const buffer = await decodeNiftiBuffer(bytes);
-  if (buffer.byteLength > maxBytes) throw new Error(`${file.name} needs ${(buffer.byteLength / 2 ** 20).toFixed(0)} MB decoded, above the ${(maxBytes / 2 ** 20).toFixed(0)} MB limit.`);
+  const buffer = await decodeNiftiBuffer(bytes, { maxBytes: maxBytes + 1 });
+  signal?.throwIfAborted();
+  if (buffer.byteLength > maxBytes) throw new Error(`${file.name} exceeds the decoded input size limit of ${(maxBytes / 2 ** 20).toFixed(0)} MB.`);
   const { data, header, frames } = readNiftiFrames(buffer, Float32Array);
   if (frames !== 1) throw new Error(`${file.name} has ${frames} volumes; choose a single 3D stack.`);
   const spacingUm = niftiSpacingUm(header);

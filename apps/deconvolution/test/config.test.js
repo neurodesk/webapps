@@ -1,4 +1,5 @@
 // DOM-independent unit tests (Node). Browser behaviour is covered by e2e/.
+import { gzipSync } from "node:zlib";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createNiftiFromVolume, parseNiftiHeader } from "@neurodesk/webapp-components/file-io";
@@ -192,4 +193,39 @@ test("the staged notices name the crates the module links, with their copyright 
   } finally {
     await rm(out, { recursive: true, force: true });
   }
+});
+
+test("input size and cancellation are checked before reading source bytes", async () => {
+  const file = { name: "large.nii", size: 1025, arrayBuffer() { assert.fail("must not read oversized input"); } };
+  await assert.rejects(readVolume(file, { maxBytes: 1024 }), /input size limit/);
+  await assert.rejects(readVolume(file, { signal: AbortSignal.abort() }), { name: "AbortError" });
+});
+
+test("compressed NIfTI accepts the exact decoded limit and refuses larger images", async () => {
+  const bytes = stackNifti(new Float32Array(4096), [16, 16, 16], { x: 1, y: 1, z: 1 });
+  const file = new File([gzipSync(new Uint8Array(bytes))], "stack.nii.gz");
+  const volume = await readVolume(file, { maxBytes: bytes.byteLength });
+  assert.deepEqual(volume.dims, [16, 16, 16]);
+  await assert.rejects(readVolume(file, { maxBytes: 1024 }), /decoded input size limit/);
+});
+
+test("oversized compressed input stops consuming decoded chunks at the limit", async (t) => {
+  let chunks = 0;
+  let cancelled = false;
+  t.mock.method(globalThis, "DecompressionStream", function () {
+    return {
+      readable: new ReadableStream({
+        pull(controller) {
+          chunks++;
+          controller.enqueue(new Uint8Array(256));
+        },
+        cancel() { cancelled = true; },
+      }),
+      writable: new WritableStream(),
+    };
+  });
+  const file = new File([new Uint8Array([0x1f, 0x8b])], "large.nii.gz");
+  await assert.rejects(readVolume(file, { maxBytes: 1024 }), /decoded input size limit/);
+  assert.ok(cancelled);
+  assert.ok(chunks <= 6, `consumed ${chunks} chunks`);
 });
