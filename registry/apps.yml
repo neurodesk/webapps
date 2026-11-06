@@ -1470,6 +1470,34 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: gliomoda
+    path: gliomoda
+    catalog: neuro
+    title: GlioMODA
+    description: Segment gliomas on atlas-registered brain MRI with GlioMODA.
+    categories: [segmentation, lesion-mapping]
+    keywords: [glioma, brain tumour, brain tumor, BraTS, tumour segmentation, GlioMODA, nnU-Net, T1c, FLAIR, BrainLesion]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [nifti]
+    hardware: webgpu-optional
+    handoff: none
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/gliomoda.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
+
   - id: stitching
     catalog: microscopy
     path: stitching

@@ -898,6 +898,34 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
 
+  apps/gliomoda:
+    dependencies:
+      '@neurodesk/gliomoda':
+        specifier: workspace:*
+        version: link:../../packages/gliomoda
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../../packages/synthsr
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      playwright:
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
+
   apps/greedy:
     dependencies:
       '@brainchop/mindgrab':
@@ -1908,6 +1936,16 @@ importers:
       '@fireants/fireants':
         specifier: 0.1.20260913
         version: 0.1.20260913
+
+  packages/gliomoda:
+    dependencies:
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../synthsr
+    devDependencies:
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
 
   packages/greedy: {}
 

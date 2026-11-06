@@ -14,5 +14,6 @@
   "stardist": "Python StarDist (pip install stardist) is the command-line reference the app reproduces label for label on the example; no separate command line is packaged",
   "calcium-imaging": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; CaImAn and Suite2p are the established command-line tools for batch work",
   "spot-detection": "the detector is a JavaScript port of Big-FISH, whose Python package (pip install big-fish) is the batch tool: on the example it gives the app's spot set and threshold; a packaged command line for the port is not done yet",
+  "gliomoda": "the Neurocontainers gliomoda 0.0.4 image is the command-line reference: the Standalone dialog lists it, and packages/gliomoda/validation holds the app's labels to its outputs on the example",
   "stitching": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; Fiji's Grid/Collection stitching and BigStitcher are the established command-line tools for batch work"
 }

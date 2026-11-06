@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 2,
+  "app": "gliomoda",
+  "title": "GlioMODA",
+  "description": "Segment gliomas on atlas-registered brain MRI with GlioMODA (BraTS labels).",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Segment tumour",
+      "description": "Return the BraTS label map (1 necrotic core, 2 oedema, 3 enhancing tumour) and a volume table, using the GlioMODA model for the supplied sequences.",
+      "mode": "batch",
+      "inputs": {
+        "t1c": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "space": "atlas",
+          "description": "Optional T1 contrast-enhanced image, skull-stripped on the 240 x 240 x 155 BraTS/SRI24 grid",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "t2f": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "space": "atlas",
+          "description": "Optional T2 FLAIR image, skull-stripped on the 240 x 240 x 155 BraTS/SRI24 grid",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "t1n": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "space": "atlas",
+          "description": "Optional T1 native image, skull-stripped on the 240 x 240 x 155 BraTS/SRI24 grid",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "t2w": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "space": "atlas",
+          "description": "Optional T2-weighted image, skull-stripped on the 240 x 240 x 155 BraTS/SRI24 grid",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "mirror": {
+          "type": "boolean",
+          "default": true,
+          "description": "Average the 7 mirrored passes of each patch, as nnU-Net and the GlioMODA container do"
+        },
+        "resEncL": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use the ResEncL model; needs all four sequences"
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "wasm"
+          ],
+          "default": "auto",
+          "description": "Requested inference backend; WebGPU failures fall back to WASM CPU."
+        }
+      },
+      "artifacts": {
+        "segmentation": {
+          "type": "neuro:label-map",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "atlas"
+        },
+        "volumes": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

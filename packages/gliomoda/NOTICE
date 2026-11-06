@@ -1,0 +1,15 @@
+GlioMODA glioma segmentation
+Canisius J, Buchner J, Rosier M, et al. GlioMODA: Robust Glioma Segmentation in
+Clinical Routine. medRxiv. 2025. https://doi.org/10.1101/2025.11.12.25339968
+Code: https://github.com/BrainLesion/GlioMODA (Apache-2.0)
+Model weights: GlioMODA weights v1.0.2, Zenodo record 15625233, CC BY 4.0
+https://doi.org/10.5281/zenodo.15625233
+The fold_all checkpoints are converted to ONNX by scripts/export_model.py and
+published separately on Hugging Face. model.manifest.json pins each file by
+size and SHA-256.
+
+Inference repeats nnU-Net v2.5.2's preprocessing and sliding-window prediction
+(Isensee et al., Nature Methods 2021, Apache-2.0):
+https://github.com/MIC-DKFZ/nnUNet
+
+JavaScript port and packaging by Neurodesk, Apache-2.0.

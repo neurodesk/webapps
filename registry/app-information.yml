@@ -2381,6 +2381,46 @@ apps:
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
 
+  gliomoda:
+    about:
+      - "Segment adult gliomas with GlioMODA, a set of nnU-Net models trained on BraTS that each take a different combination of the four standard sequences: T1 contrast-enhanced, T2 FLAIR, T1 native and T2-weighted. The app picks the model for the sequences you load, normalises each image inside the brain and runs the network over overlapping patches with mirroring, as nnU-Net 2.5.2 does in the Neurocontainers GlioMODA image."
+      - "Labels follow BraTS 2023: 1 necrotic tumour core, 2 oedema (non-enhancing FLAIR hyperintensity), 3 enhancing tumour. The volume table adds the whole tumour (1 + 2 + 3) and the tumour core (1 + 3)."
+      - "Inputs must already be co-registered, skull-stripped and on the BraTS/SRI24 atlas grid, 240 × 240 × 155 at 1 mm, for example from BrainLesion's preprocessing package. On the example the app's labels match the container's for every model; packages/gliomoda/README.md lists the measurements."
+      - "Outputs are research estimates, not a diagnosis. Check them against the images."
+    packages:
+      - { name: GlioMODA, url: https://github.com/BrainLesion/GlioMODA, role: glioma segmentation networks (weights v1.0.2, fold_all) }
+      - { name: nnU-Net, url: https://github.com/MIC-DKFZ/nnUNet, role: preprocessing and sliding-window prediction, ported from version 2.5.2 }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: inference on WebGPU or the CPU }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Glioma segmentation
+        title: GlioMODA
+        reference: 'Canisius J, Buchner J, Rosier M, Griessmair M, Peeken J, Kirschke JS, Piraud M, Bakas S, Menze B, Wiestler B, Kofler F. GlioMODA: Robust Glioma Segmentation in Clinical Routine. medRxiv. 2025.'
+        doi: 10.1101/2025.11.12.25339968
+        code: https://github.com/BrainLesion/GlioMODA
+      - group: Glioma segmentation
+        title: BrainLesion Suite
+        reference: 'Kofler F, Rosier M, Astaraki M, et al. BrainLesion Suite: A Flexible and User-Friendly Framework for Modular Brain Lesion Image Analysis. arXiv:2507.09036. 2025.'
+        doi: 10.48550/arXiv.2507.09036
+        code: https://github.com/BrainLesion
+      - group: Glioma segmentation
+        title: nnU-Net
+        reference: 'Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211.'
+        doi: 10.1038/s41592-020-01008-z
+        code: https://github.com/MIC-DKFZ/nnUNet
+      - group: Inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Example data
+        title: UPENN-GBM
+        reference: 'Bakas S, Sako C, Akbari H, et al. The University of Pennsylvania glioblastoma (UPenn-GBM) cohort: advanced MRI, clinical, genomics, & radiomics. Scientific Data. 2022;9:453.'
+        doi: 10.1038/s41597-022-01560-7
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
   stitching:
     packages:
       - { name: Stitching pipeline, url: https://github.com/neurodesk/webapps/tree/main/apps/stitching/src/core, role: "phase-correlation pairwise registration, global optimisation and linear-blending fusion, written from the paper below (not from Fiji's GPL code)" }
