@@ -78,6 +78,10 @@ for (const name of ['prf_coarse', 'prf_fine', 'rc_hull', 'cf_hull']) {
   const prefix = `lh_${name}`;
   const exported = new Map(samsrf.exportGiis(maps, prefix, null, 'samsrfx-10.003').map(file => [file.name, samsrf.readGifti(file.bytes).arrays[0].data]));
   const references = new Map(readdirSync(join(directory, 'runs', name)).filter(file => file.endsWith('.gii')).map(file => [file, samsrf.readGifti(read(`runs/${name}/${file}`)).arrays[0].data]));
+  for (const map of exactMaps[name]) {
+    const file = `${prefix}_${map}.gii`;
+    if (!references.has(file)) throw new Error(`Missing required MATLAB reference ${file}`);
+  }
   for (const [file, expected] of references) {
     const actual = exported.get(file);
     if (!actual) throw new Error(`Missing output ${file}`);

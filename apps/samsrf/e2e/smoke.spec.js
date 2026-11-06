@@ -87,8 +87,11 @@ async function runEveryAnalysis(page, timeout) {
     const run = page.locator("#runButton");
     await expect(run).toBeEnabled();
     await run.click();
+    await expect(page.locator("#exportConvention")).toBeDisabled();
     // The previous analysis leaves the output section open; its status line names the analysis.
     await expect(page.locator("#statusText")).toContainText(expected.outcome, { timeout });
+    await expect(page.locator("#exportConvention")).toBeEnabled();
+    await expect(page.locator("#exportConvention")).toHaveValue("samsrfx-10.003");
     await expect(page.locator("#outputSection")).toHaveAttribute("open", "");
     for (const label of ["Polar angle", "Eccentricity", "R²"]) {
       await expect(page.locator("#resultList")).toContainText(label);

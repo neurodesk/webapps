@@ -454,7 +454,7 @@ function setBusy(controller) {
   busy = controller;
   const locked = Boolean(controller);
   for (const element of Object.values(fields)) element.disabled = locked;
-  for (const id of ["analysis", "preset", "tr", "scalingFactor", "hrf", "combine", "normalise", "fineFit", "fineFitThreshold", "coarseOnly", "revcorThreshold", "modelJson", "clearInputs"]) $(id).disabled = locked;
+  for (const id of ["analysis", "preset", "tr", "scalingFactor", "hrf", "combine", "normalise", "fineFit", "fineFitThreshold", "coarseOnly", "revcorThreshold", "exportConvention", "modelJson", "clearInputs"]) $(id).disabled = locked;
   exampleControl.setDisabled(locked);
   updateRunButton();
 }
