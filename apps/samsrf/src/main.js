@@ -15,6 +15,7 @@ import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { zipSync } from "fflate";
 import { APP } from "./config.js";
 import { ENGINE } from "./engine.js";
+import { EXPORT_CONVENTIONS, exportConvention } from "@neurodesk/samsrf";
 import { runAnalysis, workerCount } from "./pool.js";
 import { createSurfaceViewer } from "./viewer.js";
 import {
@@ -230,6 +231,7 @@ function fillPresets() {
   $("preset").replaceChildren(...presetsFor(analysis()).map(({ id, label }) => new Option(label, id)));
 }
 $("hrf").replaceChildren(...HRF_OPTIONS.map(({ value, label }) => new Option(label, value)));
+$("exportConvention").replaceChildren(...Object.entries(EXPORT_CONVENTIONS).map(([value, label]) => new Option(label, value)));
 
 function settings() {
   const scalingFactor = $("scalingFactor").readOnly ? editableScalingFactor : Number($("scalingFactor").value);
@@ -237,6 +239,7 @@ function settings() {
   return {
     scalingFactor: scalingFactor > 0 ? scalingFactor : DEFAULT_SETTINGS.scalingFactor,
     tr: tr > 0 ? tr : DEFAULT_SETTINGS.tr,
+    exportConvention: $("exportConvention").value,
   };
 }
 
@@ -273,6 +276,7 @@ function renderModel() {
   $("fineFit").value = fineFit(model);
   $("fineFitThreshold").value = String(model.Fine_Fit_Threshold ?? 0.01);
   $("coarseOnly").checked = Boolean(model.Coarse_Fit_Only);
+  $("exportConvention").value = exportConvention(model.Export_Convention);
   $("revcorThreshold").value = String(model.R2_Threshold ?? 0);
   $("stimulusFields").hidden = kind === "cf";
   $("hrfField").hidden = kind === "cf";
@@ -318,6 +322,7 @@ $("coarseOnly").addEventListener("change", () => editModel((current) => {
   return next;
 }));
 $("revcorThreshold").addEventListener("change", () => editModel((current) => ({ ...current, R2_Threshold: Number($("revcorThreshold").value) })));
+$("exportConvention").addEventListener("change", () => editModel(current => ({ ...current, Export_Convention: $("exportConvention").value })));
 $("modelJson").addEventListener("change", () => {
   try {
     model = parseModel($("modelJson").value, analysis());

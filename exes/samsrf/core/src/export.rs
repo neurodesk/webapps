@@ -9,6 +9,16 @@
 use crate::gifti::write_map;
 use crate::mapset::Maps;
 
+/// The Neurodesk v10.004 image contains SamSrf 10.003, whose exporter subtracts
+/// 0.5 from eccentricity after expanding Srf into single precision. SamSrf 10.4
+/// removed that offset. Keep the older convention explicit, never inferred.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExportConvention {
+    #[default]
+    Geometric,
+    SamSrfX10003,
+}
+
 /// A file to write: its name and GIFTI bytes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExportedGifti {
@@ -36,8 +46,12 @@ impl ExportSelection {
 }
 
 pub fn export_giis(maps: &Maps, prefix: &str, selection: &ExportSelection) -> Vec<ExportedGifti> {
+    export_giis_with_convention(maps, prefix, selection, ExportConvention::Geometric)
+}
+
+pub fn export_giis_with_convention(maps: &Maps, prefix: &str, selection: &ExportSelection, convention: ExportConvention) -> Vec<ExportedGifti> {
     let mut files = Vec::new();
-    if let Some((polar, eccentricity)) = polar_and_eccentricity(maps) {
+    if let Some((polar, eccentricity)) = polar_and_eccentricity_with_convention(maps, convention) {
         if selection.selects("Polar") {
             files.push(ExportedGifti { name: format!("{prefix}_pol.gii"), bytes: write_map(&polar) });
         }
@@ -60,12 +74,30 @@ pub fn export_giis(maps: &Maps, prefix: &str, selection: &ExportSelection) -> Ve
 /// Like SamSrf, any name containing `x0` switches this on, and x0, y0 and R^2 are then
 /// rows 2, 3 and 1 by position, not by name.
 pub fn polar_and_eccentricity(maps: &Maps) -> Option<(Vec<f64>, Vec<f64>)> {
+    polar_and_eccentricity_with_convention(maps, ExportConvention::Geometric)
+}
+
+pub fn polar_and_eccentricity_with_convention(maps: &Maps, convention: ExportConvention) -> Option<(Vec<f64>, Vec<f64>)> {
     if maps.rows() < 3 || !maps.values.iter().any(|value| value.contains("x0")) {
         return None;
     }
     let r2 = maps.row(0);
     let x0 = maps.row(1);
     let y0 = maps.row(2);
+    if convention == ExportConvention::SamSrfX10003 {
+        let mut polar = Vec::with_capacity(maps.vertices);
+        let mut eccentricity = Vec::with_capacity(maps.vertices);
+        for ((&x, &y), &r) in x0.iter().zip(y0).zip(r2) {
+            let (x, y) = (x as f32, y as f32);
+            // MATLAB's single / double-scalar operation rounds the result, not
+            // the scalar operand. In particular pi must stay double precision.
+            let angle = y.atan2(x);
+            let radians = (angle as f64 / std::f64::consts::PI) as f32;
+            polar.push((radians as f64 * 180.0) as f32 as f64);
+            eccentricity.push(if r as f32 == 0.0 { 0.0 } else { ((x * x + y * y).sqrt() - 0.5) as f64 });
+        }
+        return Some((polar, eccentricity));
+    }
     let polar = x0
         .iter()
         .zip(y0)

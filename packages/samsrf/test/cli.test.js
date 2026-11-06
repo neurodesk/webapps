@@ -6,8 +6,9 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { hemisphereOf, main, parseCommandLine } from '../src/cli.js';
-import { analysisSpec, createJob, exportGiis, readAnalysisInputs, runJob } from '../src/node.js';
+import { analysisSpec, createJob, exportGiis, readAnalysisInputs, readGifti, runJob } from '../src/node.js';
 import { MODELS } from '../validation/example-inputs.mjs';
+import { giftiRun, matFile } from './fixtures.js';
 
 const BIN = fileURLToPath(new URL('../bin/samsrf.js', import.meta.url));
 // The web app's example files (apps/samsrf/examples.json, downloaded flat into one folder).
@@ -142,6 +143,29 @@ test('errors exit 1 with a message naming the file', async (t) => {
   const usage = spawnSync(process.execPath, [BIN, 'rc'], { encoding: 'utf8' });
   assert.equal(usage.status, 1);
   assert.match(usage.stderr, /Give rc a model file and an output directory/);
+});
+
+test('the CLI applies and records the selected legacy export convention', async t => {
+  const work = scratch(t);
+  const modelPath = join(work, 'model.json');
+  const apertures = join(work, 'aps.mat');
+  const runPath = join(work, 'lh_run.gii');
+  const model = {
+    ...MODELS.prf, Name: 'Legacy', Hrf: 1, Polar_Search_Space: false,
+    Param1: [3], Param2: [4], Param3: [2], Coarse_Fit_Only: true,
+  };
+  writeFileSync(apertures, matFile({ ApFrm: { dims: [2, 2, 4], data: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] } }));
+  writeFileSync(runPath, giftiRun([[1, 2, 4, 3]]));
+  for (const [convention, eccentricity] of [['samsrf-10.4', 5], ['samsrfx-10.003', 4.5]]) {
+    writeFileSync(modelPath, JSON.stringify({ ...model, Export_Convention: convention }));
+    const output = join(work, convention);
+    const result = await run(['prf', modelPath, output, '--runs', runPath, '--apertures', apertures, '--no-normalise']);
+    assert.equal(result.code, 0, result.stderr);
+    const actual = readGifti(readFileSync(join(output, 'lh_Legacy_CrsFit_ecc.gii'))).arrays[0].data;
+    assert.deepEqual(Array.from(actual), [eccentricity]);
+    const provenance = JSON.parse(readFileSync(join(output, 'lh_Legacy_CrsFit_provenance.json')));
+    assert.equal(provenance.exportConvention, convention);
+  }
 });
 
 test('a short rc run writes the GIfTIs an in-process job writes', { skip: !dir && 'set SAMSRF_WEBAPP_EXAMPLE_DIR' }, async (t) => {

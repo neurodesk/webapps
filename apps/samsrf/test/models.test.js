@@ -40,6 +40,16 @@ test("connective field models name the seed and template files", () => {
   assert.deepEqual(model, { Name: "CF_Rcp", SeedRoi: "lh.V1_seed", Template: "lh_benson" });
 });
 
+test("legacy exports persist in saved model JSON and invalid conventions are rejected", () => {
+  for (const preset of Object.values(PRESETS)) {
+    const model = buildModel(preset.id, { exportConvention: "samsrfx-10.003" });
+    assert.equal(model.Export_Convention, "samsrfx-10.003");
+    assert.deepEqual(parseModel(JSON.stringify(model), preset.analysis), model);
+    assert.throws(() => parseModel(JSON.stringify({ ...model, Export_Convention: "unknown" }), preset.analysis), /export convention/);
+    assert.throws(() => parseModel(JSON.stringify({ ...model, Export_Convention: ["samsrfx-10.003"] }), preset.analysis), /export convention/);
+  }
+});
+
 test("HRF settings round-trip, including concurrent fitting that JSON cannot write as Infinity", () => {
   for (const value of ["0", "[]", "1", "Inf"]) assert.equal(hrfValue(hrfModel(value)), value);
   assert.equal(JSON.parse(JSON.stringify({ Hrf: hrfModel("Inf") })).Hrf, "Inf");

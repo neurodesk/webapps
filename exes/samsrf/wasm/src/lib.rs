@@ -636,6 +636,14 @@ pub fn remove_noise(volumes: usize, vertices: usize, data: Vec<f64>, covariates:
 
 // Export
 
+fn export_convention(name: Option<String>) -> Result<export::ExportConvention> {
+    match name.as_deref().unwrap_or("samsrf-10.4") {
+        "samsrf-10.4" => Ok(export::ExportConvention::Geometric),
+        "samsrfx-10.003" => Ok(export::ExportConvention::SamSrfX10003),
+        other => Err(shape(format!("unknown export convention {other}"))),
+    }
+}
+
 fn maps(values: Vec<String>, vertices: usize, data: Vec<f64>) -> Result<mapset::Maps> {
     if data.len() != values.len() * vertices {
         return Err(shape(format!("maps hold {} values, not {} rows x {vertices} vertices", data.len(), values.len())));
@@ -644,10 +652,10 @@ fn maps(values: Vec<String>, vertices: usize, data: Vec<f64>) -> Result<mapset::
 }
 
 #[wasm_bindgen(js_name = exportGiis)]
-pub fn export_giis(values: Vec<String>, vertices: usize, data: Vec<f64>, prefix: &str, selection: Option<Vec<String>>) -> Result<Array> {
+pub fn export_giis(values: Vec<String>, vertices: usize, data: Vec<f64>, prefix: &str, selection: Option<Vec<String>>, convention: Option<String>) -> Result<Array> {
     let maps = maps(values, vertices, data)?;
     let selection = selection.map_or(export::ExportSelection::All, export::ExportSelection::Named);
-    Ok(export::export_giis(&maps, prefix, &selection)
+    Ok(export::export_giis_with_convention(&maps, prefix, &selection, export_convention(convention)?)
         .into_iter()
         .map(|file| object(vec![("name", JsValue::from_str(&file.name)), ("bytes", Uint8Array::from(file.bytes.as_slice()).into())]))
         .collect())
@@ -659,9 +667,9 @@ pub fn write_gifti_map(values: &[f64]) -> Vec<u8> {
 }
 
 #[wasm_bindgen(js_name = polarAndEccentricity)]
-pub fn polar_and_eccentricity(values: Vec<String>, vertices: usize, data: Vec<f64>) -> Result<JsValue> {
+pub fn polar_and_eccentricity(values: Vec<String>, vertices: usize, data: Vec<f64>, convention: Option<String>) -> Result<JsValue> {
     let maps = maps(values, vertices, data)?;
-    Ok(export::polar_and_eccentricity(&maps).map_or(JsValue::NULL, |(polar, eccentricity)| {
+    Ok(export::polar_and_eccentricity_with_convention(&maps, export_convention(convention)?).map_or(JsValue::NULL, |(polar, eccentricity)| {
         object(vec![("polar", f64s(&polar)), ("eccentricity", f64s(&eccentricity))])
     }))
 }
