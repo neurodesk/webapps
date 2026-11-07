@@ -97,3 +97,33 @@ test('Undo after a drop leaves out files removed before it', async ({ page }) =>
   await page.locator('#status .nd-status-undo').click();
   await expect(page.locator('#fileList .file-name')).toHaveText(['b_T1w.nii']);
 });
+
+test('a NIfTI chosen while the viewer starts is loaded once it is ready', async ({ page }) => {
+  // Hold animation frames so the viewer setup, which waits for one, cannot finish.
+  await page.addInitScript(() => {
+    const held = [];
+    const requestFrame = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (callback) => {
+      if (window.releaseFrames) return requestFrame(callback);
+      held.push(callback);
+      return held.length;
+    };
+    window.releaseFrames = null;
+    window.releaseHeldFrames = () => {
+      window.releaseFrames = true;
+      for (const callback of held.splice(0)) requestFrame(callback);
+    };
+  });
+  await page.goto('/index.html');
+  await expect.poll(() => page.evaluate(() => Boolean(window.app?.fileIOController))).toBe(true);
+
+  await page.locator('#fileInput').setInputFiles({
+    name: 'early_T1w.nii',
+    mimeType: 'application/octet-stream',
+    buffer: createInt16Nifti([10, 20, 30]),
+  });
+  await page.evaluate(() => window.releaseHeldFrames());
+
+  await expect(page.locator('#fileList .file-name')).toHaveText(['early_T1w.nii']);
+  await expect.poll(() => page.evaluate(() => window.app.fileIOController.getActiveFile()?.name)).toBe('early_T1w.nii');
+});

@@ -185,12 +185,17 @@ class MuscleMapApp {
     const colormapData = generateNiivueColormap();
 
     // Setup
-    const viewerReady = await this.setupViewer();
-
-    // Register colormap after viewer is ready
-    if (viewerReady) {
-      this.viewerController.registerMuscleColormap(colormapData);
-    }
+    this.viewerSetup = this.setupViewer().then((viewerReady) => {
+      // Register colormap after viewer is ready
+      if (viewerReady) {
+        this.viewerController.registerMuscleColormap(colormapData);
+      }
+      return viewerReady;
+    });
+    // Listen for files before the viewer is ready: a file chosen or dropped while
+    // WebGL starts would otherwise be lost. The handler waits for the viewer.
+    this.setupFileInput();
+    await this.viewerSetup;
 
     this.setupEventListeners();
     await this.setupExamples();
@@ -341,14 +346,17 @@ class MuscleMapApp {
     document.getElementById('fileInput').closest('.section-content').prepend(this.exampleSelector);
   }
 
-  setupEventListeners() {
+  setupFileInput() {
     const fileInput = document.getElementById('fileInput');
-    if (fileInput) {
-      fileInput.addEventListener('change', (e) => this.fileIOController.handleFileInput(e));
-    }
+    fileInput?.addEventListener('change', async (e) => {
+      await this.viewerSetup;
+      this.fileIOController.handleFileInput(e);
+    });
     // The page-wide drop replaces the inputs; "Load files…" adds to them.
     fileInput?.addEventListener('nd-replace', () => this.fileIOController.clearFiles());
+  }
 
+  setupEventListeners() {
     const runBtn = document.getElementById('runSegmentation');
     if (runBtn) runBtn.addEventListener('click', () => this.runSegmentation());
 
