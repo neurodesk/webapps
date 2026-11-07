@@ -6,6 +6,9 @@
 // guessing a channel, and refuses a stack whose decoded size is above `maxBytes` from the page
 // directories alone, before any pixel is decoded. `rgb: 'mean'` reads RGB pages as the mean of
 // their red, green and blue samples instead, as ImageJ converts RGB to 8-bit.
+//
+// A 2D image with several channels (RGB, palette, multi-sample or one page per channel) is read
+// with `openTiffPlanes`, which keeps every sample as a plane of its own.
 import { GeoTIFF, fromArrayBuffer } from 'geotiff';
 import { InputTooLargeError, MAX_INPUT_BYTES } from './input-limits.js';
 
@@ -108,7 +111,44 @@ export function parseOmeDescription(description) {
     declaredSpacing: { x: finite(attribute('PhysicalSizeX')), y: finite(attribute('PhysicalSizeY')), z: finite(attribute('PhysicalSizeZ')), unit: attribute('PhysicalSizeXUnit') ?? 'µm' },
     frameInterval: increment && timeScale ? increment * timeScale : null,
     stagePosition: omeStagePosition(text),
+    uuid: xmlAttribute(text.match(/<(?:[\w.-]+:)?OME\b[^>]*>/)[0], 'UUID') ?? null,
+    channels: omeChannels(text),
+    tiffData: omeTiffData(text),
   };
+}
+
+/** The first image's XML, or the whole description when it has no closed Image element. */
+function firstImage(text) {
+  return text.match(/<(?:[\w.-]+:)?Image\b[\s\S]*?<\/(?:[\w.-]+:)?Image\s*>/)?.[0] ?? text;
+}
+
+/** The first image's Channel elements: Name (null when absent or empty) and SamplesPerPixel. */
+function omeChannels(text) {
+  return (firstImage(text).match(/<(?:[\w.-]+:)?Channel\b[^>]*>/g) ?? []).map((tag) => ({
+    name: xmlAttribute(tag, 'Name') || null,
+    samplesPerPixel: Number(xmlAttribute(tag, 'SamplesPerPixel') ?? 1),
+  }));
+}
+
+/**
+ * The first image's TiffData elements: IFD, FirstC, FirstZ, FirstT and PlaneCount as written
+ * (undefined when absent; the reader decides what a malformed value means), and the UUID of the
+ * file holding those planes (null when they are in this file's own pages).
+ */
+function omeTiffData(text) {
+  const elements = firstImage(text).match(/<(?:[\w.-]+:)?TiffData\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:[\w.-]+:)?TiffData\s*>)/g) ?? [];
+  return elements.map((element) => {
+    const tag = element.match(/^<[^>]*>/)[0];
+    const uuid = element.match(/<(?:[\w.-]+:)?UUID\b[^>]*>([^<]*)</)?.[1];
+    return {
+      IFD: xmlAttribute(tag, 'IFD'),
+      FirstC: xmlAttribute(tag, 'FirstC'),
+      FirstZ: xmlAttribute(tag, 'FirstZ'),
+      FirstT: xmlAttribute(tag, 'FirstT'),
+      PlaneCount: xmlAttribute(tag, 'PlaneCount'),
+      uuid: uuid ? decodeXml(uuid).trim() || null : null,
+    };
+  });
 }
 
 /**
@@ -281,6 +321,93 @@ export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES
   return { ...info, data };
 }
 
+const RGB_SAMPLES = ['red', 'green', 'blue'];
+// ExtraSamples 1 and 2 are associated and unassociated alpha; 0 is unspecified data.
+const ALPHA = new Set([1, 2]);
+
+async function tagValue(directory, tag, fallback) {
+  return directory.hasTag(tag) ? directory.loadValue(tag) : fallback;
+}
+
+/**
+ * What each sample of a page is: red, green and blue for the first three samples of an RGB page
+ * and the three colours of a palette page, "alpha" for an ExtraSamples alpha, and "sample N" for
+ * every other sample, a channel of its own (a MinIsBlack page with four fluorescence samples has
+ * four channels).
+ */
+async function sampleKinds(image) {
+  const directory = image.fileDirectory;
+  const count = image.getSamplesPerPixel();
+  const photometric = Number(await tagValue(directory, 'PhotometricInterpretation', 1));
+  if (photometric === 3) return [...RGB_SAMPLES];
+  const base = photometric === 2 && count >= 3 ? 3 : Math.min(1, count);
+  // geotiff gives one value as a number and several as a typed array.
+  const raw = await tagValue(directory, 'ExtraSamples', []);
+  const extra = typeof raw === 'number' ? [raw] : Array.from(raw, Number);
+  return Array.from({ length: count }, (_, sample) => {
+    if (sample < base) return base === 3 ? RGB_SAMPLES[sample] : 'sample 1';
+    return ALPHA.has(extra[sample - base]) ? 'alpha' : `sample ${sample + 1}`;
+  });
+}
+
+function splitRgb(data, count) {
+  return [0, 1, 2].map((c) => {
+    const plane = new data.constructor(count);
+    for (let i = 0; i < count; i++) plane[i] = data[i * 3 + c];
+    return plane;
+  });
+}
+
+/**
+ * The planes of a 2D image TIFF: every sample of every full-resolution page, whatever it holds
+ * (RGB, palette colour, several channel samples, one page per channel). Reduced-resolution pages
+ * (NewSubfileType bit 0) are pyramid levels and are left out. Only the page directories are read
+ * here, at most `pageLimit` full-resolution pages of them, so the caller can refuse a file by its
+ * page count, sizes or `decodedBytes` before `readPlanes` decodes any pixel.
+ * @param {ArrayBuffer} buffer
+ * @param {{ pageLimit?: number }} [options]
+ */
+export async function openTiffPlanes(buffer, { pageLimit = Infinity } = {}) {
+  const tiff = await fromArrayBuffer(buffer);
+  const count = await tiff.getImageCount();
+  const images = [];
+  const palettes = [];
+  const pages = [];
+  for (let ifd = 0; ifd < count && pages.length < pageLimit; ifd++) {
+    const image = await tiff.getImage(ifd);
+    if (Number(await tagValue(image.fileDirectory, 'NewSubfileType', 0)) & 1) continue;
+    const width = image.getWidth();
+    const height = image.getHeight();
+    const samples = await sampleKinds(image);
+    const palette = Number(await tagValue(image.fileDirectory, 'PhotometricInterpretation', 1)) === 3;
+    let decodedBytes = 0;
+    // Decoded size, not stored size: geotiff widens some samples (float16 to Float32Array),
+    // and a palette page decodes to three 16-bit colour samples at most.
+    for (let sample = 0; sample < image.getSamplesPerPixel(); sample++) {
+      decodedBytes += width * height * (palette ? 3 * 2 : image.getArrayForSample(sample, 1).BYTES_PER_ELEMENT);
+    }
+    images.push(image);
+    palettes.push(palette);
+    pages.push({ ifd, width, height, samples, decodedBytes });
+  }
+  const description = images.length ? await tagValue(images[0].fileDirectory, 'ImageDescription', null) : null;
+  return {
+    pages,
+    // geotiff keeps the NUL terminator of a value stored inline in its entry.
+    description: description == null ? null : String(description).replace(/\0+$/, ''),
+    async readPlanes({ signal } = {}) {
+      const planes = [];
+      for (const [index, image] of images.entries()) {
+        signal?.throwIfAborted();
+        const { width, height, samples } = pages[index];
+        const rasters = palettes[index] ? splitRgb(await image.readRGB({ interleave: true, signal }), width * height) : await image.readRasters({ interleave: false, signal });
+        planes.push(rasters.flatMap((data, sample) => (samples[sample] === 'alpha' ? [] : [{ kind: samples[sample], data }])));
+      }
+      return planes;
+    },
+  };
+}
+
 function dtypeName(Type) {
   return Type.name.replace('Array', '').toLowerCase();
 }
@@ -385,4 +512,17 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
     out.set(source.subarray(page * planeBytes, (page + 1) * planeBytes), strip);
   }
   return out;
+}
+
+/**
+ * A label image as an uncompressed baseline TIFF: unsigned 16-bit when every label fits, 32-bit
+ * otherwise. 0 is background.
+ * @param {ArrayLike<number>} labels
+ * @param {number} width
+ * @param {number} height
+ */
+export function writeLabelTiff(labels, width, height) {
+  let max = 0;
+  for (let i = 0; i < labels.length; i++) if (labels[i] > max) max = labels[i];
+  return writeTiffStack({ width, height, data: max <= 0xffff ? Uint16Array.from(labels) : Uint32Array.from(labels) });
 }

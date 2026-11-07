@@ -24,6 +24,14 @@ def main(out):
     with tifffile.TiffWriter(f"{out}/two-series.ome.tif", ome=True) as tif:
         tif.write(ramp, metadata={"axes": "TYX"})
         tif.write(ramp[:2], metadata={"axes": "TYX"})
+    # Planes for openTiffPlanes: an RGB page with an alpha, then an unspecified sample; a palette page.
+    base = (np.arange(4 * 6).reshape(4, 6) * 7).astype(np.uint8)
+    extras = np.stack([base, base + 1, base + 2, np.full_like(base, 255), base + 3], -1)
+    tifffile.imwrite(f"{out}/rgb-alpha-extra.tif", extras, photometric="rgb", planarconfig="contig", extrasamples=["unassalpha", "unspecified"])
+    colormap = np.zeros((3, 256), dtype=np.uint16)
+    colormap[:, 1] = [65535, 0, 0]
+    colormap[:, 2] = [0, 65535, 0]
+    tifffile.imwrite(f"{out}/palette-uint8.tif", base % 3, photometric="palette", colormap=colormap)
 
 
 if __name__ == "__main__":

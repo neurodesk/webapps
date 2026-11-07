@@ -21,7 +21,47 @@ export interface TiffStackMetadata {
   frameInterval: number | null;
   /** OME stage position of the first image's first plane (TheZ = TheC = TheT = 0), in micrometres; null when that plane records none or the file is not OME. */
   stagePosition: { x: number; y: number; z: number | null } | null;
+  /** OME only: the OME element's UUID, the first image's channels and its TiffData elements. */
+  uuid?: string | null;
+  channels?: OmeChannel[];
+  tiffData?: OmeTiffData[];
   description?: string;
+}
+
+export interface OmeChannel {
+  /** null when the Channel has no Name or an empty one. */
+  name: string | null;
+  samplesPerPixel: number;
+}
+
+/** A TiffData element's attributes as written (undefined when absent), and the UUID of the file holding its planes (null for this file). */
+export interface OmeTiffData {
+  IFD?: string;
+  FirstC?: string;
+  FirstZ?: string;
+  FirstT?: string;
+  PlaneCount?: string;
+  uuid: string | null;
+}
+
+/** A full-resolution page of a 2D image TIFF and what each of its samples holds. */
+export interface TiffPlanePage {
+  ifd: number;
+  width: number;
+  height: number;
+  /** 'red', 'green', 'blue' (RGB and palette pages), 'alpha', or 'sample N' (1-based). */
+  samples: string[];
+  /** Bytes of the decoded samples, alpha included. */
+  decodedBytes: number;
+}
+
+export interface TiffPlanes {
+  /** At most `pageLimit` pages, pyramid levels left out. */
+  pages: TiffPlanePage[];
+  /** The first page's ImageDescription, or null. */
+  description: string | null;
+  /** Per page, its samples other than alpha, in sample order; palette pages as red, green and blue. */
+  readPlanes(options?: { signal?: AbortSignal }): Promise<Array<Array<{ kind: string; data: TiffSampleArray }>>>;
 }
 
 export interface TiffStackInfo {
@@ -65,3 +105,7 @@ export function readTiffStack<Data extends TiffSampleArray = TiffSampleArray>(bu
 export function imagejDescription(options: { frames: number; frameInterval?: number | null; unit?: string | null; min?: number | null; max?: number | null }): string;
 /** Uncompressed little-endian baseline TIFF, one strip per page; `rgb` writes Uint8Array red, green, blue triplets as RGB pages. */
 export function writeTiffStack(stack: { width: number; height: number; data: TiffSampleArray; description?: string; pixelSize?: { x: number; y: number } | null; rgb?: boolean }): Uint8Array;
+/** The full-resolution pages of a 2D image TIFF from their directories; `readPlanes` decodes them. */
+export function openTiffPlanes(buffer: ArrayBuffer, options?: { pageLimit?: number }): Promise<TiffPlanes>;
+/** A label image as an uncompressed TIFF, unsigned 16-bit when the labels fit and 32-bit otherwise. */
+export function writeLabelTiff(labels: ArrayLike<number>, width: number, height: number): Uint8Array;

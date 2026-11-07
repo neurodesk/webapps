@@ -5,9 +5,11 @@ import {
   imagejDescription,
   inspectTiffStack,
   micrometresPerUnit,
+  openTiffPlanes,
   parseImagejDescription,
   parseOmeDescription,
   readTiffStack,
+  writeLabelTiff,
   writeTiffStack,
 } from '../src/file-io/tiff.js';
 import { InputTooLargeError } from '../src/file-io/input-limits.js';
@@ -261,4 +263,65 @@ test('a plain TIFF declares its resolution tags in their own unit, never as micr
   assert.equal(metadata.kind, 'baseline');
   assert.deepEqual(metadata.pixelSize, { x: null, y: null, z: null });
   assert.deepEqual(metadata.declaredSpacing, { x: 0.5, y: 0.25, z: null, unit: null });
+});
+
+test('openTiffPlanes keeps colour and extra samples as planes and leaves alpha out', async () => {
+  const tiff = await openTiffPlanes(fixture('rgb-alpha-extra.tif'));
+  assert.deepEqual(tiff.pages.map(({ ifd, width, height, samples, decodedBytes }) => ({ ifd, width, height, samples, decodedBytes })), [
+    { ifd: 0, width: 6, height: 4, samples: ['red', 'green', 'blue', 'alpha', 'sample 5'], decodedBytes: 5 * 24 },
+  ]);
+  const [planes] = await tiff.readPlanes();
+  const base = Array.from({ length: 24 }, (_, i) => i * 7);
+  assert.deepEqual(planes.map((plane) => plane.kind), ['red', 'green', 'blue', 'sample 5']);
+  assert.deepEqual(planes.map((plane) => Array.from(plane.data)), [0, 1, 2, 3].map((offset) => base.map((value) => value + offset)));
+});
+
+test('openTiffPlanes reads a palette page as its red, green and blue colours', async () => {
+  const tiff = await openTiffPlanes(fixture('palette-uint8.tif'));
+  assert.deepEqual(tiff.pages[0].samples, ['red', 'green', 'blue']);
+  assert.equal(tiff.pages[0].decodedBytes, 24 * 6);
+  const [planes] = await tiff.readPlanes();
+  // Index (i * 7) % 3: 0 is black, 1 red, 2 green.
+  const index = Array.from({ length: 24 }, (_, i) => (i * 7) % 3);
+  assert.deepEqual(planes.map((plane) => Array.from(plane.data)), [1, 2, 3].map((colour) => index.map((k) => (k === colour ? 255 : 0))));
+});
+
+test('openTiffPlanes leaves reduced-resolution pages out, stops at pageLimit, and returns the description', async () => {
+  const data = Uint16Array.from({ length: 3 * 4 * 5 }, (_, i) => i);
+  const bytes = writeTiffStack({ width: 5, height: 4, data, description: 'ImageJ=1.11a\nchannels=2\n' });
+  // Mark the second page a reduced-resolution image: NewSubfileType is each IFD's first entry.
+  const view = new DataView(bytes.buffer);
+  const second = view.getUint32(view.getUint32(4, true) + 2 + view.getUint16(view.getUint32(4, true), true) * 12, true);
+  assert.equal(view.getUint16(second + 2, true), 254);
+  view.setUint32(second + 2 + 8, 1, true);
+  const tiff = await openTiffPlanes(buffer(bytes));
+  assert.deepEqual(tiff.pages.map((page) => [page.ifd, page.samples, page.decodedBytes]), [[0, ['sample 1'], 40], [2, ['sample 1'], 40]]);
+  assert.equal(tiff.description, 'ImageJ=1.11a\nchannels=2\n');
+  const planes = await tiff.readPlanes();
+  assert.deepEqual(planes.map(([plane]) => [plane.kind, plane.data[0]]), [['sample 1', 0], ['sample 1', 40]]);
+  assert.deepEqual((await openTiffPlanes(buffer(bytes), { pageLimit: 1 })).pages.map((page) => page.ifd), [0]);
+});
+
+test('OME descriptions give the first image\'s channels, its TiffData as written and the file UUID', () => {
+  const xml = '<ome:OME xmlns:ome="x" UUID="urn:uuid:a"><ome:Image ID="Image:0"><ome:Pixels SizeC="2" SizeZ="1" SizeT="1">'
+    + '<ome:Channel Name="A &amp; B" SamplesPerPixel="1"/><ome:Channel Name=""/><ome:ChannelRef/>'
+    + '<ome:TiffData IFD="1" FirstC="x"/><ome:TiffData PlaneCount="2"><ome:UUID FileName="y.ome.tif">urn:uuid:b</ome:UUID></ome:TiffData>'
+    + '</ome:Pixels></ome:Image><ome:Image ID="Image:1"><ome:Pixels SizeC="1"><ome:Channel Name="C"/></ome:Pixels></ome:Image></ome:OME>';
+  const ome = parseOmeDescription(xml);
+  assert.equal(ome.uuid, 'urn:uuid:a');
+  assert.deepEqual(ome.channels, [{ name: 'A & B', samplesPerPixel: 1 }, { name: null, samplesPerPixel: 1 }]);
+  assert.deepEqual(ome.tiffData, [
+    { IFD: '1', FirstC: 'x', FirstZ: undefined, FirstT: undefined, PlaneCount: undefined, uuid: null },
+    { IFD: undefined, FirstC: undefined, FirstZ: undefined, FirstT: undefined, PlaneCount: '2', uuid: 'urn:uuid:b' },
+  ]);
+});
+
+test('writeLabelTiff writes 16-bit labels when they fit and 32-bit otherwise', async () => {
+  for (const max of [65535, 70000]) {
+    const labels = Int32Array.from({ length: 6 * 4 }, (_, i) => (i === 5 ? max : i % 3));
+    const stack = await readTiffStack(buffer(writeLabelTiff(labels, 6, 4)));
+    assert.equal(stack.dtype, max > 65535 ? 'uint32' : 'uint16');
+    assert.deepEqual([stack.width, stack.height, stack.pages], [6, 4, 1]);
+    assert.deepEqual(Array.from(stack.data), Array.from(labels));
+  }
 });

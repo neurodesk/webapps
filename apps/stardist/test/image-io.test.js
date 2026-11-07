@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encode as encodePng } from "fast-png";
-import { fromArrayBuffer } from "geotiff";
-import { MAX_DECODED_BYTES, nucleiCsv, readImage, writeLabelTiff } from "../src/image-io.js";
+import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
+import { MAX_DECODED_BYTES, nucleiCsv, readImage } from "../src/image-io.js";
 
 const toBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
@@ -70,26 +70,6 @@ function tiff(pages) {
 }
 
 const ramp = (Type, length, offset) => Type.from({ length }, (_, i) => (i * 37 + offset) % 60000);
-
-test("the label TIFF reads back with geotiff as the same labels", async () => {
-  const width = 37;
-  const height = 21;
-  const labels = Int32Array.from({ length: width * height }, (_, i) => (i * 13) % 300);
-  const tiff = writeLabelTiff(labels, width, height);
-  const image = await (await fromArrayBuffer(toBuffer(tiff))).getImage();
-  assert.equal(image.getWidth(), width);
-  assert.equal(image.getHeight(), height);
-  assert.equal(image.getBitsPerSample(), 16);
-  const [values] = await image.readRasters();
-  assert.deepEqual(Array.from(values), Array.from(labels));
-});
-
-test("more than 65535 nuclei are written as 32-bit labels", async () => {
-  const labels = Int32Array.from({ length: 70000 }, (_, i) => i + 1);
-  const image = await (await fromArrayBuffer(toBuffer(writeLabelTiff(labels, 350, 200)))).getImage();
-  assert.equal(image.getBitsPerSample(), 32);
-  assert.equal((await image.readRasters())[0][69999], 70000);
-});
 
 test("TIFF pages and samples become planes, and the label TIFF is itself readable", async () => {
   const labels = Int32Array.from({ length: 32 * 16 }, (_, i) => i % 7);
