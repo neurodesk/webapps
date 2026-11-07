@@ -969,6 +969,39 @@ try {
     await expect(page.locator('#fileInfo')).toContainText('interface-stack-2.tif');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
+  await check('microsam', async page => {
+    const { syntheticDiscs } = await import('../apps/microsam/test/offline.mjs');
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(syntheticDiscs());
+    await expect(page.locator('#fileInfo')).toHaveText('synthetic-discs.tif · 128 × 128 · TIFF');
+    await expect(page.locator('#channelField')).toBeHidden();
+    // The backend chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#backend')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#backend').selectOption('wasm');
+    await advanced.tap();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#embedButton')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#backend')).toHaveValue('wasm');
+    await page.locator('#embedButton').tap();
+    await expect(page.locator('#statusText')).toHaveText(/^Embeddings ready/, { timeout: 180000 });
+    const box = await page.locator('#canvas').boundingBox();
+    const scale = Math.min(box.width, box.height) / 128;
+    await page.locator('#canvas').tap({ position: { x: box.width / 2 - 32 * scale, y: box.height / 2 - 32 * scale } });
+    await expect(page.locator('#acceptButton')).toBeEnabled({ timeout: 60000 });
+    await page.locator('#acceptButton').tap();
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Object labels · 1 object');
+    // A new image withdraws the objects of the old one.
+    await page.locator('#imageInput').setInputFiles({ ...syntheticDiscs(), name: 'second.tif' });
+    await expect(page.locator('#fileInfo')).toContainText('second.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
   await check('sdc', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);

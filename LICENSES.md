@@ -44,6 +44,10 @@ for each app are recorded in `registry/apps.yml`.
   the app as `THIRD_PARTY_NOTICES.txt`. The Allen CCFv3 atlas it downloads, which both offline asset inventories
   bundle, is for research and noncommercial use only under the Allen Institute terms of use; commercial
   redistribution of an offline bundle containing it needs the Allen Institute's written permission
+- `apps/microsam`: MIT (`apps/microsam/LICENSE`); it ports micro-sam 1.8.14 (MIT) and Pillow 13.0.0's bilinear
+  resampling (MIT-CMU) and downloads micro-sam's `vit_t_lm` model (CC BY 4.0, from Apache-2.0 MobileSAM and
+  Segment Anything); attribution in `apps/microsam/NOTICE`, the Apache-2.0 text for the traced MobileSAM and
+  Segment Anything graphs in `apps/microsam/LICENSE-APACHE-2.0`. The build ships the three files at the app's root
 - `packages/shoreline`: Apache-2.0 AND BSD-3-Clause (`packages/shoreline/LICENSE`,
   `packages/shoreline/NOTICE`); the WebAssembly build of `exes/dwi/shoreline`, whose 3dSHORE
   and topup displacement crates port QSIPrep and DIPY code (BSD-3-Clause)
