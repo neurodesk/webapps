@@ -1,7 +1,9 @@
 // DOM-independent app logic, unit-tested under Node (test/config.test.js).
+import packageJson from "../package.json" with { type: "json" };
+
 export const APP = Object.freeze({
   id: "reproin",
-  version: "0.1.20261104",
+  version: packageJson.version,
 });
 
 // Top-level folder inside the downloaded ZIP.

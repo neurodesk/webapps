@@ -9,6 +9,7 @@ import applyReleasePlan from '@changesets/apply-release-plan';
 import { read as readConfig } from '@changesets/config';
 import { getPackages } from '@manypkg/get-packages';
 import { repoRoot } from './apps-registry.mjs';
+import { stringLiterals } from './string-literals.mjs';
 
 export const DATE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(\d{8})$/;
 export const LINKED_PACKAGES = Object.freeze({
@@ -229,24 +230,6 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
   dwicorrect: [
     { file: 'apps/dwicorrect/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],
-  'ants-denoise': [
-    { file: 'apps/ants-denoise/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
-  ],
-  brainchop: [
-    { file: 'apps/brainchop/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
-  ],
-  reproin: [
-    { file: 'apps/reproin/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
-  ],
-  samsrf: [
-    { file: 'apps/samsrf/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
-  ],
-  stardist: [
-    { file: 'apps/stardist/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
-  ],
-  'structure-tensor': [
-    { file: 'apps/structure-tensor/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
-  ],
   qsmbly: [
     { file: 'apps/qsmbly/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
     { file: 'apps/qsmbly/rust-wasm/Cargo.toml', pattern: /(name = "qsm_wasm"\nversion = ")[^"]+("\n)/, replace: '$1{version}$2' },
@@ -317,32 +300,75 @@ export async function syncEmbeddedVersions(appId, version, root = repoRoot) {
   return updates.map(({ path }) => path);
 }
 
-const VERSION_SOURCE = /^(?:apps|packages)\/.+\.(?:[cm]?js|tsx?|html)$/;
+const VERSION_SOURCE = /^(?:apps|packages|site)\/.+\.(?:[cm]?[jt]sx?|html)$/;
 const NOT_VERSION_SOURCE = /\/(?:test|tests|e2e|validation|docs|vendor|public|node_modules)\/|\.(?:test|spec)\.[^/]+$/;
-// A date version inside a string (a `name@x.y.z` dependency pin aside), or a 0.0.0 placeholder.
-const VERSION_LITERAL = /["'`][^"'`\n]*?(?<!@)\b(\d+\.\d+\.20\d{6})\b|(?:\bversion:|\bVERSION\s*=)\s*["'](0\.0\.0)["']/dg;
+const DATE_VERSION_IN_TEXT = /(?<![@\w.])(\d+)\.(\d+)\.20\d{6}(?![\w.])/g;
+const VERSION_KEY = /^(?:version|VERSION)$/;
+const PLACEHOLDER_OR_DATE = /^(?:0\.0\.0|\d+\.\d+\.20\d{6})$/;
 
-/** Version literals in tracked app and package sources that no embedded version site rewrites. */
+/**
+ * App version literals in tracked sources of date-versioned app, package and site workspaces
+ * that no embedded version site rewrites: any string assigned to a `version`/`VERSION` key that holds 0.0.0 or a date version,
+ * and any other date version in a string whose MAJOR.MINOR is that of the enclosing package (so
+ * pins of other packages and `name@x.y.z` specifiers pass). Comments and URLs are not read. A
+ * date version in HTML outside `<script>` is not checked.
+ */
 export async function unsyncedVersionLiterals(root = repoRoot) {
-  const { stdout } = await promisify(execFile)('git', ['-C', root, 'ls-files', '-z', 'apps', 'packages'], { maxBuffer: 64 * 1024 * 1024 });
+  const { stdout } = await promisify(execFile)('git', ['-C', root, 'ls-files', '-z', 'apps', 'packages', 'site'], { maxBuffer: 64 * 1024 * 1024 });
+  const files = stdout.split('\0').filter(Boolean);
+  const seriesByDir = new Map();
+  for (const file of files.filter((item) => /(?:^|\/)package\.json$/.test(item))) {
+    const { version } = JSON.parse(await readFile(join(root, file), 'utf8').catch(() => '{}'));
+    const series = DATE_VERSION.exec(version ?? '');
+    seriesByDir.set(file.slice(0, -'/package.json'.length), series && `${series[1]}.${series[2]}`);
+  }
+  const seriesOf = (file) => {
+    for (let dir = file; dir.includes('/');) {
+      dir = dir.slice(0, dir.lastIndexOf('/'));
+      if (seriesByDir.has(dir)) return seriesByDir.get(dir);
+    }
+    return null;
+  };
   const sites = Object.values(EMBEDDED_VERSION_SITES).flat();
   const unsynced = [];
-  for (const file of stdout.split('\0')) {
-    if (!VERSION_SOURCE.test(file) || NOT_VERSION_SOURCE.test(file)) continue;
-    const text = await readFile(join(root, file), 'utf8').catch(() => '');
+  for (const file of files) {
+    const series = seriesOf(file);
+    if (!series || !VERSION_SOURCE.test(file) || NOT_VERSION_SOURCE.test(file)) continue;
+    let text = await readFile(join(root, file), 'utf8').catch(() => '');
+    if (file.endsWith('.html')) text = scriptsOnly(text);
     const synced = new Set();
     for (const site of sites.filter((item) => item.file === file)) {
       const match = site.pattern.exec(text);
       if (match) synced.add(match.index + match[1].length);
     }
-    for (const match of text.matchAll(VERSION_LITERAL)) {
-      const [start] = match.indices[1] ?? match.indices[2];
-      if (synced.has(start)) continue;
-      const line = text.slice(0, start).split('\n').length;
-      unsynced.push(`${file}:${line}: ${match[1] ?? match[2]} is not an EMBEDDED_VERSION_SITES entry`);
+    for (const { value, start, key } of stringLiterals(text)) {
+      if (value.includes('://')) continue;
+      const found = VERSION_KEY.test(key ?? '') && PLACEHOLDER_OR_DATE.test(value)
+        ? [{ version: value, at: start }]
+        : [...value.matchAll(DATE_VERSION_IN_TEXT)]
+          .filter((match) => `${match[1]}.${match[2]}` === series)
+          .map((match) => ({ version: match[0], at: start + match.index }));
+      for (const { version, at } of found) {
+        if (synced.has(at)) continue;
+        const line = text.slice(0, at).split('\n').length;
+        unsynced.push(`${file}:${line}: ${version}: read it from package.json, or register it in EMBEDDED_VERSION_SITES if the file cannot import JSON`);
+      }
     }
   }
   return unsynced;
+}
+
+// The HTML with everything outside `<script>` elements blanked, keeping offsets and lines.
+function scriptsOnly(html) {
+  const blank = (text) => text.replace(/[^\n]/g, ' ');
+  let out = '';
+  let last = 0;
+  for (const match of html.matchAll(/(<script\b[^>]*>)([\s\S]*?)<\/script>/gi)) {
+    const body = match.index + match[1].length;
+    out += blank(html.slice(last, body)) + match[2];
+    last = body + match[2].length;
+  }
+  return out + blank(html.slice(last));
 }
 
 /** Every embedded version string that disagrees with its app's package.json. */

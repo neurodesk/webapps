@@ -4,6 +4,7 @@
 "reproin": patch
 "samsrf": patch
 "structure-tensor": patch
+"@neurodesk/vessel-surfer-easter-egg": patch
 ---
 
-Keep the version in the app config in step with the released app version.
+Read the app version from package.json, so the config always reports the released version.

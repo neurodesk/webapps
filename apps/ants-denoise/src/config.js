@@ -1,6 +1,7 @@
 // DOM-independent app config. Kept pure so it can be unit-tested under Node
 // without a browser (see test/config.test.js).
 import automation from "../automation.json" with { type: "json" };
+import packageJson from "../package.json" with { type: "json" };
 import { denoiseArguments } from "@neurodesk/ants-denoise";
 import { DENOISE_WASM_SHA256 } from "@neurodesk/ants-denoise/pin";
 import { outputNames } from "@neurodesk/webapp-components/file-io/bids-derivatives";
@@ -8,7 +9,7 @@ import { outputNames } from "@neurodesk/webapp-components/file-io/bids-derivativ
 export const APP = Object.freeze({
   id: "ants-denoise",
   title: automation.title,
-  version: "0.1.20261104",
+  version: packageJson.version,
 });
 
 // DenoiseImage's noise model and radii with its defaults, as automation.json declares them. ANTs

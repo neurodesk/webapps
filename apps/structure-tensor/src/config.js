@@ -1,11 +1,12 @@
 // DOM-independent app config: settings, refusals and output names, unit-tested under Node.
 import automation from "../automation.json" with { type: "json" };
+import packageJson from "../package.json" with { type: "json" };
 import { axisScales } from "./tensor.js";
 
 export const APP = Object.freeze({
   id: "structure-tensor",
   title: automation.title,
-  version: "0.0.20261105",
+  version: packageJson.version,
 });
 
 // Every voxel holds up to nine float64 working arrays (three gradients, six tensor components).

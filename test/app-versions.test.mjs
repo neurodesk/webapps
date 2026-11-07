@@ -10,6 +10,7 @@ import {
   EMBEDDED_VERSION_SITES, LINKED_PACKAGES, applyRelease, embeddedVersionMismatches, mergeSameVersionSections,
   planRelease, releaseDate, syncEmbeddedVersions, unsyncedVersionLiterals, validateReleaseDate, workspacePackages,
 } from '../scripts/lib/app-versions.mjs';
+import { stringLiterals } from '../scripts/lib/string-literals.mjs';
 
 const registry = await loadAppsRegistry();
 const packages = await workspacePackages();
@@ -35,21 +36,58 @@ test('embedded version strings and linked packages match their app', async () =>
   }
 });
 
-test('every app version literal in app and package sources is an embedded version site', async () => {
+test('every app version literal in app, package and site sources is read from package.json or an embedded version site', async () => {
   assert.deepEqual(await unsyncedVersionLiterals(), []);
 });
 
-test('version literals outside the embedded version sites are reported', async (t) => {
-  const { root, put } = await fixture(t);
-  await put('apps/newapp/src/config.js', 'export const APP = { id: "newapp", version: "0.0.0" };\n');
-  await put('apps/newapp/src/worker.js', "const runtime = { app: 'NewApp web 0.1.20261001', niimath: '@niivue/niimath@1.4.20261016' };\n// niimath 1.4.20260909 has no STL writer.\n");
-  await put('apps/newapp/test/config.test.js', "const expected = '0.1.20261001';\n");
-  await put('packages/newapp/src/pipeline.js', "export const VERSION = '0.1.20261001';\n");
+test('version literals outside the embedded version sites are reported, comments, pins and URLs are not', async (t) => {
+  const { root, put, manifest } = await fixture(t);
+  await manifest('apps/newapp', { name: 'newapp', version: '0.1.20261001', private: true });
+  await manifest('site/easter-eggs/egg', { name: 'egg', version: '0.1.20260930', private: true });
+  const reported = {
+    'apps/newapp/src/config.js': 'export const APP = { id: "newapp", version: "0.0.0" };\n',
+    'apps/newapp/src/quoted.jsx': 'export const APP = { "version": "0.0.0" };\n',
+    'apps/newapp/src/spaced.mts': "export const APP = { version : '0.0.0' };\n",
+    'apps/newapp/src/backtick.cts': 'export const VERSION = `0.0.0`;\n',
+    'apps/newapp/src/stale.ts': "export const APP = { version: '0.0.20260901' };\n",
+    'apps/newapp/src/worker.js': "const runtime = { app: 'NewApp web 0.1.20261001' };\n",
+    'apps/newapp/index.html': "<p>Don't 0.1.20261001</p>\n<script>const v = '0.1.20261001';</script>\n",
+    'site/easter-eggs/egg/src/config.js': 'export const APP = { version: "0.1.20260918" };\n',
+  };
+  const passed = {
+    'apps/newapp/src/comment.js': "// newapp's 0.1.20261001 has no STL writer\nconst a = 'x';\n/* \"0.1.20261001\" */\n",
+    'apps/newapp/src/regex.js': "const re = /it's/g;\nconst b = 'ok';\nconst c = 4 / 2 / '0';\n",
+    'apps/newapp/src/pins.js': [
+      'export const NIIMATH_VERSION = "1.4.20261016";',
+      'const deps = { "@niivue/dcm2niix": "1.4.20261029" };',
+      "const pin = '@niivue/niimath@0.1.20261016';",
+      'const url = "https://huggingface.co/datasets/x/resolve/0.1.20261001/model.onnx";',
+      'import packageJson from "../package.json" with { type: "json" };',
+      'export const APP = { version: packageJson.version };',
+      '',
+    ].join('\n'),
+    'apps/newapp/test/config.test.js': "const expected = '0.1.20261001';\n",
+    'packages/components/src/server.js': "export function start({ version = '0.0.0' } = {}) {}\n",
+  };
+  for (const [path, text] of Object.entries({ ...reported, ...passed })) await put(path, text);
   await run('git', ['-C', root, 'add', '.']);
+  const message = 'read it from package.json, or register it in EMBEDDED_VERSION_SITES if the file cannot import JSON';
   assert.deepEqual(await unsyncedVersionLiterals(root), [
-    'apps/newapp/src/config.js:1: 0.0.0 is not an EMBEDDED_VERSION_SITES entry',
-    'apps/newapp/src/worker.js:1: 0.1.20261001 is not an EMBEDDED_VERSION_SITES entry',
-    'packages/newapp/src/pipeline.js:1: 0.1.20261001 is not an EMBEDDED_VERSION_SITES entry',
+    `apps/newapp/index.html:2: 0.1.20261001: ${message}`,
+    `apps/newapp/src/backtick.cts:1: 0.0.0: ${message}`,
+    `apps/newapp/src/config.js:1: 0.0.0: ${message}`,
+    `apps/newapp/src/quoted.jsx:1: 0.0.0: ${message}`,
+    `apps/newapp/src/spaced.mts:1: 0.0.0: ${message}`,
+    `apps/newapp/src/stale.ts:1: 0.0.20260901: ${message}`,
+    `apps/newapp/src/worker.js:1: 0.1.20261001: ${message}`,
+    `site/easter-eggs/egg/src/config.js:1: 0.1.20260918: ${message}`,
+  ]);
+});
+
+test('string literals skip comments and regular expressions and split template literals', () => {
+  const source = "// it's\nconst a = { 'VERSION': `x${ { b: '/' }.b }y`, r: /['`]/g, d: 4 / 2 }; /* 'no' */ const e = 'a\\'b';";
+  assert.deepEqual(stringLiterals(source).map(({ value, key }) => [value, key]), [
+    ['VERSION', null], ['x', 'VERSION'], ['/', 'b'], ['y', null], ["a\\'b", 'e'],
   ]);
 });
 
@@ -87,7 +125,7 @@ async function fixture(t) {
   await run('git', ['init', '-q', root]);
   await run('git', ['-C', root, 'add', '.']);
   await run('git', ['-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'Fixture']);
-  return { root, put, json };
+  return { root, put, manifest, json };
 }
 
 test('mixed shared changesets retain the strongest bump, attribution and dated dependents', async (t) => {
