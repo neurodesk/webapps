@@ -300,18 +300,21 @@ export async function syncEmbeddedVersions(appId, version, root = repoRoot) {
   return updates.map(({ path }) => path);
 }
 
-const VERSION_SOURCE = /^(?:apps|packages|site)\/.+\.(?:[cm]?[jt]sx?|html)$/;
+// JSX is left out: its text cannot be tokenized without a parser, and app versions live in
+// config .js/.ts files.
+const VERSION_SOURCE = /^(?:apps|packages|site)\/.+\.(?:[cm]?[jt]s|html)$/;
 const NOT_VERSION_SOURCE = /\/(?:test|tests|e2e|validation|docs|vendor|public|node_modules)\/|\.(?:test|spec)\.[^/]+$/;
-const DATE_VERSION_IN_TEXT = /(?<![@\w.])(\d+)\.(\d+)\.20\d{6}(?![\w.])/g;
-const VERSION_KEY = /^(?:version|VERSION)$/;
-const PLACEHOLDER_OR_DATE = /^(?:0\.0\.0|\d+\.\d+\.20\d{6})$/;
+const DATE_VERSION_IN_TEXT = /(?<![@\w.])v?((\d+)\.(\d+)\.20\d{6})(?![\w.])/dg;
+const VERSION_KEY = /(?:^|_)version$/i;
+const PACKAGE_KEY = /[@/]/;
 
 /**
  * App version literals in tracked sources of date-versioned app, package and site workspaces
- * that no embedded version site rewrites: any string assigned to a `version`/`VERSION` key that holds 0.0.0 or a date version,
- * and any other date version in a string whose MAJOR.MINOR is that of the enclosing package (so
- * pins of other packages and `name@x.y.z` specifiers pass). Comments and URLs are not read. A
- * date version in HTML outside `<script>` is not checked.
+ * that no embedded version site rewrites: a `0.0.0` assigned to a `version`, `VERSION` or
+ * `APP_VERSION` key, and any date version in a string (`v` prefix allowed) whose MAJOR.MINOR is
+ * that of the enclosing package. Pins of other packages, `name@x.y.z` specifiers, values under a
+ * package-name key (`"@scope/name": "…"`), comments and URLs pass. A date version in HTML
+ * outside `<script>` is not checked, nor one whose MAJOR.MINOR is stale.
  */
 export async function unsyncedVersionLiterals(root = repoRoot) {
   const { stdout } = await promisify(execFile)('git', ['-C', root, 'ls-files', '-z', 'apps', 'packages', 'site'], { maxBuffer: 64 * 1024 * 1024 });
@@ -342,16 +345,16 @@ export async function unsyncedVersionLiterals(root = repoRoot) {
       if (match) synced.add(match.index + match[1].length);
     }
     for (const { value, start, key } of stringLiterals(text)) {
-      if (value.includes('://')) continue;
-      const found = VERSION_KEY.test(key ?? '') && PLACEHOLDER_OR_DATE.test(value)
+      if (value.includes('://') || PACKAGE_KEY.test(key ?? '')) continue;
+      const found = VERSION_KEY.test(key ?? '') && value === '0.0.0'
         ? [{ version: value, at: start }]
         : [...value.matchAll(DATE_VERSION_IN_TEXT)]
-          .filter((match) => `${match[1]}.${match[2]}` === series)
-          .map((match) => ({ version: match[0], at: start + match.index }));
+          .filter((match) => `${match[2]}.${match[3]}` === series)
+          .map((match) => ({ version: match[1], at: start + match.indices[1][0] }));
       for (const { version, at } of found) {
         if (synced.has(at)) continue;
         const line = text.slice(0, at).split('\n').length;
-        unsynced.push(`${file}:${line}: ${version}: read it from package.json, or register it in EMBEDDED_VERSION_SITES if the file cannot import JSON`);
+        unsynced.push(`${file}:${line}: ${version}: read it from package.json (preferred), or register it in EMBEDDED_VERSION_SITES`);
       }
     }
   }

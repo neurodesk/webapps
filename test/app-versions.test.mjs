@@ -44,41 +44,55 @@ test('version literals outside the embedded version sites are reported, comments
   const { root, put, manifest } = await fixture(t);
   await manifest('apps/newapp', { name: 'newapp', version: '0.1.20261001', private: true });
   await manifest('site/easter-eggs/egg', { name: 'egg', version: '0.1.20260930', private: true });
+  await manifest('packages/semver-only', { name: 'semver-only', version: '1.0.0' });
   const reported = {
     'apps/newapp/src/config.js': 'export const APP = { id: "newapp", version: "0.0.0" };\n',
-    'apps/newapp/src/quoted.jsx': 'export const APP = { "version": "0.0.0" };\n',
+    'apps/newapp/src/quoted.ts': 'export const APP = { "version": "0.0.0" };\n',
     'apps/newapp/src/spaced.mts': "export const APP = { version : '0.0.0' };\n",
     'apps/newapp/src/backtick.cts': 'export const VERSION = `0.0.0`;\n',
-    'apps/newapp/src/stale.ts': "export const APP = { version: '0.0.20260901' };\n",
+    'apps/newapp/src/annotated.ts': 'export const VERSION: string = "0.0.0";\n',
+    'apps/newapp/src/app-version.js': "export const APP_VERSION = '0.0.0';\n",
     'apps/newapp/src/worker.js': "const runtime = { app: 'NewApp web 0.1.20261001' };\n",
+    'apps/newapp/src/prefixed.js': "const banner = 'NewApp v0.1.20261001';\n",
+    'apps/newapp/src/increment.js': 'let n = 0;\nn++ / 2; const VERSION = "0.0.0"; n / 2;\n',
+    'apps/newapp/src/property.js': 'const obj = { return: 4 };\nobj.return / 2; const VERSION = "0.0.0"; obj.return / 2;\n',
     'apps/newapp/index.html': "<p>Don't 0.1.20261001</p>\n<script>const v = '0.1.20261001';</script>\n",
     'site/easter-eggs/egg/src/config.js': 'export const APP = { version: "0.1.20260918" };\n',
   };
   const passed = {
     'apps/newapp/src/comment.js': "// newapp's 0.1.20261001 has no STL writer\nconst a = 'x';\n/* \"0.1.20261001\" */\n",
-    'apps/newapp/src/regex.js': "const re = /it's/g;\nconst b = 'ok';\nconst c = 4 / 2 / '0';\n",
+    'apps/newapp/src/regex.js': "const f = (a) => { return /it's/.test(a); };\nconst re = /it's/g;\nconst b = 'ok';\nconst c = 4 / 2 / '0';\n",
     'apps/newapp/src/pins.js': [
       'export const NIIMATH_VERSION = "1.4.20261016";',
-      'const deps = { "@niivue/dcm2niix": "1.4.20261029" };',
+      'const deps = { "@niivue/dcm2niix": "1.4.20261029", "@neurodesk/library": "0.1.20260901" };',
+      "const provenance = { tool: { name: '@niivue/niimath', version: '1.4.20261016' } };",
+      "const stages = [{ name: '@neurodesk/greedy', version: '0.0.20261020' }];",
       "const pin = '@niivue/niimath@0.1.20261016';",
       'const url = "https://huggingface.co/datasets/x/resolve/0.1.20261001/model.onnx";',
       'import packageJson from "../package.json" with { type: "json" };',
       'export const APP = { version: packageJson.version };',
       '',
     ].join('\n'),
+    // JSX is not scanned: its text cannot be tokenized without a parser.
+    'apps/newapp/src/view.jsx': 'export const View = () => <p>Don\'t</p>;\nexport const VERSION = "0.0.0";\n',
     'apps/newapp/test/config.test.js': "const expected = '0.1.20261001';\n",
-    'packages/components/src/server.js': "export function start({ version = '0.0.0' } = {}) {}\n",
+    // A package without a date version is not an app release.
+    'packages/semver-only/src/server.js': "export function start({ version = '0.0.0' } = {}) {}\n",
   };
   for (const [path, text] of Object.entries({ ...reported, ...passed })) await put(path, text);
   await run('git', ['-C', root, 'add', '.']);
-  const message = 'read it from package.json, or register it in EMBEDDED_VERSION_SITES if the file cannot import JSON';
+  const message = 'read it from package.json (preferred), or register it in EMBEDDED_VERSION_SITES';
   assert.deepEqual(await unsyncedVersionLiterals(root), [
     `apps/newapp/index.html:2: 0.1.20261001: ${message}`,
+    `apps/newapp/src/annotated.ts:1: 0.0.0: ${message}`,
+    `apps/newapp/src/app-version.js:1: 0.0.0: ${message}`,
     `apps/newapp/src/backtick.cts:1: 0.0.0: ${message}`,
     `apps/newapp/src/config.js:1: 0.0.0: ${message}`,
-    `apps/newapp/src/quoted.jsx:1: 0.0.0: ${message}`,
+    `apps/newapp/src/increment.js:2: 0.0.0: ${message}`,
+    `apps/newapp/src/prefixed.js:1: 0.1.20261001: ${message}`,
+    `apps/newapp/src/property.js:2: 0.0.0: ${message}`,
+    `apps/newapp/src/quoted.ts:1: 0.0.0: ${message}`,
     `apps/newapp/src/spaced.mts:1: 0.0.0: ${message}`,
-    `apps/newapp/src/stale.ts:1: 0.0.20260901: ${message}`,
     `apps/newapp/src/worker.js:1: 0.1.20261001: ${message}`,
     `site/easter-eggs/egg/src/config.js:1: 0.1.20260918: ${message}`,
   ]);

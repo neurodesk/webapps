@@ -1,7 +1,11 @@
 // A small JavaScript/TypeScript tokenizer that finds string literals and skips comments and
 // regular expressions. It reads only what the embedded version check needs: each string's text,
 // its offset, and the property or variable name it is assigned to (`key: "…"`, `KEY = '…'`,
-// `"key": "…"`). JSX text is not tokenized, so an apostrophe in JSX text would open a string.
+// `"key": "…"`, `const KEY: Type = '…'`). Without a parser it does not handle:
+// - JSX text: an apostrophe in `<p>Don't</p>` would open a string, so callers skip .jsx/.tsx;
+// - a regex right after a statement's closing `)` or `}` (`if (x) /re/.test(s)` reads as division);
+// - type annotations other than one name (`const KEY: Record<K, V> = '…'` has no key);
+// - `cond ? version : '…'`, which reads `version` as the key.
 
 const NAME = /[\p{ID_Continue}$]/u;
 // After these words a `/` starts a regular expression, not a division.
@@ -23,15 +27,22 @@ export function stringLiterals(source) {
   let i = 0;
 
   const keyBefore = () => {
-    const [key, operator] = tokens.slice(-2);
-    if (!key || !operator || operator.kind !== 'punct' || !/^[:=]$/.test(operator.value)) return null;
+    const [name, colon, type, operator] = tokens.slice(-4);
+    if (operator?.kind === 'punct' && operator.value === '=' && colon?.value === ':' && name?.kind === 'name' && type?.kind === 'name') {
+      return name.value;
+    }
+    const [key, last] = tokens.slice(-2);
+    if (!key || !last || last.kind !== 'punct' || !/^[:=]$/.test(last.value)) return null;
     return key.kind === 'name' || key.kind === 'string' ? key.value : null;
   };
+  // A `/` divides after a value (a name, number, string, `)`, `]`, `}`, `x++`, `obj.return`)
+  // and starts a regular expression elsewhere, keywords such as `return` included.
   const regexAllowed = () => {
-    const last = tokens.at(-1);
+    const [before, last] = tokens.slice(-2);
     if (!last) return true;
-    if (last.kind === 'name') return KEYWORDS_BEFORE_EXPRESSION.has(last.value);
+    if (last.kind === 'name') return before?.value !== '.' && KEYWORDS_BEFORE_EXPRESSION.has(last.value);
     if (last.kind !== 'punct') return false;
+    if (/^[+-]$/.test(last.value) && before?.value === last.value) return false;
     return !/^[)\]}]$/.test(last.value);
   };
   // Reads raw string text from `i` to the closing quote (or a template's `${`), skipping escapes.
