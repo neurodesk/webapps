@@ -14,6 +14,7 @@ use crate::error::{Error, Result};
 use crate::hrf::{self, ResolvedHrf};
 use crate::mapset::{MapSet, Maps};
 use crate::model::Model;
+use crate::precision::Precision;
 use crate::surface::Surface;
 use crate::timeseries::{TimeSeries, VertexSelection};
 use crate::{fit_prf, preprocess, revcor_cf, revcor_prf};
@@ -75,6 +76,7 @@ pub struct Job {
     seed_fine_fit: Option<Maps>,
     total_vertices: usize,
     model_name: String,
+    precision: Precision,
 }
 
 /// The result of `Job::run` on one vertex range: `rows x (end - start)` values, row-major,
@@ -140,7 +142,15 @@ impl Partial {
 
 impl Job {
     pub fn prepare(inputs: JobInputs, progress: &mut dyn FnMut(usize, usize)) -> Result<Job> {
-        let JobInputs { model, apertures, hrf, mut data, kept, roi, noise_ceiling, global_signal, seed, surface, area, seed_fine_fit, total_vertices } = inputs;
+        let JobInputs { model, apertures, hrf, mut data, kept, roi, mut noise_ceiling, global_signal, seed, surface, area, seed_fine_fit, total_vertices } = inputs;
+        let precision = match &model {
+            Model::Prf(model) => model.data_precision,
+            _ => Precision::Double,
+        };
+        precision.round_slice(&mut data.data);
+        if let Some(ceiling) = &mut noise_ceiling {
+            precision.round_slice(ceiling);
+        }
         if let Some(seed) = &seed {
             if seed.template.vertices != total_vertices {
                 return Err(Error::Shape(format!("template has {} vertices, runs have {total_vertices}", seed.template.vertices)));
@@ -241,7 +251,7 @@ impl Job {
                 Analysis::RevCorCf(Box::new(revcor_cf::Prepared::new(cf, &seed.vertices, &seed_courses, &seed.template, &area, surface.as_ref())?))
             }
         };
-        Ok(Job { analysis, data, kept_position, mver, noise_ceiling, seed_fine_fit, total_vertices, model_name })
+        Ok(Job { analysis, data, kept_position, mver, noise_ceiling, seed_fine_fit, total_vertices, model_name, precision })
     }
 
     pub fn kind(&self) -> Kind {
@@ -385,6 +395,9 @@ impl Job {
                 }
             }
         }
+        // Concatenating the single noise-ceiling row in MATLAB converts the
+        // parameter rows before normr2; compression also casts maps without it.
+        self.precision.round_slice(&mut maps.data);
         if let Some(ceiling) = &self.noise_ceiling {
             let mut row = vec![0.0; self.total_vertices];
             let mut known = vec![false; self.total_vertices];
@@ -398,6 +411,7 @@ impl Job {
                 fit_prf::normr2(&mut maps, &known);
             }
         }
+        self.precision.round_slice(&mut maps.data);
         let analysed = if self.mver.len() == self.total_vertices { VertexSelection::All } else { VertexSelection::from_indices(self.mver.clone()) };
         Ok(MapSet { maps, raw, analysed })
     }

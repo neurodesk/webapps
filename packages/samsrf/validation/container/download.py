@@ -8,12 +8,13 @@ import sys
 import urllib.request
 import zipfile
 
-if len(sys.argv) != 2:
-    raise SystemExit('Usage: python download.py OUTPUT_DIRECTORY')
+if len(sys.argv) not in (2, 3):
+    raise SystemExit('Usage: python download.py OUTPUT_DIRECTORY [FIXTURE_JSON]')
 destination = Path(sys.argv[1])
 if destination.exists() and any(destination.iterdir()):
     raise SystemExit(f'{destination}: use a new or empty directory')
-pin = json.loads(Path(__file__).with_name('fixture.json').read_text())
+pin_path = Path(sys.argv[2]) if len(sys.argv) == 3 else Path(__file__).with_name('fixture.json')
+pin = json.loads(pin_path.read_text())
 with urllib.request.urlopen(pin['url'], timeout=120) as response:
     data = response.read()
 if len(data) != pin['bytes'] or hashlib.sha256(data).hexdigest() != pin['sha256']:

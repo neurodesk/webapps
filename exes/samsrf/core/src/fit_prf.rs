@@ -8,11 +8,14 @@
 //! and the pRF-from-CF analysis (`SeedRoi` in a pRF model).
 
 use crate::apertures::Apertures;
+use crate::css;
+use num_complex::Complex64;
 use crate::error::{Error, Result};
 use crate::expr::Value;
 use crate::hrf::{self, ErrfunHrf, ResolvedHrf};
 use crate::model::{FineFit, PrfModel};
 use crate::optim::{self, FminsearchOptions};
+use crate::precision::{self, Precision};
 use crate::prf::{self, predict_timecourse};
 use crate::searchspace::{self, SearchSpace};
 
@@ -154,21 +157,26 @@ impl Prepared {
         let mut r: Vec<f64> = self
             .normalised
             .iter()
-            .map(|xn| match (&yn, xn) {
-                (Some(yn), Some(xn)) => dot(yn, xn),
-                _ => f64::NAN,
+            .enumerate()
+            .map(|(p, xn)| if model.data_precision == Precision::Single {
+                f64::from(precision::correlation_single(search.prediction(p), y, true))
+            } else {
+                match (&yn, xn) {
+                    (Some(yn), Some(xn)) => dot(yn, xn),
+                    _ => f64::NAN,
+                }
             })
             .collect();
         let max_r2;
         if model.only_positive_coarse_fits {
             let best = nan_max(&r);
-            max_r2 = best * best;
+            max_r2 = model.data_precision.round(best * best);
             for value in &mut r {
-                *value *= *value;
+                *value = model.data_precision.round(*value * *value);
             }
         } else {
             for value in &mut r {
-                *value *= *value;
+                *value = model.data_precision.round(*value * *value);
             }
             max_r2 = nan_max(&r);
         }
@@ -191,8 +199,11 @@ impl Prepared {
         }
         let prediction = self.predict(&params)?;
         let prediction = hrf::convolve(&prediction, &self.coarse_hrf, model.downsample_predictions);
-        let correlation = prf::pearson(y, &prediction);
-        Ok((params, correlation * correlation, Some(prediction)))
+        let correlation = match model.data_precision {
+            Precision::Double => prf::pearson(y, &prediction),
+            Precision::Single => f64::from(precision::correlation_single(&prediction, y, true)),
+        };
+        Ok((params, model.data_precision.round(correlation * correlation), Some(prediction)))
     }
 
     /// The unconvolved predicted time course of a parameter set.
@@ -210,7 +221,7 @@ impl Prepared {
         let model = &self.model;
         if model.coarse_fit_only {
             let (beta, baseline) = match coarse_prediction {
-                Some(prediction) => fit_betas(prediction, y),
+                Some(prediction) => fit_betas_precision(prediction, y, model.data_precision),
                 None => (0.0, 0.0),
             };
             let mut row = vec![rimg];
@@ -232,17 +243,22 @@ impl Prepared {
         let errfun_hrf = if self.fitting_hrf { ErrfunHrf::Fit { tr: model.tr } } else { ErrfunHrf::Kernel(self.coarse_hrf.clone()) };
         let (mut fp, mut fr) = if rimg >= model.fine_fit_threshold {
             let mut failure: Option<Error> = None;
-            let mut errfun = |p: &[f64]| match prf::errfun(&model.prf_function, &self.apertures, &self.xy_points, &errfun_hrf, p, y, model.downsample_predictions, model.compressive_nonlinearity) {
+            let mut errfun = |p: &[f64]| match prf::errfun_with_convention(&model.prf_function, &self.apertures, &self.xy_points, &errfun_hrf, p, y, model.downsample_predictions, model.compressive_nonlinearity, model.data_precision, model.css_convention) {
                 Ok(value) => value,
                 Err(error) => {
                     failure.get_or_insert(error);
-                    f64::NAN
+                    Complex64::new(f64::NAN, 0.0)
                 }
             };
             let (fp, err) = match &self.hooke_jeeves_steps {
                 Some(steps) => {
                     let only_positive: Vec<bool> = self.fine_only_positive.iter().map(|flag| *flag != 0).collect();
-                    optim::hooke_jeeves(&mut errfun, &seeds, steps, &only_positive, 15, 3)
+                    if model.compressive_nonlinearity && model.css_convention == css::Convention::Samsrf {
+                        let (params, value) = optim::hooke_jeeves(&mut errfun, &seeds, steps, &only_positive, 15, 3);
+                        (params, value.re)
+                    } else {
+                        optim::hooke_jeeves(|p| errfun(p).re, &seeds, steps, &only_positive, 15, 3)
+                    }
                 }
                 None => {
                     let tolerance = match &model.fine_fit {
@@ -250,14 +266,19 @@ impl Prepared {
                         _ => 1e-4,
                     };
                     let options = FminsearchOptions { tol_x: tolerance, stop_when_not_finite: true, ..Default::default() };
-                    let result = optim::fminsearch(&mut errfun, &seeds, &options);
-                    (result.x, result.fval)
+                    if model.compressive_nonlinearity && model.css_convention == css::Convention::Samsrf {
+                        let result = optim::fminsearch(&mut errfun, &seeds, &options);
+                        (result.x, result.fval.re)
+                    } else {
+                        let result = optim::fminsearch(|p| errfun(p).re, &seeds, &options);
+                        (result.x, result.fval)
+                    }
                 }
             };
             if let Some(error) = failure {
                 return Err(error);
             }
-            (fp, 1.0 - err)
+            (fp, model.data_precision.round(1.0 - err))
         } else {
             (vec![0.0; self.fine_names.len()], 0.0)
         };
@@ -280,11 +301,17 @@ impl Prepared {
             }
         }
         let mut prediction = None;
+        let mut legacy_exponent = None;
         if good {
             let mut fx = self.predict(&fp)?;
             if model.compressive_nonlinearity {
-                let exponent = fp[model.param_names.len()];
-                prf::compress(&mut fx, exponent);
+                if model.css_convention == css::Convention::Samsrf {
+                    // Pinned samsrf_fit_prf uses the final parameter here. With a
+                    // fitted HRF this is AmpRat, unlike the optimizer's exponent.
+                    legacy_exponent = fp.last().copied();
+                } else {
+                    prf::compress(&mut fx, fp[model.param_names.len()]);
+                }
             }
             prediction = Some(fx);
         } else if model.replace_bad_fits {
@@ -298,8 +325,13 @@ impl Prepared {
         let (beta, baseline) = match prediction {
             Some(fx) => {
                 let kernel = if self.fitting_hrf { hrf::doublegamma(model.tr, &fp[fp.len() - 5..]) } else { self.coarse_hrf.clone() };
-                let fx = hrf::convolve(&fx, &kernel, model.downsample_predictions);
-                fit_betas(&fx, y)
+                if let Some(exponent) = legacy_exponent {
+                    let fx = css::predict(&fx, exponent, &kernel, model.downsample_predictions);
+                    css::fit_betas(&fx, y, model.data_precision)
+                } else {
+                    let fx = hrf::convolve(&fx, &kernel, model.downsample_predictions);
+                    fit_betas_precision(&fx, y, model.data_precision)
+                }
             }
             None => (0.0, 0.0),
         };
@@ -385,6 +417,20 @@ pub fn prctile(values: &[f64], p: f64) -> f64 {
 /// first the system is rank deficient, so only the first column gets a coefficient. A
 /// prediction that is constant, or constant to rounding, takes that path.
 pub fn fit_betas(x: &[f64], y: &[f64]) -> (f64, f64) {
+    fit_betas_epsilon(x, y, f64::EPSILON)
+}
+
+fn fit_betas_precision(x: &[f64], y: &[f64], precision: Precision) -> (f64, f64) {
+    if precision == Precision::Double {
+        return fit_betas(x, y);
+    }
+    let x: Vec<f64> = x.iter().map(|&value| precision.round(value)).collect();
+    let y: Vec<f64> = y.iter().map(|&value| precision.round(value)).collect();
+    let (amplitude, intercept) = fit_betas_epsilon(&x, &y, f64::from(f32::EPSILON));
+    (precision.round(amplitude), precision.round(intercept))
+}
+
+fn fit_betas_epsilon(x: &[f64], y: &[f64], epsilon: f64) -> (f64, f64) {
     let n = x.len() as f64;
     if x.is_empty() || x.len() != y.len() {
         return (f64::NAN, f64::NAN);
@@ -401,7 +447,7 @@ pub fn fit_betas(x: &[f64], y: &[f64]) -> (f64, f64) {
         sxx += (a - mean_x) * (a - mean_x);
         sxy += (a - mean_x) * (b - mean_y);
     }
-    let tolerance = n.max(2.0) * f64::EPSILON;
+    let tolerance = n.max(2.0) * epsilon;
     let ones_first = n >= sxx_raw;
     let (r11, r22) = if ones_first {
         (n.sqrt(), sxx.max(0.0).sqrt())

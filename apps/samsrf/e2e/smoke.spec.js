@@ -87,10 +87,14 @@ async function runEveryAnalysis(page, timeout) {
     const run = page.locator("#runButton");
     await expect(run).toBeEnabled();
     await run.click();
-    await expect(page.locator("#exportConvention")).toBeDisabled();
+    for (const setting of ["exportConvention", "dataPrecision", "cssConvention"]) {
+      await expect(page.locator(`#${setting}`)).toBeDisabled();
+    }
     // The previous analysis leaves the output section open; its status line names the analysis.
     await expect(page.locator("#statusText")).toContainText(expected.outcome, { timeout });
-    await expect(page.locator("#exportConvention")).toBeEnabled();
+    for (const setting of ["exportConvention", "dataPrecision", "cssConvention"]) {
+      await expect(page.locator(`#${setting}`)).toBeEnabled();
+    }
     await expect(page.locator("#exportConvention")).toHaveValue("samsrfx-10.003");
     await expect(page.locator("#outputSection")).toHaveAttribute("open", "");
     for (const label of ["Polar angle", "Eccentricity", "R²"]) {
@@ -345,4 +349,30 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   expect(report.provenance.method).toBe("samsrf-rc");
   expect(report.provenance.model.Aperture_File).toBe("aps_Bars");
   expect(report.provenance.model.Scaling_Factor).toBe(9.5);
+});
+
+test("MATLAB fit settings round-trip through JSON and remain in collapsed settings", async ({ page }) => {
+  await page.goto("./");
+  await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
+  await page.locator("#dataPrecision").selectOption("single");
+  const model = JSON.parse(await page.locator("#modelJson").inputValue());
+  model.Compressive_Nonlinearity = true;
+  await page.locator("#modelJson").fill(JSON.stringify(model));
+  await page.locator("#modelJson").dispatchEvent("change");
+  await expect(page.locator("#cssConvention")).toBeVisible();
+  await page.locator("#cssConvention").selectOption("samsrf");
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#advancedSettings > summary").click();
+  await expect(page.locator("#dataPrecision")).toHaveValue("single");
+  await expect(page.locator("#cssConvention")).toHaveValue("samsrf");
+  const downloading = page.waitForEvent("download");
+  await page.locator("#saveModel").click();
+  const download = await downloading;
+  const saved = JSON.parse(readFileSync(await download.path(), "utf8"));
+  expect(saved.Data_Precision).toBe("single");
+  expect(saved.Css_Convention).toBe("samsrf");
+  expect(saved.Compressive_Nonlinearity).toBe(true);
+  await page.locator("#analysis").selectOption("cf");
+  await expect(page.locator("#dataPrecision")).toBeHidden();
+  await expect(page.locator("#cssConvention")).toBeHidden();
 });
