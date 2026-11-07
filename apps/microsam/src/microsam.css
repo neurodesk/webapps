@@ -1,0 +1,5 @@
+/* The prompt canvas takes clicks and drags itself, on touch screens too. */
+.microsam-canvas {
+  cursor: crosshair;
+  touch-action: none;
+}
