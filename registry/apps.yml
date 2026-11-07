@@ -1428,6 +1428,7 @@ apps:
       browser_test: true
       release: false
   - id: lightsheet-atlas
+    catalog: microscopy
     path: lightsheet-atlas
     title: Light-sheet atlas
     description: Map cleared mouse brains to the Allen atlas; count cells.
