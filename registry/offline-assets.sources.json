@@ -7413,6 +7413,22 @@
         "kind": "model",
         "license": "Allen Institute terms of use (noncommercial redistribution with citation)"
       }
+    ],
+    "microscope-qc": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
+        "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
+        "bytes": 12590015,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif",
+        "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
+        "bytes": 461646,
+        "kind": "example",
+        "license": "CC0-1.0"
+      }
     ]
   },
   "exclusions": [],

@@ -18,6 +18,9 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/deface`: BSD-2-Clause (`apps/deface/LICENSE`)
 - `apps/easy-mp2rage`: GPL-3.0-or-later (`apps/easy-mp2rage/LICENSE`)
 - `apps/niimath`: BSD-2-Clause (`apps/niimath/LICENSE`)
+- `apps/microscope-qc`: MIT (`apps/microscope-qc/LICENSE`); its PSF and field-illumination code is written
+  from the MetroloJ_QC paper, and its Gaussian blur is a port of ImageJ 1's public-domain `GaussianBlur`.
+  MetroloJ_QC (no licence file) and Fiji ran only as external validation references
 - `apps/calcium-imaging`: MIT (`apps/calcium-imaging/LICENSE`); its motion correction, ROI, ΔF/F and
   OASIS code is written from the papers. CaImAn (GPL-2.0), OASIS (GPL-3.0) and scikit-image ran only
   as external validation references; their outputs, not their code, are in `apps/calcium-imaging/test/fixtures`

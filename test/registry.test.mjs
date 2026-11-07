@@ -210,6 +210,7 @@ test('catalog assigns task categories and shares apps across related categories'
     'structure-tensor': ['fibre-orientation'],
     'lightsheet-atlas': ['registration'],
     'spot-detection': ['spot-detection'],
+    'microscope-qc': ['quality-control'],
     zarro: ['visualization'],
     fastprep: ['preprocessing', 'functional-imaging', 'pipelines'],
     'me-ica': ['preprocessing', 'functional-imaging'],

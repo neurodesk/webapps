@@ -87,6 +87,16 @@ function stitchingTiles() {
     buffer: Buffer.from(writeTiffStack({ width: 128, height: 96, data: Uint16Array.from(tile.data, (v) => Math.round(v * 20)) })),
   }));
 }
+// A 48 × 36 uint16 field image with an off-centre illumination peak, as a baseline TIFF.
+function fieldImage(name) {
+  const width = 48;
+  const height = 36;
+  const data = new Uint16Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) data[y * width + x] = Math.round(500 + 2000 * Math.exp(-((x - 28) ** 2 + (y - 15) ** 2) / 800));
+  }
+  return { name, mimeType: 'image/tiff', buffer: Buffer.from(writeTiffStack({ width, height, data })) };
+}
 const apps = (await loadAppsRegistry()).apps;
 const site = await serveSite(join(repoRoot, 'dist'));
 const browser = await chromium.launch({ args:['--enable-webgl','--use-gl=angle','--use-angle=swiftshader'] });
@@ -800,6 +810,37 @@ try {
     // A new image withdraws the results of the old one.
     await page.locator('#imageInput').setInputFiles(nifti('interface-t2.nii', 40));
     await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
+  await check('microscope-qc', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#imageInput').setInputFiles(fieldImage('interface-field.tif'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-field.tif · 48 × 36 · 1 plane · uint16', { timeout: 60000 });
+    await expect(page.locator('#analysis')).toHaveValue('field');
+    // Values chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#step')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#step').fill('20');
+    await page.locator('#referenceZone').uncheck();
+    await advanced.tap();
+    await expect(page.locator('#step')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#analysis')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#step')).toHaveValue('20');
+    await expect(page.locator('#referenceZone')).not.toBeChecked();
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toContainText('Quality control complete', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Iso-intensity zones · 20 % steps');
+    // A new image withdraws the results of the old one.
+    await page.locator('#imageInput').setInputFiles(fieldImage('interface-field-2.tif'));
+    await expect(page.locator('#fileInfo')).toContainText('interface-field-2.tif');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
   await check('brainqcnet', async page => {
