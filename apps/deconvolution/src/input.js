@@ -3,10 +3,17 @@
 // it. DOM-free, so Node tests read the same files the app does.
 import { readTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { decodeNiftiBuffer, readNiftiFrames } from "@neurodesk/webapp-components/file-io";
+import { InputTooLargeError, assertInputSize, assertNiftiDecodedSize } from "@neurodesk/webapp-components/file-io/input-limits";
 import { checkSquarePixels, niftiSpacingUm } from "./config.js";
 
-/** Decoded input bytes the app accepts before refusing a file (512 MiB). */
+/** Decoded voxel bytes the app accepts before refusing a file (512 MiB). */
 export const MAX_INPUT_BYTES = 2 ** 29;
+
+/**
+ * File bytes allowed beyond the voxels, for page directories, OME-XML and NIfTI headers, so a
+ * stack exactly at the voxel limit is not refused for its metadata (64 MiB).
+ */
+const METADATA_BYTES = 2 ** 26;
 
 export function formatOf(name) {
   if (/\.(ome\.)?tiff?$/i.test(name)) return "tiff";
@@ -29,12 +36,20 @@ export function checkZStack({ pages, metadata }, name) {
 
 const SPACING_SOURCE = { ome: "OME-XML", imagej: "ImageJ" };
 
-export async function readVolume(file, { signal, maxBytes = MAX_INPUT_BYTES } = {}) {
+/**
+ * `maxBytes` limits the decoded voxels (the Float32 array for NIfTI, checked from the header
+ * before inflating), `maxFileBytes` the file and a NIfTI's inflated bytes.
+ */
+export async function readVolume(file, { signal, maxBytes = MAX_INPUT_BYTES, maxFileBytes = maxBytes + METADATA_BYTES } = {}) {
   const format = formatOf(file.name);
   if (!format) throw new Error(`${file.name} is not a TIFF or NIfTI file.`);
   if (!file.size) throw new Error(`${file.name} is empty.`);
   signal?.throwIfAborted();
-  if (file.size > maxBytes) throw new Error(`${file.name} exceeds the input size limit.`);
+  assertInputSize([file], maxFileBytes);
+  if (format === "nifti") {
+    await assertNiftiDecodedSize(file, maxBytes);
+    signal?.throwIfAborted();
+  }
   const bytes = await file.arrayBuffer();
   signal?.throwIfAborted();
   if (format === "tiff") {
@@ -52,9 +67,10 @@ export async function readVolume(file, { signal, maxBytes = MAX_INPUT_BYTES } = 
       niftiHeader: null,
     };
   }
-  const buffer = await decodeNiftiBuffer(bytes, { maxBytes: maxBytes + 1 });
+  // A header can understate what the stream inflates to: stop reading one byte past the limit.
+  const buffer = await decodeNiftiBuffer(bytes, { maxBytes: maxFileBytes + 1 });
   signal?.throwIfAborted();
-  if (buffer.byteLength > maxBytes) throw new Error(`${file.name} exceeds the decoded input size limit of ${(maxBytes / 2 ** 20).toFixed(0)} MB.`);
+  if (buffer.byteLength > maxFileBytes) throw new InputTooLargeError(buffer.byteLength, maxFileBytes, { subject: "Decompressed NIfTI" });
   const { data, header, frames } = readNiftiFrames(buffer, Float32Array);
   if (frames !== 1) throw new Error(`${file.name} has ${frames} volumes; choose a single 3D stack.`);
   const spacingUm = niftiSpacingUm(header);

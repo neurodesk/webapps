@@ -3,7 +3,8 @@
     python -I make_tiff_fixtures.py <fixtures directory>
 
 `main` was run with tifffile 2026.3.3; `microscopy` (the microscopy-*.tif files, moved here from
-the deconvolution app's former reader) and `page_mapping` with tifffile 2024.2.12.
+the deconvolution app's former reader), `page_mapping` and `samples_per_channel` with tifffile
+2024.2.12.
 """
 import sys
 
@@ -87,7 +88,21 @@ def page_mapping(out):
             writer.write(np.full((2, 3), 99, dtype=np.uint8), photometric="minisblack", subfiletype=1, metadata=None)
 
 
+def samples_per_channel(out):
+    # OME counts samples in SizeC: tifffile writes SizeC 3 (or 2) with one Channel of
+    # SamplesPerPixel 3 (or 2) and one IFD per z plane, as Bio-Formats does.
+    rgb = np.zeros((2, 3, 4, 3), dtype=np.uint8)
+    rgb[0] = (30, 60, 90)
+    rgb[1] = (90, 120, 150)
+    tifffile.imwrite(f"{out}/ome-rgb-z2.ome.tif", rgb, ome=True, photometric="rgb", metadata={"axes": "ZYXS"})
+    alpha = np.full((2, 3, 4, 2), 255, dtype=np.uint8)
+    alpha[0, ..., 0] = 10
+    alpha[1, ..., 0] = 20
+    tifffile.imwrite(f"{out}/ome-gray-alpha.ome.tif", alpha, ome=True, photometric="minisblack", extrasamples=["unassalpha"], metadata={"axes": "ZYXS"})
+
+
 if __name__ == "__main__":
     main(sys.argv[1])
     microscopy(sys.argv[1])
     page_mapping(sys.argv[1])
+    samples_per_channel(sys.argv[1])
