@@ -121,6 +121,7 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
     neuromorph: 'morphometry',
     stitching: 'registration',
     'structure-tensor': 'fibre-orientation',
+    'lightsheet-atlas': 'registration',
     'microscope-qc': 'quality-control',
   };
   const cards = [...document.querySelectorAll('[data-app-card]')];

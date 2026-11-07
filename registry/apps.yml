@@ -1427,6 +1427,32 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: lightsheet-atlas
+    catalog: microscopy
+    path: lightsheet-atlas
+    title: Light-sheet atlas
+    description: Map cleared mouse brains to the Allen atlas; count cells.
+    categories: [registration]
+    keywords: [light-sheet, cleared brain, mouse, Allen CCFv3, atlas registration, cell counting, cellfinder, brainreg, BrainGlobe, microscopy]
+    anatomy: [brain]
+    modalities: [microscopy]
+    inputs: [tiff, ome-zarr]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0 AND BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
   - id: calcium-imaging
     path: calcium-imaging
     catalog: microscopy

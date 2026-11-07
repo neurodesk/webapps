@@ -7,7 +7,7 @@ has one home catalogue and can also be served by others.
 | --- | --- | --- | --- |
 | `webapps.neurodesk.org` | `neuro` | GitHub Pages | every app not listed below |
 | `mskapps.sciget.org` | `msk` | Cloudflare Worker, assets only | MuscleMap, SeedSeg, Carotid Flow |
-| `microscopyapps.sciget.org` | `microscopy` | Cloudflare Worker, assets only | StarDist, micro-sam, Calcium imaging, Spot detection, Microscope QC, NeuroMorph, Structure Tensor, ZARRo; elastix (also on neuro) |
+| `microscopyapps.sciget.org` | `microscopy` | Cloudflare Worker, assets only | StarDist, micro-sam, Calcium imaging, Spot detection, Microscope QC, NeuroMorph, Structure Tensor, Stitching, Light-sheet atlas, ZARRo; elastix (also on neuro) |
 | `webapps.sciget.org` | hub | Cloudflare Worker, assets only | none: one card per catalogue |
 
 `neurodesk.org` DNS is on AWS Route 53, so the neuro catalogue stays on GitHub

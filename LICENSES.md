@@ -39,6 +39,11 @@ for each app are recorded in `registry/apps.yml`.
   the bundled `clipper-lib`, in `apps/stardist/NOTICE`. The build ships both files at the app's root
 - `apps/spot-detection`: BSD-3-Clause (`apps/spot-detection/LICENSE`), as the Big-FISH 0.6.2 source it ports;
   attribution, and the fdlibm notice of its erf, in `apps/spot-detection/NOTICE`. The build copies both into the app
+- `apps/lightsheet-atlas`: Apache-2.0 AND BSD-3-Clause: its cell detection (`src/detect.js`) ports cellfinder 1.10.1
+  (BSD-3-Clause, `apps/lightsheet-atlas/LICENSE-cellfinder`); attribution in `apps/lightsheet-atlas/NOTICE`, served with
+  the app as `THIRD_PARTY_NOTICES.txt`. The Allen CCFv3 atlas it downloads, which both offline asset inventories
+  bundle, is for research and noncommercial use only under the Allen Institute terms of use; commercial
+  redistribution of an offline bundle containing it needs the Allen Institute's written permission
 - `apps/microsam`: MIT (`apps/microsam/LICENSE`); it ports micro-sam 1.8.14 (MIT) and Pillow 13.0.0's bilinear
   resampling (MIT-CMU) and downloads micro-sam's `vit_t_lm` model (CC BY 4.0, from Apache-2.0 MobileSAM and
   Segment Anything); attribution in `apps/microsam/NOTICE`, the Apache-2.0 text for the traced MobileSAM and

@@ -18,6 +18,7 @@
   "neuromorph": "NeuroM, whose definitions the app follows, is the command-line route for batch morphometrics (pip install neurom); NeuroMorph has no packaged command line of its own yet",
   "stitching": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; Fiji's Grid/Collection stitching and BigStitcher are the established command-line tools for batch work",
   "structure-tensor": "browser-only v1: the numerics (apps/structure-tensor/src/tensor.js) are DOM-free and Node-tested, but no command-line package is released yet",
-  "microsam": "micro-sam (pip or conda install micro_sam) is the Python reference the app reproduces mask for mask on the example; interactive prompting has no separate command line",
-  "microscope-qc": "no command-line package yet: v1 runs its numerics (src/core) in a browser worker only; MetroloJ_QC in Fiji is the established desktop tool for batch QC"
+  "lightsheet-atlas": "the pipeline (apps/lightsheet-atlas/src) already runs in Node for its validation; a packaged command line is future work, and BrainGlobe's brainreg and cellfinder are the native tools for batch work",
+  "microscope-qc": "no command-line package yet: v1 runs its numerics (src/core) in a browser worker only; MetroloJ_QC in Fiji is the established desktop tool for batch QC",
+  "microsam": "micro-sam (pip or conda install micro_sam) is the Python reference the app reproduces mask for mask on the example; interactive prompting has no separate command line"
 }

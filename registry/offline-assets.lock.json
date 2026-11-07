@@ -5243,6 +5243,58 @@
       "kind": "example",
       "dependencies": []
     },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/brainreg-test-brain.ome.tif": {
+      "sha256": "7e9a73a6e5c36f9d8f9761c8e2399767cc5c56461f2e622e9ece6f6c182b03c2",
+      "bytes": 9565228,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/cellfinder-crop.ome.tif": {
+      "sha256": "aac1fcbabdbe4dfafeb861026be2ac1e1b6f379b2c1202248a0e32637d3b42c3",
+      "bytes": 21505056,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_template.nii.gz": {
+      "sha256": "cc72a32188504f64ba33b3b49ee8134df2563c5471f41cb3ab339952feae0ca3",
+      "bytes": 5932246,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "Allen Institute terms of use (noncommercial redistribution with citation)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_annotation.nii.gz": {
+      "sha256": "0f495ee499c0c12c8de726fb455dd28a7fa23188d660276f6256d3ab9dd7c9a1",
+      "bytes": 1260100,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "Allen Institute terms of use (noncommercial redistribution with citation)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_structures.json": {
+      "sha256": "cd2ca51d5fea23b9663b0c01f056733813cb6a595eaa77c5088459ab8a7d0da6",
+      "bytes": 117346,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "model",
+      "license": "Allen Institute terms of use (noncommercial redistribution with citation)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif": {
+      "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
+      "bytes": 461646,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif": {
+      "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
+      "bytes": 12590015,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif": {
       "sha256": "8fd1ed64bed1350597957b648b3b86a8c411b33c4b6733a7fbfe374243aad265",
       "bytes": 129856,
@@ -5264,20 +5316,6 @@
       "contentType": "application/octet-stream",
       "kind": "model",
       "license": "CC-BY-4.0",
-      "dependencies": []
-    },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif": {
-      "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
-      "bytes": 461646,
-      "contentType": "image/tiff",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif": {
-      "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
-      "bytes": 12590015,
-      "contentType": "image/tiff",
-      "kind": "example",
       "dependencies": []
     }
   },
@@ -6630,14 +6668,21 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif"
     ],
-    "microsam": [
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-encoder.onnx",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-decoder.onnx"
+    "lightsheet-atlas": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/brainreg-test-brain.ome.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/cellfinder-crop.ome.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_template.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_annotation.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_structures.json"
     ],
     "microscope-qc": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif"
+    ],
+    "microsam": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-encoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-decoder.onnx"
     ]
   }
 }
