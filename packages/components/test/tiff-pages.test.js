@@ -30,7 +30,7 @@ test('a plain multi-page stack reads every page with its calibration', async () 
 test('an ImageJ hyperstack reports its channels, slices and spacing', async () => {
   const stack = await openTiffPages(await fixture('imagej-hyperstack.tif'));
   assert.equal(stack.pageCount, 4);
-  assert.deepEqual(stack.metadata, { kind: 'imagej', unlabelledStack: false, images: 1, sizeC: 2, sizeZ: 2, sizeT: 1, pixelSize: { x: 0.5, y: 0.5, z: 2.5 }, frameInterval: null });
+  assert.deepEqual(stack.metadata, { kind: 'imagej', unlabelledStack: false, images: 1, sizeC: 2, sizeZ: 2, sizeT: 1, pixelSize: { x: 0.5, y: 0.5, z: 2.5 }, declaredSpacing: { x: 0.5, y: 0.5, z: 2.5, unit: 'um' }, frameInterval: null, stagePosition: null });
   assert.deepEqual(stack.resolution, { x: 2, y: 2, unit: null });
   const [plane] = await stack.readPage(3);
   assert.deepEqual(Array.from(plane), expected(3, 0, 4, 6, 251));
