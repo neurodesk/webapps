@@ -351,7 +351,9 @@ class MuscleMapApp {
     if (!fileInput) return;
     // Selections and page-drop clears run in order once the viewer is ready.
     // Each selection's files are taken now: the input's list changes with the next one.
+    // The picker stays disabled until then; a page drop or a handoff can still deliver files.
     let pending = this.viewerSetup;
+    this.viewerSetup.then(() => { fileInput.disabled = false; });
     const enqueue = (step) => {
       pending = pending.then(step).catch((error) => console.error('MuscleMap file input failed:', error));
     };
