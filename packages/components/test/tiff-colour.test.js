@@ -12,7 +12,7 @@ function fixture(name) {
 
 const ramp = (count, scale) => Array.from({ length: count }, (_, i) => i * scale);
 
-test('an 8-bit deflate RGB image reads interleaved with its pixel size from 300 dpi', async () => {
+test('an 8-bit deflate RGB image reads interleaved, declaring 300 dpi without calling it a pixel size', async () => {
   const image = await readTiffImage(fixture('colour-rgb-deflate-uint8.tif'));
   assert.equal(image.width, 5);
   assert.equal(image.height, 4);
@@ -20,18 +20,19 @@ test('an 8-bit deflate RGB image reads interleaved with its pixel size from 300 
   assert.equal(image.bitsPerSample, 8);
   assert.ok(image.data instanceof Uint8Array);
   assert.deepEqual(Array.from(image.data), ramp(60, 4));
-  assert.ok(Math.abs(image.pixelSize.x - 25400 / 300) < 1e-9);
-  assert.ok(Math.abs(image.pixelSize.y - 25400 / 300) < 1e-9);
+  assert.equal(image.pixelSize, null);
+  assert.deepEqual(image.declaredSpacing, { x: 1 / 300, y: 1 / 300, z: null, unit: 'inch' });
 });
 
-test('a 16-bit RGB image drops its alpha sample and reads pixels per centimetre', async () => {
+test('a 16-bit RGB image drops its alpha sample and declares pixels per centimetre', async () => {
   const image = await readTiffImage(fixture('colour-rgba-uint16.tif'));
   assert.equal(image.channels, 3);
   assert.equal(image.bitsPerSample, 16);
   assert.equal(image.maxValue, 65535);
   assert.ok(image.data instanceof Uint16Array);
   assert.deepEqual(Array.from(image.data), ramp(36, 1000));
-  assert.deepEqual(image.pixelSize, { x: 20, y: 25 });
+  assert.equal(image.pixelSize, null);
+  assert.deepEqual(image.declaredSpacing, { x: 0.002, y: 0.0025, z: null, unit: 'centimeter' });
 });
 
 test('three greyscale samples per pixel are a channel stack, refused rather than read as RGB', async () => {

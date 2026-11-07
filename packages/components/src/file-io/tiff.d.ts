@@ -76,8 +76,10 @@ export interface TiffImage {
   maxValue: number;
   /** Interleaved samples in row, column, channel order. */
   data: Uint8Array | Uint16Array;
-  /** Micrometres; null when the file does not record a physical size. */
+  /** Micrometres from OME-XML or ImageJ; null otherwise (a plain TIFF's resolution tags are not a calibration). */
   pixelSize: { x: number; y: number } | null;
+  /** What the file declares: OME/ImageJ declared spacing, or a plain TIFF's X/YResolution as 1/resolution in its ResolutionUnit. */
+  declaredSpacing: { x: number | null; y: number | null; z: number | null; unit: string | null } | null;
   metadata: { kind: 'ome' | 'imagej' | 'baseline'; description: string };
 }
 

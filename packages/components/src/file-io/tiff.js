@@ -388,7 +388,6 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
 }
 
 // TIFF 6.0 ResolutionUnit: 2 is the inch, 3 the centimetre (1, no unit, gives no size).
-const RESOLUTION_UNIT_MICROMETRES = { 2: 25400, 3: 10000 };
 
 // PhotometricInterpretation values readTiffImage converts to RGB through geotiff's readRGB.
 const CONVERTED_TO_RGB = new Set([3, 5, 6, 8]);
@@ -401,14 +400,9 @@ function reducedResolution(image) {
   return (Number(image.fileDirectory.getValue('NewSubfileType') ?? 0) & 1) === 1;
 }
 
-function imagePixelSize(image, metadata) {
-  const ome = metadata?.kind === 'ome' || metadata?.kind === 'imagej' ? metadata.pixelSize : null;
-  if (ome?.x && ome?.y) return { x: ome.x, y: ome.y };
-  const unit = RESOLUTION_UNIT_MICROMETRES[image.fileDirectory.getValue('ResolutionUnit') ?? 2];
-  const x = rational(image.fileDirectory.getValue('XResolution'));
-  const y = rational(image.fileDirectory.getValue('YResolution'));
-  if (!unit || !(x > 0) || !(y > 0)) return null;
-  return { x: unit / x, y: unit / y };
+function imagePixelSize(metadata) {
+  const size = metadata?.kind === 'ome' || metadata?.kind === 'imagej' ? metadata.pixelSize : null;
+  return size?.x && size?.y ? { x: size.x, y: size.y } : null;
 }
 
 /** How a single TIFF image's samples become grey or RGB, or why they cannot. */
@@ -442,8 +436,8 @@ function colourLayout(image) {
  * samples; 16-bit ones are refused before decoding). Several samples on a greyscale image are a
  * channel stack and are refused. Samples are 8 or 16-bit unsigned integers, interleaved
  * (row, column, channel). The decoded size is checked against `maxBytes` from the page directory
- * before any pixel is decoded. `pixelSize` (micrometres) comes from OME-XML, ImageJ or the
- * resolution tags when they give a unit, else it is null.
+ * before any pixel is decoded. `pixelSize` (micrometres) comes from OME-XML or ImageJ, else it
+ * is null: a plain TIFF's resolution tags are only `declaredSpacing`, as in `readTiffStack`.
  * @param {ArrayBuffer} buffer
  * @param {{ signal?: AbortSignal, maxBytes?: number }} [options]
  */
@@ -493,7 +487,8 @@ export async function readTiffImage(buffer, { signal, maxBytes = MAX_INPUT_BYTES
     bitsPerSample: outputBits,
     maxValue: 2 ** outputBits - 1,
     data: data instanceof Output ? data : Output.from(data),
-    pixelSize: imagePixelSize(image, metadata),
+    pixelSize: imagePixelSize(metadata),
+    declaredSpacing: metadata ? metadata.declaredSpacing ?? null : baselineSpacing(image, resolution),
     metadata: { kind: metadata?.kind ?? 'baseline', description },
   };
 }
