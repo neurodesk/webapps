@@ -1,6 +1,6 @@
 //! `neurodesk-compute`: a small token-protected HTTP + Server-Sent-Events server
-//! that runs the Neurodesk `nesvor` container (or a simulated placeholder) for
-//! the browser webapp.
+//! that runs pinned Neurodesk tools (or simulated placeholders) for browser
+//! webapps, on its own host or, in single-owner mode, through Slurm.
 //!
 //! The wire protocol is documented in `docs/architecture/remote-compute-protocol.md`.
 //! The library exposes the pieces the binary and the integration tests share:
@@ -11,7 +11,11 @@ pub mod auth;
 pub mod config;
 pub mod cors;
 pub mod detect;
+pub mod instance;
 pub mod jobs;
+pub mod profiles;
+pub mod projects;
+pub mod roots;
 pub mod runner;
 pub mod server;
 pub mod tls;
@@ -39,3 +43,8 @@ pub const NESVOR_SIMG_URL: &str =
     "https://neurocontainers.neurodesk.workers.dev/nesvor_0.5.0_20260722.simg";
 
 pub mod durable;
+
+#[cfg(test)]
+mod project_tests;
+#[cfg(test)]
+mod test_support;

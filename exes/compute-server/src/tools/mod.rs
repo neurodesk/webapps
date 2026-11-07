@@ -2,8 +2,12 @@
 //! progress mapping of its log lines. The server never runs caller-supplied
 //! command lines.
 
+#[cfg(test)]
+pub mod fake;
+pub mod mrc;
 pub mod nesvor;
 pub mod nifti;
+pub mod project;
 pub mod sct;
 
 use std::fmt;
@@ -19,11 +23,13 @@ pub struct ReceivedPart {
     pub name: String,
     /// Where the bytes were stored.
     pub path: PathBuf,
-    /// File name inside the job's `in/` directory (`stack-0.nii.gz` or `stack-0.nii`).
+    /// File name inside the job's `in/` directory (`stack-0.nii.gz`,
+    /// `stack-0.nii`, or `gain.mrc` for project tools).
     pub file_name: String,
     /// Whether the bytes are gzip-compressed.
     pub gzipped: bool,
-    /// The first (decompressed) bytes of the file, at most 352.
+    /// The first (decompressed) bytes of the file: at most 352 of a NIfTI
+    /// upload, 1024 of an MRC upload.
     pub header: Vec<u8>,
     /// Size of the stored (possibly compressed) file.
     pub bytes: u64,
@@ -66,13 +72,30 @@ pub struct ValidatedJob {
 pub enum JobInputs {
     Nesvor { stacks: Vec<StackInput> },
     Sct { analysis: sct::AnalysisInputs },
+    Project { project: project::ProjectInputs },
 }
 
 impl ValidatedJob {
     pub fn stacks(&self) -> &[StackInput] {
         match &self.inputs {
             JobInputs::Nesvor { stacks } => stacks,
-            JobInputs::Sct { .. } => &[],
+            _ => &[],
+        }
+    }
+
+    /// The inputs of a project tool's job.
+    pub fn project(&self) -> Option<&project::ProjectInputs> {
+        match &self.inputs {
+            JobInputs::Project { project } => Some(project),
+            _ => None,
+        }
+    }
+
+    /// The inputs of a project tool's job, for the server to resolve.
+    pub fn project_mut(&mut self) -> Option<&mut project::ProjectInputs> {
+        match &mut self.inputs {
+            JobInputs::Project { project } => Some(project),
+            _ => None,
         }
     }
 }
@@ -180,25 +203,61 @@ pub trait Tool: Send + Sync {
     }
     /// Whether the tool runs on the GPU unless the server is started with `--cpu`.
     fn uses_gpu(&self) -> bool;
-    /// Arguments appended to a GPU tool's command line when it runs on the CPU.
-    fn cpu_flags(&self) -> &'static [&'static str] {
-        &[]
-    }
     /// Commands accepted in `spec.command`.
     fn commands(&self) -> &'static [&'static str];
     /// Validates the spec against the received parts.
     fn validate(&self, spec: &Value, parts: &[ReceivedPart]) -> Result<ValidatedJob, SpecError>;
-    /// Builds the tool command line (first element is the program name).
-    fn argv(&self, job: &ValidatedJob, paths: &ToolPaths) -> Vec<String>;
     /// Classifies a log line and extracts progress.
     fn parse_log_line(&self, job: &ValidatedJob, line: &str) -> LogUpdate;
+    /// Whether the tool works on its own `in/` and `out/` or in a project.
+    fn layout(&self) -> Layout<'_>;
+}
+
+/// Where a tool's job reads and writes.
+pub enum Layout<'a> {
+    /// NIfTI uploads in the job's `in/`, a static list of outputs in `out/`.
+    Files(&'a dyn FileTool),
+    /// MRC uploads and every output in the job's `<Type>/jobNNN/` of a project.
+    Project(&'a dyn ProjectTool),
+}
+
+/// A tool that runs on uploaded NIfTI files in its own job directory.
+pub trait FileTool: Send + Sync {
+    /// Arguments appended to a GPU tool's command line when it runs on the CPU.
+    fn cpu_flags(&self) -> &'static [&'static str] {
+        &[]
+    }
+    /// Builds the tool command line (first element is the program name).
+    fn argv(&self, job: &ValidatedJob, paths: &ToolPaths) -> Vec<String>;
     /// The outputs the tool produces.
     fn outputs(&self, job: &ValidatedJob) -> &'static [OutputSpec];
 }
 
+pub use project::ProjectTool;
+
 /// All registered tools.
 pub fn registry() -> Vec<Arc<dyn Tool>> {
     vec![Arc::new(nesvor::Nesvor), Arc::new(sct::Sct)]
+}
+
+/// The tools a configuration offers: project tools only in single-owner
+/// mode, file tools never on Slurm, SCT only with Docker or the simulator.
+pub fn available(
+    config: &crate::config::ServeConfig,
+    tools: Vec<Arc<dyn Tool>>,
+) -> Vec<Arc<dyn Tool>> {
+    use crate::config::RunnerKind;
+    tools
+        .into_iter()
+        .filter(|tool| match tool.layout() {
+            Layout::Project(_) => config.single_owner,
+            Layout::Files(_) => {
+                config.runner != RunnerKind::Slurm
+                    && (tool.id() != "sct"
+                        || matches!(config.runner, RunnerKind::Docker | RunnerKind::Simulate))
+            }
+        })
+        .collect()
 }
 
 /// Looks up a tool by id.

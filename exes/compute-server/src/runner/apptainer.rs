@@ -2,10 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-use tokio_util::sync::CancellationToken;
-
 use super::process::{run_process, KillStrategy};
-use super::{LineSink, RunFuture, RunRequest, Runner};
+use super::{RunContext, RunFuture, RunRequest, Runner};
 use crate::config::RunnerKind;
 use crate::tools::ToolPaths;
 
@@ -38,10 +36,10 @@ impl Runner for ApptainerRunner {
         ToolPaths::container()
     }
 
-    fn run(&self, request: RunRequest, sink: LineSink, cancel: CancellationToken) -> RunFuture {
+    fn run(&self, request: RunRequest, context: RunContext) -> RunFuture {
         let args = apptainer_args(&self.image, &request);
-        Box::pin(async move {
-            run_process("apptainer", &args, sink, cancel, KillStrategy::KillChild).await
-        })
+        Box::pin(
+            async move { run_process("apptainer", &args, context, KillStrategy::KillChild).await },
+        )
     }
 }

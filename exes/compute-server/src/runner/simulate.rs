@@ -13,7 +13,7 @@ use flate2::Compression;
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
-use super::{shell_join, LineSink, RunFuture, RunOutcome, RunRequest, Runner};
+use super::{shell_join, RunContext, RunFuture, RunOutcome, RunRequest, Runner, RunnerEvent};
 use crate::config::RunnerKind;
 use crate::tools::nesvor::DEFAULT_ITERATIONS;
 use crate::tools::nifti::{self, Header, HEADER_LEN};
@@ -35,8 +35,16 @@ impl Runner for SimulateRunner {
         ToolPaths::container()
     }
 
-    fn run(&self, request: RunRequest, sink: LineSink, cancel: CancellationToken) -> RunFuture {
-        Box::pin(async move { simulate(request, sink, cancel).await })
+    fn run(&self, request: RunRequest, context: RunContext) -> RunFuture {
+        Box::pin(async move {
+            if let Err(error) = context.status.report(RunnerEvent::Running { state: None }) {
+                tracing::error!(%error, "could not persist the running state");
+            }
+            if request.project.is_some() {
+                return simulate_project(request, context).await;
+            }
+            simulate(request, context.lines, context.cancel).await
+        })
     }
 }
 
@@ -53,9 +61,53 @@ struct Volume {
     voxels: Vec<f32>,
 }
 
+/// Runs a project tool's own placeholder after a cancellable pause.
+async fn simulate_project(request: RunRequest, context: RunContext) -> io::Result<RunOutcome> {
+    let Some(project) = request.project else {
+        return Err(io::Error::other("not a project job"));
+    };
+    let Some(inputs) = request.job.project().cloned() else {
+        return Err(io::Error::other("not a project job"));
+    };
+    let crate::tools::Layout::Project(_) = project.tool.layout() else {
+        return Err(io::Error::other("not a project tool"));
+    };
+    let _ = context.lines.send(log_line(
+        "INFO",
+        &format!("simulated run of: {}", shell_join(&request.argv)),
+    ));
+    tokio::select! {
+        _ = tokio::time::sleep(STAGE_DELAY * 2) => {},
+        _ = context.cancel.cancelled() => return Ok(RunOutcome::Cancelled),
+    }
+    let sink = context.lines.clone();
+    let status = tokio::task::spawn_blocking(move || {
+        let crate::tools::Layout::Project(tool) = project.tool.layout() else {
+            unreachable!("checked above")
+        };
+        let log = move |line: String| {
+            let _ = sink.send(line);
+        };
+        tool.simulate(
+            &inputs,
+            &crate::tools::project::SimulatedRun {
+                project_dir: &project.project_dir,
+                directory: &project.directory,
+                log: &log,
+            },
+        )
+    })
+    .await
+    .map_err(|error| io::Error::other(error.to_string()))??;
+    if context.cancel.is_cancelled() {
+        return Ok(RunOutcome::Cancelled);
+    }
+    Ok(RunOutcome::Exited(status))
+}
+
 async fn simulate(
     request: RunRequest,
-    sink: LineSink,
+    sink: super::LineSink,
     cancel: CancellationToken,
 ) -> io::Result<RunOutcome> {
     let log = |level: &str, message: String| {

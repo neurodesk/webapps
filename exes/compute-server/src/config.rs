@@ -3,6 +3,10 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::profiles::Profiles;
+use crate::roots::DataRoot;
+use crate::runner::slurm::SlurmSettings;
+
 /// Which runner executes tool jobs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunnerKind {
@@ -14,6 +18,8 @@ pub enum RunnerKind {
     Native,
     /// Built-in placeholder that averages the input stacks.
     Simulate,
+    /// Slurm batch jobs running an apptainer image (single-owner mode only).
+    Slurm,
 }
 
 impl RunnerKind {
@@ -24,6 +30,7 @@ impl RunnerKind {
             RunnerKind::Apptainer => "apptainer",
             RunnerKind::Native => "native",
             RunnerKind::Simulate => "simulate",
+            RunnerKind::Slurm => "slurm",
         }
     }
 
@@ -34,10 +41,14 @@ impl RunnerKind {
             "apptainer" => Some(RunnerKind::Apptainer),
             "native" => Some(RunnerKind::Native),
             "simulate" => Some(RunnerKind::Simulate),
+            "slurm" => Some(RunnerKind::Slurm),
             _ => None,
         }
     }
 }
+
+/// Default of `--max-download-bytes`: 2 GiB.
+pub const DEFAULT_MAX_DOWNLOAD_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 /// TLS mode of the listener.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +103,18 @@ pub struct ServeConfig {
     pub gpu: GpuInfo,
     /// Interval of the retention sweep.
     pub sweep_interval: Duration,
+    /// Every pairing maps to one owner; enables projects and data roots.
+    pub single_owner: bool,
+    /// Idle period after which a single-owner credential is revoked.
+    pub session_idle: Duration,
+    /// Read-only data roots (single-owner mode only).
+    pub data_roots: Vec<DataRoot>,
+    /// Outputs above this size are listed with `download: false`.
+    pub max_download_bytes: u64,
+    /// Resource profiles of project jobs.
+    pub profiles: Profiles,
+    /// The Slurm runner's settings.
+    pub slurm: Option<SlurmSettings>,
 }
 
 impl ServeConfig {
@@ -114,7 +137,40 @@ impl ServeConfig {
             max_files: 40,
             gpu: GpuInfo::default(),
             sweep_interval: Duration::from_secs(30),
+            single_owner: false,
+            session_idle: crate::auth::SESSION_IDLE,
+            data_roots: Vec::new(),
+            max_download_bytes: DEFAULT_MAX_DOWNLOAD_BYTES,
+            profiles: Profiles::local(),
+            slurm: None,
         }
+    }
+
+    /// `info.ownership`.
+    pub fn ownership(&self) -> &'static str {
+        if self.single_owner {
+            "single"
+        } else {
+            "pairing"
+        }
+    }
+
+    /// `info.features`: projects and data roots in single-owner mode, the
+    /// scheduler with the Slurm runner.
+    pub fn features(&self) -> Vec<&'static str> {
+        let mut features = Vec::new();
+        if self.single_owner {
+            features.extend(["projects", "dataRoots"]);
+        }
+        if self.runner == RunnerKind::Slurm {
+            features.push("scheduler");
+        }
+        features
+    }
+
+    /// Whether a feature is enabled.
+    pub fn has_feature(&self, feature: &str) -> bool {
+        self.features().contains(&feature)
     }
 
     /// `https` or `http` depending on the TLS mode.

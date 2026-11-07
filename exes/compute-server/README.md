@@ -3,7 +3,9 @@
 A small, token-protected HTTP + Server-Sent-Events server that runs the
 Neurodesk `nesvor` container (fetal MRI slice-to-volume reconstruction, GPU) on
 a machine you control, so that the browser webapp at
-<https://webapps.neurodesk.org/nesvor/> can offload the reconstruction. The first supported scientific deployment is Linux x86-64 with an NVIDIA GPU
+<https://webapps.neurodesk.org/nesvor/> can offload the reconstruction. In
+single-owner mode it also runs project tools on a Slurm cluster (see
+[HPC](#hpc-single-owner-mode-and-slurm)). The first supported scientific deployment is Linux x86-64 with an NVIDIA GPU
 and Docker. The server executable does not need Python or Node.js; the scientific
 container, models, Docker and NVIDIA runtime are separate requirements. The wire
 protocol is in
@@ -72,7 +74,8 @@ runners require `--parallel 1` until GPU allocation is implemented.
 ## Runners
 
 `--runner` selects `docker` (default when `docker info` works), `apptainer`,
-`native` (a `nesvor` on `PATH`) or `simulate`. The simulated runner replaces the
+`native` (a `nesvor` on `PATH`), `simulate`, or `slurm` for project tools on a
+cluster ([HPC](#hpc-single-owner-mode-and-slurm)). The simulated runner replaces the
 tool by a placeholder that averages the uploaded stacks; every response and the
 UI mark such results as simulated. It is what the tests and
 `make run-simulated` use.
@@ -122,7 +125,7 @@ analytics. Model acquisition must be completed separately before offline operati
 | `--listen ADDR` | `0.0.0.0:8765` | Socket address to bind. |
 | `--token T` / `NEURODESK_COMPUTE_TOKEN` | generated | Installation pairing code. |
 | `--data-dir DIR` | platform data dir, `neurodesk-compute` | Jobs, token, TLS files, apptainer image. |
-| `--runner R` | auto (docker, apptainer, native) | `docker`, `apptainer`, `native` or `simulate`. |
+| `--runner R` | auto (docker, apptainer, native) | `docker`, `apptainer`, `native`, `simulate` or `slurm`. |
 | `--image REF` | pinned digest / `<data-dir>/nesvor_0.5.0_20260722.simg` | Docker image or `.simg` path. |
 | `--cpu` | off | No GPU passthrough, adds `--device -1`. |
 | `--parallel N` | 1 | Must be 1 for production runners; larger values are simulator-only. |
@@ -133,14 +136,136 @@ analytics. Model acquisition must be completed separately before offline operati
 | `--www DIR` | `www` beside the executable | Static files served at `/`. |
 | `--max-upload-bytes N` | 4 GiB | Request body limit. |
 | `--max-files N` | 40 | File parts per job. |
+| `--single-owner` | off | Every pairing maps to one owner; enables projects and data roots. Refuses `--token`. |
+| `--data-root ID=PATH` | — | Read-only data root (repeatable; single-owner mode). |
+| `--max-download-bytes N` | 2 GiB | Project outputs above this are listed with `download: false`. |
+| `--slurm-config FILE` | — | Slurm runner configuration (JSON); its profiles also apply to the simulator. |
 
-Subcommands: `serve` (default), `doctor`, `pull`. All accept the same flags.
+`--runner slurm` requires `--single-owner`, `--slurm-config` and a loopback
+`--listen`. `--parallel` then caps the jobs handed to Slurm; the production
+`--parallel 1` rule does not apply to it.
+
+Subcommands: `serve` (default), `doctor`, `pull` (all accept the same flags),
+`unlock --data-dir DIR` and `check-slurm --slurm-config FILE --profile NAME
+[--data-root ID=PATH] [--data-dir DIR] [--timeout 1h]`.
+
+## HPC: single-owner mode and Slurm
+
+For cryo-EM ([ADR-0004](../../docs/adr/0004-hpc-batch-compute-for-cryo-em.md)),
+one user runs the server as themselves on a cluster's submit host. Jobs run
+as Slurm batch jobs in an Apptainer image; data stays on the cluster and only
+the result files the browser asks for leave it.
+
+- **Single owner.** `--single-owner` maps every pairing to one owner, so a
+  browser that pairs again next day sees the same projects. Each credential is
+  revoked after 14 days without use, and `DELETE /api/v1/session` revokes only
+  the calling credential. The pairing code is read from `<data-dir>/token`,
+  which must have mode 0600, or from `NEURODESK_COMPUTE_TOKEN`; `--token` is
+  refused because other users of a login node can read process arguments.
+- **Data roots.** `--data-root facility=/scratch/cryoem/incoming` names a
+  read-only directory. Clients list it and select files in it by relative
+  path and pattern; the API never shows host paths. Jobs see it at
+  `/data/facility`. STAR files store that path, so renaming or removing a root,
+  or a site purge of scratch storage, breaks existing projects.
+- **Projects.** Each project is a RELION project directory,
+  `<data-dir>/projects/<id>/`, mounted read-write at `/project` in its jobs.
+  Projects and their jobs are never removed by `--retain`; delete them through
+  the API, newest job first.
+- **Slurm.** `--runner slurm --slurm-config slurm.json` submits each job with
+  `sbatch` as `nd-<job id>` with `--no-requeue`. The batch script
+  (`<Type>/jobNNN/job.sbatch`) starts the configured `apptainer` through
+  `env -i`, keeping only `PATH`, `HOME`, `USER`, `LANG` and
+  `CUDA_VISIBLE_DEVICES`, with `exec --containall --no-mount hostfs,bind-paths`
+  and node-local scratch as `--workdir`. The container sees the project, the
+  data roots, the image and, for GPU profiles, the GPU driver (`--nv`).
+  `run.out` and `run.err` in the job directory are the job's log. Jobs outlive
+  the server: stopping it leaves them to Slurm, and the next start re-attaches
+  them and re-reads their logs.
+
+`slurm.json`:
+
+```json
+{
+  "apptainer": "/usr/bin/apptainer",
+  "image": { "path": "/shared/images/relion_5.1.1.sif", "sha256": "…" },
+  "scratch": "$TMPDIR",
+  "profiles": {
+    "cpu": { "partition": "cpu", "cpus": 16, "gpus": 0, "memory": "64G", "time": "12:00:00" },
+    "gpu-4": { "partition": "gpu", "account": "lab", "cpus": 24, "gpus": 4, "memory": "128G", "time": "24:00:00" }
+  },
+  "defaults": { "class2d": "gpu-4", "refine3d": "gpu-4", "motioncorr": "cpu" }
+}
+```
+
+`scratch` is `$NAME`, `${NAME}` or an absolute path on the compute node; each
+job uses and removes `<scratch>/nd-<job id>`. A profile may set `gres` (for
+example `"gpu:a100:4"`) in place of the default `gpu:<gpus>`. The data
+directory, data roots, image and `apptainer` paths may contain only letters,
+digits and `/ . _ + - @ ~ =`, because they are written into `#SBATCH` lines and
+`--bind` arguments.
+
+At startup the server runs `sbatch`, `squeue`, `sacct`, `scontrol` and
+`scancel --version`, checks that accounting answers, asks `sbatch --test-only`
+to accept every profile, and checks the image's SHA-256 (once per path, size
+and modification time; the result is cached in the data directory). Sites
+without Slurm accounting are not supported.
+
+### Deployment
+
+1. Pick a named submit host where long-running user processes are allowed (a
+   login alias often covers several hosts, and some sites stop user processes
+   on login nodes). Run the server there as yourself, never as root or a shared
+   account, and keep it alive with `tmux` or a user systemd unit.
+2. Check each profile's compute nodes once before use:
+
+   ```sh
+   neurodesk-compute check-slurm --slurm-config slurm.json --profile gpu-4 \
+     --data-root facility=/scratch/cryoem/incoming --data-dir ~/neurodesk-compute
+   ```
+
+   The probe job runs through the same batch script. It reports whether the
+   node runs the image, reads every data root, writes the projects directory
+   and `/tmp`, sees the allocated GPUs, and keeps out a canary directory named
+   by `APPTAINER_BIND`, `APPTAINER_MOUNT` and `SINGULARITY_BIND` as well as the
+   server's data directory. A failed probe keeps its files and prints where.
+3. Start the server on loopback with the built app:
+
+   ```sh
+   neurodesk-compute serve --single-owner --runner slurm --slurm-config slurm.json \
+     --data-root facility=/scratch/cryoem/incoming --data-dir ~/neurodesk-compute \
+     --listen 127.0.0.1:8765 --insecure-http --www ./www
+   ```
+
+   Other users of the host can reach a loopback port, so every API call needs a
+   credential and the pairing code file is private. Two users on one host need
+   different ports.
+4. From your computer, open an SSH tunnel to that named host and port, then
+   open `http://localhost:8765` and pair with the code from
+   `<data-dir>/token`:
+
+   ```sh
+   ssh -N -L 8765:127.0.0.1:8765 you@login2.cluster.example
+   ```
+
+   The page and the API share one origin, and `localhost` is a secure context.
+   This tunnel is the only supported route for now; the hosted page, Open
+   OnDemand and site gateways are not.
+
+### One server per data directory
+
+Besides the `flock` on `server.lock`, which some Lustre and NFS mounts do not
+honour across hosts, a Slurm-mode server creates `<data-dir>/instance.lock`
+exclusively, naming its host, process id and start time. A clean shutdown
+removes it. If the lock is left behind (a crash, a killed process or a lost
+host), the server refuses to start and names the holder. Confirm that server
+is stopped, then run `neurodesk-compute unlock --data-dir DIR`; it refuses
+while a server still holds the `flock`. There is no automatic takeover.
 
 ## Development
 
 ```sh
 make build            # release build
-make test             # cargo test (unit + integration, simulate runner)
+make test             # cargo test (unit + integration; simulate runner, fake Slurm commands)
 make lint fmt         # clippy -D warnings, fmt --check
 make run-simulated    # serve --runner simulate --insecure-http --listen 127.0.0.1:8765 --token dev
 ```

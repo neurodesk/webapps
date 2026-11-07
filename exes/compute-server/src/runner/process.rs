@@ -5,9 +5,8 @@ use std::process::Stdio;
 
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::process::Command;
-use tokio_util::sync::CancellationToken;
 
-use super::{LineSink, RunOutcome};
+use super::{LineSink, RunContext, RunOutcome, RunnerEvent};
 
 /// How a running process is stopped on cancellation.
 #[derive(Debug, Clone)]
@@ -18,15 +17,21 @@ pub enum KillStrategy {
     Command(Vec<String>),
 }
 
-/// Spawns `program args…` with piped stdout and stderr, forwards every line
-/// to `sink`, and resolves when the process exits or is cancelled.
+/// Spawns `program args…` with piped stdout and stderr, reports the job
+/// running once spawned, forwards every line, and resolves when the process
+/// exits or is cancelled.
 pub async fn run_process(
     program: &str,
     args: &[String],
-    sink: LineSink,
-    cancel: CancellationToken,
+    context: RunContext,
     kill: KillStrategy,
 ) -> io::Result<RunOutcome> {
+    let RunContext {
+        lines: sink,
+        status,
+        cancel,
+        ..
+    } = context;
     let mut command = Command::new(program);
     command.args(args);
     command.stdin(Stdio::null());
@@ -38,6 +43,9 @@ pub async fn run_process(
     let mut child = command.spawn().map_err(|error| {
         io::Error::new(error.kind(), format!("could not start {program}: {error}"))
     })?;
+    if let Err(error) = status.report(RunnerEvent::Running { state: None }) {
+        tracing::error!(%error, "could not persist the running state");
+    }
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -143,6 +151,7 @@ async fn forward_lines<R: AsyncRead + Unpin + Send + 'static>(reader: Option<R>,
 pub fn reconcile(kind: crate::config::RunnerKind, id: &str) -> io::Result<()> {
     match kind {
         crate::config::RunnerKind::Simulate => Ok(()),
+        crate::config::RunnerKind::Slurm => Err(io::Error::other("an unfinished Slurm job requires --runner slurm to re-attach")),
         crate::config::RunnerKind::Docker => {
             let name = super::docker::container_name(id);
             let output = bounded_command("docker", &["container", "ls", "--all", "--filter", &format!("name=^{name}$"), "--format", "{{.Names}}"])?;
@@ -184,6 +193,24 @@ fn bounded_command(program: &str, args: &[&str]) -> io::Result<std::process::Out
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
+    use tokio_util::sync::CancellationToken;
+
+    struct Ignore;
+
+    impl super::super::StatusReporter for Ignore {
+        fn report(&self, _event: RunnerEvent) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn context(sink: LineSink, cancel: CancellationToken) -> RunContext {
+        RunContext {
+            lines: sink,
+            status: std::sync::Arc::new(Ignore),
+            cancel,
+            detach: CancellationToken::new(),
+        }
+    }
 
     #[tokio::test]
     async fn cancellation_stops_descendants_before_returning() {
@@ -194,8 +221,7 @@ mod tests {
             run_process(
                 "sh",
                 &["-c".into(), "sleep 60 & echo $!; wait".into()],
-                sink,
-                task_cancel,
+                context(sink, task_cancel),
                 KillStrategy::KillChild,
             )
             .await
@@ -230,8 +256,7 @@ mod tests {
             run_process(
                 "sh",
                 &["-c".into(), "echo ready; sleep 60".into()],
-                sink,
-                task_cancel,
+                context(sink, task_cancel),
                 KillStrategy::Command(vec!["sh".into(), "-c".into(), "exit 1".into()]),
             )
             .await

@@ -1,0 +1,1426 @@
+[
+  {
+    "name": "import movies, GUI defaults",
+    "spec": {
+      "tool": "relion",
+      "command": "import",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "movies": {
+          "root": "examples",
+          "path": "relion30/Movies",
+          "pattern": "*.tiff"
+        }
+      },
+      "options": {
+        "angpix": 0.885,
+        "kV": 200,
+        "Cs": 1.4
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Import/job001",
+    "expected": {
+      "program": "relion_import",
+      "args": [
+        "--do_movies",
+        "--optics_group_name",
+        "opticsGroup1",
+        "--angpix",
+        "0.885",
+        "--kV",
+        "200",
+        "--Cs",
+        "1.4",
+        "--Q0",
+        "0.1",
+        "--beamtilt_x",
+        "0",
+        "--beamtilt_y",
+        "0",
+        "--i",
+        "/data/examples/relion30/Movies/*.tiff",
+        "--odir",
+        "Import/job001/",
+        "--ofile",
+        "movies.star",
+        "--pipeline_control",
+        "Import/job001/"
+      ],
+      "mpiRanks": 1,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "import single-frame micrographs from the root itself",
+    "spec": {
+      "tool": "relion",
+      "command": "import",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "movies": {
+          "root": "examples",
+          "path": "",
+          "pattern": "*.mrc"
+        }
+      },
+      "options": {
+        "angpix": 0.885,
+        "kV": 200,
+        "Cs": 1.4,
+        "isMultiframe": false
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Import/job001",
+    "expected": {
+      "program": "relion_import",
+      "args": [
+        "--do_micrographs",
+        "--optics_group_name",
+        "opticsGroup1",
+        "--angpix",
+        "0.885",
+        "--kV",
+        "200",
+        "--Cs",
+        "1.4",
+        "--Q0",
+        "0.1",
+        "--beamtilt_x",
+        "0",
+        "--beamtilt_y",
+        "0",
+        "--i",
+        "/data/examples/*.mrc",
+        "--odir",
+        "Import/job001/",
+        "--ofile",
+        "micrographs.star",
+        "--pipeline_control",
+        "Import/job001/"
+      ],
+      "mpiRanks": 1,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "motioncorr, GUI defaults",
+    "spec": {
+      "tool": "relion",
+      "command": "motioncorr",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "movies": "Import/job001/movies.star"
+      },
+      "options": {
+        "dosePerFrame": 1.277
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "MotionCorr/job002",
+    "expected": {
+      "program": "relion_run_motioncorr_mpi",
+      "args": [
+        "--i",
+        "Import/job001/movies.star",
+        "--o",
+        "MotionCorr/job002/",
+        "--first_frame_sum",
+        "1",
+        "--last_frame_sum",
+        "-1",
+        "--use_own",
+        "--j",
+        "4",
+        "--float16",
+        "--bin_factor",
+        "1",
+        "--bfactor",
+        "150",
+        "--dose_per_frame",
+        "1.277",
+        "--preexposure",
+        "0",
+        "--patch_x",
+        "1",
+        "--patch_y",
+        "1",
+        "--eer_grouping",
+        "32",
+        "--dose_weighting",
+        "--grouping_for_ps",
+        "3",
+        "--pipeline_control",
+        "MotionCorr/job002/"
+      ],
+      "mpiRanks": 4,
+      "threads": 4,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "motioncorr with the tutorial gain reference and 5 x 5 patches",
+    "spec": {
+      "tool": "relion",
+      "command": "motioncorr",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "movies": "Import/job001/movies.star",
+        "gain": {
+          "part": "gain"
+        }
+      },
+      "options": {
+        "dosePerFrame": 1.277,
+        "patchX": 5,
+        "patchY": 5,
+        "gainFlip": 1,
+        "groupFrames": 2
+      }
+    },
+    "parts": [
+      "gain"
+    ],
+    "profile": {
+      "cpus": 18,
+      "gpus": 0
+    },
+    "directory": "MotionCorr/job002",
+    "expected": {
+      "program": "relion_run_motioncorr_mpi",
+      "args": [
+        "--i",
+        "Import/job001/movies.star",
+        "--o",
+        "MotionCorr/job002/",
+        "--first_frame_sum",
+        "1",
+        "--last_frame_sum",
+        "-1",
+        "--use_own",
+        "--j",
+        "4",
+        "--float16",
+        "--bin_factor",
+        "1",
+        "--bfactor",
+        "150",
+        "--dose_per_frame",
+        "1.277",
+        "--preexposure",
+        "0",
+        "--patch_x",
+        "5",
+        "--patch_y",
+        "5",
+        "--eer_grouping",
+        "32",
+        "--group_frames",
+        "2",
+        "--gainref",
+        "MotionCorr/job002/gain.mrc",
+        "--gain_rot",
+        "0",
+        "--gain_flip",
+        "1",
+        "--dose_weighting",
+        "--grouping_for_ps",
+        "3",
+        "--pipeline_control",
+        "MotionCorr/job002/"
+      ],
+      "mpiRanks": 4,
+      "threads": 4,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "ctffind, GUI defaults",
+    "spec": {
+      "tool": "relion",
+      "command": "ctffind",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "micrographs": "MotionCorr/job002/corrected_micrographs.star"
+      },
+      "options": {}
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "CtfFind/job003",
+    "expected": {
+      "program": "relion_run_ctffind_mpi",
+      "args": [
+        "--i",
+        "MotionCorr/job002/corrected_micrographs.star",
+        "--o",
+        "CtfFind/job003/",
+        "--Box",
+        "512",
+        "--ResMin",
+        "30",
+        "--ResMax",
+        "5",
+        "--dFMin",
+        "5000",
+        "--dFMax",
+        "50000",
+        "--FStep",
+        "500",
+        "--dAst",
+        "100",
+        "--ctffind_exe",
+        "/opt/ctffind-4.1.14/bin/ctffind",
+        "--ctfWin",
+        "-1",
+        "--is_ctffind4",
+        "--fast_search",
+        "--use_given_ps",
+        "--pipeline_control",
+        "CtfFind/job003/"
+      ],
+      "mpiRanks": 16,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "autopick LoG, GUI defaults",
+    "spec": {
+      "tool": "relion",
+      "command": "autopick",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "micrographs": "CtfFind/job003/micrographs_ctf.star"
+      },
+      "options": {}
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "AutoPick/job004",
+    "expected": {
+      "program": "relion_autopick_mpi",
+      "args": [
+        "--fn_topaz_exe",
+        "relion_python_topaz",
+        "--i",
+        "CtfFind/job003/micrographs_ctf.star",
+        "--odir",
+        "AutoPick/job004/",
+        "--pickname",
+        "autopick",
+        "--LoG",
+        "--LoG_diam_min",
+        "200",
+        "--LoG_diam_max",
+        "250",
+        "--shrink",
+        "0",
+        "--lowpass",
+        "20",
+        "--LoG_adjust_threshold",
+        "0",
+        "--pipeline_control",
+        "AutoPick/job004/"
+      ],
+      "mpiRanks": 16,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "autopick LoG, tutorial diameters with an upper threshold",
+    "spec": {
+      "tool": "relion",
+      "command": "autopick",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "micrographs": "CtfFind/job003/micrographs_ctf.star"
+      },
+      "options": {
+        "logDiamMin": 150,
+        "logDiamMax": 180,
+        "logUpperThreshold": 5,
+        "logInvert": true
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "AutoPick/job004",
+    "expected": {
+      "program": "relion_autopick_mpi",
+      "args": [
+        "--fn_topaz_exe",
+        "relion_python_topaz",
+        "--i",
+        "CtfFind/job003/micrographs_ctf.star",
+        "--odir",
+        "AutoPick/job004/",
+        "--pickname",
+        "autopick",
+        "--LoG",
+        "--LoG_diam_min",
+        "150",
+        "--LoG_diam_max",
+        "180",
+        "--shrink",
+        "0",
+        "--lowpass",
+        "20",
+        "--LoG_adjust_threshold",
+        "0",
+        "--LoG_upper_threshold",
+        "5",
+        "--Log_invert",
+        "--pipeline_control",
+        "AutoPick/job004/"
+      ],
+      "mpiRanks": 16,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "extract, GUI defaults",
+    "spec": {
+      "tool": "relion",
+      "command": "extract",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "micrographs": "CtfFind/job003/micrographs_ctf.star",
+        "coordinates": "AutoPick/job004/autopick.star"
+      },
+      "options": {}
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Extract/job005",
+    "expected": {
+      "program": "relion_preprocess_mpi",
+      "args": [
+        "--i",
+        "CtfFind/job003/micrographs_ctf.star",
+        "--coord_list",
+        "AutoPick/job004/autopick.star",
+        "--part_star",
+        "Extract/job005/particles.star",
+        "--part_dir",
+        "Extract/job005/",
+        "--extract",
+        "--extract_size",
+        "128",
+        "--float16",
+        "--norm",
+        "--bg_radius",
+        "48",
+        "--white_dust",
+        "-1",
+        "--black_dust",
+        "-1",
+        "--invert_contrast",
+        "--pipeline_control",
+        "Extract/job005/"
+      ],
+      "mpiRanks": 16,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "extract 256 px rescaled to 64 px",
+    "spec": {
+      "tool": "relion",
+      "command": "extract",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "micrographs": "CtfFind/job003/micrographs_ctf.star",
+        "coordinates": "AutoPick/job004/autopick.star"
+      },
+      "options": {
+        "extractSize": 256,
+        "doRescale": true,
+        "rescale": 64
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Extract/job005",
+    "expected": {
+      "program": "relion_preprocess_mpi",
+      "args": [
+        "--i",
+        "CtfFind/job003/micrographs_ctf.star",
+        "--coord_list",
+        "AutoPick/job004/autopick.star",
+        "--part_star",
+        "Extract/job005/particles.star",
+        "--part_dir",
+        "Extract/job005/",
+        "--extract",
+        "--extract_size",
+        "256",
+        "--float16",
+        "--scale",
+        "64",
+        "--norm",
+        "--bg_radius",
+        "24",
+        "--white_dust",
+        "-1",
+        "--black_dust",
+        "-1",
+        "--invert_contrast",
+        "--pipeline_control",
+        "Extract/job005/"
+      ],
+      "mpiRanks": 16,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "class2d VDAM, GUI defaults on GPUs",
+    "spec": {
+      "tool": "relion",
+      "command": "class2d",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "particles": "Extract/job005/particles.star"
+      },
+      "options": {}
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 24,
+      "gpus": 4
+    },
+    "directory": "Class2D/job006",
+    "expected": {
+      "program": "relion_refine",
+      "args": [
+        "--o",
+        "Class2D/job006/run",
+        "--grad",
+        "--class_inactivity_threshold",
+        "0.1",
+        "--grad_write_iter",
+        "10",
+        "--iter",
+        "200",
+        "--i",
+        "Extract/job005/particles.star",
+        "--dont_combine_weights_via_disc",
+        "--pool",
+        "3",
+        "--pad",
+        "2",
+        "--ctf",
+        "--tau2_fudge",
+        "2",
+        "--particle_diameter",
+        "200",
+        "--K",
+        "1",
+        "--flatten_solvent",
+        "--zero_mask",
+        "--center_classes",
+        "--oversampling",
+        "1",
+        "--psi_step",
+        "12",
+        "--offset_range",
+        "5",
+        "--offset_step",
+        "2",
+        "--norm",
+        "--scale",
+        "--j",
+        "24",
+        "--gpu",
+        "",
+        "--pipeline_control",
+        "Class2D/job006/"
+      ],
+      "mpiRanks": 1,
+      "threads": 24,
+      "gpus": 4,
+      "then": []
+    }
+  },
+  {
+    "name": "class2d VDAM, tutorial classes on CPUs",
+    "spec": {
+      "tool": "relion",
+      "command": "class2d",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "particles": "Extract/job005/particles.star"
+      },
+      "options": {
+        "nrClasses": 50,
+        "particleDiameter": 200,
+        "nrPool": 30
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Class2D/job006",
+    "expected": {
+      "program": "relion_refine",
+      "args": [
+        "--o",
+        "Class2D/job006/run",
+        "--grad",
+        "--class_inactivity_threshold",
+        "0.1",
+        "--grad_write_iter",
+        "10",
+        "--iter",
+        "200",
+        "--i",
+        "Extract/job005/particles.star",
+        "--dont_combine_weights_via_disc",
+        "--pool",
+        "30",
+        "--pad",
+        "2",
+        "--ctf",
+        "--tau2_fudge",
+        "2",
+        "--particle_diameter",
+        "200",
+        "--K",
+        "50",
+        "--flatten_solvent",
+        "--zero_mask",
+        "--center_classes",
+        "--oversampling",
+        "1",
+        "--psi_step",
+        "12",
+        "--offset_range",
+        "5",
+        "--offset_step",
+        "2",
+        "--norm",
+        "--scale",
+        "--j",
+        "16",
+        "--pipeline_control",
+        "Class2D/job006/"
+      ],
+      "mpiRanks": 1,
+      "threads": 16,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "select with the class ranker, GUI defaults",
+    "spec": {
+      "tool": "relion",
+      "command": "select",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "optimiser": "Class2D/job006/run_it200_optimiser.star"
+      },
+      "options": {
+        "mode": "ranker"
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Select/job007",
+    "expected": {
+      "program": "relion_class_ranker",
+      "args": [
+        "--opt",
+        "Class2D/job006/run_it200_optimiser.star",
+        "--o",
+        "Select/job007/",
+        "--fn_sel_parts",
+        "particles.star",
+        "--fn_sel_classavgs",
+        "class_averages.star",
+        "--fn_root",
+        "rank",
+        "--do_granularity_features",
+        "--auto_select",
+        "--min_score",
+        "0.5",
+        "--pipeline_control",
+        "Select/job007/"
+      ],
+      "mpiRanks": 1,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "select with the class ranker and a minimum particle count",
+    "spec": {
+      "tool": "relion",
+      "command": "select",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "optimiser": "Class2D/job006/run_it200_optimiser.star"
+      },
+      "options": {
+        "mode": "ranker",
+        "minScore": 0.25,
+        "minParticles": 5000,
+        "minClasses": 10
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Select/job007",
+    "expected": {
+      "program": "relion_class_ranker",
+      "args": [
+        "--opt",
+        "Class2D/job006/run_it200_optimiser.star",
+        "--o",
+        "Select/job007/",
+        "--fn_sel_parts",
+        "particles.star",
+        "--fn_sel_classavgs",
+        "class_averages.star",
+        "--select_min_nr_particles",
+        "5000",
+        "--fn_root",
+        "rank",
+        "--do_granularity_features",
+        "--auto_select",
+        "--min_score",
+        "0.25",
+        "--pipeline_control",
+        "Select/job007/"
+      ],
+      "mpiRanks": 1,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "select classes 3 to 5 (no GUI command: one star_handler call)",
+    "spec": {
+      "tool": "relion",
+      "command": "select",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "particles": "Class2D/job006/run_it200_data.star"
+      },
+      "options": {
+        "mode": "classes",
+        "classes": [
+          5,
+          3,
+          4
+        ]
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Select/job007",
+    "expected": {
+      "program": "relion_star_handler",
+      "args": [
+        "--i",
+        "Class2D/job006/run_it200_data.star",
+        "--o",
+        "Select/job007/particles.star",
+        "--select",
+        "rlnClassNumber",
+        "--minval",
+        "3",
+        "--maxval",
+        "5",
+        "--pipeline_control",
+        "Select/job007/"
+      ],
+      "mpiRanks": 1,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "select classes 1, 2, 7 and 12 (no GUI command: ranges, then combine)",
+    "spec": {
+      "tool": "relion",
+      "command": "select",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "particles": "Class2D/job006/run_it200_data.star"
+      },
+      "options": {
+        "mode": "classes",
+        "classes": [
+          12,
+          1,
+          7,
+          2
+        ]
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Select/job007",
+    "expected": {
+      "program": "relion_star_handler",
+      "args": [
+        "--i",
+        "Class2D/job006/run_it200_data.star",
+        "--o",
+        "Select/job007/classes_001_002.star",
+        "--select",
+        "rlnClassNumber",
+        "--minval",
+        "1",
+        "--maxval",
+        "2"
+      ],
+      "mpiRanks": 1,
+      "threads": 1,
+      "gpus": 0,
+      "then": [
+        {
+          "program": "relion_star_handler",
+          "args": [
+            "--i",
+            "Class2D/job006/run_it200_data.star",
+            "--o",
+            "Select/job007/classes_007_007.star",
+            "--select",
+            "rlnClassNumber",
+            "--minval",
+            "7",
+            "--maxval",
+            "7"
+          ]
+        },
+        {
+          "program": "relion_star_handler",
+          "args": [
+            "--i",
+            "Class2D/job006/run_it200_data.star",
+            "--o",
+            "Select/job007/classes_012_012.star",
+            "--select",
+            "rlnClassNumber",
+            "--minval",
+            "12",
+            "--maxval",
+            "12"
+          ]
+        },
+        {
+          "program": "relion_star_handler",
+          "args": [
+            "--combine",
+            "--i",
+            "Select/job007/classes_001_002.star Select/job007/classes_007_007.star Select/job007/classes_012_012.star",
+            "--o",
+            "Select/job007/particles.star",
+            "--pipeline_control",
+            "Select/job007/"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "initialmodel, GUI defaults on GPUs",
+    "spec": {
+      "tool": "relion",
+      "command": "initialmodel",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "particles": "Select/job007/particles.star"
+      },
+      "options": {}
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 24,
+      "gpus": 4
+    },
+    "directory": "InitialModel/job008",
+    "expected": {
+      "program": "relion_refine",
+      "args": [
+        "--o",
+        "InitialModel/job008/run",
+        "--iter",
+        "200",
+        "--grad",
+        "--denovo_3dref",
+        "--i",
+        "Select/job007/particles.star",
+        "--ctf",
+        "--K",
+        "1",
+        "--sym",
+        "C1",
+        "--flatten_solvent",
+        "--zero_mask",
+        "--dont_combine_weights_via_disc",
+        "--pool",
+        "3",
+        "--pad",
+        "1",
+        "--particle_diameter",
+        "200",
+        "--oversampling",
+        "1",
+        "--healpix_order",
+        "1",
+        "--offset_range",
+        "6",
+        "--offset_step",
+        "2",
+        "--auto_sampling",
+        "--tau2_fudge",
+        "4",
+        "--j",
+        "24",
+        "--gpu",
+        "",
+        "--pipeline_control",
+        "InitialModel/job008/"
+      ],
+      "mpiRanks": 1,
+      "threads": 24,
+      "gpus": 4,
+      "then": [
+        {
+          "program": "rm",
+          "args": [
+            "-f",
+            "InitialModel/job008/RELION_JOB_EXIT_SUCCESS"
+          ]
+        },
+        {
+          "program": "relion_align_symmetry",
+          "args": [
+            "--i",
+            "InitialModel/job008/run_it200_model.star",
+            "--o",
+            "InitialModel/job008/initial_model.mrc",
+            "--sym",
+            "C1",
+            "--apply_sym",
+            "--select_largest_class",
+            "--pipeline_control",
+            "InitialModel/job008/"
+          ]
+        },
+        {
+          "program": "touch",
+          "args": [
+            "InitialModel/job008/RELION_JOB_EXIT_SUCCESS"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "initialmodel in C1, symmetrised to D2 (tutorial)",
+    "spec": {
+      "tool": "relion",
+      "command": "initialmodel",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "particles": "Select/job007/particles.star"
+      },
+      "options": {
+        "sym": "D2",
+        "nrIter": 100
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 24,
+      "gpus": 4
+    },
+    "directory": "InitialModel/job008",
+    "expected": {
+      "program": "relion_refine",
+      "args": [
+        "--o",
+        "InitialModel/job008/run",
+        "--iter",
+        "100",
+        "--grad",
+        "--denovo_3dref",
+        "--i",
+        "Select/job007/particles.star",
+        "--ctf",
+        "--K",
+        "1",
+        "--sym",
+        "C1",
+        "--flatten_solvent",
+        "--zero_mask",
+        "--dont_combine_weights_via_disc",
+        "--pool",
+        "3",
+        "--pad",
+        "1",
+        "--particle_diameter",
+        "200",
+        "--oversampling",
+        "1",
+        "--healpix_order",
+        "1",
+        "--offset_range",
+        "6",
+        "--offset_step",
+        "2",
+        "--auto_sampling",
+        "--tau2_fudge",
+        "4",
+        "--j",
+        "24",
+        "--gpu",
+        "",
+        "--pipeline_control",
+        "InitialModel/job008/"
+      ],
+      "mpiRanks": 1,
+      "threads": 24,
+      "gpus": 4,
+      "then": [
+        {
+          "program": "rm",
+          "args": [
+            "-f",
+            "InitialModel/job008/RELION_JOB_EXIT_SUCCESS"
+          ]
+        },
+        {
+          "program": "relion_align_symmetry",
+          "args": [
+            "--i",
+            "InitialModel/job008/run_it100_model.star",
+            "--o",
+            "InitialModel/job008/initial_model.mrc",
+            "--sym",
+            "D2",
+            "--apply_sym",
+            "--select_largest_class",
+            "--pipeline_control",
+            "InitialModel/job008/"
+          ]
+        },
+        {
+          "program": "touch",
+          "args": [
+            "InitialModel/job008/RELION_JOB_EXIT_SUCCESS"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "refine3d, GUI defaults on GPUs",
+    "spec": {
+      "tool": "relion",
+      "command": "refine3d",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "particles": "Select/job007/particles.star",
+        "reference": "InitialModel/job008/initial_model.mrc"
+      },
+      "options": {}
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 24,
+      "gpus": 4
+    },
+    "directory": "Refine3D/job009",
+    "expected": {
+      "program": "relion_refine_mpi",
+      "args": [
+        "--o",
+        "Refine3D/job009/run",
+        "--auto_refine",
+        "--split_random_halves",
+        "--i",
+        "Select/job007/particles.star",
+        "--ref",
+        "InitialModel/job008/initial_model.mrc",
+        "--firstiter_cc",
+        "--trust_ref_size",
+        "--ini_high",
+        "60",
+        "--dont_combine_weights_via_disc",
+        "--pool",
+        "3",
+        "--pad",
+        "2",
+        "--ctf",
+        "--particle_diameter",
+        "200",
+        "--flatten_solvent",
+        "--zero_mask",
+        "--oversampling",
+        "1",
+        "--healpix_order",
+        "2",
+        "--auto_local_healpix_order",
+        "4",
+        "--offset_range",
+        "5",
+        "--offset_step",
+        "2",
+        "--sym",
+        "C1",
+        "--low_resol_join_halves",
+        "40",
+        "--norm",
+        "--scale",
+        "--j",
+        "4",
+        "--gpu",
+        "",
+        "--pipeline_control",
+        "Refine3D/job009/"
+      ],
+      "mpiRanks": 5,
+      "threads": 4,
+      "gpus": 4,
+      "then": []
+    }
+  },
+  {
+    "name": "refine3d in D2 with an uploaded mask, Blush and solvent-flattened FSCs on CPUs",
+    "spec": {
+      "tool": "relion",
+      "command": "refine3d",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "particles": "Select/job007/particles.star",
+        "reference": "InitialModel/job008/initial_model.mrc",
+        "mask": {
+          "part": "mask"
+        }
+      },
+      "options": {
+        "sym": "D2",
+        "doSolventFsc": true,
+        "doBlush": true,
+        "sampling": "3.7 degrees",
+        "autoLocalSampling": "0.9 degrees",
+        "offsetStep": 0.5
+      }
+    },
+    "parts": [
+      "mask"
+    ],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "Refine3D/job009",
+    "expected": {
+      "program": "relion_refine_mpi",
+      "args": [
+        "--o",
+        "Refine3D/job009/run",
+        "--auto_refine",
+        "--split_random_halves",
+        "--i",
+        "Select/job007/particles.star",
+        "--ref",
+        "InitialModel/job008/initial_model.mrc",
+        "--firstiter_cc",
+        "--trust_ref_size",
+        "--ini_high",
+        "60",
+        "--blush",
+        "--blush_model",
+        "v1.0",
+        "--dont_combine_weights_via_disc",
+        "--pool",
+        "3",
+        "--pad",
+        "2",
+        "--ctf",
+        "--particle_diameter",
+        "200",
+        "--flatten_solvent",
+        "--zero_mask",
+        "--solvent_mask",
+        "Refine3D/job009/mask.mrc",
+        "--solvent_correct_fsc",
+        "--oversampling",
+        "1",
+        "--healpix_order",
+        "3",
+        "--auto_local_healpix_order",
+        "5",
+        "--offset_range",
+        "5",
+        "--offset_step",
+        "1",
+        "--sym",
+        "D2",
+        "--low_resol_join_halves",
+        "40",
+        "--norm",
+        "--scale",
+        "--j",
+        "5",
+        "--pipeline_control",
+        "Refine3D/job009/"
+      ],
+      "mpiRanks": 3,
+      "threads": 5,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "maskcreate, GUI defaults",
+    "spec": {
+      "tool": "relion",
+      "command": "maskcreate",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "map": "Refine3D/job009/run_class001.mrc"
+      },
+      "options": {}
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "MaskCreate/job010",
+    "expected": {
+      "program": "relion_mask_create",
+      "args": [
+        "--i",
+        "Refine3D/job009/run_class001.mrc",
+        "--o",
+        "MaskCreate/job010/mask.mrc",
+        "--lowpass",
+        "15",
+        "--ini_threshold",
+        "0.02",
+        "--extend_inimask",
+        "3",
+        "--width_soft_edge",
+        "3",
+        "--j",
+        "16",
+        "--pipeline_control",
+        "MaskCreate/job010/"
+      ],
+      "mpiRanks": 1,
+      "threads": 16,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "maskcreate, tutorial settings",
+    "spec": {
+      "tool": "relion",
+      "command": "maskcreate",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "map": "Refine3D/job009/run_class001.mrc"
+      },
+      "options": {
+        "angpix": 1.244,
+        "inimaskThreshold": 0.01,
+        "extendInimask": 0,
+        "widthMaskEdge": 6
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "MaskCreate/job010",
+    "expected": {
+      "program": "relion_mask_create",
+      "args": [
+        "--i",
+        "Refine3D/job009/run_class001.mrc",
+        "--o",
+        "MaskCreate/job010/mask.mrc",
+        "--lowpass",
+        "15",
+        "--angpix",
+        "1.244",
+        "--ini_threshold",
+        "0.01",
+        "--extend_inimask",
+        "0",
+        "--width_soft_edge",
+        "6",
+        "--j",
+        "16",
+        "--pipeline_control",
+        "MaskCreate/job010/"
+      ],
+      "mpiRanks": 1,
+      "threads": 16,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "postprocess, GUI defaults",
+    "spec": {
+      "tool": "relion",
+      "command": "postprocess",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "halfMap": "Refine3D/job009/run_half1_class001_unfil.mrc",
+        "mask": "MaskCreate/job010/mask.mrc"
+      },
+      "options": {}
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "PostProcess/job011",
+    "expected": {
+      "program": "relion_postprocess",
+      "args": [
+        "--mask",
+        "MaskCreate/job010/mask.mrc",
+        "--i",
+        "Refine3D/job009/run_half1_class001_unfil.mrc",
+        "--o",
+        "PostProcess/job011/postprocess",
+        "--angpix",
+        "-1",
+        "--auto_bfac",
+        "--autob_lowres",
+        "10",
+        "--pipeline_control",
+        "PostProcess/job011/"
+      ],
+      "mpiRanks": 1,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  },
+  {
+    "name": "postprocess with an ad-hoc B-factor and low-pass filter",
+    "spec": {
+      "tool": "relion",
+      "command": "postprocess",
+      "project": "0123456789abcdef0123456789abcdef",
+      "inputs": {
+        "halfMap": "Refine3D/job009/run_half2_class001_unfil.mrc",
+        "mask": "MaskCreate/job010/mask.mrc"
+      },
+      "options": {
+        "angpix": 0.885,
+        "doAutoBfac": false,
+        "doAdhocBfac": true,
+        "adhocBfac": -50,
+        "doSkipFscWeighting": true,
+        "lowPass": 3.5
+      }
+    },
+    "parts": [],
+    "profile": {
+      "cpus": 16,
+      "gpus": 0
+    },
+    "directory": "PostProcess/job011",
+    "expected": {
+      "program": "relion_postprocess",
+      "args": [
+        "--mask",
+        "MaskCreate/job010/mask.mrc",
+        "--i",
+        "Refine3D/job009/run_half2_class001_unfil.mrc",
+        "--o",
+        "PostProcess/job011/postprocess",
+        "--angpix",
+        "0.885",
+        "--adhoc_bfac",
+        "-50",
+        "--skip_fsc_weighting",
+        "--low_pass",
+        "3.5",
+        "--pipeline_control",
+        "PostProcess/job011/"
+      ],
+      "mpiRanks": 1,
+      "threads": 1,
+      "gpus": 0,
+      "then": []
+    }
+  }
+]
