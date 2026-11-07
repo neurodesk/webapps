@@ -32,9 +32,16 @@ impl ObjectiveValue for Complex64 {
     fn magnitude(self) -> f64 { self.norm() }
     fn real(self) -> f64 { self.re }
     fn sort_order(self, other: Self) -> Ordering {
-        matlab_order(self.norm(), other.norm()).then_with(|| matlab_order(self.arg(), other.arg()))
+        matlab_order(complex_sort_magnitude(self), complex_sort_magnitude(other)).then_with(|| matlab_order(self.arg(), other.arg()))
     }
     fn infinity() -> Self { Self::new(f64::INFINITY, 0.0) }
+}
+
+fn complex_sort_magnitude(value: Complex64) -> f64 {
+    // The recorded R2023b CSS simplex ties after sqrt(re²+im²), then sorts by
+    // phase. hypot can separate that tie by one ULP and change the fitted pRF.
+    let square = value.norm_sqr();
+    if square.is_normal() { square.sqrt() } else { value.norm() }
 }
 
 /// `optimset` fields `fminsearch` reads. `tol_x` and `tol_fun` default to 1e-4, the
@@ -269,6 +276,14 @@ pub fn hooke_jeeves<T: ObjectiveValue, F: FnMut(&[f64]) -> T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recorded_complex_simplex_tie_uses_phase() {
+        let a = Complex64::new(0.9106118083000183, -7.183147232581177e-8);
+        let b = Complex64::new(0.9106118083000183, -7.159155046565502e-8);
+        assert!(a.sort_order(b).is_lt());
+        assert!(Complex64::new(1e200, 1e200).sort_order(Complex64::new(2e200, 0.0)).is_lt());
+    }
 
     fn banana(x: &[f64]) -> f64 {
         100.0 * (x[1] - x[0] * x[0]).powi(2) + (1.0 - x[0]).powi(2)

@@ -8,7 +8,7 @@ fn reference() -> Option<(PathBuf, Vec<Value>)> {
     let root = std::env::var_os("SAMSRF_MATLAB_REFERENCE_DIR").map(PathBuf::from)?;
     let metadata: Value = serde_json::from_slice(&std::fs::read(root.join("reference.json")).unwrap()).unwrap();
     let cases = metadata["cases"].as_array().unwrap().clone();
-    assert_eq!(cases.len(), 584, "missing recorded MATLAB cases");
+    assert_eq!(cases.len(), 741, "missing recorded MATLAB cases");
     Some((root, cases))
 }
 
@@ -22,6 +22,37 @@ fn array(root: &Path, descriptor: &Value) -> Vec<f64> {
 fn close(actual: f64, expected: f64, tolerance: f64, context: &str) {
     assert!(actual == expected || actual.is_nan() && expected.is_nan() || actual.is_finite() && expected.is_finite() && (actual - expected).abs() <= tolerance,
         "{context}: {actual} != {expected}, tolerance {tolerance}");
+}
+
+#[test]
+fn regression_rank_and_coefficients_match_matlab_across_scales() {
+    let Some((root, cases)) = reference() else { return; };
+    let mut count = 0;
+    for case in cases.iter().filter(|c| c["kind"] == "glm") {
+        count += 1;
+        let real = array(&root, &case["prediction"]);
+        let imaginary = match case["prediction"]["imaginary"].as_str() {
+            Some(file) if !file.is_empty() => array(&root, &json!({"file":file,"shape":case["prediction"]["shape"]})),
+            _ => vec![0.0; real.len()],
+        };
+        let prediction: Vec<_> = real.into_iter().zip(imaginary).map(|(re, im)| num_complex::Complex64::new(re, im)).collect();
+        let observations = array(&root, &case["observations"]);
+        let expected = array(&root, &case["beta"]);
+        let precision = if case["precision"] == "single" { Precision::Single } else { Precision::Double };
+        let (beta, baseline) = css::fit_betas(&prediction, &observations, precision);
+        assert_eq!(expected.len(), 2);
+        for (index, actual) in [baseline, beta].into_iter().enumerate() {
+            // These synthetic observations have a nonzero intercept. A zero
+            // coefficient identifies the column MATLAB rejected as deficient.
+            assert_eq!(actual == 0.0, expected[index] == 0.0, "{} coefficient {index}: rank decision", case["id"]);
+            // The centered double solve on rounded inputs is not MATLAB's
+            // single QR. An independent 60-digit solve confirms the web result
+            // in the largest recorded discrepancy (13 float32 ULPs).
+            let relative = if precision == Precision::Single { 16.0 * f64::from(f32::EPSILON) } else { 1e-12 };
+            close(actual, expected[index], relative * expected[index].abs(), &format!("{} coefficient {index}", case["id"]));
+        }
+    }
+    assert_eq!(count, 146, "missing regression scale/precision cases");
 }
 
 #[test]

@@ -384,20 +384,23 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   unit-norm courses and `[1 X] \ Y` solves the normal equations; MATLAB
   uses QR. Well-conditioned cases agree to rounding; general QR equivalence
   is not established. The two-column GLM uses centered variance to avoid
-  cancellation when deciding rank, with MATLAB's pivot order and rank tolerance (`max(m, n) * eps * |R(1,1)|`): a
+  cancellation when deciding rank, with MATLAB's pivot order and real-design rank tolerance (`max(m, n) * eps * |R(1,1)|`): a
   prediction that is constant, or constant to rounding, leaves the column with
   the larger norm its coefficient and the other 0. Octave's `\` uses no such
   tolerance, so on the example's coarse fit it reports amplitudes near 1e13 on
-  9 vertices where the port reports 0.
+  9 vertices where the port reports 0. The opt-in complex CSS solve uses the
+  recorded R2023b matrix-norm threshold `max(size(A)) * eps(norm(A,1))`;
+  both real and complex decisions are checked across prediction scales.
 - **Compressive nonlinearity.** `Css_Convention: "nonnegative"` (the default)
   clips negative responses before the CSS power and uses the fitted Exponent
   for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex
   powers and its final-parameter post-fit formula: with concurrent HRF fitting
   that parameter is AmpRat. Exported maps retain real components, as SamSrf
   10.4's `samsrf_expand_srf` does. Raw optimizer cases now match the actual
-  MATLAB recordings in both precisions. Full CSS pipeline parity remains
-  under investigation, including weak fits and complex least-squares rank
-  decisions; this option does not imply arbitrary-input bit parity.
+  MATLAB recordings in both precisions, and the recorded single-precision
+  pipeline parameters and scores match exactly. Betas retain small regression
+  rounding differences, and some double-precision weak fits still differ.
+  This option does not imply arbitrary-input bit parity.
 - **Maps outside the ROI.** `samsrf_compress_srf` keeps the ROI's columns and
   `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside
   the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected

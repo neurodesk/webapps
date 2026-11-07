@@ -16,7 +16,7 @@ for (const [name, expected] of Object.entries(manifest.files)) {
   assert.equal(createHash('sha256').update(bytes).digest('hex'), expected, `Reference checksum: ${name}`);
 }
 const cases = readJson('reference.json').cases;
-assert.equal(cases.length, 584, 'The pinned reference must retain every recorded case');
+assert.equal(cases.length, 741, 'The pinned reference must retain every recorded case');
 const lookup = new Map(cases.map(item => [item.id, item]));
 assert.equal(lookup.size, cases.length, 'Reference case IDs must be unique');
 const required = id => {
@@ -77,13 +77,14 @@ for (const [dataset, averages] of [['x001_lh', [0, 1]], ['x001_rh', [1]], ['anal
     for (const coarse of [0, 1]) pipelineIds.push(`pipeline_single_${dataset}_average${average}_coarse${coarse}`);
   }
 }
-pipelineIds.push('pipeline_double_x001_lh_rc', 'pipeline_double_x001_rh_rc');
+pipelineIds.push('pipeline_double_x001_lh_rc', 'pipeline_double_x001_rh_rc', 'pipeline_single_css');
 for (const id of pipelineIds) {
   const recorded = required(id), preprocessing = required(recorded.preprocessing);
   const model = { ...recorded.model };
   const isForward = recorded.analysis === 'prf';
   if (isForward) model.Data_Precision = 'single';
   else model.Save_Rmaps = false;
+  if (model.Compressive_Nonlinearity) model.Css_Convention = 'samsrf';
   const apertures = samsrf.readAperturesFile(path.join(reference, `${model.Aperture_File}.mat`));
   const vertices = preprocessing.courses.shape[1];
   const job = samsrf.createJob({
@@ -107,4 +108,4 @@ for (const id of pipelineIds) {
 const failures = reports.filter(item => item.failures.length);
 if (reportFile) fs.writeFileSync(reportFile, JSON.stringify({ gates: reports.length, failed: failures.length, results: reports }, null, 2) + '\n');
 assert.equal(failures.length, 0, `${failures.length} MATLAB map gates failed`);
-console.log(`All ${reports.length} required MATLAB gates passed. CSS and unlisted precision paths are not asserted by this comparator.`);
+console.log(`All ${reports.length} required MATLAB gates passed. Unlisted precision paths are not asserted by this comparator.`);

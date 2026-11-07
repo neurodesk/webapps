@@ -127,9 +127,14 @@ for the existing Neurodesk container.
 
 ## Recorded inputs and focused diagnosis
 
-`reference.json` pins the 584-case archive from runs
+`reference.json` pins the 741-case archive from runs
 [42187489864](https://github.com/neurodesk/webapps/actions/runs/42187489864) and
-[42194676865](https://github.com/neurodesk/webapps/actions/runs/42194676865).
+[42194676865](https://github.com/neurodesk/webapps/actions/runs/42194676865), plus
+the controlled diagnostics from
+[42204409108, attempt 2](https://github.com/neurodesk/webapps/actions/runs/42204409108/attempts/2).
+That diagnostic run records `MKL_CBWR=COMPATIBLE`, an AMD EPYC host and
+MATLAB's reported CNR `auto` branch. The original pipeline recordings retain
+their own provenance; the new run does not relabel them.
 The archive manifest hashes every file and identifies the supplemental cases.
 It includes retained discrepancies; case count is not a passing-gate count.
 
@@ -148,20 +153,29 @@ SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-source-reference" cargo test --relea
 ```
 
 The Node comparator verifies every archive file hash, requires each tested case,
-and checks individual vertices without map-wide error normalization. Its 105
+and checks individual vertices without map-wide error normalization. Its 114
 required gates cover preprocessing, Benson import, single-precision Gaussian
-forward pipelines and double-precision reverse-correlation pipelines. Fine-fit
-parameters and scores in the single mode must match exactly; coarse scores and
+forward pipelines, double-precision reverse-correlation pipelines and the
+single-precision CSS pipeline. Fine-fit parameters and scores in the single mode must match exactly; coarse scores and
 least-squares coefficients have small absolute/per-value tolerances. No differing
 vertex quota is allowed.
 
 Native gates additionally cover all 14 raw optimizer cases, nine double-precision
-CF modes from identical recorded profiles, and 251 polygon cases. Two polygons
+CF modes from identical recorded profiles, 146 real/complex regression scale
+cases and 251 polygon cases. Regression rank decisions must match exactly;
+coefficient comparisons use per-value relative tolerances (16 single-precision
+epsilon units, approximately 1.9e-6, or 1e-12 for double), never a map-wide
+scale. This allows the recorded rounding difference between MATLAB's single QR
+and the stable double solve on rounded inputs. A 60-digit independent solve
+confirmed the web result in the largest observed coefficient discrepancy.
+Two polygons
 (`polygon_191`, `polygon_193`) sit exactly on the inferred relative simplification
 cutoff and retain scale-dependent rounding differences; they are explicitly
 excluded from that assertion. CF checks from identical profiles isolate parameter
 estimation, and do not establish full single-precision CF pipeline parity.
 
-Full CSS pipeline fits, general double-precision fine-fit plateaus, and single
-reverse-correlation/CF arithmetic remain diagnostic cases. A successful source
+General double-precision fine-fit plateaus, double CSS weak fits, and single
+reverse-correlation/CF arithmetic remain diagnostic cases. The single CSS
+parameters and scores match exactly for this recorded pipeline; beta and baseline
+retain the documented least-squares rounding tolerance. A successful source
 gate does not assert those paths, arbitrary-input parity, or a rebuilt container.
