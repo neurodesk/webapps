@@ -5,7 +5,7 @@ import { axisScales } from "./tensor.js";
 export const APP = Object.freeze({
   id: "structure-tensor",
   title: automation.title,
-  version: "0.0.0",
+  version: "0.0.20261105",
 });
 
 // Every voxel holds up to nine float64 working arrays (three gradients, six tensor components).

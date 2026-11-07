@@ -8,7 +8,7 @@ import { outputNames } from "@neurodesk/webapp-components/file-io/bids-derivativ
 export const APP = Object.freeze({
   id: "ants-denoise",
   title: automation.title,
-  version: "0.0.20261029",
+  version: "0.1.20261104",
 });
 
 // DenoiseImage's noise model and radii with its defaults, as automation.json declares them. ANTs

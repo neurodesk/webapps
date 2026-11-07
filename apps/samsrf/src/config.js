@@ -5,5 +5,5 @@ import automation from "../automation.json" with { type: "json" };
 export const APP = Object.freeze({
   id: "samsrf",
   title: automation.title,
-  version: "0.0.0",
+  version: "0.2.20261106",
 });

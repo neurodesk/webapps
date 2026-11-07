@@ -1,7 +1,7 @@
 // DOM-independent app logic, unit-tested under Node (test/config.test.js).
 export const APP = Object.freeze({
   id: "reproin",
-  version: "0.0.20261030",
+  version: "0.1.20261104",
 });
 
 // Top-level folder inside the downloaded ZIP.

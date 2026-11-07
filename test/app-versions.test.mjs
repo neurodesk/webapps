@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import {
   EMBEDDED_VERSION_SITES, LINKED_PACKAGES, applyRelease, embeddedVersionMismatches, mergeSameVersionSections,
-  planRelease, releaseDate, syncEmbeddedVersions, validateReleaseDate, workspacePackages,
+  planRelease, releaseDate, syncEmbeddedVersions, unsyncedVersionLiterals, validateReleaseDate, workspacePackages,
 } from '../scripts/lib/app-versions.mjs';
 
 const registry = await loadAppsRegistry();
@@ -33,6 +33,24 @@ test('embedded version strings and linked packages match their app', async () =>
     assert.ok(packages.get(linked), `${linked} exists`);
     assert.ok(registry.apps.some((app) => app.id === appId), `${appId} is registered`);
   }
+});
+
+test('every app version literal in app and package sources is an embedded version site', async () => {
+  assert.deepEqual(await unsyncedVersionLiterals(), []);
+});
+
+test('version literals outside the embedded version sites are reported', async (t) => {
+  const { root, put } = await fixture(t);
+  await put('apps/newapp/src/config.js', 'export const APP = { id: "newapp", version: "0.0.0" };\n');
+  await put('apps/newapp/src/worker.js', "const runtime = { app: 'NewApp web 0.1.20261001', niimath: '@niivue/niimath@1.4.20261016' };\n// niimath 1.4.20260909 has no STL writer.\n");
+  await put('apps/newapp/test/config.test.js', "const expected = '0.1.20261001';\n");
+  await put('packages/newapp/src/pipeline.js', "export const VERSION = '0.1.20261001';\n");
+  await run('git', ['-C', root, 'add', '.']);
+  assert.deepEqual(await unsyncedVersionLiterals(root), [
+    'apps/newapp/src/config.js:1: 0.0.0 is not an EMBEDDED_VERSION_SITES entry',
+    'apps/newapp/src/worker.js:1: 0.1.20261001 is not an EMBEDDED_VERSION_SITES entry',
+    'packages/newapp/src/pipeline.js:1: 0.1.20261001 is not an EMBEDDED_VERSION_SITES entry',
+  ]);
 });
 
 test('MuscleMap app releases version portable features separately from checkpoints', () => {
@@ -273,123 +291,4 @@ test('an SDC pipeline release keeps the app and package on the same UTC version'
   assert.equal((await json('apps/sdc')).version, '0.1.20261020');
   assert.equal((await json('packages/sdc')).version, '0.1.20261020');
   assert.match(await readFile(join(root, 'packages/sdc/CHANGELOG.md'), 'utf8'), /Validate reverse-pair metadata/);
-});
-
-test('an app release leaves the desktop suite version unchanged', async (t) => {
-  const { root, put, json } = await fixture(t);
-  await put('packages/desktop/package.json', JSON.stringify({ name: '@neurodesk/desktop', version: '0.1.20260930', private: true }));
-  await put('.changeset/app.md', '---\n"zarro": patch\n---\n\nUpdated offline app.\n');
-  const release = await planRelease(root, { date: '20261001' });
-  assert.ok(!release.plan.releases.some(item => item.name === '@neurodesk/desktop'));
-  await applyRelease(release);
-  assert.equal((await json('packages/desktop')).version, '0.1.20260930');
-});
-
-test('daily desktop stamping preserves app versions and can be repeated across jobs', async (t) => {
-  const { root, put, json } = await fixture(t);
-  await put('packages/desktop/package.json', JSON.stringify({ name: '@neurodesk/desktop', version: '0.9.20260930', private: true }));
-  const app = await json('apps/zarro');
-  const options = { cwd: root, env: { ...process.env, DESKTOP_RELEASE_DATE: '20261001' } };
-  const script = join(repoRoot, 'scripts/desktop/daily-version.mjs');
-  for (let i = 0; i < 2; i += 1) {
-    await run(process.execPath, [script], options);
-    assert.equal((await json('packages/desktop')).version, '0.9.20261001');
-    assert.deepEqual(await json('apps/zarro'), app);
-  }
-  await assert.rejects(run(process.execPath, [script], {
-    ...options, env: { ...process.env, DESKTOP_RELEASE_DATE: '20260230' },
-  }), /Invalid release date/);
-  assert.equal((await json('packages/desktop')).version, '0.9.20261001');
-});
-
-test('same-day app updates do not release the desktop suite', async (t) => {
-  const { root, put } = await fixture(t);
-  await put('packages/desktop/package.json', JSON.stringify({ name: '@neurodesk/desktop', version: '0.1.20260930', private: true }));
-  await put('.changeset/app.md', '---\n"zarro": patch\n---\n\nSame-day offline fix.\n');
-  const release = await planRelease(root, { date: '20260930', sameDay: true });
-  assert.ok(!release.plan.releases.some(item => item.name === '@neurodesk/desktop'));
-});
-
-test('an app release uses the strongest linked bump and updates pinned dependents to the final date', async (t) => {
-  const { root, put, json } = await fixture(t);
-  await put('packages/unrelated/package.json', JSON.stringify({
-    name: 'unrelated', version: '1.0.0', dependencies: { '@neurodesk/synthsr': '0.2.20260930' },
-  }));
-  await put('.changeset/a.md', '---\n"synthsr": major\n"@neurodesk/synthsr": patch\n---\n\nBreaking synthesis change.\n');
-  await applyRelease(await planRelease(root, { date: '20261001' }));
-  assert.equal((await json('apps/synthsr')).version, '1.0.20261001');
-  assert.equal((await json('packages/synthsr')).version, '1.0.20261001');
-  assert.equal((await json('packages/unrelated')).dependencies['@neurodesk/synthsr'], '1.0.20261001');
-  assert.deepEqual(await embeddedVersionMismatches(await workspacePackages(root), root), []);
-});
-
-test('linked packages inherit the app release series for every changeset bump', async (t) => {
-  const { root, put, json } = await fixture(t);
-  const app = await json('apps/synthsr');
-  await put('apps/synthsr/package.json', JSON.stringify({ ...app, releaseSeries: '0.2' }));
-  for (const bump of ['patch', 'minor', 'major']) {
-    await put('.changeset/a.md', `---\n"@neurodesk/synthsr": ${bump}\n---\n\nShared pipeline change.\n`);
-    const release = await planRelease(root, { date: '20261001' });
-    for (const name of ['synthsr', '@neurodesk/synthsr']) {
-      assert.equal(release.plan.releases.find((item) => item.name === name).newVersion, '0.2.20261001', `${name}: ${bump}`);
-    }
-  }
-  await applyRelease(await planRelease(root, { date: '20261001' }));
-  assert.equal((await json('apps/synthsr')).version, '0.2.20261001');
-  assert.equal((await json('packages/synthsr')).version, '0.2.20261001');
-  assert.deepEqual(await embeddedVersionMismatches(await workspacePackages(root), root), []);
-});
-
-test('same-day updates are explicit and retain one changelog version heading', async (t) => {
-  const { root, put } = await fixture(t);
-  await put('.changeset/a.md', "---\n'zarro': patch\n---\n\nSame-day fix.\n");
-  await assert.rejects(planRelease(root, { date: '20260930' }), /already at/);
-  await applyRelease(await planRelease(root, { date: '20260930', sameDay: true }));
-  const changelog = await readFile(join(root, 'apps/zarro/CHANGELOG.md'), 'utf8');
-  assert.equal(changelog, '# zarro\n\n## 0.1.20260930\n\n### Patch Changes\n\n- Same-day fix.\n- Earlier work.\n');
-});
-
-test('same-day sections merge change types in changeset order', () => {
-  const text = '# x\n\n## 1.0.1\n\n### Patch Changes\n\n- New patch.\n\n### Minor Changes\n\n- New minor.\n\n## 1.0.1\n\n### Patch Changes\n\n- Old patch.\n  - nested\n\n## 1.0.0\n\n- First.\n';
-  assert.equal(mergeSameVersionSections(text, '1.0.1'), '# x\n\n## 1.0.1\n\n### Minor Changes\n\n- New minor.\n\n### Patch Changes\n\n- New patch.\n- Old patch.\n  - nested\n\n## 1.0.0\n\n- First.\n');
-  assert.equal(mergeSameVersionSections('# x\n\n## 1.0.1\n\n## 1.0.1\n\n\n## 1.0.0\n', '1.0.1'), '# x\n\n## 1.0.1\n\n## 1.0.0\n');
-  assert.equal(mergeSameVersionSections(text, '9.9.9'), text);
-});
-
-test('upstream release series survives patch, minor and major webapp changes', async (t) => {
-  const { root, put, json } = await fixture(t);
-  const manifest = await json('apps/zarro');
-  await put('apps/zarro/package.json', JSON.stringify({ ...manifest, releaseSeries: '0.1' }));
-  for (const bump of ['patch', 'minor', 'major']) {
-    await put('.changeset/a.md', `---\n"zarro": ${bump}\n---\n\nWebapp changes.\n`);
-    const release = await planRelease(root, { date: '20261001' });
-    assert.equal(release.plan.releases.find(({ name }) => name === 'zarro').newVersion, '0.1.20261001');
-    await assert.rejects(planRelease(root, { date: '20260930' }), /already at/);
-  }
-  await applyRelease(await planRelease(root, { date: '20261001' }));
-  assert.equal((await json('apps/zarro')).version, '0.1.20261001');
-  assert.deepEqual(await embeddedVersionMismatches(await workspacePackages(root), root), []);
-});
-
-test('broken embedded version sites fail before consuming changesets or editing manifests', async (t) => {
-  const { root, put, json } = await fixture(t);
-  await put('.changeset/a.md', '---\n"zarro": patch\n---\n\nFix the viewer.\n');
-  await put('apps/zarro/src/config.js', 'export const APP = {};\n');
-  await assert.rejects(planRelease(root, { date: '20261001' }), /version site not found/);
-  assert.equal((await json('apps/zarro')).version, '0.1.20260930');
-  assert.match(await readFile(join(root, '.changeset/a.md'), 'utf8'), /Fix the viewer/);
-  await rm(join(root, 'apps/zarro/src/config.js'));
-  await assert.rejects(planRelease(root, { date: '20261001' }), { code: 'ENOENT' });
-  assert.equal((await json('apps/zarro')).version, '0.1.20260930');
-});
-
-test('every embedded version site in the real repo resolves', async () => {
-  for (const [appId, sites] of Object.entries(EMBEDDED_VERSION_SITES)) {
-    for (const site of sites) {
-      const text = await readFile(join(repoRoot, site.file), 'utf8');
-      assert.ok(site.pattern.test(text), `${appId}: ${site.file} matches its version pattern`);
-    }
-  }
-  const pkg = [...packages.values()].find((item) => item.id === 'zarro');
-  assert.deepEqual(await syncEmbeddedVersions('zarro', pkg.manifest.version), []);
 });

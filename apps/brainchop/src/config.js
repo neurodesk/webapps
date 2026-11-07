@@ -5,5 +5,5 @@ import automation from "../automation.json" with { type: "json" };
 export const APP = Object.freeze({
   id: "brainchop",
   title: automation.title,
-  version: "0.1.20261103",
+  version: "0.1.20261104",
 });

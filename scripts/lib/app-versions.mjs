@@ -1,7 +1,9 @@
 // Changesets owns dependency propagation and changelogs. Apps and their linked
 // packages replace the planned semver patch with the UTC release date.
+import { execFile } from 'node:child_process';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import getReleasePlan from '@changesets/get-release-plan';
 import applyReleasePlan from '@changesets/apply-release-plan';
 import { read as readConfig } from '@changesets/config';
@@ -227,6 +229,24 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
   dwicorrect: [
     { file: 'apps/dwicorrect/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],
+  'ants-denoise': [
+    { file: 'apps/ants-denoise/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  brainchop: [
+    { file: 'apps/brainchop/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  reproin: [
+    { file: 'apps/reproin/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  samsrf: [
+    { file: 'apps/samsrf/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  stardist: [
+    { file: 'apps/stardist/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  'structure-tensor': [
+    { file: 'apps/structure-tensor/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
   qsmbly: [
     { file: 'apps/qsmbly/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
     { file: 'apps/qsmbly/rust-wasm/Cargo.toml', pattern: /(name = "qsm_wasm"\nversion = ")[^"]+("\n)/, replace: '$1{version}$2' },
@@ -295,6 +315,34 @@ export async function syncEmbeddedVersions(appId, version, root = repoRoot) {
   const updates = await embeddedVersionUpdates(appId, version, root);
   for (const { path, text } of updates) await writeFile(path, text);
   return updates.map(({ path }) => path);
+}
+
+const VERSION_SOURCE = /^(?:apps|packages)\/.+\.(?:[cm]?js|tsx?|html)$/;
+const NOT_VERSION_SOURCE = /\/(?:test|tests|e2e|validation|docs|vendor|public|node_modules)\/|\.(?:test|spec)\.[^/]+$/;
+// A date version inside a string (a `name@x.y.z` dependency pin aside), or a 0.0.0 placeholder.
+const VERSION_LITERAL = /["'`][^"'`\n]*?(?<!@)\b(\d+\.\d+\.20\d{6})\b|(?:\bversion:|\bVERSION\s*=)\s*["'](0\.0\.0)["']/dg;
+
+/** Version literals in tracked app and package sources that no embedded version site rewrites. */
+export async function unsyncedVersionLiterals(root = repoRoot) {
+  const { stdout } = await promisify(execFile)('git', ['-C', root, 'ls-files', '-z', 'apps', 'packages'], { maxBuffer: 64 * 1024 * 1024 });
+  const sites = Object.values(EMBEDDED_VERSION_SITES).flat();
+  const unsynced = [];
+  for (const file of stdout.split('\0')) {
+    if (!VERSION_SOURCE.test(file) || NOT_VERSION_SOURCE.test(file)) continue;
+    const text = await readFile(join(root, file), 'utf8').catch(() => '');
+    const synced = new Set();
+    for (const site of sites.filter((item) => item.file === file)) {
+      const match = site.pattern.exec(text);
+      if (match) synced.add(match.index + match[1].length);
+    }
+    for (const match of text.matchAll(VERSION_LITERAL)) {
+      const [start] = match.indices[1] ?? match.indices[2];
+      if (synced.has(start)) continue;
+      const line = text.slice(0, start).split('\n').length;
+      unsynced.push(`${file}:${line}: ${match[1] ?? match[2]} is not an EMBEDDED_VERSION_SITES entry`);
+    }
+  }
+  return unsynced;
 }
 
 /** Every embedded version string that disagrees with its app's package.json. */
