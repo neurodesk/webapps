@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 2,
+  "app": "microscope-qc",
+  "title": "Microscope QC",
+  "description": "Microscope quality control with MetroloJ_QC's definitions: lateral and axial FWHM of sub-resolution beads against the theoretical resolution, and field-illumination uniformity and centring.",
+  "defaultOperation": "run-qc",
+  "operations": {
+    "run-qc": {
+      "title": "Run quality control",
+      "description": "PSF from beads: detect beads in one z-stack, fit Gaussian x, y and z profiles and summarise FWHM against theory. Field illumination: uniformity, field uniformity and centering accuracy of one image of a uniform slide.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tiff",
+            "ome-tiff"
+          ],
+          "description": "One single-channel TIFF: a bead z-stack (one plane per page) or one field image",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "analysis": {
+          "type": "string",
+          "enum": [
+            "psf",
+            "field"
+          ],
+          "description": "psf for a bead z-stack, field for a field-illumination image; defaults to psf for a stack and field for one plane"
+        },
+        "microscope": {
+          "type": "string",
+          "enum": [
+            "widefield",
+            "confocal",
+            "spinning",
+            "multiphoton"
+          ],
+          "default": "widefield",
+          "description": "Microscope type, which sets the theoretical resolution formula"
+        },
+        "na": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 1.7,
+          "description": "Objective numerical aperture; read from OME-XML LensNA when recorded"
+        },
+        "refractiveIndex": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 2,
+          "description": "Immersion refractive index; read from OME-XML when recorded"
+        },
+        "emission": {
+          "type": "number",
+          "minimum": 200,
+          "maximum": 2000,
+          "description": "Emission wavelength in nm (widefield and spinning disk)"
+        },
+        "excitation": {
+          "type": "number",
+          "minimum": 200,
+          "maximum": 2000,
+          "description": "Excitation wavelength in nm (confocal and multiphoton)"
+        },
+        "pixelX": {
+          "type": "number",
+          "minimum": 0.0001,
+          "maximum": 100,
+          "description": "Pixel width in µm; read from the TIFF when recorded"
+        },
+        "pixelY": {
+          "type": "number",
+          "minimum": 0.0001,
+          "maximum": 100,
+          "description": "Pixel height in µm; read from the TIFF when recorded"
+        },
+        "zStep": {
+          "type": "number",
+          "minimum": 0.0001,
+          "maximum": 100,
+          "description": "z step in µm; read from the TIFF when recorded"
+        },
+        "boxRadius": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 100,
+          "description": "Bead box half-width in µm; default four theoretical lateral FWHMs"
+        },
+        "prominence": {
+          "type": "number",
+          "minimum": 1e-06,
+          "maximum": 1000000000000.0,
+          "description": "Bead prominence in grey levels; default 10 background SDs of the maximum projection"
+        },
+        "minR2": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum adjusted R² of all three fits for a bead to enter the summary",
+          "default": 0.95
+        },
+        "excludeSaturated": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reject beads with a saturated voxel in their box"
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Iso-intensity zone step in percent (field illumination)",
+          "default": 10
+        },
+        "blur": {
+          "type": "boolean",
+          "default": true,
+          "description": "Blur the field image with ImageJ's Gaussian, σ = 2 px, before measuring"
+        },
+        "referenceZone": {
+          "type": "boolean",
+          "default": true,
+          "description": "Centre on the top iso-intensity zone's centroid rather than the brightest pixel"
+        }
+      },
+      "artifacts": {
+        "overlay": {
+          "type": "neuro:label-map",
+          "mediaType": "image/tiff",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "summary": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "beads": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "metrics": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "points": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "profiles": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "provenance": {
+          "type": "neuro:provenance",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

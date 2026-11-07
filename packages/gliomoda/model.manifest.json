@@ -1,0 +1,371 @@
+{
+  "schema_version": 1,
+  "app": "gliomoda",
+  "license": "CC-BY-4.0",
+  "preprocessing_contract": {
+    "source": "packages/gliomoda/src/pipeline.js",
+    "grid": "240 x 240 x 155 BraTS/SRI24 atlas at 1 mm; no resampling",
+    "layout": "NCDHW; NIfTI voxel axes reversed (k, j, i), transpose_forward [0, 1, 2], no reorientation",
+    "normalization": "z-score per channel inside the hole-filled union of nonzero voxels, zero outside (nnU-Net ZScoreNormalization, use_mask_for_norm)",
+    "prediction": "nnU-Net 2.5.2 sliding window: step 0.5, Gaussian importance (sigma patch/8), mirroring over the listed axes, float16 accumulation",
+    "labels": "sigmoid regions [whole tumour, tumour core, enhancing tumour] > 0.5 written in regions_class_order: 2 oedema, 1 necrotic core, 3 enhancing"
+  },
+  "assets": [
+    {
+      "id": "t1c-t2f-t1n-t2w",
+      "filename": "gliomoda-t1c-t2f-t1n-t2w.onnx",
+      "bytes": 62467807,
+      "sha256": "eaf3f803cd9267cd39dee067bd17463ae742252c25c9b39c2b7e68d060535943",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t1c",
+        "t2f",
+        "t1n",
+        "t2w"
+      ],
+      "patch": [
+        128,
+        128,
+        128
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "a033e4dfaccfde1f07f8cb9da74ab02901407beba2cd074d0e5f7254c69996b8",
+      "float16_max_logit_change": 0.01074,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t1c-t2f-t1n-t2w_ResEncL",
+      "filename": "gliomoda-t1c-t2f-t1n-t2w_ResEncL.onnx",
+      "bytes": 204895126,
+      "sha256": "69dfb12296c020abc92b08cd35067e66a990d2dd18fd1e4aae1dc60fa2ad4b0a",
+      "network": "ResidualEncoderUNet",
+      "channels": [
+        "t1c",
+        "t2f",
+        "t1n",
+        "t2w"
+      ],
+      "patch": [
+        160,
+        192,
+        160
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "7bd72bf2f2810cdf297f36a6d25dc28b6cc1b322fd30bfc50937a13baf2542d6",
+      "float16_max_logit_change": 0.01581,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t1c",
+      "filename": "gliomoda-t1c.onnx",
+      "bytes": 61642436,
+      "sha256": "6f3e31e648c534eeaec4c2a00353d78f5c5b2230ea88e7686e8a8801d4d28c2f",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t1c"
+      ],
+      "patch": [
+        128,
+        160,
+        112
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "699b787f4e6ce2186d5afde07dc12e1829b8d7f55edb677a6104bd223a3092c9",
+      "float16_max_logit_change": 0.01758,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t2f",
+      "filename": "gliomoda-t2f.onnx",
+      "bytes": 61642436,
+      "sha256": "f32dcd451fd9de914ea13297ffaf8807c9183fce26296ccd91eb56120a83103a",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t2f"
+      ],
+      "patch": [
+        128,
+        160,
+        112
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "cf6ff745bda977b2e0415b1c2808f9094d383e592ce9331270c660824c83cf25",
+      "float16_max_logit_change": 0.01859,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t2w",
+      "filename": "gliomoda-t2w.onnx",
+      "bytes": 61642436,
+      "sha256": "df530622f6352cb0dc5aa7051a9568f4b5a305d41583016068d4cebae7a063f0",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t2w"
+      ],
+      "patch": [
+        128,
+        160,
+        112
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "afbeb6af5fc6eb879a1289d32972de6b61748b13992ff36792e789424e26fad2",
+      "float16_max_logit_change": 0.02423,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t1c-t1n",
+      "filename": "gliomoda-t1c-t1n.onnx",
+      "bytes": 61642589,
+      "sha256": "5bf91370032191f712dea6a2e0cc89d2fe3db4fd678d0f567934cbc3fbdc0525",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t1c",
+        "t1n"
+      ],
+      "patch": [
+        128,
+        160,
+        112
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "1ff569ab223eefd8e767e5b1bee2daeb370de2ef62784c48a737c0b6ac2ae695",
+      "float16_max_logit_change": 0.01915,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t1c-t2f",
+      "filename": "gliomoda-t1c-t2f.onnx",
+      "bytes": 62464351,
+      "sha256": "3e5c4c9526a70bd3295c1920f6891c2eb33a71df4dc79c5f81918602cc76f183",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t1c",
+        "t2f"
+      ],
+      "patch": [
+        128,
+        128,
+        128
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "0e29f882310fe8cb076d6cadb982067ef53c6a32231f40ae17d9c173aa4307b3",
+      "float16_max_logit_change": 0.03082,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t1c-t2w",
+      "filename": "gliomoda-t1c-t2w.onnx",
+      "bytes": 61642589,
+      "sha256": "36789de5fcc0f48e90cb88e9216a039459a8cb4b038e3b670f588796baf09bf3",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t1c",
+        "t2w"
+      ],
+      "patch": [
+        128,
+        160,
+        112
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "ef67d65793e62834af0b23b69580b818f4b42d5eafa7c5afbc33366563769cb6",
+      "float16_max_logit_change": 0.02156,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t2f-t1n",
+      "filename": "gliomoda-t2f-t1n.onnx",
+      "bytes": 61642589,
+      "sha256": "fced45d1a9ab006ddf137fccefcf60775d41f4513eb2e475727406fb14da7c7a",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t2f",
+        "t1n"
+      ],
+      "patch": [
+        128,
+        160,
+        112
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "c1f9340ae7c25c780fe4fcef99f3f97bd7afe3b75a6f7a0d1f62c8c006950a14",
+      "float16_max_logit_change": 0.01521,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t2f-t2w",
+      "filename": "gliomoda-t2f-t2w.onnx",
+      "bytes": 61642589,
+      "sha256": "3c53153f17549565ad64179360edd6ff20d38f656b6080359f455d17cbdcba58",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t2f",
+        "t2w"
+      ],
+      "patch": [
+        128,
+        160,
+        112
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "2664a4fe0e7c74409b78cdfd46726106431a14927665f4c0b69a150e8cc727bc",
+      "float16_max_logit_change": 0.02383,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t1c-t1n-t2w",
+      "filename": "gliomoda-t1c-t1n-t2w.onnx",
+      "bytes": 61644317,
+      "sha256": "e4783ae914cc582203b4482586d58adf1c40b1bfa2f4958148ccacaeaeed2e20",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t1c",
+        "t1n",
+        "t2w"
+      ],
+      "patch": [
+        128,
+        160,
+        112
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "a3905b8b3e2f64cfeaa1317b7cf4e0e017253e41443e0caa769815298fd5d05d",
+      "float16_max_logit_change": 0.01055,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    },
+    {
+      "id": "t2f-t1n-t2w",
+      "filename": "gliomoda-t2f-t1n-t2w.onnx",
+      "bytes": 61644317,
+      "sha256": "6a709bb1161f8cd5c3aa848fbb75bd034ab6b8f20c3c2673b8554bcb995882ff",
+      "network": "PlainConvUNet",
+      "channels": [
+        "t2f",
+        "t1n",
+        "t2w"
+      ],
+      "patch": [
+        128,
+        160,
+        112
+      ],
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "regions_class_order": [
+        2,
+        1,
+        3
+      ],
+      "checkpoint_sha256": "e372a975fd32741e451a95e35c26a416ca1d94197a6e2d511d8cf7ae08c47987",
+      "float16_max_logit_change": 0.01489,
+      "source_url": "https://zenodo.org/records/15625233/files/weights.zip"
+    }
+  ],
+  "source_commit": "GlioMODA weights v1.0.2 (Zenodo 15625233, md5 428d96a19480ecfa391b3cdd5a7a535b), <model>/fold_all/checkpoint_final.pth, as baked into vnmd/gliomoda_0.0.4@sha256:aeaa0a4aa901667612ae811700123c3b1e3525b5e78a4bcaa262914d53ad0232",
+  "graph_optimization": "ConvTranspose rewritten as an equivalent 1x1x1 Conv plus depth-to-space for the WebGPU backend; convolution weights stored as float16 and cast to float32 in the graph, so arithmetic is float32. Built by packages/gliomoda/scripts/export_model.py",
+  "repository": "neurodeskorg/webapps",
+  "revision": "cddf84f3c1decfa10ed3b750648fc062911c4223",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/"
+}

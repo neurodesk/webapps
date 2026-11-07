@@ -779,7 +779,11 @@
           "command": "Expand-Archive -Path .\\easy-mp2rage-0.8.20261103-windows-x64.zip -DestinationPath .\n.\\easy-mp2rage-0.8.20261103-windows-x64\\easy-mp2rage.exe correct --uni UNI.nii.gz --inv2 INV2.nii.gz --b1 B1.nii.gz --b1-type tfl --mp2rage TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,EFF results"
         }
       ],
-      "containers": []
+      "containers": [],
+      "openrecon": {
+        "recipe": "mp2ragedenoise",
+        "label": "MP2RAGE UNI denoising"
+      }
     },
     "niimath": {
       "desktop": true,
@@ -1347,7 +1351,7 @@
           "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt",
           "url": "https://hub.docker.com/r/vnmd/topofit_0.5.1",
           "dockerImage": "vnmd/topofit_0.5.1:candidate-1c960cec82947541d270e06099ab415933c9ea07",
-          "dockerLabel": "Docker Hub · candidate build"
+          "dockerLabel": "Docker Hub \u00b7 candidate build"
         }
       ],
       "openrecon": {
@@ -2153,6 +2157,57 @@
       "containers": []
     },
     "spot-detection": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "gliomoda": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "gliomoda",
+          "label": "gliomoda 0.0.4 (20261024)",
+          "url": "https://hub.docker.com/r/vnmd/gliomoda_0.0.4",
+          "dockerImage": "vnmd/gliomoda_0.0.4:20261024",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/gliomoda_0.0.4_20261024.simg",
+          "apptainerName": "gliomoda_0.0.4_20261024"
+        }
+      ]
+    },
+    "neuromorph": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "stitching": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "structure-tensor": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "microsam": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "microscope-qc": {
       "desktop": true,
       "profile": "interactive",
       "assets": [],

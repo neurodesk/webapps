@@ -191,6 +191,52 @@ test('declared single-file runtime deduplication rewrites references and removes
   await assert.rejects(readFile(join(siteDist, 'vesselboost/runtime/viewer.js')), { code: 'ENOENT' });
 });
 
+test('shared NGFF codecs retain their relative helper and leave other app codecs working', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-ngff-codecs-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  const manifest = JSON.parse(await readFile(new URL('../runtime-assets/manifest.json', import.meta.url), 'utf8'));
+  const families = manifest.families.filter(family => family.id.startsWith('ngff-codec'));
+  const codecs = families.find(family => family.id === 'ngff-codecs');
+  const support = families.find(family => family.id === 'ngff-codec-support');
+  const helper = support.files[0];
+  assert.equal(codecs.target, support.target);
+  const sources = new Map([[helper.name, 'export const decode = bytes => Uint8Array.from(bytes);']]);
+  for (const file of codecs.files) {
+    sources.set(file.name, `import { decode } from './${helper.name}'; export default { name: '${file.name}', decode };`);
+  }
+  for (const family of families) {
+    for (const file of family.files) {
+      file.sha256 = createHash('sha256').update(sources.get(file.name)).digest('hex');
+    }
+  }
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families }));
+  const apps = ['stitching', 'elastix'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
+  for (const app of apps) {
+    const assets = join(siteDist, app.path, 'assets');
+    await mkdir(assets, { recursive: true });
+    for (const [name, source] of sources) await writeFile(join(assets, name), source);
+    await writeFile(join(assets, 'local.js'), `export { decode } from './${helper.name}';`);
+    await writeFile(join(assets, 'entry.js'), codecs.files.map((file, index) =>
+      `export const codec${index} = () => import('./${file.name}');`).join('\n'));
+  }
+  await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  for (const app of apps) {
+    const assets = join(siteDist, app.path, 'assets');
+    const entry = await import(pathToFileURL(join(assets, 'entry.js')));
+    for (const [index, file] of codecs.files.entries()) {
+      await assert.rejects(access(join(assets, file.name)), { code: 'ENOENT' });
+      const codec = (await entry[`codec${index}`]()).default;
+      assert.equal(codec.name, file.name);
+      assert.deepEqual(codec.decode([1, 2, 3]), Uint8Array.of(1, 2, 3));
+    }
+    const local = await import(pathToFileURL(join(assets, 'local.js')));
+    assert.deepEqual(local.decode([4, 5]), Uint8Array.of(4, 5));
+  }
+});
+
 test('a shared lazy chunk is deduplicated beside vendored component sources of the same name', async t => {
   const root = await mkdtemp(join(tmpdir(), 'runtime-lazy-chunk-'));
   t.after(() => rm(root, { recursive: true, force: true }));

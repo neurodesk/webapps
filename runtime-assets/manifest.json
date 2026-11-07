@@ -211,6 +211,42 @@
           "sha256": "ef5671590c9e38258beaa6c5ab90be4c830f68a684cd5cc47cb57e2aa95480d6"
         }
       ]
+    },
+    {
+      "id": "ngff-codecs",
+      "version": "0.38.0",
+      "target": "ngff-codecs/0.38.0",
+      "deduplicate": true,
+      "match_by": "sha256",
+      "reason": "Identical Blosc and Zstd codec chunks shared by microscopy apps; embedded WASM stays with its loader.",
+      "files": [
+        {
+          "name": "blosc-j6ygecpn.js",
+          "source_app": "stitching",
+          "source": "assets/blosc-j6ygecpn.js",
+          "sha256": "740fb07ecf1f4771840e671a425161590ae3f6ba7b1127d7b0c1a52f2c08bb2e"
+        },
+        {
+          "name": "zstd-Cp7BEDDH.js",
+          "source_app": "stitching",
+          "source": "assets/zstd-Cp7BEDDH.js",
+          "sha256": "48fe19532c4474f278c9d791a606966364e3426895dbb0e7b3532f8c24afc26a"
+        }
+      ]
+    },
+    {
+      "id": "ngff-codec-support",
+      "version": "0.38.0",
+      "target": "ngff-codecs/0.38.0",
+      "reason": "Keep the codecs’ relative base64 helper beside them. App copies remain for other local codecs.",
+      "files": [
+        {
+          "name": "chunk-INHXZS53-D3tQiqtZ.js",
+          "source_app": "stitching",
+          "source": "assets/chunk-INHXZS53-D3tQiqtZ.js",
+          "sha256": "e7b1dbec4d04bd93e0e0f29b42b2418f23a2230cf6e8fa47b932e7f477abd43b"
+        }
+      ]
     }
   ],
   "downloads": [

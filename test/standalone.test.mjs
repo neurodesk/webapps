@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 
 test('scanner packages link the supported apps to their OpenRecon recipes', async () => {
   const catalog = await loadStandalone(await loadAppsRegistry());
-  const expected = { musclemap: 'musclemap', qsmbly: 'qsmxt', spinalcordtoolbox: 'spinalcordtoolbox', synthseg: 'synthseg', topofit: 'topofit', vesselboost: 'vesselboost' };
+  const expected = { 'easy-mp2rage': 'mp2ragedenoise', musclemap: 'musclemap', qsmbly: 'qsmxt', spinalcordtoolbox: 'spinalcordtoolbox', synthseg: 'synthseg', topofit: 'topofit', vesselboost: 'vesselboost' };
   assert.deepEqual(Object.fromEntries(Object.entries(catalog.apps).filter(([, app]) => app.openrecon).map(([id, app]) => [id, app.openrecon.recipe])), expected);
   const dom = new JSDOM('<html><body></body></html>');
   const dialog = openStandalone({ title: 'QSMbly', app: catalog.apps.qsmbly }, dom.window.document);

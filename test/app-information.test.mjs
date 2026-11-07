@@ -28,7 +28,11 @@ const REQUIRED_METHODS = {
   dwidenoise: ['arxiv.org/abs/2011.01355', '10.3389/fninf.2014.00008', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   stardist: ['10.1007/978-3-030-00934-2_30', '10.1038/s41592-018-0216-7', '10.1038/s41592-019-0612-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
   degibbs: ['10.1002/mrm.26054', '10.1016/j.neuroimage.2019.116137', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  'microscope-qc': ['10.1083/jcb.202107093', '10.1111/jmi.13041', '10.1038/nmeth.3102', '10.1038/nbt899', '10.5281/zenodo.10522322', '10.1038/nmeth.2089', 'github.com/niivue/niivue'],
   'calcium-imaging': ['10.1364/OL.33.000156', '10.1016/j.jneumeth.2017.07.031', '10.1038/nn.2620', '10.1016/0165-1684(94)90060-4', '10.1038/nature12354', '10.1371/journal.pcbi.1005423', '10.1016/j.neuron.2015.11.037', '10.7554/eLife.38173', '10.1038/s41586-020-2807-6', 'github.com/niivue/niivue'],
+  stitching: ['10.1093/bioinformatics/btp184', '10.1038/nmeth.2019', '10.1038/s41598-017-04567-y', 'github.com/niivue/niivue'],
+  neuromorph: ['10.5281/zenodo.597333', 'PMC1244622', '10.1029/TR038i006p00913', '10.1016/S0165-0270(98)00091-0', '10.1523/JNEUROSCI.2055-07.2007', '10.1096/fba.2024-00048', '10.1152/jn.00891.2012', 'github.com/niivue/niivue'],
+  'structure-tensor': ['10.1007/s10237-011-0325-z', '10.1007/978-3-319-28549-8_3', '10.1038/s41597-022-01477-1', 'github.com/niivue/niivue'],
   'ants-denoise': ['10.1002/jmri.22003', '10.1038/s41598-021-87564-6', '10.1038/s41597-025-05250-y', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   'spot-detection': ['10.1261/rna.079073.121', 'github.com/niivue/niivue'],
   n4: ['10.1109/TMI.2010.2046908', '10.1016/j.neuroimage.2010.09.025', '10.1016/j.neuroimage.2019.116137', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
@@ -70,7 +74,9 @@ const REQUIRED_METHODS = {
   fastprep: ['arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', '10.1038/s41592-018-0235-4', '10.52294/001c.94384', '10.1016/j.neuroimage.2026.122074', '10.1126/sciadv.add3607', '10.1016/j.neuroimage.2010.07.033', 'sites.google.com/view/greedyreg/cite', 'github.com/pyushkevich/greedy', '10.1016/j.neuroimage.2004.07.068', '10.1002/hbm.460020402', 'cowles.yale.edu/sites/default/files/2023-05/s-0383.pdf', '10.21105/joss.03669', '10.1016/j.neuroimage.2011.12.028', '10.1002/hbm.20359'],
   elastix: ['10.1109/TMI.2009.2035616', '10.3389/fninf.2013.00050', '10.1038/s41592-021-01326-w', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   brainqcnet: ['10.1162/imag_a_00300', 'github.com/cfchen-duke/ProtoPNet', '10.1109/CVPR.2016.90', '10.1038/s41597-022-01694-8', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  microsam: ['10.1038/s41592-024-02580-4', '10.1109/ICCV51070.2023.00371', '10.48550/arXiv.2306.14289', '10.1038/s41592-019-0612-7', 'onnxruntime.ai'],
   bison: ['10.1002/mrm.28547', '10.1016/j.neuroimage.2017.06.009', '10.1016/j.neuroimage.2010.07.033', '10.1016/S1053-8119(09)70884-5', 'sites.google.com/view/greedyreg/about', '10.1109/TMI.2010.2046908', '10.1002/jmri.22003', '10.52294/001c.94384', '10.18112/openneuro.ds007522.v2.0.1', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  gliomoda: ['10.1101/2025.11.12.25339968', '10.48550/arXiv.2507.09036', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01560-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {
@@ -78,7 +84,7 @@ test('every registered app has app information with packages and cited methods',
     const info = information.apps[app.id];
     assert.ok(info, `${app.id} has an app-information entry`);
     assert.ok(info.packages.length >= 1, `${app.id} lists what runs under the hood`);
-    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer/i.test(item.name)), `${app.id} names its runtime`);
+    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer|onnx runtime/i.test(item.name)), `${app.id} names its runtime`);
     const cited = info.citations.map((item) => `${item.doi ?? ''} ${item.url ?? ''} ${item.code ?? ''} ${item.title}`).join('\n');
     for (const method of REQUIRED_METHODS[app.id] ?? []) {
       assert.ok(cited.includes(method), `${app.id} must cite ${method}`);

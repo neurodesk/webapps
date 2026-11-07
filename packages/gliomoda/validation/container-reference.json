@@ -1,0 +1,275 @@
+{
+  "container": {
+    "image": "vnmd/gliomoda_0.0.4@sha256:aeaa0a4aa901667612ae811700123c3b1e3525b5e78a4bcaa262914d53ad0232",
+    "recipe": "https://raw.githubusercontent.com/neurodesk/neurocontainers/722ce790ba985edd7fe18dfe918e24bc5ebbaa21/recipes/gliomoda/build.yaml",
+    "command": "validation/container.sh: gliomoda --device cpu --threads 8, and nnUNetPredictor(use_mirroring=False) for the _nomirror file",
+    "outputs": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/51f90f6c30c02722a0a3296b9c744cce5c88bb38/gliomoda/validation/container/"
+  },
+  "example": "apps/gliomoda/examples.json upenn-gbm-00002",
+  "gates": {
+    "dice": 0.99,
+    "differingVoxels": 500
+  },
+  "runs": [
+    {
+      "file": "t1c-t1n-t2w.nii.gz",
+      "model": "t1c-t1n-t2w",
+      "mirror": true,
+      "sha256": "4a90a75fa218db12cc4be823ddf3510169af272528e187cf749eb1737c0e166b",
+      "containerCounts": [
+        8737773,
+        15594,
+        145517,
+        29116
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99998,
+          "TC": 1,
+          "ET": 0.99988
+        },
+        "differing": 16
+      }
+    },
+    {
+      "file": "t1c-t1n.nii.gz",
+      "model": "t1c-t1n",
+      "mirror": true,
+      "sha256": "6f5a1821bc1be5b5d086e6af5af70f3367e50f8c7335c0c31f300ae1312c246a",
+      "containerCounts": [
+        8731577,
+        15260,
+        152228,
+        28935
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99996,
+          "TC": 0.99999,
+          "ET": 0.99993
+        },
+        "differing": 20
+      }
+    },
+    {
+      "file": "t1c-t2f-t1n-t2w_nomirror.nii.gz",
+      "model": "t1c-t2f-t1n-t2w",
+      "mirror": false,
+      "sha256": "99b1795efd7a3539d2eb47e0a18b41c07e99358e5656428ae346b9de8c1f27af",
+      "containerCounts": [
+        8738012,
+        15983,
+        145909,
+        28096
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99998,
+          "TC": 1,
+          "ET": 0.99998
+        },
+        "differing": 9
+      }
+    },
+    {
+      "file": "t1c-t2f-t1n-t2w_ResEncL.nii.gz",
+      "model": "t1c-t2f-t1n-t2w_ResEncL",
+      "mirror": true,
+      "sha256": "9e82535ab87a370262f2330754d4dc13a32f6fe7e8d638d3ad739d3e4aff1985",
+      "containerCounts": [
+        8723854,
+        15458,
+        160247,
+        28441
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99997,
+          "TC": 0.99999,
+          "ET": 0.99995
+        },
+        "differing": 18
+      }
+    },
+    {
+      "file": "t1c-t2f-t1n-t2w.nii.gz",
+      "model": "t1c-t2f-t1n-t2w",
+      "mirror": true,
+      "sha256": "f2b0639c27ed3ffb0fde769a474ffef63c8af41be151b65956ceb5e252439f7d",
+      "containerCounts": [
+        8737540,
+        15858,
+        146358,
+        28244
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99999,
+          "TC": 0.99999,
+          "ET": 0.99996
+        },
+        "differing": 8
+      }
+    },
+    {
+      "file": "t1c-t2f.nii.gz",
+      "model": "t1c-t2f",
+      "mirror": true,
+      "sha256": "1bfd0256bc3a438ebd9c26524d605c9751780e477956fd90b3b189959f1b0ac6",
+      "containerCounts": [
+        8735241,
+        15313,
+        148539,
+        28907
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99998,
+          "TC": 0.99997,
+          "ET": 0.99998
+        },
+        "differing": 10
+      }
+    },
+    {
+      "file": "t1c-t2w.nii.gz",
+      "model": "t1c-t2w",
+      "mirror": true,
+      "sha256": "6cccd50ae1a35407019e2ecf31fda73701d59b0f9a2f6589ceb4b65860d3c3e8",
+      "containerCounts": [
+        8737544,
+        15716,
+        146029,
+        28711
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99998,
+          "TC": 1,
+          "ET": 0.99997
+        },
+        "differing": 9
+      }
+    },
+    {
+      "file": "t1c.nii.gz",
+      "model": "t1c",
+      "mirror": true,
+      "sha256": "6e24816a7f4ac4942cf281c1fbf1bf25ec38735c59d0984c1dfe41c1e5543d8a",
+      "containerCounts": [
+        8727631,
+        14818,
+        156282,
+        29269
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99997,
+          "TC": 1,
+          "ET": 1
+        },
+        "differing": 13
+      }
+    },
+    {
+      "file": "t2f-t1n-t2w.nii.gz",
+      "model": "t2f-t1n-t2w",
+      "mirror": true,
+      "sha256": "937b65348b9b976f232d8ed453eb460d1007e0d1aede7ac77c2b378f43d85d22",
+      "containerCounts": [
+        8738693,
+        12205,
+        145489,
+        31613
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99998,
+          "TC": 0.99995,
+          "ET": 0.99992
+        },
+        "differing": 12
+      }
+    },
+    {
+      "file": "t2f-t1n.nii.gz",
+      "model": "t2f-t1n",
+      "mirror": true,
+      "sha256": "57cb4b073a2c3126e6ee6725993a7bc2667d64705646ef3530f901cacc595fcb",
+      "containerCounts": [
+        8736400,
+        11660,
+        146241,
+        33699
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99997,
+          "TC": 0.99999,
+          "ET": 0.99997
+        },
+        "differing": 12
+      }
+    },
+    {
+      "file": "t2f-t2w.nii.gz",
+      "model": "t2f-t2w",
+      "mirror": true,
+      "sha256": "251af21a61ed3e5271b6391337a0bd95b8d1a87e1efb3f41e4839c208c2b4a90",
+      "containerCounts": [
+        8734900,
+        9476,
+        147416,
+        36208
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99998,
+          "TC": 0.99993,
+          "ET": 0.99996
+        },
+        "differing": 13
+      }
+    },
+    {
+      "file": "t2f.nii.gz",
+      "model": "t2f",
+      "mirror": true,
+      "sha256": "9859c4d9e058d701dbd65c683159e6b19c8b46fcb6e1e6a96646687d313278e3",
+      "containerCounts": [
+        8733720,
+        7730,
+        148079,
+        38471
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99999,
+          "TC": 0.99999,
+          "ET": 0.99992
+        },
+        "differing": 8
+      }
+    },
+    {
+      "file": "t2w.nii.gz",
+      "model": "t2w",
+      "mirror": true,
+      "sha256": "3899878ec1d986b190e2c3de77e7d487c8727497dcf1ff1def0bc714bf049f71",
+      "containerCounts": [
+        8736521,
+        10712,
+        147684,
+        33083
+      ],
+      "node": {
+        "dice": {
+          "WT": 0.99999,
+          "TC": 0.99999,
+          "ET": 0.99992
+        },
+        "differing": 9
+      }
+    }
+  ]
+}

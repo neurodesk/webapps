@@ -103,3 +103,29 @@ test('each catalogue lists only its own apps under its own brand', async () => {
   const neuro = renderLandingPage({ ...registry, apps: catalogApps(registry, findCatalog(registry, 'neuro')) }, standalone, findCatalog(registry, 'neuro'));
   for (const moved of ['musclemap', 'seedseg', 'carotid-flow']) assert.doesNotMatch(neuro, new RegExp(`data-app-id="${moved}"`));
 });
+
+test('microscopy catalogue groups apps by task without repeating its domain', async () => {
+  const { catalogApps, findCatalog } = await import('../scripts/lib/apps-registry.mjs');
+  const registry = await loadAppsRegistry();
+  const catalog = findCatalog(registry, 'microscopy');
+  const html = renderLandingPage({ ...registry, apps: catalogApps(registry, catalog) }, await loadStandalone(registry), catalog);
+  const { document } = new JSDOM(html).window;
+  assert.equal(document.querySelector('[data-category-filter="microscopy"]'), null);
+  const expected = {
+    stardist: 'segmentation',
+    microsam: 'segmentation',
+    'spot-detection': 'spot-detection',
+    'calcium-imaging': 'calcium-imaging',
+    zarro: 'visualization',
+    elastix: 'registration',
+    neuromorph: 'morphometry',
+    stitching: 'registration',
+    'structure-tensor': 'fibre-orientation',
+    'microscope-qc': 'quality-control',
+  };
+  const cards = [...document.querySelectorAll('[data-app-card]')];
+  assert.equal(cards.length, Object.keys(expected).length);
+  for (const [id, category] of Object.entries(expected)) {
+    assert.deepEqual(cards.filter(card => card.dataset.appId === id).map(card => card.dataset.category), [category]);
+  }
+});

@@ -4,11 +4,14 @@
 // geometry travels to and from niimath. STL is what slicers and 3D printers take.
 const MZ3_SIGNATURE = 23117;
 
-export function writeMz3(vertices, faces) {
-  const buffer = new ArrayBuffer(16 + faces.length * 4 + vertices.length * 4);
+// `colors`, when given, is one RGBA byte quadruple per vertex (mz3 attribute 4).
+export function writeMz3(vertices, faces, colors = null) {
+  if (colors && colors.length !== (vertices.length / 3) * 4) throw new Error('mz3 colours need four bytes per vertex.');
+  const colorBytes = colors ? colors.length : 0;
+  const buffer = new ArrayBuffer(16 + faces.length * 4 + vertices.length * 4 + colorBytes);
   const view = new DataView(buffer);
   view.setUint16(0, MZ3_SIGNATURE, true);
-  view.setUint16(2, 3, true); // faces and vertices, no colours or scalars
+  view.setUint16(2, colors ? 7 : 3, true); // faces and vertices, then colours when given
   view.setUint32(4, faces.length / 3, true);
   view.setUint32(8, vertices.length / 3, true);
   view.setUint32(12, 0, true);
@@ -21,6 +24,7 @@ export function writeMz3(vertices, faces) {
     view.setFloat32(offset, value, true);
     offset += 4;
   }
+  if (colors) new Uint8Array(buffer, offset, colorBytes).set(colors);
   return buffer;
 }
 

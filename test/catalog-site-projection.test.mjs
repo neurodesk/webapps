@@ -100,6 +100,28 @@ test('runtime references resolve against the file or the site root', () => {
   );
 });
 
+test('catalogue projection follows Vite preload paths from the app base', async t => {
+  const { root, siteDist } = await fixture(t);
+  const source = [
+    'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["../_runtime/codecs/1/blosc.js?v=1","/_runtime/codecs/1/zstd.js"])))=>i.map(i=>d[i]);',
+    'export const codec = () => import("../../_runtime/codecs/1/blosc.js");',
+  ].join('\n');
+  await put(siteDist, 'dicomview/assets/index-Abcd1234.js', source);
+  await put(siteDist, '_runtime/codecs/1/blosc.js', 'import "./helper.js";');
+  await put(siteDist, '_runtime/codecs/1/zstd.js', 'export {};');
+  await put(siteDist, '_runtime/codecs/1/helper.js', 'export {};');
+  const destination = join(root, 'out');
+  await projectCatalogSite({
+    repoRoot, siteDist, destination, registry, catalog: findCatalog(full, 'neuro'), information, standalone, notFoundTemplate,
+  });
+  for (const name of ['blosc.js', 'zstd.js', 'helper.js']) {
+    await access(join(destination, '_runtime/codecs/1', name));
+  }
+  assert.equal(await readFile(join(destination, 'dicomview/assets/index-Abcd1234.js'), 'utf8'), source);
+  assert.deepEqual(runtimeReferences(source, join(siteDist, 'dicomview/assets/index-Abcd1234.js'), siteDist)
+    .map(({ target }) => target), ['blosc.js', 'zstd.js', 'blosc.js'].map(name => join(siteDist, '_runtime/codecs/1', name)));
+});
+
 test('the hub site holds the hub page and nothing it does not load', async (t) => {
   const { root, siteDist } = await fixture(t);
   const hubDir = join(root, 'dist-sites/hub');
