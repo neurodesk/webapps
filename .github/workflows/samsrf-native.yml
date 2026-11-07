@@ -71,6 +71,8 @@ jobs:
           node-version: 22
       - name: Core unit tests
         run: cargo test --release --manifest-path exes/samsrf/Cargo.toml
+      - name: Reference execution provenance tests
+        run: python3 -m unittest discover -s packages/samsrf/validation/matlab -p test_environment.py
       - name: Clippy
         run: cargo clippy --manifest-path exes/samsrf/Cargo.toml --all-targets -- -D warnings
       - name: WebAssembly builds
@@ -160,6 +162,7 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           python3 packages/samsrf/validation/matlab/prepare.py reference-source "$RUNNER_TEMP/samsrf-matlab"
+          python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab"
       - name: Fetch pinned MATLAB inputs for focused diagnostics
         if: inputs.diagnostics_only
         run: python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json

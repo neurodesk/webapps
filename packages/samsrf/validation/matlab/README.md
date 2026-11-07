@@ -31,7 +31,9 @@ this source-level comparison.
 
 The workflow requests `MKL_CBWR=COMPATIBLE`, `MKL_NUM_THREADS=1`,
 `OMP_NUM_THREADS=1`, `MKL_DYNAMIC=FALSE` and `OMP_DYNAMIC=FALSE`. The
-recorder sets and checks MATLAB's computational thread limit with
+workflow saves the request environment before MATLAB starts. MATLAB can alter
+these variables during startup, so the recorder retains its process environment
+separately and sets and checks MATLAB's computational thread limit with
 `maxNumCompThreads(1)` and records the reported BLAS branch and CPU.
 The effective MKL branch and dynamic-thread setting are still unverified;
 `environment.json` lists these explicitly. A successful recording is not a
@@ -59,6 +61,7 @@ git clone https://github.com/samsrf/samsrf.git "$TMPDIR/samsrf-source"
 git -C "$TMPDIR/samsrf-source" checkout 41ed1e96cc4d9b8b750f5594a61845df21ab8984
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-input"
 python3 packages/samsrf/validation/matlab/prepare.py "$TMPDIR/samsrf-source" "$TMPDIR/samsrf-matlab"
+python3 packages/samsrf/validation/matlab/capture_environment.py "$TMPDIR/samsrf-matlab"
 ```
 
 Then call `record_reference(SOURCE, INPUT, OUTPUT, MATRIX_INPUT, SPM)` with
