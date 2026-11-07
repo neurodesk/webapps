@@ -169,12 +169,16 @@ host. A separate nonnegative control recomputes its own coarse seed.
 The recorder saves every objective call, raw/compressed/convolved prediction,
 correlation reduction, optimizer iteration procedure, termination reason,
 coarse fit threshold decision, acceptance decision, final QR factors and complex
-coefficients. `sourceExport` records the fit parameters, R² and coefficients
-that survive acceptance and precision conversion; rejected fits export zeros.
+coefficients. `sourceSavedFit` retains the complex fit parameters, R² and
+coefficients after the precision conversion in `samsrf_compress_srf`.
+`sourceExport` records their real parts, as `samsrf_expand_srf` does before
+GIfTI export. Both list coefficients in map order, Beta then Baseline; rejected
+fits contain zeros.
 `candidateBeta` is a diagnostic solve even when that candidate is rejected.
 The separate explicit QR solve is compared byte for byte with `mldivide` and
 labeled `qrMatchesMldivide`; the factors are not assumed to be its internal QR.
-A one-vertex Octave smoke test runs the recorder before MATLAB dispatch. It
+An Octave smoke test runs one pipeline vertex and all 156 numerical primitive
+cases before MATLAB dispatch. It
 checks executable plumbing with a stubbed environment; its outputs never
 become MATLAB fixtures. Complete diagnostics are approximately 200 MB per
 process before compression, or 0.8 GB across the two same-host pairs.
