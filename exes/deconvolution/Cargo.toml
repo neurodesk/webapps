@@ -1,0 +1,19 @@
+# Widefield and confocal 3D deconvolution: `core` holds the Gibson-Lanni PSF by direct
+# integration, FFT convolution and Richardson-Lucy with optional total-variation
+# regularisation; `wasm` is its wasm-bindgen surface for packages/deconvolution. Standalone
+# workspace so `cargo build` here never joins a parent one.
+[workspace]
+resolver = "2"
+members = ["core", "wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/neurodesk/webapps/tree/main/exes/deconvolution"
+
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
+codegen-units = 1

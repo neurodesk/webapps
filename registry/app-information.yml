@@ -2591,3 +2591,48 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+  deconvolution:
+    about:
+      - "Richardson-Lucy follows scikit-image's restoration.richardson_lucy (0.25, clip=False): the estimate starts flat at 0.5, both convolutions are linear FFT convolutions cropped as scipy's mode='same', and the image is taken as zero outside its borders. On two odd-sized test stacks the WebAssembly result equals scikit-image's to 2e-14 relative difference. With zero outside the image, a stack's outermost voxels brighten as the iterations increase; crop them away or keep a margin of background around the cells. The result is in the input's intensity units; negative input voxels (a subtracted camera offset) are set to 0."
+      - "The theoretical PSF is the scalar Gibson-Lanni model, integrated directly by Gauss-Legendre quadrature at every voxel's radius, with the optical path difference of Aguet et al. (2009) and psfmodels' coverslip and working-distance defaults. It agrees with an adaptive quadrature of the same integral to 1.5e-7 of the peak and with psfmodels 0.3.3 within 8e-5 where psfmodels integrates exactly; where the sample index is below the NA, psfmodels' own integration differs by up to 4e-3. The confocal PSF multiplies the excitation and emission PSFs, which assumes a pinhole much smaller than one Airy unit."
+      - "RL-TV divides each Richardson-Lucy update by 1 − λ div(∇u/|∇u|) (Dey et al. 2006), on the voxel grid. Against DeconvolutionLab2's RLTV on a noisy phantom both lower the error the same way; the two differ in starting estimate and boundary handling, so their voxels are not identical. A measured PSF must be on the image's voxel size; its border median is removed and it is centred on its brightest voxel."
+      - "The app reads one channel at one time point: TIFF, OME-TIFF and ImageJ stacks (any compression geotiff decodes), and NIfTI. The voxel size comes from OME-XML, ImageJ calibration or the NIfTI header, and can be corrected in the form. A run plans its WebAssembly memory first and refuses stacks that would need more than 2 GB; the example takes about 15 seconds for 20 iterations."
+      - "Example: HeLa cells stained for actin with phalloidin-488, imaged on a Zeiss LSM 710 confocal (63×/1.4 oil): the Raw.tif crop of Romain Guiet's Deconvolution Test Dataset (EPFL BIOP, Zenodo 5101351), unchanged, under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."
+    packages:
+      - { name: Deconvolution core (Rust → WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/packages/deconvolution, role: "Gibson-Lanni PSF, FFT convolution, Richardson-Lucy and RL-TV (@neurodesk/deconvolution, with RustFFT and RealFFT)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF decoding, through the shared webapp-components TIFF reader" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Deconvolution
+        title: Richardson-Lucy (Richardson)
+        reference: "Richardson WH. Bayesian-based iterative method of image restoration. Journal of the Optical Society of America. 1972;62(1):55–59."
+        doi: 10.1364/JOSA.62.000055
+      - group: Deconvolution
+        title: Richardson-Lucy (Lucy)
+        reference: "Lucy LB. An iterative technique for the rectification of observed distributions. The Astronomical Journal. 1974;79:745–754."
+        doi: 10.1086/111605
+      - group: Deconvolution
+        title: Richardson-Lucy with total variation
+        reference: "Dey N, Blanc-Féraud L, Zimmer C, Roux P, Kam Z, Olivo-Marin JC, Zerubia J. Richardson–Lucy algorithm with total variation regularization for 3D confocal microscope deconvolution. Microscopy Research and Technique. 2006;69(4):260–266."
+        doi: 10.1002/jemt.20294
+      - group: Deconvolution
+        title: scikit-image (reference Richardson-Lucy)
+        reference: "van der Walt S, Schönberger JL, Nunez-Iglesias J, et al. scikit-image: image processing in Python. PeerJ. 2014;2:e453."
+        doi: 10.7717/peerj.453
+        code: https://github.com/scikit-image/scikit-image
+      - group: Point spread function
+        title: Gibson-Lanni model
+        reference: "Gibson SF, Lanni F. Experimental test of an analytical model of aberration in an oil-immersion objective lens used in three-dimensional light microscopy. Journal of the Optical Society of America A. 1991;8(10):1601–1613."
+        doi: 10.1364/JOSAA.8.001601
+      - group: Point spread function
+        title: Optical path difference
+        reference: "Aguet F, Geissbühler S, Märki I, Lasser T, Unser M. Super-resolution orientation estimation and localization of fluorescent dipoles using 3-D steerable filters. Optics Express. 2009;17(8):6829–6848."
+        doi: 10.1364/OE.17.006829
+      - group: Example data
+        title: Deconvolution Test Dataset
+        reference: "Guiet R. Deconvolution Test Dataset. Zenodo. 2021. CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the example is its Raw.tif crop, unchanged."
+        doi: 10.5281/zenodo.5101351
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

@@ -7379,6 +7379,38 @@
         "kind": "example"
       }
     ],
+    "deconvolution": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif",
+        "sha256": "a79ed0b43b7ed37fa6b70eed6a2b72202daf67e528db871533d77c9b6ae8f266",
+        "bytes": 2782466,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/README.md",
+        "sha256": "12660b5f8e5ae189fb1ca916a5bd3997192ec4c66701ebbd37bb19844c01a667",
+        "bytes": 760,
+        "kind": "attribution",
+        "license": "CC-BY-4.0"
+      }
+    ],
+    "microscope-qc": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
+        "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
+        "bytes": 12590015,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif",
+        "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
+        "bytes": 461646,
+        "kind": "example",
+        "license": "CC0-1.0"
+      }
+    ],
     "microsam": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
@@ -7400,22 +7432,6 @@
         "bytes": 16496933,
         "kind": "model",
         "license": "CC-BY-4.0"
-      }
-    ],
-    "microscope-qc": [
-      {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
-        "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
-        "bytes": 12590015,
-        "kind": "example",
-        "license": "CC-BY-4.0"
-      },
-      {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif",
-        "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
-        "bytes": 461646,
-        "kind": "example",
-        "license": "CC0-1.0"
       }
     ]
   },

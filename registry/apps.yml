@@ -1637,3 +1637,29 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: deconvolution
+    catalog: microscopy
+    path: deconvolution
+    title: Deconvolution
+    description: Deconvolve widefield and confocal microscopy stacks.
+    categories: [preprocessing]
+    keywords: [deconvolution, Richardson-Lucy, RL-TV, total variation, point spread function, PSF, Gibson-Lanni, widefield, confocal, fluorescence, microscopy, TIFF]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff, nifti]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

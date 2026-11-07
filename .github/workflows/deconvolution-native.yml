@@ -1,0 +1,77 @@
+name: deconvolution-native
+
+# The Rust core behind packages/deconvolution. The core must pass
+# its unit tests natively and build for wasm32, the committed WebAssembly module in
+# packages/deconvolution/wasm must equal a rebuild from source with the pinned toolchain, and
+# the package tests hold the committed module to the scikit-image, psfmodels and quadrature
+# references in packages/deconvolution/validation.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - '.github/workflows/deconvolution-native.yml'
+      - '.github/actions/setup-wasm-opt/**'
+      - 'exes/deconvolution/**'
+      - 'packages/deconvolution/**'
+      - 'scripts/deconvolution-third-party-notices.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deconvolution-native.yml'
+      - '.github/actions/setup-wasm-opt/**'
+      - 'exes/deconvolution/**'
+      - 'packages/deconvolution/**'
+      - 'scripts/deconvolution-third-party-notices.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deconvolution-native-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    name: core tests and package tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Core unit tests
+        run: cargo test --release --manifest-path exes/deconvolution/Cargo.toml
+      - name: Clippy
+        run: cargo clippy --manifest-path exes/deconvolution/Cargo.toml --all-targets -- -D warnings
+      - name: WebAssembly build
+        run: cargo build --release --target wasm32-unknown-unknown -p deconvolution-wasm --manifest-path exes/deconvolution/Cargo.toml
+      - name: Third-party notices match the locked Cargo graph
+        run: python3 scripts/deconvolution-third-party-notices.py --check
+      - name: Package tests on the committed module
+        run: node --test packages/deconvolution/test/*.test.js
+
+  wasm-source:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    name: committed WASM equals a rebuild from source
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal --target wasm32-unknown-unknown
+      - name: Install wasm-pack 0.13.1
+        run: cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-opt
+        uses: ./.github/actions/setup-wasm-opt
+      - name: Rebuild and compare
+        run: bash packages/deconvolution/scripts/build-wasm.sh --check

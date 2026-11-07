@@ -405,6 +405,14 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - `validation/reference.json` is Python StarDist's result (`validation/reference.py`, environment in the README); the unit tests and `e2e/workflow.spec.js` read it. Rerecord it when the model, the example or the reference versions change.
 - The ONNX model is converted once by `validation/convert_model.py` and pinned in `models/stardist.manifest.json`, which also holds the model's thresholds, grid and tile overlap (94 px, from `_axes_tile_overlap`).
 
+## deconvolution
+
+- `exes/deconvolution` (Rust: `core` PSF, FFT and Richardson-Lucy; `wasm` its surface) builds the committed `packages/deconvolution/wasm`, which the app's worker and Node load. After a Rust change run `pnpm --filter @neurodesk/deconvolution build:wasm` (Rust 1.98.1, wasm-pack 0.13.1, binaryen `version_117`, SIMD128 on) and commit; `deconvolution-native.yml` fails when a rebuild differs. Then rerun `apps/deconvolution/scripts/record-reference.mjs`: the e2e tests hold the browser's example output to `e2e/expected.json` byte for byte.
+- Richardson-Lucy is scikit-image 0.25's `richardson_lucy` with `clip=False` (flat 0.5 start, zero outside the image, `mode="same"` crops); keep it so: `packages/deconvolution/test/rl.test.js` holds it to `validation/rl-reference.json` at 1e-9. RL-TV follows Dey et al. 2006 and is only qualitatively compared with DeconvolutionLab2 (`validation/dl2`, GPL, external).
+- The PSF is the scalar Gibson-Lanni integral by direct quadrature, not MicroscPSF-Py's Bessel-series fit, which is 3 % off at NA 1.4. `test/psf.test.js` holds it to adaptive quadrature (1e-6) and psfmodels (1e-4, except where light is evanescent, whose psfmodels error is documented in the package README). psfmodels and DeconvolutionLab2 are GPL: validation references only, never ported.
+- TIFF input and output go through the shared `@neurodesk/webapp-components/file-io/tiff` (photometric, alpha and palette rules, OME plane mapping, memory budget); `src/input.js` refuses channels, time points and non-square pixels from the metadata it returns. NIfTI written from a micrometre stack stores millimetres (`niftiGeometry`); the y axis is flipped so TIFF row 0 shows at the top.
+- `scripts/stage-notices.mjs` copies the package's LICENSE, NOTICE (fdlibm) and THIRD_PARTY_NOTICES.md and geotiff's licence into `public/licenses/` before `dev` and `build`; it is gitignored. Regenerate THIRD_PARTY_NOTICES.md with `scripts/deconvolution-third-party-notices.py` after a Cargo.lock change (`--check` runs in `deconvolution-native.yml`).
+
 ## samsrf
 
 - The app reproduces SamSrf X's `SamSrfAnalysis` (samsrf/samsrf@41ed1e96) for GIfTI input: `prf` (forward-model fit), `rc` (reverse-correlation pRF) and `cf` (reverse-correlation connective fields against a template map such as Benson). Numerics belong to `@neurodesk/samsrf`; the app does none.
