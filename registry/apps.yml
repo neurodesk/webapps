@@ -89,7 +89,7 @@ site:
       description: Prepare images with correction, denoising, brain extraction and image maths.
     - id: conversion
       title: Conversion
-      description: Convert scanner DICOM files to NIfTI and BIDS datasets.
+      description: Convert scanner and microscope files to NIfTI, BIDS and OME-Zarr.
     - id: privacy
       title: Privacy
       description: Remove identifying facial features from images before sharing.
@@ -1586,9 +1586,10 @@ apps:
       release: false
   - id: omezarr-convert
     path: omezarr-convert
+    catalog: microscopy
     title: OME-Zarr Converter
     description: Convert microscopy TIFF and NIfTI images to OME-Zarr.
-    categories: [image-processing]
+    categories: [conversion]
     keywords: [OME-Zarr, OME-NGFF, conversion, OME-TIFF, TIFF, microscopy, multiscale, pyramid, Zarr, bioformats2raw, ImageJ, NIfTI]
     anatomy: [any]
     modalities: [microscopy]

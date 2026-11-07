@@ -204,6 +204,7 @@ test('catalog assigns task categories and shares apps across related categories'
     brainchop: ['segmentation'],
     dcm2niix: ['conversion'],
     reproin: ['conversion'],
+    'omezarr-convert': ['conversion'],
     'calcium-imaging': ['calcium-imaging'],
     stardist: ['segmentation'],
     neuromorph: ['morphometry'],
