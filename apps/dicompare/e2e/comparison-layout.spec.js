@@ -16,7 +16,7 @@ for (const width of [320, 390]) {
       for (const file of dicomSeries({ series })) await writeFile(join(folder, file.name), file.buffer);
       folders.push(folder);
     }
-    await page.goto('./');
+    await page.goto('./workspace');
     await page.getByRole('button', { name: 'From data', exact: true }).click();
     await page.locator('#staged-load-schema').setInputFiles(folders[0]);
     const attach = page.locator('input[id^="load-data-"]');
