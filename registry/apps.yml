@@ -1586,6 +1586,8 @@ apps:
       release: false
   - id: histo2mri
     path: histo2mri
+    catalog: microscopy
+    also_in: [neuro]
     title: Histology to MRI
     description: Register 2D histology sections to an MRI volume
     categories: [registration]

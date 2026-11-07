@@ -208,6 +208,7 @@ test('catalog assigns task categories and shares apps across related categories'
     stardist: ['segmentation'],
     neuromorph: ['morphometry'],
     'structure-tensor': ['fibre-orientation'],
+    histo2mri: ['registration'],
     'spot-detection': ['spot-detection'],
     zarro: ['visualization'],
     fastprep: ['preprocessing', 'functional-imaging', 'pipelines'],
