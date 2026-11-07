@@ -1,6 +1,6 @@
 // 2D light-microscopy input (TIFF, OME-TIFF, ImageJ TIFF, PNG) and the channels the model sees.
 // DOM-free so Node tests can use it.
-import { openTiffPlanes, parseImagejDescription, parseOmeDescription } from "@neurodesk/webapp-components/file-io/tiff";
+import { omePageChannels, openTiffPlanes, parseImagejDescription, parseOmeDescription } from "@neurodesk/webapp-components/file-io/tiff";
 import { convertIndexedToRgb, decode as decodePng } from "fast-png";
 
 /**
@@ -31,39 +31,6 @@ function checkSize(name, width, height) {
 }
 
 /**
- * The channel each IFD holds, from the TiffData elements of a 2D OME image (Z and T are 1, so
- * the planes of one TiffData are consecutive channels). Without TiffData the IFDs are the channels
- * in order. Returns IFD index → channel index; throws on a layout it cannot interpret.
- */
-function tiffDataChannels(name, ome, channels) {
-  const refuse = (why) => new Error(`${name} maps its channels to TIFF pages in a way the app cannot read (${why}); save the channels as one OME-TIFF with tifffile or Fiji.`);
-  const map = new Map();
-  if (!ome.tiffData.length) {
-    for (let c = 0; c < channels; c++) map.set(c, c);
-    return map;
-  }
-  if (ome.tiffData.some((entry) => entry.uuid && entry.uuid !== ome.uuid)) throw refuse("planes in another file");
-  for (const entry of ome.tiffData) {
-    const integer = (key, fallback) => {
-      if (entry[key] === undefined) return fallback;
-      if (!/^\d+$/.test(entry[key])) throw refuse(`${key}="${entry[key]}"`);
-      return Number(entry[key]);
-    };
-    if (integer("FirstZ", 0) || integer("FirstT", 0)) throw refuse("a plane beyond Z 0, T 0");
-    const ifd = integer("IFD", 0);
-    const first = integer("FirstC", 0);
-    const count = integer("PlaneCount", entry.IFD === undefined ? channels : 1);
-    for (let k = 0; k < count; k++) {
-      if (first + k >= channels) throw refuse(`channel ${first + k + 1} of ${channels}`);
-      if (map.has(ifd + k)) throw refuse(`IFD ${ifd + k} named twice`);
-      map.set(ifd + k, first + k);
-    }
-  }
-  if (new Set(map.values()).size !== map.size) throw refuse("a channel in two IFDs");
-  return map;
-}
-
-/**
  * The plane layout OME-XML or an ImageJ description declares: channel names, in the order of the
  * kept pages (`ifds`, their IFD indices), when the pages are the channels of one 2D image. Z-stacks,
  * time series, several OME images and TiffData layouts it cannot follow are refused.
@@ -77,13 +44,7 @@ export function describedLayout(name, description, ifds) {
     if (ome.sizeZ > 1 || ome.sizeT > 1) {
       throw new Error(`${name} is a ${ome.sizeZ > 1 ? "Z-stack" : "time series"} (${ome.sizeZ} slices, ${ome.sizeT} time points); save one 2D plane to segment.`);
     }
-    const names = Array.from({ length: ome.sizeC }, (_, i) => ome.channels[i]?.name || `Channel ${i + 1}`);
-    const onePerPage = names.length === pages && ome.channels.every((channel) => channel.samplesPerPixel === 1);
-    if (!onePerPage) return { format: "OME-TIFF", names: null };
-    const map = tiffDataChannels(name, ome, names.length);
-    const missing = ifds.find((ifd) => !map.has(ifd));
-    if (missing !== undefined) throw new Error(`${name} has a TIFF page (IFD ${missing}) its OME-XML assigns to no channel; save the channels as one OME-TIFF with tifffile or Fiji.`);
-    return { format: "OME-TIFF", names: ifds.map((ifd) => names[map.get(ifd)]) };
+    return { format: "OME-TIFF", names: omePageChannels(name, ome, ifds) };
   }
   const imagej = parseImagejDescription(description);
   if (imagej) {
@@ -106,7 +67,7 @@ async function readTiff(name, buffer) {
   if (pages.some((page) => page.width !== width || page.height !== height)) {
     throw new Error(`${name} has pages of different sizes; save the 2D image to segment on its own.`);
   }
-  const bytes = pages.reduce((sum, page) => sum + page.decodedBytes, 0);
+  const bytes = tiff.decodedBytes();
   if (bytes > MAX_DECODED_BYTES) {
     throw new Error(`${name} holds ${(bytes / 2 ** 30).toFixed(1)} GB of pixels in ${pages.length} pages; save the 2D image to segment on its own.`);
   }

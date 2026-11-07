@@ -1,6 +1,6 @@
 // 2D microscopy image input (TIFF, OME-TIFF, PNG) and the nucleus table the app writes.
 // DOM-free so the Node tests and the worker can use it.
-import { openTiffPlanes, parseOmeDescription } from "@neurodesk/webapp-components/file-io/tiff";
+import { omePageChannels, openTiffPlanes, parseOmeDescription } from "@neurodesk/webapp-components/file-io/tiff";
 import { convertIndexedToRgb, decode as decodePng } from "fast-png";
 
 /** The largest image the app segments: a 2D image of at most 64 megapixels. */
@@ -24,14 +24,10 @@ function checkSize(name, width, height) {
   if (width * height > MAX_PIXELS) throw new Error(`${name} is ${width} × ${height}; split images over 64 megapixels into tiles first.`);
 }
 
-/** Channel names from OME-XML when every page is one channel of a single plane. */
-function omeChannelNames(ome, pages) {
-  if (!ome || ome.sizeZ * ome.sizeT !== 1 || ome.sizeC !== pages || ome.channels.length !== pages) return null;
-  return ome.channels.map((channel, index) => channel.name ?? `Channel ${index + 1}`);
-}
-
 async function readTiff(name, buffer) {
-  const tiff = await openTiffPlanes(buffer, { pageLimit: MAX_PLANES + 1 });
+  // A palette page is its colour indices, as tifffile and Python StarDist read it: Fiji saves an
+  // 8-bit channel with a coloured LUT (a blue DAPI channel) as a palette TIFF.
+  const tiff = await openTiffPlanes(buffer, { pageLimit: MAX_PLANES + 1, palette: "index" });
   const { pages } = tiff;
   if (pages.length > MAX_PLANES) throw new Error(`${name} has more than ${MAX_PLANES} planes; save the plane to segment as its own image.`);
   if (!pages.length) throw new Error(`${name} has no image pages.`);
@@ -40,12 +36,12 @@ async function readTiff(name, buffer) {
   if (pages.some((page) => page.width !== width || page.height !== height)) {
     throw new Error(`${name} has pages of different sizes; save the plane to segment as its own image.`);
   }
-  const bytes = pages.reduce((sum, page) => sum + page.decodedBytes, 0);
+  const bytes = tiff.decodedBytes();
   if (bytes > MAX_DECODED_BYTES) {
     throw new Error(`${name} holds ${(bytes / 2 ** 30).toFixed(1)} GB of pixels in ${pages.length} pages; save the plane to segment as its own image.`);
   }
   const ome = parseOmeDescription(tiff.description);
-  const names = omeChannelNames(ome, pages.length);
+  const names = ome ? omePageChannels(name, ome, pages.map((page) => page.ifd)) : null;
   const planes = [];
   for (const [index, samples] of (await tiff.readPlanes()).entries()) {
     for (const { kind, data } of samples) {

@@ -96,6 +96,14 @@ test("OME-XML with a namespace prefix, single quotes and entities is understood"
   assert.throws(() => describedLayout("x.ome.tif", two, [0, 1]), /holds 2 OME images/);
 });
 
+test("a palette TIFF is its red, green and blue colours, offered together", async () => {
+  const image = await readImage("palette-blue.tif", fixture("palette-blue.tif"));
+  assert.deepEqual(image.planes.map((plane) => plane.label), ["red", "green", "blue"]);
+  assert.deepEqual(channelChoices(image).map((item) => item.id), ["rgb", "0", "1", "2"]);
+  const index = Array.from({ length: 12 * 10 }, (_, i) => base(i % 10, Math.floor(i / 10)) % 4);
+  assert.deepEqual(image.planes.map((plane) => Array.from(plane.data)), [index.map(() => 0), index.map(() => 0), index.map((k) => k * 80)]);
+});
+
 test("palette, 1-bit and 16-bit PNGs are unpacked", async () => {
   const palette = await readImage("palette.png", fixture("palette.png"));
   assert.deepEqual(palette.planes.map((plane) => plane.label), ["red", "green", "blue"]);
@@ -127,4 +135,11 @@ test("images over 4096 × 4096 pixels are refused before decoding", async () => 
   };
   await assert.rejects(readImage("big.tif", header(4097, 4096)), /4097 × 4096; split images over 16 megapixels \(4096 × 4096\) into tiles first/);
   await assert.rejects(readImage("big.tif", header(4096, 4096)), (error) => !/megapixels/.test(error.message));
+  // A sample type geotiff cannot decode (64-bit unsigned) is refused for its size first.
+  const uint64 = header(4097, 4096);
+  const view = new DataView(uint64);
+  const ifd = view.getUint32(4, true);
+  assert.equal(view.getUint16(ifd + 2 + 36, true), 258);
+  view.setUint16(ifd + 2 + 36 + 8, 64, true);
+  await assert.rejects(readImage("big.tif", uint64), /4097 × 4096; split images over 16 megapixels \(4096 × 4096\) into tiles first/);
 });
