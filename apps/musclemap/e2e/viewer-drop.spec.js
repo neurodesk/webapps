@@ -98,32 +98,64 @@ test('Undo after a drop leaves out files removed before it', async ({ page }) =>
   await expect(page.locator('#fileList .file-name')).toHaveText(['b_T1w.nii']);
 });
 
-test('a NIfTI chosen while the viewer starts is loaded once it is ready', async ({ page }) => {
-  // Hold animation frames so the viewer setup, which waits for one, cannot finish.
+// Hold animation frames so the viewer setup, which waits for one, cannot finish.
+async function openWithViewerHeld(page) {
   await page.addInitScript(() => {
     const held = [];
     const requestFrame = window.requestAnimationFrame.bind(window);
+    let holding = true;
     window.requestAnimationFrame = (callback) => {
-      if (window.releaseFrames) return requestFrame(callback);
+      if (!holding) return requestFrame(callback);
       held.push(callback);
       return held.length;
     };
-    window.releaseFrames = null;
     window.releaseHeldFrames = () => {
-      window.releaseFrames = true;
+      holding = false;
       for (const callback of held.splice(0)) requestFrame(callback);
     };
   });
   await page.goto('/index.html');
   await expect.poll(() => page.evaluate(() => Boolean(window.app?.fileIOController))).toBe(true);
+  // The race only exists while the viewer is still starting.
+  expect(await page.evaluate(() => window.app.viewerAvailable)).toBe(false);
+}
 
-  await page.locator('#fileInput').setInputFiles({
-    name: 'early_T1w.nii',
-    mimeType: 'application/octet-stream',
-    buffer: createInt16Nifti([10, 20, 30]),
-  });
+async function releaseViewer(page) {
   await page.evaluate(() => window.releaseHeldFrames());
+  await expect.poll(() => page.evaluate(() => window.app.viewerAvailable)).toBe(true);
+}
+
+function niftiUpload(name) {
+  return { name, mimeType: 'application/octet-stream', buffer: createInt16Nifti([10, 20, 30]) };
+}
+
+test('a NIfTI chosen while the viewer starts is loaded once it is ready', async ({ page }) => {
+  await openWithViewerHeld(page);
+
+  await page.locator('#fileInput').setInputFiles(niftiUpload('early_T1w.nii'));
+  await releaseViewer(page);
 
   await expect(page.locator('#fileList .file-name')).toHaveText(['early_T1w.nii']);
   await expect.poll(() => page.evaluate(() => window.app.fileIOController.getActiveFile()?.name)).toBe('early_T1w.nii');
+});
+
+test('two selections while the viewer starts both join the inputs', async ({ page }) => {
+  await openWithViewerHeld(page);
+
+  await page.locator('#fileInput').setInputFiles(niftiUpload('first_T1w.nii'));
+  await page.locator('#fileInput').setInputFiles(niftiUpload('second_T2w.nii'));
+  await releaseViewer(page);
+
+  await expect(page.locator('#fileList .file-name')).toHaveText(['first_T1w.nii', 'second_T2w.nii']);
+});
+
+test('a drop while the viewer starts replaces a selection made before it', async ({ page }) => {
+  await openWithViewerHeld(page);
+
+  await page.locator('#fileInput').setInputFiles(niftiUpload('chosen_T1w.nii'));
+  await page.locator('#fileInput').dispatchEvent('nd-replace');
+  await page.locator('#fileInput').setInputFiles(niftiUpload('dropped_T1w.nii'));
+  await releaseViewer(page);
+
+  await expect(page.locator('#fileList .file-name')).toHaveText(['dropped_T1w.nii']);
 });

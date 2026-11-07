@@ -348,12 +348,20 @@ class MuscleMapApp {
 
   setupFileInput() {
     const fileInput = document.getElementById('fileInput');
-    fileInput?.addEventListener('change', async (e) => {
-      await this.viewerSetup;
-      this.fileIOController.handleFileInput(e);
+    if (!fileInput) return;
+    // Selections and page-drop clears run in order once the viewer is ready.
+    // Each selection's files are taken now: the input's list changes with the next one.
+    let pending = this.viewerSetup;
+    const enqueue = (step) => {
+      pending = pending.then(step).catch((error) => console.error('MuscleMap file input failed:', error));
+    };
+    fileInput.addEventListener('change', () => {
+      const files = Array.from(fileInput.files);
+      fileInput.value = '';
+      enqueue(() => this.fileIOController.handleFileInput({ target: { files, value: '' } }));
     });
     // The page-wide drop replaces the inputs; "Load files…" adds to them.
-    fileInput?.addEventListener('nd-replace', () => this.fileIOController.clearFiles());
+    fileInput.addEventListener('nd-replace', () => enqueue(() => this.fileIOController.clearFiles()));
   }
 
   setupEventListeners() {
