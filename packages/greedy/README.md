@@ -55,7 +55,9 @@ build in Chromium and this build in Node gave byte-identical affine and warp
 outputs. The native `greedy-rs` does not: its libm rounds differently, and the
 same affine differed in the twelfth digit.
 
-`src/worker.js` runs this build in a browser module worker (`affine` and
+A bundled page or worker imports the build itself as `@neurodesk/greedy/wasm-single` (its
+`.wasm` is found relative to the glue, so a bundler emits it beside it); histo2mri runs it in
+its own worker this way. `src/worker.js` runs this build in a browser module worker (`affine` and
 `rigid` requests), so a page and Node run the same bytes. BISON uses it for
 its linear registrations; serve `src/` beside `wasm-single/`.
 

@@ -2200,7 +2200,7 @@
       "downloads": [],
       "containers": []
     },
-    "microsam": {
+    "histo2mri": {
       "desktop": true,
       "profile": "interactive",
       "assets": [],
@@ -2208,6 +2208,13 @@
       "containers": []
     },
     "microscope-qc": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "microsam": {
       "desktop": true,
       "profile": "interactive",
       "assets": [],

@@ -65,3 +65,23 @@ export function readTiffStack<Data extends TiffSampleArray = TiffSampleArray>(bu
 export function imagejDescription(options: { frames: number; frameInterval?: number | null; unit?: string | null; min?: number | null; max?: number | null }): string;
 /** Uncompressed little-endian baseline TIFF, one strip per page; `rgb` writes Uint8Array red, green, blue triplets as RGB pages. */
 export function writeTiffStack(stack: { width: number; height: number; data: TiffSampleArray; description?: string; pixelSize?: { x: number; y: number } | null; rgb?: boolean }): Uint8Array;
+
+export interface TiffImage {
+  width: number;
+  height: number;
+  /** 1 for greyscale, 3 for RGB. */
+  channels: 1 | 3;
+  bitsPerSample: 8 | 16;
+  /** 255 or 65535. */
+  maxValue: number;
+  /** Interleaved samples in row, column, channel order. */
+  data: Uint8Array | Uint16Array;
+  /** Micrometres from OME-XML or ImageJ; null otherwise (a plain TIFF's resolution tags are not a calibration). */
+  pixelSize: { x: number; y: number } | null;
+  /** What the file declares: OME/ImageJ declared spacing, or a plain TIFF's X/YResolution as 1/resolution in its ResolutionUnit. */
+  declaredSpacing: { x: number | null; y: number | null; z: number | null; unit: string | null } | null;
+  metadata: { kind: 'ome' | 'imagej' | 'baseline'; description: string };
+}
+
+/** One 2-D greyscale or RGB image (a section or slide overview); refuses stacks, channel stacks and over-budget images before decoding. */
+export function readTiffImage(buffer: ArrayBuffer, options?: { signal?: AbortSignal; maxBytes?: number }): Promise<TiffImage>;

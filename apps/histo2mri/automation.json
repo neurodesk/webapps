@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 2,
+  "app": "histo2mri",
+  "title": "Histology to MRI",
+  "description": "Register 2D histology sections to an MRI volume: the section plane from an approximate slice, Greedy NMI rigid, affine and deformable registration in that plane, and an optional search of the plane's offset and tilt.",
+  "defaultOperation": "register",
+  "operations": {
+    "register": {
+      "title": "Register sections",
+      "description": "Register one or more histology sections to the MRI near the given slice and return each section warped onto its plane, Greedy-compatible transforms and the sections drawn into the MRI grid.",
+      "mode": "batch",
+      "inputs": {
+        "mri": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "description": "One 3D MRI volume (NIfTI)",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "sections": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tiff",
+            "ome-tiff",
+            "png",
+            "jpeg"
+          ],
+          "description": "One or more 2D histology sections (RGB or greyscale TIFF, PNG or JPEG), in file-name order",
+          "minimum": 1,
+          "maximum": 16
+        }
+      },
+      "parameters": {
+        "axis": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 2,
+          "description": "MRI voxel axis the sections are cut across (0 = i, 1 = j, 2 = k)"
+        },
+        "index": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Approximate MRI slice index of the first section"
+        },
+        "step": {
+          "type": "number",
+          "default": 1,
+          "description": "Slices between consecutive sections"
+        },
+        "tiltA": {
+          "type": "number",
+          "minimum": -30,
+          "maximum": 30,
+          "default": 0,
+          "description": "Starting tilt about the plane's first in-plane axis, in degrees"
+        },
+        "tiltB": {
+          "type": "number",
+          "minimum": -30,
+          "maximum": 30,
+          "default": 0,
+          "description": "Starting tilt about the plane's second in-plane axis, in degrees"
+        },
+        "contrast": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "haematoxylin",
+            "eosin",
+            "dab"
+          ],
+          "default": "auto",
+          "description": "Section contrast: brightness with the background made dark, or a colour-deconvolution stain channel"
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7"
+          ],
+          "default": "auto",
+          "description": "Section orientation: automatic, or k for a rotation of (k mod 4) × 90° after a flip when k ≥ 4"
+        },
+        "pixelSize": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Section pixel size in micrometres; estimated from the tissue area when absent"
+        },
+        "refinePlane": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search the plane's offset and tilt for the best NMI"
+        },
+        "deformable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Finish with a deformable (stationary velocity) registration"
+        }
+      },
+      "artifacts": {
+        "warped": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1
+        },
+        "plane": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1
+        },
+        "section": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1
+        },
+        "affine": {
+          "type": "neuro:transform",
+          "mediaType": "text/plain",
+          "minimum": 1
+        },
+        "warp": {
+          "type": "neuro:displacement-field",
+          "mediaType": "application/gzip",
+          "minimum": 0
+        },
+        "registration": {
+          "type": "neuro:report",
+          "mediaType": "application/json",
+          "minimum": 1
+        },
+        "volume": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

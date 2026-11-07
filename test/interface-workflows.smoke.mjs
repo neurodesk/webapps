@@ -811,6 +811,40 @@ try {
     await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
+  await check('histo2mri', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#mriInput').setInputFiles(nifti('interface-t1.nii'));
+    await expect(page.locator('#mriInfo')).toHaveText('interface-t1.nii · 16 × 16 × 16');
+    await expect(page.locator('#runButton')).toBeDisabled();
+    const section = writeTiffStack({ width: 24, height: 20, data: Uint8Array.from({ length: 480 }, (_, i) => i % 200) });
+    await page.locator('#sectionInput').setInputFiles({ name: 'interface-section.tif', mimeType: 'image/tiff', buffer: Buffer.from(section) });
+    await expect(page.locator('#sectionInfo')).toHaveText('interface-section.tif · 24 × 20');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await page.locator('#sliceIndex').fill('9');
+    // Values chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#contrast')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#contrast').selectOption('haematoxylin');
+    await page.locator('#searchTilt').fill('2');
+    await advanced.tap();
+    await expect(page.locator('#contrast')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#sliceIndex')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#contrast')).toHaveValue('haematoxylin');
+    await expect(page.locator('#searchTilt')).toHaveValue('2');
+    await expect(page.locator('#sliceIndex')).toHaveValue('9');
+    // A greyscale section cannot be colour-deconvolved: the run reports it and keeps the inputs.
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toContainText('Colour deconvolution needs an RGB image', { timeout: 60000 });
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+    await expect(page.locator('#runButton')).toBeEnabled();
+  });
   await check('microscope-qc', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);

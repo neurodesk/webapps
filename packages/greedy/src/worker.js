@@ -1,6 +1,6 @@
 // A module worker that runs the single-threaded Greedy build (wasm-single/), the bytes the Node
 // command lines run, so a browser and Node give the same matrix. Serve src/ beside wasm-single/.
-//   in:  { id, method: 'affine' | 'rigid', fixed, moving, wasm? }   raw .nii bytes; wasm: moved .wasm URL
+//   in:  { id, method: 'affine' | 'rigid', fixed, moving, iterations?, initial?, wasm? }   raw .nii bytes; wasm: moved .wasm URL
 //        { id, method: 'svf', fixed, moving, matrix, mask, wasm? }   registerSvfGreedy's arguments
 //   out: { id, result, heapBytes } | { id, error, heapBytes }   result: the matrix text, or the warp
 import init, * as api from "../wasm-single/greedy_rs_wasm.js";

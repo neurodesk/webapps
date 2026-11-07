@@ -1,0 +1,106 @@
+// DOM-independent app config and input rules, unit-tested in Node (test/config.test.js).
+import automation from "../automation.json" with { type: "json" };
+import { DEFAULTS } from "./core/register.js";
+import { MAX_VOLUME_OUTPUT_BYTES } from "./core/outputs.js";
+
+export const APP = Object.freeze({
+  id: "histo2mri",
+  title: automation.title,
+  version: "0.0.20261105",
+});
+
+const NIFTI = /\.nii(\.gz)?$/i;
+const RASTER = /\.(tiff?|png|jpe?g)$/i;
+
+/** Splits chosen or dropped files into the MRI (NIfTI) and the histology sections (TIFF, PNG, JPEG). */
+export function classifyFiles(files) {
+  const mri = files.filter((file) => NIFTI.test(file.name));
+  const sections = files.filter((file) => RASTER.test(file.name));
+  const other = files.filter((file) => !NIFTI.test(file.name) && !RASTER.test(file.name));
+  if (mri.length > 1) throw new Error("Choose one MRI volume (NIfTI).");
+  if (other.length) throw new Error(`${other[0].name} is not a NIfTI MRI or a TIFF, PNG or JPEG section.`);
+  return { mri: mri[0] ?? null, sections: sections.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })) };
+}
+
+/**
+ * A section's output files, in the order a run returns them: each kind is the file's automation
+ * role and its key in outputNames. The warp is written only when the run keeps it.
+ */
+export const SECTION_OUTPUT_KINDS = ["warped", "plane", "section", "affine", "warp", "registration"];
+
+/** A section file's output names by kind, from its name without the extension. */
+export function outputNames(name) {
+  const base = name.replace(/\.ome\.tiff?$/i, "").replace(/\.(tiff?|png|jpe?g)$/i, "").replace(/[^A-Za-z0-9._-]+/g, "_");
+  return {
+    warped: `${base}_warped_rgba.nii.gz`,
+    plane: `${base}_mri_plane.nii.gz`,
+    section: `${base}_section.nii.gz`,
+    affine: `${base}_affine.mat`,
+    warp: `${base}_warp.nii.gz`,
+    registration: `${base}_registration.json`,
+  };
+}
+
+const finite = (value) => value !== "" && value !== null && value !== undefined && Number.isFinite(Number(value));
+
+/**
+ * The run settings from the form or automation parameters, checked against the MRI's size.
+ * `dims` are the MRI's three dimensions. `volumeOutput` is false, with a warning, when the
+ * sections' copy in the MRI grid would exceed `maxVolumeBytes`; the per-section files are
+ * written either way.
+ */
+export function runSettings(values, dims, sectionCount = 1, { maxVolumeBytes = MAX_VOLUME_OUTPUT_BYTES } = {}) {
+  const axis = Number(values.axis ?? 2);
+  if (![0, 1, 2].includes(axis)) throw new Error("The slice axis must be i, j or k.");
+  const index = Number(values.index);
+  if (!finite(values.index) || index < 0 || index > dims[axis] - 1) throw new Error(`Slice must be between 0 and ${dims[axis] - 1}.`);
+  const step = finite(values.step) ? Number(values.step) : 1;
+  const last = index + (sectionCount - 1) * step;
+  if (last < 0 || last > dims[axis] - 1) throw new Error(`With ${sectionCount} sections ${step} slices apart the last section is outside the MRI.`);
+  const tilt = [Number(values.tiltA ?? 0), Number(values.tiltB ?? 0)];
+  if (tilt.some((value) => !Number.isFinite(value) || Math.abs(value) > 30)) throw new Error("Tilts are degrees between −30 and 30.");
+  const pixelSize = finite(values.pixelSize) ? Number(values.pixelSize) : null;
+  if (pixelSize !== null && !(pixelSize > 0)) throw new Error("The section pixel size must be positive (µm).");
+  const searchOffset = Number(values.searchOffset ?? DEFAULTS.searchOffset);
+  const searchTilt = Number(values.searchTilt ?? DEFAULTS.searchTilt);
+  if (!(searchOffset >= 0 && searchOffset <= 10) || !(searchTilt >= 0 && searchTilt <= 10)) throw new Error("Search ranges are 0–10 slices and 0–10°.");
+  const contrast = values.contrast ?? DEFAULTS.contrast;
+  if (!["auto", "haematoxylin", "eosin", "dab"].includes(contrast)) throw new Error(`Unknown contrast ${contrast}.`);
+  const orientation = values.orientation ?? DEFAULTS.orientation;
+  if (orientation !== "auto" && !/^[0-7]$/.test(String(orientation))) throw new Error(`Unknown orientation ${orientation}.`);
+  const volumeBytes = dims[0] * dims[1] * dims[2] * 4;
+  const volumeOutput = volumeBytes <= maxVolumeBytes;
+  return {
+    volumeOutput,
+    warnings: volumeOutput ? [] : [`The MRI grid is too large for a colour copy of the sections (${Math.round(volumeBytes / 1024 ** 2)} MB); each section's files are written without it.`],
+    plane: { axis, index, step, tilt },
+    options: {
+      contrast,
+      orientation: orientation === "auto" ? "auto" : Number(orientation),
+      pixelSize,
+      refinePlane: values.refinePlane !== false,
+      searchOffset,
+      searchTilt,
+      deformable: values.deformable !== false,
+    },
+  };
+}
+
+/**
+ * The MRI as posted to a run's worker, with the buffers to transfer: shared voxels go as they
+ * are, anything else as a copy the worker takes over. SharedArrayBuffer is undefined on a page
+ * that is not cross-origin isolated.
+ */
+export function workerVolume(volume) {
+  if (typeof SharedArrayBuffer !== "undefined" && volume.data.buffer instanceof SharedArrayBuffer) return { volume, transfer: [] };
+  const data = volume.data.slice();
+  return { volume: { ...volume, data }, transfer: [data.buffer] };
+}
+
+/** The status-bar line at the end of a run: the final NMI per section and any output left out. */
+export function runSummary(reports, settings) {
+  const count = `${reports.length} section${reports.length > 1 ? "s" : ""}`;
+  const nmi = reports.map((report) => report.nmi.final.toFixed(3)).join(", ");
+  const skipped = settings.volumeOutput ? "" : "; MRI grid too large, its colour copy was skipped";
+  return `Registered ${count}; NMI ${nmi}${skipped}`;
+}
