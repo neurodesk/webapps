@@ -376,6 +376,8 @@ test('omePageChannels names pages through TiffData, or in channel order without 
   assert.equal(names(omeXml('', undefined, 'SizeC="2" SizeZ="3" SizeT="1"')), null);
   assert.equal(names(omeXml(''), [0]), null);
   assert.equal(names(omeXml('', '<Channel Name="RGB" SamplesPerPixel="3"/><Channel/>')), null);
+  // An inflated SizeC is compared with the page count before any name is allocated.
+  assert.equal(names(omeXml('', undefined, 'SizeC="10000000" SizeZ="1" SizeT="1"'), [0]), null);
 });
 
 test('omePageChannels refuses TiffData it cannot follow', () => {

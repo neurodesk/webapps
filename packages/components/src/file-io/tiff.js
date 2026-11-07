@@ -430,9 +430,9 @@ export async function openTiffPlanes(buffer, { pageLimit = Infinity, palette = '
  * @returns {string[] | null}
  */
 export function omePageChannels(name, ome, ifds) {
-  if (ome.sizeZ > 1 || ome.sizeT > 1) return null;
-  const names = Array.from({ length: ome.sizeC }, (_, i) => ome.channels[i]?.name || `Channel ${i + 1}`);
-  if (names.length !== ifds.length || !ome.channels.every((channel) => channel.samplesPerPixel === 1)) return null;
+  if (ome.sizeZ > 1 || ome.sizeT > 1 || ome.sizeC !== ifds.length) return null;
+  if (!ome.channels.every((channel) => channel.samplesPerPixel === 1)) return null;
+  const names = ifds.map((_, i) => ome.channels[i]?.name || `Channel ${i + 1}`);
   const map = tiffDataChannels(name, ome, names.length);
   const missing = ifds.find((ifd) => !map.has(ifd));
   if (missing !== undefined) throw new Error(`${name} has a TIFF page (IFD ${missing}) its OME-XML assigns to no channel; save the channels as one OME-TIFF with tifffile or Fiji.`);
