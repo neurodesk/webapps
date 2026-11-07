@@ -1013,6 +1013,25 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
 
+  apps/lightsheet-atlas:
+    dependencies:
+      '@neurodesk/greedy':
+        specifier: workspace:*
+        version: link:../../packages/greedy
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
   apps/me-ica:
     dependencies:
       '@neurodesk/webapp-components':
@@ -1776,6 +1795,9 @@ importers:
       geotiff:
         specifier: 3.0.5
         version: 3.0.5
+      zarrita:
+        specifier: 0.7.5
+        version: 0.7.5
       zod:
         specifier: ^4.6.5
         version: 4.6.5
