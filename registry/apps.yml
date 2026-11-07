@@ -89,7 +89,7 @@ site:
       description: Prepare images with correction, denoising, brain extraction and image maths.
     - id: conversion
       title: Conversion
-      description: Convert scanner and microscope files to NIfTI, BIDS and OME-Zarr.
+      description: Convert scanner DICOM files to NIfTI and BIDS datasets.
     - id: privacy
       title: Privacy
       description: Remove identifying facial features from images before sharing.
@@ -1579,6 +1579,32 @@ apps:
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: microscope-qc
+    path: microscope-qc
+    catalog: microscopy
+    title: Microscope QC
+    description: PSF resolution from beads and field illumination flatness
+    categories: [quality-control]
+    keywords: [microscopy, quality control, QC, PSF, point spread function, resolution, FWHM, sub-resolution beads, field illumination, flatness, uniformity, centering accuracy, MetroloJ_QC, QUAREP-LiMi, OME-TIFF]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff]
+    hardware: cpu
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    handoff: none
     ci:
       toolchains: [node]
       shared_runtime: false

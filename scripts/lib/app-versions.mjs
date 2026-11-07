@@ -195,6 +195,9 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
   'omezarr-convert': [
     { file: 'apps/omezarr-convert/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],
+  'microscope-qc': [
+    { file: 'apps/microscope-qc/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
   hmc: [
     { file: 'apps/hmc/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],
