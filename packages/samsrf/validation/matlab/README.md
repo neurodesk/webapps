@@ -19,8 +19,10 @@ separately from stock container results.
 The manual `samsrf-native` workflow can record these cases with
 `record_matlab=true`. Set `include_matrix=false` for a shorter diagnostic run
 that omits participant pipelines while retaining numerical primitive cases.
-The workflow runs two independent processes on each of `ubuntu-22.04` and
-`ubuntu-24.04`. Runner labels do not guarantee a CPU vendor. Use each receipt's
+Focused diagnostics run twice in independent MATLAB processes within each
+job on `ubuntu-22.04` and `ubuntu-24.04`. The same-host comparison requires
+every numerical array and case decision to match exactly. The two jobs
+separately provide cross-machine evidence. Runner labels do not guarantee a CPU vendor. Use each receipt's
 `cpu` field to establish which Intel or AMD machines actually ran the cases.
 Do not pool the receipts or relabel the previous references.
 
@@ -166,7 +168,16 @@ case runs with both the saved coarse seed and a seed recomputed on the current
 host. A separate nonnegative control recomputes its own coarse seed.
 The recorder saves every objective call, raw/compressed/convolved prediction,
 correlation reduction, optimizer iteration procedure, termination reason,
-acceptance decision, and final QR factors and complex coefficients.
+coarse fit threshold decision, acceptance decision, final QR factors and complex
+coefficients. `sourceExport` records the fit parameters, R² and coefficients
+that survive acceptance and precision conversion; rejected fits export zeros.
+`candidateBeta` is a diagnostic solve even when that candidate is rejected.
+The separate explicit QR solve is compared byte for byte with `mldivide` and
+labeled `qrMatchesMldivide`; the factors are not assumed to be its internal QR.
+A one-vertex Octave smoke test runs the recorder before MATLAB dispatch. It
+checks executable plumbing with a stubbed environment; its outputs never
+become MATLAB fixtures. Complete diagnostics are approximately 200 MB per
+process before compression, or 0.8 GB across the two same-host pairs.
 The objective remains the actual source `prf_errfun`; diagnostic computations
 do not supply its return value. The callback uses the source's nonfinite stop
 rule. This isolates CSS optimizer paths without rerunning the participant

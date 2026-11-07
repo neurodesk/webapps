@@ -1,4 +1,5 @@
-function record_css_diagnostics(source, reference, output)
+function record_css_diagnostics(source, reference, output, smoke)
+if nargin < 4, smoke = false; end
 % Isolate the remaining full-pipeline CSS fits using recorded MATLAB inputs.
 addpath(genpath(source));
 if ~isfolder(output), mkdir(output); end
@@ -10,13 +11,29 @@ cd(output);
 environment = reference_environment('source-diagnostics');
 write_json('environment.json', environment);
 cases = {};
-for precision = {'single', 'double'}
+precisions = {'single','double'};
+controls = [false true];
+vertices = [15 18 22 26 47 58 67 73 74 79 81 88 89];
+seedSources = {'recorded','recomputed'};
+if smoke
+    precisions = {'single'};
+    controls = false;
+    vertices = 15;
+    seedSources = {'recorded'};
+end
+for precision = precisions
     kind = precision{1};
     metadata = jsondecode(fileread(fullfile(reference, ['pipeline_' kind '_css.json'])));
     assert(strcmp(metadata.precision, kind), 'Wrong pipeline precision');
     pre = jsondecode(fileread(fullfile(reference, [metadata.preprocessing '.json'])));
     assert(strcmp(pre.courses.class, kind), 'Wrong observation class');
-    model = metadata.model;
+    model = samsrf_model_defaults('samsrf_fit_prf', metadata.model);
+    assert(~model.Only_Positive_Coarse_Fits && ~model.Aperture_Mean_Response && ...
+        model.Smoothed_Coarse_Fit == 0 && isempty(model.Seed_Fine_Fit) && ...
+        ~isfield(model,'Hooke_Jeeves_Steps') && ~model.Polar_Search_Space && ...
+        isempty(model.Hrf) && ~model.Replace_Bad_Fits, 'Unsupported diagnostic model');
+    model.Scaled_Param(end+1) = 0;
+    model.Only_Positive(end+1) = 1;
     observations = cast(read_array(reference, pre.courses), kind);
     grid = read_array(reference, metadata.grid);
     recordedCorrelations = cast(read_array(reference, metadata.coarseCorrelations), kind);
@@ -24,7 +41,8 @@ for precision = {'single', 'double'}
     aps = load(fullfile(reference, [model.Aperture_File '.mat']));
     xy = aps.ApXY / max(abs(aps.ApXY(:))) * model.Scaling_Factor;
     profile = str2func(model.Prf_Function);
-    for nonnegative = [false true]
+    assert(size(observations,2) <= model.Coarse_Fit_Block_Size, 'Recorder requires one coarse block');
+    for nonnegative = controls
         frames = aps.ApFrm;
         if nonnegative
             frames = max(frames, 0);
@@ -43,9 +61,9 @@ for precision = {'single', 'double'}
             'recordedCorrelations',array_file([coarseId '_recorded'],recordedCorrelations));
         cases{end+1} = coarse; %#ok<AGROW>
         % MATLAB columns 47 and 88 are the material double discrepancies in #730.
-        for vertex = [15 18 22 26 47 58 67 73 74 79 81 88 89]
+        for vertex = vertices
             % Both seeds separate reference-host coarse ties from fine-fit changes.
-            for seedSource = {'recorded','recomputed'}
+            for seedSource = seedSources
                 if nonnegative && strcmp(seedSource{1},'recorded')
                     continue
                 end
@@ -68,16 +86,21 @@ for precision = {'single', 'double'}
                 if isfield(model,'Nelder_Mead_Tolerance')
                     options.TolX = model.Nelder_Mead_Tolerance;
                 end
-                [parameters, objective, exitflag, optimizer] = fminsearch(@evaluate, seed, options);
+                coarseR2 = max(scores);
+                fineFitRun = coarseR2 >= model.Fine_Fit_Threshold;
+                parameters = zeros(size(seed));
+                objective = 1;
+                exitflag = [];
+                optimizer = struct('message','Below fine-fit threshold');
+                if fineFitRun
+                    [parameters, objective, exitflag, optimizer] = fminsearch(@evaluate, seed, options);
+                end
                 acceptedParameters = parameters;
                 accepted = (1-objective) > 0;
                 if accepted
                     for parameter = 1:numel(parameters)
-                        scaled = parameter <= numel(model.Scaled_Param) && model.Scaled_Param(parameter);
-                        positive = 1;
-                        if parameter <= numel(model.Only_Positive)
-                            positive = model.Only_Positive(parameter);
-                        end
+                        scaled = model.Scaled_Param(parameter);
+                        positive = model.Only_Positive(parameter);
                         if scaled && abs(acceptedParameters(parameter)) > 2*model.Scaling_Factor
                             accepted = false;
                         end
@@ -91,19 +114,44 @@ for precision = {'single', 'double'}
                         end
                     end
                 end
-                raw = prf_predict_timecourse(profile(parameters,xy),frames);
-                compressed = raw.^parameters(end);
-                x = prf_convolve_hrf(compressed,hrf,model.Downsample_Predictions);
-                design = [ones(size(x)) x];
-                beta = design \ y;
-                [q, r, piv] = qr(cast(design,kind),0);
+                raw = [];
+                compressed = [];
+                x = [];
+                beta = [];
+                q = [];
+                r = [];
+                piv = [];
+                betaFromQr = [];
+                if fineFitRun
+                    raw = prf_predict_timecourse(profile(acceptedParameters,xy),frames);
+                    compressed = raw.^acceptedParameters(end);
+                    x = prf_convolve_hrf(compressed,hrf,model.Downsample_Predictions);
+                    design = [ones(size(x)) x];
+                    beta = design \ y;
+                    [q, r, piv] = qr(cast(design,kind),0);
+                    betaFromQr = zeros(2,1,kind);
+                    betaFromQr(piv) = r \ (q' * y);
+                end
+                exportParameters = zeros(size(parameters));
+                exportR2 = 0;
+                exportBeta = zeros(2,1,kind);
+                if accepted
+                    exportParameters = acceptedParameters;
+                    exportR2 = 1-objective;
+                    exportBeta = beta;
+                end
                 id = sprintf('css_pipeline_%s_v%d_nonnegative%d_%s', ...
                     kind,vertex,nonnegative,seedSource{1});
                 item = struct('id',id,'kind','css-trace','precision',kind, ...
                     'vertex',vertex,'vertexIndexBase',1, ...
                     'pipeline',metadata.id,'coarse',coarseId,'seedSource',seedSource{1}, ...
                     'nonnegativeApertures',nonnegative,'exitflag',exitflag, ...
-                    'accepted',accepted, ...
+                    'accepted',accepted,'fineFitRun',fineFitRun, ...
+                    'coarseR2',array_file([id '_coarse_r2'],coarseR2), ...
+                    'sourceExport',struct('betaComputed',accepted, ...
+                        'parameters',array_file([id '_export_parameters'],real(cast(exportParameters,kind))), ...
+                        'r2',array_file([id '_export_r2'],real(cast(exportR2,kind))), ...
+                        'beta',array_file([id '_export_beta'],real(cast(exportBeta,kind)))), ...
                     'acceptedParameters',array_file([id '_accepted_parameters'],acceptedParameters), ...
                     'optimizer',optimizer,'iterations',{iterations}, ...
                     'seed',array_file([id '_seed'],seed), ...
@@ -114,7 +162,9 @@ for precision = {'single', 'double'}
                     'prediction',array_file([id '_prediction'],x), ...
                     'raw',array_file([id '_raw'],raw), ...
                     'compressed',array_file([id '_compressed'],compressed), ...
-                    'beta',array_file([id '_beta'],beta), ...
+                    'candidateBeta',array_file([id '_candidate_beta'],beta), ...
+                    'betaFromQr',array_file([id '_beta_from_qr'],betaFromQr), ...
+                    'qrMatchesMldivide',fineFitRun && same_bytes(betaFromQr,beta), ...
                     'q',array_file([id '_q'],q), ...
                     'qr',array_file([id '_qr'],r),'pivot',array_file([id '_pivot'],piv), ...
                     'trace',array_file([id '_trace'],trace), ...
@@ -130,6 +180,30 @@ for precision = {'single', 'double'}
                 fprintf('Recorded %s\n',id);
             end
         end
+    end
+end
+if smoke
+    write_json('diagnostics.json',struct('environment',environment,'smoke',true,'cases',{cases}));
+    return
+end
+% Bracket the prediction scales reached by the double CSS failures. Norms
+% must be recorded independently of squared sums at underflow and overflow.
+for scale = [1e-162 1e-155 1 1e153 1e154]
+    y = [-2; -1; 1; 2];
+    for imaginary = [0 0.3]
+        x = scale * (y + 1i*imaginary*[1; -1; -1; 1]);
+        xc = x - mean(x);
+        yc = y - mean(y);
+        id = sprintf('css_correlation_double_scale%g_imaginary%g',scale,imaginary);
+        r = corr(x,y);
+        cases{end+1} = struct('id',id,'kind','css-correlation','precision','double', ...
+            'prediction',array_file([id '_prediction'],x), ...
+            'observations',array_file([id '_observations'],y), ...
+            'norm',array_file([id '_norm'],norm(xc)), ...
+            'sumSquares',array_file([id '_sum_squares'],sum(abs(xc).^2)), ...
+            'dot',array_file([id '_dot'],xc'*yc), ...
+            'correlation',array_file([id '_correlation'],r), ...
+            'objective',array_file([id '_objective'],1-r.^2)); %#ok<AGROW>
     end
 end
 % Scale and complexity can select different MATLAB least-squares paths.
@@ -171,7 +245,9 @@ for precision = {'single','double'}
                 cases{end+1} = struct('id',id,'kind','glm','precision',kind, ...
                     'prediction',array_file([id '_prediction'],x), ...
                     'observations',array_file([id '_observations'],y), ...
-                    'beta',array_file([id '_beta'],beta), ...
+                    'candidateBeta',array_file([id '_candidate_beta'],beta), ...
+                    'betaFromQr',array_file([id '_beta_from_qr'],betaFromQr), ...
+                    'qrMatchesMldivide',fineFitRun && same_bytes(betaFromQr,beta), ...
                     'uniformBeta',array_file([id '_uniform_beta'],uniform)); %#ok<AGROW>
             end
         end
@@ -232,4 +308,11 @@ fid = fopen(file,'w');
 assert(fid~=-1);
 cleanup = onCleanup(@() fclose(fid));
 fprintf(fid,'%s\n',jsonencode(value,'PrettyPrint',true));
+end
+
+function same = same_bytes(a,b)
+same = strcmp(class(a),class(b)) && isequal(size(a),size(b)) && ...
+    isreal(a) == isreal(b) && ...
+    isequal(typecast(real(a(:)),'uint8'),typecast(real(b(:)),'uint8')) && ...
+    isequal(typecast(imag(a(:)),'uint8'),typecast(imag(b(:)),'uint8'));
 end
