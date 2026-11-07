@@ -5228,6 +5228,20 @@
       "kind": "attribution",
       "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif": {
+      "sha256": "2dbf8ba6c58540e9da2fa2329f543ac9f67f042615673b681d0e13deb636ca71",
+      "bytes": 524640,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif": {
+      "sha256": "354470416dd4cd5cb4d55b645818fa4138d0e4b943016aff15204f3885ce0036",
+      "bytes": 532360,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6574,6 +6588,10 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r004_c004.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/TileConfiguration.txt",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/LICENSE.txt"
+    ],
+    "structure-tensor": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif"
     ]
   }
 }

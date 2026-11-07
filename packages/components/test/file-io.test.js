@@ -7,6 +7,7 @@ import {
   classifyImageComponent,
   createFloat64Nifti,
   createNiftiFromData,
+  createRgb24Nifti,
   createNiftiHeaderFromVolume,
   createNiftiFromVolume,
   isNiftiFile,
@@ -125,6 +126,18 @@ test('writes a 4D map when dims name a frame count, and a 3D one from a 4D sourc
   assert.deepEqual(Array.from(data), [1, 0, 0, 1, 0, 0]);
   const scalar = parseNiftiHeader(createNiftiFromData(new Float32Array([1, 2]), source));
   assert.deepEqual(scalar.dims.slice(0, 5), [3, 2, 1, 1, 1]);
+});
+
+test('writes RGB24 colour images as one byte triplet per voxel', () => {
+  const source = createNiftiHeaderFromVolume({ hdr: { dims: [3, 2, 1, 1], scl_slope: 2 } });
+  const output = createRgb24Nifti(new Uint8Array([255, 0, 0, 0, 128, 255]), source, [2, 1, 1]);
+  const parsed = parseNiftiHeader(output);
+  assert.equal(new DataView(output).getInt16(70, true), 128);
+  assert.equal(new DataView(output).getInt16(72, true), 24);
+  assert.deepEqual(parsed.dims.slice(0, 4), [3, 2, 1, 1]);
+  assert.equal(output.byteLength, 352 + 6);
+  assert.deepEqual(Array.from(new Uint8Array(output, 352)), [255, 0, 0, 0, 128, 255]);
+  assert.throws(() => createRgb24Nifti(new Uint8Array(4), source), /byte triplets/);
 });
 
 test('resets source scaling when writing newly derived voxel data', () => {

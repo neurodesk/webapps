@@ -1,0 +1,32 @@
+[
+  {
+    "id": "shg-dermis",
+    "label": "SHG collagen, human dermis",
+    "description": "Second-harmonic generation image of collagen in unstained human reticular dermis (PSHG-TISS skin_12, CC BY 4.0), summed over nine laser polarisations.",
+    "expectedResult": "Orientation, coherency and energy maps, a colour survey and an orientation distribution peaking near 90° for the mostly vertical collagen bundles.",
+    "files": [
+      {
+        "role": "image",
+        "name": "skin12_shg_polarisation_sum.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif",
+        "sha256": "2dbf8ba6c58540e9da2fa2329f543ac9f67f042615673b681d0e13deb636ca71",
+        "bytes": 524640
+      }
+    ]
+  },
+  {
+    "id": "synthetic-3d",
+    "label": "Synthetic 3D fibres",
+    "description": "Synthetic 64 × 64 × 32 stack of two fibre lattices with known directions, for the 3D analysis; not real tissue.",
+    "expectedResult": "Azimuth 30° and elevation 0° in the left half, azimuth −45° and elevation 40° in the right half, and a direction colour map.",
+    "files": [
+      {
+        "role": "image",
+        "name": "synthetic_fibres_3d.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif",
+        "sha256": "354470416dd4cd5cb4d55b645818fa4138d0e4b943016aff15204f3885ce0036",
+        "bytes": 532360
+      }
+    ]
+  }
+]

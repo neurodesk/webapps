@@ -93,6 +93,9 @@ site:
     - id: privacy
       title: Privacy
       description: Remove identifying facial features from images before sharing.
+    - id: fibre-orientation
+      title: Fibre Orientation
+      description: Map fibre orientation and coherency in tissue images.
     - id: morphometry
       title: Morphometry
       description: Measure neuronal shape, branching and Sholl profiles.
@@ -1551,6 +1554,31 @@ apps:
     support_status: experimental
     shell: imaging-workspace
     handoff: none
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: structure-tensor
+    path: structure-tensor
+    catalog: microscopy
+    title: Structure Tensor
+    description: Map fibre orientation and coherency in microscopy images.
+    categories: [fibre-orientation]
+    keywords: [structure tensor, OrientationJ, fibre orientation, coherency, collagen, histology, microscopy, TIFF]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff, nifti]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
     ci:
       toolchains: [node]
       shared_runtime: false

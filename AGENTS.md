@@ -191,6 +191,12 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Samples are rounded to single precision as they are read, because MorphIO stores them that way; without it bifurcation angles drift from NeuroM by up to 1e-4 relative.
 - `validation/neurom-reference.json` holds NeuroM 4.0.6's numbers for both hosted examples and NeuroM's committed test morphologies (`test/fixtures/neurom`). `test/neurom-parity.test.js` and `e2e/smoke.spec.js` require 1e-6 relative and identical counts and Sholl intersections. Rerecord with `validation/neurom_reference.py` (pins in `validation/requirements.txt`) when a definition or an example changes.
 
+## structure-tensor
+
+- The numerics are `apps/structure-tensor/src/tensor.js`: pure, float64, run in a module worker (one per run, terminated on cancel) and under Node in the tests. Its kernels and borders are scipy.ndimage's on purpose: `validation/scipy-reference.py` writes `validation/reference.json`, the unit tests compare with it at 1e-9°, and the browser test compares the example's downloaded float32 maps with it. Regenerate the reference after any change to the kernels, the window or the maps.
+- OrientationJ is GPL-3.0: never copy its code. It is only an external check (`validation/orientationj/`). Its `tensor` setting is a window √3 times wider than this app's ρ; `fit-window.py` records the match at ρ 5 for tensor 3.
+- Angles use OrientationJ's convention: counterclockwise from +x with rows pointing down. TIFFs are shown upright through a NIfTI header whose y axis runs down the rows (`rasterHeader` in `src/io.js`). σ must be at least one voxel along every axis (`imageRefusal`), because thinner sampled derivative kernels lose gain and bias 3D angles.
+
 ## brainqcnet
 
 - The preprocessing, slice classification loop, summaries and CSV writers live in `packages/brainqcnet`; the app adds the UI, the ONNX Runtime Web worker (one per run, terminated on cancel) and the file names. Change numerics in the package only.
