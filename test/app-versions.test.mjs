@@ -45,6 +45,8 @@ test('version literals outside the embedded version sites are reported, comments
   await manifest('apps/newapp', { name: 'newapp', version: '0.1.20261001', private: true });
   await manifest('site/easter-eggs/egg', { name: 'egg', version: '0.1.20260930', private: true });
   await manifest('packages/semver-only', { name: 'semver-only', version: '1.0.0' });
+  // A nested package.json without a date version (like easy-mp2rage's web/) defers to the app's.
+  await manifest('apps/newapp/web', { name: 'newapp-web', version: '0.1.0', private: true });
   const reported = {
     'apps/newapp/src/config.js': 'export const APP = { id: "newapp", version: "0.0.0" };\n',
     'apps/newapp/src/quoted.ts': 'export const APP = { "version": "0.0.0" };\n',
@@ -52,6 +54,8 @@ test('version literals outside the embedded version sites are reported, comments
     'apps/newapp/src/backtick.cts': 'export const VERSION = `0.0.0`;\n',
     'apps/newapp/src/annotated.ts': 'export const VERSION: string = "0.0.0";\n',
     'apps/newapp/src/app-version.js': "export const APP_VERSION = '0.0.0';\n",
+    'apps/newapp/src/camel.js': "export const meta = { appVersion: '0.0.0' };\n",
+    'apps/newapp/web/js/app.js': 'export const APP = { version: "0.0.0" };\n',
     'apps/newapp/src/worker.js': "const runtime = { app: 'NewApp web 0.1.20261001' };\n",
     'apps/newapp/src/prefixed.js': "const banner = 'NewApp v0.1.20261001';\n",
     'apps/newapp/src/increment.js': 'let n = 0;\nn++ / 2; const VERSION = "0.0.0"; n / 2;\n',
@@ -81,12 +85,13 @@ test('version literals outside the embedded version sites are reported, comments
   };
   for (const [path, text] of Object.entries({ ...reported, ...passed })) await put(path, text);
   await run('git', ['-C', root, 'add', '.']);
-  const message = 'read it from package.json (preferred), or register it in EMBEDDED_VERSION_SITES';
+  const message = "read it from package.json (preferred; a dependency's version from that dependency's package.json), or register it in EMBEDDED_VERSION_SITES";
   assert.deepEqual(await unsyncedVersionLiterals(root), [
     `apps/newapp/index.html:2: 0.1.20261001: ${message}`,
     `apps/newapp/src/annotated.ts:1: 0.0.0: ${message}`,
     `apps/newapp/src/app-version.js:1: 0.0.0: ${message}`,
     `apps/newapp/src/backtick.cts:1: 0.0.0: ${message}`,
+    `apps/newapp/src/camel.js:1: 0.0.0: ${message}`,
     `apps/newapp/src/config.js:1: 0.0.0: ${message}`,
     `apps/newapp/src/increment.js:2: 0.0.0: ${message}`,
     `apps/newapp/src/prefixed.js:1: 0.1.20261001: ${message}`,
@@ -94,6 +99,7 @@ test('version literals outside the embedded version sites are reported, comments
     `apps/newapp/src/quoted.ts:1: 0.0.0: ${message}`,
     `apps/newapp/src/spaced.mts:1: 0.0.0: ${message}`,
     `apps/newapp/src/worker.js:1: 0.1.20261001: ${message}`,
+    `apps/newapp/web/js/app.js:1: 0.0.0: ${message}`,
     `site/easter-eggs/egg/src/config.js:1: 0.1.20260918: ${message}`,
   ]);
 });

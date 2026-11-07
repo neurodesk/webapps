@@ -305,13 +305,13 @@ export async function syncEmbeddedVersions(appId, version, root = repoRoot) {
 const VERSION_SOURCE = /^(?:apps|packages|site)\/.+\.(?:[cm]?[jt]s|html)$/;
 const NOT_VERSION_SOURCE = /\/(?:test|tests|e2e|validation|docs|vendor|public|node_modules)\/|\.(?:test|spec)\.[^/]+$/;
 const DATE_VERSION_IN_TEXT = /(?<![@\w.])v?((\d+)\.(\d+)\.20\d{6})(?![\w.])/dg;
-const VERSION_KEY = /(?:^|_)version$/i;
+const VERSION_KEY = /version$/i;
 const PACKAGE_KEY = /[@/]/;
 
 /**
  * App version literals in tracked sources of date-versioned app, package and site workspaces
- * that no embedded version site rewrites: a `0.0.0` assigned to a `version`, `VERSION` or
- * `APP_VERSION` key, and any date version in a string (`v` prefix allowed) whose MAJOR.MINOR is
+ * that no embedded version site rewrites: a `0.0.0` assigned to a key ending in `version`
+ * (`version`, `VERSION`, `APP_VERSION`, `appVersion`), and any date version in a string (`v` prefix allowed) whose MAJOR.MINOR is
  * that of the enclosing package. Pins of other packages, `name@x.y.z` specifiers, values under a
  * package-name key (`"@scope/name": "…"`), comments and URLs pass. A date version in HTML
  * outside `<script>` is not checked, nor one whose MAJOR.MINOR is stale.
@@ -328,7 +328,8 @@ export async function unsyncedVersionLiterals(root = repoRoot) {
   const seriesOf = (file) => {
     for (let dir = file; dir.includes('/');) {
       dir = dir.slice(0, dir.lastIndexOf('/'));
-      if (seriesByDir.has(dir)) return seriesByDir.get(dir);
+      // A nested package.json without a date version (easy-mp2rage's web/) defers to its owner.
+      if (seriesByDir.get(dir)) return seriesByDir.get(dir);
     }
     return null;
   };
@@ -354,7 +355,7 @@ export async function unsyncedVersionLiterals(root = repoRoot) {
       for (const { version, at } of found) {
         if (synced.has(at)) continue;
         const line = text.slice(0, at).split('\n').length;
-        unsynced.push(`${file}:${line}: ${version}: read it from package.json (preferred), or register it in EMBEDDED_VERSION_SITES`);
+        unsynced.push(`${file}:${line}: ${version}: read it from package.json (preferred; a dependency's version from that dependency's package.json), or register it in EMBEDDED_VERSION_SITES`);
       }
     }
   }
