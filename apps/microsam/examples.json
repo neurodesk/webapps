@@ -1,0 +1,17 @@
+[
+  {
+    "id": "bbbc038-nuclei",
+    "label": "Fluorescent nuclei (BBBC038)",
+    "description": "A 360 × 360 fluorescence image of 23 cell nuclei from the 2018 Data Science Bowl (CC0).",
+    "expectedResult": "Click a nucleus or drag a box around it; each accepted nucleus becomes one label in the TIFF and one row in the CSV.",
+    "files": [
+      {
+        "role": "image",
+        "name": "bbbc038-nuclei.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
+        "sha256": "8fd1ed64bed1350597957b648b3b86a8c411b33c4b6733a7fbfe374243aad265",
+        "bytes": 129856
+      }
+    ]
+  }
+]

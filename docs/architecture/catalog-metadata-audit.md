@@ -107,7 +107,7 @@ Categories may contain a single app. Cross-list substantial tasks and scientific
 
 | Id | Title | Apps |
 | --- | --- | --- |
-| segmentation | Segmentation | MuscleMap, VesselBoost, Spinal Cord Toolbox, SeedSeg, SynthSeg, Brain extraction, White matter lesions, BISON tissue segmentation, Brainchop, StarDist |
+| segmentation | Segmentation | MuscleMap, VesselBoost, Spinal Cord Toolbox, SeedSeg, SynthSeg, Brain extraction, White matter lesions, BISON tissue segmentation, Brainchop, StarDist, micro-sam |
 | lesion-mapping | Lesion Mapping | CALMaR, SYNcro, Disconnectome |
 | quantitative-mri | Quantitative MRI | QSMbly, Easy MP2RAGE T1 Map, Carotid Flow |
 | diffusion-imaging | Diffusion & Tractography | dwi2trx, Disconnectome, NODDI, Degibbs, Dwidenoise, SDC, DWI Correct, HMC |

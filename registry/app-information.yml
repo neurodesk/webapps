@@ -2523,6 +2523,39 @@ apps:
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
 
+  microsam:
+    packages:
+      - { name: micro-sam, url: https://github.com/computational-cell-analytics/micro-sam, role: "light-microscopy generalist ViT-T model (vit_t_lm, CC BY 4.0); preprocessing and prompt handling ported from micro-sam 1.8.14 (MIT)" }
+      - { name: MobileSAM, url: https://github.com/ChaoningZhang/MobileSAM, role: "TinyViT image encoder and the ONNX prompt decoder graph (Apache-2.0)" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on WebGPU or the CPU (WebAssembly) }
+      - { name: Pillow, url: https://github.com/python-pillow/Pillow, role: "bilinear resampling ported from Pillow 13.0.0 (MIT-CMU), as micro-sam resizes images" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF and OME-TIFF reading }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
+    citations:
+      - group: Interactive segmentation
+        title: Segment Anything for Microscopy (micro-sam)
+        reference: "Archit A, Freckmann L, Nair S, et al. Segment Anything for Microscopy. Nature Methods. 2025;22(3):579–591."
+        doi: 10.1038/s41592-024-02580-4
+        code: https://github.com/computational-cell-analytics/micro-sam
+      - group: Interactive segmentation
+        title: Segment Anything
+        reference: "Kirillov A, Mintun E, Ravi N, et al. Segment Anything. Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). 2023:4015–4026."
+        doi: 10.1109/ICCV51070.2023.00371
+        code: https://github.com/facebookresearch/segment-anything
+      - group: Interactive segmentation
+        title: MobileSAM
+        reference: "Zhang C, Han D, Qiao Y, et al. Faster Segment Anything: towards lightweight SAM for mobile applications. arXiv:2306.14289. 2023."
+        doi: 10.48550/arXiv.2306.14289
+        code: https://github.com/ChaoningZhang/MobileSAM
+      - group: Example data
+        title: 2018 Data Science Bowl (BBBC038, CC0)
+        reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
+        doi: 10.1038/s41592-019-0612-7
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+
   microscope-qc:
     packages:
       - { name: Microscope QC numerics, url: https://github.com/neurodesk/webapps/tree/main/apps/microscope-qc/src/core, role: "bead detection, Gaussian profile fits and field-illumination metrics, written from MetroloJ_QC's published definitions" }
