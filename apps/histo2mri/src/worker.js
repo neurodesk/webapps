@@ -11,7 +11,7 @@ import { gzip, registerAffineGreedy, registerRigidGreedy, registerSvfGreedy } fr
 import { preflightSection, registerSection } from './core/register.js';
 import { planeSform, registrationImages, registrationReport, sectionsInVolume, warpedSection, worldTransforms } from './core/outputs.js';
 import { rgbaNifti } from './core/nifti.js';
-import { outputNames } from './config.js';
+import { outputNames, SECTION_OUTPUT_KINDS } from './config.js';
 
 const greedy = {
   rigid: async (args) => registerRigidGreedy({ api, ...args }),
@@ -53,14 +53,15 @@ self.onmessage = async ({ data: { volume, sections, plane, options, version, axi
       const images = registrationImages(result);
       const report = registrationReport(result, { name, version, settings: { plane, options }, axisName });
       const names = outputNames(name);
-      const files = [
-        { kind: 'warped', name: names.warped, bytes: await gzip(rgbaNifti(warped.rgba, [warped.nu, warped.nv, 1], planeSform(result.plane, warped.spacing))) },
-        { kind: 'plane', name: names.plane, bytes: await gzip(images.plane) },
-        { kind: 'section', name: names.section, bytes: await gzip(images.section) },
-        { kind: 'affine', name: names.affine, bytes: text(transforms.matrix) },
-        ...(result.warp ? [{ kind: 'warp', name: names.warp, bytes: await gzip(transforms.warp) }] : []),
-        { kind: 'registration', name: names.report, bytes: text(`${JSON.stringify(report, null, 2)}\n`) },
-      ];
+      const bytes = {
+        warped: await gzip(rgbaNifti(warped.rgba, [warped.nu, warped.nv, 1], planeSform(result.plane, warped.spacing))),
+        plane: await gzip(images.plane),
+        section: await gzip(images.section),
+        affine: text(transforms.matrix),
+        warp: result.warp ? await gzip(transforms.warp) : null,
+        registration: text(`${JSON.stringify(report, null, 2)}\n`),
+      };
+      const files = SECTION_OUTPUT_KINDS.filter((kind) => bytes[kind]).map((kind) => ({ kind, name: names[kind], bytes: bytes[kind] }));
       self.postMessage({ type: 'section', index: n, name, files, report }, files.map((file) => file.bytes.buffer));
       if (volumeOutput) registered.push({ result: { plane: result.plane }, warped });
     }

@@ -22,7 +22,7 @@ test("output names keep the section's name without its extension", () => {
   const names = outputNames("slide 150.ome.tif");
   assert.equal(names.warped, "slide_150_warped_rgba.nii.gz");
   assert.equal(names.affine, "slide_150_affine.mat");
-  assert.equal(outputNames("x.jpg").report, "x_registration.json");
+  assert.equal(outputNames("x.jpg").registration, "x_registration.json");
 });
 
 test("run settings check the slice range, section spacing and options", () => {

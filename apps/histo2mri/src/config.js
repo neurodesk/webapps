@@ -22,7 +22,13 @@ export function classifyFiles(files) {
   return { mri: mri[0] ?? null, sections: sections.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })) };
 }
 
-/** A section file's output names, from its name without the extension. */
+/**
+ * A section's output files, in the order a run returns them: each kind is the file's automation
+ * role and its key in outputNames. The warp is written only when the run keeps it.
+ */
+export const SECTION_OUTPUT_KINDS = ["warped", "plane", "section", "affine", "warp", "registration"];
+
+/** A section file's output names by kind, from its name without the extension. */
 export function outputNames(name) {
   const base = name.replace(/\.ome\.tiff?$/i, "").replace(/\.(tiff?|png|jpe?g)$/i, "").replace(/[^A-Za-z0-9._-]+/g, "_");
   return {
@@ -31,7 +37,7 @@ export function outputNames(name) {
     section: `${base}_section.nii.gz`,
     affine: `${base}_affine.mat`,
     warp: `${base}_warp.nii.gz`,
-    report: `${base}_registration.json`,
+    registration: `${base}_registration.json`,
   };
 }
 

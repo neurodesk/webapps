@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import automation from "../automation.json" with { type: "json" };
-import { APP, outputNames, runSettings } from "../src/config.js";
+import { APP, outputNames, runSettings, SECTION_OUTPUT_KINDS } from "../src/config.js";
 
 // The shared adapter on a minimal page: a document with the transfer input and nothing else.
 function register(operation) {
@@ -31,8 +31,8 @@ async function settled(dispatch) {
 // sections in the MRI grid only when runSettings allows that copy.
 function artifacts(settings, { warp }) {
   const names = outputNames("s1.tif");
-  const kinds = ["warped", "plane", "section", "affine", ...(warp ? ["warp"] : []), "registration"];
-  const files = kinds.map((kind) => ({ role: kind, file: new File([kind], names[kind === "registration" ? "report" : kind]) }));
+  const kinds = SECTION_OUTPUT_KINDS.filter((kind) => warp || kind !== "warp");
+  const files = kinds.map((kind) => ({ role: kind, file: new File([kind], names[kind]) }));
   if (settings.volumeOutput) files.push({ role: "volume", file: new File(["volume"], "sections_in_mri.nii.gz") });
   return files;
 }
