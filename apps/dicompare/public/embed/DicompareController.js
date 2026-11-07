@@ -21,13 +21,14 @@
  *   });
  */
 
-const DEFAULT_WORKER_URL = 'https://webapps.neurodesk.org/dicompare/embed/dicompare-worker.js';
+// The worker sits next to this module, wherever it is hosted.
+const DEFAULT_WORKER_URL = new URL('./dicompare-worker.js', import.meta.url).href;
 
 export class DicompareController {
   /**
    * @param {Object} options
    * @param {string} options.schemaUrl - URL or path to the dicompare schema JSON
-   * @param {string} [options.workerUrl] - URL to dicompare-worker.js (default: dicompare CDN)
+   * @param {string} [options.workerUrl] - URL to dicompare-worker.js (default: next to this module)
    * @param {function} [options.updateOutput] - Callback for status messages
    */
   constructor(options = {}) {

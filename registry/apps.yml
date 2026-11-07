@@ -291,7 +291,7 @@ apps:
     runtime: react-vite
     model_manifest: null
     asset_manifest_schema: null
-    source: astewartau/dicompare-web@d3d08798068c2515060ff76d95c2b5e116e39578
+    source: astewartau/dicompare-web@5dbbeea479feec18b10cf318b83d645b8ea06dd4
     license: NOASSERTION
     maintainers: [astewartau]
     support_status: active
@@ -1428,6 +1428,7 @@ apps:
       browser_test: true
       release: false
   - id: calcium-imaging
+    catalog: neuro
     path: calcium-imaging
     catalog: microscopy
     title: Calcium imaging
@@ -1454,6 +1455,7 @@ apps:
       browser_test: true
       release: false
   - id: spot-detection
+    catalog: neuro
     path: spot-detection
     catalog: microscopy
     title: Spot detection
