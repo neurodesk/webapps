@@ -1,0 +1,185 @@
+{
+ "versions": {
+  "pillow": "13.0.0",
+  "torch": "2.5.1+cpu",
+  "numpy": "2.4.6"
+ },
+ "cases": [
+  {
+   "height": 360,
+   "width": 360,
+   "channels": 1,
+   "dtype": "uint8",
+   "input_sha256": "5762d1f5127d45a6574264c7caa5ed11b70cdbb942598a6dee2b38a972da8da5",
+   "uint8_sha256": [
+    "5762d1f5127d45a6574264c7caa5ed11b70cdbb942598a6dee2b38a972da8da5",
+    "5762d1f5127d45a6574264c7caa5ed11b70cdbb942598a6dee2b38a972da8da5",
+    "5762d1f5127d45a6574264c7caa5ed11b70cdbb942598a6dee2b38a972da8da5"
+   ],
+   "resized": [
+    1024,
+    1024
+   ],
+   "resized_sha256": [
+    "4f3839f25881096c64c01e79ec00464792e17dc48c5505fb148378db7c05a7ce",
+    "4f3839f25881096c64c01e79ec00464792e17dc48c5505fb148378db7c05a7ce",
+    "4f3839f25881096c64c01e79ec00464792e17dc48c5505fb148378db7c05a7ce"
+   ],
+   "tensor_sha256": "0f5c872282ff9a87a9c8282463e4c4bced51fdb7f17d31f9088644297cf520c2"
+  },
+  {
+   "height": 157,
+   "width": 203,
+   "channels": 1,
+   "dtype": "uint16",
+   "input_sha256": "da7219402989f22f209a2b6fac6df0b248afffbcac4b15971906e85e3863c37e",
+   "uint8_sha256": [
+    "6b20e7a9f765d0cce7b2fae04001abde50e2f0868cc11421b207940764d5359a",
+    "6b20e7a9f765d0cce7b2fae04001abde50e2f0868cc11421b207940764d5359a",
+    "6b20e7a9f765d0cce7b2fae04001abde50e2f0868cc11421b207940764d5359a"
+   ],
+   "resized": [
+    792,
+    1024
+   ],
+   "resized_sha256": [
+    "977ce2e05f1372f8df4ae48605a69c8cb56eccb1839d1fce500fdb592257db79",
+    "977ce2e05f1372f8df4ae48605a69c8cb56eccb1839d1fce500fdb592257db79",
+    "977ce2e05f1372f8df4ae48605a69c8cb56eccb1839d1fce500fdb592257db79"
+   ],
+   "tensor_sha256": "f744711251abf09c7abab9cd8f8ad9b1fbee6573c926242d131abb8e033bec37"
+  },
+  {
+   "height": 700,
+   "width": 1500,
+   "channels": 3,
+   "dtype": "uint8",
+   "input_sha256": "93f244262119196b41167e91499c1e226d86df3e296dc52c638cc53e9f9830dd",
+   "uint8_sha256": [
+    "7ad9e678ccb58a0ed865ab92f7c64516a75d717109733469261da957a704e25f",
+    "2b5ab105ae72cb86b285385655ab037d90517764d253823eb11ed73b90de3e5d",
+    "b07872b485982109eb0d444b57e00d1886ea18abd14ec2c88e82d59c10f65e6c"
+   ],
+   "resized": [
+    478,
+    1024
+   ],
+   "resized_sha256": [
+    "612cfd579c70ee19669a50ebe2edf3d664c67d17cc2fb0b8aaf58525fcc0f9aa",
+    "a99fbfd350c9a83d989c6130c150b2e147ae2bfbd54903cca2ed68428d118052",
+    "7e2dda005e691007a9b048ccf23d27c26eb4f05142704482b77aef56bd70918b"
+   ],
+   "tensor_sha256": "d8ca9d2d5299f3a6274f138f6e3b3ea42ba9d65ff4d9b9d5152c70d9907b7333"
+  },
+  {
+   "height": 3000,
+   "width": 900,
+   "channels": 1,
+   "dtype": "uint16",
+   "input_sha256": "a4d2f62e22b20c7a98d698c8800ccce9a7dd44f142cdef38d9231791579af270",
+   "uint8_sha256": [
+    "924fa33d691c3806a7102aa3fdbc526ea759494ce75a4e1fcb2ba7d7c9e425ac",
+    "924fa33d691c3806a7102aa3fdbc526ea759494ce75a4e1fcb2ba7d7c9e425ac",
+    "924fa33d691c3806a7102aa3fdbc526ea759494ce75a4e1fcb2ba7d7c9e425ac"
+   ],
+   "resized": [
+    1024,
+    307
+   ],
+   "resized_sha256": [
+    "a31db99f4b65a775f0bd64c0d484e5c010c80d84f9a486f678a75da060054a6f",
+    "a31db99f4b65a775f0bd64c0d484e5c010c80d84f9a486f678a75da060054a6f",
+    "a31db99f4b65a775f0bd64c0d484e5c010c80d84f9a486f678a75da060054a6f"
+   ],
+   "tensor_sha256": "c780c8f40e2e5ae245cb83703cb54542a6d1ff3757ed866f610bd3582dd5a258"
+  },
+  {
+   "height": 1024,
+   "width": 800,
+   "channels": 1,
+   "dtype": "float32",
+   "input_sha256": "fc163b87b424498ddf443440141b4f4bf3021c2144a218b2ddd71605dac18a0f",
+   "uint8_sha256": [
+    "95abc43f39162dbcc4f3c67f7248f4442925e1baa401095574fc73efb78a42bc",
+    "95abc43f39162dbcc4f3c67f7248f4442925e1baa401095574fc73efb78a42bc",
+    "95abc43f39162dbcc4f3c67f7248f4442925e1baa401095574fc73efb78a42bc"
+   ],
+   "resized": [
+    1024,
+    800
+   ],
+   "resized_sha256": [
+    "95abc43f39162dbcc4f3c67f7248f4442925e1baa401095574fc73efb78a42bc",
+    "95abc43f39162dbcc4f3c67f7248f4442925e1baa401095574fc73efb78a42bc",
+    "95abc43f39162dbcc4f3c67f7248f4442925e1baa401095574fc73efb78a42bc"
+   ],
+   "tensor_sha256": "333b9a6f6f6a052302dfcc34bdec3add933745a74ea25b31f2355fd7e6e6c7e1"
+  },
+  {
+   "height": 512,
+   "width": 2048,
+   "channels": 2,
+   "dtype": "uint16",
+   "input_sha256": "32aa7c423a9a827f3dcfbe19d0c73a0e6a8d11260d51dfd8264420dc87f7c98b",
+   "uint8_sha256": [
+    "d2dd1d383638ea449ad5f960cf6d3efcd2fbe43099a740b15c768f5603ee3b5d",
+    "7c9338e1784bcc06686935f77e8bf9977e12cd556d8c9b8856fa7dc247800be2",
+    "30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58"
+   ],
+   "resized": [
+    256,
+    1024
+   ],
+   "resized_sha256": [
+    "f5a8fb25faa8e33fb7c28e8e9a40318bbfdcc5aa9caf38a2d9b5980273f4a88f",
+    "78d9d7e4d058497551d64209bdb0d7f20837da8ba748b9deb6eeeb5af04c8ef8",
+    "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
+   ],
+   "tensor_sha256": "2cf6fe19e56c1ce626f6a7ffe56c82e6ba8ae8c7a31f816f3a5c9f171da0f89c"
+  },
+  {
+   "height": 37,
+   "width": 1000,
+   "channels": 1,
+   "dtype": "float32",
+   "input_sha256": "84b1989592632809c5990e8b5b1c03bba33b27ab15cfcc010f46b3fc78676140",
+   "uint8_sha256": [
+    "e8f2f7a61d82c3ca8cf338baa72152a0ad8a7cf2af2175e7b1ca4f48c5a196a2",
+    "e8f2f7a61d82c3ca8cf338baa72152a0ad8a7cf2af2175e7b1ca4f48c5a196a2",
+    "e8f2f7a61d82c3ca8cf338baa72152a0ad8a7cf2af2175e7b1ca4f48c5a196a2"
+   ],
+   "resized": [
+    38,
+    1024
+   ],
+   "resized_sha256": [
+    "24857e94fe33d6956e20111afa64caef722b7c3d7562629ad0fb6f623e0ff3f6",
+    "24857e94fe33d6956e20111afa64caef722b7c3d7562629ad0fb6f623e0ff3f6",
+    "24857e94fe33d6956e20111afa64caef722b7c3d7562629ad0fb6f623e0ff3f6"
+   ],
+   "tensor_sha256": "fa2fde156f0cb30a79e77fdeb4957c58a339085ffe12cfa8ee2241cf95597a98"
+  },
+  {
+   "height": 999,
+   "width": 1001,
+   "channels": 3,
+   "dtype": "uint16",
+   "input_sha256": "e25f50b51dc438dab8bbeb4e46e3b83131a1906c70ad3788269e80b2dc36ecae",
+   "uint8_sha256": [
+    "19673afefd3c04c4e6c54c2065c0c15726c76daa39fa485f95e7e40c9ad2b5c0",
+    "64349f01c836e7cb08c4da06bdf4c0c5961ff4201e8e48e01867e78477217ab2",
+    "fcbe46136a0455d0166cb6b41ab1189c46f920010fa129b6a0f9f47c6bd3d384"
+   ],
+   "resized": [
+    1022,
+    1024
+   ],
+   "resized_sha256": [
+    "e7f8f49792bca1256d53a750b97793c1fef00ee69911a842b8b08e26ac427f5f",
+    "9fc42789e0f7f515cbecc5b42ecb89de8a49b8585b788a9d949d2c0b3928e774",
+    "b3bb8d5946de52744f66653f773ecd963f2e4069e29116d02d2a3308f85b6670"
+   ],
+   "tensor_sha256": "7a552e9aa3df6e52220109d313272923178d4093b583a5be08bd15cf6e7f92fa"
+  }
+ ]
+}
