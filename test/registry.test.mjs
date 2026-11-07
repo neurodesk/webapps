@@ -209,6 +209,7 @@ test('catalog assigns task categories and shares apps across related categories'
     neuromorph: ['morphometry'],
     'structure-tensor': ['fibre-orientation'],
     'spot-detection': ['spot-detection'],
+    'microscope-qc': ['quality-control'],
     zarro: ['visualization'],
     fastprep: ['preprocessing', 'functional-imaging', 'pipelines'],
     'me-ica': ['preprocessing', 'functional-imaging'],
