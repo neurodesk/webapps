@@ -165,11 +165,29 @@ function omeStagePosition(text) {
 }
 
 /**
+ * The channel extent of the plane grid. OME counts samples in SizeC, so an interleaved RGB
+ * image is SizeC 3 with one `<Channel SamplesPerPixel="3">` and one IFD per plane. The channels'
+ * SamplesPerPixel decide when they add up to SizeC, else the first channel's when it divides
+ * SizeC, else the first page's samples per pixel when it does.
+ */
+function planeChannels(sizeC, description, pageSamples) {
+  const pixels = description.match(/<(?:[\w.-]+:)?Pixels\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?Pixels>/)?.[1] ?? '';
+  const samples = (pixels.match(/<(?:[\w.-]+:)?Channel\b[^>]*>/g) ?? []).map((channel) => {
+    const value = xmlAttribute(channel, 'SamplesPerPixel')?.trim();
+    return value !== undefined && INTEGER.test(value) && Number(value) > 0 ? Number(value) : null;
+  });
+  const divides = (count) => Number.isInteger(count) && count > 1 && sizeC % count === 0;
+  if (samples.length && samples.every((count) => count !== null) && samples.reduce((sum, count) => sum + count, 0) === sizeC) return samples.length;
+  if (divides(samples[0])) return sizeC / samples[0];
+  return divides(pageSamples) ? sizeC / pageSamples : sizeC;
+}
+
+/**
  * The IFD of each plane, in the order of `DimensionOrder` (plane k is the k-th page of a
  * sequential file), or null when the description has no TiffData. Throws for planes in another
  * file, a mapping it cannot follow, planes no TiffData maps and IFDs the file does not have.
  */
-function omePlaneIfds(ome, description, ifdCount) {
+function omePlaneIfds(ome, description, ifdCount, pageSamples) {
   const blocks = parseTiffData(description);
   if (!blocks.length) return null;
   const fileUuid = xmlAttribute(description.match(/<(?:[\w.-]+:)?OME\b[^>]*>/)[0], 'UUID') ?? blocks[0].uuid;
@@ -177,7 +195,7 @@ function omePlaneIfds(ome, description, ifdCount) {
   if (external || new Set(blocks.map((block) => block.uuid)).size > 1) {
     throw new Error('This OME-TIFF keeps some of its planes in other files; open the companion file set in Fiji and save it as one OME-TIFF.');
   }
-  const sizes = { Z: ome.sizeZ, C: ome.sizeC, T: ome.sizeT };
+  const sizes = { Z: ome.sizeZ, C: planeChannels(ome.sizeC, description, pageSamples), T: ome.sizeT };
   const order = String(ome.dimensionOrder ?? 'XYZCT').slice(2).split('');
   if (order.length !== 3 || !['Z', 'C', 'T'].every((axis) => order.includes(axis) && Number.isInteger(sizes[axis]) && sizes[axis] > 0)) {
     throw new Error(`This OME-TIFF's DimensionOrder (${ome.dimensionOrder}) or sizes cannot be followed.`);
@@ -310,7 +328,7 @@ async function openStack(source, rgb) {
   if (!Type) throw new Error(`TIFF sample type (format ${format}, ${bits} bits) is not 8, 16 or 32-bit integer or 32/64-bit float.`);
   if (ome?.images > 1) throw new Error(`This OME-TIFF holds ${ome.images} image series; save the one you need as its own file.`);
   // The stack's pages: the OME planes' IFDs, else every full-resolution page in file order.
-  let ifds = ome ? omePlaneIfds(ome, description, ifdCount) : null;
+  let ifds = ome ? omePlaneIfds(ome, description, ifdCount, first.getSamplesPerPixel()) : null;
   if (!ifds) {
     ifds = [];
     for (let index = 0; index < ifdCount; index++) {

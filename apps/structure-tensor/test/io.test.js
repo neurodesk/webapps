@@ -6,6 +6,7 @@ import { rasterSize, readImages, tiffLayout, withoutExif, writeTiff } from "../s
 import { MAX_VOXELS } from "../src/config.js";
 import { analyse } from "../src/tensor.js";
 import { buildTiff, omeXml } from "./tiff-fixtures.mjs";
+import { writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { axisAngle, cylinders3d } from "./synthetic.mjs";
 
 const pages = (count, width = 16, height = 16) => Array.from({ length: count }, (_, z) => new Uint8Array(width * height).fill(z + 1));
@@ -45,7 +46,23 @@ test("a calibrated single-channel OME stack keeps its micrometre voxel size", as
 test("an OME-TIFF whose planes are in other files is refused", async () => {
   const buffer = buildTiff({ width: 16, height: 16, pages: pages(1), description: omeXml({ SizeX: 16, SizeY: 16, SizeZ: 4, SizeC: 1, SizeT: 1 }) });
   // The shared reader refuses a TiffData mapping past the last page before the app counts planes.
-  await assert.rejects(tiffLayout(buffer), /TiffData names page 2, but the file has 1|declares 4 planes but holds 1/);
+  await assert.rejects(tiffLayout(buffer), /TiffData names page 2, but the file has 1/);
+});
+
+test("an OME-TIFF without TiffData that holds fewer pages than its planes is refused", async () => {
+  const description = omeXml({ SizeX: 16, SizeY: 16, SizeZ: 4, SizeC: 1, SizeT: 1 }).replace("<TiffData/>", "");
+  await assert.rejects(tiffLayout(buildTiff({ width: 16, height: 16, pages: pages(1), description })), /declares 4 planes but holds 1; its other planes are in other files/);
+});
+
+test("an OME RGB stack (SizeC 3, one Channel of SamplesPerPixel 3) is one channel, one page per slice", async () => {
+  const description = omeXml({ SizeX: 4, SizeY: 4, SizeZ: 2, SizeC: 3, SizeT: 1, PhysicalSizeX: 0.5, PhysicalSizeY: 0.5, PhysicalSizeZ: 2 })
+    .replace('SamplesPerPixel="1"', 'SamplesPerPixel="3"')
+    .replace("<TiffData/>", '<TiffData IFD="0" PlaneCount="2"/>');
+  const rgb = Uint8Array.from({ length: 2 * 16 * 3 }, (_, i) => (i < 48 ? 30 : 90) + 30 * (i % 3));
+  const buffer = writeTiffStack({ width: 4, height: 4, data: rgb, rgb: true, description }).buffer;
+  assert.deepEqual(await tiffLayout(buffer), { dims: [4, 4, 2], spacing: [0.5, 0.5, 2], unit: "µm" });
+  const { image } = await readImages([tiffFile(buffer)]);
+  assert.deepEqual([image.data[0], image.data[16]], [60, 120]);
 });
 
 test("a small compressed TIFF over the voxel limit is refused from its header, before decoding", async () => {

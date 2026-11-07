@@ -195,37 +195,60 @@ test("the staged notices name the crates the module links, with their copyright 
   }
 });
 
+// A File that refuses to be read whole, so a refusal is shown to come from its header.
+class HeaderOnlyFile extends File {
+  arrayBuffer() {
+    assert.fail("must not read the whole file");
+  }
+}
+
 test("input size and cancellation are checked before reading source bytes", async () => {
   const file = { name: "large.nii", size: 1025, arrayBuffer() { assert.fail("must not read oversized input"); } };
-  await assert.rejects(readVolume(file, { maxBytes: 1024 }), /input size limit/);
+  await assert.rejects(readVolume(file, { maxFileBytes: 1024 }), { name: "InputTooLargeError", message: /Input too large/ });
   await assert.rejects(readVolume(file, { signal: AbortSignal.abort() }), { name: "AbortError" });
 });
 
-test("compressed NIfTI accepts the exact decoded limit and refuses larger images", async () => {
-  const bytes = stackNifti(new Float32Array(4096), [16, 16, 16], { x: 1, y: 1, z: 1 });
-  const file = new File([gzipSync(new Uint8Array(bytes))], "stack.nii.gz");
-  const volume = await readVolume(file, { maxBytes: bytes.byteLength });
-  assert.deepEqual(volume.dims, [16, 16, 16]);
-  await assert.rejects(readVolume(file, { maxBytes: 1024 }), /decoded input size limit/);
+test("the voxel limit counts voxels, not the header bytes around them", async () => {
+  const voxels = new Float32Array(4096);
+  const nifti = stackNifti(voxels, [16, 16, 16], { x: 1, y: 1, z: 1 });
+  const tiff = stackTiff(voxels, [16, 16, 16], { x: 1, y: 1, z: 1 });
+  assert.ok(nifti.byteLength > voxels.byteLength && tiff.byteLength > voxels.byteLength);
+  assert.deepEqual((await readVolume(new File([nifti], "stack.nii"), { maxBytes: voxels.byteLength })).dims, [16, 16, 16]);
+  assert.deepEqual((await readVolume(new File([tiff], "stack.tif"), { maxBytes: voxels.byteLength })).dims, [16, 16, 16]);
+  await assert.rejects(readVolume(new File([tiff], "stack.tif"), { maxBytes: voxels.byteLength - 1 }), { name: "InputTooLargeError", message: /Decoded TIFF stack too large/ });
 });
 
-test("oversized compressed input stops consuming decoded chunks at the limit", async (t) => {
-  let chunks = 0;
-  let cancelled = false;
+test("compressed NIfTI accepts the exact decoded limit and refuses larger images from its header", async () => {
+  const voxels = new Float32Array(4096);
+  const bytes = gzipSync(new Uint8Array(stackNifti(voxels, [16, 16, 16], { x: 1, y: 1, z: 1 })));
+  const volume = await readVolume(new File([bytes], "stack.nii.gz"), { maxBytes: voxels.byteLength });
+  assert.deepEqual(volume.dims, [16, 16, 16]);
+  // An int8 NIfTI is counted as the Float32 array it is read into, before it is inflated.
+  const int8 = gzipSync(new Uint8Array(createNiftiFromVolume({ hdr: niftiGeometry([16, 16, 16], { x: 1, y: 1, z: 1 }), img: new Int8Array(4096) })));
+  for (const file of [new HeaderOnlyFile([bytes], "stack.nii.gz"), new HeaderOnlyFile([int8], "int8.nii.gz")]) {
+    await assert.rejects(readVolume(file, { maxBytes: voxels.byteLength - 1 }), { name: "InputTooLargeError", message: /Decoded image too large/ }, file.name);
+  }
+});
+
+test("a NIfTI header that understates its data stops inflating at the file limit", { timeout: 5000 }, async (t) => {
+  const header = new Uint8Array(stackNifti(new Float32Array(8), [2, 2, 2], { x: 1, y: 1, z: 1 }).slice(0, 352));
+  const streams = [];
   t.mock.method(globalThis, "DecompressionStream", function () {
+    const stream = { chunks: 0, cancelled: false };
+    streams.push(stream);
     return {
       readable: new ReadableStream({
         pull(controller) {
-          chunks++;
-          controller.enqueue(new Uint8Array(256));
+          controller.enqueue(stream.chunks++ ? new Uint8Array(256) : header);
         },
-        cancel() { cancelled = true; },
+        cancel() { stream.cancelled = true; },
       }),
       writable: new WritableStream(),
     };
   });
   const file = new File([new Uint8Array([0x1f, 0x8b])], "large.nii.gz");
-  await assert.rejects(readVolume(file, { maxBytes: 1024 }), /decoded input size limit/);
-  assert.ok(cancelled);
-  assert.ok(chunks <= 6, `consumed ${chunks} chunks`);
+  await assert.rejects(readVolume(file, { maxFileBytes: 1024 }), { name: "InputTooLargeError", message: /Decompressed NIfTI too large/ });
+  const inflate = streams.at(-1);
+  assert.ok(inflate.cancelled);
+  assert.ok(inflate.chunks <= 6, `consumed ${inflate.chunks} chunks`);
 });
