@@ -217,7 +217,7 @@ async fn info(State(state): State<AppState>, request: Request) -> Result<Json<Va
         if config.has_feature("dataRoots") {
             object.insert("dataRoots".to_string(), hpc::roots_json(config));
         }
-        if config.has_feature("scheduler") {
+        if config.has_feature("projects") {
             let profiles: Vec<Value> = config
                 .profiles
                 .list()

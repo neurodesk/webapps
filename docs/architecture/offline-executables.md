@@ -30,6 +30,7 @@ Paths in this table are relative to the repository root. Existing implementation
 
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
+| `cryo-em` | None in the browser: RELION runs on the user's cluster | The app builds RELION job specs (`packages/cryo-em`) for a neurodesk-compute server; the batch route is RELION itself in the Neurodesk relion container. |
 | `stitching` | Tile stitching: pairwise phase correlation, global optimisation and linear-blending fusion | The pipeline is pure JavaScript in `apps/stitching/src/core`, already run in Node by `apps/stitching/validation`; a command line could reuse it unchanged. No package yet. |
 | `microscope-qc` | Bead PSF (FWHM) and field-illumination quality control, MetroloJ_QC definitions | The numerics are pure JavaScript in `apps/microscope-qc/src/core`; a Node command line could reuse them unchanged. No package yet. |
 | `calcium-imaging` | Two-photon movie preprocessing: motion correction, ROIs, ΔF/F and OASIS deconvolution | The pipeline is pure JavaScript in `apps/calcium-imaging/src/core`; a Node command line could reuse it unchanged. No package yet. |

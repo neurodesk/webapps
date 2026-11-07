@@ -65,7 +65,7 @@ async fn info_and_shared_ownership() {
         info["dataRoots"],
         json!([{ "id": "facility", "label": "facility" }])
     );
-    assert!(info.get("profiles").is_none());
+    assert_eq!(info["profiles"][0]["name"], "local");
     assert_eq!(info["limits"]["maxDownloadBytes"], 100);
     assert!(info["tools"]
         .as_array()
@@ -132,6 +132,25 @@ async fn info_and_shared_ownership() {
         server.get("/api/v1/projects").await.status(),
         StatusCode::OK
     );
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn projects_created_in_one_second_list_newest_first() {
+    let mut server = harness().await;
+    let mut created = Vec::new();
+    for index in 0..6 {
+        created.push(server.project(&format!("project {index}")).await);
+    }
+    let listed = server.json("/api/v1/projects").await;
+    let ids: Vec<&str> = listed["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|project| project["id"].as_str().unwrap())
+        .collect();
+    created.reverse();
+    assert_eq!(ids, created);
     server.stop().await;
 }
 

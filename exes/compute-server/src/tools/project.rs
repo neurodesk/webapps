@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::profiles::Profile;
+use crate::roots::DataRoot;
 
 /// The validated inputs of a project tool's job.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -91,14 +92,35 @@ pub struct ProjectArgs<'a> {
     pub launch: LaunchPlan,
 }
 
-/// The directories and log of a simulated run.
+/// The directories, command, data roots and log of a simulated run.
 pub struct SimulatedRun<'a> {
     /// Host path of the project, which jobs see as `/project`.
     pub project_dir: &'a Path,
     /// The job directory, `<Type>/jobNNN`.
     pub directory: &'a str,
+    /// The commands a real run would execute.
+    pub command: &'a ProjectCommand,
+    /// Their launch plan.
+    pub launch: LaunchPlan,
+    /// The server's data roots, mounted at `/data/<id>` in a real run.
+    pub data_roots: &'a [DataRoot],
     /// Forwards one log line.
     pub log: &'a (dyn Fn(String) + Sync),
+    /// Waits one simulated stage.
+    pub pause: &'a (dyn Fn() + Sync),
+    /// Whether the job was cancelled.
+    pub cancelled: &'a (dyn Fn() -> bool + Sync),
+}
+
+/// How a simulated run ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SimulatedEnd {
+    /// The simulated program exited with this status.
+    Exited(i32),
+    /// The tool failed for the reason given (`tool-failed`).
+    Failed(String),
+    /// The run noticed the cancellation and stopped.
+    Cancelled,
 }
 
 /// What a project tool supplies to the generic machinery.
@@ -107,12 +129,17 @@ pub trait ProjectTool: Send + Sync {
     /// profile for this job (`invalid-spec`).
     fn launch(&self, job: &ProjectInputs, profile: &Profile) -> Result<LaunchPlan, String>;
     /// The commands inside the container, without the MPI launcher. The
-    /// working directory is the project, `/project`.
-    fn command(&self, job: &ProjectInputs, args: &ProjectArgs<'_>) -> ProjectCommand;
+    /// working directory is the project, `/project`. An error fails the job
+    /// before it is handed to the runner.
+    fn command(
+        &self,
+        job: &ProjectInputs,
+        args: &ProjectArgs<'_>,
+    ) -> Result<ProjectCommand, String>;
     /// Files, relative to the job directory, that a succeeded job must have written.
     fn required_outputs(&self, job: &ProjectInputs) -> Vec<String>;
-    /// Writes placeholder results for `--runner simulate`; returns the exit status.
-    fn simulate(&self, job: &ProjectInputs, run: &SimulatedRun<'_>) -> io::Result<i32>;
+    /// Writes placeholder results for `--runner simulate`.
+    fn simulate(&self, job: &ProjectInputs, run: &SimulatedRun<'_>) -> io::Result<SimulatedEnd>;
     /// Refuses a configuration whose profiles cannot run the tool's commands;
     /// checked at startup.
     fn check_profiles(&self, profiles: &crate::profiles::Profiles) -> Result<(), String> {

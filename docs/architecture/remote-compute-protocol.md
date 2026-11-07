@@ -333,7 +333,8 @@ maps every pairing to one owner, the Unix user the server runs as.
   refresh at most once per hour.
 - The server refuses `--token` on its command line in this mode, because other
   users of a login node can read process arguments. It reads the pairing code
-  from `<data-dir>/token` (mode 0600) or `NEURODESK_COMPUTE_TOKEN`.
+  from `<data-dir>/token` or `NEURODESK_COMPUTE_TOKEN`, and refuses to start when
+  the token file is readable by group or others.
 - Projects, data roots and the `relion` tool exist only in this mode.
 
 ### Additions to `GET /api/v1/info`
@@ -416,9 +417,9 @@ characters) and `?` (one character). It matches names in that one directory,
 dotfiles excluded. Every match is canonicalised and must lie inside the
 canonical root. No match is `invalid-spec`.
 
-A single file is named as `{ "root": "facility", "path": "2026-11/gain.mrc" }`:
-the path must be a regular file whose canonical path lies inside the canonical
-root.
+A single file is named as `{ "root": "facility", "path": "2026-11/gain.mrc" }`
+(no `pattern`): the path must be a regular file whose canonical path lies inside
+the canonical root. Patterns match regular files only.
 
 Inside a job the root is mounted read-only at `/data/<root>`; specs and STAR
 files refer to it by that path.
@@ -427,6 +428,8 @@ files refer to it by that path.
 
 A project is one RELION project directory on the server,
 `<data-dir>/projects/<project id>/`. Project ids are 32 lowercase hex digits.
+The server keeps its project records in `<data-dir>/project-records/`; the
+project directory holds only RELION's files.
 
 #### `POST /api/v1/projects`
 
@@ -536,7 +539,13 @@ deleted.
 New `error.code` values: `interrupted` (the server cannot establish the job ever
 ran), `scheduler-lost` (Slurm no longer knows the job), `scheduler-failed` (a
 terminal Slurm state other than `COMPLETED`; `message` names the state and
-`exit:signal`).
+`exit:signal`; also an `sbatch` that reports *Batch job submission failed*,
+without reconciliation). `COMPLETED` with `RELION_JOB_EXIT_FAILURE`, or with no
+marker within the grace period, is `tool-failed`.
+
+While Slurm holds a job, `message` is its pending reason; log lines do not
+replace it. In Slurm mode a job not yet handed to Slurm stays queued across a
+restart; a job handed to Slurm is re-attached.
 
 ### Resource profiles
 
@@ -556,7 +565,15 @@ The Slurm runner reads `--slurm-config <file.json>`:
 ```
 
 A spec may name `"profile": "<name>"`; otherwise the command's default applies.
-The caller never passes Slurm flags. The simulated runner uses the built-in
+The caller never passes Slurm flags.
+
+- `scratch` is `$NAME`, `${NAME}` or an absolute path; each job uses and removes
+  `<scratch>/nd-<job id>`.
+- A profile may set `gres` (for example `gpu:a100:4`) in place of `gpu:<gpus>`.
+- `partition`, `account`, `qos`, `memory` and `time` accept only plain Slurm
+  tokens. The data directory, data roots, image and apptainer paths may contain
+  only letters, digits and `/ . _ + - @ ~ =`; the server refuses others at
+  startup, because they are written into the batch script. The simulated runner uses the built-in
 profile `local` (`cpus` = available parallelism, `gpus` = 0) unless a config
 file is given.
 
@@ -574,7 +591,9 @@ state mapping and isolation rules are those of ADR-0004. Timing constants:
 | Polling failures before new submissions return `runner-unavailable` | 10 min |
 
 The batch script is `<Type>/jobNNN/job.sbatch`; Slurm's output is
-`<Type>/jobNNN/run.out` and `run.err`, which are the job's log.
+`<Type>/jobNNN/run.out` and `run.err`, which are the job's log. Each step of a
+command (the main program and every follow-up step) runs in its own
+`apptainer exec` with the same mounts; only the main step runs under `mpirun`.
 
 ## Job specification: `relion`
 
@@ -637,8 +656,11 @@ MPI launcher, with `` `which relion_x` `` read as `relion_x`. Every RELION
 program gets `--pipeline_control <Type>/jobNNN/`, so it writes
 `RELION_JOB_EXIT_SUCCESS` or `RELION_JOB_EXIT_FAILURE`. Exceptions:
 
-- `import` reads `/data/<root>/<path>/<pattern>`; the GUI accepts only paths
-  inside the project.
+- `import` first links the data-root directory into its job,
+  `ln -sfn /data/<root>/<path> <Type>/jobNNN/data`, then runs
+  `relion_import --i "<Type>/jobNNN/data/<pattern>"`: `relion_import` refuses
+  absolute paths. Later STAR files name movies through that link, which stays
+  valid because every job mounts the root at the same `/data/<root>`.
 - `select` with `mode: "classes"` replaces the GUI's interactive
   `relion_display` with `relion_star_handler --select rlnClassNumber` per run of
   consecutive classes, joined by `relion_star_handler --combine` when there is
@@ -804,7 +826,7 @@ its input and adds the columns listed here.
 
 | Command | Files | Blocks and columns |
 | --- | --- | --- |
-| `import` | `movies.star` (`isMultiframe`) or `micrographs.star` | `optics`: `rlnOpticsGroupName`, `rlnOpticsGroup`, `rlnMicrographOriginalPixelSize`, `rlnVoltage`, `rlnSphericalAberration`, `rlnAmplitudeContrast` (and `rlnMicrographPixelSize` for micrographs). `movies`: `rlnMicrographMovieName`, `rlnOpticsGroup`; or `micrographs`: `rlnMicrographName`, `rlnOpticsGroup`. One row per matched file, `/data/<root>/<path>/<name>`, using the spec's `path`, in byte order. |
+| `import` | `movies.star` (`isMultiframe`) or `micrographs.star` | `optics`: `rlnOpticsGroupName`, `rlnOpticsGroup`, `rlnMicrographOriginalPixelSize`, `rlnVoltage`, `rlnSphericalAberration`, `rlnAmplitudeContrast` (and `rlnMicrographPixelSize` for micrographs). `movies`: `rlnMicrographMovieName`, `rlnOpticsGroup`; or `micrographs`: `rlnMicrographName`, `rlnOpticsGroup`. One row per matched file, `<Type>/jobNNN/data/<name>`, in byte order: like real import, the simulator first links `<Type>/jobNNN/data` to the data-root directory (in the container `/data/<root>/<path>`; the simulator links the host directory). |
 | `motioncorr` | `Movies/<stem>.mrc` (64²); `Movies/<stem>.star`; `Movies/<stem>_noDW.mrc` with `doSaveNoDW`; `Movies/<stem>_PS.mrc` with `doSavePs`; `corrected_micrographs.star` | `<stem>.star` has `general` pairs `rlnImageSizeX` 64, `rlnImageSizeY` 64, `rlnImageSizeZ` 24, `rlnMicrographMovieName`, `rlnMicrographGainName` (when a gain is given: its job-visible path), `rlnMicrographBinning`, `rlnMicrographOriginalPixelSize`, `rlnMicrographDoseRate`, `rlnMicrographPreExposure`, `rlnVoltage`, `rlnMicrographStartFrame`, `rlnMotionModelVersion` 0. `corrected_micrographs.star`: `optics` + `rlnMicrographPixelSize`; `micrographs`: `rlnMicrographName` (`<dir>/Movies/<stem>.mrc`), `rlnMicrographNameNoDW` (with `doSaveNoDW`), `rlnMicrographMetadata`, `rlnOpticsGroup`, `rlnAccumMotionTotal`, `rlnAccumMotionEarly`, `rlnAccumMotionLate`, `rlnCtfPowerSpectrum` (with `doSavePs`). |
 | `ctffind` | `Movies/<stem>.ctf` (MRC, 64²) per micrograph; `micrographs_ctf.star` | `optics` copied; `micrographs`: the input's columns + `rlnCtfImage` (`<dir>/Movies/<stem>.ctf:mrc`), `rlnDefocusU`, `rlnDefocusV`, `rlnCtfAstigmatism`, `rlnDefocusAngle`, `rlnCtfFigureOfMerit`, `rlnCtfMaxResolution` (and `rlnPhaseShift` with `doPhaseshift`). |
 | `autopick` | `Movies/<stem>_autopick.star` per micrograph; `autopick.star` | Each coordinate file has one block `data_` with `rlnCoordinateX`, `rlnCoordinateY`, `rlnClassNumber`, `rlnAutopickFigureOfMerit`, `rlnAnglePsi` and four picks at (16, 16), (48, 16), (16, 48) and (48, 48). `autopick.star`: `coordinate_files` with `rlnMicrographName`, `rlnMicrographCoordinates` (`<dir>/Movies/<stem>_autopick.star`). |

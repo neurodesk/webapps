@@ -8,9 +8,9 @@
     "inputs.<name>: from (allowed job types of a path), suffix (required ending), pattern (regular expression the path must contain), optional, when.",
     "options.<name>: gui (RELION job option variable), type bool|int|number|enum|string|int-list, default or required, min, max, multipleOf, enum, pattern, when.",
     "Conditions: {option, eq|ne|gt|ge|lt|le|in|notIn}, {input, present}, {gpus: true}, {all: [...]}, {not: condition}.",
-    "Argument strings expand {dir}, {input:NAME}, {option:NAME}, {derived:NAME}, {threads} and {const:NAME}; {when, args, else} groups emit conditionally.",
-    "Numbers are written as RELION's floatToString writes them: printf %.6g of the float32 value. Integers are written in decimal.",
-    "steps[0] is the main program; mpi: true appends _mpi to it when the launch has more than one rank. Later steps run in order after it.",
+    "Argument strings expand {dir}, {input:NAME}, {inputDir:NAME} and {inputPattern:NAME} (a dataRoot input's /data/<root>/<path> and pattern), {option:NAME}, {derived:NAME}, {threads} and {const:NAME}; {when, args, else} groups emit conditionally.",
+    "Number options are written as typed into the GUI: the shortest decimal that reads back as the same double, without an exponent, negative zero as 0. Derived values are written as RELION's floatToString writes them: printf %.6g of the float32 value. Integers are written in decimal.",
+    "steps[0] runs first: the main program, or import's link of the data-root directory into the job directory (relion_import refuses absolute paths). mpi: true appends _mpi to it when the launch has more than one rank. Later steps run in order after it.",
     "A step with builder names a step sequence written in code, documented in README.md (selectClasses).",
     "Output and argument templates take {option:NAME:03} to zero-pad an integer to three digits."
   ],
@@ -38,6 +38,7 @@
         "beamtiltY": { "gui": "beamtilt_y", "type": "number", "default": 0, "min": -10, "max": 10 }
       },
       "steps": [
+        { "program": "ln", "args": ["-sfn", "{inputDir:movies}", "{dir}data"] },
         {
           "program": "relion_import",
           "args": [
@@ -49,7 +50,7 @@
             "--Q0", "{option:Q0}",
             "--beamtilt_x", "{option:beamtiltX}",
             "--beamtilt_y", "{option:beamtiltY}",
-            "--i", "{input:movies}",
+            "--i", "{dir}data/{inputPattern:movies}",
             "--odir", "{dir}",
             { "when": { "option": "isMultiframe", "eq": true }, "args": ["--ofile", "movies.star"], "else": ["--ofile", "micrographs.star"] },
             "--pipeline_control", "{dir}"

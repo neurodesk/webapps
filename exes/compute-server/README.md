@@ -210,6 +210,69 @@ to accept every profile, and checks the image's SHA-256 (once per path, size
 and modification time; the result is cached in the data directory). Sites
 without Slurm accounting are not supported.
 
+### The `relion` tool
+
+The cryo-EM app's jobs are RELION 5.1.1 commands (`import`, `motioncorr`,
+`ctffind`, `autopick`, `extract`, `class2d`, `select`, `initialmodel`,
+`refine3d`, `maskcreate`, `postprocess`), one RELION job per compute job, in a
+project. The tool is offered only in single-owner mode on the `slurm` or
+`simulate` runner. Its options, defaults, ranges and command lines are not
+written in Rust: `src/tools/relion` embeds
+[`packages/cryo-em/src/commands.json`](../../packages/cryo-em/src/commands.json)
+at build time and interprets it exactly as `packages/cryo-em/src/spec.js` does
+for the app and the Node reference server. The tests hold it to the package's
+fixtures: `test/fixtures/argv-cases.json` (the command lines, byte for byte,
+which equal what RELION's GUI writes to `note.txt`) and
+`test/fixtures/validation-cases.json` (the same accept and refuse decisions
+with the same messages, and RELION's number formatting). After changing the
+package, regenerate its fixtures (`pnpm --filter @neurodesk/cryo-em fixture`)
+and run `make test`.
+
+- Each step runs in `/project`; the main program runs under
+  `mpirun --bind-to none -np <ranks>` when its launch rule gives more than one
+  rank. Every profile a command defaults to must be able to run it: a profile
+  with fewer CPUs than `refine3d` needs MPI ranks (3, or `gpus + 1` rounded up
+  to odd) is refused at startup and in specs. With the simulator, the built-in
+  `local` profile has the host's CPU count, so a host with fewer than 3 CPUs
+  refuses to start in single-owner mode.
+- `info.tools[].image` reports `vnmd/relion_5.1.1`
+  (`tools::relion::IMAGE`), to be pinned by digest when the multi-arch image is
+  published. The Slurm runner always runs the SIF from `--slurm-config`.
+- Inputs are earlier jobs' outputs (project-relative paths), uploaded MRC parts
+  (`gain`, `mask`, stored in the job directory), or files in data roots:
+  `{ root, path, pattern }` for movies and `{ root, path }` for one file, such
+  as a gain reference.
+- Progress comes from RELION's own lines: the preprocessing progress bar, VDAM
+  iterations and auto-refine iterations.
+
+With `--runner simulate`, `relion` runs no RELION program. It logs the command
+lines it would run, checks that every file the inputs reference exists
+(following STAR files from job to job, into data roots, and image indices into
+MRC stacks), replays RELION-format log lines and writes each command's outputs
+as small valid STAR and MRC files, then `run.out`, `run.err` and
+`RELION_JOB_EXIT_SUCCESS` or `RELION_JOB_EXIT_FAILURE`. A job whose inputs
+reference a missing file fails with `tool-failed` naming the referring file.
+The files follow "The simulated `relion` tool" in the protocol: the same
+names, data blocks, columns and MRC sizes as the Node reference server
+(`test-utils/relion-simulator.mjs`), not the same bytes.
+
+### Example data
+
+```sh
+neurodesk-compute fetch-example relion-tutorial --dest /scratch/you/examples
+```
+
+downloads the 24 movies and the gain reference of RELION's single-particle
+tutorial (EMPIAR-10204 subset, CC0, 3.2 GB) from the Hugging Face dataset
+`neurodeskorg/webapps` at a pinned commit into
+`/scratch/you/examples/relion-tutorial/`. Each file's SHA-256 is pinned in
+`src/examples.rs`; a file is written as `<name>.part` and renamed only once it
+matches. Rerunning skips verified files and resumes partial ones. The command
+prints the flag to add to `serve`, `--data-root examples=/scratch/you/examples`,
+and what to import (root `examples`, path `relion-tutorial/Movies`, pattern
+`*.tiff`). It honours `HTTPS_PROXY` and verifies TLS against the bundled
+Mozilla roots.
+
 ### Deployment
 
 1. Pick a named submit host where long-running user processes are allowed (a
@@ -267,8 +330,17 @@ while a server still holds the `flock`. There is no automatic takeover.
 make build            # release build
 make test             # cargo test (unit + integration; simulate runner, fake Slurm commands)
 make lint fmt         # clippy -D warnings, fmt --check
+make conformance      # the Node protocol suites against this server (needs node and curl)
 make run-simulated    # serve --runner simulate --insecure-http --listen 127.0.0.1:8765 --token dev
 ```
+
+`make conformance` builds the server and runs `scripts/conformance.sh`: it
+starts a per-pairing simulate server and a single-owner simulate server with a
+temporary data root (`facility`) and `--max-download-bytes 65536`, then runs
+`test/remote-compute-protocol.test.mjs` against the first and
+`test/remote-compute-hpc.test.mjs` against both. The same suites run against
+the Node reference server by default, so both implementations answer to one
+test. CI runs it in `compute-server-native.yml`.
 
 Protocol: [remote-compute-protocol.md](../../docs/architecture/remote-compute-protocol.md).
 

@@ -13,7 +13,9 @@ Three consumers share it:
   imports `src/spec.js`;
 - the Rust server (`exes/compute-server`), which loads `src/commands.json` with
   `include_str!` and interprets it the same way. Its tests read
-  `test/fixtures/argv-cases.json` and must produce the same commands byte for byte.
+  `test/fixtures/argv-cases.json` and must produce the same commands byte for
+  byte, and `test/fixtures/validation-cases.json`, whose specs it must accept
+  and normalise, or refuse with the same message, as `validateRelionSpec` does.
 
 ## API (`src/spec.js`)
 
@@ -25,14 +27,17 @@ Three consumers share it:
 | `relionOutputs(validated)` | Files the job writes, relative to its directory, with `required`. |
 | `parseRelionLogLine(validated, line)` | `{ level, progress }`: `info`, `warning` or `error`, and `[fraction, stage]` or `null`. |
 | `resolveInputPaths(validated, directory)` | Input paths inside the container. |
-| `relionNumber(value)` | RELION's `floatToString`. |
+| `typedNumber(value)` | A `number` option as typed into the GUI. |
+| `relionNumber(value)` | RELION's `floatToString`, for values the GUI computes. |
 | `RELION_COMMANDS`, `jobTypeDirectory(command)`, `RELION_DEFINITION` | The command ids, their job directory types, and the parsed table. |
 
 The server runs `program args`, under `mpirun --bind-to none -np <mpiRanks>`
 when `mpiRanks` is above 1, then each `then` entry in order, and stops at the
 first non-zero exit. The working directory is the project (`/project`).
-`initialmodel` has three `then` steps (the GUI's `rm`, `relion_align_symmetry`
-and `touch`); `select` with several runs of classes has more.
+`import` runs `ln -sfn` first and `relion_import` as its `then` step (see
+below); `initialmodel` has three `then` steps (the GUI's `rm`,
+`relion_align_symmetry` and `touch`); `select` with several runs of classes
+has more.
 
 ## The command table (`src/commands.json`)
 
@@ -75,7 +80,8 @@ the full schema. Each `commands.<id>` has:
   - `extractBackgroundRadius`: Extract's `--bg_radius`. The diameter, or
     `0.75 * size` when it is negative, halved, scaled by `rescale / size`
     when `doRescale`, truncated to an integer.
-- `steps`: `steps[0]` is the main program; later steps run after it.
+- `steps`: `steps[0]` runs first (the main program, except for `import`'s
+  link); later steps run after it.
   - `program`, `args`, `when`. `mpi: true` appends `_mpi` when there is more
     than one rank, and is required on the first step of an MPI launch.
   - `builder: "selectClasses"`: see [Class selection](#class-selection).
@@ -95,7 +101,8 @@ Groups nest. Strings expand:
 | --- | --- |
 | `{dir}` | The job directory with a trailing slash (`Class2D/job006/`), as RELION's `outputname` |
 | `{input:NAME}` | The input's path |
-| `{option:NAME}` | The option's value: `number` as `floatToString`, `int` in decimal, `enum` and `string` as given |
+| `{inputDir:NAME}`, `{inputPattern:NAME}` | A `dataRoot` input's directory, `/data/<root>/<path>` (`/data/<root>` when the path is empty), and its pattern |
+| `{option:NAME}` | The option's value: `number` as typed (see Numbers), `int` in decimal, `enum` and `string` as given |
 | `{option:NAME:03}` | An `int` option zero-padded to three digits (more when larger) |
 | `{derived:NAME}` | A derived value |
 | `{threads}` | `--j` |
@@ -115,32 +122,41 @@ Conditions:
 
 ### Numbers
 
-RELION writes job option values as `floatToString` produces them: printf
-`%.6g` of the `float` value (`0.885`, `-1`, `50000`, `1.23457e+06`). Values
-the GUI derives (`--psi_step`, `--offset_step`) are computed in `float` and
-`double` as `pipeline_jobs.cpp` does. Integers are written in decimal.
-Negative zero is written as `0`. `relionNumber` reproduces this; the Rust
-port must match it on every case in the fixture.
+The GUI passes a typed option to the program as the text the user typed
+(`joboptions[...].getString()`), so a `number` option is written as typed:
+the shortest decimal that reads back as the same double, without an exponent
+(`0.8851234`, `60`, `0.0000001`), negative zero as `0`. `typedNumber` does
+this; the Rust port must match it (Rust's `{}` for `f64` gives the same text
+except `-0` for negative zero).
+
+Values the GUI computes (`--psi_step`, `--offset_step`, `--bg_radius`) go
+through `floatToString`: printf `%.6g` of the `float` value (`0.666`,
+`2.46914`, `1.23457e+06`), computed in `float` and `double` as
+`pipeline_jobs.cpp` does. Like printf, it rounds the exact binary value with
+ties to even (`123456.5` is `123456`). Negative zero is written as `0`.
+`relionNumber` reproduces this. Integers are written in decimal.
 
 ## Argv parity
 
-The tests hold each command to a hand-derived GUI command:
-`test/gui-cases.js` lists, per case, the lines `getCommands*Job()` in RELION
-5.1.1's `src/pipeline_jobs.cpp` writes to `note.txt` for those settings,
-spacing included, with `mpirun -n N` removed. A line is compared as the words
-a shell gives for it: whitespace separates, double quotes group, `""` is an
-empty word, and `` `which relion_x` `` is `relion_x`. Every RELION program gets
-`--pipeline_control <dir>/`, as the GUI's `prepareFinalCommand` adds it.
-
-ADR-0004's argument gate records the real `note.txt` from the GUI in the
-container, with the same settings and profile, and compares it the same way
-after normalising `jobNNN`.
+`test/gui-cases.js` lists, per case, the lines RELION 5.1.1 writes to
+`note.txt` for those settings, spacing included. `note.txt` has no MPI
+launcher: RELION adds `mpirun -n N` only to the line it executes. The tests
+compare each line as the words a shell gives for it: whitespace separates,
+double quotes group, `""` is an empty word, and `` `which relion_x` `` is
+`relion_x`. Every RELION program gets `--pipeline_control <dir>/`, as the
+GUI's `prepareFinalCommand` adds it. `validation/pipeliner-parity.mjs` checks
+the lines against RELION itself (see Validation against RELION).
 
 Where this differs from the GUI by design:
 
-- `import` reads `--i /data/<root>/<path>/<pattern>`. The GUI refuses absolute
-  paths and wants a symbolic link inside the project; data roots are mounted at
-  the same absolute path in every job instead.
+- `import` first runs `ln -sfn /data/<root>/<path> <dir>data` and then
+  `relion_import --i "<dir>data/<pattern>"`. `relion_import` itself refuses
+  an absolute `--i` ("Please import files by a relative path", import.cpp)
+  and RELION asks for a symbolic link inside the project, which a GUI user
+  makes by hand. The link lives in the job directory, so the movie names in
+  `movies.star` are `<dir>data/<file>`, and later jobs read them through it
+  because every job mounts the data roots at the same `/data/<root>`. The
+  parity check leaves the `ln` line out.
 - `select` with `mode: "classes"` has no GUI command (see below).
 - Only the options in the table exist. Continuation, helical processing,
   template and Topaz picking, re-extraction, MTF files, scratch directories,
@@ -194,6 +210,61 @@ finds RELION's Python environment, so no `--python` is passed, as in the GUI.
   `Refinement has converged` gives 0.9.
 - `import`, `select`, `maskcreate` and `postprocess` report no progress.
 
+## Validation against RELION
+
+Both scripts need Docker and the `relion` image (RELION 5.1.1 with
+CTFFIND 4.1.14, from the neurocontainers `relion` recipe).
+
+### Arguments: `validation/pipeliner-parity.mjs`
+
+ADR-0004's argument gate, run without the GUI:
+
+```sh
+node packages/cryo-em/validation/pipeliner-parity.mjs --image relion:5.1.1
+```
+
+For every case in `test/gui-cases.js` except `select` in `classes` mode, it
+makes a fresh project whose job counter gives the case's `jobNNN`, adds the job
+with `relion_pipeliner --addJobFromStar` and `--addJobOptions` (inputs, every
+option through its `gui` variable, `nr_mpi`, `nr_threads`, `use_gpu` and
+`gpu_ids` from the case's profile) and runs it with `--RunJobs`. RELION then
+writes `note.txt` as the GUI does (`PipeLine::runJob`). The RELION programs and
+`mpirun` on `PATH` are stubs that only write the success marker. It fails
+unless RELION's words equal `relionCommand()` and its text equals the case's
+`gui` lines, printing a word diff. `--addJobFromStar` makes a new job, as the
+GUI's Run! does; `--addJob` would mark MotionCorr, CtfFind, AutoPick and
+Extract as continuations (`--only_do_unfinished`).
+
+It also adds each command once without options and checks RELION's defaults,
+read back from `job.star`, against the table's `default`s.
+
+`validation/relion-gui.mjs` holds what the table does not: each job type's
+label, the input variables, the GUI settings the package fixes (LoG picking,
+VDAM, the class ranker) and the gain rotation and flip texts. `--case <text>`
+runs matching cases, `--cases <module>` checks another module's `GUI_CASES`,
+`--notes <file>` writes RELION's lines as JSON and `--keep` keeps the
+projects.
+
+### Plumbing: `validation/container-chain.mjs`
+
+Runs the generated commands for a whole chain (import, motioncorr with the
+gain as a data-root file, ctffind, LoG autopick, extract, class2d, select by
+the class ranker and again by class number, initialmodel, refine3d,
+maskcreate, postprocess) in the container on the CPU, as the compute server
+runs them: one container per step, the project at `/project` as the working
+directory, the tutorial at `/data/examples/relion-tutorial` read-only, and
+`mpirun --bind-to none -np N` for MPI steps. After each job it checks
+`RELION_JOB_EXIT_SUCCESS` and every required output of `relionOutputs()`.
+Selecting the ranker's classes by number must give the ranker's particles.
+Settings are reduced (9 movies, 64 px particles, fewer classes and
+mini-batches); Refine3D runs to convergence. It is not ADR-0004's GPU
+reconstruction gate. `validation/cpu-chain-report.md` records a run.
+
+```sh
+node packages/cryo-em/validation/container-chain.mjs \
+  --movies <dir holding the tutorial's Movies/> --project <empty dir> --record run.json
+```
+
 ## Regenerating the fixture
 
 ```sh
@@ -201,7 +272,10 @@ pnpm --filter @neurodesk/cryo-em fixture
 pnpm --filter @neurodesk/cryo-em test
 ```
 
-Run it after changing `src/commands.json`, `src/spec.js` or
-`test/gui-cases.js`; the tests fail while the fixture is stale. Each fixture
-entry holds the spec, the received parts, the profile, the directory and the
-expected `relionCommand` result.
+Run it after changing `src/commands.json`, `src/spec.js`,
+`test/gui-cases.js` or `scripts/write-validation-fixture.mjs`; the tests fail
+while a fixture is stale. Each `argv-cases.json` entry holds the spec, the
+received parts, the profile, the directory and the expected `relionCommand`
+result. `validation-cases.json` holds `cases` (spec, parts, optional profile,
+and either the normalised `validated` spec or the `error` message) and
+`numbers` (`[value, relionNumber(value)]`).

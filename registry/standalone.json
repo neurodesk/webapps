@@ -2213,6 +2213,17 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "cryo-em": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [],
+      "computeServer": {
+        "name": "neurodesk-compute",
+        "documentation": "https://github.com/neurodesk/webapps/tree/main/exes/compute-server"
+      }
     }
   }
 }

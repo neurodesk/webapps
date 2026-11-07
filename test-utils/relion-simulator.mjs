@@ -5,7 +5,7 @@
 // chain of jobs is checked through real references. The file layout is
 // documented in docs/architecture/remote-compute-protocol.md ("The simulated
 // `relion` tool") so the Rust server can write the same structure.
-import { closeSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { RELION_DEFINITION, classRanges, relionNumber, relionOutputs } from '../packages/cryo-em/src/spec.js';
 import { isInside, matchPattern } from './data-roots.mjs';
@@ -328,7 +328,10 @@ export function locate(context, reference) {
   } catch {
     return { problem: 'does not exist' };
   }
-  if (!isInside(base, canonical)) return { problem: 'lies outside the project and the data roots' };
+  // Import links its data-root directory into the project (`<dir>data`), so a
+  // project path may resolve into a data root, as it does in the container.
+  const roots = [base, ...context.dataRoots.values()];
+  if (!roots.some(allowed => isInside(allowed, canonical))) return { problem: 'lies outside the project and the data roots' };
   if (!statSync(canonical).isFile()) return { problem: 'is not a regular file' };
   return { path: canonical };
 }
@@ -512,7 +515,12 @@ function importJob(context) {
   const { options, inputs } = context.validated;
   const { root, path, pattern } = inputs.movies;
   const matched = matchPattern(context.dataRoots.get(root), path, pattern);
-  const files = matched.names.map(name => ['/data', root, path, name].filter(part => part !== '').join('/'));
+  // Real import first runs `ln -sfn /data/<root>/<path> <dir>data`, because
+  // relion_import refuses absolute paths; the STAR file names the link.
+  const link = join(context.projectDir, context.directory, 'data');
+  rmSync(link, { force: true });
+  symlinkSync(realpathSync(join(context.dataRoots.get(root), path)), link);
+  const files = matched.names.map(name => `${context.directory}/data/${name}`);
   const opticsColumns = ['rlnOpticsGroupName', 'rlnOpticsGroup', 'rlnMicrographOriginalPixelSize', 'rlnVoltage', 'rlnSphericalAberration', 'rlnAmplitudeContrast'];
   const opticsRow = [OPTICS_GROUP, 1, options.angpix, options.kV, options.Cs, options.Q0];
   if (options.isMultiframe) {

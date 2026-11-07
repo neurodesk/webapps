@@ -8,6 +8,7 @@ pub mod mrc;
 pub mod nesvor;
 pub mod nifti;
 pub mod project;
+pub mod relion;
 pub mod sct;
 
 use std::fmt;
@@ -237,11 +238,16 @@ pub use project::ProjectTool;
 
 /// All registered tools.
 pub fn registry() -> Vec<Arc<dyn Tool>> {
-    vec![Arc::new(nesvor::Nesvor), Arc::new(sct::Sct)]
+    vec![
+        Arc::new(nesvor::Nesvor),
+        Arc::new(sct::Sct),
+        Arc::new(relion::Relion),
+    ]
 }
 
 /// The tools a configuration offers: project tools only in single-owner
-/// mode, file tools never on Slurm, SCT only with Docker or the simulator.
+/// mode on Slurm or the simulator, file tools never on Slurm, SCT only with
+/// Docker or the simulator.
 pub fn available(
     config: &crate::config::ServeConfig,
     tools: Vec<Arc<dyn Tool>>,
@@ -250,7 +256,10 @@ pub fn available(
     tools
         .into_iter()
         .filter(|tool| match tool.layout() {
-            Layout::Project(_) => config.single_owner,
+            Layout::Project(_) => {
+                config.single_owner
+                    && matches!(config.runner, RunnerKind::Slurm | RunnerKind::Simulate)
+            }
             Layout::Files(_) => {
                 config.runner != RunnerKind::Slurm
                     && (tool.id() != "sct"

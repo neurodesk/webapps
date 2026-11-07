@@ -341,7 +341,7 @@ test('import specs that leave the root or match nothing are invalid', async () =
   await assert.rejects(client.submit(importSpec('f'.repeat(32)), {}), isInvalid, 'unknown project');
   const inside = await run(client, importSpec(project.id, 'links', 'inside.tiff'));
   const movies = blockNamed(await star(client, inside.id, 'Import/job001/movies.star'), 'movies');
-  assert.deepEqual(column(movies, 'rlnMicrographMovieName'), [`/data/${ROOT}/links/inside.tiff`]);
+  assert.deepEqual(column(movies, 'rlnMicrographMovieName'), ['Import/job001/data/inside.tiff']);
   assert.deepEqual((await client.project(project.id)).jobs.length, 1, 'refused specs allocate no job directory');
   await client.removeProject(project.id);
 });
@@ -367,7 +367,7 @@ test('a simulated RELION chain from import to postprocess follows real reference
   assert.deepEqual(outputNames(imported), [...outputNames(imported)].sort(), 'outputs sorted by name');
   assert.ok(imported.outputs.every(output => output.download === true || output.bytes > 0));
   const movies = blockNamed(await star(client, imported.id, 'Import/job001/movies.star'), 'movies');
-  assert.deepEqual(column(movies, 'rlnMicrographMovieName'), [1, 2, 3].map(index => `/data/${ROOT}/2026-11/grid3/FoilHole_${index}.tiff`));
+  assert.deepEqual(column(movies, 'rlnMicrographMovieName'), [1, 2, 3].map(index => `Import/job001/data/FoilHole_${index}.tiff`));
   assert.match(await (await client.output(imported.id, 'Import/job001/run.out')).text(), /relion_import/);
 
   const fractions = [];
@@ -496,7 +496,7 @@ test('a job whose STAR files reference a vanished file fails and lists its log',
   const error = await client.watch(receipt.id).then(() => null, caught => caught);
   assert.ok(error instanceof ComputeError);
   assert.equal(error.code, 'tool-failed');
-  assert.match(error.message, new RegExp(`/data/${ROOT}/vanishing/b\\.tiff, which does not exist`));
+  assert.match(error.message, /Import\/job001\/data\/b\.tiff, which does not exist/);
   const failed = await client.job(receipt.id);
   assert.equal(failed.status, 'failed');
   assert.ok(outputNames(failed).includes('CtfFind/job003/RELION_JOB_EXIT_FAILURE'));

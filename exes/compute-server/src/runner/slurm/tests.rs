@@ -160,7 +160,7 @@ async fn startup_checks_info_and_refusals() {
         .iter()
         .map(|tool| tool["id"].as_str().unwrap())
         .collect();
-    assert_eq!(tools, vec![fake::ID]);
+    assert_eq!(tools, vec![crate::tools::relion::ID, fake::ID]);
     harness.stop().await;
 
     fake.mode("test_only_fail", Some(""));
@@ -686,8 +686,17 @@ async fn persistent_polling_failures_refuse_new_submissions() {
     let project = harness.project("unavailable").await;
     let (id, _, _) = accepted(&harness, &fake, &project).await;
     fake.mode("squeue_fail", Some(""));
-    tokio::time::sleep(Duration::from_millis(400)).await;
-    let response = harness.submit(&import(&project), &[]).await;
+    // Wait for the poller to see the failures rather than for a fixed time.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let response = loop {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let response = harness.submit(&import(&project), &[]).await;
+        if response.status() == StatusCode::SERVICE_UNAVAILABLE
+            || tokio::time::Instant::now() > deadline
+        {
+            break response;
+        }
+    };
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["error"]["code"], "runner-unavailable");
@@ -695,8 +704,18 @@ async fn persistent_polling_failures_refuse_new_submissions() {
     assert_eq!(job["status"], "queued");
     assert_eq!(job["scheduler"]["state"], "PENDING");
     fake.mode("squeue_fail", None);
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    harness.accepted(&import(&project)).await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let status = harness.submit(&import(&project), &[]).await.status();
+        if status == StatusCode::ACCEPTED {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "submissions stay refused: {status}"
+        );
+    }
     harness.stop().await;
 }
 

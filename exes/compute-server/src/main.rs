@@ -37,6 +37,18 @@ enum Command {
     Unlock(UnlockArgs),
     /// Submit a probe job that checks a profile's compute nodes.
     CheckSlurm(CheckSlurmArgs),
+    /// Download a pinned example dataset to serve as a data root.
+    FetchExample(FetchExampleArgs),
+}
+
+/// Flags of `fetch-example`.
+#[derive(Debug, Clone, Args)]
+struct FetchExampleArgs {
+    /// Example to download (relion-tutorial).
+    name: String,
+    /// Directory that receives <name>/; serve it with --data-root examples=<dest>.
+    #[arg(long)]
+    dest: PathBuf,
 }
 
 /// Flags of `unlock`.
@@ -146,6 +158,7 @@ async fn main() -> ExitCode {
         Some(Command::Pull(args)) => pull(args).await,
         Some(Command::Unlock(args)) => unlock(args),
         Some(Command::CheckSlurm(args)) => check_slurm(args).await,
+        Some(Command::FetchExample(args)) => fetch_example(args).await,
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -154,6 +167,71 @@ async fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+async fn fetch_example(args: FetchExampleArgs) -> Result<(), String> {
+    use compute_server::examples::{self, Progress};
+    let known = examples::examples();
+    let example = known
+        .iter()
+        .find(|example| example.name == args.name)
+        .ok_or_else(|| {
+            let names: Vec<&str> = known.iter().map(|example| example.name.as_str()).collect();
+            format!(
+                "unknown example '{}'; known: {}",
+                args.name,
+                names.join(", ")
+            )
+        })?;
+    std::fs::create_dir_all(&args.dest)
+        .map_err(|error| format!("{}: {error}", args.dest.display()))?;
+    let dest = args
+        .dest
+        .canonicalize()
+        .map_err(|error| format!("{}: {error}", args.dest.display()))?;
+    eprintln!(
+        "Fetching {} ({} files, {}) from {}/{} at {} into {}",
+        example.name,
+        example.files.len(),
+        examples::size(example.bytes()),
+        examples::HUGGING_FACE_DATASETS,
+        example.repository,
+        example.revision,
+        dest.join(&example.name).display()
+    );
+    let sizes: std::collections::HashMap<String, u64> = example
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), file.bytes))
+        .collect();
+    let mut report = |event: Progress| match event {
+        Progress::Verified { path } => eprintln!("  verified    {path}"),
+        Progress::Downloading {
+            path,
+            offset,
+            bytes,
+        } if offset > 0 => eprintln!(
+            "  resuming    {path} at {} of {}",
+            examples::size(offset),
+            examples::size(bytes)
+        ),
+        Progress::Downloading { path, bytes, .. } => {
+            eprintln!("  downloading {path} ({})", examples::size(bytes))
+        }
+        Progress::Retrying { path, error } => eprintln!("  retrying    {path}: {error}"),
+        Progress::Done { path } => eprintln!(
+            "  done        {path} ({}, SHA-256 verified)",
+            examples::size(sizes.get(&path).copied().unwrap_or(0))
+        ),
+    };
+    let root = examples::fetch(example, &dest, examples::HUGGING_FACE_DATASETS, &mut report)
+        .await
+        .map_err(|error| error.to_string())?;
+    println!("{} is ready in {}.", example.name, root.display());
+    println!("Serve it as a data root with:");
+    println!("  --data-root examples={}", dest.display());
+    println!("Then {}.", example.usage);
+    Ok(())
 }
 
 fn default_data_dir() -> PathBuf {
@@ -719,5 +797,17 @@ mod tests {
             "gpu-4",
         ]);
         assert!(matches!(cli.command, Some(Command::CheckSlurm(_))));
+        let cli = Cli::parse_from([
+            "neurodesk-compute",
+            "fetch-example",
+            "relion-tutorial",
+            "--dest",
+            "/scratch/examples",
+        ]);
+        let Some(Command::FetchExample(args)) = cli.command else {
+            panic!("fetch-example");
+        };
+        assert_eq!(args.name, "relion-tutorial");
+        assert_eq!(args.dest, PathBuf::from("/scratch/examples"));
     }
 }

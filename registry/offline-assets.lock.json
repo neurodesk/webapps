@@ -5279,6 +5279,13 @@
       "contentType": "image/tiff",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/607388b20e8c7e0000ec8498d19ac7e3c35d6472/cryo-em/relion-tutorial/SHA256SUMS": {
+      "sha256": "123d411889e6259ec176942ada14c49b0bd43fddd371b944a76e5aed888367da",
+      "bytes": 2657,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6638,6 +6645,9 @@
     "microscope-qc": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif"
+    ],
+    "cryo-em": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/607388b20e8c7e0000ec8498d19ac7e3c35d6472/cryo-em/relion-tutorial/SHA256SUMS"
     ]
   }
 }

@@ -11,6 +11,7 @@ pub mod auth;
 pub mod config;
 pub mod cors;
 pub mod detect;
+pub mod examples;
 pub mod instance;
 pub mod jobs;
 pub mod profiles;

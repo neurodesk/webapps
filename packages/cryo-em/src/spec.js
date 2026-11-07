@@ -15,7 +15,7 @@ const PROJECT_ID = /^[0-9a-f]{32}$/;
 const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ROOT_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const JOB_COMPONENT = /^job[0-9]{3,}$/;
-const PLACEHOLDER = /\{([a-z]+)(?::([A-Za-z0-9]+))?(?::0([1-9]))?\}/g;
+const PLACEHOLDER = /\{([A-Za-z]+)(?::([A-Za-z0-9]+))?(?::0([1-9]))?\}/g;
 const MAX_PATH_BYTES = 1024;
 const MAX_PATTERN_BYTES = 255;
 
@@ -267,19 +267,69 @@ export function relionLaunch(command, profile) {
 }
 
 /**
- * RELION's floatToString: printf `%.6g` of the float32 value. Negative zero
- * is written as `0`.
+ * A `number` option as typed into RELION's GUI, which passes the text to the
+ * program unchanged: the shortest decimal that reads back as the same double,
+ * without an exponent (`0.8851234`, `60`, `0.0000001`). Negative zero is `0`.
+ */
+export function typedNumber(value) {
+  if (value === 0) return '0';
+  const text = String(value);
+  const match = /^(-?)(\d)(?:\.(\d+))?e([+-]\d+)$/.exec(text);
+  if (!match) return text;
+  const [, sign, lead, fraction = '', exponentText] = match;
+  const digits = lead + fraction;
+  const exponent = Number(exponentText);
+  if (exponent < 0) return `${sign}0.${'0'.repeat(-exponent - 1)}${digits}`;
+  return `${sign}${digits.padEnd(exponent + 1, '0')}`;
+}
+
+/**
+ * RELION's floatToString, for the values the GUI computes (`--psi_step`,
+ * `--offset_step`, `--bg_radius`): printf `%.6g` of the float32 value.
+ * Negative zero is written as `0`. Like printf, it rounds the exact binary value to six
+ * significant digits with ties to even (123456.5 is `123456`), which
+ * `toFixed` and `toExponential` do not: they round ties up.
  */
 export function relionNumber(value) {
   const single = Math.fround(value);
   if (single === 0) return '0';
-  const [mantissa, exponentText] = single.toExponential(5).split('e');
-  const exponent = Number(exponentText);
+  const sign = single < 0 ? '-' : '';
+  const { digits, exponent } = sixSignificantDigits(Math.abs(single));
   if (exponent < -4 || exponent >= 6) {
-    const sign = exponent < 0 ? '-' : '+';
-    return `${trimZeros(mantissa)}e${sign}${String(Math.abs(exponent)).padStart(2, '0')}`;
+    const mantissa = trimZeros(`${digits[0]}.${digits.slice(1)}`);
+    const exponentSign = exponent < 0 ? '-' : '+';
+    return `${sign}${mantissa}e${exponentSign}${String(Math.abs(exponent)).padStart(2, '0')}`;
   }
-  return trimZeros(single.toFixed(5 - exponent));
+  const fixed = exponent >= 0
+    ? `${digits.slice(0, exponent + 1)}.${digits.slice(exponent + 1)}`
+    : `0.${'0'.repeat(-exponent - 1)}${digits}`;
+  return `${sign}${trimZeros(fixed)}`;
+}
+
+// The six significant digits of a positive finite double, rounded from its
+// exact decimal expansion with ties to even, and the decimal exponent of the
+// first digit.
+function sixSignificantDigits(value) {
+  let scaled = value;
+  let shift = 0;
+  while (!Number.isInteger(scaled)) {
+    scaled *= 2;
+    shift += 1;
+  }
+  // value = scaled / 2^shift = scaled * 5^shift / 10^shift, exactly.
+  const exact = (BigInt(scaled) * 5n ** BigInt(shift)).toString();
+  let exponent = exact.length - 1 - shift;
+  if (exact.length <= 6) return { digits: exact.padEnd(6, '0'), exponent };
+  let head = BigInt(exact.slice(0, 6));
+  const rest = exact.slice(6);
+  const tie = rest[0] === '5' && /^50*$/.test(rest);
+  if (rest[0] > '5' || (rest[0] === '5' && !tie) || (tie && head % 2n === 1n)) head += 1n;
+  let digits = head.toString();
+  if (digits.length > 6) {
+    digits = digits.slice(0, 6);
+    exponent += 1;
+  }
+  return { digits, exponent };
 }
 
 function trimZeros(text) {
@@ -324,7 +374,7 @@ function formatOption(command, name, options, width) {
     if (option.type !== 'int') throw new Error(`option ${name} cannot be zero-padded`);
     return String(value).padStart(Number(width), '0');
   }
-  if (option.type === 'number') return relionNumber(value);
+  if (option.type === 'number') return typedNumber(value);
   if (option.type === 'int') return String(value);
   if (option.type === 'enum' || option.type === 'string') return value;
   throw new Error(`option ${name} of type ${option.type} cannot be written as an argument`);
@@ -341,6 +391,12 @@ function expand(template, context) {
       const path = context.inputPaths[name];
       if (typeof path !== 'string') throw new Error(`no path for input ${name}`);
       return path;
+    }
+    if (kind === 'inputDir' || kind === 'inputPattern') {
+      const value = context.inputs[name];
+      if (!isObject(value) || typeof value.pattern !== 'string') throw new Error(`input ${name} is not a data-root reference`);
+      if (kind === 'inputPattern') return value.pattern;
+      return ['/data', value.root, value.path].filter(part => part !== '').join('/');
     }
     throw new Error(`unsupported placeholder ${match}`);
   });

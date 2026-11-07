@@ -22,9 +22,13 @@ use crate::tools::ToolPaths;
 /// Pause between simulated stages so that cancellation can be exercised.
 pub const STAGE_DELAY: Duration = Duration::from_millis(50);
 
-/// The placeholder runner.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct SimulateRunner;
+/// The placeholder runner. Project tools simulate themselves and see the
+/// data roots.
+#[derive(Debug, Clone, Default)]
+pub struct SimulateRunner {
+    /// The server's data roots.
+    pub data_roots: Vec<crate::roots::DataRoot>,
+}
 
 impl Runner for SimulateRunner {
     fn kind(&self) -> RunnerKind {
@@ -36,12 +40,13 @@ impl Runner for SimulateRunner {
     }
 
     fn run(&self, request: RunRequest, context: RunContext) -> RunFuture {
+        let data_roots = self.data_roots.clone();
         Box::pin(async move {
             if let Err(error) = context.status.report(RunnerEvent::Running { state: None }) {
                 tracing::error!(%error, "could not persist the running state");
             }
             if request.project.is_some() {
-                return simulate_project(request, context).await;
+                return simulate_project(request, context, data_roots).await;
             }
             simulate(request, context.lines, context.cancel).await
         })
@@ -62,7 +67,11 @@ struct Volume {
 }
 
 /// Runs a project tool's own placeholder after a cancellable pause.
-async fn simulate_project(request: RunRequest, context: RunContext) -> io::Result<RunOutcome> {
+async fn simulate_project(
+    request: RunRequest,
+    context: RunContext,
+    data_roots: Vec<crate::roots::DataRoot>,
+) -> io::Result<RunOutcome> {
     let Some(project) = request.project else {
         return Err(io::Error::other("not a project job"));
     };
@@ -72,28 +81,36 @@ async fn simulate_project(request: RunRequest, context: RunContext) -> io::Resul
     let crate::tools::Layout::Project(_) = project.tool.layout() else {
         return Err(io::Error::other("not a project tool"));
     };
-    let _ = context.lines.send(log_line(
-        "INFO",
-        &format!("simulated run of: {}", shell_join(&request.argv)),
-    ));
     tokio::select! {
         _ = tokio::time::sleep(STAGE_DELAY * 2) => {},
         _ = context.cancel.cancelled() => return Ok(RunOutcome::Cancelled),
     }
     let sink = context.lines.clone();
-    let status = tokio::task::spawn_blocking(move || {
+    let cancel = context.cancel.clone();
+    let command = crate::tools::project::ProjectCommand {
+        main: request.argv.clone(),
+        follow_up: project.follow_up.clone(),
+    };
+    let end = tokio::task::spawn_blocking(move || {
         let crate::tools::Layout::Project(tool) = project.tool.layout() else {
             unreachable!("checked above")
         };
         let log = move |line: String| {
             let _ = sink.send(line);
         };
+        let cancelled = || cancel.is_cancelled();
+        let pause = || std::thread::sleep(STAGE_DELAY);
         tool.simulate(
             &inputs,
             &crate::tools::project::SimulatedRun {
                 project_dir: &project.project_dir,
                 directory: &project.directory,
+                command: &command,
+                launch: project.launch,
+                data_roots: &data_roots,
                 log: &log,
+                pause: &pause,
+                cancelled: &cancelled,
             },
         )
     })
@@ -102,7 +119,14 @@ async fn simulate_project(request: RunRequest, context: RunContext) -> io::Resul
     if context.cancel.is_cancelled() {
         return Ok(RunOutcome::Cancelled);
     }
-    Ok(RunOutcome::Exited(status))
+    Ok(match end {
+        crate::tools::project::SimulatedEnd::Exited(status) => RunOutcome::Exited(status),
+        crate::tools::project::SimulatedEnd::Failed(message) => RunOutcome::Failed {
+            code: "tool-failed",
+            message,
+        },
+        crate::tools::project::SimulatedEnd::Cancelled => RunOutcome::Cancelled,
+    })
 }
 
 async fn simulate(

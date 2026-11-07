@@ -8,8 +8,15 @@ on:
       - 'exes/compute-server/**'
       - 'apps/nesvor/**'
       - 'packages/components/**'
+      - 'packages/cryo-em/**'
       - 'packages/runtime-support/**'
       - 'scripts/package-compute-server.mjs'
+      - 'test/remote-compute-protocol.test.mjs'
+      - 'test/remote-compute-hpc.test.mjs'
+      - 'test-utils/compute-reference-server.mjs'
+      - 'test-utils/relion-simulator.mjs'
+      - 'test-utils/data-roots.mjs'
+      - 'test-utils/nifti-fixture.mjs'
       - 'test/compute-server-distribution.test.mjs'
   push:
     branches: [main]
@@ -18,8 +25,15 @@ on:
       - 'exes/compute-server/**'
       - 'apps/nesvor/**'
       - 'packages/components/**'
+      - 'packages/cryo-em/**'
       - 'packages/runtime-support/**'
       - 'scripts/package-compute-server.mjs'
+      - 'test/remote-compute-protocol.test.mjs'
+      - 'test/remote-compute-hpc.test.mjs'
+      - 'test-utils/compute-reference-server.mjs'
+      - 'test-utils/relion-simulator.mjs'
+      - 'test-utils/data-roots.mjs'
+      - 'test-utils/nifti-fixture.mjs'
   workflow_dispatch:
     inputs:
       draft_release:
@@ -65,6 +79,8 @@ jobs:
           cargo clippy --locked --release --all-targets -- -D warnings
           cargo fmt --check
           cargo build --locked --release
+      - name: Protocol conformance suites against the server
+        run: make -C exes/compute-server conformance
       - name: Build frontend and test packaging
         run: |
           pnpm --filter nesvor build

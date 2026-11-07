@@ -12,10 +12,12 @@ import {
   relionNumber,
   relionOutputs,
   resolveInputPaths,
+  typedNumber,
   validateRelionSpec,
 } from '../src/spec.js';
 import { CPU_PROFILE, GPU_PROFILE, GUI_CASES, PROJECT, shellWords } from './gui-cases.js';
 import { argvCases } from '../scripts/write-argv-fixture.mjs';
+import { validationCases } from '../scripts/write-validation-fixture.mjs';
 
 function run(testCase) {
   const validated = validateRelionSpec(testCase.spec, { parts: testCase.parts ?? [], profile: testCase.profile });
@@ -46,6 +48,11 @@ test('the argv fixture matches the interpreter', async () => {
   assert.deepEqual(fixture, argvCases());
 });
 
+test('the validation fixture matches the interpreter', async () => {
+  const fixture = JSON.parse(await readFile(new URL('./fixtures/validation-cases.json', import.meta.url), 'utf8'));
+  assert.deepEqual(fixture, JSON.parse(JSON.stringify(validationCases())));
+});
+
 test('job type directories', () => {
   assert.equal(jobTypeDirectory('class2d'), 'Class2D');
   assert.equal(jobTypeDirectory('postprocess'), 'PostProcess');
@@ -66,6 +73,27 @@ test('numbers are written as RELION floatToString writes them', () => {
   assert.equal(relionNumber(0.00001), '1e-05');
   assert.equal(relionNumber(1 / 3), '0.333333');
   assert.equal(relionNumber(12.000001), '12');
+});
+
+test('number options are written as typed into the GUI, which passes them unchanged', () => {
+  assert.equal(typedNumber(0.885), '0.885');
+  assert.equal(typedNumber(0.8851234), '0.8851234');
+  assert.equal(typedNumber(60), '60');
+  assert.equal(typedNumber(-0.1), '-0.1');
+  assert.equal(typedNumber(0), '0');
+  assert.equal(typedNumber(-0), '0');
+  assert.equal(typedNumber(0.0000001), '0.0000001');
+  assert.equal(typedNumber(-1.5e-10), '-0.00000000015');
+  assert.equal(typedNumber(123456789), '123456789');
+  assert.equal(typedNumber(1e21), '1000000000000000000000');
+});
+
+test('numbers round exact ties to even, as printf does', () => {
+  assert.equal(relionNumber(123456.5), '123456');
+  assert.equal(relionNumber(123457.5), '123458');
+  assert.equal(relionNumber(1234565), '1.23456e+06');
+  assert.equal(relionNumber(999999.5), '1e+06');
+  assert.equal(relionNumber(-2.5), '-2.5');
 });
 
 test('launch rules', () => {
@@ -250,10 +278,19 @@ test('the job directory must match the command', () => {
 });
 
 test('the server can pass its own input paths', () => {
-  const testCase = GUI_CASES.find(item => item.spec.command === 'import');
+  const testCase = GUI_CASES.find(item => item.spec.command === 'motioncorr');
   const validated = validateRelionSpec(testCase.spec);
-  const result = relionCommand(validated, { directory: 'Import/job001', profile: CPU_PROFILE, inputPaths: { movies: '/data/examples/x/*.tiff' } });
-  assert.equal(result.args[result.args.indexOf('--i') + 1], '/data/examples/x/*.tiff');
+  const result = relionCommand(validated, { directory: 'MotionCorr/job002', profile: CPU_PROFILE, inputPaths: { movies: 'Import/job009/movies.star' } });
+  assert.equal(result.args[result.args.indexOf('--i') + 1], 'Import/job009/movies.star');
+});
+
+test('import links the data-root directory into its job and imports through the link', () => {
+  const spec = { tool: 'relion', command: 'import', project: PROJECT, inputs: { movies: { root: 'facility', path: '', pattern: 'grid?_*.eer' } }, options: { angpix: 1, kV: 300, Cs: 2.7 } };
+  const result = relionCommand(validateRelionSpec(spec), { directory: 'Import/job004', profile: CPU_PROFILE });
+  assert.deepEqual([result.program, ...result.args], ['ln', '-sfn', '/data/facility', 'Import/job004/data']);
+  const [relionImport] = result.then;
+  assert.equal(relionImport.program, 'relion_import');
+  assert.equal(relionImport.args[relionImport.args.indexOf('--i') + 1], 'Import/job004/data/grid?_*.eer');
 });
 
 test('outputs follow the options', () => {

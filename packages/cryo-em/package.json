@@ -14,7 +14,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/spec.js && node --check scripts/write-argv-fixture.mjs && node --check test/gui-cases.js && node --check test/spec.test.js",
-    "fixture": "node scripts/write-argv-fixture.mjs"
+    "lint": "node --check src/spec.js && node --check scripts/write-argv-fixture.mjs && node --check scripts/write-validation-fixture.mjs && node --check test/gui-cases.js && node --check test/spec.test.js && node --check validation/relion-gui.mjs && node --check validation/pipeliner-parity.mjs && node --check validation/container-chain.mjs",
+    "fixture": "node scripts/write-argv-fixture.mjs && node scripts/write-validation-fixture.mjs"
   }
 }

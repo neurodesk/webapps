@@ -18,7 +18,8 @@ pub struct Project {
     pub id: String,
     /// Display name.
     pub name: String,
-    /// RFC 3339 creation time.
+    /// RFC 3339 creation time, to the millisecond, so projects created in
+    /// the same second still list newest first.
     pub created_at: String,
     /// Job directories allocated so far; the next job is `jobNNN` with NNN one more.
     pub allocated: u32,
@@ -28,12 +29,19 @@ pub struct Project {
 }
 
 impl Project {
+    /// The creation time; records written before millisecond precision parse too.
+    pub fn created(&self) -> Option<DateTime<Utc>> {
+        DateTime::parse_from_rfc3339(&self.created_at)
+            .ok()
+            .map(|time| time.with_timezone(&Utc))
+    }
+
     /// A new project named `name`.
     pub fn new(id: String, name: String, created_at: DateTime<Utc>) -> Project {
         Project {
             id,
             name,
-            created_at: created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            created_at: created_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             allocated: 0,
             deleted: false,
         }
@@ -204,6 +212,20 @@ mod tests {
         assert!(validate_name("").is_err());
         assert!(validate_name(&"x".repeat(101)).is_err());
         assert!(validate_name("a\nb").is_err());
+    }
+
+    #[test]
+    fn creation_times_keep_milliseconds_and_read_older_records() {
+        let time = DateTime::parse_from_rfc3339("2026-11-07T10:00:00.250Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let project = Project::new("a".repeat(32), "x".into(), time);
+        assert_eq!(project.created_at, "2026-11-07T10:00:00.250Z");
+        let older = Project {
+            created_at: "2026-11-07T10:00:00Z".into(),
+            ..project.clone()
+        };
+        assert!(older.created() < project.created());
     }
 
     #[test]

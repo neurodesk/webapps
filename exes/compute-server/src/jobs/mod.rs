@@ -827,7 +827,7 @@ impl JobStore {
                         profile: &profile,
                         launch,
                     },
-                );
+                )?;
                 let project_dir = self.dirs.project(&place.project);
                 let request = RunRequest {
                     job_id: job.id.clone(),

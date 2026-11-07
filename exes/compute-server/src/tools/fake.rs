@@ -10,7 +10,7 @@ use std::io;
 use serde_json::{Map, Value};
 
 use super::project::{
-    LaunchPlan, ProjectArgs, ProjectCommand, ProjectInputs, ProjectTool, SimulatedRun,
+    LaunchPlan, ProjectArgs, ProjectCommand, ProjectInputs, ProjectTool, SimulatedEnd, SimulatedRun,
 };
 use super::{JobInputs, Layout, LogLevel, LogUpdate, ReceivedPart, SpecError, Tool, ValidatedJob};
 use crate::profiles::Profile;
@@ -149,7 +149,11 @@ impl ProjectTool for FakeRelion {
         })
     }
 
-    fn command(&self, job: &ProjectInputs, args: &ProjectArgs<'_>) -> ProjectCommand {
+    fn command(
+        &self,
+        job: &ProjectInputs,
+        args: &ProjectArgs<'_>,
+    ) -> Result<ProjectCommand, String> {
         let mut main = vec![
             "fake_relion".to_string(),
             "--o".to_string(),
@@ -177,15 +181,19 @@ impl ProjectTool for FakeRelion {
                 ]
             })
             .collect();
-        ProjectCommand { main, follow_up }
+        Ok(ProjectCommand { main, follow_up })
     }
 
     fn required_outputs(&self, _job: &ProjectInputs) -> Vec<String> {
         vec!["out.star".to_string()]
     }
 
-    fn simulate(&self, job: &ProjectInputs, run: &SimulatedRun<'_>) -> io::Result<i32> {
+    fn simulate(&self, job: &ProjectInputs, run: &SimulatedRun<'_>) -> io::Result<SimulatedEnd> {
         let options = options(job);
+        (run.log)(format!(
+            "simulated run of: {}",
+            crate::runner::shell_join(&run.command.main)
+        ));
         let flag = |key: &str| options.get(key).and_then(Value::as_bool).unwrap_or(false);
         let dir = run.project_dir.join(run.directory);
         (run.log)("progress 0.5".to_string());
@@ -199,7 +207,7 @@ impl ProjectTool for FakeRelion {
         if flag("fail") {
             (run.log)("ERROR simulated failure".to_string());
             std::fs::write(dir.join("RELION_JOB_EXIT_FAILURE"), "")?;
-            return Ok(1);
+            return Ok(SimulatedEnd::Exited(1));
         }
         if !flag("skipOutput") {
             let mut star = String::from("data_\n");
@@ -222,6 +230,6 @@ impl ProjectTool for FakeRelion {
             std::fs::write(dir.join("out.star"), star)?;
         }
         std::fs::write(dir.join("RELION_JOB_EXIT_SUCCESS"), "")?;
-        Ok(0)
+        Ok(SimulatedEnd::Exited(0))
     }
 }

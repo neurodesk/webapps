@@ -64,9 +64,15 @@ impl JobStore {
     /// All projects, newest first.
     pub fn projects(&self) -> Vec<ProjectSummary> {
         let inner = self.lock();
-        let mut projects: Vec<ProjectSummary> = inner
-            .projects
-            .values()
+        let mut ordered: Vec<&Project> = inner.projects.values().collect();
+        ordered.sort_by(|a, b| {
+            b.created()
+                .cmp(&a.created())
+                .then_with(|| b.created_at.cmp(&a.created_at))
+                .then_with(|| b.id.cmp(&a.id))
+        });
+        ordered
+            .into_iter()
             .map(|project| ProjectSummary {
                 id: project.id.clone(),
                 name: project.name.clone(),
@@ -81,9 +87,7 @@ impl JobStore {
                     })
                     .count(),
             })
-            .collect();
-        projects.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
-        projects
+            .collect()
     }
 
     /// A project with its jobs in creation order.

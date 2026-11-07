@@ -228,7 +228,9 @@ pub fn build(config: &ServeConfig) -> io::Result<Arc<dyn Runner>> {
             image: PathBuf::from(&config.image),
         }),
         RunnerKind::Native => Arc::new(native::NativeRunner),
-        RunnerKind::Simulate => Arc::new(simulate::SimulateRunner),
+        RunnerKind::Simulate => Arc::new(simulate::SimulateRunner {
+            data_roots: config.data_roots.clone(),
+        }),
         RunnerKind::Slurm => {
             let settings = config
                 .slurm

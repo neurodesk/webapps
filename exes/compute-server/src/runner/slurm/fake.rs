@@ -164,6 +164,14 @@ impl FakeSlurm {
         std::env::join_paths(paths).unwrap()
     }
 
+    // Writes through a temporary file and a rename, so a fake command that
+    // runs concurrently never reads a truncated, empty state file.
+    fn put(path: PathBuf, contents: impl AsRef<[u8]>) {
+        let temporary = path.with_extension("tmp");
+        std::fs::write(&temporary, contents).unwrap();
+        std::fs::rename(&temporary, &path).unwrap();
+    }
+
     fn job(&self, id: &str) -> PathBuf {
         self.state.join("jobs").join(id)
     }
@@ -172,7 +180,7 @@ impl FakeSlurm {
     pub fn mode(&self, name: &str, value: Option<&str>) {
         let path = self.state.join("mode").join(name);
         match value {
-            Some(value) => std::fs::write(path, value).unwrap(),
+            Some(value) => Self::put(path, value),
             None => {
                 let _ = std::fs::remove_file(path);
             }
@@ -181,7 +189,7 @@ impl FakeSlurm {
 
     /// The "today" sacct uses without `-S`.
     pub fn today(&self, start: &str) {
-        std::fs::write(self.state.join("today"), start).unwrap();
+        Self::put(self.state.join("today"), start);
     }
 
     /// The Slurm id of the job named `nd-<job id>`.
@@ -212,11 +220,10 @@ impl FakeSlurm {
 
     /// Puts a job in `squeue` with a state and reason.
     pub fn queue(&self, id: &str, state: &str, reason: Option<&str>) {
-        std::fs::write(
+        Self::put(
             self.job(id).join("queue"),
             format!("{state}|{}", reason.unwrap_or("None")),
-        )
-        .unwrap();
+        );
     }
 
     /// Takes a job out of `squeue`.
@@ -226,14 +233,14 @@ impl FakeSlurm {
 
     /// Records an accounting state.
     pub fn account(&self, id: &str, state: &str, exit: &str) {
-        std::fs::write(self.job(id).join("sacct"), format!("{state}|{exit}")).unwrap();
+        Self::put(self.job(id).join("sacct"), format!("{state}|{exit}"));
     }
 
     /// Makes `sacct --name` list or hide a job.
     pub fn accounted(&self, id: &str, listed: bool) {
         let path = self.job(id).join("accounted");
         if listed {
-            std::fs::write(path, "").unwrap();
+            Self::put(path, "");
         } else {
             let _ = std::fs::remove_file(path);
         }
@@ -241,7 +248,7 @@ impl FakeSlurm {
 
     /// Makes `scontrol show job` know a job.
     pub fn control(&self, id: &str, state: &str, exit: &str) {
-        std::fs::write(self.job(id).join("scontrol"), format!("{state}|{exit}")).unwrap();
+        Self::put(self.job(id).join("scontrol"), format!("{state}|{exit}"));
     }
 
     /// Ends a job: out of the queue, with an accounting record.
