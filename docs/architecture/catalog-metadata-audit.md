@@ -116,7 +116,7 @@ Categories may contain a single app. Cross-list substantial tasks and scientific
 | surfaces | Surfaces & Meshes | SurfAnnotate, Brain2Print, TopoFit |
 | preprocessing | Preprocessing | NiiMath, Brain extraction, fastprep, Degibbs, N4, Dwidenoise, SDC, ME-ICA, DWI Correct, HMC, ANTs DenoiseImage, Deconvolution |
 | visualization | Visualization | MRI2VID, SurfAnnotate, ZARRo, DICOM View |
-| quality-control | Quality Control | dicompare, BrowserQC, DICOM View, BrainQCNet |
+| quality-control | Quality Control | dicompare, BrowserQC, DICOM View, BrainQCNet, Microscope QC |
 | pipelines | Workflows | fastprep, Pipeline builder |
 | functional-imaging | Functional Imaging | fastprep, ME-ICA, SamSrf |
 | spectroscopy | Spectroscopy | LCModel |
