@@ -216,6 +216,11 @@ test("the voxel limit counts voxels, not the header bytes around them", async ()
   assert.deepEqual((await readVolume(new File([nifti], "stack.nii"), { maxBytes: voxels.byteLength })).dims, [16, 16, 16]);
   assert.deepEqual((await readVolume(new File([tiff], "stack.tif"), { maxBytes: voxels.byteLength })).dims, [16, 16, 16]);
   await assert.rejects(readVolume(new File([tiff], "stack.tif"), { maxBytes: voxels.byteLength - 1 }), { name: "InputTooLargeError", message: /Decoded TIFF stack too large/ });
+  // An 8-bit TIFF is counted as the Float32 array it is read into, as a NIfTI is.
+  const bytes = stackTiff(new Uint8Array(4096), [16, 16, 16], { x: 1, y: 1, z: 1 });
+  await assert.rejects(readVolume(new File([bytes], "stack8.tif"), { maxBytes: 4096 }), { name: "InputTooLargeError", message: /Decoded TIFF stack too large/ });
+  const read = await readVolume(new File([bytes], "stack8.tif"), { maxBytes: voxels.byteLength });
+  assert.ok(read.data instanceof Float32Array);
 });
 
 test("compressed NIfTI accepts the exact decoded limit and refuses larger images from its header", async () => {
@@ -238,8 +243,10 @@ test("a NIfTI header that understates its data stops inflating at the file limit
     streams.push(stream);
     return {
       readable: new ReadableStream({
+        // Finite, so a missing backstop reads it to the end and fails the assertions below.
         pull(controller) {
-          controller.enqueue(stream.chunks++ ? new Uint8Array(256) : header);
+          if (stream.chunks === 64) controller.close();
+          else controller.enqueue(stream.chunks++ ? new Uint8Array(256) : header);
         },
         cancel() { stream.cancelled = true; },
       }),
