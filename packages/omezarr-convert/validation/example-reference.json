@@ -1,0 +1,432 @@
+{
+  "source": {
+    "shape": [
+      1,
+      2,
+      32,
+      515,
+      771
+    ],
+    "dtype": "uint8",
+    "sha256": "1f6132ffcbf93279bbad0d5fedf5b63bd1ee1e40f100edc05434f064ae07924b"
+  },
+  "0.4": {
+    "multiscales": {
+      "metadata": {
+        "method": "loci.common.image.SimpleImageScaler",
+        "version": "Bio-Formats 9.0.0-rc2"
+      },
+      "axes": [
+        {
+          "name": "t",
+          "type": "time"
+        },
+        {
+          "name": "c",
+          "type": "channel"
+        },
+        {
+          "unit": "micrometer",
+          "name": "z",
+          "type": "space"
+        },
+        {
+          "unit": "micrometer",
+          "name": "y",
+          "type": "space"
+        },
+        {
+          "unit": "micrometer",
+          "name": "x",
+          "type": "space"
+        }
+      ],
+      "name": "retina_large crop",
+      "datasets": [
+        {
+          "path": "0",
+          "coordinateTransformations": [
+            {
+              "scale": [
+                1.0,
+                1.0,
+                0.19999999999999998,
+                0.022898532227185703,
+                0.02290576171875
+              ],
+              "type": "scale"
+            }
+          ]
+        },
+        {
+          "path": "1",
+          "coordinateTransformations": [
+            {
+              "scale": [
+                1.0,
+                1.0,
+                0.19999999999999998,
+                0.04579706445437141,
+                0.0458115234375
+              ],
+              "type": "scale"
+            }
+          ]
+        },
+        {
+          "path": "2",
+          "coordinateTransformations": [
+            {
+              "scale": [
+                1.0,
+                1.0,
+                0.19999999999999998,
+                0.09159412890874281,
+                0.091623046875
+              ],
+              "type": "scale"
+            }
+          ]
+        }
+      ],
+      "version": "0.4"
+    },
+    "omero": {
+      "channels": [
+        {
+          "color": "FF0000",
+          "coefficient": 1,
+          "active": true,
+          "label": "Channel 0",
+          "window": {
+            "min": 0.0,
+            "max": 231.0,
+            "start": 0.0,
+            "end": 231.0
+          },
+          "family": "linear",
+          "inverted": false
+        },
+        {
+          "color": "00FF00",
+          "coefficient": 1,
+          "active": true,
+          "label": "Channel 1",
+          "window": {
+            "min": 0.0,
+            "max": 152.0,
+            "start": 0.0,
+            "end": 152.0
+          },
+          "family": "linear",
+          "inverted": false
+        }
+      ],
+      "rdefs": {
+        "defaultT": 0,
+        "model": "color",
+        "defaultZ": 16
+      }
+    },
+    "levels": [
+      {
+        "path": "0",
+        "shape": [
+          1,
+          2,
+          32,
+          515,
+          771
+        ],
+        "chunks": [
+          1,
+          1,
+          1,
+          256,
+          256
+        ],
+        "dtype": "uint8",
+        "sha256": "1f6132ffcbf93279bbad0d5fedf5b63bd1ee1e40f100edc05434f064ae07924b"
+      },
+      {
+        "path": "1",
+        "shape": [
+          1,
+          2,
+          32,
+          257,
+          385
+        ],
+        "chunks": [
+          1,
+          1,
+          1,
+          256,
+          256
+        ],
+        "dtype": "uint8",
+        "sha256": "bfac792377c9ef821b85ae70b22fb4b5f120e263eb473ecb91a3dd5ce998959b"
+      },
+      {
+        "path": "2",
+        "shape": [
+          1,
+          2,
+          32,
+          128,
+          192
+        ],
+        "chunks": [
+          1,
+          1,
+          1,
+          128,
+          192
+        ],
+        "dtype": "uint8",
+        "sha256": "ab919f7bcd17b9a7918aadb9adca7d861d7f958d074a4fdec808296c1d085d53"
+      }
+    ]
+  },
+  "0.5": {
+    "multiscales": {
+      "metadata": {
+        "method": "loci.common.image.SimpleImageScaler",
+        "version": "Bio-Formats 9.0.0-rc2"
+      },
+      "axes": [
+        {
+          "name": "t",
+          "type": "time"
+        },
+        {
+          "name": "c",
+          "type": "channel"
+        },
+        {
+          "unit": "micrometer",
+          "name": "z",
+          "type": "space"
+        },
+        {
+          "unit": "micrometer",
+          "name": "y",
+          "type": "space"
+        },
+        {
+          "unit": "micrometer",
+          "name": "x",
+          "type": "space"
+        }
+      ],
+      "name": "retina_large crop",
+      "datasets": [
+        {
+          "path": "0",
+          "coordinateTransformations": [
+            {
+              "scale": [
+                1.0,
+                1.0,
+                0.19999999999999998,
+                0.022898532227185703,
+                0.02290576171875
+              ],
+              "type": "scale"
+            }
+          ]
+        },
+        {
+          "path": "1",
+          "coordinateTransformations": [
+            {
+              "scale": [
+                1.0,
+                1.0,
+                0.19999999999999998,
+                0.04579706445437141,
+                0.0458115234375
+              ],
+              "type": "scale"
+            }
+          ]
+        },
+        {
+          "path": "2",
+          "coordinateTransformations": [
+            {
+              "scale": [
+                1.0,
+                1.0,
+                0.19999999999999998,
+                0.09159412890874281,
+                0.091623046875
+              ],
+              "type": "scale"
+            }
+          ]
+        }
+      ]
+    },
+    "omero": {
+      "channels": [
+        {
+          "color": "FF0000",
+          "coefficient": 1,
+          "active": true,
+          "label": "Channel 0",
+          "window": {
+            "min": 0.0,
+            "max": 231.0,
+            "start": 0.0,
+            "end": 231.0
+          },
+          "family": "linear",
+          "inverted": false
+        },
+        {
+          "color": "00FF00",
+          "coefficient": 1,
+          "active": true,
+          "label": "Channel 1",
+          "window": {
+            "min": 0.0,
+            "max": 152.0,
+            "start": 0.0,
+            "end": 152.0
+          },
+          "family": "linear",
+          "inverted": false
+        }
+      ],
+      "rdefs": {
+        "defaultT": 0,
+        "model": "color",
+        "defaultZ": 16
+      }
+    },
+    "levels": [
+      {
+        "path": "0",
+        "shape": [
+          1,
+          2,
+          32,
+          515,
+          771
+        ],
+        "chunks": [
+          1,
+          1,
+          1,
+          256,
+          256
+        ],
+        "dtype": "uint8",
+        "sha256": "1f6132ffcbf93279bbad0d5fedf5b63bd1ee1e40f100edc05434f064ae07924b"
+      },
+      {
+        "path": "1",
+        "shape": [
+          1,
+          2,
+          32,
+          257,
+          385
+        ],
+        "chunks": [
+          1,
+          1,
+          1,
+          256,
+          256
+        ],
+        "dtype": "uint8",
+        "sha256": "bfac792377c9ef821b85ae70b22fb4b5f120e263eb473ecb91a3dd5ce998959b"
+      },
+      {
+        "path": "2",
+        "shape": [
+          1,
+          2,
+          32,
+          128,
+          192
+        ],
+        "chunks": [
+          1,
+          1,
+          1,
+          128,
+          192
+        ],
+        "dtype": "uint8",
+        "sha256": "ab919f7bcd17b9a7918aadb9adca7d861d7f958d074a4fdec808296c1d085d53"
+      }
+    ]
+  },
+  "mean": [
+    {
+      "shape": [
+        1,
+        2,
+        32,
+        515,
+        771
+      ],
+      "sha256": "1f6132ffcbf93279bbad0d5fedf5b63bd1ee1e40f100edc05434f064ae07924b"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        32,
+        257,
+        385
+      ],
+      "sha256": "d29987a59ee0308794b4b050c16037853786e09e6ebac10eabd13bed55dab87d"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        32,
+        128,
+        192
+      ],
+      "sha256": "2c015e66920842ca07e296f65a946d31098c285baf26f1148f8c98b3bb610e76"
+    }
+  ],
+  "nearest": [
+    {
+      "shape": [
+        1,
+        2,
+        32,
+        515,
+        771
+      ],
+      "sha256": "1f6132ffcbf93279bbad0d5fedf5b63bd1ee1e40f100edc05434f064ae07924b"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        32,
+        257,
+        385
+      ],
+      "sha256": "bfac792377c9ef821b85ae70b22fb4b5f120e263eb473ecb91a3dd5ce998959b"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        32,
+        128,
+        192
+      ],
+      "sha256": "ab919f7bcd17b9a7918aadb9adca7d861d7f958d074a4fdec808296c1d085d53"
+    }
+  ]
+}

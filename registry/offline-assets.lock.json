@@ -5243,6 +5243,27 @@
       "kind": "example",
       "dependencies": []
     },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/34cb2e8c741240765ed75b48328ffe8676cbba24/omezarr-convert/example/retina-crop.ome.tif": {
+      "sha256": "a76758337ac07c0ffd2fa9f423409a31e576eb820e91c8b0830b221b6bdb8225",
+      "bytes": 1842339,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif": {
+      "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
+      "bytes": 461646,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif": {
+      "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
+      "bytes": 12590015,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif": {
       "sha256": "8fd1ed64bed1350597957b648b3b86a8c411b33c4b6733a7fbfe374243aad265",
       "bytes": 129856,
@@ -5264,20 +5285,6 @@
       "contentType": "application/octet-stream",
       "kind": "model",
       "license": "CC-BY-4.0",
-      "dependencies": []
-    },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif": {
-      "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
-      "bytes": 461646,
-      "contentType": "image/tiff",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif": {
-      "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
-      "bytes": 12590015,
-      "contentType": "image/tiff",
-      "kind": "example",
       "dependencies": []
     }
   },
@@ -6630,14 +6637,17 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif"
     ],
-    "microsam": [
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-encoder.onnx",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-decoder.onnx"
+    "omezarr-convert": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/34cb2e8c741240765ed75b48328ffe8676cbba24/omezarr-convert/example/retina-crop.ome.tif"
     ],
     "microscope-qc": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif"
+    ],
+    "microsam": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-encoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-decoder.onnx"
     ]
   }
 }

@@ -122,7 +122,7 @@ Categories may contain a single app. Cross-list substantial tasks and scientific
 | spectroscopy | Spectroscopy | LCModel |
 | fetal-imaging | Fetal Imaging | NeSVoR |
 | privacy | Privacy | Deface |
-| conversion | Conversion | dcm2niix, ReproIn |
+| conversion | Conversion | dcm2niix, ReproIn, OME-Zarr Converter |
 | spot-detection | Spot Detection | Spot detection |
 | calcium-imaging | Calcium Imaging | Calcium imaging |
 | fibre-orientation | Fibre Orientation | Structure Tensor |

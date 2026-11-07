@@ -7,6 +7,9 @@ for each app are recorded in `registry/apps.yml`.
 - `packages/calmar`: source licence unresolved, preserving CALMAR `NOASSERTION` as
   npm `UNLICENSED` (`packages/calmar/LICENSE`, `packages/calmar/NOTICE`).
 - `packages/components`: MIT (`packages/components/LICENSE`)
+- `packages/omezarr-convert`: Apache-2.0 (`packages/omezarr-convert/LICENSE`); its vendored OME-NGFF JSON
+  schemas are under the W3C Software and Document License (`packages/omezarr-convert/schemas/LICENSE.md`,
+  `packages/omezarr-convert/NOTICE`)
 - `packages/node-drivers`: MIT (`packages/node-drivers/LICENSE`); Node drivers and the `brainchop-mindgrab` command line
 - `apps/musclemap`: MIT (`apps/musclemap/web/LICENSE`)
 - `apps/qsmbly`: MIT (`apps/qsmbly/LICENSE`)
