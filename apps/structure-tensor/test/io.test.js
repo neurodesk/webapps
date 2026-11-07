@@ -44,7 +44,8 @@ test("a calibrated single-channel OME stack keeps its micrometre voxel size", as
 
 test("an OME-TIFF whose planes are in other files is refused", async () => {
   const buffer = buildTiff({ width: 16, height: 16, pages: pages(1), description: omeXml({ SizeX: 16, SizeY: 16, SizeZ: 4, SizeC: 1, SizeT: 1 }) });
-  await assert.rejects(tiffLayout(buffer), /declares 4 planes but holds 1/);
+  // The shared reader refuses a TiffData mapping past the last page before the app counts planes.
+  await assert.rejects(tiffLayout(buffer), /TiffData names page 2, but the file has 1|declares 4 planes but holds 1/);
 });
 
 test("a small compressed TIFF over the voxel limit is refused from its header, before decoding", async () => {
