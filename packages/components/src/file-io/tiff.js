@@ -166,20 +166,21 @@ function omeStagePosition(text) {
 
 /**
  * The channel extent of the plane grid. OME counts samples in SizeC, so an interleaved RGB
- * image is SizeC 3 with one `<Channel SamplesPerPixel="3">` and one IFD per plane. The channels'
- * SamplesPerPixel decide when they add up to SizeC, else the first channel's when it divides
- * SizeC, else the first page's samples per pixel when it does.
+ * image is SizeC 3 with one `<Channel SamplesPerPixel="3">` and one IFD per plane. The samples
+ * the first page holds decide when there are several and they divide SizeC (the pages are the
+ * data; their `<Channel>` elements can contradict them), else the channels' SamplesPerPixel
+ * when they add up to SizeC, else the first channel's when it divides SizeC.
  */
 function planeChannels(sizeC, description, pageSamples) {
+  const divides = (count) => Number.isInteger(count) && count > 1 && sizeC % count === 0;
+  if (divides(pageSamples)) return sizeC / pageSamples;
   const pixels = description.match(/<(?:[\w.-]+:)?Pixels\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?Pixels>/)?.[1] ?? '';
   const samples = (pixels.match(/<(?:[\w.-]+:)?Channel\b[^>]*>/g) ?? []).map((channel) => {
     const value = xmlAttribute(channel, 'SamplesPerPixel')?.trim();
     return value !== undefined && INTEGER.test(value) && Number(value) > 0 ? Number(value) : null;
   });
-  const divides = (count) => Number.isInteger(count) && count > 1 && sizeC % count === 0;
   if (samples.length && samples.every((count) => count !== null) && samples.reduce((sum, count) => sum + count, 0) === sizeC) return samples.length;
-  if (divides(samples[0])) return sizeC / samples[0];
-  return divides(pageSamples) ? sizeC / pageSamples : sizeC;
+  return divides(samples[0]) ? sizeC / samples[0] : sizeC;
 }
 
 /**

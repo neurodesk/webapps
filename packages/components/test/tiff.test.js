@@ -406,6 +406,15 @@ test('OME channel samples come from the first page when no Channel names them', 
   await assert.rejects(readTiffStack(buffer(writeTiffStack({ width: 1, height: 1, data: new Uint8Array([1, 2]), description: grey }))), /names page 3, but the file has 2/);
 });
 
+test('OME pages decide the channel samples when their Channel elements contradict them', async () => {
+  // RGB pages whose three Channels claim one sample each: main read these as one RGB channel.
+  const channels = '<Channel SamplesPerPixel="1"/>'.repeat(3);
+  const description = `<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYCZT" SizeX="1" SizeY="1" SizeC="3" SizeZ="2" SizeT="1">${channels}<TiffData/></Pixels></Image></OME>`;
+  const bytes = buffer(writeTiffStack({ width: 1, height: 1, data: new Uint8Array([3, 3, 3, 9, 9, 9]), rgb: true, description }));
+  const stack = await readTiffStack(bytes, { rgb: 'mean' });
+  assert.deepEqual([stack.pages, stack.metadata.sizeC, ...stack.data], [2, 3, 3, 9]);
+});
+
 test('imagejDescription labels a calibrated z stack that reads back as z planes', async () => {
   const description = imagejDescription({ slices: 4, spacing: 0.13, unit: 'micron', min: 0, max: 1 });
   assert.equal(description, 'ImageJ=1.11a\nimages=4\nslices=4\nhyperstack=true\nspacing=0.13\nunit=micron\nmin=0\nmax=1\n');

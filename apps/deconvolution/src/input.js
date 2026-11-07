@@ -53,7 +53,7 @@ export async function readVolume(file, { signal, maxBytes = MAX_INPUT_BYTES, max
   const bytes = await file.arrayBuffer();
   signal?.throwIfAborted();
   if (format === "tiff") {
-    const stack = await readTiffStack(bytes, { maxBytes, signal });
+    const stack = await readTiffStack(bytes, { maxBytes, signal, Type: Float32Array });
     checkZStack(stack, file.name);
     const spacingUm = stack.metadata.pixelSize;
     checkSquarePixels(spacingUm, file.name);
