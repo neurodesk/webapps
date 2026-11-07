@@ -130,11 +130,20 @@ jobs:
 
   matlab-reference:
     if: github.event_name == 'workflow_dispatch' && inputs.record_matlab
-    name: record actual MATLAB source reference
-    runs-on: ubuntu-22.04
+    name: record actual MATLAB source reference (${{ matrix.host }}, repeat ${{ matrix.repeat }})
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [ubuntu-22.04, ubuntu-24.04]
+        repeat: [1, 2]
+    runs-on: ${{ matrix.host }}
     timeout-minutes: 90
     env:
       MKL_CBWR: COMPATIBLE
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_DYNAMIC: 'FALSE'
+      OMP_DYNAMIC: 'FALSE'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -184,6 +193,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: samsrf-matlab-${{ github.sha }}-${{ github.run_attempt }}
+          name: samsrf-matlab-${{ github.sha }}-${{ matrix.host }}-${{ matrix.repeat }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/samsrf-matlab/
           if-no-files-found: error

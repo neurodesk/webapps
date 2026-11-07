@@ -19,13 +19,23 @@ separately from stock container results.
 The manual `samsrf-native` workflow can record these cases with
 `record_matlab=true`. Set `include_matrix=false` for a shorter diagnostic run
 that omits participant pipelines while retaining numerical primitive cases.
+The workflow runs two independent processes on each of `ubuntu-22.04` and
+`ubuntu-24.04`. Runner labels do not guarantee a CPU vendor. Use each receipt's
+`cpu` field to establish which Intel or AMD machines actually ran the cases.
+Do not pool the receipts or relabel the previous references.
+
 Public GitHub Actions runs are [licensed by MathWorks](https://github.com/matlab-actions/setup-matlab#licensing)
 for MATLAB and the required toolboxes. That grant excludes Compiler. A MATLAB Compiler license is needed
 only to package a new standalone Runtime application; it is not needed for
 this source-level comparison.
 
-The workflow pins `MKL_CBWR=COMPATIBLE` and records MATLAB's reported BLAS
-branch and CPU information. This matters even with an identical MATLAB release:
+The workflow requests `MKL_CBWR=COMPATIBLE`, `MKL_NUM_THREADS=1`,
+`OMP_NUM_THREADS=1`, `MKL_DYNAMIC=FALSE` and `OMP_DYNAMIC=FALSE`. The
+recorder sets and checks MATLAB's computational thread limit with
+`maxNumCompThreads(1)` and records the reported BLAS branch and CPU.
+The effective MKL branch and dynamic-thread setting are still unverified;
+`environment.json` lists these explicitly. A successful recording is not a
+verified cross-host reproducibility result. This matters even with an identical MATLAB release:
 [run 42199010165](https://github.com/neurodesk/webapps/actions/runs/42199010165)
 reported CNR `auto`, while
 [run 42201373392](https://github.com/neurodesk/webapps/actions/runs/42201373392)
@@ -34,7 +44,15 @@ traces and parameter estimates. Existing archives retain their original BLAS
 provenance. Reproducing one recorded backend does not imply bit parity with
 every MATLAB host.
 
-On a machine with MATLAB and the required toolboxes:
+On a machine with MATLAB and the required toolboxes, export the execution
+requests before launching MATLAB:
+
+```sh
+export MKL_CBWR=COMPATIBLE MKL_NUM_THREADS=1 OMP_NUM_THREADS=1
+export MKL_DYNAMIC=FALSE OMP_DYNAMIC=FALSE
+```
+
+Prepare the inputs:
 
 ```sh
 git clone https://github.com/samsrf/samsrf.git "$TMPDIR/samsrf-source"
@@ -139,9 +157,17 @@ The archive manifest hashes every file and identifies the supplemental cases.
 It includes retained discrepancies; case count is not a passing-gate count.
 
 `record_matlab=true, diagnostics_only=true` runs `record_css_diagnostics`
-against those pinned inputs. This isolates full-pipeline CSS optimizer paths,
-complex predictions, QR factors and least-squares coefficients without
-rerunning the entire participant matrix. It records actual MATLAB arithmetic;
+against those pinned inputs in both precisions. It includes MATLAB columns
+47 and 88 from #730 and columns 73 and 22 from #731. Each original-aperture
+case runs with both the saved coarse seed and a seed recomputed on the current
+host. A separate nonnegative control recomputes its own coarse seed.
+The recorder saves every objective call, raw/compressed/convolved prediction,
+correlation reduction, optimizer iteration procedure, termination reason,
+acceptance decision, and final QR factors and complex coefficients.
+The objective remains the actual source `prf_errfun`; diagnostic computations
+do not supply its return value. The callback uses the source's nonfinite stop
+rule. This isolates CSS optimizer paths without rerunning the participant
+matrix. Each completed case has a JSON receipt so a later failure retains it. It records actual MATLAB arithmetic;
 Octave is used only for a syntax check of the recorder.
 
 The source gate is now executable:

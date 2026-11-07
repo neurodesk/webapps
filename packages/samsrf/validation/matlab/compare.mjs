@@ -82,8 +82,10 @@ for (const id of pipelineIds) {
   const recorded = required(id), preprocessing = required(recorded.preprocessing);
   const model = { ...recorded.model };
   const isForward = recorded.analysis === 'prf';
-  if (isForward) model.Data_Precision = 'single';
-  else model.Save_Rmaps = false;
+  assert.ok(['single', 'double'].includes(recorded.precision), `${id}: missing reference precision`);
+  assert.equal(preprocessing.courses.class, recorded.precision, `${id}: observation precision`);
+  model.Data_Precision = recorded.precision;
+  if (!isForward) model.Save_Rmaps = false;
   if (model.Compressive_Nonlinearity) model.Css_Convention = 'samsrf';
   const apertures = samsrf.readAperturesFile(path.join(reference, `${model.Aperture_File}.mat`));
   const vertices = preprocessing.courses.shape[1];

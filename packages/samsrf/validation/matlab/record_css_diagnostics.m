@@ -2,47 +2,135 @@ function record_css_diagnostics(source, reference, output)
 % Isolate the remaining full-pipeline CSS fits using recorded MATLAB inputs.
 addpath(genpath(source));
 if ~isfolder(output), mkdir(output); end
+assert(~isfile(fullfile(output,'diagnostics.json')) && ...
+    ~isfile(fullfile(output,'diagnostics.partial.json')), 'Use a fresh diagnostics directory');
 previous = pwd;
 restore = onCleanup(@() cd(previous));
 cd(output);
-metadata = jsondecode(fileread(fullfile(reference, 'pipeline_single_css.json')));
-pre = jsondecode(fileread(fullfile(reference, [metadata.preprocessing '.json'])));
-model = metadata.model;
-observations = single(read_array(reference, pre.courses));
-grid = read_array(reference, metadata.grid);
-correlations = single(read_array(reference, metadata.coarseCorrelations));
-hrf = read_array(reference, metadata.hrf);
-aps = load(fullfile(reference, [model.Aperture_File '.mat']));
-frames = aps.ApFrm;
-xy = aps.ApXY / max(abs(aps.ApXY(:))) * model.Scaling_Factor;
-profile = str2func(model.Prf_Function);
+environment = reference_environment('source-diagnostics');
+write_json('environment.json', environment);
 cases = {};
-for vertex = [15 18 26 47 58 67 74 79 81 88 89]
-    scores = correlations(vertex,:).^2;
-    selected = scores >= prctile(scores,100);
-    seed = [mean(grid(1:3,selected),2); 1];
-    y = observations(:,vertex);
-    trace = [];
-    errors = [];
-    [parameters, objective] = fminsearch(@evaluate, seed, optimset('Display','off'));
-    raw = prf_predict_timecourse(profile(parameters,xy),frames);
-    compressed = raw.^parameters(end);
-    x = prf_convolve_hrf(compressed,hrf,1);
-    design = [ones(size(x)) x];
-    beta = design \ y;
-    [~, r, piv] = qr(single(design),0);
-    id = sprintf('css_pipeline_single_v%d',vertex);
-    item = struct('id',id,'vertex',vertex,'seed',array_file([id '_seed'],seed), ...
-        'parameters',array_file([id '_parameters'],parameters), ...
-        'objective',array_file([id '_objective'],objective), ...
-        'observations',array_file([id '_observations'],y), ...
-        'prediction',array_file([id '_prediction'],x), ...
-        'raw',array_file([id '_raw'],raw), ...
-        'beta',array_file([id '_beta'],beta), ...
-        'qr',array_file([id '_qr'],r),'pivot',array_file([id '_pivot'],piv), ...
-        'trace',array_file([id '_trace'],trace), 'errors',array_file([id '_errors'],errors));
-    cases{end+1} = item; %#ok<AGROW>
-    fprintf('Recorded %s\n',id);
+for precision = {'single', 'double'}
+    kind = precision{1};
+    metadata = jsondecode(fileread(fullfile(reference, ['pipeline_' kind '_css.json'])));
+    assert(strcmp(metadata.precision, kind), 'Wrong pipeline precision');
+    pre = jsondecode(fileread(fullfile(reference, [metadata.preprocessing '.json'])));
+    assert(strcmp(pre.courses.class, kind), 'Wrong observation class');
+    model = metadata.model;
+    observations = cast(read_array(reference, pre.courses), kind);
+    grid = read_array(reference, metadata.grid);
+    recordedCorrelations = cast(read_array(reference, metadata.coarseCorrelations), kind);
+    hrf = read_array(reference, metadata.hrf);
+    aps = load(fullfile(reference, [model.Aperture_File '.mat']));
+    xy = aps.ApXY / max(abs(aps.ApXY(:))) * model.Scaling_Factor;
+    profile = str2func(model.Prf_Function);
+    for nonnegative = [false true]
+        frames = aps.ApFrm;
+        if nonnegative
+            frames = max(frames, 0);
+        end
+        predictions = zeros(size(observations,1), size(grid,2));
+        for candidate = 1:size(grid,2)
+            raw = prf_predict_timecourse(profile(grid(1:3,candidate),xy),frames);
+            predictions(:,candidate) = prf_convolve_hrf(raw,hrf,model.Downsample_Predictions);
+        end
+        correlations = corr(observations, predictions);
+        coarseId = sprintf('css_coarse_%s_nonnegative%d',kind,nonnegative);
+        coarse = struct('id',coarseId,'kind','css-coarse','precision',kind, ...
+            'nonnegativeApertures',nonnegative, ...
+            'predictions',array_file([coarseId '_predictions'],predictions), ...
+            'correlations',array_file([coarseId '_correlations'],correlations), ...
+            'recordedCorrelations',array_file([coarseId '_recorded'],recordedCorrelations));
+        cases{end+1} = coarse; %#ok<AGROW>
+        % MATLAB columns 47 and 88 are the material double discrepancies in #730.
+        for vertex = [15 18 22 26 47 58 67 73 74 79 81 88 89]
+            % Both seeds separate reference-host coarse ties from fine-fit changes.
+            for seedSource = {'recorded','recomputed'}
+                if nonnegative && strcmp(seedSource{1},'recorded')
+                    continue
+                end
+                seedCorrelations = correlations;
+                if strcmp(seedSource{1},'recorded')
+                    seedCorrelations = recordedCorrelations;
+                end
+                scores = seedCorrelations(vertex,:).^2;
+                selected = scores >= prctile(scores,model.Coarse_Fit_Percentile);
+                seed = [mean(grid(1:3,selected),2); 1]';
+                y = observations(:,vertex);
+                trace = [];
+                errors = [];
+                rawTrace = [];
+                compressedTrace = [];
+                predictionTrace = [];
+                reductions = [];
+                iterations = {};
+                options = optimset('Display','off','OutputFcn',@iteration);
+                if isfield(model,'Nelder_Mead_Tolerance')
+                    options.TolX = model.Nelder_Mead_Tolerance;
+                end
+                [parameters, objective, exitflag, optimizer] = fminsearch(@evaluate, seed, options);
+                acceptedParameters = parameters;
+                accepted = (1-objective) > 0;
+                if accepted
+                    for parameter = 1:numel(parameters)
+                        scaled = parameter <= numel(model.Scaled_Param) && model.Scaled_Param(parameter);
+                        positive = 1;
+                        if parameter <= numel(model.Only_Positive)
+                            positive = model.Only_Positive(parameter);
+                        end
+                        if scaled && abs(acceptedParameters(parameter)) > 2*model.Scaling_Factor
+                            accepted = false;
+                        end
+                        if positive && acceptedParameters(parameter) <= 0
+                            if positive == 1
+                                accepted = false;
+                            else
+                                acceptedParameters(parameter) = abs(acceptedParameters(parameter));
+                                accepted = true;
+                            end
+                        end
+                    end
+                end
+                raw = prf_predict_timecourse(profile(parameters,xy),frames);
+                compressed = raw.^parameters(end);
+                x = prf_convolve_hrf(compressed,hrf,model.Downsample_Predictions);
+                design = [ones(size(x)) x];
+                beta = design \ y;
+                [q, r, piv] = qr(cast(design,kind),0);
+                id = sprintf('css_pipeline_%s_v%d_nonnegative%d_%s', ...
+                    kind,vertex,nonnegative,seedSource{1});
+                item = struct('id',id,'kind','css-trace','precision',kind, ...
+                    'vertex',vertex,'vertexIndexBase',1, ...
+                    'pipeline',metadata.id,'coarse',coarseId,'seedSource',seedSource{1}, ...
+                    'nonnegativeApertures',nonnegative,'exitflag',exitflag, ...
+                    'accepted',accepted, ...
+                    'acceptedParameters',array_file([id '_accepted_parameters'],acceptedParameters), ...
+                    'optimizer',optimizer,'iterations',{iterations}, ...
+                    'seed',array_file([id '_seed'],seed), ...
+                    'selectedCandidates',array_file([id '_selected'],find(selected)), ...
+                    'parameters',array_file([id '_parameters'],parameters), ...
+                    'objective',array_file([id '_objective'],objective), ...
+                    'observations',array_file([id '_observations'],y), ...
+                    'prediction',array_file([id '_prediction'],x), ...
+                    'raw',array_file([id '_raw'],raw), ...
+                    'compressed',array_file([id '_compressed'],compressed), ...
+                    'beta',array_file([id '_beta'],beta), ...
+                    'q',array_file([id '_q'],q), ...
+                    'qr',array_file([id '_qr'],r),'pivot',array_file([id '_pivot'],piv), ...
+                    'trace',array_file([id '_trace'],trace), ...
+                    'errors',array_file([id '_errors'],errors), ...
+                    'rawTrace',array_file([id '_raw_trace'],rawTrace), ...
+                    'compressedTrace',array_file([id '_compressed_trace'],compressedTrace), ...
+                    'predictionTrace',array_file([id '_prediction_trace'],predictionTrace), ...
+                    'reductions',array_file([id '_reductions'],reductions), ...
+                    'reductionColumns',{{'meanX','meanY','normX','normY','dot','correlation'}});
+                cases{end+1} = item; %#ok<AGROW>
+                write_json([id '.json'],item);
+                write_json('diagnostics.partial.json',struct('environment',environment,'cases',{cases}));
+                fprintf('Recorded %s\n',id);
+            end
+        end
+    end
 end
 % Scale and complexity can select different MATLAB least-squares paths.
 t = (1:250)';
@@ -89,18 +177,31 @@ for precision = {'single','double'}
         end
     end
 end
-fid = fopen('diagnostics.json','w');
-assert(fid~=-1);
-[~, cpu] = system('lscpu');
-fprintf(fid,'%s\n',jsonencode(struct('matlabVersion',version,'blas',version('-blas'), ...
-    'mklCbwr',getenv('MKL_CBWR'),'cpu',cpu,'cases',{cases}),'PrettyPrint',true));
-fclose(fid);
+write_json('diagnostics.json',struct('environment',environment,'cases',{cases}));
 
     function error = evaluate(p)
-        error = prf_errfun(profile,frames,xy,hrf,p,y,1,true);
+        % Call the actual objective. The parallel recording never supplies its result.
+        error = prf_errfun(profile,frames,xy,hrf,p,y,model.Downsample_Predictions,true);
+        rawValue = prf_predict_timecourse(profile(p,xy),frames);
+        compressedValue = rawValue.^p(end);
+        predicted = prf_convolve_hrf(compressedValue,hrf,model.Downsample_Predictions);
+        xc = predicted - mean(predicted);
+        yc = y - mean(y);
         trace(end+1,:) = double(p(:))';
         errors(end+1,1) = double(error);
+        rawTrace(:,end+1) = rawValue;
+        compressedTrace(:,end+1) = compressedValue;
+        predictionTrace(:,end+1) = predicted;
+        reductions(end+1,:) = double([mean(predicted),mean(y),norm(xc),norm(yc),xc'*yc,corr(predicted,y)]);
     end
+
+    function stop = iteration(~, values, state)
+        % Match samsrf_prfoptim_loop's nonfinite termination exactly.
+        stop = ~isfinite(values.fval);
+        iterations{end+1} = struct('state',state,'iteration',values.iteration, ...
+            'evaluations',values.funccount,'procedure',values.procedure,'stop',stop);
+    end
+
 end
 
 function value = read_array(root, descriptor)
@@ -124,4 +225,11 @@ fid = fopen(path,'w','ieee-le');
 assert(fid~=-1);
 cleanup = onCleanup(@() fclose(fid));
 assert(fwrite(fid,double(value),'double')==numel(value));
+end
+
+function write_json(file,value)
+fid = fopen(file,'w');
+assert(fid~=-1);
+cleanup = onCleanup(@() fclose(fid));
+fprintf(fid,'%s\n',jsonencode(value,'PrettyPrint',true));
 end
