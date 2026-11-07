@@ -206,6 +206,10 @@ export function buildModel(presetId, settings = DEFAULT_SETTINGS) {
   const preset = PRESETS[presetId];
   if (!preset) throw new Error(`Unknown model preset ${presetId}.`);
   const model = preset.build({ ...DEFAULT_SETTINGS, ...settings });
+  if (preset.analysis === "prf") {
+    if (settings.dataPrecision === "single") model.Data_Precision = "single";
+    if (settings.cssConvention === "samsrf") model.Css_Convention = "samsrf";
+  }
   const convention = exportConvention(settings.exportConvention);
   return convention === "samsrf-10.4" ? model : { ...model, Export_Convention: convention };
 }
@@ -260,6 +264,9 @@ export function parseModel(text, analysis) {
   if (!model || typeof model !== "object" || Array.isArray(model)) throw new Error("The model JSON must be an object.");
   if (typeof model.Name !== "string" || !model.Name) throw new Error("The model needs a Name.");
   exportConvention(model.Export_Convention);
+  if (model.Data_Precision !== undefined && !["single", "double"].includes(model.Data_Precision)) throw new Error("Data_Precision must be single or double.");
+  if (model.Css_Convention !== undefined && !["nonnegative", "samsrf"].includes(model.Css_Convention)) throw new Error("Css_Convention must be nonnegative or samsrf.");
+  if (analysis !== "prf" && model.Data_Precision === "single") throw new Error("Single precision is supported for forward pRF fits.");
   if (analysis === "prf") {
     for (const key of ["Prf_Function", "Param_Names", "Scaled_Param", "Only_Positive", "Scaling_Factor", "TR", "Hrf"]) {
       if (!(key in model)) throw new Error(`A forward-model pRF model needs ${key}.`);

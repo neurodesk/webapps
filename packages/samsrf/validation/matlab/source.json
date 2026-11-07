@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/samsrf/samsrf.git",
+  "commit": "41ed1e96cc4d9b8b750f5594a61845df21ab8984",
+  "release": "R2023bU11",
+  "mklCbwr": "COMPATIBLE",
+  "spm": {
+    "repository": "https://github.com/spm/spm12.git",
+    "commit": "03ac9473cad402407b6472228377c0167fdc54b8"
+  },
+  "patches": [
+    "Honor the documented def_64bit setting",
+    "Append the CF surround row only in hull mode",
+    "Pass double starting parameters to fminsearch in CF Gaussian mode"
+  ]
+}
