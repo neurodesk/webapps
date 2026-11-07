@@ -1586,6 +1586,7 @@ apps:
       release: false
   - id: microscope-qc
     path: microscope-qc
+    catalog: microscopy
     title: Microscope QC
     description: PSF resolution from beads and field illumination flatness
     categories: [quality-control]

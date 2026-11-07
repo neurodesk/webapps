@@ -120,6 +120,7 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
     neuromorph: 'morphometry',
     stitching: 'registration',
     'structure-tensor': 'fibre-orientation',
+    'microscope-qc': 'quality-control',
   };
   const cards = [...document.querySelectorAll('[data-app-card]')];
   assert.equal(cards.length, Object.keys(expected).length);
