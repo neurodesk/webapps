@@ -7107,6 +7107,316 @@
         "bytes": 5250,
         "kind": "example"
       }
+    ],
+    "gliomoda": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T1GD.nii.gz",
+        "sha256": "462062c55658b10cd28d50a8e09c76704ff6c3b33d69c234db4953c1ec6f87a0",
+        "bytes": 2151118,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_FLAIR.nii.gz",
+        "sha256": "43317039045422dc9005c494dbce3ed8e2fc147fc5768521f7b0e879a4f301f1",
+        "bytes": 1900090,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T1.nii.gz",
+        "sha256": "725cc586cc5e397e012ff563719382ae45ba98a67cc690f38429954d4aadd134",
+        "bytes": 2054596,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T2.nii.gz",
+        "sha256": "d38f1b5912c36b12a81dbfcb45044e802d7daafd5ffd3198137d683880ae6988",
+        "bytes": 1775300,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t2f-t1n-t2w.onnx",
+        "sha256": "eaf3f803cd9267cd39dee067bd17463ae742252c25c9b39c2b7e68d060535943",
+        "bytes": 62467807,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t2f-t1n-t2w_ResEncL.onnx",
+        "sha256": "69dfb12296c020abc92b08cd35067e66a990d2dd18fd1e4aae1dc60fa2ad4b0a",
+        "bytes": 204895126,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c.onnx",
+        "sha256": "6f3e31e648c534eeaec4c2a00353d78f5c5b2230ea88e7686e8a8801d4d28c2f",
+        "bytes": 61642436,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2f.onnx",
+        "sha256": "f32dcd451fd9de914ea13297ffaf8807c9183fce26296ccd91eb56120a83103a",
+        "bytes": 61642436,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2w.onnx",
+        "sha256": "df530622f6352cb0dc5aa7051a9568f4b5a305d41583016068d4cebae7a063f0",
+        "bytes": 61642436,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t1n.onnx",
+        "sha256": "5bf91370032191f712dea6a2e0cc89d2fe3db4fd678d0f567934cbc3fbdc0525",
+        "bytes": 61642589,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t2f.onnx",
+        "sha256": "3e5c4c9526a70bd3295c1920f6891c2eb33a71df4dc79c5f81918602cc76f183",
+        "bytes": 62464351,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t2w.onnx",
+        "sha256": "36789de5fcc0f48e90cb88e9216a039459a8cb4b038e3b670f588796baf09bf3",
+        "bytes": 61642589,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2f-t1n.onnx",
+        "sha256": "fced45d1a9ab006ddf137fccefcf60775d41f4513eb2e475727406fb14da7c7a",
+        "bytes": 61642589,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2f-t2w.onnx",
+        "sha256": "3c53153f17549565ad64179360edd6ff20d38f656b6080359f455d17cbdcba58",
+        "bytes": 61642589,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t1c-t1n-t2w.onnx",
+        "sha256": "e4783ae914cc582203b4482586d58adf1c40b1bfa2f4958148ccacaeaeed2e20",
+        "bytes": 61644317,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/models/gliomoda-t2f-t1n-t2w.onnx",
+        "sha256": "6a709bb1161f8cd5c3aa848fbb75bd034ab6b8f20c3c2673b8554bcb995882ff",
+        "bytes": 61644317,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      }
+    ],
+    "neuromorph": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4c85eb64bb6df8ddbc6fc55287857604ef5b184/neuromorph/example/n120.CNG.swc",
+        "sha256": "6373be369f45dad69d36dd4b05fbee0991d3a6279b9c6a57dc10003f276e8a8c",
+        "bytes": 93864,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4c85eb64bb6df8ddbc6fc55287857604ef5b184/neuromorph/example/5-27-11cell1-nonFS-BC.CNG.swc",
+        "sha256": "cf59917cae264e397522be011e63701af5903f41f2a7fe6d7f3086e201ef60f0",
+        "bytes": 245320,
+        "kind": "example"
+      }
+    ],
+    "stitching": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r001_c001.tif",
+        "sha256": "c5ffd7bd182478d269804226516a0f922014e7d89e01671848e474e360bfed5f",
+        "bytes": 1940855,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r001_c002.tif",
+        "sha256": "09c16a74fa50a2a0da2de92103ae422da259c81aaeef674846538f68ebf798fa",
+        "bytes": 1943585,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r001_c003.tif",
+        "sha256": "8c6ced9dac8c65259750d65a150e448b946f13ab1f25fc8e0b7ab42bd137588e",
+        "bytes": 1927940,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r001_c004.tif",
+        "sha256": "d803b7a2e8c7a92bcdfc87f9a01499417a3d1e588d4fd563f00e1848cc8b4e84",
+        "bytes": 1931632,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r002_c001.tif",
+        "sha256": "d1347b92cb9c9fd8e79ad22710caf20a54f996b2b1841f96274c2c2bcc588436",
+        "bytes": 1937761,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r002_c002.tif",
+        "sha256": "81f5b94d1cba17c4b335a9172c67d6e26b27ddde791639763f2d0d091878ec60",
+        "bytes": 1953883,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r002_c003.tif",
+        "sha256": "144205fa09e6175302861128bb59dee299e990fd8a7a9ca79c3a1fd0cf415d0e",
+        "bytes": 1963977,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r002_c004.tif",
+        "sha256": "1ccf92b6a9d2786cd0d6ea2beeeca5b023fb436ba3a415f2bb7fe7d41db5ec8f",
+        "bytes": 1967564,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r003_c001.tif",
+        "sha256": "c702a6ee0a0b9e44a8fe6f6773cdb784894009976e8e4cb3fb53f3dfa817c6fa",
+        "bytes": 1959796,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r003_c002.tif",
+        "sha256": "dc2fe872f1b5eaf56a7b11167ef4dcaecd2e4c007bd3c7e5fd831bb9cbf0b615",
+        "bytes": 1933754,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r003_c003.tif",
+        "sha256": "50062768508a9de75bf6a13accec1528d383133d9bb6e1aba6ed22cec8b08be8",
+        "bytes": 1958045,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r003_c004.tif",
+        "sha256": "060ffd2c33c80b6490ad20ce0e8970b2ced833514c5906715bf921f17d810932",
+        "bytes": 1939298,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r004_c001.tif",
+        "sha256": "7a8abfbc8fa44d11b13905074250e9c09b3f51d397dabae9c1423017b1ecd703",
+        "bytes": 1936031,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r004_c002.tif",
+        "sha256": "874034866d03d849464a2457a6a257a513f24c526f22da7e0aa8bfcef2520b3d",
+        "bytes": 1933222,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r004_c003.tif",
+        "sha256": "5d0ee1b05f226fb5e893059b4bde53f42c090e1435a324d82968d017a5849ac3",
+        "bytes": 1934981,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/img_r004_c004.tif",
+        "sha256": "6a0e8f25674a8e7cefd3d4daf082496649d67592171f8045ee267e985c856f30",
+        "bytes": 1979616,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/TileConfiguration.txt",
+        "sha256": "90e9868dc6e6c4cf4befe2da9d9d7ef792421aa93f1c4305dac9ceddaa6d94fc",
+        "bytes": 672,
+        "kind": "example",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/dcc16e00d5b1451004ec814af07970551bff7665/stitching/example/LICENSE.txt",
+        "sha256": "bba3439c82dc1581e20bc5c31834d4f833796fe2eb01ced878f3c7c85ff27418",
+        "bytes": 1825,
+        "kind": "attribution",
+        "license": "US Government work (NIST), distributed under the NIST notice in github.com/usnistgov/MIST; acknowledge NIST as the source"
+      }
+    ],
+    "structure-tensor": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/skin12_shg_polarisation_sum.tif",
+        "sha256": "2dbf8ba6c58540e9da2fa2329f543ac9f67f042615673b681d0e13deb636ca71",
+        "bytes": 524640,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/09b7e0aa259ccfda6c5044a5a640e91f231ab49d/structure-tensor/example/synthetic_fibres_3d.tif",
+        "sha256": "354470416dd4cd5cb4d55b645818fa4138d0e4b943016aff15204f3885ce0036",
+        "bytes": 532360,
+        "kind": "example"
+      }
+    ],
+    "microsam": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
+        "sha256": "8fd1ed64bed1350597957b648b3b86a8c411b33c4b6733a7fbfe374243aad265",
+        "bytes": 129856,
+        "kind": "example",
+        "license": "CC0-1.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-encoder.onnx",
+        "sha256": "9816b80db84179cbe643d9268717f74452b17abdc79493b22ca3d8a57ed933f9",
+        "bytes": 28045411,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-decoder.onnx",
+        "sha256": "4681effe84d432165cd6f27fb5e10fbc77f80ce20ac82242da37f1ed847f3f6f",
+        "bytes": 16496933,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      }
+    ],
+    "microscope-qc": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
+        "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
+        "bytes": 12590015,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif",
+        "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
+        "bytes": 461646,
+        "kind": "example",
+        "license": "CC0-1.0"
+      }
     ]
   },
   "exclusions": [],

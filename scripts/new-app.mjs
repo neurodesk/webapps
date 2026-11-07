@@ -31,7 +31,7 @@ const ID = /^[a-z][a-z0-9-]*$/;
 const DEFAULTS = {
   runtime: 'react-vite',
   shell: 'imaging-workspace',
-  category: 'image-processing',
+  category: 'preprocessing',
 };
 
 function usage() {

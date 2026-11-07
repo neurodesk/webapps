@@ -1,0 +1,119 @@
+{
+  "description": "Synthetic 3 x 3 mosaic cut from one real NIST MIST tile (img_r002_c002.tif of the example) with known sub-pixel positions; see synthetic_real.py.",
+  "tiles": 9,
+  "links": 20,
+  "linksUsed": 20,
+  "largestLayoutError": 25.055,
+  "largestError": 0.1652,
+  "meanError": 0.0666,
+  "errors": [
+    {
+      "tile": "tile_r1_c1.tif",
+      "truth": [
+        0,
+        0
+      ],
+      "found": [
+        0,
+        0
+      ],
+      "error": 0
+    },
+    {
+      "tile": "tile_r1_c2.tif",
+      "truth": [
+        386.1128,
+        -7.995
+      ],
+      "found": [
+        386.0944,
+        -8.0058
+      ],
+      "error": 0.0213
+    },
+    {
+      "tile": "tile_r1_c3.tif",
+      "truth": [
+        794.3327,
+        0.0142
+      ],
+      "found": [
+        794.3032,
+        0.0016
+      ],
+      "error": 0.0321
+    },
+    {
+      "tile": "tile_r2_c1.tif",
+      "truth": [
+        -7.6504,
+        276.3442
+      ],
+      "found": [
+        -7.7721,
+        276.2325
+      ],
+      "error": 0.1652
+    },
+    {
+      "tile": "tile_r2_c2.tif",
+      "truth": [
+        402.6509,
+        259.1962
+      ],
+      "found": [
+        402.5907,
+        259.1679
+      ],
+      "error": 0.0665
+    },
+    {
+      "tile": "tile_r2_c3.tif",
+      "truth": [
+        784.3815,
+        260.4093
+      ],
+      "found": [
+        784.3053,
+        260.3674
+      ],
+      "error": 0.087
+    },
+    {
+      "tile": "tile_r3_c1.tif",
+      "truth": [
+        1.9322,
+        551.9132
+      ],
+      "found": [
+        1.8639,
+        551.8787
+      ],
+      "error": 0.0765
+    },
+    {
+      "tile": "tile_r3_c2.tif",
+      "truth": [
+        399.8996,
+        552.5189
+      ],
+      "found": [
+        399.8227,
+        552.4536
+      ],
+      "error": 0.1009
+    },
+    {
+      "tile": "tile_r3_c3.tif",
+      "truth": [
+        800.6304,
+        550.1116
+      ],
+      "found": [
+        800.6046,
+        550.0687
+      ],
+      "error": 0.0501
+    }
+  ]
+}

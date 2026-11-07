@@ -341,7 +341,7 @@ test('ESLint stays out of every app build, unit test and browser test', async ()
   // ESLint, and nothing else loads the runner or the config.
   const workspace = await graph;
   const catalog = reachableFrom(workspace, CATALOG);
-  const loaders = new Set(['scripts/lint.mjs', 'eslint.config.js', 'test/lint-coverage.test.mjs']);
+  const loaders = new Set(['scripts/lint.mjs', 'eslint.config.js', 'test-utils/lint-coverage-suite.mjs']);
   const imports = /(?:from\s*|import\s*\(\s*|require\(\s*)['"](?:(?:eslint|@eslint\/js|globals)(?:\/[^'"]*)?|[^'"]*\/(?:lint\.mjs|eslint\.config\.js))['"]|['"](?:[^'"]*\/)?scripts\/lint\.mjs['"]/;
   const sources = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' })
     .split('\0').filter(path => /\.(?:[cm]?[jt]sx?)$/.test(path));

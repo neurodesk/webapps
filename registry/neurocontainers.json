@@ -181,6 +181,20 @@
       "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/nesvor_0.5.0_20260722.simg",
       "apptainerName": "nesvor_0.5.0_20260722",
       "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt"
+    },
+    "gliomoda": {
+      "id": "gliomoda",
+      "label": "gliomoda 0.0.4 (20261024)",
+      "version": "0.0.4",
+      "buildDate": "20261024",
+      "image": "vnmd/gliomoda_0.0.4@sha256:aeaa0a4aa901667612ae811700123c3b1e3525b5e78a4bcaa262914d53ad0232",
+      "digest": "sha256:aeaa0a4aa901667612ae811700123c3b1e3525b5e78a4bcaa262914d53ad0232",
+      "url": "https://hub.docker.com/r/vnmd/gliomoda_0.0.4",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/722ce790ba985edd7fe18dfe918e24bc5ebbaa21/recipes/gliomoda/build.yaml",
+      "dockerImage": "vnmd/gliomoda_0.0.4:20261024",
+      "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/gliomoda_0.0.4_20261024.simg",
+      "apptainerName": "gliomoda_0.0.4_20261024",
+      "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt"
     }
   },
   "unresolved": []

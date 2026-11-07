@@ -185,6 +185,18 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - `e2e/expected.json` pins native ANTs 2.6.5 `DenoiseImage` on the example with one ITK thread (`scripts/native-reference.mjs`, Docker), and the browser tests must reproduce it byte for byte. Rerecord it after a module rebuild or an example change.
 - The radii stop at the largest pair checked against native (patch 2, search 3), and the shrink factor stays 1. The app has no command line of its own: the Standalone dialog lists the ANTs container (`registry/standalone-exceptions.json`).
 
+## neuromorph
+
+- The SWC checks, morphometrics, Sholl analysis and tables live in `apps/neuromorph/src/morph` (pure, no DOM); the app adds the UI and the NiiVue tube view. The definitions are NeuroM 4's, implemented cleanly; `README.md` lists them and every deliberate difference.
+- Samples are rounded to single precision as they are read, because MorphIO stores them that way; without it bifurcation angles drift from NeuroM by up to 1e-4 relative.
+- `validation/neurom-reference.json` holds NeuroM 4.0.6's numbers for both hosted examples and NeuroM's committed test morphologies (`test/fixtures/neurom`). `test/neurom-parity.test.js` and `e2e/smoke.spec.js` require 1e-6 relative and identical counts and Sholl intersections. Rerecord with `validation/neurom_reference.py` (pins in `validation/requirements.txt`) when a definition or an example changes.
+
+## structure-tensor
+
+- The numerics are `apps/structure-tensor/src/tensor.js`: pure, float64, run in a module worker (one per run, terminated on cancel) and under Node in the tests. Its kernels and borders are scipy.ndimage's on purpose: `validation/scipy-reference.py` writes `validation/reference.json`, the unit tests compare with it at 1e-9°, and the browser test compares the example's downloaded float32 maps with it. Regenerate the reference after any change to the kernels, the window or the maps.
+- OrientationJ is GPL-3.0: never copy its code. It is only an external check (`validation/orientationj/`). Its `tensor` setting is a window √3 times wider than this app's ρ; `fit-window.py` records the match at ρ 5 for tensor 3.
+- Angles use OrientationJ's convention: counterclockwise from +x with rows pointing down. TIFFs are shown upright through a NIfTI header whose y axis runs down the rows (`rasterHeader` in `src/io.js`). σ must be at least one voxel along every axis (`imageRefusal`), because thinner sampled derivative kernels lose gain and bias 3D angles.
+
 ## brainqcnet
 
 - The preprocessing, slice classification loop, summaries and CSV writers live in `packages/brainqcnet`; the app adds the UI, the ONNX Runtime Web worker (one per run, terminated on cancel) and the file names. Change numerics in the package only.
@@ -198,6 +210,27 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - TIFF stacks are read and written only through `@neurodesk/webapp-components/file-io/tiff`; do not add an app-local TIFF reader or writer.
 - The worker pool shares the movie through SharedArrayBuffer (the page is cross-origin isolated) and falls back to one worker with copies. Each task gets a fresh worker, terminated on cancel.
 - ROI detection is deliberately simple (correlation-image seeds and watershed) and is not Suite2p's or CNMF's; About and the README say so. It leaves out the border band that resampling filled from the edge.
+
+## stitching
+
+- The numerics are pure JavaScript in `apps/stitching/src/core` (layout, FFT, pairwise phase correlation, global optimisation, fusion), written from Preibisch et al. 2009. Fiji's Stitching and BigStitcher are GPL-2: external validation references only, never copy their code.
+- `validation/fiji-example.mjs` compares the Node pipeline with Fiji's Grid/Collection stitching on the example and records `validation/example-reference.json`, including the SHA-256 of the registered TileConfiguration and fused TIFF that `e2e/smoke.spec.js` requires the browser to reproduce. Rerun it with `--write` after any change to the numerics, and rerun `validation/synthetic-real.mjs`; `test/reference.test.js` holds both to their limits (Fiji within 1 px, known offsets within 0.5 px).
+- Offsets are tile B's position minus tile A's, x first; positions are the pixel coordinates of each tile's first pixel. Pair weights are r × overlapping pixels; README lists this and the other deliberate differences from Fiji.
+- TIFF is read and written only through `@neurodesk/webapp-components/file-io/tiff`; OME stage positions come from its `stagePosition`.
+
+## microsam
+
+- Interactive 2D segmentation with micro-sam's `vit_t_lm` (CC BY 4.0) as two ONNX files pinned in `models/microsam.manifest.json`: the encoder runs once per image (WebGPU, else WebAssembly), the decoder once per prompt change (WebAssembly), in one worker per image (`src/worker.js`) that is terminated to cancel.
+- `src/preprocess.js` reproduces micro-sam's `_to_image` and SAM's resize, including a port of Pillow's bilinear `Resample.c`; `test/preprocess.test.js` holds the uint8 image, the resize and the encoder tensor to micro-sam's SHA-256 (`validation/preprocess_reference.py`). Change them together.
+- Export the model as `micro_sam.util.get_sam_model` returns it, without `eval()` and with `TrainingMode.PRESERVE` (`validation/export_onnx.py` asserts the zero cache, `cached_attention_bias_absmax: 0` in the manifest): `train(False)` refreshes TinyViT's cached attention biases from the trained ones, and the export would no longer give micro-sam's masks. Upstream disagrees with itself: MobileSAM's `build_sam_vit_t` calls `eval()` before loading and `get_sam_model` loads after building, so inference has the zero cache, while `SamTrainer` validates and the BioImage.IO export runs with live biases. The deciding evidence is that `faithful-chicken` 1.1's published test embedding matches the zero-cache state; annotation IoUs on the example are in-sample (BBBC038 stage1_train is generalist training data) and are no evidence. An upstream micro-sam issue should be filed; until it is answered keep the zero cache, which the NOTICE, manifest and HF README state as a modification.
+- `e2e/workflow.spec.js` requires the 24 masks of `validation/reference.json` (micro-sam's PyTorch outputs) byte for byte in the browser; rerecord with `validation/reference.py` after changing the model, the prompts' handling or the example. The hashes are pinned to `onnxruntime-web` 1.29.0: some pixels lie within 3.9e-5 of the threshold against 6.2e-4 export error. On an ONNX Runtime bump, if a hash changes, take the differing pixels from the browser and from `reference.json`, check each against micro-sam's PyTorch mask logits and accept only pixels whose logit is within the export error of 0; then re-record the hashes. Any other differing pixel is a regression. `segment_from_*` takes no `return_logits`: in `validation/reference.py`'s environment, repeat what the case's `segment_from_*` function in micro-sam's `prompt_based_segmentation.py` does (set the precomputed embedding, convert the prompt to the predictor's coordinates, pick the same mask), but call `predictor.predict(..., return_logits=True)` and compare the returned full-resolution logits.
+
+## microscope-qc
+
+- The numerics are pure JavaScript in `apps/microscope-qc/src/core` (`fit.js`, `psf.js`, `field.js`, `optics.js`), written from MetroloJ_QC's published definitions (Faklaris et al. 2022). MetroloJ_QC's repository has no licence, so never copy its code; it and Fiji ran only as references. `field.js` ports ImageJ 1's public-domain `GaussianBlur`, float32 arithmetic and integer rounding included, so the field metrics equal ImageJ's; keep that port exact.
+- `test/fixtures/metroloj-reference.json` holds the ImageJ and MetroloJ_QC numbers, recorded by `validation/reference.mjs` (Docker `fiji/fiji`, MetroloJ_QC 1.3.1.2 jar). Rerecord it when detection, centring, the fit or an example changes; do not loosen the tolerances.
+- TIFF input goes only through `@neurodesk/webapp-components/file-io/tiff`. Optics come from OME-XML when present (`src/core/optics.js`); every value can be typed in and a TIFF without metadata runs on typed values alone.
+- The field-illumination example is synthetic: no openly licensed uniform-slide image was found. Replace it with a real one when one is published under an open licence.
 
 ## nesvor and the compute server
 

@@ -13,5 +13,11 @@
   "brainchop": "Browser TensorFlow.js inference with WebGL; no command-line package.",
   "stardist": "Python StarDist (pip install stardist) is the command-line reference the app reproduces label for label on the example; no separate command line is packaged",
   "calcium-imaging": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; CaImAn and Suite2p are the established command-line tools for batch work",
-  "spot-detection": "the detector is a JavaScript port of Big-FISH, whose Python package (pip install big-fish) is the batch tool: on the example it gives the app's spot set and threshold; a packaged command line for the port is not done yet"
+  "spot-detection": "the detector is a JavaScript port of Big-FISH, whose Python package (pip install big-fish) is the batch tool: on the example it gives the app's spot set and threshold; a packaged command line for the port is not done yet",
+  "gliomoda": "the Neurocontainers gliomoda 0.0.4 image is the command-line reference: the Standalone dialog lists it, and packages/gliomoda/validation holds the app's labels to its outputs on the example",
+  "neuromorph": "NeuroM, whose definitions the app follows, is the command-line route for batch morphometrics (pip install neurom); NeuroMorph has no packaged command line of its own yet",
+  "stitching": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; Fiji's Grid/Collection stitching and BigStitcher are the established command-line tools for batch work",
+  "structure-tensor": "browser-only v1: the numerics (apps/structure-tensor/src/tensor.js) are DOM-free and Node-tested, but no command-line package is released yet",
+  "microsam": "micro-sam (pip or conda install micro_sam) is the Python reference the app reproduces mask for mask on the example; interactive prompting has no separate command line",
+  "microscope-qc": "no command-line package yet: v1 runs its numerics (src/core) in a browser worker only; MetroloJ_QC in Fiji is the established desktop tool for batch QC"
 }

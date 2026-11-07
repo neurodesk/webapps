@@ -98,9 +98,13 @@ test("SyN-SDC takes uploaded brain masks in place of MindGrab's", async ({ page 
   await page.locator("#imageInput").setInputFiles(synFiles({ PhaseEncodingDirection: "j-", TotalReadoutTime: 0.05 }));
   await page.locator("#advancedSettings > summary").click();
   const [, , , mask] = syntheticPair();
+  // setInputFiles does not wait for an enabled input; loading the images disables the masks.
+  await expect(page.locator("#dwiMaskInput")).toBeEnabled();
   await page.locator("#dwiMaskInput").setInputFiles({ ...mask, name: "dwi_mask.nii.gz" });
   await expect(page.locator("#statusText")).toHaveText("dwi_mask.nii.gz will be the DWI brain mask");
+  await expect(page.locator("#t1wMaskInput")).toBeEnabled();
   await page.locator("#t1wMaskInput").setInputFiles({ ...mask, name: "t1w_mask.nii.gz" });
+  await expect(page.locator("#statusText")).toHaveText("t1w_mask.nii.gz will be the T1w brain mask");
   await expect(page.locator("#clearMasks")).toBeVisible();
   await page.locator("#clearMasks").click();
   await expect(page.locator("#statusText")).toHaveText("Using MindGrab brain masks");

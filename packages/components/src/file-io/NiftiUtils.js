@@ -283,6 +283,19 @@ export function createFloat64Nifti(data, sourceHeader, dims = null) {
   return createTypedNifti(data, sourceHeader, { datatype: 64, bitpix: 64, bytesPerVoxel: 8, dims });
 }
 
+/**
+ * An RGB24 NIfTI (datatype 128): `rgb` holds one red, green, blue byte triplet per voxel, in
+ * voxel order, as NiiVue and FSL read colour images.
+ */
+export function createRgb24Nifti(rgb, sourceHeader, dims = null) {
+  if (!(rgb instanceof Uint8Array) || rgb.length % 3 !== 0) throw new Error('RGB24 data must be a Uint8Array of byte triplets.');
+  const { view, headerSize } = typedNiftiBuffer(sourceHeader, rgb.length / 3, { datatype: 128, bitpix: 24, bytesPerVoxel: 3, dims });
+  new Uint8Array(view.buffer, headerSize).set(rgb);
+  view.setFloat32(124, 0, headerIsLittleEndian(view));
+  view.setFloat32(128, 0, headerIsLittleEndian(view));
+  return view.buffer;
+}
+
 export function createMaskNifti(maskData, sourceHeader, dims = null) {
   const uint8 = maskData instanceof Uint8Array ? maskData : Uint8Array.from(maskData, value => value ? 1 : 0);
   return createUint8Nifti(uint8, sourceHeader, dims);
