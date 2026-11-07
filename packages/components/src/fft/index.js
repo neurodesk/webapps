@@ -1,6 +1,6 @@
-// Complex FFT on split real/imaginary Float64Arrays: iterative radix-2 for powers of two,
-// Bluestein's chirp-z transform for every other length. Forward uses e^{-2πikn/N}; the
-// inverse is unscaled (callers divide by N where they need to).
+// Complex FFT on split real/imaginary Float64Arrays, in any number of dimensions: iterative
+// radix-2 for powers of two, Bluestein's chirp-z transform for every other length. Forward uses
+// e^{-2πikn/N}; the inverse is unscaled (callers divide by N where they need to).
 
 const plans = new Map();
 
@@ -126,29 +126,40 @@ export function fft1d(re, im, inverse = false) {
   else bluestein(p, re, im, inverse);
 }
 
-/** In-place 2D transform of row-major `re`/`im` (height × width). */
-export function fft2d(re, im, height, width, inverse = false) {
-  const rowRe = new Float64Array(width);
-  const rowIm = new Float64Array(width);
-  for (let y = 0; y < height; y++) {
-    const offset = y * width;
-    rowRe.set(re.subarray(offset, offset + width));
-    rowIm.set(im.subarray(offset, offset + width));
-    fft1d(rowRe, rowIm, inverse);
-    re.set(rowRe, offset);
-    im.set(rowIm, offset);
-  }
-  const colRe = new Float64Array(height);
-  const colIm = new Float64Array(height);
-  for (let x = 0; x < width; x++) {
-    for (let y = 0; y < height; y++) {
-      colRe[y] = re[y * width + x];
-      colIm[y] = im[y * width + x];
+/** The smallest power of two that is at least `n`. */
+export function nextPowerOfTwo(n) {
+  let p = 1;
+  while (p < n) p *= 2;
+  return p;
+}
+
+/** In-place transform of an array of `shape` (first axis fastest; [width, height] for a row-major image). */
+export function fftn(re, im, shape, inverse = false) {
+  const total = shape.reduce((a, b) => a * b, 1);
+  if (re.length !== total || im.length !== total) throw new Error('FFT buffers do not match the shape.');
+  let stride = 1;
+  for (const n of shape) {
+    if (n > 1 && stride === 1) {
+      for (let start = 0; start < total; start += n) fft1d(re.subarray(start, start + n), im.subarray(start, start + n), inverse);
+    } else if (n > 1) {
+      const lineRe = new Float64Array(n);
+      const lineIm = new Float64Array(n);
+      const block = stride * n;
+      for (let base = 0; base < total; base += block) {
+        for (let offset = 0; offset < stride; offset++) {
+          const start = base + offset;
+          for (let k = 0; k < n; k++) {
+            lineRe[k] = re[start + k * stride];
+            lineIm[k] = im[start + k * stride];
+          }
+          fft1d(lineRe, lineIm, inverse);
+          for (let k = 0; k < n; k++) {
+            re[start + k * stride] = lineRe[k];
+            im[start + k * stride] = lineIm[k];
+          }
+        }
+      }
     }
-    fft1d(colRe, colIm, inverse);
-    for (let y = 0; y < height; y++) {
-      re[y * width + x] = colRe[y];
-      im[y * width + x] = colIm[y];
-    }
+    stride *= n;
   }
 }
