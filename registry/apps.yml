@@ -1690,10 +1690,11 @@ apps:
       browser_test: true
       release: false
   - id: deconvolution
+    catalog: microscopy
     path: deconvolution
     title: Deconvolution
     description: Deconvolve widefield and confocal microscopy stacks.
-    categories: [image-processing]
+    categories: [preprocessing]
     keywords: [deconvolution, Richardson-Lucy, RL-TV, total variation, point spread function, PSF, Gibson-Lanni, widefield, confocal, fluorescence, microscopy, TIFF]
     anatomy: [any]
     modalities: [microscopy]
