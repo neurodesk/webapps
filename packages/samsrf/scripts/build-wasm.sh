@@ -5,10 +5,9 @@
 #   build-wasm.sh          rebuild wasm/ from the Rust source
 #   build-wasm.sh --check  rebuild into a scratch directory and fail unless every file equals wasm/
 #
-# The build is reproducible byte for byte given the pinned toolchain below (rustc, wasm-pack and
-# the binaryen wasm-opt that wasm-pack takes from PATH all change the output). Panic messages embed
-# source paths, so the Cargo home is remapped to a fixed prefix: a runner with a different home
-# directory then produces the same binary.
+# The canonical release builder is the wasm-source CI job. These toolchain pins alone do not
+# guarantee identical Rust instruction layouts in other build environments. Panic messages embed
+# source paths, so Cargo home and the checkout are remapped; --check still compares every byte.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

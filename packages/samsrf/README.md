@@ -320,12 +320,18 @@ pnpm --filter @neurodesk/samsrf build:wasm
 and binaryen `version_117` `wasm-opt` first on `PATH`. The build removes the
 optional WASM `producers` section: the release and cargo-installed binding
 generators identify the same version differently. The `wasm-source` job in
-`.github/workflows/samsrf-native.yml` runs `build-wasm.sh --check`, which
-rebuilds into a scratch directory and fails when a file differs from `wasm/`.
-CI retains a differing rebuild and its optimizer input as an artifact. Locally,
-set `SAMSRF_REBUILD_DIR` to capture that input and keep the files after a failed
-check. Dispatch `samsrf-native` with `wasm_only: true` to diagnose a build on a
-CI host while the PR stays in draft.
+`.github/workflows/samsrf-native.yml` on `ubuntu-24.04` is the canonical release
+builder. It runs `build-wasm.sh --check`, which fails when any file differs from
+`wasm/`. Matching tool versions alone do not guarantee byte equality elsewhere:
+local and CI Rust builds produced different JSON deserializer inlining.
+
+CI retains a differing rebuild, the raw Rust module, the optimizer input and
+tool identities as an artifact. Locally, set `SAMSRF_REBUILD_DIR` to capture the
+optimizer input and keep the files after a failed check. Dispatch `samsrf-native`
+with `wasm_only: true` while the PR stays in draft, download
+`samsrf-differing-rebuild`, and validate its `samsrf_wasm_bg.wasm` with the reference
+gates before committing it. The final ready PR must pass the full workflow,
+including a fresh byte-for-byte rebuild of that committed module.
 The same workflow runs the core tests, clippy and `node --test
 packages/samsrf/test/*.test.js` on the committed module.
 
