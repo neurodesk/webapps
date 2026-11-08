@@ -43,10 +43,9 @@ if (values.tag && releaseFromTag(values.tag)?.id === SUITE_ID) {
     releases = [release];
   }
 }
-// Releases newest first; three pages reach several days of releases.
-async function recentReleases() {
+async function allReleases() {
   const releases = [];
-  for (let page = 1; page <= 3; page += 1) {
+  for (let page = 1; ; page += 1) {
     const response = await fetch(`https://api.github.com/repos/neurodesk/webapps/releases?per_page=100&page=${page}`, { headers });
     if (!response.ok) throw new Error(`releases page ${page}: HTTP ${response.status}`);
     const batch = await response.json();
@@ -59,7 +58,7 @@ async function recentReleases() {
 let update;
 if (values.missing) {
   update = [];
-  for (const release of unlistedReleases(catalog, await recentReleases(), nativeReleases(await portableSpecs()))) {
+  for (const release of unlistedReleases(catalog, await allReleases(), nativeReleases(await portableSpecs()))) {
     try {
       update.push(...await catalogUpdate(catalog, [release], { fetchRelease, fetchText, nativeAt }));
     } catch (error) {
