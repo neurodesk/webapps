@@ -80,7 +80,8 @@ if [[ "$mode" == check ]]; then
       done
       echo "Retained differing build in $SAMSRF_REBUILD_DIR"
     fi
-    echo "Run 'pnpm --filter @neurodesk/samsrf build:wasm' and commit wasm/." >&2
+    echo "Dispatch samsrf-native with wasm_only=true on this branch for the canonical build." >&2
+    echo "Validate the samsrf-differing-rebuild artifact against the reference gates before committing it; see packages/samsrf/README.md." >&2
   fi
   exit $status
 fi
