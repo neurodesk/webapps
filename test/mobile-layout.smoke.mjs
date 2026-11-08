@@ -118,8 +118,8 @@ try {
           const enter = page.locator('#enterAppButton, #landingLaunch').filter({ visible: true }).first();
           if (await enter.count()) await enter.tap();
           if (app.id === 'dicompare') {
-            // dicompare opens on its workspace; there is no landing page to pass.
-            await expect(page.locator('header').filter({ has: page.locator('h1').filter({ hasText: /^Workspace$/ }) }).locator('.nd-app-bar')).toBeVisible();
+            await page.getByRole('link', { name: 'Open Workspace', exact: true }).tap();
+            await expect(page.getByRole('button', { name: 'From data', exact: true })).toBeVisible();
           }
           const welcome = page.locator('#welcomeLater');
           if (await welcome.isVisible()) await welcome.tap();

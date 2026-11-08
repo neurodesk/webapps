@@ -2,10 +2,8 @@
 
 use std::path::Path;
 
-use tokio_util::sync::CancellationToken;
-
 use super::process::{run_process, KillStrategy};
-use super::{LineSink, RunFuture, RunRequest, Runner};
+use super::{RunContext, RunFuture, RunRequest, Runner};
 use crate::config::RunnerKind;
 use crate::tools::ToolPaths;
 
@@ -76,14 +74,14 @@ impl Runner for DockerRunner {
         ToolPaths::container()
     }
 
-    fn run(&self, request: RunRequest, sink: LineSink, cancel: CancellationToken) -> RunFuture {
+    fn run(&self, request: RunRequest, context: RunContext) -> RunFuture {
         let args = docker_args(&self.image, &request);
         let kill = KillStrategy::Command(vec![
             "docker".to_string(),
             "kill".to_string(),
             container_name(&request.job_id),
         ]);
-        Box::pin(async move { run_process("docker", &args, sink, cancel, kill).await })
+        Box::pin(async move { run_process("docker", &args, context, kill).await })
     }
 }
 
@@ -107,6 +105,8 @@ mod tests {
             },
             gpu: true,
             image: None,
+            project: None,
+            resume: None,
         };
         let args = docker_args("img", &request);
         let joined = args.join(" ");

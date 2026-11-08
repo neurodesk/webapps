@@ -7379,38 +7379,6 @@
         "kind": "example"
       }
     ],
-    "histo2mri": [
-      {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_r1_0.6mm_anterior.nii.gz",
-        "sha256": "561fd1e5943ae1a231c0c43523a3445520316e91355895bcd8a4b6995b95dfc0",
-        "bytes": 4089034,
-        "kind": "example",
-        "license": "CC-BY-4.0"
-      },
-      {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_thionin_section150_85um.tif",
-        "sha256": "8a35fb01f446c2306fdbb81c163368057137fc34bb61445bdcacfd5677af5839",
-        "bytes": 1724747,
-        "kind": "example",
-        "license": "CC-BY-4.0"
-      }
-    ],
-    "microscope-qc": [
-      {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
-        "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
-        "bytes": 12590015,
-        "kind": "example",
-        "license": "CC-BY-4.0"
-      },
-      {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif",
-        "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
-        "bytes": 461646,
-        "kind": "example",
-        "license": "CC0-1.0"
-      }
-    ],
     "microsam": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
@@ -7431,6 +7399,47 @@
         "sha256": "4681effe84d432165cd6f27fb5e10fbc77f80ce20ac82242da37f1ed847f3f6f",
         "bytes": 16496933,
         "kind": "model",
+        "license": "CC-BY-4.0"
+      }
+    ],
+    "microscope-qc": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
+        "sha256": "1fe45d9809acc75f925f81ab42cde9aa91d5fc9be699e926f93c01519eeec98d",
+        "bytes": 12590015,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/synthetic-field-illumination.ome.tif",
+        "sha256": "d5900083977e2716962d534277203f6c6722d5c2439e4385ede95c71964e275a",
+        "bytes": 461646,
+        "kind": "example",
+        "license": "CC0-1.0"
+      }
+    ],
+    "cryo-em": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/607388b20e8c7e0000ec8498d19ac7e3c35d6472/cryo-em/relion-tutorial/SHA256SUMS",
+        "kind": "example",
+        "license": "CC0-1.0",
+        "sha256": "123d411889e6259ec176942ada14c49b0bd43fddd371b944a76e5aed888367da",
+        "bytes": 2657
+      }
+    ],
+    "histo2mri": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_r1_0.6mm_anterior.nii.gz",
+        "sha256": "561fd1e5943ae1a231c0c43523a3445520316e91355895bcd8a4b6995b95dfc0",
+        "bytes": 4089034,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_thionin_section150_85um.tif",
+        "sha256": "8a35fb01f446c2306fdbb81c163368057137fc34bb61445bdcacfd5677af5839",
+        "bytes": 1724747,
+        "kind": "example",
         "license": "CC-BY-4.0"
       }
     ]

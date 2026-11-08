@@ -40,6 +40,7 @@ export const INPUT_FORMATS = new Map([
   ['mgz', 'MGZ'],
   ['ome-zarr', 'OME-Zarr'],
   ['tiff', 'TIFF'],
+  ['mrc', 'MRC'],
   ['itk', 'NRRD/MHA/MINC'],
   ['gifti', 'GIfTI'],
   ['freesurfer', 'FreeSurfer'],

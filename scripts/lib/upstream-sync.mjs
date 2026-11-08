@@ -16,6 +16,13 @@ function show(directory, commit, path) {
   return git(directory, 'show', `${commit}:${path}`);
 }
 
+// The newest vMAJOR.MINOR.PATCH tag, for apps whose upstream.json sets
+// `"track": "release"`; pre-release and other tags are skipped.
+export function latestRelease(directory) {
+  return git(directory, 'tag', '--list', 'v*', '--sort=-v:refname').toString().split('\n')
+    .find(tag => /^v\d+\.\d+\.\d+$/.test(tag));
+}
+
 function isBinary(...buffers) {
   return buffers.some(buffer => buffer && buffer.subarray(0, 8000).includes(0));
 }

@@ -345,6 +345,7 @@ class MuscleMapApp {
     const fileInput = document.getElementById('fileInput');
     if (fileInput) {
       fileInput.addEventListener('change', (e) => this.fileIOController.handleFileInput(e));
+      fileInput.disabled = false;
     }
     // The page-wide drop replaces the inputs; "Load files…" adds to them.
     fileInput?.addEventListener('nd-replace', () => this.fileIOController.clearFiles());

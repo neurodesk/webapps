@@ -1,5 +1,17 @@
 # qsmbly
 
+## 0.31.20261108
+
+### Patch Changes
+
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+
 ## 0.31.20261104
 
 ### Patch Changes
@@ -12,6 +24,7 @@
   - next.html: the pipeline rules' recommendations and reference pipelines (#194) (#197)
 
   Adapt the browser Rust bindings to the new masking and ARLO APIs, preserving voxel-major inputs, echo ordering, and masked outputs.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.24.0
 

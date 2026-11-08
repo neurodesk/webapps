@@ -32,17 +32,33 @@ on:
         description: Sign and notarize the macOS installer, then attach every verified package to the existing SamSrf release
         type: boolean
         default: false
+      record_matlab:
+        description: Record the expanded reference with actual MATLAB (no portable release)
+        type: boolean
+        default: false
+      include_matrix:
+        description: Include the full participant pipeline matrix in a MATLAB recording
+        type: boolean
+        default: true
+      diagnostics_only:
+        description: Record focused CSS and regression diagnostics from pinned MATLAB inputs
+        type: boolean
+        default: false
+      wasm_only:
+        description: Only rebuild WASM and retain its optimizer input for diagnosis
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: samsrf-native-${{ github.ref }}
+  group: samsrf-native-${{ github.ref }}${{ inputs.record_matlab && '-matlab' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.wasm_only))
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -59,6 +75,8 @@ jobs:
           node-version: 22
       - name: Core unit tests
         run: cargo test --release --manifest-path exes/samsrf/Cargo.toml
+      - name: Reference execution provenance tests
+        run: python3 -m unittest discover -s packages/samsrf/validation/matlab -p test_environment.py
       - name: Clippy
         run: cargo clippy --manifest-path exes/samsrf/Cargo.toml --all-targets -- -D warnings
       - name: WebAssembly builds
@@ -69,9 +87,30 @@ jobs:
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference"
           node packages/samsrf/validation/container/compare.mjs "$RUNNER_TEMP/samsrf-reference"
+      - name: MATLAB source references (per-vertex gates and numerical primitives)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-source-reference" packages/samsrf/validation/matlab/reference.json
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
+          node packages/samsrf/validation/matlab/compare.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-matrix-input"
+          SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_reference
+      - name: CSS extreme-scale and rank regression gates
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
+          SAMSRF_CSS_DIAGNOSTICS_DIR="$RUNNER_TEMP/samsrf-css-diagnostics" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_diagnostics
+          node packages/samsrf/validation/matlab/compare-css.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-comparison.json"
+          cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v47_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace.json"
+      - name: Retain the full CSS comparison including remaining differences
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-css-comparison
+          path: |
+            ${{ runner.temp }}/samsrf-css-comparison.json
+            ${{ runner.temp }}/samsrf-css-trace.json
+          if-no-files-found: ignore
 
   wasm-source:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.record_matlab)
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -85,7 +124,31 @@ jobs:
       - name: Set up wasm-opt
         uses: ./.github/actions/setup-wasm-opt
       - name: Rebuild and compare
+        env:
+          SAMSRF_REBUILD_DIR: ${{ runner.temp }}/samsrf-rebuild
+          WASM_PACK_CACHE: ${{ runner.temp }}/samsrf-bindgen-cache
         run: bash packages/samsrf/scripts/build-wasm.sh --check
+      - name: Retain compiler output and binding generator identity
+        if: failure() || inputs.wasm_only
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/samsrf-rebuild"
+          raw=exes/samsrf/target/wasm32-unknown-unknown/release/samsrf_wasm.wasm
+          if [[ -f "$raw" ]]; then
+            cp "$raw" "$RUNNER_TEMP/samsrf-rebuild/rust-output.wasm"
+          fi
+          for bindgen in "$RUNNER_TEMP"/samsrf-bindgen-cache/*/wasm-bindgen; do
+            if [[ -f "$bindgen" ]]; then
+              sha256sum "$bindgen"
+            fi
+          done > "$RUNNER_TEMP/samsrf-rebuild/bindgen.sha256"
+      - name: Retain rebuild stages for diagnosis
+        if: failure() || inputs.wasm_only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-differing-rebuild
+          path: ${{ runner.temp }}/samsrf-rebuild
+          if-no-files-found: ignore
 
   portable:
     needs: [test, wasm-source]
@@ -109,3 +172,109 @@ jobs:
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
       CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
+
+  recorder-smoke:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.wasm_only)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: samsrf/samsrf
+          ref: 41ed1e96cc4d9b8b750f5594a61845df21ab8984
+          path: reference-source
+          persist-credentials: false
+      - name: Install Octave for recorder plumbing checks
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends octave
+      - name: Run the recorder on a pinned real input
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json
+          octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); smoke_recorder(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-reference'),fullfile(getenv('RUNNER_TEMP'),'samsrf-smoke'))"
+
+  matlab-reference:
+    needs: recorder-smoke
+    if: github.event_name == 'workflow_dispatch' && inputs.record_matlab
+    name: record actual MATLAB source reference (${{ matrix.host }})
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.host }}
+    timeout-minutes: 90
+    env:
+      MKL_CBWR: COMPATIBLE
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_DYNAMIC: 'FALSE'
+      OMP_DYNAMIC: 'FALSE'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check out the web port's exact SamSrf version
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: samsrf/samsrf
+          ref: 41ed1e96cc4d9b8b750f5594a61845df21ab8984
+          path: reference-source
+          persist-credentials: false
+      - name: Prepare verified inputs and declared source repairs
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
+          python3 packages/samsrf/validation/matlab/prepare.py reference-source "$RUNNER_TEMP/samsrf-matlab"
+          python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab"
+      - name: Fetch pinned MATLAB inputs for focused diagnostics
+        if: inputs.diagnostics_only
+        run: python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json
+      - name: Check out the pinned SPM GIfTI readers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: spm/spm12
+          ref: 03ac9473cad402407b6472228377c0167fdc54b8
+          path: reference-spm
+          sparse-checkout: |
+            @gifti
+            @xmltree
+            @file_array
+          persist-credentials: false
+      - name: Set up real MATLAB and required toolboxes
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3
+        with:
+          release: R2023bU11
+          products: Statistics_and_Machine_Learning_Toolbox Image_Processing_Toolbox Parallel_Computing_Toolbox
+      - name: Record numerical intermediates and fitted maps
+        if: '!inputs.diagnostics_only'
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); if strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'))
+      - name: Record focused CSS and regression diagnostics
+        if: inputs.diagnostics_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_css_diagnostics(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-reference'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'))
+      - name: Prepare a fresh same-host repeat
+        if: inputs.diagnostics_only
+        run: |
+          mkdir "$RUNNER_TEMP/samsrf-matlab-repeat"
+          cp "$RUNNER_TEMP/samsrf-matlab/source.json" "$RUNNER_TEMP/samsrf-matlab-repeat/source.json"
+          python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab-repeat"
+      - name: Repeat focused diagnostics in a new MATLAB process on this host
+        if: inputs.diagnostics_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_css_diagnostics(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-reference'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'))
+      - name: Compare same-host numerical arrays and decisions
+        if: inputs.diagnostics_only
+        run: node packages/samsrf/validation/matlab/compare-recordings.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"
+      - name: Retain complete or partial reference for diagnosis
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-matlab-${{ github.sha }}-${{ matrix.host }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/samsrf-matlab/
+            ${{ runner.temp }}/samsrf-matlab-repeat/
+          if-no-files-found: error

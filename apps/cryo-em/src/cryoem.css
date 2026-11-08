@@ -1,0 +1,33 @@
+/* Class averages and particle images as a grid of small canvases. */
+.cryoem-classes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: var(--nd-space-sm);
+  margin-top: var(--nd-space-md);
+}
+.cryoem-class {
+  display: grid;
+  gap: var(--nd-space-xs);
+  padding: var(--nd-space-xs);
+  border: 2px solid var(--nd-color-border);
+  border-radius: var(--nd-radius-sm);
+  background: var(--nd-color-surface);
+  color: var(--nd-color-text-muted);
+  font: inherit;
+  font-size: 0.7rem;
+  text-align: center;
+}
+.cryoem-class img { width: 100%; height: auto; image-rendering: pixelated; }
+button.cryoem-class { cursor: pointer; }
+.cryoem-class[aria-pressed="true"] { border-color: var(--nd-color-primary); color: var(--nd-color-text); }
+.cryoem-class:focus-visible { outline: 2px solid var(--nd-color-primary); outline-offset: 1px; }
+/* Data-root folders and files: a short scrolling list of small buttons. */
+.cryoem-entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nd-space-xs);
+  max-height: 160px;
+  overflow: auto;
+}
+.cryoem-entries [aria-pressed="true"] { border-color: var(--nd-color-primary); }
+.cryoem-fsc { max-width: 560px; }

@@ -30,6 +30,7 @@ Paths in this table are relative to the repository root. Existing implementation
 
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
+| `cryo-em` | None in the browser: RELION runs on the user's cluster | The app builds RELION job specs (`packages/cryo-em`) for a neurodesk-compute server; the batch route is RELION itself in the Neurodesk relion container. |
 | `stitching` | Tile stitching: pairwise phase correlation, global optimisation and linear-blending fusion | The pipeline is pure JavaScript in `apps/stitching/src/core`, already run in Node by `apps/stitching/validation`; a command line could reuse it unchanged. No package yet. |
 | `histo2mri` | Histology section to MRI registration (Greedy NMI rigid, affine and deformable in the section plane, plane offset and tilt search) | The pipeline is pure JavaScript in `apps/histo2mri/src/core` with Greedy injected; `test/` runs it in Node on `@neurodesk/greedy/single`, so a command line could reuse it unchanged. No package yet. |
 | `microscope-qc` | Bead PSF (FWHM) and field-illumination quality control, MetroloJ_QC definitions | The numerics are pure JavaScript in `apps/microscope-qc/src/core`; a Node command line could reuse them unchanged. No package yet. |

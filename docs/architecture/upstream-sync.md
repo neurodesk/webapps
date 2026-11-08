@@ -14,6 +14,12 @@ The workflow always starts from `main`, including manual runs. Its optional app
 input selects one registered app; an empty input syncs every registered app.
 When upstream matches the source pin, the script writes nothing.
 
+An app whose `upstream.json` sets `"track": "release"` follows the newest
+`vMAJOR.MINOR.PATCH` tag instead of its branch, so the deployment only moves
+when upstream publishes a release. dicompare does this, and `releaseFile`
+records the release (`src/upstreamRelease.ts`) for the app to display. A pin
+ahead of the newest release stays where it is until a later release reaches it.
+
 BrowserQC excludes upstream public assets, standalone layout and styling, and
 vendored DICOM code. The pull request lists changes to these files for manual
 porting. Scientific source changes still undergo the three-way merge, so

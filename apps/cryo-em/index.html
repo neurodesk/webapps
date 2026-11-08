@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cryo-EM — NeuroDesk</title>
+  </head>
+  <body>
+    <!--
+      Built from the shared workspace vocabulary in
+      @neurodesk/webapp-components/styles/imaging-workspace.css. The app owns the
+      words, the generated step forms and the class and FSC views.
+      RELION runs on the user's own neurodesk-compute server (ADR-0004).
+    -->
+    <header id="controls">
+      <!-- 1. Input: the tutorial example, the server and its data. -->
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Server and data</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <div id="computeControl"></div>
+          <p id="serverNeeds" class="nd-message warning" hidden>Needs neurodesk-compute on your cluster; see Standalone for setup.</p>
+        </div>
+      </details>
+
+      <!-- 2. The RELION project the steps write into. -->
+      <details class="nd-sidebar-section" id="projectSection" open>
+        <summary class="nd-section-title">Project</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="projectSelect">Project</label>
+            <select id="projectSelect" disabled>
+              <option value="">Connect to a server first</option>
+            </select>
+          </div>
+          <div class="nd-field">
+            <label for="projectName">New project</label>
+            <input id="projectName" type="text" maxlength="100" placeholder="Beta-galactosidase" disabled />
+          </div>
+          <div class="nd-row">
+            <button id="createProject" class="nd-btn nd-btn-secondary" type="button" disabled>Create project</button>
+            <button id="deleteProject" class="nd-btn nd-btn-danger" type="button" disabled>Delete project</button>
+          </div>
+        </div>
+      </details>
+
+      <!-- 3. The task: one RELION step, its generated form and the primary action. -->
+      <details class="nd-sidebar-section" id="stepSection" open>
+        <summary class="nd-section-title">Processing step</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="stepSelect">Step</label>
+            <select id="stepSelect"></select>
+          </div>
+          <div id="stepForm"></div>
+          <p id="formMessage" class="nd-message error" role="alert" hidden></p>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run step</button>
+        </div>
+      </details>
+
+      <!-- 4. The project's jobs, newest last. -->
+      <details class="nd-sidebar-section" id="jobsSection">
+        <summary class="nd-section-title">Jobs</summary>
+        <div class="nd-section-content">
+          <div id="jobList" aria-label="Project jobs"></div>
+        </div>
+      </details>
+
+      <!-- 5. Output: the selected job's files. -->
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <p id="jobSummary" class="nd-hint" hidden></p>
+          <div id="resultList"></div>
+          <button id="deleteJob" class="nd-btn nd-btn-danger" type="button" hidden>Delete job</button>
+        </div>
+      </details>
+
+      <!-- Uploaded MRC files; the step form moves each picker to the input that takes it. -->
+      <div id="pickers" hidden>
+        <label class="nd-file" id="gainPicker">
+          <input id="gainInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose an MRC gain reference" />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span id="gainText">Drop an MRC gain reference</span>
+        </label>
+        <label class="nd-file" id="maskPicker">
+          <input id="maskInput" type="file" data-neurodesk-input="mask" multiple aria-label="Choose an MRC mask" />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span id="maskText">Choose an MRC mask</span>
+        </label>
+      </div>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Map and micrograph viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Connect to a compute server, then run a step or open a job.</p>
+        <p id="viewerError" class="nd-viewer-notice" hidden></p>
+        <section id="classView" class="nd-viewer-report" aria-label="Class averages" hidden>
+          <div class="nd-report-controls">
+            <p id="classSummary" class="nd-report-lead"></p>
+          </div>
+          <div id="classGrid" class="cryoem-classes"></div>
+        </section>
+        <section id="fscView" class="nd-viewer-report" aria-label="Fourier shell correlation" hidden>
+          <p id="fscLead" class="nd-report-lead"></p>
+          <figure class="nd-chart-figure cryoem-fsc">
+            <figcaption>Gold-standard FSC, corrected for mask effects</figcaption>
+            <div id="fscChart"></div>
+            <ul class="nd-chart-legend">
+              <li><svg viewBox="0 0 18 10" aria-hidden="true"><line x1="0" x2="18" y1="5" y2="5" stroke="currentColor" stroke-width="1.5"/></svg>Corrected FSC</li>
+              <li><svg viewBox="0 0 18 10" aria-hidden="true"><line x1="0" x2="18" y1="5" y2="5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="1 3"/></svg>Phase-randomised</li>
+              <li><svg viewBox="0 0 18 10" aria-hidden="true"><line x1="0" x2="18" y1="5" y2="5" stroke="currentColor" stroke-width="2" stroke-dasharray="6 4"/></svg>FSC 0.143</li>
+            </ul>
+          </figure>
+        </section>
+      </div>
+      <div class="nd-viewer-info"><span id="imageLabel" class="nd-viewer-info-primary"></span><span id="location"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Job progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel the job" aria-label="Cancel the job" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Cryo-EM runs single-particle analysis with RELION 5.1.1 on your own cluster: import movies from a data root, then motion correction, CTF estimation (CTFFIND 4.1.14), Laplacian-of-Gaussian particle picking, extraction, 2D classification, class selection, an initial model, 3D refinement, a solvent mask and post-processing, one RELION job per step in a project the server keeps. Each step's command line is the one RELION's own GUI writes for the same settings. This page builds and checks each step, sends it to a neurodesk-compute server that you start as yourself on a host that can submit Slurm jobs, and shows micrographs, class averages, maps and the FSC curve the jobs write. Reach the server through an SSH tunnel and open the page it serves; Standalone lists every setup step. This app runs RELION, not CryoSPARC; CTF refinement, polishing and 3D classification are not offered yet.</p>
+    </template>
+    <template id="privacyContent">
+      <p>Your movies and every intermediate file stay on the cluster that runs your compute server. RELION runs there as your own user, inside the pinned container, and the server keeps your projects until you delete them. Only the result files you view or download reach this browser, and only an uploaded gain reference or mask travels from this browser to the server. Nothing is sent to Neurodesk or other third parties. The compute server records no analytics; the hosted page may collect page-view analytics.</p>
+      <p>The server address is remembered in this browser. A paired credential stays in this tab’s session storage so you can reconnect after a reload; Disconnect clears it and asks the server to revoke it. Anyone who pairs with your server can see and change all of your projects.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

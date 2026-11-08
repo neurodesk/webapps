@@ -3,9 +3,9 @@
 (() => {
   const appPath = '/dicompare/';
   const marker = '#__neurodesk_dicompare_route=';
-  const isSchemaPath = path => /^\/dicompare\/schema(?:\/[^/]+)?\/?$/.test(path);
+  const isAppRoute = path => /^\/dicompare\/(?:schema(?:\/[^/]+)?|workspace)\/?$/.test(path);
 
-  if (isSchemaPath(location.pathname)) {
+  if (isAppRoute(location.pathname)) {
     const route = location.pathname + location.search + location.hash;
     location.replace(appPath + marker + encodeURIComponent(route));
   } else if (location.pathname === appPath && location.hash.startsWith(marker)) {
@@ -13,7 +13,7 @@
       const route = decodeURIComponent(location.hash.slice(marker.length));
       const target = new URL(route, location.origin);
       // Never restore an external URL or an unrelated route from a crafted link.
-      if (target.origin === location.origin && isSchemaPath(target.pathname)) {
+      if (target.origin === location.origin && isAppRoute(target.pathname)) {
         history.replaceState(history.state, '', target.pathname + target.search + target.hash);
       }
     } catch {

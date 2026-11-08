@@ -6,6 +6,44 @@
 //! reference harness reimplements in `shims/fminsearch.m`; the two produce the same
 //! sequence of evaluations.
 
+use num_complex::Complex64;
+use std::cmp::Ordering;
+
+/// MATLAB orders complex objectives by magnitude and phase when sorting a
+/// simplex, but compares their real parts in the acceptance branches.
+pub trait ObjectiveValue: Copy + std::ops::Sub<Output = Self> {
+    fn is_finite(self) -> bool;
+    fn magnitude(self) -> f64;
+    fn real(self) -> f64;
+    fn sort_order(self, other: Self) -> Ordering;
+    fn infinity() -> Self;
+}
+
+impl ObjectiveValue for f64 {
+    fn is_finite(self) -> bool { self.is_finite() }
+    fn magnitude(self) -> f64 { self.abs() }
+    fn real(self) -> f64 { self }
+    fn sort_order(self, other: Self) -> Ordering { matlab_order(self, other) }
+    fn infinity() -> Self { f64::INFINITY }
+}
+
+impl ObjectiveValue for Complex64 {
+    fn is_finite(self) -> bool { self.re.is_finite() && self.im.is_finite() }
+    fn magnitude(self) -> f64 { self.norm() }
+    fn real(self) -> f64 { self.re }
+    fn sort_order(self, other: Self) -> Ordering {
+        matlab_order(complex_sort_magnitude(self), complex_sort_magnitude(other)).then_with(|| matlab_order(self.arg(), other.arg()))
+    }
+    fn infinity() -> Self { Self::new(f64::INFINITY, 0.0) }
+}
+
+fn complex_sort_magnitude(value: Complex64) -> f64 {
+    // The recorded R2023b CSS simplex ties after sqrt(re²+im²), then sorts by
+    // phase. hypot can separate that tie by one ULP and change the fitted pRF.
+    let square = value.norm_sqr();
+    if square.is_normal() { square.sqrt() } else { value.norm() }
+}
+
 /// `optimset` fields `fminsearch` reads. `tol_x` and `tol_fun` default to 1e-4, the
 /// iteration and evaluation limits to `200 * n`.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,16 +74,16 @@ pub enum ExitFlag {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FminsearchResult {
+pub struct FminsearchResult<T = f64> {
     pub x: Vec<f64>,
-    pub fval: f64,
+    pub fval: T,
     pub exit_flag: ExitFlag,
     pub iterations: usize,
     pub func_count: usize,
 }
 
 /// MATLAB `fminsearch(f, x0, options)`.
-pub fn fminsearch<F: FnMut(&[f64]) -> f64>(mut f: F, x0: &[f64], options: &FminsearchOptions) -> FminsearchResult {
+pub fn fminsearch<T: ObjectiveValue, F: FnMut(&[f64]) -> T>(mut f: F, x0: &[f64], options: &FminsearchOptions) -> FminsearchResult<T> {
     let n = x0.len();
     let max_iter = options.max_iter.unwrap_or(200 * n);
     let max_fun = options.max_fun_evals.unwrap_or(200 * n);
@@ -55,12 +93,12 @@ pub fn fminsearch<F: FnMut(&[f64]) -> f64>(mut f: F, x0: &[f64], options: &Fmins
 
     // v: n + 1 vertices, each of n coordinates; fv their values. Kept sorted by fv.
     let mut v: Vec<Vec<f64>> = Vec::with_capacity(n + 1);
-    let mut fv: Vec<f64> = Vec::with_capacity(n + 1);
+    let mut fv: Vec<T> = Vec::with_capacity(n + 1);
     v.push(x0.to_vec());
     fv.push(f(x0));
     let mut func_evals = 1;
     let mut itercount = 0;
-    let output_stop = |fval: f64| options.stop_when_not_finite && !fval.is_finite();
+    let output_stop = |fval: T| options.stop_when_not_finite && !fval.is_finite();
     if output_stop(fv[0]) {
         return FminsearchResult { x: v[0].clone(), fval: fv[0], exit_flag: ExitFlag::Stopped, iterations: itercount, func_count: func_evals };
     }
@@ -81,7 +119,7 @@ pub fn fminsearch<F: FnMut(&[f64]) -> f64>(mut f: F, x0: &[f64], options: &Fmins
     let mut exit_flag = ExitFlag::Converged;
 
     while func_evals < max_fun && itercount < max_iter && !stop {
-        let f_spread = fv[1..].iter().map(|value| (fv[0] - value).abs()).fold(0.0, f64::max);
+        let f_spread = fv[1..].iter().map(|value| (fv[0] - *value).magnitude()).fold(0.0, f64::max);
         let x_spread = v[1..]
             .iter()
             .map(|vertex| vertex.iter().zip(&v[0]).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max))
@@ -103,27 +141,27 @@ pub fn fminsearch<F: FnMut(&[f64]) -> f64>(mut f: F, x0: &[f64], options: &Fmins
         let xr: Vec<f64> = xbar.iter().zip(&worst).map(|(b, w)| (1.0 + rho) * b - rho * w).collect();
         let fxr = f(&xr);
         func_evals += 1;
-        if fxr < fv[0] {
+        if fxr.real() < fv[0].real() {
             let xe: Vec<f64> = xbar.iter().zip(&worst).map(|(b, w)| (1.0 + rho * chi) * b - rho * chi * w).collect();
             let fxe = f(&xe);
             func_evals += 1;
-            if fxe < fxr {
+            if fxe.real() < fxr.real() {
                 v[n] = xe;
                 fv[n] = fxe;
             } else {
                 v[n] = xr;
                 fv[n] = fxr;
             }
-        } else if fxr < fv[n - 1] {
+        } else if fxr.real() < fv[n - 1].real() {
             v[n] = xr;
             fv[n] = fxr;
         } else {
             let mut shrink = false;
-            if fxr < fv[n] {
+            if fxr.real() < fv[n].real() {
                 let xc: Vec<f64> = xbar.iter().zip(&worst).map(|(b, w)| (1.0 + psi * rho) * b - psi * rho * w).collect();
                 let fxc = f(&xc);
                 func_evals += 1;
-                if fxc <= fxr {
+                if fxc.real() <= fxr.real() {
                     v[n] = xc;
                     fv[n] = fxc;
                 } else {
@@ -133,7 +171,7 @@ pub fn fminsearch<F: FnMut(&[f64]) -> f64>(mut f: F, x0: &[f64], options: &Fmins
                 let xcc: Vec<f64> = xbar.iter().zip(&worst).map(|(b, w)| (1.0 - psi) * b + psi * w).collect();
                 let fxcc = f(&xcc);
                 func_evals += 1;
-                if fxcc < fv[n] {
+                if fxcc.real() < fv[n].real() {
                     v[n] = xcc;
                     fv[n] = fxcc;
                 } else {
@@ -165,11 +203,11 @@ pub fn fminsearch<F: FnMut(&[f64]) -> f64>(mut f: F, x0: &[f64], options: &Fmins
 }
 
 /// MATLAB `sort` is stable, and NaN sorts last.
-fn sort_simplex(v: &mut [Vec<f64>], fv: &mut [f64]) {
+fn sort_simplex<T: ObjectiveValue>(v: &mut [Vec<f64>], fv: &mut [T]) {
     let mut order: Vec<usize> = (0..fv.len()).collect();
-    order.sort_by(|&a, &b| matlab_order(fv[a], fv[b]));
+    order.sort_by(|&a, &b| fv[a].sort_order(fv[b]));
     let sorted_v: Vec<Vec<f64>> = order.iter().map(|&i| v[i].clone()).collect();
-    let sorted_f: Vec<f64> = order.iter().map(|&i| fv[i]).collect();
+    let sorted_f: Vec<T> = order.iter().map(|&i| fv[i]).collect();
     v.clone_from_slice(&sorted_v);
     fv.copy_from_slice(&sorted_f);
 }
@@ -186,14 +224,14 @@ fn matlab_order(a: f64, b: f64) -> std::cmp::Ordering {
 /// `samsrf_hookejeeves(ErrFcn, SeedParams, InitStep, OnlyPos, NumMaxIter, NumShrinks)`.
 /// `only_positive` follows `logical(OnlyPos)`: any non-zero flag (SamSrf's -1 included)
 /// forbids offsets that make the parameter `<= 0`. Returns the parameters and the error.
-pub fn hooke_jeeves<F: FnMut(&[f64]) -> f64>(
+pub fn hooke_jeeves<T: ObjectiveValue, F: FnMut(&[f64]) -> T>(
     mut f: F,
     seed: &[f64],
     initial_step: &[f64],
     only_positive: &[bool],
     max_iterations: usize,
     max_shrinks: usize,
-) -> (Vec<f64>, f64) {
+) -> (Vec<f64>, T) {
     let n = seed.len();
     debug_assert_eq!(initial_step.len(), n);
     debug_assert_eq!(only_positive.len(), n);
@@ -203,7 +241,7 @@ pub fn hooke_jeeves<F: FnMut(&[f64]) -> f64>(
     let mut iterations = 0;
     let mut no_better = 0;
     while iterations < max_iterations && no_better < max_shrinks {
-        let mut best_err = f64::INFINITY;
+        let mut best_err = T::infinity();
         let mut best: Option<Vec<f64>> = None;
         // Offsets: +step per parameter, then -step per parameter, as [eye; -eye].
         for i in 0..2 * n {
@@ -216,12 +254,12 @@ pub fn hooke_jeeves<F: FnMut(&[f64]) -> f64>(
             }
             let err = f(&candidate);
             // `min` ignores NaN; `find(NewErr == NewMinErr, 1)` takes the first minimum.
-            if err < best_err {
+            if err.sort_order(best_err).is_lt() {
                 best_err = err;
                 best = Some(candidate);
             }
         }
-        if best_err < current_err {
+        if best_err.real() < current_err.real() {
             current = best.expect("a finite minimum has a candidate");
             current_err = best_err;
         } else {
@@ -238,6 +276,14 @@ pub fn hooke_jeeves<F: FnMut(&[f64]) -> f64>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recorded_complex_simplex_tie_uses_phase() {
+        let a = Complex64::new(0.9106118083000183, -7.183147232581177e-8);
+        let b = Complex64::new(0.9106118083000183, -7.159155046565502e-8);
+        assert!(a.sort_order(b).is_lt());
+        assert!(Complex64::new(1e200, 1e200).sort_order(Complex64::new(2e200, 0.0)).is_lt());
+    }
 
     fn banana(x: &[f64]) -> f64 {
         100.0 * (x[1] - x[0] * x[0]).powi(2) + (1.0 - x[0]).powi(2)

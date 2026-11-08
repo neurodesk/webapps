@@ -57,7 +57,7 @@ interface ValidationFunctionLibraryModalProps {
 const loadValidationFunctions = async (): Promise<ValidationFunction[]> => {
   let functionFiles: string[] = [];
   try {
-    const indexResponse = await fetch('/validation-functions/index.json');
+    const indexResponse = await fetch(`${import.meta.env.BASE_URL}validation-functions/index.json`);
     if (indexResponse.ok) {
       functionFiles = await indexResponse.json();
     } else {
@@ -69,7 +69,7 @@ const loadValidationFunctions = async (): Promise<ValidationFunction[]> => {
 
   const results = await Promise.all(functionFiles.map(async fileName => {
     try {
-      const response = await fetch(`/validation-functions/${fileName}`);
+      const response = await fetch(`${import.meta.env.BASE_URL}validation-functions/${fileName}`);
       if (response.ok) {
         return await response.json() as ValidationFunction;
       }
