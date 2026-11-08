@@ -63,6 +63,8 @@ export async function stageStandaloneAssets(destination) {
 
 export function validateComputeServer(server, id) {
   if (server.name !== 'neurodesk-compute' || !/^https:\/\/github\.com\/neurodesk\/webapps\//.test(server.documentation)) throw new Error(`${id}: invalid compute server metadata`);
+  // The dialog's setup steps: docker on one GPU machine (NeSVoR) or a user's own server on a Slurm cluster.
+  if (server.runner !== undefined && server.runner !== 'slurm') throw new Error(`${id}: compute server runner must be slurm or left out`);
   if (!server.download) return;
   const file = server.download;
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.tar\.gz$/.test(file.filename) || !Number.isSafeInteger(file.bytes) || file.bytes <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error(`${id}: compute server download requires a safe filename, size and checksum`);

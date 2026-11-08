@@ -7417,6 +7417,15 @@
         "kind": "example",
         "license": "CC0-1.0"
       }
+    ],
+    "cryo-em": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/607388b20e8c7e0000ec8498d19ac7e3c35d6472/cryo-em/relion-tutorial/SHA256SUMS",
+        "kind": "example",
+        "license": "CC0-1.0",
+        "sha256": "123d411889e6259ec176942ada14c49b0bd43fddd371b944a76e5aed888367da",
+        "bytes": 2657
+      }
     ]
   },
   "exclusions": [],
