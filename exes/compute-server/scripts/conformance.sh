@@ -61,6 +61,7 @@ COMPUTE_SERVER_URL="$pairing_url" COMPUTE_SERVER_TOKEN="$pairing_token" \
   node --test test/remote-compute-protocol.test.mjs || status=1
 echo "== HPC features (single-owner, simulate)"
 COMPUTE_SERVER_HPC_URL="$hpc_url" COMPUTE_SERVER_HPC_TOKEN="$hpc_token" COMPUTE_SERVER_HPC_ROOT="$work/root" \
+  COMPUTE_SERVER_HPC_DATA_DIR="$work/hpc" \
   COMPUTE_SERVER_URL="$pairing_url" COMPUTE_SERVER_TOKEN="$pairing_token" \
   node --test test/remote-compute-hpc.test.mjs || status=1
 if [ "$status" -ne 0 ]; then

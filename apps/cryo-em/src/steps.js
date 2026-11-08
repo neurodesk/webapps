@@ -274,9 +274,35 @@ export function jobType(directory) {
   return directory.split('/')[0];
 }
 
+/** RELION's iteration of a `run_itNNN_*` output; -1 for other files. */
+function iteration(name) {
+  const match = /_it(\d+)_[^/]*$/.exec(name);
+  return match ? Number(match[1]) : -1;
+}
+
+/** Sorts names by name, except that a later iteration comes before an earlier one. */
+export function finalIterationFirst(a, b) {
+  return iteration(b) - iteration(a) || (a < b ? -1 : a > b ? 1 : 0);
+}
+
 /**
- * Earlier outputs an input accepts, newest job first: files directly in a
- * succeeded job's directory whose type, suffix and pattern the input allows.
+ * The Class selection inputs that belong to a viewed class-average stack:
+ * `run_itNNN_classes.mrcs` → that iteration's `_data.star` and `_optimiser.star`,
+ * each only when the job wrote it.
+ */
+export function classSelectionInputs(classes, outputs) {
+  const names = new Set(outputs.map(output => output.name));
+  const prefix = classes.replace(/_classes\.mrcs$/, '');
+  const inputs = {};
+  if (names.has(`${prefix}_data.star`)) inputs.particles = `${prefix}_data.star`;
+  if (names.has(`${prefix}_optimiser.star`)) inputs.optimiser = `${prefix}_optimiser.star`;
+  return inputs;
+}
+
+/**
+ * Earlier outputs an input accepts, newest job first and, within a job, its
+ * final iteration first: files directly in a succeeded job's directory whose
+ * type, suffix and pattern the input allows.
  * `jobs` are project jobs with their `outputs` (from GET /jobs/{id}).
  */
 export function inputChoices(input, jobs) {
@@ -289,7 +315,7 @@ export function inputChoices(input, jobs) {
       .filter(name => name.startsWith(`${job.directory}/`) && !name.slice(job.directory.length + 1).includes('/'))
       .filter(name => !input.suffix || name.endsWith(input.suffix))
       .filter(name => !input.pattern || new RegExp(input.pattern).test(name))
-      .sort();
+      .sort(finalIterationFirst);
     for (const name of names) choices.push({ path: name, job: job.id, directory: job.directory });
   }
   return choices;

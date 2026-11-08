@@ -60,13 +60,22 @@ function contentTypeOf(name) {
   return types[extension] ?? 'application/octet-stream';
 }
 
+// The canonical `<project>/<Type>/jobNNN`, anchored to the canonical project
+// directory: jobs write the project, so a symlink anywhere in `directory`
+// could point outside it, and such a directory throws.
+function jobDirOf(projectDir, directory) {
+  const expected = join(realpathSync(projectDir), directory);
+  if (realpathSync(expected) !== expected || !statSync(expected).isDirectory()) throw new Error(`${directory} is not a directory of its project`);
+  return expected;
+}
+
 // Every regular file under a project job's directory, recursively, sorted by
 // project-relative name. A symlink is listed only when its canonical target is
 // a file inside the job directory.
 function listJobFiles(projectDir, directory, maxDownloadBytes) {
   let jobDir;
   try {
-    jobDir = realpathSync(join(projectDir, directory));
+    jobDir = jobDirOf(projectDir, directory);
   } catch {
     return [];
   }
@@ -621,7 +630,7 @@ export function startReferenceServer({
     const output = job.listing.find(item => item.name === name);
     let path = null;
     try {
-      const jobDir = realpathSync(join(projectDirOf(job.project), job.directory));
+      const jobDir = jobDirOf(projectDirOf(job.project), job.directory);
       const target = realpathSync(join(projectDirOf(job.project), name));
       if (isInside(jobDir, target)) path = target;
     } catch {

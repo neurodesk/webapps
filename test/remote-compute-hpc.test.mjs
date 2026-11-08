@@ -9,6 +9,8 @@
 //     --data-root facility=<empty dir> --max-download-bytes 65536
 // and set COMPUTE_SERVER_HPC_URL, COMPUTE_SERVER_HPC_TOKEN (the pairing code)
 // and COMPUTE_SERVER_HPC_ROOT (the same directory; this suite fills it).
+// COMPUTE_SERVER_HPC_DATA_DIR (its --data-dir) enables the checks that
+// tamper with project directories.
 // The per-pairing checks use COMPUTE_SERVER_URL/COMPUTE_SERVER_TOKEN when set.
 import assert from 'node:assert/strict';
 import test, { after, before } from 'node:test';
@@ -452,6 +454,25 @@ test('output names with / work in both encodings and stay inside the job directo
   }
   const multi = await raw(`jobs/${postprocess.id}/outputs/PostProcess/job011/..%2F..%2FImport/job001/movies.star`);
   assert.equal(multi.status, 404);
+});
+
+test('a job directory swapped for a symlink to outside the project serves nothing', async t => {
+  const dataDir = external ? process.env.COMPUTE_SERVER_HPC_DATA_DIR : server.dataDir;
+  if (!dataDir) return t.skip('set COMPUTE_SERVER_HPC_DATA_DIR to the server\'s --data-dir');
+  const client = api();
+  const project = await client.createProject('Swapped job directory');
+  const imported = await run(client, importSpec(project.id));
+  assert.equal(imported.status, 'succeeded');
+  const name = 'Import/job001/movies.star';
+  assert.ok(outputNames(imported).includes(name));
+  const outside = mkdtempSync(join(workDir, 'swapped-'));
+  writeFileSync(join(outside, 'movies.star'), 'outside the project\n');
+  const jobDir = join(dataDir, 'projects', project.id, 'Import/job001');
+  rmSync(jobDir, { recursive: true });
+  symlinkSync(outside, jobDir);
+  const response = await raw(`jobs/${imported.id}/outputs/${name}`);
+  assert.equal(response.status, 404);
+  await client.removeProject(project.id);
 });
 
 test('outputs above the download limit are listed with download false and refused with 413', async t => {

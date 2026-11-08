@@ -562,3 +562,26 @@ async fn cancelled_project_jobs_keep_their_files() {
     tokio::time::sleep(Duration::from_millis(50)).await;
     server.stop().await;
 }
+
+#[tokio::test]
+async fn a_job_directory_swapped_for_a_symlink_serves_nothing() {
+    let mut server = harness().await;
+    let project = server.project("swap").await;
+    let id = server.accepted(&import(&project)).await;
+    server.wait_status(&id, "succeeded").await;
+    let job_dir = server
+        .data()
+        .join("projects")
+        .join(&project)
+        .join("Import/job001");
+    let outside = server.data_dir.path().join("outside-job");
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("out.star"), "outside").unwrap();
+    std::fs::rename(&job_dir, server.data_dir.path().join("moved-job")).unwrap();
+    symlink(&outside, &job_dir).unwrap();
+    let response = server
+        .get(&format!("/api/v1/jobs/{id}/outputs/Import/job001/out.star"))
+        .await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    server.stop().await;
+}

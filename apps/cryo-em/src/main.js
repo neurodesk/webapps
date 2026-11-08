@@ -21,7 +21,7 @@ import { ComputeError } from '@neurodesk/webapp-components/compute';
 import { registerAppAutomation } from '@neurodesk/webapp-components/automation';
 import { validateRelionSpec } from '@neurodesk/cryo-em';
 import { APP } from './config.js';
-import { ENUM_TEXT, STEPS, defaultInput, inputChoices, jobType, parseOption, stepForm, stepLabel, typeLabel } from './steps.js';
+import { ENUM_TEXT, STEPS, classSelectionInputs, defaultInput, finalIterationFirst, inputChoices, jobType, parseOption, stepForm, stepLabel, typeLabel } from './steps.js';
 import { displayRange, imagePixels, mrcImage, readMrc } from './mrc.js';
 import { parseChecksums, postprocessFsc } from './star.js';
 import { fscChartSvg } from './fsc-chart.js';
@@ -181,7 +181,8 @@ async function showMrc(mrc, label) {
 
 function showStack(mrc, label, { job, name } = {}) {
   const selectable = job && jobType(job.directory) === 'Class2D' && name.endsWith('_classes.mrcs');
-  const chosen = new Set(selectable && state.values.select.inputs.particles?.startsWith(`${job.directory}/`) ? state.values.select.options.classes ?? [] : []);
+  const inputs = selectable ? classSelectionInputs(name, state.jobs.get(job.id)?.outputs ?? []) : {};
+  const chosen = new Set(inputs.particles && state.values.select.inputs.particles === inputs.particles ? state.values.select.options.classes ?? [] : []);
   const count = Math.min(mrc.nz, 400);
   const canvas = document.createElement('canvas');
   canvas.width = mrc.nx;
@@ -210,7 +211,7 @@ function showStack(mrc, label, { job, name } = {}) {
         cell.setAttribute('aria-pressed', String(on));
         if (on) chosen.add(number);
         else chosen.delete(number);
-        chooseClasses(job, [...chosen].sort((a, b) => a - b));
+        chooseClasses(inputs, [...chosen].sort((a, b) => a - b));
       };
     }
     cells.push(cell);
@@ -223,12 +224,12 @@ function showStack(mrc, label, { job, name } = {}) {
   setView('classes');
 }
 
-function chooseClasses(job, classes) {
-  const data = state.jobs.get(job.id)?.outputs.find(output => output.name.startsWith(`${job.directory}/`) && output.name.endsWith('_data.star'));
+/** Fills Class selection from the classes clicked in one iteration's averages. */
+function chooseClasses(inputs, classes) {
   const select = state.values.select;
   select.options.mode = 'classes';
   select.options.classes = classes;
-  if (data) select.inputs.particles = data.name;
+  Object.assign(select.inputs, inputs);
   status(classes.length ? `Classes ${classes.join(', ')} chosen for Class selection` : 'No classes chosen');
   if (state.command === 'select') renderForm();
 }
@@ -429,7 +430,7 @@ function renderOutputs() {
 
 /** The output a finished step shows first. */
 function primaryOutput(job) {
-  const names = (job.outputs ?? []).filter(output => output.download !== false).map(output => output.name).sort();
+  const names = (job.outputs ?? []).filter(output => output.download !== false).map(output => output.name).sort(finalIterationFirst);
   const pick = pattern => names.find(name => pattern.test(name));
   return {
     motioncorr: pick(/\/Movies\/[^/]+\.mrc$/),

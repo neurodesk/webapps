@@ -137,6 +137,21 @@ pub fn validate_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The canonical job directory `<project>/<Type>/jobNNN`, anchored to the
+/// canonical project directory. Jobs write the project, so a symlink anywhere
+/// in `directory` could point outside it; such a directory is refused as
+/// not found.
+pub fn job_dir(project_dir: &Path, directory: &str) -> io::Result<PathBuf> {
+    let expected = project_dir.canonicalize()?.join(directory);
+    if expected.canonicalize()? != expected || !expected.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{directory} is not a directory of its project"),
+        ));
+    }
+    Ok(expected)
+}
+
 /// Every regular file under a job directory, recursively, sorted by its
 /// project-relative name. A symlink is listed only when its canonical target
 /// is a file inside the job directory. Files above `max_download` carry
@@ -146,7 +161,7 @@ pub fn list_outputs(
     directory: &str,
     max_download: u64,
 ) -> io::Result<Vec<OutputInfo>> {
-    let job_dir = project_dir.join(directory).canonicalize()?;
+    let job_dir = job_dir(project_dir, directory)?;
     let mut outputs = Vec::new();
     let mut pending = vec![(job_dir.clone(), directory.to_string())];
     while let Some((dir, name)) = pending.pop() {
@@ -260,5 +275,22 @@ mod tests {
         assert_eq!(outputs[0].download, Some(true));
         assert_eq!(outputs[1].download, Some(false));
         assert_eq!(outputs[2].content_type, "text/plain");
+    }
+
+    #[test]
+    fn a_symlinked_job_directory_lists_nothing() {
+        let project = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("secret.star"), "s").unwrap();
+        std::fs::create_dir_all(project.path().join("Class2D")).unwrap();
+        symlink(outside.path(), project.path().join("Class2D/job006")).unwrap();
+        let error = list_outputs(project.path(), "Class2D/job006", 6).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        std::fs::create_dir_all(outside.path().join("job006")).unwrap();
+        std::fs::remove_file(project.path().join("Class2D/job006")).unwrap();
+        std::fs::remove_dir(project.path().join("Class2D")).unwrap();
+        symlink(outside.path(), project.path().join("Class2D")).unwrap();
+        assert!(list_outputs(project.path(), "Class2D/job006", 6).is_err());
+        assert!(job_dir(project.path(), "Class2D/job006").is_err());
     }
 }

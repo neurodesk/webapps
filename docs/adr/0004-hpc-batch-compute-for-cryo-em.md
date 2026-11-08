@@ -177,7 +177,9 @@ roots.
   limit carry `"download": false`; they stay on the cluster and remain usable as
   inputs. `GET /jobs/{id}/outputs/{path}` accepts `/` in the path and resolves it
   by canonicalising it and requiring the result to lie inside the job's own
-  directory, since RELION can create symlinks there. This needs
+  directory, since RELION can create symlinks there. That directory must itself
+  canonicalise to the canonical project directory joined with `<Type>/jobNNN`,
+  so a job directory swapped for a symlink lists and serves nothing. This needs
   dynamic outputs in place of the static `Tool::outputs()` list.
 - File uploads become tool-specific: `relion` accepts an MRC gain reference and
   an MRC mask. Both servers currently accept or rename only NIfTI.
@@ -215,6 +217,10 @@ protocol document.
   resubmits on its own.
 - **Restart.** Jobs with a Slurm ID re-attach: polling resumes and the log is
   re-read from the start of the Slurm output file, the only copy of the log.
+  Log files that are symlinks are not followed. Re-attaching needs only the
+  Slurm ID (or the job name) and the job directory, never the current launch
+  profiles; a job that cannot re-attach stays active, so its project cannot be
+  deleted while Slurm may still hold it.
   Re-attached and unresolved jobs count toward `--parallel`, which caps jobs
   handed to Slurm.
 - **Shutdown** detaches from Slurm jobs; it does not cancel them.

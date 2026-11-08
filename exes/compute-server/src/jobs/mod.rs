@@ -19,8 +19,8 @@ use crate::profiles::Profiles;
 use crate::projects::{Project, ProjectDirs};
 use crate::roots::RelativePath;
 use crate::runner::{
-    shell_join, ProjectRun, Resume, RunContext, RunOutcome, RunRequest, Runner, RunnerEvent,
-    StatusReporter,
+    shell_join, ProjectLaunch, ProjectRun, Resume, RunContext, RunOutcome, RunRequest, Runner,
+    RunnerEvent, StatusReporter,
 };
 use crate::tools::project::{job_directory, part_file_name, valid_job_type, ProjectArgs};
 use crate::tools::{Layout, LogLevel, Tool, ValidatedJob};
@@ -533,7 +533,8 @@ impl JobStore {
     }
 
     /// A job's output: after success for file tools; after any ending for
-    /// project jobs, whose path must canonicalise into the job's directory.
+    /// project jobs, whose path must canonicalise into the job's directory,
+    /// itself a plain directory of the project (`projects::job_dir`).
     pub fn output(&self, id: &str, name: &str) -> Result<OutputFile, OutputError> {
         let inner = self.lock();
         let job = inner.jobs.get(id).ok_or(OutputError::NotFound)?;
@@ -560,9 +561,7 @@ impl JobStore {
         }
         let relative = RelativePath::parse(name).map_err(|_| OutputError::NotFound)?;
         let project_dir = self.dirs.project(&place.project);
-        let work = project_dir
-            .join(&place.directory)
-            .canonicalize()
+        let work = crate::projects::job_dir(&project_dir, &place.directory)
             .map_err(|_| OutputError::NotFound)?;
         let path = project_dir
             .join(relative.as_str())
@@ -798,10 +797,12 @@ impl JobStore {
         match self.started(job, resume) {
             Ok(started) => Some(started),
             Err(message) => {
-                job.fail(JobError::new(
-                    "interrupted",
-                    format!("cannot re-attach: {message}"),
-                ));
+                // The scheduler may still hold the job, so it stays active
+                // and its project undeletable rather than becoming terminal
+                // without a confirmed end.
+                tracing::error!(job = %job.id, %message, "cannot re-attach");
+                job.message = Some(format!("cannot re-attach: {message}"));
+                job.emit_status();
                 None
             }
         }
@@ -814,35 +815,45 @@ impl JobStore {
                 let (Some(place), Some(inputs)) = (&job.placement, job.validated.project()) else {
                     return Err("project job without a project".into());
                 };
-                let profile = self
-                    .options
-                    .profiles
-                    .resolve(&job.validated.command, inputs.profile.as_deref())?
-                    .clone();
-                let launch = project_tool.launch(inputs, &profile)?;
-                let command = project_tool.command(
-                    inputs,
-                    &ProjectArgs {
-                        directory: &place.directory,
-                        profile: &profile,
-                        launch,
-                    },
-                )?;
+                // Re-attaching follows the submitted job by its scheduler id
+                // or name, so it must not depend on today's launch profiles.
+                let (argv, launch) = if resume.is_some() {
+                    (Vec::new(), None)
+                } else {
+                    let profile = self
+                        .options
+                        .profiles
+                        .resolve(&job.validated.command, inputs.profile.as_deref())?
+                        .clone();
+                    let plan = project_tool.launch(inputs, &profile)?;
+                    let command = project_tool.command(
+                        inputs,
+                        &ProjectArgs {
+                            directory: &place.directory,
+                            profile: &profile,
+                            launch: plan,
+                        },
+                    )?;
+                    let launch = ProjectLaunch {
+                        profile,
+                        plan,
+                        follow_up: command.follow_up,
+                    };
+                    (command.main, Some(launch))
+                };
                 let project_dir = self.dirs.project(&place.project);
                 let request = RunRequest {
                     job_id: job.id.clone(),
                     job_dir: project_dir.join(&place.directory),
-                    argv: command.main,
+                    argv,
                     job: job.validated.clone(),
-                    gpu: launch.gpus > 0,
+                    gpu: launch.as_ref().is_some_and(|launch| launch.plan.gpus > 0),
                     image: job.tool.pinned_image(),
                     project: Some(ProjectRun {
                         tool: Arc::clone(&job.tool),
                         project_dir: project_dir.clone(),
                         directory: place.directory.clone(),
-                        profile,
                         launch,
-                        follow_up: command.follow_up,
                     }),
                     resume,
                 };
@@ -887,10 +898,13 @@ impl JobStore {
         let id = request.job_id.clone();
         let job_dir = request.job_dir.clone();
         let (line_tx, line_rx) = mpsc::unbounded_channel::<String>();
-        let mut preamble = vec![crate::runner::simulate::log_line(
-            "INFO",
-            &format!("argv: {}", shell_join(&request.argv)),
-        )];
+        let mut preamble = Vec::new();
+        if !request.argv.is_empty() {
+            preamble.push(crate::runner::simulate::log_line(
+                "INFO",
+                &format!("argv: {}", shell_join(&request.argv)),
+            ));
+        }
         for warning in &request.job.warnings {
             preamble.push(crate::runner::simulate::log_line("WARNING", warning));
         }

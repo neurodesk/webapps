@@ -111,7 +111,7 @@ pub struct Resume {
     pub scheduler_id: Option<String>,
 }
 
-/// A project job's directories, resources and launch.
+/// A project job's directories and, for a new run, its launch.
 #[derive(Clone)]
 pub struct ProjectRun {
     /// The tool, for the simulated runner.
@@ -120,10 +120,18 @@ pub struct ProjectRun {
     pub project_dir: PathBuf,
     /// `<Type>/jobNNN`.
     pub directory: String,
+    /// `None` when re-attaching: following a submitted job needs only its
+    /// scheduler id (or name) and its directory, not today's launch profiles.
+    pub launch: Option<ProjectLaunch>,
+}
+
+/// What starting a project job needs from the launch profiles.
+#[derive(Clone)]
+pub struct ProjectLaunch {
     /// Resources.
     pub profile: Profile,
     /// Ranks, threads, GPUs.
-    pub launch: LaunchPlan,
+    pub plan: LaunchPlan,
     /// Commands after the main program (whose argv is the request's).
     pub follow_up: Vec<Vec<String>>,
 }
@@ -137,7 +145,7 @@ pub struct RunRequest {
     /// `out/`, or the project job's `<Type>/jobNNN`.
     pub job_dir: PathBuf,
     /// Complete tool command line, including the tool's CPU flags when a GPU
-    /// tool runs on the CPU.
+    /// tool runs on the CPU; empty when a project job re-attaches.
     pub argv: Vec<String>,
     /// The validated job.
     pub job: ValidatedJob,

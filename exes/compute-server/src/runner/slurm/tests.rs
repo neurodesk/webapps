@@ -26,7 +26,8 @@ fn timings() -> SlurmTimings {
     }
 }
 
-fn slurm_config(base: &Path) -> SlurmConfig {
+/// The cluster's configuration; `cpu` names its CPU profile, the import default.
+fn slurm_config(base: &Path, cpu: &str) -> SlurmConfig {
     let image = base.join("relion.sif");
     std::fs::write(&image, "not really a SIF").unwrap();
     let sha = crate::api::hex_digest(ring::digest::digest(
@@ -39,10 +40,10 @@ fn slurm_config(base: &Path) -> SlurmConfig {
             "image": { "path": image, "sha256": sha },
             "scratch": "$TMPDIR",
             "profiles": {
-                "cpu": { "cpus": 4, "gpus": 0, "memory": "8G", "time": "01:00:00" },
+                cpu: { "cpus": 4, "gpus": 0, "memory": "8G", "time": "01:00:00" },
                 "gpu-2": { "partition": "gpu", "account": "lab", "cpus": 8, "gpus": 2, "memory": "32G", "time": "02:00:00" }
             },
-            "defaults": { "import": "cpu", "process": "gpu-2" }
+            "defaults": { "import": cpu, "process": "gpu-2" }
         })
         .to_string(),
     )
@@ -55,7 +56,7 @@ fn configure(config: &mut crate::config::ServeConfig, base: &Path, parallel: usi
     let root = base.join("facility");
     std::fs::create_dir_all(root.join("grid3")).unwrap();
     std::fs::write(root.join("grid3/a.tiff"), "a").unwrap();
-    let slurm = slurm_config(base);
+    let slurm = slurm_config(base, "cpu");
     config.runner = RunnerKind::Slurm;
     config.parallel = parallel;
     config.profiles = slurm.profiles.clone();
@@ -677,6 +678,44 @@ async fn shutdown_detaches_and_restart_reattaches() {
     assert!(text.contains("second line after"));
     let job = until(&harness, &waiting, |job| !job["scheduler"].is_null()).await;
     assert_eq!(job["directory"], "Import/job002");
+    harness.stop().await;
+}
+
+#[tokio::test]
+async fn reattaching_does_not_depend_on_the_launch_profiles() {
+    let (mut harness, fake) = cluster(1).await;
+    let project = harness.project("renamed profile").await;
+    let (id, slurm_id, dir) = accepted(&harness, &fake, &project).await;
+    fake.queue(&slurm_id, "RUNNING", None);
+    harness.wait_status(&id, "running").await;
+    harness.stop().await;
+    let slurm = slurm_config(harness.data_dir.path(), "cpu-renamed");
+    harness.config.profiles = slurm.profiles.clone();
+    harness.config.slurm.as_mut().unwrap().config = slurm;
+    harness.boot().await.unwrap();
+    let job = harness.json(&format!("/api/v1/jobs/{id}")).await;
+    assert_eq!(job["status"], "running", "{job}");
+    assert!(job["error"].is_null(), "{job}");
+    assert_eq!(
+        harness.delete(&format!("/api/v1/jobs/{id}")).await.status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        harness
+            .delete(&format!("/api/v1/projects/{project}"))
+            .await
+            .status(),
+        StatusCode::CONFLICT
+    );
+    succeed(&fake, &slurm_id, &dir);
+    harness.wait_status(&id, "succeeded").await;
+    assert_eq!(
+        harness
+            .delete(&format!("/api/v1/projects/{project}"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
     harness.stop().await;
 }
 

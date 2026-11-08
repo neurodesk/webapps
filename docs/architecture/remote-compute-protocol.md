@@ -498,7 +498,9 @@ After a project job ends the server lists every regular file under its
 `<Type>/jobNNN/` directory, recursively, as an output whose `name` is the
 project-relative path (`"Class2D/job006/run_it200_classes.mrcs"`), sorted by
 name. Symlinks are listed only when their canonical target lies inside the job
-directory. A file larger than `limits.maxDownloadBytes` carries
+directory, and the job directory must canonicalise to the canonical project
+directory joined with `<Type>/jobNNN`: when any part of it is a symlink, nothing
+is listed or served. A file larger than `limits.maxDownloadBytes` carries
 `"download": false`; other outputs carry `"download": true`. Outputs of jobs
 outside projects keep the v1 shape (no `download` field).
 
@@ -545,7 +547,8 @@ marker within the grace period, is `tool-failed`.
 
 While Slurm holds a job, `message` is its pending reason; log lines do not
 replace it. In Slurm mode a job not yet handed to Slurm stays queued across a
-restart; a job handed to Slurm is re-attached.
+restart; a job handed to Slurm is re-attached by its Slurm id or name, whatever
+the launch profiles are by then.
 
 ### Resource profiles
 

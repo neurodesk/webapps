@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RELION_COMMANDS, RELION_DEFINITION, validateRelionSpec } from '@neurodesk/cryo-em';
-import { INPUT_TEXT, OPTION_TEXT, STEPS, defaultInput, inputChoices, parseOption, stepForm, typeLabel } from '../src/steps.js';
+import { INPUT_TEXT, OPTION_TEXT, STEPS, classSelectionInputs, defaultInput, finalIterationFirst, inputChoices, parseOption, stepForm, typeLabel } from '../src/steps.js';
 import { EXAMPLE_SETTINGS, exampleMovies } from '../src/example.js';
 import { APP } from '../src/config.js';
 
@@ -47,6 +47,24 @@ test('inputs default to the newest succeeded job of an allowed type, files in it
   const half = stepForm('postprocess').inputs.find(input => input.name === 'halfMap');
   const refine = [{ id: 'r', directory: 'Refine3D/job009', status: 'succeeded', outputs: ['run_class001.mrc', 'run_half2_class001_unfil.mrc', 'run_half1_class001_unfil.mrc'].map(name => output(`Refine3D/job009/${name}`)) }];
   assert.equal(defaultInput(half, refine), 'Refine3D/job009/run_half1_class001_unfil.mrc');
+});
+
+test('Class2D outputs default to the final iteration; clicked classes take their own iteration\'s files', () => {
+  const names = ['000', '025', '100'].flatMap(it => ['classes.mrcs', 'data.star', 'optimiser.star'].map(end => `Class2D/job006/run_it${it}_${end}`));
+  const outputs = names.map(name => ({ name }));
+  const jobs = [{ id: 'c', status: 'succeeded', directory: 'Class2D/job006', outputs }];
+  const select = stepForm('select', { options: { mode: 'classes' } }).inputs[0];
+  const ranker = stepForm('select', { options: { mode: 'ranker' } }).inputs[0];
+  assert.equal(defaultInput(select, jobs), 'Class2D/job006/run_it100_data.star');
+  assert.equal(defaultInput(ranker, jobs), 'Class2D/job006/run_it100_optimiser.star');
+  assert.equal([...names].sort(finalIterationFirst).find(name => name.endsWith('_classes.mrcs')), 'Class2D/job006/run_it100_classes.mrcs');
+  assert.deepEqual(classSelectionInputs('Class2D/job006/run_it025_classes.mrcs', outputs), {
+    particles: 'Class2D/job006/run_it025_data.star',
+    optimiser: 'Class2D/job006/run_it025_optimiser.star',
+  });
+  assert.deepEqual(classSelectionInputs('Class2D/job006/run_it100_classes.mrcs', outputs.filter(output => !output.name.includes('_it100_data'))), {
+    optimiser: 'Class2D/job006/run_it100_optimiser.star',
+  });
 });
 
 test('typed values parse to what the spec validation expects', () => {

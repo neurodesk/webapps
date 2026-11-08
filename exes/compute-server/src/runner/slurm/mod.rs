@@ -37,7 +37,8 @@ use self::reconcile::Reconciled;
 use self::script::{Script, Step};
 use self::tail::Tail;
 use super::{
-    ProjectRun, Recovery, RunContext, RunFuture, RunOutcome, RunRequest, Runner, RunnerEvent,
+    ProjectLaunch, ProjectRun, Recovery, RunContext, RunFuture, RunOutcome, RunRequest, Runner,
+    RunnerEvent,
 };
 use crate::config::RunnerKind;
 use crate::roots::DataRoot;
@@ -182,7 +183,7 @@ impl Shared {
                 Err(outcome) => return Ok(outcome),
             },
         };
-        let mut tail = Tail::new(&job_dir);
+        let mut tail = Tail::new(&project.project_dir, &project.directory);
         let tracked = self.track(&id, &mut tail, &context).await;
         let outcome = match tracked {
             Tracked::Detached => RunOutcome::Detached,
@@ -211,8 +212,11 @@ impl Shared {
         if context.cancel.is_cancelled() {
             return Ok(Err(RunOutcome::Cancelled));
         }
+        let Some(launch) = &project.launch else {
+            return Err(io::Error::other("a new submission needs a launch plan"));
+        };
         let script_path = request.job_dir.join("job.sbatch");
-        let text = self.script(request, project, name);
+        let text = self.script(request, project, launch, name);
         std::fs::write(&script_path, text)?;
         std::fs::File::open(&script_path)?.sync_all()?;
         let at = Utc::now();
@@ -274,13 +278,19 @@ impl Shared {
         })
     }
 
-    fn script(&self, request: &RunRequest, project: &ProjectRun, name: &str) -> String {
+    fn script(
+        &self,
+        request: &RunRequest,
+        project: &ProjectRun,
+        launch: &ProjectLaunch,
+        name: &str,
+    ) -> String {
         let config = &self.settings.config;
         let mut steps = vec![Step {
             argv: request.argv.clone(),
-            ranks: project.launch.ranks,
+            ranks: launch.plan.ranks,
         }];
-        steps.extend(project.follow_up.iter().map(|argv| Step {
+        steps.extend(launch.follow_up.iter().map(|argv| Step {
             argv: argv.clone(),
             ranks: None,
         }));
@@ -289,8 +299,8 @@ impl Shared {
             job_dir: &request.job_dir,
             project_dir: &project.project_dir,
             roots: &self.roots,
-            profile: &project.profile,
-            gpu: project.launch.gpus > 0,
+            profile: &launch.profile,
+            gpu: launch.plan.gpus > 0,
             apptainer: &config.apptainer,
             image: &config.image,
             scratch: &config.scratch,

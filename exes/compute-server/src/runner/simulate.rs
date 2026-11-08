@@ -87,9 +87,12 @@ async fn simulate_project(
     }
     let sink = context.lines.clone();
     let cancel = context.cancel.clone();
+    let Some(launch) = project.launch.clone() else {
+        return Err(io::Error::other("a project job without a launch plan"));
+    };
     let command = crate::tools::project::ProjectCommand {
         main: request.argv.clone(),
-        follow_up: project.follow_up.clone(),
+        follow_up: launch.follow_up,
     };
     let end = tokio::task::spawn_blocking(move || {
         let crate::tools::Layout::Project(tool) = project.tool.layout() else {
@@ -106,7 +109,7 @@ async fn simulate_project(
                 project_dir: &project.project_dir,
                 directory: &project.directory,
                 command: &command,
-                launch: project.launch,
+                launch: launch.plan,
                 data_roots: &data_roots,
                 log: &log,
                 pause: &pause,
