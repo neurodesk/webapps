@@ -76,7 +76,17 @@ fn flock(data_dir: &Path) -> io::Result<File> {
 /// Takes the data directory: `flock` always, `instance.lock` when `exclusive_file`.
 pub fn acquire(data_dir: &Path, exclusive_file: bool) -> io::Result<Locks> {
     let file = flock(data_dir)?;
-    if let Err(error) = file.try_lock() {
+    // A child process forked by this process (between fork and exec) briefly
+    // shares the lock's open file description, so a server restarted inside
+    // one process can find the lock busy for a moment. Retry for up to 2 s.
+    let mut attempts = 0;
+    let mut locked = file.try_lock();
+    while locked.is_err() && attempts < 40 {
+        attempts += 1;
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        locked = file.try_lock();
+    }
+    if let Err(error) = locked {
         let holder = holder_of(data_dir)
             .map(|holder| format!(" by {}", holder.describe()))
             .unwrap_or_default();

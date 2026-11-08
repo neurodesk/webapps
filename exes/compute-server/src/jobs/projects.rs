@@ -43,16 +43,25 @@ pub struct ProjectDetail {
 impl JobStore {
     /// Creates a project directory and its record.
     pub fn create_project(&self, name: String) -> std::io::Result<ProjectDetail> {
-        let project = Project::new(crate::api::new_job_id(), name, Utc::now());
+        let mut inner = self.lock();
+        // Creation times are strictly increasing, so projects created within
+        // one millisecond still list newest first.
+        let newest = inner.projects.values().filter_map(Project::created).max();
+        let mut created = Utc::now();
+        if let Some(newest) = newest {
+            if created <= newest {
+                created = newest + chrono::Duration::milliseconds(1);
+            }
+        }
+        let project = Project::new(crate::api::new_job_id(), name, created);
         let dir = self.dirs.project(&project.id);
         std::fs::create_dir_all(&dir)?;
         if let Err(error) = self.dirs.persist(&project) {
             let _ = std::fs::remove_dir_all(&dir);
             return Err(error);
         }
-        self.lock()
-            .projects
-            .insert(project.id.clone(), project.clone());
+        inner.projects.insert(project.id.clone(), project.clone());
+        drop(inner);
         Ok(ProjectDetail {
             id: project.id,
             name: project.name,
