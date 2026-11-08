@@ -57,7 +57,7 @@ try {
       assert.equal(sections.includes('Command line'), downloads.length > 0, `${app.id}: lists a command line exactly when it has released one`);
       const computeServer = catalog.apps[app.id].computeServer;
       if (computeServer) {
-        assert.equal(sections[0], 'Compute server · Linux with NVIDIA GPU');
+        assert.equal(sections[0], computeServer.runner === 'slurm' ? 'Compute server · Slurm cluster' : 'Compute server · Linux with NVIDIA GPU');
         await expect(dialog.locator('#standalone-compute')).toBeVisible();
       } else if (catalog.apps[app.id].containers.length) {
         assert.equal(sections[0], 'Neurodesk containers');
