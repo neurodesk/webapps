@@ -244,6 +244,10 @@ tolerance of 24.78495. This is ten times the real QR tolerance; the earlier
 `eps(norm(A,1))` inference gives 15.625 and wrongly retains the baseline column,
 whose QR diagonal is 15.81078. The corrected rule passes the original 146
 scale cases and the newly recorded pipeline regression.
+The factor is measured directly for double precision. The same factor is used
+for single precision, whose recorded cases agree but do not distinguish the
+two rules. A separate native gate checks the overflowing design's tiny
+amplitude against MATLAB within eight ULP, even though its final map is rejected.
 
 The required CSS replay checks all 96 vertices' zero and nonfinite decisions.
 At vertices 46, 80 and 87 it also requires exact parameters, noise ceilings and

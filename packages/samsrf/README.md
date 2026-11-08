@@ -389,7 +389,9 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   the larger norm its coefficient and the other 0. Octave's `\` uses no such
   tolerance, so on the example's coarse fit it reports amplitudes near 1e13 on
   9 vertices where the port reports 0. The opt-in complex CSS solve uses ten
-  times the real-design tolerance, as measured in R2023b's rank warnings.
+  times the real-design tolerance, directly measured in a double-precision
+  R2023b rank warning. The single-precision factor follows the same rule;
+  its recorded cases are consistent but do not distinguish it from the old rule.
   The earlier `max(size(A)) * eps(norm(A,1))` estimate matched the synthetic
   cases but incorrectly retained a baseline column in the double CSS pipeline.
   Both real and complex decisions are checked across prediction scales.

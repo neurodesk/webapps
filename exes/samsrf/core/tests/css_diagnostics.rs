@@ -100,3 +100,29 @@ fn complex_css_rank_threshold_drops_the_recorded_baseline_column() {
     assert_eq!(case["qrMatchesMldivide"], false);
     assert_ne!(array(&root, &case["betaFromQr"])[0], 0.0);
 }
+
+#[test]
+fn overflowing_css_design_matches_the_recorded_tiny_coefficient() {
+    let Some((root, cases)) = recording() else {
+        return;
+    };
+    let case = cases
+        .iter()
+        .find(|c| c["id"] == "css_pipeline_double_v88_nonnegative0_recorded")
+        .unwrap();
+    assert_eq!(case["accepted"], false);
+    let x = complex_array(&root, &case["prediction"]);
+    let y = array(&root, &case["observations"]);
+    let expected = array(&root, &case["candidateBeta"]);
+    assert!(x.iter().map(|v| v.norm_sqr()).sum::<f64>().is_infinite());
+    let (beta, baseline) = css::fit_betas(&x, &y, Precision::Double);
+    assert_eq!(expected[0], 0.0);
+    assert_eq!(baseline, expected[0]);
+    assert!(expected[1] > 0.0 && expected[1] < 1e-307);
+    assert!(beta > 0.0 && beta < 1e-307);
+    assert!(
+        beta.to_bits().abs_diff(expected[1].to_bits()) <= 8,
+        "{beta} != {} within 8 ULP",
+        expected[1]
+    );
+}

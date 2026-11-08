@@ -247,7 +247,8 @@ fn main() -> Result<()> {
         },
     );
     let mut branch_diff = Difference::default();
-    for (evaluation, p) in native_trace.iter().take(evaluations).enumerate() {
+    let common_evaluations = native_trace.len().min(evaluations);
+    for (evaluation, p) in native_trace[..common_evaluations].iter().enumerate() {
         for (element, &actual) in p.iter().enumerate() {
             branch_diff.add(
                 actual,
@@ -258,11 +259,25 @@ fn main() -> Result<()> {
             );
         }
     }
+    let first_unmatched = if native_trace.len() > evaluations {
+        Some(
+            json!({"side":"native","evaluation":evaluations,"parameters":native_trace[evaluations]}),
+        )
+    } else if evaluations > native_trace.len() {
+        let p: Vec<_> = (0..seed.len())
+            .map(|i| parameters[i * evaluations + native_trace.len()])
+            .collect();
+        Some(json!({"side":"MATLAB","evaluation":native_trace.len(),"parameters":p}))
+    } else {
+        None
+    };
     let report = json!({"case":args[2],"execution":"native Rust","precision":case["precision"],
         "parityAsserted":false,"matlabEnvironment":recording["environment"],
         "sameParameters":{"raw":raw_diff.report(),"compressed":compressed_diff.report(),
             "prediction":prediction_diff.report(),"objective":objective_diff.report()},
         "optimizer":{"nativeEvaluations":native_trace.len(),"matlabEvaluations":evaluations,
+            "unmatchedEvaluations":{"native":native_trace.len()-common_evaluations,"matlab":evaluations-common_evaluations},
+            "firstUnmatchedEvaluation":first_unmatched,
             "parameters":branch_diff.report(),"resultParameters":result.x,
             "resultObjective":{"real":result.fval.re.to_string(),"imaginary":result.fval.im.to_string()}}});
     fs::write(&args[3], serde_json::to_string_pretty(&report)? + "\n")?;
