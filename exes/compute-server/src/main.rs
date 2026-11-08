@@ -39,14 +39,16 @@ enum Command {
     CheckSlurm(CheckSlurmArgs),
     /// Download a pinned example dataset to serve as a data root.
     FetchExample(FetchExampleArgs),
+    /// Download the pinned Apptainer image a Slurm-run tool needs (relion).
+    FetchImage(FetchExampleArgs),
 }
 
 /// Flags of `fetch-example`.
 #[derive(Debug, Clone, Args)]
 struct FetchExampleArgs {
-    /// Example to download (relion-tutorial).
+    /// Example (relion-tutorial) or image (relion) to download.
     name: String,
-    /// Directory that receives <name>/; serve it with --data-root examples=<dest>.
+    /// Directory that receives <name>/ (for an example, serve it with --data-root examples=<dest>).
     #[arg(long)]
     dest: PathBuf,
 }
@@ -158,7 +160,8 @@ async fn main() -> ExitCode {
         Some(Command::Pull(args)) => pull(args).await,
         Some(Command::Unlock(args)) => unlock(args),
         Some(Command::CheckSlurm(args)) => check_slurm(args).await,
-        Some(Command::FetchExample(args)) => fetch_example(args).await,
+        Some(Command::FetchExample(args)) => fetch_example(args, false).await,
+        Some(Command::FetchImage(args)) => fetch_example(args, true).await,
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -169,16 +172,22 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn fetch_example(args: FetchExampleArgs) -> Result<(), String> {
+/// `fetch-example` and `fetch-image`: the same pinned, resumable download.
+async fn fetch_example(args: FetchExampleArgs, image: bool) -> Result<(), String> {
     use compute_server::examples::{self, Progress};
-    let known = examples::examples();
+    let known = if image {
+        examples::images()
+    } else {
+        examples::examples()
+    };
+    let kind = if image { "image" } else { "example" };
     let example = known
         .iter()
         .find(|example| example.name == args.name)
         .ok_or_else(|| {
             let names: Vec<&str> = known.iter().map(|example| example.name.as_str()).collect();
             format!(
-                "unknown example '{}'; known: {}",
+                "unknown {kind} '{}'; known: {}",
                 args.name,
                 names.join(", ")
             )
@@ -228,6 +237,13 @@ async fn fetch_example(args: FetchExampleArgs) -> Result<(), String> {
         .await
         .map_err(|error| error.to_string())?;
     println!("{} is ready in {}.", example.name, root.display());
+    if image {
+        for file in &example.files {
+            println!("Image: {}", root.join(&file.path).display());
+        }
+        println!("Then {}.", example.usage);
+        return Ok(());
+    }
     println!("Serve it as a data root with:");
     println!("  --data-root examples={}", dest.display());
     println!("Then {}.", example.usage);

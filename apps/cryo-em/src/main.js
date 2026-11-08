@@ -242,9 +242,11 @@ function showFsc(fsc, label) {
 }
 
 // 5. Compute server connection; the app needs the HPC features (protocol "HPC features").
-// neurodesk-compute --www serves the app at the origin root; the catalogue
-// serves it under /cryo-em/, where probing /api/v1/info would only 404.
-const servedByComputeServer = new URL('.', location.href).pathname === '/';
+// The server archive marks its copy of the page (scripts/package-compute-server.mjs),
+// and the browser tests serve a build at the origin root; on a catalogue host
+// probing /api/v1/info would only 404.
+const servedByComputeServer = document.querySelector('meta[name="neurodesk-compute"]') !== null
+  || new URL('.', location.href).pathname === '/';
 const connection = createComputeConnection({ id: 'computeConnection', storageKey: 'cryo-em.compute', tool: 'relion', autodetect: servedByComputeServer });
 $('computeControl').append(connection);
 

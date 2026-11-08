@@ -19,7 +19,7 @@
         <div class="nd-section-content">
           <div id="exampleControl"></div>
           <div id="computeControl"></div>
-          <p id="serverNeeds" class="nd-message warning" hidden>Needs a single-owner neurodesk-compute with data roots and RELION; see About.</p>
+          <p id="serverNeeds" class="nd-message warning" hidden>Needs neurodesk-compute on your cluster; see Standalone for setup.</p>
         </div>
       </details>
 
@@ -130,7 +130,7 @@
     </footer>
 
     <template id="aboutContent">
-      <p>Cryo-EM runs single-particle analysis with RELION 5.1.1 on your own cluster: import movies from a data root, then motion correction, CTF estimation (CTFFIND 4.1.14), Laplacian-of-Gaussian particle picking, extraction, 2D classification, class selection, an initial model, 3D refinement, a solvent mask and post-processing, one RELION job per step in a project the server keeps. Each step's command line is the one RELION's own GUI writes for the same settings. This page builds and checks each step, sends it to a neurodesk-compute server that you start as yourself on a host that can submit Slurm jobs (<code>neurodesk-compute serve --single-owner --runner slurm --data-root facility=/path/to/movies</code>), and shows micrographs, class averages, maps and the FSC curve the jobs write. Reach the server through an SSH tunnel and open the page it serves at http://localhost:&lt;port&gt;. The RELION tutorial example needs <code>neurodesk-compute fetch-example relion-tutorial</code> on the server first. This app runs RELION, not CryoSPARC; CTF refinement, polishing and 3D classification are not offered yet.</p>
+      <p>Cryo-EM runs single-particle analysis with RELION 5.1.1 on your own cluster: import movies from a data root, then motion correction, CTF estimation (CTFFIND 4.1.14), Laplacian-of-Gaussian particle picking, extraction, 2D classification, class selection, an initial model, 3D refinement, a solvent mask and post-processing, one RELION job per step in a project the server keeps. Each step's command line is the one RELION's own GUI writes for the same settings. This page builds and checks each step, sends it to a neurodesk-compute server that you start as yourself on a host that can submit Slurm jobs, and shows micrographs, class averages, maps and the FSC curve the jobs write. Reach the server through an SSH tunnel and open the page it serves; Standalone lists every setup step. This app runs RELION, not CryoSPARC; CTF refinement, polishing and 3D classification are not offered yet.</p>
     </template>
     <template id="privacyContent">
       <p>Your movies and every intermediate file stay on the cluster that runs your compute server. RELION runs there as your own user, inside the pinned container, and the server keeps your projects until you delete them. Only the result files you view or download reach this browser, and only an uploaded gain reference or mask travels from this browser to the server. Nothing is sent to Neurodesk or other third parties. The compute server records no analytics; the hosted page may collect page-view analytics.</p>

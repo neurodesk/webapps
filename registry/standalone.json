@@ -2222,7 +2222,8 @@
       "containers": [],
       "computeServer": {
         "name": "neurodesk-compute",
-        "documentation": "https://github.com/neurodesk/webapps/tree/main/exes/compute-server"
+        "runner": "slurm",
+        "documentation": "https://github.com/neurodesk/webapps/tree/main/exes/compute-server#hpc-single-owner-mode-and-slurm"
       }
     }
   }

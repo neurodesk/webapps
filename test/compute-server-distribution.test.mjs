@@ -56,3 +56,27 @@ test('packaging fails when a production asset or module dependency is missing', 
     await assert.rejects(packageComputeServer({ ...fixtureData, version: '0.1.20260921' }), /Missing packaged frontend dependencies/);
   } finally { await rm(fixtureData.directory, { recursive: true, force: true }); }
 });
+
+test('archive serves the cryo-em app marked as the server’s own page, keeping its cluster setup', async () => {
+  const fixtureData = await fixture();
+  try {
+    const cryoEm = join(fixtureData.directory, 'cryo-em');
+    await mkdir(join(cryoEm, 'assets'), { recursive: true });
+    await writeFile(join(cryoEm, 'index.html'), '<html><head><title>Cryo-EM</title></head><script src="/cryo-em/assets/app.js"></script><script src="./app-shell.js" data-neurodesk-app-shell data-ga4-measurement-id="test"></script></html>');
+    await writeFile(join(cryoEm, 'assets/app.js'), 'export {};');
+    await writeFile(join(cryoEm, 'app-shell.js'), 'export {};');
+    await writeFile(join(cryoEm, 'standalone.json'), JSON.stringify({ apps: { 'cryo-em': { computeServer: { runner: 'slurm', download: { sha256: 'obsolete' } } } } }));
+    const metadata = await packageComputeServer({ ...fixtureData, cryoEmFrontend: cryoEm, version: '0.1.20260921' });
+    const extract = join(fixtureData.directory, 'extracted');
+    await mkdir(extract);
+    assert.equal(spawnSync('tar', ['-xzf', join(fixtureData.out, metadata.archive), '-C', extract]).status, 0);
+    const bundle = join(extract, 'neurodesk-compute-0.1.20260921-linux-x64');
+    await checkFrontend(join(bundle, 'www'));
+    const index = await readFile(join(bundle, 'www/cryo-em/index.html'), 'utf8');
+    assert.match(index, /<meta name="neurodesk-compute" content="same-origin" \/>/);
+    assert.doesNotMatch(index, /data-ga4-measurement-id/);
+    assert.match(await readFile(join(bundle, 'www/index.html'), 'utf8'), /href="\/cryo-em\/"/);
+    const catalog = JSON.parse(await readFile(join(bundle, 'www/cryo-em/standalone.json'), 'utf8'));
+    assert.deepEqual(catalog.apps['cryo-em'].computeServer, { runner: 'slurm' });
+  } finally { await rm(fixtureData.directory, { recursive: true, force: true }); }
+});

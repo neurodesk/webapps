@@ -34,6 +34,13 @@ fn slurm_config(base: &Path, cpu: &str) -> SlurmConfig {
         &ring::digest::SHA256,
         b"not really a SIF",
     ));
+    // The relion tool refuses to start unless every one of its commands has a default.
+    let mut defaults: serde_json::Map<String, serde_json::Value> =
+        crate::tools::relion::spec::relion_commands()
+            .iter()
+            .map(|command| (command.to_string(), json!(cpu)))
+            .collect();
+    defaults.insert("process".into(), json!("gpu-2"));
     SlurmConfig::parse(
         &json!({
             "apptainer": "/usr/bin/apptainer",
@@ -43,7 +50,7 @@ fn slurm_config(base: &Path, cpu: &str) -> SlurmConfig {
                 cpu: { "cpus": 4, "gpus": 0, "memory": "8G", "time": "01:00:00" },
                 "gpu-2": { "partition": "gpu", "account": "lab", "cpus": 8, "gpus": 2, "memory": "32G", "time": "02:00:00" }
             },
-            "defaults": { "import": cpu, "process": "gpu-2" }
+            "defaults": defaults
         })
         .to_string(),
     )

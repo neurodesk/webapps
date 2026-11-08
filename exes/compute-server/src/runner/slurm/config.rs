@@ -25,7 +25,9 @@ struct File {
 #[serde(deny_unknown_fields)]
 struct ImageFile {
     path: PathBuf,
-    sha256: String,
+    /// Left out for the image `fetch-image relion` downloads.
+    #[serde(default)]
+    sha256: Option<String>,
 }
 
 /// Node-local scratch handed to `apptainer exec --workdir`.
@@ -69,7 +71,12 @@ impl SlurmConfig {
         if !file.image.path.is_absolute() {
             return Err("image.path must be an absolute path".into());
         }
-        let sha256 = file.image.sha256.to_ascii_lowercase();
+        let sha256 = file
+            .image
+            .sha256
+            .as_deref()
+            .unwrap_or(crate::examples::RELION_IMAGE_SHA256)
+            .to_ascii_lowercase();
         if sha256.len() != 64 || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err("image.sha256 must be 64 hex digits".into());
         }
@@ -190,6 +197,30 @@ mod tests {
             "defaults": { "class2d": "gpu-4", "import": "cpu" }
         })
         .to_string()
+    }
+
+    #[test]
+    fn the_standalone_dialog_example_runs_the_pinned_image() {
+        // The file packages/components/src/ui/renderStandalone.js shows cryo-em users.
+        let parsed = SlurmConfig::parse(
+            r#"{
+  "apptainer": "/usr/bin/apptainer",
+  "image": { "path": "/shared/images/relion/relion_5.1.1.sif" },
+  "scratch": "$TMPDIR",
+  "profiles": {
+    "cpu": { "partition": "cpu", "cpus": 16, "gpus": 0, "memory": "64G", "time": "12:00:00" },
+    "gpu": { "partition": "gpu", "account": "lab", "cpus": 24, "gpus": 4, "memory": "128G", "time": "24:00:00" }
+  },
+  "defaults": {
+    "import": "cpu", "motioncorr": "cpu", "ctffind": "cpu", "autopick": "cpu", "extract": "cpu",
+    "class2d": "gpu", "select": "cpu", "initialmodel": "gpu", "refine3d": "gpu",
+    "maskcreate": "cpu", "postprocess": "cpu"
+  }
+}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.image_sha256, crate::examples::RELION_IMAGE_SHA256);
+        assert_eq!(parsed.profiles.resolve("refine3d", None).unwrap().gpus, 4);
     }
 
     #[test]

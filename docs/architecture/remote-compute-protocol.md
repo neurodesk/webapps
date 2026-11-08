@@ -557,17 +557,25 @@ The Slurm runner reads `--slurm-config <file.json>`:
 ```json
 {
   "apptainer": "/usr/bin/apptainer",
-  "image": { "path": "/shared/images/relion_5.1.1.sif", "sha256": "…" },
+  "image": { "path": "/shared/images/relion/relion_5.1.1.sif" },
   "scratch": "$TMPDIR",
   "profiles": {
     "cpu": { "partition": "cpu", "cpus": 16, "gpus": 0, "memory": "64G", "time": "12:00:00" },
     "gpu-4": { "partition": "gpu", "account": "lab", "qos": null, "cpus": 24, "gpus": 4, "memory": "128G", "time": "24:00:00" }
   },
-  "defaults": { "motioncorr": "cpu", "ctffind": "cpu", "autopick": "cpu", "extract": "cpu", "class2d": "gpu-4", "initialmodel": "gpu-4", "refine3d": "gpu-4", "postprocess": "cpu" }
+  "defaults": {
+    "import": "cpu", "motioncorr": "cpu", "ctffind": "cpu", "autopick": "cpu", "extract": "cpu",
+    "class2d": "gpu-4", "select": "cpu", "initialmodel": "gpu-4", "refine3d": "gpu-4",
+    "maskcreate": "cpu", "postprocess": "cpu"
+  }
 }
 ```
 
 A spec may name `"profile": "<name>"`; otherwise the command's default applies.
+With more than one profile, every command of a project tool needs a default:
+the server refuses to start otherwise. `image.sha256` may be left out for the
+image `neurodesk-compute fetch-image relion` downloads, whose SHA-256 the server
+pins; any other image needs it.
 The caller never passes Slurm flags.
 
 - `scratch` is `$NAME`, `${NAME}` or an absolute path; each job uses and removes

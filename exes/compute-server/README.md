@@ -147,7 +147,8 @@ analytics. Model acquisition must be completed separately before offline operati
 
 Subcommands: `serve` (default), `doctor`, `pull` (all accept the same flags),
 `unlock --data-dir DIR` and `check-slurm --slurm-config FILE --profile NAME
-[--data-root ID=PATH] [--data-dir DIR] [--timeout 1h]`.
+[--data-root ID=PATH] [--data-dir DIR] [--timeout 1h]`, `fetch-example NAME
+--dest DIR` and `fetch-image NAME --dest DIR`.
 
 ## HPC: single-owner mode and Slurm
 
@@ -187,17 +188,23 @@ the result files the browser asks for leave it.
 ```json
 {
   "apptainer": "/usr/bin/apptainer",
-  "image": { "path": "/shared/images/relion_5.1.1.sif", "sha256": "…" },
+  "image": { "path": "/shared/images/relion/relion_5.1.1.sif" },
   "scratch": "$TMPDIR",
   "profiles": {
     "cpu": { "partition": "cpu", "cpus": 16, "gpus": 0, "memory": "64G", "time": "12:00:00" },
     "gpu-4": { "partition": "gpu", "account": "lab", "cpus": 24, "gpus": 4, "memory": "128G", "time": "24:00:00" }
   },
-  "defaults": { "class2d": "gpu-4", "refine3d": "gpu-4", "motioncorr": "cpu" }
+  "defaults": {
+    "import": "cpu", "motioncorr": "cpu", "ctffind": "cpu", "autopick": "cpu", "extract": "cpu",
+    "class2d": "gpu-4", "select": "cpu", "initialmodel": "gpu-4", "refine3d": "gpu-4",
+    "maskcreate": "cpu", "postprocess": "cpu"
+  }
 }
 ```
 
-`scratch` is `$NAME`, `${NAME}` or an absolute path on the compute node; each
+Every `relion` command needs a default profile when there is more than one
+profile; the server refuses to start otherwise, because the app's "Server
+default" names none. `scratch` is `$NAME`, `${NAME}` or an absolute path on the compute node; each
 job uses and removes `<scratch>/nd-<job id>`. A profile may set `gres` (for
 example `"gpu:a100:4"`) in place of the default `gpu:<gpus>`. The data
 directory, data roots, image and `apptainer` paths may contain only letters,
@@ -255,6 +262,19 @@ reference a missing file fails with `tool-failed` naming the referring file.
 The files follow "The simulated `relion` tool" in the protocol: the same
 names, data blocks, columns and MRC sizes as the Node reference server
 (`test-utils/relion-simulator.mjs`), not the same bytes.
+
+### The RELION image
+
+```sh
+neurodesk-compute fetch-image relion --dest /shared/images
+```
+
+downloads the RELION 5.1.1 Apptainer image to
+`/shared/images/relion/relion_5.1.1.sif`, from the Hugging Face dataset at a
+pinned commit, resuming and checking it like the example data below. Put it
+where every compute node can read it. With that image, `slurm.json` can leave
+`image.sha256` out: the server checks the file against the SHA-256 pinned in
+`src/examples.rs`. An image you build yourself needs its own `image.sha256`.
 
 ### Example data
 

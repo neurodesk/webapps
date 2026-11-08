@@ -192,15 +192,17 @@ impl ProjectTool for Relion {
     }
 
     fn check_profiles(&self, profiles: &Profiles) -> Result<(), String> {
+        // The app's "Server default" sends no profile, so every command needs one.
         for command in spec::relion_commands() {
-            if let Ok(profile) = profiles.resolve(command, None) {
-                spec::relion_launch(command, profile.cpus, profile.gpus).map_err(|error| {
-                    format!(
-                        "the default profile '{}' of {command} cannot run it: {error}",
-                        profile.name
-                    )
-                })?;
-            }
+            let profile = profiles.resolve(command, None).map_err(|_| {
+                format!("{command} has no default profile; add it to \"defaults\" in the Slurm configuration")
+            })?;
+            spec::relion_launch(command, profile.cpus, profile.gpus).map_err(|error| {
+                format!(
+                    "the default profile '{}' of {command} cannot run it: {error}",
+                    profile.name
+                )
+            })?;
         }
         Ok(())
     }
@@ -217,6 +219,26 @@ mod tests {
         let map = BTreeMap::from([("gpu".to_string(), profile)]);
         let defaults = BTreeMap::from([("refine3d".to_string(), "gpu".to_string())]);
         Profiles::new(map, defaults).unwrap()
+    }
+
+    #[test]
+    fn refuses_a_command_without_a_default_among_several_profiles() {
+        let profile = |cpus: u32| -> Profile {
+            serde_json::from_value(serde_json::json!({ "cpus": cpus, "gpus": 0 })).unwrap()
+        };
+        let map = BTreeMap::from([("a".to_string(), profile(8)), ("b".to_string(), profile(8))]);
+        let mut defaults: BTreeMap<String, String> = spec::relion_commands()
+            .iter()
+            .map(|command| (command.to_string(), "a".to_string()))
+            .collect();
+        assert!(Relion
+            .check_profiles(&Profiles::new(map.clone(), defaults.clone()).unwrap())
+            .is_ok());
+        defaults.remove("import");
+        let error = Relion
+            .check_profiles(&Profiles::new(map, defaults).unwrap())
+            .unwrap_err();
+        assert!(error.contains("import has no default profile"), "{error}");
     }
 
     #[test]

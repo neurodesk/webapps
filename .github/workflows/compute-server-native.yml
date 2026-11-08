@@ -7,6 +7,7 @@ on:
       - '.github/workflows/compute-server-native.yml'
       - 'exes/compute-server/**'
       - 'apps/nesvor/**'
+      - 'apps/cryo-em/**'
       - 'packages/components/**'
       - 'packages/cryo-em/**'
       - 'packages/runtime-support/**'
@@ -24,6 +25,7 @@ on:
       - '.github/workflows/compute-server-native.yml'
       - 'exes/compute-server/**'
       - 'apps/nesvor/**'
+      - 'apps/cryo-em/**'
       - 'packages/components/**'
       - 'packages/cryo-em/**'
       - 'packages/runtime-support/**'
@@ -84,11 +86,12 @@ jobs:
       - name: Build frontend and test packaging
         run: |
           pnpm --filter nesvor build
+          pnpm --filter cryo-em build
           node --test test/compute-server-distribution.test.mjs
       - name: Package Linux server with frontend
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' exes/compute-server/Cargo.toml)
-          node scripts/package-compute-server.mjs --binary exes/compute-server/target/release/neurodesk-compute --frontend apps/nesvor/dist --out exes/compute-server/dist --version "$version"
+          node scripts/package-compute-server.mjs --binary exes/compute-server/target/release/neurodesk-compute --frontend apps/nesvor/dist --cryo-em-frontend apps/cryo-em/dist --out exes/compute-server/dist --version "$version"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: neurodesk-compute-linux-x64-archive

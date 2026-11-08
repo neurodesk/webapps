@@ -212,6 +212,40 @@ pub fn relion_tutorial() -> Example {
     }
 }
 
+/// The RELION 5.1.1 Apptainer image the Slurm runner runs: built once from the
+/// Neurocontainers release and mirrored to the dataset, because Neurocontainers
+/// deletes rebuilt images and a rebuild does not reproduce the bytes.
+pub const RELION_IMAGE_REVISION: &str = "@RELION_IMAGE_REVISION@";
+/// File name of the image, below `<dest>/relion/`.
+pub const RELION_IMAGE_FILE: &str = "relion_5.1.1.sif";
+/// Lowercase hex SHA-256 of the image; `slurm.json` may leave `image.sha256` out
+/// for this file.
+pub const RELION_IMAGE_SHA256: &str = "@RELION_IMAGE_SHA256@";
+const RELION_IMAGE_BYTES: u64 = 0;
+
+/// The pinned RELION image, fetched like an example.
+pub fn relion_image() -> Example {
+    Example {
+        name: "relion".into(),
+        repository: "neurodeskorg/webapps".into(),
+        revision: RELION_IMAGE_REVISION.into(),
+        prefix: "cryo-em/relion-image".into(),
+        files: vec![ExampleFile {
+            path: RELION_IMAGE_FILE.into(),
+            sha256: RELION_IMAGE_SHA256.into(),
+            bytes: RELION_IMAGE_BYTES,
+        }],
+        usage: "set \"image\": { \"path\": \"<that file>\" } in slurm.json and put it where \
+                every compute node can read it"
+            .into(),
+    }
+}
+
+/// Every image `fetch-image` knows.
+pub fn images() -> Vec<Example> {
+    vec![relion_image()]
+}
+
 /// Every example `fetch-example` knows.
 pub fn examples() -> Vec<Example> {
     vec![relion_tutorial()]
