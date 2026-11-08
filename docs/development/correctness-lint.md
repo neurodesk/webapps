@@ -2,7 +2,9 @@
 
 Run `pnpm lint` for the correctness gate and the existing workspace syntax and
 TypeScript checks. `pnpm lint:correctness` runs the source inventory gate alone;
-`pnpm test:lint` exercises its canaries. The independent `code-quality` workflow
+`pnpm test:lint` exercises its canaries in a temporary repository under `TMPDIR`.
+The copy includes current working source and reuses installed dependencies; deliberately
+broken fixtures never enter the working checkout or its Git index. The independent `code-quality` workflow
 runs the latter checks without building apps or installing scientific runtimes.
 
 The root ESLint configuration applies correctness rules to every owned JS/TS

@@ -6,7 +6,7 @@ const dispatch = (page, command, request = {}) => page.evaluate(({ command, requ
 
 test('DICOM analysis executes the Python worker and returns real acquisition metadata', async ({ page }) => {
   await page.context().route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
-  await page.goto('./');
+  await page.goto('./workspace');
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
   await page.locator('#neurodesk-input-transfer').setInputFiles(dicomSeries({ series: 31 }));
   await dispatch(page, 'adopt', { role: 'dicom' });
@@ -30,7 +30,7 @@ test('DICOM analysis executes the Python worker and returns real acquisition met
 
 test('protocol comparison uses the explicit schema acquisition and reports validation results', async ({ page }) => {
   await page.context().route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
-  await page.goto('./');
+  await page.goto('./workspace');
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
   await page.locator('#neurodesk-input-transfer').setInputFiles(dicomSeries({ series: 32 }));
   await dispatch(page, 'adopt', { role: 'dicom' });
@@ -58,7 +58,7 @@ test('an analysis engine startup rejection reaches the footer and log without an
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.context().route('**/dicompare-0.11.1-py3-none-any.whl', route => route.fulfill({ status: 200, body: 'invalid wheel' }));
-  await page.goto('./');
+  await page.goto('./workspace');
   await expect(page.locator('#statusText')).toContainText('Analysis engine failed to start', { timeout: 60000 });
   await expect(page.locator('#technicalLogOutput')).toContainText('Analysis engine failed to start');
   expect(pageErrors).toEqual([]);

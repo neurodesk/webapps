@@ -75,11 +75,48 @@ export class ComputeClient {
     if (!response.ok && response.status !== 404) throw await this.#error(response);
   }
 
-  /** Bytes of one named output as a Blob. */
+  /**
+   * Bytes of one named output as a Blob. A project job's output names are
+   * project-relative paths with `/`; the name travels percent-encoded as one
+   * path segment, so `.` and `..` components reach the server unnormalised.
+   */
   async output(id, name, { signal } = {}) {
     const response = await this.#request('GET', `${API}/jobs/${encodeURIComponent(id)}/outputs/${encodeURIComponent(name)}`, { signal });
     if (!response.ok) throw await this.#error(response);
     return response.blob();
+  }
+
+  /** Projects of the single owner, newest first: `{ projects: [...] }`. */
+  async projects({ signal } = {}) {
+    return this.#json('GET', `${API}/projects`, { signal });
+  }
+
+  async createProject(name, { signal } = {}) {
+    return this.#json('POST', `${API}/projects`, {
+      body: JSON.stringify({ name }), signal, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  /** One project with its jobs in creation order. */
+  async project(id, { signal } = {}) {
+    return this.#json('GET', `${API}/projects/${encodeURIComponent(id)}`, { signal });
+  }
+
+  async removeProject(id, { signal } = {}) {
+    const response = await this.#request('DELETE', `${API}/projects/${encodeURIComponent(id)}`, { signal });
+    if (!response.ok && response.status !== 404) throw await this.#error(response);
+  }
+
+  /** The server's data roots: `{ roots: [{ id, label }] }`. */
+  async roots({ signal } = {}) {
+    return this.#json('GET', `${API}/roots`, { signal });
+  }
+
+  /** One page of a directory in a data root; pass the previous page's `next` as `cursor`. */
+  async entries(root, path = '', cursor = null, { signal } = {}) {
+    const query = new URLSearchParams({ path });
+    if (cursor) query.set('cursor', cursor);
+    return this.#json('GET', `${API}/roots/${encodeURIComponent(root)}/entries?${query}`, { signal });
   }
 
   /**

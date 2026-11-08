@@ -5,10 +5,9 @@
 #   build-wasm.sh          rebuild wasm/ from the Rust source
 #   build-wasm.sh --check  rebuild into a scratch directory and fail unless every file equals wasm/
 #
-# The build is reproducible byte for byte given the pinned toolchain below (rustc, wasm-pack and
-# the binaryen wasm-opt that wasm-pack takes from PATH all change the output). Panic messages embed
-# source paths, so the Cargo home is remapped to a fixed prefix: a runner with a different home
-# directory then produces the same binary.
+# The canonical release builder is the wasm-source CI job. These toolchain pins alone do not
+# guarantee identical Rust instruction layouts in other build environments. Panic messages embed
+# source paths, so Cargo home and the checkout are remapped; --check still compares every byte.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -53,7 +52,15 @@ export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$re
 crate=../../exes/samsrf/wasm
 scratch="$(mktemp -d -t samsrf-wasm.XXXXXX)"
 trap 'rm -rf "$scratch"' EXIT
-"$WASM_PACK" build "$crate" --target web --release --out-dir "$scratch"
+"$WASM_PACK" build "$crate" --target web --release --no-opt --out-dir "$scratch"
+if [[ -n "${SAMSRF_REBUILD_DIR:-}" ]]; then
+  mkdir -p "$SAMSRF_REBUILD_DIR"
+  cp "$scratch/samsrf_wasm_bg.wasm" "$SAMSRF_REBUILD_DIR/before-opt.wasm"
+  sha256sum "$(command -v wasm-opt)" > "$SAMSRF_REBUILD_DIR/optimizer.sha256"
+  rustc -vV > "$SAMSRF_REBUILD_DIR/rustc.txt"
+fi
+wasm-opt "$scratch/samsrf_wasm_bg.wasm" -O3 --strip-producers -o "$scratch/optimized.wasm"
+mv "$scratch/optimized.wasm" "$scratch/samsrf_wasm_bg.wasm"
 
 if [[ "$mode" == check ]]; then
   status=0
@@ -66,7 +73,15 @@ if [[ "$mode" == check ]]; then
     fi
   done
   if [[ $status -ne 0 ]]; then
-    echo "Run 'pnpm --filter @neurodesk/samsrf build:wasm' and commit wasm/." >&2
+    if [[ -n "${SAMSRF_REBUILD_DIR:-}" ]]; then
+      mkdir -p "$SAMSRF_REBUILD_DIR"
+      for file in "${FILES[@]}"; do
+        cp "$scratch/$file" "$SAMSRF_REBUILD_DIR/"
+      done
+      echo "Retained differing build in $SAMSRF_REBUILD_DIR"
+    fi
+    echo "Dispatch samsrf-native with wasm_only=true on this branch for the canonical build." >&2
+    echo "Validate the samsrf-differing-rebuild artifact against the reference gates before committing it; see packages/samsrf/README.md." >&2
   fi
   exit $status
 fi

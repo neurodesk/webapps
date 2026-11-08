@@ -11,6 +11,7 @@
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::expr::Value;
+use crate::precision::{self, Precision};
 
 /// The points a profile is evaluated at, with the parameter transform the grid branch applies.
 struct Domain {
@@ -282,21 +283,27 @@ pub fn predict_timecourse(rfp: &[f64], apertures: &Apertures) -> Vec<f64> {
     if !finite || pixels == 0 {
         return vec![f64::NAN; apertures.volumes()];
     }
+    // MATLAB's mean reduces long vectors through four accumulators. Retain the
+    // dense pixel position even though zero aperture entries are stored sparsely:
+    // changing lanes can change the sign of a nearly cancelled CSS response.
+    let lane = |index: usize| if pixels >= 44 { index % 4 } else { 0 };
     let mut y: Vec<f64> = apertures
         .frames
         .iter()
         .map(|frame| {
-            let sum: f64 = frame
-                .indices
-                .iter()
-                .zip(&frame.values)
-                .map(|(index, value)| rfp.get(*index as usize).copied().unwrap_or(f64::NAN) * value)
-                .sum();
-            sum / pixels as f64
+            let mut sums = [0.0; 4];
+            for (&index, &value) in frame.indices.iter().zip(&frame.values) {
+                sums[lane(index as usize)] += rfp.get(index as usize).copied().unwrap_or(f64::NAN) * value;
+            }
+            sums.iter().sum::<f64>() / pixels as f64
         })
         .collect();
     if percent_overlap {
-        let mean_abs = rfp.iter().map(|value| value.abs()).sum::<f64>() / pixels as f64;
+        let mut sums = [0.0; 4];
+        for (index, value) in rfp.iter().enumerate() {
+            sums[lane(index)] += value.abs();
+        }
+        let mean_abs = sums.iter().sum::<f64>() / pixels as f64;
         for value in &mut y {
             *value = *value / mean_abs * 100.0;
         }
@@ -358,28 +365,69 @@ pub fn errfun(
     downsampling: usize,
     css_nonlinearity: bool,
 ) -> Result<f64> {
+    errfun_with_precision(prf_function, apertures, xy, hrf, p, observed, downsampling, css_nonlinearity, Precision::Double)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn errfun_with_precision(
+    prf_function: &crate::expr::AnonymousFunction,
+    apertures: &Apertures,
+    xy: &[[f64; 2]],
+    hrf: &crate::hrf::ErrfunHrf,
+    p: &[f64],
+    observed: &[f64],
+    downsampling: usize,
+    css_nonlinearity: bool,
+    precision: Precision,
+) -> Result<f64> {
+    Ok(errfun_with_convention(prf_function, apertures, xy, hrf, p, observed, downsampling, css_nonlinearity, precision, crate::css::Convention::Nonnegative)?.re)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn errfun_with_convention(
+    prf_function: &crate::expr::AnonymousFunction,
+    apertures: &Apertures,
+    xy: &[[f64; 2]],
+    hrf: &crate::hrf::ErrfunHrf,
+    p: &[f64],
+    observed: &[f64],
+    downsampling: usize,
+    css_nonlinearity: bool,
+    precision: Precision,
+    css_convention: crate::css::Convention,
+) -> Result<num_complex::Complex64> {
     use crate::hrf::ErrfunHrf;
+    use num_complex::Complex64;
     let n = p.len();
     let hrf_parameters = match hrf {
         ErrfunHrf::Fit { .. } if n < 5 => {
-            return Err(Error::Shape(format!("fitting the HRF needs five HRF parameters, got {n} parameters in total")));
+            return Err(Error::Shape(format!(
+                "fitting the HRF needs five HRF parameters, got {n} parameters in total"
+            )));
         }
         ErrfunHrf::Fit { .. } => 5,
         ErrfunHrf::Kernel(_) => 0,
     };
     if hrf_parameters > 0 && !hrf_parameters_in_bounds(&p[n - 5..]) {
-        return Ok(1.0);
+        return Ok(Complex64::new(1.0, 0.0));
     }
     let mut coordinates = Vec::with_capacity(2 * xy.len());
     coordinates.extend(xy.iter().map(|point| point[0]));
     coordinates.extend(xy.iter().map(|point| point[1]));
-    let xy_value = Value { rows: xy.len(), cols: 2, data: coordinates };
+    let xy_value = Value {
+        rows: xy.len(),
+        cols: 2,
+        data: coordinates,
+    };
     let rfp = prf_function.evaluate(&[Value::column(p.to_vec()), xy_value])?;
     if rfp.cols == 2 {
         return Err(Error::NotImplemented("multi-condition predictions"));
     }
     if rfp.cols != 1 {
-        return Err(Error::Shape(format!("the pRF function returned a {} x {} profile", rfp.rows, rfp.cols)));
+        return Err(Error::Shape(format!(
+            "the pRF function returned a {} x {} profile",
+            rfp.rows, rfp.cols
+        )));
     }
     let mut yp = predict_timecourse(&rfp.data, apertures);
     let kernel = match hrf {
@@ -390,11 +438,26 @@ pub fn errfun(
         let exponent = *p.get(n - hrf_parameters - 1).ok_or_else(|| {
             Error::Shape("the compressive nonlinearity needs an exponent parameter before the HRF parameters".into())
         })?;
+        if css_convention == crate::css::Convention::Samsrf {
+            let yp = crate::css::predict(&yp, exponent, &kernel, downsampling);
+            return Ok(crate::css::objective(&yp, observed, precision));
+        }
         compress(&mut yp, exponent);
     }
     let yp = crate::hrf::convolve(&yp, &kernel, downsampling);
-    let r = pearson(&yp, observed);
-    Ok(1.0 - r * r)
+    Ok(Complex64::new(
+        match precision {
+            Precision::Double => {
+                let r = pearson(&yp, observed);
+                1.0 - r * r
+            }
+            Precision::Single => {
+                let r = precision::correlation_single(&yp, observed, false);
+                f64::from(1.0f32 - r * r)
+            }
+        },
+        0.0,
+    ))
 }
 
 #[cfg(test)]

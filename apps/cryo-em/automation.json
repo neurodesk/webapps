@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "app": "cryo-em",
+  "title": "Cryo-EM",
+  "description": "Open MRC micrographs, image stacks and maps for inspection. RELION processing runs on a neurodesk-compute server through the interactive controls.",
+  "defaultOperation": "open-map",
+  "operations": {
+    "open-map": {
+      "title": "Open an MRC file",
+      "description": "Display one MRC micrograph or map in the viewer, or an MRC image stack as a grid of images.",
+      "mode": "viewer",
+      "inputs": {
+        "map": {
+          "source": "files",
+          "type": "neuro:cryo-em-map",
+          "formats": [
+            "mrc",
+            "mrcs"
+          ],
+          "description": "One MRC2014 micrograph, map or image stack",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {},
+      "artifacts": {},
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

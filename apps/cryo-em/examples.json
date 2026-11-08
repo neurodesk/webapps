@@ -1,0 +1,17 @@
+[
+  {
+    "id": "relion-tutorial",
+    "label": "RELION tutorial movies (EMPIAR-10204)",
+    "description": "24 beta-galactosidase movies and their gain reference (CC0), held in the compute server's examples data root.",
+    "expectedResult": "Run each step from import to post-processing for class averages, a D2 map and a gold-standard FSC resolution.",
+    "files": [
+      {
+        "role": "manifest",
+        "name": "SHA256SUMS",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/607388b20e8c7e0000ec8498d19ac7e3c35d6472/cryo-em/relion-tutorial/SHA256SUMS",
+        "sha256": "123d411889e6259ec176942ada14c49b0bd43fddd371b944a76e5aed888367da",
+        "bytes": 2657
+      }
+    ]
+  }
+]

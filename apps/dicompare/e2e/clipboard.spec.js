@@ -6,7 +6,7 @@ for (const width of [1280, 390]) {
     const errors = [];
     page.on('pageerror', error => errors.push(error.stack || error.message));
     await page.context().route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
-    await page.goto('./');
+    await page.goto('./workspace');
     await expect(page.locator('#statusText')).toContainText('Ready', { timeout: 180000 });
     await page.getByRole('button', { name: 'From data', exact: true }).click();
     await page.getByRole('button', { name: 'Library', exact: true }).click();

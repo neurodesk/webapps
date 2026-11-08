@@ -15,6 +15,7 @@
 
 use crate::error::{Error, Result};
 use crate::expr::AnonymousFunction;
+use crate::precision::Precision;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -51,6 +52,8 @@ pub enum FineFit {
 #[serde(rename_all = "camelCase")]
 pub struct PrfModel {
     pub name: String,
+    pub data_precision: Precision,
+    pub css_convention: crate::css::Convention,
     pub prf_function: AnonymousFunction,
     pub param_names: Vec<String>,
     pub scaled_param: Vec<bool>,
@@ -175,6 +178,9 @@ pub fn parse_model_json(kind: AnalysisKind, json: &str) -> Result<Model> {
         Value::Object(map) => Fields(map),
         _ => return Err(Error::Model("the model file must hold a JSON object".into())),
     };
+    if kind != AnalysisKind::Prf && fields.precision()? != Precision::Double {
+        return Err(Error::NotImplemented("Data_Precision=single for reverse-correlation analyses"));
+    }
     match kind {
         AnalysisKind::Prf => fields.prf().map(Model::Prf),
         AnalysisKind::RevCorPrf => fields.revcor_prf().map(Model::RevCorPrf),
@@ -186,6 +192,14 @@ pub fn parse_model_json(kind: AnalysisKind, json: &str) -> Result<Model> {
 struct Fields(Map<String, Value>);
 
 impl Fields {
+    fn precision(&self) -> Result<Precision> {
+        match self.string_or("Data_Precision", "double")?.as_str() {
+            "double" => Ok(Precision::Double),
+            "single" => Ok(Precision::Single),
+            _ => Err(Error::Model("Data_Precision must be 'double' or 'single'".into())),
+        }
+    }
+
     fn has(&self, name: &str) -> bool {
         self.0.contains_key(name)
     }
@@ -347,6 +361,12 @@ impl Fields {
         }
         Ok(PrfModel {
             name,
+            data_precision: self.precision()?,
+            css_convention: match self.string_or("Css_Convention", "nonnegative")?.as_str() {
+                "nonnegative" => crate::css::Convention::Nonnegative,
+                "samsrf" => crate::css::Convention::Samsrf,
+                _ => return Err(Error::Model("Css_Convention must be 'nonnegative' or 'samsrf'".into())),
+            },
             prf_function,
             param_names,
             scaled_param: scaled_param.iter().map(|value| *value != 0.0).collect(),
@@ -573,6 +593,8 @@ mod tests {
         params.extend(std::iter::repeat_n(vec![0.0], 7));
         let expected = PrfModel {
             name: "pRF_Gaussian".into(),
+            data_precision: Precision::Double,
+            css_convention: crate::css::Convention::Nonnegative,
             prf_function: AnonymousFunction::parse("@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)").unwrap(),
             param_names: vec!["x0".into(), "y0".into(), "Sigma".into()],
             scaled_param: vec![true, true, true],
@@ -682,6 +704,7 @@ mod tests {
     fn prf_optional_fields_are_read() {
         let mut map = minimal_prf();
         for (field, value) in [
+            ("Data_Precision", serde_json::json!("single")),
             ("Downsample_Predictions", serde_json::json!(2)),
             ("Noise_Ceiling_Threshold", serde_json::json!(0.2)),
             ("Seed_Fine_Fit", serde_json::json!("pRF_seed")),
@@ -701,6 +724,7 @@ mod tests {
             map.insert(field.into(), value);
         }
         let model = prf(&Value::Object(map).to_string()).unwrap();
+        assert_eq!(model.data_precision, Precision::Single);
         assert_eq!(model.downsample_predictions, 2);
         assert_eq!(model.noise_ceiling_threshold, 0.2);
         assert_eq!(model.seed_fine_fit, "pRF_seed");

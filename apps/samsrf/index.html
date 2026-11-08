@@ -84,6 +84,24 @@
                 <input id="fineFitThreshold" type="number" min="0" max="1" step="0.01" value="0.01" />
               </div>
               <label class="nd-check" data-analysis="prf"><input id="coarseOnly" type="checkbox" /> Coarse fit only</label>
+              <div class="nd-field" data-analysis="prf">
+                <label for="dataPrecision">Fit precision
+                  <span class="nd-info-icon" tabindex="0" aria-label="About fit precision">i<span class="nd-info-tooltip">MATLAB stores observations as single precision by default. This option reproduces its mixed arithmetic for forward fits; parameters remain double during optimization.</span></span>
+                </label>
+                <select id="dataPrecision">
+                  <option value="double">Double precision</option>
+                  <option value="single">MATLAB single precision</option>
+                </select>
+              </div>
+              <div class="nd-field" id="cssConventionField" hidden>
+                <label for="cssConvention">CSS convention
+                  <span class="nd-info-icon" tabindex="0" aria-label="About CSS conventions">i<span class="nd-info-tooltip">SamSrf keeps complex powers of negative responses and uses the final parameter for post-fit betas. With a fitted HRF that parameter is AmpRat. Nonnegative CSS clips negative responses and uses Exponent.</span></span>
+                </label>
+                <select id="cssConvention">
+                  <option value="nonnegative">Nonnegative CSS</option>
+                  <option value="samsrf">SamSrf compatibility</option>
+                </select>
+              </div>
               <div class="nd-field" data-analysis="rc">
                 <label for="revcorThreshold">Profile threshold <small>R²</small>
                   <span class="nd-info-icon" tabindex="0" aria-label="About the profile threshold">i<span class="nd-info-tooltip">Correlation profiles below this R² are not analysed further (R2_Threshold).</span></span>
@@ -92,13 +110,13 @@
               </div>
               <div class="nd-field">
                 <label for="exportConvention">Map export
-                  <span class="nd-info-icon" tabindex="0" aria-label="About map export conventions">i<span class="nd-info-tooltip">The Neurodesk v10.004 container reports SamSrf 10.003. Its legacy export subtracts 0.5 from eccentricity and derives maps in float32. This choice changes display and downloads; fitting remains float64.</span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About map export conventions">i<span class="nd-info-tooltip">The Neurodesk v10.004 container reports SamSrf 10.003. Its legacy export subtracts 0.5 from eccentricity and derives maps in float32. Fit precision is a separate setting.</span></span>
                 </label>
                 <select id="exportConvention"></select>
               </div>
               <div class="nd-field">
                 <label for="modelJson">Model JSON
-                  <span class="nd-info-icon" tabindex="0" aria-label="About the model JSON">i<span class="nd-info-tooltip">SamSrf model fields plus Export_Convention for this app's map exports. Edits here are used for the run; the fields above update to match.</span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the model JSON">i<span class="nd-info-tooltip">SamSrf model fields plus Data_Precision, Css_Convention and Export_Convention. Edits here are used for the run; the fields above update to match.</span></span>
                 </label>
                 <textarea id="modelJson" rows="10" spellcheck="false"></textarea>
               </div>

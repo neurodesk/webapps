@@ -1,16 +1,31 @@
 // Node reference implementation of the remote compute protocol v1 with the
-// simulated nesvor tool. Used by browser tests, the desktop workflow and the
-// protocol conformance test. See docs/architecture/remote-compute-protocol.md.
+// simulated nesvor, sct and relion tools. Used by browser tests, the desktop
+// workflow and the protocol conformance tests. With `singleOwner` it also
+// serves the HPC features: projects, data roots and the relion tool.
+// See docs/architecture/remote-compute-protocol.md.
 import { createServer } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
+import { createReadStream, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { availableParallelism, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { RELION_COMMANDS, RELION_DEFINITION, jobTypeDirectory, parseRelionLogLine, relionCommand, resolveInputPaths, validateRelionSpec } from '../packages/cryo-em/src/spec.js';
+import { canonicalRoots, compareBytes, isInside, listEntries, matchPattern, resolveFile } from './data-roots.mjs';
+import { checkReferences, isMrc, launchLines, missingOutputs, syntheticLog, writeJobEnd, writeOutputs } from './relion-simulator.mjs';
 import { isNifti1, readVolume, writeFloat32Volume } from './nifti-fixture.mjs';
 import { validateSctSpec, sctArgv, SCT_IMAGE, SCT_VERSION, SCT_COMMANDS } from '../apps/spinalcordtoolbox/web/js/app/analysis-spec.js';
 import { validateNesvorSpec, nesvorArgv } from '../apps/nesvor/src/spec.js';
 
 export const REFERENCE_VERSION = '0.1.20260921';
 export const NESVOR_IMAGE = 'vnmd/nesvor_0.5.0@sha256:4a9b346297bd5c10af4047745b6fa82f2912e06c8fecaab615f2adcb32599f64';
+// The relion image is pinned by digest once the multi-arch rebuild is published.
+export const RELION_IMAGE = 'vnmd/relion_5.1.1@sha256:14c760762a640c7dca9033cc261d80428ceee74239e9e60eb2a5080962c1c3a0';
+export const SESSION_IDLE_DAYS = 14;
+const SESSION_IDLE_MS = SESSION_IDLE_DAYS * 24 * 60 * 60 * 1000;
+const SINGLE_OWNER = 'single-owner';
+const LOCAL_PROFILE = 'local';
+const ACTIVE = ['queued', 'running', 'cancelling'];
 const ALWAYS_ALLOWED = ['https://webapps.neurodesk.org', 'https://neurodesk.github.io'];
 const STAGES = [
   ['Data loading starts ...', 'Loading stacks', 0.02],
@@ -27,12 +42,113 @@ function logLine(level, message) {
   return `${timestamp()} [${level}] ${message}`;
 }
 
-export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'test-token', allowOrigins = [], stageDelayMs = 40, maxUploadBytes = 512 * 1024 * 1024, maxFiles = 40 } = {}) {
+function contentTypeOf(name) {
+  const extension = name.includes('.') ? name.split('.').at(-1).toLowerCase() : '';
+  const types = {
+    json: 'application/json',
+    star: 'text/plain',
+    txt: 'text/plain',
+    out: 'text/plain',
+    err: 'text/plain',
+    log: 'text/plain',
+    sbatch: 'text/plain',
+    png: 'image/png',
+    pdf: 'application/pdf',
+    eps: 'application/postscript',
+    gz: 'application/gzip',
+  };
+  return types[extension] ?? 'application/octet-stream';
+}
+
+// The canonical `<project>/<Type>/jobNNN`, anchored to the canonical project
+// directory: jobs write the project, so a symlink anywhere in `directory`
+// could point outside it, and such a directory throws.
+function jobDirOf(projectDir, directory) {
+  const expected = join(realpathSync(projectDir), directory);
+  if (realpathSync(expected) !== expected || !statSync(expected).isDirectory()) throw new Error(`${directory} is not a directory of its project`);
+  return expected;
+}
+
+// Every regular file under a project job's directory, recursively, sorted by
+// project-relative name. A symlink is listed only when its canonical target is
+// a file inside the job directory.
+function listJobFiles(projectDir, directory, maxDownloadBytes) {
+  let jobDir;
+  try {
+    jobDir = jobDirOf(projectDir, directory);
+  } catch {
+    return [];
+  }
+  const outputs = [];
+  const pending = [[jobDir, directory]];
+  while (pending.length) {
+    const [folder, prefix] = pending.pop();
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      const name = `${prefix}/${entry.name}`;
+      const path = join(folder, entry.name);
+      if (entry.isDirectory()) {
+        pending.push([path, name]);
+        continue;
+      }
+      let target = path;
+      if (entry.isSymbolicLink()) {
+        try {
+          target = realpathSync(path);
+        } catch {
+          continue;
+        }
+        if (!isInside(jobDir, target)) continue;
+      }
+      const stat = statSync(target);
+      if (!stat.isFile()) continue;
+      outputs.push({ name, bytes: stat.size, contentType: contentTypeOf(entry.name), download: stat.size <= maxDownloadBytes });
+    }
+  }
+  return outputs.sort((a, b) => compareBytes(a.name, b.name));
+}
+
+function pad3(value) {
+  return String(value).padStart(3, '0');
+}
+
+/**
+ * Start the reference server. HPC options (protocol "HPC features"):
+ * `singleOwner` maps every pairing to one owner and enables projects, data
+ * roots and the relion tool; `dataRoots` is `{ id: absolutePath }`; `dataDir`
+ * holds the projects (default: a temporary directory removed on close);
+ * `maxDownloadBytes` marks larger project outputs `download: false`;
+ * `localProfile` is the built-in `local` resource profile; `clock` returns
+ * the time in milliseconds for session idle expiry.
+ */
+export function startReferenceServer({
+  port = 0,
+  host = '127.0.0.1',
+  token = 'test-token',
+  allowOrigins = [],
+  stageDelayMs = 40,
+  maxUploadBytes = 512 * 1024 * 1024,
+  maxFiles = 40,
+  singleOwner = false,
+  dataRoots = {},
+  dataDir = null,
+  maxDownloadBytes = 2 * 1024 * 1024 * 1024,
+  localProfile = { cpus: availableParallelism(), gpus: 0 },
+  clock = Date.now,
+} = {}) {
   const jobs = new Map();
   const sessions = new Map();
   const submissions = new Map();
+  const projects = new Map();
+  const roots = canonicalRoots(dataRoots);
+  const ownsDataDir = !dataDir;
+  if (dataDir) mkdirSync(dataDir, { recursive: true });
+  const dataPath = realpathSync(dataDir ?? mkdtempSync(join(tmpdir(), 'nd-compute-reference-')));
+  const projectsDir = join(dataPath, 'projects');
+  mkdirSync(projectsDir, { recursive: true });
   let failNext = null;
   let running = null;
+  let runningJob = Promise.resolve();
+  let closed = false;
   const queue = [];
 
   const allowed = origin => {
@@ -62,10 +178,23 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
   };
   const fail = (response, status, code, message) => json(response, status, { error: { code, message } });
 
+  // Sessions are keyed by credential. In single-owner mode a credential idle
+  // for SESSION_IDLE_DAYS is revoked; every use refreshes it.
   const ownerOf = request => {
     const header = request.headers.authorization || '';
-    return header.startsWith('Bearer ') ? sessions.get(header.slice(7)) : undefined;
+    if (!header.startsWith('Bearer ')) return undefined;
+    const credential = header.slice(7);
+    const session = sessions.get(credential);
+    if (!session) return undefined;
+    if (singleOwner && clock() - session.lastUsed > SESSION_IDLE_MS) {
+      sessions.delete(credential);
+      return undefined;
+    }
+    session.lastUsed = clock();
+    return session.owner;
   };
+
+  const projectDirOf = id => join(projectsDir, id);
 
   const publicJob = job => ({
     id: job.id,
@@ -81,8 +210,20 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
     error: job.error,
-    outputs: job.status === 'succeeded' ? job.outputs.map(({ name, bytes, contentType }) => ({ name, bytes: bytes.length, contentType })) : [],
+    outputs: publicOutputs(job),
+    project: job.project,
+    directory: job.directory,
+    dependsOn: job.dependsOn,
+    scheduler: null,
   });
+
+  // v1 outputs exist only after success; a project job lists its directory
+  // once it has ended, whatever the outcome.
+  const publicOutputs = job => {
+    if (job.project) return ['succeeded', 'failed', 'cancelled'].includes(job.status) ? job.listing : [];
+    if (job.status !== 'succeeded') return [];
+    return job.outputs.map(({ name, bytes, contentType }) => ({ name, bytes: bytes.length, contentType }));
+  };
 
   const emit = (job, event, data) => {
     job.events.push({ event, data });
@@ -111,6 +252,7 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
   const finish = (job, status, error = null) => {
     job.finishedAt = new Date().toISOString();
     job.error = error;
+    if (job.project) job.listing = listJobFiles(projectDirOf(job.project), job.directory, maxDownloadBytes);
     setStatus(job, status);
     emit(job, 'done', publicJob(job));
     job.listeners.clear();
@@ -137,10 +279,77 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
     finish(job, 'succeeded');
   };
 
+  // The simulated relion tool: log the command lines, check every file the
+  // inputs reference, replay RELION-format log lines, then write the outputs,
+  // run.out, run.err and the exit marker (test-utils/relion-simulator.mjs).
+  const runRelion = async job => {
+    const context = {
+      projectDir: projectDirOf(job.project),
+      directory: job.directory,
+      validated: job.validated,
+      inputPaths: resolveInputPaths(job.validated, job.directory),
+      dataRoots: roots,
+    };
+    const out = [];
+    const err = [];
+    const say = (level, line) => {
+      out.push(line);
+      if (level === 'error') err.push(line);
+      log(job, level, line);
+    };
+    const end = (status, error = null, marker = null) => {
+      try {
+        writeJobEnd(context, { out, err, marker });
+      } catch (writeError) {
+        log(job, 'error', `Could not write the job's log: ${writeError.message}`);
+      }
+      finish(job, status, error);
+    };
+    const failed = message => end('failed', { code: 'tool-failed', message }, 'RELION_JOB_EXIT_FAILURE');
+    const wantsFailure = failNext;
+    failNext = null;
+    try {
+      const command = relionCommand(job.validated, { directory: job.directory, profile: localProfile });
+      for (const line of launchLines(command)) say('info', `Simulated run of: ${line}`);
+      say('warning', 'SIMULATED relion: no RELION program runs and every output is a placeholder');
+      try {
+        checkReferences(context);
+      } catch (error) {
+        say('error', `ERROR: ${error.message}`);
+        return failed(error.message);
+      }
+      for (const line of syntheticLog(job.validated)) {
+        if (job.cancelled) return end('cancelled');
+        const parsed = parseRelionLogLine(job.validated, line);
+        say(parsed.level, line);
+        if (parsed.progress) progress(job, parsed.progress[0], parsed.progress[1]);
+        await sleep(job, stageDelayMs);
+      }
+      if (job.cancelled) return end('cancelled');
+      if (wantsFailure) {
+        say('error', `ERROR: ${wantsFailure}`);
+        return failed(`${command.program} exited with status 1`);
+      }
+      for (const line of writeOutputs(context)) say('info', line);
+      const missing = missingOutputs(context);
+      if (missing.length) {
+        const message = `required outputs are missing: ${missing.join(', ')}`;
+        say('error', `ERROR: ${message}`);
+        return failed(message);
+      }
+      progress(job, 1, 'Finished');
+      return end('succeeded', null, 'RELION_JOB_EXIT_SUCCESS');
+    } catch (error) {
+      say('error', `ERROR: ${error.message}`);
+      return failed(error.message);
+    }
+  };
+
   const run = async job => {
     job.startedAt = new Date().toISOString();
     setStatus(job, 'running');
     if (job.spec.tool === 'sct') return runSct(job);
+    if (job.spec.tool === 'relion') return runRelion(job);
     log(job, 'info', `Simulated run of: nesvor ${nesvorArgv(job.validated).join(' ')}`);
     const wantsFailure = failNext;
     failNext = null;
@@ -197,13 +406,115 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
   };
 
   const pump = () => {
-    if (running || !queue.length) return;
+    if (closed || running || !queue.length) return;
     running = queue.shift();
     for (const job of queue) emit(job, 'status', { status: 'queued', position: publicJob(job).position });
-    void run(running).finally(() => {
+    runningJob = run(running).finally(() => {
       running = null;
       pump();
     });
+  };
+
+  const fingerprintOf = (validated, files) => JSON.stringify({ validated, files: Object.keys(files).sort().map(name => [name, createHash('sha256').update(files[name]).digest('hex')]) });
+
+  const enqueue = (response, owner, scopedKey, fingerprint, fields) => {
+    const job = {
+      id: randomBytes(16).toString('hex'),
+      owner,
+      status: 'queued',
+      progress: null,
+      stage: null,
+      message: null,
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      finishedAt: null,
+      error: null,
+      outputs: [],
+      project: null,
+      directory: null,
+      dependsOn: [],
+      listing: [],
+      log: [],
+      events: [],
+      listeners: new Set(),
+      cancelled: false,
+      wake: null,
+      ...fields,
+    };
+    jobs.set(job.id, job);
+    submissions.set(scopedKey, { id: job.id, fingerprint });
+    queue.push(job);
+    json(response, 202, { id: job.id, status: 'queued', position: publicJob(job).position });
+    pump();
+    return job;
+  };
+
+  const replay = (response, previous, fingerprint) => {
+    if (previous.fingerprint !== fingerprint) return fail(response, 409, 'conflict', 'Idempotency-Key was already used for different content');
+    const existing = jobs.get(previous.id);
+    if (!existing) return fail(response, 409, 'conflict', 'The original job has been deleted; use a new submission key');
+    return json(response, 202, { id: existing.id, status: existing.status, position: publicJob(existing).position });
+  };
+
+  // Data-root inputs must resolve now; the job sees the roots again when it runs.
+  const checkDataInputs = validated => {
+    for (const [name, value] of Object.entries(validated.inputs)) {
+      if (typeof value !== 'object' || 'part' in value) continue;
+      const root = roots.get(value.root);
+      if (!root) throw new Error(`inputs.${name}.root names an unknown data root`);
+      try {
+        if ('pattern' in value) matchPattern(root, value.path, value.pattern);
+        else resolveFile(root, value.path);
+      } catch (error) {
+        throw new Error(`inputs.${name}: ${error.message}`);
+      }
+    }
+  };
+
+  // Each project path input must be a listed output of a succeeded job in the
+  // same project; those jobs become the direct dependencies.
+  const resolveDependencies = (project, validated) => {
+    const dependsOn = [];
+    for (const [name, value] of Object.entries(validated.inputs)) {
+      if (typeof value !== 'string') continue;
+      const directory = value.split('/').slice(0, 2).join('/');
+      const source = project.jobIds.map(id => jobs.get(id)).find(job => job.directory === directory);
+      const listed = source?.status === 'succeeded' && source.listing.some(output => output.name === value);
+      if (!listed) throw new Error(`inputs.${name}: ${value} is not a listed output of a succeeded job in this project`);
+      if (!dependsOn.includes(source.id)) dependsOn.push(source.id);
+    }
+    return dependsOn;
+  };
+
+  const submitRelion = (response, owner, scopedKey, spec, files) => {
+    if (!singleOwner) return fail(response, 400, 'invalid-spec', 'The relion tool exists only on a server in single-owner mode');
+    let validated;
+    let dependsOn;
+    let project;
+    try {
+      if (spec.profile !== undefined && spec.profile !== LOCAL_PROFILE) throw new Error(`profile must be ${LOCAL_PROFILE}`);
+      validated = validateRelionSpec(spec, { parts: Object.keys(files), profile: localProfile });
+      project = projects.get(validated.project);
+      if (!project) throw new Error(`project ${validated.project} does not exist`);
+      for (const name of Object.keys(files)) {
+        if (!isMrc(files[name])) throw new Error(`${name} is not an MRC file`);
+      }
+      checkDataInputs(validated);
+      dependsOn = resolveDependencies(project, validated);
+    } catch (error) {
+      return fail(response, 400, 'invalid-spec', error.message);
+    }
+    const fingerprint = fingerprintOf(validated, files);
+    const previous = submissions.get(scopedKey);
+    if (previous) return replay(response, previous, fingerprint);
+    project.allocated += 1;
+    const directory = `${jobTypeDirectory(validated.command)}/job${pad3(project.allocated)}`;
+    const jobDir = join(projectDirOf(project.id), directory);
+    mkdirSync(jobDir, { recursive: true });
+    for (const [name, bytes] of Object.entries(files)) writeFileSync(join(jobDir, `${name}.mrc`), bytes);
+    const job = enqueue(response, owner, scopedKey, fingerprint, { spec, validated, files: {}, project: project.id, directory, dependsOn });
+    project.jobIds.push(job.id);
+    return null;
   };
 
   const submit = async (request, response, owner) => {
@@ -234,6 +545,7 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
       files[name] = Buffer.from(await value.arrayBuffer());
     }
     if (Object.keys(files).length > maxFiles) return fail(response, 413, 'too-large', `More than ${maxFiles} files`);
+    if (spec?.tool === 'relion') return submitRelion(response, owner, scopedKey, spec, files);
     let validated;
     try {
       validated = spec?.tool === 'sct' ? validateSctSpec(spec, Object.keys(files)) : validateNesvorSpec(spec, Object.keys(files));
@@ -243,43 +555,97 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
     for (const name of Object.keys(files)) {
       if (!isNifti1(files[name])) return fail(response, 400, 'invalid-spec', `${name} is not a NIfTI-1 file`);
     }
-    const fingerprint = JSON.stringify({ validated, files: Object.keys(files).sort().map(name => [name, createHash('sha256').update(files[name]).digest('hex')]) });
+    const fingerprint = fingerprintOf(validated, files);
     const previous = submissions.get(scopedKey);
-    if (previous) {
-      if (previous.fingerprint !== fingerprint) return fail(response, 409, 'conflict', 'Idempotency-Key was already used for different content');
-      const existing = jobs.get(previous.id);
-      if (!existing) return fail(response, 409, 'conflict', 'The original job has been deleted; use a new submission key');
-      return json(response, 202, { id: existing.id, status: existing.status, position: publicJob(existing).position });
-    }
-    const job = {
-      id: randomBytes(16).toString('hex'),
-      owner,
-      spec,
-      validated,
-      files,
-      status: 'queued',
-      progress: null,
-      stage: null,
-      message: null,
-      createdAt: new Date().toISOString(),
-      startedAt: null,
-      finishedAt: null,
-      error: null,
-      outputs: [],
-      log: [],
-      events: [],
-      listeners: new Set(),
-      cancelled: false,
-      wake: null,
-    };
-    jobs.set(job.id, job);
-    submissions.set(scopedKey, { id: job.id, fingerprint });
-    queue.push(job);
-    const payload = { id: job.id, status: 'queued', position: publicJob(job).position };
-    json(response, 202, payload);
-    pump();
+    if (previous) return replay(response, previous, fingerprint);
+    enqueue(response, owner, scopedKey, fingerprint, { spec, validated, files });
     return null;
+  };
 
+  const readJson = async request => {
+    try {
+      return await new Response(Readable.toWeb(request)).json();
+    } catch {
+      return undefined;
+    }
+  };
+
+  const publicProject = project => ({
+    id: project.id,
+    name: project.name,
+    createdAt: project.createdAt,
+    jobs: project.jobIds.map(id => jobs.get(id)).map(job => ({
+      id: job.id,
+      command: job.spec.command,
+      directory: job.directory,
+      status: job.status,
+      dependsOn: job.dependsOn,
+      createdAt: job.createdAt,
+      finishedAt: job.finishedAt,
+    })),
+  });
+
+  const projectRoute = async (request, response, route) => {
+    if (route.length === 1 && request.method === 'POST') {
+      const body = await readJson(request);
+      const name = body?.name;
+      const valid = typeof name === 'string' && [...name].length >= 1 && [...name].length <= 100 && !/\p{Cc}/u.test(name);
+      if (!valid) return fail(response, 400, 'invalid-spec', 'name must be 1 to 100 characters without control characters');
+      const project = { id: randomBytes(16).toString('hex'), name, createdAt: new Date().toISOString(), allocated: 0, jobIds: [] };
+      mkdirSync(projectDirOf(project.id), { recursive: true });
+      projects.set(project.id, project);
+      return json(response, 201, publicProject(project));
+    }
+    if (route.length === 1 && request.method === 'GET') {
+      const listed = [...projects.values()].reverse().map(project => ({ id: project.id, name: project.name, createdAt: project.createdAt, jobCount: project.jobIds.length }));
+      return json(response, 200, { projects: listed });
+    }
+    const project = route.length === 2 ? projects.get(route[1]) : undefined;
+    if (!project) return fail(response, 404, 'not-found', 'Unknown project');
+    if (request.method === 'GET') return json(response, 200, publicProject(project));
+    if (request.method !== 'DELETE') return fail(response, 404, 'not-found', 'Not found');
+    const members = project.jobIds.map(id => jobs.get(id));
+    if (members.some(job => ACTIVE.includes(job.status))) return fail(response, 409, 'conflict', 'Cancel the project\'s jobs and wait for them to stop before deletion');
+    for (const job of members) jobs.delete(job.id);
+    rmSync(projectDirOf(project.id), { recursive: true, force: true });
+    projects.delete(project.id);
+    response.writeHead(204);
+    response.end();
+    return null;
+  };
+
+  const rootRoute = (request, response, route, url) => {
+    if (route.length === 1 && request.method === 'GET') return json(response, 200, { roots: [...roots.keys()].map(id => ({ id, label: id })) });
+    const root = route.length === 3 && route[2] === 'entries' && request.method === 'GET' ? roots.get(route[1]) : undefined;
+    if (!root) return fail(response, 404, 'not-found', 'Not found');
+    try {
+      return json(response, 200, listEntries(root, url.searchParams.get('path') ?? '', url.searchParams.get('cursor')));
+    } catch {
+      return fail(response, 404, 'not-found', 'No such directory in this root');
+    }
+  };
+
+  // A project output: a listed name, canonically inside the job's directory.
+  const serveProjectOutput = (response, job, name) => {
+    const output = job.listing.find(item => item.name === name);
+    let path = null;
+    try {
+      const jobDir = jobDirOf(projectDirOf(job.project), job.directory);
+      const target = realpathSync(join(projectDirOf(job.project), name));
+      if (isInside(jobDir, target)) path = target;
+    } catch {
+      path = null;
+    }
+    if (!output || !path || !['succeeded', 'failed', 'cancelled'].includes(job.status)) return fail(response, 404, 'not-found', 'Unknown output');
+    if (!output.download) return fail(response, 413, 'too-large', `${name} is larger than the download limit of ${maxDownloadBytes} bytes`);
+    const size = statSync(path).size;
+    response.writeHead(200, {
+      'Content-Type': output.contentType,
+      'Content-Length': size,
+      'Content-Disposition': `attachment; filename="${name.split('/').at(-1)}"`,
+    });
+    createReadStream(path).pipe(response);
+    return null;
   };
 
   const events = (request, response, job) => {
@@ -330,9 +696,9 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
       try { body = await new Response(Readable.toWeb(request)).json(); }
       catch { return fail(response, 400, 'invalid-spec', 'Expected JSON pairing request'); }
       if (body.code !== token) return fail(response, 401, 'unauthorized', 'Invalid pairing code');
-      const clientId = randomBytes(16).toString('hex');
+      const clientId = singleOwner ? SINGLE_OWNER : randomBytes(16).toString('hex');
       const credential = randomBytes(32).toString('hex');
-      sessions.set(credential, clientId);
+      sessions.set(credential, { owner: clientId, lastUsed: clock() });
       return json(response, 200, { token: credential, clientId });
     }
     const owner = ownerOf(request);
@@ -345,8 +711,15 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
           runner: 'simulate',
           gpu: { available: false, name: null },
           tools: [{ id: 'nesvor', version: '0.5.0', image: NESVOR_IMAGE, commands: ['reconstruct'] }, { id: 'sct', version: SCT_VERSION, image: SCT_IMAGE, commands: SCT_COMMANDS, gpuRequired: false }],
-          limits: { maxUploadBytes, maxFiles },
+          limits: { maxUploadBytes, maxFiles, maxDownloadBytes },
+          ownership: singleOwner ? 'single' : 'pairing',
+          features: singleOwner ? ['projects', 'dataRoots'] : [],
         });
+        if (singleOwner) {
+          info.tools.push({ id: 'relion', version: RELION_DEFINITION.version, image: RELION_IMAGE, commands: [...RELION_COMMANDS], gpuRequired: false });
+          info.dataRoots = [...roots.keys()].map(id => ({ id, label: id }));
+          info.profiles = [{ name: LOCAL_PROFILE, summary: `${localProfile.gpus} GPUs, ${localProfile.cpus} CPUs` }];
+        }
       }
       return json(response, 200, info);
     }
@@ -356,6 +729,11 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
       response.writeHead(204);
       response.end();
       return;
+    }
+    if (route[0] === 'projects' || route[0] === 'roots') {
+      if (!singleOwner) return fail(response, 404, 'not-found', 'Not found');
+      if (route[0] === 'roots') return rootRoute(request, response, route, url);
+      return projectRoute(request, response, route);
     }
     if (route[0] !== 'jobs') return fail(response, 404, 'not-found', 'Not found');
     if (route.length === 1 && request.method === 'POST') return submit(request, response, owner);
@@ -379,14 +757,29 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
     }
     if (route.length === 2 && request.method === 'DELETE') {
       if (['queued', 'running', 'cancelling'].includes(job.status)) return fail(response, 409, 'conflict', 'Cancel the job and wait for its runner to stop before deletion');
+      if (job.project) {
+        const dependants = [...jobs.values()].filter(other => other.dependsOn.includes(job.id));
+        if (dependants.length) return fail(response, 409, 'conflict', `${dependants.map(other => other.directory).join(', ')} depends on this job; delete it first`);
+        rmSync(join(projectDirOf(job.project), job.directory), { recursive: true, force: true });
+        const project = projects.get(job.project);
+        project.jobIds = project.jobIds.filter(id => id !== job.id);
+      }
       jobs.delete(job.id);
       response.writeHead(204);
       response.end();
       return null;
     }
     if (route.length === 3 && route[2] === 'events' && request.method === 'GET') return events(request, response, job);
-    if (route.length === 4 && route[2] === 'outputs' && request.method === 'GET') {
-      const output = job.status === 'succeeded' ? job.outputs.find(item => item.name === decodeURIComponent(route[3])) : null;
+    if (route.length >= 4 && route[2] === 'outputs' && request.method === 'GET') {
+      // A name may contain '/', percent-encoded in one segment or as further segments.
+      let name;
+      try {
+        name = route.slice(3).map(decodeURIComponent).join('/');
+      } catch {
+        return fail(response, 404, 'not-found', 'Unknown output');
+      }
+      if (job.project) return serveProjectOutput(response, job, name);
+      const output = job.status === 'succeeded' ? job.outputs.find(item => item.name === name) : null;
       if (!output) return fail(response, 404, 'not-found', 'Unknown output');
       response.writeHead(200, {
         'Content-Type': output.contentType,
@@ -408,14 +801,20 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
         origin,
         port: address.port,
         token,
-        close: () => new Promise(done => {
-          for (const job of jobs.values()) {
-            job.cancelled = true;
-            job.wake?.();
-          }
-          server.closeAllConnections?.();
-          server.close(() => done());
-        }),
+        dataDir: dataPath,
+        close: async () => {
+          closed = true;
+          await new Promise(done => {
+            for (const job of jobs.values()) {
+              job.cancelled = true;
+              job.wake?.();
+            }
+            server.closeAllConnections?.();
+            server.close(() => done());
+          });
+          await runningJob.catch(() => {});
+          if (ownsDataDir) rmSync(dataPath, { recursive: true, force: true });
+        },
       });
     });
   });
@@ -426,12 +825,22 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const index = process.argv.indexOf(name);
     return index < 0 ? fallback : process.argv[index + 1];
   };
+  const dataRoots = {};
+  process.argv.forEach((value, index) => {
+    if (value !== '--data-root') return;
+    const [id, ...path] = process.argv[index + 1].split('=');
+    dataRoots[id] = path.join('=');
+  });
   const server = await startReferenceServer({
     port: Number(argument('--port', 8766)),
     host: argument('--host', '127.0.0.1'),
     token: argument('--token', 'test-token'),
     allowOrigins: (argument('--allow-origin', '') || '').split(',').filter(Boolean),
     stageDelayMs: Number(argument('--stage-delay-ms', 400)),
+    singleOwner: process.argv.includes('--single-owner'),
+    dataRoots,
+    dataDir: argument('--data-dir', null),
+    maxDownloadBytes: Number(argument('--max-download-bytes', 2 * 1024 * 1024 * 1024)),
   });
-  console.log(`neurodesk-compute reference server (simulated nesvor) listening at ${server.origin} token=${server.token}`);
+  console.log(`neurodesk-compute reference server (simulated tools) listening at ${server.origin} token=${server.token}`);
 }

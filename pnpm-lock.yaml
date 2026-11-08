@@ -398,6 +398,25 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
 
+  apps/cryo-em:
+    dependencies:
+      '@neurodesk/cryo-em':
+        specifier: workspace:*
+        version: link:../../packages/cryo-em
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.26
+        version: 1.0.0-rc.26
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
   apps/dcm2niix:
     dependencies:
       '@neurodesk/mri2vid':
@@ -1852,6 +1871,8 @@ importers:
       jsdom:
         specifier: 24.1.3
         version: 24.1.3
+
+  packages/cryo-em: {}
 
   packages/deface:
     dependencies:

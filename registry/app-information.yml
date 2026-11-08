@@ -2229,7 +2229,7 @@ apps:
 
   samsrf:
     about:
-      - This port uses double precision and real-valued compressive responses. Validation includes Octave and limited comparisons with the actual SamSrfX MATLAB Runtime container; default single-precision MATLAB fits can still differ. Advanced settings offers the older container's eccentricity export convention. The example preserves the original whole-surface X001 runs for connective-field global-signal correction. Match model settings and run order, and use a fresh MATLAB results directory to avoid stale caches.
+      - Map population receptive fields and connective fields from surface time series. Advanced settings offers MATLAB single precision for forward fits, SamSrf's complex CSS convention, and the older container's eccentricity export convention. Validation includes actual MATLAB source and SamSrfX Runtime references; these options do not guarantee identical results for every dataset and setting. The example preserves the original whole-surface X001 runs for connective-field global-signal correction. Match model settings and run order, and use a fresh MATLAB results directory to avoid stale caches.
     packages:
       - name: SamSrf X (Rust and WebAssembly port)
         url: https://github.com/samsrf/samsrf
@@ -2587,6 +2587,56 @@ apps:
         title: ImageJ
         reference: "Schneider CA, Rasband WS, Eliceiri KW. NIH Image to ImageJ: 25 years of image analysis. Nature Methods. 2012;9(7):671–675."
         doi: 10.1038/nmeth.2089
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  cryo-em:
+    execution: RELION runs on your own cluster through the neurodesk-compute server you start there. Movies and intermediate files stay on the cluster; only the result files you view or download reach this browser.
+    packages:
+      - { name: RELION 5.1.1, url: https://github.com/3dem/relion, role: "single-particle processing: import, motion correction, LoG picking, extraction, 2D classification, class selection, initial model, 3D refinement, masks and post-processing, in the Neurodesk relion container on the cluster" }
+      - { name: CTFFIND 4.1.14, url: https://grigoriefflab.umassmed.edu/ctffind4, role: CTF estimation, in the same container }
+      - { name: neurodesk-compute, url: https://github.com/neurodesk/webapps/tree/main/exes/compute-server, role: "compute server on the cluster: data roots, RELION projects, Slurm submission and progress for the browser" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: micrograph and map viewer }
+    citations:
+      - group: Single-particle processing
+        title: RELION
+        reference: "Scheres SHW. RELION: Implementation of a Bayesian approach to cryo-EM structure determination. Journal of Structural Biology. 2012;180(3):519–530."
+        doi: 10.1016/j.jsb.2012.09.006
+        code: https://github.com/3dem/relion
+      - group: Single-particle processing
+        title: RELION-3 (motion correction, LoG picking)
+        reference: "Zivanov J, Nakane T, Forsberg BO, Kimanius D, Hagen WJH, Lindahl E, Scheres SHW. New tools for automated high-resolution cryo-EM structure determination in RELION-3. eLife. 2018;7:e42166."
+        doi: 10.7554/eLife.42166
+      - group: Single-particle processing
+        title: RELION-4.0 (VDAM, class ranker)
+        reference: "Kimanius D, Dong L, Sharov G, Nakane T, Scheres SHW. New tools for automated cryo-EM single-particle analysis in RELION-4.0. Biochemical Journal. 2021;478(24):4169–4185."
+        doi: 10.1042/BCJ20210708
+      - group: Single-particle processing
+        title: Blush regularisation (RELION-5)
+        reference: "Kimanius D, Jamali K, Wilkinson ME, Lövestam S, Velazhahan V, Nakane T, Scheres SHW. Data-driven regularization lowers the size barrier of cryo-EM structure determination. Nature Methods. 2024;21(7):1216–1221."
+        doi: 10.1038/s41592-024-02304-8
+      - group: CTF estimation
+        title: CTFFIND4
+        reference: "Rohou A, Grigorieff N. CTFFIND4: Fast and accurate defocus estimation from electron micrographs. Journal of Structural Biology. 2015;192(2):216–221."
+        doi: 10.1016/j.jsb.2015.08.008
+      - group: Resolution
+        title: Gold-standard FSC
+        reference: "Scheres SHW, Chen S. Prevention of overfitting in cryo-EM structure determination. Nature Methods. 2012;9(9):853–854."
+        doi: 10.1038/nmeth.2115
+      - group: Resolution
+        title: Phase-randomised FSC correction
+        reference: "Chen S, McMullan G, Faruqi AR, Murshudov GN, Short JM, Scheres SHW, Henderson R. High-resolution noise substitution to measure overfitting and validate resolution in 3D structure determination by single particle electron cryomicroscopy. Ultramicroscopy. 2013;135:24–35."
+        doi: 10.1016/j.ultramic.2013.06.004
+      - group: Resolution
+        title: B-factor sharpening
+        reference: "Rosenthal PB, Henderson R. Optimal determination of particle orientation, absolute hand, and contrast loss in single-particle electron cryomicroscopy. Journal of Molecular Biology. 2003;333(4):721–745."
+        doi: 10.1016/j.jmb.2003.07.013
+      - group: Example data
+        title: EMPIAR-10204
+        reference: "Beta-galactosidase recorded on a JEOL CRYO ARM 200, the RELION tutorial subset of EMPIAR-10204 (CC0). Data courtesy of Takayuki Kato in the Namba group, Osaka University."
+        url: https://www.ebi.ac.uk/empiar/EMPIAR-10204/
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

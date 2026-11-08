@@ -1,0 +1,4358 @@
+{
+  "cases": [
+    {
+      "name": "spec is not an object",
+      "spec": null,
+      "parts": [],
+      "error": "spec must be an object"
+    },
+    {
+      "name": "spec is an array",
+      "spec": [],
+      "parts": [],
+      "error": "spec must be an object"
+    },
+    {
+      "name": "unknown top-level key",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        },
+        "extra": 1
+      },
+      "parts": [],
+      "error": "unknown key extra"
+    },
+    {
+      "name": "tool is not relion",
+      "spec": {
+        "tool": "nesvor",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "tool must be \"relion\""
+    },
+    {
+      "name": "tool is missing",
+      "spec": {
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "tool must be \"relion\""
+    },
+    {
+      "name": "unknown command",
+      "spec": {
+        "tool": "relion",
+        "command": "class3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "command must be one of import, motioncorr, ctffind, autopick, extract, class2d, select, initialmodel, refine3d, maskcreate, postprocess"
+    },
+    {
+      "name": "command is not a string",
+      "spec": {
+        "tool": "relion",
+        "command": 3,
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "command must be one of import, motioncorr, ctffind, autopick, extract, class2d, select, initialmodel, refine3d, maskcreate, postprocess"
+    },
+    {
+      "name": "project is not hex",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "project must be a project id (32 lowercase hex digits)"
+    },
+    {
+      "name": "project is short",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "abc",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "project must be a project id (32 lowercase hex digits)"
+    },
+    {
+      "name": "profile is a number",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        },
+        "profile": 4
+      },
+      "parts": [],
+      "error": "profile must be a profile name"
+    },
+    {
+      "name": "profile has a space",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        },
+        "profile": "gpu 4"
+      },
+      "parts": [],
+      "error": "profile must be a profile name"
+    },
+    {
+      "name": "profile is null",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        },
+        "profile": null
+      },
+      "parts": [],
+      "error": "profile must be a profile name"
+    },
+    {
+      "name": "profile is named",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        },
+        "profile": "gpu-4"
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "isMultiframe": true,
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4,
+          "Q0": 0.1,
+          "beamtiltX": 0,
+          "beamtiltY": 0
+        },
+        "profile": "gpu-4"
+      }
+    },
+    {
+      "name": "options are an array",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": []
+      },
+      "parts": [],
+      "error": "options must be an object"
+    },
+    {
+      "name": "options are null",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": null
+      },
+      "parts": [],
+      "error": "options must be an object"
+    },
+    {
+      "name": "options are omitted",
+      "spec": {
+        "tool": "relion",
+        "command": "ctffind",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "MotionCorr/job002/corrected_micrographs.star"
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "ctffind",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "MotionCorr/job002/corrected_micrographs.star"
+        },
+        "options": {
+          "useNoDW": false,
+          "doPhaseshift": false,
+          "phaseMin": 0,
+          "phaseMax": 180,
+          "phaseStep": 10,
+          "dAst": 100,
+          "useGivenPs": true,
+          "slowSearch": false,
+          "box": 512,
+          "resMin": 30,
+          "resMax": 5,
+          "dfMin": 5000,
+          "dfMax": 50000,
+          "dfStep": 500,
+          "ctfWin": -1
+        }
+      }
+    },
+    {
+      "name": "unknown option",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "bogus": 1
+        }
+      },
+      "parts": [],
+      "error": "unknown option bogus"
+    },
+    {
+      "name": "required option missing",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200
+        }
+      },
+      "parts": [],
+      "error": "option Cs is required"
+    },
+    {
+      "name": "bool option is a string",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4,
+          "isMultiframe": "yes"
+        }
+      },
+      "parts": [],
+      "error": "isMultiframe must be a boolean"
+    },
+    {
+      "name": "number option is a string",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": "0.885",
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "angpix must be a finite number"
+    },
+    {
+      "name": "number option is below its range",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.05,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "angpix must be in [0.1, 20]"
+    },
+    {
+      "name": "number option is above its range",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 11
+        }
+      },
+      "parts": [],
+      "error": "Cs must be in [0, 10]"
+    },
+    {
+      "name": "number option at its inclusive bounds",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.1,
+          "kV": 500,
+          "Cs": 0
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "isMultiframe": true,
+          "angpix": 0.1,
+          "kV": 500,
+          "Cs": 0,
+          "Q0": 0.1,
+          "beamtiltX": 0,
+          "beamtiltY": 0
+        }
+      }
+    },
+    {
+      "name": "int option is fractional",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "nrClasses": 2.5
+        }
+      },
+      "parts": [],
+      "error": "nrClasses must be an integer"
+    },
+    {
+      "name": "int option is a boolean",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "nrClasses": true
+        }
+      },
+      "parts": [],
+      "error": "nrClasses must be a finite number"
+    },
+    {
+      "name": "int options set",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "nrClasses": 4,
+          "nrIterGrad": 20
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "nrClasses": 4,
+          "tauFudge": 2,
+          "nrIterGrad": 20,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "highresLimit": -1,
+          "doCenter": true,
+          "performAlignment": true,
+          "psiSampling": 6,
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "allowCoarser": false,
+          "nrPool": 3,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "int option is null",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "nrClasses": null
+        }
+      },
+      "parts": [],
+      "error": "nrClasses must be a finite number"
+    },
+    {
+      "name": "multipleOf refuses an odd box",
+      "spec": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "extractSize": 129
+        }
+      },
+      "parts": [],
+      "error": "extractSize must be a multiple of 2"
+    },
+    {
+      "name": "enum option is not listed",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "sampling": "2 degrees"
+        }
+      },
+      "parts": [],
+      "error": "sampling must be one of 30 degrees, 15 degrees, 7.5 degrees, 3.7 degrees, 1.8 degrees, 0.9 degrees, 0.5 degrees, 0.2 degrees, 0.1 degrees"
+    },
+    {
+      "name": "string option breaks its pattern",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "sym": "X5"
+        }
+      },
+      "parts": [],
+      "error": "sym must match ^([CDScds][1-9][0-9]{0,2}[vhVH]?|[Tt][dhDH]?|[Oo][hH]?|[Ii][1-5]?[hH]?)$"
+    },
+    {
+      "name": "string option is a number",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "sym": 1
+        }
+      },
+      "parts": [],
+      "error": "sym must match ^([CDScds][1-9][0-9]{0,2}[vhVH]?|[Tt][dhDH]?|[Oo][hH]?|[Ii][1-5]?[hH]?)$"
+    },
+    {
+      "name": "string option matches its pattern",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "sym": "D2",
+          "doBlush": true,
+          "blushVersion": "amy-v1.0"
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "refCorrectGreyscale": false,
+          "trustRefSize": true,
+          "iniHigh": 60,
+          "sym": "D2",
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "doSolventFsc": false,
+          "doBlush": true,
+          "blushVersion": "amy-v1.0",
+          "sampling": "7.5 degrees",
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "autoLocalSampling": "1.8 degrees",
+          "autoFaster": false,
+          "nrPool": 3,
+          "doPad1": false,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "mode is required",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it200_optimiser.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "option mode is required"
+    },
+    {
+      "name": "mode is not listed",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it200_optimiser.star"
+        },
+        "options": {
+          "mode": "manual"
+        }
+      },
+      "parts": [],
+      "error": "mode must be one of classes, ranker"
+    },
+    {
+      "name": "option applies only in another mode",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it200_optimiser.star"
+        },
+        "options": {
+          "mode": "ranker",
+          "classes": [
+            1
+          ]
+        }
+      },
+      "parts": [],
+      "error": "option classes applies only when mode is \"classes\""
+    },
+    {
+      "name": "ranker threshold above 1",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it200_optimiser.star"
+        },
+        "options": {
+          "mode": "ranker",
+          "minScore": 1.5
+        }
+      },
+      "parts": [],
+      "error": "minScore must be in [0, 1]"
+    },
+    {
+      "name": "classes are required",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes"
+        }
+      },
+      "parts": [],
+      "error": "option classes is required"
+    },
+    {
+      "name": "classes are empty",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": []
+        }
+      },
+      "parts": [],
+      "error": "classes must list 1 to 1000 integers"
+    },
+    {
+      "name": "classes are not a list",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": 3
+        }
+      },
+      "parts": [],
+      "error": "classes must list 1 to 1000 integers"
+    },
+    {
+      "name": "classes repeat",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            1,
+            1
+          ]
+        }
+      },
+      "parts": [],
+      "error": "classes lists 1 twice"
+    },
+    {
+      "name": "class 0",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            0
+          ]
+        }
+      },
+      "parts": [],
+      "error": "classes item must be in [1, 1000]"
+    },
+    {
+      "name": "fractional class",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            1.5
+          ]
+        }
+      },
+      "parts": [],
+      "error": "classes item must be an integer"
+    },
+    {
+      "name": "classes out of order",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            3,
+            1
+          ]
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            3,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "name": "ranker option in classes mode",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            1
+          ],
+          "minScore": 0.5
+        }
+      },
+      "parts": [],
+      "error": "option minScore applies only when mode is \"ranker\""
+    },
+    {
+      "name": "ranker input missing",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "ranker"
+        }
+      },
+      "parts": [],
+      "error": "input optimiser is required"
+    },
+    {
+      "name": "classes input in ranker mode",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it200_optimiser.star",
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "ranker"
+        }
+      },
+      "parts": [],
+      "error": "input particles applies only when mode is \"classes\""
+    },
+    {
+      "name": "inputs are an array",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": [],
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs must be an object"
+    },
+    {
+      "name": "inputs are omitted",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "options": {}
+      },
+      "parts": [],
+      "error": "input particles is required"
+    },
+    {
+      "name": "unknown input",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "extra": "Extract/job005/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "unknown input extra"
+    },
+    {
+      "name": "path has two components",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must be a file of an earlier job, <Type>/jobNNN/<file>"
+    },
+    {
+      "name": "path job component is short",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job05/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must be a file of an earlier job, <Type>/jobNNN/<file>"
+    },
+    {
+      "name": "path job component has letters",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/jobabc/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must be a file of an earlier job, <Type>/jobNNN/<file>"
+    },
+    {
+      "name": "path comes from the wrong job type",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must be an output of a Extract or Select job"
+    },
+    {
+      "name": "path has the wrong suffix",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.mrc"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must end with particles.star"
+    },
+    {
+      "name": "path has a dot-dot component",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/../job005/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must be a relative path without empty, . or .. components"
+    },
+    {
+      "name": "path has a dot component",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/./job005/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must be a relative path without empty, . or .. components"
+    },
+    {
+      "name": "path is absolute",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "/Extract/job005/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must be a relative path without empty, . or .. components"
+    },
+    {
+      "name": "path has an empty component",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract//job005/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must be a relative path without empty, . or .. components"
+    },
+    {
+      "name": "path has a backslash",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005\\particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must not contain a backslash or NUL"
+    },
+    {
+      "name": "path is empty",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": ""
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must not be empty"
+    },
+    {
+      "name": "path is longer than 1024 bytes",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaparticles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles is longer than 1024 bytes"
+    },
+    {
+      "name": "path with a four-digit job and a subdirectory",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job1234/sub/particles.star"
+        },
+        "options": {
+          "nrClasses": 2
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job1234/sub/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "nrClasses": 2,
+          "tauFudge": 2,
+          "nrIterGrad": 200,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "highresLimit": -1,
+          "doCenter": true,
+          "performAlignment": true,
+          "psiSampling": 6,
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "allowCoarser": false,
+          "nrPool": 3,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "path is a number",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": 5
+        },
+        "options": {}
+      },
+      "parts": [],
+      "error": "inputs.particles must be a project-relative path"
+    },
+    {
+      "name": "half map without half1 or half2",
+      "spec": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_class001_unfil.mrc",
+          "mask": "MaskCreate/job010/mask.mrc"
+        }
+      },
+      "parts": [],
+      "error": "inputs.halfMap must contain half[12]"
+    },
+    {
+      "name": "half map and an uploaded mask",
+      "spec": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half2_class001_unfil.mrc",
+          "mask": {
+            "part": "mask"
+          }
+        }
+      },
+      "parts": [
+        "mask"
+      ],
+      "validated": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half2_class001_unfil.mrc",
+          "mask": {
+            "part": "mask"
+          }
+        },
+        "options": {
+          "angpix": -1,
+          "doAutoBfac": true,
+          "autobLowres": 10,
+          "doAdhocBfac": false,
+          "adhocBfac": -1000,
+          "doSkipFscWeighting": false,
+          "lowPass": 5
+        }
+      }
+    },
+    {
+      "name": "part with an extra key",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "part": "gain",
+            "root": "facility"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [
+        "gain"
+      ],
+      "error": "inputs.gain must be { \"part\": \"gain\" }"
+    },
+    {
+      "name": "part names another input",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "part": "mask"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [
+        "mask"
+      ],
+      "error": "inputs.gain.part must be \"gain\""
+    },
+    {
+      "name": "part was not uploaded",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "part": "gain"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [],
+      "error": "inputs.gain.part must name an uploaded part"
+    },
+    {
+      "name": "uploaded part is unused",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [
+        "gain"
+      ],
+      "error": "uploaded part gain is not used by any input"
+    },
+    {
+      "name": "two uploaded parts, one used",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "part": "gain"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [
+        "gain",
+        "mask"
+      ],
+      "error": "uploaded part mask is not used by any input"
+    },
+    {
+      "name": "path given where only a part or data file is accepted",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": "Import/job001/gain.mrc"
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [],
+      "error": "inputs.gain must be { \"part\": \"gain\" } or { root, path }"
+    },
+    {
+      "name": "data file with a pattern",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "root": "facility",
+            "path": "gain",
+            "pattern": "*.mrc"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [],
+      "error": "inputs.gain must be { \"part\": \"gain\" } or { root, path }"
+    },
+    {
+      "name": "data file with an unknown key",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "root": "facility",
+            "path": "gain/gain.mrc",
+            "label": "x"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [],
+      "error": "inputs.gain has unknown key label"
+    },
+    {
+      "name": "data file with a bad root id",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "root": "Facility",
+            "path": "gain/gain.mrc"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [],
+      "error": "inputs.gain.root must be a data root id"
+    },
+    {
+      "name": "data file with an empty path",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "root": "facility",
+            "path": ""
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [],
+      "error": "inputs.gain.path must not be empty"
+    },
+    {
+      "name": "data file with a dot-dot path",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "root": "facility",
+            "path": "../gain.mrc"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [],
+      "error": "inputs.gain.path must be a relative path without empty, . or .. components"
+    },
+    {
+      "name": "data file",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "root": "facility",
+            "path": "gain/gain.mrc"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.2
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "root": "facility",
+            "path": "gain/gain.mrc"
+          }
+        },
+        "options": {
+          "firstFrameSum": 1,
+          "lastFrameSum": -1,
+          "eerGrouping": 32,
+          "doFloat16": true,
+          "bfactor": 150,
+          "patchX": 1,
+          "patchY": 1,
+          "groupFrames": 1,
+          "binFactor": 1,
+          "gainRot": 0,
+          "gainFlip": 0,
+          "doDoseWeighting": true,
+          "doSaveNoDW": false,
+          "dosePerFrame": 1.2,
+          "preExposure": 0,
+          "doSavePs": true,
+          "groupForPs": 4
+        }
+      }
+    },
+    {
+      "name": "data root as a string",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "2026-11/grid3/*.tiff"
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies must be { root, path, pattern }"
+    },
+    {
+      "name": "data root with an unknown key",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff",
+            "recursive": true
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies has unknown key recursive"
+    },
+    {
+      "name": "data root id is missing",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "path": "",
+            "pattern": "*"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.root must be a data root id"
+    },
+    {
+      "name": "data root id has upper case",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "Facility",
+            "path": "2026-11/grid3",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.root must be a data root id"
+    },
+    {
+      "name": "data root path is a number",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": 3,
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.path must be a string"
+    },
+    {
+      "name": "data root path is absolute",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "/etc",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.path must be a relative path without empty, . or .. components"
+    },
+    {
+      "name": "data root path has a NUL",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3\u0000",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.path must not contain a backslash or NUL"
+    },
+    {
+      "name": "data root pattern is missing",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.pattern must be a non-empty string"
+    },
+    {
+      "name": "data root pattern is empty",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": ""
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.pattern must be a non-empty string"
+    },
+    {
+      "name": "data root pattern has a slash",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "grid3/*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.pattern must name files in one directory using only * and ? as wildcards"
+    },
+    {
+      "name": "data root pattern has a bracket",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "[ab].tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.pattern must name files in one directory using only * and ? as wildcards"
+    },
+    {
+      "name": "data root pattern is longer than 255 bytes",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "2026-11/grid3",
+            "pattern": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.pattern is longer than 255 bytes"
+    },
+    {
+      "name": "data root pattern of 255 bytes in the root itself",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "",
+            "pattern": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé*"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "",
+            "pattern": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé*"
+          }
+        },
+        "options": {
+          "isMultiframe": true,
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4,
+          "Q0": 0.1,
+          "beamtiltX": 0,
+          "beamtiltY": 0
+        }
+      }
+    },
+    {
+      "name": "data root pattern of 256 bytes",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "facility",
+            "path": "",
+            "pattern": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "error": "inputs.movies.pattern is longer than 255 bytes"
+    },
+    {
+      "name": "rule refuses float16 without power spectra",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "dosePerFrame": 1,
+          "doSavePs": false
+        }
+      },
+      "parts": [],
+      "error": "doFloat16 needs doSavePs: CTFFIND reads the power spectra of float16 micrographs"
+    },
+    {
+      "name": "rule passes without float16",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "dosePerFrame": 1,
+          "doSavePs": false,
+          "doFloat16": false
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "firstFrameSum": 1,
+          "lastFrameSum": -1,
+          "eerGrouping": 32,
+          "doFloat16": false,
+          "bfactor": 150,
+          "patchX": 1,
+          "patchY": 1,
+          "groupFrames": 1,
+          "binFactor": 1,
+          "gainRot": 0,
+          "gainFlip": 0,
+          "doDoseWeighting": true,
+          "doSaveNoDW": false,
+          "dosePerFrame": 1,
+          "preExposure": 0,
+          "doSavePs": false,
+          "groupForPs": 4
+        }
+      }
+    },
+    {
+      "name": "refine3d on a two-CPU profile",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 2,
+        "gpus": 0
+      },
+      "error": "refine3d needs 3 MPI ranks with at least one CPU each; the profile has 2 CPUs"
+    },
+    {
+      "name": "refine3d on four GPUs and four CPUs",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 4,
+        "gpus": 4
+      },
+      "error": "refine3d needs 5 MPI ranks with at least one CPU each; the profile has 4 CPUs"
+    },
+    {
+      "name": "refine3d on four GPUs and six CPUs",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 6,
+        "gpus": 4
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "refCorrectGreyscale": false,
+          "trustRefSize": true,
+          "iniHigh": 60,
+          "sym": "C1",
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "doSolventFsc": false,
+          "doBlush": false,
+          "blushVersion": "v1.0",
+          "sampling": "7.5 degrees",
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "autoLocalSampling": "1.8 degrees",
+          "autoFaster": false,
+          "nrPool": 3,
+          "doPad1": false,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "class2d without a profile",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {
+          "nrClasses": 50,
+          "particleDiameter": 180,
+          "tauFudge": 2.5
+        }
+      },
+      "parts": [],
+      "validated": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "nrClasses": 50,
+          "tauFudge": 2.5,
+          "nrIterGrad": 200,
+          "particleDiameter": 180,
+          "doZeroMask": true,
+          "highresLimit": -1,
+          "doCenter": true,
+          "performAlignment": true,
+          "psiSampling": 6,
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "allowCoarser": false,
+          "nrPool": 3,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: import movies, GUI defaults",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "examples",
+            "path": "relion30/Movies",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "examples",
+            "path": "relion30/Movies",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "isMultiframe": true,
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4,
+          "Q0": 0.1,
+          "beamtiltX": 0,
+          "beamtiltY": 0
+        }
+      }
+    },
+    {
+      "name": "GUI case: import single-frame micrographs from the root itself",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "examples",
+            "path": "",
+            "pattern": "*.mrc"
+          }
+        },
+        "options": {
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4,
+          "isMultiframe": false
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "examples",
+            "path": "",
+            "pattern": "*.mrc"
+          }
+        },
+        "options": {
+          "isMultiframe": false,
+          "angpix": 0.885,
+          "kV": 200,
+          "Cs": 1.4,
+          "Q0": 0.1,
+          "beamtiltX": 0,
+          "beamtiltY": 0
+        }
+      }
+    },
+    {
+      "name": "GUI case: motioncorr, GUI defaults",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "dosePerFrame": 1.277
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "firstFrameSum": 1,
+          "lastFrameSum": -1,
+          "eerGrouping": 32,
+          "doFloat16": true,
+          "bfactor": 150,
+          "patchX": 1,
+          "patchY": 1,
+          "groupFrames": 1,
+          "binFactor": 1,
+          "gainRot": 0,
+          "gainFlip": 0,
+          "doDoseWeighting": true,
+          "doSaveNoDW": false,
+          "dosePerFrame": 1.277,
+          "preExposure": 0,
+          "doSavePs": true,
+          "groupForPs": 4
+        }
+      }
+    },
+    {
+      "name": "GUI case: motioncorr with the tutorial gain reference and 5 x 5 patches",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "part": "gain"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.277,
+          "patchX": 5,
+          "patchY": 5,
+          "gainFlip": 1,
+          "groupFrames": 2
+        }
+      },
+      "parts": [
+        "gain"
+      ],
+      "profile": {
+        "cpus": 18,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "part": "gain"
+          }
+        },
+        "options": {
+          "firstFrameSum": 1,
+          "lastFrameSum": -1,
+          "eerGrouping": 32,
+          "doFloat16": true,
+          "bfactor": 150,
+          "patchX": 5,
+          "patchY": 5,
+          "groupFrames": 2,
+          "binFactor": 1,
+          "gainRot": 0,
+          "gainFlip": 1,
+          "doDoseWeighting": true,
+          "doSaveNoDW": false,
+          "dosePerFrame": 1.277,
+          "preExposure": 0,
+          "doSavePs": true,
+          "groupForPs": 4
+        }
+      }
+    },
+    {
+      "name": "GUI case: ctffind, GUI defaults",
+      "spec": {
+        "tool": "relion",
+        "command": "ctffind",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "MotionCorr/job002/corrected_micrographs.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "ctffind",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "MotionCorr/job002/corrected_micrographs.star"
+        },
+        "options": {
+          "useNoDW": false,
+          "doPhaseshift": false,
+          "phaseMin": 0,
+          "phaseMax": 180,
+          "phaseStep": 10,
+          "dAst": 100,
+          "useGivenPs": true,
+          "slowSearch": false,
+          "box": 512,
+          "resMin": 30,
+          "resMax": 5,
+          "dfMin": 5000,
+          "dfMax": 50000,
+          "dfStep": 500,
+          "ctfWin": -1
+        }
+      }
+    },
+    {
+      "name": "GUI case: autopick LoG, GUI defaults",
+      "spec": {
+        "tool": "relion",
+        "command": "autopick",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "autopick",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star"
+        },
+        "options": {
+          "logDiamMin": 200,
+          "logDiamMax": 250,
+          "logInvert": false,
+          "logMaxres": 20,
+          "logAdjustThreshold": 0,
+          "logUpperThreshold": 999
+        }
+      }
+    },
+    {
+      "name": "GUI case: autopick LoG, tutorial diameters with an upper threshold",
+      "spec": {
+        "tool": "relion",
+        "command": "autopick",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star"
+        },
+        "options": {
+          "logDiamMin": 150,
+          "logDiamMax": 180,
+          "logUpperThreshold": 5,
+          "logInvert": true
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "autopick",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star"
+        },
+        "options": {
+          "logDiamMin": 150,
+          "logDiamMax": 180,
+          "logInvert": true,
+          "logMaxres": 20,
+          "logAdjustThreshold": 0,
+          "logUpperThreshold": 5
+        }
+      }
+    },
+    {
+      "name": "GUI case: extract, GUI defaults",
+      "spec": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "extractSize": 128,
+          "doInvert": true,
+          "doFloat16": true,
+          "doNorm": true,
+          "bgDiameter": -1,
+          "whiteDust": -1,
+          "blackDust": -1,
+          "doRescale": false,
+          "rescale": 128,
+          "doFomThreshold": false,
+          "minimumPickFom": 0
+        }
+      }
+    },
+    {
+      "name": "GUI case: extract 256 px rescaled to 64 px",
+      "spec": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "extractSize": 256,
+          "doRescale": true,
+          "rescale": 64
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "extractSize": 256,
+          "doInvert": true,
+          "doFloat16": true,
+          "doNorm": true,
+          "bgDiameter": -1,
+          "whiteDust": -1,
+          "blackDust": -1,
+          "doRescale": true,
+          "rescale": 64,
+          "doFomThreshold": false,
+          "minimumPickFom": 0
+        }
+      }
+    },
+    {
+      "name": "GUI case: class2d VDAM, GUI defaults on GPUs",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 24,
+        "gpus": 4
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "nrClasses": 1,
+          "tauFudge": 2,
+          "nrIterGrad": 200,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "highresLimit": -1,
+          "doCenter": true,
+          "performAlignment": true,
+          "psiSampling": 6,
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "allowCoarser": false,
+          "nrPool": 3,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: class2d VDAM, tutorial classes on CPUs",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "nrClasses": 50,
+          "particleDiameter": 200,
+          "nrPool": 30
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "nrClasses": 50,
+          "tauFudge": 2,
+          "nrIterGrad": 200,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "highresLimit": -1,
+          "doCenter": true,
+          "performAlignment": true,
+          "psiSampling": 6,
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "allowCoarser": false,
+          "nrPool": 30,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: select with the class ranker, GUI defaults",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it200_optimiser.star"
+        },
+        "options": {
+          "mode": "ranker"
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it200_optimiser.star"
+        },
+        "options": {
+          "mode": "ranker",
+          "minScore": 0.5,
+          "minParticles": -1,
+          "minClasses": -1
+        }
+      }
+    },
+    {
+      "name": "GUI case: select with the class ranker and a minimum particle count",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it200_optimiser.star"
+        },
+        "options": {
+          "mode": "ranker",
+          "minScore": 0.25,
+          "minParticles": 5000,
+          "minClasses": 10
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it200_optimiser.star"
+        },
+        "options": {
+          "mode": "ranker",
+          "minScore": 0.25,
+          "minParticles": 5000,
+          "minClasses": 10
+        }
+      }
+    },
+    {
+      "name": "GUI case: select classes 3 to 5 (no GUI command: one star_handler call)",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            5,
+            3,
+            4
+          ]
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            5,
+            3,
+            4
+          ]
+        }
+      }
+    },
+    {
+      "name": "GUI case: select classes 1, 2, 7 and 12 (no GUI command: ranges, then combine)",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            12,
+            1,
+            7,
+            2
+          ]
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Class2D/job006/run_it200_data.star"
+        },
+        "options": {
+          "mode": "classes",
+          "classes": [
+            12,
+            1,
+            7,
+            2
+          ]
+        }
+      }
+    },
+    {
+      "name": "GUI case: initialmodel, GUI defaults on GPUs",
+      "spec": {
+        "tool": "relion",
+        "command": "initialmodel",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 24,
+        "gpus": 4
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "initialmodel",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {
+          "nrIter": 200,
+          "tauFudge": 4,
+          "nrClasses": 1,
+          "sym": "C1",
+          "doRunC1": true,
+          "particleDiameter": 200,
+          "doSolvent": true,
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "nrPool": 3,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: initialmodel in C1, symmetrised to D2 (tutorial)",
+      "spec": {
+        "tool": "relion",
+        "command": "initialmodel",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {
+          "sym": "D2",
+          "nrIter": 100
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 24,
+        "gpus": 4
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "initialmodel",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {
+          "nrIter": 100,
+          "tauFudge": 4,
+          "nrClasses": 1,
+          "sym": "D2",
+          "doRunC1": true,
+          "particleDiameter": 200,
+          "doSolvent": true,
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "nrPool": 3,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: refine3d, GUI defaults on GPUs",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 24,
+        "gpus": 4
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "refCorrectGreyscale": false,
+          "trustRefSize": true,
+          "iniHigh": 60,
+          "sym": "C1",
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "doSolventFsc": false,
+          "doBlush": false,
+          "blushVersion": "v1.0",
+          "sampling": "7.5 degrees",
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "autoLocalSampling": "1.8 degrees",
+          "autoFaster": false,
+          "nrPool": 3,
+          "doPad1": false,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: refine3d in D2 with an uploaded mask, Blush and solvent-flattened FSCs on CPUs",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc",
+          "mask": {
+            "part": "mask"
+          }
+        },
+        "options": {
+          "sym": "D2",
+          "doSolventFsc": true,
+          "doBlush": true,
+          "sampling": "3.7 degrees",
+          "autoLocalSampling": "0.9 degrees",
+          "offsetStep": 0.5
+        }
+      },
+      "parts": [
+        "mask"
+      ],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc",
+          "mask": {
+            "part": "mask"
+          }
+        },
+        "options": {
+          "refCorrectGreyscale": false,
+          "trustRefSize": true,
+          "iniHigh": 60,
+          "sym": "D2",
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "doSolventFsc": true,
+          "doBlush": true,
+          "blushVersion": "v1.0",
+          "sampling": "3.7 degrees",
+          "offsetRange": 5,
+          "offsetStep": 0.5,
+          "autoLocalSampling": "0.9 degrees",
+          "autoFaster": false,
+          "nrPool": 3,
+          "doPad1": false,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: maskcreate, GUI defaults",
+      "spec": {
+        "tool": "relion",
+        "command": "maskcreate",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "map": "Refine3D/job009/run_class001.mrc"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "maskcreate",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "map": "Refine3D/job009/run_class001.mrc"
+        },
+        "options": {
+          "lowpassFilter": 15,
+          "angpix": -1,
+          "inimaskThreshold": 0.02,
+          "extendInimask": 3,
+          "widthMaskEdge": 3
+        }
+      }
+    },
+    {
+      "name": "GUI case: maskcreate, tutorial settings",
+      "spec": {
+        "tool": "relion",
+        "command": "maskcreate",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "map": "Refine3D/job009/run_class001.mrc"
+        },
+        "options": {
+          "angpix": 1.244,
+          "inimaskThreshold": 0.01,
+          "extendInimask": 0,
+          "widthMaskEdge": 6
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "maskcreate",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "map": "Refine3D/job009/run_class001.mrc"
+        },
+        "options": {
+          "lowpassFilter": 15,
+          "angpix": 1.244,
+          "inimaskThreshold": 0.01,
+          "extendInimask": 0,
+          "widthMaskEdge": 6
+        }
+      }
+    },
+    {
+      "name": "GUI case: postprocess, GUI defaults",
+      "spec": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half1_class001_unfil.mrc",
+          "mask": "MaskCreate/job010/mask.mrc"
+        },
+        "options": {}
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half1_class001_unfil.mrc",
+          "mask": "MaskCreate/job010/mask.mrc"
+        },
+        "options": {
+          "angpix": -1,
+          "doAutoBfac": true,
+          "autobLowres": 10,
+          "doAdhocBfac": false,
+          "adhocBfac": -1000,
+          "doSkipFscWeighting": false,
+          "lowPass": 5
+        }
+      }
+    },
+    {
+      "name": "GUI case: postprocess with an ad-hoc B-factor and low-pass filter",
+      "spec": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half2_class001_unfil.mrc",
+          "mask": "MaskCreate/job010/mask.mrc"
+        },
+        "options": {
+          "angpix": 0.885,
+          "doAutoBfac": false,
+          "doAdhocBfac": true,
+          "adhocBfac": -50,
+          "doSkipFscWeighting": true,
+          "lowPass": 3.5
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half2_class001_unfil.mrc",
+          "mask": "MaskCreate/job010/mask.mrc"
+        },
+        "options": {
+          "angpix": 0.885,
+          "doAutoBfac": false,
+          "autobLowres": 10,
+          "doAdhocBfac": true,
+          "adhocBfac": -50,
+          "doSkipFscWeighting": true,
+          "lowPass": 3.5
+        }
+      }
+    },
+    {
+      "name": "GUI case: import with every acquisition option and a ? pattern",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "examples",
+            "path": "a/b",
+            "pattern": "x_??.tif"
+          }
+        },
+        "options": {
+          "angpix": 1.1,
+          "kV": 300,
+          "Cs": 2.7,
+          "Q0": 0.07,
+          "beamtiltX": 0.2,
+          "beamtiltY": -0.1
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "examples",
+            "path": "a/b",
+            "pattern": "x_??.tif"
+          }
+        },
+        "options": {
+          "isMultiframe": true,
+          "angpix": 1.1,
+          "kV": 300,
+          "Cs": 2.7,
+          "Q0": 0.07,
+          "beamtiltX": 0.2,
+          "beamtiltY": -0.1
+        }
+      }
+    },
+    {
+      "name": "GUI case: import passes a seven-digit pixel size as typed",
+      "spec": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "examples",
+            "path": "a",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "angpix": 0.8851234,
+          "kV": 200,
+          "Cs": 1.4
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "import",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": {
+            "root": "examples",
+            "path": "a",
+            "pattern": "*.tiff"
+          }
+        },
+        "options": {
+          "isMultiframe": true,
+          "angpix": 0.8851234,
+          "kV": 200,
+          "Cs": 1.4,
+          "Q0": 0.1,
+          "beamtiltX": 0,
+          "beamtiltY": 0
+        }
+      }
+    },
+    {
+      "name": "GUI case: motioncorr on one rank with a data-root gain, rotated and flipped, no power spectra",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "root": "examples",
+            "path": "relion-tutorial/Movies/gain.mrc"
+          }
+        },
+        "options": {
+          "dosePerFrame": 1.277,
+          "firstFrameSum": 2,
+          "lastFrameSum": 30,
+          "eerGrouping": 20,
+          "doFloat16": false,
+          "doSavePs": false,
+          "bfactor": 200,
+          "binFactor": 2,
+          "preExposure": 1.5,
+          "doSaveNoDW": true,
+          "gainRot": 3,
+          "gainFlip": 2,
+          "patchX": 4,
+          "patchY": 3
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 7,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star",
+          "gain": {
+            "root": "examples",
+            "path": "relion-tutorial/Movies/gain.mrc"
+          }
+        },
+        "options": {
+          "firstFrameSum": 2,
+          "lastFrameSum": 30,
+          "eerGrouping": 20,
+          "doFloat16": false,
+          "bfactor": 200,
+          "patchX": 4,
+          "patchY": 3,
+          "groupFrames": 1,
+          "binFactor": 2,
+          "gainRot": 3,
+          "gainFlip": 2,
+          "doDoseWeighting": true,
+          "doSaveNoDW": true,
+          "dosePerFrame": 1.277,
+          "preExposure": 1.5,
+          "doSavePs": false,
+          "groupForPs": 4
+        }
+      }
+    },
+    {
+      "name": "GUI case: motioncorr without dose weighting, power spectra grouped every frame",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "dosePerFrame": 1.277,
+          "doDoseWeighting": false,
+          "doSaveNoDW": true,
+          "groupForPs": 0.1,
+          "binFactor": 1.5
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 3,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "firstFrameSum": 1,
+          "lastFrameSum": -1,
+          "eerGrouping": 32,
+          "doFloat16": true,
+          "bfactor": 150,
+          "patchX": 1,
+          "patchY": 1,
+          "groupFrames": 1,
+          "binFactor": 1.5,
+          "gainRot": 0,
+          "gainFlip": 0,
+          "doDoseWeighting": false,
+          "doSaveNoDW": true,
+          "dosePerFrame": 1.277,
+          "preExposure": 0,
+          "doSavePs": true,
+          "groupForPs": 0.1
+        }
+      }
+    },
+    {
+      "name": "GUI case: motioncorr ignores the profile GPUs, rounds a half power-spectrum group up",
+      "spec": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "dosePerFrame": 2,
+          "groupForPs": 5
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 8,
+        "gpus": 1
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "motioncorr",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "movies": "Import/job001/movies.star"
+        },
+        "options": {
+          "firstFrameSum": 1,
+          "lastFrameSum": -1,
+          "eerGrouping": 32,
+          "doFloat16": true,
+          "bfactor": 150,
+          "patchX": 1,
+          "patchY": 1,
+          "groupFrames": 1,
+          "binFactor": 1,
+          "gainRot": 0,
+          "gainFlip": 0,
+          "doDoseWeighting": true,
+          "doSaveNoDW": false,
+          "dosePerFrame": 2,
+          "preExposure": 0,
+          "doSavePs": true,
+          "groupForPs": 5
+        }
+      }
+    },
+    {
+      "name": "GUI case: ctffind from imported micrographs with phase shifts, exhaustive search and a window",
+      "spec": {
+        "tool": "relion",
+        "command": "ctffind",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "Import/job001/micrographs.star"
+        },
+        "options": {
+          "useNoDW": true,
+          "doPhaseshift": true,
+          "phaseMin": 10,
+          "phaseMax": 170,
+          "phaseStep": 5,
+          "dAst": 500,
+          "useGivenPs": false,
+          "slowSearch": true,
+          "box": 256,
+          "resMin": 25.5,
+          "resMax": 3.5,
+          "dfMin": 1000,
+          "dfMax": 30000,
+          "dfStep": 250,
+          "ctfWin": 1024
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 5,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "ctffind",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "Import/job001/micrographs.star"
+        },
+        "options": {
+          "useNoDW": true,
+          "doPhaseshift": true,
+          "phaseMin": 10,
+          "phaseMax": 170,
+          "phaseStep": 5,
+          "dAst": 500,
+          "useGivenPs": false,
+          "slowSearch": true,
+          "box": 256,
+          "resMin": 25.5,
+          "resMax": 3.5,
+          "dfMin": 1000,
+          "dfMax": 30000,
+          "dfStep": 250,
+          "ctfWin": 1024
+        }
+      }
+    },
+    {
+      "name": "GUI case: autopick LoG without a low-pass limit, adjusted thresholds",
+      "spec": {
+        "tool": "relion",
+        "command": "autopick",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "MotionCorr/job002/corrected_micrographs.star"
+        },
+        "options": {
+          "logDiamMin": 120.5,
+          "logDiamMax": 160,
+          "logMaxres": -1,
+          "logAdjustThreshold": -0.5,
+          "logUpperThreshold": 998.5
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "autopick",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "MotionCorr/job002/corrected_micrographs.star"
+        },
+        "options": {
+          "logDiamMin": 120.5,
+          "logDiamMax": 160,
+          "logInvert": false,
+          "logMaxres": -1,
+          "logAdjustThreshold": -0.5,
+          "logUpperThreshold": 998.5
+        }
+      }
+    },
+    {
+      "name": "GUI case: extract with a background diameter, dust removal and an FOM threshold",
+      "spec": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "extractSize": 256,
+          "doRescale": true,
+          "rescale": 100,
+          "bgDiameter": 200,
+          "whiteDust": 5,
+          "blackDust": 4.5,
+          "doFomThreshold": true,
+          "minimumPickFom": -0.5
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "extractSize": 256,
+          "doInvert": true,
+          "doFloat16": true,
+          "doNorm": true,
+          "bgDiameter": 200,
+          "whiteDust": 5,
+          "blackDust": 4.5,
+          "doRescale": true,
+          "rescale": 100,
+          "doFomThreshold": true,
+          "minimumPickFom": -0.5
+        }
+      }
+    },
+    {
+      "name": "GUI case: extract on one CPU without normalisation, inversion or float16",
+      "spec": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "doInvert": false,
+          "doFloat16": false,
+          "doNorm": false,
+          "extractSize": 100
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 1,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "extractSize": 100,
+          "doInvert": false,
+          "doFloat16": false,
+          "doNorm": false,
+          "bgDiameter": -1,
+          "whiteDust": -1,
+          "blackDust": -1,
+          "doRescale": false,
+          "rescale": 128,
+          "doFomThreshold": false,
+          "minimumPickFom": 0
+        }
+      }
+    },
+    {
+      "name": "GUI case: extract rescaled to a size that truncates the background radius",
+      "spec": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "extractSize": 250,
+          "doRescale": true,
+          "rescale": 66
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "extract",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "micrographs": "CtfFind/job003/micrographs_ctf.star",
+          "coordinates": "AutoPick/job004/autopick.star"
+        },
+        "options": {
+          "extractSize": 250,
+          "doInvert": true,
+          "doFloat16": true,
+          "doNorm": true,
+          "bgDiameter": -1,
+          "whiteDust": -1,
+          "blackDust": -1,
+          "doRescale": true,
+          "rescale": 66,
+          "doFomThreshold": false,
+          "minimumPickFom": 0
+        }
+      }
+    },
+    {
+      "name": "GUI case: class2d without CTF, alignment, centring or masking, with every I/O option",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": false,
+          "highresLimit": 8,
+          "doCenter": false,
+          "doZeroMask": false,
+          "performAlignment": false,
+          "nrPool": 10,
+          "doParallelDiscio": false,
+          "doPrereadImages": true,
+          "doCombineThruDisc": true,
+          "tauFudge": 1.5,
+          "nrIterGrad": 100,
+          "particleDiameter": 180
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": false,
+          "ctfIntactFirstPeak": false,
+          "nrClasses": 1,
+          "tauFudge": 1.5,
+          "nrIterGrad": 100,
+          "particleDiameter": 180,
+          "doZeroMask": false,
+          "highresLimit": 8,
+          "doCenter": false,
+          "performAlignment": false,
+          "psiSampling": 6,
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "allowCoarser": false,
+          "nrPool": 10,
+          "doParallelDiscio": false,
+          "doPrereadImages": true,
+          "doCombineThruDisc": true
+        }
+      }
+    },
+    {
+      "name": "GUI case: class2d ignoring CTFs to the first peak with coarser sampling on GPUs",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "ctfIntactFirstPeak": true,
+          "allowCoarser": true,
+          "psiSampling": 2.5,
+          "offsetRange": 3,
+          "offsetStep": 0.75
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 12,
+        "gpus": 2
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": true,
+          "nrClasses": 1,
+          "tauFudge": 2,
+          "nrIterGrad": 200,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "highresLimit": -1,
+          "doCenter": true,
+          "performAlignment": true,
+          "psiSampling": 2.5,
+          "offsetRange": 3,
+          "offsetStep": 0.75,
+          "allowCoarser": true,
+          "nrPool": 3,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: select with the class ranker and a minimum class count",
+      "spec": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it100_optimiser.star"
+        },
+        "options": {
+          "mode": "ranker",
+          "minClasses": 10,
+          "minScore": 0.35
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "select",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "optimiser": "Class2D/job006/run_it100_optimiser.star"
+        },
+        "options": {
+          "mode": "ranker",
+          "minScore": 0.35,
+          "minParticles": -1,
+          "minClasses": 10
+        }
+      }
+    },
+    {
+      "name": "GUI case: initialmodel with two classes in D2 from the start, every I/O option",
+      "spec": {
+        "tool": "relion",
+        "command": "initialmodel",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "nrClasses": 2,
+          "doRunC1": false,
+          "sym": "D2",
+          "doSolvent": false,
+          "ctfIntactFirstPeak": true,
+          "nrPool": 5,
+          "doParallelDiscio": false,
+          "doPrereadImages": true,
+          "doCombineThruDisc": true,
+          "tauFudge": 2.5,
+          "particleDiameter": 180,
+          "nrIter": 50
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "initialmodel",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "nrIter": 50,
+          "tauFudge": 2.5,
+          "nrClasses": 2,
+          "sym": "D2",
+          "doRunC1": false,
+          "particleDiameter": 180,
+          "doSolvent": false,
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": true,
+          "nrPool": 5,
+          "doParallelDiscio": false,
+          "doPrereadImages": true,
+          "doCombineThruDisc": true
+        }
+      }
+    },
+    {
+      "name": "GUI case: initialmodel without CTF correction, lower-case c1",
+      "spec": {
+        "tool": "relion",
+        "command": "initialmodel",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": false,
+          "sym": "c1"
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "initialmodel",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star"
+        },
+        "options": {
+          "nrIter": 200,
+          "tauFudge": 4,
+          "nrClasses": 1,
+          "sym": "c1",
+          "doRunC1": true,
+          "particleDiameter": 200,
+          "doSolvent": true,
+          "doCtfCorrection": false,
+          "ctfIntactFirstPeak": false,
+          "nrPool": 3,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: refine3d from absolute greyscale with a MaskCreate mask, amyloid Blush and faster local searches on GPUs",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc",
+          "mask": "MaskCreate/job010/mask.mrc"
+        },
+        "options": {
+          "refCorrectGreyscale": true,
+          "trustRefSize": false,
+          "iniHigh": 0,
+          "doCtfCorrection": false,
+          "doZeroMask": false,
+          "doBlush": true,
+          "blushVersion": "amy-v1.0",
+          "autoFaster": true,
+          "doPad1": true,
+          "doParallelDiscio": false,
+          "doPrereadImages": true,
+          "doCombineThruDisc": true,
+          "sampling": "30 degrees",
+          "autoLocalSampling": "0.1 degrees",
+          "offsetRange": 3.5,
+          "offsetStep": 0.3
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 8,
+        "gpus": 2
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc",
+          "mask": "MaskCreate/job010/mask.mrc"
+        },
+        "options": {
+          "refCorrectGreyscale": true,
+          "trustRefSize": false,
+          "iniHigh": 0,
+          "sym": "C1",
+          "doCtfCorrection": false,
+          "ctfIntactFirstPeak": false,
+          "particleDiameter": 200,
+          "doZeroMask": false,
+          "doSolventFsc": false,
+          "doBlush": true,
+          "blushVersion": "amy-v1.0",
+          "sampling": "30 degrees",
+          "offsetRange": 3.5,
+          "offsetStep": 0.3,
+          "autoLocalSampling": "0.1 degrees",
+          "autoFaster": true,
+          "nrPool": 3,
+          "doPad1": true,
+          "doParallelDiscio": false,
+          "doPrereadImages": true,
+          "doCombineThruDisc": true
+        }
+      }
+    },
+    {
+      "name": "GUI case: refine3d on three CPUs ignoring CTFs to the first peak, solvent FSC without a mask",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "ctfIntactFirstPeak": true,
+          "iniHigh": 40,
+          "doSolventFsc": true
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 3,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Select/job007/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "refCorrectGreyscale": false,
+          "trustRefSize": true,
+          "iniHigh": 40,
+          "sym": "C1",
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": true,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "doSolventFsc": true,
+          "doBlush": false,
+          "blushVersion": "v1.0",
+          "sampling": "7.5 degrees",
+          "offsetRange": 5,
+          "offsetStep": 1,
+          "autoLocalSampling": "1.8 degrees",
+          "autoFaster": false,
+          "nrPool": 3,
+          "doPad1": false,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: maskcreate from the initial model without a low-pass filter",
+      "spec": {
+        "tool": "relion",
+        "command": "maskcreate",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "map": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "lowpassFilter": -1,
+          "angpix": 0.885,
+          "inimaskThreshold": 0.005,
+          "extendInimask": 2,
+          "widthMaskEdge": 8
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 1,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "maskcreate",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "map": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "lowpassFilter": -1,
+          "angpix": 0.885,
+          "inimaskThreshold": 0.005,
+          "extendInimask": 2,
+          "widthMaskEdge": 8
+        }
+      }
+    },
+    {
+      "name": "GUI case: postprocess with an uploaded mask and no B-factor sharpening",
+      "spec": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half1_class001_unfil.mrc",
+          "mask": {
+            "part": "mask"
+          }
+        },
+        "options": {
+          "doAutoBfac": false,
+          "autobLowres": 8
+        }
+      },
+      "parts": [
+        "mask"
+      ],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half1_class001_unfil.mrc",
+          "mask": {
+            "part": "mask"
+          }
+        },
+        "options": {
+          "angpix": -1,
+          "doAutoBfac": false,
+          "autobLowres": 8,
+          "doAdhocBfac": false,
+          "adhocBfac": -1000,
+          "doSkipFscWeighting": false,
+          "lowPass": 5
+        }
+      }
+    },
+    {
+      "name": "GUI case: postprocess with both automatic and ad-hoc B-factors",
+      "spec": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half1_class001_unfil.mrc",
+          "mask": "MaskCreate/job010/mask.mrc"
+        },
+        "options": {
+          "doAutoBfac": true,
+          "autobLowres": 8.5,
+          "doAdhocBfac": true,
+          "adhocBfac": -120
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "postprocess",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "halfMap": "Refine3D/job009/run_half1_class001_unfil.mrc",
+          "mask": "MaskCreate/job010/mask.mrc"
+        },
+        "options": {
+          "angpix": -1,
+          "doAutoBfac": true,
+          "autobLowres": 8.5,
+          "doAdhocBfac": true,
+          "adhocBfac": -120,
+          "doSkipFscWeighting": false,
+          "lowPass": 5
+        }
+      }
+    },
+    {
+      "name": "GUI case: maskcreate passes a tiny threshold without an exponent",
+      "spec": {
+        "tool": "relion",
+        "command": "maskcreate",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "map": "Refine3D/job009/run_class001.mrc"
+        },
+        "options": {
+          "inimaskThreshold": 1e-7,
+          "lowpassFilter": 12.5,
+          "angpix": 1.0605
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "maskcreate",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "map": "Refine3D/job009/run_class001.mrc"
+        },
+        "options": {
+          "lowpassFilter": 12.5,
+          "angpix": 1.0605,
+          "inimaskThreshold": 1e-7,
+          "extendInimask": 3,
+          "widthMaskEdge": 3
+        }
+      }
+    },
+    {
+      "name": "GUI case: class2d with float32-rounded angular and offset steps",
+      "spec": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "psiSampling": 1.2345678,
+          "offsetStep": 0.333,
+          "highresLimit": 7.25,
+          "offsetRange": 2.5
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 16,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "class2d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star"
+        },
+        "options": {
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "nrClasses": 1,
+          "tauFudge": 2,
+          "nrIterGrad": 200,
+          "particleDiameter": 200,
+          "doZeroMask": true,
+          "highresLimit": 7.25,
+          "doCenter": true,
+          "performAlignment": true,
+          "psiSampling": 1.2345678,
+          "offsetRange": 2.5,
+          "offsetStep": 0.333,
+          "allowCoarser": false,
+          "nrPool": 3,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    },
+    {
+      "name": "GUI case: refine3d with a float32-rounded offset step",
+      "spec": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "offsetStep": 0.1234567,
+          "iniHigh": 35.5,
+          "particleDiameter": 185.5
+        }
+      },
+      "parts": [],
+      "profile": {
+        "cpus": 4,
+        "gpus": 0
+      },
+      "validated": {
+        "tool": "relion",
+        "command": "refine3d",
+        "project": "0123456789abcdef0123456789abcdef",
+        "inputs": {
+          "particles": "Extract/job005/particles.star",
+          "reference": "InitialModel/job008/initial_model.mrc"
+        },
+        "options": {
+          "refCorrectGreyscale": false,
+          "trustRefSize": true,
+          "iniHigh": 35.5,
+          "sym": "C1",
+          "doCtfCorrection": true,
+          "ctfIntactFirstPeak": false,
+          "particleDiameter": 185.5,
+          "doZeroMask": true,
+          "doSolventFsc": false,
+          "doBlush": false,
+          "blushVersion": "v1.0",
+          "sampling": "7.5 degrees",
+          "offsetRange": 5,
+          "offsetStep": 0.1234567,
+          "autoLocalSampling": "1.8 degrees",
+          "autoFaster": false,
+          "nrPool": 3,
+          "doPad1": false,
+          "doParallelDiscio": true,
+          "doPrereadImages": false,
+          "doCombineThruDisc": false
+        }
+      }
+    }
+  ],
+  "numbers": [
+    [
+      0,
+      "0"
+    ],
+    [
+      0,
+      "0"
+    ],
+    [
+      1,
+      "1"
+    ],
+    [
+      -1,
+      "-1"
+    ],
+    [
+      0.1,
+      "0.1"
+    ],
+    [
+      0.885,
+      "0.885"
+    ],
+    [
+      1.277,
+      "1.277"
+    ],
+    [
+      0.02,
+      "0.02"
+    ],
+    [
+      0.3333333333333333,
+      "0.333333"
+    ],
+    [
+      0.6666666666666666,
+      "0.666667"
+    ],
+    [
+      12.000001,
+      "12"
+    ],
+    [
+      50000,
+      "50000"
+    ],
+    [
+      123456,
+      "123456"
+    ],
+    [
+      1234567,
+      "1.23457e+06"
+    ],
+    [
+      0.0001,
+      "0.0001"
+    ],
+    [
+      0.00001,
+      "1e-05"
+    ],
+    [
+      0.000123456789,
+      "0.000123457"
+    ],
+    [
+      1e-30,
+      "1e-30"
+    ],
+    [
+      3.4e+38,
+      "3.4e+38"
+    ],
+    [
+      123456.5,
+      "123456"
+    ],
+    [
+      123457.5,
+      "123458"
+    ],
+    [
+      1234565,
+      "1.23456e+06"
+    ],
+    [
+      1234575,
+      "1.23458e+06"
+    ],
+    [
+      999999.5,
+      "1e+06"
+    ],
+    [
+      9999995,
+      "1e+07"
+    ],
+    [
+      0.125,
+      "0.125"
+    ],
+    [
+      2.5,
+      "2.5"
+    ],
+    [
+      -2.5,
+      "-2.5"
+    ],
+    [
+      7.5,
+      "7.5"
+    ],
+    [
+      1.0000005,
+      "1"
+    ],
+    [
+      99999.95,
+      "100000"
+    ],
+    [
+      16777216,
+      "1.67772e+07"
+    ],
+    [
+      16777217,
+      "1.67772e+07"
+    ],
+    [
+      1e+21,
+      "1e+21"
+    ],
+    [
+      -1000,
+      "-1000"
+    ],
+    [
+      0.5,
+      "0.5"
+    ],
+    [
+      15,
+      "15"
+    ],
+    [
+      60,
+      "60"
+    ],
+    [
+      0.45,
+      "0.45"
+    ],
+    [
+      999,
+      "999"
+    ]
+  ]
+}
