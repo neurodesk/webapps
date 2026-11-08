@@ -1,0 +1,622 @@
+{
+  "$schema-notes": [
+    "The relion tool's commands. src/spec.js and exes/compute-server interpret this file; README.md is the full schema.",
+    "commands.<id>: jobType (RELION job directory), launch, inputs, options, rules, derived, steps, outputs, progress.",
+    "launch.rule: single (one process), cpuRanks (MPI ranks from CPUs), refineRanks (smallest odd rank count >= max(3, gpus + 1)).",
+    "launch.threadsPerRank (cpuRanks): ranks = max(1, floor(cpus / threadsPerRank)). launch.threads: --j is floor(cpus / ranks). launch.gpu: --gpu \"\" when the profile has GPUs.",
+    "inputs.<name>.accept: path (project-relative output of an earlier job), part (uploaded <name>.mrc in the job directory), dataRoot ({root, path, pattern}), dataFile ({root, path}: one file in a data root).",
+    "inputs.<name>: from (allowed job types of a path), suffix (required ending), pattern (regular expression the path must contain), optional, when.",
+    "options.<name>: gui (RELION job option variable), type bool|int|number|enum|string|int-list, default or required, min, max, multipleOf, enum, pattern, when.",
+    "Conditions: {option, eq|ne|gt|ge|lt|le|in|notIn}, {input, present}, {gpus: true}, {all: [...]}, {not: condition}.",
+    "Argument strings expand {dir}, {input:NAME}, {inputDir:NAME} and {inputPattern:NAME} (a dataRoot input's /data/<root>/<path> and pattern), {option:NAME}, {derived:NAME}, {threads} and {const:NAME}; {when, args, else} groups emit conditionally.",
+    "Number options are written as typed into the GUI: the shortest decimal that reads back as the same double, without an exponent, negative zero as 0. Derived values are written as RELION's floatToString writes them: printf %.6g of the float32 value. Integers are written in decimal.",
+    "steps[0] runs first: the main program, or import's link of the data-root directory into the job directory (relion_import refuses absolute paths). mpi: true appends _mpi to it when the launch has more than one rank. Later steps run in order after it.",
+    "A step with builder names a step sequence written in code, documented in README.md (selectClasses).",
+    "Output and argument templates take {option:NAME:03} to zero-pad an integer to three digits."
+  ],
+  "tool": "relion",
+  "version": "5.1.1",
+  "constants": {
+    "ctffindExecutable": "/opt/ctffind-4.1.14/bin/ctffind",
+    "opticsGroupName": "opticsGroup1",
+    "topazExecutable": "relion_python_topaz"
+  },
+  "commands": {
+    "import": {
+      "jobType": "Import",
+      "launch": { "rule": "single", "threads": false, "gpu": false },
+      "inputs": {
+        "movies": { "accept": ["dataRoot"] }
+      },
+      "options": {
+        "isMultiframe": { "gui": "is_multiframe", "type": "bool", "default": true },
+        "angpix": { "gui": "angpix", "type": "number", "required": true, "min": 0.1, "max": 20 },
+        "kV": { "gui": "kV", "type": "number", "required": true, "min": 50, "max": 500 },
+        "Cs": { "gui": "Cs", "type": "number", "required": true, "min": 0, "max": 10 },
+        "Q0": { "gui": "Q0", "type": "number", "default": 0.1, "min": 0, "max": 1 },
+        "beamtiltX": { "gui": "beamtilt_x", "type": "number", "default": 0, "min": -10, "max": 10 },
+        "beamtiltY": { "gui": "beamtilt_y", "type": "number", "default": 0, "min": -10, "max": 10 }
+      },
+      "steps": [
+        { "program": "ln", "args": ["-sfn", "{inputDir:movies}", "{dir}data"] },
+        {
+          "program": "relion_import",
+          "args": [
+            { "when": { "option": "isMultiframe", "eq": true }, "args": ["--do_movies"], "else": ["--do_micrographs"] },
+            "--optics_group_name", "{const:opticsGroupName}",
+            "--angpix", "{option:angpix}",
+            "--kV", "{option:kV}",
+            "--Cs", "{option:Cs}",
+            "--Q0", "{option:Q0}",
+            "--beamtilt_x", "{option:beamtiltX}",
+            "--beamtilt_y", "{option:beamtiltY}",
+            "--i", "{dir}data/{inputPattern:movies}",
+            "--odir", "{dir}",
+            { "when": { "option": "isMultiframe", "eq": true }, "args": ["--ofile", "movies.star"], "else": ["--ofile", "micrographs.star"] },
+            "--pipeline_control", "{dir}"
+          ]
+        }
+      ],
+      "outputs": [
+        { "path": "movies.star", "required": true, "when": { "option": "isMultiframe", "eq": true } },
+        { "path": "micrographs.star", "required": true, "when": { "option": "isMultiframe", "eq": false } }
+      ],
+      "progress": null
+    },
+    "motioncorr": {
+      "jobType": "MotionCorr",
+      "launch": { "rule": "cpuRanks", "threadsPerRank": 4, "threads": true, "gpu": false },
+      "inputs": {
+        "movies": { "accept": ["path"], "from": ["Import"], "suffix": "movies.star" },
+        "gain": { "accept": ["part", "dataFile"], "optional": true }
+      },
+      "options": {
+        "firstFrameSum": { "gui": "first_frame_sum", "type": "int", "default": 1, "min": 1, "max": 10000 },
+        "lastFrameSum": { "gui": "last_frame_sum", "type": "int", "default": -1, "min": -1, "max": 10000 },
+        "eerGrouping": { "gui": "eer_grouping", "type": "int", "default": 32, "min": 1, "max": 1000 },
+        "doFloat16": { "gui": "do_float16", "type": "bool", "default": true },
+        "bfactor": { "gui": "bfactor", "type": "number", "default": 150, "min": 0, "max": 10000 },
+        "patchX": { "gui": "patch_x", "type": "int", "default": 1, "min": 1, "max": 50 },
+        "patchY": { "gui": "patch_y", "type": "int", "default": 1, "min": 1, "max": 50 },
+        "groupFrames": { "gui": "group_frames", "type": "int", "default": 1, "min": 1, "max": 100 },
+        "binFactor": { "gui": "bin_factor", "type": "number", "default": 1, "min": 1, "max": 8 },
+        "gainRot": { "gui": "gain_rot", "type": "int", "default": 0, "min": 0, "max": 3 },
+        "gainFlip": { "gui": "gain_flip", "type": "int", "default": 0, "min": 0, "max": 2 },
+        "doDoseWeighting": { "gui": "do_dose_weighting", "type": "bool", "default": true },
+        "doSaveNoDW": { "gui": "do_save_noDW", "type": "bool", "default": false },
+        "dosePerFrame": { "gui": "dose_per_frame", "type": "number", "required": true, "min": 0.01, "max": 100 },
+        "preExposure": { "gui": "pre_exposure", "type": "number", "default": 0, "min": 0, "max": 1000 },
+        "doSavePs": { "gui": "do_save_ps", "type": "bool", "default": true },
+        "groupForPs": { "gui": "group_for_ps", "type": "number", "default": 4, "min": 0.1, "max": 100 }
+      },
+      "rules": [
+        { "when": { "all": [{ "option": "doFloat16", "eq": true }, { "option": "doSavePs", "eq": false }] }, "error": "doFloat16 needs doSavePs: CTFFIND reads the power spectra of float16 micrographs" }
+      ],
+      "derived": {
+        "psGrouping": { "fn": "powerSpectrumGrouping", "dose": "groupForPs", "dosePerFrame": "dosePerFrame" }
+      },
+      "steps": [
+        {
+          "program": "relion_run_motioncorr",
+          "mpi": true,
+          "args": [
+            "--i", "{input:movies}",
+            "--o", "{dir}",
+            "--first_frame_sum", "{option:firstFrameSum}",
+            "--last_frame_sum", "{option:lastFrameSum}",
+            "--use_own",
+            "--j", "{threads}",
+            { "when": { "option": "doFloat16", "eq": true }, "args": ["--float16"] },
+            "--bin_factor", "{option:binFactor}",
+            "--bfactor", "{option:bfactor}",
+            "--dose_per_frame", "{option:dosePerFrame}",
+            "--preexposure", "{option:preExposure}",
+            "--patch_x", "{option:patchX}",
+            "--patch_y", "{option:patchY}",
+            "--eer_grouping", "{option:eerGrouping}",
+            { "when": { "option": "groupFrames", "gt": 1 }, "args": ["--group_frames", "{option:groupFrames}"] },
+            { "when": { "input": "gain", "present": true }, "args": ["--gainref", "{input:gain}", "--gain_rot", "{option:gainRot}", "--gain_flip", "{option:gainFlip}"] },
+            { "when": { "option": "doDoseWeighting", "eq": true }, "args": ["--dose_weighting", { "when": { "option": "doSaveNoDW", "eq": true }, "args": ["--save_noDW"] }] },
+            { "when": { "option": "doSavePs", "eq": true }, "args": ["--grouping_for_ps", "{derived:psGrouping}"] },
+            "--pipeline_control", "{dir}"
+          ]
+        }
+      ],
+      "outputs": [
+        { "path": "corrected_micrographs.star", "required": true },
+        { "path": "logfile.pdf", "required": false }
+      ],
+      "progress": { "kind": "bar", "stage": "Motion correction" }
+    },
+    "ctffind": {
+      "jobType": "CtfFind",
+      "launch": { "rule": "cpuRanks", "threadsPerRank": 1, "threads": false, "gpu": false },
+      "inputs": {
+        "micrographs": { "accept": ["path"], "from": ["MotionCorr", "Import"], "suffix": "micrographs.star" }
+      },
+      "options": {
+        "useNoDW": { "gui": "use_noDW", "type": "bool", "default": false },
+        "doPhaseshift": { "gui": "do_phaseshift", "type": "bool", "default": false },
+        "phaseMin": { "gui": "phase_min", "type": "number", "default": 0, "min": 0, "max": 360 },
+        "phaseMax": { "gui": "phase_max", "type": "number", "default": 180, "min": 0, "max": 360 },
+        "phaseStep": { "gui": "phase_step", "type": "number", "default": 10, "min": 0.1, "max": 180 },
+        "dAst": { "gui": "dast", "type": "number", "default": 100, "min": 0, "max": 10000 },
+        "useGivenPs": { "gui": "use_given_ps", "type": "bool", "default": true },
+        "slowSearch": { "gui": "slow_search", "type": "bool", "default": false },
+        "box": { "gui": "box", "type": "int", "default": 512, "min": 64, "max": 4096 },
+        "resMin": { "gui": "resmin", "type": "number", "default": 30, "min": 1, "max": 1000 },
+        "resMax": { "gui": "resmax", "type": "number", "default": 5, "min": 0.5, "max": 100 },
+        "dfMin": { "gui": "dfmin", "type": "number", "default": 5000, "min": 0, "max": 200000 },
+        "dfMax": { "gui": "dfmax", "type": "number", "default": 50000, "min": 0, "max": 200000 },
+        "dfStep": { "gui": "dfstep", "type": "number", "default": 500, "min": 10, "max": 10000 },
+        "ctfWin": { "gui": "ctf_win", "type": "int", "default": -1, "min": -1, "max": 8192 }
+      },
+      "steps": [
+        {
+          "program": "relion_run_ctffind",
+          "mpi": true,
+          "args": [
+            "--i", "{input:micrographs}",
+            "--o", "{dir}",
+            "--Box", "{option:box}",
+            "--ResMin", "{option:resMin}",
+            "--ResMax", "{option:resMax}",
+            "--dFMin", "{option:dfMin}",
+            "--dFMax", "{option:dfMax}",
+            "--FStep", "{option:dfStep}",
+            "--dAst", "{option:dAst}",
+            { "when": { "option": "useNoDW", "eq": true }, "args": ["--use_noDW"] },
+            { "when": { "option": "doPhaseshift", "eq": true }, "args": ["--do_phaseshift", "--phase_min", "{option:phaseMin}", "--phase_max", "{option:phaseMax}", "--phase_step", "{option:phaseStep}"] },
+            "--ctffind_exe", "{const:ctffindExecutable}",
+            "--ctfWin", "{option:ctfWin}",
+            "--is_ctffind4",
+            { "when": { "option": "slowSearch", "eq": false }, "args": ["--fast_search"] },
+            { "when": { "option": "useGivenPs", "eq": true }, "args": ["--use_given_ps"] },
+            "--pipeline_control", "{dir}"
+          ]
+        }
+      ],
+      "outputs": [
+        { "path": "micrographs_ctf.star", "required": true },
+        { "path": "logfile.pdf", "required": false }
+      ],
+      "progress": { "kind": "bar", "stage": "CTF estimation" }
+    },
+    "autopick": {
+      "jobType": "AutoPick",
+      "launch": { "rule": "cpuRanks", "threadsPerRank": 1, "threads": false, "gpu": false },
+      "inputs": {
+        "micrographs": { "accept": ["path"], "from": ["CtfFind", "MotionCorr", "Import"], "suffix": ".star" }
+      },
+      "options": {
+        "logDiamMin": { "gui": "log_diam_min", "type": "number", "default": 200, "min": 1, "max": 10000 },
+        "logDiamMax": { "gui": "log_diam_max", "type": "number", "default": 250, "min": 1, "max": 10000 },
+        "logInvert": { "gui": "log_invert", "type": "bool", "default": false },
+        "logMaxres": { "gui": "log_maxres", "type": "number", "default": 20, "min": -1, "max": 1000 },
+        "logAdjustThreshold": { "gui": "log_adjust_thr", "type": "number", "default": 0, "min": -10, "max": 10 },
+        "logUpperThreshold": { "gui": "log_upper_thr", "type": "number", "default": 999, "min": 0, "max": 999 }
+      },
+      "steps": [
+        {
+          "program": "relion_autopick",
+          "mpi": true,
+          "args": [
+            "--fn_topaz_exe", "{const:topazExecutable}",
+            "--i", "{input:micrographs}",
+            "--odir", "{dir}",
+            "--pickname", "autopick",
+            "--LoG",
+            "--LoG_diam_min", "{option:logDiamMin}",
+            "--LoG_diam_max", "{option:logDiamMax}",
+            "--shrink", "0",
+            "--lowpass", "{option:logMaxres}",
+            "--LoG_adjust_threshold", "{option:logAdjustThreshold}",
+            { "when": { "option": "logUpperThreshold", "lt": 999 }, "args": ["--LoG_upper_threshold", "{option:logUpperThreshold}"] },
+            { "when": { "option": "logInvert", "eq": true }, "args": ["--Log_invert"] },
+            "--pipeline_control", "{dir}"
+          ]
+        }
+      ],
+      "outputs": [
+        { "path": "autopick.star", "required": true },
+        { "path": "logfile.pdf", "required": false }
+      ],
+      "progress": { "kind": "bar", "stage": "Particle picking" }
+    },
+    "extract": {
+      "jobType": "Extract",
+      "launch": { "rule": "cpuRanks", "threadsPerRank": 1, "threads": false, "gpu": false },
+      "inputs": {
+        "micrographs": { "accept": ["path"], "from": ["CtfFind"], "suffix": "micrographs_ctf.star" },
+        "coordinates": { "accept": ["path"], "from": ["AutoPick"], "suffix": "autopick.star" }
+      },
+      "options": {
+        "extractSize": { "gui": "extract_size", "type": "int", "default": 128, "min": 16, "max": 2048, "multipleOf": 2 },
+        "doInvert": { "gui": "do_invert", "type": "bool", "default": true },
+        "doFloat16": { "gui": "do_float16", "type": "bool", "default": true },
+        "doNorm": { "gui": "do_norm", "type": "bool", "default": true },
+        "bgDiameter": { "gui": "bg_diameter", "type": "number", "default": -1, "min": -1, "max": 4096 },
+        "whiteDust": { "gui": "white_dust", "type": "number", "default": -1, "min": -1, "max": 100 },
+        "blackDust": { "gui": "black_dust", "type": "number", "default": -1, "min": -1, "max": 100 },
+        "doRescale": { "gui": "do_rescale", "type": "bool", "default": false },
+        "rescale": { "gui": "rescale", "type": "int", "default": 128, "min": 16, "max": 2048, "multipleOf": 2 },
+        "doFomThreshold": { "gui": "do_fom_threshold", "type": "bool", "default": false },
+        "minimumPickFom": { "gui": "minimum_pick_fom", "type": "number", "default": 0, "min": -100, "max": 100 }
+      },
+      "derived": {
+        "bgRadius": { "fn": "extractBackgroundRadius", "diameter": "bgDiameter", "size": "extractSize", "rescale": "rescale", "doRescale": "doRescale" }
+      },
+      "steps": [
+        {
+          "program": "relion_preprocess",
+          "mpi": true,
+          "args": [
+            "--i", "{input:micrographs}",
+            "--coord_list", "{input:coordinates}",
+            "--part_star", "{dir}particles.star",
+            "--part_dir", "{dir}",
+            "--extract",
+            "--extract_size", "{option:extractSize}",
+            { "when": { "option": "doFomThreshold", "eq": true }, "args": ["--minimum_pick_fom", "{option:minimumPickFom}"] },
+            { "when": { "option": "doFloat16", "eq": true }, "args": ["--float16"] },
+            { "when": { "option": "doRescale", "eq": true }, "args": ["--scale", "{option:rescale}"] },
+            { "when": { "option": "doNorm", "eq": true }, "args": ["--norm", "--bg_radius", "{derived:bgRadius}", "--white_dust", "{option:whiteDust}", "--black_dust", "{option:blackDust}"] },
+            { "when": { "option": "doInvert", "eq": true }, "args": ["--invert_contrast"] },
+            "--pipeline_control", "{dir}"
+          ]
+        }
+      ],
+      "outputs": [
+        { "path": "particles.star", "required": true }
+      ],
+      "progress": { "kind": "bar", "stage": "Particle extraction" }
+    },
+    "class2d": {
+      "jobType": "Class2D",
+      "launch": { "rule": "single", "threads": true, "gpu": true },
+      "inputs": {
+        "particles": { "accept": ["path"], "from": ["Extract", "Select"], "suffix": "particles.star" }
+      },
+      "options": {
+        "doCtfCorrection": { "gui": "do_ctf_correction", "type": "bool", "default": true },
+        "ctfIntactFirstPeak": { "gui": "ctf_intact_first_peak", "type": "bool", "default": false },
+        "nrClasses": { "gui": "nr_classes", "type": "int", "default": 1, "min": 1, "max": 400 },
+        "tauFudge": { "gui": "tau_fudge", "type": "number", "default": 2, "min": 0.1, "max": 100 },
+        "nrIterGrad": { "gui": "nr_iter_grad", "type": "int", "default": 200, "min": 1, "max": 999 },
+        "particleDiameter": { "gui": "particle_diameter", "type": "number", "default": 200, "min": 1, "max": 10000 },
+        "doZeroMask": { "gui": "do_zero_mask", "type": "bool", "default": true },
+        "highresLimit": { "gui": "highres_limit", "type": "number", "default": -1, "min": -1, "max": 1000 },
+        "doCenter": { "gui": "do_center", "type": "bool", "default": true },
+        "performAlignment": { "gui": "dont_skip_align", "type": "bool", "default": true },
+        "psiSampling": { "gui": "psi_sampling", "type": "number", "default": 6, "min": 0.1, "max": 90 },
+        "offsetRange": { "gui": "offset_range", "type": "number", "default": 5, "min": 0, "max": 100 },
+        "offsetStep": { "gui": "offset_step", "type": "number", "default": 1, "min": 0.1, "max": 20 },
+        "allowCoarser": { "gui": "allow_coarser", "type": "bool", "default": false },
+        "nrPool": { "gui": "nr_pool", "type": "int", "default": 3, "min": 1, "max": 100 },
+        "doParallelDiscio": { "gui": "do_parallel_discio", "type": "bool", "default": true },
+        "doPrereadImages": { "gui": "do_preread_images", "type": "bool", "default": false },
+        "doCombineThruDisc": { "gui": "do_combine_thru_disc", "type": "bool", "default": false }
+      },
+      "derived": {
+        "psiStep": { "fn": "multiply", "option": "psiSampling", "by": 2 },
+        "offsetStep": { "fn": "multiply", "option": "offsetStep", "by": 2 }
+      },
+      "steps": [
+        {
+          "program": "relion_refine",
+          "args": [
+            "--o", "{dir}run",
+            "--grad",
+            "--class_inactivity_threshold", "0.1",
+            "--grad_write_iter", "10",
+            "--iter", "{option:nrIterGrad}",
+            "--i", "{input:particles}",
+            { "when": { "option": "doCombineThruDisc", "eq": false }, "args": ["--dont_combine_weights_via_disc"] },
+            { "when": { "option": "doParallelDiscio", "eq": false }, "args": ["--no_parallel_disc_io"] },
+            { "when": { "option": "doPrereadImages", "eq": true }, "args": ["--preread_images"] },
+            "--pool", "{option:nrPool}",
+            "--pad", "2",
+            { "when": { "option": "doCtfCorrection", "eq": true }, "args": ["--ctf", { "when": { "option": "ctfIntactFirstPeak", "eq": true }, "args": ["--ctf_intact_first_peak"] }] },
+            "--tau2_fudge", "{option:tauFudge}",
+            "--particle_diameter", "{option:particleDiameter}",
+            "--K", "{option:nrClasses}",
+            "--flatten_solvent",
+            { "when": { "option": "doZeroMask", "eq": true }, "args": ["--zero_mask"] },
+            { "when": { "option": "highresLimit", "gt": 0 }, "args": ["--strict_highres_exp", "{option:highresLimit}"] },
+            { "when": { "option": "doCenter", "eq": true }, "args": ["--center_classes"] },
+            "--oversampling", "1",
+            {
+              "when": { "option": "performAlignment", "eq": false },
+              "args": ["--skip_align"],
+              "else": ["--psi_step", "{derived:psiStep}", "--offset_range", "{option:offsetRange}", "--offset_step", "{derived:offsetStep}", { "when": { "option": "allowCoarser", "eq": true }, "args": ["--allow_coarser_sampling"] }]
+            },
+            "--norm",
+            "--scale",
+            "--j", "{threads}",
+            { "when": { "gpus": true }, "args": ["--gpu", ""] },
+            "--pipeline_control", "{dir}"
+          ]
+        }
+      ],
+      "outputs": [
+        { "path": "run_it{option:nrIterGrad:03}_data.star", "required": true },
+        { "path": "run_it{option:nrIterGrad:03}_optimiser.star", "required": true },
+        { "path": "run_it{option:nrIterGrad:03}_model.star", "required": true },
+        { "path": "run_it{option:nrIterGrad:03}_classes.mrcs", "required": true }
+      ],
+      "progress": { "kind": "iterations", "stage": "2D classification" }
+    },
+    "select": {
+      "jobType": "Select",
+      "launch": { "rule": "single", "threads": false, "gpu": false },
+      "inputs": {
+        "optimiser": { "accept": ["path"], "from": ["Class2D"], "suffix": "_optimiser.star", "when": { "option": "mode", "eq": "ranker" } },
+        "particles": { "accept": ["path"], "from": ["Class2D"], "suffix": "_data.star", "when": { "option": "mode", "eq": "classes" } }
+      },
+      "options": {
+        "mode": { "type": "enum", "required": true, "enum": ["classes", "ranker"] },
+        "classes": { "type": "int-list", "required": true, "min": 1, "max": 1000, "minItems": 1, "maxItems": 1000, "when": { "option": "mode", "eq": "classes" } },
+        "minScore": { "gui": "rank_threshold", "type": "number", "default": 0.5, "min": 0, "max": 1, "when": { "option": "mode", "eq": "ranker" } },
+        "minParticles": { "gui": "select_nr_parts", "type": "int", "default": -1, "min": -1, "max": 100000000, "when": { "option": "mode", "eq": "ranker" } },
+        "minClasses": { "gui": "select_nr_classes", "type": "int", "default": -1, "min": -1, "max": 1000, "when": { "option": "mode", "eq": "ranker" } }
+      },
+      "steps": [
+        {
+          "when": { "option": "mode", "eq": "ranker" },
+          "program": "relion_class_ranker",
+          "args": [
+            "--opt", "{input:optimiser}",
+            "--o", "{dir}",
+            "--fn_sel_parts", "particles.star",
+            "--fn_sel_classavgs", "class_averages.star",
+            { "when": { "option": "minParticles", "gt": 0 }, "args": ["--select_min_nr_particles", "{option:minParticles}"], "else": [{ "when": { "option": "minClasses", "gt": 0 }, "args": ["--select_min_nr_classes", "{option:minClasses}"] }] },
+            "--fn_root", "rank",
+            "--do_granularity_features",
+            "--auto_select",
+            "--min_score", "{option:minScore}",
+            "--pipeline_control", "{dir}"
+          ]
+        },
+        { "when": { "option": "mode", "eq": "classes" }, "builder": "selectClasses" }
+      ],
+      "outputs": [
+        { "path": "particles.star", "required": true },
+        { "path": "class_averages.star", "required": true, "when": { "option": "mode", "eq": "ranker" } },
+        { "path": "rank_optimiser.star", "required": true, "when": { "option": "mode", "eq": "ranker" } }
+      ],
+      "progress": null
+    },
+    "initialmodel": {
+      "jobType": "InitialModel",
+      "launch": { "rule": "single", "threads": true, "gpu": true },
+      "inputs": {
+        "particles": { "accept": ["path"], "from": ["Select", "Extract"], "suffix": "particles.star" }
+      },
+      "options": {
+        "nrIter": { "gui": "nr_iter", "type": "int", "default": 200, "min": 1, "max": 999 },
+        "tauFudge": { "gui": "tau_fudge", "type": "number", "default": 4, "min": 0.1, "max": 100 },
+        "nrClasses": { "gui": "nr_classes", "type": "int", "default": 1, "min": 1, "max": 50 },
+        "sym": { "gui": "sym_name", "type": "string", "default": "C1", "pattern": "^([CDScds][1-9][0-9]{0,2}[vhVH]?|[Tt][dhDH]?|[Oo][hH]?|[Ii][1-5]?[hH]?)$" },
+        "doRunC1": { "gui": "do_run_C1", "type": "bool", "default": true },
+        "particleDiameter": { "gui": "particle_diameter", "type": "number", "default": 200, "min": 1, "max": 10000 },
+        "doSolvent": { "gui": "do_solvent", "type": "bool", "default": true },
+        "doCtfCorrection": { "gui": "do_ctf_correction", "type": "bool", "default": true },
+        "ctfIntactFirstPeak": { "gui": "ctf_intact_first_peak", "type": "bool", "default": false },
+        "nrPool": { "gui": "nr_pool", "type": "int", "default": 3, "min": 1, "max": 100 },
+        "doParallelDiscio": { "gui": "do_parallel_discio", "type": "bool", "default": true },
+        "doPrereadImages": { "gui": "do_preread_images", "type": "bool", "default": false },
+        "doCombineThruDisc": { "gui": "do_combine_thru_disc", "type": "bool", "default": false }
+      },
+      "steps": [
+        {
+          "program": "relion_refine",
+          "args": [
+            "--o", "{dir}run",
+            "--iter", "{option:nrIter}",
+            "--grad",
+            "--denovo_3dref",
+            "--i", "{input:particles}",
+            { "when": { "option": "doCtfCorrection", "eq": true }, "args": ["--ctf", { "when": { "option": "ctfIntactFirstPeak", "eq": true }, "args": ["--ctf_intact_first_peak"] }] },
+            "--K", "{option:nrClasses}",
+            { "when": { "option": "doRunC1", "eq": true }, "args": ["--sym", "C1"], "else": ["--sym", "{option:sym}"] },
+            { "when": { "option": "doSolvent", "eq": true }, "args": ["--flatten_solvent"] },
+            "--zero_mask",
+            { "when": { "option": "doCombineThruDisc", "eq": false }, "args": ["--dont_combine_weights_via_disc"] },
+            { "when": { "option": "doParallelDiscio", "eq": false }, "args": ["--no_parallel_disc_io"] },
+            { "when": { "option": "doPrereadImages", "eq": true }, "args": ["--preread_images"] },
+            "--pool", "{option:nrPool}",
+            "--pad", "1",
+            "--particle_diameter", "{option:particleDiameter}",
+            "--oversampling", "1",
+            "--healpix_order", "1",
+            "--offset_range", "6",
+            "--offset_step", "2",
+            "--auto_sampling",
+            "--tau2_fudge", "{option:tauFudge}",
+            "--j", "{threads}",
+            { "when": { "gpus": true }, "args": ["--gpu", ""] },
+            "--pipeline_control", "{dir}"
+          ]
+        },
+        { "program": "rm", "args": ["-f", "{dir}RELION_JOB_EXIT_SUCCESS"] },
+        {
+          "program": "relion_align_symmetry",
+          "args": [
+            "--i", "{dir}run_it{option:nrIter:03}_model.star",
+            "--o", "{dir}initial_model.mrc",
+            { "when": { "all": [{ "option": "doRunC1", "eq": true }, { "option": "sym", "notIn": ["C1", "c1"] }] }, "args": ["--sym", "{option:sym}"], "else": ["--sym", "C1"] },
+            "--apply_sym",
+            "--select_largest_class",
+            "--pipeline_control", "{dir}"
+          ]
+        },
+        { "program": "touch", "args": ["{dir}RELION_JOB_EXIT_SUCCESS"] }
+      ],
+      "outputs": [
+        { "path": "initial_model.mrc", "required": true },
+        { "path": "run_it{option:nrIter:03}_model.star", "required": true },
+        { "path": "run_it{option:nrIter:03}_data.star", "required": true }
+      ],
+      "progress": { "kind": "iterations", "stage": "Initial model" }
+    },
+    "refine3d": {
+      "jobType": "Refine3D",
+      "launch": { "rule": "refineRanks", "threads": true, "gpu": true },
+      "inputs": {
+        "particles": { "accept": ["path"], "from": ["Select", "Extract"], "suffix": "particles.star" },
+        "reference": { "accept": ["path"], "from": ["InitialModel"], "suffix": ".mrc" },
+        "mask": { "accept": ["path", "part"], "from": ["MaskCreate"], "suffix": ".mrc", "optional": true }
+      },
+      "options": {
+        "refCorrectGreyscale": { "gui": "ref_correct_greyscale", "type": "bool", "default": false },
+        "trustRefSize": { "gui": "trust_ref_size", "type": "bool", "default": true },
+        "iniHigh": { "gui": "ini_high", "type": "number", "default": 60, "min": 0, "max": 1000 },
+        "sym": { "gui": "sym_name", "type": "string", "default": "C1", "pattern": "^([CDScds][1-9][0-9]{0,2}[vhVH]?|[Tt][dhDH]?|[Oo][hH]?|[Ii][1-5]?[hH]?)$" },
+        "doCtfCorrection": { "gui": "do_ctf_correction", "type": "bool", "default": true },
+        "ctfIntactFirstPeak": { "gui": "ctf_intact_first_peak", "type": "bool", "default": false },
+        "particleDiameter": { "gui": "particle_diameter", "type": "number", "default": 200, "min": 1, "max": 10000 },
+        "doZeroMask": { "gui": "do_zero_mask", "type": "bool", "default": true },
+        "doSolventFsc": { "gui": "do_solvent_fsc", "type": "bool", "default": false },
+        "doBlush": { "gui": "do_blush", "type": "bool", "default": false },
+        "blushVersion": { "gui": "blush_version", "type": "enum", "default": "v1.0", "enum": ["v1.0", "amy-v1.0"] },
+        "sampling": { "gui": "sampling", "type": "enum", "default": "7.5 degrees", "enum": ["30 degrees", "15 degrees", "7.5 degrees", "3.7 degrees", "1.8 degrees", "0.9 degrees", "0.5 degrees", "0.2 degrees", "0.1 degrees"] },
+        "offsetRange": { "gui": "offset_range", "type": "number", "default": 5, "min": 0, "max": 100 },
+        "offsetStep": { "gui": "offset_step", "type": "number", "default": 1, "min": 0.1, "max": 20 },
+        "autoLocalSampling": { "gui": "auto_local_sampling", "type": "enum", "default": "1.8 degrees", "enum": ["30 degrees", "15 degrees", "7.5 degrees", "3.7 degrees", "1.8 degrees", "0.9 degrees", "0.5 degrees", "0.2 degrees", "0.1 degrees"] },
+        "autoFaster": { "gui": "auto_faster", "type": "bool", "default": false },
+        "nrPool": { "gui": "nr_pool", "type": "int", "default": 3, "min": 1, "max": 100 },
+        "doPad1": { "gui": "do_pad1", "type": "bool", "default": false },
+        "doParallelDiscio": { "gui": "do_parallel_discio", "type": "bool", "default": true },
+        "doPrereadImages": { "gui": "do_preread_images", "type": "bool", "default": false },
+        "doCombineThruDisc": { "gui": "do_combine_thru_disc", "type": "bool", "default": false }
+      },
+      "derived": {
+        "healpixOrder": { "fn": "enumIndex", "option": "sampling" },
+        "autoLocalHealpixOrder": { "fn": "enumIndex", "option": "autoLocalSampling" },
+        "offsetStep": { "fn": "multiply", "option": "offsetStep", "by": 2 }
+      },
+      "steps": [
+        {
+          "program": "relion_refine",
+          "mpi": true,
+          "args": [
+            "--o", "{dir}run",
+            "--auto_refine",
+            "--split_random_halves",
+            "--i", "{input:particles}",
+            "--ref", "{input:reference}",
+            { "when": { "option": "refCorrectGreyscale", "eq": false }, "args": ["--firstiter_cc"] },
+            { "when": { "option": "trustRefSize", "eq": true }, "args": ["--trust_ref_size"] },
+            { "when": { "option": "iniHigh", "gt": 0 }, "args": ["--ini_high", "{option:iniHigh}"] },
+            { "when": { "option": "doBlush", "eq": true }, "args": ["--blush", "--blush_model", "{option:blushVersion}"] },
+            { "when": { "option": "doCombineThruDisc", "eq": false }, "args": ["--dont_combine_weights_via_disc"] },
+            { "when": { "option": "doParallelDiscio", "eq": false }, "args": ["--no_parallel_disc_io"] },
+            { "when": { "option": "doPrereadImages", "eq": true }, "args": ["--preread_images"] },
+            "--pool", "{option:nrPool}",
+            { "when": { "option": "doPad1", "eq": true }, "args": ["--pad", "1"], "else": ["--pad", "2"] },
+            { "when": { "option": "autoFaster", "eq": true }, "args": ["--auto_ignore_angles", "--auto_resol_angles"] },
+            { "when": { "option": "doCtfCorrection", "eq": true }, "args": ["--ctf", { "when": { "option": "ctfIntactFirstPeak", "eq": true }, "args": ["--ctf_intact_first_peak"] }] },
+            "--particle_diameter", "{option:particleDiameter}",
+            "--flatten_solvent",
+            { "when": { "option": "doZeroMask", "eq": true }, "args": ["--zero_mask"] },
+            { "when": { "input": "mask", "present": true }, "args": ["--solvent_mask", "{input:mask}", { "when": { "option": "doSolventFsc", "eq": true }, "args": ["--solvent_correct_fsc"] }] },
+            "--oversampling", "1",
+            "--healpix_order", "{derived:healpixOrder}",
+            "--auto_local_healpix_order", "{derived:autoLocalHealpixOrder}",
+            "--offset_range", "{option:offsetRange}",
+            "--offset_step", "{derived:offsetStep}",
+            "--sym", "{option:sym}",
+            "--low_resol_join_halves", "40",
+            "--norm",
+            "--scale",
+            "--j", "{threads}",
+            { "when": { "gpus": true }, "args": ["--gpu", ""] },
+            "--pipeline_control", "{dir}"
+          ]
+        }
+      ],
+      "outputs": [
+        { "path": "run_data.star", "required": true },
+        { "path": "run_optimiser.star", "required": true },
+        { "path": "run_model.star", "required": true },
+        { "path": "run_class001.mrc", "required": true },
+        { "path": "run_half1_class001_unfil.mrc", "required": true },
+        { "path": "run_half2_class001_unfil.mrc", "required": true }
+      ],
+      "progress": { "kind": "autoRefine", "stage": "3D refinement" }
+    },
+    "maskcreate": {
+      "jobType": "MaskCreate",
+      "launch": { "rule": "single", "threads": true, "gpu": false },
+      "inputs": {
+        "map": { "accept": ["path"], "from": ["Refine3D", "InitialModel"], "suffix": ".mrc" }
+      },
+      "options": {
+        "lowpassFilter": { "gui": "lowpass_filter", "type": "number", "default": 15, "min": -1, "max": 1000 },
+        "angpix": { "gui": "angpix", "type": "number", "default": -1, "min": -1, "max": 20 },
+        "inimaskThreshold": { "gui": "inimask_threshold", "type": "number", "default": 0.02, "min": -100000, "max": 100000 },
+        "extendInimask": { "gui": "extend_inimask", "type": "int", "default": 3, "min": 0, "max": 100 },
+        "widthMaskEdge": { "gui": "width_mask_edge", "type": "int", "default": 3, "min": 0, "max": 100 }
+      },
+      "steps": [
+        {
+          "program": "relion_mask_create",
+          "args": [
+            "--i", "{input:map}",
+            "--o", "{dir}mask.mrc",
+            { "when": { "option": "lowpassFilter", "gt": 0 }, "args": ["--lowpass", "{option:lowpassFilter}"] },
+            { "when": { "option": "angpix", "gt": 0 }, "args": ["--angpix", "{option:angpix}"] },
+            "--ini_threshold", "{option:inimaskThreshold}",
+            "--extend_inimask", "{option:extendInimask}",
+            "--width_soft_edge", "{option:widthMaskEdge}",
+            "--j", "{threads}",
+            "--pipeline_control", "{dir}"
+          ]
+        }
+      ],
+      "outputs": [
+        { "path": "mask.mrc", "required": true }
+      ],
+      "progress": null
+    },
+    "postprocess": {
+      "jobType": "PostProcess",
+      "launch": { "rule": "single", "threads": false, "gpu": false },
+      "inputs": {
+        "halfMap": { "accept": ["path"], "from": ["Refine3D"], "suffix": "_unfil.mrc", "pattern": "half[12]" },
+        "mask": { "accept": ["path", "part"], "from": ["MaskCreate"], "suffix": ".mrc" }
+      },
+      "options": {
+        "angpix": { "gui": "angpix", "type": "number", "default": -1, "min": -1, "max": 20 },
+        "doAutoBfac": { "gui": "do_auto_bfac", "type": "bool", "default": true },
+        "autobLowres": { "gui": "autob_lowres", "type": "number", "default": 10, "min": 1, "max": 100 },
+        "doAdhocBfac": { "gui": "do_adhoc_bfac", "type": "bool", "default": false },
+        "adhocBfac": { "gui": "adhoc_bfac", "type": "number", "default": -1000, "min": -10000, "max": 10000 },
+        "doSkipFscWeighting": { "gui": "do_skip_fsc_weighting", "type": "bool", "default": false },
+        "lowPass": { "gui": "low_pass", "type": "number", "default": 5, "min": 0.5, "max": 100 }
+      },
+      "steps": [
+        {
+          "program": "relion_postprocess",
+          "args": [
+            "--mask", "{input:mask}",
+            "--i", "{input:halfMap}",
+            "--o", "{dir}postprocess",
+            "--angpix", "{option:angpix}",
+            { "when": { "option": "doAutoBfac", "eq": true }, "args": ["--auto_bfac", "--autob_lowres", "{option:autobLowres}"] },
+            { "when": { "option": "doAdhocBfac", "eq": true }, "args": ["--adhoc_bfac", "{option:adhocBfac}"] },
+            { "when": { "option": "doSkipFscWeighting", "eq": true }, "args": ["--skip_fsc_weighting", "--low_pass", "{option:lowPass}"] },
+            "--pipeline_control", "{dir}"
+          ]
+        }
+      ],
+      "outputs": [
+        { "path": "postprocess.mrc", "required": true },
+        { "path": "postprocess_masked.mrc", "required": true },
+        { "path": "postprocess.star", "required": true },
+        { "path": "logfile.pdf", "required": false }
+      ],
+      "progress": null
+    }
+  }
+}

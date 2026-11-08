@@ -13,11 +13,12 @@ import { syntheticNifti } from '../../test-utils/nifti-fixture.mjs';
 import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 import { startReferenceServer } from '../../test-utils/compute-reference-server.mjs';
+import { writeTutorialRoot } from '../../apps/cryo-em/e2e/fixtures.mjs';
 
 const appRoot = fileURLToPath(new URL('../../apps/', import.meta.url));
 const appWorkflows = readdirSync(appRoot).filter(id => existsSync(join(appRoot, id, 'test/offline.mjs')));
 
-export const workflowApps = [...appWorkflows, 'nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'mri2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview', 'fastprep', 'hmc', 'noddi', 'degibbs', 'n4', 'dcm2niix', 'dwidenoise', 'sdc', 'dwicorrect', 'me-ica', 'pipeline-builder', 'bison'];
+export const workflowApps = [...appWorkflows, 'nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'mri2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview', 'fastprep', 'hmc', 'noddi', 'degibbs', 'n4', 'dcm2niix', 'dwidenoise', 'sdc', 'dwicorrect', 'me-ica', 'pipeline-builder', 'bison', 'cryo-em'];
 
 /**
  * Anything a workflow needs before the desktop app starts. NeSVoR computes on a
@@ -25,6 +26,16 @@ export const workflowApps = [...appWorkflows, 'nesvor', 'musclemap', 'vesselboos
  * loopback and admits that origin through NEURODESK_COMPUTE_ORIGINS.
  */
 export async function prepareWorkflow(id) {
+  if (id === 'cryo-em') {
+    // Cryo-EM needs a single-owner server whose `examples` data root holds the tutorial's names.
+    const scratch = await mkdtemp(join(tmpdir(), 'cryo-em-workflow-'));
+    const compute = await startReferenceServer({ stageDelayMs: 50, singleOwner: true, dataRoots: { examples: writeTutorialRoot(scratch) }, localProfile: { cpus: 4, gpus: 0 } });
+    const close = async () => {
+      await compute.close();
+      await rm(scratch, { recursive: true, force: true });
+    };
+    return { env: { NEURODESK_COMPUTE_ORIGINS: compute.origin }, context: { compute }, close };
+  }
   if (id !== 'nesvor') return null;
   const compute = await startReferenceServer({ stageDelayMs: 50 });
   return { env: { NEURODESK_COMPUTE_ORIGINS: compute.origin }, context: { compute }, close: () => compute.close() };
@@ -205,6 +216,28 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     await expect(panel).toHaveAttribute('data-state', 'idle');
     await expect(panel.locator('input[type="password"]')).toHaveValue('');
     return { ...result, simulated: true };
+  }
+  if (id === 'cryo-em') {
+    assert.ok(compute, 'the cryo-em workflow needs the reference compute server from prepareWorkflow');
+    const panel = page.locator('#computeConnection');
+    await panel.locator('input[type="text"]').fill(compute.origin);
+    await panel.locator('input[type="password"]').fill(compute.token);
+    await panel.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-state', 'simulated', { timeout: 30000 });
+    await page.locator('#projectName').fill('Desktop workflow');
+    await page.locator('#createProject').click();
+    await expect(page.locator('#projectSelect option:checked')).toHaveText('Desktop workflow');
+    await page.getByRole('combobox', { name: 'Input', exact: true }).selectOption('relion-tutorial');
+    await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
+    for (const [command, label] of [['import', 'Import movies'], ['motioncorr', 'Motion correction']]) {
+      await page.locator('#stepSelect').selectOption(command);
+      await page.locator('#runButton').click();
+      await expect(page.locator('#statusText')).toContainText(`${label} finished`, { timeout: 120000 });
+    }
+    await expect(page.locator('#imageLabel')).toContainText('MotionCorr/job002/Movies/', { timeout: 60000 });
+    const star = await download('#resultList [data-stage$="/corrected_micrographs.star"] .nd-download-btn');
+    assert.match(star.bytes.toString('utf8'), /MotionCorr\/job002\/Movies\/20170629_00021_frameImage\.mrc/);
+    return { filename: star.filename, bytes: star.bytes.length, simulated: true };
   }
   if (id === 'musclemap') return verifyMuscleMapFullPipeline(page, page.url());
   if (id === 'brain-extraction') {

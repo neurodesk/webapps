@@ -166,7 +166,7 @@
       "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt",
       "url": "https://hub.docker.com/r/vnmd/topofit_0.5.1",
       "dockerImage": "vnmd/topofit_0.5.1:candidate-1c960cec82947541d270e06099ab415933c9ea07",
-      "dockerLabel": "Docker Hub · candidate build"
+      "dockerLabel": "Docker Hub \u00b7 candidate build"
     },
     "nesvor": {
       "id": "nesvor",
@@ -194,6 +194,20 @@
       "dockerImage": "vnmd/gliomoda_0.0.4:20261024",
       "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/gliomoda_0.0.4_20261024.simg",
       "apptainerName": "gliomoda_0.0.4_20261024",
+      "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt"
+    },
+    "relion": {
+      "id": "relion",
+      "label": "relion 5.1.1 (20261107)",
+      "version": "5.1.1",
+      "buildDate": "20261107",
+      "image": "vnmd/relion_5.1.1@sha256:14c760762a640c7dca9033cc261d80428ceee74239e9e60eb2a5080962c1c3a0",
+      "digest": "sha256:14c760762a640c7dca9033cc261d80428ceee74239e9e60eb2a5080962c1c3a0",
+      "url": "https://hub.docker.com/r/vnmd/relion_5.1.1",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/c47213e98a34a5e8bcbcd111b030b3f2be611167/recipes/relion/build.yaml",
+      "dockerImage": "vnmd/relion_5.1.1:20261107",
+      "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/relion_5.1.1_20261107.simg",
+      "apptainerName": "relion_5.1.1_20261107",
       "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt"
     }
   },

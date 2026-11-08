@@ -1,6 +1,6 @@
 {
   "name": "spot-detection",
-  "version": "0.0.20261105",
+  "version": "0.1.20261108",
   "private": true,
   "type": "module",
   "scripts": {

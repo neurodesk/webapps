@@ -1,5 +1,39 @@
 # samsrf
 
+## 0.3.20261108
+
+### Patch Changes
+
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+  - @neurodesk/samsrf@0.3.20261108
+- Preserve double CSS correlations at underflow and overflow scales and match the measured complex regression rank threshold. Add pinned MATLAB diagnostics, focused WebAssembly regression gates and native evaluation traces; remaining double CSS differences stay explicit.
+- Updated dependencies
+  - @neurodesk/samsrf@0.3.20261108
+
+## 0.3.20261107
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/samsrf@0.3.20261107
+
+## 0.3.20261106
+
+### Minor Changes
+
+- f1726f2: Match MATLAB's removal of retraced zero-area polygon edges before estimating connective-field hulls, preserve small polygon areas away from zero, and correct mixed-precision Benson coordinate conversion. Add optional single-precision observations for forward fits. Expand actual MATLAB reference recording to raw input conversion, both hemispheres, independent pRF data, CSS arithmetic and mesh smoothing. Add saved forward-fit precision and CSS convention controls, the opt-in complex SamSrf CSS path, and the original CF Gaussian residual summation order. Match MATLAB's pixel-reduction order and complex regression rank decisions, reject nonfinite CSS objectives, and reproduce complex simplex ties.
+
+### Patch Changes
+
+- Updated dependencies [f1726f2]
+  - @neurodesk/samsrf@0.3.20261106
+
 ## 0.2.20261106
 
 ### Minor Changes

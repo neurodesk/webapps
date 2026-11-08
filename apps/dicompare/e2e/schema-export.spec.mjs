@@ -14,7 +14,7 @@ test('downloaded browser schemas preserve Python export semantics and enforce ev
     series: index === 0 ? [{ name: 'Series 1', fields: [contains] }] : [],
   }));
   const metadata = { name: 'Export regression', description: '', version: '1.0', authors: [] };
-  await page.goto('./');
+  await page.goto('./workspace');
   await expect(page.getByRole('button', { name: 'From data', exact: true })).toBeVisible();
   await page.evaluate(async ({ acquisitions, metadata }) => {
     const db = await new Promise((resolve, reject) => {

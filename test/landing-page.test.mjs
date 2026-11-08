@@ -120,6 +120,7 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
     elastix: 'registration',
     neuromorph: 'morphometry',
     stitching: 'registration',
+    'cryo-em': 'reconstruction',
     'structure-tensor': 'fibre-orientation',
     'lightsheet-atlas': 'registration',
     'microscope-qc': 'quality-control',

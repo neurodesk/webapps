@@ -317,10 +317,21 @@ pnpm --filter @neurodesk/samsrf build:wasm
 ```
 
 `scripts/build-wasm.sh` needs Rust 1.98.1 (through rustup), wasm-pack 0.13.1
-and binaryen `version_117` `wasm-opt` first on `PATH`. With these pins the build
-is reproducible byte for byte. The `wasm-source` job in
-`.github/workflows/samsrf-native.yml` runs `build-wasm.sh --check`, which
-rebuilds into a scratch directory and fails when a file differs from `wasm/`.
+and binaryen `version_117` `wasm-opt` first on `PATH`. The build removes the
+optional WASM `producers` section: the release and cargo-installed binding
+generators identify the same version differently. The `wasm-source` job in
+`.github/workflows/samsrf-native.yml` on `ubuntu-24.04` is the canonical release
+builder. It runs `build-wasm.sh --check`, which fails when any file differs from
+`wasm/`. Matching tool versions alone do not guarantee byte equality elsewhere:
+local and CI Rust builds produced different JSON deserializer inlining.
+
+CI retains a differing rebuild, the raw Rust module, the optimizer input and
+tool identities as an artifact. Locally, set `SAMSRF_REBUILD_DIR` to capture the
+optimizer input and keep the files after a failed check. Dispatch `samsrf-native`
+with `wasm_only: true` while the PR stays in draft, download
+`samsrf-differing-rebuild`, and validate its `samsrf_wasm_bg.wasm` with the reference
+gates before committing it. The final ready PR must pass the full workflow,
+including a fresh byte-for-byte rebuild of that committed module.
 The same workflow runs the core tests, clippy and `node --test
 packages/samsrf/test/*.test.js` on the committed module.
 
@@ -336,10 +347,21 @@ with its result and the native and WebAssembly errfun timings.
 reference is produced.
 [validation/container/README.md](validation/container/README.md) adds actual
 MATLAB Runtime references, a controlled precision comparison and CI gates.
+[validation/matlab/README.md](validation/matlab/README.md) adds the pinned
+MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
 
 ## Divergences from SamSrf
 
-- **Precision.** Every computation is in f64. SamSrf converts Srf data to
+- **Precision.** Double arithmetic remains the default. Forward-model JSON
+  can select `"Data_Precision": "single"`: processed courses and noise
+  ceilings are rounded before selection, the fitting objective uses mixed
+  single/double arithmetic, and saved maps are rounded as in SamSrf. This
+  option currently rejects reverse-correlation analyses. It does not promise
+  bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
+  precision rounding, and the GLM uses a stable double solve on rounded
+  inputs with the single-precision rank threshold. The reduction order targets
+  the recorded R2023b compatible backend; MATLAB's AVX-512 path can itself
+  produce different fits on identical inputs. SamSrf converts Srf data to
   single precision (`samsrf_32bit_srf`). Its 64-bit opt-out tests
   `exist('SamSrfDefs.defs_64bit', 'var')`, a variable that never exists, so the
   conversion always happens. This can change coarse seeds and fine-fit optimizer
@@ -373,27 +395,40 @@ MATLAB Runtime references, a controlled precision comparison and CI gates.
   unit-norm courses and `[1 X] \ Y` solves the normal equations; MATLAB
   uses QR. Well-conditioned cases agree to rounding; general QR equivalence
   is not established. The two-column GLM uses centered variance to avoid
-  cancellation when deciding rank, with MATLAB's pivot order and rank tolerance (`max(m, n) * eps * |R(1,1)|`): a
+  cancellation when deciding rank, with MATLAB's pivot order and real-design rank tolerance (`max(m, n) * eps * |R(1,1)|`): a
   prediction that is constant, or constant to rounding, leaves the column with
   the larger norm its coefficient and the other 0. Octave's `\` uses no such
   tolerance, so on the example's coarse fit it reports amplitudes near 1e13 on
-  9 vertices where the port reports 0.
-- **Compressive nonlinearity.** `Yp.^P(cssp)` on a prediction below zero is
-  complex in MATLAB. Apertures that are not binary (X001's are resampled and
-  ring to -0.074) make predictions dip to about -1e-6 in a third of the
-  volumes, so SamSrf's fit then runs on complex numbers. The port takes those
-  volumes as zero, the response the nonlinearity models. With concurrent HRF
-  fitting, the port uses the CSS `Exponent` for post-fit betas. The pinned
-  upstream `samsrf_fit_prf.m:527` instead uses the final parameter (`AmpRat`),
-  an apparent indexing bug. This correction is intentional and tested.
+  9 vertices where the port reports 0. The opt-in complex CSS solve uses ten
+  times the real-design tolerance, directly measured in a double-precision
+  R2023b rank warning. The single-precision factor follows the same rule;
+  its recorded cases are consistent but do not distinguish it from the old rule.
+  The earlier `max(size(A)) * eps(norm(A,1))` estimate matched the synthetic
+  cases but incorrectly retained a baseline column in the double CSS pipeline.
+  Both real and complex decisions are checked across prediction scales.
+- **Compressive nonlinearity.** `Css_Convention: "nonnegative"` (the default)
+  clips negative responses before the CSS power and uses the fitted Exponent
+  for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex
+  powers and its final-parameter post-fit formula: with concurrent HRF fitting
+  that parameter is AmpRat. Exported maps retain real components, as SamSrf
+  10.4's `samsrf_expand_srf` does. Raw optimizer cases now match the actual
+  MATLAB recordings in both precisions, and the recorded single-precision
+  pipeline parameters and scores match exactly. Betas retain small regression
+  rounding differences, and some double-precision weak fits still differ.
+  Double CSS norms now retain their scale when squared predictions underflow
+  or overflow; large regressors also avoid overflow in their coefficient solve.
+  The recorded 96-vertex double pipeline has matching zero/nonfinite decisions,
+  with focused value gates at vertices 46, 80 and 87 (zero-based). Other parameter
+  differences remain listed by `validation/matlab/compare-css.mjs`.
+  This option does not imply arbitrary-input bit parity.
 - **Maps outside the ROI.** `samsrf_compress_srf` keeps the ROI's columns and
   `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside
   the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected
   `rc` model fit included; `nR^2` is 0 there too.
-- **Template precision.** `readBensonTemplate` rounds every step to single
-  precision as MATLAB does, but Rust's `cos` and `sin` are correctly rounded
-  where Octave's single-precision versions are not: about 0.1 % of the
-  template coordinates differ by one float32 ulp (4e-8 relative).
+- **Template precision.** `readBensonTemplate` retains double scalar constants
+  until each mixed operation is rounded to single, as MATLAB does. Its sine
+  and cosine implementation can still differ from MATLAB's by a few float32
+  ULPs. Both hemispheres are covered by the actual MATLAB importer fixture.
 - **`fminsearch` stop.** SamSrf stops a fine fit when its `OutputFcn` sees a
   non-finite best value; that can only be the first value (NaN sorts last), and
   the port does the same. MATLAB's exit flag for that case is not reproduced;
@@ -405,12 +440,16 @@ MATLAB Runtime references, a controlled precision comparison and CI gates.
   coordinates are all collinear makes `samsrf_revcor_cf` fail in MATLAB; here
   the cluster is the peak alone. Cocircular or nearly cocircular template points
   can also produce different valid Delaunay edges in Delaunator and MATLAB;
-  CF region growing depends on those edges. Actual MATLAB geometry parity
-  remains unverified.
+  CF region growing depends on those edges. Recorded MATLAB grid cases now
+  cover cocircular, nearly cocircular and duplicate coordinates. Thin polygon
+  simplification follows the measured relative cutoff; outcomes exactly at
+  that cutoff can still differ with rounding and scale.
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so
-  sums over every pair of seed vertices; `Vx` is the 1-based MATLAB index of
+  sums over every pair of seed vertices in the source order. This costs
+  quadratic work per objective evaluation in unsmoothed Gaussian mode;
+  smoothing uses an elementwise residual. `Vx` is the 1-based MATLAB index of
   the peak seed vertex. The template coordinates are single precision
   (MATLAB computes them on the GIFTI's `single` data) and every later step is
   f64 here where SamSrf stays in `single`.

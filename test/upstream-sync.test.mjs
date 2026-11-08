@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import YAML from 'yaml';
-import { PACKAGE_VERSION_SITE, mergeUpstream } from '../scripts/lib/upstream-sync.mjs';
+import { PACKAGE_VERSION_SITE, latestRelease, mergeUpstream } from '../scripts/lib/upstream-sync.mjs';
 
 const pkg = (version, dependencies) => `${JSON.stringify({ name: 'demo', version, dependencies }, null, 2)}\n`;
 const lines = (...items) => `${items.join('\n')}\n`;
@@ -303,6 +303,27 @@ test('sync records target citations even when the local upstream modal was remov
     write(appDir, { 'index.html': '<main>Shared shell</main>\n' });
     mergeUpstream({ upstream, base, target, appDir, config: { citationSnapshot: { file: 'index.html', selector: '#citationsModal', output: 'upstream-citations.json' } } });
     assert.deepEqual(JSON.parse(readFileSync(join(appDir, 'upstream-citations.json'), 'utf8')), { commit: target, dois: ['10.1/new', '10.1/old'] });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('release tracking picks the newest vX.Y.Z tag, not the branch tip or a pre-release', () => {
+  const root = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'upstream-release-test-'));
+  try {
+    const upstream = join(root, 'upstream');
+    execFileSync('git', ['init', '-q', upstream]);
+    const tag = (name) => execFileSync('git', ['-C', upstream, 'tag', name]);
+    assert.equal(latestRelease(upstream), undefined);
+    commit(upstream, { 'a.txt': 'one\n' });
+    tag('v0.9.0');
+    commit(upstream, { 'a.txt': 'two\n' });
+    tag('v0.10.0');
+    commit(upstream, { 'a.txt': 'three\n' });
+    tag('v0.11.0-rc.1');
+    tag('nightly');
+    commit(upstream, { 'a.txt': 'four\n' });
+    assert.equal(latestRelease(upstream), 'v0.10.0');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

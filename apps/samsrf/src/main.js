@@ -240,6 +240,8 @@ function settings() {
     scalingFactor: scalingFactor > 0 ? scalingFactor : DEFAULT_SETTINGS.scalingFactor,
     tr: tr > 0 ? tr : DEFAULT_SETTINGS.tr,
     exportConvention: $("exportConvention").value,
+    dataPrecision: $("dataPrecision").value,
+    cssConvention: $("cssConvention").value,
   };
 }
 
@@ -276,6 +278,9 @@ function renderModel() {
   $("fineFit").value = fineFit(model);
   $("fineFitThreshold").value = String(model.Fine_Fit_Threshold ?? 0.01);
   $("coarseOnly").checked = Boolean(model.Coarse_Fit_Only);
+  $("dataPrecision").value = model.Data_Precision ?? "double";
+  $("cssConvention").value = model.Css_Convention ?? "nonnegative";
+  $("cssConventionField").hidden = kind !== "prf" || !model.Compressive_Nonlinearity;
   $("exportConvention").value = exportConvention(model.Export_Convention);
   $("revcorThreshold").value = String(model.R2_Threshold ?? 0);
   $("stimulusFields").hidden = kind === "cf";
@@ -323,6 +328,8 @@ $("coarseOnly").addEventListener("change", () => editModel((current) => {
 }));
 $("revcorThreshold").addEventListener("change", () => editModel((current) => ({ ...current, R2_Threshold: Number($("revcorThreshold").value) })));
 $("exportConvention").addEventListener("change", () => editModel(current => ({ ...current, Export_Convention: $("exportConvention").value })));
+$("dataPrecision").addEventListener("change", () => editModel(current => ({ ...current, Data_Precision: $("dataPrecision").value })));
+$("cssConvention").addEventListener("change", () => editModel(current => ({ ...current, Css_Convention: $("cssConvention").value })));
 $("modelJson").addEventListener("change", () => {
   try {
     model = parseModel($("modelJson").value, analysis());
@@ -454,7 +461,7 @@ function setBusy(controller) {
   busy = controller;
   const locked = Boolean(controller);
   for (const element of Object.values(fields)) element.disabled = locked;
-  for (const id of ["analysis", "preset", "tr", "scalingFactor", "hrf", "combine", "normalise", "fineFit", "fineFitThreshold", "coarseOnly", "revcorThreshold", "exportConvention", "modelJson", "clearInputs"]) $(id).disabled = locked;
+  for (const id of ["analysis", "preset", "tr", "scalingFactor", "hrf", "combine", "normalise", "fineFit", "fineFitThreshold", "coarseOnly", "revcorThreshold", "exportConvention", "dataPrecision", "cssConvention", "modelJson", "clearInputs"]) $(id).disabled = locked;
   exampleControl.setDisabled(locked);
   updateRunButton();
 }

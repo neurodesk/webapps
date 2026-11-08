@@ -45,6 +45,38 @@ pub struct Hull {
 }
 
 impl Hull {
+    /// Hull of a polygon after removing collinear boundary vertices, including
+    /// retraced spikes. SamSrf's CF path constructs a `polyshape` before taking
+    /// its hull; a zero-area spike is therefore not part of that hull.
+    pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
+        let mut boundary = points.to_vec();
+        // Inferred from recorded R2023b thin triangles at three scales. Points
+        // exactly at the relative cutoff remain sensitive to rounding.
+        let span = (0..2).map(|axis| {
+            let low = points.iter().map(|p| p[axis]).fold(f64::INFINITY, f64::min);
+            let high = points.iter().map(|p| p[axis]).fold(f64::NEG_INFINITY, f64::max);
+            high - low
+        }).fold(0.0, f64::max);
+        let tolerance = span * 1e-8;
+        loop {
+            let n = boundary.len();
+            if n < 3 {
+                return None;
+            }
+            let redundant = (0..n).find(|&i| {
+                let a = boundary[(i + n - 1) % n];
+                let b = boundary[i];
+                let c = boundary[(i + 1) % n];
+                let cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+                cross == 0.0 || cross.abs() < tolerance * (c[0] - a[0]).hypot(c[1] - a[1])
+            });
+            match redundant {
+                Some(i) => { boundary.remove(i); }
+                None => return Self::of(&boundary),
+            }
+        }
+    }
+
     /// The convex hull of `points` (Andrew's monotone chain), or `None` when the points
     /// span no area (fewer than three distinct points, or all collinear).
     pub fn of(points: &[[f64; 2]]) -> Option<Hull> {
@@ -82,13 +114,15 @@ impl Hull {
         Some(hull)
     }
 
-    /// Shoelace area.
+    /// Shoelace area, translated to avoid cancellation far from the origin.
     pub fn area(&self) -> f64 {
         let n = self.vertices.len();
+        let origin = self.vertices[0];
         let mut twice = 0.0;
         for i in 0..n {
-            let a = self.vertices[i];
-            let b = self.vertices[(i + 1) % n];
+            let a = [self.vertices[i][0] - origin[0], self.vertices[i][1] - origin[1]];
+            let next = self.vertices[(i + 1) % n];
+            let b = [next[0] - origin[0], next[1] - origin[1]];
             twice += a[0] * b[1] - b[0] * a[1];
         }
         twice.abs() / 2.0
@@ -97,18 +131,20 @@ impl Hull {
     /// The polygon centroid, as `polyshape.centroid`.
     pub fn centroid(&self) -> [f64; 2] {
         let n = self.vertices.len();
+        let origin = self.vertices[0];
         let mut twice = 0.0;
         let mut cx = 0.0;
         let mut cy = 0.0;
         for i in 0..n {
-            let a = self.vertices[i];
-            let b = self.vertices[(i + 1) % n];
+            let a = [self.vertices[i][0] - origin[0], self.vertices[i][1] - origin[1]];
+            let next = self.vertices[(i + 1) % n];
+            let b = [next[0] - origin[0], next[1] - origin[1]];
             let cross = a[0] * b[1] - b[0] * a[1];
             twice += cross;
             cx += (a[0] + b[0]) * cross;
             cy += (a[1] + b[1]) * cross;
         }
-        [cx / (3.0 * twice), cy / (3.0 * twice)]
+        [origin[0] + cx / (3.0 * twice), origin[1] + cy / (3.0 * twice)]
     }
 }
 
@@ -196,6 +232,19 @@ mod tests {
         assert_eq!(Hull::of(&[[0.0, 0.0], [1.0, 1.0]]), None);
         assert_eq!(Hull::of(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), None);
         assert_eq!(Hull::of(&[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]), None);
+    }
+
+    #[test]
+    fn small_offset_polygon_retains_its_area_and_centroid() {
+        // Recorded MATLAB polyshape case: uncentred shoelace arithmetic gave
+        // zero area, although the triangle has three distinct vertices.
+        let points = [[1000.0, 1000.0], [1000.001, 1000.0000000001], [1000.002, 1000.0]];
+        let hull = Hull::of_polygon(&points).unwrap();
+        let expected_area = (points[2][0] - points[0][0]) * (points[1][1] - points[0][1]) / 2.0;
+        assert_eq!(hull.area(), expected_area);
+        let [x, y] = hull.centroid();
+        assert!((x - 1000.001).abs() < 2e-13);
+        assert!((y - (1000.0 + (points[1][1] - 1000.0) / 3.0)).abs() < 2e-13);
     }
 
     #[test]

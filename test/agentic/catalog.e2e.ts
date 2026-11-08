@@ -20,6 +20,7 @@ for (const entry of catalog) {
   test.describe(entry.id, { tags: [entry.id] }, () => {
     test('production workspace and example inventory', { tags: ['workspace'] }, async ({ app, browser }) => {
       await app.open(`/${entry.path}/`);
+      if (entry.id === 'dicompare') await browser.locator('main a[href$="/workspace"]').click();
       await expect(browser.locator('.nd-app-bar:visible')).toHaveCount(1);
       await expect(browser.locator('footer#status')).toBeVisible();
       const { version } = JSON.parse(await readFile(join(repoRoot, 'apps', entry.id, 'package.json'), 'utf8'));
@@ -43,6 +44,7 @@ for (const entry of catalog) {
 
     test('agent opens and closes About and Cite', { tags: ['agent', 'help'] }, async ({ app, agent, browser }) => {
       await app.open(`/${entry.path}/`);
+      if (entry.id === 'dicompare') await browser.locator('main a[href$="/workspace"]').click();
       for (const action of ['About', 'Cite']) {
         await agent.act(`Open the ${action} dialog using the application bar. Leave the dialog open.`);
         await expect(browser.locator(infoDialog)).toHaveCount(1);
@@ -56,6 +58,7 @@ for (const entry of catalog) {
     for (const example of entry.examples) {
       test(`agent imports ${example.id}`, { tags: ['agent', 'example'] }, async ({ app, agent, browser }) => {
         await app.open(`/${entry.path}/`);
+        if (entry.id === 'dicompare') await browser.locator('main a[href$="/workspace"]').click();
         await agent.act('Choose the example labelled {label} from the Example selector. Leave processing controls untouched.', {
           params: { label: example.label },
         });
@@ -78,6 +81,7 @@ for (const entry of catalog) {
         tags: ['agent', 'pipeline'],
       }, async ({ app, agent, browser, screen }) => {
         await app.open(`/${entry.path}/`);
+        if (entry.id === 'dicompare') await browser.locator('main a[href$="/workspace"]').click();
         await browser.locator('select[data-neurodesk-example]').selectOption({ value: example.id });
         await expect(browser.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 300000 });
         await agent.act('Inspect the loaded reference and matching test acquisition, then open its Print options. Leave the print options open.');
@@ -93,6 +97,7 @@ for (const entry of catalog) {
         const server = await startReferenceServer();
         try {
           await app.open(`/${entry.path}/`);
+          if (entry.id === 'dicompare') await browser.locator('main a[href$="/workspace"]').click();
           await browser.locator('select[data-neurodesk-example]').selectOption({ value: example.id });
           await expect(browser.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 300000 });
           await browser.locator('#executionMode').selectOption({ value: 'remote' });
@@ -118,6 +123,7 @@ for (const entry of catalog) {
         tags: ['agent', 'pipeline'],
       }, async ({ app, agent, browser, downloads }) => {
         await app.open(`/${entry.path}/`);
+        if (entry.id === 'dicompare') await browser.locator('main a[href$="/workspace"]').click();
         await browser.locator('select[data-neurodesk-example]').selectOption({ value: example.id });
         await expect(browser.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 300000 });
         await browser.locator('#toolsPanel > summary').click();
@@ -139,6 +145,7 @@ for (const entry of catalog) {
         tags: ['agent', 'pipeline'],
       }, async ({ app, agent, browser, screen, downloads }) => {
         await app.open(`/${entry.path}/`);
+        if (entry.id === 'dicompare') await browser.locator('main a[href$="/workspace"]').click();
         await browser.locator('select[data-neurodesk-example]').selectOption({ value: example.id });
         await expect(browser.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 300000 });
         await agent.act('Choose the Closed ROI drawing tool. Leave the loaded surface visible.');
@@ -172,6 +179,7 @@ for (const entry of catalog) {
         timeout: 7200000,
       }, async ({ app, agent, browser, downloads }) => {
         await app.open(`/${entry.path}/`);
+        if (entry.id === 'dicompare') await browser.locator('main a[href$="/workspace"]').click();
         await browser.locator('select[data-neurodesk-example]').selectOption({ value: example.id });
         await expect(browser.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 300000 });
         if (entry.id === 'vesselboost') {
