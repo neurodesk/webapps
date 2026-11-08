@@ -57,12 +57,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: samsrf-native-${{ github.ref }}${{ inputs.record_matlab && '-matlab' || '' }}
+  group: samsrf-native-${{ github.ref }}${{ (inputs.record_matlab || inputs.revcor_only) && '-matlab' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.wasm_only))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.wasm_only))
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -114,7 +114,7 @@ jobs:
           if-no-files-found: ignore
 
   wasm-source:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.record_matlab)
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only))
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -198,14 +198,17 @@ jobs:
           octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); smoke_recorder(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-reference'),fullfile(getenv('RUNNER_TEMP'),'samsrf-smoke'))"
       - name: Exercise every reverse-correlation recorder branch
         run: |
+          octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','octave')); test_nanmedian"
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor-input" packages/samsrf/validation/matlab/inputs.json
           python3 packages/samsrf/validation/matlab/prepare.py reference-source "$RUNNER_TEMP/samsrf-revcor-provenance"
           python3 -I packages/samsrf/validation/octave/dump_gifti.py --out "$RUNNER_TEMP/samsrf-revcor-input/x001_lh" --samples "$RUNNER_TEMP/samsrf-revcor-samples.json" "$RUNNER_TEMP/samsrf-revcor-input/x001_lh/"*.gii
           octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); smoke_revcor_recorder(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-revcor-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-revcor-smoke'))"
+          node packages/samsrf/validation/matlab/validate-revcor-recording.mjs "$RUNNER_TEMP/samsrf-revcor-smoke" --smoke
+          SAMSRF_REVCOR_SMOKE="$RUNNER_TEMP/samsrf-revcor-smoke" node --test packages/samsrf/validation/matlab/test-revcor-validation.mjs
 
   matlab-reference:
     needs: recorder-smoke
-    if: github.event_name == 'workflow_dispatch' && inputs.record_matlab
+    if: github.event_name == 'workflow_dispatch' && (inputs.record_matlab || inputs.revcor_only)
     name: record actual MATLAB source reference (${{ matrix.host }})
     strategy:
       fail-fast: false
@@ -265,11 +268,19 @@ jobs:
         with:
           release: R2023bU11
           products: Statistics_and_Machine_Learning_Toolbox Image_Processing_Toolbox Parallel_Computing_Toolbox
+      - name: Smoke every reverse-correlation recorder branch in MATLAB
+        if: inputs.revcor_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-revcor-smoke'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'),fullfile(pwd,'reference-spm'),true,true)
+      - name: Validate MATLAB smoke before recording the full matrix
+        if: inputs.revcor_only
+        run: node packages/samsrf/validation/matlab/validate-revcor-recording.mjs "$RUNNER_TEMP/samsrf-revcor-smoke" --smoke
       - name: Record numerical intermediates and fitted maps
         if: '!inputs.diagnostics_only'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if reverseCorrelationOnly, record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-revcor-smoke'),matrixInput,fullfile(pwd,'reference-spm'),true,true); elseif strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly)
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if ~reverseCorrelationOnly && strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly)
       - name: Require every reverse-correlation case and recorded array
         if: inputs.revcor_only
         run: node packages/samsrf/validation/matlab/validate-revcor-recording.mjs "$RUNNER_TEMP/samsrf-matlab"

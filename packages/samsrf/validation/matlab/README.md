@@ -105,7 +105,7 @@ public source-recording workflow:
 
 ```sh
 gh workflow run samsrf-native.yml --ref BRANCH \
-  -f record_matlab=true -f revcor_only=true
+  -f revcor_only=true
 ```
 
 `record_revcor_matrix.m` records 102 cases: six preprocessing cases, six Benson
@@ -114,7 +114,12 @@ and concatenated runs and the single RH run from the pinned input archive.
 CF covers hull, summary and Gaussian estimation, each with smoothing and
 global regression on and off. The ROI overlaps part of the seed region to
 exercise the source's ordering of global regression and seed selection.
-RC covers hull and Gaussian estimation and a custom HRF.
+RC covers hull and Gaussian estimation and a custom HRF. The hull and Gaussian
+cases use the app presets' SPM canonical HRF (`Hrf=0`) with negative peaks off.
+Gaussian fits use the upstream seed expression
+`@(V)[V(2:3);V(4)/(2*sqrt(2*log(2)))]` and `R2_Threshold=0.1`.
+The custom-HRF case enables negative peaks. RC's summary estimator
+(`Prf_Function=-1`) is not covered or supported by the port.
 
 These inputs are participant subsets with synthetic meshes. Global correction
 uses the mean of the complete subset; it does not reproduce the original
@@ -135,12 +140,26 @@ CF's saved `ConFlds` retains full vertex width with NaNs outside the ROI:
 the source's compression guard leaves it uncompressed in this case. Its
 columns therefore differ from the compressed maps and courses. RC profiles
 are compressed to the selected vertices. Receipts preserve both behaviors.
+The recorded source `model` enables `Save_Rmaps` to retain those profiles.
+`mapReplayModel` disables that storage-only option, which the port rejects,
+and selects `Data_Precision` explicitly. In the pinned source, `Save_Rmaps`
+does not change the computed maps. Replay still needs to resolve recorded
+relative input paths and provide the recorded preprocessing and template data;
+the port does not yet accept single-precision RC/CF models.
 
 The local/CI Octave smoke executes all 17 branches of a single-precision,
-two-vertex recording using the documented Octave shims. MATLAB then runs the
-same smoke before recording the full matrix. `validate-revcor-recording.mjs`
-requires every case and array, checks saved classes and ROI reconstruction,
-and hashes the numerical files. These checks establish recording integrity,
+three-vertex recording using the documented Octave shims. Vertex 25 adds a
+usable Gaussian fit to vertices 2 and 96, which can be rejected or fall below
+the fit threshold. The full ROI also includes vertex 25. The NaN-median shim
+runs on CI's Octave 8.4 without the newer `omitnan` option.
+MATLAB then runs and validates the same smoke before recording the full matrix.
+`validate-revcor-recording.mjs` requires every case and array, correct row
+labels, finite profiles inside the ROI, partial seed/ROI overlap and at least
+one finite nonzero R² per pipeline. It checks saved classes and compression
+round trips, then hashes the numerical files. Mutation tests run on the actual
+Octave smoke to check that corrupt recordings fail. Compression round trips
+check the source's own serialization, not an independent numerical reference.
+These checks establish recording integrity,
 not port parity. There is no port acceptance gate or compiled Runtime evidence
 for this new matrix yet. The new archives are separate from the 741-case pin.
 

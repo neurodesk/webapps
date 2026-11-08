@@ -40,20 +40,22 @@ for i = 1:numel(cases)
     assert(strcmp(item.savedCourses.class, 'single'));
     assert(strcmp(item.profiles.class, 'single'));
     vertices = read_array(item.savedVertices);
-    assert(isequal(double(vertices(:)), [1; 96]));
+    assert(isequal(double(vertices(:)), [2; 25; 96]));
     if strcmp(item.analysis, 'cf')
         corrected = read_array(item.recomputedCorrectedCourses);
         assert(isequaln(read_array(item.savedCourses), corrected(:,vertices)));
         assert(isequal(item.profiles.shape, [9 96]));
         profiles = read_array(item.profiles);
-        outside = profiles(:,2:95);
+        outside = profiles(:,setdiff(1:96,vertices));
         assert(all(isnan(outside(:))));
     else
         assert(strcmp(item.regressors.class, 'double'));
         assert(strcmp(item.savedRegressors.class, 'single'));
-        assert(isequal(item.profiles.shape, [400 2]));
+        assert(isequal(item.profiles.shape, [400 3]));
     end
 end
+write_json('reference.json', struct('smoke', true, 'cases', {cases}));
+write_json('environment.json', struct('smokeInterpreter', 'Octave', 'version', version));
 fprintf('All 17 RC/CF recorder smoke cases passed. Octave does not establish MATLAB parity.\n');
 end
 

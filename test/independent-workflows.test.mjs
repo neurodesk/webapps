@@ -286,10 +286,12 @@ test('manual SamSrf MATLAB recording uses pinned source and cannot publish relea
   assert.ok(recording.steps.some(step => step.if === 'always()' && step.uses?.startsWith('actions/upload-artifact@')));
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const only of [false, true]) {
-      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { record_matlab: only, sign_release: true } };
-      assert.equal(runInNewContext(recording.if, context), event === 'workflow_dispatch' && only);
-      for (const name of ['test', 'wasm-source']) {
-        assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !only);
+      for (const revcor of [false, true]) {
+        const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { record_matlab: only, revcor_only: revcor, sign_release: true } };
+        assert.equal(runInNewContext(recording.if, context), event === 'workflow_dispatch' && (only || revcor));
+        for (const name of ['test', 'wasm-source']) {
+          assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !(only || revcor));
+        }
       }
     }
   }

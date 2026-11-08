@@ -39,12 +39,13 @@ for precision = precisions
                 1, average, true, '');
             assert(strcmp(class(Srf.Data), kind), 'Processed precision was not honored');
             count = size(Srf.Data, 2);
-            roi = unique([1:12 count-7:count]);
+            roi = unique([1:12 25 count-7:count]);
             if smoke
-                roi = [1 count];
+                roi = [2 25 count];
             end
             seed = 2:2:18;
-            assert(count >= 20 && all(seed <= count));
+            assert(count >= 26 && all(seed <= count));
+            assert(any(ismember(seed,roi)) && any(~ismember(seed,roi)));
             samsrf_srf2label(Srf, 'roi', 1, roi);
             samsrf_srf2label(Srf, 'seed', 1, seed);
             samsrf_benson2srf(fullfile(folder, [dataset.hemisphere '_benson']), ...
@@ -125,20 +126,20 @@ for precision = precisions
             assert(size(ApFrm, 3) == size(Srf.Data, 1));
             apertureArray = arrayFile([id '_apertures'], ApFrm);
             customHrf = samsrf_doublegamma(dataset.tr, [5 15 1.2 0.9 5 1 30]);
-            configurations = {'hull', [], 0; 'custom_hrf', customHrf(:), 0; ...
-                'gaussian', [], '@(P,XY)prf_gaussian_rf(P(1),P(2),P(3),XY)'};
+            configurations = {'hull', 0, 0, false; 'custom_hrf', customHrf(:), 0, true; ...
+                'gaussian', 0, '@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)', false};
             for config = 1:size(configurations, 1)
                 fitId = [id '_rc_' configurations{config, 1}];
                 Model = struct('Name', fitId, 'Aperture_File', aperturePath, ...
                     'Scaling_Factor', dataset.radius, 'TR', dataset.tr, ...
                     'Hrf', configurations{config, 2}, 'Rdim', size(ApFrm, 1), ...
                     'Prf_Function', configurations{config, 3}, 'Save_Rmaps', true, ...
-                    'Allow_Negative_Peaks', true);
+                    'Allow_Negative_Peaks', configurations{config, 4});
                 if ischar(Model.Prf_Function)
                     Model.Param_Names = {'x0', 'y0', 'Sigma'};
                     Model.Scaled_Param = [1 1 1];
-                    Model.SeedPar_Function = '@(P)[P(2) P(3) P(4)/2.355]';
-                    Model.R2_Threshold = 0;
+                    Model.SeedPar_Function = '@(V)[V(2:3);V(4)/(2*sqrt(2*log(2)))]';
+                    Model.R2_Threshold = 0.1;
                 end
                 item = run_case(fitId, 'revcor', Srf, Model, fullfile(work, 'roi'), ...
                     defaults, output, arrayFile, writeJson, id, kind);
@@ -197,6 +198,11 @@ item = struct('id', id, 'kind', 'pipeline', 'analysis', analysis, ...
     'savedMaps', arrayFile([id '_saved_maps'], saved.Data), ...
     'savedVertices', arrayFile([id '_saved_vertices'], vertices), ...
     'savedCourses', arrayFile([id '_saved_courses'], saved.Y));
+% Save_Rmaps only controls storage in the pinned source. The port currently
+% rejects it; a map replay must disable it while retaining source profiles.
+item.mapReplayModel = model;
+item.mapReplayModel.Save_Rmaps = false;
+item.mapReplayModel.Data_Precision = kind;
 if strcmp(analysis, 'cf')
     item.profiles = arrayFile([id '_profiles'], saved.ConFlds);
 else
