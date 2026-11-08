@@ -19,7 +19,7 @@ separately from stock container results.
 The manual `samsrf-native` workflow can record these cases with
 `record_matlab=true`. Set `include_matrix=false` for a shorter diagnostic run
 that omits participant pipelines while retaining numerical primitive cases.
-Focused diagnostics run twice in independent MATLAB processes within each
+Focused CSS diagnostics run twice in independent MATLAB processes within each
 job on `ubuntu-22.04` and `ubuntu-24.04`. The same-host comparison requires
 every numerical array and case decision to match exactly. The two jobs
 separately provide cross-machine evidence. Runner labels do not guarantee a CPU vendor. Use each receipt's
@@ -98,6 +98,52 @@ the original 100-pixel resolution. The failed 20-pixel run is evidence of an
 upstream execution limit, not a passing web-equivalence case. Each completed
 pipeline case also writes its own metadata so a later failure does not hide it.
 
+## Raw-input reverse-correlation matrix
+
+No personal MATLAB license or local MATLAB installation is needed for this
+public source-recording workflow:
+
+```sh
+gh workflow run samsrf-native.yml --ref BRANCH \
+  -f record_matlab=true -f revcor_only=true
+```
+
+`record_revcor_matrix.m` records 102 cases: six preprocessing cases, six Benson
+imports, 72 CF pipelines and 18 RC pipelines. Both precisions use LH averaged
+and concatenated runs and the single RH run from the pinned input archive.
+CF covers hull, summary and Gaussian estimation, each with smoothing and
+global regression on and off. The ROI overlaps part of the seed region to
+exercise the source's ordering of global regression and seed selection.
+RC covers hull and Gaussian estimation and a custom HRF.
+
+These inputs are participant subsets with synthetic meshes. Global correction
+uses the mean of the complete subset; it does not reproduce the original
+whole-cortex global signal. Smoothing checks the numerical path on the
+synthetic mesh, not anatomical accuracy. Additional RC cases sample every fifth
+aperture row and column, giving a 20-by-20 input with `Rdim=20`; the original
+100-by-100 hull cases remain in the existing reference. The derived apertures
+are recorded explicitly. This is not a repair of the upstream mismatched-Rdim
+failure or an assertion that RC supports temporal aperture downsampling.
+
+Each case has a fresh directory and defaults file. Receipts retain saved maps,
+expanded maps, profiles, selected vertices, processed courses and MATLAB array
+classes. RC records the actual regressor cache before compression alongside
+the rounded saved copy. CF also records the global signal and a separately
+recomputed global-regression result; the validator requires it to equal the
+courses saved by the full analysis at every selected vertex.
+CF's saved `ConFlds` retains full vertex width with NaNs outside the ROI:
+the source's compression guard leaves it uncompressed in this case. Its
+columns therefore differ from the compressed maps and courses. RC profiles
+are compressed to the selected vertices. Receipts preserve both behaviors.
+
+The local/CI Octave smoke executes all 17 branches of a single-precision,
+two-vertex recording using the documented Octave shims. MATLAB then runs the
+same smoke before recording the full matrix. `validate-revcor-recording.mjs`
+requires every case and array, checks saved classes and ROI reconstruction,
+and hashes the numerical files. These checks establish recording integrity,
+not port parity. There is no port acceptance gate or compiled Runtime evidence
+for this new matrix yet. The new archives are separate from the 741-case pin.
+
 ## Building a matching Runtime container
 
 `build_container.py` is the build recipe for the repaired, version-matched
@@ -109,6 +155,14 @@ ID. It does not publish the image.
 This recipe has not been executed with MATLAB Compiler. The source checks
 have been exercised locally; successful source recordings do not validate the
 compiled application or its container packaging.
+
+The source matrix above keeps numerical work independent of this build.
+Free public MATLAB Actions [exclude Compiler](https://github.com/matlab-actions/setup-matlab#licensing).
+A standard trial does not provide a durable substitute: MathWorks states that
+[trial-built applications expire](https://www.mathworks.com/matlabcentral/answers/515199-do-apps-compiled-using-simulink-compiler-under-a-trial-license-expire)
+and [trials cannot download previous releases](https://www.mathworks.com/matlabcentral/answers/2026102-how-do-i-download-and-install-previous-releases-of-matlab-or-the-mathworks-product-installer).
+The public Neurodesk binaries remain the older stock baseline documented
+separately. None of these routes establishes the matching compiled image.
 
 On a Linux x86-64 host with MATLAB R2023b Update 11, MATLAB Compiler, the Statistics,
 Image Processing and Parallel Computing toolboxes, and Docker:
