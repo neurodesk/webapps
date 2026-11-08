@@ -1,5 +1,11 @@
 # @neurodesk/samsrf
 
+## 0.3.20261107
+
+### Patch Changes
+
+- Record double CSS optimizer and QR diagnostics alongside single precision, retain execution requests and observations separately, and select reference precision explicitly in the MATLAB comparator.
+
 ## 0.3.20261106
 
 ### Minor Changes
