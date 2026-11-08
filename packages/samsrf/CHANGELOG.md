@@ -4,7 +4,6 @@
 
 ### Patch Changes
 
-- Add a raw-input MATLAB RC/CF recording matrix covering both precisions, all CF estimators, smoothing, global regression and custom-HRF RC fits. Public MATLAB Actions can record it without a personal MATLAB license; single RC/CF support and compiled Runtime validation remain pending.
 - Preserve double CSS correlations at underflow and overflow scales and match the measured complex regression rank threshold. Add pinned MATLAB diagnostics, focused WebAssembly regression gates and native evaluation traces; remaining double CSS differences stay explicit.
 
 ## 0.3.20261107

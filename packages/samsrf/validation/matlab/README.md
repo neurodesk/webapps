@@ -108,6 +108,11 @@ gh workflow run samsrf-native.yml --ref BRANCH \
   -f revcor_only=true
 ```
 
+`revcor_only` selects this matrix instead of the normal reference, even when
+`record_matlab=true` is also set. It always includes the participant inputs,
+so `include_matrix` has no effect. Do not combine it with `diagnostics_only`
+or `wasm_only`, which select different recording/build jobs.
+
 `record_revcor_matrix.m` records 102 cases: six preprocessing cases, six Benson
 imports, 72 CF pipelines and 18 RC pipelines. Both precisions use LH averaged
 and concatenated runs and the single RH run from the pinned input archive.
