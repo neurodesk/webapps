@@ -484,6 +484,24 @@ async fn cancelling_pending_jobs_waits_for_accounting() {
 }
 
 #[tokio::test]
+async fn a_failing_scancel_is_retried_once_per_poll() {
+    let (mut harness, fake) = cluster(4).await;
+    let project = harness.project("cancel-retry").await;
+    let (id, slurm_id, _) = accepted(&harness, &fake, &project).await;
+    fake.queue(&slurm_id, "RUNNING", None);
+    harness.wait_status(&id, "running").await;
+    fake.mode("scancel_fail", Some(""));
+    harness.post(&format!("/api/v1/jobs/{id}/cancel")).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    // 400 ms at one retry per 40 ms poll; unthrottled it was hundreds.
+    let attempts = fake.cancelled().len();
+    assert!((2..=20).contains(&attempts), "{attempts} scancel calls");
+    fake.mode("scancel_fail", None);
+    harness.wait_status(&id, "cancelled").await;
+    harness.stop().await;
+}
+
+#[tokio::test]
 async fn lost_sbatch_answers_are_reconciled_by_name() {
     let (mut harness, fake) = cluster(4).await;
     let project = harness.project("lost").await;

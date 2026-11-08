@@ -41,9 +41,45 @@ pub const SIMULATED_WARNING_PREFIX: &str = "SIMULATED relion:";
 /// The tool.
 pub struct Relion;
 
+/// The job's settings, with every data-root input moved to the canonical
+/// location the server resolved: a symlink inside a root may point to a host
+/// path the container cannot see, so RELION is never given one.
 fn validated(job: &ProjectInputs) -> Result<Validated, String> {
-    serde_json::from_value(job.settings.clone())
-        .map_err(|error| format!("the job's relion settings are unreadable: {error}"))
+    let mut validated: Validated = serde_json::from_value(job.settings.clone())
+        .map_err(|error| format!("the job's relion settings are unreadable: {error}"))?;
+    for value in validated.inputs.values_mut() {
+        let (root, path, pattern) = match value {
+            InputValue::DataRoot {
+                root,
+                path,
+                pattern,
+            } => (&*root, path, Some(pattern.clone())),
+            InputValue::DataFile { root, path } => (&*root, path, None),
+            _ => continue,
+        };
+        let Some(reference) = job.data.iter().find(|reference| {
+            &reference.root == root && &reference.path == path && reference.pattern == pattern
+        }) else {
+            continue;
+        };
+        let Some(directory) = &reference.directory else {
+            continue;
+        };
+        let base = format!("/data/{root}");
+        let Some(relative) = directory
+            .strip_prefix(&base)
+            .map(|rest| rest.trim_start_matches('/'))
+        else {
+            continue;
+        };
+        *path = match (&pattern, reference.matches.first()) {
+            (Some(_), _) => relative.to_string(),
+            (None, Some(name)) if relative.is_empty() => name.clone(),
+            (None, Some(name)) => format!("{relative}/{name}"),
+            (None, None) => continue,
+        };
+    }
+    Ok(validated)
 }
 
 fn to_launch(launch: spec::Launch) -> LaunchPlan {
@@ -219,6 +255,44 @@ mod tests {
         let map = BTreeMap::from([("gpu".to_string(), profile)]);
         let defaults = BTreeMap::from([("refine3d".to_string(), "gpu".to_string())]);
         Profiles::new(map, defaults).unwrap()
+    }
+
+    #[test]
+    fn commands_name_the_resolved_data_location_not_a_symlink_in_the_root() {
+        let spec = serde_json::json!({
+            "tool": "relion", "command": "import", "project": "0123456789abcdef0123456789abcdef",
+            "inputs": { "movies": { "root": "facility", "path": "current", "pattern": "*.tiff" } },
+            "options": { "angpix": 0.885, "kV": 200, "Cs": 1.4 }
+        });
+        let JobInputs::Project { project: mut job } = Relion.validate(&spec, &[]).unwrap().inputs
+        else {
+            panic!("a project job");
+        };
+        // facility/current is a symlink to facility/2026-11/movies, which the server resolved.
+        job.data[0].directory = Some("/data/facility/2026-11/movies".into());
+        job.data[0].matches = vec!["a.tiff".into()];
+        let profile: Profile =
+            serde_json::from_value(serde_json::json!({ "cpus": 4, "gpus": 0 })).unwrap();
+        let launch = Relion.launch(&job, &profile).unwrap();
+        let command = Relion
+            .command(
+                &job,
+                &ProjectArgs {
+                    directory: "Import/job001",
+                    profile: &profile,
+                    launch,
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            command.main,
+            [
+                "ln",
+                "-sfn",
+                "/data/facility/2026-11/movies",
+                "Import/job001/data"
+            ]
+        );
     }
 
     #[test]

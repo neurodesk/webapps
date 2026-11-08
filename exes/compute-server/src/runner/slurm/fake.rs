@@ -117,6 +117,10 @@ exit 1
 const SCANCEL: &str = r#"
 id="$1"
 echo "$id" >> "$S/cancelled"
+if [ -f "$S/mode/scancel_fail" ]; then
+  echo "scancel: error: Unable to contact slurm controller" >&2
+  exit 1
+fi
 if [ ! -f "$S/mode/scancel_noop" ]; then
   rm -f "$S/jobs/$id/queue"
   echo "CANCELLED by 1000|0:15" > "$S/jobs/$id/sacct"

@@ -73,6 +73,7 @@ const state = {
   uploads: {},
   selectedJob: null,
   following: null,
+  submitting: false,
   settingsOpen: false,
   views: { image: null, classes: null, fsc: null },
 };
@@ -750,7 +751,7 @@ function renderForm() {
 
 function syncControls() {
   const connected = Boolean(state.client);
-  const busy = Boolean(state.following);
+  const busy = Boolean(state.following || state.submitting);
   $('projectSelect').disabled = !connected;
   $('projectName').disabled = !connected;
   $('createProject').disabled = !connected;
@@ -787,6 +788,8 @@ function buildSpec() {
 }
 
 $('runButton').addEventListener('click', async () => {
+  // A second click while the spec or an MRC part uploads would submit another cluster job.
+  if (state.submitting || state.following) return;
   let request;
   try {
     request = buildSpec();
@@ -798,8 +801,11 @@ $('runButton').addEventListener('click', async () => {
   }
   $('formMessage').hidden = true;
   const label = stepLabel(state.command);
+  state.submitting = true;
+  syncControls();
   try {
     const receipt = await state.client.submit(request.spec, request.files);
+    state.submitting = false;
     log.log(`Submitted ${label}: ${JSON.stringify(request.spec)}`);
     const following = follow(receipt.id, label);
     await refreshProject();
@@ -808,6 +814,9 @@ $('runButton').addEventListener('click', async () => {
     $('formMessage').textContent = error.message;
     $('formMessage').hidden = false;
     status(`${label} was not accepted: ${error.message}`, 'error');
+  } finally {
+    state.submitting = false;
+    syncControls();
   }
 });
 

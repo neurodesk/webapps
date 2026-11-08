@@ -309,18 +309,26 @@ impl Shared {
     }
 
     /// Follows a submitted job until Slurm reports a terminal state, forgets
-    /// it, or the server stops. A user cancel calls `scancel` until it succeeds.
+    /// it, or the server stops. A user cancel calls `scancel` until it
+    /// succeeds, at most once per poll interval after a failure.
     async fn track(&self, id: &str, tail: &mut Tail, context: &RunContext) -> Tracked {
         let mut snapshots = self.poller.subscribe();
         let mut seen = 0;
         let mut cancelled = false;
+        let mut cancel_retry: Option<Instant> = None;
         let mut reported: Option<(String, Option<String>)> = None;
         let mut missing_since: Option<Instant> = None;
         loop {
-            if context.cancel.is_cancelled() && !cancelled {
+            if context.cancel.is_cancelled()
+                && !cancelled
+                && cancel_retry.is_none_or(|at| Instant::now() >= at)
+            {
                 match self.slurm.cancel(id).await {
                     Ok(()) => cancelled = true,
-                    Err(error) => tracing::warn!(%error, job = id, "scancel failed; retrying"),
+                    Err(error) => {
+                        tracing::warn!(%error, job = id, "scancel failed; retrying");
+                        cancel_retry = Some(Instant::now() + self.timings().poll);
+                    }
                 }
             }
             tail.forward(&context.lines, false).await;
@@ -353,7 +361,7 @@ impl Shared {
             }
             tokio::select! {
                 _ = snapshots.changed() => {},
-                _ = context.cancel.cancelled(), if !cancelled => {},
+                _ = context.cancel.cancelled(), if !cancelled && cancel_retry.is_none() => {},
                 _ = context.detach.cancelled() => return Tracked::Detached,
                 _ = tokio::time::sleep(self.timings().tail) => {},
             }

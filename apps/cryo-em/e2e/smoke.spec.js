@@ -201,6 +201,30 @@ test("the footer × cancels a running step", async ({ page }) => {
   await expect(page.locator("#runButton")).toBeEnabled();
 });
 
+test("a second Run click while the step is being submitted sends nothing", async ({ page }) => {
+  test.setTimeout(120000);
+  await connect(page);
+  await createProject(page, "Double click");
+  await loadExample(page);
+  let submissions = 0;
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  await page.route(`${COMPUTE_URL}/api/v1/jobs`, async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    submissions += 1;
+    await held;
+    await route.fallback();
+  });
+  await page.locator("#stepSelect").selectOption("import");
+  await page.locator("#runButton").evaluate(button => { button.click(); button.click(); });
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect.poll(() => submissions).toBe(1);
+  release();
+  await expect(page.locator("#statusText")).toContainText("Import movies finished", { timeout: STEP_TIMEOUT });
+  expect(submissions).toBe(1);
+  await expect(page.locator("#jobList")).not.toContainText("Import/job002");
+});
+
 test("a failed example download can be retried", async ({ page }) => {
   let attempts = 0;
   await page.route(example.files[0].url, route => {
