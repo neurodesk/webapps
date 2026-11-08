@@ -242,9 +242,11 @@ and run `make test`.
   to odd) is refused at startup and in specs. With the simulator, the built-in
   `local` profile has the host's CPU count, so a host with fewer than 3 CPUs
   refuses to start in single-owner mode.
-- `info.tools[].image` reports `vnmd/relion_5.1.1`
-  (`tools::relion::IMAGE`), to be pinned by digest when the multi-arch image is
-  published. The Slurm runner always runs the SIF from `--slurm-config`.
+- `info.tools[].image` reports
+  `vnmd/relion_5.1.1@sha256:14c760762a640c7dca9033cc261d80428ceee74239e9e60eb2a5080962c1c3a0`
+  (`tools::relion::IMAGE`, tag `20261107`). The Slurm runner always runs the
+  SIF from `--slurm-config`; `fetch-image relion` downloads the one built from
+  that image.
 - Inputs are earlier jobs' outputs (project-relative paths), uploaded MRC parts
   (`gain`, `mask`, stored in the job directory), or files in data roots:
   `{ root, path, pattern }` for movies and `{ root, path }` for one file, such

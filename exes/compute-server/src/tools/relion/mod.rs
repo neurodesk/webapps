@@ -24,12 +24,13 @@ use spec::{InputValue, Validated};
 /// Tool id.
 pub const ID: &str = "relion";
 
-/// The Neurodesk RELION image, reported as `info.tools[].image` only: the
-/// Slurm runner runs the SIF named in `--slurm-config`. Pin it by digest once
-/// neurocontainers publishes the multi-arch rebuild (branch
-/// `feat/relion-5.1.1`); the digest changes with that release. The Node
-/// reference server reports the same reference (`RELION_IMAGE`).
-pub const IMAGE: &str = "vnmd/relion_5.1.1";
+/// The Neurodesk RELION image (`relion_5.1.1:20261107`), reported as
+/// `info.tools[].image` only: the Slurm runner runs the SIF named in
+/// `--slurm-config`, which `fetch-image relion` mirrors from this digest.
+/// Pinned in the same four places as NeSVoR's (AGENTS.md); the Node
+/// reference server reports it as `RELION_IMAGE`.
+pub const IMAGE: &str =
+    "vnmd/relion_5.1.1@sha256:14c760762a640c7dca9033cc261d80428ceee74239e9e60eb2a5080962c1c3a0";
 
 /// The simulator's warning line; the tool logs it at level `warning`.
 pub const SIMULATED_WARNING: &str =

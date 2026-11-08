@@ -620,6 +620,14 @@ server; the Rust server interprets the same file and is held to
 `packages/cryo-em/test/fixtures/argv-cases.json`. The package README defines the
 table's schema. The simulated `relion` tool is documented separately.
 
+The image is
+`vnmd/relion_5.1.1@sha256:14c760762a640c7dca9033cc261d80428ceee74239e9e60eb2a5080962c1c3a0`
+(tag `20261107`), which `info.tools[].image` reports. The Slurm runner runs its
+Apptainer image, mirrored once to the Hugging Face dataset `neurodeskorg/webapps`
+under `cryo-em/relion-image/` and pinned by SHA-256 in
+`exes/compute-server/src/examples.rs`; `neurodesk-compute fetch-image relion`
+downloads it.
+
 ```json
 {
   "tool": "relion",

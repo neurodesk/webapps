@@ -2219,7 +2219,16 @@
       "profile": "interactive",
       "assets": [],
       "downloads": [],
-      "containers": [],
+      "containers": [
+        {
+          "id": "relion",
+          "label": "relion 5.1.1 (20261107)",
+          "url": "https://hub.docker.com/r/vnmd/relion_5.1.1",
+          "dockerImage": "vnmd/relion_5.1.1:20261107",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/relion_5.1.1_20261107.simg",
+          "apptainerName": "relion_5.1.1_20261107"
+        }
+      ],
       "computeServer": {
         "name": "neurodesk-compute",
         "runner": "slurm",

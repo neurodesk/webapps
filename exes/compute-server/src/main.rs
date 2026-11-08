@@ -825,5 +825,17 @@ mod tests {
         };
         assert_eq!(args.name, "relion-tutorial");
         assert_eq!(args.dest, PathBuf::from("/scratch/examples"));
+        let cli = Cli::parse_from([
+            "neurodesk-compute",
+            "fetch-image",
+            "relion",
+            "--dest",
+            "/shared/images",
+        ]);
+        let Some(Command::FetchImage(args)) = cli.command else {
+            panic!("fetch-image");
+        };
+        assert_eq!(args.name, "relion");
+        assert_eq!(args.dest, PathBuf::from("/shared/images"));
     }
 }

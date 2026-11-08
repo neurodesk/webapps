@@ -215,13 +215,14 @@ pub fn relion_tutorial() -> Example {
 /// The RELION 5.1.1 Apptainer image the Slurm runner runs: built once from the
 /// Neurocontainers release and mirrored to the dataset, because Neurocontainers
 /// deletes rebuilt images and a rebuild does not reproduce the bytes.
-pub const RELION_IMAGE_REVISION: &str = "@RELION_IMAGE_REVISION@";
+pub const RELION_IMAGE_REVISION: &str = "f43c3cdab8ba43352f7774879016da5fdce65ae3";
 /// File name of the image, below `<dest>/relion/`.
 pub const RELION_IMAGE_FILE: &str = "relion_5.1.1.sif";
 /// Lowercase hex SHA-256 of the image; `slurm.json` may leave `image.sha256` out
 /// for this file.
-pub const RELION_IMAGE_SHA256: &str = "@RELION_IMAGE_SHA256@";
-const RELION_IMAGE_BYTES: u64 = 0;
+pub const RELION_IMAGE_SHA256: &str =
+    "998e9e1113bf6bf9aa0e62f2a514203a8036cf747a5eec0dc4142d082cadc7a4";
+const RELION_IMAGE_BYTES: u64 = 13_729_689_600;
 
 /// The pinned RELION image, fetched like an example.
 pub fn relion_image() -> Example {

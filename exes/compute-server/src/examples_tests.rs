@@ -263,3 +263,25 @@ fn sizes() {
     assert_eq!(size(56_956_944), "57.0 MB");
     assert_eq!(size(3_234_567_890), "3.2 GB");
 }
+
+#[test]
+fn the_relion_image_is_pinned_at_a_commit() {
+    let image = relion_image();
+    assert!(
+        image.revision.len() == 40 && image.revision.bytes().all(|byte| byte.is_ascii_hexdigit())
+    );
+    let [file] = image.files.as_slice() else {
+        panic!("one image file");
+    };
+    assert_eq!(file.sha256, RELION_IMAGE_SHA256);
+    assert!(file.sha256.len() == 64 && file.sha256.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert!(file.bytes > 1 << 30);
+    assert_eq!(
+        image.url(HUGGING_FACE_DATASETS, file),
+        format!(
+            "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/{}/cryo-em/relion-image/relion_5.1.1.sif",
+            image.revision
+        )
+    );
+    assert_eq!(images(), vec![image]);
+}

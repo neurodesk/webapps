@@ -20,7 +20,7 @@ import { validateNesvorSpec, nesvorArgv } from '../apps/nesvor/src/spec.js';
 export const REFERENCE_VERSION = '0.1.20260921';
 export const NESVOR_IMAGE = 'vnmd/nesvor_0.5.0@sha256:4a9b346297bd5c10af4047745b6fa82f2912e06c8fecaab615f2adcb32599f64';
 // The relion image is pinned by digest once the multi-arch rebuild is published.
-export const RELION_IMAGE = 'vnmd/relion_5.1.1';
+export const RELION_IMAGE = 'vnmd/relion_5.1.1@sha256:14c760762a640c7dca9033cc261d80428ceee74239e9e60eb2a5080962c1c3a0';
 export const SESSION_IDLE_DAYS = 14;
 const SESSION_IDLE_MS = SESSION_IDLE_DAYS * 24 * 60 * 60 * 1000;
 const SINGLE_OWNER = 'single-owner';
