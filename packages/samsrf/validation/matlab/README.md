@@ -168,6 +168,32 @@ These checks establish recording integrity,
 not port parity. There is no port acceptance gate or compiled Runtime evidence
 for this new matrix yet. The new archives are separate from the 741-case pin.
 
+The first actual MATLAB recording, [run 42445033403](https://github.com/neurodesk/webapps/actions/runs/42445033403),
+passed the smoke and all 102 cases on both hosts at recorder commit `949548566`.
+Each full recording contains 788 numerical arrays. The Ubuntu 22.04 host used
+an AMD EPYC 9V74; Ubuntu 24.04 used an Intel Xeon Platinum 8370C. Despite both
+requesting `MKL_CBWR=COMPATIBLE`, MATLAB reported CNR branches `auto` and
+`AVX512_E1`, respectively. The environment receipts retain that distinction.
+
+Across these two recordings, 499 array hashes and all 90 saved pipeline maps
+differ. Their zero and nonfinite masks agree, but the differences are not
+limited to rounding: a single-precision smoothed Gaussian CF R² differs by
+0.25536. Double-precision Gaussian CF parameters also differ substantially
+despite nearly identical R². Both recordings must be retained as evidence;
+neither establishes cross-host reproducibility or a tolerance for the port.
+
+`revcor-reference.json` pins both recordings and their comparison report by
+dataset commit, SHA-256 and byte count. To download and validate them:
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-revcor-reference" \
+  packages/samsrf/validation/matlab/revcor-reference.json
+node packages/samsrf/validation/matlab/validate-revcor-recording.mjs \
+  "$TMPDIR/samsrf-revcor-reference/ubuntu-22.04"
+node packages/samsrf/validation/matlab/validate-revcor-recording.mjs \
+  "$TMPDIR/samsrf-revcor-reference/ubuntu-24.04"
+```
+
 ## Building a matching Runtime container
 
 `build_container.py` is the build recipe for the repaired, version-matched
