@@ -919,6 +919,7 @@ async fn restart_preserves_results_identity_and_retention() {
     server.running.shutdown().await;
     let path = root.join(id).join("job.json");
     let mut record: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    record["state"] = json!("running");
     record["view"]["status"] = json!("running");
     record["view"]["finishedAt"] = Value::Null;
     std::fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();

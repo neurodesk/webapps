@@ -157,6 +157,25 @@ test('compute server setup leads with download, startup and pairing for the curr
   dom.window.close();
 });
 
+test('cryo-em setup walks through a Slurm cluster, not a Docker GPU machine', async () => {
+  const catalog = await loadStandalone(await loadAppsRegistry());
+  const dom = new JSDOM('<html><body></body></html>', { url: 'https://microscopyapps.sciget.org/cryo-em/' });
+  const dialog = openStandalone({ title: 'Cryo-EM', app: catalog.apps['cryo-em'] }, dom.window.document);
+  const section = dialog.root.querySelector('#standalone-compute').parentElement;
+  assert.match(section.textContent, /Slurm cluster/);
+  assert.doesNotMatch(section.textContent, /docker|NeSVoR/i);
+  assert.match(section.querySelector('#compute-fetch').textContent, /fetch-image relion[\s\S]*fetch-example relion-tutorial/);
+  const config = JSON.parse(section.querySelector('#compute-slurm-config').textContent);
+  assert.deepEqual(Object.keys(config.image), ['path']);
+  assert.match(section.querySelector('#compute-check').textContent, /check-slurm --slurm-config slurm\.json --profile gpu/);
+  const start = section.querySelector('#compute-start').textContent;
+  for (const flag of ['--single-owner', '--runner slurm', '--listen 127.0.0.1:8765', '--www']) assert.ok(start.includes(flag), flag);
+  assert.match(section.querySelector('#compute-tunnel').textContent, /^ssh -N -L 8765:127\.0\.0\.1:8765 /);
+  assert.match(section.textContent, /localhost:8765\/cryo-em\//);
+  assert.match(section.textContent, /released server with Slurm support is not available/);
+  dom.window.close();
+});
+
 test('compute server setup does not fabricate an unpublished backend download', async () => {
   const catalog = await loadStandalone(await loadAppsRegistry());
   const dom = new JSDOM('<html><body></body></html>');

@@ -9,8 +9,9 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::api::{self, AppState};
-use crate::config::{ServeConfig, TlsMode};
-use crate::jobs::JobStore;
+use crate::config::{RunnerKind, ServeConfig, TlsMode};
+use crate::jobs::{JobStore, StoreOptions};
+use crate::tools::{Layout, Tool};
 use crate::{runner, tools, www};
 
 /// A running server.
@@ -21,7 +22,7 @@ pub struct Running {
     pub store: Arc<JobStore>,
     handle: JoinHandle<io::Result<()>>,
     shutdown: CancellationToken,
-    _data_lock: std::fs::File,
+    _locks: crate::instance::Locks,
 }
 
 impl Running {
@@ -30,7 +31,8 @@ impl Running {
         format!("{scheme}://{}", self.addr)
     }
 
-    /// Stops the listener and active jobs; retains finished results.
+    /// Stops the listener and local runners' active jobs (a Slurm runner
+    /// detaches); retains finished results.
     pub async fn shutdown(mut self) {
         self.shutdown.cancel();
         self.store.shutdown().await;
@@ -44,24 +46,21 @@ impl Running {
 }
 
 /// Builds the complete application router.
-pub fn app(config: Arc<ServeConfig>, store: Arc<JobStore>) -> io::Result<Router> {
+pub fn app(
+    config: Arc<ServeConfig>,
+    store: Arc<JobStore>,
+    tools: Vec<Arc<dyn Tool>>,
+) -> io::Result<Router> {
+    let policy = crate::auth::SessionPolicy {
+        single_owner: config.single_owner,
+        idle: config.session_idle,
+    };
     let state = AppState {
-        sessions: Arc::new(crate::auth::Sessions::load(&config.data_dir)?),
+        sessions: Arc::new(crate::auth::Sessions::load(&config.data_dir, policy)?),
         submissions: Arc::new(api::SubmissionLocks::default()),
         config: config.clone(),
         store,
-        tools: Arc::new(
-            tools::registry()
-                .into_iter()
-                .filter(|tool| {
-                    tool.id() != "sct"
-                        || matches!(
-                            config.runner,
-                            crate::config::RunnerKind::Docker | crate::config::RunnerKind::Simulate
-                        )
-                })
-                .collect(),
-        ),
+        tools: Arc::new(tools),
     };
     let www_router = match &config.www {
         Some(dir) => www::router(dir),
@@ -73,23 +72,83 @@ pub fn app(config: Arc<ServeConfig>, store: Arc<JobStore>) -> io::Result<Router>
         .layer(tower_http::trace::TraceLayer::new_for_http()))
 }
 
-/// Creates the job store and workers for a configuration.
-pub fn store(config: &ServeConfig) -> io::Result<Arc<JobStore>> {
-    let runner = runner::build(config);
-    let simulated = config.runner == crate::config::RunnerKind::Simulate;
-    let store = JobStore::new(runner, simulated, config.cpu, config.retain);
-    store.recover(&config.data_dir.join("jobs"))?;
-    store.spawn_workers(config.parallel, config.sweep_interval);
+/// Creates the job store for a configuration, recovers it and starts it.
+pub fn store(config: &ServeConfig, tools: Vec<Arc<dyn Tool>>) -> io::Result<Arc<JobStore>> {
+    let runner = runner::build(config)?;
+    let options = StoreOptions {
+        simulated: config.runner == RunnerKind::Simulate,
+        cpu: config.cpu,
+        retain: config.retain,
+        parallel: config.parallel,
+        data_dir: config.data_dir.clone(),
+        max_download_bytes: config.max_download_bytes,
+        profiles: config.profiles.clone(),
+    };
+    let store = JobStore::new(runner, tools, options);
+    store.recover()?;
+    store.start(config.sweep_interval);
     Ok(store)
 }
 
-/// Binds the listener and starts serving. Self-signed certificates must be
-/// generated beforehand (`TlsMode::Site` with the generated files).
-pub async fn start(config: ServeConfig) -> io::Result<Running> {
-    if config.parallel != 1 && config.runner != crate::config::RunnerKind::Simulate {
-        return Err(io::Error::other(
+/// Refuses combinations of settings the protocol does not allow.
+pub fn validate(config: &ServeConfig) -> io::Result<()> {
+    let refuse = |message: &str| Err(io::Error::other(message.to_string()));
+    let slurm = config.runner == RunnerKind::Slurm;
+    if config.parallel != 1 && !matches!(config.runner, RunnerKind::Simulate | RunnerKind::Slurm) {
+        return refuse(
             "production runners require --parallel 1 until per-job GPU allocation is supported",
-        ));
+        );
+    }
+    if !config.single_owner && !config.data_roots.is_empty() {
+        return refuse("--data-root requires --single-owner");
+    }
+    if slurm && !config.single_owner {
+        return refuse("--runner slurm requires --single-owner");
+    }
+    if slurm && config.slurm.is_none() {
+        return refuse("--runner slurm requires --slurm-config");
+    }
+    if slurm && !is_loopback(&config.listen) {
+        return refuse("--runner slurm listens on loopback only (--listen 127.0.0.1:<port>); reach it through an SSH tunnel");
+    }
+    let mut ids: Vec<&str> = config
+        .data_roots
+        .iter()
+        .map(|root| root.id.as_str())
+        .collect();
+    ids.sort_unstable();
+    if ids.windows(2).any(|pair| pair[0] == pair[1]) {
+        return refuse("data root ids must be unique");
+    }
+    Ok(())
+}
+
+fn is_loopback(listen: &str) -> bool {
+    listen
+        .parse::<std::net::SocketAddr>()
+        .is_ok_and(|addr| addr.ip().is_loopback())
+}
+
+/// Binds the listener and starts serving the registered tools available to
+/// this configuration. Self-signed certificates must be generated beforehand
+/// (`TlsMode::Site` with the generated files).
+pub async fn start(config: ServeConfig) -> io::Result<Running> {
+    let tools = tools::available(&config, tools::registry());
+    start_with_tools(config, tools).await
+}
+
+/// [`start`] with an explicit tool list.
+pub async fn start_with_tools(
+    config: ServeConfig,
+    tools: Vec<Arc<dyn Tool>>,
+) -> io::Result<Running> {
+    validate(&config)?;
+    for tool in &tools {
+        if let Layout::Project(project_tool) = tool.layout() {
+            project_tool
+                .check_profiles(&config.profiles)
+                .map_err(|error| io::Error::other(format!("{}: {error}", tool.id())))?;
+        }
     }
     std::fs::create_dir_all(config.data_dir.join("jobs"))?;
     #[cfg(unix)]
@@ -97,18 +156,15 @@ pub async fn start(config: ServeConfig) -> io::Result<Running> {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&config.data_dir, std::fs::Permissions::from_mode(0o700))?;
     }
-    let data_lock = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(config.data_dir.join("server.lock"))?;
-    data_lock
-        .try_lock()
-        .map_err(|error| io::Error::other(format!("data directory already in use: {error}")))?;
+    let locks = crate::instance::acquire(&config.data_dir, config.runner == RunnerKind::Slurm)?;
+    if let Some(settings) = &config.slurm {
+        crate::runner::slurm::checks::startup(settings, &config.data_dir, &config.data_roots)
+            .await
+            .map_err(io::Error::other)?;
+    }
     let config = Arc::new(config);
-    let store = store(&config)?;
-    let app = app(config.clone(), store.clone())?;
+    let store = store(&config, tools.clone())?;
+    let app = app(config.clone(), store.clone(), tools)?;
     let shutdown = CancellationToken::new();
 
     let std_listener = std::net::TcpListener::bind(&config.listen)?;
@@ -154,6 +210,6 @@ pub async fn start(config: ServeConfig) -> io::Result<Running> {
         store,
         handle,
         shutdown,
-        _data_lock: data_lock,
+        _locks: locks,
     })
 }

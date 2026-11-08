@@ -1,5 +1,23 @@
 # elastix
 
+## 0.5.20261108
+
+### Patch Changes
+
+- d02feb7: StarDist and ZARRo move to the SciGet Microscopy catalogue at https://microscopyapps.sciget.org/. Links to their old addresses on webapps.neurodesk.org redirect there with the rest of the path, the query and the fragment. Their app bar, page title and privacy text name SciGet.
+
+  elastix is now also served at https://microscopyapps.sciget.org/elastix/, under the SciGet brand. It stays at https://webapps.neurodesk.org/elastix/ as well.
+
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+  - @neurodesk/elastix@0.5.20261108
+  - @neurodesk/runtime-support@0.9.23
+
 ## 0.5.20261104
 
 ### Patch Changes
