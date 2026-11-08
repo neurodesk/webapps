@@ -89,6 +89,21 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           node packages/samsrf/validation/matlab/compare.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-matrix-input"
           SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_reference
+      - name: CSS extreme-scale and rank regression gates
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
+          SAMSRF_CSS_DIAGNOSTICS_DIR="$RUNNER_TEMP/samsrf-css-diagnostics" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_diagnostics
+          node packages/samsrf/validation/matlab/compare-css.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-comparison.json"
+          cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v47_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace.json"
+      - name: Retain the full CSS comparison including remaining differences
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-css-comparison
+          path: |
+            ${{ runner.temp }}/samsrf-css-comparison.json
+            ${{ runner.temp }}/samsrf-css-trace.json
+          if-no-files-found: ignore
 
   wasm-source:
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.record_matlab)
