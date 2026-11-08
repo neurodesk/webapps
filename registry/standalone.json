@@ -1778,35 +1778,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.6.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261103/n4-0.6.20261103-linux-x64.tar.gz",
-          "sha256": "0b855a03e40dbcbe22d3b37b64e58e73a2477b788c093598b9d792fb77f2dcfd",
-          "bytes": 55126432,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261103/n4-0.6.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.6.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261108/n4-0.6.20261108-linux-x64.tar.gz",
+          "sha256": "226811deed58c9178265e2c2fe84ad669f458273e836a2278c7f8aa5c5290d3e",
+          "bytes": 57196722,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261108/n4-0.6.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf n4-0.6.20261103-linux-x64.tar.gz\n./n4-0.6.20261103-linux-x64/n4 sub-01_dwi.nii.gz results"
+          "command": "tar -xzf n4-0.6.20261108-linux-x64.tar.gz\n./n4-0.6.20261108-linux-x64/n4 sub-01_dwi.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.6.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261103/n4-0.6.20261103-macos-arm64.pkg",
-          "sha256": "cbbcd5f7f955d65a0b2306885882c6672de023daa4e1e29c89f50572e880ad8d",
-          "bytes": 48756261,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261103/n4-0.6.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.6.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261108/n4-0.6.20261108-macos-arm64.pkg",
+          "sha256": "27dbb5182e0372463bbd875b2d139ae5b85ac8fdabe51ea50e30ca7ef4d383ae",
+          "bytes": 50871592,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261108/n4-0.6.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg n4-0.6.20261103-macos-arm64.pkg -target /\nn4 self-check\nn4 sub-01_dwi.nii.gz results"
+          "command": "sudo installer -pkg n4-0.6.20261108-macos-arm64.pkg -target /\nn4 self-check\nn4 sub-01_dwi.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.6.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261103/n4-0.6.20261103-windows-x64.zip",
-          "sha256": "fc459eefaba56711a58de4062c239844a7d54d8ef94522a9ead749cbcc7427d5",
-          "bytes": 45463363,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261103/n4-0.6.20261103-windows-x64.zip.validation.txt",
+          "version": "0.6.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261108/n4-0.6.20261108-windows-x64.zip",
+          "sha256": "8e22c59d86717bb027ea938fa8e1634c154be55c0e9d4f5abd7c869b03743139",
+          "bytes": 47760317,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261108/n4-0.6.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\n4-0.6.20261103-windows-x64.zip -DestinationPath .\n.\\n4-0.6.20261103-windows-x64\\n4.exe sub-01_dwi.nii.gz results"
+          "command": "Expand-Archive -Path .\\n4-0.6.20261108-windows-x64.zip -DestinationPath .\n.\\n4-0.6.20261108-windows-x64\\n4.exe sub-01_dwi.nii.gz results"
         }
       ],
       "containers": []
