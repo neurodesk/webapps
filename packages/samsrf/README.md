@@ -317,10 +317,13 @@ pnpm --filter @neurodesk/samsrf build:wasm
 ```
 
 `scripts/build-wasm.sh` needs Rust 1.98.1 (through rustup), wasm-pack 0.13.1
-and binaryen `version_117` `wasm-opt` first on `PATH`. With these pins the build
-is reproducible byte for byte. The `wasm-source` job in
+and binaryen `version_117` `wasm-opt` first on `PATH`. The build removes the
+optional WASM `producers` section: the release and cargo-installed binding
+generators identify the same version differently. The `wasm-source` job in
 `.github/workflows/samsrf-native.yml` runs `build-wasm.sh --check`, which
 rebuilds into a scratch directory and fails when a file differs from `wasm/`.
+CI retains a differing rebuild as an artifact. Locally, set `SAMSRF_REBUILD_DIR`
+to keep those files for inspection after a failed check.
 The same workflow runs the core tests, clippy and `node --test
 packages/samsrf/test/*.test.js` on the committed module.
 

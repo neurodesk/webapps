@@ -120,7 +120,16 @@ jobs:
       - name: Set up wasm-opt
         uses: ./.github/actions/setup-wasm-opt
       - name: Rebuild and compare
+        env:
+          SAMSRF_REBUILD_DIR: ${{ runner.temp }}/samsrf-rebuild
         run: bash packages/samsrf/scripts/build-wasm.sh --check
+      - name: Retain a differing rebuild for diagnosis
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-differing-rebuild
+          path: ${{ runner.temp }}/samsrf-rebuild
+          if-no-files-found: ignore
 
   portable:
     needs: [test, wasm-source]

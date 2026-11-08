@@ -66,6 +66,13 @@ if [[ "$mode" == check ]]; then
     fi
   done
   if [[ $status -ne 0 ]]; then
+    if [[ -n "${SAMSRF_REBUILD_DIR:-}" ]]; then
+      mkdir -p "$SAMSRF_REBUILD_DIR"
+      for file in "${FILES[@]}"; do
+        cp "$scratch/$file" "$SAMSRF_REBUILD_DIR/"
+      done
+      echo "Retained differing build in $SAMSRF_REBUILD_DIR"
+    fi
     echo "Run 'pnpm --filter @neurodesk/samsrf build:wasm' and commit wasm/." >&2
   fi
   exit $status
