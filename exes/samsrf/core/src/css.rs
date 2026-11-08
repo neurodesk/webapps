@@ -70,13 +70,29 @@ fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> Complex64 {
         nx += dx.re * dx.re + dx.im * dx.im;
         ny += dy * dy;
     }
-    Complex64::new(
-        dot.re / nx.sqrt() / ny.sqrt(),
-        dot.im / nx.sqrt() / ny.sqrt(),
-    )
+    let norm_x = norm_extreme(
+        nx,
+        x.iter().flat_map(|value| [value.re - mx.re, value.im - mx.im]),
+    );
+    let norm_y = norm_extreme(ny, y.iter().map(|value| value - my));
+    Complex64::new(dot.re / norm_x / norm_y, dot.im / norm_x / norm_y)
 }
 
-/// Complex least squares with MATLAB's matrix-norm rank threshold.
+fn norm_extreme(sum_squares: f64, values: impl Iterator<Item = f64> + Clone) -> f64 {
+    // Retain the ordinary reduction, but avoid losing the exponent range when
+    // CSS produces predictions whose squares underflow or overflow.
+    if sum_squares.is_normal() || sum_squares.is_nan() {
+        return sum_squares.sqrt();
+    }
+    let scale = values.clone().map(f64::abs).fold(0.0, f64::max);
+    if scale == 0.0 || !scale.is_finite() {
+        return scale;
+    }
+    let squares = values.map(|value| (value / scale).powi(2)).sum::<f64>();
+    scale * squares.sqrt()
+}
+
+/// Complex least squares with MATLAB's measured QR rank threshold.
 /// The exported map drops imaginary coefficients, as samsrf_expand_srf does.
 pub fn fit_betas(x: &[Complex64], y: &[f64], precision: Precision) -> (f64, f64) {
     let n = x.len() as f64;
@@ -100,6 +116,25 @@ pub fn fit_betas(x: &[Complex64], y: &[f64], precision: Precision) -> (f64, f64)
         raw_xx += x.norm_sqr();
         raw_xy += x.conj() * y;
     }
+    if precision == Precision::Double
+        && raw_xx.is_infinite()
+        && x.iter().all(|value| value.re.is_finite() && value.im.is_finite())
+    {
+        // At this scale MATLAB's rank tolerance exceeds the residual norm of
+        // the ones column. Solve its retained prediction column without x²
+        // overflowing, rather than letting inf/inf select a full-rank solve.
+        let scale = x.iter()
+            .map(|value| value.re.abs().max(value.im.abs()))
+            .fold(0.0, f64::max);
+        let mut denominator = 0.0;
+        let mut numerator = Complex64::new(0.0, 0.0);
+        for (&value, &observation) in x.iter().zip(&y) {
+            let scaled = value / scale;
+            denominator += scaled.norm_sqr();
+            numerator += scaled.conj() * observation;
+        }
+        return (((numerator / denominator) / scale).re, 0.0);
+    }
     let epsilon = if precision == Precision::Single {
         f64::from(f32::EPSILON)
     } else {
@@ -111,17 +146,17 @@ pub fn fit_betas(x: &[Complex64], y: &[f64], precision: Precision) -> (f64, f64)
     } else {
         (raw_xx.sqrt(), (n * (sxx / raw_xx)).sqrt())
     };
-    let tolerance = if x.iter().any(|value| value.im != 0.0) {
-        // R2023b's complex solve uses max(size(A))*eps(norm(A,1)); its real
-        // solve uses the leading QR diagonal. The recorded scale sweep covers
-        // both precisions and distinguishes these decisions at n=16 and n=250.
-        let norm = precision.round(n.max(x.iter().map(|value| value.norm()).sum()));
-        let exponent = ((norm.to_bits() >> 52) & 0x7ff) as i32 - 1023;
-        let mantissa = if precision == Precision::Single { 23 } else { 52 };
-        n.max(2.0) * 2.0f64.powi(exponent - mantissa)
+    // MATLAB's rank warnings report ten times the real-path tolerance for
+    // complex designs. The original scale cases also fit eps(norm(A,1)), but
+    // the recorded double CSS vertex 81 distinguishes the two rules: MATLAB
+    // reports 24.78495, while the spacing-based estimate gives 15.625 and
+    // incorrectly retains the baseline column (R22 = 15.81078).
+    let complex_factor = if x.iter().any(|value| value.im != 0.0) {
+        10.0
     } else {
-        n.max(2.0) * epsilon * r11
+        1.0
     };
+    let tolerance = complex_factor * n.max(2.0) * epsilon * r11;
     let (beta, baseline) = if r22 <= tolerance {
         if ones_first {
             (0.0, my)
@@ -168,7 +203,30 @@ mod tests {
     }
 
     #[test]
-    fn complex_single_regression_uses_the_recorded_matrix_rank_threshold() {
+    fn double_correlation_preserves_scale_when_squaring_underflows_or_overflows() {
+        let observed = [-2.0, -1.0, 1.0, 2.0];
+        for scale in [1e-162, 1e154] {
+            let predicted: Vec<_> = observed.iter()
+                .map(|value| Complex64::new(value * scale, 0.0))
+                .collect();
+            let error = objective(&predicted, &observed, Precision::Double);
+            assert!(error.re.abs() < 1e-14, "scale {scale}: {error}");
+            assert_eq!(error.im, 0.0);
+        }
+    }
+
+    #[test]
+    fn double_regression_retains_the_prediction_column_when_its_squared_norm_overflows() {
+        let x: Vec<_> = [1.0, 2.0, 3.0, 4.0].iter()
+            .map(|value| Complex64::new(value * 1e155, 0.0))
+            .collect();
+        let (beta, baseline) = fit_betas(&x, &[3.0, 5.0, 7.0, 9.0], Precision::Double);
+        assert!((beta / (70.0 / 30.0 / 1e155) - 1.0).abs() < 1e-14);
+        assert_eq!(baseline, 0.0);
+    }
+
+    #[test]
+    fn complex_single_regression_uses_the_recorded_qr_rank_threshold() {
         for volumes in [16, 250] {
             let x: Vec<_> = (1..=volumes).map(|t| Complex64::new((t as f64).sin(), 0.3 * (t as f64).cos()) * 1e-4).collect();
             let y: Vec<_> = (1..=volumes).map(|t| 2.0 * (t as f64).sin() + 3.0).collect();

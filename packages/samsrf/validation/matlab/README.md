@@ -218,8 +218,56 @@ cutoff and retain scale-dependent rounding differences; they are explicitly
 excluded from that assertion. CF checks from identical profiles isolate parameter
 estimation, and do not establish full single-precision CF pipeline parity.
 
-General double-precision fine-fit plateaus, double CSS weak fits, and single
+General double-precision fine-fit plateaus, remaining double CSS fits, and single
 reverse-correlation/CF arithmetic remain diagnostic cases. The single CSS
 parameters and scores match exactly for this recorded pipeline; beta and baseline
 retain the documented least-squares rounding tolerance. A successful source
 gate does not assert those paths, arbitrary-input parity, or a rebuilt container.
+
+## Extreme CSS scales and regression rank
+
+`diagnostics-reference.json` pins the 238-case recording from
+[run 42427404570](https://github.com/neurodesk/webapps/actions/runs/42427404570),
+recorder commit `681e7e3290b036b9a054dfc38ef9376a9b3869e2`. Both runner labels
+received AMD EPYC 7763 CPUs. All 4,189 numerical arrays and every case decision
+were identical in four processes, including two fresh processes on each host.
+`reproducibility.json` retains all four environments and per-file hashes. This
+does not establish Intel/AMD reproducibility or change the older reference's
+provenance. MATLAB reported CNR `auto`; its effective CNR and dynamic-thread
+settings remain unverified.
+
+Double CSS squared norms could underflow or overflow even when predictions
+were finite. A scaled norm for those extremes restores the recorded fit at
+zero-based vertex 46 (R² 0.4461133943 becomes 0.04894233754) and the rejected
+all-zero output at vertex 87. At vertex 80, MATLAB's rank warning reports a
+tolerance of 24.78495. This is ten times the real QR tolerance; the earlier
+`eps(norm(A,1))` inference gives 15.625 and wrongly retains the baseline column,
+whose QR diagonal is 15.81078. The corrected rule passes the original 146
+scale cases and the newly recorded pipeline regression.
+The factor is measured directly for double precision. The same factor is used
+for single precision, whose recorded cases agree but do not distinguish the
+two rules. A separate native gate checks the overflowing design's tiny
+amplitude against MATLAB within eight ULP, even though its final map is rejected.
+
+The required CSS replay checks all 96 vertices' zero and nonfinite decisions.
+At vertices 46, 80 and 87 it also requires exact parameters, noise ceilings and
+zero coefficients. Nonzero amplitudes have a 16-double-epsilon relative bound;
+R² and near-zero baselines have a 16-double-epsilon absolute bound. Every
+remaining per-value difference is written to the report without a widened
+tolerance. This is a focused regression gate, not full double CSS equivalence.
+The existing single CSS and Gaussian gates remain required.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
+SAMSRF_CSS_DIAGNOSTICS_DIR="$TMPDIR/samsrf-css-diagnostics" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_diagnostics
+node packages/samsrf/validation/matlab/compare-css.mjs "$TMPDIR/samsrf-source-reference" "$TMPDIR/css-comparison.json"
+cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$TMPDIR/samsrf-source-reference" "$TMPDIR/samsrf-css-diagnostics" css_pipeline_double_v47_nonnegative0_recorded "$TMPDIR/css-trace.json"
+```
+
+`css_trace` evaluates the native Rust port at every recorded parameter vector,
+reports the first differing raw, compressed, convolved and objective value,
+then compares the independent optimizer's evaluation sequence. It records
+real and imaginary differences and nonfinite mismatches separately. Native
+tracing is diagnostic evidence; the required pipeline replay uses the committed
+WebAssembly module. The trace does not treat a numerical difference as an
+accepted tolerance or claim that separate QR factors reproduce `mldivide`.

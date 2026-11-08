@@ -1,5 +1,11 @@
 # @neurodesk/samsrf
 
+## 0.3.20261108
+
+### Patch Changes
+
+- Preserve double CSS correlations at underflow and overflow scales and match the measured complex regression rank threshold. Add pinned MATLAB diagnostics, focused WebAssembly regression gates and native evaluation traces; remaining double CSS differences stay explicit.
+
 ## 0.3.20261107
 
 ### Patch Changes

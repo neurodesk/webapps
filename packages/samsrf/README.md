@@ -317,10 +317,21 @@ pnpm --filter @neurodesk/samsrf build:wasm
 ```
 
 `scripts/build-wasm.sh` needs Rust 1.98.1 (through rustup), wasm-pack 0.13.1
-and binaryen `version_117` `wasm-opt` first on `PATH`. With these pins the build
-is reproducible byte for byte. The `wasm-source` job in
-`.github/workflows/samsrf-native.yml` runs `build-wasm.sh --check`, which
-rebuilds into a scratch directory and fails when a file differs from `wasm/`.
+and binaryen `version_117` `wasm-opt` first on `PATH`. The build removes the
+optional WASM `producers` section: the release and cargo-installed binding
+generators identify the same version differently. The `wasm-source` job in
+`.github/workflows/samsrf-native.yml` on `ubuntu-24.04` is the canonical release
+builder. It runs `build-wasm.sh --check`, which fails when any file differs from
+`wasm/`. Matching tool versions alone do not guarantee byte equality elsewhere:
+local and CI Rust builds produced different JSON deserializer inlining.
+
+CI retains a differing rebuild, the raw Rust module, the optimizer input and
+tool identities as an artifact. Locally, set `SAMSRF_REBUILD_DIR` to capture the
+optimizer input and keep the files after a failed check. Dispatch `samsrf-native`
+with `wasm_only: true` while the PR stays in draft, download
+`samsrf-differing-rebuild`, and validate its `samsrf_wasm_bg.wasm` with the reference
+gates before committing it. The final ready PR must pass the full workflow,
+including a fresh byte-for-byte rebuild of that committed module.
 The same workflow runs the core tests, clippy and `node --test
 packages/samsrf/test/*.test.js` on the committed module.
 
@@ -388,9 +399,13 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   prediction that is constant, or constant to rounding, leaves the column with
   the larger norm its coefficient and the other 0. Octave's `\` uses no such
   tolerance, so on the example's coarse fit it reports amplitudes near 1e13 on
-  9 vertices where the port reports 0. The opt-in complex CSS solve uses the
-  recorded R2023b matrix-norm threshold `max(size(A)) * eps(norm(A,1))`;
-  both real and complex decisions are checked across prediction scales.
+  9 vertices where the port reports 0. The opt-in complex CSS solve uses ten
+  times the real-design tolerance, directly measured in a double-precision
+  R2023b rank warning. The single-precision factor follows the same rule;
+  its recorded cases are consistent but do not distinguish it from the old rule.
+  The earlier `max(size(A)) * eps(norm(A,1))` estimate matched the synthetic
+  cases but incorrectly retained a baseline column in the double CSS pipeline.
+  Both real and complex decisions are checked across prediction scales.
 - **Compressive nonlinearity.** `Css_Convention: "nonnegative"` (the default)
   clips negative responses before the CSS power and uses the fitted Exponent
   for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex
@@ -400,6 +415,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   MATLAB recordings in both precisions, and the recorded single-precision
   pipeline parameters and scores match exactly. Betas retain small regression
   rounding differences, and some double-precision weak fits still differ.
+  Double CSS norms now retain their scale when squared predictions underflow
+  or overflow; large regressors also avoid overflow in their coefficient solve.
+  The recorded 96-vertex double pipeline has matching zero/nonfinite decisions,
+  with focused value gates at vertices 46, 80 and 87 (zero-based). Other parameter
+  differences remain listed by `validation/matlab/compare-css.mjs`.
   This option does not imply arbitrary-input bit parity.
 - **Maps outside the ROI.** `samsrf_compress_srf` keeps the ROI's columns and
   `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside
