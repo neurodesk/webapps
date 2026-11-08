@@ -1449,35 +1449,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.3.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261103/disconnectome-0.3.20261103-linux-x64.tar.gz",
-          "sha256": "bdc15e745a63c3c0541146567909c2be759dbdf30b7b3cde3f5b29f016d9d392",
-          "bytes": 73002052,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261103/disconnectome-0.3.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.3.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261108/disconnectome-0.3.20261108-linux-x64.tar.gz",
+          "sha256": "0563fa372a8b39eb71f1f35662e9acc8e4051ac693e97a8657cab8846b75b7a6",
+          "bytes": 73002060,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261108/disconnectome-0.3.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf disconnectome-0.3.20261103-linux-x64.tar.gz\n./disconnectome-0.3.20261103-linux-x64/disconnectome lesion.nii.gz results"
+          "command": "tar -xzf disconnectome-0.3.20261108-linux-x64.tar.gz\n./disconnectome-0.3.20261108-linux-x64/disconnectome lesion.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.3.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261103/disconnectome-0.3.20261103-macos-arm64.pkg",
-          "sha256": "125eec98b2fb37bff1cb75252fa2fd5466b36974de2e17e06cba27b7bb398e74",
-          "bytes": 66442587,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261103/disconnectome-0.3.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.3.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261108/disconnectome-0.3.20261108-macos-arm64.pkg",
+          "sha256": "7f5b68708bbaf169afbfc72163968247b8f1c307e93484a66d999fde9e0c0467",
+          "bytes": 66442604,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261108/disconnectome-0.3.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg disconnectome-0.3.20261103-macos-arm64.pkg -target /\ndisconnectome self-check\ndisconnectome lesion.nii.gz results"
+          "command": "sudo installer -pkg disconnectome-0.3.20261108-macos-arm64.pkg -target /\ndisconnectome self-check\ndisconnectome lesion.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.3.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261103/disconnectome-0.3.20261103-windows-x64.zip",
-          "sha256": "31e43ff9b2ff16b970643a491bbdc810aa7afdbf8615b5378f7ac7bf180bb579",
+          "version": "0.3.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261108/disconnectome-0.3.20261108-windows-x64.zip",
+          "sha256": "9cf85473afb6222caaf488db1f631d13a1b53ca2fb61cfe22bcd40e78ddd403d",
           "bytes": 62658198,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261103/disconnectome-0.3.20261103-windows-x64.zip.validation.txt",
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261108/disconnectome-0.3.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\disconnectome-0.3.20261103-windows-x64.zip -DestinationPath .\n.\\disconnectome-0.3.20261103-windows-x64\\disconnectome.exe lesion.nii.gz results"
+          "command": "Expand-Archive -Path .\\disconnectome-0.3.20261108-windows-x64.zip -DestinationPath .\n.\\disconnectome-0.3.20261108-windows-x64\\disconnectome.exe lesion.nii.gz results"
         }
       ],
       "containers": []
