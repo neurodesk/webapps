@@ -1,5 +1,22 @@
 # seedseg
 
+## 0.7.20261108
+
+### Patch Changes
+
+- 22c7b3c: MuscleMap, SeedSeg and Carotid Flow move to the SciGet MSK catalogue at https://mskapps.sciget.org/. Links to their old addresses on webapps.neurodesk.org redirect there with the rest of the path, the query and the fragment. Their app bar, page title and privacy text name SciGet.
+
+  DICOM View on webapps.neurodesk.org no longer offers MuscleMap, SeedSeg or Carotid Flow under "Open in another webapp", because a handoff only works within one site. These apps still open DICOM and NIfTI files directly, and the desktop suite keeps every handoff.
+
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+  - @neurodesk/seedseg@0.7.20261108
+
 ## 0.7.20261104
 
 ### Patch Changes

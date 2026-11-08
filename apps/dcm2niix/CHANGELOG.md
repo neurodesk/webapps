@@ -1,5 +1,20 @@
 # dcm2niix
 
+## 0.2.20261108
+
+### Patch Changes
+
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [2fecf25]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+  - @neurodesk/mri2vid@0.6.20261108
+  - @neurodesk/runtime-support@0.9.23
+
 ## 0.2.20261104
 
 ### Patch Changes
