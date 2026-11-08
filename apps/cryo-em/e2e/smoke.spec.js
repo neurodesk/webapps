@@ -225,6 +225,50 @@ test("a second Run click while the step is being submitted sends nothing", async
   await expect(page.locator("#jobList")).not.toContainText("Import/job002");
 });
 
+test("a finishing step's late refresh does not reopen Run while the next step is being submitted", async ({ page }) => {
+  test.setTimeout(120000);
+  await connect(page);
+  const projectId = await createProject(page, "Late refresh");
+  await loadExample(page);
+  // Step A's refreshes: the first (after submitting) passes, the second (after it ends) is held.
+  let projectReads = 0;
+  let releaseRefresh;
+  const refreshHeld = new Promise(resolve => { releaseRefresh = resolve; });
+  await page.route(`${COMPUTE_URL}/api/v1/projects/${projectId}`, async route => {
+    if (route.request().method() !== "GET") return route.fallback();
+    projectReads += 1;
+    if (projectReads === 2) await refreshHeld;
+    await route.fallback();
+  });
+  let submissions = 0;
+  let releaseSubmit;
+  const submitHeld = new Promise(resolve => { releaseSubmit = resolve; });
+  await page.route(`${COMPUTE_URL}/api/v1/jobs`, async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    submissions += 1;
+    if (submissions === 2) await submitHeld;
+    await route.fallback();
+  });
+  await page.locator("#stepSelect").selectOption("import");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Import movies finished", { timeout: STEP_TIMEOUT });
+  await expect.poll(() => projectReads).toBe(2);
+  // Step B starts while A's handler still waits for its refresh.
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#runButton").click();
+  await expect.poll(() => submissions).toBe(2);
+  const refreshed = page.waitForResponse(response => response.url() === `${COMPUTE_URL}/api/v1/projects/${projectId}` && response.request().method() === "GET");
+  releaseRefresh();
+  await refreshed;
+  // Let A's handler run to its end; it must leave B's guard alone.
+  await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 300)));
+  await expect(page.locator("#runButton")).toBeDisabled();
+  releaseSubmit();
+  await expect(page.locator("#statusText")).toContainText("Import movies finished", { timeout: STEP_TIMEOUT });
+  await expect(page.locator("#runButton")).toBeEnabled({ timeout: STEP_TIMEOUT });
+  expect(submissions).toBe(2);
+});
+
 test("a failed example download can be retried", async ({ page }) => {
   let attempts = 0;
   await page.route(example.files[0].url, route => {

@@ -73,7 +73,7 @@ const state = {
   uploads: {},
   selectedJob: null,
   following: null,
-  submitting: false,
+  submitting: null,
   settingsOpen: false,
   views: { image: null, classes: null, fsc: null },
 };
@@ -801,11 +801,14 @@ $('runButton').addEventListener('click', async () => {
   }
   $('formMessage').hidden = true;
   const label = stepLabel(state.command);
-  state.submitting = true;
+  // Only this submission clears its own guard: an earlier step's handler can
+  // still be finishing its project refresh after this one starts.
+  const submission = {};
+  state.submitting = submission;
   syncControls();
   try {
     const receipt = await state.client.submit(request.spec, request.files);
-    state.submitting = false;
+    state.submitting = null;
     log.log(`Submitted ${label}: ${JSON.stringify(request.spec)}`);
     const following = follow(receipt.id, label);
     await refreshProject();
@@ -815,7 +818,7 @@ $('runButton').addEventListener('click', async () => {
     $('formMessage').hidden = false;
     status(`${label} was not accepted: ${error.message}`, 'error');
   } finally {
-    state.submitting = false;
+    if (state.submitting === submission) state.submitting = null;
     syncControls();
   }
 });

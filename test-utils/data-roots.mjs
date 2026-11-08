@@ -130,8 +130,8 @@ export function globMatches(pattern, name) {
 
 /**
  * Files of one directory of a root that `pattern` selects, sorted in byte
- * order. Dotfiles never match; a match whose canonical path leaves the root
- * refuses the whole reference; no match is an error.
+ * order. Dotfiles never match; a match that is a symlink or whose canonical
+ * path leaves the root refuses the whole reference; no match is an error.
  */
 export function matchPattern(root, path, pattern) {
   if (typeof pattern !== 'string' || pattern === '' || Buffer.byteLength(pattern) > MAX_PATTERN_BYTES) throw new Error('pattern must be 1 to 255 bytes');
@@ -141,6 +141,8 @@ export function matchPattern(root, path, pattern) {
   for (const name of readdirSync(directory)) {
     if (name.startsWith('.')) continue;
     if (!globMatches(pattern, name)) continue;
+    // Jobs read the directory through /data/<root>, where a link's host target does not exist.
+    if (lstatSync(join(directory, name)).isSymbolicLink()) throw new Error(`${name} is a symbolic link, which jobs cannot follow; select the folder it points into`);
     let canonical;
     try {
       canonical = realpathSync(join(directory, name));

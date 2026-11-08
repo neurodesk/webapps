@@ -267,7 +267,9 @@ pub struct PatternMatch {
 }
 
 /// Resolves `{ root, path, pattern }`. Every match is canonicalised and must
-/// lie inside the root; a match outside it refuses the whole reference.
+/// lie inside the root; a match outside it refuses the whole reference. A
+/// matching symlink is refused too: jobs read the directory through
+/// `/data/<root>`, where a link's host target does not exist.
 pub fn match_pattern(
     root: &DataRoot,
     path: &str,
@@ -283,6 +285,11 @@ pub fn match_pattern(
         };
         if !glob_matches(pattern, &name) {
             continue;
+        }
+        if entry.file_type().is_ok_and(|kind| kind.is_symlink()) {
+            return Err(PathError::Invalid(format!(
+                "{name} is a symbolic link, which jobs cannot follow; select the folder it points into"
+            )));
         }
         let canonical = entry
             .path()
@@ -497,10 +504,17 @@ mod tests {
             .collect();
         assert_eq!(names, vec!["grid3", "inside.tiff"]);
         assert_eq!(page.entries[1].kind, EntryKind::File);
-        assert!(matches!(
-            match_pattern(&fixture.root, "2026-11/grid3", "*.tiff"),
-            Err(PathError::Outside)
-        ));
+        // A matching link is refused whether its target leaves the root or not:
+        // jobs would read it at /data/<root>, where the host target does not exist.
+        for (directory, pattern) in [("2026-11/grid3", "*.tiff"), ("2026-11", "*.tiff")] {
+            assert!(
+                matches!(
+                    match_pattern(&fixture.root, directory, pattern),
+                    Err(PathError::Invalid(message)) if message.contains("symbolic link")
+                ),
+                "{directory}/{pattern}"
+            );
+        }
         assert_eq!(
             match_pattern(&fixture.root, "2026-11/grid3", "?.tiff")
                 .unwrap()

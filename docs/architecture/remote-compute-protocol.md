@@ -415,7 +415,10 @@ A spec names files in a root as
 `pattern` is 1 to 255 bytes, contains no `/`, and uses only `*` (any run of
 characters) and `?` (one character). It matches names in that one directory,
 dotfiles excluded. Every match is canonicalised and must lie inside the
-canonical root. No match is `invalid-spec`.
+canonical root, and no match may be a symlink: jobs see the root at
+`/data/<root>`, where a link's host target does not exist. Commands name the
+canonical directory and file the server resolved, never a symlinked path the
+client typed. No match, or a symlinked match, is `invalid-spec`.
 
 A single file is named as `{ "root": "facility", "path": "2026-11/gain.mrc" }`
 (no `pattern`): the path must be a regular file whose canonical path lies inside

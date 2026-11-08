@@ -264,7 +264,7 @@ async fn data_root_listings_and_escapes() {
         ),
         (
             json!({ "root": "facility", "path": "escape", "pattern": "*.tiff" }),
-            "outside",
+            "symbolic link",
         ),
         (
             json!({ "root": "facility", "path": "outside", "pattern": "*.tiff" }),

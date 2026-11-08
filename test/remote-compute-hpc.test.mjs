@@ -341,10 +341,10 @@ test('import specs that leave the root or match nothing are invalid', async () =
   }
   await assert.rejects(client.submit(relion(project.id, 'import', { movies: { root: 'nope', path: '', pattern: '*' } }, { angpix: 1, kV: 300, Cs: 2.7 }), {}), isInvalid);
   await assert.rejects(client.submit(importSpec('f'.repeat(32)), {}), isInvalid, 'unknown project');
-  const inside = await run(client, importSpec(project.id, 'links', 'inside.tiff'));
-  const movies = blockNamed(await star(client, inside.id, 'Import/job001/movies.star'), 'movies');
-  assert.deepEqual(column(movies, 'rlnMicrographMovieName'), ['Import/job001/data/inside.tiff']);
-  assert.deepEqual((await client.project(project.id)).jobs.length, 1, 'refused specs allocate no job directory');
+  // A link that stays inside the root is refused too: jobs read the folder at
+  // /data/<root>, where a link's host target does not exist.
+  await assert.rejects(client.submit(importSpec(project.id, 'links', 'inside.tiff'), {}), error => isInvalid(error) && /symbolic link/.test(error.message));
+  assert.deepEqual((await client.project(project.id)).jobs.length, 0, 'refused specs allocate no job directory');
   await client.removeProject(project.id);
 });
 
