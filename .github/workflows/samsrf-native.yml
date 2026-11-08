@@ -126,7 +126,22 @@ jobs:
       - name: Rebuild and compare
         env:
           SAMSRF_REBUILD_DIR: ${{ runner.temp }}/samsrf-rebuild
+          WASM_PACK_CACHE: ${{ runner.temp }}/samsrf-bindgen-cache
         run: bash packages/samsrf/scripts/build-wasm.sh --check
+      - name: Retain compiler output and binding generator identity
+        if: failure() || inputs.wasm_only
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/samsrf-rebuild"
+          raw=exes/samsrf/target/wasm32-unknown-unknown/release/samsrf_wasm.wasm
+          if [[ -f "$raw" ]]; then
+            cp "$raw" "$RUNNER_TEMP/samsrf-rebuild/rust-output.wasm"
+          fi
+          for bindgen in "$RUNNER_TEMP"/samsrf-bindgen-cache/*/wasm-bindgen; do
+            if [[ -f "$bindgen" ]]; then
+              sha256sum "$bindgen"
+            fi
+          done > "$RUNNER_TEMP/samsrf-rebuild/bindgen.sha256"
       - name: Retain rebuild stages for diagnosis
         if: failure() || inputs.wasm_only
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
