@@ -44,6 +44,10 @@ on:
         description: Record focused CSS and regression diagnostics from pinned MATLAB inputs
         type: boolean
         default: false
+      wasm_only:
+        description: Only rebuild WASM and retain its optimizer input for diagnosis
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -54,7 +58,7 @@ concurrency:
 
 jobs:
   test:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.record_matlab)
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.wasm_only))
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -123,8 +127,8 @@ jobs:
         env:
           SAMSRF_REBUILD_DIR: ${{ runner.temp }}/samsrf-rebuild
         run: bash packages/samsrf/scripts/build-wasm.sh --check
-      - name: Retain a differing rebuild for diagnosis
-        if: failure()
+      - name: Retain rebuild stages for diagnosis
+        if: failure() || inputs.wasm_only
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: samsrf-differing-rebuild
@@ -155,7 +159,7 @@ jobs:
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
 
   recorder-smoke:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.wasm_only)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

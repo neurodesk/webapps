@@ -53,7 +53,15 @@ export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$re
 crate=../../exes/samsrf/wasm
 scratch="$(mktemp -d -t samsrf-wasm.XXXXXX)"
 trap 'rm -rf "$scratch"' EXIT
-"$WASM_PACK" build "$crate" --target web --release --out-dir "$scratch"
+"$WASM_PACK" build "$crate" --target web --release --no-opt --out-dir "$scratch"
+if [[ -n "${SAMSRF_REBUILD_DIR:-}" ]]; then
+  mkdir -p "$SAMSRF_REBUILD_DIR"
+  cp "$scratch/samsrf_wasm_bg.wasm" "$SAMSRF_REBUILD_DIR/before-opt.wasm"
+  sha256sum "$(command -v wasm-opt)" > "$SAMSRF_REBUILD_DIR/optimizer.sha256"
+  rustc -vV > "$SAMSRF_REBUILD_DIR/rustc.txt"
+fi
+wasm-opt "$scratch/samsrf_wasm_bg.wasm" -O3 --strip-producers -o "$scratch/optimized.wasm"
+mv "$scratch/optimized.wasm" "$scratch/samsrf_wasm_bg.wasm"
 
 if [[ "$mode" == check ]]; then
   status=0

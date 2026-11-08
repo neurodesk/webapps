@@ -322,8 +322,10 @@ optional WASM `producers` section: the release and cargo-installed binding
 generators identify the same version differently. The `wasm-source` job in
 `.github/workflows/samsrf-native.yml` runs `build-wasm.sh --check`, which
 rebuilds into a scratch directory and fails when a file differs from `wasm/`.
-CI retains a differing rebuild as an artifact. Locally, set `SAMSRF_REBUILD_DIR`
-to keep those files for inspection after a failed check.
+CI retains a differing rebuild and its optimizer input as an artifact. Locally,
+set `SAMSRF_REBUILD_DIR` to capture that input and keep the files after a failed
+check. Dispatch `samsrf-native` with `wasm_only: true` to diagnose a build on a
+CI host while the PR stays in draft.
 The same workflow runs the core tests, clippy and `node --test
 packages/samsrf/test/*.test.js` on the committed module.
 
