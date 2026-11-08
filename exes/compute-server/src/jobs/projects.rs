@@ -47,7 +47,8 @@ impl JobStore {
         // Creation times are strictly increasing, so projects created within
         // one millisecond still list newest first.
         let newest = inner.projects.values().filter_map(Project::created).max();
-        let mut created = Utc::now();
+        // Stored times have millisecond precision; compare at that precision.
+        let mut created = chrono::SubsecRound::trunc_subsecs(Utc::now(), 3);
         if let Some(newest) = newest {
             if created <= newest {
                 created = newest + chrono::Duration::milliseconds(1);

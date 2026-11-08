@@ -151,6 +151,16 @@ async fn projects_created_in_one_second_list_newest_first() {
         .collect();
     created.reverse();
     assert_eq!(ids, created);
+    let times: Vec<&str> = listed["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|project| project["createdAt"].as_str().unwrap())
+        .collect();
+    assert!(
+        times.windows(2).all(|pair| pair[0] > pair[1]),
+        "createdAt strictly decreases: {times:?}"
+    );
     server.stop().await;
 }
 
