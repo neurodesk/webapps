@@ -1,5 +1,7 @@
 # @neurodesk/dicompare
 
+## 0.15.20261108
+
 ## 0.15.20261106
 
 ### Patch Changes

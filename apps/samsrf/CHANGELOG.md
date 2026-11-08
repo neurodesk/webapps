@@ -4,6 +4,14 @@
 
 ### Patch Changes
 
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+  - @neurodesk/samsrf@0.3.20261108
 - Preserve double CSS correlations at underflow and overflow scales and match the measured complex regression rank threshold. Add pinned MATLAB diagnostics, focused WebAssembly regression gates and native evaluation traces; remaining double CSS differences stay explicit.
 - Updated dependencies
   - @neurodesk/samsrf@0.3.20261108

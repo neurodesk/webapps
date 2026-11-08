@@ -1,5 +1,46 @@
 # @neurodesk/webapp-components
 
+## 0.25.0
+
+### Minor Changes
+
+- fbe693d: Add Calcium imaging, a browser app for two-photon calcium imaging preprocessing. It loads a multi-page or OME-TIFF movie, corrects motion rigidly or piecewise rigidly (NoRMCorre-style patches) with sub-pixel Fourier cross-correlation or phase correlation, computes mean, max and local-correlation images, detects active cells from the correlation image (users can add or remove ROIs at the cursor), extracts neuropil-corrected ΔF/F and deconvolves spikes with OASIS AR(1), all in web workers. On the DANDI 000249 example its rigid shifts equal CaImAn's for every frame given the same template, and its OASIS matches the reference implementation on test traces.
+
+  `@neurodesk/webapp-components/file-io/tiff` reads greyscale TIFF, ImageJ and OME-TIFF stacks with geotiff (refusing multi-sample and palette pages and over-budget stacks before decoding) and writes uncompressed ImageJ-compatible TIFF stacks.
+
+- 8327887: Add Tile stitching, a browser app that stitches overlapping 2D or 3D microscopy tiles (TIFF or OME-TIFF) from a grid layout, a Fiji TileConfiguration file or OME stage positions. Pairs are registered by phase correlation with cross-correlation checks of the strongest peaks (after Preibisch et al. 2009), positions are optimised by weighted least squares with outlier rejection, and the tiles are fused with linear blending into TIFF and zipped OME-Zarr, with Fiji's TileConfiguration.registered.txt. On the NIST MIST example every tile is within 0.31 px of Fiji's Grid/Collection stitching.
+
+  `@neurodesk/webapp-components/file-io/tiff` now reads OME stage positions (`stagePosition`, micrometres, from the first image's first plane (TheZ = TheC = TheT = 0); null otherwise; always present).
+
+  Compute Pearson correlation with stable incremental covariance so high-offset uint32 and float64 tiles retain correct matching scores.
+
+  Reject source tile selections over the input budget before reading, check cancellation between file reads, and escape CSV fields so punctuation in filenames preserves report columns.
+
+  Refresh the registered-position text reference after stable correlation changes its final floating-point digits; the example's fused TIFF and recorded Fiji accuracy comparison are unchanged.
+
+  Require compatible tile calibration for translation-only stitching, allowing one part per million of metadata rounding, and convert relative stage displacement with a shared pixel size so absolute stage origins cannot distort placement.
+
+  Share checksum-pinned Blosc and Zstd codec chunks in the composite runtime store to keep the catalogue within its duplicate-content budget. Standalone bundles retain their codecs.
+
+  Resolve Vite preload-table paths from the app base when projecting catalogue sites so shared codecs are included alongside ordinary module imports.
+
+- 6102c59: Add Structure Tensor, a fibre orientation app for microscopy using the OrientationJ method. It takes a 2D image or a 3D stack (TIFF, NIfTI, PNG, JPEG, or 2D slices) and computes Gaussian-derivative structure-tensor maps in the browser: orientation, coherency and energy, OrientationJ's HSB colour survey, an orientation distribution CSV and a dominant-direction summary. In 3D it also gives the fibre azimuth and elevation, a fibre coherency and an RGB direction map, with the fibre vectors as NIfTI. On the SHG collagen example the maps equal a scipy.ndimage reference to 1e-13°, and synthetic gratings and cylinder lattices give their true angles within 0.01°. The shared file-io gains `createRgb24Nifti` for colour NIfTI images.
+
+  `@neurodesk/webapp-components/file-io/tiff` can inspect a Blob or File range by range (only its page directories and description are read), read RGB pages as the mean of red, green and blue with `rgb: 'mean'`, reports `samplesPerPixel`, and writes RGB pages with `rgb: true`. Structure Tensor reads and writes TIFF through it.
+
+### Patch Changes
+
+- af1bc1e: Allow input owners to explicitly cancel pending folder traversal and withdraw Undo when clearing inputs, while preserving Undo during ordinary loaded-file updates.
+- 7539ad5: Add NeuroMorph, a browser app for neuron morphology from SWC reconstructions. It reads one or more SWC files or a folder, reports and repairs common SWC faults, draws each neuron as tubes coloured by soma, axon, basal and apical dendrite, and measures total length, branch and terminal points, path and radial distance, branch and Strahler order, bifurcation angles, surface area, volume and the Sholl profile with a configurable step, with CSV downloads. On both NeuroMorpho.Org examples and NeuroM's test morphologies every value agrees with NeuroM 4.0.6 to one part in a million and every Sholl count is identical.
+
+  `writeMz3` takes optional per-vertex RGBA colours, and the example selector offers **Load folder…** for any input marked `data-neurodesk-folder`.
+
+- aa722fe: Add an opt-in native NiiVue wand adapter that sets intensity bounds from image contrast, handles signed seeds and NIfTI intensity scaling, and preserves connectivity, radius, previews and Undo. Restore the original viewer method when the adapter is removed. Existing viewers do not opt in automatically.
+
+  Support an optional RAS brain mask as a connectivity barrier, reject outside seeds, and convert matching native NIfTI masks using the viewer signed axis permutation.
+
+  Add a synchronous drawing-to-native voxel-order conversion with base-grid checks for native mask export and confirmation.
+
 ## 0.24.0
 
 ### Minor Changes
