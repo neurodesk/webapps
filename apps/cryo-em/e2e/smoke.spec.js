@@ -269,6 +269,57 @@ test("a finishing step's late refresh does not reopen Run while the next step is
   expect(submissions).toBe(2);
 });
 
+test("a refresh that sees a just-submitted job leaves following it to the submit", async ({ page }) => {
+  test.setTimeout(120000);
+  await connect(page);
+  const projectId = await createProject(page, "One follower");
+  await loadExample(page);
+  // Step A's second refresh (after it ends) is held until step B's job exists on the server.
+  let projectReads = 0;
+  let releaseRefresh;
+  const refreshHeld = new Promise(resolve => { releaseRefresh = resolve; });
+  await page.route(`${COMPUTE_URL}/api/v1/projects/${projectId}`, async route => {
+    if (route.request().method() !== "GET") return route.fallback();
+    projectReads += 1;
+    if (projectReads === 2) await refreshHeld;
+    await route.fallback();
+  });
+  // Step B is created on the server, but its receipt reaches the page only after that refresh.
+  let submissions = 0;
+  let releaseReceipt;
+  const receiptHeld = new Promise(resolve => { releaseReceipt = resolve; });
+  let created;
+  const jobCreated = new Promise(resolve => { created = resolve; });
+  await page.route(`${COMPUTE_URL}/api/v1/jobs`, async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    submissions += 1;
+    if (submissions !== 2) return route.fallback();
+    const response = await route.fetch();
+    created();
+    await receiptHeld;
+    await route.fulfill({ response });
+  });
+  let streams = 0;
+  page.on("request", request => { if (/\/api\/v1\/jobs\/[^/]+\/events$/.test(request.url())) streams += 1; });
+  await page.locator("#stepSelect").selectOption("import");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Import movies finished", { timeout: STEP_TIMEOUT });
+  await expect.poll(() => projectReads).toBe(2);
+  await page.locator("#runButton").click();
+  await jobCreated;
+  const refreshed = page.waitForResponse(response => response.url() === `${COMPUTE_URL}/api/v1/projects/${projectId}` && response.request().method() === "GET");
+  releaseRefresh();
+  await refreshed;
+  await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 300)));
+  const streamsBeforeReceipt = streams;
+  releaseReceipt();
+  await expect(page.locator("#statusText")).toContainText("Import movies finished", { timeout: STEP_TIMEOUT });
+  await expect(page.locator("#runButton")).toBeEnabled({ timeout: STEP_TIMEOUT });
+  // Only the submit handler followed step B, under the step's own label.
+  expect(streamsBeforeReceipt).toBe(1);
+  expect(streams).toBe(2);
+});
+
 test("a failed example download can be retried", async ({ page }) => {
   let attempts = 0;
   await page.route(example.files[0].url, route => {
