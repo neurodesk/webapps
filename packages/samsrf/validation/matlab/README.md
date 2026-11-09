@@ -267,7 +267,13 @@ It includes retained discrepancies; case count is not a passing-gate count.
 
 `record_matlab=true, diagnostics_only=true` runs `record_css_diagnostics`
 against those pinned inputs in both precisions. It includes MATLAB columns
-47 and 88 from #730 and columns 73 and 22 from #731. Each original-aperture
+47 and 88 from #730 and columns 73 and 22 from #731. The current recorder also
+includes columns 16, 17, 60, 69 and 82: the missing traces for the remaining
+double CSS parameter differences after #736 (zero-based vertices 15, 16, 59,
+68 and 81). There are 18 columns in each precision, 108 optimizer traces and
+268 cases in total. These new traces are not in the older 238-case pinned
+archive below. The repeat comparator requires each current trace by ID, so
+two matching but incomplete recordings cannot pass. Each original-aperture
 case runs with both the saved coarse seed and a seed recomputed on the current
 host. A separate nonnegative control recomputes its own coarse seed.
 The recorder saves every objective call, raw/compressed/convolved prediction,
@@ -284,13 +290,15 @@ labeled `qrMatchesMldivide`; the factors are not assumed to be its internal QR.
 An Octave smoke test runs one pipeline vertex and all 156 numerical primitive
 cases before MATLAB dispatch. It
 checks executable plumbing with a stubbed environment; its outputs never
-become MATLAB fixtures. Complete diagnostics are approximately 200 MB per
-process before compression, or 0.8 GB across the two same-host pairs.
+become MATLAB fixtures. The previous 238-case diagnostics occupied approximately
+200 MB per process before compression. Budget at least 300 MB per process
+for the expanded matrix, or 1.2 GB across the two same-host pairs.
 The objective remains the actual source `prf_errfun`; diagnostic computations
 do not supply its return value. The callback uses the source's nonfinite stop
 rule. This isolates CSS optimizer paths without rerunning the participant
-matrix. Each completed case has a JSON receipt so a later failure retains it. It records actual MATLAB arithmetic;
-Octave is used only for a syntax check of the recorder.
+matrix. Each completed case has a JSON receipt so a later failure retains it.
+Only MATLAB runs supply numerical reference evidence; the Octave run checks
+that the recorder executes.
 
 The source gate is now executable:
 
