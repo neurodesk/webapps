@@ -42,9 +42,10 @@ test('builds an aggregate filter limited to registered app paths', () => {
 test('counts each app on its catalogue host, and a moved app on the primary domain too', async () => {
   const registry = await loadAppsRegistry();
   const app = (id) => registry.apps.find((entry) => entry.id === id);
-  assert.deepEqual(appHosts(registry, app('dicomview')), ['webapps.neurodesk.org']);
+  assert.deepEqual(appHosts(registry, app('dicomview')), ['webapps.neurodesk.org', 'mskapps.sciget.org', 'preclinicalapps.sciget.org']);
+  assert.deepEqual(appHosts(registry, app('synthseg')), ['webapps.neurodesk.org']);
   assert.deepEqual(appHosts(registry, app('musclemap')), ['mskapps.sciget.org', 'webapps.neurodesk.org']);
-  assert.deepEqual(appHosts(registry, app('elastix')), ['webapps.neurodesk.org', 'microscopyapps.sciget.org']);
+  assert.deepEqual(appHosts(registry, app('structure-tensor')), ['microscopyapps.sciget.org', 'preclinicalapps.sciget.org', 'webapps.neurodesk.org']);
   assert.deepEqual(dimensionFilter({ hostName: ['mskapps.sciget.org', 'webapps.neurodesk.org'] }), {
     filter: { fieldName: 'hostName', inListFilter: { values: ['mskapps.sciget.org', 'webapps.neurodesk.org'], caseSensitive: false } },
   });

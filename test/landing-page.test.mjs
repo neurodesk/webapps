@@ -81,8 +81,8 @@ test('each catalogue lists only its own apps under its own brand', async () => {
   const { catalogApps, findCatalog } = await import('../scripts/lib/apps-registry.mjs');
   const registry = await loadAppsRegistry();
   const standalone = await loadStandalone(registry);
-  for (const id of ['neuro', 'msk', 'microscopy']) {
-    const catalog = findCatalog(registry, id);
+  for (const catalog of registry.site.catalogs) {
+    const { id } = catalog;
     const apps = catalogApps(registry, catalog);
     const html = renderLandingPage({ ...registry, apps }, standalone, catalog);
     const { document } = new JSDOM(html).window;
@@ -124,6 +124,8 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
     'structure-tensor': 'fibre-orientation',
     'omezarr-convert': 'conversion',
     'microscope-qc': 'quality-control',
+    niimath: 'preprocessing',
+    mri2vid: 'visualization',
   };
   const cards = [...document.querySelectorAll('[data-app-card]')];
   assert.equal(cards.length, Object.keys(expected).length);
