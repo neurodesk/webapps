@@ -7,7 +7,8 @@ import { findApp, findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { SHARED_ROOT_FILES, hostedThemeOptions, projectCatalogSite, projectHubSite, runtimeReferences, workerConfig, workerSites } from '../scripts/lib/catalog-sites.mjs';
 import { loadNotFoundTemplate } from '../scripts/lib/not-found-page.mjs';
-import { loadStandalone } from '../scripts/lib/standalone.mjs';
+import { JSDOM } from 'jsdom';
+import { desktopSuite, loadStandalone, setSuiteRecord } from '../scripts/lib/standalone.mjs';
 
 const full = await loadAppsRegistry();
 // dicomview (home neuro, copied to msk) and musclemap (msk) keep the fixture small.
@@ -85,6 +86,27 @@ test('a catalogue site holds its own apps and only the runtime families they rea
   await assert.rejects(access(join(mskDir, '.nojekyll')), { code: 'ENOENT' });
   await assert.rejects(access(join(mskDir, 'surf')), { code: 'ENOENT' });
   assert.match(await readFile(join(mskDir, '_headers'), 'utf8'), /Cross-Origin-Embedder-Policy: credentialless/);
+});
+
+test('a catalogue site describes the one desktop suite its landing page links', async (t) => {
+  const { root, siteDist } = await fixture(t);
+  const edition = structuredClone(standalone);
+  const mskRecord = { ...structuredClone(standalone.suite), version: '0.28.20261014' };
+  setSuiteRecord(edition, desktopSuite(full, findCatalog(full, 'msk')), mskRecord);
+  const project = async (id) => {
+    const destination = join(root, 'dist-sites', id);
+    await projectCatalogSite({ repoRoot, siteDist, destination, registry, catalog: findCatalog(full, id), information, standalone: edition, notFoundTemplate });
+    const link = new JSDOM(await readFile(join(destination, 'index.html'), 'utf8')).window.document.querySelector('.standalone-link');
+    return { link, catalog: JSON.parse(await readFile(join(destination, 'standalone.json'), 'utf8')) };
+  };
+  const msk = await project('msk');
+  assert.equal(msk.link.dataset.suiteRelease, 'webapps-msk');
+  assert.deepEqual(msk.catalog.suite, mskRecord);
+  assert.equal('suites' in msk.catalog, false);
+  const neuro = await project('neuro');
+  assert.equal(neuro.link.dataset.suiteRelease, 'webapps');
+  assert.deepEqual(neuro.catalog.suite, standalone.suite);
+  assert.equal('suites' in neuro.catalog, false);
 });
 
 for (const [script, message] of [

@@ -6,6 +6,7 @@ import { injectCompositeTheme } from './composite-theme.mjs';
 import { renderHubPage } from './hub-page.mjs';
 import { renderLandingPage } from './landing-page.mjs';
 import { renderNotFoundPage } from './not-found-page.mjs';
+import { linkedSuite, suiteRecord } from './standalone.mjs';
 import { writeCompositeRuntimeCacheManifests } from './runtime-cache.mjs';
 import { headersFile } from './vite-app-config.mjs';
 
@@ -161,8 +162,10 @@ export async function runtimeClosure(siteDir, files) {
 /**
  * Write one catalogue's site from the all-app assembly in `siteDist`: its apps,
  * themed so the handoff menu lists only them, the root files they load, the
- * runtime families they reference, its landing page, 404 redirects and the
- * standalone entries of its apps.
+ * runtime families they reference, its landing page, 404 redirects and its
+ * standalone catalog: the entries of its apps and, as `suite`, the record of
+ * the one desktop suite its landing page links (`linkedSuite`), with no
+ * `suites` map.
  */
 export async function projectCatalogSite({ repoRoot, siteDist, destination, registry, catalog, information, standalone, notFoundTemplate }) {
   const apps = catalogApps(registry, catalog);
@@ -203,8 +206,11 @@ export async function projectCatalogSite({ repoRoot, siteDist, destination, regi
   }
   await writeCompositeRuntimeCacheManifests({ siteDist: destination, registry: listed });
 
-  const ownStandalone = { ...standalone, apps: Object.fromEntries(siteAppIds.map((id) => [id, standalone.apps[id]])) };
-  await writeFile(join(destination, 'index.html'), renderLandingPage(listed, ownStandalone, catalog));
+  const { suites, ...shared } = standalone;
+  const suite = suiteRecord(standalone, linkedSuite(registry, standalone, catalog));
+  const ownStandalone = { ...shared, apps: Object.fromEntries(siteAppIds.map((id) => [id, standalone.apps[id]])), suite };
+  // The landing page resolves the linked suite itself, which needs the full catalog's `suites`.
+  await writeFile(join(destination, 'index.html'), renderLandingPage(listed, standalone, catalog));
   await writeFile(join(destination, 'standalone.json'), `${JSON.stringify(ownStandalone, null, 2)}\n`);
   await writeFile(join(destination, '404.html'), renderNotFoundPage(notFoundTemplate, { registry, catalog }));
   await writeFile(join(destination, '_headers'), headersFile);
