@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/omezarr-convert",
-  "version": "0.0.20261105",
+  "version": "0.0.20261109",
   "private": true,
   "description": "Convert microscopy TIFF, OME-TIFF, PNG/JPEG sequences and NIfTI to multiscale OME-Zarr (NGFF 0.4 and 0.5)",
   "type": "module",

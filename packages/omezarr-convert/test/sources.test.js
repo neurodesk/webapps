@@ -295,6 +295,31 @@ test("a TIFF sequence is one single-page file per Z plane", async () => {
   await assert.rejects(openSource([await file(here("../../components/test/fixtures/tiff/stack-u16.tif")), await file(here("../../components/test/fixtures/tiff/stack-u16.tif"), "b.tif")]), /has 3 pages/);
 });
 
+for (const [fixture, tag, value, error] of [
+  ["rgba.tif", 338, 0, /sample roles/],
+  ["miniswhite.tif", 262, 1, /photometric/],
+]) {
+  test(`a TIFF sequence rejects inconsistent ${error.source}`, async () => {
+    const original = await readFile(here(`../../components/test/fixtures/tiff/${fixture}`));
+    const changed = Buffer.from(original);
+    const little = changed.toString("ascii", 0, 2) === "II";
+    const view = new DataView(changed.buffer, changed.byteOffset, changed.byteLength);
+    const ifd = view.getUint32(4, little);
+    let found = false;
+    for (let i = 0; i < view.getUint16(ifd, little); i += 1) {
+      const entry = ifd + 2 + i * 12;
+      if (view.getUint16(entry, little) !== tag) continue;
+      assert.equal(view.getUint16(entry + 2, little), 3);
+      assert.equal(view.getUint32(entry + 4, little), 1);
+      view.setUint16(entry + 8, value, little);
+      found = true;
+    }
+    assert.ok(found);
+    const source = await openSource([new File([original], "a.tif"), new File([changed], "b.tif")]);
+    await assert.rejects(source.readPlane(0, 0, 1), error);
+  });
+}
+
 test("user metadata replaces the file's, and invalid sizes are refused", async () => {
   const source = await openSource([await file(here("./fixtures/tczyx-named.ome.tif"))]);
   const edited = withMetadata(source, { scale: { x: 0.1, y: 0.1, z: 1 }, unit: "micrometer", labels: ["Nuclei", " ", "Actin"], name: "edited" });

@@ -196,8 +196,11 @@ export async function openTiffSequence(files, { signal } = {}) {
       if (cached?.z !== z) {
         const stack = z === 0 ? first : await open(z);
         stacks.delete(z);
-        for (const key of ["width", "height", "dtype", "samplesPerPixel", "pageCount"]) {
+        for (const key of ["width", "height", "dtype", "samplesPerPixel", "pageCount", "photometric"]) {
           if (stack[key] !== first[key]) throw new Error(`${ordered[z].name} differs from ${ordered[0].name} in ${key}; a sequence needs equal images.`);
+        }
+        if (stack.sampleRoles.some((role, index) => role !== first.sampleRoles[index])) {
+          throw new Error(`${ordered[z].name} differs from ${ordered[0].name} in sample roles; a sequence needs equal images.`);
         }
         cached = { z, planes: await stack.readPage(0, { signal: planeSignal }) };
       }
