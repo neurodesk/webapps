@@ -56,6 +56,17 @@ test('one file per plane is ordered by its number, not as text', async () => {
   assert.deepEqual([...(await stack.readPlane(2))], [100, 101]);
 });
 
+test('a later multi-page file in a TIFF sequence is refused on every read', async () => {
+  const page = { width: 2, height: 2, data: plane(2, 2, 0) };
+  const stack = await openTiffStack([
+    file(encodeTiff([page]), 'a.tif'),
+    file(encodeTiff([page, page]), 'b.tif'),
+  ]);
+  await stack.readPlane(0);
+  await assert.rejects(stack.readPlane(1), /b.tif has multiple pages/);
+  await assert.rejects(stack.readPlane(1), /b.tif has multiple pages/);
+});
+
 test('ImageJ spacing and resolution give the voxel size', async () => {
   const bytes = encodeTiff([{ width: 2, height: 2, data: plane(2, 2, 0), description: 'ImageJ=1.52n\nunit=micron\nspacing=5\n', xResolution: [1, 2], yResolution: [1, 2] }]);
   const stack = await openTiffStack([file(bytes, 'ij.tif')]);
@@ -115,6 +126,10 @@ test('an OME-Zarr folder lists its levels in microns and reads planes', async ()
     axes,
     levels: [{ shape: [2, 2, 2, 3], scale: [1, 5, 2, 2], data: full }, { shape: [2, 1, 1, 2], scale: [1, 10, 4, 4], data: coarse }],
   });
+  await assert.rejects(openMicroscopyStack(files), /2 channels; select a channel explicitly/);
+  await assert.rejects(openMicroscopyStack(files, { channel: 0.5 }), /outside/);
+  const firstChannel = await openMicroscopyStack(files, { channel: 0 });
+  assert.deepEqual([...(await firstChannel.readPlane(0))], [0, 1, 2, 3, 4, 5]);
   const stack = await openMicroscopyStack(files, { channel: 1 });
   assert.equal(stack.kind, 'ome-zarr');
   assert.deepEqual(stack.shape, [2, 2, 3]);

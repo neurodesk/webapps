@@ -174,6 +174,7 @@ export async function openTiffStack(files, { maxPlaneBytes = PLANE_LIMIT_BYTES }
     let tiff = opened.get(z);
     if (!tiff) {
       tiff = await fromBlob(list[z]);
+      if (await tiff.getImageCount() !== 1) throw new Error(`${list[z].name} has multiple pages; choose one single-page TIFF per plane.`);
       opened.clear();
       opened.set(z, tiff);
     }
@@ -247,7 +248,7 @@ export function ngffLevels(multiscale) {
  * Open an OME-Zarr image from the files of its folder (picked or dropped, with relative paths).
  * Non-spatial axes (t, c) must have length 1, or `channel` picks one channel.
  */
-export async function openOmeZarrStack(files, { channel = 0, maxPlaneBytes = PLANE_LIMIT_BYTES, maxSlabBytes = SLAB_LIMIT_BYTES } = {}) {
+export async function openOmeZarrStack(files, { channel, maxPlaneBytes = PLANE_LIMIT_BYTES, maxSlabBytes = SLAB_LIMIT_BYTES } = {}) {
   const list = [...files];
   const paths = list.map(fileName);
   const marker = paths.map((path) => /(^|\/)(\.zattrs|zarr\.json)$/.exec(path) && path).filter(Boolean)
@@ -273,8 +274,10 @@ export async function openOmeZarrStack(files, { channel = 0, maxPlaneBytes = PLA
   for (const name of axes.filter((a) => !['z', 'y', 'x'].includes(a))) {
     const length = arrays[0].shape[index(name)];
     if (name !== 'c' && length !== 1) throw new Error(`The OME-Zarr image has ${length} ${name} points; export one.`);
-    if (name === 'c' && (channel < 0 || channel >= length)) throw new Error(`Channel ${channel} is outside 0-${length - 1}.`);
+    if (name === 'c' && length > 1 && channel === undefined) throw new Error(`The OME-Zarr image has ${length} channels; select a channel explicitly or export one.`);
+    if (name === 'c' && channel !== undefined && (!Number.isInteger(channel) || channel < 0 || channel >= length)) throw new Error(`Channel ${channel} is outside 0-${length - 1}.`);
   }
+  channel ??= 0;
   const dtype = String(arrays[0].dtype);
   const [, height, width] = described[0].shape;
   const bytes = arrays[0].dtype === 'float64' ? 8 : arrays[0].dtype.endsWith('32') ? 4 : arrays[0].dtype.endsWith('16') ? 2 : 1;
