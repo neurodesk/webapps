@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate the synthetic example session bundled with dicompare-web.
 
-The session is served at public/example-data/dicompare-example-session.zip and
-loaded by the "Example data" button, so people without DICOMs of their own can
+The session is published to the pinned dataset and
+loaded by the shared example selector, so people without DICOMs of their own can
 try dicompare in one click. Every file is synthetic: the pixel data is a small
 numerical phantom and the headers carry no subject information.
 
@@ -26,12 +26,13 @@ slice count does not affect any check.
 Usage (needs pydicom and numpy):
     python3 scripts/example-data/generate_example_data.py
 
-The output is deterministic, so re-running it reproduces the committed zip.
+The output is deterministic, so re-running it reproduces the published zip.
 """
 
 from __future__ import annotations
 
 import io
+import os
 import zipfile
 from pathlib import Path
 
@@ -41,7 +42,7 @@ from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.uid import ExplicitVRLittleEndian, MRImageStorage, generate_uid
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-OUTPUT_ZIP = REPO_ROOT / "public" / "example-data" / "dicompare-example-session.zip"
+OUTPUT_ZIP = Path(os.environ["TMPDIR"]) / "dicompare-example-session.zip"
 SESSION_DIR = "dicompare-example-session"
 
 # Fixed (fictional) study date/time so the output is reproducible.
@@ -301,7 +302,7 @@ def main() -> None:
             zf.writestr(info, files[name])
 
     raw = sum(len(v) for v in files.values())
-    print(f"Wrote {OUTPUT_ZIP.relative_to(REPO_ROOT)}: {len(files) - 1} DICOMs, "
+    print(f"Wrote {OUTPUT_ZIP}: {len(files) - 1} DICOMs, "
           f"{raw / 1e6:.2f} MB raw, {OUTPUT_ZIP.stat().st_size / 1e6:.2f} MB zipped")
 
 

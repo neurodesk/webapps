@@ -10,6 +10,7 @@ using the dicompare version pinned in src/version.ts. Run with:
 
 import asyncio
 import json
+import os
 import zipfile
 from collections import Counter
 from pathlib import Path
@@ -18,7 +19,7 @@ import pytest
 from dicompare.interface import analyze_dicom_files_for_ui, validate_acquisition_direct
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-EXAMPLE_ZIP = REPO_ROOT / "public" / "example-data" / "dicompare-example-session.zip"
+EXAMPLE_ZIP = Path(os.environ["TMPDIR"]) / "dicompare-example-session.zip"
 SCHEMAS = REPO_ROOT / "public" / "schemas"
 
 

@@ -141,7 +141,7 @@ const validateStepsSingle: TutorialStep[] = [
   },
   {
     target: '[data-tutorial="test-data-dropzone"]',
-    content: 'Drop your files here. These are the files you want to check for compliance. No DICOMs to hand? Click "Load example data" for a small synthetic session.',
+    content: 'Drop your files here. These are the files you want to check for compliance.',
     placement: 'left',
     waitFor: { type: 'hasItems', minCount: 1 },
   },
@@ -182,7 +182,7 @@ const validateStepsMulti: TutorialStep[] = [
   },
   {
     target: '[data-tutorial="test-data-dropzone"]',
-    content: 'Drop your files here. These are the files you want to check for compliance. No DICOMs to hand? Click "Load example data" for a small synthetic session.',
+    content: 'Drop your files here. These are the files you want to check for compliance.',
     placement: 'left',
     waitFor: { type: 'hasItems', minCount: 1 },
   },

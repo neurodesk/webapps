@@ -28,6 +28,10 @@ export default function ExampleInput() {
         assertCurrent();
         const transfer = new DataTransfer();
         for (const file of files) transfer.items.add(file);
+        if (example.id === 'synthetic-session') {
+          await actions.current.addFromData(transfer.files, 'validation-subject', assertCurrent);
+          return;
+        }
         const ids = await actions.current.addFromData(transfer.files, 'schema-template', assertCurrent);
         assertCurrent();
         const id = ids?.[0];
