@@ -1,5 +1,13 @@
 # ants-denoise
 
+## 0.1.20261109
+
+### Patch Changes
+
+- Updated dependencies [6ca6f49]
+  - @neurodesk/webapp-components@0.26.0
+  - @neurodesk/runtime-support@0.9.24
+
 ## 0.1.20261108
 
 ### Patch Changes

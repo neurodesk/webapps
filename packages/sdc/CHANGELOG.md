@@ -1,5 +1,15 @@
 # @neurodesk/sdc
 
+## 0.5.20261109
+
+### Patch Changes
+
+- Updated dependencies [6ca6f49]
+  - @neurodesk/webapp-components@0.26.0
+  - @neurodesk/hmc@0.4.20261109
+  - @neurodesk/n4@0.6.20261109
+  - @neurodesk/runtime-support@0.9.24
+
 ## 0.5.20261108
 
 ### Patch Changes
