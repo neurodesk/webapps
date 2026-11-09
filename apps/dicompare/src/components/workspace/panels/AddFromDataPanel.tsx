@@ -11,6 +11,7 @@ interface AddFromDataPanelProps {
   schemaDropZone: UseDropZoneReturn;
   testDropZone: UseDropZoneReturn;
   onFileUpload: (files: FileList | null, mode?: 'schema-template' | 'validation-subject') => void;
+  onLoadExampleData: (load: (files: FileList) => Promise<void> | void) => void;
   onLargeFolderBrowse?: (mode: 'schema-template' | 'validation-subject') => void;
   isLargeFolderSupported?: boolean;
   onStagedAttachSchema: () => void;
@@ -24,6 +25,7 @@ const AddFromDataPanel: React.FC<AddFromDataPanelProps> = ({
   schemaDropZone,
   testDropZone,
   onFileUpload,
+  onLoadExampleData,
   onLargeFolderBrowse,
   isLargeFolderSupported = false,
   onStagedAttachSchema,
@@ -55,6 +57,7 @@ const AddFromDataPanel: React.FC<AddFromDataPanelProps> = ({
                 onBlankClick={onStagedCreateBlank}
                 showLibraryButton
                 showBlankButton
+                onExampleDataClick={() => onLoadExampleData((files) => onFileUpload(files, 'schema-template'))}
                 emptyLabel="No reference"
                 fileInputId="staged-load-schema"
               />
@@ -77,6 +80,7 @@ const AddFromDataPanel: React.FC<AddFromDataPanelProps> = ({
                 onLargeFolderBrowse={onLargeFolderBrowse ? () => onLargeFolderBrowse('validation-subject') : undefined}
                 isLargeFolderSupported={isLargeFolderSupported}
                 dropZone={testDropZone}
+                onExampleDataClick={() => onLoadExampleData((files) => onFileUpload(files, 'validation-subject'))}
                 emptyLabel="No test data"
                 fileInputId="staged-load-data"
               />

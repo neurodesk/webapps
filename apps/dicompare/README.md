@@ -31,6 +31,17 @@ For the command-line interface (CLI) or Python API, see the [`dicompare` pip pac
 
 ---
 
+## Example data
+
+No DICOMs to hand? In the workspace, open **From data** and click **Load example data** next to Browse. It loads a small synthetic, anonymized session ([`public/example-data/dicompare-example-session.zip`](public/example-data/dicompare-example-session.zip), about 110 KB) with two acquisitions from a fictional 3T Siemens scanner:
+
+- **`acq-t1wmpr`**: a 3D T1w MPRAGE that passes every check of the HCP *T1-weighted 3D MPRAGE* reference.
+- **`acq-qsmmegre`**: a five-echo 3D GRE (magnitude and phase) for QSM. Attach *QSM Consensus Guidelines* from the Library and the report shows 8 passes, 2 failures (non-uniform echo spacing of 7.5, 7.5, 6.0, 7.5 ms; readout bandwidth 300 Hz/pixel against a 220 Hz/pixel maximum at 3T) and 1 warning (first echo 6.0 ms; 5 ms or less preferred).
+
+The images are a numerical phantom, a few slices per volume. Regenerate the zip with `python3 scripts/example-data/generate_example_data.py` (needs pydicom and numpy). `pytest scripts/example-data` checks the reports against the pinned dicompare, and CI runs it.
+
+---
+
 ## Desktop App
 
 For offline use or better performance, download the desktop app from [GitHub Releases](https://github.com/neurodesk/webapps/releases):

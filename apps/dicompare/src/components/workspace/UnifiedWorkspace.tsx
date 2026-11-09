@@ -30,7 +30,11 @@ import { useReadmeModal } from '../../hooks/useReadmeModal';
 import { useFileSystemAccess } from '../../hooks/useFileSystemAccess';
 import { useSchemaImportFromViewer } from '../../hooks/useSchemaImportFromViewer';
 import { useSessionPersistence } from '../../contexts/SessionPersistenceContext';
+<<<<<<< monorepo
 import ExampleInput from './ExampleInput';
+=======
+import { fetchExampleDataFiles } from '../../utils/exampleData';
+>>>>>>> upstream
 
 const UnifiedWorkspace: React.FC = () => {
   const {
@@ -161,6 +165,17 @@ const UnifiedWorkspace: React.FC = () => {
     if (!files) return;
     await addFromData(files, mode);
   }, [addFromData]);
+
+  // Fetch the bundled example session and hand it to an upload handler, so it
+  // takes the same path as files the user drops
+  const handleLoadExampleData = useCallback(async (load: (files: FileList) => Promise<void> | void) => {
+    setDropError(null);
+    try {
+      await load(await fetchExampleDataFiles());
+    } catch (err) {
+      setDropError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
 
   // Large folder upload handler (File System Access API for >2GB datasets)
   const handleLargeFolderBrowse = useCallback(async (mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
@@ -462,8 +477,14 @@ const UnifiedWorkspace: React.FC = () => {
               onCreateSchema={handleCreateSchema}
               onDetachCreatedSchema={handleDetachCreatedSchema}
               onToggleEditing={() => selectedId && toggleEditing(selectedId)}
+<<<<<<< monorepo
               onAttachData={asyncCallback('Attach data failed', handleAttachData)}
               onUploadSchemaForItem={asyncCallback('Upload schema for item failed', handleUploadSchemaForItem)}
+=======
+              onAttachData={handleAttachData}
+              onLoadExampleData={handleLoadExampleData}
+              onUploadSchemaForItem={handleUploadSchemaForItem}
+>>>>>>> upstream
               onDetachData={handleDetachData}
               onDetachValidationData={handleDetachValidationData}
               onAttachSchema={() => setShowAttachSchemaModal(true)}

@@ -40,6 +40,22 @@ function stripWebAnalyticsPlugin() {
   }
 }
 
+// index.html's <base href="/"> is for the web builds' deep routes. The desktop
+// app loads index.html from file:// with a relative base ('./') and a
+// HashRouter, so the tag would resolve schemas/ and example-data/ against the
+// filesystem root; drop it so they resolve next to index.html.
+function stripBaseHrefPlugin() {
+  return {
+    name: 'strip-base-href',
+    transformIndexHtml(html: string) {
+      if (!html.includes('<base href="/" />')) {
+        throw new Error('strip-base-href: <base href="/" /> not found in index.html')
+      }
+      return html.replace(/[ \t]*<base href="\/" \/>\n?/, '')
+    }
+  }
+}
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
@@ -74,7 +90,7 @@ export default defineConfig({
       copyPublicDir: true
     },
     publicDir: 'public',
-    plugins: [react(), copyPyodidePlugin(), stripWebAnalyticsPlugin()],
+    plugins: [react(), copyPyodidePlugin(), stripWebAnalyticsPlugin(), stripBaseHrefPlugin()],
     server: {
       port: 3001
     },

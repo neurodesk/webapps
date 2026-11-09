@@ -55,6 +55,7 @@ interface WorkspaceDetailPanelProps {
   onDetachCreatedSchema: () => void;  // Detach created schema from current item
   onToggleEditing: () => void;
   onAttachData: (files: FileList) => void;
+  onLoadExampleData: (load: (files: FileList) => Promise<void> | void) => void;  // Fetch the bundled example session, then pass it to load
   onUploadSchemaForItem: (files: FileList) => void;  // Upload DICOMs to build schema for current item
   onDetachData: () => void;
   onDetachValidationData: () => void;
@@ -103,6 +104,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   onDetachCreatedSchema,
   onToggleEditing,
   onAttachData,
+  onLoadExampleData,
   onUploadSchemaForItem,
   onDetachData,
   onDetachValidationData,
@@ -357,6 +359,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         schemaDropZone={schemaDropZone}
         testDropZone={testDropZone}
         onFileUpload={onFileUpload}
+        onLoadExampleData={onLoadExampleData}
         onLargeFolderBrowse={onLargeFolderBrowse}
         isLargeFolderSupported={isLargeFolderSupported}
         onStagedAttachSchema={onStagedAttachSchema}
@@ -582,6 +585,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             processingTarget={processingTarget}
             onBrowse={onAttachData}
             dropZone={mainDropZone}
+            onExampleDataClick={() => onLoadExampleData(onAttachData)}
             emptyLabel="No test data"
             fileInputId={`load-data-${selectedItem.id}`}
             className="h-full flex flex-col items-center justify-center"
