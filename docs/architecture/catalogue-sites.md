@@ -28,6 +28,8 @@ Pages. `sciget.org` DNS is on Cloudflare.
   carries the brand, title and URL of the host that serves it, and appears in that
   host's landing page and DICOM View menu. Analytics counts every copy.
 - `former_paths:` on an app: paths it was served from before a rename.
+- `desktop:` on every catalogue: its desktop suite's Electron `app_id` and
+  `executable` (see [Desktop suites](#desktop-suites)).
 
 Every catalogue host sends to one GA4 stream; the hub sends nothing. The
 stream's cross-domain and unwanted-referral lists match `sciget.org` and
@@ -47,8 +49,9 @@ it on another host too, add that catalogue to `also_in`.
 
 `pnpm build` builds each app once, then `scripts/build-site.mjs` writes:
 
-- `dist/`: every app, as before. The desktop suite assembles from it
+- `dist/`: every app, as before. The full desktop suite assembles from it
   (`scripts/desktop/assemble.mjs`), so its DICOM View still hands off to every app.
+  Each other catalogue's suite assembles from its `dist-sites/<catalogue>/`.
 - `dist-sites/<catalogue>/`: one deployable site per catalogue
   (`scripts/lib/catalog-sites.mjs`).
 - `dist-sites/hub/`: the hub page (`scripts/lib/hub-page.mjs`).
@@ -121,8 +124,33 @@ missing on the neuro host, so the 404 table sends the visitor on to
 
 A handoff opens the receiving app on the same origin. DICOM View on
 `webapps.neurodesk.org` therefore no longer offers MuscleMap, SeedSeg or Carotid
-Flow; the copy of DICOM View on `mskapps.sciget.org` does. The desktop suite
+Flow; the copy of DICOM View on `mskapps.sciget.org` does. The full Neurodesk suite
 keeps every handoff.
+
+## Desktop suites
+
+Each catalogue has its own offline desktop suite. `desktopSuite` in
+`scripts/lib/standalone.mjs` derives it from the registry, and
+`scripts/desktop/suites.mjs` selects one for the desktop scripts (`--catalog <id>`,
+else `NEURODESK_SUITE`, else the full suite).
+
+- The primary catalogue's suite is the full suite. It holds every app and
+  assembles from `dist/`, so its DICOM View keeps every handoff.
+- Every other catalogue's suite is an edition. It holds that catalogue's apps and
+  assembles from `dist-sites/<catalogue>/`: the catalogue's brand, handoffs to the
+  same apps only, and the runtime families they reach. Its offline start page
+  carries the catalogue's title and logo.
+- The suite is named after the catalogue's `title` (for example Microscopy
+  Webapps). Its Electron appId and executable come from the catalogue's `desktop:`
+  block, such as `microscopy-webapps`.
+- The full suite releases as `webapps-vVERSION`, an edition as
+  `webapps-<catalogue>-vVERSION`. All suites share the desktop version. Only the
+  full suite ships the Apptainer SIF and runs the offline workflow, container and
+  model-pack tests.
+- `registry/standalone.json` records the full suite under `suite` and an edition
+  under `suites.<catalogue>`. A catalogue's landing page and its site's
+  `standalone.json` link its own edition once it is recorded, and the full suite
+  before that (`linkedSuite`).
 
 ## Deployment
 
@@ -146,5 +174,10 @@ attach the custom domains.
    `site/` if it has a new brand.
 2. Set `catalog:` on its apps.
 3. Add its site to the `worker-sites` artifact, the `deploy-workers` and `verify-workers` matrices and the hub check in `deploy-pages.yml` (`test/catalog-site-projection.test.mjs` holds all four to the registry). The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
-4. Build, then run `node --test test/catalog-sites.test.mjs` and
+4. Give it a `desktop:` block (`app_id`, `executable`). In
+   `.github/workflows/standalone.yml`, add it to the desktop job's `suite` matrix
+   and add the bundle job's two upload steps, `offline-resources-<id>` and
+   `desktop-<id>-models-pack`. `test/independent-workflows.test.mjs` holds the
+   workflow to the registry's suites.
+5. Build, then run `node --test test/catalog-sites.test.mjs` and
    `pnpm audit:artifacts`.

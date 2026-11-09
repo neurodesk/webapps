@@ -92,7 +92,7 @@ the same trusted workflow run.
 Electron uses the pinned electron-builder 26 `afterSign` hook after executable
 resource editing and before ZIP creation. The hook owns Windows signing, while
 builder's own signing is disabled. It signs the whole unpacked PE payload and
-requires `neurodesk-webapps.exe`. Archive verification occurs before release
+requires the suite's executable, such as `neurodesk-webapps.exe`. Archive verification occurs before release
 splitting and again before publication, including reassembled multipart ZIPs.
 Offline resource integrity checks remain in place and fail if signing changes a
 checksummed scientific asset without a corresponding bundle update.

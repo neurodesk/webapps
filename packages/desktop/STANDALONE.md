@@ -1,6 +1,8 @@
 # Neurodesk Webapps standalone
 
-One archive per platform holds all 24 web applications, the Python wheels, the WebAssembly modules and the sample assets. Models are not in that archive. The application downloads a model the first time it is needed and caches it for later runs.
+The full suite, Neurodesk Webapps, holds every web application. Each catalogue edition (MSK Webapps, Microscopy Webapps and Preclinical Webapps) holds its catalogue's apps and is named after it; its executable is, for example, `microscopy-webapps` instead of `neurodesk-webapps`.
+
+One archive per platform holds the suite's web applications, the Python wheels, the WebAssembly modules and the sample assets. Models are not in that archive. The application downloads a model the first time it is needed and caches it for later runs.
 
 One separate model pack holds every model of the release. It is the same file for every platform. Install it when the machine has no internet access.
 
