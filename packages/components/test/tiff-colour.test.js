@@ -59,6 +59,24 @@ test('reduced-resolution pages are skipped and a stack of full-size pages is ref
   await assert.rejects(readTiffImage(fixture('colour-rgb-two-pages.tif')), /2 full-size pages/);
 });
 
+test('an unflagged smaller TIFF page is another image, not a thumbnail', async () => {
+  const bytes = fixture('colour-rgb-reduced.tif');
+  const view = new DataView(bytes);
+  const little = view.getUint16(0) === 0x4949;
+  const first = view.getUint32(4, little);
+  const second = view.getUint32(first + 2 + 12 * view.getUint16(first, little), little);
+  assert.ok(second);
+  let found = false;
+  for (let i = 0; i < view.getUint16(second, little); i++) {
+    const entry = second + 2 + 12 * i;
+    if (view.getUint16(entry, little) !== 254) continue;
+    view.setUint32(entry + 8, 0, little);
+    found = true;
+  }
+  assert.ok(found);
+  await assert.rejects(readTiffImage(bytes), /stack rather than one image/);
+});
+
 test('an RGB OME-TIFF reads with its OME pixel size', async () => {
   const image = await readTiffImage(fixture('colour-rgb.ome.tif'));
   assert.equal(image.metadata.kind, 'ome');

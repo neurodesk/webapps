@@ -1,6 +1,6 @@
 {
   "name": "histo2mri",
-  "version": "0.0.20261105",
+  "version": "0.0.20261109",
   "private": true,
   "type": "module",
   "scripts": {

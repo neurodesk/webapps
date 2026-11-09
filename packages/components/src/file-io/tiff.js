@@ -450,7 +450,7 @@ export async function readTiffImage(buffer, { signal, maxBytes = MAX_INPUT_BYTES
   const height = image.getHeight();
   for (let page = 1; page < pages; page++) {
     const other = await tiff.getImage(page);
-    if (!reducedResolution(other) && (other.getWidth() >= width || other.getHeight() >= height)) {
+    if (!reducedResolution(other)) {
       throw new Error(`This TIFF holds ${pages} full-size pages, a stack rather than one image; save the section you need as its own file.`);
     }
   }

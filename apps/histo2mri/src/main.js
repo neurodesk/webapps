@@ -25,6 +25,7 @@ import { axisPlanes } from "./core/plane.js";
 import { apply, invert } from "./core/matrix.js";
 import { mriViewerFile, mriVolume } from "./core/nifti.js";
 import { APP, classifyFiles, runSettings, runSummary, workerVolume } from "./config.js";
+import { replaceViewerVolumes } from "./viewer-volumes.js";
 import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
@@ -97,11 +98,13 @@ function status(message, error = false) {
   log.log(message, error ? "error" : "info");
 }
 
-async function showVolumes(base, overlay = null) {
+let displayedVolumes = [];
+async function showVolumes(base, overlay = null, signal) {
   await viewerReady();
   const volumes = [{ url: base, name: base.name, colormap: "gray" }];
   if (overlay) volumes.push({ url: overlay, name: overlay.name, opacity: overlayOpacity });
-  await viewer.loadVolumes(volumes);
+  await replaceViewerVolumes(viewer, displayedVolumes, volumes, signal);
+  displayedVolumes = volumes;
   $("emptyState").hidden = true;
 }
 
@@ -249,8 +252,7 @@ async function loadInputs(filesPromise, signal, { parameters = null } = {}) {
       nextSections.push({ file, image: await readSection(file, current) });
     }
     current.throwIfAborted();
-    if (mriFile) await showVolumes(nextMri.viewerFile);
-    current.throwIfAborted();
+    if (mriFile) await showVolumes(nextMri.viewerFile, null, current);
     if (mriFile) {
       mri = nextMri;
       syncInputFiles("mriInput", [mriFile]);
