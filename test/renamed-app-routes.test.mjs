@@ -39,8 +39,8 @@ for (const [page, route, expected] of [
   ['neuro', '/musclemap', 'https://mskapps.sciget.org/musclemap'],
   ['neuro', '/seedseg/index.html?example=1#results', 'https://mskapps.sciget.org/seedseg/index.html?example=1#results'],
   ['neuro', '/carotid-flow/assets/app.js', 'https://mskapps.sciget.org/carotid-flow/assets/app.js'],
-  ['msk', '/dicomview/?x=1#y', 'https://webapps.neurodesk.org/dicomview/?x=1#y'],
-  ['msk', '/dicom2vid/x', 'https://webapps.neurodesk.org/mri2vid/x'],
+  ['msk', '/synthseg/?x=1#y', 'https://webapps.neurodesk.org/synthseg/?x=1#y'],
+  ['msk', '/dicom2vid/x', '/mri2vid/x'],
 ]) {
   test(`${page} 404 page sends ${route} to ${expected}`, () => {
     const origin = `https://${page === 'msk' ? msk.host : neuro.host}`;
@@ -51,7 +51,7 @@ for (const [page, route, expected] of [
 for (const [page, route] of [
   ['neuro', '/'], ['neuro', '/missing'], ['neuro', '/dicom2video/'], ['neuro', '/mri2vid/missing'],
   ['neuro', '/dicompare/schema'], ['neuro', '/musclemapper/'], ['neuro', '/constructor/'], ['neuro', '/__proto__/'],
-  ['msk', '/'], ['msk', '/musclemap/missing'],
+  ['msk', '/'], ['msk', '/musclemap/missing'], ['msk', '/dicomview/?x=1#y'],
   ['all', '/musclemap/'],
 ]) {
   test(`${page} 404 page leaves ${route} alone`, () => {
@@ -85,9 +85,11 @@ test('each 404 page names its catalogue and loads dicompare routing only where d
 });
 
 test('an app served by several catalogues stays on each of them and redirects elsewhere to its home', () => {
-  assert.ok(catalogApps(registry, microscopy).some(({ id }) => id === 'elastix'));
-  assert.ok(catalogApps(registry, neuro).some(({ id }) => id === 'elastix'));
-  assert.equal(movedAppRoutes(registry, microscopy).elastix, undefined);
-  assert.equal(movedAppRoutes(registry, neuro).elastix, undefined);
-  assert.equal(movedAppRoutes(registry, msk).elastix, 'https://webapps.neurodesk.org/elastix');
+  const preclinical = findCatalog(registry, 'preclinical');
+  for (const catalog of [microscopy, preclinical]) {
+    assert.ok(catalogApps(registry, catalog).some(({ id }) => id === 'structure-tensor'));
+    assert.equal(movedAppRoutes(registry, catalog)['structure-tensor'], undefined);
+  }
+  assert.equal(movedAppRoutes(registry, msk)['structure-tensor'], 'https://microscopyapps.sciget.org/structure-tensor');
+  assert.equal(movedAppRoutes(registry, neuro)['structure-tensor'], 'https://microscopyapps.sciget.org/structure-tensor');
 });

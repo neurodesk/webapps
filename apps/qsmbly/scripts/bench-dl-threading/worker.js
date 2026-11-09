@@ -28,8 +28,10 @@ self.onmessage = async (e) => {
   const { threads, flag, reps, nx, ny, nz, core, halo, mode, model, weightsUrl } = e.data;
   try {
     log(`worker up: isolated=${self.crossOriginIsolated} SharedArrayBuffer=${typeof SharedArrayBuffer}`);
+    const packed = await fetch('../../wasm/qsm_wasm_dl_bg.wasm.gz.bin');
+    const bytes = await new Response(packed.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
     const mod = await import('../../wasm/qsm_wasm_dl.js');
-    const out = await mod.default('../../wasm/qsm_wasm_dl_bg.wasm');
+    const out = await mod.default({ module_or_path: bytes });
     log(`wasm instantiated, heap=${(out.memory.buffer.byteLength / 1e6).toFixed(0)} MB`);
 
     const url = weightsUrl || `${WEIGHT_BASE}/${model}.onnx`;
