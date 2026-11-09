@@ -4,12 +4,14 @@
 // can version independently, so an update replaces and version-checks only the platforms of the source it
 // came from.
 import { portableCommand, releasePlatform } from './portable-command.mjs';
+import { SUITE_ID, suiteRecordPath } from './suite-release.mjs';
 
 export const RELEASE_ARGUMENT = /^([a-z0-9][a-z0-9-]*)@(\d+\.\d+\.\d{8})$/;
 const RELEASE_TAG = /^([a-z0-9][a-z0-9-]*)-v(\d+\.\d+\.\d{8})$/;
-// The nightly desktop suite releases as webapps-vVERSION with its own catalog entry, standalone-catalog.json,
-// which scripts/desktop/publish.mjs writes after checking every archive.
-export const SUITE_ID = 'webapps';
+// The nightly desktop suites release as webapps-vVERSION (every app) and webapps-<catalogue>-vVERSION, each
+// with its own catalog entry, standalone-catalog.json, which scripts/desktop/publish.mjs writes after
+// checking every archive.
+export { SUITE_ID, suiteRecordPath };
 
 export function parseReleases(values) {
   return values.map((value) => {

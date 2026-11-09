@@ -1,9 +1,60 @@
 import { cp, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { repoRoot, loadAppsRegistry } from './apps-registry.mjs';
+import { catalogApps, primaryCatalog, repoRoot, loadAppsRegistry } from './apps-registry.mjs';
+import { suiteRecordPath, suiteReleaseId } from './suite-release.mjs';
 
 export async function loadStandalone(registry, root = repoRoot) {
   return validateStandalone(JSON.parse(await readFile(join(root, 'registry/standalone.json'), 'utf8')), registry);
+}
+
+/**
+ * The desktop suite of a catalogue: one Electron application holding its apps.
+ * The primary catalogue's suite is the full suite and holds every app, so its
+ * DICOM View still hands off to apps other hosts serve; any other catalogue's
+ * suite holds the apps its host serves. The suite takes the catalogue's title
+ * as its product name and release title.
+ */
+export function desktopSuite(registry, catalog) {
+  const primary = catalog.host === registry.site.domain;
+  return {
+    catalog: catalog.id,
+    primary,
+    title: catalog.title,
+    release: suiteReleaseId(catalog.id, primary),
+    appId: catalog.desktop.app_id,
+    executable: catalog.desktop.executable,
+    apps: primary ? registry.apps : catalogApps(registry, catalog),
+  };
+}
+
+/** Every catalogue's desktop suite, the full suite first. */
+export function desktopSuites(registry) {
+  return registry.site.catalogs.map(catalog => desktopSuite(registry, catalog)).sort((a, b) => Number(b.primary) - Number(a.primary));
+}
+
+/** The published record of a suite (`suite` for the full suite, `suites.<catalogue>` otherwise), or undefined before its first release. */
+export function suiteRecord(standalone, suite) {
+  const [key, id] = suiteRecordPath(suite.release);
+  return id ? standalone?.[key]?.[id] : standalone?.[key];
+}
+
+/** Writes a suite's published record where `suiteRecord` reads it. */
+export function setSuiteRecord(standalone, suite, record) {
+  const [key, id] = suiteRecordPath(suite.release);
+  if (id) (standalone[key] ??= {})[id] = record;
+  else standalone[key] = record;
+  return standalone;
+}
+
+/**
+ * The suite a catalogue's Standalone links point at: its own once a release is
+ * recorded, else the full suite, so a catalogue never links a release that does
+ * not exist yet.
+ */
+export function linkedSuite(registry, standalone, catalog) {
+  const own = desktopSuite(registry, catalog);
+  if (own.primary || suiteRecord(standalone, own)?.downloads?.length) return own;
+  return desktopSuite(registry, primaryCatalog(registry));
 }
 
 // Every themed app build runs this check on the whole catalog, so the CI
@@ -26,11 +77,24 @@ export function validateStandalone(value, registry) {
       throw new Error(`${id}: OpenRecon requires a package label and recipe name`);
     }
   }
-  if (value.suite) {
-    validateDownloads(value.suite.downloads, 'suite');
-    if (value.suite.models) validateDownloads([value.suite.models], 'suite model pack');
+  if (value.suite) validateSuite(value.suite, 'suite');
+  if (value.suites !== undefined) {
+    const editions = new Set((registry.site?.catalogs ?? []).filter(catalog => catalog.host !== registry.site.domain).map(catalog => catalog.id));
+    if (!value.suites || typeof value.suites !== 'object' || Array.isArray(value.suites)) throw new Error('suites must map catalogue ids to suite records');
+    for (const [id, record] of Object.entries(value.suites)) {
+      if (!editions.has(id)) throw new Error(`suites.${id}: not a catalogue with its own desktop suite`);
+      validateSuite(record, `suites.${id}`);
+    }
   }
   return value;
+}
+
+// A published suite: the release it came from and what it holds.
+function validateSuite(record, label) {
+  if (!/^\d+\.\d+\.\d{8}$/.test(record?.version ?? '')) throw new Error(`${label}: version must be MAJOR.MINOR.YYYYMMDD`);
+  if (!Array.isArray(record.apps) || record.apps.some(app => typeof app?.id !== 'string' || typeof app?.version !== 'string')) throw new Error(`${label}: apps must list { id, version }`);
+  validateDownloads(record.downloads, label);
+  if (record.models) validateDownloads([record.models], `${label} model pack`);
 }
 
 function validateDownloads(downloads, id) {

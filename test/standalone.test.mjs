@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
-import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
-import { DIALOG_FORBIDDEN, loadStandalone } from '../scripts/lib/standalone.mjs';
+import { catalogApps, findCatalog, loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
+import { DIALOG_FORBIDDEN, desktopSuite, desktopSuites, linkedSuite, loadStandalone, setSuiteRecord, suiteRecord, validateStandalone } from '../scripts/lib/standalone.mjs';
 import { ciWorkflowApps, cpuWorkflowApps, hardwareWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
 import { prepareWorkflow, workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
@@ -38,6 +38,60 @@ test('no Standalone dialog shows build or checksum instructions', async () => {
     dialog.root.remove();
   }
   dom.window.close();
+});
+
+test('each catalogue has a desktop suite: the full suite for the primary catalogue, its own apps for any other', async () => {
+  const registry = await loadAppsRegistry();
+  const suites = desktopSuites(registry);
+  assert.deepEqual(suites.map(({ catalog, release, title, appId, executable, primary }) => ({ catalog, release, title, appId, executable, primary })), [
+    { catalog: 'neuro', release: 'webapps', title: 'Neurodesk Webapps', appId: 'org.neurodesk.webapps', executable: 'neurodesk-webapps', primary: true },
+    { catalog: 'msk', release: 'webapps-msk', title: 'MSK Webapps', appId: 'org.sciget.mskapps', executable: 'msk-webapps', primary: false },
+    { catalog: 'microscopy', release: 'webapps-microscopy', title: 'Microscopy Webapps', appId: 'org.sciget.microscopyapps', executable: 'microscopy-webapps', primary: false },
+    { catalog: 'preclinical', release: 'webapps-preclinical', title: 'Preclinical Webapps', appId: 'org.sciget.preclinicalapps', executable: 'preclinical-webapps', primary: false },
+  ]);
+  const ids = suite => suite.apps.map(({ id }) => id).sort();
+  assert.deepEqual(ids(suites[0]), registry.apps.map(({ id }) => id).sort(), 'the full suite keeps every app and every DICOM View handoff');
+  for (const suite of suites.slice(1)) {
+    assert.deepEqual(ids(suite), catalogApps(registry, findCatalog(registry, suite.catalog)).map(({ id }) => id).sort());
+    assert.ok(suite.apps.length < registry.apps.length);
+  }
+  assert.ok(ids(suites.find(({ catalog }) => catalog === 'microscopy')).includes('elastix'), 'an also_in copy ships in the catalogue suite');
+  assert.ok(!ids(suites.find(({ catalog }) => catalog === 'microscopy')).includes('musclemap'));
+});
+
+test('a catalogue links its own suite once a release is recorded, and the full suite before that', async () => {
+  const registry = await loadAppsRegistry();
+  const standalone = await loadStandalone(registry);
+  const microscopy = findCatalog(registry, 'microscopy');
+  assert.equal(linkedSuite(registry, standalone, findCatalog(registry, 'neuro')).release, 'webapps');
+  assert.equal(linkedSuite(registry, undefined, microscopy).release, 'webapps', 'no catalog at all still links the full suite');
+  assert.equal(suiteRecord(standalone, desktopSuite(registry, microscopy)), undefined);
+  assert.equal(suiteRecord(standalone, desktopSuite(registry, findCatalog(registry, 'neuro'))), standalone.suite);
+  const record = { version: '0.50.20261201', revision: 'a'.repeat(40), apps: [{ id: 'zarro', version: '0.4.20261104' }], downloads: [standalone.suite.downloads[0]] };
+  const published = setSuiteRecord(structuredClone(standalone), desktopSuite(registry, microscopy), record);
+  assert.deepEqual(published.suites, { microscopy: record });
+  assert.deepEqual(suiteRecord(published, desktopSuite(registry, microscopy)), record);
+  assert.equal(linkedSuite(registry, published, microscopy).release, 'webapps-microscopy');
+  assert.equal(linkedSuite(registry, published, findCatalog(registry, 'msk')).release, 'webapps', 'another catalogue still falls back');
+  const empty = setSuiteRecord(structuredClone(standalone), desktopSuite(registry, microscopy), { ...record, downloads: [] });
+  assert.equal(linkedSuite(registry, empty, microscopy).release, 'webapps', 'a record without downloads is not a published suite');
+  validateStandalone(published, registry);
+});
+
+test('the catalog validates every catalogue suite record and refuses one for the primary or an unknown catalogue', async () => {
+  const registry = await loadAppsRegistry();
+  const standalone = await loadStandalone(registry);
+  const record = { version: '0.50.20261201', apps: [{ id: 'zarro', version: '0.4.20261104' }], downloads: [standalone.suite.downloads[0]], models: standalone.suite.models };
+  const withSuites = suites => validateStandalone({ ...standalone, suites }, registry);
+  withSuites({ microscopy: record, msk: record });
+  assert.throws(() => withSuites({ neuro: record }), /suites\.neuro: not a catalogue with its own desktop suite/);
+  assert.throws(() => withSuites({ unknown: record }), /suites\.unknown: not a catalogue with its own desktop suite/);
+  assert.throws(() => withSuites([record]), /suites must map catalogue ids to suite records/);
+  assert.throws(() => withSuites({ msk: { ...record, version: '0.50' } }), /suites\.msk: version must be MAJOR\.MINOR\.YYYYMMDD/);
+  assert.throws(() => withSuites({ msk: { ...record, apps: ['zarro'] } }), /suites\.msk: apps must list \{ id, version \}/);
+  assert.throws(() => withSuites({ msk: { ...record, downloads: [{ ...record.downloads[0], sha256: 'nope' }] } }), /suites\.msk: download must have a checksum/);
+  assert.throws(() => withSuites({ msk: { ...record, models: { ...record.models, url: 'https://example.test/x' } } }), /suites\.msk model pack: invalid download URL/);
+  assert.throws(() => validateStandalone({ ...standalone, suite: { ...standalone.suite, apps: undefined } }, registry), /suite: apps must list \{ id, version \}/);
 });
 
 test('a future app cannot be silently omitted from desktop packaging', async t => {

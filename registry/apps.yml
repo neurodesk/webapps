@@ -16,6 +16,9 @@ site:
       more_apps: More SciGet web apps
   # Every app has one home catalogue (its `catalog:`); `also_in:` lists other
   # catalogues whose hosts serve a copy. Handoff menus list the apps of one host.
+  # `desktop:` names each catalogue's offline suite (scripts/lib/standalone.mjs):
+  # the Electron appId and executable. The suite is titled after the catalogue;
+  # the primary catalogue's suite holds every app, any other its host's apps.
   catalogs:
     - id: neuro
       host: webapps.neurodesk.org
@@ -28,6 +31,9 @@ site:
         logo: neurodesk-logo.svg
         home: https://neurodesk.org/
         more_apps: More Neurodesk web apps
+      desktop:
+        app_id: org.neurodesk.webapps
+        executable: neurodesk-webapps
     - id: msk
       host: mskapps.sciget.org
       hosting: worker
@@ -39,6 +45,9 @@ site:
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
         more_apps: More MSK web apps
+      desktop:
+        app_id: org.sciget.mskapps
+        executable: msk-webapps
     - id: microscopy
       host: microscopyapps.sciget.org
       hosting: worker
@@ -50,6 +59,9 @@ site:
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
         more_apps: More microscopy web apps
+      desktop:
+        app_id: org.sciget.microscopyapps
+        executable: microscopy-webapps
     - id: preclinical
       host: preclinicalapps.sciget.org
       hosting: worker
@@ -61,6 +73,9 @@ site:
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
         more_apps: More preclinical web apps
+      desktop:
+        app_id: org.sciget.preclinicalapps
+        executable: preclinical-webapps
   analytics:
     measurement_id: G-4Z9774J59Y
     period_days: 30

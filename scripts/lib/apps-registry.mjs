@@ -66,6 +66,12 @@ const GA4_MEASUREMENT_ID = /^G-[A-Z0-9]+$/;
 const PACKAGE_SCRIPT = /^[a-z][a-z0-9:-]*$/;
 const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 const LOGO = /^[a-z0-9][a-z0-9-]*\.svg$/;
+// A catalogue's desktop suite: its Electron appId (reverse DNS) and executable name.
+const DESKTOP_APP_ID = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
+const EXECUTABLE = /^[a-z][a-z0-9-]*$/;
+// Desktop suites release as webapps-vVERSION and webapps-<catalogue>-vVERSION
+// (scripts/lib/suite-release.mjs), beside the apps' <id>-vVERSION tags.
+const RESERVED_APP_ID = /^webapps(-|$)/;
 // Where a catalogue is served: the repository's one GitHub Pages site, or an
 // assets-only Cloudflare Worker (.github/workflows/deploy-pages.yml).
 export const HOSTINGS = new Set(['pages', 'worker']);
@@ -93,6 +99,7 @@ function validateCatalogs(registry, errors) {
   validateSiteEntry(registry.site.hub, 'site.hub', errors);
   const ids = new Set();
   const hosts = new Set([registry.site.hub?.host]);
+  const desktops = { app_id: new Set(), executable: new Set() };
   for (const catalog of catalogs) {
     if (!ID.test(catalog?.id ?? '')) errors.push(`invalid catalog id: ${catalog?.id}`);
     // dist-sites/hub holds the hub page.
@@ -101,6 +108,13 @@ function validateCatalogs(registry, errors) {
     if (hosts.has(catalog?.host)) errors.push(`duplicate catalog host: ${catalog.host}`);
     if (!HOSTINGS.has(catalog?.hosting)) errors.push(`hosting for catalog ${catalog?.id} must be one of: ${[...HOSTINGS].join(', ')}`);
     validateSiteEntry(catalog, `catalog ${catalog?.id}`, errors);
+    const desktop = catalog?.desktop;
+    if (!DESKTOP_APP_ID.test(desktop?.app_id ?? '')) errors.push(`catalog ${catalog?.id}.desktop.app_id must be a reverse-DNS application id`);
+    if (!EXECUTABLE.test(desktop?.executable ?? '')) errors.push(`catalog ${catalog?.id}.desktop.executable must be a lower-case executable name`);
+    for (const key of ['app_id', 'executable']) {
+      if (desktops[key].has(desktop?.[key])) errors.push(`duplicate desktop ${key}: ${desktop[key]}`);
+      desktops[key].add(desktop?.[key]);
+    }
     ids.add(catalog?.id);
     hosts.add(catalog?.host);
   }
@@ -150,6 +164,7 @@ export async function loadAppsRegistry(path = registryPath) {
 
   for (const app of registry?.apps ?? []) {
     if (!ID.test(app.id ?? '')) errors.push(`invalid app id: ${app.id}`);
+    if (RESERVED_APP_ID.test(app.id ?? '')) errors.push(`app id ${app.id} is reserved for desktop suite releases`);
     if (!ID.test(app.path ?? '')) errors.push(`invalid app path for ${app.id}: ${app.path}`);
     if (ids.has(app.id)) errors.push(`duplicate app id: ${app.id}`);
     if (paths.has(app.path)) errors.push(`duplicate app path: ${app.path}`);
@@ -267,7 +282,11 @@ export async function loadAppsRegistry(path = registryPath) {
   }
 
   if (errors.length) throw new Error(`Invalid app registry:\n- ${errors.join('\n- ')}`);
-  const siteEntry = (entry) => Object.freeze({ ...entry, brand: Object.freeze({ ...entry.brand }) });
+  const siteEntry = (entry) => Object.freeze({
+    ...entry,
+    brand: Object.freeze({ ...entry.brand }),
+    ...(entry.desktop ? { desktop: Object.freeze({ ...entry.desktop }) } : {}),
+  });
   return Object.freeze({
     site: Object.freeze({
       ...registry.site,

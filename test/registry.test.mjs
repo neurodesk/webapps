@@ -321,8 +321,25 @@ test('also_in lists other declared catalogues, each once', async () => {
   assert.ok(catalogApps(registry, findCatalog(registry, 'neuro')).some(({ id }) => id === 'musclemap'));
 });
 
+test('every catalogue declares a desktop suite with its own Electron application id and executable', async () => {
+  const registry = await loadAppsRegistry();
+  assert.deepEqual(registry.site.catalogs.map(({ id, desktop }) => [id, desktop.app_id, desktop.executable]), [
+    ['neuro', 'org.neurodesk.webapps', 'neurodesk-webapps'],
+    ['msk', 'org.sciget.mskapps', 'msk-webapps'],
+    ['microscopy', 'org.sciget.microscopyapps', 'microscopy-webapps'],
+    ['preclinical', 'org.sciget.preclinicalapps', 'preclinical-webapps'],
+  ]);
+  assert.ok(Object.isFrozen(registry.site.catalogs[0].desktop));
+});
+
 test('registry rejects duplicate catalogue hosts and ids, and catalogues without apps', async () => {
   const cases = [
+    [raw => { delete raw.site.catalogs[1].desktop; }, /catalog msk\.desktop\.app_id must be a reverse-DNS application id/],
+    [raw => { raw.site.catalogs[1].desktop.app_id = 'mskapps'; }, /catalog msk\.desktop\.app_id must be a reverse-DNS application id/],
+    [raw => { raw.site.catalogs[1].desktop.executable = 'MSK Webapps'; }, /catalog msk\.desktop\.executable must be a lower-case executable name/],
+    [raw => { raw.site.catalogs[1].desktop.executable = raw.site.catalogs[0].desktop.executable; }, /duplicate desktop executable: neurodesk-webapps/],
+    [raw => { raw.site.catalogs[1].desktop.app_id = raw.site.catalogs[0].desktop.app_id; }, /duplicate desktop app_id: org\.neurodesk\.webapps/],
+    [raw => { raw.apps[0].id = 'webapps-msk'; }, /app id webapps-msk is reserved for desktop suite releases/],
     [raw => { raw.site.catalogs[1].host = raw.site.catalogs[0].host; }, /duplicate catalog host: webapps\.neurodesk\.org/],
     [raw => { raw.site.catalogs[1].host = raw.site.hub.host; }, /duplicate catalog host: webapps\.sciget\.org/],
     [raw => { raw.site.catalogs[1].id = 'neuro'; }, /duplicate catalog id: neuro/],
