@@ -11,6 +11,9 @@
   - Merge pull request #36 from astewartau/feat/load-example-data
   - chore: bump version to 0.15.6
 
+- Updated dependencies [6ca6f49]
+  - @neurodesk/webapp-components@0.26.0
+
 ## 0.15.20261108
 
 ### Patch Changes

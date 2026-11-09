@@ -130,7 +130,7 @@ echo "      Base bundle (classical + separation + relaxometry + model registry).
 echo "      DL bundle (deep-learning inference via tract; lazy-loaded, SIMD128)..."
 RUSTFLAGS="$DL_RUSTFLAGS" "${WP[@]}" build --target web --release --out-dir pkg-dl --out-name qsm_wasm_dl --features "$DL_FEATS"
 
-# Keep the full DL runtime within the host's 25 MiB per-file limit.
+# Shrink the DL runtime; it is served gzipped below.
 wasm-opt pkg-dl/qsm_wasm_dl_bg.wasm -Oz --enable-threads --enable-bulk-memory --enable-mutable-globals --enable-simd -o pkg-dl/qsm_wasm_dl_bg.wasm
 
 echo ""
@@ -150,6 +150,11 @@ cp "$RUST_DIR/pkg-dl/qsm_wasm_dl.js" "$WASM_DIR/"
 cp "$RUST_DIR/pkg-dl/qsm_wasm_dl_bg.wasm" "$WASM_DIR/"
 cp "$RUST_DIR/pkg-dl/qsm_wasm_dl.d.ts" "$WASM_DIR/" 2>/dev/null || true
 cp "$RUST_DIR/pkg-dl/qsm_wasm_dl_bg.wasm.d.ts" "$WASM_DIR/" 2>/dev/null || true
+# Serve the DL module gzipped (about 5 MB instead of 25 MB, the Workers per-file limit);
+# js/modules/ModelWeights.js inflates it. -n keeps the bytes free of the build time. The .bin
+# suffix keeps it in the service worker's verified runtime cache, which takes .wasm and .bin.
+gzip -9nc "$WASM_DIR/qsm_wasm_dl_bg.wasm" > "$WASM_DIR/qsm_wasm_dl_bg.wasm.gz.bin"
+rm "$WASM_DIR/qsm_wasm_dl_bg.wasm"
 
 # Threaded builds emit a wasm-bindgen-rayon `snippets/` dir with the worker bootstrap JS, which
 # qsm_wasm.js / qsm_wasm_dl.js import by relative path — copy it alongside (harmless if absent).

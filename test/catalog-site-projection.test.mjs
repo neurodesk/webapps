@@ -10,7 +10,7 @@ import { loadNotFoundTemplate } from '../scripts/lib/not-found-page.mjs';
 import { loadStandalone } from '../scripts/lib/standalone.mjs';
 
 const full = await loadAppsRegistry();
-// Two real apps, one per catalogue, keep the fixture small.
+// dicomview (home neuro, copied to msk) and musclemap (msk) keep the fixture small.
 const registry = { ...full, apps: [findApp(full, 'dicomview'), findApp(full, 'musclemap')] };
 const information = await loadAppInformation(full);
 const standalone = await loadStandalone(full);
@@ -67,9 +67,14 @@ test('a catalogue site holds its own apps and only the runtime families they rea
   const msk = await projectCatalogSite({
     repoRoot, siteDist, destination: mskDir, registry, catalog: findCatalog(full, 'msk'), information, standalone, notFoundTemplate,
   });
-  assert.deepEqual(msk.apps, ['musclemap']);
-  assert.deepEqual(msk.families, []);
-  assert.deepEqual((await readdir(join(mskDir, '_runtime'))), []);
+  // dicomview is also_in msk: the copy brings its runtime families and hands off to msk's apps only.
+  assert.deepEqual(msk.apps, ['dicomview', 'musclemap']);
+  assert.deepEqual(msk.families, ['_runtime/ort-web/1.21.0', '_runtime/viewer/1.0']);
+  await assert.rejects(access(join(mskDir, '_runtime/unused')), { code: 'ENOENT' });
+  const mskDicomview = await readFile(join(mskDir, 'dicomview/index.html'), 'utf8');
+  assert.match(mskDicomview, /data-app-url="https:\/\/mskapps\.sciget\.org\/dicomview\/"/);
+  const mskPayload = JSON.parse(mskDicomview.match(/data-neurodesk-app-information>([\s\S]*?)<\/script>/)[1]);
+  assert.deepEqual(mskPayload.catalog.map(({ id }) => id).sort(), ['dicomview', 'musclemap']);
   const msHtml = await readFile(join(mskDir, 'musclemap/index.html'), 'utf8');
   assert.match(msHtml, /<title>MuscleMap \| SciGet MSK Webapps<\/title>/);
   assert.match(msHtml, /data-brand-name="SciGet"/);
@@ -133,6 +138,7 @@ test('the Worker-hosted sites deploy as assets-only Workers on their own domains
   assert.deepEqual(workerSites(full), [
     { host: 'mskapps.sciget.org', site: 'msk' },
     { host: 'microscopyapps.sciget.org', site: 'microscopy' },
+    { host: 'preclinicalapps.sciget.org', site: 'preclinical' },
     { host: 'webapps.sciget.org', site: 'hub' },
   ]);
   assert.deepEqual(workerConfig('mskapps.sciget.org', 'msk'), {
@@ -150,6 +156,12 @@ test('the deploy workflow deploys every Worker site the registry declares', asyn
   const workflow = parse(await readFile(join(repoRoot, '.github/workflows/deploy-pages.yml'), 'utf8'));
   const matrix = workflow.jobs['deploy-workers'].strategy.matrix.include;
   assert.deepEqual(matrix, workerSites(full).map(({ host, site }) => ({ site, url: `https://${host}/` })));
+  const catalogSites = workerSites(full).filter(({ site }) => site !== 'hub');
+  assert.deepEqual(workflow.jobs['verify-workers'].strategy.matrix.include, catalogSites.map(({ host, site }) => ({ site, url: `https://${host}/` })));
+  const upload = workflow.jobs.build.steps.find((step) => step.with?.name === 'worker-sites');
+  assert.deepEqual(upload.with.path.trim().split('\n'), workerSites(full).flatMap(({ site }) => [`dist-sites/${site}`, `dist-sites/${site}.wrangler.json`]));
+  const hubCheck = workflow.jobs['deploy-workers'].steps.find((step) => step.name === 'Check the hub lists every catalogue');
+  assert.match(hubCheck.run, new RegExp(`for host in ${full.site.catalogs.map(({ host }) => host).join(' ')}; do`), 'the hub check covers every catalogue');
   const pages = workflow.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-pages-artifact'));
   const primary = full.site.catalogs.find((catalog) => catalog.hosting === 'pages');
   assert.equal(pages.with.path, `dist-sites/${primary.id}`);
