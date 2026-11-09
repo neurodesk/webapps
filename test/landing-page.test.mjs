@@ -3,7 +3,9 @@ import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { loadAppsRegistry, SUPPORT_STATUSES } from '../scripts/lib/apps-registry.mjs';
 import { renderLandingPage } from '../scripts/lib/landing-page.mjs';
-import { loadStandalone } from '../scripts/lib/standalone.mjs';
+import { desktopSuite, loadStandalone, setSuiteRecord } from '../scripts/lib/standalone.mjs';
+
+const FULL_SUITE_SEARCH = 'https://github.com/neurodesk/webapps/releases?q=Neurodesk+Webapps&expanded=true';
 
 test('landing page renders categorized, searchable app cards', async () => {
   const registry = await loadAppsRegistry();
@@ -99,9 +101,34 @@ test('each catalogue lists only its own apps under its own brand', async () => {
     const primary = catalog.host === registry.site.domain;
     assert.equal(Boolean(document.querySelector('#analytics')), primary, 'only the primary host reports usage');
     assert.equal(Boolean(document.querySelector('a[href="./surf/"]')), primary, 'only the primary host serves the game');
+    const link = document.querySelector('.standalone-link');
+    assert.equal(link.getAttribute('href'), FULL_SUITE_SEARCH, `${id} links the full suite before its own edition is released`);
+    assert.equal(link.dataset.suiteRelease, 'webapps');
   }
   const neuro = renderLandingPage({ ...registry, apps: catalogApps(registry, findCatalog(registry, 'neuro')) }, standalone, findCatalog(registry, 'neuro'));
   for (const moved of ['musclemap', 'seedseg', 'carotid-flow']) assert.doesNotMatch(neuro, new RegExp(`data-app-id="${moved}"`));
+});
+
+test('a catalogue with a released edition links its own desktop suite', async () => {
+  const { catalogApps, findCatalog } = await import('../scripts/lib/apps-registry.mjs');
+  const registry = await loadAppsRegistry();
+  const standalone = structuredClone(await loadStandalone(registry));
+  const microscopy = findCatalog(registry, 'microscopy');
+  setSuiteRecord(standalone, desktopSuite(registry, microscopy), structuredClone(standalone.suite));
+  const linkOf = (id) => {
+    const catalog = findCatalog(registry, id);
+    const html = renderLandingPage({ ...registry, apps: catalogApps(registry, catalog) }, standalone, catalog);
+    return { html, link: new JSDOM(html).window.document.querySelector('.standalone-link') };
+  };
+  const { link } = linkOf('microscopy');
+  assert.equal(link.getAttribute('href'), 'https://github.com/neurodesk/webapps/releases?q=Microscopy+Webapps&expanded=true');
+  assert.equal(link.dataset.suiteRelease, 'webapps-microscopy');
+  assert.match(link.getAttribute('title'), /Microscopy Webapps desktop suite/);
+  const msk = linkOf('msk').link;
+  assert.equal(msk.getAttribute('href'), FULL_SUITE_SEARCH);
+  assert.equal(msk.dataset.suiteRelease, 'webapps');
+  assert.match(msk.getAttribute('title'), /Neurodesk Webapps desktop suite/);
+  assert.ok(linkOf('neuro').html.includes('href="https://github.com/neurodesk/webapps/releases?q=Neurodesk+Webapps&amp;expanded=true"'));
 });
 
 test('microscopy catalogue groups apps by task without repeating its domain', async () => {

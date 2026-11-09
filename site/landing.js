@@ -1,16 +1,17 @@
 import { initAnalytics } from './analytics.js';
 
-// Resolve the suite separately from the repository's individual app releases.
+// Resolve this catalogue's suite separately from the repository's individual app releases and other suites.
 // Keep the release listing usable if GitHub is unavailable or rate-limits us.
 async function updateStandaloneLink() {
   const link = document.querySelector('.standalone-link');
   if (!link) return;
+  const tag = new RegExp(`^${link.dataset.suiteRelease ?? 'webapps'}-v\\d+\\.\\d+\\.\\d{8}$`);
   try {
     for (let page = 1; ; page++) {
       const response = await fetch(`https://api.github.com/repos/neurodesk/webapps/releases?per_page=100&page=${page}`);
       if (!response.ok) return;
       const releases = await response.json();
-      const suite = releases.find(release => !release.draft && !release.prerelease && /^webapps-v\d+\.\d+\.\d{8}$/.test(release.tag_name));
+      const suite = releases.find(release => !release.draft && !release.prerelease && tag.test(release.tag_name));
       if (suite) {
         link.href = `https://github.com/neurodesk/webapps/releases/tag/${suite.tag_name}`;
         return;

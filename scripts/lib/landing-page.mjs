@@ -1,4 +1,5 @@
 import { ANATOMY, HARDWARE, INPUT_FORMATS, MODALITIES, primaryCatalog } from './apps-registry.mjs';
+import { linkedSuite } from './standalone.mjs';
 
 const escape = (value) => String(value)
   .replaceAll('&', '&amp;')
@@ -103,10 +104,14 @@ const analyticsSection = `
  * `catalog` names and brands it (the primary catalogue by default, as the
  * all-app assembly and the desktop suite show). Only the primary catalogue
  * carries the usage report and the Vessel Surfer link, which its host serves.
+ * The Standalone link searches the releases of the catalogue's linked desktop
+ * suite; site/landing.js upgrades it to that suite's newest release.
  */
 export function renderLandingPage(registry, standalone, catalog = primaryCatalog(registry)) {
   const primary = catalog.host === registry.site.domain;
   const { brand } = catalog;
+  const suite = linkedSuite(registry, standalone, catalog);
+  const suiteSearch = `https://github.com/neurodesk/webapps/releases?q=${suite.title.replaceAll(' ', '+')}&expanded=true`;
   const categories = registry.site.categories.filter((category) => (
     registry.apps.some((app) => app.categories.includes(category.id))
   ));
@@ -141,7 +146,7 @@ export function renderLandingPage(registry, standalone, catalog = primaryCatalog
       <a class="brand" href="${escape(brand.home)}" aria-label="${escape(brand.name)} home"><img src="./${escape(brand.logo)}" alt="${escape(brand.name)}"></a>
       <nav class="site-nav" aria-label="${escape(brand.name)} navigation">
         <a href="https://github.com/neurodesk/webapps">GitHub</a>
-        <a class="theme-toggle standalone-link" href="https://github.com/neurodesk/webapps/releases?q=Neurodesk+Webapps&amp;expanded=true" title="Download the latest full desktop suite for macOS, Windows or Linux">
+        <a class="theme-toggle standalone-link" href="${escape(suiteSearch)}" data-suite-release="${escape(suite.release)}" title="Download the latest ${escape(suite.title)} desktop suite for macOS, Windows or Linux">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>
           <span>Standalone</span>
         </a>
