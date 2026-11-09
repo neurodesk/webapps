@@ -30,6 +30,7 @@ test('single-file and Apptainer downloads need no concatenation or archive extra
   assert.match(notes, /curl --fail --location --retry 3/);
   assert.match(notes, /sha256sum -c -/);
   assert.match(notes, /apptainer run 'suite.sif' --verify/);
+  assert.match(notes, /keep the SIF for Apptainer/);
   assert.doesNotMatch(notes, /cat '|tar -x|unzip|Expand-Archive/);
 });
 
@@ -66,5 +67,5 @@ test('an edition installs and launches its own application from folders named af
   assert.match(notes, /open "\$HOME\/Applications\/microscopy-webapps\.app"/);
   assert.match(notes, /\.\/app\/microscopy-webapps\n/);
   assert.match(notes, /mkdir 'webapps-microscopy-0\.6\.20260916-models'/);
-  assert.doesNotMatch(notes, /neurodesk-webapps|'webapps-0/);
+  assert.doesNotMatch(notes, /neurodesk-webapps|'webapps-0|SIF/);
 });
