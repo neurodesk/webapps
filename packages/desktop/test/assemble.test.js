@@ -31,7 +31,7 @@ async function fixture(t) {
   const emptyAssets = Object.fromEntries(apps.map(app => [app.id, []]));
   const catalog = JSON.parse(await readFile(join(repoRoot, 'registry/standalone.json')));
   await mkdir(join(root, 'registry'));
-  const catalogs = registry.site.catalogs.filter(entry => apps.some(app => app.catalog === entry.id));
+  const catalogs = registry.site.catalogs.filter(entry => apps.some(app => [app.catalog, ...(app.also_in ?? [])].includes(entry.id)));
   await writeFile(join(root, 'registry/apps.yml'), JSON.stringify({ ...registry, site: { ...registry.site, catalogs }, apps }));
   await writeFile(join(root, 'registry/standalone.json'), JSON.stringify({ ...catalog, apps: Object.fromEntries(apps.map(app => [app.id, catalog.apps[app.id]])) }));
   for (const name of ['sources', 'lock']) {
