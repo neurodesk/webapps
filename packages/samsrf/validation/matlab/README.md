@@ -270,7 +270,9 @@ against those pinned inputs in both precisions. It includes MATLAB columns
 47 and 88 from #730 and columns 73 and 22 from #731. The current recorder also
 includes columns 16, 17, 60, 69 and 82: the missing traces for the remaining
 double CSS parameter differences after #736 (zero-based vertices 15, 16, 59,
-68 and 81). There are 18 columns in each precision, 108 optimizer traces and
+68 and 81). Columns 16/17 differ by at most 2.7e-15 in fitted parameters;
+columns 60/69/82 include exponent differences up to 5.2e-3. There are
+18 columns in each precision, 108 optimizer traces and
 268 cases in total. These new traces are not in the older 238-case pinned
 archive below. The repeat comparator requires each current trace by ID, so
 two matching but incomplete recordings cannot pass. Each original-aperture
