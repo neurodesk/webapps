@@ -28,6 +28,7 @@ import {
 } from './adaptive_streaming_fov_prototype.ts'
 import { AbortableTaskPool } from './abortable_task_pool'
 import { getBackendFromUrl } from './backend'
+import { hostingCatalog, initialSource, type OmezarrSourceId } from './catalog'
 import {
   decodeCompactShareState,
   encodeCompactShareState,
@@ -178,7 +179,6 @@ const ADAPTIVE_FINE_RADIUS = ADAPTIVE_CELL_EDGE / 2
 const MAX_IN_MEMORY_NIFTI_BYTES = 256 * 1024 * 1024
 const AUTO_WINDOW_CHUNK_LIMIT = 8
 type SourceKind = 'synthetic' | 'omezarr'
-type OmezarrSourceId = 'dandi' | 'custom'
 type SupportedDtype = 'uint8' | 'uint16'
 type ZarrFetchArray = zarr.Array<zarr.DataType, zarr.AsyncReadable>
 
@@ -532,6 +532,12 @@ function errorText(error: unknown): string {
 
 function reportViewerActionError(error: unknown): void {
   status(errorText(error), { error: true })
+}
+
+function emptySourceMessage(): string {
+  return els.source.value === 'dandi'
+    ? 'Search DANDI and select an OME-Zarr asset, then press Load volume'
+    : 'Add an OME-Zarr store URL, then press Load volume'
 }
 
 function showEmptyState(message: string): void {
@@ -1378,10 +1384,6 @@ function currentSourceKind(): SourceKind {
   return els.source.value === 'synthetic' ? 'synthetic' : 'omezarr'
 }
 
-function isOmezarrSourceId(value: string): value is OmezarrSourceId {
-  return value === 'dandi' || value === 'custom'
-}
-
 function customStoreUrls(): string[] {
   const values = [...els.zarrUrls.querySelectorAll<HTMLInputElement>('input[type="url"]')]
     .map((input) => input.value.trim())
@@ -1683,11 +1685,7 @@ async function reloadAfterStoreRemoval(): Promise<void> {
   syncZarrLevelControl()
   syncActiveLodIndicator(null)
   syncDownloadControl()
-  showEmptyState(
-    els.source.value === 'dandi'
-      ? 'Search DANDI and select an OME-Zarr asset, then press Load volume'
-      : 'Add an OME-Zarr store URL, then press Load volume',
-  )
+  showEmptyState(emptySourceMessage())
 }
 
 function updateActiveCustomLayerFromControls(): void {
@@ -2356,10 +2354,7 @@ function setDefaultWindowForSelectedSource(): void {
 }
 
 function initControlsFromUrl(params: URLSearchParams): void {
-  const requestedSource = params.get('source')
-  if (requestedSource && isOmezarrSourceId(requestedSource)) {
-    els.source.value = requestedSource
-  }
+  els.source.value = initialSource(params.get('source'), hostingCatalog(document))
   const layerPayload = params.get('layers')
   stainLayers = parseStainLayers(layerPayload)
   activeStainLayerId = params.get('activeLayer')
@@ -5580,11 +5575,7 @@ async function main(): Promise<void> {
     syncSourceControls()
     updateUrlFromControls()
     if (currentStoreUrls().length === 0) {
-      showEmptyState(
-        els.source.value === 'dandi'
-          ? 'Search DANDI and select an OME-Zarr asset, then press Load volume'
-          : 'Add an OME-Zarr store URL, then press Load volume',
-      )
+      showEmptyState(emptySourceMessage())
       return
     }
     reloadVolume({ reloadSource: true }).catch(reportViewerActionError)
@@ -5690,6 +5681,8 @@ async function main(): Promise<void> {
   })
 
   if (currentSourceKind() === 'omezarr' && currentStoreUrls().length === 0) {
+    // The page's own copy names DANDI, the default source.
+    if (els.source.value !== 'dandi') showEmptyState(emptySourceMessage())
     syncDownloadControl()
     syncZarrLevelControl()
   } else {

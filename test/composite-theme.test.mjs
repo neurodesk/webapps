@@ -105,6 +105,23 @@ test('theming again for another catalogue replaces every catalogue value', () =>
   assert.equal(injectCompositeTheme(themed, msk), themed);
 });
 
+test('names the hosting catalogue on the page, once, and only when one hosts it', () => {
+  const catalogs = (html) => [...html.matchAll(/data-neurodesk-catalog="([^"]*)"/g)].map(([, id]) => id);
+  const standalone = injectCompositeTheme(document, metadata);
+  assert.deepEqual(catalogs(standalone), []);
+
+  const neuro = injectCompositeTheme(standalone, { ...metadata, catalogId: 'neuro' });
+  assert.deepEqual(catalogs(neuro), ['neuro']);
+  assert.match(neuro, /<html\b[^>]*\sdata-neurodesk-catalog="neuro"[^>]*>/);
+
+  const microscopy = injectCompositeTheme(neuro, { ...metadata, catalogId: 'microscopy' });
+  assert.deepEqual(catalogs(microscopy), ['microscopy']);
+  assert.equal(injectCompositeTheme(microscopy, { ...metadata, catalogId: 'microscopy' }), microscopy);
+  assert.equal(injectCompositeTheme(document, { ...metadata, catalogId: 'microscopy' }).match(/<html\b[^>]*>/)[0], microscopy.match(/<html\b[^>]*>/)[0]);
+
+  assert.throws(() => injectCompositeTheme(document, { ...metadata, catalogId: '"><script>' }), /Invalid catalog id/);
+});
+
 test('inserts title and metadata when the app ships none', () => {
   const bare = '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>';
   const themed = injectCompositeTheme(bare, metadata);

@@ -49,6 +49,7 @@ export function injectCompositeTheme(html, {
   siteTitle = DEFAULT_BRAND.siteTitle,
   brandName = DEFAULT_BRAND.brandName,
   moreAppsLabel = DEFAULT_BRAND.moreAppsLabel,
+  catalogId,
   information,
   standaloneHref,
   componentsHref,
@@ -64,6 +65,7 @@ export function injectCompositeTheme(html, {
       throw new Error(`${label} must be a non-empty string`);
     }
   }
+  if (catalogId !== undefined && !appIdPattern.test(catalogId)) throw new Error(`Invalid catalog id: ${catalogId}`);
   if (url !== undefined && !/^https?:\/\/\S+$/.test(url)) {
     throw new Error(`url must be an absolute http(s) URL, got ${url}`);
   }
@@ -118,6 +120,17 @@ export function injectCompositeTheme(html, {
     );
   } else if (!/<html\b[^>]*\bdata-neurodesk-theme=/i.test(themed)) {
     themed = themed.replace(/<html\b/i, '<html data-neurodesk-theme="dark"');
+  }
+
+  // Name the catalogue that hosts the page, so an app can pick defaults that suit its audience.
+  // Standalone builds and the dev server are hosted by no catalogue and carry no attribute.
+  if (catalogId !== undefined) {
+    const attribute = ` data-neurodesk-catalog="${escapeAttribute(catalogId)}"`;
+    themed = themed.replace(/<html\b[^>]*>/i, (tag) => (
+      /\sdata-neurodesk-catalog="[^"]*"/i.test(tag)
+        ? tag.replace(/\sdata-neurodesk-catalog="[^"]*"/i, attribute)
+        : tag.replace(/^<html\b/i, `<html${attribute}`)
+    ));
   }
 
   if (!/data-neurodesk-theme-controller(?:\s|=|>)/i.test(themed)) {

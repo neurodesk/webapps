@@ -50,7 +50,11 @@ it on another host too, add that catalogue to `also_in`.
 A catalogue site holds:
 
 - its apps, themed again with the catalogue's brand and a handoff list of the
-  apps on that host;
+  apps on that host. Each app page names its catalogue in
+  `<html data-neurodesk-catalog="<id>">`, so an app can open with defaults for
+  that audience (ZARRo opens on an OME-Zarr URL on `microscopy`). The all-app
+  assembly in `dist/`, standalone builds and the dev server carry no attribute;
+  the desktop suite is built from `dist/`;
 - the shared root files the app pages load (`app-shell.js`, `theme.js`, fonts,
   logos, `shell-adapters/`);
 - the `_runtime/` families its files reference. A family is the directory two
