@@ -10,7 +10,7 @@ import YAML from 'yaml';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 import { EMBEDDED_VERSION_SITES } from '../scripts/lib/app-versions.mjs';
 import { nativeReleases, portableSpecs, portableSpecsAt } from '../scripts/lib/native-releases.mjs';
-import { applyCatalogUpdate, catalogReleases, catalogUpdate, checkReceipt, checkUpdateAssets, parseReleases, releaseFromTag } from '../scripts/lib/standalone-import.mjs';
+import { applyCatalogUpdate, catalogReleases, catalogUpdate, checkReceipt, checkUpdateAssets, parseReleases, releaseFromTag, unlistedReleases } from '../scripts/lib/standalone-import.mjs';
 
 const CATALOG_DISPATCH = 'gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"';
 
@@ -427,10 +427,25 @@ test('an app release starts every native command line build, Rust or portable, w
   assert.ok(Object.values(ci.jobs).some((job) => job.steps?.some((step) => step.run === 'pnpm test:contracts')));
 });
 
+test('the scheduled run picks the newest release of each app with archives the catalog does not link yet', () => {
+  const release = (version, names, extra = {}) => ({ ...verifiedRelease(names.map((name) => name.replace('0.2.20261006', version)), `tool-v${version}`), ...extra });
+  const catalog = (urls) => ({ apps: { tool: { downloads: urls.map((url) => ({ kind: 'cli', url })) } } });
+  const listed = release('0.2.20261006', archives);
+  const newer = release('0.2.20261008', archives);
+  const urls = listed.assets.map((item) => item.browser_download_url);
+  assert.deepEqual(unlistedReleases(catalog(urls), [newer, listed], portable), [{ id: 'tool', version: '0.2.20261008' }]);
+  assert.deepEqual(unlistedReleases(catalog(newer.assets.map((item) => item.browser_download_url)), [newer, listed], portable), []);
+  const skipped = [release('0.2.20261009', archives, { draft: true }), release('0.2.20261010', archives, { prerelease: true }), release('0.2.20261011', [])];
+  assert.deepEqual(unlistedReleases(catalog(urls), [...skipped, listed], portable), [], 'drafts, prereleases and releases without archives wait');
+  assert.deepEqual(unlistedReleases({ apps: {} }, [newer], portable), [], 'only apps the catalog lists');
+});
+
 test('the catalog workflow computes without write access and publishes without running dependencies', async () => {
   const flow = await workflow('standalone-catalog.yml');
   assert.deepEqual(flow.on.repository_dispatch, { types: ['standalone-catalog'] });
   assert.deepEqual(flow.on.release, { types: ['released'] });
+  assert.ok(flow.on.schedule?.length, 'a schedule catches up updates that failed');
+  assert.match(flow.jobs.compute.steps.find((step) => step.id === 'update').run, /schedule\) node scripts\/catalog-update\.mjs --out update\.json --missing/);
   assert.equal(flow.concurrency, undefined, 'a concurrency group would drop queued catalog updates');
   assert.deepEqual(flow.permissions, { contents: 'read' });
   const compute = flow.jobs.compute;

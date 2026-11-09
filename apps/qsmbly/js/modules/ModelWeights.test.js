@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createHash, webcrypto } from 'node:crypto';
-import { SourceTextModule, SyntheticModule } from 'node:vm';
+import { gzipSync } from 'node:zlib';
+import { SourceTextModule, SyntheticModule, createContext } from 'node:vm';
 import { fetchModelWeights } from './ModelWeights.js';
 
 test('verified weights remain usable when the shared cache rejects a quota-exceeding write', async () => {
@@ -38,17 +39,16 @@ test('verified weights remain usable when the shared cache rejects a quota-excee
   }
 });
 
-test('DL initialization uses the exact runtime manifest WASM URL', async () => {
-  const importedUrls = [];
-  const initializedUrls = [];
+async function loadModelWeightsModule(importedUrls, initialized, fetch) {
+  const context = createContext({ fetch, Response, Blob, DecompressionStream });
   const dlModule = new SyntheticModule(['default'], function () {
-    this.setExport('default', async url => initializedUrls.push(url));
-  });
+    this.setExport('default', async options => initialized.push(options));
+  }, { context });
   await dlModule.link(() => {});
   await dlModule.evaluate();
-
   const source = await readFile(new URL('./ModelWeights.js', import.meta.url), 'utf8');
   const module = new SourceTextModule(source, {
+    context,
     importModuleDynamically: async url => {
       importedUrls.push(url);
       return dlModule;
@@ -58,16 +58,34 @@ test('DL initialization uses the exact runtime manifest WASM URL', async () => {
     this.setExport('fetchModel', () => {
       throw new Error('Loading the DL runtime must not fetch model weights');
     });
-  }));
+  }, { context }));
   await module.evaluate();
+  return module.namespace;
+}
 
-  const first = module.namespace.loadDlWasm('https://example.org/qsmbly', '0.31.20261016');
-  const second = module.namespace.loadDlWasm('https://example.org/qsmbly', '0.31.20261016');
-  expect(await first).toBe(await second);
-  expect(importedUrls).toEqual([
-    'https://example.org/qsmbly/wasm/qsm_wasm_dl.js?v=0.31.20261016',
-  ]);
-  expect(initializedUrls).toEqual([
-    'https://example.org/qsmbly/wasm/qsm_wasm_dl_bg.wasm',
-  ]);
-});
+// A wasm header; the DL module is served gzipped, or inflated by a host that sets Content-Encoding.
+const wasmBytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+
+for (const [served, body] of [['gzipped', gzipSync(wasmBytes)], ['already inflated', wasmBytes]]) {
+  test(`DL initialization inflates the ${served} runtime manifest WASM once`, async () => {
+    const importedUrls = [];
+    const initialized = [];
+    const requests = [];
+    const fetch = async url => {
+      requests.push(url);
+      return new Response(body);
+    };
+    const { loadDlWasm } = await loadModelWeightsModule(importedUrls, initialized, fetch);
+    const first = loadDlWasm('https://example.org/qsmbly', '0.31.20261016');
+    const second = loadDlWasm('https://example.org/qsmbly', '0.31.20261016');
+    expect(await first).toBe(await second);
+    expect(importedUrls).toEqual([
+      'https://example.org/qsmbly/wasm/qsm_wasm_dl.js?v=0.31.20261016',
+    ]);
+    expect(requests).toEqual([
+      'https://example.org/qsmbly/wasm/qsm_wasm_dl_bg.wasm.gz.bin',
+    ]);
+    expect(initialized).toHaveLength(1);
+    expect(Array.from(initialized[0].module_or_path)).toEqual(Array.from(wasmBytes));
+  });
+}

@@ -413,35 +413,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.6.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-linux-x64.tar.gz",
-          "sha256": "1995e544f7bdc322643f151d9773f8776198ef0625d34e9a044c50ef312f051d",
-          "bytes": 169338909,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.6.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261108/vesselboost-0.6.20261108-linux-x64.tar.gz",
+          "sha256": "652b9f18407637b79b4900044eee31701229b7e12e9b620d59ef8696f8774eec",
+          "bytes": 171407581,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261108/vesselboost-0.6.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf vesselboost-0.6.20261103-linux-x64.tar.gz\n./vesselboost-0.6.20261103-linux-x64/vesselboost input.nii.gz results"
+          "command": "tar -xzf vesselboost-0.6.20261108-linux-x64.tar.gz\n./vesselboost-0.6.20261108-linux-x64/vesselboost input.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.6.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-macos-arm64.pkg",
-          "sha256": "df87625bca25703b524f2a769a60b4c7d6838162c21fe6fed144272b7a994ee9",
-          "bytes": 170864122,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.6.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261108/vesselboost-0.6.20261108-macos-arm64.pkg",
+          "sha256": "39d26e20ad219a72fce459c45f705806effd084370b763fda8932ff72884b5aa",
+          "bytes": 172989074,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261108/vesselboost-0.6.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg vesselboost-0.6.20261103-macos-arm64.pkg -target /\nvesselboost self-check\nvesselboost input.nii.gz results"
+          "command": "sudo installer -pkg vesselboost-0.6.20261108-macos-arm64.pkg -target /\nvesselboost self-check\nvesselboost input.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.6.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-windows-x64.zip",
-          "sha256": "e2eb10166669771270b89ea7bc0f78e0c08f6701c1a16aefe00df4847f82cb23",
-          "bytes": 171028854,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261103/vesselboost-0.6.20261103-windows-x64.zip.validation.txt",
+          "version": "0.6.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261108/vesselboost-0.6.20261108-windows-x64.zip",
+          "sha256": "aafa59b42b51bf46fc3a36147cce406181d6cb3b34d70e98c19354e9756b9e48",
+          "bytes": 173334551,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/vesselboost-v0.6.20261108/vesselboost-0.6.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\vesselboost-0.6.20261103-windows-x64.zip -DestinationPath .\n.\\vesselboost-0.6.20261103-windows-x64\\vesselboost.exe input.nii.gz results"
+          "command": "Expand-Archive -Path .\\vesselboost-0.6.20261108-windows-x64.zip -DestinationPath .\n.\\vesselboost-0.6.20261108-windows-x64\\vesselboost.exe input.nii.gz results"
         }
       ],
       "containers": [
@@ -467,35 +467,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.9.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261103/sct-webapp-0.9.20261103-linux-x64.tar.gz",
-          "sha256": "0f5d3596df4ec62e8b505df49162d0973eca20282a9bec26963e2273133cc4df",
-          "bytes": 176584125,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261103/sct-webapp-0.9.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.9.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261108/sct-webapp-0.9.20261108-linux-x64.tar.gz",
+          "sha256": "4b7d792ac9c0e1ac26c98437ba3a4017a6548eed77591d48f610ec7e950ab224",
+          "bytes": 178646342,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261108/sct-webapp-0.9.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf sct-webapp-0.9.20261103-linux-x64.tar.gz\n./sct-webapp-0.9.20261103-linux-x64/sct-webapp segment --task spinalcord input.nii.gz results"
+          "command": "tar -xzf sct-webapp-0.9.20261108-linux-x64.tar.gz\n./sct-webapp-0.9.20261108-linux-x64/sct-webapp segment --task spinalcord input.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.9.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261103/sct-webapp-0.9.20261103-macos-arm64.pkg",
-          "sha256": "e4c57bb088b4cf843aa1b51cfacf258d6971071dbccb51336031c7fb394777e2",
-          "bytes": 178091275,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261103/sct-webapp-0.9.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.9.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261108/sct-webapp-0.9.20261108-macos-arm64.pkg",
+          "sha256": "6897f58e6665d5513d7155e76ccf02971de635162b925f03521487ed33ff2a34",
+          "bytes": 180210010,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261108/sct-webapp-0.9.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg sct-webapp-0.9.20261103-macos-arm64.pkg -target /\nsct-webapp self-check\nsct-webapp segment --task spinalcord input.nii.gz results"
+          "command": "sudo installer -pkg sct-webapp-0.9.20261108-macos-arm64.pkg -target /\nsct-webapp self-check\nsct-webapp segment --task spinalcord input.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.9.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261103/sct-webapp-0.9.20261103-windows-x64.zip",
-          "sha256": "f8c77d53dcb2cc50024b1d0613582eb62b558cacd4f448fd6728276ac5ffa882",
-          "bytes": 178081896,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261103/sct-webapp-0.9.20261103-windows-x64.zip.validation.txt",
+          "version": "0.9.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261108/sct-webapp-0.9.20261108-windows-x64.zip",
+          "sha256": "88422e8d1e74b0b2e83e6891dc4db85cc0f1cd95e41fd802b5256395c3a66430",
+          "bytes": 180386629,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spinalcordtoolbox-v0.9.20261108/sct-webapp-0.9.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\sct-webapp-0.9.20261103-windows-x64.zip -DestinationPath .\n.\\sct-webapp-0.9.20261103-windows-x64\\sct-webapp.exe segment --task spinalcord input.nii.gz results"
+          "command": "Expand-Archive -Path .\\sct-webapp-0.9.20261108-windows-x64.zip -DestinationPath .\n.\\sct-webapp-0.9.20261108-windows-x64\\sct-webapp.exe segment --task spinalcord input.nii.gz results"
         }
       ],
       "containers": [
@@ -521,35 +521,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.7.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.7.20261103/calmar-0.7.20261103-linux-x64.tar.gz",
-          "sha256": "952fec059e2433de6233d3b2830b7e8f8e1d06ae183b9c1e3669f23062513791",
-          "bytes": 263679299,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.7.20261103/calmar-0.7.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.11.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.11.20261108/calmar-0.11.20261108-linux-x64.tar.gz",
+          "sha256": "64731dec6d7f9f2acabefb2d3408a3d1e515df107e24fa63ff5c3564949dc515",
+          "bytes": 265769187,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.11.20261108/calmar-0.11.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf calmar-0.7.20261103-linux-x64.tar.gz\n./calmar-0.7.20261103-linux-x64/calmar prepare t1.nii.gz candidate-results"
+          "command": "tar -xzf calmar-0.11.20261108-linux-x64.tar.gz\n./calmar-0.11.20261108-linux-x64/calmar prepare t1.nii.gz candidate-results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.7.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.7.20261103/calmar-0.7.20261103-macos-arm64.pkg",
-          "sha256": "4adf2b4ee4f2c29927e4842b5954f391c18fb8ec780c6252f44ea12ccc19511e",
-          "bytes": 265433372,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.7.20261103/calmar-0.7.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.11.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.11.20261108/calmar-0.11.20261108-macos-arm64.pkg",
+          "sha256": "71abc1064fbd4a91941ab1a952c4138e92d7dc5bac0893c73f73308574de6651",
+          "bytes": 267566742,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.11.20261108/calmar-0.11.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg calmar-0.7.20261103-macos-arm64.pkg -target /\ncalmar self-check\ncalmar prepare t1.nii.gz candidate-results"
+          "command": "sudo installer -pkg calmar-0.11.20261108-macos-arm64.pkg -target /\ncalmar self-check\ncalmar prepare t1.nii.gz candidate-results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.7.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.7.20261103/calmar-0.7.20261103-windows-x64.zip",
-          "sha256": "f852fdc0107a05cb217b4c4437c29525338b772ca983d02c4e6e36bd53e091c7",
-          "bytes": 265426424,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.7.20261103/calmar-0.7.20261103-windows-x64.zip.validation.txt",
+          "version": "0.11.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.11.20261108/calmar-0.11.20261108-windows-x64.zip",
+          "sha256": "a82b470dcd32da19b6c580991142ae653afae229d56f66f42ebfa95a6704dc02",
+          "bytes": 267749091,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/calmar-v0.11.20261108/calmar-0.11.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\calmar-0.7.20261103-windows-x64.zip -DestinationPath .\n.\\calmar-0.7.20261103-windows-x64\\calmar.exe prepare t1.nii.gz candidate-results"
+          "command": "Expand-Archive -Path .\\calmar-0.11.20261108-windows-x64.zip -DestinationPath .\n.\\calmar-0.11.20261108-windows-x64\\calmar.exe prepare t1.nii.gz candidate-results"
         }
       ],
       "containers": []
@@ -707,35 +707,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "1.4.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261103/deface-1.4.20261103-linux-x64.tar.gz",
-          "sha256": "f58e223e50459390d37fab53b8778ee248415ef5707a9564a747696e13c7dea6",
-          "bytes": 81682376,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261103/deface-1.4.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "1.4.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261108/deface-1.4.20261108-linux-x64.tar.gz",
+          "sha256": "f8b0ae4b45a967fd698f0bcd1737af419652543d5ec21e2c91ff98571e902923",
+          "bytes": 83750826,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261108/deface-1.4.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf deface-1.4.20261103-linux-x64.tar.gz\n./deface-1.4.20261103-linux-x64/deface head.nii.gz results"
+          "command": "tar -xzf deface-1.4.20261108-linux-x64.tar.gz\n./deface-1.4.20261108-linux-x64/deface head.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "1.4.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261103/deface-1.4.20261103-macos-arm64.pkg",
-          "sha256": "f36285ced6e9b993b1ad5a1055eea997c098f89ae3b7f7a572fe122339bf6c7f",
-          "bytes": 75309665,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261103/deface-1.4.20261103-macos-arm64.pkg.validation.txt",
+          "version": "1.4.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261108/deface-1.4.20261108-macos-arm64.pkg",
+          "sha256": "b5ff05e31638a92b01770025c59669847b54ac16ebc5d96f877dc5a505471234",
+          "bytes": 77421074,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261108/deface-1.4.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg deface-1.4.20261103-macos-arm64.pkg -target /\ndeface self-check\ndeface head.nii.gz results"
+          "command": "sudo installer -pkg deface-1.4.20261108-macos-arm64.pkg -target /\ndeface self-check\ndeface head.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "1.4.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261103/deface-1.4.20261103-windows-x64.zip",
-          "sha256": "90546ee6aa578d16111ffffc91fef64209c05fcaf63e662cdb2a28ec83d440c4",
-          "bytes": 73067805,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261103/deface-1.4.20261103-windows-x64.zip.validation.txt",
+          "version": "1.4.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261108/deface-1.4.20261108-windows-x64.zip",
+          "sha256": "5741fc9eb7117c34460da9ebf8dfca6dd8ab032e1c539e0404c0de7e9abbbc78",
+          "bytes": 75368595,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261108/deface-1.4.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\deface-1.4.20261103-windows-x64.zip -DestinationPath .\n.\\deface-1.4.20261103-windows-x64\\deface.exe head.nii.gz results"
+          "command": "Expand-Archive -Path .\\deface-1.4.20261108-windows-x64.zip -DestinationPath .\n.\\deface-1.4.20261108-windows-x64\\deface.exe head.nii.gz results"
         }
       ],
       "containers": []
@@ -793,35 +793,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "1.3.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261103/niimath-1.3.20261103-linux-x64.tar.gz",
-          "sha256": "1072b119f22a684672fb3d803ef56d52196646349d52478727851dc2d7b43cb6",
-          "bytes": 44232837,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261103/niimath-1.3.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "1.3.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261108/niimath-1.3.20261108-linux-x64.tar.gz",
+          "sha256": "071d067043ef122f1a37fead44441bf4c393f50ef8edf1ef89089017da25261d",
+          "bytes": 44232839,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261108/niimath-1.3.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf niimath-1.3.20261103-linux-x64.tar.gz\n./niimath-1.3.20261103-linux-x64/niimath T1.nii.gz -s 2 smooth.nii.gz"
+          "command": "tar -xzf niimath-1.3.20261108-linux-x64.tar.gz\n./niimath-1.3.20261108-linux-x64/niimath T1.nii.gz -s 2 smooth.nii.gz"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "1.3.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261103/niimath-1.3.20261103-macos-arm64.pkg",
-          "sha256": "dd7495aa0d7a3a13a96e389fd53d649c387a65d60de6935c755493ecadc5760a",
-          "bytes": 37685702,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261103/niimath-1.3.20261103-macos-arm64.pkg.validation.txt",
+          "version": "1.3.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261108/niimath-1.3.20261108-macos-arm64.pkg",
+          "sha256": "3fad88585c00f5d69f98c1466adb70a6994724a6fde35d58890bea3ec8506f83",
+          "bytes": 37685827,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261108/niimath-1.3.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg niimath-1.3.20261103-macos-arm64.pkg -target /\nniimath self-check\nniimath T1.nii.gz -s 2 smooth.nii.gz"
+          "command": "sudo installer -pkg niimath-1.3.20261108-macos-arm64.pkg -target /\nniimath self-check\nniimath T1.nii.gz -s 2 smooth.nii.gz"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "1.3.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261103/niimath-1.3.20261103-windows-x64.zip",
-          "sha256": "57d218c36af385195a09917bffa4fa5779d708de1f93b9eaa21bc08e2bdc55d1",
-          "bytes": 33964417,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261103/niimath-1.3.20261103-windows-x64.zip.validation.txt",
+          "version": "1.3.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261108/niimath-1.3.20261108-windows-x64.zip",
+          "sha256": "0e75cac548b8fc99f466450665d5c38693753b6cce2d9939badf73a932736dbe",
+          "bytes": 33964416,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/niimath-v1.3.20261108/niimath-1.3.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\niimath-1.3.20261103-windows-x64.zip -DestinationPath .\n.\\niimath-1.3.20261103-windows-x64\\niimath.exe T1.nii.gz -s 2 smooth.nii.gz"
+          "command": "Expand-Archive -Path .\\niimath-1.3.20261108-windows-x64.zip -DestinationPath .\n.\\niimath-1.3.20261108-windows-x64\\niimath.exe T1.nii.gz -s 2 smooth.nii.gz"
         }
       ],
       "containers": [
@@ -1039,35 +1039,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.8.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261103/syncro-0.8.20261103-linux-x64.tar.gz",
-          "sha256": "9673ad9a29131fa998b4317488e6aa4bf047c65e68ce6650a4506a5c3e4503c3",
-          "bytes": 126379061,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261103/syncro-0.8.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.8.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261108/syncro-0.8.20261108-linux-x64.tar.gz",
+          "sha256": "b9f996cfb08b135b976320d12fa075787f8c668ff32a4ae9feb52fdfcd46b4c8",
+          "bytes": 126379107,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261108/syncro-0.8.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf syncro-0.8.20261103-linux-x64.tar.gz\n./syncro-0.8.20261103-linux-x64/syncro input.nii.gz results --threads 4"
+          "command": "tar -xzf syncro-0.8.20261108-linux-x64.tar.gz\n./syncro-0.8.20261108-linux-x64/syncro input.nii.gz results --threads 4"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.8.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261103/syncro-0.8.20261103-macos-arm64.pkg",
-          "sha256": "19ee76ebe2c34a1a43583d4c7322113ac3a7db12a1e776ad5199a2e8f45a9532",
-          "bytes": 127748639,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261103/syncro-0.8.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.8.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261108/syncro-0.8.20261108-macos-arm64.pkg",
+          "sha256": "bb223b53473195a42d8a62f40c36a794b1de12936f340e23b52c04dd514c8a01",
+          "bytes": 127748691,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261108/syncro-0.8.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg syncro-0.8.20261103-macos-arm64.pkg -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4"
+          "command": "sudo installer -pkg syncro-0.8.20261108-macos-arm64.pkg -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.8.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261103/syncro-0.8.20261103-windows-x64.zip",
-          "sha256": "53bed0b72c2c32b91c4af2125bb4185cace6cd7bd88853a3720e4fde0ea10322",
-          "bytes": 127247852,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261103/syncro-0.8.20261103-windows-x64.zip.validation.txt",
+          "version": "0.8.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261108/syncro-0.8.20261108-windows-x64.zip",
+          "sha256": "7800332b4e530d5aabc017df7cc5ce0e6874a042d9571452bb48e3527b25b17b",
+          "bytes": 127247855,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261108/syncro-0.8.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\syncro-0.8.20261103-windows-x64.zip -DestinationPath .\n.\\syncro-0.8.20261103-windows-x64\\syncro.exe input.nii.gz results --threads 4"
+          "command": "Expand-Archive -Path .\\syncro-0.8.20261108-windows-x64.zip -DestinationPath .\n.\\syncro-0.8.20261108-windows-x64\\syncro.exe input.nii.gz results --threads 4"
         }
       ],
       "containers": [
@@ -1089,35 +1089,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.8.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261103/dwi2trx-0.8.20261103-linux-x64.tar.gz",
-          "sha256": "142837ebfae1b93137d0f9d3f821538f2a30bf5421ea75012a61f9e39e4ea471",
-          "bytes": 52814534,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261103/dwi2trx-0.8.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.8.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261108/dwi2trx-0.8.20261108-linux-x64.tar.gz",
+          "sha256": "b794b8d0a90bc44e34117e705a43662d8fff5d390716c57ce8f1602543c8b66e",
+          "bytes": 54891158,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261108/dwi2trx-0.8.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf dwi2trx-0.8.20261103-linux-x64.tar.gz\n./dwi2trx-0.8.20261103-linux-x64/dwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "tar -xzf dwi2trx-0.8.20261108-linux-x64.tar.gz\n./dwi2trx-0.8.20261108-linux-x64/dwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.8.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261103/dwi2trx-0.8.20261103-macos-arm64.pkg",
-          "sha256": "97376f8cadefcfbbb239a5018afd40c70319086b09b465d1c2703aef7ce95d28",
-          "bytes": 46439816,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261103/dwi2trx-0.8.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.8.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261108/dwi2trx-0.8.20261108-macos-arm64.pkg",
+          "sha256": "ad44a42f9d57f91181a152bc012d80ea913c0bf077be06b52e293b1a0d8abcb9",
+          "bytes": 48555519,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261108/dwi2trx-0.8.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg dwi2trx-0.8.20261103-macos-arm64.pkg -target /\ndwi2trx self-check\ndwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "sudo installer -pkg dwi2trx-0.8.20261108-macos-arm64.pkg -target /\ndwi2trx self-check\ndwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.8.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261103/dwi2trx-0.8.20261103-windows-x64.zip",
-          "sha256": "7dbc6090e004d1980e9abd8781e795e7f8478dca09778f43d94bdca7bffa3fe4",
-          "bytes": 43156907,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261103/dwi2trx-0.8.20261103-windows-x64.zip.validation.txt",
+          "version": "0.8.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261108/dwi2trx-0.8.20261108-windows-x64.zip",
+          "sha256": "50054d9b4e0ba45a106e1d64d8b4cc4a029839422d1bf41b2b75113a65100a55",
+          "bytes": 45458638,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261108/dwi2trx-0.8.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\dwi2trx-0.8.20261103-windows-x64.zip -DestinationPath .\n.\\dwi2trx-0.8.20261103-windows-x64\\dwi2trx.exe dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "Expand-Archive -Path .\\dwi2trx-0.8.20261108-windows-x64.zip -DestinationPath .\n.\\dwi2trx-0.8.20261108-windows-x64\\dwi2trx.exe dwi.nii.gz dwi.bval dwi.bvec results"
         }
       ],
       "containers": []
@@ -1218,35 +1218,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.5.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261103/ants-0.5.20261103-linux-x64.tar.gz",
-          "sha256": "9c4ea488b5a522e25338ea2f56d1eb33cca3020e248d87176a1ac9ddd57b9d90",
-          "bytes": 46583425,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261103/ants-0.5.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.5.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261108/ants-0.5.20261108-linux-x64.tar.gz",
+          "sha256": "6c6225676f243acb82301fd3e1bf28cdb2a67662f489cb0432e5a95ce7098968",
+          "bytes": 46583431,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261108/ants-0.5.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf ants-0.5.20261103-linux-x64.tar.gz\n./ants-0.5.20261103-linux-x64/ants moving.nii.gz fixed.nii.gz results"
+          "command": "tar -xzf ants-0.5.20261108-linux-x64.tar.gz\n./ants-0.5.20261108-linux-x64/ants moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.5.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261103/ants-0.5.20261103-macos-arm64.pkg",
-          "sha256": "5bf05429663f376f90007d0bec5447554422aaae9bb7a99c40a99ca96941711f",
-          "bytes": 40033722,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261103/ants-0.5.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.5.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261108/ants-0.5.20261108-macos-arm64.pkg",
+          "sha256": "b71026801d0042c536cba2302feaa1a09d22b18ecc8f3bd9ae6f69af3ed0e26d",
+          "bytes": 40033704,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261108/ants-0.5.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg ants-0.5.20261103-macos-arm64.pkg -target /\nants self-check\nants moving.nii.gz fixed.nii.gz results"
+          "command": "sudo installer -pkg ants-0.5.20261108-macos-arm64.pkg -target /\nants self-check\nants moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.5.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261103/ants-0.5.20261103-windows-x64.zip",
-          "sha256": "f817725d8c915b6bfba9ba1f7fca5ac197dd3436088341e480c471688e28ba17",
-          "bytes": 36254163,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261103/ants-0.5.20261103-windows-x64.zip.validation.txt",
+          "version": "0.5.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261108/ants-0.5.20261108-windows-x64.zip",
+          "sha256": "b418f417b804061c55fd3f8a1bed1e093fdbd5b8de5b830013791bfcdc8cbf4a",
+          "bytes": 36254164,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261108/ants-0.5.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\ants-0.5.20261103-windows-x64.zip -DestinationPath .\n.\\ants-0.5.20261103-windows-x64\\ants.exe moving.nii.gz fixed.nii.gz results"
+          "command": "Expand-Archive -Path .\\ants-0.5.20261108-windows-x64.zip -DestinationPath .\n.\\ants-0.5.20261108-windows-x64\\ants.exe moving.nii.gz fixed.nii.gz results"
         }
       ],
       "containers": [
@@ -1367,35 +1367,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.4.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261103/fireants-0.4.20261103-linux-x64.tar.gz",
-          "sha256": "2f251035cc728f4cbb1d67bf2fbbe8d59fa1a956a008238e15fd563722d2efb9",
-          "bytes": 43717149,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261103/fireants-0.4.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.4.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-linux-x64.tar.gz",
+          "sha256": "7ed75609834be3aea5df978a659379fdb07d8379c73f731060de09c02205f206",
+          "bytes": 43717160,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf fireants-0.4.20261103-linux-x64.tar.gz\n./fireants-0.4.20261103-linux-x64/fireants moving.nii.gz fixed.nii.gz results"
+          "command": "tar -xzf fireants-0.4.20261108-linux-x64.tar.gz\n./fireants-0.4.20261108-linux-x64/fireants moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.4.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261103/fireants-0.4.20261103-macos-arm64.pkg",
-          "sha256": "f0ca379e91e1ccea66b95bc86dc9126096f591e7c20f5740561f7b163a6c6c79",
-          "bytes": 37155342,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261103/fireants-0.4.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.4.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-macos-arm64.pkg",
+          "sha256": "b11b37e5e5e545126639f6d3910e417d679f47c412928c1d1484c7e61b87a119",
+          "bytes": 37155359,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg fireants-0.4.20261103-macos-arm64.pkg -target /\nfireants self-check\nfireants moving.nii.gz fixed.nii.gz results"
+          "command": "sudo installer -pkg fireants-0.4.20261108-macos-arm64.pkg -target /\nfireants self-check\nfireants moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.4.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261103/fireants-0.4.20261103-windows-x64.zip",
-          "sha256": "6be72a8aa3930ea8502fd576c2f7432de00ee08e8356368924feecb65a8dd450",
+          "version": "0.4.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-windows-x64.zip",
+          "sha256": "28f2c1c2fe62d91b8fdfe759dcafbbed60b3b69e75335f403eefff3e104ccfd3",
           "bytes": 33382118,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261103/fireants-0.4.20261103-windows-x64.zip.validation.txt",
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\fireants-0.4.20261103-windows-x64.zip -DestinationPath .\n.\\fireants-0.4.20261103-windows-x64\\fireants.exe moving.nii.gz fixed.nii.gz results"
+          "command": "Expand-Archive -Path .\\fireants-0.4.20261108-windows-x64.zip -DestinationPath .\n.\\fireants-0.4.20261108-windows-x64\\fireants.exe moving.nii.gz fixed.nii.gz results"
         }
       ],
       "containers": []
@@ -1600,35 +1600,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.8.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261103/lcmodel-0.8.20261103-linux-x64.tar.gz",
-          "sha256": "b748ed14c46c386f278be20af0ce7a3441a207d172092b8baecc30a92541e8f4",
-          "bytes": 77165302,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261103/lcmodel-0.8.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.8.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-linux-x64.tar.gz",
+          "sha256": "95ef0f63022763951b4f4b7751dce88cf1adb9ce3a65dac822a8666cdde57938",
+          "bytes": 79227087,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf lcmodel-0.8.20261103-linux-x64.tar.gz\n./lcmodel-0.8.20261103-linux-x64/lcmodel meas.dat meas_water.dat results"
+          "command": "tar -xzf lcmodel-0.8.20261108-linux-x64.tar.gz\n./lcmodel-0.8.20261108-linux-x64/lcmodel meas.dat meas_water.dat results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.8.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261103/lcmodel-0.8.20261103-macos-arm64.pkg",
-          "sha256": "fe3e3c0be51d47129ff0c29cdbbeb4c43cfde1e2824ae3c9fefce6b05ebd58d8",
-          "bytes": 70784576,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261103/lcmodel-0.8.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.8.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-macos-arm64.pkg",
+          "sha256": "5fb08107f3b66af880831f1f8ccbbeee91f988aa82749c416de3c851814897b0",
+          "bytes": 72899987,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg lcmodel-0.8.20261103-macos-arm64.pkg -target /\nlcmodel self-check\nlcmodel meas.dat meas_water.dat results"
+          "command": "sudo installer -pkg lcmodel-0.8.20261108-macos-arm64.pkg -target /\nlcmodel self-check\nlcmodel meas.dat meas_water.dat results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.8.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261103/lcmodel-0.8.20261103-windows-x64.zip",
-          "sha256": "b1ac5dba0850b4906eac9ef9860f9f861b26b4c9facfc19c3e7eb647b9836684",
-          "bytes": 67509092,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261103/lcmodel-0.8.20261103-windows-x64.zip.validation.txt",
+          "version": "0.8.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-windows-x64.zip",
+          "sha256": "3e51113880a7b59e46de4d458a7a4828871f038640f59e8225924703e4060a0d",
+          "bytes": 69810826,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\lcmodel-0.8.20261103-windows-x64.zip -DestinationPath .\n.\\lcmodel-0.8.20261103-windows-x64\\lcmodel.exe meas.dat meas_water.dat results"
+          "command": "Expand-Archive -Path .\\lcmodel-0.8.20261108-windows-x64.zip -DestinationPath .\n.\\lcmodel-0.8.20261108-windows-x64\\lcmodel.exe meas.dat meas_water.dat results"
         }
       ],
       "containers": []
@@ -1696,35 +1696,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.6.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261103/noddi-0.6.20261103-linux-x64.tar.gz",
-          "sha256": "fd6770966bd39e412bb5c71c336a19c798d386e9a1d839ea9fffb5a956b4e681",
-          "bytes": 52981860,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261103/noddi-0.6.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.6.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261108/noddi-0.6.20261108-linux-x64.tar.gz",
+          "sha256": "eb7526820d05060dcfba434a29528de2cf4885c085dd744ca5d43ec732a25df3",
+          "bytes": 55047501,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261108/noddi-0.6.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf noddi-0.6.20261103-linux-x64.tar.gz\n./noddi-0.6.20261103-linux-x64/noddi dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "tar -xzf noddi-0.6.20261108-linux-x64.tar.gz\n./noddi-0.6.20261108-linux-x64/noddi dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.6.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261103/noddi-0.6.20261103-macos-arm64.pkg",
-          "sha256": "cca36b12744b79b001761d76e2d692ceb3294a4125d8b5dea96488b1e680bce0",
-          "bytes": 46598906,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261103/noddi-0.6.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.6.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261108/noddi-0.6.20261108-macos-arm64.pkg",
+          "sha256": "7c1ae8084508f44f5ac94ad4ea01f5e9bceacc2e7bb56e2ae24a02d91ca6032a",
+          "bytes": 48716800,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261108/noddi-0.6.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg noddi-0.6.20261103-macos-arm64.pkg -target /\nnoddi self-check\nnoddi dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "sudo installer -pkg noddi-0.6.20261108-macos-arm64.pkg -target /\nnoddi self-check\nnoddi dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.6.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261103/noddi-0.6.20261103-windows-x64.zip",
-          "sha256": "987d62a4dfb8be210c99e8e57f495cc87b9972cdb681001f5977209be5d67167",
-          "bytes": 43328338,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261103/noddi-0.6.20261103-windows-x64.zip.validation.txt",
+          "version": "0.6.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261108/noddi-0.6.20261108-windows-x64.zip",
+          "sha256": "62e6e0dd681e303608e20ba84366f03f8cf26dd36f13869b23b8de26dc00643c",
+          "bytes": 45628143,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.6.20261108/noddi-0.6.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\noddi-0.6.20261103-windows-x64.zip -DestinationPath .\n.\\noddi-0.6.20261103-windows-x64\\noddi.exe dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "Expand-Archive -Path .\\noddi-0.6.20261108-windows-x64.zip -DestinationPath .\n.\\noddi-0.6.20261108-windows-x64\\noddi.exe dwi.nii.gz dwi.bval dwi.bvec results"
         }
       ],
       "containers": []
@@ -1826,35 +1826,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.4.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-linux-x64.tar.gz",
-          "sha256": "0eb0e8cc1dcad6e34eb0b0cf437e704556ade84bd2b431a49629ed9468a9e226",
-          "bytes": 44553823,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.4.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261108/dwidenoise-0.4.20261108-linux-x64.tar.gz",
+          "sha256": "414d75e02de454c2a0e432ad69f088e8340b9ac99a273de81c523f6c6e533b0a",
+          "bytes": 46621936,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261108/dwidenoise-0.4.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf dwidenoise-0.4.20261103-linux-x64.tar.gz\n./dwidenoise-0.4.20261103-linux-x64/dwidenoise sub-01_dwi.nii.gz results"
+          "command": "tar -xzf dwidenoise-0.4.20261108-linux-x64.tar.gz\n./dwidenoise-0.4.20261108-linux-x64/dwidenoise sub-01_dwi.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.4.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-macos-arm64.pkg",
-          "sha256": "1290ad2aaf397df9180a732fd18579f16cec091069ed99033305a7f83dee5190",
-          "bytes": 38159773,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.4.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261108/dwidenoise-0.4.20261108-macos-arm64.pkg",
+          "sha256": "b0b09ff25f2f172a8dfcab6841f2a0109cdb2612895ca688f96f8532bab8499d",
+          "bytes": 40276975,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261108/dwidenoise-0.4.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg dwidenoise-0.4.20261103-macos-arm64.pkg -target /\ndwidenoise self-check\ndwidenoise sub-01_dwi.nii.gz results"
+          "command": "sudo installer -pkg dwidenoise-0.4.20261108-macos-arm64.pkg -target /\ndwidenoise self-check\ndwidenoise sub-01_dwi.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.4.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-windows-x64.zip",
-          "sha256": "cdd5a66ab37afcc2859220b87c4b0eac9c1854aa654c3d88397dbb76f15be4f7",
-          "bytes": 34874301,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261103/dwidenoise-0.4.20261103-windows-x64.zip.validation.txt",
+          "version": "0.4.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261108/dwidenoise-0.4.20261108-windows-x64.zip",
+          "sha256": "33071cd15c85784c6bca059f1509562768818dda2d90cdf8f1946e608575cb50",
+          "bytes": 37178963,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261108/dwidenoise-0.4.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\dwidenoise-0.4.20261103-windows-x64.zip -DestinationPath .\n.\\dwidenoise-0.4.20261103-windows-x64\\dwidenoise.exe sub-01_dwi.nii.gz results"
+          "command": "Expand-Archive -Path .\\dwidenoise-0.4.20261108-windows-x64.zip -DestinationPath .\n.\\dwidenoise-0.4.20261108-windows-x64\\dwidenoise.exe sub-01_dwi.nii.gz results"
         }
       ],
       "containers": []
@@ -2102,35 +2102,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.1.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.1.20261103/samsrf-0.1.20261103-linux-x64.tar.gz",
-          "sha256": "ac766a01bc2be2bfc55bb064bbb928d7c3b8add6774617baa2bb433c41036581",
-          "bytes": 43590520,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.1.20261103/samsrf-0.1.20261103-linux-x64.tar.gz.validation.txt",
+          "version": "0.3.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261108/samsrf-0.3.20261108-linux-x64.tar.gz",
+          "sha256": "2d871a01a4651e22bdcbb622599a58217107f1fe65b2a7cfb49c9937fa4c3ab7",
+          "bytes": 43618319,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261108/samsrf-0.3.20261108-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf samsrf-0.1.20261103-linux-x64.tar.gz\n./samsrf-0.1.20261103-linux-x64/samsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
+          "command": "tar -xzf samsrf-0.3.20261108-linux-x64.tar.gz\n./samsrf-0.3.20261108-linux-x64/samsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.1.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.1.20261103/samsrf-0.1.20261103-macos-arm64.pkg",
-          "sha256": "cc88655d7f51acca94f23c12aee11ed9774c543c081ea2f128a05653e6a97811",
-          "bytes": 37036500,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.1.20261103/samsrf-0.1.20261103-macos-arm64.pkg.validation.txt",
+          "version": "0.3.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261108/samsrf-0.3.20261108-macos-arm64.pkg",
+          "sha256": "459ead18035f801ac0ab6fd0d626b01416f6bdeb53593cd7f3ce9d67117e62de",
+          "bytes": 37056462,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261108/samsrf-0.3.20261108-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg samsrf-0.1.20261103-macos-arm64.pkg -target /\nsamsrf self-check\nsamsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
+          "command": "sudo installer -pkg samsrf-0.3.20261108-macos-arm64.pkg -target /\nsamsrf self-check\nsamsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.1.20261103",
-          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.1.20261103/samsrf-0.1.20261103-windows-x64.zip",
-          "sha256": "c72630582bc94cf8480050dfa957adc3a388c76eb71e9f982100f92123e86c13",
-          "bytes": 33246497,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.1.20261103/samsrf-0.1.20261103-windows-x64.zip.validation.txt",
+          "version": "0.3.20261108",
+          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261108/samsrf-0.3.20261108-windows-x64.zip",
+          "sha256": "b3b08076975e31a72f417c5b170897353f05b442052c45c6937c753afc8bc111",
+          "bytes": 33268757,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261108/samsrf-0.3.20261108-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\samsrf-0.1.20261103-windows-x64.zip -DestinationPath .\n.\\samsrf-0.1.20261103-windows-x64\\samsrf.exe rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
+          "command": "Expand-Archive -Path .\\samsrf-0.3.20261108-windows-x64.zip -DestinationPath .\n.\\samsrf-0.3.20261108-windows-x64\\samsrf.exe rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
         }
       ],
       "containers": []

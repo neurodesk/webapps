@@ -14,8 +14,8 @@ site:
       logo: sciget-logo.svg
       home: https://webapps.sciget.org/
       more_apps: More SciGet web apps
-  # Every app belongs to exactly one catalogue (its `catalog:`) and is served
-  # only from that catalogue's host. Handoff menus list the apps of one host.
+  # Every app has one home catalogue (its `catalog:`); `also_in:` lists other
+  # catalogues whose hosts serve a copy. Handoff menus list the apps of one host.
   catalogs:
     - id: neuro
       host: webapps.neurodesk.org
@@ -33,7 +33,7 @@ site:
       hosting: worker
       title: SciGet MSK Webapps
       heading: Run Musculoskeletal and Body Imaging Tools in Your Browser
-      description: Segment muscles, measure fat and blood flow, and check body imaging protocols in your browser without uploading your scans.
+      description: Segment muscles, measure fat and blood flow, convert, view, denoise and register body scans, and check imaging protocols in your browser without uploading your scans.
       brand:
         name: SciGet
         logo: sciget-logo.svg
@@ -50,6 +50,17 @@ site:
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
         more_apps: More SciGet microscopy web apps
+    - id: preclinical
+      host: preclinicalapps.sciget.org
+      hosting: worker
+      title: Preclinical Webapps
+      heading: Run Preclinical Imaging Tools in Your Browser
+      description: Convert, view, denoise and register small-animal MRI, map susceptibility, and analyse light-sheet, two-photon and neuron data in your browser without uploading your data.
+      brand:
+        name: SciGet
+        logo: sciget-logo.svg
+        home: https://webapps.sciget.org/
+        more_apps: More preclinical web apps
   analytics:
     measurement_id: G-4Z9774J59Y
     period_days: 30
@@ -226,6 +237,7 @@ apps:
   - id: qsmbly
     path: qsmbly
     catalog: neuro
+    also_in: [preclinical]
     title: QSMbly
     description: Make QSM, R2* and SWI maps from multi-echo MRI.
     categories: [quantitative-mri]
@@ -279,6 +291,7 @@ apps:
   - id: dicompare
     path: dicompare
     catalog: neuro
+    also_in: [msk, preclinical]
     title: dicompare
     description: Check DICOM acquisitions against a reference protocol.
     categories: [quality-control]
@@ -356,6 +369,7 @@ apps:
   - id: niimath
     path: niimath
     catalog: neuro
+    also_in: [msk, microscopy, preclinical]
     title: NiiMath
     description: Apply image maths, filters and meshing with niimath.
     categories: [preprocessing]
@@ -381,6 +395,7 @@ apps:
   - id: mri2vid
     path: mri2vid
     catalog: neuro
+    also_in: [msk, microscopy, preclinical]
     former_paths: [dicom2vid]
     title: MRI2VID
     description: Convert DICOM, NIfTI or MGZ volumes into scrolling videos.
@@ -460,6 +475,7 @@ apps:
   - id: zarro
     path: zarro
     catalog: microscopy
+    also_in: [preclinical]
     title: ZARRo
     description: Stream, view and measure large OME-Zarr images.
     categories: [visualization]
@@ -906,7 +922,7 @@ apps:
   - id: elastix
     path: elastix
     catalog: neuro
-    also_in: [microscopy]
+    also_in: [msk, microscopy, preclinical]
     title: elastix
     description: Rigid, affine and B-spline registration with elastix.
     categories: [registration]
@@ -932,6 +948,7 @@ apps:
   - id: dicomview
     path: dicomview
     catalog: neuro
+    also_in: [msk, preclinical]
     title: DICOM View
     description: Browse DICOM series, images, headers and protocol.
     categories: [visualization, quality-control]
@@ -1011,6 +1028,7 @@ apps:
   - id: degibbs
     path: degibbs
     catalog: neuro
+    also_in: [preclinical]
     title: Degibbs
     description: Remove Gibbs ringing from MRI scans.
     categories: [preprocessing, diffusion-imaging]
@@ -1063,6 +1081,7 @@ apps:
   - id: dcm2niix
     path: dcm2niix
     catalog: neuro
+    also_in: [msk, preclinical]
     title: dcm2niix
     description: Convert scanner DICOM exports to anatomical and DWI BIDS.
     categories: [conversion]
@@ -1089,11 +1108,12 @@ apps:
   - id: dwidenoise
     path: dwidenoise
     catalog: neuro
+    also_in: [preclinical]
     title: Dwidenoise
     description: Denoise diffusion MRI with Patch2Self.
     categories: [preprocessing, diffusion-imaging]
     keywords: [denoising, Patch2Self, DIPY, diffusion MRI, preprocessing, WebAssembly]
-    anatomy: [brain]
+    anatomy: [any]
     modalities: [mri]
     inputs: [dicom, nifti]
     hardware: cpu
@@ -1274,11 +1294,12 @@ apps:
   - id: ants-denoise
     path: ants-denoise
     catalog: neuro
+    also_in: [msk, preclinical]
     title: ANTs DenoiseImage
     description: Reduce noise in 3D MRI with ANTs adaptive non-local means.
     categories: [preprocessing]
     keywords: [denoising, non-local means, DenoiseImage, ANTs, Rician noise, MRI, preprocessing, WebAssembly]
-    anatomy: [brain]
+    anatomy: [any]
     modalities: [mri]
     inputs: [dicom, nifti]
     hardware: cpu
@@ -1456,6 +1477,7 @@ apps:
   - id: calcium-imaging
     path: calcium-imaging
     catalog: microscopy
+    also_in: [preclinical]
     title: Calcium imaging
     description: Two-photon motion correction, ROIs, ΔF/F and spikes
     categories: [calcium-imaging]
@@ -1535,6 +1557,7 @@ apps:
   - id: neuromorph
     path: neuromorph
     catalog: microscopy
+    also_in: [preclinical]
     title: NeuroMorph
     description: Check SWC neurons and measure morphology and Sholl.
     categories: [morphometry]
@@ -1561,6 +1584,7 @@ apps:
 
   - id: stitching
     catalog: microscopy
+    also_in: [preclinical]
     path: stitching
     title: Tile stitching
     description: Stitch overlapping 2D and 3D microscopy tiles
@@ -1588,6 +1612,7 @@ apps:
   - id: structure-tensor
     path: structure-tensor
     catalog: microscopy
+    also_in: [preclinical]
     title: Structure Tensor
     description: Map fibre orientation and coherency in microscopy images.
     categories: [fibre-orientation]
