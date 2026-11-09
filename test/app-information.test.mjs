@@ -285,13 +285,13 @@ test('the shell names the hosting catalogue in its Privacy text and More Apps li
     appId: 'syncro',
     information: appInformationPayload(information, 'syncro'),
     brandName: 'SciGet',
-    moreAppsLabel: 'More SciGet MSK web apps',
+    moreAppsLabel: 'More MSK web apps',
   });
   sciget.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
   const privacy = sciget.document.querySelector('.nd-app-dialog[data-dialog="privacy"]').textContent;
   assert.match(privacy, /The SciGet hosting layer records page views only/);
   assert.doesNotMatch(privacy, /Neurodesk hosting/);
-  assert.ok(sciget.document.querySelector('.nd-app-bar a[title="More SciGet MSK web apps"]'));
+  assert.ok(sciget.document.querySelector('.nd-app-bar a[title="More MSK web apps"]'));
   const cite = (sciget.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="cite"]').click(), sciget.document.querySelector('.nd-app-dialog[data-dialog="cite"]').textContent);
   assert.match(cite, /Neurodesk \(\d{4}\)\. /, 'the citation keeps its factual Neurodesk attribution');
 });
