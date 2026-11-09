@@ -14,6 +14,16 @@ export function selectedSuite(registry, argv = process.argv, env = process.env) 
   return desktopSuite(registry, id ? findCatalog(registry, id) : primaryCatalog(registry));
 }
 
+/** The electron-builder settings that name a suite's application and archives. */
+export function builderConfig(suite) {
+  return {
+    appId: suite.appId,
+    productName: suite.title,
+    executableName: suite.executable,
+    artifactName: `${suite.release}-\${version}-\${os}-\${arch}.\${ext}`,
+  };
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const suites = desktopSuites(await loadAppsRegistry());
   if (process.argv.includes('--releases')) {

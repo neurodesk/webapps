@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { windowsSigningConfig } from './windows-signing.mjs';
 import { macNotarizeConfig } from './mac-notarize.mjs';
 import { prepareReleaseFiles } from './release-files.mjs';
+import { builderConfig, selectedSuite } from './suites.mjs';
+import { loadAppsRegistry } from '../lib/apps-registry.mjs';
 import { loadBundle, verifyBundle } from '../../packages/desktop/src/bundle.js';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -15,18 +17,19 @@ const { build } = require('electron-builder');
 // Runtime wheels and WebAssembly dominate these archives; moderate compression
 // avoids spending tens of minutes on the hosted runner for a small size difference.
 process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL ??= '3';
+const suite = selectedSuite(await loadAppsRegistry());
 await verifyBundle(resources);
 const artifacts = await build({ projectDir, publish: 'never', config: {
-  ...windowsSigningConfig(),
+  ...windowsSigningConfig(process.platform, suite.executable),
   ...macNotarizeConfig(),
-  executableName: 'neurodesk-webapps',
+  ...builderConfig(suite),
   extraResources: [{ from: resources, to: 'offline' }],
 } });
 const executable = process.platform === 'darwin'
-  ? join(projectDir, 'release/mac-arm64/neurodesk-webapps.app/Contents/MacOS/neurodesk-webapps')
+  ? join(projectDir, `release/mac-arm64/${suite.executable}.app/Contents/MacOS/${suite.executable}`)
   : process.platform === 'win32'
-    ? join(projectDir, 'release/win-unpacked/neurodesk-webapps.exe')
-    : join(projectDir, 'release/linux-unpacked/neurodesk-webapps');
+    ? join(projectDir, `release/win-unpacked/${suite.executable}.exe`)
+    : join(projectDir, `release/linux-unpacked/${suite.executable}`);
 const report = process.env.NEURODESK_TEST_REPORT || join(projectDir, 'release/test-report');
 const packagedResources = process.platform === 'darwin'
   ? resolve(executable, '../../Resources/offline')
@@ -44,5 +47,5 @@ await new Promise((resolve, reject) => {
 const version = JSON.parse(await readFile(join(projectDir, 'package.json'))).version;
 const platform = { darwin: 'macos-arm64', linux: 'linux-x64', win32: 'windows-x64' }[process.platform];
 for (const path of artifacts.filter(path => /\.(zip|tar\.gz)$/.test(path))) {
-  console.log(await prepareReleaseFiles(path, join(projectDir, 'release/github'), { version, platform }));
+  console.log(await prepareReleaseFiles(path, join(projectDir, 'release/github'), { version, platform, suite }));
 }

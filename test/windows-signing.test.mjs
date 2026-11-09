@@ -65,7 +65,7 @@ test('portable and native release gates verify Windows archives before publishin
   assert.ok(checks.findIndex(step => step.name === 'Enforce Windows signature policy') < checks.findIndex(step => step.name === 'Attach verified release assets'));
   const publish = await read('scripts/desktop/publish.mjs');
   assert.match(publish, /windowsSigning\.archiveSha256 !== archiveHash/);
-  assert.match(publish, /verifyWindowsArchive\(archive\)/);
+  assert.match(publish, /verifyWindowsArchive\(archive, suite\.executable\)/);
 });
 
 test('Electron signing is disabled by default and runs after resource editing before archival', () => {

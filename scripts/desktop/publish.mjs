@@ -13,10 +13,12 @@ import { fileHash } from '../../packages/desktop/src/bundle.js';
 import { loadAppsRegistry } from '../lib/apps-registry.mjs';
 import { loadStandalone } from '../lib/standalone.mjs';
 import { recordUrls, reusePlan } from '../lib/release-reuse.mjs';
+import { selectedSuite } from './suites.mjs';
 
 const directory = resolve(process.argv[2] || 'release-artifacts');
 const registry = await loadAppsRegistry();
 const catalog = await loadStandalone(registry);
+const suite = selectedSuite(registry);
 const version = JSON.parse(await readFile('packages/desktop/package.json')).version;
 const tag = `webapps-v${version}`;
 const gh = args => execFileSync('gh', args, { encoding: 'utf8' }).trim();
@@ -55,7 +57,7 @@ async function releaseRecord(platform) {
   if (platform === 'windows-x64' && signingEnabled()) {
     const archiveHash = metadata.archiveSha256 || metadata.sha256;
     if (metadata.windowsSigning?.verified !== true || metadata.windowsSigning.archiveSha256 !== archiveHash) throw new Error('Windows release lacks archive-bound signing verification');
-    if (!metadata.parts) verifyWindowsArchive(primary);
+    if (!metadata.parts) verifyWindowsArchive(primary, suite.executable);
     else {
       const temporary = await mkdtemp(join(tmpdir(), 'desktop-signature-check-'));
       try {
@@ -64,7 +66,7 @@ async function releaseRecord(platform) {
           for (const part of metadata.parts) yield* createReadStream(find(part.filename));
         }
         await pipeline(chunks(), createWriteStream(archive));
-        verifyWindowsArchive(archive);
+        verifyWindowsArchive(archive, suite.executable);
       } finally { await rm(temporary, { recursive: true, force: true }); }
     }
   }

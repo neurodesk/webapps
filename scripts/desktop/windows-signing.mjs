@@ -7,10 +7,10 @@ export function signingEnabled() {
   execFileSync(python(), [policy, 'check-config'], { stdio: 'inherit' });
   return process.env.WINDOWS_SIGNING_ENABLED === 'true';
 }
-export function verifyWindowsArchive(path) {
-  execFileSync(python(), [policy, 'verify', path, '--required', 'neurodesk-webapps.exe'], { stdio: 'inherit' });
+export function verifyWindowsArchive(path, executable) {
+  execFileSync(python(), [policy, 'verify', path, '--required', `${executable}.exe`], { stdio: 'inherit' });
 }
-export function windowsSigningConfig(platform = process.platform) {
+export function windowsSigningConfig(platform, executable) {
   if (platform !== 'win32' || !signingEnabled()) return {};
   return {
     // In builder 26, afterSign runs after Windows resource editing, even when
@@ -18,7 +18,7 @@ export function windowsSigningConfig(platform = process.platform) {
     win: { signExecutable: false },
     afterSign: async ({ appOutDir, electronPlatformName }) => {
       if (electronPlatformName !== 'win32') throw new Error('Expected Windows packaging');
-      execFileSync(python(), [policy, 'sign', appOutDir, '--required', 'neurodesk-webapps.exe'], { stdio: 'inherit' });
+      execFileSync(python(), [policy, 'sign', appOutDir, '--required', `${executable}.exe`], { stdio: 'inherit' });
     },
   };
 }

@@ -6,7 +6,9 @@ import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { fileHash, loadBundle } from '../../packages/desktop/src/bundle.js';
+import { loadAppsRegistry } from '../lib/apps-registry.mjs';
 import { prepareReleaseFiles } from './release-files.mjs';
+import { selectedSuite } from './suites.mjs';
 
 // Every release rebuilds the asset files, so their timestamps and ownership
 // differ while the model bytes do not. The archive is written here rather than
@@ -82,7 +84,7 @@ export async function writeTarGz(archive, directory, names) {
 
 // The four platform archives carry byte-identical models, so the models ship
 // once as the content-addressed cache the resolver already reads.
-export async function modelsPack(full, light, archive, destination, { version }) {
+export async function modelsPack(full, light, archive, destination, { version, suite }) {
   const complete = await loadBundle(full);
   const bundle = await loadBundle(light);
   const names = new Set();
@@ -99,18 +101,19 @@ export async function modelsPack(full, light, archive, destination, { version })
   const models = [...names].sort();
   await mkdir(dirname(archive), { recursive: true });
   await writeTarGz(archive, join(full, 'assets'), models);
-  return { models, release: await prepareReleaseFiles(archive, destination, { version, platform: 'any', kind: 'models' }) };
+  return { models, release: await prepareReleaseFiles(archive, destination, { version, platform: 'any', kind: 'models', suite }) };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = resolve(import.meta.dirname, '../..');
   const version = JSON.parse(await readFile(join(root, 'packages/desktop/package.json'))).version;
+  const suite = selectedSuite(await loadAppsRegistry());
   const result = await modelsPack(
     resolve(process.argv[2] || join(root, 'packages/desktop/resources')),
     resolve(process.argv[3] || join(root, 'packages/desktop/resources-light')),
-    join(root, `packages/desktop/release/webapps-${version}-models.tar.gz`),
+    join(root, `packages/desktop/release/${suite.release}-${version}-models.tar.gz`),
     join(root, 'packages/desktop/release/github'),
-    { version },
+    { version, suite },
   );
   console.log(`Packed ${result.models.length} models`);
   console.log(result.release);
