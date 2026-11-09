@@ -44,6 +44,8 @@ jobs:
     outputs:
       release_date: ${{ steps.date.outputs.release_date }}
     steps:
+      - name: Free Linux runner storage for the four suites
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -81,23 +83,64 @@ jobs:
           key: offline-assets-${{ hashFiles('registry/offline-assets.lock.json') }}
       - name: Verify all offline inputs against the committed lock
         run: node scripts/desktop/assets.mjs
-      - run: node scripts/desktop/assemble.mjs
-      - name: Archive complete offline resources
-        run: tar -czf offline-resources.tar.gz -C packages/desktop resources
+      # One suite per catalogue (scripts/desktop/suites.mjs): the full suite from dist/,
+      # each edition from its catalogue's site in dist-sites/.
+      - name: Assemble every catalogue suite and its model pack
+        run: |
+          for suite in $(node scripts/desktop/suites.mjs); do
+            NEURODESK_SUITE=$suite node scripts/desktop/assemble.mjs
+            tar -czf "offline-resources-$suite.tar.gz" -C packages/desktop resources
+            node scripts/desktop/without-models.mjs
+            NEURODESK_SUITE=$suite node scripts/desktop/models-pack.mjs
+            mv packages/desktop/release/github "models-pack-$suite"
+            rm -rf packages/desktop/release
+          done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: offline-resources
-          path: offline-resources.tar.gz
+          name: offline-resources-neuro
+          path: offline-resources-neuro.tar.gz
           compression-level: 0
           if-no-files-found: error
-      - name: Build the platform-independent model pack
-        run: |
-          node scripts/desktop/without-models.mjs
-          node scripts/desktop/models-pack.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: desktop-models-pack
-          path: packages/desktop/release/github/
+          name: desktop-neuro-models-pack
+          path: models-pack-neuro/
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: offline-resources-msk
+          path: offline-resources-msk.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-msk-models-pack
+          path: models-pack-msk/
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: offline-resources-microscopy
+          path: offline-resources-microscopy.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-microscopy-models-pack
+          path: models-pack-microscopy/
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: offline-resources-preclinical
+          path: offline-resources-preclinical.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-preclinical-models-pack
+          path: models-pack-preclinical/
           compression-level: 0
           if-no-files-found: error
 
@@ -107,11 +150,18 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-15, windows-latest]
+        suite: [neuro, msk, microscopy, preclinical]
+        # The full suite also runs the offline workflows and builds the container.
+        include:
+          - suite: neuro
+            full: true
     runs-on: ${{ matrix.os }}
     timeout-minutes: 100
     permissions:
       contents: read
       id-token: write
+    env:
+      NEURODESK_SUITE: ${{ matrix.suite }}
     steps:
       - name: Free Linux runner storage for the suite archives
         if: runner.os == 'Linux'
@@ -142,8 +192,8 @@ jobs:
         run: node --test packages/desktop/test/source-approval.test.js
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: offline-resources
-      - run: tar -xzf offline-resources.tar.gz -C packages/desktop
+          name: offline-resources-${{ matrix.suite }}
+      - run: tar -xzf offline-resources-${{ matrix.suite }}.tar.gz -C packages/desktop
       - name: Prepare the package without models
         shell: bash
         run: |
@@ -161,23 +211,25 @@ jobs:
           NEURODESK_TEST_REPORT: desktop-reports
           NEURODESK_SOFTWARE_RENDERING: '1'
       - name: Select workflow coverage from the complete app registry
+        if: matrix.full
         shell: bash
         run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs)" >> "$GITHUB_ENV"
       - name: Test offline computations and exports
-        if: runner.os != 'Linux'
+        if: matrix.full && runner.os != 'Linux'
         run: node scripts/desktop/smoke.mjs
         env:
           NEURODESK_TEST_REPORT: desktop-workflow-reports
           NEURODESK_WORKFLOWS: '1'
           NEURODESK_SMOKE_DIAGNOSTICS: ${{ runner.os == 'Windows' && '1' || '' }}
       - name: Test Linux offline computations and exports
-        if: runner.os == 'Linux'
+        if: matrix.full && runner.os == 'Linux'
         run: xvfb-run -a node scripts/desktop/smoke.mjs
         env:
           NEURODESK_TEST_REPORT: desktop-workflow-reports
           NEURODESK_WORKFLOWS: '1'
           NEURODESK_SOFTWARE_RENDERING: '1'
       - name: Restore full catalog coverage for installed-package tests
+        if: matrix.full
         shell: bash
         run: echo "NEURODESK_TEST_APP=" >> "$GITHUB_ENV"
       - name: Package and test the installed suite
@@ -198,18 +250,18 @@ jobs:
           NEURODESK_TEST_REPORT: packaged-desktop-reports
           NEURODESK_SOFTWARE_RENDERING: '1'
       - name: Install pinned Apptainer
-        if: runner.os == 'Linux'
+        if: matrix.full && runner.os == 'Linux'
         run: |
           curl -fL https://github.com/apptainer/apptainer/releases/download/v1.5.3/apptainer_1.5.3_amd64.deb -o "$RUNNER_TEMP/apptainer.deb"
           echo "82b0bdddf459087d202383360b8318d526ad6826c748a2f669913cc6aef9ee40  $RUNNER_TEMP/apptainer.deb" | sha256sum -c -
           sudo apt-get install -y "$RUNNER_TEMP/apptainer.deb"
       - name: Build and test offline Docker and Apptainer distributions
-        if: runner.os == 'Linux'
+        if: matrix.full && runner.os == 'Linux'
         run: node scripts/desktop/container.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
-          name: desktop-${{ matrix.os }}
+          name: desktop-${{ matrix.suite }}-${{ matrix.os }}
           path: |
             desktop-reports/
             desktop-workflow-reports/
@@ -223,6 +275,8 @@ jobs:
     needs: bundle
     runs-on: ubuntu-22.04
     timeout-minutes: 100
+    env:
+      NEURODESK_SUITE: neuro
     steps:
       - name: Free Linux runner storage for the suite archives
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
@@ -240,12 +294,12 @@ jobs:
       - run: node packages/desktop/node_modules/electron/install.js
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: offline-resources
-      - run: tar -xzf offline-resources.tar.gz -C packages/desktop
+          name: offline-resources-neuro
+      - run: tar -xzf offline-resources-neuro.tar.gz -C packages/desktop
       - run: node scripts/desktop/without-models.mjs
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: desktop-models-pack
+          name: desktop-neuro-models-pack
           path: models-release
       - name: Install the model pack the way the release notes describe
         run: |
@@ -270,7 +324,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
-          name: desktop-models-offline
+          name: desktop-neuro-models-offline
           path: reports/
           compression-level: 0
           if-no-files-found: error
@@ -296,14 +350,18 @@ jobs:
         with:
           pattern: desktop-*
           path: release-artifacts
-      - run: node scripts/desktop/publish.mjs release-artifacts
+      - name: Publish every catalogue suite
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # A release made with GITHUB_TOKEN starts no workflow, so announce it; standalone-catalog commits the
-      # suite entry to registry/standalone.json and redeploys the site.
+        run: |
+          for suite in $(node scripts/desktop/suites.mjs); do
+            NEURODESK_SUITE=$suite node scripts/desktop/publish.mjs release-artifacts
+          done
+      # A release made with GITHUB_TOKEN starts no workflow, so announce them; standalone-catalog commits the
+      # suite entries to registry/standalone.json and redeploys the site.
       - name: Publish to the Standalone catalog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RELEASE="webapps@$(node -p "require('./packages/desktop/package.json').version")"
-          gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"
+          RELEASES="$(node scripts/desktop/suites.mjs --releases)"
+          gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASES"

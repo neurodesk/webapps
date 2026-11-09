@@ -355,10 +355,12 @@ test('the nightly suite release announces itself to the catalog', async () => {
   const publish = (await workflow('standalone.yml')).jobs.publish;
   assert.equal(publish.permissions.contents, 'write');
   const steps = publish.steps.map((step) => step.run || '');
+  // Every catalogue suite is announced in one dispatch, as space-separated id@version releases.
+  const dispatch = CATALOG_DISPATCH.replace('=$RELEASE"', '=$RELEASES"');
   const release = steps.findIndex((run) => run.includes('node scripts/desktop/publish.mjs'));
-  const announce = steps.findIndex((run) => run.includes(CATALOG_DISPATCH));
-  assert.ok(release >= 0 && announce > release, 'the suite is announced after it is published');
-  assert.match(steps[announce], /RELEASE="webapps@\$\(node -p "require\('\.\/packages\/desktop\/package\.json'\)\.version"\)"/);
+  const announce = steps.findIndex((run) => run.includes(dispatch));
+  assert.ok(release >= 0 && announce > release, 'the suites are announced after they are published');
+  assert.match(steps[announce], /RELEASES="\$\(node scripts\/desktop\/suites\.mjs --releases\)"/);
 });
 
 test('a release.json from before exes/node-cli lists its targets without install commands', async () => {

@@ -4,6 +4,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import YAML from 'yaml';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
+import { desktopSuites } from '../scripts/lib/standalone.mjs';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { commandLineClosure } from '../scripts/lib/module-closure.mjs';
 import { repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -57,6 +58,46 @@ test('desktop builds run on the daily schedule or by hand, and publish only on s
       ? '${{ steps.date.outputs.release_date }}'
       : '${{ needs.bundle.outputs.release_date }}');
   }
+});
+
+test('the desktop workflow builds, tests and publishes one suite per catalogue', async () => {
+  const flow = await workflow('standalone');
+  const suites = desktopSuites(await loadAppsRegistry());
+  const ids = suites.map(suite => suite.catalog);
+  const primary = suites.find(suite => suite.primary).catalog;
+  const uploads = job => job.steps.filter(step => step.uses?.startsWith('actions/upload-artifact@')).map(step => step.with.name);
+  const downloads = job => job.steps.filter(step => step.uses?.startsWith('actions/download-artifact@')).map(step => step.with.name ?? step.with.pattern);
+  const bundle = flow.jobs.bundle;
+  const assemble = bundle.steps.find(step => step.run?.includes('scripts/desktop/assemble.mjs')).run;
+  assert.match(assemble, /for suite in \$\(node scripts\/desktop\/suites\.mjs\); do/);
+  for (const script of ['assemble.mjs', 'models-pack.mjs']) assert.match(assemble, new RegExp(`NEURODESK_SUITE=\\$suite node scripts/desktop/${script.replace('.', '\\.')}`));
+  assert.deepEqual(uploads(bundle).sort(), ids.flatMap(id => [`offline-resources-${id}`, `desktop-${id}-models-pack`]).sort(), 'the bundle uploads each suite\'s resources and model pack');
+  const desktop = flow.jobs.desktop;
+  assert.deepEqual(desktop.strategy.matrix.suite, ids);
+  assert.deepEqual(desktop.strategy.matrix.include, [{ suite: primary, full: true }], 'only the full suite is marked full');
+  assert.equal(desktop.env.NEURODESK_SUITE, '${{ matrix.suite }}');
+  assert.deepEqual(downloads(desktop), ['offline-resources-${{ matrix.suite }}']);
+  assert.deepEqual(uploads(desktop), ['desktop-${{ matrix.suite }}-${{ matrix.os }}']);
+  const condition = name => desktop.steps.find(step => step.name === name)?.if ?? '';
+  for (const name of [
+    'Select workflow coverage from the complete app registry',
+    'Test offline computations and exports',
+    'Test Linux offline computations and exports',
+    'Restore full catalog coverage for installed-package tests',
+    'Install pinned Apptainer',
+    'Build and test offline Docker and Apptainer distributions',
+  ]) assert.match(condition(name), /^matrix\.full\b/, `${name} runs for the full suite only`);
+  for (const step of desktop.steps.filter(step => /scripts\/desktop\/(smoke|pack)\.mjs/.test(step.run ?? '') && !step.env?.NEURODESK_WORKFLOWS)) {
+    assert.doesNotMatch(step.if ?? '', /matrix\.full/, `${step.name ?? step.run} tests every suite`);
+  }
+  const models = flow.jobs['models-offline'];
+  assert.equal(models.env.NEURODESK_SUITE, primary);
+  assert.deepEqual(downloads(models), [`offline-resources-${primary}`, `desktop-${primary}-models-pack`]);
+  assert.deepEqual(uploads(models), [`desktop-${primary}-models-offline`]);
+  const publish = flow.jobs.publish;
+  assert.deepEqual(downloads(publish), ['desktop-*']);
+  const run = publish.steps.find(step => step.run?.includes('scripts/desktop/publish.mjs')).run;
+  assert.match(run, /for suite in \$\(node scripts\/desktop\/suites\.mjs\); do\s+NEURODESK_SUITE=\$suite node scripts\/desktop\/publish\.mjs release-artifacts/);
 });
 
 test('web releases and deployments do not wait for the desktop suite', async () => {
