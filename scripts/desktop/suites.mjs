@@ -1,0 +1,25 @@
+import { readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { findCatalog, loadAppsRegistry, primaryCatalog, repoRoot } from '../lib/apps-registry.mjs';
+import { desktopSuite, desktopSuites } from '../lib/standalone.mjs';
+
+/**
+ * The desktop suite a script builds: the catalogue named by `--catalog <id>`,
+ * else NEURODESK_SUITE, else the primary catalogue's full suite.
+ */
+export function selectedSuite(registry, argv = process.argv, env = process.env) {
+  const index = argv.indexOf('--catalog');
+  const id = (index >= 0 ? argv[index + 1] : undefined) || env.NEURODESK_SUITE;
+  return desktopSuite(registry, id ? findCatalog(registry, id) : primaryCatalog(registry));
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const suites = desktopSuites(await loadAppsRegistry());
+  if (process.argv.includes('--releases')) {
+    const { version } = JSON.parse(await readFile(join(repoRoot, 'packages/desktop/package.json'), 'utf8'));
+    console.log(suites.map(suite => `${suite.release}@${version}`).join(' '));
+  } else {
+    console.log(suites.map(suite => suite.catalog).join('\n'));
+  }
+}

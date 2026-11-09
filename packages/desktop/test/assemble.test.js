@@ -16,8 +16,8 @@ async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'desktop-assemble-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const path of [
-    'scripts/desktop/assemble.mjs', 'scripts/desktop/stage-python.mjs',
-    'scripts/lib/apps-registry.mjs', 'scripts/lib/standalone.mjs', 'scripts/lib/landing-page.mjs',
+    'scripts/desktop/assemble.mjs', 'scripts/desktop/stage-python.mjs', 'scripts/desktop/suites.mjs',
+    'scripts/lib/apps-registry.mjs', 'scripts/lib/standalone.mjs', 'scripts/lib/suite-release.mjs', 'scripts/lib/landing-page.mjs',
     'packages/desktop/src/bundle.js', 'packages/desktop/package.json',
     'packages/desktop/STANDALONE.md', 'packages/desktop/AUTOMATION.md', 'packages/desktop/jobs',
   ]) {
@@ -47,6 +47,19 @@ async function fixture(t) {
   for (const path of ['_runtime/worker.js', 'shell-adapters/components/core/dom.js', 'unselected/index.html']) {
     await mkdir(dirname(join(root, 'dist', path)), { recursive: true });
     await writeFile(join(root, 'dist', path), 'fixture');
+  }
+  // The microscopy site as the site build projects it: its own copies of the pages and runtime.
+  const edition = join(root, 'dist-sites/microscopy');
+  for (const app of apps) {
+    await mkdir(join(edition, app.path), { recursive: true });
+    await writeFile(join(edition, app.path, 'index.html'), '<html><body>Microscopy edition app</body></html>');
+  }
+  for (const path of ['app-theme.css', 'fonts']) {
+    await cp(join(repoRoot, 'site', path), join(edition, path), { recursive: true });
+  }
+  for (const path of ['_runtime/worker.js', 'shell-adapters/components/core/dom.js']) {
+    await mkdir(dirname(join(edition, path)), { recursive: true });
+    await writeFile(join(edition, path), 'edition fixture');
   }
   return root;
 }
@@ -83,3 +96,41 @@ for (const app of [null, 'mri2vid', 'zarro,mri2vid']) {
     await assert.rejects(verifyBundle(destination), /missing or corrupt: site\/fonts\/inter\.woff2/);
   });
 }
+
+for (const [catalog, source, title, logo] of [
+  ['microscopy', 'dist-sites/microscopy', 'Microscopy Webapps', 'sciget-logo.svg'],
+  ['neuro', 'dist', 'Neurodesk Webapps', 'neurodesk-logo.svg'],
+]) {
+  test(`the ${catalog} desktop suite assembles from ${source} under its catalogue's brand`, async t => {
+    const root = await fixture(t);
+    const destination = join(root, 'offline');
+    await run(process.execPath, [join(root, 'scripts/desktop/assemble.mjs'), '--out', destination, '--catalog', catalog]);
+    const manifest = JSON.parse(await readFile(join(destination, 'manifest.json')));
+    assert.deepEqual(manifest.apps.map(entry => entry.id).sort(), ['mri2vid', 'zarro']);
+    for (const path of ['mri2vid/index.html', 'zarro/index.html', '_runtime/worker.js', 'shell-adapters/components/core/dom.js']) {
+      assert.deepEqual(await readFile(join(destination, 'site', path)), await readFile(join(root, source, path)), path);
+    }
+    const landing = await readFile(join(destination, 'site/index.html'), 'utf8');
+    assert.equal(/<title>([^<]*)<\/title>/.exec(landing)?.[1], title);
+    assert.match(landing, new RegExp(`<img src="\\./${logo.replace('.', '\\.')}"`));
+    await verifyBundle(destination);
+  });
+}
+
+test('the environment selects the suite when no catalogue is passed', async t => {
+  const root = await fixture(t);
+  const destination = join(root, 'offline');
+  await run(process.execPath, [join(root, 'scripts/desktop/assemble.mjs'), '--out', destination], { env: { ...process.env, NEURODESK_SUITE: 'microscopy' } });
+  assert.match(await readFile(join(destination, 'site/zarro/index.html'), 'utf8'), /Microscopy edition app/);
+});
+
+test('an app outside the selected suite is refused', async t => {
+  const root = await fixture(t);
+  const registry = JSON.parse(await readFile(join(root, 'registry/apps.yml')));
+  registry.apps = registry.apps.map(app => app.id === 'mri2vid' ? { ...app, also_in: ['msk'] } : app);
+  await writeFile(join(root, 'registry/apps.yml'), JSON.stringify(registry));
+  await assert.rejects(
+    run(process.execPath, [join(root, 'scripts/desktop/assemble.mjs'), '--out', join(root, 'offline'), '--catalog', 'microscopy', '--app', 'mri2vid']),
+    /Unknown app: mri2vid/,
+  );
+});

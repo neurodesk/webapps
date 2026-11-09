@@ -7,6 +7,7 @@ import { JSDOM } from 'jsdom';
 import { catalogApps, findCatalog, loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { DIALOG_FORBIDDEN, desktopSuite, desktopSuites, linkedSuite, loadStandalone, setSuiteRecord, suiteRecord, validateStandalone } from '../scripts/lib/standalone.mjs';
 import { ciWorkflowApps, cpuWorkflowApps, hardwareWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
+import { selectedSuite } from '../scripts/desktop/suites.mjs';
 import { prepareWorkflow, workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 import { portableCommand, releasePlatform } from '../scripts/lib/portable-command.mjs';
@@ -57,6 +58,22 @@ test('each catalogue has a desktop suite: the full suite for the primary catalog
   }
   assert.ok(ids(suites.find(({ catalog }) => catalog === 'microscopy')).includes('elastix'), 'an also_in copy ships in the catalogue suite');
   assert.ok(!ids(suites.find(({ catalog }) => catalog === 'microscopy')).includes('musclemap'));
+});
+
+test('desktop scripts build the catalogue named by --catalog, else NEURODESK_SUITE, else the full suite', async () => {
+  const registry = await loadAppsRegistry();
+  assert.equal(selectedSuite(registry, ['node', 'script'], {}).release, 'webapps');
+  assert.equal(selectedSuite(registry, ['node', 'script'], { NEURODESK_SUITE: 'msk' }).release, 'webapps-msk');
+  assert.equal(selectedSuite(registry, ['node', 'script', '--catalog', 'microscopy'], { NEURODESK_SUITE: 'msk' }).release, 'webapps-microscopy');
+  assert.throws(() => selectedSuite(registry, ['node', 'script', '--catalog', 'nowhere'], {}), /Unknown catalog 'nowhere'/);
+});
+
+test('the suite list names every catalogue once, the full suite first, at the desktop version', async () => {
+  const registry = await loadAppsRegistry();
+  const { version } = JSON.parse(await readFile('packages/desktop/package.json', 'utf8'));
+  const ids = desktopSuites(registry).map(({ catalog }) => catalog);
+  assert.deepEqual(execFileSync(process.execPath, ['scripts/desktop/suites.mjs'], { encoding: 'utf8' }).trim().split('\n'), ids);
+  assert.equal(execFileSync(process.execPath, ['scripts/desktop/suites.mjs', '--releases'], { encoding: 'utf8' }).trim(), desktopSuites(registry).map(({ release }) => `${release}@${version}`).join(' '));
 });
 
 test('a catalogue links its own suite once a release is recorded, and the full suite before that', async () => {

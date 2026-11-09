@@ -1,9 +1,10 @@
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { loadAppsRegistry, repoRoot } from '../lib/apps-registry.mjs';
+import { findCatalog, loadAppsRegistry, repoRoot } from '../lib/apps-registry.mjs';
 import { loadStandalone } from '../lib/standalone.mjs';
 import { renderLandingPage } from '../lib/landing-page.mjs';
 import { stagePython } from './stage-python.mjs';
+import { selectedSuite } from './suites.mjs';
 import { fileHash, verifyBundle, inventoryFiles } from '../../packages/desktop/src/bundle.js';
 
 const argument = name => {
@@ -12,10 +13,14 @@ const argument = name => {
 };
 const registry = await loadAppsRegistry();
 const standalone = await loadStandalone(registry);
+const suite = selectedSuite(registry);
 const ids = argument('--app')?.split(',');
-const unknown = ids?.filter(id => !registry.apps.some(app => app.id === id));
+const unknown = ids?.filter(id => !suite.apps.some(app => app.id === id));
 if (unknown?.length) throw new Error(`Unknown app: ${unknown.join(', ')}`);
-const apps = ids ? registry.apps.filter(app => ids.includes(app.id)) : registry.apps;
+const apps = ids ? suite.apps.filter(app => ids.includes(app.id)) : suite.apps;
+// The full suite keeps every handoff of the all-app assembly; an edition takes
+// its catalogue's projected site, whose handoff menus list only its own apps.
+const source = suite.primary ? join(repoRoot, 'dist') : join(repoRoot, 'dist-sites', suite.catalog);
 const destination = resolve(argument('--out') || join(repoRoot, 'packages/desktop/resources'));
 const cache = process.env.NEURODESK_ASSET_CACHE || join(repoRoot, '.offline-cache');
 const lock = JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.lock.json')));
@@ -47,16 +52,16 @@ const add = async url => {
 };
 for (const app of apps) {
   if (!lock.apps[app.id] || lock.apps[app.id].length !== sources.apps[app.id].length) throw new Error(`${app.id}: offline inventory is incomplete`);
-  await cp(join(repoRoot, 'dist', app.path), join(destination, 'site', app.path), { recursive: true });
+  await cp(join(source, app.path), join(destination, 'site', app.path), { recursive: true });
   for (const url of lock.apps[app.id]) await add(url);
 }
 // Composite resources retain their relative URLs and worker adjacency.
-for (const entry of await readdir(join(repoRoot, 'dist'), { withFileTypes: true })) {
+for (const entry of await readdir(source, { withFileTypes: true })) {
   if (!entry.isDirectory() || ['_runtime', 'shell-adapters', 'fonts'].includes(entry.name)) {
-    await cp(join(repoRoot, 'dist', entry.name), join(destination, 'site', entry.name), { recursive: true });
+    await cp(join(source, entry.name), join(destination, 'site', entry.name), { recursive: true });
   }
 }
-await writeFile(join(destination, 'site/index.html'), renderLandingPage({ ...registry, apps }, standalone));
+await writeFile(join(destination, 'site/index.html'), renderLandingPage({ ...registry, apps }, standalone, findCatalog(registry, suite.catalog)));
 await stagePython({ destination, apps, sources, lock, cache });
 // Offline builds contain no analytics bootstrap or remote update checks.
 async function disableAnalytics(directory) {
