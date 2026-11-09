@@ -31,25 +31,25 @@ site:
     - id: msk
       host: mskapps.sciget.org
       hosting: worker
-      title: SciGet MSK Webapps
+      title: MSK Webapps
       heading: Run Musculoskeletal and Body Imaging Tools in Your Browser
       description: Segment muscles, measure fat and blood flow, convert, view, denoise and register body scans, and check imaging protocols in your browser without uploading your scans.
       brand:
         name: SciGet
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
-        more_apps: More SciGet MSK web apps
+        more_apps: More MSK web apps
     - id: microscopy
       host: microscopyapps.sciget.org
       hosting: worker
-      title: SciGet Microscopy Webapps
+      title: Microscopy Webapps
       heading: Run Microscopy Tools in Your Browser
       description: Segment nuclei and stream, view and measure large microscopy images in your browser without uploading your data.
       brand:
         name: SciGet
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
-        more_apps: More SciGet microscopy web apps
+        more_apps: More microscopy web apps
     - id: preclinical
       host: preclinicalapps.sciget.org
       hosting: worker
