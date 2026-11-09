@@ -75,6 +75,7 @@ test('placeholder analytics covers every registered app', async () => {
   const placeholder = emptyAnalytics(registry);
   assert.equal(placeholder.unavailable, true);
   assert.deepEqual(placeholder.apps.map(({ id }) => id), registry.apps.map(({ id }) => id));
+  assert.deepEqual(Object.keys(placeholder.catalogs), registry.site.catalogs.map(({ id }) => id));
 });
 
 test('ranks apps by visitors, then page views, then title', () => {
@@ -86,4 +87,20 @@ test('ranks apps by visitors, then page views, then title', () => {
   ];
   assert.deepEqual(rankApps(apps).map(({ title }) => title), ['CALMaR', 'SeedSeg', 'Brain2Print', 'Deface']);
   assert.equal(apps[0].title, 'Deface');
+});
+
+test('a catalogue report lists its apps with its own totals and countries', async () => {
+  const { catalogAnalytics } = await import('../scripts/lib/catalog-sites.mjs');
+  const { catalogApps, findCatalog } = await import('../scripts/lib/apps-registry.mjs');
+  const registry = await loadAppsRegistry();
+  const msk = findCatalog(registry, 'msk');
+  const report = emptyAnalytics(registry, '2026-11-09T00:00:00.000Z');
+  report.totals = { users: 100, pageViews: 300 };
+  report.catalogs.msk = { totals: { users: 7, pageViews: 20 }, countries: [{ code: 'AU', name: 'Australia', users: 6 }] };
+  const own = catalogAnalytics(report, catalogApps(registry, msk), msk);
+  assert.deepEqual(own.totals, { users: 7, pageViews: 20 });
+  assert.deepEqual(own.countries, [{ code: 'AU', name: 'Australia', users: 6 }]);
+  assert.deepEqual(own.apps.map(({ id }) => id).sort(), catalogApps(registry, msk).map(({ id }) => id).sort());
+  assert.equal('catalogs' in own, false);
+  assert.throws(() => catalogAnalytics({ ...report, catalogs: undefined }, [], msk), /no report for catalogue msk/);
 });
