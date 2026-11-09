@@ -1210,6 +1210,12 @@ test('a standalone catalog change selects the apps whose entries changed', async
   }));
   assert.deepEqual(suite.selected, []);
   assert.equal(suite.site, true);
+  const edition = plan(edit((value) => {
+    value.suites = { microscopy: { version: value.suite.version, apps: value.suite.apps, downloads: value.suite.downloads } };
+  }));
+  assert.equal(edition.allApps, false);
+  assert.deepEqual(edition.selected, []);
+  assert.equal(edition.site, true);
   // Every themed build validates the whole catalog, so an invalid entry breaks every app.
   const invalid = plan(edit((value) => {
     value.apps.lcmodel.downloads[0].sha256 = 'not-a-checksum';

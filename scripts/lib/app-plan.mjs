@@ -68,8 +68,9 @@ function analyseLockfile(manifest) {
 
 // The app entries a registry/apps.yml change touched, or why the change is
 // shared: every app build embeds the site section's analytics id.
-// The app entries a registry/standalone.json change touched, whether the
-// suite (read only by the catalog page and the desktop bundle) changed, or why
+// The app entries a registry/standalone.json change touched, whether a desktop
+// suite record (`suite` or `suites`, read only by the catalog pages and the
+// desktop bundles) changed, or why
 // the change is shared. Every themed app build copies the file and validates
 // all of it, but the shell renders only the app's own entry, so a valid head
 // catalog reaches only the apps whose entries changed.
@@ -82,10 +83,10 @@ function standaloneImpact({ before, after }, registry) {
   } catch (error) {
     return { shared: `it is not a valid catalog at head (${error.message}), and every themed app build validates it` };
   }
-  const field = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now)])].find((key) => key !== 'apps' && key !== 'suite' && !same(old?.[key], now[key]));
+  const field = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now)])].find((key) => !['apps', 'suite', 'suites'].includes(key) && !same(old?.[key], now[key]));
   if (field) return { shared: `its ${field} field changed` };
   const ids = [...new Set([...Object.keys(old?.apps ?? {}), ...Object.keys(now.apps)])];
-  return { changed: ids.filter((id) => !same(old?.apps?.[id], now.apps[id])), suite: !same(old?.suite, now.suite) };
+  return { changed: ids.filter((id) => !same(old?.apps?.[id], now.apps[id])), suite: !same(old?.suite, now.suite) || !same(old?.suites, now.suites) };
 }
 
 function registryImpact({ before, after }) {
