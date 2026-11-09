@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmod, copyFile, mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { downloadBytes } from '../../../scripts/lib/download-bytes.mjs';
 import { EXAMPLE_ASSETS, MODEL_ASSETS, QSMXT, nativeDirectory, qsmxtVersion, releasePlatform } from '../src/node.js';
 import { verifyNativeExamples, verifyNativeWeights } from '../src/native-registry.js';
 
@@ -10,9 +11,7 @@ const platform = process.argv[2] ?? releasePlatform();
 const target = QSMXT.targets[platform];
 if (!target) throw new Error(`No pinned QSMxT archive for ${platform}`);
 async function pinnedSource(pin) {
-  const response = await fetch(pin.url);
-  if (!response.ok) throw new Error(`Failed to read the pinned native registry: HTTP ${response.status}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = await downloadBytes(pin.url);
   if (createHash('sha256').update(bytes).digest('hex') !== pin.sha256) {
     throw new Error('The native registry failed checksum verification.');
   }
@@ -24,9 +23,7 @@ verifyNativeExamples(examples, EXAMPLE_ASSETS);
 const directory = nativeDirectory();
 // Restage from verified archive bytes on every build, including npm prepack. A stamp
 // cannot establish the identity of previously extracted executables.
-const response = await fetch(target.url);
-if (!response.ok) throw new Error(`Failed to download ${target.url}: HTTP ${response.status}`);
-const bytes = Buffer.from(await response.arrayBuffer());
+const bytes = await downloadBytes(target.url);
 const digest = createHash('sha256').update(bytes).digest('hex');
 if (digest !== target.sha256) throw new Error(`${basename(target.url)} has SHA-256 ${digest}, expected ${target.sha256}`);
 await mkdir(join(directory, '..'), { recursive: true });
@@ -45,9 +42,7 @@ try {
   if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`${basename(target.url)} contains ${names.join(', ')}, expected ${expected.join(', ')}`);
   for (const name of target.executables) await chmod(join(extracted, name), 0o755);
   if (platform !== releasePlatform()) throw new Error('Build QSMxT on its target platform');
-  const sourceResponse = await fetch(QSMXT.build.url);
-  if (!sourceResponse.ok) throw new Error(`Source download: HTTP ${sourceResponse.status}`);
-  const sourceBytes = Buffer.from(await sourceResponse.arrayBuffer());
+  const sourceBytes = await downloadBytes(QSMXT.build.url);
   if (createHash('sha256').update(sourceBytes).digest('hex') !== QSMXT.build.sha256) {
     throw new Error('QSMxT source checksum mismatch');
   }

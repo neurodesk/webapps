@@ -19,7 +19,7 @@ separately from stock container results.
 The manual `samsrf-native` workflow can record these cases with
 `record_matlab=true`. Set `include_matrix=false` for a shorter diagnostic run
 that omits participant pipelines while retaining numerical primitive cases.
-Focused diagnostics run twice in independent MATLAB processes within each
+Focused CSS diagnostics run twice in independent MATLAB processes within each
 job on `ubuntu-22.04` and `ubuntu-24.04`. The same-host comparison requires
 every numerical array and case decision to match exactly. The two jobs
 separately provide cross-machine evidence. Runner labels do not guarantee a CPU vendor. Use each receipt's
@@ -98,6 +98,102 @@ the original 100-pixel resolution. The failed 20-pixel run is evidence of an
 upstream execution limit, not a passing web-equivalence case. Each completed
 pipeline case also writes its own metadata so a later failure does not hide it.
 
+## Raw-input reverse-correlation matrix
+
+No personal MATLAB license or local MATLAB installation is needed for this
+public source-recording workflow:
+
+```sh
+gh workflow run samsrf-native.yml --ref BRANCH \
+  -f revcor_only=true
+```
+
+`revcor_only` selects this matrix instead of the normal reference, even when
+`record_matlab=true` is also set. It always includes the participant inputs,
+so `include_matrix` has no effect. Do not combine it with `diagnostics_only`
+or `wasm_only`, which select different recording/build jobs.
+
+`record_revcor_matrix.m` records 102 cases: six preprocessing cases, six Benson
+imports, 72 CF pipelines and 18 RC pipelines. Both precisions use LH averaged
+and concatenated runs and the single RH run from the pinned input archive.
+CF covers hull, summary and Gaussian estimation, each with smoothing and
+global regression on and off. The ROI overlaps part of the seed region to
+exercise the source's ordering of global regression and seed selection.
+RC covers hull and Gaussian estimation and a custom HRF. The hull and Gaussian
+cases use the app presets' SPM canonical HRF (`Hrf=0`) with negative peaks off.
+Gaussian fits use the upstream seed expression
+`@(V)[V(2:3);V(4)/(2*sqrt(2*log(2)))]` and `R2_Threshold=0.1`.
+The custom-HRF case enables negative peaks. RC's summary estimator
+(`Prf_Function=-1`) is not covered or supported by the port.
+
+These inputs are participant subsets with synthetic meshes. Global correction
+uses the mean of the complete subset; it does not reproduce the original
+whole-cortex global signal. Smoothing checks the numerical path on the
+synthetic mesh, not anatomical accuracy. Additional RC cases sample every fifth
+aperture row and column, giving a 20-by-20 input with `Rdim=20`; the original
+100-by-100 hull cases remain in the existing reference. The derived apertures
+are recorded explicitly. This is not a repair of the upstream mismatched-Rdim
+failure or an assertion that RC supports temporal aperture downsampling.
+
+Each case has a fresh directory and defaults file. Receipts retain saved maps,
+expanded maps, profiles, selected vertices, processed courses and MATLAB array
+classes. RC records the actual regressor cache before compression alongside
+the rounded saved copy. CF also records the global signal and a separately
+recomputed global-regression result; the validator requires it to equal the
+courses saved by the full analysis at every selected vertex.
+CF's saved `ConFlds` retains full vertex width with NaNs outside the ROI:
+the source's compression guard leaves it uncompressed in this case. Its
+columns therefore differ from the compressed maps and courses. RC profiles
+are compressed to the selected vertices. Receipts preserve both behaviors.
+The recorded source `model` enables `Save_Rmaps` to retain those profiles.
+`mapReplayModel` disables that storage-only option, which the port rejects,
+and selects `Data_Precision` explicitly. In the pinned source, `Save_Rmaps`
+does not change the computed maps. Replay still needs to resolve recorded
+relative input paths and provide the recorded preprocessing and template data;
+the port does not yet accept single-precision RC/CF models.
+
+The local/CI Octave smoke executes all 17 branches of a single-precision,
+three-vertex recording using the documented Octave shims. Vertex 25 adds a
+usable Gaussian fit to vertices 2 and 96, which can be rejected or fall below
+the fit threshold. The full ROI also includes vertex 25. The NaN-median shim
+runs on CI's Octave 8.4 without the newer `omitnan` option.
+MATLAB then runs and validates the same smoke before recording the full matrix.
+`validate-revcor-recording.mjs` requires every case and array, correct row
+labels, finite profiles inside the ROI, partial seed/ROI overlap and at least
+one finite nonzero R² per pipeline. It checks saved classes and compression
+round trips, then hashes the numerical files. Mutation tests run on the actual
+Octave smoke to check that corrupt recordings fail. Compression round trips
+check the source's own serialization, not an independent numerical reference.
+These checks establish recording integrity,
+not port parity. There is no port acceptance gate or compiled Runtime evidence
+for this new matrix yet. The new archives are separate from the 741-case pin.
+
+The first actual MATLAB recording, [run 42445033403](https://github.com/neurodesk/webapps/actions/runs/42445033403),
+passed the smoke and all 102 cases on both hosts at recorder commit `949548566`.
+Each full recording contains 788 numerical arrays. The Ubuntu 22.04 host used
+an AMD EPYC 9V74; Ubuntu 24.04 used an Intel Xeon Platinum 8370C. Despite both
+requesting `MKL_CBWR=COMPATIBLE`, MATLAB reported CNR branches `auto` and
+`AVX512_E1`, respectively. The environment receipts retain that distinction.
+
+Across these two recordings, 499 array hashes and all 90 saved pipeline maps
+differ. Their zero and nonfinite masks agree, but the differences are not
+limited to rounding: a single-precision smoothed Gaussian CF R² differs by
+0.25536. Double-precision Gaussian CF parameters also differ substantially
+despite nearly identical R². Both recordings must be retained as evidence;
+neither establishes cross-host reproducibility or a tolerance for the port.
+
+`revcor-reference.json` pins both recordings and their comparison report by
+dataset commit, SHA-256 and byte count. To download and validate them:
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-revcor-reference" \
+  packages/samsrf/validation/matlab/revcor-reference.json
+node packages/samsrf/validation/matlab/validate-revcor-recording.mjs \
+  "$TMPDIR/samsrf-revcor-reference/ubuntu-22.04"
+node packages/samsrf/validation/matlab/validate-revcor-recording.mjs \
+  "$TMPDIR/samsrf-revcor-reference/ubuntu-24.04"
+```
+
 ## Building a matching Runtime container
 
 `build_container.py` is the build recipe for the repaired, version-matched
@@ -109,6 +205,14 @@ ID. It does not publish the image.
 This recipe has not been executed with MATLAB Compiler. The source checks
 have been exercised locally; successful source recordings do not validate the
 compiled application or its container packaging.
+
+The source matrix above keeps numerical work independent of this build.
+Free public MATLAB Actions [exclude Compiler](https://github.com/matlab-actions/setup-matlab#licensing).
+A standard trial does not provide a durable substitute: MathWorks states that
+[trial-built applications expire](https://www.mathworks.com/matlabcentral/answers/515199-do-apps-compiled-using-simulink-compiler-under-a-trial-license-expire)
+and [trials cannot download previous releases](https://www.mathworks.com/matlabcentral/answers/2026102-how-do-i-download-and-install-previous-releases-of-matlab-or-the-mathworks-product-installer).
+The public Neurodesk binaries remain the older stock baseline documented
+separately. None of these routes establishes the matching compiled image.
 
 On a Linux x86-64 host with MATLAB R2023b Update 11, MATLAB Compiler, the Statistics,
 Image Processing and Parallel Computing toolboxes, and Docker:

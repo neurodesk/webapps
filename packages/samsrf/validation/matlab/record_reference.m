@@ -1,4 +1,4 @@
-function record_reference(source, input, output, matrixInput, spmSource)
+function record_reference(source, input, output, matrixInput, spmSource, reverseCorrelationOnly, smoke)
 % Record actual MATLAB arithmetic before deciding how to emulate it in WASM.
 % source is the pinned checkout with prepare.py's three declared repairs.
 arguments
@@ -7,6 +7,8 @@ arguments
     output (1,:) char
     matrixInput (1,:) char = ''
     spmSource (1,:) char = ''
+    reverseCorrelationOnly (1,1) logical = false
+    smoke (1,1) logical = false
 end
 assert(isfile(fullfile(output, 'source.json')), 'Run prepare.py first');
 assert(~isfile(fullfile(output, 'reference.json')), 'Use a fresh output directory');
@@ -20,9 +22,26 @@ cd(output);
 set(groot, 'defaultFigureVisible', 'off');
 defaults = jsondecode(fileread(fullfile(source, 'SamSrf_defaults.json')));
 meta = reference_environment('source-matrix');
+if reverseCorrelationOnly
+    meta.executionMode = 'source-reverse-correlation-matrix';
+end
 meta.source = jsondecode(fileread('source.json'));
 meta.input = jsondecode(fileread(fullfile(input, 'manifest.json')));
 write_json('environment.json', meta);
+if reverseCorrelationOnly
+    assert(~isempty(matrixInput), 'The reverse-correlation matrix requires raw inputs');
+    write_json('SamSrf_defaults.json', defaults);
+    pool = gcp('nocreate');
+    if isempty(pool)
+        pool = parpool('local', 2);
+    end
+    poolCleanup = onCleanup(@() delete(pool));
+    cases = record_revcor_matrix(matrixInput, output, @array_file, @write_json, smoke);
+    write_json('reference.json', struct('smoke', smoke, 'cases', {cases}));
+    fprintf('Recorded %d source RC/CF cases. Port and Runtime parity are not asserted.\n', numel(cases));
+    return
+end
+assert(~smoke, 'Smoke selection is only implemented for the reverse-correlation matrix');
 d = load(fullfile(input, 'probe-all.mat'));
 cases = {};
 for precision = {'double', 'single'}
