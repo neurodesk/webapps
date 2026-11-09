@@ -10,7 +10,7 @@ overrides:
   '@electron/osx-sign>isbinaryfile': 5.0.7
   '@itk-wasm/dam>decompress': npm:@xhmikosr/decompress@11.1.4
   '@itk-wasm/dam>tar': 7.5.22
-  '@modelcontextprotocol/server': 2.3.1
+  e2e>@modelcontextprotocol/server: 2.3.1
 
 packageExtensionsChecksum: sha256-EPy7zbuidI8Srb4UkOibNKc5G1oSjCWxwkDFUICvDbE=
 

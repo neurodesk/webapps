@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.48.20261109
+
+### Patch Changes
+
+- Update the desktop MCP server dependency to 2.3.1.
+
 ## 0.48.20261108
 
 ### Patch Changes
