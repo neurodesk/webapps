@@ -262,12 +262,13 @@ test('an archive re-uploaded between computing and publishing an update blocks t
 });
 
 // A suite release as scripts/desktop/publish.mjs leaves it: archives, a model pack in parts reused from an
-// earlier suite, and the catalog entry describing them.
-function suiteReleases(version = '0.28.20261014') {
-  const tag = `webapps-v${version}`;
+// earlier suite, and the catalog entry describing them: `suite` for the full suite, `suites.<catalogue>` for an
+// edition.
+function suiteReleases(version = '0.28.20261014', id = 'webapps') {
+  const tag = `${id}-v${version}`;
   const file = (name, digit, onTag = tag) => ({ name, digest: `sha256:${digit.repeat(64)}`, size: 10, browser_download_url: `https://github.com/neurodesk/webapps/releases/download/${onTag}/${name}` });
   const record = ({ name, digest, browser_download_url }) => ({ url: browser_download_url, sha256: digest.slice(7) });
-  const zip = file(`webapps-${version}-mac-arm64.zip`, 'a');
+  const zip = file(`${id}-${version}-mac-arm64.zip`, 'a');
   const install = file('webapps-0.27.20261012-models.tar.gz.install.txt', 'b', 'webapps-v0.27.20261012');
   const part = file('webapps-0.27.20261012-models.tar.gz.part01', 'c', 'webapps-v0.27.20261012');
   const suite = {
@@ -285,7 +286,8 @@ function suiteReleases(version = '0.28.20261014') {
     },
     fetchText: async (url) => {
       assert.equal(url, catalogAsset.browser_download_url);
-      return JSON.stringify({ apps: {}, suite });
+      const edition = id.slice('webapps-'.length);
+      return JSON.stringify(edition ? { apps: {}, suites: { [edition]: suite } } : { apps: {}, suite });
     },
   };
 }
@@ -303,6 +305,31 @@ test('a released desktop suite replaces the catalog suite entry, never with an o
   applyCatalogUpdate(catalog, [{ id: 'webapps', version: '0.27.20261012', suite: older.suite }]);
   assert.equal(catalog.suite.version, '0.28.20261014');
   assert.deepEqual(releaseFromTag('webapps-v0.28.20261014'), { id: 'webapps', version: '0.28.20261014' });
+});
+
+test('a released catalogue edition replaces its own suite entry, never the full suite or with an older one', async () => {
+  const { suite, releases, fetchText } = suiteReleases('0.28.20261014', 'webapps-microscopy');
+  const fetchRelease = async (tag) => releases[tag];
+  const full = { version: '0.10.20260918', downloads: [] };
+  const catalog = { apps: { tool: { downloads: [] } }, suite: full };
+  const changes = await catalogUpdate(catalog, parseReleases(['webapps-microscopy@0.28.20261014']), { fetchRelease, fetchText, nativeAt: () => new Map() });
+  assert.deepEqual(changes, [{ id: 'webapps-microscopy', version: '0.28.20261014', suite }]);
+  await checkUpdateAssets(changes, fetchRelease);
+  applyCatalogUpdate(catalog, changes);
+  assert.deepEqual(catalog.suites, { microscopy: suite });
+  assert.equal(catalog.suite, full);
+  const older = suiteReleases('0.27.20261012', 'webapps-microscopy');
+  applyCatalogUpdate(catalog, [{ id: 'webapps-microscopy', version: '0.27.20261012', suite: older.suite }]);
+  assert.equal(catalog.suites.microscopy.version, '0.28.20261014');
+  const msk = suiteReleases('0.27.20261012', 'webapps-msk');
+  applyCatalogUpdate(catalog, [{ id: 'webapps-msk', version: '0.27.20261012', suite: msk.suite }]);
+  assert.deepEqual(Object.keys(catalog.suites).sort(), ['microscopy', 'msk']);
+  // An edition's catalog asset that records only the full suite does not describe the edition.
+  const mislabelled = suiteReleases('0.28.20261014', 'webapps-microscopy');
+  await assert.rejects(
+    catalogUpdate({ apps: {} }, parseReleases(['webapps-microscopy@0.28.20261014']), { fetchRelease: async (tag) => mislabelled.releases[tag], fetchText: async () => JSON.stringify({ suite: mislabelled.suite }), nativeAt: () => new Map() }),
+    /webapps-microscopy: release webapps-microscopy-v0\.28\.20261014 describes suite undefined/,
+  );
 });
 
 test('a suite entry must match its release and every file it lists', async () => {
@@ -346,6 +373,7 @@ test('a release.json from before exes/node-cli lists its targets without install
 test('release tags name the app and version; specs are read from the tag itself', async () => {
   assert.deepEqual(releaseFromTag('white-matter-lesions-v0.2.20261006'), { id: 'white-matter-lesions', version: '0.2.20261006' });
   assert.equal(releaseFromTag('webapps-v0.10.20260918-desktop'), null);
+  assert.deepEqual(releaseFromTag('webapps-microscopy-v0.28.20261014'), { id: 'webapps-microscopy', version: '0.28.20261014' });
   const current = await portableSpecs();
   const committed = portableSpecsAt('HEAD');
   assert.deepEqual([...committed.keys()].sort(), [...current.keys()].sort());

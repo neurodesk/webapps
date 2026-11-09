@@ -1,6 +1,6 @@
 // Compute the Standalone catalog changes for released native archives, without writing the catalog.
 // Usage: node scripts/catalog-update.mjs --out update.json (app@VERSION ... | --tag APP-vVERSION | --missing)
-// webapps@VERSION (tag webapps-vVERSION) is the nightly desktop suite.
+// webapps@VERSION (tag webapps-vVERSION) is the nightly full desktop suite, webapps-<catalogue>@VERSION an edition.
 // --tag serves the release "released" event: a release without native archives yet is skipped, because
 // its native workflow announces it again once the archives are attached.
 // --missing serves the schedule: each app's newest release whose archives the catalog does not link yet. One
@@ -8,7 +8,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { nativeReleases, portableSpecs, portableSpecsAt } from './lib/native-releases.mjs';
-import { SUITE_ID, catalogUpdate, parseReleases, releaseFromTag, releaseSources, unlistedReleases } from './lib/standalone-import.mjs';
+import { catalogUpdate, parseReleases, releaseFromTag, releaseSources, suiteRecordPath, unlistedReleases } from './lib/standalone-import.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, tag: { type: 'string' }, missing: { type: 'boolean' } } });
 if (!values.out) throw new Error('--out is required');
@@ -30,8 +30,9 @@ async function fetchText(url) {
 
 const nativeAt = (tag) => nativeReleases(portableSpecsAt(`refs/tags/${tag}`));
 let releases = parseReleases(positionals);
-if (values.tag && releaseFromTag(values.tag)?.id === SUITE_ID) {
-  releases = [releaseFromTag(values.tag)];
+const tagged = values.tag && releaseFromTag(values.tag);
+if (tagged && suiteRecordPath(tagged.id)) {
+  releases = [tagged];
 } else if (values.tag) {
   const release = releaseFromTag(values.tag);
   const sources = (release && nativeAt(values.tag).get(release.id)) ?? [];

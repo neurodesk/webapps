@@ -143,8 +143,8 @@ export async function releaseDownloads({ id, version, release, native, previous 
 export async function catalogUpdate(catalog, releases, { fetchRelease, fetchText, nativeAt }) {
   const update = [];
   for (const { id, version } of releases) {
-    if (id === SUITE_ID) {
-      update.push(await suiteUpdate(version, { fetchRelease, fetchText }));
+    if (suiteRecordPath(id)) {
+      update.push(await suiteUpdate(id, version, { fetchRelease, fetchText }));
       continue;
     }
     if (!catalog.apps[id]) throw new Error(`${id}: not in the Standalone catalog`);
@@ -182,17 +182,22 @@ async function checkSuiteFiles(suite, fetchRelease) {
   }
 }
 
-// The suite's catalog entry, taken from its release and held to GitHub's digests of every listed file.
-export async function suiteUpdate(version, { fetchRelease, fetchText }) {
-  const tag = `${SUITE_ID}-v${version}`;
+// The record at a suite's path in a standalone catalog (`suite`, or `suites.<catalogue>` for an edition).
+function recordAt(catalog, path) {
+  return path.reduce((value, key) => value?.[key], catalog);
+}
+
+// A suite's catalog entry, taken from its release and held to GitHub's digests of every listed file.
+export async function suiteUpdate(id, version, { fetchRelease, fetchText }) {
+  const tag = `${id}-v${version}`;
   const release = await fetchRelease(tag);
-  if (release.draft || release.prerelease) throw new Error(`${SUITE_ID}: release ${tag} is not released yet`);
+  if (release.draft || release.prerelease) throw new Error(`${id}: release ${tag} is not released yet`);
   const asset = release.assets.find((item) => item.name === 'standalone-catalog.json');
-  if (!asset) throw new Error(`${SUITE_ID}: release ${tag} has no standalone-catalog.json`);
-  const { suite } = JSON.parse(await fetchText(asset.browser_download_url));
-  if (suite?.version !== version) throw new Error(`${SUITE_ID}: release ${tag} describes suite ${suite?.version}`);
+  if (!asset) throw new Error(`${id}: release ${tag} has no standalone-catalog.json`);
+  const suite = recordAt(JSON.parse(await fetchText(asset.browser_download_url)), suiteRecordPath(id));
+  if (suite?.version !== version) throw new Error(`${id}: release ${tag} describes suite ${suite?.version}`);
   await checkSuiteFiles(suite, fetchRelease);
-  return { id: SUITE_ID, version, suite };
+  return { id, version, suite };
 }
 
 // Publishers re-upload with --clobber, so an update computed before a re-upload names bytes the release no
@@ -237,9 +242,13 @@ export function applyCatalogUpdate(catalog, update) {
   if (!Array.isArray(update)) throw new Error('A catalog update is a list of { id, version, downloads } releases');
   for (const { id, version, downloads, suite } of update) {
     if (suite) {
-      if (catalog.suite && compareVersions(version, catalog.suite.version) < 0) {
-        console.log(`${id}: catalog already lists suite ${catalog.suite.version}; keeping it over ${version}`);
-      } else catalog.suite = suite;
+      const path = suiteRecordPath(id);
+      const [key, edition] = path;
+      const current = recordAt(catalog, path);
+      if (current && compareVersions(version, current.version) < 0) {
+        console.log(`${id}: catalog already lists suite ${current.version}; keeping it over ${version}`);
+      } else if (edition) (catalog[key] ??= {})[edition] = suite;
+      else catalog[key] = suite;
       continue;
     }
     const app = catalog.apps[id];
