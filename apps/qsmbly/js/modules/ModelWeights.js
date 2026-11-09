@@ -45,14 +45,25 @@ export async function fetchModelWeights(model, onProgress, weightBaseUrl = '') {
 // Lazy-load the onnx wasm bundle (bigger; only needed for deep-learning inference).
 let _dlModulePromise = null;
 
+/** Fetch the gzipped DL module (build.sh) and return the wasm bytes. */
+async function fetchDlWasm(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Deep-learning runtime download failed (${response.status}).`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  // A host that sets Content-Encoding: gzip has fetch inflate it already.
+  if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes;
+  const inflated = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(inflated).arrayBuffer());
+}
+
 /** Load + init the DL wasm bundle once; resolves to its module namespace. */
 export function loadDlWasm(baseUrl, version) {
   if (!_dlModulePromise) {
     _dlModulePromise = (async () => {
       const jsUrl = `${baseUrl}/wasm/qsm_wasm_dl.js?v=${version}`;
-      const wasmUrl = `${baseUrl}/wasm/qsm_wasm_dl_bg.wasm`;
-      const mod = await import(jsUrl);
-      await mod.default(wasmUrl);
+      const wasmUrl = `${baseUrl}/wasm/qsm_wasm_dl_bg.wasm.gz.bin`;
+      const [mod, bytes] = await Promise.all([import(jsUrl), fetchDlWasm(wasmUrl)]);
+      await mod.default({ module_or_path: bytes });
       return mod;
     })().catch((e) => { _dlModulePromise = null; throw e; });
   }

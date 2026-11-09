@@ -46,6 +46,24 @@ export function catalogReleases(catalog, natives) {
   });
 }
 
+// The newest published release of each app that carries archives the catalog does not link yet. A
+// catalog run lost to an outage or a cancelled dispatch leaves its release unlisted; the scheduled run
+// catches it up. Older releases need nothing: the catalog only ever moves to the newest.
+export function unlistedReleases(catalog, releases, natives) {
+  const linked = new Set(Object.values(catalog.apps).flatMap((app) => app.downloads.map((download) => download.url)));
+  const newest = new Map();
+  for (const release of releases) {
+    const parsed = releaseFromTag(release.tag_name);
+    if (!parsed || release.draft || release.prerelease || !catalog.apps[parsed.id]) continue;
+    if (!releaseSources(natives.get(parsed.id) ?? [], release).length) continue;
+    const seen = newest.get(parsed.id);
+    if (!seen || compareVersions(parsed.version, seen.release.version) > 0) newest.set(parsed.id, { release: parsed, assets: release.assets });
+  }
+  return [...newest.values()]
+    .filter(({ assets }) => !assets.some((asset) => linked.has(asset.browser_download_url)))
+    .map(({ release }) => release);
+}
+
 // The sources whose archives a release carries. Sources can attach to one shared tag or to their own.
 export function releaseSources(sources, release) {
   return sources.filter((source) => !source.external && release.assets.some((asset) => source.targets.includes(releasePlatform(source.spec, asset.name))));

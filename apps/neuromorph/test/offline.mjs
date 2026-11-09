@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { expect } from '@playwright/test';
 
 const reference = JSON.parse(await readFile(new URL('../validation/neurom-reference.json', import.meta.url), 'utf8'));
@@ -7,7 +8,7 @@ const reference = JSON.parse(await readFile(new URL('../validation/neurom-refere
 // The installed desktop app measures NeuroM's Neuron.swc test morphology (the harness's
 // image fixture is not a reconstruction) and its table holds NeuroM's numbers.
 export async function verifyOffline(page, { download }) {
-  const fixture = new URL('fixtures/neurom/Neuron.swc', import.meta.url).pathname;
+  const fixture = fileURLToPath(new URL('fixtures/neurom/Neuron.swc', import.meta.url));
   await page.locator('#swcInput').setInputFiles(fixture);
   await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60000 });
   await page.locator('#runButton').click();

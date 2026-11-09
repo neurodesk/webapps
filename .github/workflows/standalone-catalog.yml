@@ -4,7 +4,11 @@ name: standalone-catalog
 # registry/standalone.json on main and redeploys the site, so each app's Standalone dialog lists them. A native release job announces its archives with a
 # repository_dispatch; publishing a draft or prerelease by hand announces it through the release event.
 # Runs are not grouped: each one re-applies its own update to the latest main, so none can be dropped.
+# The schedule publishes each app's newest release the catalog does not link yet, so an update lost to an
+# outage or a failed run is caught up the next day.
 on:
+  schedule:
+    - cron: '47 11 * * *'
   repository_dispatch:
     types: [standalone-catalog]
   release:
@@ -52,6 +56,7 @@ jobs:
           case "$EVENT" in
             release) node scripts/catalog-update.mjs --out update.json --tag "$TAG" ;;
             repository_dispatch) node scripts/catalog-update.mjs --out update.json $DISPATCHED ;;
+            schedule) node scripts/catalog-update.mjs --out update.json --missing ;;
             *) node scripts/catalog-update.mjs --out update.json $REQUESTED ;;
           esac
           echo "changed=$(node -p "require('./update.json').length > 0")" >> "$GITHUB_OUTPUT"

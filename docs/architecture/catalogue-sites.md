@@ -5,9 +5,10 @@ has one home catalogue and can also be served by others.
 
 | Host | Catalogue | Hosting | Apps |
 | --- | --- | --- | --- |
-| `webapps.neurodesk.org` | `neuro` | GitHub Pages | every app not listed below; Histology to MRI (also on microscopy) |
-| `mskapps.sciget.org` | `msk` | Cloudflare Worker, assets only | MuscleMap, SeedSeg, Carotid Flow |
-| `microscopyapps.sciget.org` | `microscopy` | Cloudflare Worker, assets only | StarDist, micro-sam, Calcium imaging, Spot detection, Histology to MRI, Microscope QC, NeuroMorph, Structure Tensor, ZARRo; elastix (also on neuro) |
+| `webapps.neurodesk.org` | `neuro` | GitHub Pages | every app whose home is not listed below; a copy of Histology to MRI |
+| `mskapps.sciget.org` | `msk` | Cloudflare Worker, assets only | MuscleMap, SeedSeg, Carotid Flow; copies of dcm2niix, DICOM View, dicompare, MRI2vid, niimath, ANTs Denoise and elastix |
+| `microscopyapps.sciget.org` | `microscopy` | Cloudflare Worker, assets only | StarDist, micro-sam, Calcium imaging, Spot detection, Histology to MRI, Microscope QC, NeuroMorph, Stitching, Structure Tensor, ZARRo, Cryo-EM; copies of elastix, niimath and MRI2vid |
+| `preclinicalapps.sciget.org` | `preclinical` | Cloudflare Worker, assets only | copies only: dcm2niix, DICOM View, dicompare, MRI2vid, niimath, Degibbs, ANTs Denoise, dwidenoise, elastix, QSMbly, ZARRo, Stitching, Structure Tensor, Calcium imaging, NeuroMorph |
 | `webapps.sciget.org` | hub | Cloudflare Worker, assets only | none: one card per catalogue |
 
 `neurodesk.org` DNS is on AWS Route 53, so the neuro catalogue stays on GitHub
@@ -63,6 +64,26 @@ reference that resolves in `dist/` also resolves in the site. Every handoff menu
 lists only same-host apps. `pnpm audit:artifacts` audits `dist/` and each site,
 and applies the 750 MiB Pages budget to the `pages` site only.
 
+## Shared tools
+
+General tools keep their home and are copied, through `also_in`, to the
+catalogues where they apply without change: conversion, viewing, protocol
+checks, image maths, denoising and elastix registration. A copy needs no anatomy
+model, template or mask it would infer itself. These are not copied, or not to
+the catalogue named:
+
+- N4, which extracts a brain with MindGrab when no mask is given and fixes its
+  B-spline spacing at 100 mm;
+- Greedy and ANTs, which expect brain-extracted images and offer MNI templates
+  (elastix covers registration for every anatomy);
+- Degibbs on msk, whose diffusion category would add a diffusion section there.
+
+Microscopy gets niimath and MRI2vid for volumes already in NIfTI, such as the maps
+Structure Tensor and Spot detection write; of the general tools only elastix reads
+TIFF and OME-Zarr. The preclinical catalogue keeps QSMbly for
+its rodent masks (RS2-Net and voxel-scaled BET) and the tissue and rodent
+neuroscience microscopy tools; general cell-biology tools stay on microscopy.
+
 ## Moved apps
 
 `site/404.html` is a template. `scripts/lib/not-found-page.mjs` renders it per
@@ -88,7 +109,7 @@ missing on the neuro host, so the 404 table sends the visitor on to
 
 A handoff opens the receiving app on the same origin. DICOM View on
 `webapps.neurodesk.org` therefore no longer offers MuscleMap, SeedSeg or Carotid
-Flow. These apps still take DICOM and NIfTI files directly. The desktop suite
+Flow; the copy of DICOM View on `mskapps.sciget.org` does. The desktop suite
 keeps every handoff.
 
 ## Deployment
@@ -96,7 +117,7 @@ keeps every handoff.
 `.github/workflows/deploy-pages.yml` builds once, then:
 
 - uploads `dist-sites/neuro` to GitHub Pages;
-- deploys `dist-sites/msk`, `dist-sites/microscopy` and `dist-sites/hub` with
+- deploys `dist-sites/msk`, `dist-sites/microscopy`, `dist-sites/preclinical` and `dist-sites/hub` with
   `wrangler deploy --config dist-sites/<site>.wrangler.json`, using the
   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets;
 - runs the deployed checks (`pnpm test:deployed`,
@@ -112,6 +133,6 @@ attach the custom domains.
 1. Add an entry to `site.catalogs` with `hosting: worker`, and add its logo to
    `site/` if it has a new brand.
 2. Set `catalog:` on its apps.
-3. Add its host to the `deploy-workers` and `verify-workers` matrices in `deploy-pages.yml`. The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
+3. Add its site to the `worker-sites` artifact, the `deploy-workers` and `verify-workers` matrices and the hub check in `deploy-pages.yml` (`test/catalog-site-projection.test.mjs` holds all four to the registry). The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
 4. Build, then run `node --test test/catalog-sites.test.mjs` and
    `pnpm audit:artifacts`.

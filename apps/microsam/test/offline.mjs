@@ -32,10 +32,12 @@ export async function verifyOffline(page, { download }) {
   await page.mouse.click(...at(32.5, 32.5));
   await expect(page.locator('#acceptButton')).toBeEnabled({ timeout: 60000 });
   await page.locator('#acceptButton').click();
-  await page.mouse.move(...at(96 - 2 * RADIUS, 32 - 2 * RADIUS));
+  // A box drawn snugly around the disc: one twice its width also takes in the background.
+  const margin = RADIUS + 3;
+  await page.mouse.move(...at(96 - margin, 32 - margin));
   await page.mouse.down();
   await page.mouse.move(...at(96, 32), { steps: 4 });
-  await page.mouse.move(...at(96 + 2 * RADIUS, 32 + 2 * RADIUS), { steps: 4 });
+  await page.mouse.move(...at(96 + margin, 32 + margin), { steps: 4 });
   await page.mouse.up();
   await expect(page.locator('#acceptButton')).toBeEnabled({ timeout: 60000 });
   await page.locator('#acceptButton').click();
