@@ -474,6 +474,8 @@ registerAppAutomation({
       await loadFiles(Promise.resolve(inputs.image), signal);
       if (inputs.psf?.length) await loadMeasuredPsf(Promise.resolve(inputs.psf), signal);
       else clearMeasuredPsf();
+      $("psfXY").value = "";
+      $("psfZ").value = "";
       showOptics({
         modality: parameters.modality ?? DEFAULT_OPTICS.modality,
         na: parameters.numericalAperture ?? DEFAULT_OPTICS.na,

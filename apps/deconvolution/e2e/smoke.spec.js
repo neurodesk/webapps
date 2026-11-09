@@ -226,6 +226,9 @@ test("the automation operation runs RL-TV with its parameters and reports its ar
   const want = deconvolveInNode(volume, { spacingUm: { x: 0.2, y: 0.2, z: 0.5 }, optics, method: "rltv", iterations: 4, tvWeight: 0.01 });
   const parameters = { modality: "widefield", numericalAperture: 0.8, immersionIndex: 1.0, sampleIndex: 1.33, emissionNm: 600, voxelSizeXYUm: 0.2, voxelSizeZUm: 0.5, method: "rltv", iterations: 4, tvWeight: 0.01 };
   await page.goto("/");
+  await page.locator("#advancedSettings").evaluate((element) => { element.open = true; });
+  await page.locator("#psfXY").fill("1");
+  await page.locator("#psfZ").fill("1");
   await page.locator("#neurodesk-input-transfer").setInputFiles(synthetic.image);
   const report = await page.evaluate(async (parameters) => {
     await globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" });
@@ -237,6 +240,8 @@ test("the automation operation runs RL-TV with its parameters and reports its ar
     }
   }, parameters);
   expect(report.state).toBe("succeeded");
+  await expect(page.locator("#psfXY")).toHaveValue("");
+  await expect(page.locator("#psfZ")).toHaveValue("");
   expect(report.report.provenance.method).toContain("total variation");
   expect(report.report.provenance.psf.numericalAperture).toBe(0.8);
   await expect(page.locator("#method")).toHaveValue("rltv");
