@@ -141,6 +141,80 @@ test("a 2 × 2 mosaic of 3D stacks is recovered within 0.5 voxel and fused as a 
   expect(tiff.metadata.pixelSize.y).toBeCloseTo(archive.scale[1], 6);
 });
 
+/** The viewer canvas once two consecutive captures agree (NiiVue has drawn the last change). */
+async function settledCanvas(page) {
+  let previous = null;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const shot = await page.locator("#gl1").screenshot();
+    if (previous && shot.equals(previous)) return shot;
+    previous = shot;
+    await page.waitForTimeout(150);
+  }
+  throw new Error("The viewer did not settle");
+}
+
+test("Layout and Stitched share the zoom, and tile outlines can be hidden", async ({ page }) => {
+  test.setTimeout(180000);
+  const { files, grid } = syntheticTiles({ columns: 3, rows: 2, seed: 5, jitter: 6 });
+  await page.goto("/");
+  await page.locator("#tileInput").setInputFiles(files);
+  await expect(page.locator("#fileInfo")).toHaveText("6 tiles · 160 × 128 · uint16", { timeout: 60000 });
+  const toolbar = page.locator(".nd-viewer-toolbar");
+  const outlines = toolbar.getByRole("button", { name: "Outlines", exact: true });
+  await expect(outlines).toBeVisible();
+  await expect(outlines).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#outlineLegend")).toHaveText("Outlines: cyan layout");
+  await toolbar.getByRole("button", { name: "Stitched", exact: true }).click();
+  await expect(page.locator("#statusText")).toHaveText("Stitch the tiles to see this view");
+  await expect(toolbar.getByRole("button", { name: "Layout", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+  await setGrid(page, grid);
+  await stitchAndWait(page, 120000);
+  await expect(page.locator("#statusText")).toContainText(/moved up to \d+\.\d px/);
+  await expect(toolbar.getByRole("button", { name: "Stitched", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#outlineLegend")).toHaveText("Outlines: cyan layout · orange stitched");
+
+  // The first tile keeps its layout position, so where it alone covers the mosaic both views
+  // put the same voxel, with the same value, under the same point of the canvas.
+  const box = await page.locator("#gl1").boundingBox();
+  const firstTile = { x: box.x + box.width * 0.12, y: box.y + box.height * 0.3 };
+  const locationAt = async (view) => {
+    await toolbar.getByRole("button", { name: view, exact: true }).click();
+    await settledCanvas(page);
+    await page.mouse.click(firstTile.x, firstTile.y);
+    await expect(page.locator("#location")).not.toHaveText("");
+    return page.locator("#location").textContent();
+  };
+  const stitchedVoxel = await locationAt("Stitched");
+  expect(await locationAt("Layout")).toBe(stitchedVoxel);
+  await toolbar.getByRole("button", { name: "Stitched", exact: true }).click();
+
+  // Zoom into the middle of the mosaic.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const unzoomed = await settledCanvas(page);
+  for (let i = 0; i < 6; i++) await page.mouse.wheel(0, -100);
+  const stitched = await settledCanvas(page);
+  expect(stitched.equals(unzoomed)).toBe(false);
+
+  await toolbar.getByRole("button", { name: "Layout", exact: true }).click();
+  const layout = await settledCanvas(page);
+  expect(layout.equals(stitched)).toBe(false);
+  await toolbar.getByRole("button", { name: "Stitched", exact: true }).click();
+  // Back on the stitched image at the same zoom and position, pixel for pixel.
+  expect((await settledCanvas(page)).equals(stitched)).toBe(true);
+
+  await outlines.click();
+  await expect(outlines).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#outlineLegend")).toHaveText("");
+  const bare = await settledCanvas(page);
+  expect(bare.equals(stitched)).toBe(false);
+  await toolbar.getByRole("button", { name: "Layout", exact: true }).click();
+  await toolbar.getByRole("button", { name: "Stitched", exact: true }).click();
+  expect((await settledCanvas(page)).equals(bare)).toBe(true);
+  await outlines.click();
+  expect((await settledCanvas(page)).equals(stitched)).toBe(true);
+});
+
 test("refusals: one tile, an RGB tile, mixed sample types and a grid that does not fit", async ({ page }) => {
   test.setTimeout(120000);
   const { files } = syntheticTiles();

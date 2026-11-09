@@ -135,7 +135,10 @@
         <p id="emptyState" class="nd-viewer-empty">Drop TIFF tiles anywhere, or choose an example.</p>
         <section id="linkReport" class="nd-viewer-report" aria-label="Tile pairs" hidden></section>
       </div>
-      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+      <div class="nd-viewer-info">
+        <span id="location" class="nd-viewer-info-primary"></span>
+        <span id="outlineLegend"></span>
+      </div>
     </main>
 
     <footer id="status">
@@ -153,6 +156,7 @@
       <p><strong>Global optimisation.</strong> Tile translations minimise the squared differences between the measured and implied pairwise offsets, each pair weighted by r × overlapping pixels (least squares, the first tile fixed). Pairs with r below the threshold are not used; after each solve the pair with the largest residual is dropped while it exceeds 2.5 × the mean residual and 0.95 px, or while the mean residual exceeds 3.5 px, as Fiji's Grid/Collection stitching does with its defaults. A tile left without any usable pair keeps its layout position, moved with the rest.</p>
       <p><strong>Fusion.</strong> Linear blending: each output pixel is the mean of the tiles covering it, sampled by linear interpolation at sub-pixel positions and weighted by the distance to each tile's nearest edge. The fused image keeps the tiles' sample type.</p>
       <p><strong>Validation.</strong> On the NIST MIST example the registered positions are within 0.31 px of Fiji's Grid/Collection stitching (Stitching 3.1.8) and every pair offset within 0.73 px. On a synthetic 3 × 3 mosaic cut from a real tile with known sub-pixel positions, with the layout up to 25 px off, every tile was found within 0.17 px.</p>
+      <p><strong>Checking the result.</strong> Layout shows the tiles blended at their layout positions, Stitched at the registered ones, on the same grid and contrast. Switching between them keeps the zoom, so a seam that looks doubled in Layout should be sharp in Stitched. Outlines mark each tile at its layout position (cyan) and where stitching placed it (orange); the first tile stays fixed, so the others move relative to it.</p>
       <p>Outputs: the fused image as TIFF and as zipped OME-Zarr (.ozx), Fiji's TileConfiguration.registered.txt, the table of pairs (CSV) and provenance (JSON). Not in this version: illumination correction, multi-channel and time-lapse tiles, rotation or affine models.</p>
     </template>
     <template id="privacyContent"><p>Tiles are processed locally in this browser and are never uploaded. Only the example is downloaded, from the Neurodesk dataset on Hugging Face.</p></template>
