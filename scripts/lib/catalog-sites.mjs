@@ -27,8 +27,8 @@ export const SHARED_ROOT_FILES = [
   'landing.css',
   'landing.js',
 ];
-// Served only by the primary catalogue: its usage report and the Vessel Surfer game.
-const PRIMARY_ROOT_FILES = ['analytics.json', 'surf'];
+// Served only by the primary catalogue: the Vessel Surfer game.
+const PRIMARY_ROOT_FILES = ['surf'];
 
 const TEXT_EXTENSIONS = new Set(['.html', '.js', '.mjs', '.css']);
 const RUNTIME_DIRECTORY = '_runtime';
@@ -159,10 +159,22 @@ export async function runtimeClosure(siteDir, files) {
 }
 
 /**
+ * One catalogue's usage report, from the all-app report scripts/write-analytics.mjs
+ * writes: its apps, with the totals and countries of their visits alone.
+ */
+export function catalogAnalytics(report, apps, catalog) {
+  const { catalogs, ...all } = report;
+  const own = catalogs?.[catalog.id];
+  if (!own) throw new Error(`analytics.json has no report for catalogue ${catalog.id}; rerun scripts/write-analytics.mjs`);
+  const ids = new Set(apps.map(({ id }) => id));
+  return { ...all, ...own, apps: all.apps.filter(({ id }) => ids.has(id)) };
+}
+
+/**
  * Write one catalogue's site from the all-app assembly in `siteDist`: its apps,
  * themed so the handoff menu lists only them, the root files they load, the
- * runtime families they reference, its landing page, 404 redirects and the
- * standalone entries of its apps.
+ * runtime families they reference, its landing page, usage report, 404
+ * redirects and the standalone entries of its apps.
  */
 export async function projectCatalogSite({ repoRoot, siteDist, destination, registry, catalog, information, standalone, notFoundTemplate }) {
   const apps = catalogApps(registry, catalog);
@@ -205,6 +217,8 @@ export async function projectCatalogSite({ repoRoot, siteDist, destination, regi
 
   const ownStandalone = { ...standalone, apps: Object.fromEntries(siteAppIds.map((id) => [id, standalone.apps[id]])) };
   await writeFile(join(destination, 'index.html'), renderLandingPage(listed, ownStandalone, catalog));
+  const report = JSON.parse(await readFile(join(siteDist, 'analytics.json'), 'utf8'));
+  await writeFile(join(destination, 'analytics.json'), `${JSON.stringify(catalogAnalytics(report, apps, catalog), null, 2)}\n`);
   await writeFile(join(destination, 'standalone.json'), `${JSON.stringify(ownStandalone, null, 2)}\n`);
   await writeFile(join(destination, '404.html'), renderNotFoundPage(notFoundTemplate, { registry, catalog }));
   await writeFile(join(destination, '_headers'), headersFile);
