@@ -13,7 +13,7 @@ write_json('environment.json', environment);
 cases = {};
 precisions = {'single','double'};
 controls = [false true];
-vertices = [15 18 22 26 47 58 67 73 74 79 81 88 89];
+vertices = [15 16 17 18 22 26 47 58 60 67 69 73 74 79 81 82 88 89];
 seedSources = {'recorded','recomputed'};
 if smoke
     precisions = {'single'};
@@ -60,7 +60,8 @@ for precision = precisions
             'correlations',array_file([coarseId '_correlations'],correlations), ...
             'recordedCorrelations',array_file([coarseId '_recorded'],recordedCorrelations));
         cases{end+1} = coarse; %#ok<AGROW>
-        % MATLAB columns 47 and 88 are the material double discrepancies in #730.
+        % Include every column with remaining double CSS parameter differences,
+        % as well as the original R2/acceptance and regression failures.
         for vertex = vertices
             % Both seeds separate reference-host coarse ties from fine-fit changes.
             for seedSource = seedSources
