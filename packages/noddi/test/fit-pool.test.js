@@ -27,7 +27,7 @@ test('an aborted fit never reaches a runner, and cancellation during dtifit prev
   await assert.rejects(fitVolume({ ...options, signal: controller.signal, dtifit: () => { throw new Error('An aborted fit must not run.'); } }), (error) => error === reason);
 });
 
-for (const method of ['amico', 'dmipy']) {
+for (const method of ['amico', 'dmipy', 'toolbox']) {
   test(`${method}: cancellation ignores already-queued worker messages`, async () => {
     const controller = new AbortController();
     const reason = new DOMException('Fitting cancelled', 'AbortError');

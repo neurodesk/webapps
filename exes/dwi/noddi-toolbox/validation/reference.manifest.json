@@ -5,6 +5,32 @@
     "sha256": "d4f8a1fe5c5e038a29174c40c4f6de0c868728e4d4cdf59c1d7f6dd399ca8143",
     "status": "requires authenticated NITRC access; not included in this reference"
   },
+  "inputs": [
+    {
+      "role": "image",
+      "name": "sub-01_dir-AP_desc-slab_dwi.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.nii.gz",
+      "sha256": "1e7c8461d9bfc3c80633f930dc1df16d892a6bfd5e15db4c5a2be9d021e48d00",
+      "bytes": 8353126,
+      "path": "input/sub-01_dir-AP_desc-slab_dwi.nii.gz"
+    },
+    {
+      "role": "bval",
+      "name": "sub-01_dir-AP_desc-slab_dwi.bval",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.bval",
+      "sha256": "5f990dc6bfeb61653df62e49437d1e71c1a4e4d487c478c7dd7571307566ff19",
+      "bytes": 634,
+      "path": "input/sub-01_dir-AP_desc-slab_dwi.bval"
+    },
+    {
+      "role": "bvec",
+      "name": "sub-01_dir-AP_desc-slab_dwi.bvec",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce028ecca10e9abe7988f965e03ad51627ca9c52/noddi/examples/sub-01_dir-AP_desc-slab_dwi.bvec",
+      "sha256": "7141cc17a90f78c29dbdc1218755081d51c93988d139886fcb9871d9e3fdfd6d",
+      "bytes": 3619,
+      "path": "input/sub-01_dir-AP_desc-slab_dwi.bvec"
+    }
+  ],
   "files": [
     {
       "path": "README.md",
