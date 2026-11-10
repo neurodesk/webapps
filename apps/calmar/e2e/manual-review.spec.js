@@ -13,6 +13,14 @@ for (const width of [1440, 390]) {
     await expect(page.locator('#patientBehaviorReportBody')).toContainText('284 days');
     await page.locator('#patientBehaviorOptions summary').click();
     await page.screenshot({ path: test.info().outputPath(`example-context-${width}.png`), fullPage: true, animations: 'disabled' });
+    // The second chronic participant replaces the first one's context with its own.
+    await page.locator('select[data-neurodesk-example]').selectOption('stroke-lesion-m2001');
+    await expect(page.locator('#patientAge')).toHaveValue('38', { timeout: 60000 });
+    await expect(page.locator('#patientSex')).toHaveValue('female');
+    await expect(page.locator('#patientTpo')).toHaveValue('895');
+    await expect(page.locator('#patientBehaviorReportBody')).toContainText('87.1');
+    await expect(page.locator('#patientBehaviorReportBody')).toContainText('1076 days');
+    await expect(page.locator('#patientBehaviorReportBody')).not.toContainText('34.7');
     await page.evaluate(async () => {
       const { writeNifti1 } = await import('/js/modules/nifti-writer.js');
       const bytes = writeNifti1(new Float32Array(8), { dims: [2, 2, 2], spacing: [1, 1, 1], affine: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] });

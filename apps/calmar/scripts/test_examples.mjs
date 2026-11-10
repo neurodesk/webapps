@@ -98,13 +98,99 @@ test('an incomplete diffusion bundle is rejected before replacing the current su
 });
 
 for (const id of ['stroke-dwi-adc-soop', 'stroke-dwi-adc-isles2022']) {
-  test(`${id} imports the published DWI/ADC pair and clears previous demographics`, async () => {
+  test(`${id} imports the published DWI/ADC pair and replaces previous demographics with its own`, async () => {
     const { options, loaded, contexts } = await loadAdapter();
     const example = examples.find(item => item.id === id);
     assert.deepEqual(example.files.map(file => file.role), ['dwi', 'adc']);
-    assert.equal(example.patientContext, undefined);
     await options.onLoad(example, { fetchFiles: async () => example.files.map(file => new File(['scan'], file.name)), assertCurrent() {} });
     assert.deepEqual(loaded.map(item => [item.kind, item.file.name]), example.files.map(file => [file.role, file.name]));
-    assert.deepEqual(contexts, [undefined]);
+    assert.deepEqual(contexts, [example.patientContext]);
   });
 }
+
+// Examples carry only what their dataset publishes for that case.
+test('the two chronic examples are different ARC participants with their own published context', async () => {
+  const { options, loaded, contexts } = await loadAdapter();
+  const chronic = examples.filter(item => item.files.length === 1 && item.files[0].role === 'structural');
+  assert.deepEqual(chronic.map(item => item.id), ['stroke-lesion', 'stroke-lesion-m2001']);
+  assert.equal(new Set(chronic.map(item => item.label)).size, 2, 'the menu tells the two scans apart');
+  for (const example of chronic) {
+    await options.onLoad(example, { fetchFiles: async () => example.files.map(file => new File(['scan'], file.name)), assertCurrent() {} });
+  }
+  assert.deepEqual(loaded.map(file => file.name), chronic.map(item => item.files[0].name));
+  assert.deepEqual(contexts, chronic.map(item => item.patientContext));
+  // ds004884 v1.0.1 participants.tsv: sub-M2001  F  38  n/a  895  87.1  Anomic; ses-1076 is 1076 days post-stroke.
+  const context = chronic[1].patientContext;
+  assert.deepEqual([context.ageAtStroke, context.sex, context.tpo, context.tpoUnit], [38, 'female', 895, 'days']);
+  assert.deepEqual(context.assessments, [{ name: 'WAB-R Aphasia Quotient', result: '87.1 (895 days post-stroke)', date: '' }]);
+  assert.match(context.notes, /1076 days post-stroke \(ses-1076\).*not contemporaneous.*Anomic/);
+  assert.equal(context.source.imagingTpoDays, 1076);
+  assert.equal(context.source.url, chronic[0].patientContext.source.url, 'both rows come from the same pinned participants.tsv');
+  assert.match(chronic[1].files[0].name, /^sub-M2001_ses-1076_/);
+});
+
+test('SOOP sub-2 carries its participants.tsv row and no time since onset', () => {
+  // ds004889 v1.1.2 participants.tsv: sub-2  M  78  w  1  0  22.84  17  n/a  "2: Cardioembolism ...". sub-1 has no row.
+  const example = examples.find(item => item.id === 'stroke-dwi-adc-soop');
+  const context = example.patientContext;
+  assert.deepEqual(example.files.map(file => file.name), ['sub-2_rec-TRACE_dwi.nii.gz', 'sub-2_rec-ADC_dwi.nii.gz']);
+  assert.deepEqual([context.ageAtStroke, context.sex, context.tpo, context.tpoUnit], [undefined, 'male', undefined, 'days']);
+  assert.deepEqual(context.assessments, [{ name: 'NIH Stroke Scale (NIHSS)', result: '17', date: '' }]);
+  assert.match(context.notes, /Age at imaging: 78 years/);
+  assert.match(context.notes, /cardioembolism/);
+  assert.match(context.notes, /TPO is left blank/);
+  assert.match(context.source.url, /^https:\/\/github\.com\/OpenNeuroDatasets\/ds004889\/blob\/[a-f0-9]{40}\/participants\.tsv$/);
+  assert.match(example.label, /SOOP sub-2$/);
+  assert.match(example.description, /sub-2/);
+});
+
+test('ISLES case 0001 carries the age and sex of its sidecars and no time since onset', () => {
+  // sub-strokecase0001_ses-0001_{dwi,adc}.json: "PatientAge": "088Y", "PatientSex": "F".
+  const example = examples.find(item => item.id === 'stroke-dwi-adc-isles2022');
+  const context = example.patientContext;
+  assert.equal(context.ageAtStroke, undefined);
+  assert.equal(context.sex, 'female');
+  assert.equal(context.tpo, undefined, 'ISLES 2022 publishes no per-case onset time');
+  assert.equal(context.assessments, undefined);
+  assert.match(context.notes, /088Y/);
+  assert.match(context.notes, /TPO is left blank/);
+  const sidecar = example.files.find(file => file.role === 'dwi').url.replace(/\.nii\.gz$/, '.json');
+  assert.equal(context.source.url, sidecar.replace('/resolve/', '/blob/'), 'the source link is the pinned sidecar the values were read from');
+});
+
+test('every menu entry names the scan it loads and carries that case\'s context', () => {
+  assert.deepEqual(examples.map(item => item.id), ['stroke-lesion', 'stroke-lesion-m2001', 'stroke-dwi-adc-soop', 'stroke-dwi-adc-isles2022']);
+  assert.equal(examples.some(item => item.rotation), false, 'no entry alternates between cases');
+  for (const example of examples) assert.ok(example.patientContext?.source?.url, `${example.id} links the source of its context`);
+});
+
+test('the behavioural form shows the case that is loaded and empties for a case without data', async () => {
+  const { JSDOM } = await import('jsdom');
+  const { bindPatientBehavior } = await import('../web/js/modules/patient-behavior.js');
+  const doc = new JSDOM(await readFile(new URL('../web/index.html', import.meta.url), 'utf8')).window.document;
+  const behavior = bindPatientBehavior(doc);
+  const value = id => doc.getElementById(id).value;
+  const isles = examples.find(item => item.id === 'stroke-dwi-adc-isles2022');
+  behavior.loadExampleContext(isles.patientContext);
+  assert.deepEqual([value('patientAge'), value('patientSex'), value('patientTpo'), value('patientTpoUnit')], ['', 'female', '', 'days']);
+  const report = doc.getElementById('patientBehaviorReportBody');
+  assert.doesNotMatch(report.textContent, /Age at stroke:/);
+  assert.match(report.textContent, /Sex: Female\. Example dataset context/);
+  assert.doesNotMatch(report.textContent, /Time post-onset at assessment/);
+  assert.match(report.textContent, /does not publish time since stroke onset/);
+  assert.equal(report.querySelector('a').href, isles.patientContext.source.url);
+  assert.equal(doc.getElementById('patientContextSource').hidden, false);
+  behavior.loadExampleContext(examples.find(item => item.id === 'stroke-dwi-adc-soop').patientContext);
+  assert.deepEqual([value('patientAge'), value('patientSex'), value('patientTpo'), value('patientTpoUnit')], ['', 'male', '', 'days']);
+  assert.match(report.textContent, /Sex: Male\. Example dataset context/);
+  assert.match(report.textContent, /NIH Stroke Scale \(NIHSS\)17/);
+  assert.doesNotMatch(report.textContent, /088Y|Time post-onset at assessment/, 'nothing of the previous case remains');
+  behavior.loadExampleContext(examples.find(item => item.id === 'stroke-lesion-m2001').patientContext);
+  assert.deepEqual([value('patientAge'), value('patientSex'), value('patientTpo'), value('patientTpoUnit')], ['38', 'female', '895', 'days']);
+  assert.match(report.textContent, /Time post-onset at assessment: 895 days/);
+  assert.match(report.textContent, /87\.1 \(895 days post-stroke\)/);
+  behavior.loadExampleContext(undefined);
+  assert.deepEqual([value('patientAge'), value('patientSex'), value('patientTpo'), value('patientTpoUnit')], ['', '', '', 'months']);
+  assert.equal(doc.getElementById('patientContextSource').hidden, true);
+  assert.equal(doc.getElementById('patientBehaviorReport').hidden, true);
+});

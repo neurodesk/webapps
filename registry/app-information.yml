@@ -249,6 +249,10 @@ apps:
         title: Stroke Outcome Optimization Project (SOOP)
         reference: "Absher J, Goncher S, Newman-Norlund R, et al. The stroke outcome optimization project: Acute ischemic strokes from a comprehensive stroke center. Scientific Data. 2024;11:839."
         doi: 10.1038/s41597-024-03667-5
+      - group: Example data
+        title: Aphasia Recovery Cohort (ARC)
+        reference: "Gibson M, Newman-Norlund R, Bonilha L, et al. The Aphasia Recovery Cohort, an open-source chronic stroke repository. Scientific Data. 2024;11:981."
+        doi: 10.1038/s41597-024-03819-7
       - group: Lesion segmentation
         title: ATLAS v2.0
         reference: "Liew SL, Lo BP, Donnelly MR, et al. A large, curated, open-source stroke neuroimaging dataset to improve lesion segmentation algorithms. Scientific Data. 2022;9:320."
