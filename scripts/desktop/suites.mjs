@@ -14,13 +14,20 @@ export function selectedSuite(registry, argv = process.argv, env = process.env) 
   return desktopSuite(registry, id ? findCatalog(registry, id) : primaryCatalog(registry));
 }
 
-/** The electron-builder settings that name a suite's application and archives. */
+/**
+ * The electron-builder settings that name a suite's application and archives.
+ * Electron names its profile directory (`app.getPath('userData')`: models,
+ * missing-asset records, runs) after the packaged package.json's productName,
+ * else its name, so an edition writes its own productName there; the full suite
+ * keeps the `@neurodesk/desktop` profile its installs already use.
+ */
 export function builderConfig(suite) {
   return {
     appId: suite.appId,
     productName: suite.title,
     executableName: suite.executable,
     artifactName: `${suite.release}-\${version}-\${os}-\${arch}.\${ext}`,
+    ...(suite.primary ? {} : { extraMetadata: { productName: suite.title } }),
   };
 }
 
