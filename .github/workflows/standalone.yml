@@ -43,6 +43,8 @@ jobs:
     timeout-minutes: 90
     outputs:
       release_date: ${{ steps.date.outputs.release_date }}
+      suites: ${{ steps.suites.outputs.suites }}
+      primary_catalog: ${{ steps.suites.outputs.primary }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -68,7 +70,7 @@ jobs:
         env:
           DESKTOP_RELEASE_DATE: ${{ steps.date.outputs.release_date }}
       - name: Test package contracts
-        run: node --test test/standalone.test.mjs test/new-app.test.mjs test/offline-asset-pins.test.mjs packages/desktop/test/*.test.js
+        run: node --test test/standalone.test.mjs test/new-app.test.mjs test/offline-asset-pins.test.mjs test/desktop-assembly.test.mjs packages/desktop/test/*.test.js
       - uses: actions/cache@v6
         with:
           path: .turbo
@@ -81,12 +83,61 @@ jobs:
           key: offline-assets-${{ hashFiles('registry/offline-assets.lock.json') }}
       - name: Verify all offline inputs against the committed lock
         run: node scripts/desktop/assets.mjs
-      - run: node scripts/desktop/assemble.mjs
+      - name: List one desktop suite per catalogue
+        id: suites
+        run: node scripts/desktop/suite.mjs >> "$GITHUB_OUTPUT"
+      # Every suite is projected from this one all-app build, as the catalogue sites are.
+      - name: Archive the all-app build
+        run: tar -cf desktop-dist.tar dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-dist
+          path: desktop-dist.tar
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+
+  assemble:
+    needs: bundle
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.bundle.outputs.suites) }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Free Linux runner storage for the suite archives
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Set the daily desktop version
+        run: node scripts/desktop/daily-version.mjs
+        env:
+          DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
+      # The bundle job verified this cache against the lock and saved it on a miss.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .offline-cache
+          key: offline-assets-${{ hashFiles('registry/offline-assets.lock.json') }}
+          fail-on-cache-miss: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-dist
+      - run: tar -xf desktop-dist.tar && rm desktop-dist.tar
+      - name: Assemble the catalogue suite
+        run: node scripts/desktop/assemble.mjs --catalog "$CATALOG"
+        env:
+          CATALOG: ${{ matrix.suite.catalog }}
       - name: Archive complete offline resources
         run: tar -czf offline-resources.tar.gz -C packages/desktop resources
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: offline-resources
+          name: offline-resources-${{ matrix.suite.catalog }}
           path: offline-resources.tar.gz
           compression-level: 0
           if-no-files-found: error
@@ -96,16 +147,17 @@ jobs:
           node scripts/desktop/models-pack.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: desktop-models-pack
+          name: desktop-${{ matrix.suite.catalog }}-models-pack
           path: packages/desktop/release/github/
           compression-level: 0
           if-no-files-found: error
 
   desktop:
-    needs: bundle
+    needs: [bundle, assemble]
     strategy:
       fail-fast: false
       matrix:
+        suite: ${{ fromJSON(needs.bundle.outputs.suites) }}
         os: [ubuntu-22.04, macos-15, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 100
@@ -142,7 +194,7 @@ jobs:
         run: node --test packages/desktop/test/source-approval.test.js
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: offline-resources
+          name: offline-resources-${{ matrix.suite.catalog }}
       - run: tar -xzf offline-resources.tar.gz -C packages/desktop
       - name: Prepare the package without models
         shell: bash
@@ -160,18 +212,21 @@ jobs:
         env:
           NEURODESK_TEST_REPORT: desktop-reports
           NEURODESK_SOFTWARE_RENDERING: '1'
-      - name: Select workflow coverage from the complete app registry
+      # A copy runs its workflow in its home catalogue's suite; a suite of copies only runs none.
+      - name: Select workflow coverage from the catalogue's own apps
         shell: bash
-        run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs)" >> "$GITHUB_ENV"
+        run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs --catalog "$CATALOG")" >> "$GITHUB_ENV"
+        env:
+          CATALOG: ${{ matrix.suite.catalog }}
       - name: Test offline computations and exports
-        if: runner.os != 'Linux'
+        if: runner.os != 'Linux' && env.NEURODESK_TEST_APP != ''
         run: node scripts/desktop/smoke.mjs
         env:
           NEURODESK_TEST_REPORT: desktop-workflow-reports
           NEURODESK_WORKFLOWS: '1'
           NEURODESK_SMOKE_DIAGNOSTICS: ${{ runner.os == 'Windows' && '1' || '' }}
       - name: Test Linux offline computations and exports
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.NEURODESK_TEST_APP != ''
         run: xvfb-run -a node scripts/desktop/smoke.mjs
         env:
           NEURODESK_TEST_REPORT: desktop-workflow-reports
@@ -198,18 +253,18 @@ jobs:
           NEURODESK_TEST_REPORT: packaged-desktop-reports
           NEURODESK_SOFTWARE_RENDERING: '1'
       - name: Install pinned Apptainer
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.suite.catalog == needs.bundle.outputs.primary_catalog
         run: |
           curl -fL https://github.com/apptainer/apptainer/releases/download/v1.5.3/apptainer_1.5.3_amd64.deb -o "$RUNNER_TEMP/apptainer.deb"
           echo "82b0bdddf459087d202383360b8318d526ad6826c748a2f669913cc6aef9ee40  $RUNNER_TEMP/apptainer.deb" | sha256sum -c -
           sudo apt-get install -y "$RUNNER_TEMP/apptainer.deb"
       - name: Build and test offline Docker and Apptainer distributions
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.suite.catalog == needs.bundle.outputs.primary_catalog
         run: node scripts/desktop/container.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
-          name: desktop-${{ matrix.os }}
+          name: desktop-${{ matrix.suite.catalog }}-${{ matrix.os }}
           path: |
             desktop-reports/
             desktop-workflow-reports/
@@ -220,7 +275,11 @@ jobs:
           if-no-files-found: error
 
   models-offline:
-    needs: bundle
+    needs: [bundle, assemble]
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.bundle.outputs.suites) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 100
     steps:
@@ -240,12 +299,12 @@ jobs:
       - run: node packages/desktop/node_modules/electron/install.js
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: offline-resources
+          name: offline-resources-${{ matrix.suite.catalog }}
       - run: tar -xzf offline-resources.tar.gz -C packages/desktop
       - run: node scripts/desktop/without-models.mjs
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: desktop-models-pack
+          name: desktop-${{ matrix.suite.catalog }}-models-pack
           path: models-release
       - name: Install the model pack the way the release notes describe
         run: |
@@ -253,8 +312,11 @@ jobs:
           cat $(ls models-release | grep -E 'models\.tar\.gz(\.part[0-9]+)?$' | sort | sed 's|^|models-release/|') > models.tar.gz
           tar -xzf models.tar.gz -C models-pack
           rm models.tar.gz
-      - name: Select workflow coverage from the complete app registry
-        run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs)" >> "$GITHUB_ENV"
+      # Every app of the suite that reads a pinned model, copies included: the pack is the suite's own.
+      - name: Select the workflows that read the model pack
+        run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs --catalog "$CATALOG" --models)" >> "$GITHUB_ENV"
+        env:
+          CATALOG: ${{ matrix.suite.catalog }}
       # A model served from the pack is read in place, so an empty profile cache
       # after a completed workflow is the proof that nothing was downloaded.
       - name: Test offline computations and exports against the extracted model pack
@@ -270,14 +332,18 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
-          name: desktop-models-offline
+          name: desktop-${{ matrix.suite.catalog }}-models-offline
           path: reports/
           compression-level: 0
           if-no-files-found: error
 
   publish:
-    needs: [bundle, desktop, models-offline]
+    needs: [bundle, assemble, desktop, models-offline]
     if: "!inputs.source_approval_only && (github.event_name == 'schedule' || inputs.publish)"
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.bundle.outputs.suites) }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -294,16 +360,18 @@ jobs:
           DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          pattern: desktop-*
+          pattern: desktop-${{ matrix.suite.catalog }}-*
           path: release-artifacts
-      - run: node scripts/desktop/publish.mjs release-artifacts
+      - run: node scripts/desktop/publish.mjs release-artifacts --catalog "$CATALOG"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CATALOG: ${{ matrix.suite.catalog }}
       # A release made with GITHUB_TOKEN starts no workflow, so announce it; standalone-catalog commits the
       # suite entry to registry/standalone.json and redeploys the site.
       - name: Publish to the Standalone catalog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUITE_RELEASE: ${{ matrix.suite.release }}
         run: |
-          RELEASE="webapps@$(node -p "require('./packages/desktop/package.json').version")"
+          RELEASE="${SUITE_RELEASE}@$(node -p "require('./packages/desktop/package.json').version")"
           gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"

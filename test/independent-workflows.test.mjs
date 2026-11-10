@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { access, readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
@@ -34,6 +35,28 @@ async function packagesWithReleaseSpec() {
   return packages;
 }
 
+test('the desktop workflow builds, tests and publishes one suite per catalogue from one build', async () => {
+  const flow = await workflow('standalone');
+  const registry = await loadAppsRegistry();
+  const outputs = Object.fromEntries(execFileSync(process.execPath, ['scripts/desktop/suite.mjs'], { cwd: repoRoot, encoding: 'utf8' })
+    .trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+  assert.deepEqual(JSON.parse(outputs.suites), registry.site.catalogs.map(catalog => ({ catalog: catalog.id, release: catalog.desktop.release })));
+  assert.equal(outputs.primary, 'neuro');
+  assert.equal(flow.jobs.bundle.outputs.suites, '${{ steps.suites.outputs.suites }}');
+  for (const name of ['assemble', 'desktop', 'models-offline', 'publish']) {
+    assert.equal(flow.jobs[name].strategy.matrix.suite, '${{ fromJSON(needs.bundle.outputs.suites) }}', name);
+  }
+  const run = (job, pattern) => flow.jobs[job].steps.find(step => pattern.test(step.run || ''));
+  assert.ok(run('assemble', /assemble\.mjs --catalog "\$CATALOG"/));
+  assert.ok(run('publish', /publish\.mjs release-artifacts --catalog "\$CATALOG"/));
+  assert.equal(run('desktop', /ci-apps\.mjs --catalog "\$CATALOG"\)/).env.CATALOG, '${{ matrix.suite.catalog }}');
+  assert.equal(run('models-offline', /ci-apps\.mjs --catalog "\$CATALOG" --models/).env.CATALOG, '${{ matrix.suite.catalog }}');
+  const container = flow.jobs.desktop.steps.find(step => step.run === 'node scripts/desktop/container.mjs');
+  assert.equal(container.if, "runner.os == 'Linux' && matrix.suite.catalog == needs.bundle.outputs.primary_catalog");
+  const download = flow.jobs.publish.steps.find(step => step.uses?.startsWith('actions/download-artifact@'));
+  assert.equal(download.with.pattern, 'desktop-${{ matrix.suite.catalog }}-*');
+});
+
 test('desktop builds run on the daily schedule or by hand, and publish only on schedule unless asked', async () => {
   const flow = await workflow('standalone');
   assert.deepEqual(flow.on, {
@@ -45,9 +68,12 @@ test('desktop builds run on the daily schedule or by hand, and publish only on s
   });
   assert.equal(flow.concurrency['cancel-in-progress'], false);
   assert.equal(flow.jobs.publish.if, "!inputs.source_approval_only && (github.event_name == 'schedule' || inputs.publish)");
-  assert.deepEqual(flow.jobs.publish.needs, ['bundle', 'desktop', 'models-offline']);
+  assert.deepEqual(flow.jobs.publish.needs, ['bundle', 'assemble', 'desktop', 'models-offline']);
   assert.ok(flow.jobs.bundle.steps.some(step => step.run === 'pnpm build'));
   assert.equal(flow.jobs.bundle.outputs.release_date, '${{ steps.date.outputs.release_date }}');
+  for (const name of ['assemble', 'desktop', 'models-offline', 'publish']) {
+    assert.ok(!flow.jobs[name].steps.some(step => /pnpm build/.test(step.run || '')), `${name} reuses the one build`);
+  }
   for (const [name, job] of Object.entries(flow.jobs)) {
     if (job.uses) continue;
     const checkout = job.steps.find(step => step.uses?.startsWith('actions/checkout@'));
