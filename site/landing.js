@@ -36,6 +36,9 @@ const cards = [...document.querySelectorAll('[data-app-card]')];
 const sections = [...document.querySelectorAll('[data-category-section]')];
 const totalApps = new Set(cards.map((card) => card.dataset.appId)).size;
 const categoryFilters = [...document.querySelectorAll('[data-category-filter]')];
+const elsewhere = document.querySelector('#elsewhere');
+const elsewhereResults = document.querySelector('#elsewhere-results');
+const elsewhereApps = JSON.parse(document.querySelector('#elsewhere-apps')?.textContent ?? '[]');
 
 let activeCategory = 'all';
 
@@ -43,15 +46,64 @@ function normalize(value) {
   return value.toLocaleLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+function searchTerms(query) {
+  return normalize(query).split(/\s+/).filter(Boolean);
+}
+
+function matchesTerms(search, terms) {
+  const searchable = normalize(search);
+  return terms.every((term) => searchable.includes(term));
+}
+
+function elsewhereCard(app) {
+  const card = document.createElement('a');
+  card.className = 'app-card';
+  card.href = app.url;
+  card.dataset.elsewhereAppId = app.id;
+  const topline = document.createElement('span');
+  topline.className = 'app-card__topline';
+  const catalog = document.createElement('span');
+  catalog.className = 'app-card__category';
+  catalog.textContent = app.catalogTitle;
+  topline.append(catalog);
+  const titleRow = document.createElement('span');
+  titleRow.className = 'app-card__title-row';
+  const title = document.createElement('h3');
+  title.textContent = app.title;
+  const arrow = document.createElement('span');
+  arrow.className = 'app-card__arrow';
+  arrow.setAttribute('aria-hidden', 'true');
+  arrow.textContent = '↗';
+  titleRow.append(title, arrow);
+  const description = document.createElement('p');
+  description.textContent = app.description;
+  const tags = document.createElement('ul');
+  tags.className = 'app-card__tags';
+  tags.setAttribute('aria-label', 'Host');
+  const host = document.createElement('li');
+  host.textContent = `Opens on ${app.host}`;
+  tags.append(host);
+  card.append(topline, titleRow, description, tags);
+  return card;
+}
+
+function showElsewhere(terms) {
+  if (!elsewhere) return;
+  const matches = terms.length ? elsewhereApps.filter((app) => matchesTerms(app.search, terms)) : [];
+  elsewhereResults.replaceChildren(...matches.map(elsewhereCard));
+  elsewhere.hidden = matches.length === 0;
+}
+
 function filterCatalog() {
   const query = searchInput.value.trim();
-  const terms = normalize(query).split(/\s+/).filter(Boolean);
+  const terms = searchTerms(query);
   const visibleApps = new Set();
+  let localMatch = false;
 
   for (const card of cards) {
     const matchesCategory = activeCategory === 'all' || card.dataset.category === activeCategory;
-    const searchable = normalize(card.dataset.search);
-    const matchesSearch = terms.every((term) => searchable.includes(term));
+    const matchesSearch = matchesTerms(card.dataset.search, terms);
+    localMatch ||= matchesSearch;
     card.hidden = !(matchesCategory && matchesSearch);
     if (!card.hidden) visibleApps.add(card.dataset.appId);
   }
@@ -69,6 +121,8 @@ function filterCatalog() {
     : `${totalApps} apps across ${sections.length} categories`;
   clearSearch.hidden = !query;
   noResults.hidden = visibleApps.size !== 0;
+  // Another host's apps only when no app here matches, whatever the category.
+  showElsewhere(localMatch ? [] : terms);
 }
 
 function selectCategory(category) {

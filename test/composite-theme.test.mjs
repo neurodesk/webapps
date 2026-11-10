@@ -122,6 +122,24 @@ test('names the hosting catalogue on the page, once, and only when one hosts it'
   assert.throws(() => injectCompositeTheme(document, { ...metadata, catalogId: '"><script>' }), /Invalid catalog id/);
 });
 
+test('names the canonical page once, and only when given one', () => {
+  const home = 'https://webapps.neurodesk.org/example/';
+  const shipped = document.replace('</head>', '<link rel="canonical" href="https://example.org/stale/"></head>');
+  const neuro = injectCompositeTheme(shipped, { ...metadata, url: home, canonical: home });
+  assert.equal((neuro.match(/rel="canonical"/g) ?? []).length, 1);
+  assert.match(neuro, /<link rel="canonical" href="https:\/\/webapps\.neurodesk\.org\/example\/">/);
+  assert.equal(injectCompositeTheme(neuro, { ...metadata, url: home, canonical: home }), neuro);
+
+  const copy = injectCompositeTheme(neuro, { ...metadata, url: 'https://mskapps.sciget.org/example/', canonical: home });
+  assert.equal((copy.match(/rel="canonical"/g) ?? []).length, 1);
+  assert.match(copy, /<link rel="canonical" href="https:\/\/webapps\.neurodesk\.org\/example\/">/);
+  assert.match(copy, /<meta property="og:url" content="https:\/\/mskapps\.sciget\.org\/example\/">/);
+
+  assert.doesNotMatch(injectCompositeTheme(document, metadata), /rel="canonical"/);
+  assert.doesNotMatch(injectCompositeTheme(neuro, metadata), /rel="canonical"/, 'a standalone build names no host');
+  assert.throws(() => injectCompositeTheme(document, { ...metadata, canonical: '../example/' }), /canonical must be an absolute/);
+});
+
 test('inserts title and metadata when the app ships none', () => {
   const bare = '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>';
   const themed = injectCompositeTheme(bare, metadata);

@@ -62,7 +62,10 @@ A catalogue site holds:
   `<html data-neurodesk-catalog="<id>">`, so an app can open with defaults for
   that audience (ZARRo opens on an OME-Zarr URL on `microscopy`). The all-app
   assembly in `dist/`, standalone builds and the dev server carry no attribute;
-  the desktop suite is built from `dist/`;
+  the desktop suite is built from `dist/`.
+  Each page's `rel=canonical` names the app's home URL, so a copy points search
+  engines at its home; `og:url` stays the host's own URL, so a shared link opens
+  where it was shared from;
 - the shared root files the app pages load (`app-shell.js`, `theme.js`, fonts,
   logos, `shell-adapters/`);
 - the `_runtime/` families its files reference. A family is the directory two
@@ -72,7 +75,10 @@ A catalogue site holds:
 - its usage report, `analytics.json`: its apps' rows from the report
   `scripts/write-analytics.mjs` writes at deploy, with the totals and countries
   that report records for the catalogue (visitors do not add up across apps).
-  The landing page header links to the hub.
+  The landing page header links to the hub. The
+  landing page embeds the apps it does not serve (`#elsewhere-apps`); a search
+  that finds nothing here lists the matching ones, linking to their home hosts.
+  The all-app `dist/` page and the desktop suite's offline page leave it out.
 
 `test/catalog-sites.test.mjs` checks the built sites. Each site holds exactly its
 catalogue's apps and exactly the runtime families its files reach. Every
