@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
+import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import {
   appHosts,
+  collectOrPlaceholder,
   dimensionFilter,
   emptyAnalytics,
   MIN_PUBLISHED_COUNTRY_USERS,
@@ -127,4 +129,31 @@ test('catalogue analytics ranks completed rows by usage rather than registry ord
   const own = catalogAnalytics(report, apps, { id: 'microscopy' });
   assert.deepEqual(own.apps.map(({ id }) => id), ['b', 'c', 'a', 'd', 'new']);
   assert.deepEqual(apps.map(({ id }) => id), ['new', 'a', 'b', 'c', 'd']);
+});
+
+test('a GA4 outage publishes the placeholder', async () => {
+  const registry = await loadAppsRegistry();
+  const warnings = [];
+  const warn = (message) => warnings.push(message);
+  const fresh = { schemaVersion: 1, unavailable: false, apps: [] };
+
+  assert.equal(await collectOrPlaceholder({ registry, collect: async () => fresh, warn }), fresh);
+  assert.deepEqual(warnings, []);
+  const outage = async () => { throw new Error('GA4 Data API returned HTTP 502'); };
+  assert.deepEqual(await collectOrPlaceholder({ registry, collect: outage, warn }), emptyAnalytics(registry));
+  assert.match(warnings[0], /HTTP 502/);
+});
+
+test('a malformed service-account key still fails the deploy', () => {
+  const run = spawnSync(process.execPath, ['scripts/write-analytics.mjs', '--allow-missing-credentials', '--output', '/dev/null'], {
+    env: {
+      ...process.env,
+      GA4_PROPERTY_ID: '1',
+      GA4_SERVICE_ACCOUNT_KEY: JSON.stringify({ client_email: 'x@example.invalid', private_key: 'not a key' }),
+    },
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /private_key is not a usable key/);
 });
