@@ -122,7 +122,7 @@ site:
       description: Prepare images with correction, denoising, brain extraction and image maths.
     - id: conversion
       title: Conversion
-      description: Convert scanner DICOM files to NIfTI and BIDS datasets.
+      description: Convert scanner and microscope files to NIfTI, BIDS and OME-Zarr.
     - id: privacy
       title: Privacy
       description: Remove identifying facial features from images before sharing.
