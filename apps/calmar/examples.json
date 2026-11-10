@@ -1,7 +1,7 @@
 [
   {
     "id": "stroke-lesion",
-    "label": "Stroke T1 MRI",
+    "label": "Stroke T1 MRI — sub-M2051",
     "description": "Structural MRI from OpenNeuro ds004884, participant sub-M2051, session ses-284. Includes published demographic and WAB-R context. Run segmentation, then review and confirm the mask before reporting.",
     "expectedResult": "A computed lesion mask for review and downloadable lesion-network mapping results.",
     "files": [
@@ -36,24 +36,60 @@
     }
   },
   {
+    "id": "stroke-lesion-m2001",
+    "label": "Stroke T1 MRI — sub-M2001",
+    "description": "Structural MRI from OpenNeuro ds004884, participant sub-M2001, session ses-1076. Includes published demographic and WAB-R context. Run segmentation, then review and confirm the mask before reporting.",
+    "expectedResult": "A computed lesion mask for review and downloadable lesion-network mapping results.",
+    "files": [
+      {
+        "role": "structural",
+        "name": "sub-M2001_ses-1076_acq-tfl3_run-4_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/23da04c5d7adb5b20bea09eb6e508ba56093fab0/examples/calmar/chronic/arc/sub-M2001_ses-1076_acq-tfl3_run-4_T1w.nii.gz",
+        "sha256": "51797b0a9d0d35b33a39b0d98e511e828ae6c4ce927c41a5aa57f77c60958d7e",
+        "bytes": 3810459
+      }
+    ],
+    "patientContext": {
+      "ageAtStroke": 38,
+      "sex": "female",
+      "tpo": 895,
+      "tpoUnit": "days",
+      "notes": "Example MRI: 1076 days post-stroke (ses-1076). WAB-R assessment: 895 days post-stroke; not contemporaneous with this MRI. Dataset WAB classification: Anomic.",
+      "assessments": [
+        {
+          "name": "WAB-R Aphasia Quotient",
+          "result": "87.1 (895 days post-stroke)",
+          "date": ""
+        }
+      ],
+      "source": {
+        "label": "OpenNeuro ds004884 v1.0.1 · sub-M2001 · ses-1076",
+        "url": "https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/participants.tsv",
+        "dictionaryUrl": "https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/participants.json",
+        "readmeUrl": "https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/README.md",
+        "imagingTpoDays": 1076
+      }
+    }
+  },
+  {
     "id": "stroke-dwi-adc",
     "label": "Acute DWI + ADC — next case",
-    "description": "Alternates SOOP sub-1 and ISLES case 0001 after successful loads. Choose either named case to repeat it. Review each computed lesion before confirming.",
+    "description": "Alternates SOOP sub-2 and ISLES case 0001 after successful loads. Choose either named case to repeat it. Review each computed lesion before confirming.",
     "expectedResult": "A computed, editable lesion candidate and downloadable native-space mask. Review and confirm it before reporting.",
     "files": [
       {
         "role": "dwi",
-        "name": "sub-1_rec-TRACE_dwi.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/soop/sub-1_rec-TRACE_dwi.nii.gz",
-        "sha256": "48809e72061ef2a94547eaf4524044cdc4c3a213d8c553c6d1c81c83ecedd11d",
-        "bytes": 730211
+        "name": "sub-2_rec-TRACE_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/23da04c5d7adb5b20bea09eb6e508ba56093fab0/examples/calmar/acute/soop/sub-2_rec-TRACE_dwi.nii.gz",
+        "sha256": "b95232b79695d5d03512ae22d2a601946aca75b2e7377efaef4d283d7921f6dc",
+        "bytes": 1630864
       },
       {
         "role": "adc",
-        "name": "sub-1_rec-ADC_dwi.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/soop/sub-1_rec-ADC_dwi.nii.gz",
-        "sha256": "7555d930de7a962f5bc40f5f02267650b8fb8bbf8b2896558bc6715d2c130028",
-        "bytes": 1039309
+        "name": "sub-2_rec-ADC_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/23da04c5d7adb5b20bea09eb6e508ba56093fab0/examples/calmar/acute/soop/sub-2_rec-ADC_dwi.nii.gz",
+        "sha256": "92f4b110c0a2bbdb34082f7071f9466f74cd9b1d8064996e2f45e9fab334f630",
+        "bytes": 1748263
       }
     ],
     "rotation": [
@@ -63,25 +99,44 @@
   },
   {
     "id": "stroke-dwi-adc-soop",
-    "label": "Acute DWI + ADC — SOOP sub-1",
-    "description": "Acute-stroke TRACE/DWI and ADC from SOOP ds004889 v1.1.2, sub-1 (CC0). Review the computed lesion candidate before confirming. Demographic context is left blank: the dataset's participants table has no entry for sub-1.",
+    "label": "Acute DWI + ADC — SOOP sub-2",
+    "description": "Acute-stroke TRACE/DWI and ADC from SOOP ds004889 v1.1.2, sub-2 (CC0). Includes the published age, sex and NIHSS; time since onset is not published. Review the computed lesion candidate before confirming.",
     "expectedResult": "A computed, editable lesion candidate and downloadable native-space mask. Review and confirm it before reporting.",
     "files": [
       {
         "role": "dwi",
-        "name": "sub-1_rec-TRACE_dwi.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/soop/sub-1_rec-TRACE_dwi.nii.gz",
-        "sha256": "48809e72061ef2a94547eaf4524044cdc4c3a213d8c553c6d1c81c83ecedd11d",
-        "bytes": 730211
+        "name": "sub-2_rec-TRACE_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/23da04c5d7adb5b20bea09eb6e508ba56093fab0/examples/calmar/acute/soop/sub-2_rec-TRACE_dwi.nii.gz",
+        "sha256": "b95232b79695d5d03512ae22d2a601946aca75b2e7377efaef4d283d7921f6dc",
+        "bytes": 1630864
       },
       {
         "role": "adc",
-        "name": "sub-1_rec-ADC_dwi.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/soop/sub-1_rec-ADC_dwi.nii.gz",
-        "sha256": "7555d930de7a962f5bc40f5f02267650b8fb8bbf8b2896558bc6715d2c130028",
-        "bytes": 1039309
+        "name": "sub-2_rec-ADC_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/23da04c5d7adb5b20bea09eb6e508ba56093fab0/examples/calmar/acute/soop/sub-2_rec-ADC_dwi.nii.gz",
+        "sha256": "92f4b110c0a2bbdb34082f7071f9466f74cd9b1d8064996e2f45e9fab334f630",
+        "bytes": 1748263
       }
-    ]
+    ],
+    "patientContext": {
+      "ageAtStroke": 78,
+      "sex": "male",
+      "tpoUnit": "days",
+      "notes": "Age is at the time of the scan. Admission diagnosis: acute ischaemic stroke, with no evidence of a prior stroke; aetiology recorded as cardioembolism.\nSOOP does not publish time since stroke onset for individual participants, so TPO is left blank.",
+      "assessments": [
+        {
+          "name": "NIH Stroke Scale (NIHSS)",
+          "result": "17",
+          "date": ""
+        }
+      ],
+      "source": {
+        "label": "OpenNeuro ds004889 v1.1.2 · sub-2",
+        "url": "https://github.com/OpenNeuroDatasets/ds004889/blob/a62344db73f18f384a95b452f4a1a423087e059b/participants.tsv",
+        "dictionaryUrl": "https://github.com/OpenNeuroDatasets/ds004889/blob/a62344db73f18f384a95b452f4a1a423087e059b/participants.json",
+        "readmeUrl": "https://github.com/OpenNeuroDatasets/ds004889/blob/a62344db73f18f384a95b452f4a1a423087e059b/README.md"
+      }
+    }
   },
   {
     "id": "stroke-dwi-adc-isles2022",

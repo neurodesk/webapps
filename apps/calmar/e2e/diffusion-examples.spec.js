@@ -72,7 +72,7 @@ async function checkRotation(page) {
     expect(await page.evaluate(() => [app.deepIslesDwiFile.name, app.deepIslesAdcFile.name])).toEqual(example.files.map(file => file.name));
     expect(await page.evaluate(() => app.maskReviewActive)).toBe(false);
     await expect(page.locator('#downloadEditedLesionMaskButton')).toBeDisabled();
-    // Behavioural context is the loaded case's published values: ISLES age and sex, nothing for SOOP sub-1.
+    // Behavioural context is the loaded case's published values: age and sex for both, no time since onset for either.
     await expect(page.locator('#patientAge')).toHaveValue(String(example.patientContext?.ageAtStroke ?? ''));
     await expect(page.locator('#patientSex')).toHaveValue(example.patientContext?.sex ?? '');
     await expect(page.locator('#patientTpo')).toHaveValue('');
