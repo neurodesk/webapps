@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createSign } from 'node:crypto';
+import { createPrivateKey, createSign } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -227,6 +227,18 @@ export async function collectAnalytics({ registry, propertyId, serviceAccount })
   };
 }
 
+// A GA4 or OAuth outage must not stop a deploy: publish the placeholder instead.
+// The previous numbers cannot be kept, because each site serves only its own
+// slice of the report (scripts/lib/catalog-sites.mjs).
+export async function collectOrPlaceholder({ registry, collect, warn = console.warn }) {
+  try {
+    return await collect();
+  } catch (error) {
+    warn(`::warning::Analytics unavailable, publishing the placeholder: ${error.message.slice(0, 200)}`);
+    return emptyAnalytics(registry);
+  }
+}
+
 export async function writeAnalytics(path, data) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(data, null, 2)}\n`);
@@ -255,8 +267,18 @@ async function main() {
   if (!serviceAccount.client_email || !serviceAccount.private_key) {
     throw new Error('GA4_SERVICE_ACCOUNT_KEY must contain client_email and private_key');
   }
+  let keyType;
+  try {
+    keyType = createPrivateKey(serviceAccount.private_key).asymmetricKeyType;
+  } catch (error) {
+    throw new Error(`GA4_SERVICE_ACCOUNT_KEY private_key is not a usable key: ${error.message}`);
+  }
+  if (keyType !== 'rsa') throw new Error(`GA4_SERVICE_ACCOUNT_KEY private_key is not a usable key: ${keyType}, not RSA`);
 
-  const data = await collectAnalytics({ registry, propertyId, serviceAccount });
+  const data = await collectOrPlaceholder({
+    registry,
+    collect: () => collectAnalytics({ registry, propertyId, serviceAccount }),
+  });
   await writeAnalytics(output, data);
   console.log(`Wrote ${data.apps.length} app analytics summaries to ${output}`);
 }
