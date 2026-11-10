@@ -276,9 +276,10 @@ below; no new schedule or successful gate is claimed. A future reverse-PE schedu
 must satisfy the original six-subject gate before it can become an app option.
 No thresholds are relaxed by this decision.
 
-Single-PE, T1w-guided ANTs SyN-SDC remains a separate planned method (#462–#466).
-Its grid/precision experiment and accuracy/memory gates are pending; it is not
-currently available in the app. The app's canonical About text states both limits.
+`apps/sdc` therefore runs ANTs only as single-PE SyN-SDC, from one DWI series and a
+T1w (#462–#466, shipped). Reverse-PE pairs go through the PyHySCO port. With SyN-SDC
+selected, a selection of two DWI series is refused; given one DWI series, SyN-SDC
+corrects it alone and ignores a reverse-PE b0. The SDC About text states the decision.
 
 ## Port gate
 
@@ -319,7 +320,7 @@ A field closer to topup's (1.40 Hz) does not give a better T1w alignment than to
 1. **Pin the evaluation data on Hugging Face** ([#504](https://github.com/neurodesk/webapps/issues/504)). Done: see "Pinned results".
 2. **DR-BUDDI in WebAssembly** ([#505](https://github.com/neurodesk/webapps/issues/505)). First a feasibility check: build the solver (not the bundled BET library) with the ITK WebAssembly toolchain of `packages/registration`, run sub-01 in a browser, and measure time and memory, also with fewer iterations or a coarser schedule. Port into `apps/sdc` only if that passes and the field still passes the gate.
 3. **WebGPU path for PyHySCO** ([#506](https://github.com/neurodesk/webapps/issues/506)). Done: the Gauss-Newton and PCG steps run as WebGPU kernels, held to the native PyHySCO field by the port gate. See [the implementation and hardware results](../../exes/sdc/README.md#webgpu).
-4. **ANTs restricted SyN** ([#507](https://github.com/neurodesk/webapps/issues/507)). It failed the gate on every subject with the SyN-SDC schedule. Decision: do not offer ANTs for reverse-PE data; see [the recorded decision](#ants-reverse-pe-decision-507). Single-PE SyN-SDC remains pending #462.
+4. **ANTs restricted SyN** ([#507](https://github.com/neurodesk/webapps/issues/507)). It failed the gate on every subject with the SyN-SDC schedule. Decision: do not offer ANTs for reverse-PE data; see [the recorded decision](#ants-reverse-pe-decision-507). Done: the app uses ANTs only for single-PE SyN-SDC.
 5. **Synb0-DisCo front end** ([#508](https://github.com/neurodesk/webapps/issues/508)). Its `--notopup` output (a synthetic undistorted b0) as the second image for the chosen solver, for data without a reverse-PE b0. Needs its own check against topup with the same synthetic image.
    Measured in [Synb0-DisCo front end](dwi-synb0-disco.md): on the six subjects, the PyHySCO field with the synthetic b0 differs from topup with the same synthetic b0 by 6.11 Hz (demeaned), and it is no closer to topup with the real pair than a zero field. No browser front end yet.
 6. **fastprep PEPOLAR** ([#509](https://github.com/neurodesk/webapps/issues/509)). Use the `sdc` solver package in fastprep for reverse-PE field estimation.
