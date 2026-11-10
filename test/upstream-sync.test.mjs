@@ -5,10 +5,44 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import YAML from 'yaml';
-import { PACKAGE_VERSION_SITE, mergeUpstream } from '../scripts/lib/upstream-sync.mjs';
+import { PACKAGE_VERSION_SITE, latestRelease, mergeUpstream } from '../scripts/lib/upstream-sync.mjs';
 
 const pkg = (version, dependencies) => `${JSON.stringify({ name: 'demo', version, dependencies }, null, 2)}\n`;
 const lines = (...items) => `${items.join('\n')}\n`;
+
+test('conflicted sync refreshes confirm draft status before pushing', () => {
+  const workflow = YAML.parse(readFileSync(new URL('../.github/workflows/upstream-sync.yml', import.meta.url), 'utf8'));
+  const script = workflow.jobs.sync.steps.find(step => step.name === 'Open or refresh the pull request').run;
+  const mocks = `
+    git() {
+      case "$1" in
+        diff) return 1 ;;
+        rev-parse) echo old-head ;;
+        push) echo PUSH ;;
+      esac
+    }
+    gh() {
+      case "$2" in
+        list) echo 123 ;;
+        view) echo "$DRAFT" ;;
+        ready) echo DRAFT; [ "$DENY" = 0 ] || return 1; DRAFT=true ;;
+        edit|comment) : ;;
+        *) return 1 ;;
+      esac
+    }
+  `;
+  const run = (conflicts, draft, deny = '0') => execFileSync('bash', ['-e', '-c', mocks + script], {
+    encoding: 'utf8',
+    env: { ...process.env, CONFLICTS: conflicts, DRAFT: draft, DENY: deny, BRANCH: 'upstream/demo', APP: 'demo', TARGET: 'abc' },
+  });
+  assert.equal(run('1', 'false'), 'DRAFT\nPUSH\n');
+  assert.equal(run('1', 'true'), 'PUSH\n');
+  assert.equal(run('0', 'false'), 'PUSH\n');
+  assert.throws(() => run('1', 'false', '1'), error => {
+    assert.equal(error.stdout, 'DRAFT\n');
+    return true;
+  });
+});
 
 test('the workflow preserves human amendments to commits authored by the bot', () => {
   const root = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'upstream-guard-test-'));
@@ -269,6 +303,27 @@ test('sync records target citations even when the local upstream modal was remov
     write(appDir, { 'index.html': '<main>Shared shell</main>\n' });
     mergeUpstream({ upstream, base, target, appDir, config: { citationSnapshot: { file: 'index.html', selector: '#citationsModal', output: 'upstream-citations.json' } } });
     assert.deepEqual(JSON.parse(readFileSync(join(appDir, 'upstream-citations.json'), 'utf8')), { commit: target, dois: ['10.1/new', '10.1/old'] });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('release tracking picks the newest vX.Y.Z tag, not the branch tip or a pre-release', () => {
+  const root = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'upstream-release-test-'));
+  try {
+    const upstream = join(root, 'upstream');
+    execFileSync('git', ['init', '-q', upstream]);
+    const tag = (name) => execFileSync('git', ['-C', upstream, 'tag', name]);
+    assert.equal(latestRelease(upstream), undefined);
+    commit(upstream, { 'a.txt': 'one\n' });
+    tag('v0.9.0');
+    commit(upstream, { 'a.txt': 'two\n' });
+    tag('v0.10.0');
+    commit(upstream, { 'a.txt': 'three\n' });
+    tag('v0.11.0-rc.1');
+    tag('nightly');
+    commit(upstream, { 'a.txt': 'four\n' });
+    assert.equal(latestRelease(upstream), 'v0.10.0');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,7 +1,127 @@
 import { createUint8Nifti, decodeNiftiBuffer, extractNiftiHeader, parseNiftiHeader, readNiftiImageData, sameVoxelGrid } from '../file-io/NiftiUtils.js';
+import { orientToRAS, inverseOrient } from '../volume/geometry.js';
 
 export const EDIT_TOOLS = Object.freeze(['draw', 'erase', 'fill']);
 export const BRUSH_SIZE = Object.freeze({ min: 1, max: 25 });
+
+/**
+ * Give NiiVue's click-to-segment equal absolute tolerance at dark and bright seeds.
+ * Keep its native connectivity, physical radius, preview, drawing and Undo logic.
+ * The default percent-of-seed interval collapses near zero and inverts below zero.
+ * This opt-in adapter sets intensity bounds and optionally blocks growth outside a RAS mask.
+ */
+export function installContrastRangeWand(nv, { getMask = () => null } = {}) {
+  if (typeof nv?.drawFloodFill !== 'function') throw new Error('This viewer does not support contrast-range wand growth.');
+  const original = nv.drawFloodFill;
+  const ranges = new WeakMap();
+  let maskedImage = null;
+  function imageRange(volume) {
+    if (ranges.has(volume)) return ranges.get(volume);
+    let span = 0;
+    for (const [low, high] of [[volume.robust_min, volume.robust_max], [volume.global_min, volume.global_max], [volume.cal_min, volume.cal_max]]) {
+      if (Number.isFinite(low) && Number.isFinite(high) && high !== low) {
+        span = Math.abs(high - low);
+        break;
+      }
+    }
+    ranges.set(volume, span);
+    return span;
+  }
+  function fill(...args) {
+    const volume = this.back;
+    if (this.opts?.clickToSegment && args[1] > 0 && !args[9] && typeof volume?.getValue === 'function') {
+      const mask = getMask();
+      const image = this.volumes?.[0] || volume;
+      const nativeImage = image.img2RAS;
+      if (mask) {
+        const dims = volume.dimsRAS || volume.dims;
+        const [x, y, z] = args[0];
+        const count = dims?.[1] * dims?.[2] * dims?.[3];
+        const index = x + y * dims?.[1] + z * dims?.[1] * dims?.[2];
+        if (mask.length !== count || !mask[index]) {
+          // Reject outside seeds and clear a previous hover preview without editing the mask.
+          if (args[8] && this.drawBitmap && args[8] !== this.drawBitmap) args[8].set(this.drawBitmap);
+          this.refreshDrawing?.(true, this.clickToSegmentIsGrowing);
+          return;
+        }
+        if (typeof nativeImage !== 'function') throw new Error('Brain-limited wand requires a scalar image.');
+        if (maskedImage?.image !== image || maskedImage?.mask !== mask) {
+          const source = nativeImage.call(image);
+          if (source.length !== count) throw new Error('Brain mask and anatomical image voxel counts differ.');
+          const Type = source instanceof Float64Array || source instanceof Int32Array || source instanceof Uint32Array ? Float64Array : Float32Array;
+          const data = Type.from(source, (value, voxel) => mask[voxel] ? value : NaN);
+          maskedImage = { image, mask, data };
+        }
+      }
+      const intensity = volume.getValue(...args[0]);
+      if (Number.isFinite(intensity)) {
+        const fraction = Math.max(0.01, Math.min(0.5, Number(this.opts.clickToSegmentPercent) || 0.1));
+        const margin = imageRange(volume) * fraction;
+        // NiiVue samples the seed in calibrated units but flood-fills raw img2RAS values.
+        const slope = Number.isFinite(volume.hdr?.scl_slope) && volume.hdr.scl_slope !== 0 ? volume.hdr.scl_slope : 1;
+        const intercept = Number.isFinite(volume.hdr?.scl_inter) ? volume.hdr.scl_inter : 0;
+        const low = (intensity - margin - intercept) / slope;
+        const high = (intensity + margin - intercept) / slope;
+        args[3] = Math.min(low, high);
+        args[4] = Math.max(low, high);
+        this.opts.clickToSegmentIntensityMin = args[3];
+        this.opts.clickToSegmentIntensityMax = args[4];
+      }
+      if (mask) {
+        // Outside-brain voxels are barriers before connectivity is evaluated, not clipped afterwards.
+        image.img2RAS = () => maskedImage.data;
+        try {
+          return original.apply(this, args);
+        } finally {
+          image.img2RAS = nativeImage;
+        }
+      }
+    }
+    return original.apply(this, args);
+  }
+  nv.drawFloodFill = fill;
+  return () => {
+    if (nv.drawFloodFill === fill) nv.drawFloodFill = original;
+  };
+}
+
+/** Convert NiiVue's RAS drawing back to the base image's native voxel order. */
+export function drawingToNativeBitmap(nv, expectedGrid) {
+  const image = nv.volumes?.[0];
+  if (!image?.hdr || !nv.drawBitmap) throw new Error('No anatomical image and drawing are available.');
+  if (expectedGrid && !sameVoxelGrid(image.hdr, expectedGrid)) {
+    throw new Error('The drawing base does not match the intended native mask geometry.');
+  }
+  const axes = drawingAxes(image);
+  const dims = Array.from(image.hdr.dims.slice(1, 4));
+  if (nv.drawBitmap.length !== dims[0] * dims[1] * dims[2]) {
+    throw new Error('Drawing and anatomical image voxel counts differ.');
+  }
+  const perm = axes.map(axis => Math.abs(axis) - 1);
+  return inverseOrient(nv.drawBitmap, perm.map(axis => dims[axis]), perm, axes.map(axis => axis < 0), dims, Uint8Array);
+}
+
+function drawingAxes(image) {
+  const axes = Array.from(image.permRAS || []);
+  if (axes.length !== 3 || new Set(axes.map(Math.abs)).size !== 3 || axes.some(axis => ![1, 2, 3].includes(Math.abs(axis)))) {
+    throw new Error('The anatomical image drawing orientation is unavailable.');
+  }
+  return axes;
+}
+
+/** Binary native-space NIfTI mask on exactly the viewer's drawing (RAS) grid. */
+export async function maskToDrawingBitmap(nv, source) {
+  const image = nv.volumes?.[0];
+  const bytes = await maskToUint8Nifti(source);
+  const header = parseNiftiHeader(bytes);
+  if (!sameVoxelGrid(header, image?.hdr)) throw new Error('Brain mask must match the displayed anatomical image grid.');
+  const axes = drawingAxes(image);
+  const { data } = readNiftiImageData(bytes, Uint8Array);
+  return orientToRAS(
+    Uint8Array.from(data, value => value > 0 ? 1 : 0), Array.from(header.dims.slice(1, 4)),
+    axes.map(axis => Math.abs(axis) - 1), axes.map(axis => axis < 0)
+  ).data;
+}
 
 export function clampBrushSize(size) {
   return Math.min(BRUSH_SIZE.max, Math.max(BRUSH_SIZE.min, Math.round(Number(size)) || BRUSH_SIZE.min));

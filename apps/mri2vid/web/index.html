@@ -50,7 +50,7 @@
         <div class="grid2">
           <div class="nd-field">
             <label for="orientation">Orientation
-              <span class="nd-info-icon" tabindex="0" aria-label="About orientation">i<span class="nd-info-tooltip">How the stack is resliced: sagittal, coronal, axial and their flipped variants. The Preview buttons set this too.</span></span>
+              <span class="nd-info-icon" tabindex="0" aria-label="About orientation">i<span class="nd-info-tooltip">Which axis of the image array the video steps through. Axis 3 steps through the slices as stored in the file; Axis 1 and 2 cut across them. Which anatomical plane each one shows depends on how the scan was acquired. The Preview buttons set this too.</span></span>
             </label>
             <select id="orientation"></select>
           </div>
@@ -89,7 +89,7 @@
           </div>
           <div class="nd-field">
             <label for="upscale">Upscale
-              <span class="nd-info-icon" tabindex="0" aria-label="About upscale">i<span class="nd-info-tooltip">Resample every frame to a larger size before encoding. Low-resolution scans (EPI, B1 maps) look better upscaled; it interpolates, it adds no detail.</span></span>
+              <span class="nd-info-icon" tabindex="0" aria-label="About upscale">i<span class="nd-info-tooltip">Resample every frame to a larger size before encoding. Low-resolution scans (EPI, B1 maps) look better upscaled; it interpolates, it adds no detail. For a video as crisp as the preview, use 2x or 4x with Nearest.</span></span>
             </label>
             <select id="upscale">
               <option value="1">1x (original)</option>
@@ -188,7 +188,7 @@
         <li>A directory is grouped by SeriesInstanceUID and the most likely structural scan is selected first; click any series to switch.</li>
         <li>Drag the two histogram handles to set the intensity window; it maps to 0-255 in the output. Reset windowing returns to the full range.</li>
         <li>Upscale enlarges frames before encoding (helps EPI and B1 maps); pick the interpolation to suit. Siemens mosaic runs get a 4D series control (first volume, mean or maximum projection).</li>
-        <li>Preview shows the actual frames; choose the reconstruction (axial, sagittal, coronal, flip), rotate or stretch them, then Generate the MP4 or WebM and download it.</li>
+        <li>Preview shows the actual frames; choose the reconstruction (Axis 1, 2 or 3, flip), rotate or stretch them, then Generate the MP4 or WebM and download it.</li>
       </ul>
     </div>
     <div class="card">
@@ -213,9 +213,9 @@
       </div>
       <div class="recon-row">
         <span class="recon-label">Reconstruction:</span>
-        <button class="nd-btn nd-btn-secondary nd-btn-sm ori" data-ori="axial" type="button">Axial</button>
-        <button class="nd-btn nd-btn-secondary nd-btn-sm ori" data-ori="sagittal" type="button">Sagittal</button>
-        <button class="nd-btn nd-btn-secondary nd-btn-sm ori" data-ori="coronal" type="button">Coronal</button>
+        <button class="nd-btn nd-btn-secondary nd-btn-sm ori" data-ori="axial" type="button">Axis 1</button>
+        <button class="nd-btn nd-btn-secondary nd-btn-sm ori" data-ori="coronal" type="button">Axis 2</button>
+        <button class="nd-btn nd-btn-secondary nd-btn-sm ori" data-ori="sagittal" type="button">Axis 3</button>
         <label class="check inline"><input id="flipOri" type="checkbox"> Flip</label>
         <button id="rotateBtn" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" title="Rotate the frames 90 degrees clockwise">Rotate 90&deg;</button>
       </div>

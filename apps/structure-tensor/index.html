@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Structure Tensor — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF, NIfTI, PNG or JPEG image, or 2D slices of a stack" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a TIFF, NIfTI, PNG or JPEG image, or 2D slices</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Orientation analysis</summary>
+        <div class="nd-section-content">
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="sigma">Gradient σ <small>px</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About the gradient scale">i<span class="nd-info-tooltip">Standard deviation of the Gaussian derivative filter. Raise it for noisy images; along z it scales with the voxel size and must stay at least one voxel.</span></span>
+              </label>
+              <input id="sigma" type="number" min="0.5" max="20" step="0.5" value="1" />
+            </div>
+            <div class="nd-field">
+              <label for="rho">Window ρ <small>px</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About the window scale">i<span class="nd-info-tooltip">Standard deviation of the Gaussian window that averages the tensor: about the size of the structures whose orientation you want.</span></span>
+              </label>
+              <input id="rho" type="number" min="0.5" max="50" step="0.5" value="3" />
+            </div>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Distribution settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="minCoherency">Min coherency <small>0–1</small></label>
+                  <input id="minCoherency" type="number" min="0" max="1" step="0.05" value="0.2" />
+                </div>
+                <div class="nd-field">
+                  <label for="minEnergy">Min energy <small>% of max</small></label>
+                  <input id="minEnergy" type="number" min="0" max="100" step="0.5" value="1" />
+                </div>
+              </div>
+              <p class="nd-hint">Only pixels above both thresholds enter the distribution.</p>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run orientation analysis</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent"><p>Images are analysed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

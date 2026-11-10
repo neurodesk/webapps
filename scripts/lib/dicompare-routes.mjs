@@ -1,8 +1,9 @@
 import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-// Only the composite GitHub Pages site needs this bridge. Standalone builds
-// keep their existing routing and deployment-base behavior.
+// Only the composite site that serves dicompare needs this bridge; its 404 page
+// (scripts/lib/not-found-page.mjs) loads it. Standalone builds keep their
+// existing routing and deployment-base behavior.
 export async function stageDicompareRoutes({ repoRoot, siteDist }) {
   const index = join(siteDist, 'dicompare', 'index.html');
   const html = await readFile(index, 'utf8');
@@ -16,6 +17,5 @@ export async function stageDicompareRoutes({ repoRoot, siteDist }) {
     }
     await writeFile(index, html.replace(base, '').replace('<head>', `<head>\n  ${base}\n  ${restore}`));
   }
-  await cp(join(repoRoot, 'site', '404.html'), join(siteDist, '404.html'));
   await cp(join(repoRoot, 'site', 'dicompare-routes.js'), join(siteDist, 'dicompare', 'dicompare-routes.js'));
 }

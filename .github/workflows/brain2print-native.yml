@@ -2,12 +2,16 @@ name: brain2print-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - 'packages/components/package.json'
       - '.github/workflows/brain2print-native.yml'
       - 'packages/brain2print/**'
       - 'apps/brain2print/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/runtime-support/src/mindgrab/**'
       - 'packages/components/src/file-io/**'
       - 'exes/synthseg/test/fixtures/small.nii.gz'
@@ -22,7 +26,10 @@ on:
       - 'exes/node-cli/**'
       - 'packages/brain2print/**'
       - 'apps/brain2print/**'
-      - 'packages/node-drivers/**'
+      - 'packages/node-drivers/package.json'
+      - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
+      - 'packages/node-drivers/src/niimath.js'
       - 'packages/runtime-support/src/mindgrab/**'
       - 'packages/components/src/file-io/**'
       - 'exes/synthseg/test/fixtures/small.nii.gz'
@@ -44,6 +51,7 @@ permissions:
 
 jobs:
   browser-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: browser reference still holds
     runs-on: ubuntu-24.04
     timeout-minutes: 60

@@ -1,0 +1,7 @@
+{
+  "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2d4b20d866895654be8d09c1cb2ee16b5ba707f9/samsrf/validation/container-10.003-20261106/reference.zip",
+  "sha256": "2d6b4508f840a97435d6dcdc36f99f6d7bef7245db897b22a5cff510b2efe002",
+  "bytes": 11163624,
+  "fullGuiReference": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/555ae241f86996e5166cfd86c99a35c1027eecc0/samsrf/validation/container-10.003-20261106/full-gui-reference.zip",
+  "fullGuiReferenceSha256": "09de633d68f968d3683f14c4dd3626c2a63f8c7eb8c39784b20616b48e78bb0b"
+}

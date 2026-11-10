@@ -9,6 +9,7 @@ packages/desktop/release/
 
 # Build output
 dist/
+dist-sites/
 **/dist/
 **/target/
 .turbo/
@@ -118,3 +119,6 @@ apps/fastprep/public/meica/
 
 # scripts/dev-server.mjs records the server it started; never commit it
 .dev-server-*.pid
+
+# GlioMODA generated scientific reference outputs belong on Hugging Face.
+/packages/gliomoda/validation/container/

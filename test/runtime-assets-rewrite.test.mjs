@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { access, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -191,6 +191,52 @@ test('declared single-file runtime deduplication rewrites references and removes
   await assert.rejects(readFile(join(siteDist, 'vesselboost/runtime/viewer.js')), { code: 'ENOENT' });
 });
 
+test('shared NGFF codecs retain their relative helper and leave other app codecs working', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-ngff-codecs-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  const manifest = JSON.parse(await readFile(new URL('../runtime-assets/manifest.json', import.meta.url), 'utf8'));
+  const families = manifest.families.filter(family => family.id.startsWith('ngff-codec'));
+  const codecs = families.find(family => family.id === 'ngff-codecs');
+  const support = families.find(family => family.id === 'ngff-codec-support');
+  const helper = support.files[0];
+  assert.equal(codecs.target, support.target);
+  const sources = new Map([[helper.name, 'export const decode = bytes => Uint8Array.from(bytes);']]);
+  for (const file of codecs.files) {
+    sources.set(file.name, `import { decode } from './${helper.name}'; export default { name: '${file.name}', decode };`);
+  }
+  for (const family of families) {
+    for (const file of family.files) {
+      file.sha256 = createHash('sha256').update(sources.get(file.name)).digest('hex');
+    }
+  }
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families }));
+  const apps = ['stitching', 'elastix'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
+  for (const app of apps) {
+    const assets = join(siteDist, app.path, 'assets');
+    await mkdir(assets, { recursive: true });
+    for (const [name, source] of sources) await writeFile(join(assets, name), source);
+    await writeFile(join(assets, 'local.js'), `export { decode } from './${helper.name}';`);
+    await writeFile(join(assets, 'entry.js'), codecs.files.map((file, index) =>
+      `export const codec${index} = () => import('./${file.name}');`).join('\n'));
+  }
+  await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  for (const app of apps) {
+    const assets = join(siteDist, app.path, 'assets');
+    const entry = await import(pathToFileURL(join(assets, 'entry.js')));
+    for (const [index, file] of codecs.files.entries()) {
+      await assert.rejects(access(join(assets, file.name)), { code: 'ENOENT' });
+      const codec = (await entry[`codec${index}`]()).default;
+      assert.equal(codec.name, file.name);
+      assert.deepEqual(codec.decode([1, 2, 3]), Uint8Array.of(1, 2, 3));
+    }
+    const local = await import(pathToFileURL(join(assets, 'local.js')));
+    assert.deepEqual(local.decode([4, 5]), Uint8Array.of(4, 5));
+  }
+});
+
 test('a shared lazy chunk is deduplicated beside vendored component sources of the same name', async t => {
   const root = await mkdtemp(join(tmpdir(), 'runtime-lazy-chunk-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -351,4 +397,151 @@ test('asyncify shares its binary while keeping each pthread module in its app sc
     }
   }
   assert.deepEqual(await readFile(join(siteDist, '_runtime/ort-web/1.29.0-asyncify', wasm.name)), binary);
+});
+
+test('identical workspace styles share one file while different app CSS stays local', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'workspace-css-rewrite-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  const module = 'export const shared = true;';
+  const moduleHash = createHash('sha256').update(module).digest('hex');
+  const css = '.nd-field { display: block; }';
+  const hash = createHash('sha256').update(css).digest('hex');
+  const apps = ['brainchop', 'other'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
+  for (const app of apps) {
+    await mkdir(join(siteDist, app.path, 'assets'), { recursive: true });
+    await writeFile(join(siteDist, app.path, 'assets', 'shared-12345678.js'), module);
+    const name = app.id === 'brainchop' ? 'index-abcdefgh.css' : 'workspace-12345678.css';
+    await writeFile(join(siteDist, app.path, 'assets', name), css);
+    await writeFile(join(siteDist, app.path, 'assets', 'index-different.css'), `.custom-${app.id} { display: grid; }`);
+    await writeFile(join(siteDist, app.path, 'index.html'), `<html><head><link rel="stylesheet" href="/${app.path}/assets/${name}"><script type="module" src="./assets/shared-12345678.js"></script></head></html>`);
+  }
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families: [{
+    id: 'shared-module', target: 'module/test', deduplicate: true,
+    files: [{ name: 'shared.js', source_app: 'brainchop', source: 'assets/shared-12345678.js', sha256: moduleHash }],
+
+  }] }));
+  await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  assert.equal(await readFile(join(siteDist, '_runtime/module/test/shared.js'), 'utf8'), module);
+  assert.equal(await readFile(join(siteDist, `_runtime/styles/${hash}/shared.css`), 'utf8'), css);
+  for (const app of apps) {
+    assert.deepEqual(await readdir(join(siteDist, app.path, 'assets')), ['index-different.css']);
+    const html = await readFile(join(siteDist, app.path, 'index.html'), 'utf8');
+    const href = html.match(/rel="stylesheet" href="([^"]+)"/)[1];
+    for (const base of ['https://example.test/', 'https://example.test/webapps/']) {
+      const src = html.match(/type="module" src="([^"]+)"/)[1];
+      assert.equal(new URL(src, `${base}${app.path}/`).href, `${base}_runtime/module/test/shared.js`);
+      assert.equal(new URL(href, `${base}${app.path}/`).href, `${base}_runtime/styles/${hash}/shared.css`);
+    }
+  }
+});
+
+test('lazy chunks preload a deduplicated stylesheet from the shared store', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'workspace-css-preload-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families: [] }));
+  const css = '.nd-field { display: block; }';
+  const hash = createHash('sha256').update(css).digest('hex');
+  const apps = ['brainchop', 'other'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
+  for (const app of apps) {
+    const assets = join(siteDist, app.path, 'assets');
+    await mkdir(assets, { recursive: true });
+    await writeFile(join(assets, 'index-DO8KcUF6.css'), css);
+    await writeFile(join(siteDist, app.path, 'index.html'), `<html><head><link rel="stylesheet" crossorigin href="/${app.path}/assets/index-DO8KcUF6.css"><script type="module" src="/${app.path}/assets/index-Abcd1234.js"></script></head></html>`);
+    // Vite with base `/<app>/`: deps are base-relative and the helper prefixes the base.
+    await writeFile(join(assets, 'index-Abcd1234.js'), [
+      'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/decoder-Efgh5678.js","assets/index-DO8KcUF6.css"])))=>i.map(i=>d[i]);',
+      `const preloadUrl=function(e){return"/${app.path}/"+e};`,
+      'export const deps = __vite__mapDeps([0,1]).map(preloadUrl);',
+    ].join('\n'));
+    await writeFile(join(assets, 'decoder-Efgh5678.js'), 'export {};');
+  }
+  await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  for (const app of apps) {
+    assert.deepEqual((await readdir(join(siteDist, app.path, 'assets'))).sort(), ['decoder-Efgh5678.js', 'index-Abcd1234.js']);
+    const chunk = await readFile(join(siteDist, app.path, 'assets', 'index-Abcd1234.js'), 'utf8');
+    assert.ok(chunk.includes(`"../_runtime/styles/${hash}/shared.css"`), chunk);
+    const context = {};
+    vm.runInNewContext(chunk.replace('export const deps', 'globalThis.deps'), context);
+    const origin = 'https://example.test';
+    assert.deepEqual(Array.from(context.deps, dep => new URL(dep, origin).href), [
+      `${origin}/${app.path}/assets/decoder-Efgh5678.js`,
+      `${origin}/_runtime/styles/${hash}/shared.css`,
+    ]);
+  }
+});
+
+const sharedCss = '.nd-field { display: block; }';
+const sharedCssHash = createHash('sha256').update(sharedCss).digest('hex');
+
+// Two apps ship the same hashed stylesheet; `other` also ships `lazy-Abcd1234.js` with the given source.
+async function sharedStylesheetSite(t, label, lazySource) {
+  const root = await mkdtemp(join(tmpdir(), `workspace-css-${label}-`));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families: [] }));
+  const apps = ['brainchop', 'other'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
+  for (const app of apps) {
+    await mkdir(join(siteDist, app.path, 'assets'), { recursive: true });
+    await writeFile(join(siteDist, app.path, 'assets', 'index-DO8KcUF6.css'), sharedCss);
+    await writeFile(join(siteDist, app.path, 'index.html'), `<link rel="stylesheet" href="./assets/index-DO8KcUF6.css">`);
+  }
+  const lazy = join(siteDist, 'other', 'assets', 'lazy-Abcd1234.js');
+  await writeFile(lazy, lazySource);
+  const assemble = () => assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  return { siteDist, lazy, assemble };
+}
+
+for (const [label, source] of [
+  ['url', 'export const css = new URL("styles/index-DO8KcUF6.css", import.meta.url).href;'],
+  ['mapdeps', 'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["styles/index-DO8KcUF6.css"])))=>i.map(i=>d[i]);'],
+]) {
+  test(`a deduplicated stylesheet ${label} reference that resolves nowhere fails the site build`, async (t) => {
+    const { assemble } = await sharedStylesheetSite(t, `unresolved-${label}`, source);
+    await assert.rejects(assemble(), /Unresolved reference styles\/index-DO8KcUF6\.css/);
+  });
+}
+
+test('strings that only mention a deduplicated stylesheet name are left alone', async (t) => {
+  const source = [
+    'export const diagnosticKey = "assets/index-DO8KcUF6.css";',
+    'export const message = "missing assets/index-DO8KcUF6.css";',
+    'export const plain = "styles/index-DO8KcUF6.css";',
+    'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/highlight-index-DO8KcUF6.css"])))=>i.map(i=>d[i]);',
+    'export const other = new URL("./vendor-index-DO8KcUF6.css", import.meta.url).href;',
+    'export const external = new URL("styles/index-DO8KcUF6.css", "https://cdn.example/").href;',
+  ].join('\n');
+  const { siteDist, lazy, assemble } = await sharedStylesheetSite(t, 'unrelated', source);
+  await writeFile(join(siteDist, 'other', 'assets', 'highlight-index-DO8KcUF6.css'), '.highlight { color: red; }');
+  await assemble();
+  assert.equal(await readFile(lazy, 'utf8'), source);
+});
+
+test('a reference to another existing stylesheet of the same name stays local and does not fail', async (t) => {
+  const source = 'export const vendor = new URL("../vendor/index-DO8KcUF6.css", import.meta.url).href;';
+  const { siteDist, lazy, assemble } = await sharedStylesheetSite(t, 'samename', source);
+  await mkdir(join(siteDist, 'other', 'vendor'), { recursive: true });
+  await writeFile(join(siteDist, 'other', 'vendor', 'index-DO8KcUF6.css'), '.vendor { color: blue; }');
+  await assemble();
+  assert.equal(await readFile(lazy, 'utf8'), source);
+  assert.equal(await readFile(join(siteDist, 'other', 'vendor', 'index-DO8KcUF6.css'), 'utf8'), '.vendor { color: blue; }');
+});
+
+test('a deduplicated stylesheet URL keeps its query and fragment', async (t) => {
+  const { lazy, assemble } = await sharedStylesheetSite(t, 'suffix', [
+    'export const themed = new URL("/other/assets/index-DO8KcUF6.css?theme", import.meta.url).href;',
+    'export const anchored = new URL("./index-DO8KcUF6.css#root", import.meta.url).href;',
+  ].join('\n'));
+  await assemble();
+  assert.equal(await readFile(lazy, 'utf8'), [
+    `export const themed = new URL("../../_runtime/styles/${sharedCssHash}/shared.css?theme", import.meta.url).href;`,
+    `export const anchored = new URL("../../_runtime/styles/${sharedCssHash}/shared.css#root", import.meta.url).href;`,
+  ].join('\n'));
 });

@@ -94,7 +94,8 @@ function same(a, b) {
   if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) <= 1e-12 * Math.abs(a);
   return a === b;
 }
-const closeTo = (obj) => Object.fromEntries(Object.entries(obj).map(
+// A null is a value left for qsm-core to work out from the scan: the engine keeps it unset.
+const closeTo = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null).map(
   ([k, v]) => [k, typeof v === 'number' && !Number.isInteger(v) ? expect.closeTo(v, 15) : v]));
 
 /**
@@ -150,9 +151,9 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
     const s = userSettings();
     const { back } = roundTrip(s);
     // Fields whose UI name differs from the schema name, or that ConfigBridge reshapes.
-    expect(back.inversion.nltv.newton_iter).toBe(s.nltv.newton_max_iter);
+    expect(back.inversion.nltv.max_iter_newton).toBe(s.nltv.newton_max_iter);
     expect(back.inversion.fansi).toMatchObject(closeTo(s.fansi));
-    expect(back.field_mapping.phase_offset_sigma).toEqual(s.mcpc3ds.sigma);
+    expect(back.field_mapping.phase_offset_sigma_mm).toEqual(s.mcpc3ds.sigma);
     expect(back.field_mapping.linear_fit.reliability_threshold_percentile)
       .toBe(s.linearFit.reliability_threshold_percentile);
     expect(back.field_mapping.romeo.template).toBe(s.romeo.template);
@@ -279,7 +280,7 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
       expect(back.bg_removal.ismv).toEqual({ ...defaults.bg_removal.ismv, max_iter: 77 });
       expect(back.inversion.rts.delta).toBe(defaults.inversion.rts.delta);
       expect(back.inversion.rts.mu).toBe(defaults.inversion.rts.mu);
-      expect(back.field_mapping.phase_offset_sigma).toEqual([4, 4, 4]);
+      expect(back.field_mapping.phase_offset_sigma_mm).toEqual(defaults.field_mapping.phase_offset_sigma_mm);
       expect(back.swi.hp_sigma).toEqual(defaults.swi.hp_sigma);
       expect(back.swi.strength).toBe(defaults.swi.strength);
       expect(back.swi.mip_window).toBe(9);
@@ -295,18 +296,22 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
     });
   });
 
-  // The browser made its mask with this recipe; the engine replaces an unchosen general default
-  // with QSMART's BET mask, so exports must mark it chosen to describe what was run.
+  // QSMART keeps the browser's recipe even when the command omits the default mask.
   test('a QSMART export keeps the mask recipe the browser used', () => {
     const json = buildConfigJson(userSettings({ combined_method: 'qsmart' }));
     const mask = maskSectionString(['threshold:otsu', 'dilate:1', 'fill-holes:0', 'erode:1'], 'phase_quality');
     const command = wasm.generate_command_wasm(json, mask);
     expect(command).toContain('--qsm-algorithm qsmart');
     expect(command).not.toContain('--mask-preset bet');
-    expect(command).toContain('--mask-preset robust-threshold');
-    expect(wasm.generate_methods_wasm(json, 'QSMbly', mask)).not.toMatch(/\bBET\b/);
-    const toml = parseToml(wasm.config_json_to_toml_selected_wasm(json, mask));
-    expect(toml.masking.recipe_chosen).toBe(true);
+    expect(command).not.toContain('--mask-preset');
+    const methods = wasm.generate_methods_wasm(json, 'QSMbly', mask);
+    const description = methods.split('\n## References')[0];
+    expect(description).toContain('A brain mask was generated using Otsu thresholding');
+    expect(description).not.toMatch(/\bBET\b/);
+    const toml = wasm.config_json_to_toml_selected_wasm(json, mask);
+    const { config } = JSON.parse(wasm.config_from_toml_wasm(toml));
+    const defaults = JSON.parse(wasm.get_default_config_json_wasm());
+    expect(config.masking.sections).toEqual(defaults.masking.sections);
   });
 
   test('section toggles survive', () => {

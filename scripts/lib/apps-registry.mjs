@@ -40,15 +40,18 @@ export const INPUT_FORMATS = new Map([
   ['mgz', 'MGZ'],
   ['ome-zarr', 'OME-Zarr'],
   ['tiff', 'TIFF'],
+  ['mrc', 'MRC'],
   ['itk', 'NRRD/MHA/MINC'],
   ['gifti', 'GIfTI'],
   ['freesurfer', 'FreeSurfer'],
   ['mesh', 'STL/OBJ/PLY'],
   ['mrs-raw', 'Vendor MRS'],
   ['neuroflow', 'NeuroFlow workflow'],
+  ['swc', 'SWC'],
 ]);
 export const HARDWARE = new Map([
   ['cpu', 'No GPU needed'],
+  ['webgl-required', 'Needs WebGL'],
   ['webgpu-optional', 'WebGPU optional'],
   ['webgpu-required', 'Needs WebGPU'],
 ]);
@@ -61,6 +64,55 @@ const ASSET_MANIFEST_SCHEMAS = new Set(['scientific-assets-v1', 'pipeline-assets
 const PINNED_SOURCE = /^[^/\s]+\/[^@\s]+@[0-9a-f]{40}$/;
 const GA4_MEASUREMENT_ID = /^G-[A-Z0-9]+$/;
 const PACKAGE_SCRIPT = /^[a-z][a-z0-9:-]*$/;
+const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+const LOGO = /^[a-z0-9][a-z0-9-]*\.svg$/;
+// Where a catalogue is served: the repository's one GitHub Pages site, or an
+// assets-only Cloudflare Worker (.github/workflows/deploy-pages.yml).
+export const HOSTINGS = new Set(['pages', 'worker']);
+
+// A catalogue or the hub page: the host it is served from and the brand its
+// pages and app shells show.
+function validateSiteEntry(entry, label, errors) {
+  if (!HOST.test(entry?.host ?? '')) errors.push(`${label}.host must be a host name`);
+  for (const key of ['title', 'heading', 'description']) {
+    if (typeof entry?.[key] !== 'string' || !entry[key].trim()) errors.push(`${label}.${key} must be a non-empty string`);
+  }
+  const brand = entry?.brand;
+  if (typeof brand?.name !== 'string' || !brand.name.trim()) errors.push(`${label}.brand.name must be a non-empty string`);
+  if (!LOGO.test(brand?.logo ?? '')) errors.push(`${label}.brand.logo must name an SVG file in site/`);
+  if (!/^https:\/\/\S+\/$/.test(brand?.home ?? '')) errors.push(`${label}.brand.home must be an https URL ending in /`);
+  if (typeof brand?.more_apps !== 'string' || !brand.more_apps.trim()) errors.push(`${label}.brand.more_apps must be a non-empty string`);
+}
+
+function validateCatalogs(registry, errors) {
+  const catalogs = registry?.site?.catalogs;
+  if (!Array.isArray(catalogs) || catalogs.length === 0) {
+    errors.push('site.catalogs must be a non-empty array');
+    return;
+  }
+  validateSiteEntry(registry.site.hub, 'site.hub', errors);
+  const ids = new Set();
+  const hosts = new Set([registry.site.hub?.host]);
+  for (const catalog of catalogs) {
+    if (!ID.test(catalog?.id ?? '')) errors.push(`invalid catalog id: ${catalog?.id}`);
+    // dist-sites/hub holds the hub page.
+    if (catalog?.id === 'hub') errors.push('catalog id hub is reserved for the hub page');
+    if (ids.has(catalog?.id)) errors.push(`duplicate catalog id: ${catalog.id}`);
+    if (hosts.has(catalog?.host)) errors.push(`duplicate catalog host: ${catalog.host}`);
+    if (!HOSTINGS.has(catalog?.hosting)) errors.push(`hosting for catalog ${catalog?.id} must be one of: ${[...HOSTINGS].join(', ')}`);
+    validateSiteEntry(catalog, `catalog ${catalog?.id}`, errors);
+    ids.add(catalog?.id);
+    hosts.add(catalog?.host);
+  }
+  // A repository has one GitHub Pages site; it serves the primary domain.
+  const pages = catalogs.filter((catalog) => catalog?.hosting === 'pages');
+  if (pages.length !== 1 || pages[0].host !== registry.site.domain) {
+    errors.push('exactly one catalog must use pages hosting, on site.domain');
+  }
+  for (const id of ids) {
+    if (!registry.apps?.some((app) => app && appCatalogIds(app).includes(id))) errors.push(`catalog ${id} has no apps`);
+  }
+}
 
 export async function loadAppsRegistry(path = registryPath) {
   const registry = parse(await readFile(path, 'utf8'));
@@ -92,6 +144,9 @@ export async function loadAppsRegistry(path = registryPath) {
   if (!Array.isArray(registry?.apps) || registry.apps.length === 0) {
     errors.push('apps must be a non-empty array');
   }
+  validateCatalogs(registry, errors);
+  const catalogIds = new Set((registry?.site?.catalogs ?? []).map((catalog) => catalog?.id));
+  const formerPaths = new Set();
 
   for (const app of registry?.apps ?? []) {
     if (!ID.test(app.id ?? '')) errors.push(`invalid app id: ${app.id}`);
@@ -104,6 +159,21 @@ export async function loadAppsRegistry(path = registryPath) {
       errors.push(`categories must be a non-empty array of unique declared category ids for ${app.id}`);
     }
     if (Object.hasOwn(app, 'category')) errors.push(`use categories instead of category for ${app.id}`);
+    // One home per app: its canonical URL, the host its old links redirect to and
+    // the host its analytics count. `also_in` lists other catalogues that serve a copy.
+    if (typeof app.catalog !== 'string' || !catalogIds.has(app.catalog)) {
+      errors.push(`catalog for ${app.id} must be exactly one declared catalog id`);
+    }
+    if (app.also_in !== undefined && (!Array.isArray(app.also_in) || app.also_in.length === 0
+        || app.also_in.some((id) => !catalogIds.has(id) || id === app.catalog)
+        || new Set(app.also_in).size !== app.also_in.length)) {
+      errors.push(`also_in for ${app.id} must list other declared catalog ids, each once`);
+    }
+    if (app.former_paths !== undefined && (!Array.isArray(app.former_paths)
+        || app.former_paths.some((path) => !ID.test(path) || formerPaths.has(path)))) {
+      errors.push(`former_paths for ${app.id} must be unique app paths`);
+    }
+    for (const path of app.former_paths ?? []) formerPaths.add(path);
     if (!Array.isArray(app.keywords) || app.keywords.length === 0
       || app.keywords.some((keyword) => typeof keyword !== 'string' || !keyword.trim())) {
       errors.push(`keywords must be a non-empty string array for ${app.id}`);
@@ -192,12 +262,19 @@ export async function loadAppsRegistry(path = registryPath) {
     paths.add(app.path);
   }
 
+  for (const path of formerPaths) {
+    if (paths.has(path)) errors.push(`former path ${path} is a current app path`);
+  }
+
   if (errors.length) throw new Error(`Invalid app registry:\n- ${errors.join('\n- ')}`);
+  const siteEntry = (entry) => Object.freeze({ ...entry, brand: Object.freeze({ ...entry.brand }) });
   return Object.freeze({
     site: Object.freeze({
       ...registry.site,
       analytics: Object.freeze({ ...registry.site.analytics }),
       categories: Object.freeze(registry.site.categories.map((category) => Object.freeze({ ...category }))),
+      hub: siteEntry(registry.site.hub),
+      catalogs: Object.freeze(registry.site.catalogs.map(siteEntry)),
     }),
     apps: Object.freeze(registry.apps.map((app) => Object.freeze({
       ...app,
@@ -209,8 +286,35 @@ export async function loadAppsRegistry(path = registryPath) {
       inputs: Object.freeze([...app.inputs]),
       remote_compute: app.remote_compute === true,
       app_scoped_runtime_families: Object.freeze([...(app.app_scoped_runtime_families ?? [])]),
+      former_paths: Object.freeze([...(app.former_paths ?? [])]),
     }))),
   });
+}
+
+export function findCatalog(registry, id) {
+  const catalog = registry.site.catalogs.find((candidate) => candidate.id === id);
+  if (!catalog) throw new Error(`Unknown catalog '${id}'`);
+  return catalog;
+}
+
+/** The catalogue served from site.domain, which also hosts the analytics report. */
+export function primaryCatalog(registry) {
+  return registry.site.catalogs.find((catalog) => catalog.host === registry.site.domain);
+}
+
+/** Every catalogue that serves an app: its home first, then `also_in`. */
+export function appCatalogIds(app) {
+  return [app.catalog, ...(app.also_in ?? [])];
+}
+
+/** The apps a catalogue's host serves. */
+export function catalogApps(registry, catalog) {
+  return registry.apps.filter((app) => appCatalogIds(app).includes(catalog.id));
+}
+
+/** The deployed URL of an app on a host that serves it; its home host by default. */
+export function appUrl(registry, app, catalog = findCatalog(registry, app.catalog)) {
+  return `https://${catalog.host}/${app.path}/`;
 }
 
 export function findApp(registry, id) {

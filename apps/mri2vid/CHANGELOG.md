@@ -1,5 +1,53 @@
 # mri2vid
 
+## 0.6.20261109
+
+### Patch Changes
+
+- Updated dependencies [6ca6f49]
+  - @neurodesk/webapp-components@0.26.0
+  - @neurodesk/mri2vid@0.6.20261109
+
+## 0.6.20261108
+
+### Patch Changes
+
+- 2fecf25: Label the orientations Axis 1, 2 and 3 instead of axial, coronal and sagittal. They are array-axis reslices, so the plane names were only right for sagittal acquisitions. The orientation keys, command line values and automation parameters are unchanged. Downloads are named by axis.
+
+  Raise the video bitrate to 1 bit per pixel with a 2 Mbps floor (was 0.12 with a 1 Mbps floor). This reduces compression smoothing, most of all for upscaled frames.
+
+  Add licence notices for the bundled NiiVue and its dependencies, and the MIT text for the muxers.
+
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [2fecf25]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+  - @neurodesk/mri2vid@0.6.20261108
+
+## 0.6.20261104
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.24.0
+  - @neurodesk/mri2vid@0.6.20261104
+
+## 0.6.20261103
+
+### Patch Changes
+
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+  - @neurodesk/mri2vid@0.6.20261103
+- Updated dependencies [8e9346d]
+- Updated dependencies [239dedd]
+  - @neurodesk/webapp-components@0.22.4
+  - @neurodesk/mri2vid@0.6.20261103
+
 ## 0.6.20261031
 
 ### Patch Changes

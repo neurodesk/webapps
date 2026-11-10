@@ -154,10 +154,6 @@ impl Tool for Nesvor {
         true
     }
 
-    fn cpu_flags(&self) -> &'static [&'static str] {
-        &["--device", "-1"]
-    }
-
     fn commands(&self) -> &'static [&'static str] {
         &["reconstruct"]
     }
@@ -249,6 +245,46 @@ impl Tool for Nesvor {
         })
     }
 
+    fn parse_log_line(&self, job: &ValidatedJob, line: &str) -> LogUpdate {
+        let (level, message) = split_python_log(line);
+        for (needle, stage, fraction) in STAGES {
+            if message.contains(needle) {
+                return LogUpdate {
+                    level,
+                    progress: Some((*fraction, stage.to_string())),
+                };
+            }
+        }
+        if let Some(iteration) = training_row_iteration(message) {
+            let total = job
+                .options
+                .get("iterations")
+                .and_then(integer_value)
+                .map(|value| value as u64)
+                .unwrap_or(DEFAULT_ITERATIONS)
+                .max(1);
+            let ratio = (iteration as f64 / total as f64).clamp(0.0, 1.0);
+            return LogUpdate {
+                level,
+                progress: Some((0.40 + 0.50 * ratio, "Reconstruction".to_string())),
+            };
+        }
+        LogUpdate {
+            level,
+            progress: None,
+        }
+    }
+
+    fn layout(&self) -> super::Layout<'_> {
+        super::Layout::Files(self)
+    }
+}
+
+impl super::FileTool for Nesvor {
+    fn cpu_flags(&self) -> &'static [&'static str] {
+        &["--device", "-1"]
+    }
+
     fn argv(&self, job: &ValidatedJob, paths: &ToolPaths) -> Vec<String> {
         let mut argv = vec!["nesvor".to_string(), job.command.clone()];
         argv.push("--input-stacks".to_string());
@@ -308,36 +344,6 @@ impl Tool for Nesvor {
         argv.push("--verbose".to_string());
         argv.push("1".to_string());
         argv
-    }
-
-    fn parse_log_line(&self, job: &ValidatedJob, line: &str) -> LogUpdate {
-        let (level, message) = split_python_log(line);
-        for (needle, stage, fraction) in STAGES {
-            if message.contains(needle) {
-                return LogUpdate {
-                    level,
-                    progress: Some((*fraction, stage.to_string())),
-                };
-            }
-        }
-        if let Some(iteration) = training_row_iteration(message) {
-            let total = job
-                .options
-                .get("iterations")
-                .and_then(integer_value)
-                .map(|value| value as u64)
-                .unwrap_or(DEFAULT_ITERATIONS)
-                .max(1);
-            let ratio = (iteration as f64 / total as f64).clamp(0.0, 1.0);
-            return LogUpdate {
-                level,
-                progress: Some((0.40 + 0.50 * ratio, "Reconstruction".to_string())),
-            };
-        }
-        LogUpdate {
-            level,
-            progress: None,
-        }
     }
 
     fn outputs(&self, _job: &ValidatedJob) -> &'static [OutputSpec] {
@@ -492,7 +498,7 @@ fn is_clock(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tools::LogLevel;
+    use crate::tools::{FileTool, LogLevel};
     use serde_json::json;
     use std::path::PathBuf;
 
@@ -851,7 +857,8 @@ mod tests {
     fn cpu_runs_append_the_device_flag_instead_of_passing_the_gpu() {
         let job = Nesvor.validate(&example_spec(), &example_parts()).unwrap();
         let paths = ToolPaths::container();
-        let gpu = crate::runner::RunRequest::new(
+        let gpu = crate::runner::RunRequest::files(
+            &Nesvor,
             &Nesvor,
             "a".into(),
             PathBuf::from("/j"),
@@ -862,7 +869,8 @@ mod tests {
         assert!(gpu.gpu);
         assert_eq!(gpu.image, None);
         assert!(!gpu.argv.contains(&"--device".to_string()));
-        let cpu = crate::runner::RunRequest::new(
+        let cpu = crate::runner::RunRequest::files(
+            &Nesvor,
             &Nesvor,
             "a".into(),
             PathBuf::from("/j"),

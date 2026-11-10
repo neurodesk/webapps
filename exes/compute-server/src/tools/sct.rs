@@ -174,6 +174,20 @@ impl Tool for Sct {
         })
     }
 
+    fn parse_log_line(&self, _job: &ValidatedJob, line: &str) -> LogUpdate {
+        let (level, _) = super::split_python_log(line);
+        LogUpdate {
+            level,
+            progress: None,
+        }
+    }
+
+    fn layout(&self) -> super::Layout<'_> {
+        super::Layout::Files(self)
+    }
+}
+
+impl super::FileTool for Sct {
     fn argv(&self, job: &ValidatedJob, paths: &ToolPaths) -> Vec<String> {
         let JobInputs::Sct { analysis } = &job.inputs else {
             unreachable!("validated SCT inputs")
@@ -211,14 +225,6 @@ impl Tool for Sct {
             }
         }
         argv
-    }
-
-    fn parse_log_line(&self, _job: &ValidatedJob, line: &str) -> LogUpdate {
-        let (level, _) = super::split_python_log(line);
-        LogUpdate {
-            level,
-            progress: None,
-        }
     }
 
     fn outputs(&self, job: &ValidatedJob) -> &'static [OutputSpec] {
@@ -262,6 +268,7 @@ fn valid_slices(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tools::FileTool;
     use serde_json::json;
     use std::path::PathBuf;
 
@@ -348,7 +355,8 @@ mod tests {
                 &[part("cord", true)],
             )
             .unwrap();
-        let request = crate::runner::RunRequest::new(
+        let request = crate::runner::RunRequest::files(
+            &Sct,
             &Sct,
             "sct-test".into(),
             PathBuf::from("/job-test"),

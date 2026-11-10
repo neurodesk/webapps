@@ -14,6 +14,9 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     moreAppsHref: shellScript.dataset.moreAppsHref,
     sourceHref: shellScript.dataset.sourceHref,
     url: shellScript.dataset.appUrl,
+    // The catalogue that hosts the app: its name in the privacy text and More Apps link.
+    brandName: shellScript.dataset.brandName || 'Neurodesk',
+    moreAppsLabel: shellScript.dataset.moreAppsLabel || 'More Neurodesk web apps',
     shell: shellScript.dataset.appShell,
     standaloneHref: new URL(shellScript.dataset.standaloneHref || 'standalone.json', shellScript.src).href,
     componentsHref: new URL(shellScript.dataset.componentsHref || 'shell-adapters/components/', shellScript.src).href,
@@ -257,7 +260,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
         || `<p>Please cite the scientific software, methods, and models used in your analysis. App-specific citation details are available in the documentation and source repository.</p>`;
     }
     const appPrivacy = information?.privacy ? `<p>${escapeHtml(information.privacy)}</p>` : '';
-    return `<p>Imaging files are processed in your browser unless the app clearly states otherwise. The Neurodesk hosting layer records page views only and sends no custom events. It makes no analytics request when Do Not Track or Global Privacy Control is enabled, and never sends your loaded imaging data to Google Analytics.</p>${appPrivacy}`;
+    return `<p>Imaging files are processed in your browser unless the app clearly states otherwise. The ${escapeHtml(metadata.brandName)} hosting layer records page views only and sends no custom events. It makes no analytics request when Do Not Track or Global Privacy Control is enabled, and never sends your loaded imaging data to Google Analytics.</p>${appPrivacy}`;
   }
 
   function openFallbackDialog(kind) {
@@ -374,7 +377,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
         toggle.querySelector('span').dataset.neurodeskThemeLabel = '';
         return toggle;
       })(),
-      createLink('More Apps', 'apps', metadata.moreAppsHref, 'More Neurodesk web apps'),
+      createLink('More Apps', 'apps', metadata.moreAppsHref, metadata.moreAppsLabel),
       createLink('GitHub', 'github', metadata.sourceHref, 'View this app on GitHub'),
     );
     bar.append(identity, navigation);

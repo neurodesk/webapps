@@ -2,9 +2,11 @@ name: qsmbly-native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/qsmbly-native.yml'
       - 'packages/qsmbly/**'
+      - 'scripts/lib/download-bytes.mjs'
       - 'packages/components/src/file-io/NiftiUtils.js'
       - 'apps/qsmbly/rust-wasm/**'
       - 'apps/qsmbly/examples.json'
@@ -15,6 +17,7 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/qsmbly/**'
+      - 'scripts/lib/download-bytes.mjs'
       - 'packages/components/src/file-io/NiftiUtils.js'
       - 'apps/qsmbly/rust-wasm/**'
       - 'apps/qsmbly/examples.json'
@@ -34,6 +37,7 @@ permissions:
 
 jobs:
   portable:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write

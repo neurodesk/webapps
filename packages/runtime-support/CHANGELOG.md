@@ -1,5 +1,46 @@
 # @neurodesk/runtime-support
 
+## 0.9.24
+
+### Patch Changes
+
+- Updated dependencies [6ca6f49]
+  - @neurodesk/webapp-components@0.26.0
+
+## 0.9.23
+
+### Patch Changes
+
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+
+## 0.9.22
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.24.0
+
+## 0.9.21
+
+### Patch Changes
+
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+
+## 0.9.20
+
+### Patch Changes
+
+- Updated dependencies [8e9346d]
+- Updated dependencies [239dedd]
+  - @neurodesk/webapp-components@0.22.4
+
 ## 0.9.19
 
 ### Patch Changes

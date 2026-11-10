@@ -36,10 +36,13 @@ async function fixture(t, { model = false, template = false, templateExample = f
         domain: 'fixture.invalid',
         analytics: { measurement_id: 'G-FIXTURE', period_days: 30 },
         categories: [{ id: 'test', title: 'Test', description: 'Test apps' }],
+        hub: { host: 'hub.fixture.invalid', title: 'Hub', heading: 'Hub', description: 'Hub', brand: { name: 'Fixture', logo: 'fixture.svg', home: 'https://fixture.invalid/', more_apps: 'More fixture apps' } },
+        catalogs: [{ id: 'fixture', host: 'fixture.invalid', hosting: 'pages', title: 'Fixture', heading: 'Fixture', description: 'Fixture', brand: { name: 'Fixture', logo: 'fixture.svg', home: 'https://fixture.invalid/', more_apps: 'More fixture apps' } }],
       },
       apps: ['alpha', 'beta'].map(id => ({
         id,
         path: id,
+        catalog: 'fixture',
         title: id,
         description: 'Fixture app',
         categories: ['test'],

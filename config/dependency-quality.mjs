@@ -75,6 +75,7 @@ export const sourceMirrors = {
   'apps/spinalcordtoolbox/web/vendor/webapp-components/src/': 'packages/components/src/',
   'apps/vesselboost/web/vendor/webapp-components/src/': 'packages/components/src/',
   'apps/calmar/web/vendor/calmar/src/': 'packages/calmar/src/',
+  'apps/calmar/web/vendor/nii2tvx/': 'packages/nii2tvx/',
   'apps/easy-mp2rage/web/vendor/easy-mp2rage/': 'packages/easy-mp2rage/',
   'apps/musclemap/web/vendor/musclemap/src/': 'packages/musclemap/src/',
   'apps/seedseg/web/vendor/seedseg/src/': 'packages/seedseg/src/',

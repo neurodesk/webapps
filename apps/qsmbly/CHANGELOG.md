@@ -1,5 +1,50 @@
 # qsmbly
 
+## 0.31.20261109
+
+### Patch Changes
+
+- Updated dependencies [6ca6f49]
+  - @neurodesk/webapp-components@0.26.0
+
+## 0.31.20261108
+
+### Patch Changes
+
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+
+## 0.31.20261104
+
+### Patch Changes
+
+- 6343993: Merge upstream astewartau/qsmbly 0b6e3d3..dab1846:
+
+  - Repin qsmxt-engine to QSMxT 921e5fc (now pinned at 9994450; QSM.rs v0.40.0) (#196)
+  - Parity script: find a run's record, methods and graph under nested workflow folders (#195)
+  - next.html: each step's run state on its header line, not under the chevron (#198)
+  - next.html: the pipeline rules' recommendations and reference pipelines (#194) (#197)
+
+  Adapt the browser Rust bindings to the new masking and ARLO APIs, preserving voxel-major inputs, echo ordering, and masked outputs.
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.24.0
+
+## 0.31.20261103
+
+### Patch Changes
+
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+- Updated dependencies [8e9346d]
+- Updated dependencies [239dedd]
+  - @neurodesk/webapp-components@0.22.4
+
 ## 0.31.20261031
 
 ### Patch Changes

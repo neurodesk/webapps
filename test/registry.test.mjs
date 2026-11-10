@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { loadAppsRegistry, MAX_DESCRIPTION_LENGTH, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { MAX_DESCRIPTION_LENGTH, catalogApps, findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { validateAssetManifest } from '../scripts/lib/scientific-assets.mjs';
 
 test('catalog contains every app workspace without a repeated inventory', async () => {
@@ -175,7 +175,7 @@ test('pnpm is the only workspace lockfile authority', async () => {
   const found = [];
   async function visit(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') continue;
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === 'dist-sites') continue;
       const path = join(directory, entry.name);
       if (entry.isDirectory()) await visit(path);
       else if (entry.name === 'package-lock.json') found.push(path.slice(repoRoot.length + 1));
@@ -190,20 +190,43 @@ test('catalog assigns task categories and shares apps across related categories'
   const registry = await loadAppsRegistry();
   const expected = {
     dwi2trx: ['diffusion-imaging'],
-    niimath: ['image-processing'],
+    niimath: ['preprocessing'],
     syncro: ['registration', 'lesion-mapping'],
     disconnectome: ['lesion-mapping', 'diffusion-imaging'],
     mri2vid: ['visualization'],
     surfannotate: ['surfaces', 'visualization'],
     topofit: ['surfaces'],
-    lcmodel: ['quantitative-mri'],
+    samsrf: ['functional-imaging'],
+    lcmodel: ['spectroscopy'],
+    n4: ['preprocessing'],
+    nesvor: ['reconstruction', 'fetal-imaging'],
+    deface: ['privacy'],
+    brainchop: ['segmentation'],
+    dcm2niix: ['conversion'],
+    reproin: ['conversion'],
+    'calcium-imaging': ['calcium-imaging'],
+    stardist: ['segmentation'],
+    microsam: ['segmentation'],
+    neuromorph: ['morphometry'],
+    'structure-tensor': ['fibre-orientation'],
+    'spot-detection': ['spot-detection'],
+    'microscope-qc': ['quality-control'],
+    zarro: ['visualization'],
+    fastprep: ['preprocessing', 'functional-imaging', 'pipelines'],
+    'me-ica': ['preprocessing', 'functional-imaging'],
+    hmc: ['preprocessing', 'diffusion-imaging'],
+    sdc: ['diffusion-imaging', 'preprocessing'],
+    dwicorrect: ['diffusion-imaging', 'preprocessing'],
+    bison: ['segmentation'],
+    'white-matter-lesions': ['segmentation'],
+    degibbs: ['preprocessing', 'diffusion-imaging'],
   };
   for (const [id, categories] of Object.entries(expected)) {
     assert.deepEqual(registry.apps.find((app) => app.id === id).categories, categories);
   }
   for (const category of registry.site.categories) {
     const count = registry.apps.filter((app) => app.categories.includes(category.id)).length;
-    assert.ok(count >= 2, `${category.id} must hold at least two apps`);
+    assert.ok(count >= 1, `${category.id} must hold at least one app`);
   }
 });
 
@@ -251,4 +274,85 @@ test('registry validation rejects a handoff form apps cannot receive', async () 
   const path = join(await mkdtemp(join(tmpdir(), 'apps-registry-')), 'apps.yml');
   await writeFile(path, stringify(raw));
   await assert.rejects(loadAppsRegistry(path), /handoff for .* must be one of nifti, dicom, none/);
+});
+
+test('every app belongs to exactly one declared catalogue', async () => {
+  const registry = await loadAppsRegistry();
+  const ids = new Set(registry.site.catalogs.map(({ id }) => id));
+  for (const app of registry.apps) assert.ok(ids.has(app.catalog), `${app.id} must name a declared catalogue`);
+  assert.deepEqual(
+    registry.apps.filter(({ catalog }) => catalog === 'msk').map(({ id }) => id).sort(),
+    ['carotid-flow', 'musclemap', 'seedseg'],
+  );
+});
+
+test('every catalogue and the hub name a logo the site ships', async () => {
+  const registry = await loadAppsRegistry();
+  for (const entry of [registry.site.hub, ...registry.site.catalogs]) {
+    await access(join(repoRoot, 'site', entry.brand.logo));
+  }
+});
+
+test('registry rejects unknown, missing and repeated catalogue membership', async () => {
+  const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+  const path = join(await mkdtemp(join(tmpdir(), 'apps-catalogs-')), 'apps.yml');
+  const original = raw.apps[0].catalog;
+  for (const catalog of [undefined, 'unknown', ['neuro', 'msk']]) {
+    raw.apps[0].catalog = catalog;
+    await writeFile(path, stringify(raw));
+    await assert.rejects(loadAppsRegistry(path), /catalog for musclemap must be exactly one declared catalog id/);
+  }
+  raw.apps[0].catalog = original;
+  await writeFile(path, stringify(raw));
+  await loadAppsRegistry(path);
+});
+
+test('also_in lists other declared catalogues, each once', async () => {
+  const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+  const path = join(await mkdtemp(join(tmpdir(), 'apps-also-in-')), 'apps.yml');
+  for (const alsoIn of [[], 'neuro', ['unknown'], [raw.apps[0].catalog], ['neuro', 'neuro']]) {
+    raw.apps[0].also_in = alsoIn;
+    await writeFile(path, stringify(raw));
+    await assert.rejects(loadAppsRegistry(path), /also_in for musclemap must list other declared catalog ids, each once/);
+  }
+  raw.apps[0].also_in = ['neuro'];
+  await writeFile(path, stringify(raw));
+  const registry = await loadAppsRegistry(path);
+  assert.ok(catalogApps(registry, findCatalog(registry, 'neuro')).some(({ id }) => id === 'musclemap'));
+});
+
+test('registry rejects duplicate catalogue hosts and ids, and catalogues without apps', async () => {
+  const cases = [
+    [raw => { raw.site.catalogs[1].host = raw.site.catalogs[0].host; }, /duplicate catalog host: webapps\.neurodesk\.org/],
+    [raw => { raw.site.catalogs[1].host = raw.site.hub.host; }, /duplicate catalog host: webapps\.sciget\.org/],
+    [raw => { raw.site.catalogs[1].id = 'neuro'; }, /duplicate catalog id: neuro/],
+    [raw => { raw.site.catalogs[1].id = 'hub'; }, /catalog id hub is reserved for the hub page/],
+    [raw => { raw.site.catalogs.push({ ...raw.site.catalogs[1], id: 'empty', host: 'empty.sciget.org' }); }, /catalog empty has no apps/],
+    [raw => { raw.site.catalogs[1].hosting = 'pages'; }, /exactly one catalog must use pages hosting, on site\.domain/],
+    [raw => { raw.site.catalogs[0].hosting = 'worker'; }, /exactly one catalog must use pages hosting, on site\.domain/],
+    [raw => { raw.site.catalogs[1].hosting = 'netlify'; }, /hosting for catalog msk must be one of: pages, worker/],
+    [raw => { delete raw.site.hub; }, /site\.hub\.host must be a host name/],
+    [raw => { raw.site.catalogs[1].brand.logo = '../secret.svg'; }, /catalog msk\.brand\.logo must name an SVG file/],
+    [raw => { raw.site.catalogs = []; }, /site\.catalogs must be a non-empty array/],
+  ];
+  for (const [mutate, message] of cases) {
+    const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+    mutate(raw);
+    const path = join(await mkdtemp(join(tmpdir(), 'apps-catalogs-')), 'apps.yml');
+    await writeFile(path, stringify(raw));
+    await assert.rejects(loadAppsRegistry(path), message);
+  }
+});
+
+test('registry rejects a former path that is repeated or still in use', async () => {
+  for (const [paths, message] of [
+    [['dicom2vid'], /former_paths for .* must be unique app paths/],
+    [['dicomview'], /former path dicomview is a current app path/],
+  ]) {
+    const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+    raw.apps[0].former_paths = paths;
+    const path = join(await mkdtemp(join(tmpdir(), 'apps-catalogs-')), 'apps.yml');
+    await writeFile(path, stringify(raw));
+    await assert.rejects(loadAppsRegistry(path), message);
+  }
 });

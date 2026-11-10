@@ -6,7 +6,7 @@ on your machine, and the original Python command-line script.
 
 ## Browser tool
 
-Live site (once GitHub Pages is enabled): https://thomshaw92.github.io/DICOM2Vid/
+Live site: https://webapps.neurodesk.org/mri2vid/
 
 ### please note, this repo was written partly with Claude AI, and may contain errors.
 Drag in a DICOM folder, or a `.nii` / `.nii.gz` / `.mgz` file. Pick the
@@ -62,7 +62,10 @@ python MRI2vid.py --folder <path_to_dicom_folder> --output out.mp4 --orientation
 Options:
 
 - `--orientation`: `sagittal`, `coronal`, `axial`, `sagittal_flipped`,
-  `coronal_flipped`, `axial_flipped`.
+  `coronal_flipped`, `axial_flipped`. These step through array axes, not anatomical
+  planes: `axial` is axis 1, `coronal` axis 2, and `sagittal` axis 3 (the stored
+  slices). The names only match the anatomy for a sagittal acquisition, so the web
+  page labels them Axis 1, 2 and 3.
 - `--fps`: frames per second (default 20).
 - `--start-slice` / `--end-slice` / `--slice-step`: limit or subsample the slice
   range (0-based, end exclusive; negative indices count from the end).

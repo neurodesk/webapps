@@ -16,6 +16,7 @@ name: sdc-registration-gate
 # data into a failure. It also checks the DWI unwarp against sdcflows' and reports the slab run.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/sdc-registration-gate.yml'
       - 'packages/hmc-registration/**'
@@ -83,6 +84,7 @@ permissions:
 
 jobs:
   syn-replay:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: SyN-only replay on the 1.2 mm grid in the WebAssembly kernel
     runs-on: ubuntu-24.04
     timeout-minutes: 150
@@ -143,6 +145,7 @@ jobs:
           if-no-files-found: warn
 
   pipeline:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: SyN-SDC pipeline (packages/sdc) end to end on the full brain, 1.2 mm grid
     runs-on: ubuntu-24.04
     timeout-minutes: 300

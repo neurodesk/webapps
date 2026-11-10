@@ -1,0 +1,32 @@
+{
+  "name": "gliomoda",
+  "version": "0.1.20261109",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app gliomoda",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "node ../../scripts/lint.mjs --workspace"
+  },
+  "dependencies": {
+    "@neurodesk/gliomoda": "workspace:*",
+    "@neurodesk/synthsr": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.33",
+    "onnxruntime-web": "1.29.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "playwright": "1.64.0",
+    "vite": "^6.3.2"
+  },
+  "neurodeskWebapp": {
+    "static": {
+      "coiServiceWorker": true
+    }
+  },
+  "license": "Apache-2.0"
+}

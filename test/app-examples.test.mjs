@@ -38,6 +38,24 @@ test('new apps cannot omit examples or browser coverage', async t => {
   await assert.rejects(loadAppExamples({ ...app, ci: { browser_test: false } }, root), /enable ci.browser_test/);
 });
 
+test('rotations name concrete cases and declare their first complete bundle', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'example-rotation-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const app = { id: 'future-app', ci: { browser_test: true } };
+  await mkdir(join(root, 'apps/future-app'), { recursive: true });
+  const path = join(root, 'apps/future-app/examples.json');
+  const second = { ...example, id: 'second' };
+  const rotating = { ...example, id: 'rotate', rotation: ['t1', 'second'] };
+  await writeFile(path, JSON.stringify([rotating, example, second]));
+  assert.equal((await loadAppExamples(app, root)).length, 3);
+  for (const rotation of [[], ['t1'], ['t1', 't1'], ['t1', 'missing'], ['t1', 'rotate']]) {
+    await writeFile(path, JSON.stringify([{ ...rotating, rotation }, example, second]));
+    await assert.rejects(loadAppExamples(app, root), /example rotations/);
+  }
+  await writeFile(path, JSON.stringify([{ ...rotating, files: [{ ...example.files[0], name: 'different.nii' }] }, example, second]));
+  await assert.rejects(loadAppExamples(app, root), /rotation files must match/);
+});
+
 test('every declared example is available in the locked offline inventory', async () => {
   const { apps } = await loadAppsRegistry();
   const sources = JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.sources.json')));

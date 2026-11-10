@@ -4,11 +4,14 @@
 // geometry travels to and from niimath. STL is what slicers and 3D printers take.
 const MZ3_SIGNATURE = 23117;
 
-export function writeMz3(vertices, faces) {
-  const buffer = new ArrayBuffer(16 + faces.length * 4 + vertices.length * 4);
+// `colors`, when given, is one RGBA byte quadruple per vertex (mz3 attribute 4).
+export function writeMz3(vertices, faces, colors = null) {
+  if (colors && colors.length !== (vertices.length / 3) * 4) throw new Error('mz3 colours need four bytes per vertex.');
+  const colorBytes = colors ? colors.length : 0;
+  const buffer = new ArrayBuffer(16 + faces.length * 4 + vertices.length * 4 + colorBytes);
   const view = new DataView(buffer);
   view.setUint16(0, MZ3_SIGNATURE, true);
-  view.setUint16(2, 3, true); // faces and vertices, no colours or scalars
+  view.setUint16(2, colors ? 7 : 3, true); // faces and vertices, then colours when given
   view.setUint32(4, faces.length / 3, true);
   view.setUint32(8, vertices.length / 3, true);
   view.setUint32(12, 0, true);
@@ -21,7 +24,36 @@ export function writeMz3(vertices, faces) {
     view.setFloat32(offset, value, true);
     offset += 4;
   }
+  if (colors) new Uint8Array(buffer, offset, colorBytes).set(colors);
   return buffer;
+}
+
+// A scalar-only mz3 (attribute 8): one float per vertex and no geometry, which NiiVue
+// loads as a layer on a mesh with that many vertices (addMeshLayer).
+export function writeMz3Scalars(values) {
+  const buffer = new ArrayBuffer(16 + values.length * 4);
+  const view = new DataView(buffer);
+  view.setUint16(0, MZ3_SIGNATURE, true);
+  view.setUint16(2, 8, true);
+  view.setUint32(4, 0, true);
+  view.setUint32(8, values.length, true);
+  view.setUint32(12, 0, true);
+  values.forEach((value, index) => view.setFloat32(16 + index * 4, value, true));
+  return buffer;
+}
+
+// A FreeSurfer curvature file (new format: 0xFFFFFF, then big-endian vertex count,
+// face count, values per vertex and one float per vertex).
+export function readFreeSurferCurv(bytes) {
+  const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
+  if (input.byteLength < 15 || input[0] !== 0xff || input[1] !== 0xff || input[2] !== 0xff) throw new Error('Not a FreeSurfer curvature file.');
+  const count = view.getInt32(3, false);
+  if (view.getInt32(11, false) !== 1) throw new Error('The curvature file has more than one value per vertex.');
+  if (input.byteLength < 15 + count * 4) throw new Error('Truncated curvature file.');
+  const values = new Float32Array(count);
+  for (let index = 0; index < count; index++) values[index] = view.getFloat32(15 + index * 4, false);
+  return values;
 }
 
 export async function readMz3(bytes) {

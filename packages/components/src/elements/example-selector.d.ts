@@ -12,6 +12,8 @@ export interface AppExample {
   description: string;
   expectedResult: string;
   files: ExampleFile[];
+  /** Cycle through these catalogue IDs after successful loads; retries keep the same case. */
+  rotation?: string[];
 }
 
 export interface ExampleLoadContext {

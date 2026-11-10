@@ -1,0 +1,108 @@
+[
+  {
+    "id": "x001-bars",
+    "label": "Sweeping bars, left hemisphere (SamSrf X001)",
+    "description": "Six original whole-surface X001 sweeping-bar runs (TR 1 s), with a V1–V3 analysis ROI, bar apertures, a V1 seed and Benson template. Whole-surface data preserves global-signal correction for connective fields. SamSrf example data, OSF h92mr, CC BY 4.0.",
+    "expectedResult": "Polar angle, eccentricity, pRF size and R² maps across V1 to V3 for the chosen analysis, as the GIfTI files SamSrf exports.",
+    "files": [
+      {
+        "role": "run",
+        "name": "lh_uBars1.gii",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/702c48a3204d546abc28f0da625fd9672c8e3b1f/samsrf/example-full/lh_uBars1.gii",
+        "sha256": "5def0707a842514ea060d925d768b0f234bbd32cef429fd1cd5141118f94c3b3",
+        "bytes": 128881573
+      },
+      {
+        "role": "run",
+        "name": "lh_uBars2.gii",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/702c48a3204d546abc28f0da625fd9672c8e3b1f/samsrf/example-full/lh_uBars2.gii",
+        "sha256": "bc27861c00e067dbb1023dc8cb6dd30dd8eecbb9db18bdd49985f09a47330109",
+        "bytes": 128898481
+      },
+      {
+        "role": "run",
+        "name": "lh_uBars3.gii",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/702c48a3204d546abc28f0da625fd9672c8e3b1f/samsrf/example-full/lh_uBars3.gii",
+        "sha256": "233f0a6e2e122cfab4f7e031af153e1c19c30fb889545f6b2033e239fa5551ba",
+        "bytes": 128904153
+      },
+      {
+        "role": "run",
+        "name": "lh_uBars4.gii",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/702c48a3204d546abc28f0da625fd9672c8e3b1f/samsrf/example-full/lh_uBars4.gii",
+        "sha256": "2fd966b625e7a49140be014525fb9a56cbcf2fb9be25cde12289000a556181da",
+        "bytes": 128886221
+      },
+      {
+        "role": "run",
+        "name": "lh_uBars5.gii",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/702c48a3204d546abc28f0da625fd9672c8e3b1f/samsrf/example-full/lh_uBars5.gii",
+        "sha256": "49bf7b137ea6e2501bb81923cad656145f9fb62e3b3a9d9bc3470bfbb64c5567",
+        "bytes": 128900065
+      },
+      {
+        "role": "run",
+        "name": "lh_uBars6.gii",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/702c48a3204d546abc28f0da625fd9672c8e3b1f/samsrf/example-full/lh_uBars6.gii",
+        "sha256": "21ae574635b8974ced357fe48b0f4d2fd3cea3ec9ee7ffb9cb20e4b0c3e00134",
+        "bytes": 128895789
+      },
+      {
+        "role": "apertures",
+        "name": "aps_Bars.mat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/aps_Bars.mat",
+        "sha256": "901749ddd3643c60a02ed620ecb8237955af94a54c86679d425f5a8d3ea2d638",
+        "bytes": 1091391
+      },
+      {
+        "role": "roi",
+        "name": "lh.V123.label",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh.V123.label",
+        "sha256": "4a248c6862d5858eb4a4379918222afe9055164e802c749df2f0ce528a5c348f",
+        "bytes": 261998
+      },
+      {
+        "role": "seed",
+        "name": "lh.V1_seed.label",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh.V1_seed.label",
+        "sha256": "a72a0f3b863f7b374764d17bcd7a4bc461821019d514bfa29c74f6b49645944a",
+        "bytes": 114693
+      },
+      {
+        "role": "template",
+        "name": "lh_benson.gii",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh_benson.gii",
+        "sha256": "719b670e3c5d3d24861f3d3f88c5889afc6197f3e4e5bb3a92620c9b6a181853",
+        "bytes": 154916
+      },
+      {
+        "role": "white",
+        "name": "lh.white",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh.white",
+        "sha256": "366658ba58865c930f0f8d856cb81bbdff0081aaff008831d96a2fd7fd0dfb7d",
+        "bytes": 4834713
+      },
+      {
+        "role": "inflated",
+        "name": "lh.inflated",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh.inflated",
+        "sha256": "b32b70c4274429e0e99f7b9a1452d758464df5e51015728e0e8c145ec32bcedb",
+        "bytes": 4835530
+      },
+      {
+        "role": "curv",
+        "name": "lh.curv",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh.curv",
+        "sha256": "48e8392d5de3a0c61e0b88dde6d4480b9c1608bc1a70be10090cc7a410e22b1e",
+        "bytes": 537055
+      },
+      {
+        "role": "area",
+        "name": "lh.area",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ffa0486c3e716e257551c1ae9471ea996b19be59/samsrf/example/lh.area",
+        "sha256": "d00d0bbb96d03e7b6e0811c9ae7f9c828cef9cb4ecc95171ef91a4b4e572b2cf",
+        "bytes": 537055
+      }
+    ]
+  }
+]

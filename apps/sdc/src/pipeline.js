@@ -38,7 +38,7 @@ export function selectPair(series, { ordered = false } = {}) {
 }
 
 /** Give flat BIDS-named files their declared subject/session layout for the shared reader. */
-function bidsFile(file) {
+export function bidsFile(file) {
   if (file.webkitRelativePath || file._webkitRelativePath) return file;
   const { entities, suffix } = parseBidsName(file.name);
   const datatype = { dwi: "dwi", epi: "fmap", T1w: "anat" }[suffix];

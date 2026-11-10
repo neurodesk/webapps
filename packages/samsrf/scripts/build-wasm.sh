@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Rebuild the committed SamSrf WebAssembly core in wasm/ after a change to exes/samsrf.
+# The web app stages this directory and the command line loads it, so both run one binary.
+#
+#   build-wasm.sh          rebuild wasm/ from the Rust source
+#   build-wasm.sh --check  rebuild into a scratch directory and fail unless every file equals wasm/
+#
+# The canonical release builder is the wasm-source CI job. These toolchain pins alone do not
+# guarantee identical Rust instruction layouts in other build environments. Panic messages embed
+# source paths, so Cargo home and the checkout are remapped; --check still compares every byte.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+RUST_TOOLCHAIN=1.98.1
+WASM_PACK_VERSION=0.13.1
+WASM_OPT_VERSION=version_117
+FILES=(samsrf_wasm.js samsrf_wasm_bg.wasm samsrf_wasm.d.ts)
+
+mode=build
+if [[ $# -gt 0 ]]; then
+  if [[ "$1" != --check || $# -gt 1 ]]; then
+    echo "usage: $0 [--check]" >&2
+    exit 2
+  fi
+  mode=check
+fi
+
+WASM_PACK="${WASM_PACK:-$(command -v wasm-pack || true)}"
+if [[ -z "$WASM_PACK" ]]; then
+  echo "wasm-pack $WASM_PACK_VERSION is required to build SamSrf" >&2
+  exit 1
+fi
+installed=$("$WASM_PACK" --version | awk '{print $2}')
+if [[ "$installed" != "$WASM_PACK_VERSION" ]]; then
+  echo "wasm-pack $WASM_PACK_VERSION is required (found $installed)" >&2
+  exit 1
+fi
+
+optimizer=$(wasm-opt --version 2>/dev/null || true)
+if [[ "$optimizer" != *"($WASM_OPT_VERSION)"* ]]; then
+  echo "binaryen $WASM_OPT_VERSION wasm-opt must be on PATH (found '${optimizer:-none}'), as .github/actions/setup-wasm-opt installs it" >&2
+  exit 1
+fi
+
+export RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN"
+cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+# exes/nifti is a path dependency outside the samsrf workspace, so its panic locations
+# carry the checkout's absolute path unless the repository root is remapped too.
+repo_root="$(cd ../.. && pwd)"
+export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$repo_root=/webapps"
+
+crate=../../exes/samsrf/wasm
+scratch="$(mktemp -d -t samsrf-wasm.XXXXXX)"
+trap 'rm -rf "$scratch"' EXIT
+"$WASM_PACK" build "$crate" --target web --release --no-opt --out-dir "$scratch"
+if [[ -n "${SAMSRF_REBUILD_DIR:-}" ]]; then
+  mkdir -p "$SAMSRF_REBUILD_DIR"
+  cp "$scratch/samsrf_wasm_bg.wasm" "$SAMSRF_REBUILD_DIR/before-opt.wasm"
+  sha256sum "$(command -v wasm-opt)" > "$SAMSRF_REBUILD_DIR/optimizer.sha256"
+  rustc -vV > "$SAMSRF_REBUILD_DIR/rustc.txt"
+fi
+wasm-opt "$scratch/samsrf_wasm_bg.wasm" -O3 --strip-producers -o "$scratch/optimized.wasm"
+mv "$scratch/optimized.wasm" "$scratch/samsrf_wasm_bg.wasm"
+
+if [[ "$mode" == check ]]; then
+  status=0
+  for file in "${FILES[@]}"; do
+    if cmp -s "$scratch/$file" "wasm/$file"; then
+      echo "PASS wasm/$file equals a rebuild from source ($(sha256sum < "wasm/$file" | cut -c1-16))"
+    else
+      echo "FAIL wasm/$file differs from a rebuild from source: committed $(sha256sum < "wasm/$file" | cut -c1-16), rebuilt $(sha256sum < "$scratch/$file" | cut -c1-16)"
+      status=1
+    fi
+  done
+  if [[ $status -ne 0 ]]; then
+    if [[ -n "${SAMSRF_REBUILD_DIR:-}" ]]; then
+      mkdir -p "$SAMSRF_REBUILD_DIR"
+      for file in "${FILES[@]}"; do
+        cp "$scratch/$file" "$SAMSRF_REBUILD_DIR/"
+      done
+      echo "Retained differing build in $SAMSRF_REBUILD_DIR"
+    fi
+    echo "Dispatch samsrf-native with wasm_only=true on this branch for the canonical build." >&2
+    echo "Validate the samsrf-differing-rebuild artifact against the reference gates before committing it; see packages/samsrf/README.md." >&2
+  fi
+  exit $status
+fi
+
+rm -rf wasm
+mkdir -p wasm
+for file in "${FILES[@]}"; do
+  cp "$scratch/$file" wasm/
+done
+echo "built wasm -> packages/samsrf/wasm/ ($(wc -c < wasm/samsrf_wasm_bg.wasm) bytes)"

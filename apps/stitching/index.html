@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tile stitching — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Tiles</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="tileInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose TIFF tiles" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop TIFF or OME-TIFF tiles, or their folder</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Layout and stitching</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="layout">Approximate layout
+              <span class="nd-info-icon" tabindex="0" aria-label="About the layout">i<span class="nd-info-tooltip">Where each tile roughly lies. Grid: tiles in file-name order on a regular grid, as in Fiji's Grid/Collection stitching. TileConfiguration: Fiji's text file of pixel positions. OME stage positions: each tile's Plane PositionX/Y, divided by its pixel size.</span></span>
+            </label>
+            <select id="layout">
+              <option value="grid" selected>Grid</option>
+              <option value="file">TileConfiguration file</option>
+              <option value="stage">OME stage positions</option>
+            </select>
+          </div>
+          <div id="gridFields">
+            <div class="nd-row">
+              <div class="nd-field">
+                <label for="columns">Columns</label>
+                <input id="columns" type="number" min="1" max="1000" step="1" value="2" inputmode="numeric" />
+              </div>
+              <div class="nd-field">
+                <label for="rows">Rows</label>
+                <input id="rows" type="number" min="1" max="1000" step="1" value="2" inputmode="numeric" />
+              </div>
+              <div class="nd-field">
+                <label for="overlap">Overlap <small>%</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the overlap">i<span class="nd-info-tooltip">The overlap between neighbouring tiles as a percentage of the tile size. Registration searches the overlap this implies, so an estimate up to four times the true overlap still works; one well below it does not.</span></span>
+                </label>
+                <input id="overlap" type="number" min="0" max="95" step="any" value="10" inputmode="decimal" />
+              </div>
+            </div>
+            <div class="nd-row">
+              <div class="nd-field">
+                <label for="gridType">Order</label>
+                <select id="gridType">
+                  <option value="row" selected>Row by row</option>
+                  <option value="column">Column by column</option>
+                  <option value="snake-row">Snake by rows</option>
+                  <option value="snake-column">Snake by columns</option>
+                </select>
+              </div>
+              <div class="nd-field">
+                <label for="gridStart">First tile</label>
+                <select id="gridStart">
+                  <option value="top-left" selected>Top left</option>
+                  <option value="top-right">Top right</option>
+                  <option value="bottom-left">Bottom left</option>
+                  <option value="bottom-right">Bottom right</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div id="fileFields" hidden>
+            <label class="nd-file" id="layoutDrop">
+              <input id="layoutInput" type="file" data-neurodesk-input="protocol" accept=".txt" aria-label="Choose a TileConfiguration.txt file" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Drop TileConfiguration.txt</span>
+            </label>
+            <p id="layoutInfo" class="nd-file-info" hidden></p>
+          </div>
+          <p id="stageFields" class="nd-hint" hidden>Positions come from each tile's OME Plane PositionX and PositionY.</p>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="peaks">Peaks checked
+                    <span class="nd-info-icon" tabindex="0" aria-label="About peaks">i<span class="nd-info-tooltip">The strongest phase-correlation peaks of each pair. Every peak stands for 2 (2D) or 8 (3D) possible shifts, each scored by cross-correlation.</span></span>
+                  </label>
+                  <input id="peaks" type="number" min="1" max="20" step="1" value="5" inputmode="numeric" />
+                </div>
+                <div class="nd-field">
+                  <label for="threshold">Min. correlation
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the correlation threshold">i<span class="nd-info-tooltip">Pairs whose cross-correlation r is below this are not used to place tiles. A tile without a usable pair keeps its layout position.</span></span>
+                  </label>
+                  <input id="threshold" type="number" min="0" max="1" step="0.05" value="0.3" inputmode="decimal" />
+                </div>
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="maxRatio">Max/mean residual
+                    <span class="nd-info-icon" tabindex="0" aria-label="About outlier links">i<span class="nd-info-tooltip">After each solve, the pair with the largest residual is dropped while that residual is above this many times the mean (and 0.95 px), or while the mean residual is above the next limit.</span></span>
+                  </label>
+                  <input id="maxRatio" type="number" min="1" max="100" step="any" value="2.5" inputmode="decimal" />
+                </div>
+                <div class="nd-field">
+                  <label for="maxAbsolute">Mean residual limit <small>px</small></label>
+                  <input id="maxAbsolute" type="number" min="0" max="10000" step="any" value="3.5" inputmode="decimal" />
+                </div>
+              </div>
+            </div>
+          </details>
+          <div class="nd-row">
+            <button id="previewButton" class="nd-btn nd-btn-secondary" type="button" disabled>Preview layout</button>
+            <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Stitch tiles</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop TIFF tiles anywhere, or choose an example.</p>
+        <section id="linkReport" class="nd-viewer-report" aria-label="Tile pairs" hidden></section>
+      </div>
+      <div class="nd-viewer-info">
+        <span id="location" class="nd-viewer-info-primary"></span>
+        <span id="outlineLegend"></span>
+      </div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Stitches a mosaic of overlapping 2D or 3D microscopy tiles into one image, on the CPU in web workers. Tiles are greyscale TIFF or OME-TIFF files, one tile per file (a 3D tile is a z stack), all of the same sample type.</p>
+      <p><strong>Layout.</strong> Tiles start from an approximate layout: a regular grid in file-name order (rows, columns, overlap and acquisition order, as in Fiji's Grid/Collection stitching), a Fiji TileConfiguration.txt in pixels, or the OME stage positions divided by the pixel size. Every pair of tiles that overlaps under that layout is registered, diagonal neighbours included.</p>
+      <p><strong>Pairwise registration.</strong> Written from Preibisch, Saalfeld &amp; Tomancak (2009), not from Fiji's GPL code. The two tiles are cut to the region they share under the layout, and the phase correlation of the two regions gives candidate translations. Each of the strongest peaks stands for 2<sup>d</sup> translations (the correlation is periodic); each is scored by the Pearson cross-correlation of the overlapping pixels and the best one kept. It is then moved uphill in cross-correlation to its integer maximum, and a parabola through the correlation at that maximum and its neighbours gives the sub-pixel translation.</p>
+      <p><strong>Global optimisation.</strong> Tile translations minimise the squared differences between the measured and implied pairwise offsets, each pair weighted by r × overlapping pixels (least squares, the first tile fixed). Pairs with r below the threshold are not used; after each solve the pair with the largest residual is dropped while it exceeds 2.5 × the mean residual and 0.95 px, or while the mean residual exceeds 3.5 px, as Fiji's Grid/Collection stitching does with its defaults. A tile left without any usable pair keeps its layout position, moved with the rest.</p>
+      <p><strong>Fusion.</strong> Linear blending: each output pixel is the mean of the tiles covering it, sampled by linear interpolation at sub-pixel positions and weighted by the distance to each tile's nearest edge. The fused image keeps the tiles' sample type.</p>
+      <p><strong>Validation.</strong> On the NIST MIST example the registered positions are within 0.31 px of Fiji's Grid/Collection stitching (Stitching 3.1.8) and every pair offset within 0.73 px. On a synthetic 3 × 3 mosaic cut from a real tile with known sub-pixel positions, with the layout up to 25 px off, every tile was found within 0.17 px.</p>
+      <p><strong>Checking the result.</strong> Layout shows the tiles blended at their layout positions, Stitched at the registered ones, on the same grid and contrast. Switching between them keeps the zoom, so a seam that looks doubled in Layout should be sharp in Stitched. Outlines mark each tile at its layout position (cyan) and where stitching placed it (orange); the first tile stays fixed, so the others move relative to it.</p>
+      <p>Outputs: the fused image as TIFF and as zipped OME-Zarr (.ozx), Fiji's TileConfiguration.registered.txt, the table of pairs (CSV) and provenance (JSON). Not in this version: illumination correction, multi-channel and time-lapse tiles, rotation or affine models.</p>
+    </template>
+    <template id="privacyContent"><p>Tiles are processed locally in this browser and are never uploaded. Only the example is downloaded, from the Neurodesk dataset on Hugging Face.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -13,6 +13,7 @@ import PrivacyModal from '../components/common/PrivacyModal';
 import AcquisitionTable from '../components/schema/AcquisitionTable';
 import UnifiedSchemaSelector from '../components/schema/UnifiedSchemaSelector';
 import VersionBadge from '../components/common/VersionBadge';
+import AppNavigation from '../components/common/AppNavigation';
 import { Acquisition } from '../types';
 import { useSchemaService, UnifiedSchema } from '../hooks/useSchemaService';
 import { useSchemaContext } from '../contexts/SchemaContext';
@@ -258,7 +259,7 @@ const SchemaViewerPage: React.FC = () => {
       acquisitionNames,
     };
     sessionStorage.setItem('pendingSchemaImport', JSON.stringify(payload));
-    Promise.resolve(navigate('/')).catch(error => logError('Navigate failed', error));
+    Promise.resolve(navigate('/workspace')).catch(error => logError('Navigate failed', error));
   };
 
   const handleDownload = () => {
@@ -388,6 +389,7 @@ const SchemaViewerPage: React.FC = () => {
           </div>
         </div>
       </header>
+      <AppNavigation />
       <CitationModal
         isOpen={showCitation}
         onClose={() => setShowCitation(false)}
@@ -457,7 +459,7 @@ const SchemaViewerPage: React.FC = () => {
                   Browse Schemas
                 </Link>
                 <Link
-                  to="/"
+                  to="/workspace"
                   className="px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors"
                 >
                   Open Workspace

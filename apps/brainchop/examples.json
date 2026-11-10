@@ -1,0 +1,17 @@
+[
+  {
+    "id": "t1-brain",
+    "label": "T1-weighted brain MRI",
+    "description": "Cropped T1-weighted brain MRI for Brainchop tissue and atlas segmentation.",
+    "expectedResult": "A colored label map on the conformed 1 mm grid, downloadable as NIfTI.",
+    "files": [
+      {
+        "role": "image",
+        "name": "t1_crop.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/t1_crop.nii.gz",
+        "sha256": "1a91502c8997981a1103cc5f2a3ada12c79dfb0498047f9e931fa358bb953886",
+        "bytes": 8788862
+      }
+    ]
+  }
+]

@@ -1,5 +1,21 @@
 # @neurodesk/qsmbly
 
+## 0.31.20261109
+
+## 0.31.20261108
+
+### Patch Changes
+
+- Retry transient failures while downloading pinned QSMxT source, helper binaries and registries during builds. Keep checksum verification mandatory and stop after four attempts.
+
+## 0.31.20261104
+
+### Patch Changes
+
+- Build the native comparator from the browser's pinned QSMxT source and replay the complete exported schema-v2 configuration, preserving the V-SHARP radius step.
+
+## 0.31.20261103
+
 ## 0.31.20261031
 
 ## 0.31.20261027

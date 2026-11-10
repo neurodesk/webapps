@@ -235,8 +235,8 @@ apps:
         url: https://github.com/liamchalcroft/SynthStroke
       - group: Lesion segmentation
         title: DeepISLES
-        reference: "de la Rosa E, Reyes M, Liew SL, et al. A robust ensemble algorithm for ischemic stroke lesion segmentation: generalizability and clinical utility beyond the ISLES challenge. arXiv. 2024."
-        url: https://arxiv.org/abs/2403.19425
+        reference: "de la Rosa E, Reyes M, Liew SL, et al. DeepISLES: a clinically validated ischemic stroke segmentation model from the ISLES'22 challenge. Nature Communications. 2025;16:7357."
+        doi: 10.1038/s41467-025-62373-x
       - group: Lesion segmentation
         title: nnU-Net (DeepISLES SEALS)
         reference: "Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211."
@@ -245,6 +245,10 @@ apps:
         title: ISLES 2022
         reference: "Hernandez Petzsche MR, de la Rosa E, Hanning U, et al. ISLES 2022: a multi-center magnetic resonance imaging stroke lesion segmentation dataset. Scientific Data. 2022;9:762."
         doi: 10.1038/s41597-022-01875-5
+      - group: Example data
+        title: Stroke Outcome Optimization Project (SOOP)
+        reference: "Absher J, Goncher S, Newman-Norlund R, et al. The stroke outcome optimization project: Acute ischemic strokes from a comprehensive stroke center. Scientific Data. 2024;11:839."
+        doi: 10.1038/s41597-024-03667-5
       - group: Lesion segmentation
         title: ATLAS v2.0
         reference: "Liew SL, Lo BP, Donnelly MR, et al. A large, curated, open-source stroke neuroimaging dataset to improve lesion segmentation algorithms. Scientific Data. 2022;9:320."
@@ -277,6 +281,30 @@ apps:
         title: Neurosynth
         reference: "Yarkoni T, Poldrack RA, Nichols TE, Van Essen DC, Wager TD. Large-scale automated synthesis of human functional neuroimaging data. Nature Methods. 2011;8(8):665–670."
         doi: 10.1038/nmeth.1635
+      - group: Knowledge-base report atlases
+        title: Harvard-Oxford cortical and subcortical atlases
+        reference: "Desikan RS, Ségonne F, Fischl B, et al. An automated labeling system for subdividing the human cerebral cortex on MRI scans into gyral based regions of interest. NeuroImage. 2006;31(3):968–980."
+        doi: 10.1016/j.neuroimage.2006.01.021
+      - group: Knowledge-base report atlases
+        title: AAL atlas
+        reference: "Tzourio-Mazoyer N, Landeau B, Papathanassiou D, et al. Automated anatomical labeling of activations in SPM using a macroscopic anatomical parcellation of the MNI MRI single-subject brain. NeuroImage. 2002;15(1):273–289."
+        doi: 10.1006/nimg.2001.0978
+      - group: Knowledge-base report atlases
+        title: JHU white-matter tractography atlas
+        reference: "Hua K, Zhang J, Wakana S, et al. Tract probability maps in stereotaxic spaces: analyses of white matter anatomy and tract-specific quantification. NeuroImage. 2008;39(1):336–347."
+        doi: 10.1016/j.neuroimage.2007.07.053
+      - group: Knowledge-base report atlases
+        title: XTRACT tract atlases
+        reference: "Warrington S, Bryant KL, Khrapitchev AA, et al. XTRACT: standardised protocols for automated tractography in the human and macaque brain. NeuroImage. 2020;217:116923."
+        doi: 10.1016/j.neuroimage.2020.116923
+      - group: Disconnectome
+        title: ENIGMA Symmetric White Matter Tractography Atlas
+        reference: "Ba Gari I, Alibrando JD, Feng Y, Villalon-Reina JE, Cabalinan A, Nabulsi L, Thompson PM, Yeh FC, Chandio BQ, Nir TM, Jahanshad N. ENIGMA Symmetric White Matter Tractography Atlas v1.0.0. Zenodo; 2026."
+        doi: 10.5281/zenodo.19656193
+      - group: Disconnectome
+        title: nii2tvx
+        reference: "Neurodesk. nii2tvx: lesion-to-tract disconnection queries on a voxel index of a tractography atlas [Computer software]."
+        url: https://github.com/neurodesk/webapps/tree/main/exes/nii2tvx
       - group: Browser inference
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
@@ -1689,12 +1717,22 @@ apps:
 
   sdc:
     about:
-      - "SDC estimates the susceptibility field of an EPI acquisition from two b = 0 images with opposite phase-encoding directions, such as AP and PA, in this browser. It is a port of PyHySCO 0.0.4 (Julian and Ruthotto 2024), the hyperelastic susceptibility correction of Ruthotto et al. 2012, and its CPU field differs from PyHySCO's by a median of 5e-6 Hz (at most 0.03 Hz). In a comparison on six subjects it was the closest fast method to FSL topup; DR-BUDDI was closer but takes about 40 minutes. Each input's volumes with b ≤ 50 are averaged, without motion correction, and the two images must be in one space. The field is in Hz, with topup's sign, on the grid of the field reference; a constant offset against another tool is a translation along the phase-encoding axis. The corrected images are for quality control: the app does not resample the DWI series. The example is a 10-slice slab of OpenNeuro ds005134 (CC0); because the regularization is 3D, a slab's field is not identical to the field of the full volume. The solver is GPL-3.0-or-later, as PyHySCO is. ANTs restricted SyN is not offered for reverse-PE pairs: its tested schedule failed the image gate on all six subjects. Single-PE ANTs SyN-SDC is still under development and is not available in this app."
+      - "SDC estimates the susceptibility field of an EPI acquisition from two b = 0 images with opposite phase-encoding directions, such as AP and PA, in this browser. It is a port of PyHySCO 0.0.4 (Julian and Ruthotto 2024), the hyperelastic susceptibility correction of Ruthotto et al. 2012, and its CPU field differs from PyHySCO's by a median of 5e-6 Hz (at most 0.03 Hz). In a comparison on six subjects it was the closest fast method to FSL topup; DR-BUDDI was closer but takes about 40 minutes. Each input's volumes with b ≤ 50 are averaged, without motion correction, and the two images must be in one space. The field is in Hz, with topup's sign, on the grid of the field reference; a constant offset against another tool is a translation along the phase-encoding axis. PyHySCO's corrected images are for quality control: it does not resample the DWI series. The example is a 10-slice slab of OpenNeuro ds005134 (CC0); because the regularization is 3D, a slab's field is not identical to the field of the full volume. The solver is GPL-3.0-or-later, as PyHySCO is. ANTs restricted SyN is not offered for reverse-PE pairs: its tested schedule failed the image gate on all six subjects."
+      - "Without a reverse phase-encoding image, SyN-SDC estimates the field from one DWI series and a T1w of the same session. It ports sdcflows 2.17.1's fieldmap-less workflow as fMRIPrep wires it (Wang et al. 2017 evaluated the method in diffusion MRI): the mean b0 is registered to the T1w with ANTs SyN (Avants et al. 2008), deforming mainly along the phase-encoding axis, on a 1.2 mm grid, and sdcflows' distortion atlas (Treiber et al. 2016) limits the second stage to where distortion is expected. MindGrab masks the mean b0 and the T1w unless you give masks. The field is fitted with cubic B-splines and the whole series is resampled once, with the Jacobian factor; the b0 volumes are kept, and b-vectors are not rotated, because the correction moves voxels along the phase-encoding axis only. Of the two methods, only SyN-SDC writes a corrected DWI series. The phase-encoding direction and the total readout time come from the sidecar, or from the sidebar when no sidecar has them; the direction is never guessed. On the full-brain ds005134 reference, given native N4's EPI reference, its field is within 0.04 Hz (median in the brain) of native sdcflows at the same seed; N4's float rounding alone moves it by about 0.5 Hz. A bias-corrected T1w is better. The example, the ds005134 slab with the full T1w, took 56 minutes in Chromium on a 16-core server, and its outputs equal the Node pipeline's byte for byte; most of the time goes to registering the 0.8 mm T1w. The SyN-SDC code is Apache-2.0."
       - PyHySCO uses float32 WebGPU on a hardware adapter when the browser supports WebAssembly JSPI, and CPU WebAssembly otherwise. A failed GPU run falls back to the CPU. Saved sidecars and automation provenance record the actual backend, adapter and any GPU failure.
     packages:
       - name: PyHySCO 0.0.4 (Rust, WebAssembly and WebGPU port)
         url: https://github.com/EmoryMLIP/PyHySCO
         role: susceptibility field estimation, ported under the GPL-3.0
+      - name: sdcflows 2.17.1 SyN-SDC (JavaScript and WebAssembly port)
+        url: https://github.com/nipreps/sdcflows
+        role: fieldmap-less susceptibility distortion correction, ported under the Apache-2.0
+      - name: ANTs (WebAssembly)
+        url: https://github.com/ANTsX/ANTs
+        role: antsRegistration, antsApplyTransforms, Laplacian, DenoiseImage and N4 for SyN-SDC
+      - name: MindGrab (brainchop)
+        url: https://github.com/neuroneural/brainchop
+        role: brain masks of the mean b0 and the T1w for SyN-SDC
       - name: NiiVue
         url: https://github.com/niivue/niivue
         role: image viewer
@@ -1714,6 +1752,36 @@ apps:
           Diffeomorphic susceptibility artifact correction of diffusion-weighted magnetic resonance
           images. Physics in Medicine and Biology. 2012;57(18):5715–5731."
         doi: 10.1088/0031-9155/57/18/5715
+      - group: Distortion correction
+        title: SDCFlows
+        reference: "Esteban O, Markiewicz CJ, Blair R, et al. SDCFlows: Susceptibility Distortion Correction workFLOWS [Computer software]. Zenodo."
+        doi: 10.5281/zenodo.3758524
+        code: https://github.com/nipreps/sdcflows
+      - group: Distortion correction
+        title: SyN-SDC evaluation
+        reference: "Wang S, Peterson DJ, Gatenby JC, Li W, Grabowski TJ, Madhyastha TM. Evaluation of field map and nonlinear registration methods for correction of susceptibility artifacts in diffusion MRI. Frontiers in Neuroinformatics. 2017;11:17."
+        doi: 10.3389/fninf.2017.00017
+      - group: Distortion correction
+        title: Distortion atlas (SyN-SDC prior)
+        reference: "Treiber JM, White NS, Steed TC, et al. Characterization and correction of geometric distortions in 814 diffusion weighted images. PLoS ONE. 2016;11(3):e0152472."
+        doi: 10.1371/journal.pone.0152472
+      - group: Registration
+        title: ANTs SyN
+        reference: "Avants BB, Epstein CL, Grossman M, Gee JC. Symmetric diffeomorphic image registration with cross-correlation: evaluating automated labeling of elderly and neurodegenerative brain. Medical Image Analysis. 2008;12(1):26–41."
+        doi: 10.1016/j.media.2007.06.004
+        code: https://github.com/ANTsX/ANTs
+      - group: Preprocessing
+        title: N4 bias field correction
+        reference: "Tustison NJ, Avants BB, Cook PA, et al. N4ITK: improved N3 bias correction. IEEE Transactions on Medical Imaging. 2010;29(6):1310–1320."
+        doi: 10.1109/TMI.2010.2046908
+      - group: Preprocessing
+        title: Adaptive non-local means denoising
+        reference: "Manjón JV, Coupé P, Martí-Bonmatí L, Collins DL, Robles M. Adaptive non-local means denoising of MR images with spatially varying noise levels. Journal of Magnetic Resonance Imaging. 2010;31(1):192–203."
+        doi: 10.1002/jmri.22003
+      - group: Brain extraction
+        title: MindGrab
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        url: https://arxiv.org/abs/2506.11860
       - group: DICOM conversion
         title: dcm2niix
         reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for
@@ -2158,6 +2226,421 @@ apps:
         title: HeuDiConv
         reference: "Halchenko YO, Goncalves M, Ghosh S, et al. HeuDiConv — flexible DICOM conversion into structured directory layouts. Journal of Open Source Software. 2024;9(99):5839."
         doi: 10.21105/joss.05839
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  samsrf:
+    about:
+      - Map population receptive fields and connective fields from surface time series. Advanced settings offers MATLAB single precision for forward fits, SamSrf's complex CSS convention, and the older container's eccentricity export convention. Validation includes actual MATLAB source and SamSrfX Runtime references; these options do not guarantee identical results for every dataset and setting. The example preserves the original whole-surface X001 runs for connective-field global-signal correction. Match model settings and run order, and use a fresh MATLAB results directory to avoid stale caches.
+    packages:
+      - name: SamSrf X (Rust and WebAssembly port)
+        url: https://github.com/samsrf/samsrf
+        role: pRF and connective field analysis, ported under the BSD 3-clause licence
+      - name: NiiVue
+        url: https://github.com/niivue/niivue
+        role: surface viewer
+    builders: SamSrf, which this app ports, is developed by D. Samuel Schwarzkopf and the SamPenDu lab.
+    citations:
+      - group: Population receptive fields
+        title: pRF forward model
+        reference: "Dumoulin SO, Wandell BA. Population receptive field estimates in human visual
+          cortex. NeuroImage. 2008;39(2):647–660."
+        doi: 10.1016/j.neuroimage.2007.09.034
+      - group: Population receptive fields
+        title: SamSrf
+        reference: "Schwarzkopf DS. SamSrf: population receptive field and connective field
+          mapping toolbox [Computer software]."
+        url: https://github.com/samsrf/samsrf
+      - group: Connective fields
+        title: Connective field modeling
+        reference: "Haak KV, Winawer J, Harvey BM, Renken R, Dumoulin SO, Wandell BA, Cornelissen FW.
+          Connective field modeling. NeuroImage. 2013;66:376–384."
+        doi: 10.1016/j.neuroimage.2012.10.037
+      - group: Connective fields
+        title: Reverse-correlation connective fields
+        reference: "Tangtartharakul G, Morgan CA, Rushton SK, Schwarzkopf DS. Retinotopic connectivity
+          maps of human visual cortex with unconstrained eye movements. Human Brain Mapping.
+          2023;44(16):5221–5237."
+        doi: 10.1002/hbm.26446
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  brainchop:
+    packages:
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: Brainchop, url: https://brainchop.org/, role: whole brain segmentation }
+      - { name: TensorFlow.js, url: https://www.tensorflow.org/js, role: WebGL inference }
+    citations:
+      - group: Segmentation
+        title: Brainchop
+        reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. JOSS. 2023;8(83):5098."
+        url: https://doi.org/10.21105/joss.05098
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  stardist:
+    packages:
+      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo model (BSD-3-Clause); tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
+      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF and OME-TIFF reading }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Nucleus segmentation
+        title: StarDist
+        reference: "Schmidt U, Weigert M, Broaddus C, Myers G. Cell detection with star-convex polygons. Medical Image Computing and Computer Assisted Intervention (MICCAI 2018). Lecture Notes in Computer Science 11071. 2018:265–273."
+        doi: 10.1007/978-3-030-00934-2_30
+        code: https://github.com/stardist/stardist
+      - group: Nucleus segmentation
+        title: CSBDeep (normalization and tiled prediction)
+        reference: "Weigert M, Schmidt U, Boothe T, et al. Content-aware image restoration: pushing the limits of fluorescence microscopy. Nature Methods. 2018;15(12):1090–1097."
+        doi: 10.1038/s41592-018-0216-7
+        code: https://github.com/CSBDeep/CSBDeep
+      - group: Example data
+        title: 2018 Data Science Bowl (BBBC038)
+        reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
+        doi: 10.1038/s41592-019-0612-7
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  calcium-imaging:
+    packages:
+      - { name: Calcium imaging pipeline, url: https://github.com/neurodesk/webapps/tree/main/apps/calcium-imaging/src/core, role: "motion correction, summary images, ROIs, ΔF/F and OASIS AR(1) deconvolution, written from the papers below" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Motion correction
+        title: Efficient subpixel image registration
+        reference: "Guizar-Sicairos M, Thurman ST, Fienup JR. Efficient subpixel image registration algorithms. Optics Letters. 2008;33(2):156–158."
+        doi: 10.1364/OL.33.000156
+      - group: Motion correction
+        title: NoRMCorre
+        reference: "Pnevmatikakis EA, Giovannucci A. NoRMCorre: An online algorithm for piecewise rigid motion correction of calcium imaging data. Journal of Neuroscience Methods. 2017;291:83–94."
+        doi: 10.1016/j.jneumeth.2017.07.031
+      - group: Summary images and ROIs
+        title: Local correlation image
+        reference: "Smith SL, Häusser M. Parallel processing of visual space by neighboring neurons in mouse visual cortex. Nature Neuroscience. 2010;13(9):1144–1149."
+        doi: 10.1038/nn.2620
+      - group: Summary images and ROIs
+        title: Watershed by flooding
+        reference: "Meyer F. Topographic distance and watershed lines. Signal Processing. 1994;38(1):113–125."
+        doi: 10.1016/0165-1684(94)90060-4
+      - group: ΔF/F
+        title: Neuropil subtraction (r = 0.7)
+        reference: "Chen TW, Wardill TJ, Sun Y, et al. Ultrasensitive fluorescent proteins for imaging neuronal activity. Nature. 2013;499(7458):295–300."
+        doi: 10.1038/nature12354
+      - group: Deconvolution
+        title: OASIS
+        reference: "Friedrich J, Zhou P, Paninski L. Fast online deconvolution of calcium imaging data. PLoS Computational Biology. 2017;13(3):e1005423."
+        doi: 10.1371/journal.pcbi.1005423
+      - group: Deconvolution
+        title: Noise and AR coefficient estimation
+        reference: "Pnevmatikakis EA, Soudry D, Gao Y, et al. Simultaneous denoising, deconvolution, and demixing of calcium imaging data. Neuron. 2016;89(2):285–299."
+        doi: 10.1016/j.neuron.2015.11.037
+      - group: Validation reference
+        title: CaImAn
+        reference: "Giovannucci A, Friedrich J, Gunn P, et al. CaImAn an open source tool for scalable calcium imaging data analysis. eLife. 2019;8:e38173."
+        doi: 10.7554/eLife.38173
+        code: https://github.com/flatironinstitute/CaImAn
+      - group: Example data
+        title: Mouse auditory cortex two-photon imaging (DANDI 000249)
+        reference: "Schiavo JK, Valtcheva S, Bair-Marshall CJ, Song SC, Martin KA, Froemke RC. Innate and plastic mechanisms for maternal behaviour in auditory cortex. Nature. 2020;587(7834):426–431. Data: DANDI archive 000249, version 0.230423.1416, CC-BY-4.0."
+        doi: 10.1038/s41586-020-2807-6
+        url: https://doi.org/10.48324/dandi.000249/0.230423.1416
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  spot-detection:
+    about:
+      - "Spot detection finds diffraction-limited spots, such as single mRNA molecules in smFISH images, in one 2D image or 3D stack. It ports Big-FISH 0.6.2's detector to JavaScript: a Laplacian of Gaussian filter whose sigma is the spot radius in voxels, local maxima (voxels equal to the largest filtered value within sigma, rounded up, voxels along each axis), an automatic threshold at the elbow of the curve of log spot count against threshold, and a Gaussian fit of each spot for its sub-pixel position."
+      - "On Big-FISH's example stack the app finds the same 771 spots at the same automatic threshold (355) as Big-FISH 0.6.2, and the same 656 spots at threshold 203 in its maximum projection; its filtered image equals Big-FISH's voxel for voxel. The sub-pixel fit uses Levenberg-Marquardt on the same model where Big-FISH uses SciPy's trust-region-reflective solver: positions agree within 0.001 px except on 15 of the 771 spots, where Big-FISH's fit is degenerate."
+      - "Dense-region decomposition and cluster detection are not included. The input is one channel: save each channel of a multichannel TIFF as its own stack."
+    packages:
+      - { name: Big-FISH (port), url: https://github.com/fish-quant/big-fish, role: "LoG spot detection, elbow threshold and Gaussian sub-pixel fit, ported from Big-FISH 0.6.2 (BSD-3-Clause)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Spot detection
+        title: FISH-quant v2 (Big-FISH)
+        reference: "Imbert A, Ouyang W, Safieddine A, Coleno E, Zimmer C, Bertrand E, Walter T, Mueller F. FISH-quant v2: a scalable and modular tool for smFISH image analysis. RNA. 2022;28(6):786–795."
+        doi: 10.1261/rna.079073.121
+        code: https://github.com/fish-quant/big-fish
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  gliomoda:
+    about:
+      - "Segment adult gliomas with GlioMODA, a set of nnU-Net models trained on BraTS that each take a different combination of the four standard sequences: T1 contrast-enhanced, T2 FLAIR, T1 native and T2-weighted. The app picks the model for the sequences you load, normalises each image inside the brain and runs the network over overlapping patches with mirroring, as nnU-Net 2.5.2 does in the Neurocontainers GlioMODA image."
+      - "Labels follow BraTS 2023: 1 necrotic tumour core, 2 oedema (non-enhancing FLAIR hyperintensity), 3 enhancing tumour. The volume table adds the whole tumour (1 + 2 + 3) and the tumour core (1 + 3)."
+      - "Inputs must already be co-registered, skull-stripped and on the BraTS/SRI24 atlas grid, 240 × 240 × 155 at 1 mm, for example from BrainLesion's preprocessing package. On the example the app's labels match the container's for every model; packages/gliomoda/README.md lists the measurements."
+      - "Outputs are research estimates, not a diagnosis. Check them against the images."
+    packages:
+      - { name: GlioMODA, url: https://github.com/BrainLesion/GlioMODA, role: glioma segmentation networks (weights v1.0.2, fold_all) }
+      - { name: nnU-Net, url: https://github.com/MIC-DKFZ/nnUNet, role: preprocessing and sliding-window prediction, ported from version 2.5.2 }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: inference on WebGPU or the CPU }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Glioma segmentation
+        title: GlioMODA
+        reference: 'Canisius J, Buchner J, Rosier M, Griessmair M, Peeken J, Kirschke JS, Piraud M, Bakas S, Menze B, Wiestler B, Kofler F. GlioMODA: Robust Glioma Segmentation in Clinical Routine. medRxiv. 2025.'
+        doi: 10.1101/2025.11.12.25339968
+        code: https://github.com/BrainLesion/GlioMODA
+      - group: Glioma segmentation
+        title: BrainLesion Suite
+        reference: 'Kofler F, Rosier M, Astaraki M, et al. BrainLesion Suite: A Flexible and User-Friendly Framework for Modular Brain Lesion Image Analysis. arXiv:2507.09036. 2025.'
+        doi: 10.48550/arXiv.2507.09036
+        code: https://github.com/BrainLesion
+      - group: Glioma segmentation
+        title: nnU-Net
+        reference: 'Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211.'
+        doi: 10.1038/s41592-020-01008-z
+        code: https://github.com/MIC-DKFZ/nnUNet
+      - group: Inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Example data
+        title: UPENN-GBM
+        reference: 'Bakas S, Sako C, Akbari H, et al. The University of Pennsylvania glioblastoma (UPenn-GBM) cohort: advanced MRI, clinical, genomics, & radiomics. Scientific Data. 2022;9:453.'
+        doi: 10.1038/s41597-022-01560-7
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  neuromorph:
+    about:
+      - "NeuroMorph checks neuron reconstructions in the SWC format, draws them as tubes coloured by neurite type and measures their morphology: total length, branch and terminal points, path and radial distance, branch and Strahler order, local and remote bifurcation angles, surface area and volume from the radii, and the Sholl profile. It reads one file, several, or a folder, and writes the measures of every neuron to CSV tables."
+      - "The measures follow NeuroM 4, the Blue Brain Project's morphometrics library: on the examples every value agrees with NeuroM 4.0.6 to one part in a million and every Sholl count is identical. Lengths exclude the soma and the gap from the soma to each neurite, surface and volume treat each segment as a truncated cone, and angles are measured only where a branch splits in two. Sholl spheres start one step from the first soma sample, where NeuroM's default bins start at the soma radius."
+      - "Malformed lines, repeated ids, missing parents and parent cycles are always repaired, since no tree exists without that. Zero radii and points repeating their parent's position are repaired when the option is on, and the repaired file can be downloaded. Steps longer than 30 µm along z, neurites detached from the soma and several somata are reported but kept."
+    packages:
+      - { name: NeuroMorph morphometrics, url: https://github.com/neurodesk/webapps/tree/main/apps/neuromorph/src/morph, role: "SWC checks, morphometrics and Sholl analysis, validated against NeuroM" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: mesh viewer }
+    citations:
+      - group: Morphometrics
+        title: NeuroM
+        reference: "Blue Brain Project. NeuroM: a Python toolkit for the analysis and processing of neuron morphologies [Computer software]. Zenodo."
+        doi: 10.5281/zenodo.597333
+        code: https://github.com/BlueBrain/NeuroM
+      - group: Morphometrics
+        title: Sholl analysis
+        reference: "Sholl DA. Dendritic organization in the neurons of the visual and motor cortices of the cat. Journal of Anatomy. 1953;87(4):387–406."
+        url: https://pmc.ncbi.nlm.nih.gov/articles/PMC1244622/
+      - group: Morphometrics
+        title: Strahler order
+        reference: "Strahler AN. Quantitative analysis of watershed geomorphology. Eos, Transactions American Geophysical Union. 1957;38(6):913–920."
+        doi: 10.1029/TR038i006p00913
+      - group: File format
+        title: SWC
+        reference: "Cannon RC, Turner DA, Pyapali GK, Wheal HV. An on-line archive of reconstructed hippocampal neurons. Journal of Neuroscience Methods. 1998;84(1–2):49–54."
+        doi: 10.1016/S0165-0270(98)00091-0
+      - group: Example data
+        title: NeuroMorpho.Org
+        reference: "Ascoli GA, Donohue DE, Halavi M. NeuroMorpho.Org: a central resource for neuronal morphologies. Journal of Neuroscience. 2007;27(35):9247–9251."
+        doi: 10.1523/JNEUROSCI.2055-07.2007
+      - group: Example data
+        title: NeuroMorpho.Org community sharing
+        reference: "Tecuatl C, Ljungquist B, Ascoli GA. Accelerating the continuous community sharing of digital neuromorphology data. FASEB BioAdvances. 2024;6(7):207–221."
+        doi: 10.1096/fba.2024-00048
+      - group: Example data
+        title: CA1 pyramidal cell n120
+        reference: "Pyapali GK, Sik A, Penttonen M, Buzsáki G, Turner DA. Dendritic properties of hippocampal CA1 pyramidal neurons in the rat: intracellular staining in vivo and in vitro. Journal of Comparative Neurology. 1998;391(3):335–352."
+        doi: 10.1002/(SICI)1096-9861(19980216)391:3<335::AID-CNE4>3.0.CO;2-2
+      - group: Example data
+        title: Dentate basket cell
+        reference: "Yu J, Proddutur A, Elgammal FS, Ito T, Santhakumar V. Status epilepticus enhances tonic GABA currents and depolarizes GABA reversal potential in dentate fast-spiking basket cells. Journal of Neurophysiology. 2013;109(7):1746–1763."
+        doi: 10.1152/jn.00891.2012
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  stitching:
+    packages:
+      - { name: Stitching pipeline, url: https://github.com/neurodesk/webapps/tree/main/apps/stitching/src/core, role: "phase-correlation pairwise registration, global optimisation and linear-blending fusion, written from the paper below (not from Fiji's GPL code)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: ngff-zarr, url: https://github.com/fideus-labs/ngff-zarr, role: "OME-Zarr writing" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Stitching
+        title: Globally optimal stitching of tiled 3D microscopic image acquisitions
+        reference: "Preibisch S, Saalfeld S, Tomancak P. Globally optimal stitching of tiled 3D microscopic image acquisitions. Bioinformatics. 2009;25(11):1463–1465."
+        doi: 10.1093/bioinformatics/btp184
+      - group: Validation reference
+        title: Fiji
+        reference: "Schindelin J, Arganda-Carreras I, Frise E, et al. Fiji: an open-source platform for biological-image analysis. Nature Methods. 2012;9(7):676–682."
+        doi: 10.1038/nmeth.2019
+        code: https://github.com/fiji/Stitching
+      - group: Example data
+        title: NIST MIST stitching test data
+        reference: "Chalfoun J, Majurski M, Blattner T, Bhadriraju K, Keyrouz W, Bajcsy P, Brady M. MIST: Accurate and Scalable Microscopy Image Stitching Tool with Stage Modeling and Error Minimization. Scientific Reports. 2017;7:4988. Data: Small_Phase_Test_Dataset from github.com/usnistgov/MIST, a US Government work of NIST, distributed under the NIST notice; acknowledge NIST as the source."
+        doi: 10.1038/s41598-017-04567-y
+        url: https://github.com/usnistgov/MIST
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  structure-tensor:
+    about:
+      - "Structure Tensor measures the local orientation of fibres, such as collagen in second-harmonic generation (SHG) or histology images, by the structure-tensor method of OrientationJ (Rezakhaniha et al. 2012; Püspöki et al. 2016). Gradients are Gaussian derivatives at scale σ; their outer products are averaged by a Gaussian window of scale ρ, both in pixels. This is a clean implementation written from the papers in JavaScript with float64 sums; it does not reuse OrientationJ's GPL code. Its kernels and borders follow scipy.ndimage, against which it agrees to 1e-9°."
+      - "In 2D, orientation is the angle counterclockwise from the horizontal axis, between −90° and 90°, with image rows pointing down as in Fiji. Coherency, (λmax − λmin) / (λmax + λmin), runs from 0 for isotropic texture to 1 for one orientation; energy is the tensor's trace. The colour survey shows orientation as hue, coherency as saturation and the image as brightness, as OrientationJ does. The distribution counts pixels whose coherency and energy pass the distribution settings, in 1° bins; the summary gives the dominant direction of the whole image."
+      - "A multi-page TIFF or a 3D NIfTI is analysed in 3D. The fibre direction is the eigenvector of the smallest eigenvalue, reported as azimuth (the 2D angle of its projection) and elevation (from the image plane towards later slices). Fibre coherency (defined by this app; OrientationJ is 2D) is (λ2 − λ3) / (λ2 + λ3): 1 for fibres, 0 for sheets and isotropic texture. The direction map colours |x|, |y| and |z| as red, green and blue, scaled by fibre coherency. The fibre vectors are written as a 3-frame NIfTI. σ and ρ are scaled by the voxel size so the filters are isotropic in space; σ must be at least one voxel along every axis, because a thinner derivative filter loses gain and biases the angles."
+      - "Inputs are TIFF (grey or RGB, single page or stack; channels are averaged), NIfTI, PNG and JPEG, up to 8.4 million voxels. Maps are written as float32 TIFF for TIFF and 2D raster input and as NIfTI for NIfTI input. NIfTI angles are measured on the voxel grid with the second index pointing down, like TIFF rows. The SHG example is the sum of nine polarisations of one PSHG-TISS dermis image, which removes most of the polarisation dependence of SHG brightness. The synthetic 3D example has two fibre domains with known directions."
+    packages:
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Structure tensor
+        title: OrientationJ, collagen orientation and coherency
+        reference: "Rezakhaniha R, Agianniotis A, Schrauwen JTC, Griffa A, Sage D, Bouten CVC, van de Vosse FN, Unser M, Stergiopulos N. Experimental investigation of collagen waviness and orientation in the arterial adventitia using confocal laser scanning microscopy. Biomechanics and Modeling in Mechanobiology. 2012;11(3–4):461–473."
+        doi: 10.1007/s10237-011-0325-z
+        code: https://github.com/Biomedical-Imaging-Group/OrientationJ
+      - group: Structure tensor
+        title: Directional bioimage analysis
+        reference: "Püspöki Z, Storath M, Sage D, Unser M. Transforms and operators for directional bioimage analysis: a survey. Advances in Anatomy, Embryology and Cell Biology. 2016;219:69–93."
+        doi: 10.1007/978-3-319-28549-8_3
+      - group: Example data
+        title: PSHG-TISS
+        reference: "Hristu R, Stanciu SG, Dumitru A, Eftimie LG, Paun B, Tranca DE, et al. PSHG-TISS: a collection of polarization-resolved second harmonic generation microscopy images of fixed tissues. Scientific Data. 2022;9:376. Example image licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); this app sums its nine polarisations."
+        doi: 10.1038/s41597-022-01477-1
+        url: https://osf.io/udtqp/
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  microsam:
+    packages:
+      - { name: micro-sam, url: https://github.com/computational-cell-analytics/micro-sam, role: "light-microscopy generalist ViT-T model (vit_t_lm, CC BY 4.0); preprocessing and prompt handling ported from micro-sam 1.8.14 (MIT)" }
+      - { name: MobileSAM, url: https://github.com/ChaoningZhang/MobileSAM, role: "TinyViT image encoder and the ONNX prompt decoder graph (Apache-2.0)" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on WebGPU or the CPU (WebAssembly) }
+      - { name: Pillow, url: https://github.com/python-pillow/Pillow, role: "bilinear resampling ported from Pillow 13.0.0 (MIT-CMU), as micro-sam resizes images" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF and OME-TIFF reading }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
+    citations:
+      - group: Interactive segmentation
+        title: Segment Anything for Microscopy (micro-sam)
+        reference: "Archit A, Freckmann L, Nair S, et al. Segment Anything for Microscopy. Nature Methods. 2025;22(3):579–591."
+        doi: 10.1038/s41592-024-02580-4
+        code: https://github.com/computational-cell-analytics/micro-sam
+      - group: Interactive segmentation
+        title: Segment Anything
+        reference: "Kirillov A, Mintun E, Ravi N, et al. Segment Anything. Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). 2023:4015–4026."
+        doi: 10.1109/ICCV51070.2023.00371
+        code: https://github.com/facebookresearch/segment-anything
+      - group: Interactive segmentation
+        title: MobileSAM
+        reference: "Zhang C, Han D, Qiao Y, et al. Faster Segment Anything: towards lightweight SAM for mobile applications. arXiv:2306.14289. 2023."
+        doi: 10.48550/arXiv.2306.14289
+        code: https://github.com/ChaoningZhang/MobileSAM
+      - group: Example data
+        title: 2018 Data Science Bowl (BBBC038, CC0)
+        reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
+        doi: 10.1038/s41592-019-0612-7
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+
+  microscope-qc:
+    packages:
+      - { name: Microscope QC numerics, url: https://github.com/neurodesk/webapps/tree/main/apps/microscope-qc/src/core, role: "bead detection, Gaussian profile fits and field-illumination metrics, written from MetroloJ_QC's published definitions" }
+      - { name: ImageJ GaussianBlur, url: https://github.com/imagej/ImageJ, role: "σ = 2 px blur of field images, ported from ImageJ 1 (public domain)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Quality control metrics
+        title: MetroloJ_QC
+        reference: "Faklaris O, Bancel-Vallée L, Mauvais A, et al. Quality assessment in light microscopy for routine use through simple tools and robust metrics. Journal of Cell Biology. 2022;221(11):e202107093."
+        doi: 10.1083/jcb.202107093
+      - group: Quality control metrics
+        title: QUAREP-LiMi
+        reference: "Nelson G, Boehm U, Bagley S, et al. QUAREP-LiMi: a community-driven initiative to establish guidelines for quality assessment and reproducibility for instruments and images in light microscopy. Journal of Microscopy. 2021;284(1):56–73."
+        doi: 10.1111/jmi.13041
+      - group: Quality control metrics
+        title: PSFj
+        reference: "Theer P, Mongis C, Knop M. PSFj: know your fluorescence microscope. Nature Methods. 2014;11(10):981–982."
+        doi: 10.1038/nmeth.3102
+      - group: Theoretical resolution
+        title: Multiphoton resolution
+        reference: "Zipfel WR, Williams RM, Webb WW. Nonlinear magic: multiphoton microscopy in the biosciences. Nature Biotechnology. 2003;21(11):1369–1377."
+        doi: 10.1038/nbt899
+      - group: Example data
+        title: 100 nm bead z-stacks, NA 0.95 (Zenodo 10522322)
+        reference: "Miora RHD, Senftleben M, Abrahamsson S. Experimental validation of numerical point spread function calculation including aberration estimation [Data set]. Zenodo; 2024. CC BY 4.0."
+        doi: 10.5281/zenodo.10522322
+      - group: Validation reference
+        title: ImageJ
+        reference: "Schneider CA, Rasband WS, Eliceiri KW. NIH Image to ImageJ: 25 years of image analysis. Nature Methods. 2012;9(7):671–675."
+        doi: 10.1038/nmeth.2089
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  cryo-em:
+    execution: RELION runs on your own cluster through the neurodesk-compute server you start there. Movies and intermediate files stay on the cluster; only the result files you view or download reach this browser.
+    packages:
+      - { name: RELION 5.1.1, url: https://github.com/3dem/relion, role: "single-particle processing: import, motion correction, LoG picking, extraction, 2D classification, class selection, initial model, 3D refinement, masks and post-processing, in the Neurodesk relion container on the cluster" }
+      - { name: CTFFIND 4.1.14, url: https://grigoriefflab.umassmed.edu/ctffind4, role: CTF estimation, in the same container }
+      - { name: neurodesk-compute, url: https://github.com/neurodesk/webapps/tree/main/exes/compute-server, role: "compute server on the cluster: data roots, RELION projects, Slurm submission and progress for the browser" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: micrograph and map viewer }
+    citations:
+      - group: Single-particle processing
+        title: RELION
+        reference: "Scheres SHW. RELION: Implementation of a Bayesian approach to cryo-EM structure determination. Journal of Structural Biology. 2012;180(3):519–530."
+        doi: 10.1016/j.jsb.2012.09.006
+        code: https://github.com/3dem/relion
+      - group: Single-particle processing
+        title: RELION-3 (motion correction, LoG picking)
+        reference: "Zivanov J, Nakane T, Forsberg BO, Kimanius D, Hagen WJH, Lindahl E, Scheres SHW. New tools for automated high-resolution cryo-EM structure determination in RELION-3. eLife. 2018;7:e42166."
+        doi: 10.7554/eLife.42166
+      - group: Single-particle processing
+        title: RELION-4.0 (VDAM, class ranker)
+        reference: "Kimanius D, Dong L, Sharov G, Nakane T, Scheres SHW. New tools for automated cryo-EM single-particle analysis in RELION-4.0. Biochemical Journal. 2021;478(24):4169–4185."
+        doi: 10.1042/BCJ20210708
+      - group: Single-particle processing
+        title: Blush regularisation (RELION-5)
+        reference: "Kimanius D, Jamali K, Wilkinson ME, Lövestam S, Velazhahan V, Nakane T, Scheres SHW. Data-driven regularization lowers the size barrier of cryo-EM structure determination. Nature Methods. 2024;21(7):1216–1221."
+        doi: 10.1038/s41592-024-02304-8
+      - group: CTF estimation
+        title: CTFFIND4
+        reference: "Rohou A, Grigorieff N. CTFFIND4: Fast and accurate defocus estimation from electron micrographs. Journal of Structural Biology. 2015;192(2):216–221."
+        doi: 10.1016/j.jsb.2015.08.008
+      - group: Resolution
+        title: Gold-standard FSC
+        reference: "Scheres SHW, Chen S. Prevention of overfitting in cryo-EM structure determination. Nature Methods. 2012;9(9):853–854."
+        doi: 10.1038/nmeth.2115
+      - group: Resolution
+        title: Phase-randomised FSC correction
+        reference: "Chen S, McMullan G, Faruqi AR, Murshudov GN, Short JM, Scheres SHW, Henderson R. High-resolution noise substitution to measure overfitting and validate resolution in 3D structure determination by single particle electron cryomicroscopy. Ultramicroscopy. 2013;135:24–35."
+        doi: 10.1016/j.ultramic.2013.06.004
+      - group: Resolution
+        title: B-factor sharpening
+        reference: "Rosenthal PB, Henderson R. Optimal determination of particle orientation, absolute hand, and contrast loss in single-particle electron cryomicroscopy. Journal of Molecular Biology. 2003;333(4):721–745."
+        doi: 10.1016/j.jmb.2003.07.013
+      - group: Example data
+        title: EMPIAR-10204
+        reference: "Beta-galactosidase recorded on a JEOL CRYO ARM 200, the RELION tutorial subset of EMPIAR-10204 (CC0). Data courtesy of Takayuki Kato in the Namba group, Osaka University."
+        url: https://www.ebi.ac.uk/empiar/EMPIAR-10204/
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

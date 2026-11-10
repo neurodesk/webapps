@@ -452,14 +452,9 @@ async function runBgRemovalAndInversion({
   // =========================================================================
   // Background field removal (40% - 65%)
   // =========================================================================
-  const skipForMediSmv = dipoleMethod === 'medi' && pipelineSettings?.medi?.smv;
   let localField, erodedMask;
 
   if (!isTotalField) {
-    localField = fieldPpm;
-    erodedMask = mask;
-  } else if (skipForMediSmv) {
-    postLog('Background removal: Skipped (MEDI SMV handles it internally)');
     localField = fieldPpm;
     erodedMask = mask;
   } else {
@@ -470,7 +465,7 @@ async function runBgRemovalAndInversion({
     };
     const bgResult = wasmModule.run_bg_removal_wasm(
       fieldPpm, mask, nx, ny, nz, vsx, vsy, vsz,
-      b0, configToml, bgProgress,
+      b0, new Float64Array(echoTimesSec), magnitude || new Float64Array(0), configToml, bgProgress,
     );
     localField = new Float64Array(bgResult.slice(0, voxelCount));
     erodedMask = new Uint8Array(voxelCount);
@@ -481,8 +476,7 @@ async function runBgRemovalAndInversion({
 
   const erodedCount = erodedMask.reduce((a, b) => a + b, 0);
   postLog(`Eroded mask: ${erodedCount} voxels (${(100 * erodedCount / voxelCount).toFixed(1)}%)`);
-  sendStageData('bgRemoved', localField, dims, voxelSize, affine,
-    isTotalField && skipForMediSmv ? 'B0 Field (MEDI SMV)' : 'Local Field Map (ppm)');
+  sendStageData('bgRemoved', localField, dims, voxelSize, affine, 'Local Field Map (ppm)');
 
   // =========================================================================
   // Dipole inversion (65% - 95%)
@@ -551,7 +545,7 @@ async function runTgvCore({
   );
 
   postProgress(progressStart, 'Starting TGV reconstruction...');
-  postLog(`TGV parameters: alpha0=${alpha0.toExponential(3)}, alpha1=${alpha1.toExponential(3)} (ppm), iterations=${iterations}, erosions=${tgvSettings.erosions}`);
+  postLog(`TGV parameters: alpha0=${alpha0.toExponential(3)}, alpha1=${alpha1.toExponential(3)} (rad), iterations=${iterations}, erosions=${tgvSettings.erosions}`);
   postLog(`Using TE=${(te * 1000).toFixed(2)}ms, B0=${fieldstrength}T`);
 
   const progressRange = progressEnd - progressStart;

@@ -92,6 +92,8 @@ export function parseNiftiVolume(
 export function extractNiftiHeader(bufferLike: NiftiBytes): ArrayBuffer;
 export function createUint8Nifti(data: ArrayLike<number>, sourceHeader: NiftiBytes, dims?: [number, number, number] | null): ArrayBuffer;
 export function createFloat32Nifti(data: ArrayLike<number>, sourceHeader: NiftiBytes, dims?: [number, number, number] | null): ArrayBuffer;
+/** One byte triplet per voxel, written as datatype 128 (RGB24). */
+export function createRgb24Nifti(rgb: Uint8Array, sourceHeader: NiftiBytes, dims?: [number, number, number] | null): ArrayBuffer;
 export function createFloat64Nifti(data: ArrayLike<number>, sourceHeader: NiftiBytes, dims?: [number, number, number] | null): ArrayBuffer;
 export function createMaskNifti(maskData: ArrayLike<number | boolean>, sourceHeader: NiftiBytes, dims?: [number, number, number] | null): ArrayBuffer;
 export function createNiftiFromData(data: NiftiVoxelArray, sourceHeader: NiftiBytes, options?: NiftiFromDataOptions): ArrayBuffer;

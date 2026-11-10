@@ -1,5 +1,5 @@
 const BAD_CONCLUSIONS = new Set(['failure', 'timed_out', 'action_required', 'startup_failure', 'stale']);
-export const SCHEDULED_WORKFLOWS = ['CI approval report', 'ci', 'deploy-github-pages', 'mutation-quality', 'n4-wasm-source', 'neuroflow', 'sct-full-tests', 'sdc-registration-gate', 'standalone', 'standalone-links', 'upstream sync'];
+export const SCHEDULED_WORKFLOWS = ['CALMaR knowledge-base sync', 'CI approval report', 'ci', 'deploy-github-pages', 'mutation-quality', 'n4-wasm-source', 'neuroflow', 'sct-full-tests', 'sdc-registration-gate', 'standalone', 'standalone-catalog', 'standalone-links', 'upstream sync'];
 const LOG_LIMIT = 2 * 1024 * 1024;
 const BODY_LIMIT = 60000;
 // A dropped, reset or unresolvable connection and a gateway error say nothing

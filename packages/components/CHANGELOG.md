@@ -1,5 +1,73 @@
 # @neurodesk/webapp-components
 
+## 0.26.0
+
+### Minor Changes
+
+- 6ca6f49: Add `@neurodesk/cryo-em`, the RELION 5.1.1 job definition shared by the Cryo-EM app, the Node reference server and `neurodesk-compute`: validation, command lines that equal RELION's own `note.txt` (checked with `relion_pipeliner`), outputs and progress. The compute client gains projects, data-root listings and project-relative output names for single-owner servers.
+
+## 0.25.0
+
+### Minor Changes
+
+- fbe693d: Add Calcium imaging, a browser app for two-photon calcium imaging preprocessing. It loads a multi-page or OME-TIFF movie, corrects motion rigidly or piecewise rigidly (NoRMCorre-style patches) with sub-pixel Fourier cross-correlation or phase correlation, computes mean, max and local-correlation images, detects active cells from the correlation image (users can add or remove ROIs at the cursor), extracts neuropil-corrected ΔF/F and deconvolves spikes with OASIS AR(1), all in web workers. On the DANDI 000249 example its rigid shifts equal CaImAn's for every frame given the same template, and its OASIS matches the reference implementation on test traces.
+
+  `@neurodesk/webapp-components/file-io/tiff` reads greyscale TIFF, ImageJ and OME-TIFF stacks with geotiff (refusing multi-sample and palette pages and over-budget stacks before decoding) and writes uncompressed ImageJ-compatible TIFF stacks.
+
+- 8327887: Add Tile stitching, a browser app that stitches overlapping 2D or 3D microscopy tiles (TIFF or OME-TIFF) from a grid layout, a Fiji TileConfiguration file or OME stage positions. Pairs are registered by phase correlation with cross-correlation checks of the strongest peaks (after Preibisch et al. 2009), positions are optimised by weighted least squares with outlier rejection, and the tiles are fused with linear blending into TIFF and zipped OME-Zarr, with Fiji's TileConfiguration.registered.txt. On the NIST MIST example every tile is within 0.31 px of Fiji's Grid/Collection stitching.
+
+  `@neurodesk/webapp-components/file-io/tiff` now reads OME stage positions (`stagePosition`, micrometres, from the first image's first plane (TheZ = TheC = TheT = 0); null otherwise; always present).
+
+  Compute Pearson correlation with stable incremental covariance so high-offset uint32 and float64 tiles retain correct matching scores.
+
+  Reject source tile selections over the input budget before reading, check cancellation between file reads, and escape CSV fields so punctuation in filenames preserves report columns.
+
+  Refresh the registered-position text reference after stable correlation changes its final floating-point digits; the example's fused TIFF and recorded Fiji accuracy comparison are unchanged.
+
+  Require compatible tile calibration for translation-only stitching, allowing one part per million of metadata rounding, and convert relative stage displacement with a shared pixel size so absolute stage origins cannot distort placement.
+
+  Share checksum-pinned Blosc and Zstd codec chunks in the composite runtime store to keep the catalogue within its duplicate-content budget. Standalone bundles retain their codecs.
+
+  Resolve Vite preload-table paths from the app base when projecting catalogue sites so shared codecs are included alongside ordinary module imports.
+
+- 6102c59: Add Structure Tensor, a fibre orientation app for microscopy using the OrientationJ method. It takes a 2D image or a 3D stack (TIFF, NIfTI, PNG, JPEG, or 2D slices) and computes Gaussian-derivative structure-tensor maps in the browser: orientation, coherency and energy, OrientationJ's HSB colour survey, an orientation distribution CSV and a dominant-direction summary. In 3D it also gives the fibre azimuth and elevation, a fibre coherency and an RGB direction map, with the fibre vectors as NIfTI. On the SHG collagen example the maps equal a scipy.ndimage reference to 1e-13°, and synthetic gratings and cylinder lattices give their true angles within 0.01°. The shared file-io gains `createRgb24Nifti` for colour NIfTI images.
+
+  `@neurodesk/webapp-components/file-io/tiff` can inspect a Blob or File range by range (only its page directories and description are read), read RGB pages as the mean of red, green and blue with `rgb: 'mean'`, reports `samplesPerPixel`, and writes RGB pages with `rgb: true`. Structure Tensor reads and writes TIFF through it.
+
+### Patch Changes
+
+- af1bc1e: Allow input owners to explicitly cancel pending folder traversal and withdraw Undo when clearing inputs, while preserving Undo during ordinary loaded-file updates.
+- 7539ad5: Add NeuroMorph, a browser app for neuron morphology from SWC reconstructions. It reads one or more SWC files or a folder, reports and repairs common SWC faults, draws each neuron as tubes coloured by soma, axon, basal and apical dendrite, and measures total length, branch and terminal points, path and radial distance, branch and Strahler order, bifurcation angles, surface area, volume and the Sholl profile with a configurable step, with CSV downloads. On both NeuroMorpho.Org examples and NeuroM's test morphologies every value agrees with NeuroM 4.0.6 to one part in a million and every Sholl count is identical.
+
+  `writeMz3` takes optional per-vertex RGBA colours, and the example selector offers **Load folder…** for any input marked `data-neurodesk-folder`.
+
+- aa722fe: Add an opt-in native NiiVue wand adapter that sets intensity bounds from image contrast, handles signed seeds and NIfTI intensity scaling, and preserves connectivity, radius, previews and Undo. Restore the original viewer method when the adapter is removed. Existing viewers do not opt in automatically.
+
+  Support an optional RAS brain mask as a connectivity barrier, reject outside seeds, and convert matching native NIfTI masks using the viewer signed axis permutation.
+
+  Add a synchronous drawing-to-native voxel-order conversion with base-grid checks for native mask export and confirmation.
+
+## 0.24.0
+
+### Minor Changes
+
+- Add checksum-pinned SOOP and ISLES 2022 DWI/ADC examples to CALMaR, preserving original release terms, attribution and provenance in the offline bundle. Add an acute-example choice that alternates cases after successful imports, while keeping each scan directly selectable. Clear prior subject results and demographic context when replacing inputs, and verify real segmentation and native-mask downloads for both datasets.
+
+  Support optional example rotations in the shared selector. Loading messages identify the actual case, failed or cancelled imports retain the same next case, and replacing a catalogue resets its rotation.
+
+## 0.23.0
+
+### Minor Changes
+
+- 491c3ce: SDC adds SyN-SDC to its method selector: sdcflows 2.17.1's fieldmap-less correction from one DWI series and a T1w (`@neurodesk/sdc/syn`), run in a worker in the browser. MindGrab masks the mean b0 and the T1w on its CPU modules unless masks are uploaded. The sidebar asks for the phase-encoding direction and the total readout time only when no sidecar has them, and a run without them is refused. The app writes the corrected DWI series with its bval, bvec and sidecar, the field map in Hz, its B-spline coefficients, the displacement field and the brain mask, shows the field over the corrected mean b0, and logs per-stage times and field QC in the console. The new example is the ds005134 slab with the full T1w; its outputs equal the Node pipeline's byte for byte. `createNiivueVolumePreview` draws an optional signed overlay on its image and clears the viewer when given `null`. The SyN-SDC N4 worker (`@neurodesk/sdc/syn/n4-worker`) takes the kernel's `wasm` URL as optional: without it the module loads the `n4-bias.wasm` beside it, so the composite site serves one N4 binary to N4 and SDC (runtime family `n4-wasm`). SDC stages only MindGrab's CPU modules, the only ones it runs. A new file-input kind, `mask`, marks an optional mask beside a scan input: the shell's page drop never fills it and never makes it the primary input. SDC's two mask fields use it, carry visible labels and are disabled while PyHySCO is selected, so a dropped DWI series stays with its T1w and a dropped AP/PA pair stays together. A flat BIDS-named DWI with a T1w that has no BIDS name (or a DICOM T1w) is read as loose files.
+
+## 0.22.4
+
+### Patch Changes
+
+- 8e9346d: Fail a download whose headers or next body chunk do not arrive within 30 s, instead of leaving it pending for ever when the host accepts the connection and then goes silent. `fetchModel` and `fetchWithRetry` apply the stall guard to every model and example download; the waits between HTTP 429 retries are not counted, and a user's cancel still reports as a cancel. The example selector reports a stalled download as "The download of <file> stalled (no data for 30 s). Load the example again to retry."
+- 239dedd: Add SamSrf, which maps population receptive fields and connective fields on the cortical surface from GIfTI time series: a forward-model pRF fit, reverse-correlation pRF and reverse-correlation connective fields, with SamSrf's model presets, its GIfTI map set and the maps drawn on the inflated surface with an R² threshold. Shared components gain `writeMz3Scalars`, a scalar-only mz3 that NiiVue loads as a mesh layer, and `readFreeSurferCurv`.
+
 ## 0.22.3
 
 ### Patch Changes

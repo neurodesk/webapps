@@ -6,7 +6,7 @@
  */
 
 // Application version. `pnpm release` writes the date version (scripts/lib/app-versions.mjs).
-export const VERSION = '0.31.20261031';
+export const VERSION = '0.31.20261109';
 
 // Where deep-learning model weights are fetched from in the browser. The qsm-core model
 // registry points at OSF, which does NOT send CORS headers, so a browser fetch from it
@@ -149,7 +149,6 @@ export const TGV_DEFAULTS = {
   iterations: _TGV.iterations,
   erosions: _TGV.erosions,
   step_size: _TGV.step_size,
-  tol: _TGV.tol,
 };
 
 /** qsm-core's TGV [alpha0, alpha1] for each UI regularization level (generated). */
@@ -275,7 +274,7 @@ export const NLTV_DEFAULTS = {
   mu: _NLTV.mu,
   max_iter: _NLTV.max_iter,
   tol: _NLTV.tol,
-  newton_max_iter: _NLTV.newton_iter,
+  newton_max_iter: _NLTV.max_iter_newton,
 };
 
 export const NDI_DEFAULTS = {

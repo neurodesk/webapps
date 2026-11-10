@@ -19,6 +19,14 @@ export const ATLAS_OPTIONS = [
     functionProfileAssetId: 'schaefer400-neurosynth-v7-function-profiles'
   },
   {
+    id: 'harvardoxford',
+    displayName: 'Harvard–Oxford cortical + subcortical (25% maximum probability, 2 mm)',
+    overlapAtlasAssetId: 'harvardoxford-cort-maxprob-thr25-2mm',
+    subcorticalAtlasAssetId: 'harvardoxford-sub-maxprob-thr25-2mm',
+    weightSource: 'parcel',
+    colormap: 'random'
+  },
+  {
     id: ATLAS_OPTION_IDS.YEO7,
     displayName: 'Yeo 7 networks',
     overlapAtlasAssetId: 'yeo7-2mm',

@@ -1,5 +1,50 @@
 # dicompare
 
+## 0.15.20261109
+
+### Patch Changes
+
+- 99de1ca: Merge upstream astewartau/dicompare-web v0.15.6 (5dbbeea..753039d):
+
+  - chore: update schema DOI mapping [skip ci]
+  - Add "Load example data" with a synthetic example session
+  - Merge pull request #36 from astewartau/feat/load-example-data
+  - chore: bump version to 0.15.6
+
+- Updated dependencies [6ca6f49]
+  - @neurodesk/webapp-components@0.26.0
+
+## 0.15.20261108
+
+### Patch Changes
+
+- Updated dependencies [fbe693d]
+- Updated dependencies [af1bc1e]
+- Updated dependencies [7539ad5]
+- Updated dependencies [aa722fe]
+- Updated dependencies [8327887]
+- Updated dependencies [6102c59]
+  - @neurodesk/webapp-components@0.25.0
+
+## 0.15.20261106
+
+## 0.15.20261104
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.24.0
+
+## 0.15.20261103
+
+### Patch Changes
+
+- Updated dependencies [491c3ce]
+  - @neurodesk/webapp-components@0.23.0
+- Updated dependencies [8e9346d]
+- Updated dependencies [239dedd]
+  - @neurodesk/webapp-components@0.22.4
+
 ## 0.15.20261031
 
 ### Patch Changes

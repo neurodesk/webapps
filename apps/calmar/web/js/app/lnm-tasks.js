@@ -89,6 +89,17 @@ export const LNM_PIPELINES = [
         module: 'threshold',
         required: false,
         defaults: { value: 5, symmetric: true, minClusterVoxels: 30 }
+      },
+      {
+        // Knowledge-base report: cited literature findings for the damaged
+        // regions (HarvardOxford/AAL/JHU/XTRACT through the curated atlas
+        // mapping), tract disconnection (ENIGMA bundles via nii2tvx) and
+        // matched therapies. Optional: a missing asset leaves the rest of the
+        // Results view intact.
+        id: 'kb-report',
+        module: 'kb-report',
+        annotationAssetId: 'aphasia-kb',
+        required: false
       }
     ]
   },
@@ -148,6 +159,17 @@ export const LNM_PIPELINES = [
         module: 'threshold',
         required: false,
         defaults: { value: 5, symmetric: true, minClusterVoxels: 30 }
+      },
+      {
+        // Knowledge-base report: cited literature findings for the damaged
+        // regions (HarvardOxford/AAL/JHU/XTRACT through the curated atlas
+        // mapping), tract disconnection (ENIGMA bundles via nii2tvx) and
+        // matched therapies. Optional: a missing asset leaves the rest of the
+        // Results view intact.
+        id: 'kb-report',
+        module: 'kb-report',
+        annotationAssetId: 'aphasia-kb',
+        required: false
       }
     ]
   },
@@ -197,6 +219,17 @@ export const LNM_PIPELINES = [
           symmetric: true,
           minClusterVoxels: 30
         }
+      },
+      {
+        // Knowledge-base report: cited literature findings for the damaged
+        // regions (HarvardOxford/AAL/JHU/XTRACT through the curated atlas
+        // mapping), tract disconnection (ENIGMA bundles via nii2tvx) and
+        // matched therapies. Optional: a missing asset leaves the rest of the
+        // Results view intact.
+        id: 'kb-report',
+        module: 'kb-report',
+        annotationAssetId: 'aphasia-kb',
+        required: false
       }
     ]
   }
@@ -223,7 +256,10 @@ const IMPLEMENTED_MODULES = new Set([
   'threshold',
   // Phase 16: in-browser PCA prealign to MNI160 1mm in
   // web/js/modules/prealign.js, driven by orchestrator.prealignToMni160().
-  'prealign'
+  'prealign',
+  // Knowledge-base report: web/js/modules/kb-report.js (packages/calmar/src/kb-evidence.js),
+  // driven by orchestrator.runKbReport().
+  'kb-report'
 ]);
 
 export function getPipelineById(id) {
@@ -234,7 +270,7 @@ export function getRequiredAssetIds(pipeline) {
   if (!pipeline) return [];
   const ids = [];
   for (const stage of pipeline.stages) {
-    for (const key of ['modelAssetId', 'atlasAssetId', 'connectomeAssetId']) {
+    for (const key of ['modelAssetId', 'atlasAssetId', 'connectomeAssetId', 'annotationAssetId']) {
       if (stage[key]) ids.push(stage[key]);
     }
   }

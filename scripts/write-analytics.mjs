@@ -3,7 +3,7 @@ import { createSign } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
+import { appCatalogIds, loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 
 const ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 const DEFAULT_OUTPUT = resolve(repoRoot, 'site', 'analytics.json');
@@ -18,12 +18,12 @@ function base64url(value) {
   return Buffer.from(value).toString('base64url');
 }
 
+// hostName is one host or a list of hosts.
 export function dimensionFilter({ hostName, pagePathPrefix, pagePathPrefixes = [] }) {
   const expressions = [{
-    filter: {
-      fieldName: 'hostName',
-      stringFilter: { matchType: 'EXACT', value: hostName, caseSensitive: false },
-    },
+    filter: Array.isArray(hostName)
+      ? { fieldName: 'hostName', inListFilter: { values: hostName, caseSensitive: false } }
+      : { fieldName: 'hostName', stringFilter: { matchType: 'EXACT', value: hostName, caseSensitive: false } },
   }];
   if (pagePathPrefix) {
     expressions.push({
@@ -169,6 +169,14 @@ async function metricsForFilter(context, filter) {
   };
 }
 
+// An app is counted on every host that serves it and, for an app whose home moved
+// off the primary domain, on that domain too: its visits there predate the move,
+// since its old paths now serve only the 404 redirect, which loads no analytics.
+export function appHosts(registry, app) {
+  const hosts = appCatalogIds(app).map((id) => registry.site.catalogs.find((catalog) => catalog.id === id).host);
+  return [...new Set([...hosts, registry.site.domain])];
+}
+
 export async function collectAnalytics({ registry, propertyId, serviceAccount }) {
   const token = await accessToken(serviceAccount);
   const context = {
@@ -176,15 +184,14 @@ export async function collectAnalytics({ registry, propertyId, serviceAccount })
     propertyId,
     periodDays: registry.site.analytics.period_days,
   };
-  const hostName = registry.site.domain;
   const totals = await metricsForFilter(context, dimensionFilter({
-    hostName,
+    hostName: [...new Set(registry.apps.flatMap((app) => appHosts(registry, app)))],
     pagePathPrefixes: registry.apps.map((app) => `/${app.path}/`),
   }));
   const apps = [];
   for (const app of registry.apps) {
     const appMetrics = await metricsForFilter(context, dimensionFilter({
-      hostName,
+      hostName: appHosts(registry, app),
       pagePathPrefix: `/${app.path}/`,
     }));
     apps.push({

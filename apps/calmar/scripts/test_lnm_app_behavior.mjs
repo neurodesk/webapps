@@ -21,6 +21,7 @@
 //     the user must click Run analysis or an explicit stage button.
 
 import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as niftiModule from 'nifti-reader-js';
@@ -1148,7 +1149,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   });
   app.maskDrawingController = {
     hasDrawing: true,
-    copyDrawingBitmap: () => new Uint8Array(nativeMask),
+    copyNativeDrawingBitmap: () => new Uint8Array(nativeMask),
     exportDrawingFile: async () => { asyncExportCalls += 1; },
     close: (options) => { closeOptions = options; }
   };
@@ -1255,7 +1256,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   };
   app.maskDrawingController = {
     hasDrawing: true,
-    copyDrawingBitmap: () => new Uint8Array(nativeMask),
+    copyNativeDrawingBitmap: () => new Uint8Array(nativeMask),
     close: (options) => { closeOptions = options; }
   };
   app.nativeStructuralInfo = {
@@ -1353,7 +1354,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   };
   app.maskDrawingController = {
     hasDrawing: true,
-    copyDrawingBitmap: () => {
+    copyNativeDrawingBitmap: () => {
       copyDrawingCalls += 1;
       return new Uint8Array(drawing);
     },
@@ -1622,9 +1623,10 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   const app = makeApp();
   const summaryEl = { textContent: '' };
   const affectedResultsEl = { classList: makeClassList(['hidden']) };
-  const affectedTableEl = { innerHTML: '', appendChild: () => {} };
+  const dom = new JSDOM();
+  const affectedTableEl = dom.window.document.createElement('table');
   const mapFunctionResultsEl = { classList: makeClassList(['hidden']) };
-  const mapFunctionTableEl = { innerHTML: '', appendChild: () => {} };
+  const mapFunctionTableEl = dom.window.document.createElement('table');
   const elements = {
     networkThresholdValue: { value: '10' },
     networkThresholdSymmetric: { checked: false },
@@ -1638,23 +1640,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   };
   const restoreDocument = useMockElements(elements);
   const originalCreateElement = globalThis.document.createElement;
-  const renderedText = [];
-  globalThis.document.createElement = (tagName) => {
-    let text = '';
-    return {
-      tagName,
-      children: [],
-      style: {},
-      classList: makeClassList(),
-      appendChild(child) { this.children.push(child); },
-      setAttribute: () => {},
-      set textContent(value) {
-        text = value;
-        renderedText.push(value);
-      },
-      get textContent() { return text; }
-    };
-  };
+  globalThis.document.createElement = tag => dom.window.document.createElement(tag);
   app.viewerController = {
     replaceOverlayForStage: async () => {},
     removeVolumeForStage: () => {}
@@ -1702,15 +1688,15 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     );
     assert.equal(affectedResultsEl.classList.contains('hidden'), false,
       'affected-network table must become visible after thresholding');
-    assert.ok(renderedText.includes('Somatomotor'),
+    assert.ok(affectedTableEl.textContent.includes('Somatomotor'),
       'affected-network table must render the dominant Yeo network name');
-    assert.ok(renderedText.includes('Map %'),
+    assert.ok(affectedTableEl.textContent.includes('Map %'),
       'affected-network table must use map-specific percent copy');
     assert.equal(mapFunctionResultsEl.classList.contains('hidden'), false,
       'connectivity-map functional profile table must become visible after thresholding');
-    assert.ok(renderedText.includes('motor'),
+    assert.ok(mapFunctionTableEl.textContent.includes('motor'),
       'connectivity-map functional profile must rank terms from affected Yeo networks');
-    assert.ok(renderedText.includes('Neurosynth v7 via NiMARE'),
+    assert.ok(mapFunctionTableEl.textContent.includes('Neurosynth v7 via NiMARE'),
       'connectivity-map functional profile must show its source label');
   } finally {
     globalThis.document.createElement = originalCreateElement;
@@ -1753,36 +1739,21 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
 {
   const app = makeApp();
   const directResultsEl = { classList: makeClassList(['hidden']) };
-  const directTableEl = { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } };
+  const dom = new JSDOM();
+  const directTableEl = dom.window.document.createElement('table');
+  const directFunctionTable = dom.window.document.createElement('table');
   const affectedResultsEl = { classList: makeClassList(['hidden']) };
-  const affectedTableEl = { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } };
+  const affectedTableEl = dom.window.document.createElement('table');
   const restoreDocument = useMockElements({
     networkThresholdMinCluster: { value: '30' },
     networkOverlapTable: directTableEl,
     directFunctionProfileResults: directResultsEl,
-    directFunctionProfileTable: { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } },
+    directFunctionProfileTable: directFunctionTable,
     affectedNetworkResults: affectedResultsEl,
     affectedNetworkTable: affectedTableEl
   });
   const originalCreateElement = globalThis.document.createElement;
-  const renderedText = [];
-  globalThis.document.createElement = (tagName) => {
-    let text = '';
-    return {
-      tagName,
-      children: [],
-      style: {},
-      classList: makeClassList(),
-      colSpan: 1,
-      appendChild(child) { this.children.push(child); },
-      setAttribute: () => {},
-      set textContent(value) {
-        text = value;
-        renderedText.push(value);
-      },
-      get textContent() { return text; }
-    };
-  };
+  globalThis.document.createElement = tag => dom.window.document.createElement(tag);
   const atlasOption = app.atlasOptions.find(option => option.id === 'yeo7');
   app.selectedAtlasOptionId = 'yeo7';
   app.overlapResult = {
@@ -1816,21 +1787,21 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
 
   try {
     app.renderDirectOverlapTable();
-    assert.ok(renderedText.includes('Somatomotor'),
+    assert.ok(directTableEl.textContent.includes('Somatomotor'),
       'direct overlap table must keep rows meeting the min-cluster filter');
-    assert.equal(renderedText.includes('Default'), false,
+    assert.equal((directTableEl.textContent + affectedTableEl.textContent).includes('Default'), false,
       'direct overlap table must hide rows below the min-cluster filter');
 
     await app.updateDirectFunctionProfile();
-    assert.ok(renderedText.includes('motor'),
+    assert.ok(directFunctionTable.textContent.includes('motor'),
       'direct functional profile must use the filtered direct-overlap summary');
-    assert.equal(renderedText.includes('memory'), false,
+    assert.equal(directFunctionTable.textContent.includes('memory'), false,
       'direct functional profile must not include terms from hidden rows');
 
     app.renderAffectedNetworkTable();
-    assert.ok(renderedText.includes('Visual'),
+    assert.ok(affectedTableEl.textContent.includes('Visual'),
       'affected-network table must keep rows meeting the min-cluster filter');
-    assert.equal(renderedText.includes('Default'), false,
+    assert.equal((directTableEl.textContent + affectedTableEl.textContent).includes('Default'), false,
       'affected-network table must hide rows below the min-cluster filter');
   } finally {
     globalThis.document.createElement = originalCreateElement;
@@ -3002,13 +2973,14 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       RH_Default_2: [{ term: 'language', score: 0.7, rank: 1 }]
     }
   };
-  const tableEl = { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } };
+  const dom = new JSDOM();
+  const tableEl = dom.window.document.createElement('table');
   const downloadEl = { disabled: true };
   const networkDownloadEl = { disabled: true };
   const coverageEl = { textContent: '', classList: makeClassList(['hidden']) };
   const emptyResultEl = { classList: makeClassList(['hidden']) };
   const emptyTableEl = { innerHTML: '' };
-  const directProfileTableEl = { innerHTML: '', children: [], appendChild(child) { this.children.push(child); } };
+  const directProfileTableEl = dom.window.document.createElement('table');
   const resultsSection = { classList: makeClassList(['collapsed']) };
   const restoreDocument = useMockElements({
     atlasSelect: { value: 'yeo7', options: [], addEventListener: () => {} },
@@ -3025,23 +2997,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     resultsSection
   });
   const originalCreateElement = globalThis.document.createElement;
-  const renderedText = [];
-  globalThis.document.createElement = (tagName) => {
-    let text = '';
-    return {
-      tagName,
-      children: [],
-      style: {},
-      classList: makeClassList(),
-      appendChild(child) { this.children.push(child); },
-      setAttribute: () => {},
-      set textContent(value) {
-        text = value;
-        renderedText.push(value);
-      },
-      get textContent() { return text; }
-    };
-  };
+  globalThis.document.createElement = tag => dom.window.document.createElement(tag);
 
   const originalFetch = globalThis.fetch;
   const originalCaches = globalThis.caches;
@@ -3190,11 +3146,11 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     assert.equal(downloadEl.disabled, false,
       'atlas overlap must enable CSV export after the selected-atlas table is populated');
     await app._functionalProfileRenderPromise;
-    assert.ok(renderedText.includes('Neurosynth v7 via NiMARE (parcel-wise Schaefer ROI decode)'),
+    assert.ok(directProfileTableEl.textContent.includes('Neurosynth v7 via NiMARE (parcel-wise Schaefer ROI decode)'),
       'Schaefer direct overlap must render its functional-profile source label');
-    assert.ok(renderedText.includes('Atlas label drivers'),
-      `Schaefer direct overlap must use atlas-label functional-profile driver copy; got ${renderedText.join(' | ')}`);
-    assert.ok(renderedText.includes('language') || renderedText.includes('visual'),
+    assert.ok(directProfileTableEl.textContent.includes('Atlas label drivers'),
+      `Schaefer direct overlap must use atlas-label functional-profile driver copy; got ${directProfileTableEl.textContent}`);
+    assert.ok(directProfileTableEl.textContent.includes('language') || directProfileTableEl.textContent.includes('visual'),
       'Schaefer direct overlap must rank terms from parcel-label profiles');
     {
       const views = [];
@@ -3357,4 +3313,114 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   }
 }
 
-console.log('lnm-app behavior OK: dispatch + precondition + explicit-start + split-log routing + worker-wait + manual mask review/upload/approval-banner/download/confirm/native-overlay/resume + threshold-preview/projection + selectable atlas + subject-atlas QC + advanced atlas-QC button + registration QC modes/blend + affected-network labels + functional profiles + layer-toggle + min-cluster input/table-filter + top-percent + auto-promote + coverage-note + version-label + MNI160 threshold-resample/header cases.');
+// ---- Knowledge-base evidence: approved only, or approved + unreviewed drafts ----
+{
+  const withDrafts = {
+    kbReport: { annotationAssetId: 'aphasia-kb', draftsAnnotationAssetId: 'aphasia-kb-drafts' },
+    annotationAssets: [{ id: 'aphasia-kb', supportStatus: 'supported' }, { id: 'aphasia-kb-drafts', supportStatus: 'supported' }],
+  };
+  const app = makeApp();
+  app.ensureManifest = async () => withDrafts;
+  let reruns = 0;
+  app.runKbReport = async () => { reruns += 1; };
+  assert.equal(app.kbEvidence, 'approved', 'the report starts with approved findings only');
+  app.knowledgeBase = { kb: {}, entry: {}, evidence: 'approved' };
+  await app.handleKbEvidenceChange('drafts');
+  assert.equal(app.kbEvidence, 'drafts');
+  assert.equal(app.knowledgeBase, null, 'the other export is loaded on the next report');
+  assert.equal(reruns, 0, 'no report shown yet: nothing to recompute');
+  app.kbReport = { result: {} };
+  await app.handleKbEvidenceChange('approved');
+  assert.equal(app.kbEvidence, 'approved');
+  assert.equal(reruns, 1, 'a shown report is recomputed with the chosen evidence');
+  await app.handleKbEvidenceChange('approved');
+  assert.equal(reruns, 1, 'choosing the current level does nothing');
+
+  await app.handleKbEvidenceChange('off');
+  assert.equal(app.kbEvidence, 'off');
+  assert.equal(reruns, 1, 'disabling evidence does not compute it');
+  await app.handleKbEvidenceChange('approved');
+  assert.equal(reruns, 2, 'enabling evidence restores the report');
+  const skipped = makeApp();
+  skipped.kbEvidence = 'off';
+  skipped.ensureManifest = () => { throw new Error('disabled KB must not fetch assets'); };
+  await skipped.runKbReport();
+
+  const pending = makeApp();
+  pending.lesionFile = { arrayBuffer: () => { throw new Error('disabled KB must stop before decoding'); } };
+  let finishManifest;
+  pending.ensureManifest = () => new Promise(resolve => { finishManifest = resolve; });
+  const loading = pending.runKbReport();
+  await pending.handleKbEvidenceChange('off');
+  finishManifest(withDrafts);
+  await loading;
+  assert.equal(pending.kbReport, null, 'disabling an in-flight report prevents publication');
+
+  const select = { value: 'drafts', querySelector: () => option };
+  const option = { disabled: false };
+  const restore = useMockElements({ kbEvidenceSelect: select });
+  try {
+    const noDrafts = makeApp();
+    noDrafts.ensureManifest = async () => ({ kbReport: { annotationAssetId: 'aphasia-kb' }, annotationAssets: [{ id: 'aphasia-kb', supportStatus: 'supported' }] });
+    await noDrafts.handleKbEvidenceChange('drafts');
+    assert.equal(noDrafts.kbEvidence, 'approved', 'a build without the drafts export stays on approved findings');
+    assert.equal(select.value, 'approved');
+    assert.equal(option.disabled, true, 'and disables the drafts option');
+    assert.match(noDrafts._messages.at(-1), /no knowledge-base export with drafts/);
+  } finally {
+    restore();
+  }
+}
+
+console.log('lnm-app behavior OK: dispatch + precondition + explicit-start + split-log routing + worker-wait + manual mask review/upload/approval-banner/download/confirm/native-overlay/resume + threshold-preview/projection + selectable atlas + subject-atlas QC + advanced atlas-QC button + registration QC modes/blend + affected-network labels + functional profiles + layer-toggle + min-cluster input/table-filter + top-percent + auto-promote + coverage-note + version-label + kb-evidence + MNI160 threshold-resample/header cases.');
+
+// Explicit preparation/acceptance/reporting boundaries.
+{
+  const app = makeApp();
+  app.structuralFile = { name: 'anatomy.nii' };
+  app.ensureStructuralForDiffusion = async () => {};
+  const runs = [];
+  app._runPipelineWithStatus = async pipeline => {
+    runs.push(pipeline.stages.map(stage => stage.module));
+    app._pendingMaskResume = { pipeline, nextStageIndex: 3 };
+    return 'paused';
+  };
+  await app.runLesionPreparation();
+  assert.deepEqual(runs[0], ['brain-extraction', 'prealign', 'inference-pipeline']);
+  assert.equal(app._pendingMaskResume, null, 'mask acceptance cannot start reporting');
+  await app.runReportingAnalysis();
+  assert.equal(runs.length, 1, 'unaccepted masks cannot be reported');
+  app.lesionMaskConfirmed = true;
+  await app.runReportingAnalysis();
+  assert.deepEqual(runs[1], ['registration', 'parcel-overlap', 'fc-weighted-sum', 'threshold', 'kb-report']);
+  app.confirmedNativeLesionFile = {};
+  let loaded = false;
+  app.renderConfirmedNativeLesionOverlay = async () => { loaded = true; };
+  app.viewerLayerVisibility.lesion = false;
+  app.refreshViewerLayerControls = () => {};
+  app.centerCrosshairOnLesion = () => {};
+  app.setViewerView = view => { app.viewerView = view; };
+  await app.showScanConfirmation();
+  assert.equal(loaded, true, 'confirmation reloads the real native mask');
+  assert.equal(app.viewerLayerVisibility.lesion, true);
+  assert.equal(app.viewerView, 'multiplanar', 'confirmation uses the interactive canvas');
+}
+
+// NiiVue exposes native dimensions on hdr, and no vox2mm instance method.
+{
+  const app = makeApp();
+  let draws = 0;
+  app.nv = {
+    volumes: [null, {
+      img: new Uint8Array([1, 0, 0, 1]),
+      hdr: { dims: [3, 4, 1, 1], affine: [[2, 0, 0, 10], [0, 2, 0, 0], [0, 0, 2, 0], [0, 0, 0, 1]] }
+    }],
+    scene: {},
+    mm2frac: mm => mm,
+    drawScene: () => { draws++; }
+  };
+  app.viewerController = { getVolumeIndexForStage: stage => stage === 'segmentation' ? 1 : null };
+  assert.equal(app.centerCrosshairOnLesion(), true);
+  assert.deepEqual(app.nv.scene.crosshairPos, [10, 0, 0], 'center on foreground, not the empty midpoint');
+  assert.equal(draws, 1, 'centering redraws the visible scan');
+}

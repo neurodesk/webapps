@@ -44,7 +44,8 @@ try {
   fallbackReason = error.message;
   console.error(`App planner: selecting the full catalog and site because ${fallbackReason}`);
 }
-const plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests);
+const draft = process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.CI_DRAFT === 'true';
+const plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft });
 const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test' }] };
 const fallback = (fallbackReason || (plan.reasons.fallback ?? '')).replace(/\s+/g, ' ');
 // A wide change gives every app the same long list; keep the outputs small.
@@ -54,7 +55,9 @@ const shorten = (reasons) => reasons.length > REASONS_SHOWN
   : reasons;
 const reasons = {
   fallback: fallback || null,
-  apps: Object.fromEntries(Object.entries(plan.reasons.apps).map(([app, list]) => [app, shorten(list)])),
+  apps: Object.fromEntries(Object.entries(plan.reasons.apps)
+    .filter(([app]) => plan.selected.some((entry) => entry.id === app))
+    .map(([app, list]) => [app, shorten(list)])),
   site: shorten(plan.reasons.site),
 };
 const outputs = {
@@ -74,13 +77,14 @@ const outputs = {
 };
 
 // The same reasons for a person: the job summary on GitHub, stderr locally.
-const summary = fallback
+const summary = fallback && !draft
   ? [`Full catalog and site selected: ${fallback}`]
   : [
-    `Selected ${plan.selected.length} of ${registry.apps.length} apps; site build ${plan.site ? 'runs' : 'skipped'}.`,
+    `Selected ${plan.selected.length} of ${registry.apps.length} apps; site build ${draft ? 'deferred until ready' : plan.site ? 'runs' : 'skipped'}.`,
     ...Object.entries(reasons.apps).map(([app, list]) => `- ${app}: ${list.join('; ')}`),
     ...reasons.site.map((reason) => `- site: ${reason}`),
   ];
+if (draft) summary.unshift('Draft feedback only: shared dependency coverage runs on ready_for_review and every subsequent ready PR push.');
 console.error(summary.join('\n'));
 if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `## App plan\n\n${summary.join('\n')}\n`);
 

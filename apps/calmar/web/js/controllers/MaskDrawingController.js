@@ -1,3 +1,5 @@
+import { installContrastRangeWand, maskToDrawingBitmap, drawingToNativeBitmap } from '@neurodesk/webapp-components/viewer';
+
 export class MaskDrawingController {
   constructor(options) {
     this.nv = options.nv;
@@ -5,6 +7,8 @@ export class MaskDrawingController {
     this.defaultOpacity = options.defaultOpacity ?? 0.7;
     this.defaultColormap = options.defaultColormap || 'gray';
     this.manualUndoSnapshots = [];
+    this.wandSettings = { tolerance: 10, radius: 15, singleSlice: false, brainOnly: true };
+    this.brainMask = null;
   }
 
   get hasDrawing() {
@@ -30,6 +34,10 @@ export class MaskDrawingController {
 
   copyDrawingBitmap() {
     return this.nv?.drawBitmap ? new Uint8Array(this.nv.drawBitmap) : null;
+  }
+
+  copyNativeDrawingBitmap(geometry) {
+    return drawingToNativeBitmap(this.nv, { dims: [3, ...geometry.dims], affine: geometry.affine });
   }
 
   bitmapsEqual(a, b) {
@@ -115,16 +123,84 @@ export class MaskDrawingController {
 
   setTool(tool) {
     if (!this.nv) return;
+    if (tool !== 'wand' && this.restoreWandFill) {
+      this.restoreWandFill();
+      this.restoreWandFill = null;
+    }
+    if (this.savedDrawingSettings && !['lasso', 'wand'].includes(tool)) {
+      this.nv.opts.penSize = this.savedDrawingSettings.size;
+      this.setPenShape(this.savedDrawingSettings.shape);
+      this.setFilled(this.savedDrawingSettings.filled);
+      this.savedDrawingSettings = null;
+    }
+    const wasWand = this.nv.opts.clickToSegment;
     this.nv.opts.clickToSegment = false;
+    this.nv.clickToSegmentIsGrowing = false;
+    if (wasWand) this.nv.refreshDrawing?.(true, false);
     this.nv.setDrawingEnabled?.(tool !== 'off');
     if (tool === 'off') return;
-    if (tool === 'erase') {
+    if (['lasso', 'wand'].includes(tool)) {
+      if (!this.savedDrawingSettings) {
+        const type = this.nv.document?.opts?.penType ?? this.nv.opts.penType;
+        const types = this.getPenTypes();
+        this.savedDrawingSettings = {
+          size: this.nv.opts.penSize,
+          filled: !!this.nv.opts.isFilledPen,
+          shape: type === types.RECTANGLE ? 'rectangle' : type === types.ELLIPSE ? 'ellipse' : 'pen',
+        };
+      }
+      this.setPenShape('pen');
+      this.nv.opts.penSize = 1;
+      this.nv.setPenValue?.(1, tool === 'lasso');
+      if (tool === 'wand') {
+        if (!this.restoreWandFill) this.restoreWandFill = installContrastRangeWand(this.nv, {
+          getMask: () => {
+            if (!this.wandSettings.brainOnly || !this.brainMask) return null;
+            return this.brainMask.image === this.nv.volumes?.[0] ? this.brainMask.data : new Uint8Array(0);
+          },
+        });
+        this.setWandOptions(this.wandSettings);
+        this.nv.opts.clickToSegment = true;
+      }
+    } else if (tool === 'erase') {
       this.nv.setPenValue?.(0, !!this.nv.opts.isFilledPen);
     } else if (tool === 'eraseCluster') {
       this.nv.setPenValue?.(-0, !!this.nv.opts.isFilledPen);
     } else {
       this.nv.setPenValue?.(1, !!this.nv.opts.isFilledPen);
     }
+  }
+
+  async loadBrainMaskFile(file) {
+    const request = this.brainMaskRequest = {};
+    this.brainMask = null;
+    if (!file) return;
+    const image = this.nv.volumes?.[0];
+    const data = await maskToDrawingBitmap(this.nv, file);
+    if (this.brainMaskRequest === request && this.nv.volumes?.[0] === image) this.brainMask = { image, data };
+  }
+
+  setWandOptions({ tolerance = this.wandSettings.tolerance, radius = this.wandSettings.radius, singleSlice = this.wandSettings.singleSlice, brainOnly = this.wandSettings.brainOnly } = {}) {
+    const bounded = (value, fallback) => Number.isFinite(Number(value)) ? Math.max(1, Math.min(50, Number(value))) : fallback;
+    this.wandSettings = {
+      tolerance: bounded(tolerance, this.wandSettings.tolerance),
+      radius: bounded(radius, this.wandSettings.radius),
+      singleSlice: !!singleSlice,
+      brainOnly: !!brainOnly,
+    };
+    if (this.nv?.opts) {
+      Object.assign(this.nv.opts, {
+        clickToSegmentAutoIntensity: true,
+        clickToSegmentPercent: this.wandSettings.tolerance / 100,
+        clickToSegmentMaxDistanceMM: this.wandSettings.radius,
+        clickToSegmentIs2D: this.wandSettings.singleSlice,
+        clickToSegmentIntensityMin: NaN,
+        clickToSegmentIntensityMax: NaN,
+      });
+      this.nv.clickToSegmentIsGrowing = false;
+      this.nv.refreshDrawing?.(true, false);
+    }
+    return this.wandSettings;
   }
 
   setPenShape(shape) {
@@ -245,7 +321,7 @@ export class MaskDrawingController {
   }
 
   close(options = {}) {
-    this.nv?.setDrawingEnabled?.(false);
+    this.setTool('off');
     if (options.clearDrawing) {
       if (typeof this.nv?.closeDrawing === 'function') {
         this.nv.closeDrawing();

@@ -28,7 +28,7 @@ export function serializeOverlapCsv(summary, options = {}) {
     const parcels = Array.isArray(row.parcels) ? row.parcels.join(';') : '';
 
     lines.push([
-      row.network,
+      /[,"\n\r]/.test(row.network) ? `"${row.network.replaceAll('"', '""')}"` : row.network,
       formatInt(row.voxelsInLesion),
       formatFraction(row.fractionOfLesion),
       hasNetworkSize ? formatInt(voxelsInNetwork) : '',

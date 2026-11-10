@@ -21,7 +21,7 @@ export function atlasOverlap(lesion, atlas, atlasOption) {
   const parcelResult = computeParcelOverlap({ lesion, atlas: atlas.data, dims: atlas.dims });
   const labelMap =
     atlasOption.weightSource === 'parcel'
-      ? atlas.parcelLabels || atlas.manifestEntry?.parcelLabels || {}
+      ? atlas.parcelLabels || atlas.manifestEntry?.parcelLabels || atlas.manifestEntry?.labels || {}
       : atlas.networkLabels || atlas.manifestEntry?.networkLabels || {};
   const summary =
     atlasOption.weightSource === 'parcel'

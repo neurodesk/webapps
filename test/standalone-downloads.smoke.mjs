@@ -2,17 +2,18 @@ import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { DIALOG_FORBIDDEN } from '../scripts/lib/standalone.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
+import { siteUnderTest } from '../test-utils/site-catalog.mjs';
 
-const registry = await loadAppsRegistry();
+const { apps, siteDir } = await siteUnderTest();
 const catalog = JSON.parse(await readFile(join(repoRoot, 'registry/standalone.json')));
-const server = process.env.BASE_URL ? null : await serveSite(join(repoRoot, 'dist'));
+const server = process.env.BASE_URL ? null : await serveSite(siteDir);
 const base = `${(process.env.BASE_URL || server.origin).replace(/\/$/, '')}/`;
 const browser = await chromium.launch({ headless: true });
 try {
-  for (const app of registry.apps) {
+  for (const app of apps) {
     const context = await browser.newContext();
     try {
       const page = await context.newPage();
@@ -56,7 +57,7 @@ try {
       assert.equal(sections.includes('Command line'), downloads.length > 0, `${app.id}: lists a command line exactly when it has released one`);
       const computeServer = catalog.apps[app.id].computeServer;
       if (computeServer) {
-        assert.equal(sections[0], 'Compute server · Linux with NVIDIA GPU');
+        assert.equal(sections[0], computeServer.runner === 'slurm' ? 'Compute server · Slurm cluster' : 'Compute server · Linux with NVIDIA GPU');
         await expect(dialog.locator('#standalone-compute')).toBeVisible();
       } else if (catalog.apps[app.id].containers.length) {
         assert.equal(sections[0], 'Neurodesk containers');

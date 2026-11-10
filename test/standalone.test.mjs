@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 
 test('scanner packages link the supported apps to their OpenRecon recipes', async () => {
   const catalog = await loadStandalone(await loadAppsRegistry());
-  const expected = { musclemap: 'musclemap', qsmbly: 'qsmxt', spinalcordtoolbox: 'spinalcordtoolbox', synthseg: 'synthseg', topofit: 'topofit', vesselboost: 'vesselboost' };
+  const expected = { 'easy-mp2rage': 'mp2ragedenoise', musclemap: 'musclemap', qsmbly: 'qsmxt', spinalcordtoolbox: 'spinalcordtoolbox', synthseg: 'synthseg', topofit: 'topofit', vesselboost: 'vesselboost' };
   assert.deepEqual(Object.fromEntries(Object.entries(catalog.apps).filter(([, app]) => app.openrecon).map(([id, app]) => [id, app.openrecon.recipe])), expected);
   const dom = new JSDOM('<html><body></body></html>');
   const dialog = openStandalone({ title: 'QSMbly', app: catalog.apps.qsmbly }, dom.window.document);
@@ -154,6 +154,25 @@ test('compute server setup leads with download, startup and pairing for the curr
   assert.equal(section.querySelector('#compute-start').textContent, "./start.sh --runner docker --allow-origin 'https://preview.example'");
   assert.match(section.textContent, /Pairing code/);
   assert.match(section.textContent, /port 8765/);
+  dom.window.close();
+});
+
+test('cryo-em setup walks through a Slurm cluster, not a Docker GPU machine', async () => {
+  const catalog = await loadStandalone(await loadAppsRegistry());
+  const dom = new JSDOM('<html><body></body></html>', { url: 'https://microscopyapps.sciget.org/cryo-em/' });
+  const dialog = openStandalone({ title: 'Cryo-EM', app: catalog.apps['cryo-em'] }, dom.window.document);
+  const section = dialog.root.querySelector('#standalone-compute').parentElement;
+  assert.match(section.textContent, /Slurm cluster/);
+  assert.doesNotMatch(section.textContent, /docker|NeSVoR/i);
+  assert.match(section.querySelector('#compute-fetch').textContent, /fetch-image relion[\s\S]*fetch-example relion-tutorial/);
+  const config = JSON.parse(section.querySelector('#compute-slurm-config').textContent);
+  assert.deepEqual(Object.keys(config.image), ['path']);
+  assert.match(section.querySelector('#compute-check').textContent, /check-slurm --slurm-config slurm\.json --profile gpu/);
+  const start = section.querySelector('#compute-start').textContent;
+  for (const flag of ['--single-owner', '--runner slurm', '--listen 127.0.0.1:8765', '--www']) assert.ok(start.includes(flag), flag);
+  assert.match(section.querySelector('#compute-tunnel').textContent, /^ssh -N -L 8765:127\.0\.0\.1:8765 /);
+  assert.match(section.textContent, /localhost:8765\/cryo-em\//);
+  assert.match(section.textContent, /released server with Slurm support is not available/);
   dom.window.close();
 });
 

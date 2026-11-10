@@ -1,6 +1,12 @@
 export type ComputeJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
-export interface ComputeOutput { name: string; bytes: number; contentType: string }
+export interface ComputeOutput {
+  name: string;
+  bytes: number;
+  contentType: string;
+  /** Project jobs only: false when the file is above `limits.maxDownloadBytes`. */
+  download?: boolean;
+}
 
 export interface ComputeJob {
   id: string;
@@ -17,7 +23,32 @@ export interface ComputeJob {
   finishedAt: string | null;
   error: { code: string; message: string } | null;
   outputs: ComputeOutput[];
+  /** Absent on servers without the HPC features; null or [] for jobs outside projects. */
+  project?: string | null;
+  directory?: string | null;
+  dependsOn?: string[];
+  scheduler?: { id: string; state: string } | null;
 }
+
+export interface ComputeProjectJob {
+  id: string;
+  command: string;
+  directory: string;
+  status: ComputeJobStatus;
+  dependsOn: string[];
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface ComputeProject { id: string; name: string; createdAt: string; jobs: ComputeProjectJob[] }
+
+export interface ComputeProjectSummary { id: string; name: string; createdAt: string; jobCount: number }
+
+export interface ComputeRoot { id: string; label: string }
+
+export interface ComputeEntry { name: string; kind: 'file' | 'directory'; bytes: number | null; modifiedAt: string }
+
+export interface ComputeEntriesPage { path: string; entries: ComputeEntry[]; next: string | null }
 
 export interface ComputeInfo {
   service: 'neurodesk-compute';
@@ -27,8 +58,12 @@ export interface ComputeInfo {
   simulated?: boolean;
   runner?: string;
   gpu?: { available: boolean; name: string | null };
-  tools?: { id: string; version: string; image: string; commands: string[] }[];
-  limits?: { maxUploadBytes: number; maxFiles: number };
+  tools?: { id: string; version: string; image: string; commands: string[]; gpuRequired?: boolean }[];
+  limits?: { maxUploadBytes: number; maxFiles: number; maxDownloadBytes?: number };
+  ownership?: 'pairing' | 'single';
+  features?: ('projects' | 'dataRoots' | 'scheduler')[];
+  dataRoots?: ComputeRoot[];
+  profiles?: { name: string; summary: string }[];
 }
 
 export interface WatchHandlers {
@@ -56,6 +91,12 @@ export class ComputeClient {
   watch(id: string, handlers?: WatchHandlers, options?: { signal?: AbortSignal }): Promise<ComputeJob>;
   cancel(id: string, options?: { signal?: AbortSignal }): Promise<void>;
   output(id: string, name: string, options?: { signal?: AbortSignal }): Promise<Blob>;
+  projects(options?: { signal?: AbortSignal }): Promise<{ projects: ComputeProjectSummary[] }>;
+  createProject(name: string, options?: { signal?: AbortSignal }): Promise<ComputeProject>;
+  project(id: string, options?: { signal?: AbortSignal }): Promise<ComputeProject>;
+  removeProject(id: string, options?: { signal?: AbortSignal }): Promise<void>;
+  roots(options?: { signal?: AbortSignal }): Promise<{ roots: ComputeRoot[] }>;
+  entries(root: string, path?: string, cursor?: string | null, options?: { signal?: AbortSignal }): Promise<ComputeEntriesPage>;
 }
 
 export function createComputeClient(options: ComputeClientOptions): ComputeClient;

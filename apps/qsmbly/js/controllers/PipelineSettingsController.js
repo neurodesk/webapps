@@ -414,9 +414,9 @@ export class PipelineSettingsController {
       b0_estimation: this._getEl('b0_estimation') || 'weighted_avg',
       mcpc3ds: {
         sigma: [
-          parseInt(this._getEl('mcpc3dsSigmaX')),
-          parseInt(this._getEl('mcpc3dsSigmaY')),
-          parseInt(this._getEl('mcpc3dsSigmaZ'))
+          parseFloat(this._getEl('mcpc3dsSigmaX')),
+          parseFloat(this._getEl('mcpc3dsSigmaY')),
+          parseFloat(this._getEl('mcpc3dsSigmaZ'))
         ]
       },
       b0_weight_type: this._getEl('b0_weight_type') || 'phase_snr',

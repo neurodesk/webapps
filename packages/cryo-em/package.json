@@ -1,0 +1,20 @@
+{
+  "name": "@neurodesk/cryo-em",
+  "version": "0.2.0",
+  "private": true,
+  "description": "The relion compute tool's job specification: validation, RELION GUI-equivalent command lines and log parsing",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/spec.js",
+    "./commands.json": "./src/commands.json"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/spec.js && node --check scripts/write-argv-fixture.mjs && node --check scripts/write-validation-fixture.mjs && node --check test/gui-cases.js && node --check test/spec.test.js && node --check validation/relion-gui.mjs && node --check validation/pipeliner-parity.mjs && node --check validation/container-chain.mjs",
+    "fixture": "node scripts/write-argv-fixture.mjs && node scripts/write-validation-fixture.mjs"
+  }
+}

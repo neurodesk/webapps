@@ -306,7 +306,7 @@ try {
   if (argument('--zarr')) await openZarr(argument('--zarr'));
   else await window.loadURL(`${local.origin}/${selectedApp ? `${selectedApp.path}/` : ''}`);
   // Exposed only to the main process, used by packaged-artifact verification.
-  globalThis.neurodeskOffline = { root, origin: local.origin, apps: bundle.apps, blockedRequests: mainViewer.blocked, downloads, mountDirectory: local.mountDirectory };
+  globalThis.neurodeskOffline = { ...(process.env.NEURODESK_SMOKE_DIAGNOSTICS === '1' ? { serverSnapshot: () => ({ listening: server.listening, address: server.address() }) } : {}), root, origin: local.origin, apps: bundle.apps, blockedRequests: mainViewer.blocked, downloads, mountDirectory: local.mountDirectory };
   if (job) {
     const windowClosed = new AbortController();
     window.once('closed', () => windowClosed.abort());

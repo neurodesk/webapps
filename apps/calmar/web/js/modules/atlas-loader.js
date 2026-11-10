@@ -86,13 +86,13 @@ async function loadManifest() {
   return response.json();
 }
 
-async function fetchAtlasBuffer(manifestEntry) {
+async function fetchAtlasBuffer(manifestEntry, signal) {
   if (typeof fetch === 'undefined') {
     throw new Error('fetch is required to load atlas asset');
   }
   let cache = null;
   if (typeof caches !== 'undefined') cache = await caches.open(ATLAS_CACHE);
-  return fetchCacheFirst(manifestEntry.sourceUrl, manifestEntry.cacheKey, cache);
+  return fetchCacheFirst(manifestEntry.sourceUrl, manifestEntry.cacheKey, cache, { signal });
 }
 
 async function loadConnectomeIndex(manifestEntry, cache) {
@@ -203,13 +203,15 @@ export async function loadConnectomeChannelsFromManifest(connectomeAssetId, chan
 // stalling for 10-30 s on a slow link without progress is a user-
 // experience cliff. Cache hits skip the callback (instant).
 export async function fetchCacheFirst(url, cacheKey, cache, options = {}) {
-  const { onProgress, label } = options;
+  const { onProgress, label, signal } = options;
+  signal?.throwIfAborted();
   const cacheUrl = cacheKey ? `${url}#${encodeURIComponent(cacheKey)}` : url;
   if (cache) {
     const hit = await cache.match(cacheUrl);
+    signal?.throwIfAborted();
     if (hit) return hit.arrayBuffer();
   }
-  const response = await fetch(url);
+  const response = await (signal ? fetch(url, { signal }) : fetch(url));
   if (!response.ok) throw new Error(`fetch ${url} -> HTTP ${response.status}`);
 
   // Stream-read for progress reporting if a callback is provided AND
@@ -255,7 +257,7 @@ export async function fetchCacheFirst(url, cacheKey, cache, options = {}) {
   return response.arrayBuffer();
 }
 
-export async function loadAtlasFromManifest(atlasAssetId, { manifest } = {}) {
+export async function loadAtlasFromManifest(atlasAssetId, { manifest, subcorticalAssetId, signal } = {}) {
   const assetManifest = manifest || await loadManifest();
   const manifestEntry = assetManifest.atlasAssets?.find(asset => asset.id === atlasAssetId);
   if (!manifestEntry) {
@@ -265,7 +267,7 @@ export async function loadAtlasFromManifest(atlasAssetId, { manifest } = {}) {
     throw new Error(`Atlas asset is not supported: ${atlasAssetId}`);
   }
 
-  const arrayBuffer = await fetchAtlasBuffer(manifestEntry);
+  const arrayBuffer = await fetchAtlasBuffer(manifestEntry, signal);
   const decoded = await decodeNiftiBuffer(arrayBuffer);
   if (!dimsEqual(decoded.dims, manifestEntry.dims)) {
     throw new Error(
@@ -273,6 +275,14 @@ export async function loadAtlasFromManifest(atlasAssetId, { manifest } = {}) {
     );
   }
 
+  if (subcorticalAssetId) {
+    const sub = await loadAtlasFromManifest(subcorticalAssetId, { manifest: assetManifest, signal });
+    if (!dimsEqual(decoded.dims, sub.dims) || JSON.stringify(decoded.header.affine) !== JSON.stringify(sub.header.affine)) {
+      throw new Error('Harvard–Oxford components must share the same grid and affine');
+    }
+    const { data, labels } = mergeHarvardOxford(decoded.data, sub.data, manifestEntry.labels, sub.manifestEntry.labels);
+    return { data, dims: decoded.dims, header: decoded.header, parcelLabels: labels, manifestEntry: { ...manifestEntry, parcelLabels: labels } };
+  }
   return {
     data: decoded.data,
     dims: decoded.dims,
@@ -283,4 +293,20 @@ export async function loadAtlasFromManifest(atlasAssetId, { manifest } = {}) {
     networkLabels: manifestEntry.networkLabels,
     parcelLabels: manifestEntry.parcelLabels
   };
+}
+
+// A disjoint label map: retain named subcortical structures before cortical parcels.
+export function mergeHarvardOxford(cortical, subcortical, corticalLabels, subcorticalLabels) {
+  if (cortical.length !== subcortical.length) throw new Error('Atlas lengths differ');
+  const excluded = new Set([0, 1, 2, 3, 12, 13, 14]);
+  const labels = { ...corticalLabels };
+  for (const [key, name] of Object.entries(subcorticalLabels)) {
+    if (!excluded.has(Number(key))) labels[48 + Number(key)] = name;
+  }
+  const data = new Uint16Array(cortical.length);
+  for (let i = 0; i < data.length; i++) {
+    const label = subcortical[i];
+    data[i] = excluded.has(label) ? cortical[i] : 48 + label;
+  }
+  return { data, labels };
 }

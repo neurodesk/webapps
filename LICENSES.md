@@ -18,6 +18,17 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/deface`: BSD-2-Clause (`apps/deface/LICENSE`)
 - `apps/easy-mp2rage`: GPL-3.0-or-later (`apps/easy-mp2rage/LICENSE`)
 - `apps/niimath`: BSD-2-Clause (`apps/niimath/LICENSE`)
+- `apps/microscope-qc`: MIT (`apps/microscope-qc/LICENSE`); its PSF and field-illumination code is written
+  from the MetroloJ_QC paper, and its Gaussian blur is a port of ImageJ 1's public-domain `GaussianBlur`.
+  MetroloJ_QC (no licence file) and Fiji ran only as external validation references
+- `apps/calcium-imaging`: MIT (`apps/calcium-imaging/LICENSE`); its motion correction, ROI, ΔF/F and
+  OASIS code is written from the papers. CaImAn (GPL-2.0), OASIS (GPL-3.0) and scikit-image ran only
+  as external validation references; their outputs, not their code, are in `apps/calcium-imaging/test/fixtures`
+- `apps/cryo-em`: MIT (`apps/cryo-em/LICENSE`); it builds RELION job specifications and displays their
+  results. RELION (GPL-2.0) and CTFFIND run only on the user's cluster inside the Neurodesk relion container
+- `apps/stitching`: MIT (`apps/stitching/LICENSE`); its registration, optimisation and fusion code is
+  written from Preibisch et al. 2009. Fiji's Stitching plugin (GPL-2.0) ran only as an external validation
+  reference; its outputs, not its code, are in `apps/stitching/validation`
 - `packages/degibbs`: MPL-2.0 (`packages/degibbs/LICENSE`), as the MRtrix3 `mrdegibbs` source it ports;
   attribution in `packages/degibbs/NOTICE`. It holds the degibbs WebAssembly module and command line
 - `packages/n4`: Apache-2.0 AND MPL-2.0 (`packages/n4/LICENSE`): ANTs N4 in WebAssembly (Apache-2.0) and the
@@ -25,6 +36,15 @@ for each app are recorded in `registry/apps.yml`.
   N4 WebAssembly module and the n4 command line
 - `packages/dwidenoise`: BSD-3-Clause (`packages/dwidenoise/LICENSE`), as the DIPY 1.12.1 Patch2Self source it ports;
   attribution in `packages/dwidenoise/NOTICE`. It holds the dwidenoise WebAssembly module and command line
+- `apps/stardist`: BSD-3-Clause (`apps/stardist/LICENSE`), as the StarDist 0.9.1 and CSBDeep 0.8.1 code it
+  ports and the pretrained `2D_versatile_fluo` model it runs; attribution, and the Boost Software License of
+  the bundled `clipper-lib`, in `apps/stardist/NOTICE`. The build ships both files at the app's root
+- `apps/spot-detection`: BSD-3-Clause (`apps/spot-detection/LICENSE`), as the Big-FISH 0.6.2 source it ports;
+  attribution, and the fdlibm notice of its erf, in `apps/spot-detection/NOTICE`. The build copies both into the app
+- `apps/microsam`: MIT (`apps/microsam/LICENSE`); it ports micro-sam 1.8.14 (MIT) and Pillow 13.0.0's bilinear
+  resampling (MIT-CMU) and downloads micro-sam's `vit_t_lm` model (CC BY 4.0, from Apache-2.0 MobileSAM and
+  Segment Anything); attribution in `apps/microsam/NOTICE`, the Apache-2.0 text for the traced MobileSAM and
+  Segment Anything graphs in `apps/microsam/LICENSE-APACHE-2.0`. The build ships the three files at the app's root
 - `packages/shoreline`: Apache-2.0 AND BSD-3-Clause (`packages/shoreline/LICENSE`,
   `packages/shoreline/NOTICE`); the WebAssembly build of `exes/dwi/shoreline`, whose 3dSHORE
   and topup displacement crates port QSIPrep and DIPY code (BSD-3-Clause)

@@ -9,5 +9,16 @@
   "fastprep": "exes/fastprep drives separately installed niimath, brainchop, greedy-rs, synthsr, topofit and glm; a bundled release waits on packaging those (TopoFit licence pending)",
   "me-ica": "its meica CLI is released from niivue/meica-rs; no release is tagged yet",
   "ants-denoise": "ANTs ships DenoiseImage as its own command line: the Standalone dialog lists the Neurodesk ANTs container, whose DenoiseImage gives the app's voxels with one thread and the same options",
-  "brainqcnet": "the authors publish BrainQCNet as a BIDS app container: the Standalone dialog lists garciaml/brainqcnetcpu 1.0.1, whose tables the app reproduces byte for byte (packages/brainqcnet/validation)"
+  "brainqcnet": "the authors publish BrainQCNet as a BIDS app container: the Standalone dialog lists garciaml/brainqcnetcpu 1.0.1, whose tables the app reproduces byte for byte (packages/brainqcnet/validation)",
+  "brainchop": "Browser TensorFlow.js inference with WebGL; no command-line package.",
+  "stardist": "Python StarDist (pip install stardist) is the command-line reference the app reproduces label for label on the example; no separate command line is packaged",
+  "calcium-imaging": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; CaImAn and Suite2p are the established command-line tools for batch work",
+  "spot-detection": "the detector is a JavaScript port of Big-FISH, whose Python package (pip install big-fish) is the batch tool: on the example it gives the app's spot set and threshold; a packaged command line for the port is not done yet",
+  "gliomoda": "the Neurocontainers gliomoda 0.0.4 image is the command-line reference: the Standalone dialog lists it, and packages/gliomoda/validation holds the app's labels to its outputs on the example",
+  "neuromorph": "NeuroM, whose definitions the app follows, is the command-line route for batch morphometrics (pip install neurom); NeuroMorph has no packaged command line of its own yet",
+  "stitching": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; Fiji's Grid/Collection stitching and BigStitcher are the established command-line tools for batch work",
+  "structure-tensor": "browser-only v1: the numerics (apps/structure-tensor/src/tensor.js) are DOM-free and Node-tested, but no command-line package is released yet",
+  "microsam": "micro-sam (pip or conda install micro_sam) is the Python reference the app reproduces mask for mask on the example; interactive prompting has no separate command line",
+  "microscope-qc": "no command-line package yet: v1 runs its numerics (src/core) in a browser worker only; MetroloJ_QC in Fiji is the established desktop tool for batch QC",
+  "cryo-em": "RELION is the command line: the app sends each step to RELION 5.1.1 in the Neurodesk relion container, run on the user's cluster by the neurodesk-compute server, whose Slurm-capable release follows ADR-0004; the app adds no command line of its own"
 }

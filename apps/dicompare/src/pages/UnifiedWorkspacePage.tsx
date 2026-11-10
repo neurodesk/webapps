@@ -7,6 +7,7 @@ import ThemeToggle from '../components/common/ThemeToggle';
 import CitationModal from '../components/common/CitationModal';
 import PrivacyModal from '../components/common/PrivacyModal';
 import VersionBadge from '../components/common/VersionBadge';
+import AppNavigation from '../components/common/AppNavigation';
 import UnifiedWorkspace from '../components/workspace/UnifiedWorkspace';
 import StatusFooter from '../components/common/StatusFooter';
 import TechnicalLog from '../components/common/TechnicalLog';
@@ -78,6 +79,7 @@ const UnifiedWorkspacePage: React.FC = () => {
               </div>
             </div>
           </header>
+          <AppNavigation />
           <CitationModal isOpen={showCitation} onClose={() => setShowCitation(false)} />
           <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
 

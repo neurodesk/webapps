@@ -109,17 +109,29 @@ test("cancelling archive creation never publishes the dataset", async ({ page })
 });
 
 test("a failed example download can retry", async ({ page }) => {
-  test.setTimeout(150000);
+  test.setTimeout(90000);
+  const directory = process.env.REPROIN_E2E_DICOM_DIR;
+  test.skip(!directory, "run node scripts/e2e-test-data.mjs reproin and export REPROIN_E2E_DICOM_DIR");
   let attempts = 0;
-  // The first file fails once; the retry downloads the pinned session, as the examples are checksummed.
-  await page.context().route(example.files[0].url, (route) => (++attempts === 1 ? route.fulfill({ status: 503, body: "" }) : route.fallback()));
+  // CI provisions the checksummed example. Keep retry behavior independent of the remote host.
+  for (const file of example.files) {
+    const body = readFileSync(join(directory, file.name));
+    await page.context().route(file.url, (route) => {
+      if (file === example.files[0] && ++attempts === 1) {
+        return route.fulfill({ status: 503, body: "" });
+      }
+      return route.fulfill({ status: 200, contentType: "application/dicom", body });
+    });
+  }
   await page.goto("/");
   const picker = page.getByRole("combobox", { name: "Input", exact: true });
   await picker.selectOption(example.id);
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "error");
   await expect(page.locator("#runButton")).toBeDisabled();
   await picker.selectOption(example.id);
-  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120000 });
+  const selector = page.locator("[data-neurodesk-examples]");
+  await expect(selector).not.toHaveAttribute("data-example-state", "loading", { timeout: 60000 });
+  expect(await selector.getAttribute("data-example-state"), await selector.innerText()).toBe("ready");
   await expect(page.locator("#runButton")).toBeEnabled();
   expect(attempts).toBe(2);
 });

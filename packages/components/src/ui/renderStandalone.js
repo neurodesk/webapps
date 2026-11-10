@@ -35,7 +35,76 @@ export function openStandalone({ title, app, installed = false }, doc = globalTh
     }
     root.append(row);
   };
-  if (app.computeServer) {
+  const serverDownload = (root, server, missing) => {
+    const download = server.download;
+    if (download) {
+      if (download.preview) root.append(element('p', 'Preview build for testing.', { className: 'nd-message warning' }));
+      const links = element('p');
+      links.append(element('a', `Download Linux x86-64 server (${(download.bytes / 1e6).toFixed(1)} MB)`, { href: download.url, download: download.filename }));
+      if (download.checksumUrl) links.append(doc.createTextNode(' · '), element('a', 'Checksum file', { href: download.checksumUrl }));
+      root.append(links);
+      root.append(element('p', 'In a terminal, open the folder where you saved the archive, then run:'));
+      command(root, 'compute-extract', `tar -xzf ${download.filename}\ncd ${download.filename.replace(/\.tar\.gz$/, '')}`);
+      return;
+    }
+    const notice = element('p', `${missing} `);
+    notice.append(element('a', 'Source and build instructions', { href: server.documentation }));
+    root.append(notice);
+    root.append(element('p', 'After extracting a server archive, open a terminal inside its extracted folder.'));
+  };
+  if (app.computeServer?.runner === 'slurm') {
+    const server = app.computeServer;
+    const root = section('standalone-compute', 'Compute server · Slurm cluster',
+      'Run the server as yourself on a cluster host that submits Slurm jobs. Your movies stay on the cluster; only the results you open reach this page.');
+    root.append(element('p', 'The cluster needs Slurm with job accounting (sacct), Apptainer and, for the GPU steps, NVIDIA GPUs. Python and Node.js are not required. Never run the server as root or as a shared account.'));
+    root.append(element('h4', '1. Download the server on a login host'));
+    serverDownload(root, server, 'A released server with Slurm support is not available yet.');
+    root.append(element('h4', '2. Download the RELION image and the tutorial movies'));
+    command(root, 'compute-fetch', './neurodesk-compute fetch-image relion --dest /shared/images\n./neurodesk-compute fetch-example relion-tutorial --dest $HOME/cryo-examples');
+    root.append(element('p', 'Put the image where every compute node can read it. The tutorial is 3.2 GB; both downloads resume when rerun.'));
+    root.append(element('h4', '3. Describe your cluster in slurm.json'));
+    command(root, 'compute-slurm-config', [
+      '{',
+      '  "apptainer": "/usr/bin/apptainer",',
+      '  "image": { "path": "/shared/images/relion/relion_5.1.1.sif" },',
+      '  "scratch": "$TMPDIR",',
+      '  "profiles": {',
+      '    "cpu": { "partition": "cpu", "cpus": 16, "gpus": 0, "memory": "64G", "time": "12:00:00" },',
+      '    "gpu": { "partition": "gpu", "account": "lab", "cpus": 24, "gpus": 4, "memory": "128G", "time": "24:00:00" }',
+      '  },',
+      '  "defaults": {',
+      '    "import": "cpu", "motioncorr": "cpu", "ctffind": "cpu", "autopick": "cpu", "extract": "cpu",',
+      '    "class2d": "gpu", "select": "cpu", "initialmodel": "gpu", "refine3d": "gpu",',
+      '    "maskcreate": "cpu", "postprocess": "cpu"',
+      '  }',
+      '}',
+    ].join('\n'));
+    root.append(element('p', 'Use your site’s partitions, account and GPU counts. Every step needs a default profile. A GPU profile for 3D refinement needs at least 3 CPUs. Add "gres": "gpu:a100:4" when your site names GPU types.'));
+    root.append(element('h4', '4. Check the compute nodes once per profile'));
+    command(root, 'compute-check', './neurodesk-compute check-slurm --slurm-config slurm.json --profile gpu \\\n  --data-root examples=$HOME/cryo-examples --data-dir $HOME/neurodesk-compute');
+    root.append(element('p', 'The probe job reports whether the node runs the image, reads the data, writes the project folder and sees its GPUs.'));
+    root.append(element('h4', '5. Start the server on that same host and keep it running'));
+    command(root, 'compute-start', 'tmux new -s cryo-em\n./neurodesk-compute serve --single-owner --runner slurm --slurm-config slurm.json \\\n  --data-root examples=$HOME/cryo-examples --data-dir $HOME/neurodesk-compute \\\n  --listen 127.0.0.1:8765 --insecure-http --www "$PWD/www"');
+    root.append(element('p', 'Add --data-root facility=/path/to/movies for your own data. Other users of the host need a different port. Detach from tmux with Ctrl+B then D.'));
+    root.append(element('h4', '6. Connect from your computer'));
+    command(root, 'compute-tunnel', 'ssh -N -L 8765:127.0.0.1:8765 you@login2.cluster.example');
+    const steps = element('ol');
+    for (const text of [
+      'Use the exact host name where the server runs, not a login alias that picks a host for you.',
+      'Open http://localhost:8765/cryo-em/ in your browser: the server’s own copy of this app.',
+      'Pair with the code in $HOME/neurodesk-compute/token on the cluster (cat it there).',
+      'Choose the RELION tutorial example and run the steps in order, from Import to Post-processing.',
+    ]) steps.append(element('li', text));
+    root.append(steps);
+    const details = element('details');
+    details.append(element('summary', 'Restarts, cancelling and problems'));
+    details.append(element('p', 'Jobs keep running in Slurm when the server stops. Start it again with the same command and it follows them again.'));
+    details.append(element('p', 'The × in the status bar cancels the running job with scancel. Each job folder holds job.sbatch, run.out and run.err.'));
+    details.append(element('p', 'If the server refuses to start after a crash because the data directory is in use, confirm no server is running, then:'));
+    command(details, 'compute-unlock', './neurodesk-compute unlock --data-dir $HOME/neurodesk-compute');
+    details.append(element('a', 'Compute server documentation', { href: server.documentation }));
+    root.append(details);
+  } else if (app.computeServer) {
     const server = app.computeServer;
     const root = section('standalone-compute', 'Compute server · Linux with NVIDIA GPU',
       'Install this on the Linux x86-64 machine that will process the scans. Keep the webapp open on the clinician’s computer.');

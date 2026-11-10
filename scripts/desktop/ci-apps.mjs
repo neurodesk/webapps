@@ -11,7 +11,7 @@ import { loadAppsRegistry } from '../lib/apps-registry.mjs';
 export const hardwareWorkflowApps = new Set([
   'vesselboost', 'spinalcordtoolbox', 'calmar', 'seedseg', 'deface',
   'browserqc', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg',
-  'greedy', 'ants', 'brain2print', 'topofit', 'fireants',
+  'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brainchop',
 ]);
 // Apps whose browser tests need a hardware GPU but whose offline workflow
 // completed on every hosted runner without one (MindGrab on its CPU module,

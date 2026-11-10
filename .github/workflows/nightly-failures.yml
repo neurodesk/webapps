@@ -3,6 +3,7 @@ name: scheduled workflow failure reports
 on:
   workflow_run:
     workflows:
+      - CALMaR knowledge-base sync
       - CI approval report
       - ci
       - deploy-github-pages
@@ -12,6 +13,7 @@ on:
       - sct-full-tests
       - sdc-registration-gate
       - standalone
+      - standalone-catalog
       - standalone-links
       - upstream sync
     types: [completed]

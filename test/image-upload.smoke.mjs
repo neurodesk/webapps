@@ -1,13 +1,14 @@
 import { join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { chromium, expect as baseExpect } from '@playwright/test';
-import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
+import { siteUnderTest } from '../test-utils/site-catalog.mjs';
+import { findApp } from '../scripts/lib/apps-registry.mjs';
 import { dicomSeries } from '../test-utils/dicom-fixture.mjs';
 
-const { apps } = await loadAppsRegistry();
+const { registry, apps, siteDir } = await siteUnderTest();
 const expect = baseExpect.configure({ timeout: 60000 });
-const site = await serveSite(join(repoRoot, 'dist'), { isolationHeaders: false });
+const site = await serveSite(siteDir, { isolationHeaders: false });
 const baseURL = (process.env.BASE_URL || site.origin).replace(/\/+$/, '');
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
 const failures = [];
@@ -100,7 +101,9 @@ const checks = [
 try {
   for (const [id, selector, verify] of checks) {
     if (process.env.SMOKE_APPS && !process.env.SMOKE_APPS.split(',').includes(id)) continue;
-    const app = apps.find(app => app.id === id);
+    // A host serves only its catalogue's apps.
+    if (!apps.some(app => app.id === id)) continue;
+    const app = findApp(registry, id);
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     page.setDefaultTimeout(60000);
     try {

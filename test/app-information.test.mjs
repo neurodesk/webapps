@@ -23,17 +23,25 @@ const REQUIRED_METHODS = {
   dcm2niix: ['10.1016/j.jneumeth.2016.03.001', '10.1038/sdata.2016.44', '10.1038/s41597-021-01064-w', '10.7937/TCIA.9YTJ-5Q73'],
   'brain-extraction': ['10.1002/hbm.10062', 'arxiv.org/abs/2506.11860', '10.1016/j.neuroimage.2022.119474', 'github.com/niivue/niivue'],
   dwi2trx: ['10.1016/S0006-3495(94)80775-1', 'github.com/dipy/GPUStreamlines', 'PMC5381389', 'brainder.org/2025/05/05/15656/'],
-  sdc: ['arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  sdc: ['arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', '10.5281/zenodo.3758524', '10.3389/fninf.2017.00017', '10.1371/journal.pone.0152472', '10.1016/j.media.2007.06.004', '10.1109/TMI.2010.2046908', '10.1002/jmri.22003', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   dwicorrect: ['10.1016/j.neuroimage.2015.10.019', '10.1016/j.neuroimage.2016.06.058', '10.1016/j.neuroimage.2017.02.085', '10.1016/j.neuroimage.2015.07.067', '10.1016/j.media.2013.02.010', '10.1038/s41592-021-01185-5', 'arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   dwidenoise: ['arxiv.org/abs/2011.01355', '10.3389/fninf.2014.00008', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  stardist: ['10.1007/978-3-030-00934-2_30', '10.1038/s41592-018-0216-7', '10.1038/s41592-019-0612-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
   degibbs: ['10.1002/mrm.26054', '10.1016/j.neuroimage.2019.116137', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  'microscope-qc': ['10.1083/jcb.202107093', '10.1111/jmi.13041', '10.1038/nmeth.3102', '10.1038/nbt899', '10.5281/zenodo.10522322', '10.1038/nmeth.2089', 'github.com/niivue/niivue'],
+  'calcium-imaging': ['10.1364/OL.33.000156', '10.1016/j.jneumeth.2017.07.031', '10.1038/nn.2620', '10.1016/0165-1684(94)90060-4', '10.1038/nature12354', '10.1371/journal.pcbi.1005423', '10.1016/j.neuron.2015.11.037', '10.7554/eLife.38173', '10.1038/s41586-020-2807-6', 'github.com/niivue/niivue'],
+  'cryo-em': ['10.1016/j.jsb.2012.09.006', '10.7554/eLife.42166', '10.1042/BCJ20210708', '10.1038/s41592-024-02304-8', '10.1016/j.jsb.2015.08.008', '10.1038/nmeth.2115', '10.1016/j.ultramic.2013.06.004', '10.1016/j.jmb.2003.07.013', 'EMPIAR-10204', 'github.com/niivue/niivue'],
+  stitching: ['10.1093/bioinformatics/btp184', '10.1038/nmeth.2019', '10.1038/s41598-017-04567-y', 'github.com/niivue/niivue'],
+  neuromorph: ['10.5281/zenodo.597333', 'PMC1244622', '10.1029/TR038i006p00913', '10.1016/S0165-0270(98)00091-0', '10.1523/JNEUROSCI.2055-07.2007', '10.1096/fba.2024-00048', '10.1152/jn.00891.2012', 'github.com/niivue/niivue'],
+  'structure-tensor': ['10.1007/s10237-011-0325-z', '10.1007/978-3-319-28549-8_3', '10.1038/s41597-022-01477-1', 'github.com/niivue/niivue'],
   'ants-denoise': ['10.1002/jmri.22003', '10.1038/s41598-021-87564-6', '10.1038/s41597-025-05250-y', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  'spot-detection': ['10.1261/rna.079073.121', 'github.com/niivue/niivue'],
   n4: ['10.1109/TMI.2010.2046908', '10.1016/j.neuroimage.2010.09.025', '10.1016/j.neuroimage.2019.116137', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   noddi: ['10.3389/fninf.2019.00064', '10.1016/S0006-3495(94)80775-1', '10.52294/001c.94384', '10.1016/j.neuroimage.2004.07.051', '10.1016/j.neuroimage.2012.03.072', '10.1016/j.neuroimage.2014.10.026', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   musclemap: ['10.3390/jimaging10110262', 'arxiv.org/abs/2211.02701', '10.1016/j.jneumeth.2016.03.001'],
   vesselboost: ['10.52294/001c.123217', '10.1109/TMI.2010.2046908', '10.1109/TMI.2007.906087', '10.1109/ICCV.1998.710815', '10.1002/hbm.10062', '10.1016/j.neuroimage.2022.119474'],
   spinalcordtoolbox: ['10.1016/j.neuroimage.2016.10.009', '10.1016/j.media.2025.103473', '10.1038/s41592-020-01008-z', 'arxiv.org/abs/2407.17265', '10.1177/13524585261427333', 'github.com/neuropoly/totalspineseg', '10.1002/ana.24932', '10.1038/s41393-020-00561-w'],
-  calmar: ['10.1093/brain/awv228', '10.1016/j.neuroimage.2022.119474', 'SynthStroke', 'arxiv.org/abs/2403.19425', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01875-5', '10.1109/TMI.2021.3116879', '10.1016/j.neuroimage.2010.07.033', '10.1152/jn.00338.2011', '10.1093/cercor/bhx179', '10.1038/s41467-018-03399-2', '10.1038/nmeth.1635'],
+  calmar: ['10.1016/j.neuroimage.2007.07.053', '10.1093/brain/awv228', '10.1016/j.neuroimage.2022.119474', 'SynthStroke', '10.1038/s41467-025-62373-x', '10.1038/s41597-024-03667-5', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01875-5', '10.1109/TMI.2021.3116879', '10.1016/j.neuroimage.2010.07.033', '10.1152/jn.00338.2011', '10.1093/cercor/bhx179', '10.1038/s41467-018-03399-2', '10.1038/nmeth.1635'],
   qsmbly: ['10.1002/mrm.29048', '10.1016/j.neuroimage.2021.118175', '10.1002/nbm.3570', '10.1002/nbm.4461', '10.1016/j.neuroimage.2018.06.030', '10.1016/j.neuroimage.2020.116579', '10.1016/j.neuroimage.2019.116389', '10.1002/mp.17747', '10.1007/978-3-030-59713-9_13', '10.1016/j.neuroimage.2021.118376', '10.1016/j.neuroimage.2019.116064', '10.1016/j.neuroimage.2022.119729', '10.1002/hbm.24750', '10.1002/mrm.29722', '10.1002/hbm.10062', '10.1016/j.neuroimage.2024.120769', '10.1002/mrm.28563', '10.1002/mrm.26963', '10.1002/mrm.23000', '10.1002/nbm.1670', '10.1002/mrm.22135', '10.1002/mrm.22816', '10.1016/j.neuroimage.2015.02.041', '10.1016/j.neuroimage.2020.117701', '10.1016/j.jneumeth.2016.03.001'],
   seedseg: ['10.1038/s41592-020-01008-z', '10.1007/978-3-031-72114-4_47', '10.1101/2023.10.26.564293', '10.1007/978-3-319-46723-8_49', '10.1016/j.jneumeth.2016.03.001'],
   dicompare: ['github.com/astewartau/dicompare', 'pyodide.org', '10.1016/j.jneumeth.2016.03.001'],
@@ -44,9 +52,11 @@ const REQUIRED_METHODS = {
   niimath: ['10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001'],
   mri2vid: ['10.1007/s003300101100', '10.1016/j.jneumeth.2016.03.001', 'github.com/Vanilagy/mp4-muxer'],
   browserqc: ['10.1371/journal.pone.0184661', '10.21105/joss.05098', '10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001', '10.1098/rstb.2001.0915'],
+  brainchop: ['10.21105/joss.05098'],
   brain2print: ['10.1038/s41598-025-00014-5', '10.1016/j.neuroimage.2026.122074', '10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001'],
   topofit: ['arxiv.org/abs/2505.14017', 'proceedings.mlr.press/v172/hoopes22a.html', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue', '10.1016/j.neuroimage.2012.11.065', '10.52294/001c.94384'],
   surfannotate: ['10.1016/j.neuroimage.2012.01.021', 'github.com/niivue/niivue'],
+  samsrf: ['10.1016/j.neuroimage.2007.09.034', 'github.com/samsrf/samsrf', '10.1016/j.neuroimage.2012.10.037', '10.1002/hbm.26446', 'github.com/niivue/niivue'],
   zarro: ['10.1038/s41592-021-01326-w', 'zarr.dev', 'dandiarchive.org'],
   synthseg: ['10.1016/j.media.2023.102789', '10.52294/001c.94384', 'brain-development.org/ixi-dataset', '10.1016/j.neuroimage.2020.117200', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   synthsr: ['10.1016/j.neuroimage.2021.118206', 'github.com/neurolabusc/py_synthsr'],
@@ -65,7 +75,9 @@ const REQUIRED_METHODS = {
   fastprep: ['arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', '10.1038/s41592-018-0235-4', '10.52294/001c.94384', '10.1016/j.neuroimage.2026.122074', '10.1126/sciadv.add3607', '10.1016/j.neuroimage.2010.07.033', 'sites.google.com/view/greedyreg/cite', 'github.com/pyushkevich/greedy', '10.1016/j.neuroimage.2004.07.068', '10.1002/hbm.460020402', 'cowles.yale.edu/sites/default/files/2023-05/s-0383.pdf', '10.21105/joss.03669', '10.1016/j.neuroimage.2011.12.028', '10.1002/hbm.20359'],
   elastix: ['10.1109/TMI.2009.2035616', '10.3389/fninf.2013.00050', '10.1038/s41592-021-01326-w', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   brainqcnet: ['10.1162/imag_a_00300', 'github.com/cfchen-duke/ProtoPNet', '10.1109/CVPR.2016.90', '10.1038/s41597-022-01694-8', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  microsam: ['10.1038/s41592-024-02580-4', '10.1109/ICCV51070.2023.00371', '10.48550/arXiv.2306.14289', '10.1038/s41592-019-0612-7', 'onnxruntime.ai'],
   bison: ['10.1002/mrm.28547', '10.1016/j.neuroimage.2017.06.009', '10.1016/j.neuroimage.2010.07.033', '10.1016/S1053-8119(09)70884-5', 'sites.google.com/view/greedyreg/about', '10.1109/TMI.2010.2046908', '10.1002/jmri.22003', '10.52294/001c.94384', '10.18112/openneuro.ds007522.v2.0.1', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  gliomoda: ['10.1101/2025.11.12.25339968', '10.48550/arXiv.2507.09036', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01560-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {
@@ -73,7 +85,7 @@ test('every registered app has app information with packages and cited methods',
     const info = information.apps[app.id];
     assert.ok(info, `${app.id} has an app-information entry`);
     assert.ok(info.packages.length >= 1, `${app.id} lists what runs under the hood`);
-    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer/i.test(item.name)), `${app.id} names its runtime`);
+    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer|onnx runtime/i.test(item.name)), `${app.id} names its runtime`);
     const cited = info.citations.map((item) => `${item.doi ?? ''} ${item.url ?? ''} ${item.code ?? ''} ${item.title}`).join('\n');
     for (const method of REQUIRED_METHODS[app.id] ?? []) {
       assert.ok(cited.includes(method), `${app.id} must cite ${method}`);
@@ -228,11 +240,13 @@ test('DICOM handoff Privacy discloses unchanged scanner headers', () => {
   assert.match(privacy, /headers do hold the patient/);
 });
 
-test('SDC About records the reverse-PE ANTs exclusion without claiming single-PE availability', async () => {
+test('SDC About records the reverse-PE ANTs exclusion and the single-PE SyN-SDC method', async () => {
   const about = information.apps.sdc.about.join(' ');
   assert.match(about, /ANTs restricted SyN is not offered for reverse-PE pairs/);
   assert.match(about, /failed the image gate on all six subjects/);
-  assert.match(about, /Single-PE ANTs SyN-SDC is still under development and is not available/);
+  assert.match(about, /SyN-SDC estimates the field from one DWI series and a T1w/);
+  assert.match(about, /the direction is never guessed/);
+  assert.match(about, /only SyN-SDC writes a corrected DWI series/);
   const window = await mountShell('sdc');
   window.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="about"]').click();
   assert.match(window.document.querySelector('dialog[open]').textContent, /not offered for reverse-PE pairs/);
@@ -259,4 +273,34 @@ test('NODDI cites the NODDI toolbox paper and code for the toolbox fit', () => {
   assert.equal(toolbox.code, 'https://www.nitrc.org/projects/noddi_toolbox');
   assert.ok(app.packages.some((entry) => entry.name === 'NODDI toolbox 1.05 (Rust and WebAssembly port)'));
   assert.match(app.about.join(' '), /toolbox 1\.05 grid search and two-stage Rician maximum-likelihood fit/);
+});
+
+test('a hosted site offers handoffs only to the apps it serves', () => {
+  const neuro = registry.apps.filter((app) => app.catalog === 'neuro').map(({ id }) => id);
+  const { catalog } = appInformationPayload(information, 'dicomview', neuro);
+  const ids = catalog.map(({ id }) => id);
+  for (const moved of ['musclemap', 'seedseg', 'carotid-flow']) assert.ok(!ids.includes(moved), `${moved} is served from another host`);
+  assert.ok(ids.includes('white-matter-lesions'));
+  assert.ok(ids.every((id) => neuro.includes(id)));
+});
+
+test('the shell names the hosting catalogue in its Privacy text and More Apps link', async () => {
+  const neurodesk = await mountShell('syncro');
+  neurodesk.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
+  assert.match(neurodesk.document.querySelector('.nd-app-dialog[data-dialog="privacy"]').textContent, /The Neurodesk hosting layer records page views only/);
+  assert.ok(neurodesk.document.querySelector('.nd-app-bar a[title="More Neurodesk web apps"]'));
+
+  const sciget = await mountAppShell({
+    appId: 'syncro',
+    information: appInformationPayload(information, 'syncro'),
+    brandName: 'SciGet',
+    moreAppsLabel: 'More MSK web apps',
+  });
+  sciget.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
+  const privacy = sciget.document.querySelector('.nd-app-dialog[data-dialog="privacy"]').textContent;
+  assert.match(privacy, /The SciGet hosting layer records page views only/);
+  assert.doesNotMatch(privacy, /Neurodesk hosting/);
+  assert.ok(sciget.document.querySelector('.nd-app-bar a[title="More MSK web apps"]'));
+  const cite = (sciget.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="cite"]').click(), sciget.document.querySelector('.nd-app-dialog[data-dialog="cite"]').textContent);
+  assert.match(cite, /Neurodesk \(\d{4}\)\. /, 'the citation keeps its factual Neurodesk attribution');
 });

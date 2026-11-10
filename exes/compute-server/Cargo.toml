@@ -1,9 +1,9 @@
 [package]
 name = "compute-server"
-version = "0.2.20261004"
+version = "0.3.20261108"
 edition = "2021"
 license = "MIT"
-description = "neurodesk-compute: paired HTTP + SSE server for pinned NeSVoR and SCT tools"
+description = "neurodesk-compute: paired HTTP + SSE server for pinned NeSVoR and SCT tools and, in single-owner mode, Slurm project jobs"
 default-run = "neurodesk-compute"
 
 [lib]
@@ -28,6 +28,8 @@ if-addrs = "0.15"
 rand = "0.9"
 ring = "0.17"
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+regex = { version = "1", default-features = false, features = ["std", "unicode-perl"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

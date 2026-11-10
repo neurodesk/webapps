@@ -341,7 +341,7 @@ test('ESLint stays out of every app build, unit test and browser test', async ()
   // ESLint, and nothing else loads the runner or the config.
   const workspace = await graph;
   const catalog = reachableFrom(workspace, CATALOG);
-  const loaders = new Set(['scripts/lint.mjs', 'eslint.config.js', 'test/lint-coverage.test.mjs']);
+  const loaders = new Set(['scripts/lint.mjs', 'eslint.config.js', 'test-utils/lint-coverage-suite.mjs']);
   const imports = /(?:from\s*|import\s*\(\s*|require\(\s*)['"](?:(?:eslint|@eslint\/js|globals)(?:\/[^'"]*)?|[^'"]*\/(?:lint\.mjs|eslint\.config\.js))['"]|['"](?:[^'"]*\/)?scripts\/lint\.mjs['"]/;
   const sources = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' })
     .split('\0').filter(path => /\.(?:[cm]?[jt]sx?)$/.test(path));
@@ -626,7 +626,7 @@ test('a root-relative path joined onto a computed repository root selects its ap
 
 test('ci.yml runs the composite site build on pull requests that need it', async () => {
   const ci = parse(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
-  assert.equal(ci.jobs['composite-site'].if, "github.event_name != 'pull_request' || needs.app-plan.outputs.has_site == 'true'");
+  assert.equal(ci.jobs['composite-site'].if, "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'pull_request' || needs.app-plan.outputs.has_site == 'true')");
   assert.equal(ci.jobs['app-plan'].outputs.has_site, '${{ steps.plan.outputs.has_site }}');
 });
 
@@ -1103,6 +1103,9 @@ test('only the composite build and its own tests read the composite-only site fi
     'scripts/build-site.mjs',
     'scripts/lib/landing-page.mjs',
     'scripts/lib/dicompare-routes.mjs',
+    'scripts/lib/catalog-sites.mjs',
+    'scripts/lib/hub-page.mjs',
+    'scripts/lib/not-found-page.mjs',
     'scripts/write-analytics.mjs',
     'test-utils/dicompare-routes.mjs',
     'knip.config.mjs',
@@ -1110,8 +1113,8 @@ test('only the composite build and its own tests read the composite-only site fi
     'scripts/lib/app-plan.mjs',
     ...SITE_ONLY_FILES,
   ]);
-  // Upstream copies naming their own landing.css and SPA 404 page.
-  const unrelated = new Set(['apps/qsmbly/upstream.json', 'apps/dicompare/legacy-ci/deploy.yml']);
+  // Upstream adaptation notes and copied deployment configuration are not runtime readers.
+  const unrelated = new Set(['apps/qsmbly/upstream.json', 'apps/dicompare/upstream.json', 'apps/dicompare/legacy-ci/deploy.yml']);
   const names = [...SITE_ONLY_FILES].map((path) => path.slice('site/'.length).replaceAll('.', '\\.'));
   for (const file of filesNaming(names.join('|'))) {
     if (file.startsWith('test/') || file.startsWith('site/easter-eggs/') || unrelated.has(file)) continue;

@@ -31,3 +31,17 @@ python3 tests/fixtures/ds004884-mini/build.py
 Re-runs against the upstream S3 URLs and overwrites these committed files.
 The result is reproducible across machines as long as OpenNeuro doesn't
 update the upstream release.
+
+## Example clinical context
+
+The hosted `stroke_T1.nii.gz` is byte-identical to this fixture (SHA-256
+`725a37bf9556c6776a7be552597999df67d175a44eafc03252db058e8f5c5cad`).
+The example metadata in `apps/calmar/examples.json` is transcribed from
+[v1.0.1 participants.tsv](https://github.com/OpenNeuroDatasets/ds004884/blob/530e0ef2e26e9108902b00df9724d4cb3066d4ea/participants.tsv),
+row `sub-M2051`: sex M, age_at_stroke 45, wab_days 705, wab_aq 34.7,
+wab_type Broca. The pinned `participants.json` defines `wab_days` as days
+post-stroke at WAB-R collection; the pinned README defines session names as
+days post-stroke at MRI. Thus this scan is day 284 and the assessment is day
+705. Do not assign the assessment time to the scan or derive symptom severity
+ratings from the aphasia classification or aggregate score. The runtime uses
+the bundled metadata; source links are attribution, not runtime downloads.

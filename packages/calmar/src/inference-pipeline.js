@@ -26,10 +26,15 @@ const TTA_AXES = [[0], [1], [2], [0, 1], [0, 2], [1, 2], [0, 1, 2]];
     return result;
   }
 
-  function zeroPadToPatchMultiple(data, dims, patchSize) {
+  function zeroPadToPatchMultiple(data, dims, patchSize, paddingMode = 'multiple') {
     const [nx, ny, nz] = dims;
     const [px, py, pz] = Array.isArray(patchSize) ? patchSize : [patchSize, patchSize, patchSize];
-    const pad = (d, p) => d > p && d % p !== 0 ? Math.ceil(d / p) * p : d < p ? p : d;
+    if (!['multiple', 'minimum'].includes(paddingMode)) {
+      throw new Error(`Unknown inference padding mode: ${paddingMode}`);
+    }
+    const pad = (d, p) => paddingMode === 'minimum'
+      ? Math.max(d, p)
+      : d > p && d % p !== 0 ? Math.ceil(d / p) * p : d < p ? p : d;
     const nnx = pad(nx, px);
     const nny = pad(ny, py);
     const nnz = pad(nz, pz);
@@ -283,6 +288,7 @@ const TTA_AXES = [[0], [1], [2], [0, 1], [0, 2], [1, 2], [0, 1, 2]];
    *   threshold:             probability threshold for binarization (default 0.5)
    *   minComponentSize:      drop CCs smaller than this (default 10)
    *   testTimeAugmentation:  average across 8 axis-flipped predictions (default false)
+   *   paddingMode:           'minimum' pads only axes shorter than a patch; default 'multiple'
    *   normalizeInput:        z-score normalize before padding (default true)
    *
    * Callbacks (all optional):
@@ -315,7 +321,7 @@ const TTA_AXES = [[0], [1], [2], [0, 1], [0, 2], [1, 2], [0, 1, 2]];
     }
 
     const prePadDims = [...currentDims];
-    const padded = zeroPadToPatchMultiple(currentData, currentDims, patchDims);
+    const padded = zeroPadToPatchMultiple(currentData, currentDims, patchDims, options.paddingMode);
     if (padded.dims[0] !== currentDims[0] || padded.dims[1] !== currentDims[1] || padded.dims[2] !== currentDims[2]) {
       onLog(`Padded: ${currentDims.join('x')} -> ${padded.dims.join('x')} (zero-pad)`);
       currentData = padded.data;

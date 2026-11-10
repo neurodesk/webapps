@@ -31,6 +31,18 @@ test('auxiliary files go to their own input and a scan fills each empty image sl
   assert.deepEqual(fsl.map(([input, files]) => [input, files.map(f => f.name)]), [[scan, ['data.nii.gz']], [gradients, ['bvals', 'bvecs']]]);
 });
 
+test('a mask input never takes dropped scans, so a DWI and its T1w stay together', () => {
+  const { document } = new JSDOM(`<body>
+    <input type="file" data-neurodesk-input="mask" id="dwiMask">
+    <input type="file" data-neurodesk-input="image" id="images" multiple>
+    <input type="file" data-neurodesk-input="mask" id="t1wMask"></body>`).window;
+  const scan = primaryInput(document);
+  assert.equal(scan.id, 'images', 'a mask input never leads, even when it comes first');
+  const masks = [document.getElementById('dwiMask'), document.getElementById('t1wMask')];
+  const files = ['sub-01_dwi.nii.gz', 'sub-01_dwi.bval', 'sub-01_dwi.bvec', 'sub-01_dwi.json', 'sub-01_T1w.nii.gz'].map(file);
+  assert.deepEqual(routeFiles(files, [masks[0], scan, masks[1]], scan), [[scan, files]]);
+});
+
 test('a dropped BIDS diffusion dataset stays together at the primary input', () => {
   const scan = { dataset: { neurodeskInput: 'image' } };
   const mask = { dataset: { neurodeskInput: 'image' } };
@@ -181,6 +193,40 @@ test('an example supersedes a pending traversal before it can commit', async t =
   const { window, input, deferredDrop, undo } = dropSession('<input type="file" data-neurodesk-input="image">', t);
   const finishEarlier = deferredDrop('earlier.nii');
   input.dispatchEvent(new window.CustomEvent('nd-example-status', { bubbles: true, detail: { state: 'ready' } }));
+  await finishEarlier();
+  assert.deepEqual([...input.files], []);
+  assert.equal(undo(), null);
+});
+
+test('ordinary empty auxiliary reports preserve Undo and pending traversal', async t => {
+  const { window, input, inputs, pick, drop, deferredDrop, undo } = dropSession('<input type="file" data-neurodesk-input="image"><input type="file" data-neurodesk-input="mask">', t);
+  const reportEmptyMask = () => inputs[1].dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+  pick('original.nii');
+  await drop('replacement.nii');
+  input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [...input.files] } }));
+  reportEmptyMask();
+  assert.ok(undo());
+  undo().click();
+  assert.deepEqual([...input.files].map(f => f.name), ['original.nii']);
+  const finishEarlier = deferredDrop('earlier.nii');
+  reportEmptyMask();
+  await finishEarlier();
+  assert.deepEqual([...input.files].map(f => f.name), ['earlier.nii']);
+});
+
+test('explicitly clearing inputs supersedes pending traversal and withdraws Undo', async t => {
+  const { window, input, pick, drop, deferredDrop, undo } = dropSession('<input type="file" data-neurodesk-input="image">', t);
+  const clear = () => {
+    input.files = [];
+    input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [], cancelPending: true } }));
+  };
+  pick('original.nii');
+  await drop('replacement.nii');
+  assert.ok(undo());
+  clear();
+  assert.equal(undo(), null);
+  const finishEarlier = deferredDrop('earlier.nii');
+  clear();
   await finishEarlier();
   assert.deepEqual([...input.files], []);
   assert.equal(undo(), null);

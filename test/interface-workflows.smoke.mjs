@@ -6,6 +6,10 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 import { dicomSeries } from '../test-utils/dicom-fixture.mjs';
 import { bidsTree, dropFolder } from '../test-utils/bids-folder-drop.mjs';
+import { imagejDescription, writeTiffStack } from '../packages/components/src/file-io/tiff.js';
+import { syntheticImage } from '../apps/spot-detection/src/synthetic.js';
+import { writeTiffStack as writeSpotTiff } from '../apps/spot-detection/test/tiff-fixture.mjs';
+import { syntheticMosaic } from '../apps/stitching/test/synthetic.js';
 
 function nifti(name, value = 20) {
   const buffer = Buffer.alloc(352 + 4096, 0);
@@ -55,6 +59,42 @@ async function checkBidsRun(page) {
   await expect(page.locator('#runSelect')).toBeHidden();
   await input.tap();
   await expect(page.locator('#runSelect')).toHaveValue('1');
+}
+// A 32 × 24 uint16 movie of 30 frames at 10 Hz with one blinking blob, as an ImageJ TIFF.
+function calciumMovie(name) {
+  const width = 32;
+  const height = 24;
+  const frames = 30;
+  const data = new Uint16Array(frames * width * height);
+  for (let f = 0; f < frames; f++) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const blob = Math.exp(-((y - 12) ** 2 + (x - 16) ** 2) / 8) * (f % 10 < 3 ? 400 : 100);
+        data[(f * height + y) * width + x] = Math.round(200 + blob + ((f * 31 + y * 7 + x * 13) % 17));
+      }
+    }
+  }
+  const description = imagejDescription({ frames, frameInterval: 0.1 });
+  return { name, mimeType: 'image/tiff', buffer: Buffer.from(writeTiffStack({ width, height, data, description })) };
+}
+// A 2 × 1 mosaic of 128 × 96 uint16 tiles with 25 % overlap, as two TIFF files.
+function stitchingTiles() {
+  const { tiles } = syntheticMosaic({ columns: 2, rows: 1, shape: [128, 96], overlap: 0.25, jitter: 3 });
+  return tiles.map((tile, k) => ({
+    name: `interface_tile_${k + 1}.tif`,
+    mimeType: 'image/tiff',
+    buffer: Buffer.from(writeTiffStack({ width: 128, height: 96, data: Uint16Array.from(tile.data, (v) => Math.round(v * 20)) })),
+  }));
+}
+// A 48 × 36 uint16 field image with an off-centre illumination peak, as a baseline TIFF.
+function fieldImage(name) {
+  const width = 48;
+  const height = 36;
+  const data = new Uint16Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) data[y * width + x] = Math.round(500 + 2000 * Math.exp(-((x - 28) ** 2 + (y - 15) ** 2) / 800));
+  }
+  return { name, mimeType: 'image/tiff', buffer: Buffer.from(writeTiffStack({ width, height, data })) };
 }
 const apps = (await loadAppsRegistry()).apps;
 const site = await serveSite(join(repoRoot, 'dist'));
@@ -417,6 +457,29 @@ try {
     await page.locator('#overlayPanel > summary').tap();
     await expect(page.locator('#surfaceList')).toContainText('interface.obj');
   });
+  await check('samsrf', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open','');
+    const file = name => ({ name, mimeType: 'application/octet-stream', buffer: Buffer.from('x') });
+    await page.locator('#runsInput').setInputFiles(['lh_uBars1.gii','aps_Bars.mat','lh.V123.label','lh.inflated'].map(file));
+    await expect(page.locator('#runsInfo')).toHaveText('lh_uBars1.gii');
+    await expect(page.locator('#aperturesDrop')).toContainText('aps_Bars.mat');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await page.locator('#analysis').selectOption('cf');
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await expect(page.locator('#runHint')).toHaveText('Needs a template map, a seed label, a surface area file');
+    await page.locator('#analysis').selectOption('prf');
+    await page.locator('#advancedSettings > summary').tap();
+    await page.locator('#fineFitThreshold').fill('0.2');
+    await page.locator('#fineFitThreshold').dispatchEvent('change');
+    await expect(page.locator('#modelJson')).toHaveValue(/"Fine_Fit_Threshold": 0.2/);
+    const task = page.locator('#analysisSection > summary');
+    await task.tap();
+    await expect(page.locator('#fineFitThreshold')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#fineFitThreshold')).toHaveValue('0.2');
+  });
   await check('dicompare', async page => {
     const toggle = page.locator('button[aria-controls="workflow-compare"]');
     await toggle.focus(); await page.keyboard.press('Enter');
@@ -576,6 +639,45 @@ try {
     await expect(page.locator('#runButton')).toBeEnabled();
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
+  await check('spot-detection', async page => {
+    const tiff = (name, image) => ({ name, mimeType: 'image/tiff', buffer: writeSpotTiff(image) });
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(tiff('cells.tif', syntheticImage([6, 40, 48], 15, 5)));
+    await expect(page.locator('#fileInfo')).toHaveText('cells.tif · 6 × 40 × 48 · uint16');
+    await page.locator('#voxelYx').fill('110');
+    await page.locator('#detectIn').selectOption('projection');
+    // The threshold in Advanced settings and the labels must survive closing their sections.
+    const advanced = page.locator('#advancedSettings > summary');
+    await advanced.tap();
+    await page.locator('#threshold').fill('150');
+    await advanced.tap();
+    await expect(page.locator('#threshold')).toBeHidden();
+    const labels = page.locator('#labelSection > summary');
+    await labels.tap();
+    await page.locator('#labelInput').setInputFiles(tiff('labels.tif', { data: new Uint16Array(40 * 48).fill(3), shape: [40, 48] }));
+    await expect(page.locator('#labelField')).toContainText('labels.tif · 1 cell');
+    await labels.tap();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#voxelYx')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#voxelYx')).toHaveValue('110');
+    await expect(page.locator('#detectIn')).toHaveValue('projection');
+    await advanced.tap();
+    await expect(page.locator('#threshold')).toHaveValue('150');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText(/^\d+ spots detected$/, { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('at threshold 150');
+    await expect(page.locator('#resultList')).toContainText('Cell counts · 1 cell');
+    // A new image withdraws the results and the labels of the old one.
+    await page.locator('#imageInput').setInputFiles(tiff('other.tif', syntheticImage([40, 48], 10, 3)));
+    await expect(page.locator('#fileInfo')).toContainText('other.tif · 40 × 48');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+    await expect(page.locator('#labelField')).toContainText('Drop a label TIFF on the image grid');
+    await expect(page.locator('#detectIn')).toBeDisabled();
+  });
   await check('ants-denoise', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
@@ -611,6 +713,135 @@ try {
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
     await expect(page.locator('#maskField')).toContainText('Drop a mask on the image grid');
   });
+  await check('stitching', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#tileInput').setInputFiles(stitchingTiles());
+    await expect(page.locator('#fileInfo')).toHaveText('2 tiles · 128 × 96 · uint16', { timeout: 60000 });
+    await expect(page.locator('#columns')).toHaveValue('2');
+    await page.locator('#overlap').fill('25');
+    // Values chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#threshold')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#threshold').fill('0.4');
+    await advanced.tap();
+    await expect(page.locator('#threshold')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#overlap')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#threshold')).toHaveValue('0.4');
+    await expect(page.locator('#overlap')).toHaveValue('25');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toContainText('Stitched 2 tiles', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('TileConfiguration.registered.txt');
+    // New tiles withdraw the results of the old ones.
+    await page.locator('#tileInput').setInputFiles(stitchingTiles().map((file) => ({ ...file, name: `again_${file.name}` })));
+    await expect(page.locator('#fileInfo')).toHaveText('2 tiles · 128 × 96 · uint16');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
+  await check('calcium-imaging', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#movieInput').setInputFiles(calciumMovie('interface-movie.tif'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-movie.tif · 32 × 24 · 30 frames · uint16 · 10.00 Hz');
+    await expect(page.locator('#frameRate')).toHaveValue('10');
+    await page.locator('#motion').selectOption('none');
+    // Values chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#seedZ')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#seedZ').fill('3');
+    await page.locator('#baselineWindow').fill('2');
+    await advanced.tap();
+    await expect(page.locator('#seedZ')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#motion')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#seedZ')).toHaveValue('3');
+    await expect(page.locator('#baselineWindow')).toHaveValue('2');
+    await expect(page.locator('#motion')).toHaveValue('none');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toContainText('Preprocessing complete', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Registered movie · None');
+    // A new movie withdraws the results of the old one.
+    await page.locator('#movieInput').setInputFiles(calciumMovie('interface-movie-2.tif'));
+    await expect(page.locator('#fileInfo')).toContainText('interface-movie-2.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
+  await check('structure-tensor', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t1.nii'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-t1.nii · 3D 16 × 16 × 16 · 1 × 1 × 1 mm');
+    await page.locator('#sigma').fill('1.5');
+    await page.locator('#rho').fill('4');
+    // The distribution thresholds must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#minCoherency')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#minCoherency').fill('0.4');
+    await page.locator('#minEnergy').fill('5');
+    await advanced.tap();
+    await expect(page.locator('#minCoherency')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#sigma')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#sigma')).toHaveValue('1.5');
+    await expect(page.locator('#rho')).toHaveValue('4');
+    await expect(page.locator('#minCoherency')).toHaveValue('0.4');
+    await expect(page.locator('#minEnergy')).toHaveValue('5');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('Orientation maps ready', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Direction colour map');
+    // A new image withdraws the results of the old one.
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t2.nii', 40));
+    await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
+  await check('microscope-qc', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#imageInput').setInputFiles(fieldImage('interface-field.tif'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-field.tif · 48 × 36 · 1 plane · uint16', { timeout: 60000 });
+    await expect(page.locator('#analysis')).toHaveValue('field');
+    // Values chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#step')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#step').fill('20');
+    await page.locator('#referenceZone').uncheck();
+    await advanced.tap();
+    await expect(page.locator('#step')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#analysis')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#step')).toHaveValue('20');
+    await expect(page.locator('#referenceZone')).not.toBeChecked();
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toContainText('Quality control complete', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Iso-intensity zones · 20 % steps');
+    // A new image withdraws the results of the old one.
+    await page.locator('#imageInput').setInputFiles(fieldImage('interface-field-2.tif'));
+    await expect(page.locator('#fileInfo')).toContainText('interface-field-2.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
   await check('brainqcnet', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
@@ -638,6 +869,104 @@ try {
     await expect(page.locator('#cancelButton')).toBeHidden();
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
+  await check('stardist', async page => {
+    const { syntheticNuclei } = await import('../apps/stardist/test/offline.mjs');
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(syntheticNuclei());
+    await expect(page.locator('#fileInfo')).toHaveText('synthetic-nuclei.tif · 160 × 160 · TIFF');
+    await expect(page.locator('#channelField')).toBeHidden();
+    // Thresholds and tiles chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#probThresh')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#probThresh').fill('0.6');
+    await page.locator('#tiles').selectOption('2');
+    await advanced.tap();
+    await expect(page.locator('#tiles')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#runButton')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#probThresh')).toHaveValue('0.6');
+    await expect(page.locator('#tiles')).toHaveValue('2');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('9 nuclei segmented', { timeout: 120000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Nucleus labels · 9 nuclei');
+    // A new image withdraws the result of the old one.
+    await page.locator('#imageInput').setInputFiles({ ...syntheticNuclei(), name: 'second.tif' });
+    await expect(page.locator('#fileInfo')).toContainText('second.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
+  await check('neuromorph', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    const swc = (name, rows) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(rows.join('\n')) });
+    const fork = ['1 1 0 0 0 5 -1', '2 3 5 0 0 1 1', '3 3 10 0 0 1 2', '4 3 10 10 0 0.5 3', '5 3 20 0 0 0.5 3'];
+    await page.locator('#swcInput').setInputFiles([swc('fork.swc', fork), swc('orphan.swc', [...fork, '6 3 30 0 0 0 9'])]);
+    await expect(page.locator('#fileInfo')).toHaveText('2 reconstructions');
+    await page.locator('#neuronSelect').selectOption({ label: 'orphan.swc' });
+    await expect(page.locator('#checks')).toContainText('named a missing parent');
+    // The step and repair option must survive closing the task section, and the chosen neuron the input section.
+    await page.locator('#shollStep').fill('5');
+    await page.locator('#repair').uncheck();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#shollStep')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#shollStep')).toHaveValue('5');
+    await expect(page.locator('#repair')).not.toBeChecked();
+    const input = page.locator('#inputSection > summary');
+    await input.tap();
+    await input.tap();
+    await expect(page.locator('#neuronSelect')).toHaveValue('1');
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('2 reconstructions measured');
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Sholl intersections · 5 µm step');
+    await expect(page.locator('#resultList')).toContainText('Repaired SWC · orphan.swc');
+    // New files withdraw the old tables.
+    await page.locator('#swcInput').setInputFiles([swc('fork.swc', fork)]);
+    await expect(page.locator('#fileInfo')).toHaveText('fork.swc');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+    await expect(page.locator('#neuronField')).toBeHidden();
+  });
+  await check('microsam', async page => {
+    const { syntheticDiscs } = await import('../apps/microsam/test/offline.mjs');
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(syntheticDiscs());
+    await expect(page.locator('#fileInfo')).toHaveText('synthetic-discs.tif · 128 × 128 · TIFF');
+    await expect(page.locator('#channelField')).toBeHidden();
+    // The backend chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#backend')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#backend').selectOption('wasm');
+    await advanced.tap();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#embedButton')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#backend')).toHaveValue('wasm');
+    await page.locator('#embedButton').tap();
+    await expect(page.locator('#statusText')).toHaveText(/^Embeddings ready/, { timeout: 180000 });
+    const box = await page.locator('#canvas').boundingBox();
+    const scale = Math.min(box.width, box.height) / 128;
+    await page.locator('#canvas').tap({ position: { x: box.width / 2 - 32 * scale, y: box.height / 2 - 32 * scale } });
+    await expect(page.locator('#acceptButton')).toBeEnabled({ timeout: 60000 });
+    await page.locator('#acceptButton').tap();
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Object labels · 1 object');
+    // A new image withdraws the objects of the old one.
+    await page.locator('#imageInput').setInputFiles({ ...syntheticDiscs(), name: 'second.tif' });
+    await expect(page.locator('#fileInfo')).toContainText('second.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
   await check('sdc', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
@@ -659,6 +988,33 @@ try {
     await expect(page.locator('#reference')).toHaveValue('0');
     await expect(page.locator('#fileInfo')).toHaveText('Image 1: sub-01_dir-PA_epi.nii · j');
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+    // SyN-SDC: a DWI series whose sidecar lacks the acquisition fields, and a T1w.
+    await page.locator('#method').selectOption('syn');
+    await expect(page.locator('#fileInfo')).toBeHidden();
+    await expect(page.locator('#runButton')).toHaveText('Correct distortion');
+    await page.locator('#imageInput').setInputFiles([
+      ...dwiSeries('sub-01_dir-AP_dwi'),
+      { name: 'sub-01_dir-AP_dwi.json', mimeType: 'application/json', buffer: Buffer.from('{}') },
+      nifti('sub-01_T1w.nii'),
+    ]);
+    await expect(page.locator('#pairInfo')).toHaveText('T1w: sub-01_T1w.nii');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    // The acquisition fields and Advanced settings chosen must survive closing their sections.
+    await page.locator('#direction').selectOption('j-');
+    await page.locator('#readout').fill('0.038');
+    const advanced = page.locator('#advancedSettings > summary');
+    await advanced.tap();
+    await page.locator('#prior').selectOption('none');
+    await advanced.tap();
+    await expect(page.locator('#prior')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#direction')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#direction')).toHaveValue('j-');
+    await expect(page.locator('#readout')).toHaveValue('0.038');
+    await expect(page.locator('#prior')).toHaveValue('none');
+    await expect(page.locator('#cancelButton')).toBeHidden();
   });
   await check('dwicorrect', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });

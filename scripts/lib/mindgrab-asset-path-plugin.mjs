@@ -20,13 +20,21 @@ export function mindgrabFromAssetPath() {
   };
 }
 
+// MindGrab's module suffix for each backend it can run.
+const BACKEND_SUFFIX = { webgpu: '-gpu', webgl2: '-gl', cpu: '' };
+
 // Serves and emits the named models' MindGrab modules (WebGPU, WebGL2 and threaded CPU builds)
 // under `directory`/, for an app that passes assetPath = BASE_URL + `directory`/ to the shared
 // runtime (@neurodesk/runtime-support/mindgrab), which runs MindGrab inside its own worker.
-// `packageJson` is the path of the @brainchop/mindgrab package.json the app pins.
-export function mindgrabAssets({ packageJson, models, directory = 'mindgrab' }) {
+// `packageJson` is the path of the @brainchop/mindgrab package.json the app pins. An app that
+// always requests one backend (`backend: 'cpu'`) stages only that backend's modules.
+export function mindgrabAssets({ packageJson, models, directory = 'mindgrab', backends = ['webgpu', 'webgl2', 'cpu'] }) {
   const root = dirname(packageJson);
-  const modules = models.flatMap((model) => ['-gpu', '-gl', ''].flatMap((backend) => ['js', 'wasm'].map((ext) => `brainchop-${model}${backend}.${ext}`)));
+  const suffixes = backends.map((backend) => {
+    if (!(backend in BACKEND_SUFFIX)) throw new Error(`Unknown MindGrab backend ${backend}`);
+    return BACKEND_SUFFIX[backend];
+  });
+  const modules = models.flatMap((model) => suffixes.flatMap((suffix) => ['js', 'wasm'].map((ext) => `brainchop-${model}${suffix}.${ext}`)));
   const files = new Map([
     ...modules.map((name) => [`${directory}/${name}`, join(root, 'dist', name)]),
     [`${directory}/LICENSE`, join(root, 'LICENSE')],

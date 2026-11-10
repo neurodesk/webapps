@@ -15,6 +15,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/brain-extraction': 'brain-extraction',
   '@neurodesk/brain2print': 'brain2print',
   '@neurodesk/browserqc': 'browserqc',
+  '@neurodesk/brainqcnet': 'brainqcnet',
   '@neurodesk/calmar': 'calmar',
   '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/deface': 'deface',
@@ -34,6 +35,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/musclemap': 'musclemap',
   '@neurodesk/n4': 'n4',
   '@neurodesk/niimath': 'niimath',
+  '@neurodesk/samsrf': 'samsrf',
   '@neurodesk/sdc': 'sdc',
   '@neurodesk/noddi': 'noddi',
   '@neurodesk/seedseg': 'seedseg',
@@ -189,6 +191,9 @@ export function mergeSameVersionSections(text, version) {
  * version registers a site here; test/app-versions.test.mjs checks they agree.
  */
 export const EMBEDDED_VERSION_SITES = Object.freeze({
+  'microscope-qc': [
+    { file: 'apps/microscope-qc/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
   hmc: [
     { file: 'apps/hmc/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],
@@ -209,6 +214,15 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
   ],
   noddi: [
     { file: 'apps/noddi/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  'calcium-imaging': [
+    { file: 'apps/calcium-imaging/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  'cryo-em': [
+    { file: 'apps/cryo-em/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  stitching: [
+    { file: 'apps/stitching/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
   ],
   dwicorrect: [
     { file: 'apps/dwicorrect/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },

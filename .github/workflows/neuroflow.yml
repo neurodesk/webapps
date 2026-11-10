@@ -2,6 +2,7 @@ name: neuroflow
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/neuroflow.yml'
       - 'apps/pipeline-builder/**'
@@ -28,6 +29,30 @@ on:
       - 'pnpm-workspace.yaml'
   push:
     branches: [main]
+    paths:
+      - '.github/workflows/neuroflow.yml'
+      - 'apps/pipeline-builder/**'
+      - 'apps/n4/**'
+      - 'apps/brain-extraction/**'
+      - 'apps/synthseg/**'
+      - 'apps/dwidenoise/**'
+      - 'apps/degibbs/**'
+      - 'apps/dwicorrect/**'
+      - 'apps/noddi/**'
+      - 'apps/dwi2trx/**'
+      - 'apps/calmar/tests/fixtures/synthstrip-mini/**'
+      - 'packages/**'
+      - 'exes/**'
+      - 'test-utils/**'
+      - 'test/**'
+      - 'scripts/**'
+      - 'registry/**'
+      - 'models/**'
+      - 'test/neuroflow*'
+      - 'test/pipeline-builder*'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
   workflow_dispatch:
     inputs:
       diagnostic_models:
@@ -46,6 +71,7 @@ concurrency:
 
 jobs:
   exported-template:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: macos-15
     timeout-minutes: ${{ matrix.timeout }}
     strategy:

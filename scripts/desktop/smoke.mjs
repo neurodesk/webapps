@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { prepareWorkflow, verifyWorkflow } from './workflows.mjs';
+import { diagnosticLines, failureSnapshot } from './smoke-diagnostics.mjs';
 import { observePageDiagnostics } from './page-diagnostics.mjs';
 import { verifyBundle } from '../../packages/desktop/src/bundle.js';
 
@@ -36,6 +37,17 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
       env: { ...environment, ...(prepared?.env ?? {}), NEURODESK_BUNDLE: resources, NEURODESK_APP: app.id, NEURODESK_USER_DATA: userData, NEURODESK_DOWNLOADS: join(report, app.id, 'downloads') },
       timeout: 60000,
     });
+    if (environment.NEURODESK_SMOKE_DIAGNOSTICS === '1') {
+      const child = desktop.process();
+      for (const channel of ['stdout', 'stderr']) {
+        const consume = diagnosticLines(record => console.error(JSON.stringify(record)));
+        child[channel]?.on('data', chunk => {
+          consume(chunk);
+          console.error(JSON.stringify({ time: new Date().toISOString(), event: `electron-${channel}`, bytes: chunk.length }));
+        });
+      }
+      child.on('exit', (code, signal) => console.error(JSON.stringify({ time: new Date().toISOString(), event: 'electron-exit', code, signal })));
+    }
     const page = await desktop.firstWindow();
     let reporting = false;
     let previousStatus = '';
@@ -85,6 +97,10 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
     if (process.env.NEURODESK_MODELS_DIR && downloaded) errors.push(`Downloaded ${downloaded} models although a model pack is installed`);
     results.push({ app: app.id, passed: !errors.length && !missing.length && !blocked.length, errors, missing, blocked, downloaded, workflow, diagnostics });
   } catch (error) {
+    if (desktop && environment.NEURODESK_SMOKE_DIAGNOSTICS === '1') {
+      const server = await failureSnapshot(() => desktop.evaluate(() => globalThis.neurodeskOffline?.serverSnapshot?.()));
+      console.error(JSON.stringify({ time: new Date().toISOString(), event: server ? 'failure-snapshot' : 'failure-snapshot-unavailable', ...(server ? { server } : {}) }));
+    }
     errors.push(error.message);
     results.push({ app: app.id, passed: false, errors, missing, diagnostics });
   } finally {

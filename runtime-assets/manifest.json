@@ -119,6 +119,21 @@
       ]
     },
     {
+      "id": "n4-wasm",
+      "version": "0.6.20261031",
+      "target": "n4/0.6.20261031",
+      "deduplicate": true,
+      "reason": "Share the N4 binary used by N4 and SDC's SyN-SDC while keeping each app's pthread module inside its service-worker scope; the module finds the binary through its static new URL(\"n4-bias.wasm\").",
+      "files": [
+        {
+          "name": "n4-bias.wasm",
+          "source_app": "n4",
+          "source": "n4/n4-bias.wasm",
+          "sha256": "3d15f90b995c5996977863d59b2d68f186136a26d68775a880f97a583e38e638"
+        }
+      ]
+    },
+    {
       "id": "nv-mcp",
       "version": "1.0.0-rc.7",
       "target": "nv-mcp/1.0.0-rc.7",
@@ -194,6 +209,42 @@
           "source_app": "deface",
           "source": "mindgrab/brainchop-mindgrab-gpu.wasm",
           "sha256": "ef5671590c9e38258beaa6c5ab90be4c830f68a684cd5cc47cb57e2aa95480d6"
+        }
+      ]
+    },
+    {
+      "id": "ngff-codecs",
+      "version": "0.38.0",
+      "target": "ngff-codecs/0.38.0",
+      "deduplicate": true,
+      "match_by": "sha256",
+      "reason": "Identical Blosc and Zstd codec chunks shared by microscopy apps; embedded WASM stays with its loader.",
+      "files": [
+        {
+          "name": "blosc-j6ygecpn.js",
+          "source_app": "stitching",
+          "source": "assets/blosc-j6ygecpn.js",
+          "sha256": "740fb07ecf1f4771840e671a425161590ae3f6ba7b1127d7b0c1a52f2c08bb2e"
+        },
+        {
+          "name": "zstd-Cp7BEDDH.js",
+          "source_app": "stitching",
+          "source": "assets/zstd-Cp7BEDDH.js",
+          "sha256": "48fe19532c4474f278c9d791a606966364e3426895dbb0e7b3532f8c24afc26a"
+        }
+      ]
+    },
+    {
+      "id": "ngff-codec-support",
+      "version": "0.38.0",
+      "target": "ngff-codecs/0.38.0",
+      "reason": "Keep the codecs’ relative base64 helper beside them. App copies remain for other local codecs.",
+      "files": [
+        {
+          "name": "chunk-INHXZS53-D3tQiqtZ.js",
+          "source_app": "stitching",
+          "source": "assets/chunk-INHXZS53-D3tQiqtZ.js",
+          "sha256": "e7b1dbec4d04bd93e0e0f29b42b2418f23a2230cf6e8fa47b932e7f477abd43b"
         }
       ]
     }
