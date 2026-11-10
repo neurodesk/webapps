@@ -1,7 +1,7 @@
 //! The original SamSrf CSS convention. Fractional powers of negative responses
 //! are complex; fitted maps exported by samsrf_expand_srf retain their real parts.
 
-use crate::hrf;
+use crate::matlab_math;
 use crate::precision::{self, Precision};
 use num_complex::Complex64;
 use serde::Serialize;
@@ -13,43 +13,57 @@ pub enum Convention {
     Samsrf,
 }
 
-/// MATLAB's real-base power stays real for integral exponents.
+/// MATLAB's `Yp.^P`, real for nonnegative bases and integral exponents.
 pub fn power(value: f64, exponent: f64) -> Complex64 {
-    if value >= 0.0 || exponent.fract() == 0.0 {
-        Complex64::new(value.powf(exponent), 0.0)
+    matlab_math::power(value, exponent)
+}
+
+/// `prf_convolve_hrf(Yp.^P, Hrf, Downsampling)`. MATLAB keeps the compressed
+/// prediction real unless a negative response gives it imaginary parts, and its
+/// convolution reduces real and complex vectors in different orders.
+pub fn predict(raw: &[f64], exponent: f64, kernel: &[f64], downsampling: usize) -> Vec<Complex64> {
+    let compressed: Vec<Complex64> = raw.iter().map(|&value| power(value, exponent)).collect();
+    if is_complex(&compressed) {
+        matlab_math::convolve_complex(&compressed, kernel, downsampling)
     } else {
-        let magnitude = (-value).powf(exponent);
-        let phase = std::f64::consts::PI * exponent;
-        Complex64::new(magnitude * phase.cos(), magnitude * phase.sin())
+        let real: Vec<f64> = compressed.iter().map(|value| value.re).collect();
+        matlab_math::convolve_real(&real, kernel, downsampling)
+            .into_iter()
+            .map(|value| Complex64::new(value, 0.0))
+            .collect()
     }
 }
 
-pub fn predict(raw: &[f64], exponent: f64, kernel: &[f64], downsampling: usize) -> Vec<Complex64> {
-    let compressed: Vec<Complex64> = raw.iter().map(|&value| power(value, exponent)).collect();
-    let real: Vec<f64> = compressed.iter().map(|value| value.re).collect();
-    let imaginary: Vec<f64> = compressed.iter().map(|value| value.im).collect();
-    hrf::convolve(&real, kernel, downsampling)
-        .into_iter()
-        .zip(hrf::convolve(&imaginary, kernel, downsampling))
-        .map(|(re, im)| Complex64::new(re, im))
-        .collect()
+/// Whether MATLAB holds these values as a complex array. Its elementwise results
+/// are real when every imaginary part is zero.
+fn is_complex(values: &[Complex64]) -> bool {
+    values.iter().any(|value| value.im != 0.0)
 }
 
 pub fn objective(predicted: &[Complex64], observed: &[f64], precision: Precision) -> Complex64 {
+    if precision == Precision::Double {
+        // 1 - R.^2: the complex product R*R for a complex correlation, which keeps
+        // NaN in both parts, and a real square otherwise.
+        let r = correlation(predicted, observed, precision);
+        return if is_complex(predicted) {
+            Complex64::new(1.0 - (r.re * r.re - r.im * r.im), 0.0 - (r.re * r.im + r.im * r.re))
+        } else {
+            Complex64::new(1.0 - r.re * r.re, 0.0)
+        };
+    }
     let r = correlation(predicted, observed, precision);
     if !r.re.is_finite() || !r.im.is_finite() {
-        return Complex64::new(f64::NAN, 0.0);
+        let imaginary = if is_complex(predicted) { f64::NAN } else { 0.0 };
+        return Complex64::new(f64::NAN, imaginary);
     }
-    match precision {
-        Precision::Double => Complex64::new(1.0 - (r.re * r.re - r.im * r.im), -2.0 * r.re * r.im),
-        Precision::Single => {
-            let r = num_complex::Complex32::new(r.re as f32, r.im as f32);
-            let e = num_complex::Complex32::new(1.0, 0.0) - r * r;
-            Complex64::new(f64::from(e.re), f64::from(e.im))
-        }
-    }
+    let r = num_complex::Complex32::new(r.re as f32, r.im as f32);
+    let e = num_complex::Complex32::new(1.0, 0.0) - r * r;
+    Complex64::new(f64::from(e.re), f64::from(e.im))
 }
 
+/// Statistics Toolbox `corr`: centred columns, `x' * y` and the 2-norms through
+/// MKL, `dot ./ norm(x) ./ norm(y)`, then values beyond 1 in magnitude divided by
+/// their magnitude (an overflowing dot product becomes NaN).
 fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> Complex64 {
     if x.len() != y.len() || x.len() < 2 {
         return Complex64::new(f64::NAN, f64::NAN);
@@ -57,60 +71,27 @@ fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> Complex64 {
     if precision == Precision::Single {
         return precision::correlation_complex_single(x, y);
     }
-    let mx = precision::mean_complex(x);
     let my = precision::mean_double(y);
-    let mut dot = Complex64::new(0.0, 0.0);
-    let mut nx = 0.0;
-    let mut ny = 0.0;
-    for (&x, &y) in x.iter().zip(y) {
-        let dx = x - mx;
-        let dy = y - my;
-        dot.re += dx.re * dy;
-        dot.im -= dx.im * dy;
-        nx += dx.re * dx.re + dx.im * dx.im;
-        ny += dy * dy;
+    let yc: Vec<f64> = y.iter().map(|value| value - my).collect();
+    let (dot, norm_x) = if is_complex(x) {
+        let mx = precision::mean_complex(x);
+        let xc: Vec<Complex64> = x.iter().map(|&value| value - mx).collect();
+        let norm = matlab_math::nrm2(xc.iter().flat_map(|value| [value.re, value.im]));
+        (matlab_math::zdotc_real(&xc, &yc), norm)
+    } else {
+        let real: Vec<f64> = x.iter().map(|value| value.re).collect();
+        let mx = precision::mean_double(&real);
+        let xc: Vec<f64> = real.iter().map(|value| value - mx).collect();
+        (Complex64::new(matlab_math::ddot(&xc, &yc), 0.0), matlab_math::nrm2(xc.iter().copied()))
+    };
+    let norm_y = matlab_math::nrm2(yc.iter().copied());
+    let r = Complex64::new(dot.re / norm_x / norm_y, dot.im / norm_x / norm_y);
+    let magnitude = if r.im == 0.0 { r.re.abs() } else { libm::hypot(r.re, r.im) };
+    if magnitude > 1.0 {
+        Complex64::new(r.re / magnitude, r.im / magnitude)
+    } else {
+        r
     }
-    if !dot.re.is_finite() || !dot.im.is_finite() {
-        // Near DBL_MAX a partial dot sum can overflow although the final sum
-        // is representable. Recompute only that component with scaled inputs.
-        // Restore its scale before dividing by the norms: MATLAB still rejects
-        // a genuinely overflowing dot, even when the correlation would be finite.
-        let scale = x.iter()
-            .flat_map(|value| [(value.re - mx.re).abs(), (value.im - mx.im).abs()])
-            .fold(0.0, f64::max);
-        if scale.is_finite() && scale > 0.0 {
-            if !dot.re.is_finite() {
-                dot.re = x.iter().zip(y)
-                    .map(|(x, y)| ((x.re - mx.re) / scale) * (y - my))
-                    .sum::<f64>() * scale;
-            }
-            if !dot.im.is_finite() {
-                dot.im = x.iter().zip(y)
-                    .map(|(x, y)| (-(x.im - mx.im) / scale) * (y - my))
-                    .sum::<f64>() * scale;
-            }
-        }
-    }
-    let norm_x = norm_extreme(
-        nx,
-        x.iter().flat_map(|value| [value.re - mx.re, value.im - mx.im]),
-    );
-    let norm_y = norm_extreme(ny, y.iter().map(|value| value - my));
-    Complex64::new(dot.re / norm_x / norm_y, dot.im / norm_x / norm_y)
-}
-
-fn norm_extreme(sum_squares: f64, values: impl Iterator<Item = f64> + Clone) -> f64 {
-    // Retain the ordinary reduction, but avoid losing the exponent range when
-    // CSS produces predictions whose squares underflow or overflow.
-    if sum_squares.is_normal() || sum_squares.is_nan() {
-        return sum_squares.sqrt();
-    }
-    let scale = values.clone().map(f64::abs).fold(0.0, f64::max);
-    if scale == 0.0 || !scale.is_finite() {
-        return scale;
-    }
-    let squares = values.map(|value| (value / scale).powi(2)).sum::<f64>();
-    scale * squares.sqrt()
 }
 
 /// Complex least squares with MATLAB's measured QR rank threshold.

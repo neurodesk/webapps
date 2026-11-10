@@ -52,6 +52,10 @@ on:
         description: Only rebuild WASM and retain its optimizer input for diagnosis
         type: boolean
         default: false
+      numerics_only:
+        description: With record_matlab, record MATLAB's arithmetic on generated inputs (elementary functions, powers, conv, HRF, BLAS)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -239,8 +243,8 @@ jobs:
           persist-credentials: false
       - name: Prepare verified inputs and declared source repairs
         run: |
-          if [ '${{ inputs.revcor_only }}' = true ] && [ '${{ inputs.diagnostics_only }}' = true ]; then
-            echo 'Choose either revcor_only or diagnostics_only.' >&2
+          if [ "$(grep -o true <<< '${{ inputs.revcor_only }} ${{ inputs.diagnostics_only }} ${{ inputs.numerics_only }}' | wc -l)" -gt 1 ]; then
+            echo 'Choose one of revcor_only, diagnostics_only or numerics_only.' >&2
             exit 1
           fi
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
@@ -281,7 +285,7 @@ jobs:
         if: inputs.revcor_only
         run: node packages/samsrf/validation/matlab/validate-revcor-recording.mjs "$RUNNER_TEMP/samsrf-revcor-smoke" --smoke
       - name: Record numerical intermediates and fitted maps
-        if: '!inputs.diagnostics_only'
+        if: '!inputs.diagnostics_only && !inputs.numerics_only'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if ~reverseCorrelationOnly && strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly)
@@ -307,6 +311,32 @@ jobs:
       - name: Compare same-host numerical arrays and decisions
         if: inputs.diagnostics_only
         run: node packages/samsrf/validation/matlab/compare-recordings.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"
+      - name: Record MATLAB arithmetic on generated inputs
+        if: inputs.numerics_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_numerics_probes(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'))
+      - name: Prepare a same-host repeat and an MKL_CBWR=AUTO comparison
+        if: inputs.numerics_only
+        run: |
+          for name in repeat auto; do
+            mkdir "$RUNNER_TEMP/samsrf-matlab-$name"
+            cp "$RUNNER_TEMP/samsrf-matlab/source.json" "$RUNNER_TEMP/samsrf-matlab-$name/source.json"
+          done
+          python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab-repeat"
+          MKL_CBWR=AUTO python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab-auto" AUTO
+      - name: Repeat the arithmetic probes in a new MATLAB process
+        if: inputs.numerics_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_numerics_probes(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'))
+      - name: Probe MKL with MKL_CBWR=AUTO in a new MATLAB process
+        if: inputs.numerics_only
+        env:
+          MKL_CBWR: AUTO
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_numerics_probes(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-auto'),{'blas'},'AUTO')
       - name: Retain complete or partial reference for diagnosis
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -315,5 +345,6 @@ jobs:
           path: |
             ${{ runner.temp }}/samsrf-matlab/
             ${{ runner.temp }}/samsrf-matlab-repeat/
+            ${{ runner.temp }}/samsrf-matlab-auto/
             ${{ runner.temp }}/samsrf-revcor-smoke/
           if-no-files-found: error

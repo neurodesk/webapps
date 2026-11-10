@@ -24,6 +24,7 @@ pub mod hrf;
 pub mod job;
 pub mod mapset;
 pub mod mat;
+pub mod matlab_math;
 pub mod mesh;
 pub mod model;
 pub mod nifti_aps;

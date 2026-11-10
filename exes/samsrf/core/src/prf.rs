@@ -102,8 +102,9 @@ fn gaussian_rf(args: &[Value]) -> Result<Value> {
     Ok(domain.evaluate(|x, y| gaussian(x - x0, y - y0, sigma)))
 }
 
+/// MATLAB's `exp` is fdlibm's, which `std` matches only on WebAssembly.
 fn gaussian(dx: f64, dy: f64, sigma: f64) -> f64 {
-    (-(dx * dx + dy * dy) / (2.0 * sigma * sigma)).exp()
+    crate::matlab_math::exp(-(dx * dx + dy * dy) / (2.0 * sigma * sigma))
 }
 
 fn dog_rf(args: &[Value]) -> Result<Value> {
@@ -131,7 +132,7 @@ fn multivariate_rf(args: &[Value]) -> Result<Value> {
     Ok(domain.evaluate(|x, y| {
         let dx = x - x0;
         let dy = y - y0;
-        (-a * dx * dx - b * dx * dy - c * dy * dy).exp()
+        crate::matlab_math::exp(-a * dx * dx - b * dx * dy - c * dy * dy)
     }))
 }
 
@@ -250,7 +251,7 @@ pub fn call(function: &str, args: &[Value]) -> Result<Value> {
         "prf_gaussian_rf_2sigma" => gaussian_rf_2sigma(args),
         "sqrt" => unary(function, args, f64::sqrt),
         "log" => unary(function, args, f64::ln),
-        "exp" => unary(function, args, f64::exp),
+        "exp" => unary(function, args, crate::matlab_math::exp),
         "abs" => unary(function, args, f64::abs),
         "cos" => unary(function, args, f64::cos),
         "sin" => unary(function, args, f64::sin),
