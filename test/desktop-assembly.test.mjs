@@ -9,6 +9,7 @@ import { catalogApps, findCatalog, loadAppsRegistry, repoRoot } from '../scripts
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { SHARED_ROOT_FILES } from '../scripts/lib/catalog-sites.mjs';
 import { loadStandalone } from '../scripts/lib/standalone.mjs';
+import { emptyAnalytics } from '../scripts/write-analytics.mjs';
 import { assembleSuite } from '../scripts/desktop/assemble.mjs';
 import { suiteCatalog } from '../scripts/desktop/suite.mjs';
 import { fileHash, verifyBundle } from '../packages/desktop/src/bundle.js';
@@ -31,7 +32,7 @@ async function fixture(t) {
   const dist = join(root, 'dist');
   for (const name of SHARED_ROOT_FILES) await put(dist, name.includes('.') ? name : `${name}/keep.txt`, '');
   for (const path of ['app-theme.css', 'fonts']) await cp(join(repoRoot, 'site', path), join(dist, path), { recursive: true });
-  await put(dist, 'analytics.json', '{}');
+  await put(dist, 'analytics.json', JSON.stringify(emptyAnalytics(registry)));
   await put(dist, 'surf/index.html', '<!doctype html><html><head><title>surf</title></head><body></body></html>');
   for (const app of registry.apps) {
     const runtime = app.id === 'zarro' ? '<script type="module" src="../_runtime/viewer/1.0/viewer.js"></script>' : '';
@@ -78,7 +79,8 @@ test('a catalogue suite holds exactly the apps, landing page, handoffs and asset
   assert.deepEqual(manifest.apps.map(entry => entry.id).sort(), ids);
   assert.deepEqual(Object.keys(manifest.assets).sort(), ids.map(assetUrl).sort());
   const site = (await readdir(join(destination, 'site'))).sort();
-  assert.deepEqual(site, [...new Set([...apps.map(app => app.path), ...SHARED_ROOT_FILES, '_runtime', 'index.html', 'standalone.json'])].sort());
+  assert.deepEqual(site, [...new Set([...apps.map(app => app.path), ...SHARED_ROOT_FILES, '_runtime', 'analytics.json', 'index.html', 'standalone.json'])].sort());
+  assert.deepEqual(JSON.parse(await readFile(join(destination, 'site/analytics.json'))).apps.map(app => app.id).sort(), ids, 'the usage report covers only the suite\'s apps');
   assert.deepEqual(await readdir(join(destination, 'site/_runtime')), ['viewer']);
   const landing = new JSDOM(await readFile(join(destination, 'site/index.html'), 'utf8')).window.document;
   assert.equal(landing.title, 'Microscopy Webapps');
@@ -104,7 +106,7 @@ test('a suite of some of its catalogue apps lists only them, and refuses another
   await assert.rejects(assemble(t, 'microscopy', ['musclemap']), /Not in the microscopy catalogue: musclemap/);
 });
 
-test('the primary suite keeps its usage report and serves fonts offline', async t => {
+test('the primary suite keeps the game and serves fonts offline', async t => {
   const { destination, dist } = await assemble(t, 'neuro');
   const manifest = JSON.parse(await readFile(join(destination, 'manifest.json')));
   assert.deepEqual(manifest.apps.map(entry => entry.id).sort(), catalogApps(registry, findCatalog(registry, 'neuro')).map(app => app.id).sort());
