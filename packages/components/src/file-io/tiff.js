@@ -112,7 +112,35 @@ export function parseOmeDescription(description) {
     declaredSpacing: { x: finite(attribute('PhysicalSizeX')), y: finite(attribute('PhysicalSizeY')), z: finite(attribute('PhysicalSizeZ')), unit: attribute('PhysicalSizeXUnit') ?? 'µm' },
     frameInterval: increment && timeScale ? increment * timeScale : null,
     stagePosition: omeStagePosition(text),
+    uuid: xmlAttribute(text.match(/<(?:[\w.-]+:)?OME\b[^>]*>/)?.[0] ?? '', 'UUID') ?? null,
+    tiffData: omeTiffData(text),
   };
+}
+
+/** The first image's XML, or the whole description when it has no closed Image element. */
+function firstImage(text) {
+  return text.match(/<(?:[\w.-]+:)?Image\b[\s\S]*?<\/(?:[\w.-]+:)?Image\s*>/)?.[0] ?? text;
+}
+
+/**
+ * The first image's TiffData elements: IFD, FirstC, FirstZ, FirstT and PlaneCount as written
+ * (undefined when absent; the reader decides what a malformed value means), and the UUID of the
+ * file holding those planes (null when they are in this file's own pages).
+ */
+function omeTiffData(text) {
+  const elements = firstImage(text).match(/<(?:[\w.-]+:)?TiffData\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:[\w.-]+:)?TiffData\s*>)/g) ?? [];
+  return elements.map((element) => {
+    const tag = element.match(/^<[^>]*>/)[0];
+    const uuid = element.match(/<(?:[\w.-]+:)?UUID\b[^>]*>([^<]*)</)?.[1];
+    return {
+      IFD: xmlAttribute(tag, 'IFD'),
+      FirstC: xmlAttribute(tag, 'FirstC'),
+      FirstZ: xmlAttribute(tag, 'FirstZ'),
+      FirstT: xmlAttribute(tag, 'FirstT'),
+      PlaneCount: xmlAttribute(tag, 'PlaneCount'),
+      uuid: uuid ? decodeXml(uuid).trim() || null : null,
+    };
+  });
 }
 
 /**

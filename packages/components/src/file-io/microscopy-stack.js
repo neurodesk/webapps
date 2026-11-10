@@ -70,9 +70,56 @@ function invertWhiteIsZero(data, dtype) {
 }
 
 /**
+ * The page (IFD) of each z plane of a single-file OME-TIFF with one channel and one time point,
+ * or null for a TIFF without OME-XML. With one channel and one time point the plane index is z
+ * whatever the DimensionOrder. TiffData follows the OME rules: IFD defaults to 0, and PlaneCount
+ * to 1 when IFD is given, else to every page. Without TiffData the pages are the planes in order.
+ * Throws, before any pixel is decoded, for planes in another file, a plane in another channel or
+ * time point, a z plane mapped twice or not at all, a page mapped twice and a page the file lacks.
+ */
+function omeZPages(name, ome, pageCount) {
+  if (ome?.kind !== 'ome') return null;
+  const sizeZ = ome.sizeZ;
+  if (!Number.isInteger(sizeZ) || sizeZ < 1) throw new Error(`${name} declares SizeZ="${sizeZ}"; save it again as an OME-TIFF.`);
+  if (!ome.tiffData.length) {
+    if (pageCount !== sizeZ) throw new Error(`${name} declares ${sizeZ} z plane${sizeZ === 1 ? '' : 's'} but holds ${pageCount} pages; save it again as an OME-TIFF.`);
+    return null;
+  }
+  const refuse = (why) => new Error(`${name} maps its z planes to TIFF pages in a way this reader cannot follow (${why}); save the stack as one OME-TIFF or one TIFF per plane.`);
+  if (ome.tiffData.some((entry) => entry.uuid && entry.uuid !== ome.uuid)) throw refuse('planes in another file; choose the folder of plane files instead');
+  const pages = new Array(sizeZ);
+  const used = new Set();
+  for (const entry of ome.tiffData) {
+    const integer = (key, fallback) => {
+      if (entry[key] === undefined) return fallback;
+      if (!/^\s*\d+\s*$/.test(entry[key])) throw refuse(`${key}="${entry[key]}"`);
+      return Number(entry[key]);
+    };
+    if (integer('FirstC', 0) !== 0) throw refuse(`a plane in channel ${integer('FirstC', 0) + 1}`);
+    if (integer('FirstT', 0) !== 0) throw refuse(`a plane at time point ${integer('FirstT', 0) + 1}`);
+    const ifd = integer('IFD', 0);
+    const firstZ = integer('FirstZ', 0);
+    const count = integer('PlaneCount', entry.IFD === undefined ? pageCount : 1);
+    for (let k = 0; k < count; k++) {
+      const z = firstZ + k;
+      if (z >= sizeZ) throw refuse(`z plane ${z + 1}, but its Pixels declare ${sizeZ}`);
+      if (ifd + k >= pageCount) throw refuse(`page ${ifd + k + 1}, but the file has ${pageCount}`);
+      if (pages[z] !== undefined) throw refuse(`z plane ${z + 1} twice`);
+      if (used.has(ifd + k)) throw refuse(`page ${ifd + k + 1} twice`);
+      pages[z] = ifd + k;
+      used.add(ifd + k);
+    }
+  }
+  const missing = pages.findIndex((page) => page === undefined);
+  if (missing >= 0) throw refuse(`it maps no page to z plane ${missing + 1}`);
+  return pages;
+}
+
+/**
  * Open a TIFF stack: one multi-page file, or one single-page file per plane (sorted by name).
- * Refuses palette, RGB and multi-channel pages, OME-TIFF with several channels or time points,
- * and planes larger than `maxPlaneBytes`.
+ * A single OME-TIFF's z planes are the pages its TiffData maps. Refuses palette, RGB and
+ * multi-channel pages, OME-TIFF with several channels or time points or a plane mapping it
+ * cannot follow, and planes larger than `maxPlaneBytes`.
  */
 export async function openTiffStack(files, { maxPlaneBytes = PLANE_LIMIT_BYTES } = {}) {
   const list = [...files].filter((file) => /\.tiff?$/i.test(file.name ?? ''));
@@ -82,10 +129,13 @@ export async function openTiffStack(files, { maxPlaneBytes = PLANE_LIMIT_BYTES }
   const fromBlob = (blob) => GeoTIFF.fromSource(blobSource(blob));
   const first = await fromBlob(list[0]);
   const firstImage = await first.getImage(0);
-  const page = await describePage(firstImage, list[0].name);
-  if (page.width * page.height * page.bytes > maxPlaneBytes) {
-    throw new Error(`A ${page.width} × ${page.height} ${page.dtype} plane needs more than ${Math.round(maxPlaneBytes / 2 ** 20)} MB; choose a coarser level.`);
-  }
+  const checkSize = (page) => {
+    if (page.width * page.height * page.bytes > maxPlaneBytes) {
+      throw new Error(`A ${page.width} × ${page.height} ${page.dtype} plane needs more than ${Math.round(maxPlaneBytes / 2 ** 20)} MB; choose a coarser level.`);
+    }
+    return page;
+  };
+  let page = checkSize(await describePage(firstImage, list[0].name));
   const pageCount = await first.getImageCount();
   // geotiff keeps the NUL terminator of a value stored inline in its entry.
   const description = String((await tag(firstImage, 'ImageDescription')) ?? '').replace(/\0+$/, '');
@@ -102,11 +152,15 @@ export async function openTiffStack(files, { maxPlaneBytes = PLANE_LIMIT_BYTES }
   const size = metadata?.pixelSize ?? {};
   const voxelSizeUm = { z: size.z ?? null, y: size.y ?? null, x: size.x ?? null };
 
-  const depth = list.length > 1 ? list.length : pageCount;
+  // One file per plane is ordered by name; a single file's planes are the pages its OME-XML maps.
+  const pages = list.length > 1 ? null : omeZPages(list[0].name, metadata, pageCount);
+  const depth = list.length > 1 ? list.length : pages?.length ?? pageCount;
+  // The OME-XML is always on page 0, which need not be a plane (a thumbnail, say).
+  if (pages && pages[0] !== 0) page = checkSize(await describePage(await first.getImage(pages[0]), list[0].name));
   const opened = new Map([[0, first]]);
   async function imageAt(z) {
     if (z < 0 || z >= depth || !Number.isInteger(z)) throw new RangeError(`Plane ${z} is outside 0-${depth - 1}.`);
-    if (list.length === 1) return { image: await first.getImage(z), name: list[0].name };
+    if (list.length === 1) return { image: await first.getImage(pages ? pages[z] : z), name: list[0].name };
     let tiff = opened.get(z);
     if (!tiff) {
       tiff = await fromBlob(list[z]);

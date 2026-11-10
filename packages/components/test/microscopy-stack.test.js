@@ -39,6 +39,53 @@ test('a multi-page OME-TIFF reads plane by plane with its voxel size', async () 
   await assert.rejects(stack.readPlane(2), RangeError);
 });
 
+const omeWith = (sizeZ, tiffData, uuid = '') => OME
+  .replace('<ome:OME ', `<ome:OME ${uuid ? `UUID="${uuid}" ` : ''}`)
+  .replace('SizeZ="2"', `SizeZ="${sizeZ}"`)
+  .replace('</ome:Pixels>', `${tiffData}</ome:Pixels>`);
+const omeFile = (description, offsets, name = 'mapped.ome.tif') => file(encodeTiff(offsets.map((offset, i) => ({ width: 3, height: 2, data: plane(3, 2, offset), description: i === 0 ? description : undefined }))), name);
+
+test('OME TiffData decides which page holds each z plane', async () => {
+  // Page 0 holds z 1 and page 1 holds z 0, so plane 0 is the second page.
+  const swapped = omeWith(2, '<ome:TiffData IFD="1" FirstZ="0" PlaneCount="1"/><ome:TiffData IFD="0" FirstZ="1" PlaneCount="1"/>');
+  const stack = await openTiffStack([omeFile(swapped, [20, 10])]);
+  assert.deepEqual(stack.shape, [2, 2, 3]);
+  assert.equal((await stack.readPlane(0))[0], 10);
+  assert.equal((await stack.readPlane(1))[0], 20);
+
+  // IFD defaults to 0 and PlaneCount to one plane once IFD is given; a block without either
+  // covers every page from IFD 0. Pages no plane names (thumbnails) are never read.
+  const zFirst = omeWith(3, '<ome:TiffData IFD="2" FirstZ="0"/><ome:TiffData IFD="3" FirstZ="1" PlaneCount="2"/>');
+  const thumbnails = [90, 91].map((value, i) => ({ width: 1, height: 1, data: Uint16Array.of(value), description: i === 0 ? zFirst : undefined }));
+  const planes = [30, 40, 50].map((value) => ({ width: 3, height: 2, data: plane(3, 2, value) }));
+  const offset = await openTiffStack([file(encodeTiff([...thumbnails, ...planes]), 'thumbnail.ome.tif')]);
+  assert.deepEqual(offset.shape, [3, 2, 3]);
+  assert.deepEqual(await Promise.all([0, 1, 2].map(async (z) => (await offset.readPlane(z))[0])), [30, 40, 50]);
+  const whole = await openTiffStack([omeFile(omeWith(3, '<ome:TiffData/>', 'urn:uuid:a'), [7, 8, 9])]);
+  assert.deepEqual(await Promise.all([0, 1, 2].map(async (z) => (await whole.readPlane(z))[0])), [7, 8, 9]);
+  // DimensionOrder does not move z planes when there is one channel and one time point.
+  const ordered = await openTiffStack([omeFile(swapped.replace('XYZCT', 'XYCTZ'), [20, 10])]);
+  assert.equal((await ordered.readPlane(0))[0], 10);
+  // A UUID naming this file is its own pages.
+  const own = omeWith(2, '<ome:TiffData IFD="1" FirstZ="0"><ome:UUID>urn:uuid:a</ome:UUID></ome:TiffData><ome:TiffData IFD="0" FirstZ="1"><ome:UUID>urn:uuid:a</ome:UUID></ome:TiffData>', 'urn:uuid:a');
+  assert.equal((await (await openTiffStack([omeFile(own, [20, 10])])).readPlane(0))[0], 10);
+});
+
+test('OME TiffData the reader cannot follow is refused before decoding', async () => {
+  const refused = async (sizeZ, tiffData, offsets, pattern, uuid) => assert.rejects(openTiffStack([omeFile(omeWith(sizeZ, tiffData, uuid), offsets)]), pattern);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/>', [1, 2], /maps no page to z plane 2/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/><ome:TiffData IFD="1" FirstZ="0"/>', [1, 2], /z plane 1 twice/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/><ome:TiffData IFD="0" FirstZ="1"/>', [1, 2], /page 1 twice/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/><ome:TiffData IFD="5" FirstZ="1"/>', [1, 2], /page 6, but the file has 2/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0" PlaneCount="3"/>', [1, 2, 3], /z plane 3, but its Pixels declare 2/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0" FirstC="1"/>', [1, 2], /channel 2/);
+  await refused(2, '<ome:TiffData IFD="-1" FirstZ="0"/>', [1, 2], /IFD="-1"/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"><ome:UUID FileName="b.ome.tif">urn:uuid:b</ome:UUID></ome:TiffData>', [1, 2], /another file/, 'urn:uuid:a');
+  // Without TiffData the pages are the planes in order, so their counts must agree.
+  await refused(3, '', [1, 2], /declares 3 z planes but holds 2 pages/);
+  await refused(1, '', [1, 2], /declares 1 z plane but holds 2 pages/);
+});
+
 test('big-endian pages decode to native values', async () => {
   const stack = await openTiffStack([file(encodeTiff([{ width: 2, height: 2, data: plane(2, 2, 1000) }], { littleEndian: false }), 'be.tif')]);
   assert.deepEqual([...(await stack.readPlane(0))], [1000, 1001, 1002, 1003]);
