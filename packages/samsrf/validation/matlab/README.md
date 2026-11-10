@@ -203,7 +203,8 @@ MATLAB Compiler. It records the MATLAB environment and resulting local image
 ID. It does not publish the image.
 
 **Status: not built.** The recipe has never been executed with MATLAB Compiler,
-and no compiled SamSrf 10.4 with these repairs exists. Nothing below is
+and no compiled SamSrf 10.4 with these repairs was found in the SamSrf
+releases or the Neurodesk object store checked below. Nothing below is
 evidence about a compiled application until a `build` run has passed.
 
 ### Compiler access, checked 2026-11-10
