@@ -8,7 +8,7 @@ import test from 'node:test';
 import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { commandLineClosure } from '../scripts/lib/module-closure.mjs';
-import { decideWorkflow, isSharedFilter, onlyAddsExports, ownedPackages, workflowApps } from '../scripts/lib/workflow-gate.mjs';
+import { decideWorkflow, isSharedFilter, onlyAddsExports, ownedPackages, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
 // The pull request gate skips a native suite only when no changed file can
@@ -18,6 +18,8 @@ import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.m
 const registry = await loadAppsRegistry();
 const graph = await loadConservativeWorkspaceGraph(repoRoot);
 const flowOf = (paths) => ({ on: { pull_request: { paths } } });
+const real = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
+const decideReal = async (name, changedPaths, manifests = new Map()) => decideWorkflow({ flow: await real(name), changedPaths, registry, graph, manifests, root: repoRoot });
 const decide = (paths, changedPaths, manifests = new Map()) => decideWorkflow({ flow: flowOf(paths), changedPaths, registry, graph, manifests, root: repoRoot });
 
 const dep = (version) => ({ specifier: version, version });
@@ -59,18 +61,54 @@ test('an unknown diff, an exclusion or a workflow without filters runs', () => {
   assert.equal(decide(['packages/components/**'], ['docs/readme.md']).run, true);
 });
 
-test('a shared file runs the workflow only when an owned command line imports it', () => {
+test('a shared file runs the workflow only when a script of an owned package loads it', () => {
   const paths = ['packages/noddi/**', 'packages/components/src/file-io/**'];
   const imported = commandLineClosure(repoRoot, 'packages/noddi').find((path) => path.startsWith('packages/components/src/file-io/'));
   assert.ok(imported, 'the NODDI command line imports a shared file-io module');
   const reached = decide(paths, [imported]);
   assert.equal(reached.run, true);
-  assert.match(reached.reason, /packages\/noddi's command line imports/);
+  assert.match(reached.reason, /a script in packages\/noddi loads/);
   const unreached = ['packages/components/src/file-io/tiff.js', 'packages/components/src/file-io/a-new-reader.js'];
   for (const path of unreached) assert.ok(!commandLineClosure(repoRoot, 'packages/noddi').includes(path), path);
   const skipped = decide(paths, unreached);
   assert.equal(skipped.run, false);
   assert.match(skipped.reason, /only shared paths changed/);
+});
+
+test('a browser harness in an owned package reaches the shared modules it loads', async () => {
+  // packages/sdc/validation/harness imports MindGrab's browser wrapper; the command line does not.
+  for (const path of ['packages/runtime-support/src/mindgrab/index.js', 'packages/runtime-support/src/mindgrab/worker.js']) {
+    const decision = await decideReal('sdc-native', [path]);
+    assert.equal(decision.run, true, path);
+    assert.match(decision.reason, /a script in packages\/sdc loads/);
+  }
+});
+
+test('a root script a step names, and what it imports, runs the workflow', async () => {
+  const flow = await real('neuroflow');
+  const scripts = workflowScripts(flow);
+  for (const script of ['scripts/desktop/neuroflow-smoke.mjs', 'scripts/desktop/artifact-completion-smoke.mjs']) assert.ok(scripts.includes(script), script);
+  // The template smoke is imported by neuroflow-smoke.mjs, not named by a step.
+  for (const script of ['scripts/desktop/neuroflow-smoke.mjs', 'scripts/desktop/neuroflow-template-smoke.mjs', 'scripts/desktop/artifact-completion-smoke.mjs']) {
+    const decision = await decideReal('neuroflow', [script]);
+    assert.equal(decision.run, true, script);
+    assert.match(decision.reason, /loads/);
+  }
+  assert.deepEqual(workflowScripts({ jobs: { a: { steps: [{ run: 'node scripts/a.mjs --x\nENV=1 node "test-utils/b.js"' }, { uses: 'x/y@1' }] }, b: { uses: './w.yml' } } }), ['scripts/a.mjs', 'test-utils/b.js']);
+});
+
+test('the planner reads the whole diff, not only the paths the filters matched', async () => {
+  // NeuroFlow does not filter on apps/topofit, but Pipeline Builder generates
+  // tools from every app's automation contract.
+  const path = 'registry/apps.yml';
+  const before = readFileSync(join(repoRoot, path), 'utf8');
+  const after = YAML.parse(before);
+  after.apps.find((app) => app.id === 'topofit').description += ' Reworded.';
+  const manifests = new Map([[path, { before, after: YAML.stringify(after) }]]);
+  assert.equal((await decideReal('neuroflow', [path], manifests)).run, false);
+  const decision = await decideReal('neuroflow', ['apps/topofit/automation.json', path], manifests);
+  assert.equal(decision.run, true);
+  assert.match(decision.reason, /app planner selects pipeline-builder/);
 });
 
 test('a dependency manifest that only gains exports does not run its importers', () => {
@@ -159,6 +197,8 @@ test('every workflow with a shared pull request filter waits for the gate', asyn
       continue;
     }
     gated++;
+    // With nothing to follow, the gate would skip every shared change.
+    assert.ok(ownedPackages(filters, repoRoot).length || workflowApps(filters, registry).length || workflowScripts(flow).length, `${file}: the gate can follow an owned package, an app or a script`);
     assert.equal(flow.jobs.gate?.uses, './.github/workflows/pr-gate.yml', `${file} filters on shared paths, so it calls the gate`);
     for (const [id, job] of Object.entries(flow.jobs)) {
       if (id === 'gate' || job.needs) continue;

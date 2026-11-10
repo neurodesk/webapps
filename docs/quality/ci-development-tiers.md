@@ -30,11 +30,16 @@ Every workflow with such a filter now starts with a `gate` job that calls
 
 - A changed file under any other filter (the workflow's own package, app,
   `exes/` directory, workflow file, or a single generated import) runs it.
-- Otherwise it runs when a command line the workflow owns imports a changed
-  file (`scripts/lib/module-closure.mjs`), when the lockfile change resolves a
-  package it owns differently, or when the app planner selects an app it
-  filters on. A dependency's `package.json` that only gained `exports` entries
-  does not count.
+- Otherwise it runs when a script the workflow runs loads a changed file
+  (`scripts/lib/module-closure.mjs`): any script of a package it owns (command
+  line, tests, validation harnesses, browser pages) or a root script one of
+  its steps names. It also runs when the lockfile change resolves a package it
+  owns differently, or when the app planner, given the whole diff, selects an
+  app it filters on. A dependency's `package.json` that only gained `exports`
+  entries does not count.
+- The import closure is a lower bound: a file read through a computed path is
+  not seen. Name such a file in the workflow's `paths` to make it the
+  workflow's own.
 - When it cannot decide (no diff, an unreadable lockfile, a script error) it
   runs.
 

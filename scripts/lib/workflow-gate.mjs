@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { selectAffectedApps } from './app-plan.mjs';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
-import { commandLineClosure } from './module-closure.mjs';
+import { moduleClosure, packageSources } from './module-closure.mjs';
 import { reachableFrom } from './workspace-graph.mjs';
 
 // Whether a path-filtered workflow has to run for a pull request.
@@ -12,11 +12,15 @@ import { reachableFrom } from './workspace-graph.mjs';
 // `pnpm-lock.yaml`, `registry/**`) therefore start a native suite for changes
 // that never reach it. The gate keeps those filters as the coarse trigger and
 // asks, for a pull request whose only matches are shared:
-//   - does a command line the workflow owns import the changed file,
+//   - does a script the workflow runs load a changed file: any script of a
+//     package it owns (command line, tests, validation harnesses, browser
+//     pages) or a root script one of its steps names,
 //   - does the lockfile change resolve a package it owns differently,
 //   - does the app planner select an app the workflow builds.
 // A file under any other filter is the workflow's own and always runs it.
 // Pushes to main, schedules and dispatches are not gated.
+// The import closure is a lower bound: a file read through a computed path is
+// not seen, and is first tested on main.
 
 const ROOT_MANIFESTS = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'];
 const SHARED_TREE = /^(?:packages|exes|scripts|test|test-utils|registry|models)\/\*\*$/;
@@ -55,6 +59,13 @@ export function workflowApps(filters, registry) {
   return [...new Set(filters.map((filter) => filter.match(/^apps\/([^/*]+)\//)?.[1]).filter((id) => ids.has(id)))];
 }
 
+// Root scripts a workflow's steps name (`node scripts/desktop/smoke.mjs`).
+const ROOT_SCRIPT = /(?:^|[\s'"=(])((?:scripts|test-utils|test)\/[\w./-]+\.[cm]?[jt]s)\b/gm;
+export function workflowScripts(flow) {
+  const commands = Object.values(flow?.jobs ?? {}).flatMap((job) => (job.steps ?? []).map((step) => step.run ?? ''));
+  return [...new Set(commands.flatMap((command) => [...command.matchAll(ROOT_SCRIPT)].map((match) => match[1])))];
+}
+
 // A dependency's package.json that only gained `exports` entries resolves
 // every existing import as before. Anything else may not.
 export function onlyAddsExports({ before, after }) {
@@ -90,18 +101,24 @@ export function decideWorkflow({ flow, changedPaths, registry, graph, manifests 
     if (own) return run(`${path} matches ${own.filter}`);
   }
 
+  // From here the whole diff counts: a file outside the filters can still
+  // be what makes a matched shared file relevant.
   const owned = ownedPackages(filters, root);
-  for (const directory of owned) {
-    const closure = new Set(commandLineClosure(root, directory));
-    for (const path of matched) {
+  const starts = [
+    ...owned.map((directory) => ({ from: `a script in ${directory}`, seeds: packageSources(root, directory) })),
+    ...workflowScripts(flow).map((script) => ({ from: script, seeds: [script] })),
+  ];
+  for (const { from, seeds } of starts) {
+    const closure = new Set(moduleClosure(root, seeds));
+    for (const path of changedPaths) {
       if (!closure.has(path)) continue;
       const manifest = WORKSPACE_MANIFEST.test(path) && manifests.get(path);
       if (manifest && onlyAddsExports(manifest)) continue;
-      return run(`${directory}'s command line imports ${path}`);
+      return run(`${from} loads ${path}`);
     }
   }
 
-  if (matched.includes(LOCKFILE) && owned.length) {
+  if (changedPaths.includes(LOCKFILE) && owned.length) {
     const lock = manifests.get(LOCKFILE);
     if (!lock) return run(`${LOCKFILE}: the base or head lockfile is unavailable`);
     let importers;
@@ -121,13 +138,13 @@ export function decideWorkflow({ flow, changedPaths, registry, graph, manifests 
 
   const apps = workflowApps(filters, registry);
   if (apps.length) {
-    const plan = selectAffectedApps(registry, matched, graph, manifests);
+    const plan = selectAffectedApps(registry, changedPaths, graph, manifests);
     if (plan.reasons.fallback) return run(`the app planner selects every app: ${plan.reasons.fallback}`);
     const app = apps.find((id) => plan.reasons.apps[id]);
     if (app) return run(`the app planner selects ${app}: ${plan.reasons.apps[app][0]}`);
   }
 
-  const subject = apps.length ? `app ${apps.join(', ')}` : 'command line';
+  const subject = apps.length ? `scripts or app ${apps.join(', ')}` : 'scripts';
   return {
     run: false,
     reason: `only shared paths changed (${matched.slice(0, 5).join(', ')}${matched.length > 5 ? `, and ${matched.length - 5} more` : ''}), and none reaches this workflow's ${subject}`,
