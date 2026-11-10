@@ -142,6 +142,7 @@ test('bounded dispatch windows write the same TRX as one command per pass', asyn
   }
   expect(bounded.measurements).toEqual(single.measurements);
   expect(bounded.tracts).toBe(single.tracts);
+  console.log(`dwi2trx example TRX sha256 ${single.tracts}`);
   await test.info().attach('dispatch-equivalence.json', {
     body: JSON.stringify({ tracts: single.tracts, measurements: single.measurements,
       commands: { single: single.passes.length, bounded: bounded.passes.length }, workgroups: total(single) }, null, 2),
