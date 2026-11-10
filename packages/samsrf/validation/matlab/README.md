@@ -410,6 +410,17 @@ The zero-based single CSS vertices 47 and 58 have exact zero baselines in
 MATLAB, where cancellation of the observation sum gives the port about 4e-9
 (within the bound). Other inputs, CPUs or MATLAB releases may round differently.
 
+In the full pipelines (committed module from
+[run 42925749286](https://github.com/neurodesk/webapps/actions/runs/42925749286)),
+the single CSS pipeline's largest Beta difference falls from 1.07e-6 to
+2.38e-7 and its largest Baseline difference from 3.12e-8 to 1.82e-8. Across the
+nine single forward pipelines the largest Beta difference stays 9.54e-7
+(`pipeline_single_x001_rh_average1_coarse0`) and the largest Baseline
+difference rises from 4.0e-8 to 5.7e-8. The double CSS replay keeps every
+decision; its maximum Beta and Baseline differences are unchanged (8.3e-9 and
+5.6e-16), on 64 and 65 rather than 67 vertices. The map gates' tolerances are
+unchanged.
+
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-qr" packages/samsrf/validation/matlab/qr-reference.json
 SAMSRF_QR_REFERENCE_DIR="$TMPDIR/samsrf-qr" SAMSRF_QR_REPORT="$TMPDIR/qr-port.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_reference -- --nocapture
