@@ -562,35 +562,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.31.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261108/qsmbly-0.31.20261108-linux-x64.tar.gz",
-          "sha256": "4aba34e708c81ccbe6bd1b8cd1b1f9831bcbf82a481812dbe6ad9c9c37ac9521",
-          "bytes": 62709976,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261108/qsmbly-0.31.20261108-linux-x64.tar.gz.validation.txt",
+          "version": "0.31.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261109/qsmbly-0.31.20261109-linux-x64.tar.gz",
+          "sha256": "2b41c9169baefb0b309fe8d0702a0d3459d141cede4d130c87dc1813a238fc7e",
+          "bytes": 62710010,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261109/qsmbly-0.31.20261109-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": false,
-          "command": "tar -xzf qsmbly-0.31.20261108-linux-x64.tar.gz\n./qsmbly-0.31.20261108-linux-x64/qsmbly run BIDS_DIR OUTPUT_DIR"
+          "command": "tar -xzf qsmbly-0.31.20261109-linux-x64.tar.gz\n./qsmbly-0.31.20261109-linux-x64/qsmbly run BIDS_DIR OUTPUT_DIR"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.31.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261108/qsmbly-0.31.20261108-macos-arm64.pkg",
-          "sha256": "4f064411331c0a2d5aa4a2617ef719f381710a802fd72fc53e14e72afd42fb0d",
-          "bytes": 54056621,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261108/qsmbly-0.31.20261108-macos-arm64.pkg.validation.txt",
+          "version": "0.31.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261109/qsmbly-0.31.20261109-macos-arm64.pkg",
+          "sha256": "273211c6e5da79205360c360c5cf1d5762a5d87cb43ded4d09df09b62f0163de",
+          "bytes": 54056589,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261109/qsmbly-0.31.20261109-macos-arm64.pkg.validation.txt",
           "modelsIncluded": false,
-          "command": "sudo installer -pkg qsmbly-0.31.20261108-macos-arm64.pkg -target /\nqsmbly self-check\nqsmbly run BIDS_DIR OUTPUT_DIR"
+          "command": "sudo installer -pkg qsmbly-0.31.20261109-macos-arm64.pkg -target /\nqsmbly self-check\nqsmbly run BIDS_DIR OUTPUT_DIR"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.31.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261108/qsmbly-0.31.20261108-windows-x64.zip",
-          "sha256": "ffd7640ed4704b9ba24772d9256702b78bd6c12b7ab838552464b07547db9e55",
-          "bytes": 49575842,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261108/qsmbly-0.31.20261108-windows-x64.zip.validation.txt",
+          "version": "0.31.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261109/qsmbly-0.31.20261109-windows-x64.zip",
+          "sha256": "414e0e37b25d8e6a5813fa42e8a2e90432898e3a109df4f7417f3f1df2b3607b",
+          "bytes": 49575847,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/qsmbly-v0.31.20261109/qsmbly-0.31.20261109-windows-x64.zip.validation.txt",
           "modelsIncluded": false,
-          "command": "Expand-Archive -Path .\\qsmbly-0.31.20261108-windows-x64.zip -DestinationPath .\n.\\qsmbly-0.31.20261108-windows-x64\\qsmbly.exe run BIDS_DIR OUTPUT_DIR"
+          "command": "Expand-Archive -Path .\\qsmbly-0.31.20261109-windows-x64.zip -DestinationPath .\n.\\qsmbly-0.31.20261109-windows-x64\\qsmbly.exe run BIDS_DIR OUTPUT_DIR"
         }
       ],
       "containers": [
