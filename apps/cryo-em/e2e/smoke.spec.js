@@ -340,6 +340,7 @@ test("a job the server created is followed although both submit responses were l
   await expect(page.locator("#statusText")).toContainText("Import movies (Import/job001) finished", { timeout: STEP_TIMEOUT });
   expect(submissions).toBe(2);
   expect(streams).toBe(1);
+  await expect(page.locator("#formMessage")).toBeHidden();
 });
 
 test("a failed example download can be retried", async ({ page }) => {
