@@ -99,6 +99,21 @@ const analyticsSection = `
     </section>`;
 
 /**
+ * The catalogue's own desktop suite: its published release, or nothing until
+ * the first one is published.
+ */
+function desktopLink(catalog, standalone) {
+  const suite = standalone?.suites?.[catalog.id];
+  if (!suite) return '';
+  const { product_name: productName, release } = catalog.desktop;
+  const href = `https://github.com/${standalone.repository}/releases/tag/${release}-v${suite.version}`;
+  return `        <a class="theme-toggle desktop-link" href="${escape(href)}" title="Download ${escape(productName)} for macOS, Windows or Linux">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>
+          <span>Standalone</span>
+        </a>`;
+}
+
+/**
  * The start page of one catalogue: `registry.apps` are the apps it lists and
  * `catalog` names and brands it (the primary catalogue by default, as the
  * all-app assembly and the desktop suite show). Only the primary catalogue
@@ -141,10 +156,7 @@ export function renderLandingPage(registry, standalone, catalog = primaryCatalog
       <a class="brand" href="${escape(brand.home)}" aria-label="${escape(brand.name)} home"><img src="./${escape(brand.logo)}" alt="${escape(brand.name)}"></a>
       <nav class="site-nav" aria-label="${escape(brand.name)} navigation">
         <a href="https://github.com/neurodesk/webapps">GitHub</a>
-        <a class="theme-toggle standalone-link" href="https://github.com/neurodesk/webapps/releases?q=Neurodesk+Webapps&amp;expanded=true" title="Download the latest full desktop suite for macOS, Windows or Linux">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>
-          <span>Standalone</span>
-        </a>
+${desktopLink(catalog, standalone)}
         <button class="theme-toggle" type="button" data-neurodesk-theme-toggle aria-label="Use light theme" title="Use light theme">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
           <span data-neurodesk-theme-label>Light</span>

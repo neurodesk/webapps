@@ -19,8 +19,9 @@ Pages. `sciget.org` DNS is on Cloudflare.
 `registry/apps.yml` holds the hosts:
 
 - `site.catalogs`: one entry per catalogue, with its `id`, `host`, `hosting`
-  (`pages` or `worker`), `title`, `heading`, `description` and `brand` (product
-  name, logo file in `site/`, home URL and the More Apps label).
+  (`pages` or `worker`), `title`, `heading`, `description`, `brand` (product
+  name, logo file in `site/`, home URL and the More Apps label) and `desktop`
+  (its offline suite: see [Desktop suites](#desktop-suites)).
 - `site.hub`: the hub page's host, text and brand.
 - `catalog:` on every app: its home catalogue. Its old links redirect there, and
   other hosts' 404 pages send its path there.
@@ -39,8 +40,8 @@ it on another host too, add that catalogue to `also_in`.
 
 `pnpm build` builds each app once, then `scripts/build-site.mjs` writes:
 
-- `dist/`: every app, as before. The desktop suite assembles from it
-  (`scripts/desktop/assemble.mjs`), so its DICOM View still hands off to every app.
+- `dist/`: every app, as before. Each catalogue's desktop suite is projected
+  from it (`scripts/desktop/assemble.mjs`).
 - `dist-sites/<catalogue>/`: one deployable site per catalogue
   (`scripts/lib/catalog-sites.mjs`).
 - `dist-sites/hub/`: the hub page (`scripts/lib/hub-page.mjs`).
@@ -109,8 +110,40 @@ missing on the neuro host, so the 404 table sends the visitor on to
 
 A handoff opens the receiving app on the same origin. DICOM View on
 `webapps.neurodesk.org` therefore no longer offers MuscleMap, SeedSeg or Carotid
-Flow; the copy of DICOM View on `mskapps.sciget.org` does. The desktop suite
-keeps every handoff.
+Flow; the copy of DICOM View on `mskapps.sciget.org` does. The desktop suites
+follow the same rule: each lists only its own apps.
+
+## Desktop suites
+
+Each catalogue ships its own offline Electron suite, holding the apps its host
+serves. `desktop` in its `site.catalogs` entry names it:
+
+| Key | Use | neuro | msk |
+| --- | --- | --- | --- |
+| `product_name` | window, archive notes, release title | Neurodesk Webapps | MSK Webapps |
+| `app_id` | macOS bundle id and Windows app id | `org.neurodesk.webapps` | `org.sciget.msk` |
+| `release` | GitHub tag `<release>-v<version>` and archive prefix | `webapps` | `msk-webapps` |
+| `executable` | `.app`, `.exe` and Linux binary name | `neurodesk-webapps` | `msk-webapps` |
+
+Each value is unique, so suites install side by side, and `release` is never an
+app id. The neuro values are those of the suite released before catalogues had
+their own, so existing installations keep updating.
+
+`scripts/desktop/assemble.mjs --catalog <id>` (the primary catalogue by default)
+projects the catalogue site from `dist/` with `projectCatalogSite`, drops the
+host-only `404.html`, `_headers` and `.nojekyll`, and copies the offline assets
+of those apps only. Its DICOM View therefore hands off only to apps of that suite,
+and its model pack holds only their models. The bundle manifest records the
+catalogue, and `pack.mjs`, `models-pack.mjs` and `container.mjs` read it from
+there; `publish.mjs` takes `--catalog`. The Apptainer SIF is built for the
+primary catalogue only.
+
+`registry/standalone.json` lists each published suite under `suites`, keyed by
+catalogue id. A catalogue without an entry has not published a suite yet, and its
+landing page shows no download link. The `standalone` workflow builds once, then
+assembles, tests and publishes one suite per catalogue. A suite runs the offline
+workflows of the apps it is home to; a copy's workflow runs in its home suite.
+Its model pack is tested with every app it serves that reads a model.
 
 ## Deployment
 

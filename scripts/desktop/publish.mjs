@@ -10,15 +10,21 @@ import { tmpdir } from 'node:os';
 import { signingEnabled, verifyWindowsArchive } from './windows-signing.mjs';
 import { renderInstallationNotes } from './release-notes.mjs';
 import { fileHash } from '../../packages/desktop/src/bundle.js';
-import { loadAppsRegistry } from '../lib/apps-registry.mjs';
+import { catalogApps, loadAppsRegistry } from '../lib/apps-registry.mjs';
 import { loadStandalone } from '../lib/standalone.mjs';
 import { recordUrls, reusePlan } from '../lib/release-reuse.mjs';
+import { suiteCatalog, suitePlatforms, suiteTag } from './suite.mjs';
+import { parseArgs } from 'node:util';
 
-const directory = resolve(process.argv[2] || 'release-artifacts');
+const { values: options, positionals } = parseArgs({ allowPositionals: true, options: { catalog: { type: 'string' }, 'prepare-only': { type: 'boolean' } } });
+const directory = resolve(positionals[0] || 'release-artifacts');
 const registry = await loadAppsRegistry();
-const catalog = await loadStandalone(registry);
+const catalog = suiteCatalog(registry, options.catalog);
+const { desktop } = catalog;
+const apps = catalogApps(registry, catalog);
+const standalone = await loadStandalone(registry);
 const version = JSON.parse(await readFile('packages/desktop/package.json')).version;
-const tag = `webapps-v${version}`;
+const tag = suiteTag(catalog, version);
 const gh = args => execFileSync('gh', args, { encoding: 'utf8' }).trim();
 const revision = process.env.GITHUB_SHA || gh(['api', 'repos/neurodesk/webapps/commits/HEAD', '--jq', '.sha']);
 const files = [];
@@ -35,7 +41,8 @@ const find = name => {
   if (matches.length !== 1) throw new Error(`Expected one ${name}, found ${matches.length}`);
   return matches[0];
 };
-const platforms = ['macos-arm64', 'linux-x64', 'windows-x64', 'linux-x64-apptainer'];
+const platforms = suitePlatforms(registry, catalog);
+const container = platforms.includes('linux-x64-apptainer');
 const uploads = new Set();
 async function releaseRecord(platform) {
   const path = find(`${platform}.json`);
@@ -82,7 +89,7 @@ for (const platform of platforms) entries.push(await releaseRecord(platform));
 entries.push(await releaseRecord('any'));
 if (entries.at(-1).metadata.kind !== 'models') throw new Error('The platform-independent model pack is missing');
 const published = [];
-for (const [index, { record, candidate }] of reusePlan(catalog.suite, entries.map(entry => entry.metadata)).entries()) {
+for (const [index, { record, candidate }] of reusePlan(standalone.suites?.[catalog.id], entries.map(entry => entry.metadata)).entries()) {
   if (candidate && await available(recordUrls(candidate))) {
     console.log(`Reusing the published ${record.platform} ${record.kind} from ${candidate.version}`);
     published.push(candidate);
@@ -94,7 +101,7 @@ for (const [index, { record, candidate }] of reusePlan(catalog.suite, entries.ma
 }
 const downloads = published.slice(0, platforms.length);
 const models = published.at(-1);
-const expectedApps = registry.apps.map(app => app.id).sort();
+const expectedApps = apps.map(app => app.id).sort();
 async function checkReport(artifact, report, { complete }) {
   const matching = files.filter(path => path.includes(`${artifact}/`) && path.endsWith(`/${report}/startup.json`));
   if (matching.length !== 1) throw new Error(`Missing ${report} from ${artifact}`);
@@ -103,25 +110,28 @@ async function checkReport(artifact, report, { complete }) {
   if (complete && JSON.stringify(results.map(result => result.app).sort()) !== JSON.stringify(expectedApps)) throw new Error(`Incomplete ${report} in ${artifact}`);
   return results;
 }
-for (const os of ['ubuntu-22.04', 'macos-15', 'windows-latest']) await checkReport(`desktop-${os}`, 'packaged-desktop-reports', { complete: true });
-if (!files.some(path => path.includes('desktop-ubuntu-22.04/') && path.endsWith('/container-reports/batch.json'))) throw new Error('Missing HPC batch tests');
+for (const os of ['ubuntu-22.04', 'macos-15', 'windows-latest']) await checkReport(`desktop-${catalog.id}-${os}`, 'packaged-desktop-reports', { complete: true });
+if (container && !files.some(path => path.includes(`desktop-${catalog.id}-ubuntu-22.04/`) && path.endsWith('/container-reports/batch.json'))) throw new Error('Missing HPC batch tests');
 // The pack replaces the model-inclusive edition, so a networkless run against
 // an extracted pack is the evidence that offline installations still work.
-const offline = await checkReport('desktop-models-offline', 'desktop-workflow-reports', { complete: false });
+const offline = await checkReport(`desktop-${catalog.id}-models-offline`, 'desktop-workflow-reports', { complete: false });
 if (!offline.some(result => result.workflow)) throw new Error('The offline model pack test ran no workflow');
 if (offline.some(result => result.downloaded !== 0)) throw new Error('The offline model pack test downloaded a model instead of reading the pack');
-catalog.suite = { version, revision, apps: await Promise.all(registry.apps.map(async app => ({ id: app.id, version: JSON.parse(await readFile(`apps/${app.id}/package.json`)).version }))), downloads, models };
+const suiteApps = await Promise.all(apps.map(async app => ({ id: app.id, version: JSON.parse(await readFile(`apps/${app.id}/package.json`)).version })));
+standalone.suites = { ...standalone.suites, [catalog.id]: { version, revision, apps: suiteApps, downloads, models } };
 const metadataPath = join(directory, 'standalone-catalog.json');
-await writeFile(metadataPath, `${JSON.stringify(catalog, null, 2)}\n`);
+await writeFile(metadataPath, `${JSON.stringify(standalone, null, 2)}\n`);
 uploads.add(metadataPath);
 const notesPath = join(directory, 'release-notes.md');
-await writeFile(notesPath, `# Neurodesk Webapps ${version}\n\nAll ${registry.apps.length} applications ship in one archive per platform. It downloads and caches a model the first time that model is needed. The separate model pack holds every model for every platform. Install the pack when the machine has no internet access, or share one extracted copy across an HPC cluster.\n\nDownload every archive part for your platform and its installation instructions. macOS targets Apple silicon; Linux and Windows target x86-64. The Apptainer SIF supports HPC GUI sessions and JSON batch jobs. WebGPU methods require compatible GPU hardware.\n\nEvery installed application was launched with a fresh profile on macOS, Linux and Windows. CI also tested offline computations and exports against an extracted model pack with networking denied, and a Docker batch job with networking disabled. Model accuracy and hardware-specific GPU coverage are documented in the repository test reports.\n\nSource: ${revision}\n\n${renderInstallationNotes(downloads, models)}`);
-if (process.argv.includes('--prepare-only')) {
+const apptainer = container ? ' The Apptainer SIF supports HPC GUI sessions and JSON batch jobs.' : '';
+const batch = container ? ', and a Docker batch job with networking disabled' : '';
+await writeFile(notesPath, `# ${desktop.product_name} ${version}\n\nAll ${apps.length} applications of ${catalog.title} (${catalog.host}) ship in one archive per platform. It downloads and caches a model the first time that model is needed. The separate model pack holds every model of these applications for every platform. Install the pack when the machine has no internet access, or share one extracted copy across an HPC cluster.\n\nDownload every archive part for your platform and its installation instructions. macOS targets Apple silicon; Linux and Windows target x86-64.${apptainer} WebGPU methods require compatible GPU hardware.\n\nEvery installed application was launched with a fresh profile on macOS, Linux and Windows. CI also tested offline computations and exports against an extracted model pack with networking denied${batch}. Model accuracy and hardware-specific GPU coverage are documented in the repository test reports.\n\nSource: ${revision}\n\n${renderInstallationNotes(downloads, models, desktop)}`);
+if (options['prepare-only']) {
   console.log(metadataPath);
 } else {
   const existing = readDraftRelease(gh, tag);
   if (existing && !existing.isDraft) throw new Error('Refusing to replace an already published release');
-  if (!existing) gh(['release', 'create', tag, '--draft', '--target', revision, '--title', `Neurodesk Webapps ${version}`, '--notes-file', notesPath]);
+  if (!existing) gh(['release', 'create', tag, '--draft', '--target', revision, '--title', `${desktop.product_name} ${version}`, '--notes-file', notesPath]);
   // The release-asset API returns transient 500s under load, and each suite
   // carries gigabytes per platform. Resume completed uploads and retry the rest.
   const uploaded = new Map(JSON.parse(gh(['release', 'view', tag, '--json', 'assets'])).assets.map(asset => [asset.name, asset.size]));
