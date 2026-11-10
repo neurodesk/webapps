@@ -156,7 +156,12 @@ test('ISLES case 0001 carries the age and sex of its sidecars and no time since 
   assert.match(context.notes, /TPO is left blank/);
   const sidecar = example.files.find(file => file.role === 'dwi').url.replace(/\.nii\.gz$/, '.json');
   assert.equal(context.source.url, sidecar.replace('/resolve/', '/blob/'), 'the source link is the pinned sidecar the values were read from');
-  assert.equal(examples.find(item => item.id === 'stroke-dwi-adc').patientContext, undefined, 'the rotating entry takes the context of the case it loads');
+});
+
+test('every menu entry names the scan it loads and carries that case\'s context', () => {
+  assert.deepEqual(examples.map(item => item.id), ['stroke-lesion', 'stroke-lesion-m2001', 'stroke-dwi-adc-soop', 'stroke-dwi-adc-isles2022']);
+  assert.equal(examples.some(item => item.rotation), false, 'no entry alternates between cases');
+  for (const example of examples) assert.ok(example.patientContext?.source?.url, `${example.id} links the source of its context`);
 });
 
 test('the behavioural form shows the case that is loaded and empties for a case without data', async () => {

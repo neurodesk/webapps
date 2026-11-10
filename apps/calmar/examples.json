@@ -72,32 +72,6 @@
     }
   },
   {
-    "id": "stroke-dwi-adc",
-    "label": "Acute DWI + ADC — next case",
-    "description": "Alternates SOOP sub-2 and ISLES case 0001 after successful loads. Choose either named case to repeat it. Review each computed lesion before confirming.",
-    "expectedResult": "A computed, editable lesion candidate and downloadable native-space mask. Review and confirm it before reporting.",
-    "files": [
-      {
-        "role": "dwi",
-        "name": "sub-2_rec-TRACE_dwi.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/23da04c5d7adb5b20bea09eb6e508ba56093fab0/examples/calmar/acute/soop/sub-2_rec-TRACE_dwi.nii.gz",
-        "sha256": "b95232b79695d5d03512ae22d2a601946aca75b2e7377efaef4d283d7921f6dc",
-        "bytes": 1630864
-      },
-      {
-        "role": "adc",
-        "name": "sub-2_rec-ADC_dwi.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/23da04c5d7adb5b20bea09eb6e508ba56093fab0/examples/calmar/acute/soop/sub-2_rec-ADC_dwi.nii.gz",
-        "sha256": "92f4b110c0a2bbdb34082f7071f9466f74cd9b1d8064996e2f45e9fab334f630",
-        "bytes": 1748263
-      }
-    ],
-    "rotation": [
-      "stroke-dwi-adc-soop",
-      "stroke-dwi-adc-isles2022"
-    ]
-  },
-  {
     "id": "stroke-dwi-adc-soop",
     "label": "Acute DWI + ADC — SOOP sub-2",
     "description": "Acute-stroke TRACE/DWI and ADC from SOOP ds004889 v1.1.2, sub-2 (CC0). Includes the published age, sex and NIHSS; time since onset is not published. Review the computed lesion candidate before confirming.",

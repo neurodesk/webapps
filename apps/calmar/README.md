@@ -870,12 +870,13 @@ the dataset's README, description, a notice and a provenance record.
 
 ### Acute diffusion examples
 
-The input menu offers **Acute DWI + ADC — next case**, alternating SOOP
-`sub-2` and ISLES 2022 `sub-strokecase0001` after each successful import.
-Both named cases remain selectable to repeat a scan. A failed or cancelled
-import keeps the same next case. The status and tooltip identify the scan
-actually loaded. Select **Run lesion segmentation** to compute its candidate;
-loading a case never runs segmentation or supplies a reference lesion.
+The input menu offers two acute cases by name: **Acute DWI + ADC — SOOP
+sub-2** and **Acute DWI + ADC — ISLES case 0001** (ISLES 2022
+`sub-strokecase0001`). Each entry loads the scan it names, and choosing it
+again repeats it. A failed or cancelled import leaves the previous inputs in
+place. The status and tooltip identify the scan loaded. Select **Run lesion
+segmentation** to compute its candidate; loading a case never runs
+segmentation or supplies a reference lesion.
 Switching cases clears old results and demographic context.
 
 The behavioural form is then filled with what the dataset publishes for the
