@@ -19,6 +19,7 @@
 //! Concatenating keeps 8 bytes per kept vertex and volume of every run.
 
 use crate::error::{Error, Result};
+use crate::precision::Precision;
 use crate::timeseries::{RawRun, TimeSeries, VertexSelection};
 
 /// `nrmls` of `samsrf_gii2srf`: positive = detrend and z-score, negative = detrend only,
@@ -44,6 +45,9 @@ pub struct PreprocessOptions {
     /// Keep the per-time-point `nanmean` across every vertex of the combined data
     /// (`samsrf_revcor_cf` Global_Signal_Correction).
     pub global_signal: bool,
+    /// The precision `samsrf_gii2srf` stores (`def_64bit`). Only the global signal
+    /// depends on it: single data are averaged across vertices in single.
+    pub precision: Precision,
 }
 
 /// The combined, normalised data for the kept vertices.
@@ -105,30 +109,35 @@ impl NanSum {
 struct VolumeMean {
     sum: Vec<f64>,
     count: Vec<u32>,
+    precision: Precision,
 }
 
 impl VolumeMean {
-    fn new(volumes: usize) -> Self {
+    fn new(volumes: usize, precision: Precision) -> Self {
         Self {
             sum: vec![0.0; volumes],
             count: vec![0; volumes],
+            precision,
         }
     }
 
+    /// Adds one vertex's course. Single data sum in single, vertex by vertex, as
+    /// MATLAB's `nanmean(Srf.Data, 2)` does.
     fn add(&mut self, course: &[f64]) {
         for ((sum, count), &value) in self.sum.iter_mut().zip(&mut self.count).zip(course) {
             if !value.is_nan() {
-                *sum += value;
+                *sum = self.precision.round(*sum + self.precision.round(value));
                 *count += 1;
             }
         }
     }
 
     fn mean(self) -> Vec<f64> {
+        let precision = self.precision;
         self.sum
             .iter()
             .zip(&self.count)
-            .map(|(sum, count)| sum / f64::from(*count))
+            .map(|(sum, count)| precision.round(sum / f64::from(*count)))
             .collect()
     }
 }
@@ -212,7 +221,7 @@ impl RunAccumulator {
         );
         let half = self.runs % 2;
         let mut concatenated = Vec::new();
-        let mut across = VolumeMean::new(volumes);
+        let mut across = VolumeMean::new(volumes, self.options.precision);
         let mut position = 0;
         for vertex in 0..self.total_vertices {
             let is_kept = position < kept_count && self.kept.vertex(position) == vertex;
@@ -353,7 +362,7 @@ impl RunAccumulator {
         let global_signal = match self.global {
             GlobalSignal::Off => None,
             GlobalSignal::PerRun(signal) => Some(signal),
-            GlobalSignal::FromCombined => Some(mean_across_vertices(&data)),
+            GlobalSignal::FromCombined => Some(mean_across_vertices(&data, self.options.precision)),
             GlobalSignal::AllVertices(sums) => {
                 let means = NanSum::mean(&[sums]);
                 let all = TimeSeries {
@@ -361,7 +370,7 @@ impl RunAccumulator {
                     vertices: self.total_vertices,
                     data: means,
                 };
-                Some(mean_across_vertices(&all))
+                Some(mean_across_vertices(&all, self.options.precision))
             }
         };
         Ok(Preprocessed {
@@ -387,8 +396,8 @@ fn normalise_course(course: &mut [f64], normalise: Normalise) {
 }
 
 /// `nanmean(Data, 2)`: per volume, the mean of the non-NaN values across vertices.
-fn mean_across_vertices(data: &TimeSeries) -> Vec<f64> {
-    let mut across = VolumeMean::new(data.volumes);
+fn mean_across_vertices(data: &TimeSeries, precision: Precision) -> Vec<f64> {
+    let mut across = VolumeMean::new(data.volumes, precision);
     for vertex in 0..data.vertices {
         across.add(data.course(vertex));
     }
@@ -447,6 +456,16 @@ pub fn zscore(x: &mut [f64]) {
     }
 }
 
+/// MATLAB `zscore` of a single vector: single mean, `std` and quotient.
+fn zscore_single(x: &[f32]) -> Vec<f32> {
+    let n = x.len() as f32;
+    let mu = crate::precision::sum_single(x) / n;
+    let squares: Vec<f32> = x.iter().map(|value| (value - mu) * (value - mu)).collect();
+    let sigma = if x.len() > 1 { (crate::precision::sum_single(&squares) / (n - 1.0)).sqrt() } else { 0.0 };
+    let sigma = if sigma == 0.0 { 1.0 } else { sigma };
+    x.iter().map(|value| (value - mu) / sigma).collect()
+}
+
 /// Pearson correlation as MATLAB `corr(x, y)`: NaN when either course is constant or has a NaN.
 fn correlation(x: &[f64], y: &[f64]) -> f64 {
     let mx = mean(x);
@@ -479,6 +498,33 @@ pub fn noise_ceiling(odd_mean: &[f64], even_mean: &[f64]) -> f64 {
 /// to zeros; it is left out, which is the coefficient 0 MATLAB's basic solution gives it.
 /// Collinear covariates (rank deficiency beyond that) are not reproduced.
 pub fn remove_noise(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize) -> Result<()> {
+    remove_noise_in(data, covariates, n_covariates, Precision::Double)
+}
+
+/// `remove_noise` in the data's precision. Single data make `zscore`, `[X ones] \ Y`,
+/// `X * B` and the residuals single; one covariate (the global signal) is supported.
+pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize, precision: Precision) -> Result<()> {
+    if precision == Precision::Single {
+        if n_covariates != 1 || covariates.len() != data.volumes {
+            return Err(Error::Shape("single-precision noise removal takes one covariate per volume".into()));
+        }
+        let x: Vec<f32> = zscore_single(&covariates.iter().map(|&value| value as f32).collect::<Vec<_>>());
+        let design: Vec<num_complex::Complex64> = x.iter().map(|&value| num_complex::Complex64::new(f64::from(value), 0.0)).collect();
+        for vertex in 0..data.vertices {
+            let course = data.course_mut(vertex);
+            if course.iter().any(|value| value.is_nan()) {
+                course.fill(0.0);
+                continue;
+            }
+            let (beta, baseline) = crate::css::fit_betas(&design, course, Precision::Single);
+            let (beta, baseline) = (beta as f32, baseline as f32);
+            for (value, &x) in course.iter_mut().zip(&x) {
+                let modelled = x * beta + baseline;
+                *value = f64::from(*value as f32 - modelled);
+            }
+        }
+        return Ok(());
+    }
     let volumes = data.volumes;
     if covariates.len() != volumes * n_covariates {
         return Err(Error::Shape(format!(
@@ -1286,6 +1332,7 @@ mod tests {
             normalise,
             combine,
             global_signal,
+            precision: Precision::Double,
         }
     }
 
@@ -1447,6 +1494,13 @@ mod tests {
         assert!(result.data.data[VOLUMES + 3].is_nan());
         assert_eq!(result.data.data[VOLUMES + 4..], raw[VOLUMES + 4..]);
         assert_eq!(result.noise_ceiling, None);
+    }
+
+    #[test]
+    fn a_single_global_signal_sums_rounded_courses_in_single() {
+        let data = TimeSeries { volumes: 1, vertices: 3, data: vec![1.0, 1e-8, 1e-8] };
+        assert_eq!(mean_across_vertices(&data, Precision::Double), vec![(1.0 + 1e-8 + 1e-8) / 3.0]);
+        assert_eq!(mean_across_vertices(&data, Precision::Single), vec![f64::from(1.0f32 / 3.0)]);
     }
 
     #[test]

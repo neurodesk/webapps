@@ -97,6 +97,11 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           node packages/samsrf/validation/matlab/compare.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-matrix-input"
           SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_reference
+      - name: Reverse-correlation pRF and connective-field raw pipeline gates (both MATLAB hosts)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor-reference" packages/samsrf/validation/matlab/revcor-reference.json
+          SAMSRF_REVCOR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-revcor-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test revcor_reference -- --nocapture
+          node packages/samsrf/validation/matlab/compare-revcor.mjs "$RUNNER_TEMP/samsrf-revcor-reference" "$RUNNER_TEMP/samsrf-matrix-input" "$RUNNER_TEMP/samsrf-revcor-comparison.json"
       - name: CSS extreme-scale and rank regression gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
@@ -115,6 +120,13 @@ jobs:
             ${{ runner.temp }}/samsrf-css-trace.json
             ${{ runner.temp }}/samsrf-css-trace-v60.json
             ${{ runner.temp }}/samsrf-css-trace-v69.json
+          if-no-files-found: ignore
+      - name: Retain the reverse-correlation comparison
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-revcor-comparison
+          path: ${{ runner.temp }}/samsrf-revcor-comparison.json
           if-no-files-found: ignore
 
   wasm-source:

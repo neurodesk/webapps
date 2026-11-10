@@ -122,7 +122,7 @@ a u32 count, that many u32 pixel indices and that many f64 values.
 
 | Signature | Description |
 | --- | --- |
-| `new RunAccumulator(totalVertices, keep, options)` | Combines runs as `samsrf_gii2srf` does, one run at a time. `keep` is a `Uint32Array` of the vertices to keep, or `null` for all. `options` defaults to `{ normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false }`: `normalise` is `'none'`, `'detrend'` or `'zscore'` (detrend, then z-score); `combine` is `'average'` or `'concatenate'`; `noiseCeiling` applies when averaging two or more runs; `globalSignal` keeps the mean across every vertex, kept or not. |
+| `new RunAccumulator(totalVertices, keep, options)` | Combines runs as `samsrf_gii2srf` does, one run at a time. `keep` is a `Uint32Array` of the vertices to keep, or `null` for all. `options` defaults to `{ normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false, precision: 'double' }`: `normalise` is `'none'`, `'detrend'` or `'zscore'` (detrend, then z-score); `combine` is `'average'` or `'concatenate'`; `noiseCeiling` applies when averaging two or more runs; `globalSignal` keeps the mean across every vertex, kept or not; `precision` (`'double'` or `'single'`, the model's `Data_Precision`) computes that mean as MATLAB does on data of that class. |
 | `accumulator.pushRun(run)` | Normalises a `Run` and folds it in. Every run must have the same size. |
 | `accumulator.finish() → { kept, totalVertices, runs, volumes, vertices, data, noiseCeiling, globalSignal }` | The combined, vertex-major `data` of the kept vertices (`kept` is `null` when all are kept), with `noiseCeiling` and `globalSignal` as `Float64Array`s or `null`. |
 | `accumulator.free()` | Releases the accumulator. |
@@ -217,7 +217,7 @@ re-exports the whole API, plus:
 | `readLabelFile(path)` | `readFreeSurferLabel` on a file. |
 | `readAnatomyFolder(dir, hemisphere)` | `readAnatomy` on `dir/<hemisphere>.white`, `.pial`, `.inflated`, `.sphere`, `.curv`, `.area` and, when present, `.thickness`. `hemisphere` is `'lh'` or `'rh'`. |
 | `preprocessRuns(paths, { keep, ...options }) → result` | Reads the runs one at a time into a `RunAccumulator`, freeing each, and returns `finish()`. |
-| `readAnalysisInputs({ runs, roi?, seed?, apertures?, template?, white?, area?, hemisphere?, normalise = 'zscore', combine = 'average' }) → inputs` | Reads an analysis's files as the web app does: the runs preprocessed keeping the ROI and seed vertices (every vertex without `roi`), with the noise ceiling and global signal; the serialised apertures; the Benson template (`x0` flipped for `'rh'`); the white surface and areas. Paths left out are `null`. |
+| `readAnalysisInputs({ runs, roi?, seed?, apertures?, template?, white?, area?, hemisphere?, normalise = 'zscore', combine = 'average', precision = 'double' }) → inputs` | Reads an analysis's files as the web app does: the runs preprocessed keeping the ROI and seed vertices (every vertex without `roi`), with the noise ceiling and global signal (`precision` is the model's `Data_Precision`); the serialised apertures; the Benson template (`x0` flipped for `'rh'`); the white surface and areas. Paths left out are `null`. |
 | `analysisSpec(inputs, kind, model, { roi }?) → spec` | The `createJob` spec for `kind` on `readAnalysisInputs` output. `model` is the JSON text or object; `roi` overrides the label's vertices. |
 | `runJob(job, shards = 1, onProgress?) → merged` | `job.run` over `[0, vertexCount)` in `shards` pieces in this thread, then `job.merge`. |
 | `shardRanges(total, shards) → [[start, end], ...]` | The ranges `runJob` and the command line split the vertices into. |
@@ -352,11 +352,17 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
 
 ## Divergences from SamSrf
 
-- **Precision.** Double arithmetic remains the default. Forward-model JSON
-  can select `"Data_Precision": "single"`: processed courses and noise
-  ceilings are rounded before selection, the fitting objective uses mixed
-  single/double arithmetic, and saved maps are rounded as in SamSrf. This
-  option currently rejects reverse-correlation analyses. It does not promise
+- **Precision.** Double arithmetic remains the default. Model JSON can select
+  `"Data_Precision": "single"`: processed courses and noise ceilings are
+  rounded before selection, the fitting objective uses mixed single/double
+  arithmetic, and saved maps are rounded as in SamSrf. Reverse correlation
+  (`rc`, every estimator) and connective fields (`cf` with `Fit_pRF` 0 or -1)
+  follow MATLAB's single correlations, regressions, smoothing, thresholds,
+  medians and residuals; preprocessing's `precision` option makes the global
+  signal single too. Single `cf` Gaussian fits (`Fit_pRF = 1`) are refused:
+  their result depends on MATLAB's single `exp`, which is not reproduced.
+  [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
+  lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
   precision rounding, and the GLM uses a stable double solve on rounded
   inputs with the single-precision rank threshold. The reduction order targets
@@ -456,8 +462,9 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   quadratic work per objective evaluation in unsmoothed Gaussian mode;
   smoothing uses an elementwise residual. `Vx` is the 1-based MATLAB index of
   the peak seed vertex. The template coordinates are single precision
-  (MATLAB computes them on the GIFTI's `single` data) and every later step is
-  f64 here where SamSrf stays in `single`.
+  (MATLAB computes them on the GIFTI's `single` data). With double data every
+  later step is f64; with `Data_Precision` single the estimators stay single
+  as SamSrf's do.
 - **`samsrf_fit2dprf` seeds.** Only the first `n - 2` seed parameters are
   divided by the scaling factor, as the MATLAB loop bound (written for a vector
   that does not yet hold the two betas) does.

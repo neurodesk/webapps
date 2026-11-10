@@ -36,7 +36,7 @@ fn load() -> Example {
     kept.extend(&seed);
     kept.sort_unstable();
     kept.dedup();
-    let options = PreprocessOptions { normalise: Normalise::DetrendZscore, combine: Combine::Average { noise_ceiling: true }, global_signal: true };
+    let options = PreprocessOptions { normalise: Normalise::DetrendZscore, combine: Combine::Average { noise_ceiling: true }, global_signal: true, precision: samsrf_core::precision::Precision::Double };
     let mut accumulator = RunAccumulator::new(134260, VertexSelection::Indices(kept.clone()), options);
     for run in 1..=6 {
         let raw = gifti::read_run(&read(&format!("lh_uBars{run}.gii"))).unwrap();

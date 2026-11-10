@@ -145,7 +145,8 @@ impl Job {
         let JobInputs { model, apertures, hrf, mut data, kept, roi, mut noise_ceiling, global_signal, seed, surface, area, seed_fine_fit, total_vertices } = inputs;
         let precision = match &model {
             Model::Prf(model) => model.data_precision,
-            _ => Precision::Double,
+            Model::RevCorPrf(model) => model.data_precision,
+            Model::RevCorCf(model) => model.data_precision,
         };
         precision.round_slice(&mut data.data);
         if let Some(ceiling) = &mut noise_ceiling {
@@ -202,7 +203,7 @@ impl Job {
                 for (i, &vertex) in mver.iter().enumerate() {
                     roi_series.course_mut(i).copy_from_slice(data.course(kept_position[vertex as usize] as usize));
                 }
-                preprocess::remove_noise(&mut roi_series, signal, 1)?;
+                preprocess::remove_noise_in(&mut roi_series, signal, 1, precision)?;
                 for (i, &vertex) in mver.iter().enumerate() {
                     data.course_mut(kept_position[vertex as usize] as usize).copy_from_slice(roi_series.course(i));
                 }

@@ -148,9 +148,8 @@ are compressed to the selected vertices. Receipts preserve both behaviors.
 The recorded source `model` enables `Save_Rmaps` to retain those profiles.
 `mapReplayModel` disables that storage-only option, which the port rejects,
 and selects `Data_Precision` explicitly. In the pinned source, `Save_Rmaps`
-does not change the computed maps. Replay still needs to resolve recorded
-relative input paths and provide the recorded preprocessing and template data;
-the port does not yet accept single-precision RC/CF models.
+does not change the computed maps. Replay resolves no
+recorded paths: the gates below pass the recorded or raw inputs directly.
 
 The local/CI Octave smoke executes all 17 branches of a single-precision,
 three-vertex recording using the documented Octave shims. Vertex 25 adds a
@@ -165,8 +164,8 @@ round trips, then hashes the numerical files. Mutation tests run on the actual
 Octave smoke to check that corrupt recordings fail. Compression round trips
 check the source's own serialization, not an independent numerical reference.
 These checks establish recording integrity,
-not port parity. There is no port acceptance gate or compiled Runtime evidence
-for this new matrix yet. The new archives are separate from the 741-case pin.
+not port parity; the port gates follow below. There is no compiled Runtime
+evidence for this matrix. The new archives are separate from the 741-case pin.
 
 The first actual MATLAB recording, [run 42445033403](https://github.com/neurodesk/webapps/actions/runs/42445033403),
 passed the smoke and all 102 cases on both hosts at recorder commit `949548566`.
@@ -193,6 +192,65 @@ node packages/samsrf/validation/matlab/validate-revcor-recording.mjs \
 node packages/samsrf/validation/matlab/validate-revcor-recording.mjs \
   "$TMPDIR/samsrf-revcor-reference/ubuntu-24.04"
 ```
+
+## Reverse-correlation port gates
+
+Two required gates in `samsrf-native` hold the port to both recordings.
+`exes/samsrf/core/tests/revcor_reference.rs` (`SAMSRF_REVCOR_REFERENCE_DIR`)
+starts each stage from MATLAB's own arrays, so a disagreement names its stage.
+`compare-revcor.mjs` runs the raw GIfTI, FreeSurfer and aperture inputs
+(`inputs.json`) through the public Node API, `preprocessRuns` to `runJob`.
+Both fail when a recorded case is missing. Units are 2^-24, single precision's
+unit roundoff; a "peak" limit is relative to the largest magnitude of the
+vertex's profile or course.
+
+| Stage | Limit | Largest difference | Evidence for the limit |
+| --- | --- | --- | --- |
+| Raw runs to single courses, noise ceiling, area, mesh | exact | 0 | |
+| Single global signal (`nanmean(Srf.Data, 2)`) | exact | 0 | a single sum, vertex by vertex |
+| Benson template x0, y0 | 3 x 2^-23 | as `compare.mjs` | template precision; CF jobs use MATLAB's template |
+| CF correlations `corr(Y, X)` | 16 units | 10.0 | MATLAB vs the exact correlation of its inputs: 9.9; host vs host: 10 |
+| RC profiles `[Y ones] \ X` | 32 units of the peak | 26.95 | MATLAB vs the exact solve of its inputs: 20; host vs host: 1.1 |
+| Single global regression residuals | 32 units of the peak | 22.56 | host vs host: 5.2; one near-collinear vertex |
+| Each host's profiles to its maps | exact | 0 | thresholds, peaks, hulls, medians, single sums, fminsearch |
+| RC `R^2` on the AVX-512 host | 16 single ULPs | 9 | MKL's AVX-512 dot product order (below) |
+| Positions, `Fwhm`, `Vx`, hull and summary widths, end to end | exact | 0 | |
+| CF `R^2`, `Beta`, `Suppression`; RC `Beta` (of the peak), end to end | 32 units | 20.61 | they are profile values |
+| Single RC Gaussian fits; unsmoothed double CF Gaussian fits | fit or no fit | masks equal | MATLAB's hosts differ by up to 0.84 and 9e7 |
+
+Double precision is held to 1e-12 (relative above 1) at every stage.
+
+The port reproduces these single-precision rules, each confirmed by an exact
+replay on both hosts: `corr` centres, multiplies and divides by each norm in
+single; smoothing rounds each weighted product and the quotient; `Fwhm` sums
+single areas; summary statistics take single medians (`median.m`'s
+`a + (b - a) / 2`) and MADs; the RC Gaussian residuals, their four-lane sum and
+`R^2` are single while the model stays double; the convex-hull threshold rounds
+to single; and the global signal and its regression are single.
+
+The port cannot be bit-identical before the profiles, because MATLAB is not:
+the two hosts' profiles differ on about 70% of entries. The RC profile uses
+the shared regression (`css::fit_betas`: a double solve on the rounded inputs
+with MATLAB's rank rule). Matching MKL's single QR bit for bit belongs to the
+QR work, which would tighten the RC profile and global-regression limits. A
+constant single course gives a zero profile and a zero map column, as MATLAB's
+rank rule does. `corr`'s dot product follows the AMD host's MKL order exactly
+(all 189 `R^2` values); the AVX-512 host's order was not identified (best
+candidate, 16 lanes x 4 accumulators with FMA: 145 of 189).
+
+Single-precision CF Gaussian fits (`Fit_pRF = 1`) are refused. They fit on the
+single template coordinates, so MATLAB's single `exp` decides the result. Its
+implementation is not reproduced: replaying the recorded profiles with Rust's
+`libm` `expf` leaves 1-5 of 21 vertices per case different; glibc's `expf` and
+a correctly rounded `exp` leave more. A recording of MATLAB's single `exp` on
+both hosts is needed first.
+
+The double unsmoothed CF Gaussian replay is not gated here: on 2 of 21 vertices
+fits run away to |x0| > 1e8 and do not replay. That path is unchanged and gated
+by the 741-case pin's nine CF cases. Geodesic distances are computed in double
+from the single mesh; MATLAB computes them in single and stores them as double.
+That difference is inside the correlation limit but should move to the geometry
+work.
 
 ## Building a matching Runtime container
 

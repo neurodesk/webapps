@@ -373,6 +373,7 @@ test("MATLAB fit settings round-trip through JSON and remain in collapsed settin
   expect(saved.Css_Convention).toBe("samsrf");
   expect(saved.Compressive_Nonlinearity).toBe(true);
   await page.locator("#analysis").selectOption("cf");
-  await expect(page.locator("#dataPrecision")).toBeHidden();
+  await expect(page.locator("#dataPrecision")).toHaveValue("single");
+  expect(JSON.parse(await page.locator("#modelJson").inputValue()).Data_Precision).toBe("single");
   await expect(page.locator("#cssConvention")).toBeHidden();
 });
