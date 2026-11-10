@@ -84,6 +84,7 @@ test('a catalogue suite holds exactly the apps, landing page, handoffs and asset
   assert.deepEqual(await readdir(join(destination, 'site/_runtime')), ['viewer']);
   const landing = new JSDOM(await readFile(join(destination, 'site/index.html'), 'utf8')).window.document;
   assert.equal(landing.title, 'Microscopy Webapps');
+  assert.equal(landing.querySelector('#elsewhere-apps, #elsewhere'), null, 'an offline suite offers no other catalogue\'s apps');
   assert.deepEqual([...new Set([...landing.querySelectorAll('[data-app-card]')].map(card => card.dataset.appId))].sort(), ids);
   for (const id of ['elastix', 'zarro']) {
     const html = await readFile(join(destination, 'site', id, 'index.html'), 'utf8');
