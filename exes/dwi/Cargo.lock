@@ -148,6 +148,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dwi-noddi-toolbox"
+version = "0.1.0"
+dependencies = [
+ "dwi-amico",
+ "dwi-gp",
+ "dwi-tensor",
+ "serde_json",
+]
+
+[[package]]
 name = "dwi-pe-field"
 version = "0.1.0"
 dependencies = [
@@ -289,6 +299,7 @@ dependencies = [
  "dwi-amico",
  "dwi-dmipy",
  "dwi-gradients",
+ "dwi-noddi-toolbox",
  "dwi-tensor",
 ]
 

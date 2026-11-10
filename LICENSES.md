@@ -45,6 +45,11 @@ for each app are recorded in `registry/apps.yml`.
   resampling (MIT-CMU) and downloads micro-sam's `vit_t_lm` model (CC BY 4.0, from Apache-2.0 MobileSAM and
   Segment Anything); attribution in `apps/microsam/NOTICE`, the Apache-2.0 text for the traced MobileSAM and
   Segment Anything graphs in `apps/microsam/LICENSE-APACHE-2.0`. The build ships the three files at the app's root
+- `packages/deconvolution`: MIT (`packages/deconvolution/LICENSE`); the WebAssembly build of
+  `exes/deconvolution` (MIT), statically linking RustFFT, RealFFT, libm and the other crates in
+  `packages/deconvolution/THIRD_PARTY_NOTICES.md` (generated from the Cargo lock with their licence
+  texts); libm's Bessel functions carry the FreeBSD msun / Sun Microsystems notice
+  (`packages/deconvolution/NOTICE`). `apps/deconvolution` stages these files in its build under `licenses/`.
 - `packages/shoreline`: Apache-2.0 AND BSD-3-Clause (`packages/shoreline/LICENSE`,
   `packages/shoreline/NOTICE`); the WebAssembly build of `exes/dwi/shoreline`, whose 3dSHORE
   and topup displacement crates port QSIPrep and DIPY code (BSD-3-Clause)

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { createSign } from 'node:crypto';
+import { createPrivateKey, createSign } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appCatalogIds, loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
+import { appCatalogIds, catalogApps, loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 
 const ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 const DEFAULT_OUTPUT = resolve(repoRoot, 'site', 'analytics.json');
@@ -86,6 +86,7 @@ export function emptyAnalytics(registry, generatedAt = null) {
     unavailable: true,
     totals: { users: 0, pageViews: 0 },
     countries: [],
+    catalogs: Object.fromEntries(registry.site.catalogs.map(({ id }) => [id, { totals: { users: 0, pageViews: 0 }, countries: [] }])),
     apps: registry.apps.map((app) => ({
       id: app.id,
       path: app.path,
@@ -177,6 +178,14 @@ export function appHosts(registry, app) {
   return [...new Set([...hosts, registry.site.domain])];
 }
 
+// The visits to a set of apps on every host that counts them.
+export function appsFilter(registry, apps) {
+  return dimensionFilter({
+    hostName: [...new Set(apps.flatMap((app) => appHosts(registry, app)))],
+    pagePathPrefixes: apps.map((app) => `/${app.path}/`),
+  });
+}
+
 export async function collectAnalytics({ registry, propertyId, serviceAccount }) {
   const token = await accessToken(serviceAccount);
   const context = {
@@ -184,10 +193,14 @@ export async function collectAnalytics({ registry, propertyId, serviceAccount })
     propertyId,
     periodDays: registry.site.analytics.period_days,
   };
-  const totals = await metricsForFilter(context, dimensionFilter({
-    hostName: [...new Set(registry.apps.flatMap((app) => appHosts(registry, app)))],
-    pagePathPrefixes: registry.apps.map((app) => `/${app.path}/`),
-  }));
+  const totals = await metricsForFilter(context, appsFilter(registry, registry.apps));
+  // Visitors are not additive across apps, so each catalogue's landing page
+  // needs its own totals and countries (scripts/lib/catalog-sites.mjs).
+  const catalogs = {};
+  for (const catalog of registry.site.catalogs) {
+    const { countries, ...catalogTotals } = await metricsForFilter(context, appsFilter(registry, catalogApps(registry, catalog)));
+    catalogs[catalog.id] = { totals: catalogTotals, countries };
+  }
   const apps = [];
   for (const app of registry.apps) {
     const appMetrics = await metricsForFilter(context, dimensionFilter({
@@ -209,8 +222,21 @@ export async function collectAnalytics({ registry, propertyId, serviceAccount })
     unavailable: false,
     totals: { users: totals.users, pageViews: totals.pageViews },
     countries: totals.countries,
+    catalogs,
     apps: rankApps(apps),
   };
+}
+
+// A GA4 or OAuth outage must not stop a deploy: publish the placeholder instead.
+// The previous numbers cannot be kept, because each site serves only its own
+// slice of the report (scripts/lib/catalog-sites.mjs).
+export async function collectOrPlaceholder({ registry, collect, warn = console.warn }) {
+  try {
+    return await collect();
+  } catch (error) {
+    warn(`::warning::Analytics unavailable, publishing the placeholder: ${error.message.slice(0, 200)}`);
+    return emptyAnalytics(registry);
+  }
 }
 
 export async function writeAnalytics(path, data) {
@@ -241,8 +267,18 @@ async function main() {
   if (!serviceAccount.client_email || !serviceAccount.private_key) {
     throw new Error('GA4_SERVICE_ACCOUNT_KEY must contain client_email and private_key');
   }
+  let keyType;
+  try {
+    keyType = createPrivateKey(serviceAccount.private_key).asymmetricKeyType;
+  } catch (error) {
+    throw new Error(`GA4_SERVICE_ACCOUNT_KEY private_key is not a usable key: ${error.message}`);
+  }
+  if (keyType !== 'rsa') throw new Error(`GA4_SERVICE_ACCOUNT_KEY private_key is not a usable key: ${keyType}, not RSA`);
 
-  const data = await collectAnalytics({ registry, propertyId, serviceAccount });
+  const data = await collectOrPlaceholder({
+    registry,
+    collect: () => collectAnalytics({ registry, propertyId, serviceAccount }),
+  });
   await writeAnalytics(output, data);
   console.log(`Wrote ${data.apps.length} app analytics summaries to ${output}`);
 }

@@ -10,7 +10,7 @@
 
 pub mod lasso;
 pub mod nnls;
-mod special;
+pub mod special;
 #[rustfmt::skip]
 pub mod tables;
 

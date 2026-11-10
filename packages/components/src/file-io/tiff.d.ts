@@ -2,13 +2,16 @@ export type TiffSampleArray = Uint8Array | Uint16Array | Uint32Array | Int8Array
 
 export interface TiffStackMetadata {
   kind: 'ome' | 'imagej' | 'baseline';
-  /** ImageJ only: a stack without `hyperstack=true` or `frames=`, whose pages may be z or t. */
+  /**
+   * The file does not say whether its pages are z planes or time points: an ImageJ stack without
+   * `hyperstack=true` or `frames=`, or a plain TIFF (whose sizeZ and sizeT are then null).
+   */
   unlabelledStack?: boolean;
   images: number;
   dimensionOrder?: string | null;
   sizeC: number;
-  sizeZ: number;
-  sizeT: number;
+  sizeZ: number | null;
+  sizeT: number | null;
   /** Micrometres; null when the file does not record it. */
   pixelSize: { x: number | null; y: number | null; z: number | null };
   /**
@@ -40,7 +43,8 @@ export interface OmeMetadata extends Omit<TiffStackMetadata, 'description' | 'un
 export interface OmeChannel {
   /** null when the Channel has no Name or an empty one. */
   name: string | null;
-  samplesPerPixel: number;
+  /** Null when absent, NaN when it is not a positive integer. */
+  samplesPerPixel: number | null;
 }
 
 /** A TiffData element's attributes as written (undefined when absent), and the UUID of the file holding its planes (null for this file). */
@@ -81,7 +85,7 @@ export interface TiffStackInfo {
   pages: number;
   dtype: 'uint8' | 'uint16' | 'uint32' | 'int8' | 'int16' | 'int32' | 'float32' | 'float64';
   bytesPerSample: number;
-  /** 1, or 3 or more for RGB pages read with `rgb: 'mean'`. */
+  /** Samples per pixel of the first page: 1, 2 for grey + alpha (read as grey), or 3 or more for RGB pages read with `rgb: 'mean'`. */
   samplesPerPixel: number;
   metadata: TiffStackMetadata;
 }
@@ -109,11 +113,22 @@ export interface ReadTiffStackOptions<Data extends TiffSampleArray = TiffSampleA
 export function micrometresPerUnit(unit: string | null | undefined): number | null;
 export function parseOmeDescription(description: string | null | undefined): OmeMetadata | null;
 export function parseImagejDescription(description: string | null | undefined, resolution?: [number | null, number | null]): Omit<TiffStackMetadata, 'description'> | null;
-/** Size, sample type and metadata from the page directories; no pixel is decoded. Refuses several OME series and an ImageJ `images=` that is not the page count. A Blob or File is read range by range, only as far as its page directories and description. */
+/**
+ * Size, sample type and metadata from the page directories; no pixel is decoded. `pages` counts
+ * full-resolution pages (or OME planes). Refuses several OME series, OME planes in other files or
+ * not all mapped by TiffData, and an ImageJ `images=` that is not the page count. A Blob or File
+ * is read range by range, only as far as its page directories and description.
+ */
 export function inspectTiffStack(source: ArrayBuffer | Blob, options?: { rgb?: 'refuse' | 'mean' }): Promise<TiffStackInfo>;
-/** Every page of a greyscale TIFF in page, row, column order; refuses multi-sample, palette and over-budget stacks. */
+/**
+ * Every full-resolution page of a greyscale TIFF in page (or OME plane), row, column order.
+ * Reads the grey sample of grey + alpha pages, an ImageJ 8-bit palette's indices and inverted
+ * WhiteIsZero integers; refuses colour (unless `rgb: 'mean'`), multichannel, other palette and
+ * over-budget stacks.
+ */
 export function readTiffStack<Data extends TiffSampleArray = TiffSampleArray>(buffer: ArrayBuffer, options?: ReadTiffStackOptions<Data>): Promise<TiffStack<Data>>;
-export function imagejDescription(options: { frames: number; frameInterval?: number | null; unit?: string | null; min?: number | null; max?: number | null }): string;
+/** ImageJ description of `frames` time points of `slices` z planes (`spacing` in `unit`s). */
+export function imagejDescription(options: { frames?: number; slices?: number; frameInterval?: number | null; spacing?: number | null; unit?: string | null; min?: number | null; max?: number | null }): string;
 /** Uncompressed little-endian baseline TIFF, one strip per page; `rgb` writes Uint8Array red, green, blue triplets as RGB pages. */
 export function writeTiffStack(stack: { width: number; height: number; data: TiffSampleArray; description?: string; pixelSize?: { x: number; y: number } | null; rgb?: boolean }): Uint8Array;
 /** The full-resolution pages of a 2D image TIFF from their directories; `readPlanes` decodes them. `palette: 'index'` reads palette pages as their colour indices (default `'rgb'`). */

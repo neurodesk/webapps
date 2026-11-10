@@ -8,6 +8,7 @@ import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { SHARED_ROOT_FILES, hostedThemeOptions, projectCatalogSite, projectHubSite, runtimeReferences, workerConfig, workerSites } from '../scripts/lib/catalog-sites.mjs';
 import { loadNotFoundTemplate } from '../scripts/lib/not-found-page.mjs';
 import { loadStandalone } from '../scripts/lib/standalone.mjs';
+import { emptyAnalytics } from '../scripts/write-analytics.mjs';
 
 const full = await loadAppsRegistry();
 // dicomview (home neuro, copied to msk) and musclemap (msk) keep the fixture small.
@@ -28,7 +29,7 @@ async function fixture(t) {
   t.after(() => rm(root, { recursive: true, force: true }));
   const siteDist = join(root, 'dist');
   for (const name of SHARED_ROOT_FILES) await put(siteDist, name.includes('.') ? name : `${name}/keep.txt`, '');
-  await put(siteDist, 'analytics.json', '{}');
+  await put(siteDist, 'analytics.json', JSON.stringify(emptyAnalytics(registry)));
   await put(siteDist, 'surf/index.html', page(''));
   await put(siteDist, 'dicomview/index.html', page('<script type="module" src="../_runtime/viewer/1.0/viewer.js"></script>'));
   await put(siteDist, 'musclemap/index.html', page('<script src="./app.js"></script>'));
@@ -84,6 +85,9 @@ test('a catalogue site holds its own apps and only the runtime families they rea
   assert.match(msHtml, /data-brand-name="SciGet"/);
   await assert.rejects(access(join(mskDir, '.nojekyll')), { code: 'ENOENT' });
   await assert.rejects(access(join(mskDir, 'surf')), { code: 'ENOENT' });
+  const report = JSON.parse(await readFile(join(mskDir, 'analytics.json'), 'utf8'));
+  assert.deepEqual(report.apps.map(({ id }) => id), msk.apps);
+  assert.equal(report.catalogs, undefined);
   assert.match(await readFile(join(mskDir, '_headers'), 'utf8'), /Cross-Origin-Embedder-Policy: credentialless/);
 });
 
@@ -183,4 +187,6 @@ test('an app copy takes the URL and brand of the host that serves it', () => {
   assert.equal(copy.url, 'https://microscopyapps.sciget.org/elastix/');
   assert.equal(copy.brandName, 'SciGet');
   assert.equal(copy.siteTitle, 'Microscopy Webapps');
+  assert.equal(home.canonical, 'https://webapps.neurodesk.org/elastix/', 'the home page is its own canonical');
+  assert.equal(copy.canonical, 'https://webapps.neurodesk.org/elastix/', 'a copy names its home page as canonical');
 });

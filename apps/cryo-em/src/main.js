@@ -818,6 +818,10 @@ $('runButton').addEventListener('click', async () => {
     $('formMessage').textContent = error.message;
     $('formMessage').hidden = false;
     status(`${label} was not accepted: ${error.message}`, 'error');
+    // The server may have created the job although no receipt arrived; a refresh follows it.
+    if (state.submitting === submission) state.submitting = null;
+    await refreshProject().catch(() => {});
+    if (state.following) $('formMessage').hidden = true;
   } finally {
     if (state.submitting === submission) state.submitting = null;
     syncControls();

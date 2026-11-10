@@ -9,6 +9,36 @@
     "pageViews": 0
   },
   "countries": [],
+  "catalogs": {
+    "neuro": {
+      "totals": {
+        "users": 0,
+        "pageViews": 0
+      },
+      "countries": []
+    },
+    "msk": {
+      "totals": {
+        "users": 0,
+        "pageViews": 0
+      },
+      "countries": []
+    },
+    "microscopy": {
+      "totals": {
+        "users": 0,
+        "pageViews": 0
+      },
+      "countries": []
+    },
+    "preclinical": {
+      "totals": {
+        "users": 0,
+        "pageViews": 0
+      },
+      "countries": []
+    }
+  },
   "apps": [
     {
       "id": "musclemap",
@@ -110,6 +140,374 @@
       "id": "surfannotate",
       "path": "surfannotate",
       "title": "SurfAnnotate",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "zarro",
+      "path": "zarro",
+      "title": "ZARRo",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "synthsr",
+      "path": "synthsr",
+      "title": "SynthSR",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "synthseg",
+      "path": "synthseg",
+      "title": "SynthSeg",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "syncro",
+      "path": "syncro",
+      "title": "SYNcro",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "dwi2trx",
+      "path": "dwi2trx",
+      "title": "dwi2trx",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "edgereg",
+      "path": "edgereg",
+      "title": "EdgeReg",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "disconnectome",
+      "path": "disconnectome",
+      "title": "Disconnectome",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "greedy",
+      "path": "greedy",
+      "title": "Greedy",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "ants",
+      "path": "ants",
+      "title": "ANTs",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "brain2print",
+      "path": "brain2print",
+      "title": "Brain2Print",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "topofit",
+      "path": "topofit",
+      "title": "TopoFit",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "fireants",
+      "path": "fireants",
+      "title": "FireANTs",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "brain-extraction",
+      "path": "brain-extraction",
+      "title": "Brain extraction",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "carotid-flow",
+      "path": "carotid-flow",
+      "title": "Carotid Flow",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "lcmodel",
+      "path": "lcmodel",
+      "title": "LCModel",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "white-matter-lesions",
+      "path": "white-matter-lesions",
+      "title": "White matter lesions",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "nesvor",
+      "path": "nesvor",
+      "title": "NeSVoR",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "elastix",
+      "path": "elastix",
+      "title": "elastix",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "dicomview",
+      "path": "dicomview",
+      "title": "DICOM View",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "fastprep",
+      "path": "fastprep",
+      "title": "fastprep",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "noddi",
+      "path": "noddi",
+      "title": "NODDI",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "degibbs",
+      "path": "degibbs",
+      "title": "Degibbs",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "n4",
+      "path": "n4",
+      "title": "N4",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "dcm2niix",
+      "path": "dcm2niix",
+      "title": "dcm2niix",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "dwidenoise",
+      "path": "dwidenoise",
+      "title": "Dwidenoise",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "sdc",
+      "path": "sdc",
+      "title": "SDC",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "me-ica",
+      "path": "me-ica",
+      "title": "ME-ICA",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "dwicorrect",
+      "path": "dwicorrect",
+      "title": "DWI Correct",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "pipeline-builder",
+      "path": "pipeline-builder",
+      "title": "Pipeline builder",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "hmc",
+      "path": "hmc",
+      "title": "HMC",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "bison",
+      "path": "bison",
+      "title": "BISON tissue segmentation",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "ants-denoise",
+      "path": "ants-denoise",
+      "title": "ANTs DenoiseImage",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "brainqcnet",
+      "path": "brainqcnet",
+      "title": "BrainQCNet",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "reproin",
+      "path": "reproin",
+      "title": "ReproIn",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "samsrf",
+      "path": "samsrf",
+      "title": "SamSrf",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "brainchop",
+      "path": "brainchop",
+      "title": "Brainchop",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "stardist",
+      "path": "stardist",
+      "title": "StarDist",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "calcium-imaging",
+      "path": "calcium-imaging",
+      "title": "Calcium imaging",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "spot-detection",
+      "path": "spot-detection",
+      "title": "Spot detection",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "gliomoda",
+      "path": "gliomoda",
+      "title": "GlioMODA",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "neuromorph",
+      "path": "neuromorph",
+      "title": "NeuroMorph",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "stitching",
+      "path": "stitching",
+      "title": "Tile stitching",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "structure-tensor",
+      "path": "structure-tensor",
+      "title": "Structure Tensor",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "microscope-qc",
+      "path": "microscope-qc",
+      "title": "Microscope QC",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "microsam",
+      "path": "microsam",
+      "title": "micro-sam",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "cryo-em",
+      "path": "cryo-em",
+      "title": "Cryo-EM",
       "users": 0,
       "pageViews": 0,
       "countries": []

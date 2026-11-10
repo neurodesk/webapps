@@ -339,7 +339,7 @@ test('OME descriptions give the first image\'s channels, its TiffData as written
     + '</ome:Pixels></ome:Image><ome:Image ID="Image:1"><ome:Pixels SizeC="1"><ome:Channel Name="C"/></ome:Pixels></ome:Image></ome:OME>';
   const ome = parseOmeDescription(xml);
   assert.equal(ome.uuid, 'urn:uuid:a');
-  assert.deepEqual(ome.channels, [{ name: 'A & B', samplesPerPixel: 1 }, { name: null, samplesPerPixel: 1 }]);
+  assert.deepEqual(ome.channels, [{ name: 'A & B', samplesPerPixel: 1 }, { name: null, samplesPerPixel: null }]);
   assert.deepEqual(ome.tiffData, [
     { IFD: '1', FirstC: 'x', FirstZ: undefined, FirstT: undefined, PlaneCount: undefined, uuid: null },
     { IFD: undefined, FirstC: undefined, FirstZ: undefined, FirstT: undefined, PlaneCount: '2', uuid: 'urn:uuid:b' },
@@ -356,10 +356,8 @@ test('writeLabelTiff writes 16-bit labels when they fit and 32-bit otherwise', a
   }
 });
 
-test('an OME start tag after Pixels without its closing bracket gives a null UUID', () => {
-  const ome = parseOmeDescription('<Pixels SizeC="2" SizeZ="1" SizeT="1"><OME');
-  assert.equal(ome.uuid, null);
-  assert.equal(ome.sizeC, 2);
+test('an OME start tag after Pixels without its closing bracket is not OME-XML', () => {
+  assert.equal(parseOmeDescription('<Pixels SizeC="2" SizeZ="1" SizeT="1"><OME'), null);
 });
 
 const omeXml = (tiffData, channels = '<Channel Name="DAPI"/><Channel Name="GFP"/>', sizes = 'SizeC="2" SizeZ="1" SizeT="1"') =>
@@ -390,4 +388,167 @@ test('omePageChannels refuses TiffData it cannot follow', () => {
   assert.throws(names('<TiffData IFD="0"/><TiffData IFD="0" FirstC="1"/>'), refusal('IFD 0 named twice'));
   assert.throws(names('<TiffData IFD="0"/><TiffData IFD="1"/>'), refusal('a channel in two IFDs'));
   assert.throws(names('<TiffData IFD="0"/><TiffData IFD="2" FirstC="1"/>'), { message: /^x\.ome\.tif has a TIFF page \(IFD 1\) its OME-XML assigns to no channel; save the channels as one OME-TIFF with tifffile or Fiji\.$/ });
+});
+
+// Microscopy stacks. The microscopy-*, ome-*-planes and reduced-resolution fixtures are tifffile's
+// (make_tiff_fixtures.py), written independently of this reader.
+const ramp = Uint16Array.from({ length: 3 * 5 * 7 }, (_, i) => i * 3 + 1);
+const near = (a, b, tolerance = 1e-9) => Math.abs(a - b) <= tolerance * Math.max(1, Math.abs(b));
+
+test('an ImageJ deflate z stack keeps its type, order and micron calibration', async () => {
+  const stack = await readTiffStack(fixture('microscopy-imagej-uint16.tif'));
+  assert.deepEqual([stack.width, stack.height, stack.pages, stack.dtype], [7, 5, 3, 'uint16']);
+  assert.deepEqual(Array.from(stack.data), Array.from(ramp));
+  assert.equal(stack.metadata.kind, 'imagej');
+  assert.equal(stack.metadata.sizeZ, 3);
+  assert.equal(stack.metadata.sizeT, 1);
+  assert.ok(near(stack.metadata.pixelSize.x, 0.0659, 1e-6) && near(stack.metadata.pixelSize.y, 0.0659, 1e-6));
+  assert.equal(stack.metadata.pixelSize.z, 0.13);
+});
+
+test('OME sizes in nanometres convert to micrometres, with or without a namespace prefix', async () => {
+  for (const name of ['microscopy-ome-float32-nm.ome.tif', 'microscopy-ome-prefixed-nm.ome.tif']) {
+    const stack = await readTiffStack(fixture(name));
+    assert.equal(stack.metadata.kind, 'ome', name);
+    assert.equal(stack.metadata.sizeZ, 3, name);
+    assert.ok(near(stack.metadata.pixelSize.x, 0.0659) && near(stack.metadata.pixelSize.z, 0.13), name);
+    assert.ok(near(stack.data[104], ramp[104] / 7, 1e-6), name);
+  }
+});
+
+test('an alpha extra sample is not intensity: the grey sample is read', async () => {
+  const stack = await readTiffStack(fixture('microscopy-gray-alpha.tif'));
+  assert.equal(stack.dtype, 'uint8');
+  assert.deepEqual(Array.from(stack.data), Array.from(ramp, (v) => v & 255));
+  // Unspecified extra samples are channels, so three samples are still refused.
+  await assert.rejects(readTiffStack(fixture('microscopy-three-samples-minisblack.tif')), /3 samples per pixel/);
+});
+
+test('WhiteIsZero integer pages are inverted to intensity', async () => {
+  const stack = await readTiffStack(fixture('microscopy-white-is-zero.tif'));
+  assert.deepEqual(Array.from(stack.data), Array.from(ramp, (v) => 255 - (v & 255)));
+  const floats = await readTiffStack(fixture('microscopy-white-is-zero.tif'), { Type: Float32Array });
+  assert.deepEqual(Array.from(floats.data), Array.from(ramp, (v) => 255 - (v & 255)));
+});
+
+test('an ImageJ 8-bit palette (a lookup table) is intensity; any other palette is refused', async () => {
+  const stack = await readTiffStack(fixture('microscopy-imagej-palette.tif'));
+  assert.deepEqual(Array.from(stack.data), Array.from(ramp, (v) => v & 255));
+  await assert.rejects(readTiffStack(fixture('microscopy-palette.tif')), /palette/);
+});
+
+test('a plain TIFF leaves its page axis unknown and its print resolution unused', async () => {
+  const stack = await readTiffStack(fixture('microscopy-resolution-cm.tif'));
+  assert.equal(stack.metadata.kind, 'baseline');
+  assert.equal(stack.metadata.unlabelledStack, true);
+  assert.equal(stack.metadata.sizeZ, null);
+  assert.equal(stack.metadata.sizeT, null);
+  // 20000 pixels per centimetre is a print size, not a voxel size.
+  assert.deepEqual(stack.metadata.pixelSize, { x: null, y: null, z: null });
+  assert.equal((await readTiffStack(fixture('stack-lzw-int16.tif'))).metadata.sizeT, null);
+});
+
+test('an ImageJ stack with two channels reports them', async () => {
+  const stack = await inspectTiffStack(fixture('microscopy-imagej-two-channels.tif'));
+  assert.equal(stack.metadata.sizeC, 2);
+  assert.equal(stack.pages, 6);
+});
+
+test('reduced-resolution pages (NewSubfileType bit 0) are not planes', async () => {
+  const info = await inspectTiffStack(fixture('reduced-resolution.tif'));
+  assert.equal(info.pages, 2);
+  const stack = await readTiffStack(fixture('reduced-resolution.tif'));
+  assert.deepEqual([stack.width, stack.height], [6, 4]);
+  assert.deepEqual(Array.from(new Set(stack.data.subarray(0, 24))), [5]);
+  assert.deepEqual(Array.from(new Set(stack.data.subarray(24))), [7]);
+});
+
+test('OME TiffData puts each IFD on its plane, as tifffile reads it', async () => {
+  // IFD 0 holds Z 1 (value 20) and IFD 1 holds Z 0 (value 10).
+  const stack = await readTiffStack(fixture('ome-swapped-planes.ome.tif'));
+  assert.equal(stack.pages, 2);
+  assert.deepEqual([stack.data[0], stack.data[6]], [10, 20]);
+});
+
+test('OME planes kept in another file are refused before decoding', async () => {
+  await assert.rejects(inspectTiffStack(fixture('ome-external-planes.ome.tif')), /other files/);
+  const unmapped = '<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="2" SizeY="2" SizeC="1" SizeZ="2" SizeT="1"><TiffData IFD="1" FirstZ="0" PlaneCount="1"/></Pixels></Image></OME>';
+  const bytes = writeTiffStack({ width: 2, height: 2, data: new Uint8Array(8), description: unmapped });
+  await assert.rejects(readTiffStack(buffer(bytes)), /maps no page to plane 2/);
+});
+
+test('a sequential OME mapping that leaves a plane unmapped is refused before decoding', async () => {
+  // IFD 0 is plane 1 as in a complete file, but no TiffData maps plane 2; tifffile reads it as missing.
+  const incomplete = '<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="2" SizeY="2" SizeC="1" SizeZ="2" SizeT="1"><TiffData IFD="0" FirstZ="0" PlaneCount="1"/></Pixels></Image></OME>';
+  const bytes = writeTiffStack({ width: 2, height: 2, data: new Uint8Array([10, 10, 10, 10, 20, 20, 20, 20]), description: incomplete });
+  await assert.rejects(inspectTiffStack(buffer(bytes)), /maps no page to plane 2/);
+  await assert.rejects(readTiffStack(buffer(bytes)), /maps no page to plane 2/);
+  // A sequential mapping that names a page past the file's last is refused too.
+  const beyond = incomplete.replace('PlaneCount="1"', 'PlaneCount="3"').replace('SizeZ="2"', 'SizeZ="3"');
+  await assert.rejects(inspectTiffStack(buffer(writeTiffStack({ width: 2, height: 2, data: new Uint8Array(8), description: beyond }))), /names page 3, but the file has 2/);
+});
+
+test('a TiffData PlaneCount past the planes Pixels declares is refused, not cut short', async () => {
+  // 3 pages mapped by one TiffData, but Pixels declares SizeT 2: the file contradicts itself.
+  const contradictory = '<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="2" SizeY="2" SizeC="1" SizeZ="1" SizeT="2"><TiffData IFD="0" PlaneCount="3"/></Pixels></Image></OME>';
+  const bytes = writeTiffStack({ width: 2, height: 2, data: new Uint8Array(12), description: contradictory });
+  await assert.rejects(inspectTiffStack(buffer(bytes)), /maps 3 planes but its Pixels declare 2/);
+});
+
+test('OME SizeC counts samples: an RGB channel of SamplesPerPixel 3 is one plane per IFD', async () => {
+  const ome = (sizes, tiffData) => `<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06" UUID="urn:uuid:a"><Image ID="Image:0"><Pixels ID="Pixels:0" DimensionOrder="XYCZT" Type="uint8" SizeX="2" SizeY="2" ${sizes} SizeC="3" SizeT="1"><Channel ID="Channel:0:0" SamplesPerPixel="3"/>${tiffData}</Pixels></Image></OME>`;
+  // Plane z holds (30, 60, 90) shifted by 30 z: its RGB mean is 60 + 30 z.
+  const rgb = (planes) => Uint8Array.from({ length: planes * 12 }, (_, i) => 30 * (Math.floor(i / 12) + (i % 3) + 1));
+  const cases = [
+    ['SizeZ="1"', '<TiffData IFD="0" PlaneCount="1"/>', 1],
+    ['SizeZ="1"', '<TiffData/>', 1],
+    ['SizeZ="2"', '<TiffData IFD="0" PlaneCount="2"/>', 2],
+  ];
+  for (const [sizes, tiffData, planes] of cases) {
+    const bytes = buffer(writeTiffStack({ width: 2, height: 2, data: rgb(planes), rgb: true, description: ome(sizes, tiffData) }));
+    const info = await inspectTiffStack(bytes, { rgb: 'mean' });
+    assert.deepEqual([info.pages, info.samplesPerPixel, info.metadata.sizeC, info.metadata.sizeZ], [planes, 3, 3, planes], tiffData);
+    const stack = await readTiffStack(bytes, { rgb: 'mean', Type: Float64Array });
+    assert.deepEqual(Array.from(stack.data), Array.from({ length: planes * 4 }, (_, i) => 60 + 30 * Math.floor(i / 4)), tiffData);
+  }
+  // Written by tifffile: one Channel of SamplesPerPixel 3, TiffData PlaneCount 2 for two z planes.
+  const fromTifffile = await readTiffStack(fixture('ome-rgb-z2.ome.tif'), { rgb: 'mean' });
+  assert.deepEqual([fromTifffile.pages, fromTifffile.metadata.sizeC, fromTifffile.data[0], fromTifffile.data[12]], [2, 3, 60, 120]);
+});
+
+test('OME grey + alpha, SizeC 2 with SamplesPerPixel 2, is one plane per IFD', async () => {
+  const stack = await readTiffStack(fixture('ome-gray-alpha.ome.tif'));
+  assert.deepEqual([stack.pages, stack.metadata.sizeC, stack.metadata.sizeZ], [2, 2, 2]);
+  assert.deepEqual([stack.data[0], stack.data[12]], [10, 20]);
+});
+
+test('OME channel samples come from the first page when no Channel names them', async () => {
+  // SizeC 6 of RGB pages without Channel elements: two RGB channels, one page each.
+  const description = '<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYCZT" SizeX="1" SizeY="1" SizeC="6" SizeZ="1" SizeT="1"><TiffData/></Pixels></Image></OME>';
+  const bytes = buffer(writeTiffStack({ width: 1, height: 1, data: new Uint8Array([3, 3, 3, 9, 9, 9]), rgb: true, description }));
+  const stack = await readTiffStack(bytes, { rgb: 'mean' });
+  assert.deepEqual([stack.pages, stack.metadata.sizeC, ...stack.data], [2, 6, 3, 9]);
+  // Greyscale pages keep SizeC as the channel count: three channels need three pages.
+  const grey = description.replace('SizeC="6"', 'SizeC="3"');
+  await assert.rejects(readTiffStack(buffer(writeTiffStack({ width: 1, height: 1, data: new Uint8Array([1, 2]), description: grey }))), /names page 3, but the file has 2/);
+});
+
+test('OME pages decide the channel samples when their Channel elements contradict them', async () => {
+  // RGB pages whose three Channels claim one sample each: main read these as one RGB channel.
+  const channels = '<Channel SamplesPerPixel="1"/>'.repeat(3);
+  const description = `<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYCZT" SizeX="1" SizeY="1" SizeC="3" SizeZ="2" SizeT="1">${channels}<TiffData/></Pixels></Image></OME>`;
+  const bytes = buffer(writeTiffStack({ width: 1, height: 1, data: new Uint8Array([3, 3, 3, 9, 9, 9]), rgb: true, description }));
+  const stack = await readTiffStack(bytes, { rgb: 'mean' });
+  assert.deepEqual([stack.pages, stack.metadata.sizeC, ...stack.data], [2, 3, 3, 9]);
+});
+
+test('imagejDescription labels a calibrated z stack that reads back as z planes', async () => {
+  const description = imagejDescription({ slices: 4, spacing: 0.13, unit: 'micron', min: 0, max: 1 });
+  assert.equal(description, 'ImageJ=1.11a\nimages=4\nslices=4\nhyperstack=true\nspacing=0.13\nunit=micron\nmin=0\nmax=1\n');
+  const bytes = writeTiffStack({ width: 3, height: 2, data: new Float32Array(24), description, pixelSize: { x: 0.25, y: 0.25 } });
+  const { metadata } = await inspectTiffStack(buffer(bytes));
+  assert.deepEqual([metadata.sizeZ, metadata.sizeT, metadata.unlabelledStack], [4, 1, false]);
+  assert.deepEqual(metadata.pixelSize, { x: 0.25, y: 0.25, z: 0.13 });
+  // A time series written by the frames-only call is unchanged.
+  assert.equal(imagejDescription({ frames: 3, frameInterval: 0.5 }), 'ImageJ=1.11a\nimages=3\nframes=3\nfinterval=0.5\n');
 });

@@ -92,12 +92,14 @@ test('each catalogue lists only its own apps under its own brand', async () => {
     assert.equal(document.querySelector('h1').textContent, catalog.heading);
     assert.equal(document.querySelector('.brand img').getAttribute('src'), `./${catalog.brand.logo}`);
     assert.equal(document.querySelector('.brand').getAttribute('href'), catalog.brand.home);
-    assert.ok(document.querySelector(`a[href="https://${registry.site.hub.host}/"]`), 'links to the hub');
+    const hub = `a[href="https://${registry.site.hub.host}/"]`;
+    assert.ok(document.querySelector(`.site-nav ${hub}`), 'the top bar links to the hub');
+    assert.ok(document.querySelector(`.site-footer ${hub}`), 'the footer links to the hub');
     for (const section of document.querySelectorAll('[data-category-section]')) {
       assert.ok(section.querySelector('[data-app-card]'), `${id} shows no empty category`);
     }
     const primary = catalog.host === registry.site.domain;
-    assert.equal(Boolean(document.querySelector('#analytics')), primary, 'only the primary host reports usage');
+    assert.ok(document.querySelector('#analytics'), `${id} reports usage`);
     assert.equal(Boolean(document.querySelector('a[href="./surf/"]')), primary, 'only the primary host serves the game');
   }
   const neuro = renderLandingPage({ ...registry, apps: catalogApps(registry, findCatalog(registry, 'neuro')) }, standalone, findCatalog(registry, 'neuro'));
@@ -125,10 +127,56 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
     'microscope-qc': 'quality-control',
     niimath: 'preprocessing',
     mri2vid: 'visualization',
+    deconvolution: 'preprocessing',
   };
   const cards = [...document.querySelectorAll('[data-app-card]')];
   assert.equal(cards.length, Object.keys(expected).length);
   for (const [id, category] of Object.entries(expected)) {
     assert.deepEqual(cards.filter(card => card.dataset.appId === id).map(card => card.dataset.category), [category]);
   }
+});
+
+test('a catalogue offers the apps other catalogues serve, linking to their home', async () => {
+  const { appCatalogIds, appUrl, catalogApps, findApp, findCatalog } = await import('../scripts/lib/apps-registry.mjs');
+  const registry = await loadAppsRegistry();
+  const standalone = await loadStandalone(registry);
+  for (const catalog of registry.site.catalogs) {
+    const apps = catalogApps(registry, catalog);
+    const html = renderLandingPage({ ...registry, apps }, standalone, catalog, { allApps: registry.apps });
+    const { document } = new JSDOM(html).window;
+    const elsewhere = JSON.parse(document.querySelector('script#elsewhere-apps[type="application/json"]').textContent);
+    const expected = registry.apps.filter((app) => !appCatalogIds(app).includes(catalog.id)).map(({ id }) => id);
+    assert.deepEqual(elsewhere.map(({ id }) => id), expected, `${catalog.id} offers every app it does not serve, and no other`);
+    for (const entry of elsewhere) {
+      const app = findApp(registry, entry.id);
+      const home = findCatalog(registry, app.catalog);
+      assert.equal(entry.url, appUrl(registry, app));
+      assert.match(entry.url, /^https:\/\//);
+      assert.equal(entry.host, home.host);
+      assert.equal(entry.catalogTitle, home.title);
+      assert.equal(entry.title, app.title);
+      assert.equal(entry.description, app.description);
+    }
+    assert.ok(document.querySelector('#no-results #elsewhere[hidden] #elsewhere-results.app-grid'));
+    // A category can hide a local match, so the heading claims nothing about the whole site.
+    assert.equal(document.querySelector('#no-results h2').textContent, 'No apps match these filters');
+  }
+
+  const neuro = findCatalog(registry, 'neuro');
+  const html = renderLandingPage({ ...registry, apps: catalogApps(registry, neuro) }, standalone, neuro, { allApps: registry.apps });
+  const elsewhere = JSON.parse(new JSDOM(html).window.document.querySelector('#elsewhere-apps').textContent);
+  const musclemap = elsewhere.find(({ id }) => id === 'musclemap');
+  assert.equal(musclemap.url, 'https://mskapps.sciget.org/musclemap/');
+  assert.match(musclemap.search, /muscle/);
+  assert.equal(elsewhere.find(({ id }) => id === 'stardist').search, elsewhere.find(({ id }) => id === 'stardist').search.toLocaleLowerCase());
+  const stardist = renderLandingPage({ ...registry, apps: [findApp(registry, 'stardist')] }, standalone);
+  const cardSearch = new JSDOM(stardist).window.document.querySelector('[data-app-card]').dataset.search;
+  assert.equal(elsewhere.find(({ id }) => id === 'stardist').search, cardSearch, 'the fallback matches the text a local card would');
+});
+
+test('the offline desktop landing page carries no fallback to other hosts', async () => {
+  const registry = await loadAppsRegistry();
+  const html = renderLandingPage({ ...registry, apps: registry.apps.slice(0, 3) }, await loadStandalone(registry));
+  assert.doesNotMatch(html, /elsewhere/);
+  assert.doesNotMatch(html, /https:\/\/[a-z]+apps\.sciget\.org\/[a-z0-9-]+\//);
 });

@@ -330,6 +330,105 @@ pub unsafe extern "C" fn dmipy_fit(
     0
 }
 
+/// Builds the NODDI toolbox 1.05 port's protocol; b0 volumes are those below the app's b0
+/// threshold. Returns null, with a message, when NODDI cannot run on the gradient table.
+/// # Safety
+/// See `gradients`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn toolbox_new(
+    bvals: *const f64,
+    bvecs: *const f64,
+    n: usize,
+) -> *mut dwi_noddi_toolbox::Protocol {
+    let made = unsafe { gradients(bvals, bvecs, n) }
+        .and_then(|g| g.check_noddi().map(|_| g))
+        .and_then(|g| {
+            let b = unsafe { std::slice::from_raw_parts(bvals, n) };
+            let directions: Vec<[f64; 3]> = unsafe { std::slice::from_raw_parts(bvecs, n * 3) }
+                .chunks_exact(3)
+                .map(|v| [v[0], v[1], v[2]])
+                .collect();
+            // FSL2Protocol's b0 test is b <= threshold; the app's is b < B0_THRESHOLD.
+            let b0_threshold = g
+                .b0_volumes()
+                .iter()
+                .map(|&i| b[i])
+                .fold(f64::NEG_INFINITY, f64::max);
+            dwi_noddi_toolbox::Protocol::new(b, &directions, b0_threshold)
+        });
+    match made {
+        Ok(protocol) => Box::into_raw(Box::new(protocol)),
+        Err(error) => {
+            set_text(error);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// # Safety
+/// `protocol` must come from `toolbox_new` and not be freed already.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn toolbox_free(protocol: *mut dwi_noddi_toolbox::Protocol) {
+    if !protocol.is_null() {
+        drop(unsafe { Box::from_raw(protocol) });
+    }
+}
+
+/// Fits the NODDI toolbox model in the same layout as `noddi_fit`. The success text holds the
+/// fitted, skipped, nonconverged and failed voxel counts. Skipped voxels (outside the mask, or
+/// the toolbox's error code 1: no positive b0 or fewer than six positive diffusion-weighted
+/// samples) are zero. A failed voxel (error code 2) keeps the grid-search start, as in the
+/// toolbox.
+/// # Safety
+/// The pointers address the lengths stated by `noddi_fit`, with this protocol's volume count.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn toolbox_fit(
+    protocol: *const dwi_noddi_toolbox::Protocol,
+    data: *const f32,
+    voxels: usize,
+    mask: *const u8,
+    out: *mut f32,
+) -> u32 {
+    let protocol = unsafe { &*protocol };
+    let volumes = protocol.len();
+    let data = unsafe { std::slice::from_raw_parts(data, voxels * volumes) };
+    let mask = (!mask.is_null()).then(|| unsafe { std::slice::from_raw_parts(mask, voxels) });
+    let out = unsafe { std::slice::from_raw_parts_mut(out, NODDI_OUTPUTS * voxels) };
+    out.fill(0.0);
+    let mut signal = vec![0.0; volumes];
+    let (mut fitted, mut skipped, mut nonconverged, mut failed) = (0, 0, 0, 0);
+    for voxel in 0..voxels {
+        if mask.is_some_and(|m| m[voxel] == 0) {
+            skipped += 1;
+            continue;
+        }
+        for (frame, value) in signal.iter_mut().enumerate() {
+            *value = f64::from(data[frame * voxels + voxel]);
+        }
+        let fit = dwi_noddi_toolbox::fit_voxel(protocol, &signal);
+        match fit.error_code {
+            0 => {
+                fitted += 1;
+                nonconverged += usize::from(!fit.converged);
+            }
+            1 => {
+                skipped += 1;
+                continue;
+            }
+            _ => failed += 1,
+        }
+        let [x, y, z] = fit.direction();
+        let maps = [fit.ficvf(), fit.fiso(), fit.odi(), x, y, z];
+        for (index, value) in maps.iter().enumerate() {
+            out[index * voxels + voxel] = *value as f32;
+        }
+    }
+    set_text(format!(
+        "{{\"fitted\":{fitted},\"skipped\":{skipped},\"nonconverged\":{nonconverged},\"failed\":{failed}}}"
+    ));
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

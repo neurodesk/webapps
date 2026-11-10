@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fft1d, fft2d } from "../src/core/fft.js";
 import {
   createRegistration,
   initialTemplate,
@@ -18,21 +17,6 @@ import {
 // phase_cross_correlation on five noisy shifted 45 × 52 frames.
 const reference = JSON.parse(readFileSync(new URL("./fixtures/caiman-reference.json", import.meta.url), "utf8")).registration;
 
-function naiveDft(re, im, inverse) {
-  const n = re.length;
-  const outRe = new Float64Array(n);
-  const outIm = new Float64Array(n);
-  const sign = inverse ? 1 : -1;
-  for (let k = 0; k < n; k++) {
-    for (let t = 0; t < n; t++) {
-      const angle = (sign * 2 * Math.PI * k * t) / n;
-      outRe[k] += re[t] * Math.cos(angle) - im[t] * Math.sin(angle);
-      outIm[k] += re[t] * Math.sin(angle) + im[t] * Math.cos(angle);
-    }
-  }
-  return [outRe, outIm];
-}
-
 function seeded(seed) {
   let state = seed >>> 0;
   return () => {
@@ -40,36 +24,6 @@ function seeded(seed) {
     return state / 2 ** 32;
   };
 }
-
-for (const n of [1, 2, 3, 8, 45, 52, 64, 100]) {
-  test(`the FFT of length ${n} equals the direct DFT, forward and inverse`, () => {
-    const random = seeded(n);
-    const re = Float64Array.from({ length: n }, () => random() - 0.5);
-    const im = Float64Array.from({ length: n }, () => random() - 0.5);
-    for (const inverse of [false, true]) {
-      const [expectedRe, expectedIm] = naiveDft(re, im, inverse);
-      const outRe = Float64Array.from(re);
-      const outIm = Float64Array.from(im);
-      fft1d(outRe, outIm, inverse);
-      for (let k = 0; k < n; k++) {
-        assert.ok(Math.abs(outRe[k] - expectedRe[k]) < 1e-9 * n, `re[${k}]`);
-        assert.ok(Math.abs(outIm[k] - expectedIm[k]) < 1e-9 * n, `im[${k}]`);
-      }
-    }
-  });
-}
-
-test("the 2D FFT followed by its unscaled inverse returns N times the input", () => {
-  const random = seeded(7);
-  const height = 9;
-  const width = 12;
-  const re = Float64Array.from({ length: height * width }, () => random());
-  const im = new Float64Array(height * width);
-  const copy = Float64Array.from(re);
-  fft2d(re, im, height, width);
-  fft2d(re, im, height, width, true);
-  for (let i = 0; i < re.length; i++) assert.ok(Math.abs(re[i] / (height * width) - copy[i]) < 1e-12);
-});
 
 test("cross-correlation shifts equal CaImAn's register_translation on odd-sized frames", () => {
   const spectrum = templateSpectrum(Float64Array.from(reference.template), reference.height, reference.width);

@@ -1,0 +1,16 @@
+[package]
+name = "deconvolution-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Gibson-Lanni PSF and Richardson-Lucy / RL-TV FFT deconvolution"
+
+[lib]
+name = "deconvolution_core"
+path = "src/lib.rs"
+
+[dependencies]
+libm = "0.2"
+realfft = "3"
+rustfft = { version = "6", features = ["wasm_simd"] }

@@ -1,7 +1,11 @@
 /** Physical GPU commands stay small; logical seed batches and RNG IDs stay unchanged. */
 export const MAX_WORKGROUPS_PER_DISPATCH = 16
 
-/** The final i32 of BootTrackingParams; the preceding fields keep their ABI offsets. */
+/** Tracking steps per seed row in one generation command (#598): Intel/Mesa resets
+ *  a workgroup that does not yield to preemption within 640 ms. */
+export const MAX_STEPS_PER_DISPATCH = 32
+
+/** BootTrackingParams' workgroup_offset; the preceding fields keep their ABI offsets. */
 export const WORKGROUP_OFFSET_BYTES = 92
 
 export async function dispatchBootWindows(
@@ -12,12 +16,14 @@ export async function dispatchBootWindows(
   parameters: GPUBuffer,
   shouldStop?: () => boolean,
   maxWorkgroups = MAX_WORKGROUPS_PER_DISPATCH,
+  include: (first: number) => boolean = () => true,
 ): Promise<boolean> {
   if (!Number.isSafeInteger(gridX) || gridX < 0
       || !Number.isSafeInteger(maxWorkgroups) || maxWorkgroups < 1) {
     throw new Error('Dispatch workgroup counts must be nonnegative and the window positive.')
   }
   for (let first = 0; first < gridX; first += maxWorkgroups) {
+    if (!include(first)) continue
     if (shouldStop?.()) return false
     device.queue.writeBuffer(parameters, WORKGROUP_OFFSET_BYTES, new Uint32Array([first]))
     const encoder = device.createCommandEncoder()

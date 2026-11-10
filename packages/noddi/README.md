@@ -26,6 +26,7 @@ model.free();
 `data` is a Float32Array with the volumes one after the other, as `readNiftiFrames` returns them.
 `model.fit` takes the same layout for a chunk of voxels, so a caller can report progress or spread chunks over workers.
 AMICO 1.5.4 remains the default; [exes/dwi/amico](../../exes/dwi/amico/README.md) describes its reference parity. Select the optional nonlinear Watson fit with `noddiModel(bvals, bvecs, { method: 'dmipy' })`. It ports dmipy at `2d6073218eb4ebc97645ac6e275270c36834e33d`; [exes/dwi/dmipy](../../exes/dwi/dmipy/README.md) documents the model, source and independent reference gates. After a nonlinear chunk, `model.diagnostics` reports fitted, skipped and nonconverged voxel counts. Nonpositive first measurements are skipped, as in dmipy; numerical failures reject the chunk.
+`{ method: 'toolbox' }` selects the port of the NODDI toolbox 1.05 fit: its grid search and two-stage Rician maximum-likelihood fit. [exes/dwi/noddi-toolbox](../../exes/dwi/noddi-toolbox/README.md) lists the ported files, the differences from the toolbox and the WM gate. Its diagnostics count as skipped the voxels with no positive b0 or fewer than six positive diffusion-weighted samples (toolbox error code 1, written as zeros), and as failed those whose gradient descent fails (error code 2, which keeps the grid-search start).
 `bvecs` is three rows (x, y, z) with one value per volume, as in an FSL `.bvec` file.
 
 ## Shared code
@@ -69,12 +70,15 @@ noddi dwi.nii.gz dwi.bval dwi.bvec results --no-mask --threads 8
 noddi dwi.nii.gz dwi.bval dwi.bvec results --no-noddi --tensor-fit ols
 noddi dwi.nii.gz dwi.bval dwi.bvec results --tensor-fit niimath-dtifit
 noddi dwi.nii.gz dwi.bval dwi.bvec results --method dmipy
+noddi dwi.nii.gz dwi.bval dwi.bvec results --method toolbox
 noddi self-check
 ```
 
-`--method dmipy` selects the nonlinear fit; omitting it keeps AMICO. The final provenance JSON records the method, pinned dmipy source and aggregate optimizer diagnostics. The same method and diagnostics travel through the app's shared fitting pool.
+`--method dmipy` selects the nonlinear fit and `--method toolbox` the NODDI toolbox fit; omitting it keeps AMICO. The final provenance JSON records the method, the source the fit ports and aggregate optimizer diagnostics. The same method and diagnostics travel through the app's shared fitting pool.
 
 The actual WASM fits all 13,324 eligible voxels of the maintainer's pinned FA ≥ 0.4 WM mask against the independent dmipy reference. Maximum ICVF, ISOVF and ODI differences are 0.001775, 0.001627 and 0.002245, each below 0.02. Four WASM fits stop without optimizer convergence; their returned maps remain in the comparison. This WM gate does not erase the separate whole-brain optimizer tails documented in the Rust port's report.
+
+The toolbox fit in the committed WASM fits all 13,327 voxels of the same WM mask without the toolbox's 14 error-code-2 voxels against the NODDI toolbox 1.05 reference: median absolute differences 3.3e-6 (ICVF), 3.4e-6 (ISOVF) and 3.9e-7 (ODI), each below 0.02. It takes about 15 ms per voxel on one thread.
 
 By default the brain mask is MindGrab's of the mean b0, as in the web app.
 The command line runs MindGrab's CPU modules through `@neurodesk/node-drivers/mindgrab` (about 2.6 GB of memory); do not run two at once.
