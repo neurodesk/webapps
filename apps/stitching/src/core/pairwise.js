@@ -16,7 +16,7 @@
 //
 // Tiles: { shape: [nx, ny] or [nx, ny, nz] (x fastest), data: typed array }.
 // Offsets are B's position minus A's position, in pixels, x first.
-import { fftn, nextPowerOfTwo } from './fft.js';
+import { fftn, nextPowerOfTwo } from '@neurodesk/webapp-components/fft';
 
 export const PAIRWISE_DEFAULTS = Object.freeze({
   /** Phase correlation peaks checked by cross-correlation (Fiji's default is 5). */
