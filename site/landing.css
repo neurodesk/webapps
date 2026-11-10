@@ -359,8 +359,10 @@ h1 {
 .no-results { padding: 7rem 1rem 10rem; color: var(--text); text-align: center; }
 .no-results > div { width: 4rem; margin: 0 auto 1.25rem; color: var(--green-dark); font-size: 3rem; }
 .no-results h2 { margin: 0; color: var(--ink); font-size: 2rem; font-weight: 500; }
-.no-results p { max-width: 34rem; margin: 0.8rem auto 1.5rem; color: var(--muted); line-height: 1.6; }
+.no-results > p { max-width: 34rem; margin: 0.8rem auto 1.5rem; color: var(--muted); line-height: 1.6; }
 .no-results button { padding: 0.75rem 1rem; border: 1px solid var(--green); border-radius: 8px; background: var(--green); color: var(--ink); cursor: pointer; }
+.elsewhere { margin-top: 4rem; text-align: left; }
+.elsewhere h3 { margin: 0 0 1.25rem; color: var(--ink); font-size: 1.35rem; font-weight: 500; text-align: center; }
 
 .analytics-section {
   padding: clamp(4rem, 8vw, 6rem) 0;
