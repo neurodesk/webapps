@@ -547,16 +547,16 @@ test("a BIDS run without its gradient tables shows as a disabled choice", async 
 });
 
 
-test("the nonlinear dmipy option fits in workers and downloads bounded NODDI fractions", async ({ page }) => {
+for (const method of ["dmipy", "toolbox"]) test(`the nonlinear ${method} option fits in workers and downloads bounded NODDI fractions`, async ({ page }) => {
   test.setTimeout(120000);
   const dwi = syntheticDwi({ size: 4, directions: 12 });
   await page.goto("/");
   await loadWithMask(page, dwi, 4);
   await expect(page.locator("#noddiMethod")).toHaveValue("amico");
-  await page.locator("#noddiMethod").selectOption("dmipy");
+  await page.locator("#noddiMethod").selectOption(method);
   await page.locator("#fitNoddi").uncheck();
   await expect(page.locator("#noddiMethod")).toBeDisabled();
-  await expect(page.locator("#noddiMethod")).toHaveValue("dmipy");
+  await expect(page.locator("#noddiMethod")).toHaveValue(method);
   await page.locator("#fitNoddi").check();
   await expect(page.locator("#noddiMethod")).toBeEnabled();
   await page.locator("#runButton").click();

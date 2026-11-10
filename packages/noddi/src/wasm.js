@@ -88,10 +88,11 @@ export async function loadNoddi(source) {
    * @returns {{ fit: (data: Float32Array, voxels: number, mask?: Uint8Array|null) => Record<string, Float32Array>, free: () => void }}
    */
   function noddiModel(bvals, bvecs, { method = 'amico' } = {}) {
-    if (!['amico', 'dmipy'].includes(method)) throw new Error('NODDI method is amico or dmipy.');
-    const create = method === 'dmipy' ? wasm.dmipy_new : wasm.noddi_new;
-    const fitModel = method === 'dmipy' ? wasm.dmipy_fit : wasm.noddi_fit;
-    const freeModel = method === 'dmipy' ? wasm.dmipy_free : wasm.noddi_free;
+    if (!NODDI_METHODS.includes(method)) throw new Error('NODDI method is amico, dmipy or toolbox.');
+    const prefix = method === 'amico' ? 'noddi' : method;
+    const create = wasm[`${prefix}_new`];
+    const fitModel = wasm[`${prefix}_fit`];
+    const freeModel = wasm[`${prefix}_free`];
     const g = gradientArrays(bvals, bvecs);
     const b = copyIn(g.bvals);
     const v = copyIn(g.bvecs);
@@ -131,7 +132,7 @@ export async function loadNoddi(source) {
       const out = wasm.alloc(outBytes);
       try {
         if (fitModel(dict, d.ptr, voxels, m.ptr, out) !== 0) throw new Error(text());
-        diagnostics = method === 'dmipy' ? JSON.parse(text()) : null;
+        diagnostics = method === 'amico' ? null : JSON.parse(text());
         const all = new Float32Array(wasm.memory.buffer, out, NODDI_MAPS.length * voxels);
         return Object.fromEntries(NODDI_MAPS.map((name, i) => [name, all.slice(i * voxels, (i + 1) * voxels)]));
       } finally {
@@ -152,6 +153,12 @@ export async function loadNoddi(source) {
 
   return { describe, dtiFit, noddiModel };
 }
+
+/**
+ * NODDI fits: AMICO (the default), the nonlinear dmipy port and the NODDI toolbox 1.05 port.
+ * The two nonlinear fits report voxel diagnostics.
+ */
+export const NODDI_METHODS = Object.freeze(['amico', 'dmipy', 'toolbox']);
 
 /** Maps that a NODDI model's `fit` returns, in the order the module writes them. */
 export const NODDI_MAPS = ['ICVF', 'ISOVF', 'OD', 'dirx', 'diry', 'dirz'];

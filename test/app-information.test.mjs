@@ -247,7 +247,16 @@ test('fastprep About describes browser PEPOLAR and GPL solver distribution', () 
 
 test('NODDI About names the optional nonlinear fit and its validation scope', () => {
   const about = information.apps.noddi.about.join(' ');
-  assert.match(about, /AMICO \(the default\) or the nonlinear dmipy model/);
+  assert.match(about, /AMICO \(the default\), the nonlinear dmipy model or the NODDI toolbox fit/);
   assert.match(about, /nonconverged and failed voxel counts/);
   assert.match(about, /full-brain validation outside that mask remains pending/);
+});
+
+test('NODDI cites the NODDI toolbox paper and code for the toolbox fit', () => {
+  const app = information.apps.noddi;
+  const toolbox = app.citations.find((citation) => citation.doi === '10.1016/j.neuroimage.2012.03.072');
+  assert.equal(toolbox.title, 'NODDI and the NODDI toolbox');
+  assert.equal(toolbox.code, 'https://www.nitrc.org/projects/noddi_toolbox');
+  assert.ok(app.packages.some((entry) => entry.name === 'NODDI toolbox 1.05 (Rust and WebAssembly port)'));
+  assert.match(app.about.join(' '), /toolbox 1\.05 grid search and two-stage Rician maximum-likelihood fit/);
 });

@@ -4,7 +4,7 @@
   "description": "Diffusion tensor and NODDI fitting for browsers and the command line",
   "type": "module",
   "private": true,
-  "license": "Apache-2.0 AND BSD-3-Clause AND MIT",
+  "license": "Apache-2.0 AND BSD-3-Clause AND MIT AND Artistic-2.0",
   "engines": {
     "node": ">=22"
   },
@@ -27,6 +27,7 @@
     "LICENSE-DMIPY",
     "LICENSE-DIPY",
     "LICENSE-LBFGSB",
+    "LICENSE-NODDI-TOOLBOX",
     "NOTICE",
     "README.md"
   ],
