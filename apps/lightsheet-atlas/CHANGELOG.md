@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- Include newly registered applications in catalogue analytics when the saved usage report predates them.
+- Include newly registered applications in catalogue analytics when the saved usage report predates them, preserving usage ranking.
 
 ## 0.0.20261109
 

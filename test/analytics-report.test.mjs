@@ -113,3 +113,18 @@ test('catalogue analytics includes new apps absent from the saved report', async
   assert.deepEqual(own.apps, [existing, { id: 'new', path: 'new', title: 'New', users: 0, pageViews: 0, countries: [] }]);
   assert.deepEqual(own.totals, report.catalogs.microscopy.totals);
 });
+
+test('catalogue analytics ranks completed rows by usage rather than registry order', async () => {
+  const { catalogAnalytics } = await import('../scripts/lib/catalog-sites.mjs');
+  const rows = [
+    { id: 'a', title: 'A', users: 1, pageViews: 2 },
+    { id: 'b', title: 'B', users: 100, pageViews: 100 },
+    { id: 'c', title: 'C', users: 1, pageViews: 3 },
+    { id: 'd', title: 'D', users: 1, pageViews: 2 },
+  ];
+  const report = { apps: [rows[1], rows[2], rows[0], rows[3]], catalogs: { microscopy: {} } };
+  const apps = [{ id: 'new', path: 'new', title: 'New' }, ...rows];
+  const own = catalogAnalytics(report, apps, { id: 'microscopy' });
+  assert.deepEqual(own.apps.map(({ id }) => id), ['b', 'c', 'a', 'd', 'new']);
+  assert.deepEqual(apps.map(({ id }) => id), ['new', 'a', 'b', 'c', 'd']);
+});
