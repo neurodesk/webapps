@@ -5,7 +5,9 @@
 // so a caller can stream a whole-brain stack without holding it in memory. OME-Zarr sources also
 // list their resolution `levels` and take `readPlane(z, level)`.
 //
-// TIFF decoding is geotiff (MIT); OME-Zarr is zarrita (MIT). Both load on first use.
+// TIFF decoding is geotiff (MIT); OME-Zarr is zarrita (MIT). Both load on first use. OME-XML,
+// ImageJ descriptions and length units are read by the shared TIFF module's parsers.
+import { micrometresPerUnit, parseImagejDescription, parseOmeDescription } from './tiff.js';
 
 const PLANE_LIMIT_BYTES = 1024 * 1024 * 1024;
 const SLAB_LIMIT_BYTES = 512 * 1024 * 1024;
@@ -16,62 +18,8 @@ const DTYPES = {
   '3:32': 'float32', '3:64': 'float64',
 };
 
-const UNIT_TO_UM = new Map([
-  ['µm', 1], ['μm', 1], ['um', 1], ['micron', 1], ['microns', 1], ['micrometer', 1], ['micrometre', 1],
-  ['nm', 1e-3], ['nanometer', 1e-3], ['nanometre', 1e-3],
-  ['mm', 1e3], ['millimeter', 1e3], ['millimetre', 1e3],
-  ['cm', 1e4], ['m', 1e6], ['meter', 1e6], ['metre', 1e6],
-]);
-
-/**
- * Microns per `unit` (OME, ImageJ and NGFF spellings), or null for an unknown or missing unit:
- * a size without a unit is not assumed to be in microns.
- */
-export function micronsPerUnit(unit) {
-  if (unit === undefined || unit === null || unit === '') return null;
-  const key = String(unit).trim().toLowerCase().replace('\\u00b5', 'µ');
-  return UNIT_TO_UM.get(key) ?? UNIT_TO_UM.get(String(unit).trim()) ?? null;
-}
-
 const naturalOrder = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 const fileName = (file) => file.webkitRelativePath || file._webkitRelativePath || file.name || '';
-
-function attribute(tag, name) {
-  const match = new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`).exec(tag);
-  return match ? match[1] : undefined;
-}
-
-/**
- * Pixel sizes and dimensions from an OME-XML ImageDescription (namespace prefixes allowed), or
- * null when the description is not OME-XML. Sizes are in µm; an absent size is null.
- */
-export function parseOmeXml(description) {
-  if (typeof description !== 'string' || !/<(?:[\w.-]+:)?OME[\s>]/.test(description)) return null;
-  const pixels = /<(?:[\w.-]+:)?Pixels\b[^>]*>/.exec(description);
-  if (!pixels) return null;
-  const tag = pixels[0];
-  const size = (axis) => {
-    const value = attribute(tag, `PhysicalSize${axis}`);
-    if (value === undefined) return null;
-    // The OME schema's default unit is the micrometre.
-    const scale = micronsPerUnit(attribute(tag, `PhysicalSize${axis}Unit`) ?? 'µm');
-    const number = Number(value);
-    return scale === null || !(number > 0) ? null : number * scale;
-  };
-  const count = (axis) => Number(attribute(tag, `Size${axis}`) ?? 1);
-  return {
-    voxelSizeUm: { z: size('Z'), y: size('Y'), x: size('X') },
-    sizes: { x: count('X'), y: count('Y'), z: count('Z'), c: count('C'), t: count('T') },
-    dimensionOrder: attribute(tag, 'DimensionOrder') ?? 'XYZCT',
-  };
-}
-
-/** ImageJ's `spacing=` and `unit=` (z spacing and unit) from its ImageDescription, else null. */
-export function parseImageJDescription(description) {
-  if (typeof description !== 'string' || !description.startsWith('ImageJ=')) return null;
-  const values = Object.fromEntries(description.split(/\r?\n/).map((line) => line.split('=')).filter((p) => p.length === 2));
-  return { spacing: values.spacing === undefined ? null : Number(values.spacing), unit: values.unit ?? null, channels: Number(values.channels ?? 1), frames: Number(values.frames ?? 1) };
-}
 
 function rational(value) {
   if (Array.isArray(value) || ArrayBuffer.isView(value)) return value.length >= 2 && value[1] ? value[0] / value[1] : null;
@@ -139,32 +87,20 @@ export async function openTiffStack(files, { maxPlaneBytes = PLANE_LIMIT_BYTES }
     throw new Error(`A ${page.width} × ${page.height} ${page.dtype} plane needs more than ${Math.round(maxPlaneBytes / 2 ** 20)} MB; choose a coarser level.`);
   }
   const pageCount = await first.getImageCount();
-  const description = await tag(firstImage, 'ImageDescription');
-  const ome = parseOmeXml(description);
-  const imagej = parseImageJDescription(description);
-  if (ome && (ome.sizes.c > 1 || ome.sizes.t > 1)) {
-    throw new Error(`${list[0].name} holds ${ome.sizes.c} channels and ${ome.sizes.t} time points; export the channel to analyse as its own stack.`);
-  }
-  if (imagej && (imagej.channels > 1 || imagej.frames > 1)) {
-    throw new Error(`${list[0].name} holds ${imagej.channels} channels and ${imagej.frames} frames; export the channel to analyse as its own stack.`);
+  // geotiff keeps the NUL terminator of a value stored inline in its entry.
+  const description = String((await tag(firstImage, 'ImageDescription')) ?? '').replace(/\0+$/, '');
+  const resolution = [rational(await tag(firstImage, 'XResolution')), rational(await tag(firstImage, 'YResolution'))];
+  const metadata = parseOmeDescription(description) ?? parseImagejDescription(description, resolution);
+  if (metadata?.images > 1) throw new Error(`${list[0].name} holds ${metadata.images} image series; export the one to analyse as its own file.`);
+  if (metadata && (metadata.sizeC > 1 || metadata.sizeT > 1)) {
+    const time = metadata.kind === 'ome' ? 'time points' : 'frames';
+    throw new Error(`${list[0].name} holds ${metadata.sizeC} channels and ${metadata.sizeT} ${time}; export the channel to analyse as its own stack.`);
   }
   if (list.length > 1 && pageCount > 1) throw new Error('Choose either one multi-page TIFF or one single-page TIFF per plane, not several multi-page files.');
 
-  let voxelSizeUm = { z: null, y: null, x: null };
-  if (ome) {
-    voxelSizeUm = ome.voxelSizeUm;
-  } else {
-    const unitScale = imagej ? micronsPerUnit(imagej.unit) : null;
-    const xRes = rational(await tag(firstImage, 'XResolution'));
-    const yRes = rational(await tag(firstImage, 'YResolution'));
-    if (imagej && unitScale !== null) {
-      voxelSizeUm = {
-        z: imagej.spacing > 0 ? imagej.spacing * unitScale : null,
-        y: yRes > 0 ? unitScale / yRes : null,
-        x: xRes > 0 ? unitScale / xRes : null,
-      };
-    }
-  }
+  // A plain TIFF's resolution tags are often a nominal 72 dpi, never a calibration.
+  const size = metadata?.pixelSize ?? {};
+  const voxelSizeUm = { z: size.z ?? null, y: size.y ?? null, x: size.x ?? null };
 
   const depth = list.length > 1 ? list.length : pageCount;
   const opened = new Map([[0, first]]);
@@ -226,7 +162,7 @@ export function ngffLevels(multiscale) {
   const axes = (multiscale.axes ?? []).map((axis) => (typeof axis === 'string' ? { name: axis } : axis));
   const spatial = ['z', 'y', 'x'].map((name) => axes.findIndex((axis) => axis.name === name));
   if (spatial.some((index) => index < 0)) throw new Error('The OME-Zarr image needs z, y and x axes.');
-  const units = spatial.map((index) => micronsPerUnit(axes[index].unit));
+  const units = spatial.map((index) => micrometresPerUnit(axes[index].unit));
   const top = multiscale.coordinateTransformations ?? [];
   const topScale = top.find((t) => t.type === 'scale')?.scale;
   return multiscale.datasets.map((dataset) => {

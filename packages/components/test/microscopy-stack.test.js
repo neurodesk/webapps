@@ -1,14 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  micronsPerUnit,
   ngffLevels,
   openMicroscopyStack,
   openOmeZarrStack,
   openTiffStack,
-  parseImageJDescription,
-  parseOmeXml,
 } from '../src/file-io/microscopy-stack.js';
+import { micrometresPerUnit } from '../src/file-io/tiff.js';
 import { encodeTiff } from './fixtures/tiff-writer.mjs';
 
 const plane = (width, height, offset, Type = Uint16Array) => Type.from({ length: width * height }, (_, i) => offset + i);
@@ -23,14 +21,12 @@ const OME = '<?xml version="1.0"?><ome:OME xmlns:ome="http://www.openmicroscopy.
   + 'PhysicalSizeX="0.65" PhysicalSizeXUnit="µm" PhysicalSizeY="650" PhysicalSizeYUnit="nm" PhysicalSizeZ="0.005" PhysicalSizeZUnit="mm">'
   + '</ome:Pixels></ome:Image></ome:OME>';
 
-test('OME-XML with a namespace prefix gives sizes in microns', () => {
-  const ome = parseOmeXml(OME);
-  assert.deepEqual(ome.voxelSizeUm, { z: 5, y: 0.65, x: 0.65 });
-  assert.equal(ome.sizes.c, 1);
-  assert.equal(parseOmeXml('ImageJ=1.52\nspacing=4'), null);
-  assert.deepEqual(parseImageJDescription('ImageJ=1.52n\nimages=3\nslices=3\nunit=micron\nspacing=4.5\n'), { spacing: 4.5, unit: 'micron', channels: 1, frames: 1 });
-  assert.equal(micronsPerUnit('nm'), 0.001);
-  assert.equal(micronsPerUnit('furlong'), null);
+test('NGFF and OME length units are read in microns', () => {
+  assert.equal(micrometresPerUnit('nm'), 0.001);
+  assert.equal(micrometresPerUnit('micrometer'), 1);
+  assert.equal(micrometresPerUnit('millimeter'), 1000);
+  assert.equal(micrometresPerUnit('meter'), 1e6);
+  assert.equal(micrometresPerUnit('furlong'), null);
 });
 
 test('a multi-page OME-TIFF reads plane by plane with its voxel size', async () => {
@@ -171,13 +167,14 @@ test('WhiteIsZero is decided for each page', async () => {
 });
 
 test('a size without a unit is not assumed to be in microns', async () => {
-  assert.equal(micronsPerUnit(undefined), null);
-  assert.equal(micronsPerUnit(''), null);
+  assert.equal(micrometresPerUnit(undefined), null);
+  assert.equal(micrometresPerUnit(''), null);
   const bytes = encodeTiff([{ width: 2, height: 2, data: plane(2, 2, 0), description: 'ImageJ=1.52n\nspacing=5\n', xResolution: [1, 2], yResolution: [1, 2] }]);
   const stack = await openTiffStack([file(bytes, 'no-unit.tif')]);
   assert.deepEqual(stack.voxelSizeUm, { z: null, y: null, x: null });
   // OME's schema default is the micrometre.
-  assert.deepEqual(parseOmeXml(OME.replace(/ PhysicalSize[XYZ]Unit="[^"]*"/g, '')).voxelSizeUm, { z: 0.005, y: 650, x: 0.65 });
+  const unitless = encodeTiff([0, 100].map((offset, z) => ({ width: 3, height: 2, data: plane(3, 2, offset), description: z === 0 ? OME.replace(/ PhysicalSize[XYZ]Unit="[^"]*"/g, '') : undefined })));
+  assert.deepEqual((await openTiffStack([file(unitless, 'unitless.ome.tif')])).voxelSizeUm, { z: 0.005, y: 650, x: 0.65 });
 });
 
 test('an OME-Zarr chunk several planes deep is decoded once for all its planes', async () => {
@@ -208,4 +205,13 @@ test("ngffLevels keeps declared scales in the axes' own units, and none for a da
   assert.deepEqual(levels[0].scale, { z: 10.2, y: 10.2, x: 10.2 });
   assert.deepEqual(levels[0].voxelSizeUm, { z: null, y: null, x: null });
   assert.deepEqual(levels[1].scale, { z: null, y: null, x: null });
+});
+
+test('the shared OME parser reads single-quoted attributes and refuses several image series', async () => {
+  const quoted = OME.replace(/"/g, "'");
+  const stack = await openTiffStack([file(encodeTiff([{ width: 3, height: 2, data: plane(3, 2, 0), description: quoted }, { width: 3, height: 2, data: plane(3, 2, 100) }]), 'quoted.ome.tif')]);
+  assert.deepEqual(stack.voxelSizeUm, { z: 5, y: 0.65, x: 0.65 });
+  const twoSeries = OME.replace('</ome:Image>', '</ome:Image><ome:Image ID="Image:1"><ome:Pixels SizeX="3" SizeY="2" SizeZ="1" SizeC="1" SizeT="1" Type="uint16"></ome:Pixels></ome:Image>');
+  const bytes = encodeTiff([0, 100, 200].map((offset, z) => ({ width: 3, height: 2, data: plane(3, 2, offset), description: z === 0 ? twoSeries : undefined })));
+  await assert.rejects(openTiffStack([file(bytes, 'series.ome.tif')]), /holds 2 image series/);
 });

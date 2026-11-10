@@ -35,7 +35,11 @@ const MICROMETRES = {
   millimeter: 1e3,
   millimetre: 1e3,
   cm: 1e4,
+  centimeter: 1e4,
+  centimetre: 1e4,
   m: 1e6,
+  meter: 1e6,
+  metre: 1e6,
 };
 
 const SECONDS = { ns: 1e-9, 'µs': 1e-6, us: 1e-6, ms: 1e-3, s: 1, sec: 1, second: 1, seconds: 1, min: 60, h: 3600 };
