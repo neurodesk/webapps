@@ -2,7 +2,8 @@ NODDI browser fitting library
 Copyright 2026 Neurodesk contributors
 
 The WebAssembly module src/noddi.wasm is built from the Rust crates in
-exes/dwi (gradients, tensor, amico, noddi-wasm) by scripts/build-wasm.sh.
+exes/dwi (gradients, tensor, amico, dmipy, gp, noddi-toolbox, noddi-wasm) by
+scripts/build-wasm.sh.
 
 The NODDI fit (exes/dwi/amico) is a port of AMICO 1.5.4
 (https://github.com/daducci/AMICO, the BSD-licensed release before commit
@@ -62,3 +63,11 @@ notices; see LICENSE-LBFGSB. No bundled NODDI toolbox erfi code is included.
 Fick RHJ, Wassermann D, Deriche R (2019). The Dmipy Toolbox: Diffusion MRI
 Multi-Compartment Modeling and Microstructure Recovery Made Easy.
 Frontiers in Neuroinformatics 13:64. doi:10.3389/fninf.2019.00064.
+
+The optional NODDI toolbox fit (exes/dwi/noddi-toolbox) ports the
+WatsonSHStickTortIsoV_B0 model and its two-stage fit from the NODDI matlab
+toolbox 1.05 by Gary Hui Zhang and Daniel C Alexander (University College
+London), distributed under the Artistic License 2.0; see LICENSE-NODDI-TOOLBOX.
+exes/dwi/noddi-toolbox/README.md documents how the port differs from the
+toolbox, whose source is at https://www.nitrc.org/projects/noddi_toolbox. Its
+bundled NODDI_erfi.m is not included.

@@ -1,0 +1,14 @@
+dwi-noddi-toolbox ports the WatsonSHStickTortIsoV_B0 model and its two-stage
+fit from the NODDI matlab toolbox 1.05 (NODDI_toolbox_v1.05.zip, SHA-256
+d4f8a1fe5c5e038a29174c40c4f6de0c868728e4d4cdf59c1d7f6dd399ca8143), by Gary Hui
+Zhang and Daniel C Alexander, University College London. The toolbox is
+distributed under the Artistic License 2.0; see LICENSE-NODDI-TOOLBOX. README.md
+documents how this port differs from the toolbox.
+
+The toolbox's bundled NODDI_erfi.m (Per Sundqvist, no licence) is not included:
+erfi comes from dwi-amico's independent power series. The L-BFGS-B optimizer is
+dwi-gp's port of SciPy's (BSD-3-Clause and MIT notices in dwi-gp).
+
+Zhang H, Schneider T, Wheeler-Kingshott CA, Alexander DC (2012). NODDI:
+practical in vivo neurite orientation dispersion and density imaging of the
+human brain. NeuroImage 61(4):1000-1016.

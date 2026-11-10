@@ -61,9 +61,9 @@
         },
         "method": {
           "type": "string",
-          "enum": ["amico", "dmipy"],
+          "enum": ["amico", "dmipy", "toolbox"],
           "default": "amico",
-          "description": "NODDI fit: accelerated AMICO or full nonlinear dmipy model"
+          "description": "NODDI fit: accelerated AMICO, the full nonlinear dmipy model or the NODDI toolbox 1.05 fit"
         },
         "tensorFit": {
           "type": "string",

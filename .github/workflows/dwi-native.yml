@@ -299,6 +299,43 @@ jobs:
       - name: Require the committed WebAssembly nonlinear NODDI WM gate
         run: node exes/dwi/dmipy/validation/wasm-reference.mjs "$RUNNER_TEMP/dmipy-wasm-report.json"
 
+  toolbox-reference:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    name: NODDI toolbox port, native and WASM maps on the pinned WM reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.11'
+      - name: Install NIfTI reference staging dependencies
+        run: python -m pip install numpy==1.26.4 nibabel==5.3.2
+      - name: Cache pinned reference downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/noddi-toolbox-reference
+          key: noddi-toolbox-reference-${{ hashFiles('exes/dwi/noddi-toolbox/validation/reference.manifest.json') }}
+      - name: Verify the toolbox maps, DWI and WM selection; stage the 13327 gate voxels
+        run: |
+          python exes/dwi/noddi-toolbox/validation/fetch_reference.py "$HOME/noddi-toolbox-reference" >> "$GITHUB_ENV"
+          python exes/dwi/noddi-toolbox/validation/prepare_reference.py "$HOME/noddi-toolbox-reference" "$RUNNER_TEMP/noddi-toolbox-prepared"
+          echo "NODDI_TOOLBOX_PREPARED=$RUNNER_TEMP/noddi-toolbox-prepared" >> "$GITHUB_ENV"
+      - name: Require the native toolbox WM gate
+        working-directory: exes/dwi
+        env:
+          NODDI_TOOLBOX_REQUIRE_REFERENCE: '1'
+        run: cargo +1.98.0 test --release --locked -p dwi-noddi-toolbox --test reference -- --nocapture
+      - name: Require the committed WebAssembly toolbox WM gate
+        run: node exes/dwi/noddi-toolbox/validation/wasm-reference.mjs "$RUNNER_TEMP/noddi-toolbox-wasm-report.json"
+
   oracle:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: exes/dwi oracle tests on the pinned AMICO, Patch2Self and mrdegibbs data
