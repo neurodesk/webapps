@@ -1143,8 +1143,8 @@
           "platform": "macos-arm64",
           "version": "0.5.20261109",
           "url": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261109/edgereg-0.5.20261109-macos-arm64.pkg",
-          "sha256": "6c23ea8f4d1c5c39d856a848f8870e4133350029f2246b8ad8955dfd23636844",
-          "bytes": 40669989,
+          "sha256": "ca62fcad8d6397be5ce877b902a7d597fd2acc782250b853797d56e8d360d096",
+          "bytes": 40670354,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261109/edgereg-0.5.20261109-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg edgereg-0.5.20261109-macos-arm64.pkg -target /\nedgereg self-check\nedgereg moving.nii.gz fixed.nii.gz results"
@@ -1154,8 +1154,8 @@
           "platform": "windows-x64",
           "version": "0.5.20261109",
           "url": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261109/edgereg-0.5.20261109-windows-x64.zip",
-          "sha256": "e95f521b5636cf60873f167c4379b3474c204bd3e3e1e5ff1f235e1e8480b9e8",
-          "bytes": 37575344,
+          "sha256": "cab0c85fe6f487adea355310755b02b273535757b2dd28823d61529519e06057",
+          "bytes": 37575343,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261109/edgereg-0.5.20261109-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\edgereg-0.5.20261109-windows-x64.zip -DestinationPath .\n.\\edgereg-0.5.20261109-windows-x64\\edgereg.exe moving.nii.gz fixed.nii.gz results"
