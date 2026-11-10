@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 2,
+  "app": "deconvolution",
+  "title": "Deconvolution",
+  "description": "Widefield and confocal 3D deconvolution: Richardson-Lucy, optionally with total-variation regularisation, with a Gibson-Lanni or measured PSF.",
+  "defaultOperation": "deconvolve",
+  "operations": {
+    "deconvolve": {
+      "title": "Deconvolve stack",
+      "description": "Deconvolve one single-channel 3D microscopy stack with a theoretical Gibson-Lanni PSF for the given optics, or with a measured PSF, and return the deconvolved stack as TIFF and NIfTI with the PSF used.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tif",
+            "tiff",
+            "nifti"
+          ],
+          "description": "One single-channel 3D stack: TIFF, OME-TIFF, ImageJ TIFF or NIfTI",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "psf": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tif",
+            "tiff",
+            "nifti"
+          ],
+          "description": "Optional measured PSF (a bead stack) on the image's voxel size; replaces the theoretical PSF",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "modality": {
+          "type": "string",
+          "enum": [
+            "widefield",
+            "confocal"
+          ],
+          "default": "widefield",
+          "description": "Widefield (emission PSF) or confocal (excitation × emission PSF, pinhole much smaller than one Airy unit)"
+        },
+        "numericalAperture": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.7,
+          "default": 1.4,
+          "description": "Objective numerical aperture, below the immersion index"
+        },
+        "immersionIndex": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 2,
+          "default": 1.518,
+          "description": "Refractive index of the immersion medium (1.0 air, 1.333 water, 1.518 oil)"
+        },
+        "sampleIndex": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 2,
+          "default": 1.47,
+          "description": "Refractive index of the sample or mounting medium; matters only with a depth above 0"
+        },
+        "emissionNm": {
+          "type": "number",
+          "minimum": 300,
+          "maximum": 1500,
+          "default": 520,
+          "description": "Emission wavelength in nanometres"
+        },
+        "excitationNm": {
+          "type": "number",
+          "minimum": 300,
+          "maximum": 1500,
+          "default": 488,
+          "description": "Excitation wavelength in nanometres (confocal only)"
+        },
+        "depthUm": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 200,
+          "default": 0,
+          "description": "Depth of the imaged plane below the coverslip in micrometres, for refractive-index mismatch"
+        },
+        "voxelSizeXYUm": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 100,
+          "description": "Lateral voxel size in micrometres; overrides the file's calibration"
+        },
+        "voxelSizeZUm": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 100,
+          "description": "Axial voxel size in micrometres; overrides the file's calibration"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "rl",
+            "rltv"
+          ],
+          "default": "rl",
+          "description": "rl: Richardson-Lucy as scikit-image; rltv: with total-variation regularisation (Dey et al. 2006)"
+        },
+        "iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 20,
+          "description": "Richardson-Lucy iterations"
+        },
+        "tvWeight": {
+          "type": "number",
+          "minimum": 0.0001,
+          "maximum": 0.1,
+          "default": 0.002,
+          "description": "Total-variation weight lambda (rltv only)"
+        }
+      },
+      "artifacts": {
+        "image": {
+          "type": "neuro:volume",
+          "mediaType": "image/tiff",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "nifti": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "psf": {
+          "type": "neuro:volume",
+          "mediaType": "image/tiff",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

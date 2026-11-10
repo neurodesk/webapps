@@ -13,8 +13,10 @@ permissions:
   id-token: write
 
 concurrency:
+  # Let a running deploy finish; GitHub keeps only the newest pending run, so
+  # a burst of pushes ships its last commit instead of cancelling every deploy.
   group: neurodesk-webapps-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.

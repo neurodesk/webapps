@@ -5,7 +5,7 @@ import { DEFAULTS } from "./core/pipeline.js";
 export const APP = Object.freeze({
   id: "calcium-imaging",
   title: automation.title,
-  version: "0.1.20261109",
+  version: "0.1.20261110",
 });
 
 /**
@@ -19,16 +19,17 @@ export const MAX_MOVIE_BYTES = 500_000_000;
 
 /**
  * Refuses a TIFF that is not one single-plane, single-channel movie of at least 20 frames,
- * from its page directories (before any pixel is decoded). ImageJ writes any unlabelled
- * stack as `slices=N` without `frames=` or `hyperstack=true`, so such a stack is read as N
- * frames; OME `SizeZ` and ImageJ hyperstack `slices` are spatial and refused.
+ * from its page directories (before any pixel is decoded). A plain TIFF does not label its
+ * pages, and ImageJ writes any unlabelled stack as `slices=N` without `frames=` or
+ * `hyperstack=true`, so such a stack is read as N frames; OME `SizeZ` and ImageJ hyperstack
+ * `slices` are spatial and refused.
  * @param {import("@neurodesk/webapp-components/file-io/tiff").TiffStackInfo} info
  * @returns {{ frames: number }}
  */
 export function checkMovie({ pages, metadata }, name) {
-  const plainImagejStack = metadata.kind === "imagej" && metadata.unlabelledStack === true;
-  const sizeZ = plainImagejStack ? 1 : metadata.sizeZ;
-  const sizeT = plainImagejStack ? pages / Math.max(1, metadata.sizeC) : metadata.sizeT;
+  const unlabelled = metadata.unlabelledStack === true;
+  const sizeZ = unlabelled ? 1 : metadata.sizeZ;
+  const sizeT = unlabelled ? pages / Math.max(1, metadata.sizeC) : metadata.sizeT;
   if (metadata.sizeC > 1) throw new Error(`${name} has ${metadata.sizeC} channels; save the calcium channel as its own movie.`);
   if (sizeZ > 1 && sizeT > 1) throw new Error(`${name} is a volume time series (${sizeZ} planes × ${sizeT} time points); save one plane as its own movie.`);
   if (sizeZ > 1) throw new Error(`${name} is a Z-stack of ${sizeZ} planes, not a movie; this app needs one plane over time.`);

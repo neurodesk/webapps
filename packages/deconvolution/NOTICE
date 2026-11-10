@@ -1,0 +1,26 @@
+Deconvolution library
+Copyright 2026 Neurodesk contributors
+
+The WebAssembly module wasm/deconvolution_wasm_bg.wasm is built from the Rust
+crates exes/deconvolution/core and exes/deconvolution/wasm (MIT, LICENSE) by
+scripts/build-wasm.sh. The Gibson-Lanni PSF, the FFT convolution and the
+Richardson-Lucy and RL-TV iterations are written for this package from the
+publications cited in README.md; no code of psfmodels, scikit-image or
+DeconvolutionLab2 is included. Those tools are used only as external
+references by validation/.
+
+The module statically links Rust crates under MIT (or MIT OR Apache-2.0, used
+under MIT) and, for unicode-ident, the Unicode-3.0 licence. THIRD_PARTY_NOTICES.md
+holds each crate's licence text verbatim, with its copyright lines; it is
+generated from exes/deconvolution/Cargo.lock by
+scripts/deconvolution-third-party-notices.py.
+
+libm's Bessel functions j0 and j1 are ported from FreeBSD msun (e_j0.c,
+e_j1.c), which carry this notice:
+
+  Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+  Developed at SunSoft, a Sun Microsystems, Inc. business.
+  Permission to use, copy, modify, and distribute this
+  software is freely granted, provided that this notice
+  is preserved.

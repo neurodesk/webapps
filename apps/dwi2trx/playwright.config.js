@@ -1,9 +1,11 @@
 import { withBrowserBuild } from '../../test-utils/playwright-build.mjs';
 import { defineConfig } from "@playwright/test";
+import { e2eTier } from "../../test-utils/e2e-tier.mjs";
 
 // Serve the BUILT output so COOP/COEP headers (public/_headers, applied by the host)
 // and worker/wasm asset paths are exercised — not just the dev server.
 export default defineConfig({
+  ...e2eTier,
   testDir: "./e2e",
   webServer: {
     command: withBrowserBuild("node_modules/.bin/vite preview --port 4173 --strictPort", "node scripts/copy-brainchop.mjs && node_modules/.bin/vite build && node ../../scripts/theme-app-dist.mjs --app dwi2trx"),

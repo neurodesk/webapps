@@ -44,11 +44,19 @@ permissions:
   contents: read
 
 jobs:
+  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
+  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    with:
+      workflow: dwi2trx-native
+
   # Fits the pinned example through the built web app, given the command line's MindGrab mask, and
   # compares its maps with packages/dwi2trx/validation/dwi-gradients-reference.json, the reference
   # the archives are held to.
   web-app-reference:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.tracking_only)
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.tracking_only)
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:

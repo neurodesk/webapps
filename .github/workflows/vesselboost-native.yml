@@ -44,8 +44,16 @@ permissions:
   contents: read
 
 jobs:
+  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
+  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    with:
+      workflow: vesselboost-native
+
   portable:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write
@@ -69,7 +77,8 @@ jobs:
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
 
   preprocessing-source:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: Reproduce required Rust preprocessing
     runs-on: ubuntu-22.04
     steps:

@@ -74,6 +74,10 @@
     "./automation/freesurfer-lut": "./src/automation/freesurfer-lut.json",
     "./volume": "./src/volume/index.js",
     "./volume/mean": "./src/volume/mean.js",
+    "./fft": {
+      "types": "./src/fft/index.d.ts",
+      "default": "./src/fft/index.js"
+    },
     "./worker": "./src/worker/index.js",
     "./qsm": "./src/qsm/index.js",
     "./styles/base.css": "./src/styles/base.css",

@@ -876,6 +876,41 @@ try {
     await expect(page.locator('#fileInfo')).toContainText('interface-field-2.tif');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
+  await check('deconvolution', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t1.nii'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-t1.nii · 16 × 16 × 16 · 1000 × 1000 × 1000 µm');
+    await expect(page.locator('#spacingZ')).toHaveValue('1000');
+    await page.locator('#method').selectOption('rltv');
+    await expect(page.locator('#tvWeight')).toBeEnabled();
+    await page.locator('#iterations').fill('2');
+    // The settings chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#depth')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#depth').fill('3');
+    await page.locator('#psfXY').fill('3');
+    await advanced.tap();
+    await expect(page.locator('#depth')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#depth')).toHaveValue('3');
+    await expect(page.locator('#psfXY')).toHaveValue('3');
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#method')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#method')).toHaveValue('rltv');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('Stack deconvolved', { timeout: 120000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(4);
+    // A new stack withdraws the results of the old one.
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t2.nii', 40));
+    await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
   await check('brainqcnet', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);

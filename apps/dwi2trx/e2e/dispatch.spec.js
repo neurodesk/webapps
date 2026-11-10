@@ -13,7 +13,7 @@ test('physical dispatch windows preserve the actual Boot Philox seed and lane st
   const expressions = name => [...boot.matchAll(new RegExp(`let ${name} = ([^;]+);`, 'g'))].map(match => match[1]);
   const logicalGroups = expressions('logical_group');
   const globalIds = expressions('global_id');
-  const initializers = [...boot.matchAll(/var st = (philox_init\([\s\S]*?\));/g)].map(match => match[1]);
+  const initializers = [...boot.matchAll(/\bst = (philox_init\([\s\S]*?\));/g)].map(match => match[1]);
   const workgroupSizes = [...boot.matchAll(/@workgroup_size\(([^)]+)\)/g)].map(match => match[1]);
   expect(logicalGroups).toHaveLength(2);
   expect(globalIds).toHaveLength(2);
@@ -50,7 +50,7 @@ test('physical dispatch windows preserve the actual Boot Philox seed and lane st
     try {
       const results = [];
       for (const window of [37, 16, 7, 1]) {
-        const parameters = device.createBuffer({ size: 96, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, mappedAtCreation: true });
+        const parameters = device.createBuffer({ size: 100, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, mappedAtCreation: true });
         new Uint32Array(parameters.getMappedRange())[6] = 1234;
         parameters.unmap();
         const output = device.createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
@@ -122,31 +122,55 @@ async function trackExample(browser, baseURL, overrides = {}) {
   }
 }
 
-test('bounded dispatch windows write the same TRX as one command per pass', async ({ browser, baseURL }) => {
+// One command per pass, each seed tracked to the end, is the pre-#598 dispatch;
+// the example is small enough to finish that way.
+const UNBOUNDED = { neurodeskTrackingDispatchWorkgroups: 1_000_000, neurodeskTrackingDispatchSteps: 1_000_000 };
+const total = (run, entryPoint) => run.passes.filter(pass => pass.entryPoint === entryPoint).reduce((sum, { x }) => sum + x, 0);
+
+function expectSameTracts(run, reference) {
+  for (const result of [reference, run]) {
+    expect(result.measurements.processedSeeds).toBe(result.measurements.seeds);
+    expect(result.measurements.partial).toBe(false);
+  }
+  expect(run.measurements).toEqual(reference.measurements);
+  expect(run.tracts).toBe(reference.tracts);
+}
+
+test('bounded dispatch windows and step budgets write the same TRX as one command per pass', async ({ browser, baseURL }) => {
   test.skip(!hardwareGpu || !process.env.DWI2TRX_FIXTURE_DIR, 'Requires hardware WebGPU with subgroups and DWI2TRX_FIXTURE_DIR.');
   test.setTimeout(1_200_000);
-  // One command per pass is the pre-#598 dispatch; the example is small enough to finish that way.
-  const single = await trackExample(browser, baseURL, { neurodeskTrackingDispatchWorkgroups: 1_000_000 });
+  const single = await trackExample(browser, baseURL, UNBOUNDED);
   const bounded = await trackExample(browser, baseURL);
   expect(single.parameters.maxWorkgroupsPerDispatch).toBe(1_000_000);
+  expect(single.parameters.maxStepsPerDispatch).toBe(1_000_000);
   expect(bounded.parameters.maxWorkgroupsPerDispatch).toBe(16);
+  expect(bounded.parameters.maxStepsPerDispatch).toBe(32);
   const largest = run => Math.max(...run.passes.map(({ x }) => x));
   expect(largest(single), 'the example must need more than one 16-workgroup window').toBeGreaterThan(16);
   expect(largest(bounded)).toBeLessThanOrEqual(16);
-  const total = run => run.passes.reduce((sum, { x }) => sum + x, 0);
-  expect(total(bounded)).toBe(total(single));
-  expect(bounded.passes.length).toBeGreaterThan(single.passes.length);
-  for (const run of [single, bounded]) {
-    expect(run.measurements.processedSeeds).toBe(run.measurements.seeds);
-    expect(run.measurements.partial).toBe(false);
-  }
-  expect(bounded.measurements).toEqual(single.measurements);
-  expect(bounded.tracts).toBe(single.tracts);
+  expect(total(bounded, 'getNumStreamlinesBoot_k')).toBe(total(single, 'getNumStreamlinesBoot_k'));
+  expect(total(single, 'genStreamlinesMergeBoot_k')).toBe(total(single, 'getNumStreamlinesBoot_k'));
+  expect(total(bounded, 'genStreamlinesMergeBoot_k'), 'some seeds must need more than one 32-step command')
+    .toBeGreaterThan(total(single, 'genStreamlinesMergeBoot_k'));
+  expectSameTracts(bounded, single);
+  // Logged so CI runs of different kernels on the same runner can be compared (#598).
+  console.log(`dwi2trx example TRX sha256 ${single.tracts}`);
   await test.info().attach('dispatch-equivalence.json', {
     body: JSON.stringify({ tracts: single.tracts, measurements: single.measurements,
-      commands: { single: single.passes.length, bounded: bounded.passes.length }, workgroups: total(single) }, null, 2),
+      commands: { single: single.passes.length, bounded: bounded.passes.length },
+      workgroups: { single: total(single, 'genStreamlinesMergeBoot_k'), bounded: total(bounded, 'genStreamlinesMergeBoot_k') } }, null, 2),
     contentType: 'application/json',
   });
+});
+
+test('pausing after every few tracking steps writes the same TRX', { tag: '@slow' }, async ({ browser, baseURL }) => {
+  test.skip(!hardwareGpu || !process.env.DWI2TRX_FIXTURE_DIR, 'Requires hardware WebGPU with subgroups and DWI2TRX_FIXTURE_DIR.');
+  test.setTimeout(3_600_000);
+  const single = await trackExample(browser, baseURL, UNBOUNDED);
+  // Three steps pause most streamlines mid-direction and some right after a direction ends.
+  const stepped = await trackExample(browser, baseURL, { neurodeskTrackingDispatchSteps: 3 });
+  expect(stepped.parameters.maxStepsPerDispatch).toBe(3);
+  expectSameTracts(stepped, single);
 });
 
 test('the seed batch size does not change the TRX', async ({ browser, baseURL }) => {
@@ -158,10 +182,5 @@ test('the seed batch size does not change the TRX', async ({ browser, baseURL })
   expect(chunkSize).toBeGreaterThan(1);
   const batched = await trackExample(browser, baseURL, { neurodeskTrackingChunkSeeds: chunkSize });
   expect(batched.parameters.chunkSize).toBe(chunkSize);
-  for (const run of [whole, batched]) {
-    expect(run.measurements.processedSeeds).toBe(run.measurements.seeds);
-    expect(run.measurements.partial).toBe(false);
-  }
-  expect(batched.measurements).toEqual(whole.measurements);
-  expect(batched.tracts).toBe(whole.tracts);
+  expectSameTracts(batched, whole);
 });

@@ -50,8 +50,16 @@ permissions:
   contents: read
 
 jobs:
+  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
+  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    with:
+      workflow: brain2print-native
+
   browser-reference:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: browser reference still holds
     runs-on: ubuntu-24.04
     timeout-minutes: 60
