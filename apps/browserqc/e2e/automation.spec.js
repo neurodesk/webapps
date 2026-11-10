@@ -26,6 +26,7 @@ test('CPU segmentation can be cancelled and retried to produce native-grid label
   await dispatch(page, 'cancel');
   await closed;
   expect((await dispatch(page, 'snapshot')).state).toBe('cancelled');
+  await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   await adopt(page, 'image', fixture);
   await adopt(page, 'sidecar', { name: 'scan.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ EchoTime: 0.003, RepetitionTime: 2.1 })) });
   await dispatch(page, 'start', { operation: 'quality-control', parameters: { backend: 'cpu', model: '16chan18cls' } });
