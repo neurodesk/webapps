@@ -148,7 +148,7 @@ analytics. Model acquisition must be completed separately before offline operati
 Subcommands: `serve` (default), `doctor`, `pull` (all accept the same flags),
 `unlock --data-dir DIR` and `check-slurm --slurm-config FILE --profile NAME
 [--data-root ID=PATH] [--data-dir DIR] [--timeout 1h]`, `fetch-example NAME
---dest DIR` and `fetch-image NAME --dest DIR`.
+--dest DIR`, `fetch-image NAME --dest DIR` and `cryo-em` (see "Quick start").
 
 ## HPC: single-owner mode and Slurm
 
@@ -294,6 +294,32 @@ prints the flag to add to `serve`, `--data-root examples=/scratch/you/examples`,
 and what to import (root `examples`, path `relion-tutorial/Movies`, pattern
 `*.tiff`). It honours `HTTPS_PROXY` and verifies TLS against the bundled
 Mozilla roots.
+
+### Quick start
+
+```sh
+tmux new -s cryo-em
+neurodesk-compute cryo-em [--account NAME] [--gpu-partition NAME]
+```
+
+does the deployment below in one command, as yourself on a named submit host.
+In the data directory (`--data-dir`, default the platform data dir, which
+every compute node must read and write) it:
+
+1. writes `slurm.json` once, from `sinfo -h -o "%P %G"` and `apptainer` on
+   `PATH`: a `cpu` profile (8 CPUs, 32G, 12 h) on the default partition without
+   GPUs and a `gpu` profile (1 GPU, 8 CPUs, 64G, 24 h) on the first partition
+   with a `gpu` GRES, with every RELION command's default
+   (`src/runner/slurm/quickstart.rs`). Later starts keep the file, so edit it to
+   change partitions or resources;
+2. fetches the RELION image into `images/` when the file `slurm.json` names is
+   missing, and the tutorial into `examples/`, both as below;
+3. runs `check-slurm` on both profiles whenever `slurm.json` differs from the
+   copy saved after the last passing check (`slurm-check.json`), unless
+   `--skip-check`;
+4. serves single-owner Slurm on `127.0.0.1:<--port, default 8765>` over HTTP
+   with the built app, data root `examples` and any `--data-root`, and prints
+   the SSH tunnel command for its host and the pairing code.
 
 ### Deployment
 
