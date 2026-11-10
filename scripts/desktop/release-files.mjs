@@ -13,7 +13,7 @@ import { parseArgs } from 'node:util';
 export async function prepareReleaseFiles(archive, destination, { desktop, version, platform, partBytes = 1_900_000_000, kind = 'desktop' }) {
   if (!Number.isSafeInteger(partBytes) || partBytes < 1 || partBytes >= 2 ** 31) throw new Error('Invalid release part size');
   const windowsSigned = platform === 'windows-x64' && signingEnabled();
-  if (windowsSigned) verifyWindowsArchive(archive);
+  if (windowsSigned) verifyWindowsArchive(archive, desktop.executable);
   const filename = basename(archive);
   if (!/^[a-zA-Z0-9._-]+$/.test(filename)) throw new Error('Archive filename must be safe in shell commands');
   const bytes = (await stat(archive)).size;

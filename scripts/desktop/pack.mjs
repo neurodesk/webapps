@@ -23,7 +23,7 @@ const registry = await loadAppsRegistry();
 const catalog = findCatalog(registry, (await loadBundle(resources)).catalog);
 const { desktop } = catalog;
 const artifacts = await build({ projectDir, publish: 'never', config: {
-  ...windowsSigningConfig(),
+  ...windowsSigningConfig(desktop.executable),
   ...macNotarizeConfig(),
   ...builderConfig(registry, catalog),
   extraResources: [{ from: resources, to: 'offline' }],

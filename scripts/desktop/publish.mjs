@@ -62,7 +62,7 @@ async function releaseRecord(platform) {
   if (platform === 'windows-x64' && signingEnabled()) {
     const archiveHash = metadata.archiveSha256 || metadata.sha256;
     if (metadata.windowsSigning?.verified !== true || metadata.windowsSigning.archiveSha256 !== archiveHash) throw new Error('Windows release lacks archive-bound signing verification');
-    if (!metadata.parts) verifyWindowsArchive(primary);
+    if (!metadata.parts) verifyWindowsArchive(primary, desktop.executable);
     else {
       const temporary = await mkdtemp(join(tmpdir(), 'desktop-signature-check-'));
       try {
@@ -71,7 +71,7 @@ async function releaseRecord(platform) {
           for (const part of metadata.parts) yield* createReadStream(find(part.filename));
         }
         await pipeline(chunks(), createWriteStream(archive));
-        verifyWindowsArchive(archive);
+        verifyWindowsArchive(archive, desktop.executable);
       } finally { await rm(temporary, { recursive: true, force: true }); }
     }
   }
