@@ -33,10 +33,15 @@ Every workflow with such a filter now starts with a `gate` job that calls
 - Otherwise it runs when a script the workflow runs loads a changed file
   (`scripts/lib/module-closure.mjs`): any script of a package it owns (command
   line, tests, validation harnesses, browser pages) or a root script one of
-  its steps names. It also runs when the lockfile change resolves a package it
+  its steps, or the steps of a local reusable workflow it calls, name. A
+  deleted file still counts for the module that names it. It also runs when the lockfile change resolves a package it
   owns differently, or when the app planner, given the whole diff, selects an
   app it filters on. A dependency's `package.json` that only gained `exports`
   entries does not count.
+- Python, shell and PowerShell under `scripts/`, `test-utils/` and `test/`
+  are not followed, so a change to one runs every workflow whose filters match
+  it. A change to any `packages/*/release.json` runs the callers of the shared
+  packager, whose release tests read every specification.
 - The import closure is a lower bound: a file read through a computed path is
   not seen. Name such a file in the workflow's `paths` to make it the
   workflow's own.

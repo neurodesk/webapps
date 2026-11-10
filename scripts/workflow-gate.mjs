@@ -8,7 +8,7 @@ import { appendFile, readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
 import { changedManifests, changedPathsFromGit } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
-import { decideWorkflow } from './lib/workflow-gate.mjs';
+import { calledWorkflows, decideWorkflow } from './lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from './lib/workspace-graph.mjs';
 
 function option(name) {
@@ -23,12 +23,14 @@ const head = option('--head') || 'HEAD';
 
 let decision;
 try {
-  const flow = parse(await readFile(`${repoRoot}/.github/workflows/${name}.yml`, 'utf8'));
+  const read = async (file) => parse(await readFile(`${repoRoot}/.github/workflows/${file}.yml`, 'utf8'));
+  const flow = await read(name);
+  const calledFlows = await Promise.all(calledWorkflows(flow).map(read));
   const changedPaths = changedPathsFromGit({ base, head, cwd: repoRoot });
   const manifests = changedManifests({ base, head, cwd: repoRoot, changedPaths });
   const registry = await loadAppsRegistry();
   const graph = await loadConservativeWorkspaceGraph(repoRoot);
-  decision = decideWorkflow({ flow, changedPaths, registry, graph, manifests, root: repoRoot });
+  decision = decideWorkflow({ flow, calledFlows, changedPaths, registry, graph, manifests, root: repoRoot });
 } catch (error) {
   decision = { run: true, reason: `the gate could not decide (${error.message})` };
   console.log(`::warning::${name}: ${decision.reason}`);

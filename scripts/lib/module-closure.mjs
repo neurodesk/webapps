@@ -34,10 +34,14 @@ function exportsOf(manifest) {
 
 const isFile = (path) => existsSync(path) && statSync(path).isFile();
 
-function resolveSpecifier(packages, specifier, from) {
+// `missing` collects targets that do not exist: a deleted file is still a
+// dependency of the module that names it.
+function resolveSpecifier(packages, specifier, from, missing) {
   if (specifier.startsWith('.')) {
     const base = resolve(dirname(from), specifier);
-    const file = [base, `${base}.js`, `${base}.mjs`, `${base}.ts`, join(base, 'index.js')].find(isFile);
+    const candidates = [base, `${base}.js`, `${base}.mjs`, `${base}.ts`, join(base, 'index.js')];
+    const file = candidates.find(isFile);
+    if (!file) for (const candidate of candidates) missing?.add(candidate);
     return file ? [file] : [];
   }
   const name = specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0];
@@ -52,11 +56,14 @@ function resolveSpecifier(packages, specifier, from) {
       target = exportTarget(value)?.replace('*', subpath.slice(key.length - 1));
     }
   }
+  if (target && !isFile(join(dir, target))) missing?.add(join(dir, target));
   return target && isFile(join(dir, target)) ? [manifest, join(dir, target)] : [manifest];
 }
 
-// Every file the seed files load, seeds included, as repository paths.
-export function moduleClosure(root, seeds) {
+// Every file the seed files load, seeds included, as repository paths. With
+// `missing`, also the paths they name that do not exist.
+export function moduleClosure(root, seeds, { missing = false } = {}) {
+  const absent = missing ? new Set() : null;
   const packages = workspacePackages(root);
   const pending = seeds.map((file) => resolve(root, file)).filter(isFile);
   const seen = new Set();
@@ -68,12 +75,12 @@ export function moduleClosure(root, seeds) {
     for (const match of readFileSync(file, 'utf8').matchAll(IMPORT)) {
       // A URL string is always relative to the module, with or without ./.
       const specifier = match[4] ? (match[4].startsWith('.') ? match[4] : `./${match[4]}`) : match[1] ?? match[2] ?? match[3];
-      for (const next of resolveSpecifier(packages, specifier, file)) {
+      for (const next of resolveSpecifier(packages, specifier, file, absent)) {
         if (!seen.has(next)) pending.push(next);
       }
     }
   }
-  return [...seen].map((file) => relative(root, file).split('\\').join('/')).sort();
+  return [...seen, ...(absent ?? [])].map((file) => relative(root, file).split('\\').join('/')).sort();
 }
 
 const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'target', '.turbo', '.vite', 'coverage', 'test-results', 'playwright-report']);

@@ -59,12 +59,26 @@ export function workflowApps(filters, registry) {
   return [...new Set(filters.map((filter) => filter.match(/^apps\/([^/*]+)\//)?.[1]).filter((id) => ids.has(id)))];
 }
 
-// Root scripts a workflow's steps name (`node scripts/desktop/smoke.mjs`).
+// Root scripts the steps of a workflow, and of the local reusable workflows it
+// calls, name (`node scripts/desktop/smoke.mjs`).
 const ROOT_SCRIPT = /(?:^|[\s'"=(])((?:scripts|test-utils|test)\/[\w./-]+\.[cm]?[jt]s)\b/gm;
-export function workflowScripts(flow) {
-  const commands = Object.values(flow?.jobs ?? {}).flatMap((job) => (job.steps ?? []).map((step) => step.run ?? ''));
+export function workflowScripts(flow, calledFlows = []) {
+  const commands = [flow, ...calledFlows].flatMap((each) => Object.values(each?.jobs ?? {})).flatMap((job) => (job.steps ?? []).map((step) => step.run ?? ''));
   return [...new Set(commands.flatMap((command) => [...command.matchAll(ROOT_SCRIPT)].map((match) => match[1])))];
 }
+
+// The local reusable workflows a workflow calls, by file name. The gate itself runs nothing of the caller's.
+export function calledWorkflows(flow) {
+  return [...new Set(Object.values(flow?.jobs ?? {})
+    .map((job) => job.uses?.match(/^\.\/\.github\/workflows\/([\w-]+)\.yml$/)?.[1])
+    .filter((name) => name && name !== 'pr-gate'))];
+}
+
+// Root code the import closure cannot follow: Python, shell and PowerShell.
+const UNFOLLOWED_SCRIPT = /^(?:scripts|test-utils|test)\/.*\.(?:py|sh|ps1)$/;
+// The shared packager reads every package's release specification.
+const PACKAGER = 'node-cli-portable';
+const RELEASE_SPEC = /^packages\/[^/]+\/release\.json$/;
 
 // A dependency's package.json that only gained `exports` entries resolves
 // every existing import as before. Anything else may not.
@@ -86,7 +100,7 @@ export function onlyAddsExports({ before, after }) {
   return Object.keys(was).every((key) => same(was[key], is[key]));
 }
 
-export function decideWorkflow({ flow, changedPaths, registry, graph, manifests = new Map(), root }) {
+export function decideWorkflow({ flow, calledFlows = [], changedPaths, registry, graph, manifests = new Map(), root }) {
   const run = (reason) => ({ run: true, reason });
   const filters = flow?.on?.pull_request?.paths;
   if (!Array.isArray(filters)) return run('the workflow has no pull request path filter');
@@ -101,15 +115,23 @@ export function decideWorkflow({ flow, changedPaths, registry, graph, manifests 
     if (own) return run(`${path} matches ${own.filter}`);
   }
 
+  const unfollowed = matched.find((path) => UNFOLLOWED_SCRIPT.test(path));
+  if (unfollowed) return run(`${unfollowed} is a script the gate cannot follow`);
+  if (calledWorkflows(flow).includes(PACKAGER)) {
+    const spec = matched.find((path) => RELEASE_SPEC.test(path));
+    if (spec) return run(`${spec}: the shared packager reads every release specification`);
+  }
+
   // From here the whole diff counts: a file outside the filters can still
   // be what makes a matched shared file relevant.
   const owned = ownedPackages(filters, root);
   const starts = [
     ...owned.map((directory) => ({ from: `a script in ${directory}`, seeds: packageSources(root, directory) })),
-    ...workflowScripts(flow).map((script) => ({ from: script, seeds: [script] })),
+    ...workflowScripts(flow, calledFlows).map((script) => ({ from: script, seeds: [script] })),
   ];
   for (const { from, seeds } of starts) {
-    const closure = new Set(moduleClosure(root, seeds));
+    // A deleted file is still what the module naming it loads.
+    const closure = new Set(moduleClosure(root, seeds, { missing: true }));
     for (const path of changedPaths) {
       if (!closure.has(path)) continue;
       const manifest = WORKSPACE_MANIFEST.test(path) && manifests.get(path);

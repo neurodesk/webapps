@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
-import { commandLineClosure } from '../scripts/lib/module-closure.mjs';
-import { decideWorkflow, isSharedFilter, onlyAddsExports, ownedPackages, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
+import { commandLineClosure, moduleClosure } from '../scripts/lib/module-closure.mjs';
+import { calledWorkflows, decideWorkflow, isSharedFilter, onlyAddsExports, ownedPackages, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
 // The pull request gate skips a native suite only when no changed file can
@@ -19,7 +19,11 @@ const registry = await loadAppsRegistry();
 const graph = await loadConservativeWorkspaceGraph(repoRoot);
 const flowOf = (paths) => ({ on: { pull_request: { paths } } });
 const real = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
-const decideReal = async (name, changedPaths, manifests = new Map()) => decideWorkflow({ flow: await real(name), changedPaths, registry, graph, manifests, root: repoRoot });
+const decideReal = async (name, changedPaths, manifests = new Map()) => {
+  const flow = await real(name);
+  const calledFlows = await Promise.all(calledWorkflows(flow).map(real));
+  return decideWorkflow({ flow, calledFlows, changedPaths, registry, graph, manifests, root: repoRoot });
+};
 const decide = (paths, changedPaths, manifests = new Map()) => decideWorkflow({ flow: flowOf(paths), changedPaths, registry, graph, manifests, root: repoRoot });
 
 const dep = (version) => ({ specifier: version, version });
@@ -95,6 +99,47 @@ test('a root script a step names, and what it imports, runs the workflow', async
     assert.match(decision.reason, /loads/);
   }
   assert.deepEqual(workflowScripts({ jobs: { a: { steps: [{ run: 'node scripts/a.mjs --x\nENV=1 node "test-utils/b.js"' }, { uses: 'x/y@1' }] }, b: { uses: './w.yml' } } }), ['scripts/a.mjs', 'test-utils/b.js']);
+});
+
+test('a deleted file is still a dependency of the module that names it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gate-closure-'));
+  const write = (path, text) => {
+    mkdirSync(join(root, path, '..'), { recursive: true });
+    writeFileSync(join(root, path), text);
+  };
+  mkdirSync(join(root, 'exes'));
+  write('packages/tool/package.json', JSON.stringify({ name: '@x/tool' }));
+  write('packages/tool/validation/harness.js', "import '@x/shared/wrapper';\nimport './gone';\nimport './kept.js';\n");
+  write('packages/tool/validation/kept.js', '');
+  write('packages/shared/package.json', JSON.stringify({ name: '@x/shared', exports: { './wrapper': './src/wrapper.js' } }));
+  const seeds = ['packages/tool/validation/harness.js'];
+  assert.deepEqual(moduleClosure(root, seeds), ['packages/shared/package.json', 'packages/tool/validation/harness.js', 'packages/tool/validation/kept.js']);
+  const withMissing = moduleClosure(root, seeds, { missing: true });
+  for (const path of ['packages/shared/src/wrapper.js', 'packages/tool/validation/gone.js', 'packages/tool/validation/gone/index.js']) assert.ok(withMissing.includes(path), path);
+  const flow = { on: { pull_request: { paths: ['packages/tool/**', 'packages/**'] } } };
+  const decision = decideWorkflow({ flow, changedPaths: ['packages/shared/src/wrapper.js'], registry, graph: null, root });
+  assert.equal(decision.run, true);
+  assert.match(decision.reason, /a script in packages\/tool loads packages\/shared\/src\/wrapper\.js/);
+  assert.equal(decideWorkflow({ flow, changedPaths: ['packages/shared/src/other.js'], registry, graph: null, root }).run, false);
+});
+
+test('what a called reusable workflow runs counts as the caller\'s', async () => {
+  const hmc = await real('hmc-native');
+  assert.deepEqual(calledWorkflows(hmc), ['node-cli-portable']);
+  assert.deepEqual(calledWorkflows({ jobs: { gate: { uses: './.github/workflows/pr-gate.yml' }, a: { uses: 'org/repo/.github/workflows/x.yml@v1' }, b: { steps: [] } } }), []);
+  assert.deepEqual(workflowScripts({ jobs: {} }, [{ jobs: { a: { steps: [{ run: 'node scripts/called.mjs' }] } } }]), ['scripts/called.mjs']);
+  // The packager's Python imports scripts/lib/windows_signing.py; the closure follows only JS and TS.
+  for (const path of ['scripts/lib/windows_signing.py', 'scripts/windows-signing.ps1', 'test-utils/fixture.sh']) {
+    const decision = await decideReal('hmc-native', [path]);
+    assert.equal(decision.run, true, path);
+    assert.match(decision.reason, /cannot follow/);
+  }
+  // Its release tests read every package's release specification.
+  const spec = await decideReal('hmc-native', ['packages/topofit/release.json']);
+  assert.equal(spec.run, true);
+  assert.match(spec.reason, /shared packager/);
+  // A workflow that does not call the packager has no use for another package's specification.
+  assert.equal(decide(['packages/noddi/**', 'packages/**'], ['packages/topofit/release.json']).run, false);
 });
 
 test('the planner reads the whole diff, not only the paths the filters matched', async () => {
