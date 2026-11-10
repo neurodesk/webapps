@@ -5,197 +5,90 @@
 // so a caller can stream a whole-brain stack without holding it in memory. OME-Zarr sources also
 // list their resolution `levels` and take `readPlane(z, level)`.
 //
-// TIFF decoding is geotiff (MIT); OME-Zarr is zarrita (MIT). Both load on first use. OME-XML,
-// ImageJ descriptions and length units are read by the shared TIFF module's parsers.
-import { isOmeDescription, micrometresPerUnit, parseImagejDescription, parseOmeDescription } from './tiff.js';
+// TIFF stacks are read through the shared greyscale stack reader (`openTiffStackPages`), which
+// owns the page, sample, OME TiffData and ImageJ rules; OME-Zarr is zarrita (MIT), loaded on
+// first use.
+import { isOmeDescription, micrometresPerUnit, openTiffStackPages, readTiffDescription } from './tiff.js';
 
 const PLANE_LIMIT_BYTES = 1024 * 1024 * 1024;
 const SLAB_LIMIT_BYTES = 512 * 1024 * 1024;
 
-const DTYPES = {
-  '1:8': 'uint8', '1:16': 'uint16', '1:32': 'uint32',
-  '2:8': 'int8', '2:16': 'int16', '2:32': 'int32',
-  '3:32': 'float32', '3:64': 'float64',
-};
-
 const naturalOrder = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 const fileName = (file) => file.webkitRelativePath || file._webkitRelativePath || file.name || '';
 
-function rational(value) {
-  if (Array.isArray(value) || ArrayBuffer.isView(value)) return value.length >= 2 && value[1] ? value[0] / value[1] : null;
-  return typeof value === 'number' ? value : null;
-}
-
-// geotiff's fromBlob needs FileReader, which workers have but Node does not; Blob.slice works in both.
-function blobSource(blob) {
-  return {
-    fileSize: blob.size,
-    async fetch(slices) {
-      return Promise.all(slices.map(({ offset, length }) => blob.slice(offset, offset + length).arrayBuffer()));
-    },
-    async close() {},
-  };
-}
-
-async function tag(image, name) {
-  const directory = image.getFileDirectory();
-  if (!directory.hasTag(name)) return undefined;
-  return directory.loadValue(name);
-}
-
-// ExtraSamples values 1 (associated) and 2 (unassociated) are alpha; 0 is an unspecified channel.
-const isAlpha = (value) => value === 1 || value === 2;
-
-async function describePage(image, name) {
-  const samples = image.getSamplesPerPixel();
-  const extra = (await tag(image, 'ExtraSamples')) ?? [];
-  const alphaCount = (Array.isArray(extra) || ArrayBuffer.isView(extra) ? [...extra] : [extra]).filter(isAlpha).length;
-  const photometric = await tag(image, 'PhotometricInterpretation');
-  if (photometric === 3) throw new Error(`${name} is a palette (indexed colour) TIFF; save the channel as greyscale.`);
-  if (samples - alphaCount !== 1) {
-    throw new Error(`${name} has ${samples} samples per pixel (${photometric === 2 ? 'RGB' : 'several channels'}); save one greyscale channel per stack.`);
+/** Opens one file with the shared reader, naming the file in a refusal. */
+async function openNamed(file) {
+  try {
+    return await openTiffStackPages(file);
+  } catch (error) {
+    if (error instanceof RangeError) throw error;
+    throw new Error(`${file.name}: ${error.message}`, { cause: error });
   }
-  const bits = image.getBitsPerSample(0);
-  const format = image.getSampleFormat(0) ?? 1;
-  const dtype = DTYPES[`${format}:${bits}`];
-  if (!dtype) throw new Error(`${name} uses ${bits}-bit samples of format ${format}, which this reader does not decode.`);
-  return { width: image.getWidth(), height: image.getHeight(), dtype, bytes: bits / 8, whiteIsZero: photometric === 0 };
-}
-
-function invertWhiteIsZero(data, dtype) {
-  const max = { uint8: 255, uint16: 65535, uint32: 4294967295 }[dtype];
-  if (max === undefined) throw new Error('A WhiteIsZero TIFF must have unsigned integer samples.');
-  for (let i = 0; i < data.length; i++) data[i] = max - data[i];
-  return data;
-}
-
-/**
- * The page (IFD) of each z plane of a single-file OME-TIFF with one channel and one time point,
- * or null for a TIFF without OME-XML. With one channel and one time point the plane index is z
- * whatever the DimensionOrder. TiffData follows the OME rules: IFD defaults to 0, and PlaneCount
- * to 1 when IFD is given, else to every page. Without TiffData the pages are the planes in order.
- * Throws, before any pixel is decoded, for planes in another file, a plane in another channel or
- * time point, a z plane mapped twice or not at all, a page mapped twice and a page the file lacks.
- */
-function omeZPages(name, ome, pageCount) {
-  if (ome?.kind !== 'ome') return null;
-  const sizeZ = ome.sizeZ;
-  if (!Number.isInteger(sizeZ) || sizeZ < 1) throw new Error(`${name} declares SizeZ="${sizeZ}"; save it again as an OME-TIFF.`);
-  if (!ome.tiffData.length) {
-    if (pageCount !== sizeZ) throw new Error(`${name} declares ${sizeZ} z plane${sizeZ === 1 ? '' : 's'} but holds ${pageCount} pages; save it again as an OME-TIFF.`);
-    return null;
-  }
-  const refuse = (why) => new Error(`${name} maps its z planes to TIFF pages in a way this reader cannot follow (${why}); save the stack as one OME-TIFF or one TIFF per plane.`);
-  if (ome.tiffData.some((entry) => entry.uuid && entry.uuid !== ome.uuid)) throw refuse('planes in another file');
-  const pages = new Array(sizeZ);
-  const used = new Set();
-  for (const entry of ome.tiffData) {
-    const integer = (key, fallback) => {
-      if (entry[key] === undefined) return fallback;
-      if (!/^\s*\d+\s*$/.test(entry[key])) throw refuse(`${key}="${entry[key]}"`);
-      return Number(entry[key]);
-    };
-    if (integer('FirstC', 0) !== 0) throw refuse(`a plane in channel ${integer('FirstC', 0) + 1}`);
-    if (integer('FirstT', 0) !== 0) throw refuse(`a plane at time point ${integer('FirstT', 0) + 1}`);
-    const ifd = integer('IFD', 0);
-    const firstZ = integer('FirstZ', 0);
-    const count = integer('PlaneCount', entry.IFD === undefined ? pageCount : 1);
-    for (let k = 0; k < count; k++) {
-      const z = firstZ + k;
-      if (z >= sizeZ) throw refuse(`z plane ${z + 1}, but its Pixels declare ${sizeZ}`);
-      if (ifd + k >= pageCount) throw refuse(`page ${ifd + k + 1}, but the file has ${pageCount}`);
-      if (pages[z] !== undefined) throw refuse(`z plane ${z + 1} twice`);
-      if (used.has(ifd + k)) throw refuse(`page ${ifd + k + 1} twice`);
-      pages[z] = ifd + k;
-      used.add(ifd + k);
-    }
-  }
-  const missing = pages.findIndex((page) => page === undefined);
-  if (missing >= 0) throw refuse(`it maps no page to z plane ${missing + 1}`);
-  return pages;
 }
 
 /**
  * Open a TIFF stack: one multi-page file, or one single-page file per plane (sorted by name).
- * A single OME-TIFF's z planes are the pages its TiffData maps. Refuses OME-TIFF folders, palette, RGB and
- * multi-channel pages, OME-TIFF with several channels or time points or a plane mapping it
- * cannot follow, and planes larger than `maxPlaneBytes`.
+ * A single file's planes are its full-resolution pages, or the pages its OME TiffData maps.
+ * Refuses OME-TIFF folders, OME metadata without Pixels, several channels or time points, an
+ * OME-TIFF whose page count is not its SizeZ when no TiffData maps them, and planes larger than
+ * `maxPlaneBytes`, before any pixel is decoded; the shared reader refuses palette, RGB and
+ * multi-channel pages and plane mappings it cannot follow.
  */
 export async function openTiffStack(files, { maxPlaneBytes = PLANE_LIMIT_BYTES } = {}) {
   const list = [...files].filter((file) => /\.tiff?$/i.test(file.name ?? ''));
   if (list.length === 0) throw new Error('Choose a .tif or .tiff file, or a folder of them.');
   list.sort((a, b) => naturalOrder(fileName(a), fileName(b)));
-  const { default: GeoTIFF } = await import('geotiff');
-  const fromBlob = (blob) => GeoTIFF.fromSource(blobSource(blob));
-  const first = await fromBlob(list[0]);
-  const firstImage = await first.getImage(0);
-  const checkSize = (page) => {
-    if (page.width * page.height * page.bytes > maxPlaneBytes) {
-      throw new Error(`A ${page.width} × ${page.height} ${page.dtype} plane needs more than ${Math.round(maxPlaneBytes / 2 ** 20)} MB; choose a coarser level.`);
-    }
-    return page;
-  };
-  let page = checkSize(await describePage(firstImage, list[0].name));
-  const pageCount = await first.getImageCount();
-  // geotiff keeps the NUL terminator of a value stored inline in its entry.
-  const description = String((await tag(firstImage, 'ImageDescription')) ?? '').replace(/\0+$/, '');
-  const resolution = [rational(await tag(firstImage, 'XResolution')), rational(await tag(firstImage, 'YResolution'))];
-  const metadata = parseOmeDescription(description) ?? parseImagejDescription(description, resolution);
-  if (metadata?.images > 1) throw new Error(`${list[0].name} holds ${metadata.images} image series; export the one to analyse as its own file.`);
-  if (metadata && (metadata.sizeC > 1 || metadata.sizeT > 1)) {
-    const time = metadata.kind === 'ome' ? 'time points' : 'frames';
-    throw new Error(`${list[0].name} holds ${metadata.sizeC} channels and ${metadata.sizeT} ${time}; export the channel to analyse as its own stack.`);
-  }
-  if (list.length > 1 && pageCount > 1) throw new Error('Choose either one multi-page TIFF or one single-page TIFF per plane, not several multi-page files.');
   if (list.length > 1) {
-    for (const [index, file] of list.entries()) {
-      const image = index === 0 ? firstImage : await (await fromBlob(file)).getImage(0);
-      const text = index === 0 ? description : String((await tag(image, 'ImageDescription')) ?? '');
-      if (isOmeDescription(text)) {
+    // Filename order would silently override an OME plane mapping; the description can be in any file.
+    for (const file of list) {
+      if (isOmeDescription(await readTiffDescription(file))) {
         throw new Error('OME-TIFF folders are not supported; export one multi-page OME-TIFF or plain TIFF planes.');
       }
     }
   }
-  if (isOmeDescription(description) && metadata?.kind !== 'ome') {
+  const first = await openNamed(list[0]);
+  const name = list[0].name;
+  if (first.width * first.height * first.bytesPerSample > maxPlaneBytes) {
+    throw new Error(`A ${first.width} × ${first.height} ${first.dtype} plane needs more than ${Math.round(maxPlaneBytes / 2 ** 20)} MB; choose a coarser level.`);
+  }
+  const { metadata } = first;
+  if (metadata.sizeC > 1 || metadata.sizeT > 1) {
+    const time = metadata.kind === 'ome' ? 'time points' : 'frames';
+    throw new Error(`${name} holds ${metadata.sizeC} channels and ${metadata.sizeT} ${time}; export the channel to analyse as its own stack.`);
+  }
+  if (list.length > 1 && first.pages > 1) throw new Error('Choose either one multi-page TIFF or one single-page TIFF per plane, not several multi-page files.');
+  if (isOmeDescription(metadata.description) && metadata.kind !== 'ome') {
     throw new Error('OME-TIFF metadata without Pixels is not supported; export a self-contained OME-TIFF.');
+  }
+  // Without TiffData an OME-TIFF's pages are its z planes in order, so the counts must agree.
+  if (metadata.kind === 'ome' && !metadata.tiffData.length && first.pages !== metadata.sizeZ) {
+    const sizeZ = metadata.sizeZ;
+    throw new Error(`${name} declares ${sizeZ} z plane${sizeZ === 1 ? '' : 's'} but holds ${first.pages} pages; save it again as an OME-TIFF.`);
   }
 
   // A plain TIFF's resolution tags are often a nominal 72 dpi, never a calibration.
-  const size = metadata?.pixelSize ?? {};
+  const size = metadata.pixelSize;
   const voxelSizeUm = { z: size.z ?? null, y: size.y ?? null, x: size.x ?? null };
-
-  // One file per plane is ordered by name; a single file's planes are the pages its OME-XML maps.
-  const pages = list.length > 1 ? null : omeZPages(list[0].name, metadata, pageCount);
-  const depth = list.length > 1 ? list.length : pages?.length ?? pageCount;
-  // The OME-XML is always on page 0, which need not be a plane (a thumbnail, say).
-  if (pages && pages[0] !== 0) page = checkSize(await describePage(await first.getImage(pages[0]), list[0].name));
-  const opened = new Map([[0, first]]);
-  async function imageAt(z) {
-    if (z < 0 || z >= depth || !Number.isInteger(z)) throw new RangeError(`Plane ${z} is outside 0-${depth - 1}.`);
-    if (list.length === 1) return { image: await first.getImage(pages ? pages[z] : z), name: list[0].name };
-    let tiff = opened.get(z);
-    if (!tiff) {
-      tiff = await fromBlob(list[z]);
-      if (await tiff.getImageCount() !== 1) throw new Error(`${list[z].name} has multiple pages; choose one single-page TIFF per plane.`);
-      opened.clear();
-      opened.set(z, tiff);
-    }
-    return { image: await tiff.getImage(0), name: list[z].name };
-  }
+  const depth = list.length > 1 ? list.length : first.pages;
+  let opened = { z: 0, stack: first };
   return {
     kind: 'tiff',
-    name: list.length > 1 ? `${list[0].name} … (${list.length} files)` : list[0].name,
-    shape: [depth, page.height, page.width],
-    dtype: page.dtype,
+    name: list.length > 1 ? `${name} … (${list.length} files)` : name,
+    shape: [depth, first.height, first.width],
+    dtype: first.dtype,
     voxelSizeUm,
     async readPlane(z) {
-      const { image, name } = await imageAt(z);
-      const current = await describePage(image, name);
-      if (current.width !== page.width || current.height !== page.height || current.dtype !== page.dtype) {
-        throw new Error(`${name} plane ${z} is ${current.width} × ${current.height} ${current.dtype}; the stack is ${page.width} × ${page.height} ${page.dtype}.`);
+      if (z < 0 || z >= depth || !Number.isInteger(z)) throw new RangeError(`Plane ${z} is outside 0-${depth - 1}.`);
+      if (list.length === 1) return first.readPage(z);
+      if (opened.z !== z) {
+        const stack = await openNamed(list[z]);
+        if (stack.pages !== 1) throw new Error(`${list[z].name} has multiple pages; choose one single-page TIFF per plane.`);
+        if (stack.width !== first.width || stack.height !== first.height || stack.dtype !== first.dtype) {
+          throw new Error(`${list[z].name} plane ${z} is ${stack.width} × ${stack.height} ${stack.dtype}; the stack is ${first.width} × ${first.height} ${first.dtype}.`);
+        }
+        opened = { z, stack };
       }
-      const [data] = await image.readRasters({ samples: [0] });
-      return current.whiteIsZero ? invertWhiteIsZero(data, current.dtype) : data;
+      return opened.stack.readPage(0);
     },
   };
 }

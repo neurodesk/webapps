@@ -223,7 +223,8 @@ function tiffDataNumber(value, fallback) {
 /**
  * The IFD of each plane, in the order of `DimensionOrder` (plane k is the k-th page of a
  * sequential file), or null when the description has no TiffData. Throws for planes in another
- * file, a mapping it cannot follow, planes no TiffData maps and IFDs the file does not have.
+ * file, a mapping it cannot follow, planes mapped twice or not at all, IFDs the file does not
+ * have and an IFD named for two planes.
  */
 function omePlaneIfds(ome, ifdCount, pageSamples) {
   const blocks = ome.tiffData.map((entry) => ({
@@ -260,12 +261,17 @@ function omePlaneIfds(ome, ifdCount, pageSamples) {
     if (block.planeCount !== null && block.planeCount !== undefined && start + count > planes) {
       throw new Error(`This OME-TIFF's TiffData maps ${start + count} planes but its Pixels declare ${planes}; save it again.`);
     }
-    for (let j = 0; j < count && start + j < planes; j++) map[start + j] = ifd + j;
+    for (let j = 0; j < count && start + j < planes; j++) {
+      if (map[start + j] !== -1) throw new Error(`This OME-TIFF's TiffData maps plane ${start + j + 1} twice.`);
+      map[start + j] = ifd + j;
+    }
   }
   const missing = map.indexOf(-1);
   if (missing >= 0) throw new Error(`This OME-TIFF's TiffData maps no page to plane ${missing + 1}.`);
   const outside = map.find((ifd) => ifd >= ifdCount);
   if (outside !== undefined) throw new Error(`This OME-TIFF's TiffData names page ${outside + 1}, but the file has ${ifdCount}.`);
+  const twice = map.find((ifd, plane) => map.indexOf(ifd) !== plane);
+  if (twice !== undefined) throw new Error(`This OME-TIFF's TiffData names page ${twice + 1} for two planes.`);
   return map;
 }
 
@@ -358,22 +364,46 @@ function baselineSpacing(image, resolution) {
   return { x, y, z: null, unit: RESOLUTION_UNITS[image.fileDirectory.getValue('ResolutionUnit') ?? 2] ?? null };
 }
 
+async function openGeoTiff(source) {
+  return source instanceof Blob ? GeoTIFF.fromSource(blobSource(source)) : fromArrayBuffer(source);
+}
+
+/** The first page's ImageDescription (NUL terminator removed), or '' when it has none. */
+async function pageDescription(image) {
+  // geotiff keeps the NUL terminator of a value stored inline in its entry.
+  return String((await tag(image, 'ImageDescription')) ?? '').replace(/\0+$/, '');
+}
+
+/**
+ * The first page's ImageDescription of a TIFF, '' when it has none, read from the page
+ * directory alone (a Blob or File range by range).
+ * @param {ArrayBuffer | Blob} source
+ */
+export async function readTiffDescription(source) {
+  return pageDescription(await (await openGeoTiff(source)).getImage(0));
+}
+
+/** A page's sample type, or a refusal naming the types the reader decodes. */
+function sampleType(image) {
+  const format = image.getSampleFormat();
+  const bits = image.getBitsPerSample();
+  const Type = TYPES[`${format}:${bits}`];
+  if (!Type) throw new Error(`TIFF sample type (format ${format}, ${bits} bits) is not 8, 16 or 32-bit integer or 32/64-bit float.`);
+  return { format, bits, Type };
+}
+
 async function openStack(source, rgb) {
-  const tiff = source instanceof Blob ? await GeoTIFF.fromSource(blobSource(source)) : await fromArrayBuffer(source);
+  const tiff = await openGeoTiff(source);
   const ifdCount = await tiff.getImageCount();
   const first = await tiff.getImage(0);
-  // geotiff keeps the NUL terminator of a value stored inline in its entry.
-  const description = String((await first.fileDirectory.loadValue('ImageDescription')) ?? '').replace(/\0+$/, '');
+  const description = await pageDescription(first);
   const ome = parseOmeDescription(description);
   // A File is read range by range, so values stored past the directory load on demand.
   const resolution = [rational(await tag(first, 'XResolution')), rational(await tag(first, 'YResolution'))];
   const imagej = ome ? null : parseImagejDescription(description, resolution);
   const layout = await pageLayout(first, Boolean(imagej), rgb);
   if (layout.refusal) throw new Error(layout.refusal);
-  const format = first.getSampleFormat();
-  const bits = first.getBitsPerSample();
-  const Type = TYPES[`${format}:${bits}`];
-  if (!Type) throw new Error(`TIFF sample type (format ${format}, ${bits} bits) is not 8, 16 or 32-bit integer or 32/64-bit float.`);
+  let { format, bits, Type } = sampleType(first);
   if (ome?.images > 1) throw new Error(`This OME-TIFF holds ${ome.images} image series; save the one you need as its own file.`);
   // The stack's pages: the OME planes' IFDs, else every full-resolution page in file order.
   let ifds = ome ? omePlaneIfds(ome, ifdCount, first.getSamplesPerPixel()) : null;
@@ -384,13 +414,51 @@ async function openStack(source, rgb) {
       if (!(await reducedResolution(image))) ifds.push(index);
     }
   }
+  // The OME-XML is always on page 0, which need not be a plane (a thumbnail, say): then the
+  // first plane's page sets the size and sample type, refused like page 0 before any decoding.
+  let plane = first;
+  if (ifds.length && ifds[0] !== 0) {
+    plane = await tiff.getImage(ifds[0]);
+    const planeLayout = await pageLayout(plane, Boolean(imagej), rgb);
+    if (planeLayout.refusal) throw new Error(`TIFF page ${ifds[0] + 1}: ${planeLayout.refusal}`);
+    ({ format, bits, Type } = sampleType(plane));
+  }
   const pages = ifds.length;
   // A plain TIFF does not say whether its pages are planes or time points.
   const metadata = ome ?? imagej ?? { kind: 'baseline', unlabelledStack: true, images: 1, sizeC: 1, sizeZ: null, sizeT: null, pixelSize: { x: null, y: null, z: null }, declaredSpacing: baselineSpacing(first, resolution), frameInterval: null, stagePosition: null };
   const declared = imagej ? Number(description.match(/^images=(\d+)\s*$/m)?.[1]) : NaN;
   if (declared && declared !== pages) throw new Error(`This ImageJ TIFF declares ${declared} images but holds ${pages} pages; save it again from ImageJ or Fiji.`);
-  const info = { width: first.getWidth(), height: first.getHeight(), pages, dtype: dtypeName(Type), bytesPerSample: Type.BYTES_PER_ELEMENT, samplesPerPixel: first.getSamplesPerPixel(), metadata: { ...metadata, description } };
-  return { tiff, first, format, bits, Type, info, ifds, imagej: Boolean(imagej) };
+  const width = plane.getWidth();
+  const height = plane.getHeight();
+  const info = { width, height, pages, dtype: dtypeName(Type), bytesPerSample: Type.BYTES_PER_ELEMENT, samplesPerPixel: plane.getSamplesPerPixel(), metadata: { ...metadata, description } };
+  /**
+   * Plane `index` (row, column order): the grey sample in the file's sample type, WhiteIsZero
+   * integers inverted, or with `rgb: 'mean'` an RGB page's mean as a Float64Array. Each page is
+   * checked against the first plane's size, sample type and layout before it is decoded.
+   */
+  async function readPage(index, { signal } = {}) {
+    signal?.throwIfAborted();
+    if (!Number.isInteger(index) || index < 0 || index >= pages) throw new RangeError(`TIFF plane ${index} is outside 0-${pages - 1}.`);
+    const ifd = ifds[index];
+    const image = ifd === 0 ? first : await tiff.getImage(ifd);
+    if (image.getWidth() !== width || image.getHeight() !== height) throw new Error(`TIFF page ${ifd + 1} is ${image.getWidth()} × ${image.getHeight()}, not ${width} × ${height} like page 1.`);
+    if (image.getSampleFormat() !== format || image.getBitsPerSample() !== bits) throw new Error(`TIFF page ${ifd + 1} has a different sample type from page 1.`);
+    const layout = await pageLayout(image, Boolean(imagej), rgb);
+    if (layout.refusal) throw new Error(`TIFF page ${ifd + 1}: ${layout.refusal}`);
+    if (layout.rgb) {
+      const [red, green, blue] = await image.readRasters({ interleave: false, samples: [0, 1, 2], signal });
+      const mean = new Float64Array(width * height);
+      for (let i = 0; i < mean.length; i++) mean[i] = (red[i] + green[i] + blue[i]) / 3;
+      return mean;
+    }
+    const [raster] = await image.readRasters({ samples: [0], interleave: false, signal });
+    if (layout.whiteIsZero) {
+      const top = 2 ** bits - 1;
+      for (let i = 0; i < raster.length; i++) raster[i] = top - raster[i];
+    }
+    return raster;
+  }
+  return { Type, info, readPage };
 }
 
 /**
@@ -405,6 +473,19 @@ export async function inspectTiffStack(source, { rgb = 'refuse' } = {}) {
 }
 
 /**
+ * A greyscale TIFF stack opened for plane-by-plane reading: what `inspectTiffStack` returns,
+ * with every refusal it makes, and `readPage(index, { signal })`, which decodes one plane (in
+ * OME plane order) as `readTiffStack` does. A Blob or File is read range by range, so only
+ * the pages read are loaded.
+ * @param {ArrayBuffer | Blob} source
+ * @param {{ rgb?: 'refuse' | 'mean' }} [options]
+ */
+export async function openTiffStackPages(source, { rgb = 'refuse' } = {}) {
+  const { info, readPage } = await openStack(source, rgb);
+  return { ...info, readPage };
+}
+
+/**
  * Reads every page of a greyscale TIFF into one typed array (page, row, column order).
  * By default the array has the file's sample type. `Type` (e.g. Float32Array) converts each
  * page straight into an array of that type, and `shared` backs it with a SharedArrayBuffer,
@@ -416,7 +497,7 @@ export async function inspectTiffStack(source, { rgb = 'refuse' } = {}) {
  */
 export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES, Type: OutputType, shared = false, rgb = 'refuse', onProgress } = {}) {
   signal?.throwIfAborted();
-  const { tiff, first, format, bits, Type, info, ifds, imagej } = await openStack(buffer, rgb);
+  const { Type, info, readPage } = await openStack(buffer, rgb);
   const { width, height, pages } = info;
   const Output = OutputType ?? Type;
   if (!SAMPLE[Output.name]) throw new Error(`Cannot read a TIFF stack into ${Output.name}.`);
@@ -425,24 +506,8 @@ export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES
   const data = new Output(shared ? new SharedArrayBuffer(bytes) : bytes / Output.BYTES_PER_ELEMENT);
   const plane = width * height;
   for (let page = 0; page < pages; page++) {
-    signal?.throwIfAborted();
-    const ifd = ifds[page];
-    const image = ifd === 0 ? first : await tiff.getImage(ifd);
-    if (image.getWidth() !== width || image.getHeight() !== height) throw new Error(`TIFF page ${ifd + 1} is ${image.getWidth()} × ${image.getHeight()}, not ${width} × ${height} like page 1.`);
-    if (image.getSampleFormat() !== format || image.getBitsPerSample() !== bits) throw new Error(`TIFF page ${ifd + 1} has a different sample type from page 1.`);
-    const layout = await pageLayout(image, imagej, rgb);
-    if (layout.refusal) throw new Error(`TIFF page ${ifd + 1}: ${layout.refusal}`);
-    if (layout.rgb) {
-      const [red, green, blue] = await image.readRasters({ interleave: false, samples: [0, 1, 2], signal });
-      for (let i = 0; i < plane; i++) data[page * plane + i] = (red[i] + green[i] + blue[i]) / 3;
-    } else {
-      const [raster] = await image.readRasters({ samples: [0], interleave: false, signal });
-      if (layout.whiteIsZero) {
-        const top = 2 ** bits - 1;
-        for (let i = 0; i < raster.length; i++) raster[i] = top - raster[i];
-      }
-      data.set(raster, page * plane);
-    }
+    // TypedArray set converts each value as element assignment does.
+    data.set(await readPage(page, { signal }), page * plane);
     onProgress?.(page + 1, pages);
   }
   return { ...info, data };

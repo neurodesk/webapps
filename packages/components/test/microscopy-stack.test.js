@@ -73,14 +73,14 @@ test('OME TiffData decides which page holds each z plane', async () => {
 
 test('OME TiffData the reader cannot follow is refused before decoding', async () => {
   const refused = async (sizeZ, tiffData, offsets, pattern, uuid) => assert.rejects(openTiffStack([omeFile(omeWith(sizeZ, tiffData, uuid), offsets)]), pattern);
-  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/>', [1, 2], /maps no page to z plane 2/);
-  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/><ome:TiffData IFD="1" FirstZ="0"/>', [1, 2], /z plane 1 twice/);
-  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/><ome:TiffData IFD="0" FirstZ="1"/>', [1, 2], /page 1 twice/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/>', [1, 2], /maps no page to plane 2\./);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/><ome:TiffData IFD="1" FirstZ="0"/>', [1, 2], /maps plane 1 twice/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/><ome:TiffData IFD="0" FirstZ="1"/>', [1, 2], /names page 1 for two planes/);
   await refused(2, '<ome:TiffData IFD="0" FirstZ="0"/><ome:TiffData IFD="5" FirstZ="1"/>', [1, 2], /page 6, but the file has 2/);
-  await refused(2, '<ome:TiffData IFD="0" FirstZ="0" PlaneCount="3"/>', [1, 2, 3], /z plane 3, but its Pixels declare 2/);
-  await refused(2, '<ome:TiffData IFD="0" FirstZ="0" FirstC="1"/>', [1, 2], /channel 2/);
-  await refused(2, '<ome:TiffData IFD="-1" FirstZ="0"/>', [1, 2], /IFD="-1"/);
-  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"><ome:UUID FileName="b.ome.tif">urn:uuid:b</ome:UUID></ome:TiffData>', [1, 2], /another file/, 'urn:uuid:a');
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0" PlaneCount="3"/>', [1, 2, 3], /maps 3 planes but its Pixels declare 2/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0" FirstC="1"/>', [1, 2], /TiffData 1 is not a valid plane mapping/);
+  await refused(2, '<ome:TiffData IFD="-1" FirstZ="0"/>', [1, 2], /TiffData 1 is not a valid plane mapping/);
+  await refused(2, '<ome:TiffData IFD="0" FirstZ="0"><ome:UUID FileName="b.ome.tif">urn:uuid:b</ome:UUID></ome:TiffData>', [1, 2], /planes in other files/, 'urn:uuid:a');
   // Without TiffData the pages are the planes in order, so their counts must agree.
   await refused(3, '', [1, 2], /declares 3 z planes but holds 2 pages/);
   await refused(1, '', [1, 2], /declares 1 z plane but holds 2 pages/);
@@ -211,7 +211,7 @@ test('extra samples drop out only when they are alpha', async () => {
   const associated = await openTiffStack([file(twoSamples([1]), 'associated.tif')]);
   assert.deepEqual([...(await associated.readPlane(0))], [10, 20]);
   // ExtraSamples 0 is an unspecified channel, not alpha: two channels.
-  await assert.rejects(openTiffStack([file(twoSamples([0]), 'two-channels.tif')]), /2 samples per pixel \(several channels\)/);
+  await assert.rejects(openTiffStack([file(twoSamples([0]), 'two-channels.tif')]), /2 samples per pixel \(multi-sample\)/);
 });
 
 test('WhiteIsZero is decided for each page', async () => {

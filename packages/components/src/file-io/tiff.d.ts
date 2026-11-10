@@ -121,6 +121,10 @@ export function parseImagejDescription(description: string | null | undefined, r
  * is read range by range, only as far as its page directories and description.
  */
 export function inspectTiffStack(source: ArrayBuffer | Blob, options?: { rgb?: 'refuse' | 'mean' }): Promise<TiffStackInfo>;
+/** `inspectTiffStack`'s result and refusals, with `readPage` decoding one plane (OME plane order) as `readTiffStack` does: the file's sample type, or a Float64Array mean with `rgb: 'mean'`. */
+export function openTiffStackPages(source: ArrayBuffer | Blob, options?: { rgb?: 'refuse' | 'mean' }): Promise<TiffStackInfo & { readPage(index: number, options?: { signal?: AbortSignal }): Promise<TiffSampleArray | Float64Array> }>;
+/** The first page's ImageDescription ('' when absent), from the page directory alone. */
+export function readTiffDescription(source: ArrayBuffer | Blob): Promise<string>;
 /**
  * Every full-resolution page of a greyscale TIFF in page (or OME plane), row, column order.
  * Reads the grey sample of grey + alpha pages, an ImageJ 8-bit palette's indices and inverted
