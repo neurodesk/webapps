@@ -14,7 +14,7 @@
 //
 // A 2D image with several channels (RGB, palette, multi-sample or one page per channel) is read
 // with `openTiffPlanes`, which keeps every sample as a plane of its own.
-import { GeoTIFF, fromArrayBuffer, fromBlob } from 'geotiff';
+import { GeoTIFF, fromArrayBuffer } from 'geotiff';
 import { InputTooLargeError, MAX_INPUT_BYTES } from './input-limits.js';
 
 const TYPES = {
@@ -330,8 +330,7 @@ async function pageLayout(image, imagej, rgb) {
   const samples = image.getSamplesPerPixel();
   const photometric = await tag(image, 'PhotometricInterpretation');
   if (rgb === 'mean' && photometric === 2 && samples >= 3) return { rgb: true, whiteIsZero: false };
-  const alpha = values(await tag(image, 'ExtraSamples')).filter((kind) => kind === 1 || kind === 2).length;
-  const intensities = samples - alpha;
+  const intensities = sampleRoles(1, samples, values(await tag(image, 'ExtraSamples'))).filter((role) => role !== 'alpha').length;
   if (photometric === 3 && !(imagej && intensities === 1 && image.getBitsPerSample() === 8)) return { refusal: 'This TIFF is a palette (indexed colour) image; save it as greyscale.' };
   if (intensities !== 1) {
     const kind = PHOTOMETRIC[photometric] ?? 'multi-sample';
@@ -515,8 +514,6 @@ export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES
 }
 
 const RGB_SAMPLES = ['red', 'green', 'blue'];
-// ExtraSamples 1 and 2 are associated and unassociated alpha; 0 is unspecified data.
-const ALPHA = new Set([1, 2]);
 
 /**
  * What each sample of a page is: red, green and blue for the first three samples of an RGB page
@@ -528,12 +525,9 @@ async function sampleKinds(image, palette) {
   const count = image.getSamplesPerPixel();
   const photometric = Number((await tag(image, 'PhotometricInterpretation')) ?? 1);
   if (photometric === 3 && palette === 'rgb') return [...RGB_SAMPLES];
-  const base = photometric === 2 && count >= 3 ? 3 : Math.min(1, count);
-  const extra = values(await tag(image, 'ExtraSamples'));
-  return Array.from({ length: count }, (_, sample) => {
-    if (sample < base) return base === 3 ? RGB_SAMPLES[sample] : 'sample 1';
-    return ALPHA.has(extra[sample - base]) ? 'alpha' : `sample ${sample + 1}`;
-  });
+  // Every layout but RGB is one base sample followed by its ExtraSamples.
+  const roles = sampleRoles(photometric === 2 && count >= 3 ? 2 : 1, count, values(await tag(image, 'ExtraSamples')));
+  return roles.map((role, sample) => (role === 'value' ? `sample ${sample + 1}` : role));
 }
 
 function splitRgb(data, count) {
@@ -826,8 +820,6 @@ export function sampleRoles(photometric, samplesPerPixel, extraSamples = []) {
   return roles;
 }
 
-const tagValue = async (image, name) => (image.fileDirectory.hasTag(name) ? image.fileDirectory.loadValue(name) : undefined);
-
 async function describePage(image) {
   const format = image.getSampleFormat() ?? 1;
   const bits = image.getBitsPerSample();
@@ -837,11 +829,11 @@ async function describePage(image) {
     samplesPerPixel: image.getSamplesPerPixel(),
     bitsPerSample: bits,
     Type: TYPES[`${format}:${bits}`] ?? null,
-    photometric: Number(await tagValue(image, 'PhotometricInterpretation') ?? 1),
-    extraSamples: Array.from(await tagValue(image, 'ExtraSamples') ?? []).map(Number),
-    // NewSubfileType bit 0 marks a reduced-resolution page, bit 2 a transparency mask.
-    reduced: Boolean(Number(await tagValue(image, 'NewSubfileType') ?? 0) & 1),
-    mask: Boolean(Number(await tagValue(image, 'NewSubfileType') ?? 0) & 4),
+    photometric: Number((await tag(image, 'PhotometricInterpretation')) ?? 1),
+    extraSamples: values(await tag(image, 'ExtraSamples')),
+    reduced: await reducedResolution(image),
+    // NewSubfileType bit 2 marks a transparency mask.
+    mask: Boolean(Number((await tag(image, 'NewSubfileType')) ?? 0) & 4),
   };
 }
 
@@ -856,12 +848,10 @@ async function describePage(image) {
  */
 export async function openTiffPages(source, { signal, maxBytes = Infinity, unequalOme = false } = {}) {
   signal?.throwIfAborted();
-  // A Blob is read in slices where the browser's FileReader exists, whole elsewhere (Node).
-  const tiff = source instanceof Blob && typeof FileReader === 'function'
-    ? await fromBlob(source, signal)
-    : await fromArrayBuffer(source instanceof Blob ? await source.arrayBuffer() : source, signal);
+  // A Blob is read range by range, only as far as geotiff asks.
+  const tiff = await openGeoTiff(source);
   const count = await tiff.getImageCount();
-  const description = await tagValue(await tiff.getImage(0), 'ImageDescription');
+  const description = await tag(await tiff.getImage(0), 'ImageDescription');
   const text = typeof description === 'string' ? description : null;
   const ome = omeXml(text) !== null;
   const pages = [];
@@ -886,11 +876,11 @@ export async function openTiffPages(source, { signal, maxBytes = Infinity, unequ
   const roles = sampleRoles(first.photometric, first.samplesPerPixel, first.extraSamples);
   if (!roles) throw new Error(`TIFF ${PHOTOMETRIC_NAMES[first.photometric] ?? `photometric ${first.photometric}`} images are not supported; save them as greyscale or RGB.`);
   if (bytes > maxBytes) throw new InputTooLargeError(bytes, maxBytes, { subject: 'The decoded TIFF stack' });
-  const resolutionUnit = Number(await tagValue(first.image, 'ResolutionUnit') ?? 2);
-  const x = rational(await tagValue(first.image, 'XResolution'));
-  const y = rational(await tagValue(first.image, 'YResolution'));
+  const resolutionUnit = Number((await tag(first.image, 'ResolutionUnit')) ?? 2);
+  const x = rational(await tag(first.image, 'XResolution'));
+  const y = rational(await tag(first.image, 'YResolution'));
   const resolution = Number.isFinite(x) && x > 0 && Number.isFinite(y) && y > 0
-    ? { x, y, unit: { 1: null, 2: 'inch', 3: 'centimeter' }[resolutionUnit] ?? null }
+    ? { x, y, unit: RESOLUTION_UNITS[resolutionUnit] ?? null }
     : null;
   return {
     /** The geotiff instance the pages come from. */
