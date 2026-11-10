@@ -113,82 +113,14 @@ fn norm_extreme(sum_squares: f64, values: impl Iterator<Item = f64> + Clone) -> 
     scale * squares.sqrt()
 }
 
-/// Complex least squares with MATLAB's measured QR rank threshold.
-/// The exported map drops imaginary coefficients, as samsrf_expand_srf does.
+/// `[ones x] \ y` in MATLAB's precision (see `lstsq`). The exported map
+/// drops imaginary coefficients, as samsrf_expand_srf does.
 pub fn fit_betas(x: &[Complex64], y: &[f64], precision: Precision) -> (f64, f64) {
-    let n = x.len() as f64;
     if x.is_empty() || x.len() != y.len() {
         return (f64::NAN, f64::NAN);
     }
-    let x: Vec<Complex64> = x
-        .iter()
-        .map(|v| Complex64::new(precision.round(v.re), precision.round(v.im)))
-        .collect();
-    let y: Vec<f64> = y.iter().map(|&v| precision.round(v)).collect();
-    let mx = x.iter().copied().sum::<Complex64>() / n;
-    let my = y.iter().sum::<f64>() / n;
-    let mut sxx = 0.0;
-    let mut sxy = Complex64::new(0.0, 0.0);
-    let mut raw_xx = 0.0;
-    let mut raw_xy = Complex64::new(0.0, 0.0);
-    for (&x, &y) in x.iter().zip(&y) {
-        sxx += (x - mx).norm_sqr();
-        sxy += (x - mx).conj() * (y - my);
-        raw_xx += x.norm_sqr();
-        raw_xy += x.conj() * y;
-    }
-    if precision == Precision::Double
-        && raw_xx.is_infinite()
-        && x.iter().all(|value| value.re.is_finite() && value.im.is_finite())
-    {
-        // At this scale MATLAB's rank tolerance exceeds the residual norm of
-        // the ones column. Solve its retained prediction column without x²
-        // overflowing, rather than letting inf/inf select a full-rank solve.
-        let scale = x.iter()
-            .map(|value| value.re.abs().max(value.im.abs()))
-            .fold(0.0, f64::max);
-        let mut denominator = 0.0;
-        let mut numerator = Complex64::new(0.0, 0.0);
-        for (&value, &observation) in x.iter().zip(&y) {
-            let scaled = value / scale;
-            denominator += scaled.norm_sqr();
-            numerator += scaled.conj() * observation;
-        }
-        return (((numerator / denominator) / scale).re, 0.0);
-    }
-    let epsilon = if precision == Precision::Single {
-        f64::from(f32::EPSILON)
-    } else {
-        f64::EPSILON
-    };
-    let ones_first = n >= raw_xx;
-    let (r11, r22) = if ones_first {
-        (n.sqrt(), sxx.sqrt())
-    } else {
-        (raw_xx.sqrt(), (n * (sxx / raw_xx)).sqrt())
-    };
-    // MATLAB's rank warnings report ten times the real-path tolerance for
-    // complex designs. The original scale cases also fit eps(norm(A,1)), but
-    // the recorded double CSS vertex 81 distinguishes the two rules: MATLAB
-    // reports 24.78495, while the spacing-based estimate gives 15.625 and
-    // incorrectly retains the baseline column (R22 = 15.81078).
-    let complex_factor = if x.iter().any(|value| value.im != 0.0) {
-        10.0
-    } else {
-        1.0
-    };
-    let tolerance = complex_factor * n.max(2.0) * epsilon * r11;
-    let (beta, baseline) = if r22 <= tolerance {
-        if ones_first {
-            (0.0, my)
-        } else {
-            ((raw_xy / raw_xx).re, 0.0)
-        }
-    } else {
-        let beta = sxy / sxx;
-        (beta.re, (my - beta * mx).re)
-    };
-    (precision.round(beta), precision.round(baseline))
+    let (beta, baseline) = crate::lstsq::regress_on_ones(x, y, precision);
+    (beta.re, baseline.re)
 }
 
 #[cfg(test)]
@@ -212,9 +144,9 @@ mod tests {
             Complex64::new(2.0, -1.0),
             Complex64::new(3.0, 0.0),
         ];
+        // The complex solution is beta = 1 + 0.5i, baseline = 3 - i.
         let (beta, baseline) = fit_betas(&x, &[3.0, 5.0, 7.0], Precision::Double);
-        assert_eq!(beta, 1.0);
-        assert_eq!(baseline, 3.0);
+        assert!((beta - 1.0).abs() < 1e-14 && (baseline - 3.0).abs() < 1e-14, "{beta} {baseline}");
     }
 
     #[test]

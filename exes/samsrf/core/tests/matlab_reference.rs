@@ -45,10 +45,11 @@ fn regression_rank_and_coefficients_match_matlab_across_scales() {
             // These synthetic observations have a nonzero intercept. A zero
             // coefficient identifies the column MATLAB rejected as deficient.
             assert_eq!(actual == 0.0, expected[index] == 0.0, "{} coefficient {index}: rank decision", case["id"]);
-            // The centered double solve on rounded inputs is not MATLAB's
-            // single QR. An independent 60-digit solve confirms the web result
-            // in the largest recorded discrepancy (13 float32 ULPs).
-            let relative = if precision == Precision::Single { 16.0 * f64::from(f32::EPSILON) } else { 1e-12 };
+            // The pivoted Householder solve in the design's class (lstsq).
+            // Measured maxima: 3.33 eps (single) and 2.00 eps (double)
+            // relative; the previous double solve reached 6.7 and 7.5 eps.
+            // qr_reference.rs gates imaginary parts and 348 designs.
+            let relative = if precision == Precision::Single { 4.0 * f64::from(f32::EPSILON) } else { 3.0 * f64::EPSILON };
             close(actual, expected[index], relative * expected[index].abs(), &format!("{} coefficient {index}", case["id"]));
         }
     }

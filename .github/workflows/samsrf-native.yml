@@ -109,6 +109,11 @@ jobs:
           cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v47_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace.json"
           cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v60_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace-v60.json"
           cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v69_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace-v69.json"
+      - name: Least-squares rank, tolerance and coefficient gates (MATLAB mldivide)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-qr-reference" packages/samsrf/validation/matlab/qr-reference.json
+          SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_REPORT="$RUNNER_TEMP/samsrf-qr-port.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_reference -- --nocapture
+          python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$RUNNER_TEMP/samsrf-qr-reference/ubuntu-24.04/compatible" "$RUNNER_TEMP/samsrf-qr-port.json" "$RUNNER_TEMP/samsrf-qr-accuracy.json"
       - name: Retain the full CSS comparison including remaining differences
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -119,6 +124,7 @@ jobs:
             ${{ runner.temp }}/samsrf-css-trace.json
             ${{ runner.temp }}/samsrf-css-trace-v60.json
             ${{ runner.temp }}/samsrf-css-trace-v69.json
+            ${{ runner.temp }}/samsrf-qr-accuracy.json
           if-no-files-found: ignore
 
   wasm-source:

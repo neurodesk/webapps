@@ -321,11 +321,10 @@ vertex quota is allowed.
 Native gates additionally cover all 14 raw optimizer cases, nine double-precision
 CF modes from identical recorded profiles, 146 real/complex regression scale
 cases and 251 polygon cases. Regression rank decisions must match exactly;
-coefficient comparisons use per-value relative tolerances (16 single-precision
-epsilon units, approximately 1.9e-6, or 1e-12 for double), never a map-wide
-scale. This allows the recorded rounding difference between MATLAB's single QR
-and the stable double solve on rounded inputs. A 60-digit independent solve
-confirmed the web result in the largest observed coefficient discrepancy.
+coefficient comparisons use per-value relative tolerances (4 single or 3
+double epsilon units), never a map-wide scale. The measured maxima are 3.33 and
+2.00 epsilon units; the earlier double solve on rounded inputs reached 6.7 and
+7.5, under gates of 16 single epsilon units and 1e-12.
 Two polygons
 (`polygon_191`, `polygon_193`) sit exactly on the inferred relative simplification
 cutoff and retain scale-dependent rounding differences; they are explicitly
@@ -337,6 +336,80 @@ reverse-correlation/CF arithmetic remain diagnostic cases. The single CSS
 parameters and scores match exactly for this recorded pipeline; beta and baseline
 retain the documented least-squares rounding tolerance. A successful source
 gate does not assert those paths, arbitrary-input parity, or a rebuilt container.
+
+## Least-squares solves
+
+`record_qr_backends.m` records MATLAB's `[ones x] \ y` (and `[x ones] \ y`)
+for 348 designs: the 146 regression scale and rank cases above, the 108
+recorded CSS trace regressions, constant and nearly constant predictions,
+imaginary parts that are subnormal or vanish in single precision, scales whose
+squares overflow or underflow, the reverse column order and 48 irregular
+designs. Each case keeps the inputs, `mldivide`'s coefficients, `qr(A,0)`'s R
+and pivot, and the rank warning with its tolerance. (`qr(A,y,0)` accepts a
+right-hand side only for sparse matrices, so Q'y is not available.)
+
+The `qr_only` dispatch ran it in seven fresh MATLAB processes per host, under
+`MKL_CBWR=COMPATIBLE` twice, `AUTO`, `SSE4_2`, `AVX2`, `AVX512` and
+`MKL_ENABLE_INSTRUCTIONS=SSE4_2`
+([run 42920119400](https://github.com/neurodesk/webapps/actions/runs/42920119400),
+recorder commit `2e0eb54fd02ba0eddddcf3bb262d6b649347ec8a`). Both runner labels
+received AMD EPYC 7763 CPUs. Every process reported `CNR branch auto` with
+LAPACK 3.9.0, and every array was identical across all fourteen processes:
+MATLAB ignores these MKL requests, so they cannot select another backend.
+Intel hosts were not recorded. `qr-reference.json` pins the archive
+(`ubuntu-22.04/` and `ubuntu-24.04/`, one directory per request, with
+`compare-qr-backends.mjs`'s report). The port is gated against
+`ubuntu-24.04/compatible`.
+
+`qr_reference.rs` requires, for all 348 cases, MATLAB's rank and, for the 89
+rank warnings, its printed tolerance; a real result where MATLAB's is real; zero
+coefficients for dropped columns; and |port - MATLAB|, real and imaginary parts
+together, within the first-order least-squares rounding bound
+`eps * ||row of R^-1|| * (||A|| ||b|| + kappa ||r||)`. The largest measured
+ratio is 0.93 (`random_double_9`). It also requires at least the measured
+number of bit-identical cases: 48 real and 10 complex single, 43 real and 6
+complex double (107 of 348; the previous double solve matched 18).
+`qr-accuracy.py` reports each coefficient's ULP distance and its error against
+the exact rational solution of the same rounded inputs:
+
+| Family (cases) | Bit-identical before → after | Max real-part ULP before → after |
+| --- | --- | --- |
+| Regression scale, single (33) | 6 → 17 | 12 → 2 |
+| Regression scale, double (33) | 0 → 5 | 8 → 3 |
+| Rank boundary, single (40) | 2 → 10 | 12 → 5 |
+| Rank boundary, double (40) | 0 → 11 | 14 → 3 |
+| CSS traces, single (54) | 2 → 22 | 128 → 33 (excluding vertices 47 and 58's zero baselines) |
+| CSS traces, double (54) | 0 → 21 | 293 → 32; vertex 47's baseline had the wrong sign and is now exact |
+| Constant and extreme scales, single (12) | 3 → 9 | 7 → 1 |
+| Constant and extreme scales, double (12) | 1 → 12 | 6 → 0 |
+| Nearly constant, single (5) | 0 → 3 | 351 → 1 |
+| Nearly constant, double (5) | 0 → 0 | 4.4e11 → 187 |
+| Imaginary underflow (6) and ones last (6) | 0 → 4 | 6 → 2 |
+| Irregular, single (24) | 0 → 5 | 266 → 1,011 |
+| Irregular, double (24) | 0 → 0 | 1,702 → 1,684 |
+
+"Before" is the previous solve; it had no imaginary parts and no ones-last
+order, so those columns compare real parts of ones-first designs only.
+Units are the design class's ULPs of the real part, which overstate small
+real parts of complex coefficients; the bound above is the gate. The
+remaining differences come from MKL's kernels. The Householder steps follow
+reference LAPACK; only the reflector inner products follow a measured order:
+eight accumulators over blocks of eight for real designs, two accumulators for
+complex single and sequential for complex double, each adding the leading
+element last. That order was chosen among sequential, 2-, 4-, 8-, 16- and
+32-lane, fused multiply-add and split complex accumulations by the number of
+bit-identical cases; it is a fit to this host, not MKL's documented algorithm.
+`qr(A,0)`'s R12 matches less often than `mldivide`'s coefficients do, so the
+separate factorisation is not evidence of `mldivide`'s internal one.
+The zero-based single CSS vertices 47 and 58 have exact zero baselines in
+MATLAB, where cancellation of the observation sum gives the port about 4e-9
+(within the bound). Other inputs, CPUs or MATLAB releases may round differently.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-qr" packages/samsrf/validation/matlab/qr-reference.json
+SAMSRF_QR_REFERENCE_DIR="$TMPDIR/samsrf-qr" SAMSRF_QR_REPORT="$TMPDIR/qr-port.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_reference -- --nocapture
+python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$TMPDIR/samsrf-qr/ubuntu-24.04/compatible" "$TMPDIR/qr-port.json" "$TMPDIR/qr-accuracy.json"
+```
 
 ## Extreme CSS scales and regression rank
 
@@ -387,8 +460,10 @@ whose QR diagonal is 15.81078. The corrected rule passes the original 146
 scale cases and the newly recorded pipeline regression.
 The factor is measured directly for double precision. The same factor is used
 for single precision, whose recorded cases agree but do not distinguish the
-two rules. A separate native gate checks the overflowing design's tiny
-amplitude against MATLAB within eight ULP, even though its final map is rejected.
+two rules; the least-squares recording below confirms it in single precision.
+Separate native gates require vertex 80's coefficients and the overflowing
+design's tiny amplitude to equal MATLAB's bit for bit, even though the latter's
+final map is rejected.
 
 The required CSS replay checks all 96 vertices' zero and nonfinite decisions.
 At vertices 46, 59, 68, 80 and 87 it also requires exact parameters, noise ceilings and
