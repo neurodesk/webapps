@@ -111,7 +111,7 @@ Categories may contain a single app. Cross-list substantial tasks and scientific
 | lesion-mapping | Lesion Mapping | CALMaR, SYNcro, Disconnectome |
 | quantitative-mri | Quantitative MRI | QSMbly, Easy MP2RAGE T1 Map, Carotid Flow |
 | diffusion-imaging | Diffusion & Tractography | dwi2trx, Disconnectome, NODDI, Degibbs, Dwidenoise, SDC, DWI Correct, HMC |
-| registration | Registration & Normalization | SYNcro, EdgeReg, Greedy, ANTs, FireANTs, elastix |
+| registration | Registration & Normalization | SYNcro, EdgeReg, Greedy, ANTs, FireANTs, elastix, Stitching, Light-sheet atlas |
 | reconstruction | Super-resolution & Synthesis | SynthSR, NeSVoR |
 | surfaces | Surfaces & Meshes | SurfAnnotate, Brain2Print, TopoFit |
 | preprocessing | Preprocessing | NiiMath, Brain extraction, fastprep, Degibbs, N4, Dwidenoise, SDC, ME-ICA, DWI Correct, HMC, ANTs DenoiseImage, Deconvolution |

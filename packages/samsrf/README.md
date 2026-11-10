@@ -417,8 +417,13 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   rounding differences, and some double-precision weak fits still differ.
   Double CSS norms now retain their scale when squared predictions underflow
   or overflow; large regressors also avoid overflow in their coefficient solve.
+  If a partial double dot sum overflows, the correlation recomputes that
+  component with scaled inputs, restoring the scale before normalization so
+  genuinely overflowing dots retain MATLAB's invalid-objective decision.
+  This scaling rounds terms and does not reproduce MATLAB's blocked BLAS
+  accumulation order on arbitrary inputs; the validation README states its limits.
   The recorded 96-vertex double pipeline has matching zero/nonfinite decisions,
-  with focused value gates at vertices 46, 80 and 87 (zero-based). Other parameter
+  with focused value gates at vertices 46, 59, 68, 80 and 87 (zero-based). Other parameter
   differences remain listed by `validation/matlab/compare-css.mjs`.
   This option does not imply arbitrary-input bit parity.
 - **Maps outside the ROI.** `samsrf_compress_srf` keeps the ROI's columns and

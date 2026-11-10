@@ -14,8 +14,10 @@ test('Docker images become the Docker Hub tag that must exist', () => {
 test('every link a Standalone dialog offers is checked, with where the catalog names it', () => {
   const links = standaloneLinks(catalog);
   const where = (url) => links.get(url) ?? [];
-  for (const download of [...catalog.suite.downloads, catalog.suite.models, ...catalog.suite.models.parts]) {
-    assert.ok(links.has(download.url), download.url);
+  for (const suite of Object.values(catalog.suites)) {
+    for (const download of [...suite.downloads, suite.models, ...suite.models.parts]) {
+      assert.ok(links.has(download.url), download.url);
+    }
   }
   for (const [id, app] of Object.entries(catalog.apps)) {
     for (const download of app.downloads) {

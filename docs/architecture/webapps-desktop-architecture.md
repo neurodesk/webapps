@@ -2,7 +2,7 @@
 
 ## Distributions
 
-One Electron application contains all 24 webapps and their complete runtime assets. The supported desktop targets are macOS ARM64, Linux x64 and Windows x64. Each release ships one archive per platform plus one platform-independent model pack, after the app's available upstream Neurodesk containers. The models are byte-identical on every platform, so publishing them once instead of four times removes about 6 GB from each release.
+Each catalogue ships one Electron application that contains the webapps its host serves and their complete runtime assets ([catalogue sites](catalogue-sites.md#desktop-suites)). The supported desktop targets are macOS ARM64, Linux x64 and Windows x64. Each release ships one archive per platform plus one platform-independent model pack, after the app's available upstream Neurodesk containers. The models are byte-identical on every platform, so publishing them once instead of four times removes about 6 GB from each release.
 
 | Distribution | Execution profile |
 | --- | --- |
@@ -11,7 +11,7 @@ One Electron application contains all 24 webapps and their complete runtime asse
 | Apptainer SIF | The same Linux suite with its system libraries, Xvfb and an init process; graphical HPC use and JSON automation jobs |
 | Existing native executables | Separate Greedy, SynthSR, SynthSeg and SYNcro releases on the platforms listed in the catalog |
 
-The suite runs the browser's compiled WebAssembly, WebGPU and Python pipelines. It does not depend on the separately published native executables. `assemble.mjs --app ID[,ID...] --out DIRECTORY` can generate a subset from the same registry and asset lock; the published release is the complete suite.
+The suite runs the browser's compiled WebAssembly, WebGPU and Python pipelines. It does not depend on the separately published native executables. `assemble.mjs --catalog ID --app ID[,ID...] --out DIRECTORY` can generate a subset of a catalogue's apps from the same registry and asset lock; the published release is the complete suite of each catalogue.
 
 ## Cold-start offline operation
 
@@ -25,7 +25,7 @@ The renderer uses Electron's sandbox with context isolation and no Node integrat
 
 `without-models.mjs` derives the shipped platform bundle from the verified full bundle. It removes every locked model and matching site copy, including MuscleMap's split model. The manifest retains exact source URLs, hashes and sizes. Local model pieces are reconstructed from their pinned complete model.
 
-`models-pack.mjs` writes those same models into `webapps-VERSION-models.tar.gz`. Each entry is named after the SHA-256 of its contents, which is the layout of the model cache the application already keeps. Split model files stay out of the pack because the application derives them from their pinned parent at runtime.
+`models-pack.mjs` writes those same models into `RELEASE-VERSION-models.tar.gz`, `RELEASE` being the catalogue's `desktop.release`. Each entry is named after the SHA-256 of its contents, which is the layout of the model cache the application already keeps. Split model files stay out of the pack because the application derives them from their pinned parent at runtime.
 
 The main process resolves a model from the pack directory first, then the cache, then the network. `NEURODESK_MODELS_DIR` names the pack directory and must be an absolute path. A pack file is served in place after its size and checksum match, so a read-only pack can be shared between users and bind-mounted into HPC jobs. Nothing is ever written into the pack. Without a pack, the main process verifies downloaded model bytes before serving them, caches them, and reuses them on later runs. Concurrent requests share one download. Corrupt downloads are rejected and retried on the next request.
 
@@ -57,8 +57,8 @@ Upstream Neurodesk containers are optional alternatives. Docker pulls use publis
 
 Every app must have an executable offline workflow test. Unknown workflows fail. New apps automatically enter the full hosted-CI workflow list; the existing hardware exceptions are explicit and documented. App authors must declare new assets and exercise the scientific stages they add. The host records missing and external requests as test failures.
 
-`pnpm release` versions individual apps without adding a desktop release. The `standalone` workflow builds and publishes the complete Electron and HPC suite only on its daily 03:23 UTC cron schedule. It includes all apps from the default branch commit selected for that run. The bundle job selects one UTC date, and every job uses it to stamp the desktop version as `MAJOR.MINOR.YYYYMMDD`. Explicit desktop changesets still control the committed release series.
+`pnpm release` versions individual apps without adding a desktop release. The `standalone` workflow builds and publishes one Electron suite per catalogue, and the primary catalogue's HPC image, only on its daily 03:23 UTC cron schedule. Each suite includes its catalogue's apps from the default branch commit selected for that run. The bundle job selects one UTC date, and every job uses it to stamp the desktop version as `MAJOR.MINOR.YYYYMMDD`. Explicit desktop changesets still control the committed release series.
 
-Web releases and deployments do not wait for the desktop suite. The published suite records the app versions it contains, which can trail web releases until the next daily build. Import its `standalone-catalog.json` into `registry/standalone.json` to update website download links. The generator, catalog validation, offline tests and publication checks continue to require desktop coverage for every app.
+Web releases and deployments do not wait for the desktop suite. The published suite records the app versions it contains, which can trail web releases until the next daily build. Import its `standalone-catalog.json` into `registry/standalone.json` (`suites.<catalogue>`) to update that catalogue's download link. The generator, catalog validation, offline tests and publication checks continue to require desktop coverage for every app.
 
 For installation and scheduler examples, read [the packaged user guide](../../packages/desktop/STANDALONE.md).

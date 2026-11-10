@@ -8,9 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import YAML from 'yaml';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
+import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { EMBEDDED_VERSION_SITES } from '../scripts/lib/app-versions.mjs';
 import { nativeReleases, portableSpecs, portableSpecsAt } from '../scripts/lib/native-releases.mjs';
-import { applyCatalogUpdate, catalogReleases, catalogUpdate, checkReceipt, checkUpdateAssets, parseReleases, releaseFromTag, unlistedReleases } from '../scripts/lib/standalone-import.mjs';
+import { applyCatalogUpdate, catalogReleases, catalogUpdate, checkReceipt, checkUpdateAssets, parseReleases, releaseFromTag, suiteReleases as registrySuiteReleases, unlistedReleases } from '../scripts/lib/standalone-import.mjs';
 
 const CATALOG_DISPATCH = 'gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"';
 
@@ -285,28 +286,41 @@ function suiteReleases(version = '0.28.20261014') {
     },
     fetchText: async (url) => {
       assert.equal(url, catalogAsset.browser_download_url);
-      return JSON.stringify({ apps: {}, suite });
+      return JSON.stringify({ apps: {}, suites: { neuro: suite } });
     },
   };
 }
 
-test('a released desktop suite replaces the catalog suite entry, never with an older one', async () => {
+const suites = new Map([['webapps', 'neuro'], ['msk-webapps', 'msk']]);
+
+test('a released desktop suite replaces its catalogue suite entry, never with an older one', async () => {
   const { suite, releases, fetchText } = suiteReleases();
   const fetchRelease = async (tag) => releases[tag];
-  const catalog = { apps: { tool: { downloads: [] } }, suite: { version: '0.10.20260918', downloads: [] } };
-  const changes = await catalogUpdate(catalog, parseReleases(['webapps@0.28.20261014']), { fetchRelease, fetchText, nativeAt: () => new Map() });
-  assert.deepEqual(changes, [{ id: 'webapps', version: '0.28.20261014', suite }]);
+  const msk = { version: '0.30.20261020', downloads: [] };
+  const catalog = { apps: { tool: { downloads: [] } }, suites: { neuro: { version: '0.10.20260918', downloads: [] }, msk } };
+  const changes = await catalogUpdate(catalog, parseReleases(['webapps@0.28.20261014']), { fetchRelease, fetchText, nativeAt: () => new Map(), suites });
+  assert.deepEqual(changes, [{ id: 'webapps', version: '0.28.20261014', catalog: 'neuro', suite }]);
   await checkUpdateAssets(changes, fetchRelease);
   applyCatalogUpdate(catalog, changes);
-  assert.deepEqual(catalog.suite, suite);
+  assert.deepEqual(catalog.suites, { neuro: suite, msk });
   const older = suiteReleases('0.27.20261012');
-  applyCatalogUpdate(catalog, [{ id: 'webapps', version: '0.27.20261012', suite: older.suite }]);
-  assert.equal(catalog.suite.version, '0.28.20261014');
+  applyCatalogUpdate(catalog, [{ id: 'webapps', version: '0.27.20261012', catalog: 'neuro', suite: older.suite }]);
+  assert.equal(catalog.suites.neuro.version, '0.28.20261014');
   assert.deepEqual(releaseFromTag('webapps-v0.28.20261014'), { id: 'webapps', version: '0.28.20261014' });
+  const first = { apps: {} };
+  applyCatalogUpdate(first, [{ id: 'msk-webapps', version: '0.31.20261021', catalog: 'msk', suite: msk }]);
+  assert.deepEqual(first.suites, { msk });
+  assert.deepEqual(registrySuiteReleases(await loadAppsRegistry()), new Map([['webapps', 'neuro'], ['msk-webapps', 'msk'], ['microscopy-webapps', 'microscopy'], ['preclinical-webapps', 'preclinical']]));
+});
+
+test('a suite release is read for its own catalogue only', async () => {
+  const { releases, fetchText } = suiteReleases();
+  const update = catalogUpdate({ apps: {} }, parseReleases(['webapps@0.28.20261014']), { fetchRelease: async (tag) => releases[tag], fetchText, nativeAt: () => new Map(), suites: new Map([['webapps', 'msk']]) });
+  await assert.rejects(update, /webapps: release webapps-v0\.28\.20261014 describes msk suite undefined/);
 });
 
 test('a suite entry must match its release and every file it lists', async () => {
-  const update = (releases, fetchText) => catalogUpdate({ apps: {} }, parseReleases(['webapps@0.28.20261014']), { fetchRelease: async (tag) => releases[tag], fetchText, nativeAt: () => new Map() });
+  const update = (releases, fetchText) => catalogUpdate({ apps: {} }, parseReleases(['webapps@0.28.20261014']), { fetchRelease: async (tag) => releases[tag], fetchText, nativeAt: () => new Map(), suites });
   const draft = suiteReleases();
   draft.releases['webapps-v0.28.20261014'].draft = true;
   await assert.rejects(update(draft.releases, draft.fetchText), /not released yet/);
@@ -314,7 +328,7 @@ test('a suite entry must match its release and every file it lists', async () =>
   unlisted.releases['webapps-v0.28.20261014'].assets.pop();
   await assert.rejects(update(unlisted.releases, unlisted.fetchText), /no standalone-catalog\.json/);
   const mislabelled = suiteReleases();
-  await assert.rejects(update(mislabelled.releases, async () => JSON.stringify({ suite: { ...mislabelled.suite, version: '0.27.20261012' } })), /describes suite 0\.27\.20261012/);
+  await assert.rejects(update(mislabelled.releases, async () => JSON.stringify({ suites: { neuro: { ...mislabelled.suite, version: '0.27.20261012' } } })), /describes neuro suite 0\.27\.20261012/);
   const reuploaded = suiteReleases();
   reuploaded.releases['webapps-v0.27.20261012'].assets[1].digest = `sha256:${'e'.repeat(64)}`;
   await assert.rejects(update(reuploaded.releases, reuploaded.fetchText), /part01: release webapps-v0\.27\.20261012 does not serve the bytes/);
@@ -331,7 +345,8 @@ test('the nightly suite release announces itself to the catalog', async () => {
   const release = steps.findIndex((run) => run.includes('node scripts/desktop/publish.mjs'));
   const announce = steps.findIndex((run) => run.includes(CATALOG_DISPATCH));
   assert.ok(release >= 0 && announce > release, 'the suite is announced after it is published');
-  assert.match(steps[announce], /RELEASE="webapps@\$\(node -p "require\('\.\/packages\/desktop\/package\.json'\)\.version"\)"/);
+  assert.match(steps[announce], /RELEASE="\$\{SUITE_RELEASE\}@\$\(node -p "require\('\.\/packages\/desktop\/package\.json'\)\.version"\)"/);
+  assert.equal(publish.steps[announce].env.SUITE_RELEASE, '${{ matrix.suite.release }}');
 });
 
 test('a release.json from before exes/node-cli lists its targets without install commands', async () => {

@@ -1,6 +1,6 @@
 // Compute the Standalone catalog changes for released native archives, without writing the catalog.
 // Usage: node scripts/catalog-update.mjs --out update.json (app@VERSION ... | --tag APP-vVERSION | --missing)
-// webapps@VERSION (tag webapps-vVERSION) is the nightly desktop suite.
+// <release>@VERSION (tag <release>-vVERSION) is a catalogue's nightly desktop suite, named by `desktop.release`.
 // --tag serves the release "released" event: a release without native archives yet is skipped, because
 // its native workflow announces it again once the archives are attached.
 // --missing serves the schedule: each app's newest release whose archives the catalog does not link yet. One
@@ -8,11 +8,13 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { nativeReleases, portableSpecs, portableSpecsAt } from './lib/native-releases.mjs';
-import { SUITE_ID, catalogUpdate, parseReleases, releaseFromTag, releaseSources, unlistedReleases } from './lib/standalone-import.mjs';
+import { loadAppsRegistry } from './lib/apps-registry.mjs';
+import { catalogUpdate, parseReleases, releaseFromTag, releaseSources, suiteReleases, unlistedReleases } from './lib/standalone-import.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, tag: { type: 'string' }, missing: { type: 'boolean' } } });
 if (!values.out) throw new Error('--out is required');
 const catalog = JSON.parse(await readFile(new URL('../registry/standalone.json', import.meta.url), 'utf8'));
+const suites = suiteReleases(await loadAppsRegistry());
 const headers = { accept: 'application/vnd.github+json' };
 if (process.env.GH_TOKEN) headers.authorization = `Bearer ${process.env.GH_TOKEN}`;
 
@@ -30,7 +32,7 @@ async function fetchText(url) {
 
 const nativeAt = (tag) => nativeReleases(portableSpecsAt(`refs/tags/${tag}`));
 let releases = parseReleases(positionals);
-if (values.tag && releaseFromTag(values.tag)?.id === SUITE_ID) {
+if (values.tag && suites.has(releaseFromTag(values.tag)?.id)) {
   releases = [releaseFromTag(values.tag)];
 } else if (values.tag) {
   const release = releaseFromTag(values.tag);
@@ -60,13 +62,13 @@ if (values.missing) {
   update = [];
   for (const release of unlistedReleases(catalog, await allReleases(), nativeReleases(await portableSpecs()))) {
     try {
-      update.push(...await catalogUpdate(catalog, [release], { fetchRelease, fetchText, nativeAt }));
+      update.push(...await catalogUpdate(catalog, [release], { fetchRelease, fetchText, nativeAt, suites }));
     } catch (error) {
       console.log(`::warning::${release.id}@${release.version} not published: ${error.message}`);
     }
   }
 } else {
-  update = await catalogUpdate(catalog, releases, { fetchRelease, fetchText, nativeAt });
+  update = await catalogUpdate(catalog, releases, { fetchRelease, fetchText, nativeAt, suites });
 }
 for (const { id, version, downloads, suite } of update) console.log(`${id}@${version}: ${(downloads ?? suite.downloads).length} verified downloads`);
 await writeFile(values.out, `${JSON.stringify(update, null, 2)}\n`);

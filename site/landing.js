@@ -1,29 +1,5 @@
 import { initAnalytics } from './analytics.js';
 
-// Resolve the suite separately from the repository's individual app releases.
-// Keep the release listing usable if GitHub is unavailable or rate-limits us.
-async function updateStandaloneLink() {
-  const link = document.querySelector('.standalone-link');
-  if (!link) return;
-  try {
-    for (let page = 1; ; page++) {
-      const response = await fetch(`https://api.github.com/repos/neurodesk/webapps/releases?per_page=100&page=${page}`);
-      if (!response.ok) return;
-      const releases = await response.json();
-      const suite = releases.find(release => !release.draft && !release.prerelease && /^webapps-v\d+\.\d+\.\d{8}$/.test(release.tag_name));
-      if (suite) {
-        link.href = `https://github.com/neurodesk/webapps/releases/tag/${suite.tag_name}`;
-        return;
-      }
-      if (releases.length < 100) return;
-    }
-  } catch {
-    // The ordinary link remains available offline or when the API fails.
-  }
-}
-
-updateStandaloneLink();
-
 const measurementId = document.querySelector('meta[name="neurodesk-ga4-measurement-id"]')?.content;
 if (measurementId) initAnalytics(measurementId);
 

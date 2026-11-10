@@ -1,5 +1,11 @@
 # @neurodesk/samsrf
 
+## 0.3.20261110
+
+### Patch Changes
+
+- Recover finite double CSS dot products after intermediate overflow, restoring the recorded optimizer paths at two more vertices. Pin expanded MATLAB diagnostics and require their objective decisions and focused WebAssembly map comparisons; remaining CSS differences stay explicit.
+
 ## 0.3.20261109
 
 ## 0.3.20261108

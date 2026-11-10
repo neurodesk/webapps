@@ -16,6 +16,8 @@ site:
       more_apps: More SciGet web apps
   # Every app has one home catalogue (its `catalog:`); `also_in:` lists other
   # catalogues whose hosts serve a copy. Handoff menus list the apps of one host.
+  # `desktop:` names each catalogue's offline suite: its Electron identity and
+  # its GitHub release (tag `<release>-v<version>`, archives `<release>-<version>-*`).
   catalogs:
     - id: neuro
       host: webapps.neurodesk.org
@@ -28,6 +30,11 @@ site:
         logo: neurodesk-logo.svg
         home: https://neurodesk.org/
         more_apps: More Neurodesk web apps
+      desktop:
+        product_name: Neurodesk Webapps
+        app_id: org.neurodesk.webapps
+        release: webapps
+        executable: neurodesk-webapps
     - id: msk
       host: mskapps.sciget.org
       hosting: worker
@@ -39,6 +46,11 @@ site:
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
         more_apps: More MSK web apps
+      desktop:
+        product_name: MSK Webapps
+        app_id: org.sciget.msk
+        release: msk-webapps
+        executable: msk-webapps
     - id: microscopy
       host: microscopyapps.sciget.org
       hosting: worker
@@ -50,6 +62,11 @@ site:
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
         more_apps: More microscopy web apps
+      desktop:
+        product_name: Microscopy Webapps
+        app_id: org.sciget.microscopy
+        release: microscopy-webapps
+        executable: microscopy-webapps
     - id: preclinical
       host: preclinicalapps.sciget.org
       hosting: worker
@@ -61,6 +78,11 @@ site:
         logo: sciget-logo.svg
         home: https://webapps.sciget.org/
         more_apps: More preclinical web apps
+      desktop:
+        product_name: Preclinical Webapps
+        app_id: org.sciget.preclinical
+        release: preclinical-webapps
+        executable: preclinical-webapps
   analytics:
     measurement_id: G-4Z9774J59Y
     period_days: 30
@@ -1443,6 +1465,32 @@ apps:
     shell: imaging-workspace
     handoff: none
     app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: lightsheet-atlas
+    catalog: microscopy
+    path: lightsheet-atlas
+    title: Light-sheet atlas
+    description: Map cleared mouse brains to the Allen atlas; count cells.
+    categories: [registration]
+    keywords: [light-sheet, cleared brain, mouse, Allen CCFv3, atlas registration, cell counting, cellfinder, brainreg, BrainGlobe, microscopy]
+    anatomy: [brain]
+    modalities: [microscopy]
+    inputs: [tiff, ome-zarr]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0 AND BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
     ci:
       toolchains: [node]
       shared_runtime: false

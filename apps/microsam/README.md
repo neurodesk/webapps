@@ -110,5 +110,3 @@ The annotation is pinned on Hugging Face beside the example (`microsam/validatio
   runs on the CPU in about 6 s for the example.
 - Mask input from the previous prediction (micro-sam's `segment_from_points` does not pass one either).
 - Editing accepted masks by hand; the shared `nd-mask-editor` needs a NiiVue viewer.
-- The TIFF reader is app-local; it should move to `@neurodesk/webapp-components/file-io/tiff`
-  once that module reads 2D multi-sample pages.
