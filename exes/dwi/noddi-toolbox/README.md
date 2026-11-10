@@ -57,9 +57,9 @@ The source is `NODDI_toolbox_v1.05.zip` from NITRC, SHA-256
   decodes di and diso from their square roots, so it keeps its own copy of these terms at the
   decoded values, as the toolbox evaluates them.
 - **Tensor fit.** `FitLinearDT` takes `pinv(X) * log(E / S0)`. The port computes the same
-  minimum-norm solution from the eigendecomposition of XᵀX (Jacobi), dropping singular values
-  at or below `pinv`'s tolerance, so a rank-deficient design (for example, only axial samples
-  left positive) still gives a start. The fibre direction is the eigenvector of the
+  minimum-norm solution from an SVD of X itself (one-sided Jacobi), dropping singular values
+  at or below `pinv`'s tolerance, so a rank-deficient design (for example, only axial or only
+  oblique samples left positive) still gives the minimum-norm start. The fibre direction is the eigenvector of the
   eigenvalue largest in magnitude, and its sign is `dwi-tensor`'s convention. The model depends
   on the direction only through cos²; the starting angles depend on the sign.
 - **Input checks.** The protocol needs a b0 volume and a non-zero b-vector for every other
@@ -100,16 +100,18 @@ build's.
 
 | Map | Native median | WASM median | 95th percentile | Max (native, WASM) |
 | --- | --- | --- | --- | --- |
-| ICVF | 3.27e-6 | 3.28e-6 | 1.8e-5 | 0.104, 0.104 |
-| ISOVF | 3.41e-6 | 3.38e-6 | 9.5e-6 | 0.088, 0.089 |
+| ICVF | 3.25e-6 | 3.28e-6 | 1.8e-5 | 0.104, 0.104 |
+| ISOVF | 3.39e-6 | 3.39e-6 | 9.5e-6 | 0.103, 0.110 |
 | ODI | 3.96e-7 | 3.95e-7 | 1.5e-6 | 0.990, 0.990 |
 
-In 269 voxels, a map differs by more than 0.01. In 261 of them, the toolbox reached a higher
+In 260 voxels of the native build, a map differs by more than 0.01. In 251 of them, the toolbox reached a higher
 likelihood. Most of these voxels start the descent with fiso or ficvf at 0. The encoding
 `asin(√f)` has zero slope there, and Octave's SQP leaves that point more often than L-BFGS-B.
 
 `tests/fixture.rs` and `packages/noddi/test/toolbox.test.js` fit 12 gate voxels without a
 download (`tests/fixtures/voxels.json`, `tools/fixture.py`; the inputs and maps are CC0). They
-hold the native port and the WASM to the toolbox within 1e-3.
+hold the native port to the toolbox within 1e-3 on all twelve, and the WASM on eleven: voxel
+(19, 59, 5) starts at fiso = 0, and there the WASM's last-bit math differences reach another
+optimum.
 
 The WASM fit takes about 15 ms per voxel on one thread. The toolbox in Octave took 2.8 s.

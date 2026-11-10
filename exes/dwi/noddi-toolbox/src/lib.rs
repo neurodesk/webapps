@@ -458,7 +458,7 @@ where
 /// The toolbox stops fmincon at TolFun 1e-6, absolute on a log-likelihood of 1e5 to 1e6.
 /// L-BFGS-B's ftol is relative, and scipy's default (2.2e-9) stopped it short of the toolbox's
 /// optimum in 1548 of the 13327 WM gate voxels. With ftol 0 each stage runs until its line
-/// search cannot lower the objective; 269 voxels then differ by more than 0.01, and on the
+/// search cannot lower the objective; 260 voxels then differ by more than 0.01, and on the
 /// gate no stage reached this iteration limit.
 const MAX_ITERATIONS: usize = 1000;
 
@@ -471,29 +471,24 @@ fn linear_tensor(
     signal: &[f64],
 ) -> Option<([f64; 3], f64)> {
     let s0 = b0.iter().map(|&i| signal[i]).sum::<f64>() / b0.len() as f64;
-    // The normal equations of the six tensor elements on log(E / S0), solved as pinv(X) * y.
-    let mut normal = [[0.0; 6]; 6];
-    let mut rhs = [0.0; 6];
-    for &m in kept {
-        let g = protocol.dirs[m];
-        let b = protocol.b[m];
-        let row = [
-            -b * g[0] * g[0],
-            -2.0 * b * g[0] * g[1],
-            -2.0 * b * g[0] * g[2],
-            -b * g[1] * g[1],
-            -2.0 * b * g[1] * g[2],
-            -b * g[2] * g[2],
-        ];
-        let y = (signal[m] / s0).ln();
-        for r in 0..6 {
-            rhs[r] += row[r] * y;
-            for c in 0..6 {
-                normal[r][c] += row[r] * row[c];
-            }
-        }
-    }
-    let d = pinv_solve(normal, rhs, kept.len());
+    // The six tensor elements on log(E / S0), solved as pinv(X) * y.
+    let design: Vec<[f64; 6]> = kept
+        .iter()
+        .map(|&m| {
+            let g = protocol.dirs[m];
+            let b = protocol.b[m];
+            [
+                -b * g[0] * g[0],
+                -2.0 * b * g[0] * g[1],
+                -2.0 * b * g[0] * g[2],
+                -b * g[1] * g[1],
+                -2.0 * b * g[1] * g[2],
+                -b * g[2] * g[2],
+            ]
+        })
+        .collect();
+    let y: Vec<f64> = kept.iter().map(|&m| (signal[m] / s0).ln()).collect();
+    let d = pinv_solve(&design, &y);
     let (values, vectors) =
         dwi_tensor::eigen_symmetric([[d[0], d[1], d[2]], [d[1], d[3], d[4]], [d[2], d[4], d[5]]]);
     let largest = (0..3).max_by(|&i, &j| values[i].abs().total_cmp(&values[j].abs()))?;
@@ -503,76 +498,62 @@ fn linear_tensor(
         .then_some((vectors[largest], s0))
 }
 
-/// `pinv(X) * y` from the normal equations `normal = XᵀX`, `rhs = Xᵀy` of an `rows` × 6
-/// design X: the minimum-norm least-squares solution. The singular values of X are the square
-/// roots of the eigenvalues of XᵀX; as MATLAB's `pinv`, those at or below
-/// max(size(X)) · eps · the largest are dropped, so a rank-deficient design still has a solution.
-fn pinv_solve(normal: [[f64; 6]; 6], rhs: [f64; 6], rows: usize) -> [f64; 6] {
-    let (values, vectors) = jacobi6(normal);
-    let largest = values.iter().fold(0.0f64, |m, &v| m.max(v)).sqrt();
-    let tolerance = rows.max(6) as f64 * f64::EPSILON * largest;
-    let mut x = [0.0; 6];
-    for k in 0..6 {
-        if values[k].max(0.0).sqrt() <= tolerance {
-            continue;
-        }
-        let v: [f64; 6] = std::array::from_fn(|i| vectors[i][k]);
-        let coefficient = v.iter().zip(&rhs).map(|(a, b)| a * b).sum::<f64>() / values[k];
-        for (xi, vi) in x.iter_mut().zip(&v) {
-            *xi += coefficient * vi;
-        }
-    }
-    x
-}
-
-/// Eigenvalues and eigenvectors (columns of the returned matrix) of a symmetric 6×6 matrix
-/// by cyclic Jacobi rotations.
-fn jacobi6(mut a: [[f64; 6]; 6]) -> ([f64; 6], [[f64; 6]; 6]) {
+/// `pinv(X) * y` for an n × 6 design X: the minimum-norm least-squares solution. The SVD of
+/// X comes from one-sided Jacobi rotations of its columns (Hestenes), so the singular values
+/// are X's own, not square roots of XᵀX's eigenvalues, whose roundoff would survive the cut.
+/// As MATLAB's `pinv`, singular values at or below max(n, 6) · eps · the largest are dropped.
+fn pinv_solve(design: &[[f64; 6]], y: &[f64]) -> [f64; 6] {
+    let mut a = design.to_vec();
     let mut v = [[0.0; 6]; 6];
     for (i, row) in v.iter_mut().enumerate() {
         row[i] = 1.0;
     }
-    for _ in 0..100 {
-        let off: f64 = (0..6)
-            .flat_map(|p| (p + 1..6).map(move |q| (p, q)))
-            .map(|(p, q)| a[p][q] * a[p][q])
-            .sum();
-        let diagonal: f64 = (0..6).map(|i| a[i][i] * a[i][i]).sum();
-        if off <= f64::EPSILON * f64::EPSILON * diagonal {
-            break;
-        }
+    for _ in 0..60 {
+        let mut rotated = false;
         for p in 0..6 {
             for q in p + 1..6 {
-                if a[p][q] == 0.0 {
+                let (mut alpha, mut beta, mut gamma) = (0.0, 0.0, 0.0);
+                for row in &a {
+                    alpha += row[p] * row[p];
+                    beta += row[q] * row[q];
+                    gamma += row[p] * row[q];
+                }
+                if gamma == 0.0 || gamma.abs() <= f64::EPSILON * (alpha * beta).sqrt() {
                     continue;
                 }
-                let theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
-                let t = if theta == 0.0 {
-                    1.0
-                } else {
-                    theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt())
-                };
-                let c = 1.0 / (t * t + 1.0).sqrt();
-                let s = t * c;
-                for row in a.iter_mut() {
-                    let (akp, akq) = (row[p], row[q]);
-                    row[p] = c * akp - s * akq;
-                    row[q] = s * akp + c * akq;
-                }
-                let (row_p, row_q) = (a[p], a[q]);
-                for k in 0..6 {
-                    a[p][k] = c * row_p[k] - s * row_q[k];
-                    a[q][k] = s * row_p[k] + c * row_q[k];
-                }
-                for row in v.iter_mut() {
-                    let (vp, vq) = (row[p], row[q]);
-                    row[p] = c * vp - s * vq;
-                    row[q] = s * vp + c * vq;
+                rotated = true;
+                let zeta = (beta - alpha) / (2.0 * gamma);
+                let t = zeta.signum() / (zeta.abs() + (1.0 + zeta * zeta).sqrt());
+                let c = 1.0 / (1.0 + t * t).sqrt();
+                let s = c * t;
+                for row in a.iter_mut().chain(v.iter_mut()) {
+                    let (xp, xq) = (row[p], row[q]);
+                    row[p] = c * xp - s * xq;
+                    row[q] = s * xp + c * xq;
                 }
             }
         }
+        if !rotated {
+            break;
+        }
     }
-    (std::array::from_fn(|i| a[i][i]), v)
+    // Column j of the rotated X is σ_j u_j; V's column j is the right singular vector.
+    let sigma: [f64; 6] =
+        std::array::from_fn(|j| a.iter().map(|row| row[j] * row[j]).sum::<f64>().sqrt());
+    let tolerance =
+        design.len().max(6) as f64 * f64::EPSILON * sigma.iter().fold(0.0f64, |m, &s| m.max(s));
+    let mut x = [0.0; 6];
+    for j in 0..6 {
+        if sigma[j] <= tolerance {
+            continue;
+        }
+        let coefficient =
+            a.iter().zip(y).map(|(row, yi)| row[j] * yi).sum::<f64>() / (sigma[j] * sigma[j]);
+        for (xi, row) in x.iter_mut().zip(&v) {
+            *xi += coefficient * row[j];
+        }
+    }
+    x
 }
 
 #[cfg(test)]
@@ -671,24 +652,74 @@ mod tests {
 
     #[test]
     fn pinv_matches_the_least_squares_solution_of_a_full_rank_design() {
-        let mut normal = [[0.0; 6]; 6];
-        let mut rhs = [0.0; 6];
         let truth = [1.0, -2.0, 0.5, 3.0, 0.25, -1.5];
-        for r in 0..9 {
-            let row: [f64; 6] =
-                std::array::from_fn(|c| ((r * 7 + c * 3) % 5) as f64 + (r == c) as u8 as f64);
-            let y: f64 = row.iter().zip(&truth).map(|(a, b)| a * b).sum();
-            for i in 0..6 {
-                rhs[i] += row[i] * y;
-                for j in 0..6 {
-                    normal[i][j] += row[i] * row[j];
-                }
-            }
-        }
-        let x = pinv_solve(normal, rhs, 9);
+        let design: Vec<[f64; 6]> = (0..9)
+            .map(|r| {
+                std::array::from_fn(|c| ((r * 7 + c * 3) % 5) as f64 + f64::from(u8::from(r == c)))
+            })
+            .collect();
+        let y: Vec<f64> = design
+            .iter()
+            .map(|row| row.iter().zip(&truth).map(|(a, b)| a * b).sum())
+            .collect();
+        let x = pinv_solve(&design, &y);
         for (got, want) in x.iter().zip(truth) {
             assert!((got - want).abs() < 1e-9, "{x:?}");
         }
+    }
+
+    #[test]
+    fn oblique_rank_deficient_design_gives_the_minimum_norm_tensor() {
+        // Three b0s and 12 samples per shell, all along [1, 1, 1]/√3: X has rank 1.
+        let mut bvals = vec![0.0; 3];
+        let mut bvecs = vec![[0.0; 3]; 3];
+        for shell in [1000.0, 2000.0] {
+            for _ in 0..12 {
+                bvals.push(shell);
+                bvecs.push([1.0, 1.0, 1.0]);
+            }
+        }
+        let p = Protocol::new(&bvals, &bvecs, 0.0).unwrap();
+        let signal: Vec<f64> = (0..p.len())
+            .map(|i| 1000.0 * (-p.b[i] * 0.8e-9).exp() * (1.0 + 0.01 * (i % 3) as f64))
+            .collect();
+        let kept: Vec<usize> = (0..p.len()).collect();
+        let design: Vec<[f64; 6]> = kept
+            .iter()
+            .map(|&m| {
+                let g = p.dirs[m];
+                let b = p.b[m];
+                [
+                    -b * g[0] * g[0],
+                    -2.0 * b * g[0] * g[1],
+                    -2.0 * b * g[0] * g[2],
+                    -b * g[1] * g[1],
+                    -2.0 * b * g[1] * g[2],
+                    -b * g[2] * g[2],
+                ]
+            })
+            .collect();
+        let s0 = (signal[0] + signal[1] + signal[2]) / 3.0;
+        let y: Vec<f64> = kept.iter().map(|&m| (signal[m] / s0).ln()).collect();
+        // Every non-zero row is -b r with r = [1, 2, 2, 1, 2, 1] / 3: the minimum-norm solution
+        // is s r / |r|², with s the least-squares fit of y on -b.
+        let r = [1.0, 2.0, 2.0, 1.0, 2.0, 1.0].map(|v| v / 3.0);
+        let r2: f64 = r.iter().map(|v| v * v).sum();
+        let (num, den) = kept.iter().zip(&y).fold((0.0, 0.0), |(n, d), (&m, yi)| {
+            (n - p.b[m] * yi, d + p.b[m] * p.b[m])
+        });
+        let want = r.map(|v| num / den * v / r2);
+        let got = pinv_solve(&design, &y);
+        for (g, w) in got.iter().zip(want) {
+            assert!(
+                (g - w).abs() <= 1e-9 * w.abs().max(1e-30),
+                "{got:?} vs {want:?}"
+            );
+        }
+        // The start direction is the eigenvector of that tensor: [1, 1, 1] / √3.
+        let (dir, _) = linear_tensor(&p, &kept, &[0, 1, 2], &signal).unwrap();
+        let cos = (dir[0] + dir[1] + dir[2]).abs() / 3f64.sqrt();
+        assert!(cos > 1.0 - 1e-12, "{dir:?}");
     }
 
     #[test]
