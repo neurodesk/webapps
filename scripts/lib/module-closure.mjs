@@ -65,7 +65,10 @@ function resolveSpecifier(packages, specifier, from, missing) {
 export function moduleClosure(root, seeds, { missing = false } = {}) {
   const absent = missing ? new Set() : null;
   const packages = workspacePackages(root);
-  const pending = seeds.map((file) => resolve(root, file)).filter(isFile);
+  const named = seeds.map((file) => resolve(root, file));
+  // A deleted seed is still what its caller runs.
+  for (const file of named) if (!isFile(file)) absent?.add(file);
+  const pending = named.filter(isFile);
   const seen = new Set();
   while (pending.length) {
     const file = pending.pop();

@@ -116,6 +116,8 @@ test('a deleted file is still a dependency of the module that names it', () => {
   assert.deepEqual(moduleClosure(root, seeds), ['packages/shared/package.json', 'packages/tool/validation/harness.js', 'packages/tool/validation/kept.js']);
   const withMissing = moduleClosure(root, seeds, { missing: true });
   for (const path of ['packages/shared/src/wrapper.js', 'packages/tool/validation/gone.js', 'packages/tool/validation/gone/index.js']) assert.ok(withMissing.includes(path), path);
+  assert.ok(moduleClosure(root, ['scripts/removed.mjs'], { missing: true }).includes('scripts/removed.mjs'), 'a deleted seed stays');
+  assert.deepEqual(moduleClosure(root, ['scripts/removed.mjs']), []);
   const flow = { on: { pull_request: { paths: ['packages/tool/**', 'packages/**'] } } };
   const decision = decideWorkflow({ flow, changedPaths: ['packages/shared/src/wrapper.js'], registry, graph: null, root });
   assert.equal(decision.run, true);
