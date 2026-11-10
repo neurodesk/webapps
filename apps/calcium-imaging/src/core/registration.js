@@ -10,13 +10,13 @@
 //
 // Shifts are [dy, dx] in pixels, the translation applied to a frame to register it:
 // registered(y, x) = frame(y - dy, x - dx). Resampling is bilinear with replicated borders.
-import { fft2d } from './fft.js';
+import { fftn } from '@neurodesk/webapp-components/fft';
 
 /** The template's spectrum, prepared once per template (and per patch). */
 export function templateSpectrum(template, height, width) {
   const re = Float64Array.from(template);
   const im = new Float64Array(height * width);
-  fft2d(re, im, height, width);
+  fftn(re, im, [width, height]);
   return { re, im, height, width };
 }
 
@@ -35,7 +35,7 @@ export function registerTranslation(spectrum, frame, { upsample = 10, maxShift =
   const n = height * width;
   const re = Float64Array.from(frame);
   const im = new Float64Array(n);
-  fft2d(re, im, height, width);
+  fftn(re, im, [width, height]);
   // Cross-power R = T · conj(F).
   for (let i = 0; i < n; i++) {
     const tr = spectrum.re[i];
@@ -54,7 +54,7 @@ export function registerTranslation(spectrum, frame, { upsample = 10, maxShift =
   }
   const powerRe = Float64Array.from(re);
   const powerIm = Float64Array.from(im);
-  fft2d(re, im, height, width, true);
+  fftn(re, im, [width, height], true);
   // Integer peak within |shift| ≤ maxShift and within `radius` of `center`.
   const limitY = Math.min(maxShift, Math.floor(height / 2));
   const limitX = Math.min(maxShift, Math.floor(width / 2));

@@ -5385,6 +5385,22 @@
       "contentType": "application/zip",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif": {
+      "sha256": "a79ed0b43b7ed37fa6b70eed6a2b72202daf67e528db871533d77c9b6ae8f266",
+      "bytes": 2782466,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "license": "CC-BY-4.0",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/README.md": {
+      "sha256": "12660b5f8e5ae189fb1ca916a5bd3997192ec4c66701ebbd37bb19844c01a667",
+      "bytes": 760,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "attribution",
+      "license": "CC-BY-4.0",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6761,6 +6777,10 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_template.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_annotation.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_structures.json"
+    ],
+    "deconvolution": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/README.md"
     ]
   }
 }

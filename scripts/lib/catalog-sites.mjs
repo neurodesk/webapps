@@ -62,7 +62,8 @@ async function exists(path) {
 
 /**
  * The theme options of an app on one host that serves it (its home catalogue by
- * default); `siteAppIds` limits its handoff menu.
+ * default); `siteAppIds` limits its handoff menu. Every copy names the home
+ * page as canonical, so search engines index one page per app.
  */
 export function hostedThemeOptions({ registry, information, app, version, siteAppIds, catalog = findCatalog(registry, app.catalog) }) {
   return {
@@ -73,6 +74,7 @@ export function hostedThemeOptions({ registry, information, app, version, siteAp
     version,
     measurementId: registry.site.analytics.measurement_id,
     url: appUrl(registry, app, catalog),
+    canonical: appUrl(registry, app),
     siteTitle: catalog.title,
     brandName: catalog.brand.name,
     moreAppsLabel: catalog.brand.more_apps,
@@ -218,7 +220,7 @@ export async function projectCatalogSite({ repoRoot, siteDist, destination, regi
   await writeCompositeRuntimeCacheManifests({ siteDist: destination, registry: listed });
 
   const ownStandalone = { ...standalone, apps: Object.fromEntries(siteAppIds.map((id) => [id, standalone.apps[id]])) };
-  await writeFile(join(destination, 'index.html'), renderLandingPage(listed, ownStandalone, catalog));
+  await writeFile(join(destination, 'index.html'), renderLandingPage(listed, standalone, catalog, { allApps: registry.apps }));
   const report = JSON.parse(await readFile(join(siteDist, 'analytics.json'), 'utf8'));
   await writeFile(join(destination, 'analytics.json'), `${JSON.stringify(catalogAnalytics(report, apps, catalog), null, 2)}\n`);
   await writeFile(join(destination, 'standalone.json'), `${JSON.stringify(ownStandalone, null, 2)}\n`);

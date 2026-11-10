@@ -6,6 +6,7 @@ const managedMetaPatterns = [
   /\s*<meta\b[^>]*\bname=["']description["'][^>]*>/gi,
   /\s*<meta\b[^>]*\bproperty=["']og:[^"']*["'][^>]*>/gi,
   /\s*<meta\b[^>]*\bname=["']twitter:[^"']*["'][^>]*>/gi,
+  /\s*<link\b[^>]*\brel=["']canonical["'][^>]*>/gi,
 ];
 
 function escapeAttribute(value) {
@@ -40,6 +41,7 @@ export function injectCompositeTheme(html, {
   version,
   measurementId,
   url,
+  canonical,
   href = '../app-theme.css',
   themeHref = '../theme.js',
   shellHref = '../app-shell.js',
@@ -66,8 +68,10 @@ export function injectCompositeTheme(html, {
     }
   }
   if (catalogId !== undefined && !appIdPattern.test(catalogId)) throw new Error(`Invalid catalog id: ${catalogId}`);
-  if (url !== undefined && !/^https?:\/\/\S+$/.test(url)) {
-    throw new Error(`url must be an absolute http(s) URL, got ${url}`);
+  for (const [label, value] of Object.entries({ url, canonical })) {
+    if (value !== undefined && !/^https?:\/\/\S+$/.test(value)) {
+      throw new Error(`${label} must be an absolute http(s) URL, got ${value}`);
+    }
   }
   if (!/<html\b/i.test(html)) throw new Error(`Cannot theme ${appId}: missing <html> element`);
   if (!/<\/head>/i.test(html)) throw new Error(`Cannot theme ${appId}: missing </head> element`);
@@ -90,6 +94,7 @@ export function injectCompositeTheme(html, {
     meta('property', 'og:description', description),
     ...(url ? [meta('property', 'og:url', url)] : []),
     meta('name', 'twitter:card', 'summary'),
+    ...(canonical ? [`<link rel="canonical" href="${escapeAttribute(canonical)}">`] : []),
   ].join('\n  ');
   for (const pattern of managedMetaPatterns) themed = themed.replace(pattern, '');
   if (titlePattern.test(themed)) {

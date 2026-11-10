@@ -8,7 +8,11 @@ import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 
 const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8'));
-const evaluate = (expression, github, inputs = {}) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs });
+// What pr-gate.yml answers without a checkout: false for a draft, true for
+// every event other than pull_request. A ready pull request is decided by
+// scripts/lib/workflow-gate.mjs; `reached` stands for its answer.
+const gate = (github, reached = true) => ({ gate: { outputs: { run: String(github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached)) } } });
+const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs });
 
 test('draft feedback selects direct app edits; ready PRs retain shared coverage', async () => {
   const registry = await loadAppsRegistry();
@@ -23,21 +27,36 @@ test('draft feedback selects direct app edits; ready PRs retain shared coverage'
 
 test('ready and updated PRs run deferred native jobs; push and dispatch retain their gates', async () => {
   let guarded = 0;
+  let gated = 0;
   for (const file of await readdir(new URL('../.github/workflows', import.meta.url))) {
     if (!file.endsWith('.yml')) continue;
     const flow = await workflow(file);
+    const usesGate = Object.hasOwn(flow.jobs, 'gate');
+    if (usesGate) {
+      gated++;
+      // The gate always finishes, so jobs after the entry jobs keep their default conditions.
+      assert.deepEqual(flow.jobs.gate, { uses: './.github/workflows/pr-gate.yml', with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+    }
     if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
       for (const [id, job] of Object.entries(flow.jobs)) {
-        if (job.needs) continue;
+        if (id === 'gate' || (job.needs && job.needs !== 'gate')) continue;
         assert.equal(evaluate(job.if ?? 'true', {
           event_name: 'pull_request', event: { pull_request: { draft: true } },
         }), false, `${file}: entry job ${id} must defer drafts or be restricted to non-PR events`);
       }
     }
-    for (const job of Object.values(flow.jobs)) {
-      if (!String(job.if).includes('!github.event.pull_request.draft')) continue;
+    for (const [id, job] of Object.entries(flow.jobs)) {
+      const deferred = String(job.if).includes('!github.event.pull_request.draft');
+      const waits = String(job.if).includes('needs.gate.outputs.run');
+      if (!deferred && !waits) continue;
       if (file === 'ci.yml') continue;
       guarded++;
+      if (waits) {
+        assert.equal(job.needs, 'gate', `${file}: ${id} reads the gate it waits for`);
+        assert.doesNotMatch(job.if, /always\(|cancelled\(|failure\(/, `${file}: ${id} respects a failed gate`);
+        const ready = { event_name: 'pull_request', event: { pull_request: { draft: false } } };
+        assert.equal(evaluate(job.if, ready, {}, gate(ready, false)), false, `${file}: ${id} skips a pull request that does not reach it`);
+      }
       for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft']) assert.ok(flow.on.pull_request.types.includes(action), `${file} ${action}`);
       for (const draft of [true, false]) {
         assert.equal(evaluate(job.if, { event_name: 'pull_request', event: { pull_request: { draft } } }), !draft, file);
@@ -46,6 +65,7 @@ test('ready and updated PRs run deferred native jobs; push and dispatch retain t
     }
   }
   assert.ok(guarded > 30);
+  assert.ok(gated > 20);
 });
 
 test('main CI can finish while PR pushes cancel their predecessors', async () => {

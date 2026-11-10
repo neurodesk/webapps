@@ -88,3 +88,9 @@ test('completed commands yield to a queued cancellation, including the final win
     assert.equal(f.commands.length, 1);
   }
 });
+
+test('a later generation round submits only the windows that still have work', async () => {
+  const f = gpu();
+  assert.equal(await dispatchBootWindows(f.device, 'generate', 100, [], f.parameters, undefined, 16, first => first === 32 || first === 96), true);
+  assert.deepEqual(f.commands.map(command => [command.first, command.counts[0]]), [[32, 16], [96, 4]]);
+});

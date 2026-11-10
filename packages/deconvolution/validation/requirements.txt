@@ -1,0 +1,6 @@
+# The Python references (validation only; nothing here ships). Python 3.11.
+numpy==2.4.6
+scipy==1.17.1
+scikit-image==0.25.2
+psfmodels==0.3.3
+tifffile==2026.3.3
