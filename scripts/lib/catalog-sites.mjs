@@ -182,7 +182,7 @@ export async function projectCatalogSite({ repoRoot, siteDist, destination, regi
     await cp(join(siteDist, app.path), join(destination, app.path), { recursive: true });
     const indexPath = join(destination, app.path, 'index.html');
     const version = JSON.parse(await readFile(join(repoRoot, 'apps', app.id, 'package.json'), 'utf8')).version;
-    // Only a catalogue site names its catalogue: the all-app assembly also feeds the desktop suite.
+    // Only a catalogue site names its catalogue: the all-app assembly also feeds the full desktop suite.
     await writeFile(indexPath, injectCompositeTheme(await readFile(indexPath, 'utf8'), {
       ...hostedThemeOptions({ registry, information, app, version, siteAppIds, catalog }),
       catalogId: catalog.id,

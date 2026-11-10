@@ -64,8 +64,9 @@ A catalogue site holds:
   apps on that host. Each app page names its catalogue in
   `<html data-neurodesk-catalog="<id>">`, so an app can open with defaults for
   that audience (ZARRo opens on an OME-Zarr URL on `microscopy`). The all-app
-  assembly in `dist/`, standalone builds and the dev server carry no attribute;
-  the desktop suite is built from `dist/`;
+  assembly in `dist/`, standalone builds and the dev server carry no attribute,
+  so the full desktop suite has none; a catalogue's desktop edition is built from
+  its site and keeps it;
 - the shared root files the app pages load (`app-shell.js`, `theme.js`, fonts,
   logos, `shell-adapters/`);
 - the `_runtime/` families its files reference. A family is the directory two
