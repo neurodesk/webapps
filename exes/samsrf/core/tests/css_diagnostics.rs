@@ -14,7 +14,7 @@ fn recording() -> Option<(PathBuf, Vec<Value>)> {
         "Octave is not a numerical reference"
     );
     let cases = metadata["cases"].as_array().unwrap().clone();
-    assert_eq!(cases.len(), 238, "missing recorded cases");
+    assert_eq!(cases.len(), 268, "missing recorded cases");
     Some((root, cases))
 }
 
@@ -50,6 +50,73 @@ fn complex_array(root: &Path, descriptor: &Value) -> Vec<Complex64> {
         .zip(imaginary)
         .map(|(re, im)| Complex64::new(re, im))
         .collect()
+}
+
+#[test]
+fn extreme_dot_sums_preserve_every_recorded_css_objective_decision() {
+    let Some((root, cases)) = recording() else {
+        return;
+    };
+    for vertex in [60, 69] {
+        for control in [
+            "nonnegative0_recorded",
+            "nonnegative0_recomputed",
+            "nonnegative1_recomputed",
+        ] {
+            let id = format!("css_pipeline_double_v{vertex}_{control}");
+            let case = cases
+                .iter()
+                .find(|case| case["id"] == id)
+                .expect("missing overflow trace");
+            let predicted = complex_array(&root, &case["predictionTrace"]);
+            let observed = array(&root, &case["observations"]);
+            let expected = complex_array(&root, &case["errors"]);
+            assert_eq!(predicted.len(), observed.len() * expected.len());
+            for (evaluation, (x, expected)) in predicted
+                .chunks_exact(observed.len())
+                .zip(expected)
+                .enumerate()
+            {
+                let actual = css::objective(x, &observed, Precision::Double);
+                let finite = |v: Complex64| v.re.is_finite() && v.im.is_finite();
+                assert_eq!(
+                    finite(actual),
+                    finite(expected),
+                    "{id} evaluation {evaluation}: {actual} != {expected}"
+                );
+            }
+        }
+    }
+    // These specific calls overflow the old sequential dot accumulator even
+    // though MATLAB's dot is finite. Rotation exercises the imaginary component
+    // against the same correlation identity, without inventing another fixture.
+    for (vertex, evaluation) in [(60, 787), (69, 590)] {
+        let id = format!("css_pipeline_double_v{vertex}_nonnegative0_recorded");
+        let case = cases.iter().find(|case| case["id"] == id).unwrap();
+        let predicted = complex_array(&root, &case["predictionTrace"]);
+        let observed = array(&root, &case["observations"]);
+        let expected = complex_array(&root, &case["errors"])[evaluation];
+        let x = &predicted[evaluation * observed.len()..(evaluation + 1) * observed.len()];
+        assert!(
+            x.iter()
+                .all(|value| value.im == 0.0 && value.re.is_finite())
+        );
+        assert!(expected.re.is_finite() && expected.im == 0.0);
+        let actual = css::objective(x, &observed, Precision::Double);
+        assert!(
+            (actual - expected).norm() <= 16.0 * f64::EPSILON,
+            "{id}: {actual} != {expected}"
+        );
+        let rotated: Vec<_> = x
+            .iter()
+            .map(|value| Complex64::new(0.0, value.re))
+            .collect();
+        let actual = css::objective(&rotated, &observed, Precision::Double);
+        assert!(
+            (actual - (2.0 - expected)).norm() <= 16.0 * f64::EPSILON,
+            "{id}: {actual}"
+        );
+    }
 }
 
 #[test]

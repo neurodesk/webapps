@@ -61,6 +61,7 @@ struct Difference {
     nonfinite: usize,
     maximum_absolute: f64,
     first: Option<Value>,
+    first_nonfinite: Option<Value>,
 }
 
 impl Difference {
@@ -79,6 +80,10 @@ impl Difference {
         self.differing += 1;
         if !actual.is_finite() || !expected.is_finite() {
             self.nonfinite += 1;
+            if self.first_nonfinite.is_none() {
+                self.first_nonfinite = Some(json!({"evaluation":evaluation,"element":element,
+                    "component":component,"actual":actual.to_string(),"expected":expected.to_string()}));
+            }
         } else {
             self.maximum_absolute = self.maximum_absolute.max((actual - expected).abs());
         }
@@ -100,7 +105,7 @@ impl Difference {
 
     fn report(&self) -> Value {
         json!({"compared":self.compared,"differing":self.differing,"nonfiniteDifferences":self.nonfinite,
-            "maximumAbsolute":self.maximum_absolute,"first":self.first})
+            "maximumAbsolute":self.maximum_absolute,"first":self.first,"firstNonfinite":self.first_nonfinite})
     }
 }
 
@@ -184,6 +189,7 @@ fn main() -> Result<()> {
     let mut compressed_diff = Difference::default();
     let mut prediction_diff = Difference::default();
     let mut objective_diff = Difference::default();
+    let mut recorded_prediction_objective_diff = Difference::default();
     for evaluation in 0..evaluations {
         let p: Vec<_> = (0..seed.len())
             .map(|i| parameters[i * evaluations + evaluation])
@@ -217,6 +223,15 @@ fn main() -> Result<()> {
         );
         objective_diff.values(
             &[error],
+            &expected_error[evaluation..evaluation + 1],
+            evaluation,
+        );
+        recorded_prediction_objective_diff.values(
+            &[css::objective(
+                &expected_prediction[prediction_start..prediction_start + predicted.len()],
+                &observed,
+                precision,
+            )],
             &expected_error[evaluation..evaluation + 1],
             evaluation,
         );
@@ -275,6 +290,7 @@ fn main() -> Result<()> {
         "parityAsserted":false,"matlabEnvironment":recording["environment"],
         "sameParameters":{"raw":raw_diff.report(),"compressed":compressed_diff.report(),
             "prediction":prediction_diff.report(),"objective":objective_diff.report()},
+        "recordedPredictionObjective":recorded_prediction_objective_diff.report(),
         "optimizer":{"nativeEvaluations":native_trace.len(),"matlabEvaluations":evaluations,
             "unmatchedEvaluations":{"native":native_trace.len()-common_evaluations,"matlab":evaluations-common_evaluations},
             "firstUnmatchedEvaluation":first_unmatched,

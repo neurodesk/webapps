@@ -70,6 +70,27 @@ fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> Complex64 {
         nx += dx.re * dx.re + dx.im * dx.im;
         ny += dy * dy;
     }
+    if !dot.re.is_finite() || !dot.im.is_finite() {
+        // Near DBL_MAX a partial dot sum can overflow although the final sum
+        // is representable. Recompute only that component with scaled inputs.
+        // Restore its scale before dividing by the norms: MATLAB still rejects
+        // a genuinely overflowing dot, even when the correlation would be finite.
+        let scale = x.iter()
+            .flat_map(|value| [(value.re - mx.re).abs(), (value.im - mx.im).abs()])
+            .fold(0.0, f64::max);
+        if scale.is_finite() && scale > 0.0 {
+            if !dot.re.is_finite() {
+                dot.re = x.iter().zip(y)
+                    .map(|(x, y)| ((x.re - mx.re) / scale) * (y - my))
+                    .sum::<f64>() * scale;
+            }
+            if !dot.im.is_finite() {
+                dot.im = x.iter().zip(y)
+                    .map(|(x, y)| (-(x.im - mx.im) / scale) * (y - my))
+                    .sum::<f64>() * scale;
+            }
+        }
+    }
     let norm_x = norm_extreme(
         nx,
         x.iter().flat_map(|value| [value.re - mx.re, value.im - mx.im]),
