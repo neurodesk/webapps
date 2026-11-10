@@ -15,6 +15,7 @@ const parameters: TrackingParams = {
   minPts: 10,
   maxPts: Infinity,
   maxWorkgroupsPerDispatch: 16,
+  maxStepsPerDispatch: 32,
 }
 
 await test('unbounded tracking provenance survives the snapshot and downloaded report round trip', () => {

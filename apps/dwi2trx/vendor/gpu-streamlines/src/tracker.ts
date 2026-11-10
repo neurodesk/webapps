@@ -24,7 +24,7 @@ import {
   planBatchError,
 } from './backoff'
 import { BLOCK_Y, divUp, MAX_SLINE_LEN, REAL_SIZE } from './globals'
-import { dispatchBootWindows, MAX_WORKGROUPS_PER_DISPATCH } from './dispatch'
+import { dispatchBootWindows, MAX_STEPS_PER_DISPATCH, MAX_WORKGROUPS_PER_DISPATCH } from './dispatch'
 import { BOOT_ENTRY_GEN, BOOT_ENTRY_GETNUM, bootShaderSource } from './shaders'
 
 // Re-exported so the UI (main.ts) can classify a render OOM the same way.
@@ -64,6 +64,7 @@ export interface TrackingParams {
   minPts: number // discard streamlines shorter than this
   maxPts: number // discard streamlines longer than this
   maxWorkgroupsPerDispatch: number // physical GPU command size; output does not depend on it
+  maxStepsPerDispatch: number // tracking steps per seed in one GPU command; output does not depend on it
 }
 
 export const DEFAULT_PARAMS: Omit<TrackingParams, 'tcThreshold'> = {
@@ -82,6 +83,7 @@ export const DEFAULT_PARAMS: Omit<TrackingParams, 'tcThreshold'> = {
   minPts: 0,
   maxPts: Number.POSITIVE_INFINITY,
   maxWorkgroupsPerDispatch: MAX_WORKGROUPS_PER_DISPATCH,
+  maxStepsPerDispatch: MAX_STEPS_PER_DISPATCH,
 }
 
 /** The repacked Boot kernel binds 10 storage buffers across 3 groups (down
@@ -260,8 +262,9 @@ function modelOffsets(inputs: TrackingInputs): ModelOffsets {
 }
 
 // --- params struct (must match BootTrackingParams in boot.wgsl) ---
-// 6 f32 + 18 i32 = 96 bytes, little-endian. Five modelData offsets are followed
-// by the physical dispatch's logical workgroup offset (initially zero).
+// 6 f32 + 19 i32 = 100 bytes, little-endian. Five modelData offsets are followed
+// by the physical dispatch's logical workgroup offset (initially zero) and the
+// generation pass's step budget per seed and command.
 // tc_threshold/step_size are zero on the getNum pass. rng_offset is the batch's first
 // seed index in the whole run, so a seed's random stream does not depend on the batch size.
 function packBootParams(
@@ -272,7 +275,7 @@ function packBootParams(
   firstSeed: number,
   forGen: boolean,
 ): ArrayBuffer {
-  const buf = new ArrayBuffer(96)
+  const buf = new ArrayBuffer(100)
   const dv = new DataView(buf)
   const seedLo = p.rngSeed & 0xffffffff
   const seedHi = Math.floor(p.rngSeed / 0x100000000) & 0xffffffff
@@ -309,6 +312,7 @@ function packBootParams(
   i32(off.offSampling)
   i32(off.offB0s)
   i32(0)
+  i32(p.maxStepsPerDispatch)
   return buf
 }
 
@@ -358,6 +362,9 @@ export interface TrackResult {
   processedSeeds: number
   totalSeeds: number
 }
+
+/** Words of saved generation state per seed (ROW_STATE_WORDS in boot.wgsl). */
+const ROW_STATE_WORDS = 16 + 32 * 13
 
 /** Cap a single host/GPU streamline readback so peak memory is bounded by this,
  *  not by chunk size — slices are pulled back one window at a time. */
@@ -482,8 +489,9 @@ export async function trackStreamlines(
       const batchOut: Float32Array[] = []
       try {
         const seedsBuf = track(storageFromData(device, chunk, 'seeds'))
+        // [per-seed offsets | pending flags | generation state], see boot.wgsl.
         const offsBuf = track(
-          emptyStorage(device, (nseeds + 1) * 4, 'slinesOffs'),
+          emptyStorage(device, (2 * nseeds + 1 + nseeds * ROW_STATE_WORDS) * 4, 'slinesOffs'),
         )
         device.queue.writeBuffer(offsBuf, 0, new Int32Array(nseeds + 1))
         const shDirBytes = inputs.samplmNr * gridX * BLOCK_Y * 3 * REAL_SIZE
@@ -569,7 +577,7 @@ export async function trackStreamlines(
               packBootParams(inputs, off, params, nseeds, start, true),
             ),
           )
-          const generated = await dispatchBootWindows(device, genPipe, gridX, [
+          const genGroups = [
             bindGroup0(
               device,
               genPipe,
@@ -588,7 +596,22 @@ export async function trackStreamlines(
               slineMetaBuf,
               slineBuf,
             ),
-          ], paramsGen, shouldStop, params.maxWorkgroupsPerDispatch)
+          ]
+          // Each round continues every unfinished seed by at most maxStepsPerDispatch
+          // steps; later rounds skip windows whose seeds have all finished.
+          const window = params.maxWorkgroupsPerDispatch
+          let pending = new Int32Array(nseeds).fill(1)
+          const unfinished = (first: number) =>
+            pending.subarray(first * BLOCK_Y, (first + window) * BLOCK_Y).includes(1)
+          let generated = true
+          while (pending.includes(1)) {
+            generated = await dispatchBootWindows(device, genPipe, gridX, genGroups,
+              paramsGen, shouldStop, window, unfinished)
+            if (!generated) break
+            pending = new Int32Array(
+              await readback(device, offsBuf, nseeds * 4, (nseeds + 1) * 4),
+            )
+          }
           if (!generated) break
 
           // Read positions back in fixed-size windows so peak host (and staging)

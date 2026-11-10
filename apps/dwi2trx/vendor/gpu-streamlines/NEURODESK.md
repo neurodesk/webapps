@@ -37,6 +37,17 @@ Local changes:
   is unchanged, so runs of up to 10,000 seeds give the same bytes; larger runs
   change from the second batch on. The app's hardware test requires the same TRX
   with one batch and with four.
+- `src/wgsl/boot.wgsl`, `src/dispatch.ts`, `src/tracker.ts`: the generation kernel
+  pauses after `TrackingParams.maxStepsPerDispatch` (default 32) tracking steps per
+  seed and saves where each seed stopped: its direction, phase, step, point, heading
+  and each lane's Philox state, after the per-seed offsets in `slineOutOff` (no new
+  binding). The host repeats the generation pass over the windows that still have
+  unfinished seeds. On Intel Arc 140V with Mesa 26.2, a 16-workgroup command took
+  about 0.86 s and one workgroup alone ran past the GuC's 640 ms preemption timeout,
+  which reset the GPU (#598). The steps, their order and the random draws are
+  unchanged; upstream's `tracker_boot` loop became the kernel's step loop. The app's
+  hardware test requires the same TRX with one unbounded command per pass and with
+  the defaults, and a nightly test with 3 steps per command.
 - `src/trx.ts`: fixed local DOS timestamp (1980-01-01) for deterministic ZIP bytes;
   geometry, member order and uncompressed payload are unchanged.
 - `package.json`: include the new dispatcher and this provenance, and pin the
