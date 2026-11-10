@@ -50,8 +50,11 @@ def main(source, spm, output):
     quote = lambda value: "'" + str(value).replace("'", "''") + "'"
     recorder = Path(__file__).resolve().parent
     command = f'addpath({quote(recorder)}); build_container({quote(source)},{quote(spm)},{quote(output)})'
-    subprocess.run(['matlab', '-batch', command], check=True,
-                   env={**os.environ, 'MKL_CBWR': SOURCE['mklCbwr']})
+    # A batch licensing token is honoured by setup-matlab's matlab-batch launcher,
+    # not by `matlab -batch`; the CI build selects it with SAMSRF_MATLAB_BATCH.
+    launcher = os.environ.get('SAMSRF_MATLAB_BATCH')
+    argv = [launcher, command] if launcher else ['matlab', '-batch', command]
+    subprocess.run(argv, check=True, env={**os.environ, 'MKL_CBWR': SOURCE['mklCbwr']})
     image = json.loads(subprocess.check_output([
         'docker', 'image', 'inspect', 'samsrf-reference:41ed1e96-r2023b']))[0]
     (output / 'image.json').write_text(json.dumps({

@@ -202,20 +202,89 @@ rejects additional tracked changes, and checks the SPM commit before invoking
 MATLAB Compiler. It records the MATLAB environment and resulting local image
 ID. It does not publish the image.
 
-This recipe has not been executed with MATLAB Compiler. The source checks
-have been exercised locally; successful source recordings do not validate the
-compiled application or its container packaging.
+**Status: not built.** The recipe has never been executed with MATLAB Compiler,
+and no compiled SamSrf 10.4 with these repairs exists. Nothing below is
+evidence about a compiled application until a `build` run has passed.
 
-The source matrix above keeps numerical work independent of this build.
-Free public MATLAB Actions [exclude Compiler](https://github.com/matlab-actions/setup-matlab#licensing).
-A standard trial does not provide a durable substitute: MathWorks states that
-[trial-built applications expire](https://www.mathworks.com/matlabcentral/answers/515199-do-apps-compiled-using-simulink-compiler-under-a-trial-license-expire)
-and [trials cannot download previous releases](https://www.mathworks.com/matlabcentral/answers/2026102-how-do-i-download-and-install-previous-releases-of-matlab-or-the-mathworks-product-installer).
-The public Neurodesk binaries remain the older stock baseline documented
-separately. None of these routes establishes the matching compiled image.
+### Compiler access, checked 2026-11-10
 
-On a Linux x86-64 host with MATLAB R2023b Update 11, MATLAB Compiler, the Statistics,
-Image Processing and Parallel Computing toolboxes, and Docker:
+| Route | Finding |
+| --- | --- |
+| Public MATLAB Actions | [Licenses every product except transformation products such as MATLAB Compiler](https://github.com/matlab-actions/setup-matlab#licensing). Source recording works; packaging does not. |
+| MathWorks batch licensing token | The only CI route to Compiler. The [pilot page](https://www.mathworks.com/support/batch-tokens.html) states that it is "not currently accepting new requests". |
+| Trial license | [Trial-built applications expire](https://www.mathworks.com/matlabcentral/answers/515199-do-apps-compiled-using-simulink-compiler-under-a-trial-license-expire) and [trials cannot download previous releases](https://www.mathworks.com/matlabcentral/answers/2026102-how-do-i-download-and-install-previous-releases-of-matlab-or-the-mathworks-product-installer), so R2023b Update 11 is out of reach. |
+| Existing binaries | SamSrf releases through v10.4 carry no assets. Neurodesk's object store holds only 2024 builds (`samsrf_v10.003.zip`, `samsrf_v10.004.zip` and their dated copies), which report SamSrf 10.003 and lack the repairs. |
+| This repository | No `MLM_LICENSE_TOKEN` secret and no self-hosted runner. |
+| MATLAB Runtime | Free, and not a compiler. The [R2023b Update 11 installer](https://ssd.mathworks.com/supportfiles/downloads/R2023b/Release/11/deployment_files/installer/complete/glnxa64/MATLAB_Runtime_R2023b_Update_11_glnxa64.zip) (4,834,714,979 bytes) is public. `containers.mathworks.com/matlab-runtime` has `r2023b-update-1` to `-9` tags and a moving `r2023b` tag. The Runtime executes a compiled archive; it cannot build one. |
+
+Building therefore needs someone with a MATLAB Compiler license for R2023b
+Update 11 to provide a batch token, or to run the recipe on their own licensed
+host. Everything else is in place and runs from one dispatch.
+
+### SamSrfAnalysis case matrix
+
+`cli_plan.py` defines 12 `SamSrfAnalysis` cases, each in both precisions (24
+runs): forward Gaussian pRF on the left hemisphere with runs averaged and with
+runs concatenated, on the right hemisphere, CSS and a custom HRF; reverse
+correlation (hull, Gaussian, custom HRF); and CF (hull, summary, Gaussian, and hull
+with smoothing and global-signal correction). Each run has its exact argv, its
+model file and a fresh directory whose `SamSrf_defaults.json` sets
+`def_64bit`.
+
+`prepare_cli_bundle.m` makes every derived input once, in source MATLAB:
+lowercase copies of the runs, ROI and seed labels, per-precision Benson
+templates, vectorised apertures and the custom HRF. `cli_plan.py models` then
+writes the model JSON, with the HRF's doubles exact. The bundle is hashed,
+made read-only and served at `/input` to both executions. Two upstream
+behaviours shape it: `SamSrfAnalysis` lowercases the data wildcard before
+listing files, and `samsrf_fit_prf` writes vectorised apertures beside
+unvectorised ones, which would fail on read-only inputs.
+
+`run_source_cli.m` runs each argv in source MATLAB. `run_runtime_cli.py` runs
+it in the compiled image. Each container has no network (so no license
+server can be reached), a read-only root and read-only inputs, runs as the
+caller with `--init`, and gets only its own results directory. Tags are refused: the image must
+be a registry digest or local image ID. Receipts record the argv, exit status,
+duration, image ID and digests, the requested BLAS/thread environment, `lscpu`
+and the input hashes before and after. `interrupt` sends SIGINT to the run
+that took longest and requires a prompt, nonzero exit. `failure` requires a
+missing model to exit nonzero.
+
+`compare_cli.py` is the gate between two executions. Every run must succeed in
+both and leave the same files. Every numerical array in the exported GIfTIs
+and the saved MAT files (HDF5, read with h5py) must be bitwise identical; this
+covers the nonfinite and zero masks. The saved maps must have the run's
+precision. Text fields can contain the results path and are reported, not
+gated. Function handles are listed as not compared. No tolerance is applied:
+two hosts of the same MATLAB release already differ (see
+[cross-host differences](#raw-input-reverse-correlation-matrix)), so the
+compiled-versus-source gate runs on one host, in one job.
+
+`samsrf-native` dispatch modes:
+
+- `runtime_cli=source`: public MATLAB, no Compiler. Runs the matrix twice in
+  new MATLAB processes on Ubuntu 22.04 and 24.04 and requires each host to
+  repeat exactly. This is source-CLI evidence only.
+- `runtime_cli=build`: needs the `MLM_LICENSE_TOKEN` secret and fails at once
+  without it. Builds the image, then runs the source matrix and the compiled
+  image twice on the same host. Both repeats, compiled versus source, the
+  interruption and the failure check must pass before the image is pushed to
+  `ghcr.io/neurodesk/samsrf-reference` and its digest recorded.
+- `runtime_image=NAME@sha256:...`: a Runtime-only host with no MATLAB.
+  It downloads the pinned bundle (`cli-reference.json`), verifies its hashes,
+  runs the image twice, and repeats the interruption and failure checks. It
+  also reports, without gating, its differences from the pinned source
+  recording made on another host.
+
+`test_cli.py` tests the plan, staging, the container arguments, the receipts,
+input-tree protection and the comparator, including one-ULP and nonfinite-mask
+changes. `run_runtime_cli.py` was also exercised with Docker against a
+stand-in image that fails if its inputs, root file system or network are
+writable or reachable. That checks the harness, not SamSrf.
+
+To build by hand on a Linux x86-64 host with MATLAB R2023b Update 11, MATLAB
+Compiler, the Statistics, Image Processing and Parallel Computing toolboxes,
+and Docker:
 
 ```sh
 python3 packages/samsrf/validation/matlab/build_container.py \
@@ -229,28 +298,9 @@ and [Runtime image builder](https://www.mathworks.com/help/compiler/compiler.run
 then [packages the application](https://www.mathworks.com/help/compiler/compiler.package.docker.html).
 It selects the Runtime for the installed MATLAB build instead of reusing the
 older Neurodesk image's Runtime. The recipe sets `MKL_CBWR=COMPATIBLE` in both
-the build process and generated container.
-
-Run the image from a fresh writable results directory containing a copy of
-the generated `SamSrf_defaults.json`. Set its `def_64bit` field to `true` for
-the double reference or `false` for the default single reference. The
-standalone application's defaults loader uses its starting directory. Mount
-input files separately and pass their absolute container paths:
-
-```sh
-docker run --rm --user "$(id -u):$(id -g)" \
-  -v "$INPUT:/input:ro" -v "$RESULTS:/results" -w /results \
-  samsrf-reference:41ed1e96-r2023b \
-  prf /input/model '/input/lh_*.gii' -outpath=/results
-```
-
-The model argument omits `.json`, as required by `SamSrfAnalysis`; aperture
-and other paths in that model must also resolve inside the container. Use a
-new results directory for each case to avoid MATLAB's source/regressor
-caches. Before publishing an image, run the same matrix through the compiled
-CLI, compare its saved maps with the source reference, and record its immutable
-registry digest. Until then, it is a build recipe, not a validated replacement
-for the existing Neurodesk container.
+the build process and generated container. Set `SAMSRF_MATLAB_BATCH=matlab-batch`
+when licensing through a batch token. Then follow the `build` steps in
+`samsrf-native.yml` to run the matrix and the gates.
 
 ## Recorded inputs and focused diagnosis
 
