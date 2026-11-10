@@ -41,6 +41,42 @@ enum Command {
     FetchExample(FetchExampleArgs),
     /// Download the pinned Apptainer image a Slurm-run tool needs (relion).
     FetchImage(FetchExampleArgs),
+    /// Set up and start Cryo-EM on this Slurm cluster in one step.
+    CryoEm(CryoEmArgs),
+}
+
+/// Flags of `cryo-em`.
+#[derive(Debug, Clone, Args)]
+struct CryoEmArgs {
+    /// Directory for the RELION image, the tutorial, slurm.json, projects and the
+    /// pairing code; every compute node must read and write it (default: platform data dir).
+    #[arg(long)]
+    data_dir: Option<PathBuf>,
+    /// Loopback port the server listens on (another user of this host needs another).
+    #[arg(long, default_value_t = 8765)]
+    port: u16,
+    /// Partition of the GPU steps (default: the first partition with GPUs).
+    #[arg(long)]
+    gpu_partition: Option<String>,
+    /// Partition of the CPU steps (default: the cluster's default partition).
+    #[arg(long)]
+    cpu_partition: Option<String>,
+    /// Slurm account of every job (default: your default account).
+    #[arg(long)]
+    account: Option<String>,
+    /// Read-only data root for your own movies, id=/path (repeatable).
+    #[arg(long = "data-root")]
+    data_root: Vec<String>,
+    /// Start without the compute-node check that runs after slurm.json changes.
+    #[arg(long)]
+    skip_check: bool,
+}
+
+/// Parses `serve` flags on their own, for `cryo-em`.
+#[derive(Debug, Parser)]
+struct ServeOnly {
+    #[command(flatten)]
+    serve: ServeArgs,
 }
 
 /// Flags of `fetch-example`.
@@ -154,14 +190,15 @@ async fn main() -> ExitCode {
         .init();
     let cli = Cli::parse();
     let result = match cli.command {
-        None => serve(cli.serve).await,
-        Some(Command::Serve(args)) => serve(args).await,
+        None => serve(cli.serve, None).await,
+        Some(Command::Serve(args)) => serve(args, None).await,
         Some(Command::Doctor(args)) => doctor(args).await,
         Some(Command::Pull(args)) => pull(args).await,
         Some(Command::Unlock(args)) => unlock(args),
         Some(Command::CheckSlurm(args)) => check_slurm(args).await,
         Some(Command::FetchExample(args)) => fetch_example(args, false).await,
         Some(Command::FetchImage(args)) => fetch_example(args, true).await,
+        Some(Command::CryoEm(args)) => cryo_em(args).await,
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -174,6 +211,29 @@ async fn main() -> ExitCode {
 
 /// `fetch-example` and `fetch-image`: the same pinned, resumable download.
 async fn fetch_example(args: FetchExampleArgs, image: bool) -> Result<(), String> {
+    let (example, root) = download(&args.name, &args.dest, image).await?;
+    let dest = root.parent().unwrap_or(&root).to_path_buf();
+    println!("{} is ready in {}.", example.name, root.display());
+    if image {
+        for file in &example.files {
+            println!("Image: {}", root.join(&file.path).display());
+        }
+        println!("Then {}.", example.usage);
+        return Ok(());
+    }
+    println!("Serve it as a data root with:");
+    println!("  --data-root examples={}", dest.display());
+    println!("Then {}.", example.usage);
+    Ok(())
+}
+
+/// Downloads a pinned example or image into `<dest>/<name>`, resuming and
+/// verifying every file; returns it and that directory.
+async fn download(
+    name: &str,
+    dest: &std::path::Path,
+    image: bool,
+) -> Result<(compute_server::examples::Example, PathBuf), String> {
     use compute_server::examples::{self, Progress};
     let known = if image {
         examples::images()
@@ -183,21 +243,15 @@ async fn fetch_example(args: FetchExampleArgs, image: bool) -> Result<(), String
     let kind = if image { "image" } else { "example" };
     let example = known
         .iter()
-        .find(|example| example.name == args.name)
+        .find(|example| example.name == name)
         .ok_or_else(|| {
             let names: Vec<&str> = known.iter().map(|example| example.name.as_str()).collect();
-            format!(
-                "unknown {kind} '{}'; known: {}",
-                args.name,
-                names.join(", ")
-            )
+            format!("unknown {kind} '{name}'; known: {}", names.join(", "))
         })?;
-    std::fs::create_dir_all(&args.dest)
-        .map_err(|error| format!("{}: {error}", args.dest.display()))?;
-    let dest = args
-        .dest
+    std::fs::create_dir_all(dest).map_err(|error| format!("{}: {error}", dest.display()))?;
+    let dest = dest
         .canonicalize()
-        .map_err(|error| format!("{}: {error}", args.dest.display()))?;
+        .map_err(|error| format!("{}: {error}", dest.display()))?;
     eprintln!(
         "Fetching {} ({} files, {}) from {}/{} at {} into {}",
         example.name,
@@ -236,18 +290,7 @@ async fn fetch_example(args: FetchExampleArgs, image: bool) -> Result<(), String
     let root = examples::fetch(example, &dest, examples::HUGGING_FACE_DATASETS, &mut report)
         .await
         .map_err(|error| error.to_string())?;
-    println!("{} is ready in {}.", example.name, root.display());
-    if image {
-        for file in &example.files {
-            println!("Image: {}", root.join(&file.path).display());
-        }
-        println!("Then {}.", example.usage);
-        return Ok(());
-    }
-    println!("Serve it as a data root with:");
-    println!("  --data-root examples={}", dest.display());
-    println!("Then {}.", example.usage);
-    Ok(())
+    Ok((example.clone(), root))
 }
 
 fn default_data_dir() -> PathBuf {
@@ -459,7 +502,7 @@ fn listening_urls(config: &ServeConfig, port: u16) -> Vec<String> {
     }
 }
 
-async fn serve(args: ServeArgs) -> Result<(), String> {
+async fn serve(args: ServeArgs, next_steps: Option<String>) -> Result<(), String> {
     let resolved = resolve(&args, true).await?;
     let config = resolved.config;
     let running = server::start(config.clone())
@@ -518,11 +561,207 @@ async fn serve(args: ServeArgs) -> Result<(), String> {
             "press Ctrl+C to stop; active jobs stop at shutdown; results remain until retention expiry"
         );
     }
+    if let Some(next_steps) = next_steps {
+        println!();
+        print!("{next_steps}");
+    }
 
     wait_for_shutdown().await;
     println!("shutting down");
     running.shutdown().await;
     Ok(())
+}
+
+/// `cryo-em`: fetches the RELION image and the tutorial, writes `slurm.json`
+/// from `sinfo`, checks the compute nodes after the file changes, then serves
+/// the app on loopback and prints how to reach it.
+async fn cryo_em(args: CryoEmArgs) -> Result<(), String> {
+    use compute_server::runner::slurm::quickstart::{self, Choice};
+    let data_dir = args.data_dir.clone().unwrap_or_else(default_data_dir);
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|error| format!("cannot create {}: {error}", data_dir.display()))?;
+    let data_dir = data_dir
+        .canonicalize()
+        .map_err(|error| format!("{}: {error}", data_dir.display()))?;
+    println!("Cryo-EM data directory: {}", data_dir.display());
+    println!("Compute nodes must read and write it; pass --data-dir to use another place.");
+
+    let config_path = data_dir.join("slurm.json");
+    let site_flags =
+        args.gpu_partition.is_some() || args.cpu_partition.is_some() || args.account.is_some();
+    if config_path.exists() && site_flags {
+        return Err(format!(
+            "{} already exists, so --account and the partition flags would be ignored; edit it, or delete it to write a new one",
+            config_path.display()
+        ));
+    }
+    if config_path.exists() {
+        println!(
+            "Using {} (edit it to change partitions or resources).",
+            config_path.display()
+        );
+    } else {
+        let apptainer = detect::which("apptainer")
+            .ok_or("apptainer is not on PATH; load it (e.g. module load apptainer) and rerun")?;
+        let sinfo = detect::probe("sinfo", &["-h", "-o", "%P %G"], Duration::from_secs(60)).await;
+        if !sinfo.ok {
+            return Err(format!(
+                "sinfo failed; run this on a host that submits Slurm jobs: {}",
+                sinfo.output
+            ));
+        }
+        let found = quickstart::partitions(&sinfo.output);
+        let gpu_partition = match (&args.gpu_partition, found.gpu.first()) {
+            (Some(partition), _) => partition.clone(),
+            (None, Some(partition)) => partition.clone(),
+            (None, None) => {
+                return Err("sinfo lists no partition with GPUs; pass --gpu-partition NAME".into())
+            }
+        };
+        let cpu_partition = args.cpu_partition.clone().or(found.cpu);
+        let image = data_dir
+            .join("images")
+            .join("relion")
+            .join(compute_server::examples::RELION_IMAGE_FILE);
+        let text = quickstart::config_json(
+            &apptainer,
+            &image,
+            &Choice {
+                cpu_partition: cpu_partition.as_deref(),
+                gpu_partition: &gpu_partition,
+                account: args.account.as_deref(),
+            },
+        );
+        SlurmConfig::parse(&text)?;
+        std::fs::write(&config_path, &text)
+            .map_err(|error| format!("cannot write {}: {error}", config_path.display()))?;
+        println!(
+            "Wrote {}: CPU steps on {}, GPU steps on {} with 1 GPU.",
+            config_path.display(),
+            cpu_partition.as_deref().unwrap_or("the default partition"),
+            gpu_partition
+        );
+        if found.gpu.len() > 1 && args.gpu_partition.is_none() {
+            println!(
+                "Other GPU partitions: {}. Pass --gpu-partition or edit slurm.json to use one.",
+                found.gpu[1..].join(", ")
+            );
+        }
+    }
+    let config = SlurmConfig::load(&config_path)?;
+
+    if !config.image.exists() {
+        let pinned =
+            std::path::Path::new("relion").join(compute_server::examples::RELION_IMAGE_FILE);
+        let image_dir = config
+            .image
+            .ancestors()
+            .nth(2)
+            .filter(|_| config.image.ends_with(&pinned))
+            .map(PathBuf::from)
+            .ok_or_else(|| {
+                format!(
+                    "the image {} in slurm.json does not exist",
+                    config.image.display()
+                )
+            })?;
+        download("relion", &image_dir, true).await?;
+    }
+    let examples = data_dir.join("examples");
+    download("relion-tutorial", &examples, false).await?;
+
+    let mut roots = vec![format!("examples={}", examples.display())];
+    roots.extend(args.data_root.iter().cloned());
+
+    let marker = data_dir.join("slurm-check.json");
+    let current = std::fs::read_to_string(&config_path).unwrap_or_default();
+    let checked = std::fs::read_to_string(&marker).ok().as_deref() == Some(current.as_str());
+    if args.skip_check {
+        println!("Skipping the compute-node check (--skip-check).");
+    } else if checked {
+        println!("Compute nodes already checked with this slurm.json.");
+    } else {
+        let settings = SlurmSettings {
+            config: config.clone(),
+            timings: SlurmTimings::default(),
+            path: None,
+            user: current_user().await?,
+        };
+        let parsed = roots
+            .iter()
+            .map(|argument| DataRoot::parse(argument))
+            .collect::<Result<Vec<_>, _>>()?;
+        println!("Checking the compute nodes with one short job per profile (this waits in the queue)...");
+        let timeout = Duration::from_secs(60 * 60);
+        let (cpu, gpu) = tokio::join!(
+            probe::check(&settings, &data_dir, &parsed, "cpu", timeout),
+            probe::check(&settings, &data_dir, &parsed, "gpu", timeout)
+        );
+        let mut passed = true;
+        for (name, report) in [("cpu", cpu), ("gpu", gpu)] {
+            println!("Profile {name}:");
+            match report {
+                Ok(report) => {
+                    print!("{}", report.render());
+                    passed &= report.passed();
+                }
+                Err(error) => {
+                    println!("  {error}");
+                    passed = false;
+                }
+            }
+        }
+        if !passed {
+            return Err(format!(
+                "the compute-node check failed; fix {} (partition, account, resources) and rerun",
+                config_path.display()
+            ));
+        }
+        std::fs::write(&marker, &current)
+            .map_err(|error| format!("cannot write {}: {error}", marker.display()))?;
+    }
+
+    let serve_args = cryo_em_serve_args(&config_path, &data_dir, args.port, &roots)?;
+    let user = current_user().await?;
+    let fqdn = detect::probe("hostname", &["-f"], Duration::from_secs(10)).await;
+    let host = if fqdn.ok && !fqdn.output.is_empty() {
+        fqdn.output
+    } else {
+        detect::hostname().unwrap_or_else(|| "<this host>".into())
+    };
+    let port = args.port;
+    let next_steps = format!(
+        "Next, on your own computer:\n  1. ssh -N -L {port}:127.0.0.1:{port} {user}@{host}\n  2. Open http://localhost:{port}/cryo-em/ and pair with the code above.\nKeep this running (inside tmux, detach with Ctrl+B then D).\n"
+    );
+    serve(serve_args, Some(next_steps)).await
+}
+
+/// The `serve` flags `cryo-em` starts with: single-owner Slurm on loopback HTTP.
+fn cryo_em_serve_args(
+    config: &std::path::Path,
+    data_dir: &std::path::Path,
+    port: u16,
+    roots: &[String],
+) -> Result<ServeArgs, String> {
+    let mut words: Vec<String> = vec![
+        "neurodesk-compute".into(),
+        "--single-owner".into(),
+        "--runner".into(),
+        "slurm".into(),
+        "--insecure-http".into(),
+        "--slurm-config".into(),
+        config.display().to_string(),
+        "--data-dir".into(),
+        data_dir.display().to_string(),
+        "--listen".into(),
+        format!("127.0.0.1:{port}"),
+    ];
+    for root in roots {
+        words.extend(["--data-root".into(), root.clone()]);
+    }
+    ServeOnly::try_parse_from(words)
+        .map(|parsed| parsed.serve)
+        .map_err(|error| error.to_string())
 }
 
 async fn wait_for_shutdown() {
@@ -777,6 +1016,33 @@ mod tests {
         assert!(require_private(&path).unwrap_err().contains("chmod 600"));
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         assert!(require_private(&path).is_ok());
+    }
+
+    #[test]
+    fn cryo_em_serves_single_owner_slurm_on_loopback() {
+        let args = cryo_em_serve_args(
+            std::path::Path::new("/d/slurm.json"),
+            std::path::Path::new("/d"),
+            8790,
+            &["examples=/d/examples".into(), "facility=/scratch/in".into()],
+        )
+        .unwrap();
+        assert!(args.single_owner && args.insecure_http);
+        assert_eq!(args.runner.as_deref(), Some("slurm"));
+        assert_eq!(args.listen, "127.0.0.1:8790");
+        assert_eq!(args.slurm_config, Some(PathBuf::from("/d/slurm.json")));
+        assert_eq!(args.data_dir, Some(PathBuf::from("/d")));
+        assert_eq!(
+            args.data_root,
+            ["examples=/d/examples", "facility=/scratch/in"]
+        );
+        assert_eq!(args.www, None);
+        let cli = Cli::parse_from(["neurodesk-compute", "cryo-em", "--gpu-partition", "volta"]);
+        let Some(Command::CryoEm(args)) = cli.command else {
+            panic!("cryo-em");
+        };
+        assert_eq!(args.gpu_partition.as_deref(), Some("volta"));
+        assert_eq!(args.port, 8765);
     }
 
     #[test]
