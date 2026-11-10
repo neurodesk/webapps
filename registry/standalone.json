@@ -2115,8 +2115,8 @@
           "platform": "macos-arm64",
           "version": "0.3.20261109",
           "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-macos-arm64.pkg",
-          "sha256": "0e82f1fbc21ff985d568b5754b16401fc9cdcb9ed02dd9ca7550f5c9c2bfe244",
-          "bytes": 37056458,
+          "sha256": "c4edb4898eb2633cd3c8841a8a8f4c2e5b6681a913ef2e27d2b2bec92487d6a7",
+          "bytes": 37056463,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg samsrf-0.3.20261109-macos-arm64.pkg -target /\nsamsrf self-check\nsamsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
@@ -2126,8 +2126,8 @@
           "platform": "windows-x64",
           "version": "0.3.20261109",
           "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-windows-x64.zip",
-          "sha256": "58b25dd02cc5f51ae80fb6d893a745053d943f26c462cfd218b3cf9d94adf7eb",
-          "bytes": 33268755,
+          "sha256": "fd5d31166d30a5e12d7ddd0ae59a42cfa04cbf47758ca0a69b2e79f4a4331a8b",
+          "bytes": 33268754,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\samsrf-0.3.20261109-windows-x64.zip -DestinationPath .\n.\\samsrf-0.3.20261109-windows-x64\\samsrf.exe rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
