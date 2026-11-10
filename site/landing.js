@@ -98,10 +98,12 @@ function filterCatalog() {
   const query = searchInput.value.trim();
   const terms = searchTerms(query);
   const visibleApps = new Set();
+  let localMatch = false;
 
   for (const card of cards) {
     const matchesCategory = activeCategory === 'all' || card.dataset.category === activeCategory;
     const matchesSearch = matchesTerms(card.dataset.search, terms);
+    localMatch ||= matchesSearch;
     card.hidden = !(matchesCategory && matchesSearch);
     if (!card.hidden) visibleApps.add(card.dataset.appId);
   }
@@ -119,7 +121,8 @@ function filterCatalog() {
     : `${totalApps} apps across ${sections.length} categories`;
   clearSearch.hidden = !query;
   noResults.hidden = visibleApps.size !== 0;
-  showElsewhere(visibleApps.size === 0 ? terms : []);
+  // Another host's apps only when no app here matches, whatever the category.
+  showElsewhere(localMatch ? [] : terms);
 }
 
 function selectCategory(category) {
