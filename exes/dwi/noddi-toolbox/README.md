@@ -56,8 +56,10 @@ The source is `NODDI_toolbox_v1.05.zip` from NITRC, SHA-256
   the Legendre-Gaussian integrals of the stick and the isotropic signal. The gradient descent
   decodes di and diso from their square roots, so it keeps its own copy of these terms at the
   decoded values, as the toolbox evaluates them.
-- **Tensor fit.** `FitLinearDT` takes `pinv(X) * log(E / S0)`. The port solves the normal
-  equations of the same least-squares problem. The fibre direction is the eigenvector of the
+- **Tensor fit.** `FitLinearDT` takes `pinv(X) * log(E / S0)`. The port computes the same
+  minimum-norm solution from the eigendecomposition of XᵀX (Jacobi), dropping singular values
+  at or below `pinv`'s tolerance, so a rank-deficient design (for example, only axial samples
+  left positive) still gives a start. The fibre direction is the eigenvector of the
   eigenvalue largest in magnitude, and its sign is `dwi-tensor`'s convention. The model depends
   on the direction only through cos²; the starting angles depend on the sign.
 - **Input checks.** The protocol needs a b0 volume and a non-zero b-vector for every other
@@ -98,11 +100,11 @@ build's.
 
 | Map | Native median | WASM median | 95th percentile | Max (native, WASM) |
 | --- | --- | --- | --- | --- |
-| ICVF | 3.26e-6 | 3.28e-6 | 1.8e-5 | 0.104, 0.077 |
-| ISOVF | 3.39e-6 | 3.38e-6 | 9.5e-6 | 0.084, 0.087 |
+| ICVF | 3.27e-6 | 3.28e-6 | 1.8e-5 | 0.104, 0.104 |
+| ISOVF | 3.41e-6 | 3.38e-6 | 9.5e-6 | 0.088, 0.089 |
 | ODI | 3.96e-7 | 3.95e-7 | 1.5e-6 | 0.990, 0.990 |
 
-In 259 voxels, a map differs by more than 0.01. In 251 of them, the toolbox reached a higher
+In 269 voxels, a map differs by more than 0.01. In 261 of them, the toolbox reached a higher
 likelihood. Most of these voxels start the descent with fiso or ficvf at 0. The encoding
 `asin(√f)` has zero slope there, and Octave's SQP leaves that point more often than L-BFGS-B.
 

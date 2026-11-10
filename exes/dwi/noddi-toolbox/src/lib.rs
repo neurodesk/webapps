@@ -458,7 +458,7 @@ where
 /// The toolbox stops fmincon at TolFun 1e-6, absolute on a log-likelihood of 1e5 to 1e6.
 /// L-BFGS-B's ftol is relative, and scipy's default (2.2e-9) stopped it short of the toolbox's
 /// optimum in 1548 of the 13327 WM gate voxels. With ftol 0 each stage runs until its line
-/// search cannot lower the objective; 259 voxels then differ by more than 0.01, and on the
+/// search cannot lower the objective; 269 voxels then differ by more than 0.01, and on the
 /// gate no stage reached this iteration limit.
 const MAX_ITERATIONS: usize = 1000;
 
@@ -471,7 +471,7 @@ fn linear_tensor(
     signal: &[f64],
 ) -> Option<([f64; 3], f64)> {
     let s0 = b0.iter().map(|&i| signal[i]).sum::<f64>() / b0.len() as f64;
-    // Normal equations of the six tensor elements on log(E / S0) (pinv(X) * y for a full-rank X).
+    // The normal equations of the six tensor elements on log(E / S0), solved as pinv(X) * y.
     let mut normal = [[0.0; 6]; 6];
     let mut rhs = [0.0; 6];
     for &m in kept {
@@ -493,7 +493,7 @@ fn linear_tensor(
             }
         }
     }
-    let d = solve6(normal, rhs)?;
+    let d = pinv_solve(normal, rhs, kept.len());
     let (values, vectors) =
         dwi_tensor::eigen_symmetric([[d[0], d[1], d[2]], [d[1], d[3], d[4]], [d[2], d[4], d[5]]]);
     let largest = (0..3).max_by(|&i, &j| values[i].abs().total_cmp(&values[j].abs()))?;
@@ -503,35 +503,76 @@ fn linear_tensor(
         .then_some((vectors[largest], s0))
 }
 
-/// Solves a symmetric positive-definite 6×6 system by Gaussian elimination with partial
-/// pivoting; None when it is singular.
-fn solve6(mut a: [[f64; 6]; 6], mut b: [f64; 6]) -> Option<[f64; 6]> {
-    for col in 0..6 {
-        let pivot = (col..6).max_by(|&i, &j| a[i][col].abs().total_cmp(&a[j][col].abs()))?;
-        let size = a[pivot][col].abs();
-        if size.is_nan() || size == 0.0 {
-            return None;
-        }
-        a.swap(col, pivot);
-        b.swap(col, pivot);
-        let pivot_row = a[col];
-        for row in col + 1..6 {
-            let factor = a[row][col] / pivot_row[col];
-            for (value, &p) in a[row].iter_mut().zip(&pivot_row).skip(col) {
-                *value -= factor * p;
-            }
-            b[row] -= factor * b[col];
-        }
-    }
+/// `pinv(X) * y` from the normal equations `normal = XᵀX`, `rhs = Xᵀy` of an `rows` × 6
+/// design X: the minimum-norm least-squares solution. The singular values of X are the square
+/// roots of the eigenvalues of XᵀX; as MATLAB's `pinv`, those at or below
+/// max(size(X)) · eps · the largest are dropped, so a rank-deficient design still has a solution.
+fn pinv_solve(normal: [[f64; 6]; 6], rhs: [f64; 6], rows: usize) -> [f64; 6] {
+    let (values, vectors) = jacobi6(normal);
+    let largest = values.iter().fold(0.0f64, |m, &v| m.max(v)).sqrt();
+    let tolerance = rows.max(6) as f64 * f64::EPSILON * largest;
     let mut x = [0.0; 6];
-    for row in (0..6).rev() {
-        let mut sum = b[row];
-        for k in row + 1..6 {
-            sum -= a[row][k] * x[k];
+    for k in 0..6 {
+        if values[k].max(0.0).sqrt() <= tolerance {
+            continue;
         }
-        x[row] = sum / a[row][row];
+        let v: [f64; 6] = std::array::from_fn(|i| vectors[i][k]);
+        let coefficient = v.iter().zip(&rhs).map(|(a, b)| a * b).sum::<f64>() / values[k];
+        for (xi, vi) in x.iter_mut().zip(&v) {
+            *xi += coefficient * vi;
+        }
     }
-    Some(x)
+    x
+}
+
+/// Eigenvalues and eigenvectors (columns of the returned matrix) of a symmetric 6×6 matrix
+/// by cyclic Jacobi rotations.
+fn jacobi6(mut a: [[f64; 6]; 6]) -> ([f64; 6], [[f64; 6]; 6]) {
+    let mut v = [[0.0; 6]; 6];
+    for (i, row) in v.iter_mut().enumerate() {
+        row[i] = 1.0;
+    }
+    for _ in 0..100 {
+        let off: f64 = (0..6)
+            .flat_map(|p| (p + 1..6).map(move |q| (p, q)))
+            .map(|(p, q)| a[p][q] * a[p][q])
+            .sum();
+        let diagonal: f64 = (0..6).map(|i| a[i][i] * a[i][i]).sum();
+        if off <= f64::EPSILON * f64::EPSILON * diagonal {
+            break;
+        }
+        for p in 0..6 {
+            for q in p + 1..6 {
+                if a[p][q] == 0.0 {
+                    continue;
+                }
+                let theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+                let t = if theta == 0.0 {
+                    1.0
+                } else {
+                    theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt())
+                };
+                let c = 1.0 / (t * t + 1.0).sqrt();
+                let s = t * c;
+                for row in a.iter_mut() {
+                    let (akp, akq) = (row[p], row[q]);
+                    row[p] = c * akp - s * akq;
+                    row[q] = s * akp + c * akq;
+                }
+                let (row_p, row_q) = (a[p], a[q]);
+                for k in 0..6 {
+                    a[p][k] = c * row_p[k] - s * row_q[k];
+                    a[q][k] = s * row_p[k] + c * row_q[k];
+                }
+                for row in v.iter_mut() {
+                    let (vp, vq) = (row[p], row[q]);
+                    row[p] = c * vp - s * vq;
+                    row[q] = s * vp + c * vq;
+                }
+            }
+        }
+    }
+    (std::array::from_fn(|i| a[i][i]), v)
 }
 
 #[cfg(test)]
@@ -592,6 +633,62 @@ mod tests {
         let mean = b0.iter().sum::<f64>() / 3.0;
         let sd = (b0.iter().map(|v| (v - mean) * (v - mean)).sum::<f64>() / 3.0).sqrt();
         rician::log_likelihood(signal, &predicted, sd.max(0.02 * mean) / 100.0)
+    }
+
+    #[test]
+    fn rank_deficient_tensor_design_still_starts_the_fit() {
+        // Two shells; only the 12 samples along z stay positive, so the tensor design has rank 1.
+        let mut bvals = vec![0.0; 3];
+        let mut bvecs = vec![[0.0; 3]; 3];
+        for shell in [1000.0, 2000.0] {
+            for i in 0..12 {
+                bvals.push(shell);
+                bvecs.push([0.0, 0.0, if i % 2 == 0 { 1.0 } else { -1.0 }]);
+            }
+            for i in 0..12 {
+                let a = i as f64 * 0.5;
+                bvals.push(shell);
+                bvecs.push([a.cos(), a.sin(), 0.3]);
+            }
+        }
+        let p = Protocol::new(&bvals, &bvecs, 0.0).unwrap();
+        let signal: Vec<f64> = (0..p.len())
+            .map(|i| match i {
+                0..=2 => 1000.0 + i as f64,
+                _ if p.dirs[i][0] == 0.0 && p.dirs[i][1] == 0.0 => 1000.0 * (-p.b[i] * 1e-9).exp(),
+                _ => 0.0,
+            })
+            .collect();
+        let fit = fit_voxel(&p, &signal);
+        assert_eq!(fit.error_code, 0, "{fit:?}");
+        // pinv's minimum-norm tensor has only Dzz: the start points along z.
+        assert!(
+            fit.grid[6].abs() < 1e-12 || (fit.grid[6] - PI).abs() < 1e-12,
+            "{fit:?}"
+        );
+        assert!(fit.params.iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn pinv_matches_the_least_squares_solution_of_a_full_rank_design() {
+        let mut normal = [[0.0; 6]; 6];
+        let mut rhs = [0.0; 6];
+        let truth = [1.0, -2.0, 0.5, 3.0, 0.25, -1.5];
+        for r in 0..9 {
+            let row: [f64; 6] =
+                std::array::from_fn(|c| ((r * 7 + c * 3) % 5) as f64 + (r == c) as u8 as f64);
+            let y: f64 = row.iter().zip(&truth).map(|(a, b)| a * b).sum();
+            for i in 0..6 {
+                rhs[i] += row[i] * y;
+                for j in 0..6 {
+                    normal[i][j] += row[i] * row[j];
+                }
+            }
+        }
+        let x = pinv_solve(normal, rhs, 9);
+        for (got, want) in x.iter().zip(truth) {
+            assert!((got - want).abs() < 1e-9, "{x:?}");
+        }
     }
 
     #[test]
