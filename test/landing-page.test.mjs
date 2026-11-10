@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { loadAppsRegistry, SUPPORT_STATUSES } from '../scripts/lib/apps-registry.mjs';
 import { renderLandingPage } from '../scripts/lib/landing-page.mjs';
@@ -118,8 +119,9 @@ test('each catalogue links its own desktop suite, and none before its first rele
   assert.equal(page(msk, { neuro: standalone.suites.neuro }).querySelector('.desktop-link'), null);
   const neuro = page(findCatalog(registry, 'neuro'), { neuro: suite }).querySelector('.desktop-link');
   assert.equal(neuro.getAttribute('href'), 'https://github.com/neurodesk/webapps/releases/tag/webapps-v0.49.20261111');
-  // site/landing.js rewrites .standalone-link to the newest webapps-v release, which is neuro's suite only.
+  // The link is rendered from the catalogue's own record; nothing rewrites it to another suite's release.
   assert.equal(page(msk, { msk: suite }).querySelector('.standalone-link'), null);
+  assert.doesNotMatch(await readFile(new URL('../site/landing.js', import.meta.url), 'utf8'), /api\.github\.com|releases/);
 });
 
 test('microscopy catalogue groups apps by task without repeating its domain', async () => {
