@@ -13,7 +13,7 @@ test('physical dispatch windows preserve the actual Boot Philox seed and lane st
   const expressions = name => [...boot.matchAll(new RegExp(`let ${name} = ([^;]+);`, 'g'))].map(match => match[1]);
   const logicalGroups = expressions('logical_group');
   const globalIds = expressions('global_id');
-  const initializers = [...boot.matchAll(/var st = (philox_init\([\s\S]*?\));/g)].map(match => match[1]);
+  const initializers = [...boot.matchAll(/\bst = (philox_init\([\s\S]*?\));/g)].map(match => match[1]);
   const workgroupSizes = [...boot.matchAll(/@workgroup_size\(([^)]+)\)/g)].map(match => match[1]);
   expect(logicalGroups).toHaveLength(2);
   expect(globalIds).toHaveLength(2);
