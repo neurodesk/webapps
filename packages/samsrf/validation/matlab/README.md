@@ -321,9 +321,9 @@ vertex quota is allowed.
 Native gates additionally cover all 14 raw optimizer cases, nine double-precision
 CF modes from identical recorded profiles, 146 real/complex regression scale
 cases and 251 polygon cases. Regression rank decisions must match exactly;
-coefficient comparisons use per-value relative tolerances (4 single or 3
+coefficient comparisons use per-value relative tolerances (4 single or 4
 double epsilon units), never a map-wide scale. The measured maxima are 3.33 and
-2.00 epsilon units; the earlier double solve on rounded inputs reached 6.7 and
+3.15 epsilon units; the earlier double solve on rounded inputs reached 6.7 and
 7.5, under gates of 16 single epsilon units and 1e-12.
 Two polygons
 (`polygon_191`, `polygon_193`) sit exactly on the inferred relative simplification
@@ -367,38 +367,43 @@ coefficients for dropped columns; and |port - MATLAB|, real and imaginary parts
 together, within the first-order least-squares rounding bound
 `eps * ||row of R^-1|| * (||A|| ||b|| + kappa ||r||)`. The largest measured
 ratio is 0.93 (`random_double_9`). It also requires at least the measured
-number of bit-identical cases: 48 real and 10 complex single, 43 real and 6
-complex double (107 of 348; the previous double solve matched 18).
+number of bit-identical cases: 58 real and 10 complex single, 49 real and 6
+complex double (123 of 348; the previous double solve matched 18).
 `qr-accuracy.py` reports each coefficient's ULP distance and its error against
 the exact rational solution of the same rounded inputs:
 
 | Family (cases) | Bit-identical before → after | Max real-part ULP before → after |
 | --- | --- | --- |
-| Regression scale, single (33) | 6 → 17 | 12 → 2 |
-| Regression scale, double (33) | 0 → 5 | 8 → 3 |
-| Rank boundary, single (40) | 2 → 10 | 12 → 5 |
-| Rank boundary, double (40) | 0 → 11 | 14 → 3 |
-| CSS traces, single (54) | 2 → 22 | 128 → 33 (excluding vertices 47 and 58's zero baselines) |
-| CSS traces, double (54) | 0 → 21 | 293 → 32; vertex 47's baseline had the wrong sign and is now exact |
-| Constant and extreme scales, single (12) | 3 → 9 | 7 → 1 |
-| Constant and extreme scales, double (12) | 1 → 12 | 6 → 0 |
-| Nearly constant, single (5) | 0 → 3 | 351 → 1 |
-| Nearly constant, double (5) | 0 → 0 | 4.4e11 → 187 |
-| Imaginary underflow (6) and ones last (6) | 0 → 4 | 6 → 2 |
-| Irregular, single (24) | 0 → 5 | 266 → 1,011 |
-| Irregular, double (24) | 0 → 0 | 1,702 → 1,684 |
+| Regression scale, single (33) | 6 → 24 | 12 → 1 |
+| Regression scale, double (33) | 0 → 10 | 8 → 5 |
+| Rank boundary, single (40) | 2 → 12 | 12 → 5 |
+| Rank boundary, double (40) | 0 → 8 | 14 → 6 |
+| CSS traces, single (54) | 2 → 22 | 128 → 130 (excluding vertices 47 and 58's zero baselines) |
+| CSS traces, double (54) | 0 → 22 | 293 → 16; vertex 47's baseline had the wrong sign and is now exact |
+| Constant and extreme scales, single (12) | 3 → 10 | 7 → 0 |
+| Constant and extreme scales, double (12) | 1 → 11 | 6 → 1 |
+| Nearly constant, single (5) | 0 → 4 | 351 → 1 |
+| Nearly constant, double (5) | 0 → 1 | 4.4e11 → 2 |
+| Imaginary underflow (6) and ones last (6), single | 0 → 5 | 6 → 1 |
+| Imaginary underflow (6) and ones last (6), double | 0 → 3 | 5 → 1 |
+| Irregular, single (24) | 0 → 1 | 266 → 1,011 |
+| Irregular, double (24) | 0 → 2 | 1,702 → 1,684 |
 
 "Before" is the previous solve; it had no imaginary parts and no ones-last
 order, so those columns compare real parts of ones-first designs only.
 Units are the design class's ULPs of the real part, which overstate small
 real parts of complex coefficients; the bound above is the gate. The
 remaining differences come from MKL's kernels. The Householder steps follow
-reference LAPACK; only the reflector inner products follow a measured order:
-eight accumulators over blocks of eight for real designs, two accumulators for
-complex single and sequential for complex double, each adding the leading
-element last. That order was chosen among sequential, 2-, 4-, 8-, 16- and
-32-lane, fused multiply-add and split complex accumulations by the number of
-bit-identical cases; it is a fit to this host, not MKL's documented algorithm.
+reference LAPACK; only the reflector inner products follow a measured order.
+For real designs the first product is taken alone, the rest accumulate in
+eight lanes over whole blocks of eight, the lanes reduce pairwise (i with
+i + 4, then i + 2, then i + 1), the remaining terms follow in sequence, and the
+leading element is added last. That is consistent with an aligned vector loop
+after a one-element peel, but it was chosen among sequential, 2- to 32-lane,
+peeled, adjacent-pair, fused multiply-add and split complex accumulations by
+the number of bit-identical cases: a fit to this host, not MKL's documented
+algorithm. Complex single designs fit best with two lanes and complex double
+designs sequentially; few complex cases are bit-identical.
 `qr(A,0)`'s R12 matches less often than `mldivide`'s coefficients do, so the
 separate factorisation is not evidence of `mldivide`'s internal one.
 The zero-based single CSS vertices 47 and 58 have exact zero baselines in

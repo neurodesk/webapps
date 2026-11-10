@@ -263,22 +263,25 @@ fn larfg<T: Real>(alpha: C<T>, x: &mut [C<T>], complex: bool) -> (C<T>, C<T>) {
 
 /// `v^H c` with `v(1) = 1`, as MKL accumulated it for MATLAB on the recording
 /// host. The pinned least-squares recording selects this order among the
-/// sequential, lane and fused variants tried (validation README): real designs
-/// use eight accumulators over whole blocks of eight, pairwise reduction, then
-/// the remaining terms in sequence; complex single designs use two
-/// accumulators over every term; complex double designs add in sequence. In
-/// every case the leading `c(1)` is added last.
+/// sequential, lane, peeled, fused and split complex variants tried
+/// (validation README). Real designs take the first product `v(2) c(2)` on its
+/// own, accumulate the rest in eight lanes over whole blocks of eight, reduce
+/// the lanes pairwise (lane i with i + 4, then i + 2, then i + 1) and add the
+/// remaining terms in sequence; complex single designs use two lanes over every
+/// term and complex double designs add in sequence. `c(1)` is added last.
 fn reflect_dot<T: Real>(v: &[C<T>], c: &[C<T>], complex: bool) -> C<T> {
     let single = std::mem::size_of::<T>() == 4;
-    let (lanes, sequential_tail) = match (complex, single) {
-        (false, _) => (8, true),
-        (true, true) => (2, false),
-        (true, false) => (1, false),
+    let (peeled, lanes, sequential_tail) = match (complex, single) {
+        (false, _) => (1, 8, true),
+        (true, true) => (0, 2, false),
+        (true, false) => (0, 1, false),
     };
     let products: Vec<C<T>> = v.iter().zip(&c[1..]).map(|(v, c)| v.conj().mul(*c, complex)).collect();
-    let blocked = if sequential_tail { products.len() / lanes * lanes } else { products.len() };
+    let peeled = peeled.min(products.len());
+    let body = &products[peeled..];
+    let blocked = if sequential_tail { body.len() / lanes * lanes } else { body.len() };
     let mut sums = vec![C::real(T::ZERO); lanes];
-    for (i, product) in products[..blocked].iter().enumerate() {
+    for (i, product) in body[..blocked].iter().enumerate() {
         sums[i % lanes] = sums[i % lanes].add(*product, complex);
     }
     while sums.len() > 1 {
@@ -286,8 +289,11 @@ fn reflect_dot<T: Real>(v: &[C<T>], c: &[C<T>], complex: bool) -> C<T> {
         sums = (0..half).map(|i| sums[i].add(sums[i + half], complex)).collect();
     }
     let mut w = sums[0];
-    for product in &products[blocked..] {
+    for product in &body[blocked..] {
         w = w.add(*product, complex);
+    }
+    for product in products[..peeled].iter().rev() {
+        w = product.add(w, complex);
     }
     c[0].add(w, complex)
 }

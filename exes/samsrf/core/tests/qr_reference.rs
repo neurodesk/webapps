@@ -2,7 +2,7 @@
 //! designs. The native workflow downloads the pinned recording
 //! (packages/samsrf/validation/matlab/qr-reference.json) and sets
 //! SAMSRF_QR_REFERENCE_DIR. MATLAB ran MKL's `CNR branch auto` on AMD EPYC
-//! 7763 hosts. 107 of the 348 cases are bit-identical; the others are gated
+//! 7763 hosts. 123 of the 348 cases are bit-identical; the others are gated
 //! by the least-squares rounding scale, so this is measured agreement with
 //! that backend on this finite set, not bit parity on arbitrary inputs.
 use num_complex::Complex64;
@@ -177,7 +177,7 @@ fn coefficients_agree_within_the_measured_rounding_scale() {
     eprintln!("largest ratios {worst:?}; bit-identical cases {exact:?}");
     // Bit-identical coefficients (both parts, both columns) with the recorded
     // MKL backend. A change that loses any of them is a regression.
-    for (group, minimum) in [("double-complex", 6), ("double-real", 43), ("single-complex", 10), ("single-real", 48)] {
+    for (group, minimum) in [("double-complex", 6), ("double-real", 49), ("single-complex", 10), ("single-real", 58)] {
         assert!(exact.get(group).copied().unwrap_or(0) >= minimum, "{group}: fewer bit-identical cases than {minimum}");
     }
 }
