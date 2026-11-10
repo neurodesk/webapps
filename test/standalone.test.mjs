@@ -164,12 +164,8 @@ test('cryo-em setup walks through a Slurm cluster, not a Docker GPU machine', as
   const section = dialog.root.querySelector('#standalone-compute').parentElement;
   assert.match(section.textContent, /Slurm cluster/);
   assert.doesNotMatch(section.textContent, /docker|NeSVoR/i);
-  assert.match(section.querySelector('#compute-fetch').textContent, /fetch-image relion[\s\S]*fetch-example relion-tutorial/);
-  const config = JSON.parse(section.querySelector('#compute-slurm-config').textContent);
-  assert.deepEqual(Object.keys(config.image), ['path']);
-  assert.match(section.querySelector('#compute-check').textContent, /check-slurm --slurm-config slurm\.json --profile gpu/);
-  const start = section.querySelector('#compute-start').textContent;
-  for (const flag of ['--single-owner', '--runner slurm', '--listen 127.0.0.1:8765', '--www']) assert.ok(start.includes(flag), flag);
+  for (const id of ['compute-fetch', 'compute-slurm-config', 'compute-check']) assert.equal(section.querySelector(`#${id}`), null, id);
+  assert.equal(section.querySelector('#compute-start').textContent, 'tmux new -s cryo-em\n./neurodesk-compute cryo-em');
   assert.match(section.querySelector('#compute-tunnel').textContent, /^ssh -N -L 8765:127\.0\.0\.1:8765 /);
   assert.match(section.textContent, /localhost:8765\/cryo-em\//);
   assert.match(section.textContent, /released server with Slurm support is not available/);

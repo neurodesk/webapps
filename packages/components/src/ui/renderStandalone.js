@@ -59,49 +59,21 @@ export function openStandalone({ title, app, installed = false }, doc = globalTh
     root.append(element('p', 'The cluster needs Slurm with job accounting (sacct), Apptainer and, for the GPU steps, NVIDIA GPUs. Python and Node.js are not required. Never run the server as root or as a shared account.'));
     root.append(element('h4', '1. Download the server on a login host'));
     serverDownload(root, server, 'A released server with Slurm support is not available yet.');
-    root.append(element('h4', '2. Download the RELION image and the tutorial movies'));
-    command(root, 'compute-fetch', './neurodesk-compute fetch-image relion --dest /shared/images\n./neurodesk-compute fetch-example relion-tutorial --dest $HOME/cryo-examples');
-    root.append(element('p', 'Put the image where every compute node can read it. The tutorial is 3.2 GB; both downloads resume when rerun.'));
-    root.append(element('h4', '3. Describe your cluster in slurm.json'));
-    command(root, 'compute-slurm-config', [
-      '{',
-      '  "apptainer": "/usr/bin/apptainer",',
-      '  "image": { "path": "/shared/images/relion/relion_5.1.1.sif" },',
-      '  "scratch": "$TMPDIR",',
-      '  "profiles": {',
-      '    "cpu": { "partition": "cpu", "cpus": 16, "gpus": 0, "memory": "64G", "time": "12:00:00" },',
-      '    "gpu": { "partition": "gpu", "account": "lab", "cpus": 24, "gpus": 4, "memory": "128G", "time": "24:00:00" }',
-      '  },',
-      '  "defaults": {',
-      '    "import": "cpu", "motioncorr": "cpu", "ctffind": "cpu", "autopick": "cpu", "extract": "cpu",',
-      '    "class2d": "gpu", "select": "cpu", "initialmodel": "gpu", "refine3d": "gpu",',
-      '    "maskcreate": "cpu", "postprocess": "cpu"',
-      '  }',
-      '}',
-    ].join('\n'));
-    root.append(element('p', 'Use your site’s partitions, account and GPU counts. Every step needs a default profile. A GPU profile for 3D refinement needs at least 3 CPUs. Add "gres": "gpu:a100:4" when your site names GPU types.'));
-    root.append(element('h4', '4. Check the compute nodes once per profile'));
-    command(root, 'compute-check', './neurodesk-compute check-slurm --slurm-config slurm.json --profile gpu \\\n  --data-root examples=$HOME/cryo-examples --data-dir $HOME/neurodesk-compute');
-    root.append(element('p', 'The probe job reports whether the node runs the image, reads the data, writes the project folder and sees its GPUs.'));
-    root.append(element('h4', '5. Start the server on that same host and keep it running'));
-    command(root, 'compute-start', 'tmux new -s cryo-em\n./neurodesk-compute serve --single-owner --runner slurm --slurm-config slurm.json \\\n  --data-root examples=$HOME/cryo-examples --data-dir $HOME/neurodesk-compute \\\n  --listen 127.0.0.1:8765 --insecure-http --www "$PWD/www"');
-    root.append(element('p', 'Add --data-root facility=/path/to/movies for your own data. Other users of the host need a different port. Detach from tmux with Ctrl+B then D.'));
-    root.append(element('h4', '6. Connect from your computer'));
+    root.append(element('h4', '2. Start Cryo-EM on that host'));
+    command(root, 'compute-start', 'tmux new -s cryo-em\n./neurodesk-compute cryo-em');
+    root.append(element('p', 'The first start fetches RELION and the tutorial (17 GB), writes slurm.json and tests nodes.'));
+    root.append(element('p', 'Add --account NAME or --gpu-partition NAME if your site needs them.'));
+    root.append(element('h4', '3. Connect from your computer'));
+    root.append(element('p', 'On your computer, run the tunnel command the server prints:'));
     command(root, 'compute-tunnel', 'ssh -N -L 8765:127.0.0.1:8765 you@login2.cluster.example');
-    const steps = element('ol');
-    for (const text of [
-      'Use the exact host name where the server runs, not a login alias that picks a host for you.',
-      'Open http://localhost:8765/cryo-em/ in your browser: the server’s own copy of this app.',
-      'Pair with the code in $HOME/neurodesk-compute/token on the cluster (cat it there).',
-      'Choose the RELION tutorial example and run the steps in order, from Import to Post-processing.',
-    ]) steps.append(element('li', text));
-    root.append(steps);
+    root.append(element('p', 'Open http://localhost:8765/cryo-em/, pair with the printed code, run the tutorial.'));
     const details = element('details');
     details.append(element('summary', 'Restarts, cancelling and problems'));
     details.append(element('p', 'Jobs keep running in Slurm when the server stops. Start it again with the same command and it follows them again.'));
+    details.append(element('p', 'Change partitions, accounts or resources in the slurm.json it names; the next start checks the nodes again. Add --data-root facility=/path/to/movies for your own data, and --data-dir PATH when home is too small.'));
     details.append(element('p', 'The × in the status bar cancels the running job with scancel. Each job folder holds job.sbatch, run.out and run.err.'));
     details.append(element('p', 'If the server refuses to start after a crash because the data directory is in use, confirm no server is running, then:'));
-    command(details, 'compute-unlock', './neurodesk-compute unlock --data-dir $HOME/neurodesk-compute');
+    command(details, 'compute-unlock', './neurodesk-compute unlock');
     details.append(element('a', 'Compute server documentation', { href: server.documentation }));
     root.append(details);
   } else if (app.computeServer) {
