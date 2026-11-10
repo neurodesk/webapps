@@ -37,7 +37,7 @@ async function fixture(t, { model = false, template = false, templateExample = f
         analytics: { measurement_id: 'G-FIXTURE', period_days: 30 },
         categories: [{ id: 'test', title: 'Test', description: 'Test apps' }],
         hub: { host: 'hub.fixture.invalid', title: 'Hub', heading: 'Hub', description: 'Hub', brand: { name: 'Fixture', logo: 'fixture.svg', home: 'https://fixture.invalid/', more_apps: 'More fixture apps' } },
-        catalogs: [{ id: 'fixture', host: 'fixture.invalid', hosting: 'pages', title: 'Fixture', heading: 'Fixture', description: 'Fixture', brand: { name: 'Fixture', logo: 'fixture.svg', home: 'https://fixture.invalid/', more_apps: 'More fixture apps' } }],
+        catalogs: [{ id: 'fixture', host: 'fixture.invalid', hosting: 'pages', title: 'Fixture', heading: 'Fixture', description: 'Fixture', brand: { name: 'Fixture', logo: 'fixture.svg', home: 'https://fixture.invalid/', more_apps: 'More fixture apps' }, desktop: { app_id: 'invalid.fixture.webapps', executable: 'fixture-webapps' } }],
       },
       apps: ['alpha', 'beta'].map(id => ({
         id,
