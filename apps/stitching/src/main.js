@@ -2,8 +2,9 @@
 // optimisation and linear-blending fusion. Numerics live in src/core, output files in
 // src/outputs.js and src/ome-zarr.js; this file is the workflow and the viewer.
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
-import NiiVue, { SLICE_TYPE } from "@niivue/niivue";
+import NiiVue, { DRAG_MODE, SLICE_TYPE } from "@niivue/niivue";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
+import { createElement } from "@neurodesk/webapp-components/core";
 import {
   createResultList,
   bindFileDrop,
@@ -24,7 +25,8 @@ import { fusedGeometry } from "./core/fusion.js";
 import { checkFusionMemory, checkSolverMemory, registrationWorkers } from "./core/memory.js";
 import { linksCsv, outputStem, provenance, registeredConfiguration, summarise } from "./outputs.js";
 import { readTileFiles } from "./input.js";
-import { displayNifti, displaySpacing } from "./display.js";
+import { displayNifti, displaySpacing, displayWindow } from "./display.js";
+import { displayFrame, largestMove, placeInFrame, tileOutlinePolygons } from "./frame.js";
 import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
@@ -45,9 +47,27 @@ const workspace = mountImagingWorkspace({
   controlsContract: { about: "#aboutBtn", privacy: "#privacyBtn" },
 });
 
+// Tile outlines are image annotations, coloured like overlay colormaps rather than interface
+// tokens: cyan at the layout positions, orange where stitching placed the tiles (a pair that
+// stays distinct with red-green colour blindness), as NiiVue RGBA in 0-1.
+const OUTLINES = {
+  layout: { rgba: [0, 0.8, 1, 1], colour: "cyan", label: "layout" },
+  registered: { rgba: [1, 0.6, 0, 1], colour: "orange", label: "stitched" },
+};
+let outlinesVisible = true;
+const outlineToggle = createElement("button", {
+  type: "button",
+  className: "nd-tool-btn",
+  text: "Outlines",
+  title: "Show or hide the tile outlines: cyan at the layout positions, orange where stitching placed them",
+  "aria-pressed": "true",
+  hidden: true,
+  onClick: () => void setOutlinesVisible(!outlinesVisible).catch(report),
+});
 const toolbar = createViewerToolbar({
   views: [
-    { id: "image", label: "Image", active: true },
+    { id: "layout", label: "Layout", active: true },
+    { id: "stitched", label: "Stitched" },
     { id: "pairs", label: "Pairs" },
   ],
   window: false,
@@ -55,6 +75,7 @@ const toolbar = createViewerToolbar({
   colormap: false,
   download: false,
   screenshot: false,
+  actions: [outlineToggle],
 });
 $("viewer").prepend(toolbar);
 const log = createConsole({ id: "technicalLog", resizable: true, channels: [{ id: "analysis", label: "Analysis" }, { id: "technical", label: "Technical" }] });
@@ -66,7 +87,9 @@ const info = createInfoDialog();
 $("aboutBtn").onclick = () => info.open(`About ${APP.title}`, $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 
-const viewer = new NiiVue({ isDragDropEnabled: false });
+// Right-drag pans and the wheel zooms at the pointer, as in slide viewers, so a seam can be
+// inspected closely.
+const viewer = new NiiVue({ isDragDropEnabled: false, secondaryDragMode: DRAG_MODE.pan, wheelZoomAnchor: "pointer" });
 let attached = null;
 function viewerReady() {
   attached ??= viewer.attachTo("gl1").then(() => {
@@ -78,11 +101,16 @@ function viewerReady() {
   return attached;
 }
 
-// State: the loaded tiles, the layout file, the last run and the operation in progress.
+// State: the loaded tiles, the layout file, the last run, the layout preview (the tiles fused
+// at their layout positions), the images the viewer shows and the operation in progress.
 let tiles = null;
 let layoutFile = null;
 let run = null;
 let preview = null;
+let scene = null;
+let shown = null;
+let wanted = null;
+let rendering = null;
 let busy = null;
 
 function status(message, error = false) {
@@ -172,6 +200,7 @@ function callWorker(message, { signal, onProgress, transfer = [] } = {}) {
 
 function clearRun() {
   run = null;
+  scene = null;
   results.render();
   $("outputSection").open = false;
   $("linkReport").replaceChildren();
@@ -215,6 +244,7 @@ async function loadTiles(files, signal) {
     current.throwIfAborted();
     tiles = decoded;
     preview = null;
+    scene = null;
     clearRun();
     if (layouts.length) await readLayoutFile(layouts[0]);
     else if (layoutFile && !positionsMatch()) clearLayoutFile();
@@ -289,8 +319,53 @@ function fuseInWorker(positions, signal, { tiff = false, onProgress } = {}) {
   return callWorker({ type: "fuse", tiles: tiles.map(({ shape, data }) => ({ shape, data })), positions, dtype: tiles[0].dtype, pixelSize: tiles[0].pixelSize, tiff }, { signal, onProgress });
 }
 
-function displayFile(name, image) {
-  return displayNifti(name, image.data, { shape: image.shape, spacing: displaySpacing(tiles[0].pixelSize, dims()) });
+function samePositions(a, b) {
+  return a.length === b.length && a.every((p, t) => p.every((v, d) => v === b[t][d]));
+}
+
+/**
+ * The viewer's images on one frame: the layout preview, the stitched image after a run, and
+ * the tile outlines at the layout and the registered positions as NiiVue vector annotations
+ * (an overlay volume would exceed the GPU's 3D texture size on a large mosaic). Both images
+ * share the preview's display window, so switching between them changes only the alignment.
+ */
+function viewerScene() {
+  if (scene) return scene;
+  const shapes = tiles.map((tile) => tile.shape);
+  const registered = run?.result.positions;
+  const frame = displayFrame(shapes, registered ? [preview.positions, registered] : [preview.positions]);
+  const spacing = displaySpacing(tiles[0].pixelSize, dims());
+  const window = displayWindow(preview.image.data);
+  const image = (name, fused) => displayNifti(name, placeInFrame(fused, frame), { shape: frame.shape, spacing, window });
+  const outlines = (kind, positions) => {
+    const strokeColor = OUTLINES[kind].rgba;
+    return tileOutlinePolygons(shapes, positions, frame, spacing).map(({ tile, slicePosition, outer }) => ({
+      id: `${kind}-${tile}-${slicePosition}`,
+      label: 1,
+      group: kind,
+      sliceType: SLICE_TYPE.AXIAL,
+      slicePosition,
+      polygons: [{ outer, holes: [] }],
+      style: { fillColor: [0, 0, 0, 0], strokeColor, strokeWidth: 2 },
+    }));
+  };
+  scene = {
+    images: {
+      layout: image("layout-preview.nii", preview.image),
+      stitched: run ? image(`stitched-${run.id}.nii`, run.fused) : null,
+    },
+    legend: registered ? [OUTLINES.layout, OUTLINES.registered] : [OUTLINES.layout],
+    annotations: [...outlines("layout", preview.positions), ...(registered ? outlines("registered", registered) : [])],
+  };
+  return scene;
+}
+
+/** Fuses the tiles at their approximate positions. */
+async function fusePreview(positions, signal, onProgress) {
+  const image = await fuseInWorker(positions, signal, { onProgress });
+  signal.throwIfAborted();
+  preview = { image, positions };
+  scene = null;
 }
 
 /** Fuses the tiles at their approximate positions and shows the result. */
@@ -306,10 +381,8 @@ async function showPreview(signal, start = 0) {
     status(`Layout: ${error.message}`, true);
     return false;
   }
-  const image = await fuseInWorker(positions, signal, { onProgress: (fraction) => progress.setProgress(start + (1 - start) * fraction, "Preview of the layout…") });
-  signal.throwIfAborted();
-  preview = { file: displayFile("layout-preview.nii", image), layout: settings.layout };
-  await show("preview");
+  await fusePreview(positions, signal, (fraction) => progress.setProgress(start + (1 - start) * fraction, "Preview of the layout…"));
+  await show("layout");
   return true;
 }
 
@@ -330,26 +403,73 @@ function setView(view) {
 }
 
 toolbar.addEventListener("nd-view-change", ({ detail }) => {
-  if (detail.value === "pairs" && !run) {
-    status("Stitch the tiles to see the registered pairs");
-    toolbar.setActive("image");
+  const missing = !run && ["pairs", "stitched"].includes(detail.value);
+  if (missing || (detail.value === "layout" && !preview)) {
+    status(missing ? "Stitch the tiles to see this view" : "Load tiles to preview their layout");
+    toolbar.setActive(shown?.image ?? "layout");
     return;
   }
-  setView(detail.value);
+  if (detail.value === "pairs") setView("pairs");
+  else void show(detail.value).catch(report);
 });
 
+function outlineLegend(legend) {
+  if (!outlinesVisible) return "";
+  return `Outlines: ${legend.map(({ colour, label }) => `${colour} ${label}`).join(" · ")}`;
+}
+
+async function setOutlinesVisible(visible) {
+  outlinesVisible = visible;
+  outlineToggle.setAttribute("aria-pressed", String(visible));
+  if (!shown) return;
+  $("outlineLegend").textContent = outlineLegend(shown.scene.legend);
+  viewer.isAnnotationDrawn = visible;
+  viewer.drawScene();
+}
+
+function showAnnotations(annotations) {
+  for (const { id } of [...viewer.annotations]) viewer.removeAnnotation(id);
+  for (const annotation of annotations) viewer.addAnnotation(annotation);
+  viewer.isAnnotationDrawn = outlinesVisible;
+}
+
+/**
+ * Shows the layout preview or the stitched image with the tile outlines. Both share one frame,
+ * and NiiVue keeps its pan, zoom and crosshair when a volume on the same grid replaces another,
+ * so a seam stays in view while its ghosting appears or disappears.
+ */
 async function show(stage) {
   if (["links", "configuration", "provenance"].includes(stage)) {
     if (stage === "links") setView("pairs");
     return;
   }
-  setView("image");
-  const file = stage === "preview" ? preview?.file : run?.display;
-  if (!file) return;
+  const image = stage === "layout" ? "layout" : "stitched";
+  if (!preview || (image === "stitched" && !run)) return;
+  wanted = image;
+  setView(image);
+  rendering ??= renderWanted().finally(() => {
+    rendering = null;
+  });
+  await rendering;
+}
+
+// Loads one image at a time until the viewer holds the last one asked for, so quick switching
+// cannot leave an earlier, slower load on screen.
+async function renderWanted() {
   await viewerReady();
-  viewer.sliceType = dims() > 2 ? SLICE_TYPE.MULTIPLANAR : SLICE_TYPE.AXIAL;
-  await viewer.loadVolumes([{ url: file, name: file.name, colormap: "gray" }]);
-  $("emptyState").hidden = true;
+  while (shown?.image !== wanted || shown.scene !== viewerScene()) {
+    const image = wanted;
+    const current = viewerScene();
+    const file = current.images[image];
+    viewer.sliceType = dims() > 2 ? SLICE_TYPE.MULTIPLANAR : SLICE_TYPE.AXIAL;
+    await viewer.loadVolumes([{ url: file, name: file.name, colormap: "gray" }]);
+    if (shown?.scene !== current) showAnnotations(current.annotations);
+    viewer.drawScene();
+    shown = { scene: current, image };
+    outlineToggle.hidden = false;
+    $("outlineLegend").textContent = outlineLegend(current.legend);
+    $("emptyState").hidden = true;
+  }
 }
 
 function renderReport() {
@@ -423,6 +543,11 @@ async function stitchTiles(signal, settings) {
     log.log(`Pairs: ${summary.used} of ${summary.links} used, ${summary.lowCorrelation} below r = ${settings.global.threshold}, ${summary.outliers} outliers; mean residual ${summary.meanResidual.toFixed(3)} px, largest ${summary.maxResidual.toFixed(3)} px`, "info", "analysis");
     if (summary.unlinkedGroups) log.log(`${summary.unlinkedGroups} tile group${summary.unlinkedGroups > 1 ? "s were" : " was"} not linked to the rest and kept the layout position`, "warning", "analysis");
     checkFusedSize(result.positions);
+    // The Layout view shows the tiles at the positions this run started from.
+    if (!preview || !samePositions(preview.positions, approximate)) {
+      progress.setProgress(0.76, "Preview of the layout…");
+      await fusePreview(approximate, current);
+    }
     progress.setProgress(0.78, "Fusing…");
     const fused = await fuseInWorker(result.positions, current, { tiff: true, onProgress: (fraction) => progress.setProgress(0.78 + 0.12 * fraction, "Fusing…") });
     current.throwIfAborted();
@@ -450,7 +575,7 @@ async function stitchTiles(signal, settings) {
       id: ++runCount,
       settings,
       result,
-      display: displayFile(`stitched-${runCount}.nii`, fused),
+      fused: { data: fused.data, shape: fused.shape, origin: fused.origin },
       files: {
         fused: { description: `Fused image · ${fused.shape.join(" × ")} (TIFF)`, file: new File([fused.tiff], `${stem}.tif`, { type: "image/tiff" }) },
         omeZarr: { description: "Fused image (OME-Zarr .ozx)", file: omeZarr },
@@ -462,10 +587,12 @@ async function stitchTiles(signal, settings) {
     results.render(run.files);
     renderReport();
     $("outputSection").open = true;
-    await show("fused");
+    scene = null;
+    await show("stitched");
     current.throwIfAborted();
     progress.end("Stitching complete");
-    status(`Stitched ${tiles.length} tiles · ${fused.shape.join(" × ")} · largest residual ${summary.maxResidual.toFixed(2)} px · ${seconds.toFixed(1)} s`);
+    const moved = largestMove(approximate, result.positions);
+    status(`Stitched ${tiles.length} tiles · ${fused.shape.join(" × ")} · moved up to ${moved.toFixed(1)} px · largest residual ${summary.maxResidual.toFixed(2)} px · ${seconds.toFixed(1)} s`);
     return { artifacts: Object.entries(run.files).map(([role, { file }]) => ({ role, file })), provenance: record };
   });
 }
