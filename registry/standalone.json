@@ -1367,35 +1367,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.4.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-linux-x64.tar.gz",
-          "sha256": "7ed75609834be3aea5df978a659379fdb07d8379c73f731060de09c02205f206",
-          "bytes": 43717160,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-linux-x64.tar.gz.validation.txt",
+          "version": "0.4.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261109/fireants-0.4.20261109-linux-x64.tar.gz",
+          "sha256": "2f503daab6dc445ffe6444b57d3c45f948475c1e6885c23bef0db3879e4781a9",
+          "bytes": 43717162,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261109/fireants-0.4.20261109-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf fireants-0.4.20261108-linux-x64.tar.gz\n./fireants-0.4.20261108-linux-x64/fireants moving.nii.gz fixed.nii.gz results"
+          "command": "tar -xzf fireants-0.4.20261109-linux-x64.tar.gz\n./fireants-0.4.20261109-linux-x64/fireants moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.4.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-macos-arm64.pkg",
-          "sha256": "b11b37e5e5e545126639f6d3910e417d679f47c412928c1d1484c7e61b87a119",
-          "bytes": 37155359,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-macos-arm64.pkg.validation.txt",
+          "version": "0.4.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261109/fireants-0.4.20261109-macos-arm64.pkg",
+          "sha256": "3019cd3551257c6e71cc1c47cb12db2a54911cfa158f42885eec7a79c3db9e4c",
+          "bytes": 37155313,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261109/fireants-0.4.20261109-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg fireants-0.4.20261108-macos-arm64.pkg -target /\nfireants self-check\nfireants moving.nii.gz fixed.nii.gz results"
+          "command": "sudo installer -pkg fireants-0.4.20261109-macos-arm64.pkg -target /\nfireants self-check\nfireants moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.4.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-windows-x64.zip",
-          "sha256": "28f2c1c2fe62d91b8fdfe759dcafbbed60b3b69e75335f403eefff3e104ccfd3",
+          "version": "0.4.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261109/fireants-0.4.20261109-windows-x64.zip",
+          "sha256": "e06342d49b905ee47e0cebb13bdfc377f98d2d6a3313626168d5517ab4a9feee",
           "bytes": 33382118,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261108/fireants-0.4.20261108-windows-x64.zip.validation.txt",
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.4.20261109/fireants-0.4.20261109-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\fireants-0.4.20261108-windows-x64.zip -DestinationPath .\n.\\fireants-0.4.20261108-windows-x64\\fireants.exe moving.nii.gz fixed.nii.gz results"
+          "command": "Expand-Archive -Path .\\fireants-0.4.20261109-windows-x64.zip -DestinationPath .\n.\\fireants-0.4.20261109-windows-x64\\fireants.exe moving.nii.gz fixed.nii.gz results"
         }
       ],
       "containers": []
