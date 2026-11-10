@@ -15,17 +15,18 @@ test('electron-builder copies only the resource directory without models', async
   t.mock.method(builderRequire('builder-util').log, 'info', console.error);
   const resources = resolve(directory, 'resources-light');
   const neuro = findCatalog(registry, 'neuro');
-  const config = await getConfig(directory, null, { ...builderConfig(neuro), extraResources: [{ from: resources, to: 'offline' }] });
+  const config = await getConfig(directory, null, { ...builderConfig(registry, neuro), extraResources: [{ from: resources, to: 'offline' }] });
   assert.deepEqual(config.extraResources, [{ from: resources, to: 'offline' }]);
   assert.equal(config.appId, 'org.neurodesk.webapps', 'installed suites keep updating');
   assert.equal(config.productName, 'Neurodesk Webapps');
   assert.equal(config.executableName, 'neurodesk-webapps');
   assert.equal(config.artifactName, 'webapps-${version}-${os}-${arch}.${ext}');
+  assert.equal(config.extraMetadata, undefined, 'installed suites keep their profile directory');
 });
 
 test('each catalogue suite builds under its own identity, so suites install side by side', async (t) => {
   t.mock.method(builderRequire('builder-util').log, 'info', console.error);
-  const configs = await Promise.all(registry.site.catalogs.map(catalog => getConfig(directory, null, builderConfig(catalog))));
+  const configs = await Promise.all(registry.site.catalogs.map(catalog => getConfig(directory, null, builderConfig(registry, catalog))));
   for (const key of ['appId', 'productName', 'executableName', 'artifactName']) {
     assert.equal(new Set(configs.map(config => config[key])).size, configs.length, key);
   }
@@ -34,4 +35,5 @@ test('each catalogue suite builds under its own identity, so suites install side
   assert.equal(msk.productName, 'MSK Webapps');
   assert.equal(msk.executableName, 'msk-webapps');
   assert.equal(msk.artifactName, 'msk-webapps-${version}-${os}-${arch}.${ext}');
+  assert.equal(msk.extraMetadata.productName, 'MSK Webapps', 'Electron gives the suite its own profile directory');
 });

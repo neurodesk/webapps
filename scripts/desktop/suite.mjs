@@ -21,14 +21,19 @@ export function suitePlatforms(registry, catalog) {
 /**
  * electron-builder settings that give a catalogue's suite its own identity, so
  * suites install side by side: bundle id, product name, executable and archives.
+ * Electron names the profile directory after the packaged package.json, so every
+ * suite but the primary one gets its own `productName` there. The primary suite
+ * keeps the `@neurodesk/desktop` profile its installed copies already use.
  */
-export function builderConfig(catalog) {
+export function builderConfig(registry, catalog) {
   const { desktop } = catalog;
+  const primary = catalog.id === primaryCatalog(registry).id;
   return {
     appId: desktop.app_id,
     productName: desktop.product_name,
     executableName: desktop.executable,
     artifactName: `${desktop.release}-\${version}-\${os}-\${arch}.\${ext}`,
+    ...(primary ? {} : { extraMetadata: { productName: desktop.product_name } }),
   };
 }
 

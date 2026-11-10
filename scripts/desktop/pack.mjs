@@ -19,12 +19,13 @@ const { build } = require('electron-builder');
 process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL ??= '3';
 await verifyBundle(resources);
 // The assembled bundle names the catalogue whose suite it is.
-const catalog = findCatalog(await loadAppsRegistry(), (await loadBundle(resources)).catalog);
+const registry = await loadAppsRegistry();
+const catalog = findCatalog(registry, (await loadBundle(resources)).catalog);
 const { desktop } = catalog;
 const artifacts = await build({ projectDir, publish: 'never', config: {
   ...windowsSigningConfig(),
   ...macNotarizeConfig(),
-  ...builderConfig(catalog),
+  ...builderConfig(registry, catalog),
   extraResources: [{ from: resources, to: 'offline' }],
 } });
 const executable = process.platform === 'darwin'
