@@ -7,7 +7,7 @@
 //
 // TIFF decoding is geotiff (MIT); OME-Zarr is zarrita (MIT). Both load on first use. OME-XML,
 // ImageJ descriptions and length units are read by the shared TIFF module's parsers.
-import { micrometresPerUnit, parseImagejDescription, parseOmeDescription } from './tiff.js';
+import { isOmeDescription, micrometresPerUnit, parseImagejDescription, parseOmeDescription } from './tiff.js';
 
 const PLANE_LIMIT_BYTES = 1024 * 1024 * 1024;
 const SLAB_LIMIT_BYTES = 512 * 1024 * 1024;
@@ -86,7 +86,7 @@ function omeZPages(name, ome, pageCount) {
     return null;
   }
   const refuse = (why) => new Error(`${name} maps its z planes to TIFF pages in a way this reader cannot follow (${why}); save the stack as one OME-TIFF or one TIFF per plane.`);
-  if (ome.tiffData.some((entry) => entry.uuid && entry.uuid !== ome.uuid)) throw refuse('planes in another file; choose the folder of plane files instead');
+  if (ome.tiffData.some((entry) => entry.uuid && entry.uuid !== ome.uuid)) throw refuse('planes in another file');
   const pages = new Array(sizeZ);
   const used = new Set();
   for (const entry of ome.tiffData) {
@@ -117,7 +117,7 @@ function omeZPages(name, ome, pageCount) {
 
 /**
  * Open a TIFF stack: one multi-page file, or one single-page file per plane (sorted by name).
- * A single OME-TIFF's z planes are the pages its TiffData maps. Refuses palette, RGB and
+ * A single OME-TIFF's z planes are the pages its TiffData maps. Refuses OME-TIFF folders, palette, RGB and
  * multi-channel pages, OME-TIFF with several channels or time points or a plane mapping it
  * cannot follow, and planes larger than `maxPlaneBytes`.
  */
@@ -147,6 +147,18 @@ export async function openTiffStack(files, { maxPlaneBytes = PLANE_LIMIT_BYTES }
     throw new Error(`${list[0].name} holds ${metadata.sizeC} channels and ${metadata.sizeT} ${time}; export the channel to analyse as its own stack.`);
   }
   if (list.length > 1 && pageCount > 1) throw new Error('Choose either one multi-page TIFF or one single-page TIFF per plane, not several multi-page files.');
+  if (list.length > 1) {
+    for (const [index, file] of list.entries()) {
+      const image = index === 0 ? firstImage : await (await fromBlob(file)).getImage(0);
+      const text = index === 0 ? description : String((await tag(image, 'ImageDescription')) ?? '');
+      if (isOmeDescription(text)) {
+        throw new Error('OME-TIFF folders are not supported; export one multi-page OME-TIFF or plain TIFF planes.');
+      }
+    }
+  }
+  if (isOmeDescription(description) && metadata?.kind !== 'ome') {
+    throw new Error('OME-TIFF metadata without Pixels is not supported; export a self-contained OME-TIFF.');
+  }
 
   // A plain TIFF's resolution tags are often a nominal 72 dpi, never a calibration.
   const size = metadata?.pixelSize ?? {};

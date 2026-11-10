@@ -73,6 +73,9 @@ counted another way on the same brain.
 
 ## Deliberate divergences
 
+- Single-file OME-TIFF stacks follow their declared z-plane mapping. Multi-file OME-TIFF
+  collections are refused; export one multi-page OME-TIFF or a folder of plain TIFF planes.
+  Companion-only OME metadata is refused. Plain TIFF folders are ordered by filename.
 - The atlas is the 50 µm CCFv3, not the 25 µm one: a 25 µm registration of a whole brain needs
   about 77 million voxels per image and a 0.9 GB warp field, beyond a browser tab. Region
   volumes and the label lookup are at 50 µm.

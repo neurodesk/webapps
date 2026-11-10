@@ -56,6 +56,7 @@ export interface ReadTiffStackOptions<Data extends TiffSampleArray = TiffSampleA
 }
 
 export function micrometresPerUnit(unit: string | null | undefined): number | null;
+export function isOmeDescription(description: string | null | undefined): boolean;
 export function parseOmeDescription(description: string | null | undefined): Omit<TiffStackMetadata, 'description'> | null;
 export function parseImagejDescription(description: string | null | undefined, resolution?: [number | null, number | null]): Omit<TiffStackMetadata, 'description'> | null;
 /** Size, sample type and metadata from the page directories; no pixel is decoded. Refuses several OME series and an ImageJ `images=` that is not the page count. A Blob or File is read range by range, only as far as its page directories and description. */

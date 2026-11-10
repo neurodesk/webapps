@@ -86,10 +86,15 @@ function xmlAttribute(tag, name) {
   return match ? decodeXml(match[1] ?? match[2]) : undefined;
 }
 
+/** Recognise OME-XML even when its image metadata lives in a companion file. */
+export function isOmeDescription(description) {
+  return /<(?:[\w.-]+:)?OME\b/.test(String(description ?? ''));
+}
+
 /** OME-XML `Pixels` attributes, whatever the namespace prefix (`<Pixels>`, `<ome:Pixels>`). */
 export function parseOmeDescription(description) {
   const text = String(description ?? '');
-  if (!/<(?:[\w.-]+:)?OME\b/.test(text)) return null;
+  if (!isOmeDescription(text)) return null;
   const images = text.match(/<(?:[\w.-]+:)?Image\b[^>]*>/g) ?? [];
   const pixels = text.match(/<(?:[\w.-]+:)?Pixels\b[^>]*>/)?.[0];
   if (!pixels) return null;

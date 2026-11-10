@@ -86,6 +86,23 @@ test('OME TiffData the reader cannot follow is refused before decoding', async (
   await refused(1, '', [1, 2], /declares 1 z plane but holds 2 pages/);
 });
 
+test('OME-TIFF folders are refused instead of using filename order for mapped planes', async () => {
+  const mapping = '<ome:TiffData IFD="0" FirstZ="1"><ome:UUID FileName="a.ome.tif">urn:uuid:a</ome:UUID></ome:TiffData>'
+    + '<ome:TiffData IFD="0" FirstZ="0"><ome:UUID FileName="b.ome.tif">urn:uuid:b</ome:UUID></ome:TiffData>';
+  const first = omeFile(omeWith(2, mapping, 'urn:uuid:a'), [20], 'a.ome.tif');
+  const second = omeFile(omeWith(2, mapping, 'urn:uuid:b'), [10], 'b.ome.tif');
+  await assert.rejects(openTiffStack([first, second]), /OME-TIFF folders are not supported/);
+  // The OME description can live in a later file rather than the first filename.
+  const plain = file(encodeTiff([{ width: 3, height: 2, data: plane(3, 2, 20) }]), 'a.tif');
+  await assert.rejects(openTiffStack([plain, second]), /OME-TIFF folders are not supported/);
+  const binaryOnly = '<?xml version="1.0"?><ome:OME xmlns:ome="http://www.openmicroscopy.org/Schemas/OME/2016-06">'
+    + '<ome:BinaryOnly MetadataFile="metadata.companion.ome" UUID="urn:uuid:metadata"/></ome:OME>';
+  const companion = omeFile(binaryOnly, [10], 'b.ome.tif');
+  await assert.rejects(openTiffStack([plain, companion]), /OME-TIFF folders are not supported/);
+  await assert.rejects(openTiffStack([omeFile(binaryOnly, [10], '0.ome.tif'), plain]), /OME-TIFF folders are not supported/);
+  await assert.rejects(openTiffStack([companion]), /OME-TIFF metadata without Pixels/);
+});
+
 test('big-endian pages decode to native values', async () => {
   const stack = await openTiffStack([file(encodeTiff([{ width: 2, height: 2, data: plane(2, 2, 1000) }], { littleEndian: false }), 'be.tif')]);
   assert.deepEqual([...(await stack.readPlane(0))], [1000, 1001, 1002, 1003]);
