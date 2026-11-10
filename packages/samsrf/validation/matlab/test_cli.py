@@ -22,27 +22,34 @@ def scratch():
     return tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR'))
 
 
-def write_gifti(path, values):
+def write_gifti(path, values, dimensions=None, order='RowMajorOrder'):
     raw = base64.b64encode(zlib.compress(numpy.asarray(values, '<f4').tobytes())).decode()
+    dimensions = dimensions or (len(values), 1)
+    shape = ' '.join(f'Dim{axis}="{size}"' for axis, size in enumerate(dimensions))
     path.write_text(
         '<?xml version="1.0"?><GIFTI><DataArray DataType="NIFTI_TYPE_FLOAT32" '
-        'Encoding="GZipBase64Binary" Endian="LittleEndian">'
+        f'Encoding="GZipBase64Binary" Endian="LittleEndian" Dimensionality="{len(dimensions)}" '
+        f'{shape} ArrayIndexingOrder="{order}">'
         '<MetaData><MD><Name>Name</Name><Value>x0</Value></MD></MetaData>'
         f'<Data>{raw}</Data></DataArray></GIFTI>')
 
 
-def write_mat(path, data, kind='double', folder='/results/a'):
+def write_mat(path, data, kind='double', folder='/results/a', labels=None):
     with h5py.File(path, 'w') as handle:
         srf = handle.create_group('Srf')
         srf.attrs['MATLAB_class'] = numpy.bytes_('struct')
-        dataset = srf.create_dataset('Data', data=numpy.asarray(data, 'f8' if kind == 'double' else 'f4'))
+        values = numpy.tile(numpy.asarray(data, 'f8' if kind == 'double' else 'f4')[:, None], (1, len(labels)))
+        dataset = srf.create_dataset('Data', data=values)
         dataset.attrs['MATLAB_class'] = numpy.bytes_(kind)
         text = srf.create_dataset('Structural', data=numpy.frombuffer(folder.encode('utf-16-le'), '<u2'))
         text.attrs['MATLAB_class'] = numpy.bytes_('char')
         handle.create_group('#refs#')
-        values = handle['#refs#'].create_dataset('a', data=numpy.array([1.5, 2.5]))
-        values.attrs['MATLAB_class'] = numpy.bytes_('double')
-        cell = srf.create_dataset('Values', data=numpy.array([values.ref], dtype=h5py.ref_dtype))
+        references = []
+        for index, label in enumerate(labels):
+            values = handle['#refs#'].create_dataset(str(index), data=numpy.frombuffer(label.encode('utf-16-le'), '<u2').reshape(-1, 1))
+            values.attrs['MATLAB_class'] = numpy.bytes_('char')
+            references.append(values.ref)
+        cell = srf.create_dataset('Values', data=numpy.array([references], dtype=h5py.ref_dtype))
         cell.attrs['MATLAB_class'] = numpy.bytes_('cell')
         handle_group = srf.create_group('Prf')
         handle_group.attrs['MATLAB_class'] = numpy.bytes_('function_handle')
@@ -155,7 +162,11 @@ class Runtime(unittest.TestCase):
 class Compare(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(dir=os.environ.get('TMPDIR')))
-        self.plan = {'runs': [{'id': 'a', 'precision': 'double'}]}
+        run = next(run for run in cli_plan.plan()['runs'] if run['id'] == 'prf_gaussian_rh_double')
+        run['id'] = 'a'
+        run['model']['Name'] = 'a'
+        self.plan = {'runs': [run]}
+        self.mat, self.labels, self.maps = compare_cli.expected_results(run)
 
     def execution(self, name, data=(1.0, float('nan')), kind='double', status='succeeded', folder='/results/a'):
         root = self.root / name
@@ -163,17 +174,18 @@ class Compare(unittest.TestCase):
         (root / 'receipts').mkdir()
         (root / 'receipts' / 'a.json').write_text(json.dumps({'status': status}))
         (root / 'a' / 'SamSrf_defaults.json').write_text(name)
-        write_gifti(root / 'a' / 'lh_a_x0.gii', data)
-        write_mat(root / 'a' / 'lh_a.mat', data, kind, folder)
+        for name in self.maps:
+            write_gifti(root / 'a' / name, data)
+        write_mat(root / 'a' / self.mat, data, kind, folder, self.labels)
         return root
 
     def test_identical_outputs_pass_and_paths_are_reported_not_gated(self):
         report = compare_cli.compare(self.plan, self.execution('source', folder='/tmp/source/a'), self.execution('compiled'))
         self.assertTrue(report['exact'], report)
         run = report['runs'][0]
-        self.assertEqual(run['text'], ['lh_a.mat:Srf.Structural'])
-        self.assertEqual(run['notCompared'], ['lh_a.mat:Srf.Prf (function_handle)'])
-        self.assertEqual(run['arrays'], 3)
+        self.assertEqual(run['text'], [f'{self.mat}:Srf.Structural'])
+        self.assertEqual(run['notCompared'], [f'{self.mat}:Srf.Prf (function_handle)'])
+        self.assertEqual(run['arrays'], len(self.maps) + 2)
 
     def test_one_ulp_and_nonfinite_mask_differences_fail(self):
         nudged = numpy.nextafter(numpy.float32(1.0), numpy.float32(2.0))
@@ -195,6 +207,70 @@ class Compare(unittest.TestCase):
                 report = compare_cli.compare(self.plan, self.execution(f'{name}1', **first),
                                              self.execution(f'{name}2', **second))
                 self.assertFalse(report['exact'], report)
+
+
+    def test_success_with_only_cache_arrays_is_rejected(self):
+        first, second = self.execution('first'), self.execution('second')
+        for root in (first, second):
+            for name in [self.mat, *self.maps]:
+                (root / 'a' / name).unlink()
+            with h5py.File(root / 'a' / 'cache.mat', 'w') as handle:
+                x = handle.create_dataset('X', data=[1.0])
+                x.attrs['MATLAB_class'] = numpy.bytes_('double')
+        self.assertFalse(compare_cli.compare(self.plan, first, second)['exact'])
+
+    def test_shared_missing_map_data_labels_or_export_is_rejected(self):
+        for omission in ['data', 'labels', 'export', 'empty']:
+            with self.subTest(omission=omission):
+                first, second = self.execution(omission + '1'), self.execution(omission + '2')
+                for root in (first, second):
+                    if omission == 'export':
+                        (root / 'a' / self.maps[0]).unlink()
+                    else:
+                        with h5py.File(root / 'a' / self.mat, 'r+') as handle:
+                            if omission == 'labels':
+                                del handle['Srf/Values']
+                            else:
+                                del handle['Srf/Data']
+                                if omission == 'empty':
+                                    d = handle['Srf'].create_dataset('Data', data=numpy.zeros((0, len(self.labels))))
+                                    d.attrs['MATLAB_class'] = numpy.bytes_('double')
+                self.assertFalse(compare_cli.compare(self.plan, first, second)['exact'])
+
+    def test_gifti_dimensions_and_indexing_order_are_compared(self):
+        for dimensions, order in [((3, 2), 'RowMajorOrder'), ((2, 3), 'ColumnMajorOrder')]:
+            with self.subTest(dimensions=dimensions, order=order):
+                first = self.execution('first' + order)
+                second = self.execution('second' + order)
+                write_gifti(first / 'a' / self.maps[0], [1, 2, 3, 4, 5, 6], (2, 3))
+                write_gifti(second / 'a' / self.maps[0], [1, 2, 3, 4, 5, 6], dimensions, order)
+                self.assertFalse(compare_cli.compare(self.plan, first, second)['exact'])
+
+    def test_malformed_gifti_dimensions_are_rejected(self):
+        first = self.execution('first')
+        path = first / 'a' / self.maps[0]
+        write_gifti(path, [1, 2], (2, 3))
+        with self.assertRaisesRegex(ValueError, 'dimensions'):
+            compare_cli.read_gifti(path)
+
+    def test_empty_mat_dimensions_are_compared(self):
+        first, second = self.execution('first'), self.execution('second')
+        for root, dimensions in [(first, [0, 3]), (second, [0, 99])]:
+            with h5py.File(root / 'a' / self.mat, 'r+') as handle:
+                empty = handle.create_dataset('Empty', data=numpy.array(dimensions, dtype='<u8'))
+                empty.attrs['MATLAB_class'] = numpy.bytes_('double')
+                empty.attrs['MATLAB_empty'] = numpy.uint8(1)
+        self.assertFalse(compare_cli.compare(self.plan, first, second)['exact'])
+        self.assertTrue(compare_cli.compare(self.plan, first, first)['exact'])
+
+    def test_cell_container_dimensions_are_compared(self):
+        first, second = self.execution('first'), self.execution('second')
+        with h5py.File(second / 'a' / self.mat, 'r+') as handle:
+            values = handle['Srf/Values'][()].reshape(2, 3)
+            del handle['Srf/Values']
+            cell = handle['Srf'].create_dataset('Values', data=values)
+            cell.attrs['MATLAB_class'] = numpy.bytes_('cell')
+        self.assertFalse(compare_cli.compare(self.plan, first, second)['exact'])
 
 
 if __name__ == '__main__':

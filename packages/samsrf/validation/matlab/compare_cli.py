@@ -21,7 +21,7 @@ import zlib
 
 import numpy
 
-from cli_plan import STAGED
+from cli_plan import DATASETS, STAGED
 
 NUMERIC = {'double', 'single', 'int8', 'uint8', 'int16', 'uint16', 'int32',
            'uint32', 'int64', 'uint64', 'logical'}
@@ -49,7 +49,15 @@ def read_gifti(path):
             values = numpy.frombuffer(raw, dtype=kind)
         names = {item.findtext('Name'): item.findtext('Value')
                  for item in element.iter('MD')}
-        arrays.append((f'array{index}:{names.get("Name", "")}', 'gifti', values))
+        dimensions = tuple(int(element.attrib[f'Dim{axis}'])
+                           for axis in range(int(element.attrib['Dimensionality'])))
+        order = element.attrib['ArrayIndexingOrder']
+        if order not in {'RowMajorOrder', 'ColumnMajorOrder'}:
+            raise ValueError(f'Unsupported GIfTI indexing order {order} in {path}')
+        if not dimensions or any(size < 0 for size in dimensions) or numpy.prod(dimensions) != values.size:
+            raise ValueError(f'GIfTI dimensions do not match its payload in {path}')
+        values = values.reshape(dimensions, order='C' if order == 'RowMajorOrder' else 'F')
+        arrays.append((f'array{index}:{names.get("Name", "")}', f'gifti:{order}', values))
     return arrays
 
 
@@ -70,12 +78,15 @@ def read_mat(path):
             for key in sorted(node):
                 visit(handle, node[key], f'{name}.{key}' if name else key)
             return
-        if kind == 'cell' or node.dtype == h5py.ref_dtype:
+        if node.attrs.get('MATLAB_empty'):
+            # v7.3 stores an empty array's MATLAB dimensions as its payload.
+            # Preserve that vector and its class, rather than collapsing all
+            # empty shapes into a single zero-length array.
+            entries.append((name, f'empty:{kind}', numpy.asarray(node[()])))
+        elif kind == 'cell' or node.dtype == h5py.ref_dtype:
+            entries.append((name, 'cell-shape', numpy.asarray(node.shape, dtype='<u8')))
             for index, reference in enumerate(node[()].flat):
                 visit(handle, handle[reference], f'{name}{{{index}}}')
-            return
-        if node.attrs.get('MATLAB_empty'):
-            entries.append((name, kind, numpy.zeros(0)))
         elif kind in NUMERIC:
             entries.append((name, kind, numpy.asarray(node[()])))
         elif kind == 'char':
@@ -112,6 +123,79 @@ def outputs(directory):
                   if path.is_file() and path.name not in IGNORED)
 
 
+def expected_results(run):
+    """The supported CLI matrix's outputs, from the pinned SamSrf exporters.
+
+    Derive this independently of either execution's files or Srf.Values: two
+    executions dropping the same map must still fail the publication gate.
+    """
+    model = run['model']
+    algorithm = run['algorithm']
+    dataset = DATASETS[run['dataset']]
+    stem = f'{dataset["hemisphere"]}_{model["Name"]}'
+    noise_ceiling = dataset['runs'] > 1 and '-aver=1' in run['argv']
+    if algorithm == 'prf':
+        labels = ['R^2', *model['Param_Names']]
+        if model.get('Compressive_Nonlinearity'):
+            stem += '_Css'
+            labels.append('Exponent')
+        labels += ['Beta', 'Baseline']
+        if noise_ceiling:
+            labels[0] = 'nR^2'
+            labels += ['Noise Ceiling', 'R^2']
+    elif algorithm == 'rc':
+        stem += '_Rcp'
+        labels = (['R^2', 'x0', 'y0', 'Fwhm', 'Beta'] if model['Prf_Function'] == 0
+                  else ['R^2', *model['Param_Names'], 'Beta', 'Baseline'])
+        if noise_ceiling:
+            labels.append('Noise Ceiling')
+    elif algorithm == 'cf':
+        labels = {
+            0: ['R^2', 'x0', 'y0', 'Centre', 'Surround', 'Beta', 'Suppression', 'Fwhm', 'Vx'],
+            -1: ['R^2', 'x0', 'y0', 'Sigma', 'Fwhm', 'Vx'],
+            1: ['R^2', 'x0', 'y0', 'Sigma', 'Beta', 'Baseline', 'Fwhm', 'Vx'],
+        }[model['Fit_pRF']]
+        if noise_ceiling:
+            labels.append('Noise Ceiling')
+    else:
+        raise ValueError(f'Unsupported CLI analysis {algorithm}')
+    maps = [f'{stem}_{label.lower().replace(" ", "_")}.gii' for label in labels]
+    return f'{stem}.mat', labels, maps
+
+
+def require_results(run, root, names, report):
+    mat, labels, maps = expected_results(run)
+    missing = sorted(set([mat, *maps]) - set(names))
+    if missing:
+        report['failures'].append(f'{root}: missing scientific results: {missing}')
+    if mat in names:
+        entries = {key: (kind, values) for key, kind, values in read_mat(root / mat)}
+        kind, data = entries.get('Srf.Data', (None, None))
+        dtype = numpy.dtype('f4' if run['precision'] == 'single' else 'f8')
+        valid_dtype = data is not None and (data.dtype == dtype or (
+            data.dtype.names == ('real', 'imag')
+            and all(data.dtype.fields[part][0] == dtype for part in ('real', 'imag'))))
+        # HDF5 stores MATLAB's dimensions in reverse order.
+        if (kind != run['precision'] or not valid_dtype or data.ndim != 2
+                or data.shape[0] == 0 or data.shape[1] != len(labels)):
+            report['failures'].append(f'{root / mat}: missing, empty or invalid Srf.Data for {run["precision"]} with {len(labels)} maps')
+        actual_labels = []
+        for index in range(len(labels)):
+            kind, value = entries.get(f'Srf.Values{{{index}}}', (None, None))
+            actual_labels.append(''.join(chr(int(v)) for v in value.flat)
+                                 if kind == 'char' and value is not None else None)
+        if actual_labels != labels:
+            report['failures'].append(f'{root / mat}: Srf.Values differs from the case map contract')
+        cell_kind, cell_shape = entries.get('Srf.Values', (None, None))
+        if cell_kind != 'cell-shape' or numpy.prod(cell_shape) != len(labels):
+            report['failures'].append(f'{root / mat}: Srf.Values has an invalid cell count')
+    for name in maps:
+        if name in names:
+            arrays = read_gifti(root / name)
+            if len(arrays) != 1 or not arrays[0][2].size:
+                report['failures'].append(f'{root / name}: missing or empty exported map array')
+
+
 def compare_run(run, first, second):
     report = {'id': run['id'], 'failures': [], 'text': [], 'notCompared': [], 'arrays': 0}
     statuses = [json.loads((root / 'receipts' / f'{run["id"]}.json').read_text())['status']
@@ -129,8 +213,8 @@ def compare_run(run, first, second):
     if names[0] != names[1]:
         report['failures'].append(f'Output files differ: {names}')
         return report
-    if not any(name.endswith('.mat') for name in names[0]):
-        report['failures'].append('No saved MAT result')
+    for root, files in zip((first, second), names):
+        require_results(run, root / run['id'], files, report)
     for name in names[0]:
         if name.endswith('.gii'):
             reader = read_gifti
