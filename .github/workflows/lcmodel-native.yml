@@ -66,8 +66,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
+  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    with:
+      workflow: lcmodel-native
+
   test:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -92,7 +100,8 @@ jobs:
         run: node --test packages/lcmodel/test/lcmodel-wasm.test.js
 
   fida-reference:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     env:
       DATA: ${{ github.workspace }}/../fida-reference
@@ -129,7 +138,8 @@ jobs:
   # compares its downloads with packages/lcmodel/validation/browser-reference.json, the reference
   # the archives are held to.
   web-app-reference:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:

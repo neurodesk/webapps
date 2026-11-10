@@ -103,6 +103,8 @@ jobs:
           SAMSRF_CSS_DIAGNOSTICS_DIR="$RUNNER_TEMP/samsrf-css-diagnostics" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_diagnostics
           node packages/samsrf/validation/matlab/compare-css.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-comparison.json"
           cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v47_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace.json"
+          cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v60_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace-v60.json"
+          cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v69_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace-v69.json"
       - name: Retain the full CSS comparison including remaining differences
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -111,6 +113,8 @@ jobs:
           path: |
             ${{ runner.temp }}/samsrf-css-comparison.json
             ${{ runner.temp }}/samsrf-css-trace.json
+            ${{ runner.temp }}/samsrf-css-trace-v60.json
+            ${{ runner.temp }}/samsrf-css-trace-v69.json
           if-no-files-found: ignore
 
   wasm-source:

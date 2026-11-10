@@ -34,10 +34,14 @@ function exportsOf(manifest) {
 
 const isFile = (path) => existsSync(path) && statSync(path).isFile();
 
-function resolveSpecifier(packages, specifier, from) {
+// `missing` collects targets that do not exist: a deleted file is still a
+// dependency of the module that names it.
+function resolveSpecifier(packages, specifier, from, missing) {
   if (specifier.startsWith('.')) {
     const base = resolve(dirname(from), specifier);
-    const file = [base, `${base}.js`, `${base}.mjs`, join(base, 'index.js')].find(isFile);
+    const candidates = [base, `${base}.js`, `${base}.mjs`, `${base}.ts`, join(base, 'index.js')];
+    const file = candidates.find(isFile);
+    if (!file) for (const candidate of candidates) missing?.add(candidate);
     return file ? [file] : [];
   }
   const name = specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0];
@@ -52,35 +56,62 @@ function resolveSpecifier(packages, specifier, from) {
       target = exportTarget(value)?.replace('*', subpath.slice(key.length - 1));
     }
   }
+  if (target && !isFile(join(dir, target))) missing?.add(join(dir, target));
   return target && isFile(join(dir, target)) ? [manifest, join(dir, target)] : [manifest];
 }
 
-export function commandLineClosure(root, packageDir) {
-  const directory = join(root, packageDir);
+// Every file the seed files load, seeds included, as repository paths. With
+// `missing`, also the paths they name that do not exist.
+export function moduleClosure(root, seeds, { missing = false } = {}) {
+  const absent = missing ? new Set() : null;
   const packages = workspacePackages(root);
-  const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
-  const bins = typeof manifest.bin === 'string' ? [manifest.bin] : Object.values(manifest.bin ?? {});
-  const exports = exportsOf(manifest);
-  const pending = [...bins, ...NODE_ENTRIES.map((key) => exportTarget(exports[key])), ...SOURCE_ENTRIES]
-    .filter(Boolean)
-    .map((file) => join(directory, file))
-    .filter(isFile);
+  const named = seeds.map((file) => resolve(root, file));
+  // A deleted seed is still what its caller runs.
+  for (const file of named) if (!isFile(file)) absent?.add(file);
+  const pending = named.filter(isFile);
   const seen = new Set();
   while (pending.length) {
     const file = pending.pop();
     if (seen.has(file)) continue;
     seen.add(file);
-    if (!/\.[cm]?js$/.test(file)) continue;
+    if (!/\.[cm]?[jt]s$/.test(file)) continue;
     for (const match of readFileSync(file, 'utf8').matchAll(IMPORT)) {
       // A URL string is always relative to the module, with or without ./.
       const specifier = match[4] ? (match[4].startsWith('.') ? match[4] : `./${match[4]}`) : match[1] ?? match[2] ?? match[3];
-      for (const next of resolveSpecifier(packages, specifier, file)) {
+      for (const next of resolveSpecifier(packages, specifier, file, absent)) {
         if (!seen.has(next)) pending.push(next);
       }
     }
   }
-  return [...seen]
-    .map((file) => relative(root, file).split('\\').join('/'))
-    .filter((file) => !file.startsWith(`${packageDir}/`))
-    .sort();
+  return [...seen, ...(absent ?? [])].map((file) => relative(root, file).split('\\').join('/')).sort();
+}
+
+const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'target', '.turbo', '.vite', 'coverage', 'test-results', 'playwright-report']);
+
+// Every script in a package: its command line, tests, validation harnesses and
+// browser pages' modules. What a workflow runs from a package starts at one.
+export function packageSources(root, packageDir) {
+  const sources = [];
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (!SKIPPED_DIRS.has(entry.name)) walk(join(directory, entry.name));
+      } else if (/\.[cm]?[jt]s$/.test(entry.name)) {
+        sources.push(relative(root, join(directory, entry.name)).split('\\').join('/'));
+      }
+    }
+  };
+  walk(join(root, packageDir));
+  return sources.sort();
+}
+
+export function commandLineClosure(root, packageDir) {
+  const directory = join(root, packageDir);
+  const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
+  const bins = typeof manifest.bin === 'string' ? [manifest.bin] : Object.values(manifest.bin ?? {});
+  const exports = exportsOf(manifest);
+  const seeds = [...bins, ...NODE_ENTRIES.map((key) => exportTarget(exports[key])), ...SOURCE_ENTRIES]
+    .filter(Boolean)
+    .map((file) => join(directory, file));
+  return moduleClosure(root, seeds).filter((file) => !file.startsWith(`${packageDir}/`));
 }

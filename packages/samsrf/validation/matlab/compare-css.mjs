@@ -55,7 +55,7 @@ try {
 }
 assert.deepEqual(maps.values, recorded.values);
 const expected = array(recorded.maps);
-const selectedVertices = [46, 80, 87];
+const selectedVertices = [46, 59, 68, 80, 87];
 const exactParameters = new Set(['x0', 'y0', 'Sigma', 'Exponent', 'Noise Ceiling']);
 const number = value => Number.isFinite(value) ? value : String(value);
 const mask = value => Number.isNaN(value) ? 'NaN' : Number.isFinite(value) ? 'finite' : String(value);
@@ -72,7 +72,7 @@ for (const [row, name] of maps.values.entries()) {
     if (Number.isFinite(difference)) maximumAbsolute = Math.max(maximumAbsolute, difference);
     if (!equal) differences.push({ vertex, actual: number(actual), expected: number(target), absolute: number(difference) });
     // Preserve every acceptance, zero-column and nonfinite decision across
-    // the complete ROI, including vertices outside the three value gates.
+    // the complete ROI, including vertices outside the focused value gates.
     if (mask(actual) !== mask(target) || (actual === 0) !== (target === 0)) {
       failures.push({ vertex, name, reason: 'nonfinite or zero decision' });
     }

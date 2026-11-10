@@ -273,8 +273,8 @@ double CSS parameter differences after #736 (zero-based vertices 15, 16, 59,
 68 and 81). Columns 16/17 differ by at most 2.7e-15 in fitted parameters;
 columns 60/69/82 include exponent differences up to 5.2e-3. There are
 18 columns in each precision, 108 optimizer traces and
-268 cases in total. These new traces are not in the older 238-case pinned
-archive below. The repeat comparator requires each current trace by ID, so
+268 cases in total. The current pin includes these new traces and preserves
+all arrays from the earlier 238-case archive. The repeat comparator requires each current trace by ID, so
 two matching but incomplete recordings cannot pass. Each original-aperture
 case runs with both the saved coarse seed and a seed recomputed on the current
 host. A separate nonnegative control recomputes its own coarse seed.
@@ -340,7 +340,7 @@ gate does not assert those paths, arbitrary-input parity, or a rebuilt container
 
 ## Extreme CSS scales and regression rank
 
-`diagnostics-reference.json` pins the 238-case recording from
+The previous 238-case recording came from
 [run 42427404570](https://github.com/neurodesk/webapps/actions/runs/42427404570),
 recorder commit `681e7e3290b036b9a054dfc38ef9376a9b3869e2`. Both runner labels
 received AMD EPYC 7763 CPUs. All 4,189 numerical arrays and every case decision
@@ -349,6 +349,33 @@ were identical in four processes, including two fresh processes on each host.
 does not establish Intel/AMD reproducibility or change the older reference's
 provenance. MATLAB reported CNR `auto`; its effective CNR and dynamic-thread
 settings remain unverified.
+
+`diagnostics-reference.json` now pins the expanded 268-case recording from
+[run 42717941843](https://github.com/neurodesk/webapps/actions/runs/42717941843),
+recorder commit `901c2a6e56c8f00ccd32402f8abf30720b9f8236`. All 5,155 arrays
+and every case receipt matched in four processes on AMD EPYC 7763 and 9V45
+hosts. All 4,189 arrays and 238 case receipts from the earlier archive are
+unchanged. The new archive retains the four environments and file hashes;
+it adds no Intel-host or effective-CNR verification.
+
+The new traces isolate a second overflow: the sequential dot accumulator
+overflows before cancellation makes the final sum finite. At MATLAB column
+60, evaluation 787 (zero-based), MATLAB's dot is 1.7973782649551213e308;
+at column 69, evaluation 590, it is -1.7971496736890576e308. The old port
+returned a nonfinite objective for both. Recomputing only overflowed dot
+components with scaled inputs restores these calls and the complete native
+optimizer parameter sequences, 800 and 723 evaluations respectively.
+The scale is restored before norm division, preserving MATLAB's rejection
+when the final dot itself overflows. Native tests require every objective's
+finite/nonfinite decision across both vertices, both seeds and nonnegative
+controls; the two failing calls additionally have a 16-double-epsilon absolute
+objective bound. A pure-imaginary rotation checks the same correlation identity.
+Scaling rounds the terms and does not reproduce MATLAB's blocked BLAS
+accumulation order. On other inputs, MATLAB may overflow while this
+recomputation remains finite; the recordings establish agreement for these
+cases, not every representable dot product.
+Remaining CSS differences, including column 82 and cancellation-sensitive
+columns 16/17, are not treated as equivalent fits by these tests.
 
 Double CSS squared norms could underflow or overflow even when predictions
 were finite. A scaled norm for those extremes restores the recorded fit at
@@ -364,7 +391,7 @@ two rules. A separate native gate checks the overflowing design's tiny
 amplitude against MATLAB within eight ULP, even though its final map is rejected.
 
 The required CSS replay checks all 96 vertices' zero and nonfinite decisions.
-At vertices 46, 80 and 87 it also requires exact parameters, noise ceilings and
+At vertices 46, 59, 68, 80 and 87 it also requires exact parameters, noise ceilings and
 zero coefficients. Nonzero amplitudes have a 16-double-epsilon relative bound;
 R² and near-zero baselines have a 16-double-epsilon absolute bound. Every
 remaining per-value difference is written to the report without a widened
@@ -381,7 +408,9 @@ cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --exam
 `css_trace` evaluates the native Rust port at every recorded parameter vector,
 reports the first differing raw, compressed, convolved and objective value,
 then compares the independent optimizer's evaluation sequence. It records
-real and imaginary differences and nonfinite mismatches separately. Native
+real and imaginary differences and nonfinite mismatches separately, including
+the first nonfinite mismatch. It also evaluates the objective on MATLAB's
+recorded predictions to distinguish correlation errors from prediction errors. Native
 tracing is diagnostic evidence; the required pipeline replay uses the committed
 WebAssembly module. The trace does not treat a numerical difference as an
 accepted tolerance or claim that separate QR factors reproduce `mldivide`.
