@@ -108,7 +108,10 @@ test('NeuroFlow and the SDC registration gate start for a pull request only on t
     assert.equal(flow.jobs.gate, undefined, file);
     const push = flow.on.push.paths;
     const covers = push.map(pathGlob);
-    assert.deepEqual(own.filter((filter) => !covers.some((glob) => glob.test(filter))), [], `${file}: a push to main covers every pull request path`);
+    // A nested file each pull request filter matches, which a push filter has to match too.
+    const sample = (filter) => filter.replace('**', 'nested/file.js').replace('*', 'name');
+    for (const filter of own) assert.ok(pathGlob(filter).test(sample(filter)), `${file}: ${sample(filter)} is a file ${filter} matches`);
+    assert.deepEqual(own.filter((filter) => !covers.some((glob) => glob.test(sample(filter)))), [], `${file}: a push to main covers every pull request path`);
     assert.ok(push.some(isSharedFilter), `${file} keeps its shared filters on main`);
     assert.deepEqual(flow.on.push.branches, ['main']);
     assert.ok(flow.on.schedule.length, `${file} keeps its nightly run`);
