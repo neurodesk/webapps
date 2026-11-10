@@ -1,5 +1,13 @@
 # @neurodesk/noddi
 
+## 0.6.20261109
+
+### Patch Changes
+
+- Updated dependencies [6ca6f49]
+  - @neurodesk/webapp-components@0.26.0
+  - @neurodesk/dwi2trx@0.8.20261109
+
 ## 0.6.20261108
 
 ### Patch Changes

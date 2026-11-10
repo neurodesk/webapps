@@ -1,6 +1,12 @@
 # @neurodesk/qsmbly
 
+## 0.31.20261109
+
 ## 0.31.20261108
+
+### Patch Changes
+
+- Retry transient failures while downloading pinned QSMxT source, helper binaries and registries during builds. Keep checksum verification mandatory and stop after four attempts.
 
 ## 0.31.20261104
 

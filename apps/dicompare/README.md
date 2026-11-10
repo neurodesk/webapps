@@ -31,6 +31,17 @@ For the command-line interface (CLI) or Python API, see the [`dicompare` pip pac
 
 ---
 
+## Example data
+
+In the workspace example selector, choose **Synthetic T1w and QSM protocol session**. It loads two test acquisitions from a fictional 3T Siemens scanner. The 110 KB archive is pinned in `examples.json` and included in the offline asset inventories.
+
+- **`acq-t1wmpr`**: a 3D T1w MPRAGE that passes every check of the HCP *T1-weighted 3D MPRAGE* reference.
+- **`acq-qsmmegre`**: a five-echo 3D GRE (magnitude and phase) for QSM. Attach *QSM Consensus Guidelines* from the Library and the report shows 8 passes, 2 failures (non-uniform echo spacing of 7.5, 7.5, 6.0, 7.5 ms; readout bandwidth 300 Hz/pixel against a 220 Hz/pixel maximum at 3T) and 1 warning (first echo 6.0 ms; 5 ms or less preferred).
+
+The images are a numerical phantom, a few slices per volume. Regenerate the zip under `$TMPDIR` with `python3 scripts/example-data/generate_example_data.py` (needs pydicom and numpy). `pytest scripts/example-data` checks the reports against the pinned dicompare.
+
+---
+
 ## Desktop App
 
 For offline use or better performance, download the desktop app from [GitHub Releases](https://github.com/neurodesk/webapps/releases):
