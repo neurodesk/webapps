@@ -1600,35 +1600,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.8.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-linux-x64.tar.gz",
-          "sha256": "95ef0f63022763951b4f4b7751dce88cf1adb9ce3a65dac822a8666cdde57938",
-          "bytes": 79227087,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-linux-x64.tar.gz.validation.txt",
+          "version": "0.8.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261109/lcmodel-0.8.20261109-linux-x64.tar.gz",
+          "sha256": "8dd342896495abd9a037f319fc28923851fbd01db71fcbf660ea146f9b920933",
+          "bytes": 79231887,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261109/lcmodel-0.8.20261109-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf lcmodel-0.8.20261108-linux-x64.tar.gz\n./lcmodel-0.8.20261108-linux-x64/lcmodel meas.dat meas_water.dat results"
+          "command": "tar -xzf lcmodel-0.8.20261109-linux-x64.tar.gz\n./lcmodel-0.8.20261109-linux-x64/lcmodel meas.dat meas_water.dat results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.8.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-macos-arm64.pkg",
-          "sha256": "5fb08107f3b66af880831f1f8ccbbeee91f988aa82749c416de3c851814897b0",
-          "bytes": 72899987,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-macos-arm64.pkg.validation.txt",
+          "version": "0.8.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261109/lcmodel-0.8.20261109-macos-arm64.pkg",
+          "sha256": "398e3c9067c2be8208f8ddd874ef6a2ef06a1ca447651ac2d5d742c60e58dddc",
+          "bytes": 72903658,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261109/lcmodel-0.8.20261109-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg lcmodel-0.8.20261108-macos-arm64.pkg -target /\nlcmodel self-check\nlcmodel meas.dat meas_water.dat results"
+          "command": "sudo installer -pkg lcmodel-0.8.20261109-macos-arm64.pkg -target /\nlcmodel self-check\nlcmodel meas.dat meas_water.dat results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.8.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-windows-x64.zip",
-          "sha256": "3e51113880a7b59e46de4d458a7a4828871f038640f59e8225924703e4060a0d",
-          "bytes": 69810826,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261108/lcmodel-0.8.20261108-windows-x64.zip.validation.txt",
+          "version": "0.8.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261109/lcmodel-0.8.20261109-windows-x64.zip",
+          "sha256": "c47829bd02418edea42f43a0c7cf3abd65c3c9daf71d312c37b9e42c6a7e3e92",
+          "bytes": 69813135,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lcmodel-v0.8.20261109/lcmodel-0.8.20261109-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\lcmodel-0.8.20261108-windows-x64.zip -DestinationPath .\n.\\lcmodel-0.8.20261108-windows-x64\\lcmodel.exe meas.dat meas_water.dat results"
+          "command": "Expand-Archive -Path .\\lcmodel-0.8.20261109-windows-x64.zip -DestinationPath .\n.\\lcmodel-0.8.20261109-windows-x64\\lcmodel.exe meas.dat meas_water.dat results"
         }
       ],
       "containers": []
