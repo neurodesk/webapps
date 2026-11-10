@@ -320,6 +320,29 @@ test("a refresh that sees a just-submitted job leaves following it to the submit
   expect(streams).toBe(2);
 });
 
+test("a job the server created is followed although both submit responses were lost", async ({ page }) => {
+  test.setTimeout(120000);
+  await connect(page);
+  await createProject(page, "Lost receipt");
+  await loadExample(page);
+  // The server creates the job (the retry finds it by its idempotency key), but no response reaches the page.
+  let submissions = 0;
+  await page.route(`${COMPUTE_URL}/api/v1/jobs`, async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    submissions += 1;
+    await route.fetch();
+    await route.abort("connectionreset");
+  });
+  let streams = 0;
+  page.on("request", request => { if (/\/api\/v1\/jobs\/[^/]+\/events$/.test(request.url())) streams += 1; });
+  await page.locator("#stepSelect").selectOption("import");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Import movies (Import/job001) finished", { timeout: STEP_TIMEOUT });
+  expect(submissions).toBe(2);
+  expect(streams).toBe(1);
+  await expect(page.locator("#formMessage")).toBeHidden();
+});
+
 test("a failed example download can be retried", async ({ page }) => {
   let attempts = 0;
   await page.route(example.files[0].url, route => {

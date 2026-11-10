@@ -1,12 +1,15 @@
 // Changesets owns dependency propagation and changelogs. Apps and their linked
 // packages replace the planned semver patch with the UTC release date.
+import { execFile } from 'node:child_process';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import getReleasePlan from '@changesets/get-release-plan';
 import applyReleasePlan from '@changesets/apply-release-plan';
 import { read as readConfig } from '@changesets/config';
 import { getPackages } from '@manypkg/get-packages';
 import { repoRoot } from './apps-registry.mjs';
+import { stringLiterals } from './string-literals.mjs';
 
 export const DATE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(\d{8})$/;
 export const LINKED_PACKAGES = Object.freeze({
@@ -299,6 +302,81 @@ export async function syncEmbeddedVersions(appId, version, root = repoRoot) {
   const updates = await embeddedVersionUpdates(appId, version, root);
   for (const { path, text } of updates) await writeFile(path, text);
   return updates.map(({ path }) => path);
+}
+
+// JSX is left out: its text cannot be tokenized without a parser, and app versions live in
+// config .js/.ts files.
+const VERSION_SOURCE = /^(?:apps|packages|site)\/.+\.(?:[cm]?[jt]s|html)$/;
+const NOT_VERSION_SOURCE = /\/(?:test|tests|e2e|validation|docs|vendor|public|node_modules)\/|\.(?:test|spec)\.[^/]+$/;
+const DATE_VERSION_IN_TEXT = /(?<![@\w.])v?((\d+)\.(\d+)\.20\d{6})(?![\w.])/dg;
+const VERSION_KEY = /version$/i;
+const PACKAGE_KEY = /[@/]/;
+
+/**
+ * App version literals in tracked sources of date-versioned app, package and site workspaces
+ * that no embedded version site rewrites: a `0.0.0` assigned to a key ending in `version`
+ * (`version`, `VERSION`, `APP_VERSION`, `appVersion`), and any date version in a string (`v` prefix allowed) whose MAJOR.MINOR is
+ * that of the enclosing package. Pins of other packages, `name@x.y.z` specifiers, values under a
+ * package-name key (`"@scope/name": "…"`), comments and URLs pass. A date version in HTML
+ * outside `<script>` is not checked, nor one whose MAJOR.MINOR is stale.
+ */
+export async function unsyncedVersionLiterals(root = repoRoot) {
+  const { stdout } = await promisify(execFile)('git', ['-C', root, 'ls-files', '-z', 'apps', 'packages', 'site'], { maxBuffer: 64 * 1024 * 1024 });
+  const files = stdout.split('\0').filter(Boolean);
+  const seriesByDir = new Map();
+  for (const file of files.filter((item) => /(?:^|\/)package\.json$/.test(item))) {
+    const { version } = JSON.parse(await readFile(join(root, file), 'utf8').catch(() => '{}'));
+    const series = DATE_VERSION.exec(version ?? '');
+    seriesByDir.set(file.slice(0, -'/package.json'.length), series && `${series[1]}.${series[2]}`);
+  }
+  const seriesOf = (file) => {
+    for (let dir = file; dir.includes('/');) {
+      dir = dir.slice(0, dir.lastIndexOf('/'));
+      // A nested package.json without a date version (easy-mp2rage's web/) defers to its owner.
+      if (seriesByDir.get(dir)) return seriesByDir.get(dir);
+    }
+    return null;
+  };
+  const sites = Object.values(EMBEDDED_VERSION_SITES).flat();
+  const unsynced = [];
+  for (const file of files) {
+    const series = seriesOf(file);
+    if (!series || !VERSION_SOURCE.test(file) || NOT_VERSION_SOURCE.test(file)) continue;
+    let text = await readFile(join(root, file), 'utf8').catch(() => '');
+    if (file.endsWith('.html')) text = scriptsOnly(text);
+    const synced = new Set();
+    for (const site of sites.filter((item) => item.file === file)) {
+      const match = site.pattern.exec(text);
+      if (match) synced.add(match.index + match[1].length);
+    }
+    for (const { value, start, key } of stringLiterals(text)) {
+      if (value.includes('://') || PACKAGE_KEY.test(key ?? '')) continue;
+      const found = VERSION_KEY.test(key ?? '') && value === '0.0.0'
+        ? [{ version: value, at: start }]
+        : [...value.matchAll(DATE_VERSION_IN_TEXT)]
+          .filter((match) => `${match[2]}.${match[3]}` === series)
+          .map((match) => ({ version: match[1], at: start + match.indices[1][0] }));
+      for (const { version, at } of found) {
+        if (synced.has(at)) continue;
+        const line = text.slice(0, at).split('\n').length;
+        unsynced.push(`${file}:${line}: ${version}: read it from package.json (preferred; a dependency's version from that dependency's package.json), or register it in EMBEDDED_VERSION_SITES`);
+      }
+    }
+  }
+  return unsynced;
+}
+
+// The HTML with everything outside `<script>` elements blanked, keeping offsets and lines.
+function scriptsOnly(html) {
+  const blank = (text) => text.replace(/[^\n]/g, ' ');
+  let out = '';
+  let last = 0;
+  for (const match of html.matchAll(/(<script\b[^>]*>)([\s\S]*?)<\/script>/gi)) {
+    const body = match.index + match[1].length;
+    out += blank(html.slice(last, body)) + match[2];
+    last = body + match[2].length;
+  }
+  return out + blank(html.slice(last));
 }
 
 /** Every embedded version string that disagrees with its app's package.json. */

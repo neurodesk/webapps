@@ -1,5 +1,7 @@
 # @neurodesk/degibbs
 
+## 0.4.20261110
+
 ## 0.4.20261109
 
 ### Patch Changes

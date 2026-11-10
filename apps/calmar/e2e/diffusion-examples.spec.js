@@ -53,36 +53,36 @@ for (const id of ['stroke-dwi-adc-soop', 'stroke-dwi-adc-isles2022']) {
   });
 }
 
-async function checkRotation(page) {
+async function checkNamedCases(page) {
   test.setTimeout(240000);
   await page.goto('/');
   await page.waitForFunction(() => globalThis.app?.nv?.canvas, null, { timeout: 60000 });
   const selector = page.locator('[data-neurodesk-examples]');
-  for (const [selection, actual] of [
-    ['stroke-dwi-adc', 'stroke-dwi-adc-soop'],
-    ['stroke-dwi-adc', 'stroke-dwi-adc-isles2022'],
-    ['stroke-dwi-adc-isles2022', 'stroke-dwi-adc-isles2022'],
-    ['stroke-dwi-adc', 'stroke-dwi-adc-soop'],
-  ]) {
-    await page.locator('select[data-neurodesk-example]').selectOption(selection);
+  // Each entry loads the scan it names; choosing one again repeats it, and switching replaces the previous case.
+  for (const id of ['stroke-dwi-adc-soop', 'stroke-dwi-adc-isles2022', 'stroke-dwi-adc-isles2022', 'stroke-dwi-adc-soop']) {
+    await page.locator('select[data-neurodesk-example]').selectOption(id);
     await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
-    await expect(selector).toHaveAttribute('data-example-id', actual);
-    const example = examples.find(item => item.id === actual);
+    await expect(selector).toHaveAttribute('data-example-id', id);
+    const example = examples.find(item => item.id === id);
     await expect(selector.locator('[role="status"]')).toHaveText(`${example.label} loaded.`);
     expect(await page.evaluate(() => [app.deepIslesDwiFile.name, app.deepIslesAdcFile.name])).toEqual(example.files.map(file => file.name));
     expect(await page.evaluate(() => app.maskReviewActive)).toBe(false);
     await expect(page.locator('#downloadEditedLesionMaskButton')).toBeDisabled();
+    // Behavioural context is the loaded case's published values: sex for both; imaging age stays in notes, no time since onset for either.
+    await expect(page.locator('#patientAge')).toHaveValue('');
+    await expect(page.locator('#patientSex')).toHaveValue(example.patientContext.sex);
+    await expect(page.locator('#patientTpo')).toHaveValue('');
   }
 }
 
-test('next acute case alternates datasets and fixed entries repeat the chosen scan', async ({ page }) => {
-  await checkRotation(page);
+test('each acute entry loads the scan it names with its published context', async ({ page }) => {
+  await checkNamedCases(page);
 });
 
 test.describe('phone acute examples', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  test('next acute case alternates on a phone', async ({ page }) => {
-    await checkRotation(page);
+  test('each acute entry loads the scan it names on a phone', async ({ page }) => {
+    await checkNamedCases(page);
     await page.screenshot({ path: test.info().outputPath('acute-phone.png'), fullPage: true });
   });
 });
@@ -90,7 +90,7 @@ test.describe('phone acute examples', () => {
 test.describe('download fault injection', () => {
   // Requests must reach Playwright's routes rather than the production service worker.
   test.use({ serviceWorkers: 'block' });
-  test('acute download failure and cancellation retry the same case', async ({ page }) => {
+  test('a failed or cancelled acute download keeps the previous inputs and can be retried', async ({ page }) => {
     test.setTimeout(240000);
     await page.goto('/');
     await page.waitForFunction(() => globalThis.app?.nv?.canvas, null, { timeout: 60000 });
@@ -99,11 +99,11 @@ test.describe('download fault injection', () => {
     const soop = examples.find(item => item.id === 'stroke-dwi-adc-soop');
     const isles = examples.find(item => item.id === 'stroke-dwi-adc-isles2022');
     await page.route(soop.files[0].url, route => route.abort('failed'));
-    await menu.selectOption('stroke-dwi-adc');
+    await menu.selectOption(soop.id);
     await expect(selector).toHaveAttribute('data-example-state', 'error', { timeout: 30000 });
     expect(await page.evaluate(() => app.deepIslesDwiFile)).toBeNull();
     await page.unroute(soop.files[0].url);
-    await menu.selectOption('stroke-dwi-adc');
+    await menu.selectOption(soop.id);
     await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
     await expect(selector).toHaveAttribute('data-example-id', soop.id);
     let release;
@@ -113,14 +113,15 @@ test.describe('download fault injection', () => {
       await route.abort('failed').catch(() => {});
     });
     const requested = page.waitForRequest(isles.files[0].url);
-    await menu.selectOption('stroke-dwi-adc');
+    await menu.selectOption(isles.id);
     await requested;
     await selector.getByRole('button', { name: 'Cancel example download' }).click();
     await expect(selector).toHaveAttribute('data-example-state', 'cancelled');
     expect(await page.evaluate(() => app.deepIslesDwiFile.name)).toBe(soop.files[0].name);
+    await expect(page.locator('#patientAge')).toHaveValue('');
     release();
     await page.unroute(isles.files[0].url);
-    await menu.selectOption('stroke-dwi-adc');
+    await menu.selectOption(isles.id);
     await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
     await expect(selector).toHaveAttribute('data-example-id', isles.id);
   });

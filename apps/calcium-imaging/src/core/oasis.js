@@ -7,7 +7,7 @@
 // paper's Algorithm 1. The L1 penalty is folded into the data, y′_t = y_t − λ(1 − g) for t < T
 // and y′_T = y_T − λ, because Σ s_t = (1 − g) Σ_{t<T} c_t + c_T.
 // constrainedOasisAR1 picks λ so that the residual meets the noise constraint ‖y − b − c‖² = σ²T.
-import { fft1d } from './fft.js';
+import { fft1d } from '@neurodesk/webapp-components/fft';
 
 /** Pool-based solution for fixed g and λ; `sMin` is the minimum spike size (0 for the L1 problem). */
 export function oasisAR1(y, g, lambda = 0, sMin = 0) {

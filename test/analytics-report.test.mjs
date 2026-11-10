@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
+import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import {
   appHosts,
+  collectOrPlaceholder,
   dimensionFilter,
   emptyAnalytics,
   MIN_PUBLISHED_COUNTRY_USERS,
@@ -75,6 +77,7 @@ test('placeholder analytics covers every registered app', async () => {
   const placeholder = emptyAnalytics(registry);
   assert.equal(placeholder.unavailable, true);
   assert.deepEqual(placeholder.apps.map(({ id }) => id), registry.apps.map(({ id }) => id));
+  assert.deepEqual(Object.keys(placeholder.catalogs), registry.site.catalogs.map(({ id }) => id));
 });
 
 test('ranks apps by visitors, then page views, then title', () => {
@@ -86,4 +89,47 @@ test('ranks apps by visitors, then page views, then title', () => {
   ];
   assert.deepEqual(rankApps(apps).map(({ title }) => title), ['CALMaR', 'SeedSeg', 'Brain2Print', 'Deface']);
   assert.equal(apps[0].title, 'Deface');
+});
+
+test('a catalogue report lists its apps with its own totals and countries', async () => {
+  const { catalogAnalytics } = await import('../scripts/lib/catalog-sites.mjs');
+  const { catalogApps, findCatalog } = await import('../scripts/lib/apps-registry.mjs');
+  const registry = await loadAppsRegistry();
+  const msk = findCatalog(registry, 'msk');
+  const report = emptyAnalytics(registry, '2026-11-09T00:00:00.000Z');
+  report.totals = { users: 100, pageViews: 300 };
+  report.catalogs.msk = { totals: { users: 7, pageViews: 20 }, countries: [{ code: 'AU', name: 'Australia', users: 6 }] };
+  const own = catalogAnalytics(report, catalogApps(registry, msk), msk);
+  assert.deepEqual(own.totals, { users: 7, pageViews: 20 });
+  assert.deepEqual(own.countries, [{ code: 'AU', name: 'Australia', users: 6 }]);
+  assert.deepEqual(own.apps.map(({ id }) => id).sort(), catalogApps(registry, msk).map(({ id }) => id).sort());
+  assert.equal('catalogs' in own, false);
+  assert.throws(() => catalogAnalytics({ ...report, catalogs: undefined }, [], msk), /no report for catalogue msk/);
+});
+
+test('a GA4 outage publishes the placeholder', async () => {
+  const registry = await loadAppsRegistry();
+  const warnings = [];
+  const warn = (message) => warnings.push(message);
+  const fresh = { schemaVersion: 1, unavailable: false, apps: [] };
+
+  assert.equal(await collectOrPlaceholder({ registry, collect: async () => fresh, warn }), fresh);
+  assert.deepEqual(warnings, []);
+  const outage = async () => { throw new Error('GA4 Data API returned HTTP 502'); };
+  assert.deepEqual(await collectOrPlaceholder({ registry, collect: outage, warn }), emptyAnalytics(registry));
+  assert.match(warnings[0], /HTTP 502/);
+});
+
+test('a malformed service-account key still fails the deploy', () => {
+  const run = spawnSync(process.execPath, ['scripts/write-analytics.mjs', '--allow-missing-credentials', '--output', '/dev/null'], {
+    env: {
+      ...process.env,
+      GA4_PROPERTY_ID: '1',
+      GA4_SERVICE_ACCOUNT_KEY: JSON.stringify({ client_email: 'x@example.invalid', private_key: 'not a key' }),
+    },
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /private_key is not a usable key/);
 });

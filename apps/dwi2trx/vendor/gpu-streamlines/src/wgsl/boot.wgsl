@@ -39,6 +39,7 @@ struct BootTrackingParams {
     off_sampling: i32,
     off_b0s: i32,
     workgroup_offset: i32,
+    step_budget: i32,
 }
 
 // ── buffer bindings ─────────────────────────────────────────────────
@@ -110,9 +111,6 @@ var<workgroup> wg_dirs_sh: array<f32, 60>;
 var<workgroup> wg_interp_out: array<f32, 2>;
 // Scratch for closest_peak / new direction: BLOCK_Y * 3
 var<workgroup> wg_new_dir: array<f32, 6>;
-// Step counts per tidy row
-var<workgroup> wg_stepsB: array<i32, 2>;
-var<workgroup> wg_stepsF: array<i32, 2>;
 // Set when the compiled subgroup layout differs from the one the kernel assumes
 var<workgroup> wg_lane_mismatch: atomic<u32>;
 
@@ -586,109 +584,6 @@ fn get_direction_boot(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// TRACKER — step along streamline in one direction
-// ═══════════════════════════════════════════════════════════════════
-
-struct TrackerBootResult {
-    tissue_class: i32,
-    state: PhiloxState,
-}
-
-fn tracker_boot(
-    st: PhiloxState,
-    model_type: i32,
-    max_angle: f32,
-    tc_threshold: f32,
-    step_size: f32,
-    relative_peak_thres: f32,
-    min_separation_angle: f32,
-    min_signal: f32,
-    seed: vec3<f32>,
-    first_step: vec3<f32>,
-    dimx: i32, dimy: i32, dimz: i32, dimt: i32,
-    samplm_nr: i32,
-    num_edges: i32,
-    delta_nr: i32,
-    nsteps_idx: u32,    // index into wg_stepsB/wg_stepsF
-    sline_base: u32,    // base flat f32 index into sline buffer
-    dirs_offset: u32,   // into wg_dirs_sh
-    sh_offset: u32,     // into wg_sh_mem
-    scratch_offset: u32, // into wg_new_dir
-    ind_offset: u32,    // into wg_sh_ind
-    tidx: u32, tidy: u32,
-    use_stepsB: bool
-) -> TrackerBootResult {
-    var rng = st;
-    var tissue_class: i32 = TRACKPOINT;
-
-    var point = seed;
-    var direction = first_step;
-
-    // Store initial point
-    if (tidx == 0u) {
-        store_sline_f3(sline_base, point);
-    }
-    subgroupBarrier();
-
-    var i: i32 = 1;
-    for (; i < MAX_SLINE_LEN; i++) {
-        let gdr = get_direction_boot(
-            rng,
-            5,  // NATTEMPTS
-            model_type,
-            max_angle,
-            min_signal,
-            relative_peak_thres,
-            min_separation_angle,
-            direction,
-            dimx, dimy, dimz, dimt,
-            point,
-            delta_nr, samplm_nr, num_edges,
-            dirs_offset, sh_offset, scratch_offset, ind_offset,
-            tidx, tidy);
-        rng = gdr.state;
-        subgroupBarrier();
-
-        // Read direction from scratch (closest_peak wrote it there)
-        direction = vec3<f32>(
-            wg_new_dir[scratch_offset],
-            wg_new_dir[scratch_offset + 1u],
-            wg_new_dir[scratch_offset + 2u]);
-        subgroupBarrier();
-
-        if (gdr.ndir == 0) {
-            break;
-        }
-
-        // Advance point (voxel_size is 1.0 for boot)
-        point.x += direction.x * step_size;
-        point.y += direction.y * step_size;
-        point.z += direction.z * step_size;
-
-        if (tidx == 0u) {
-            store_sline_f3(sline_base + u32(i), point);
-        }
-        subgroupBarrier();
-
-        tissue_class = check_point_fn(
-            tc_threshold, point, dimx, dimy, dimz, tidx, tidy);
-
-        if (tissue_class == ENDPOINT ||
-            tissue_class == INVALIDPOINT ||
-            tissue_class == OUTSIDEIMAGE) {
-            break;
-        }
-    }
-
-    if (use_stepsB) {
-        wg_stepsB[nsteps_idx] = i;
-    } else {
-        wg_stepsF[nsteps_idx] = i;
-    }
-    return TrackerBootResult(tissue_class, rng);
-}
-
-// ═══════════════════════════════════════════════════════════════════
 // KERNEL ENTRY POINTS
 // ═══════════════════════════════════════════════════════════════════
 
@@ -767,7 +662,70 @@ fn getNumStreamlinesBoot_k(
     }
 }
 
+// ── resumable generation state (#598) ───────────────────────────────
+// A seed row tracks up to MAX_SLINES_PER_SEED streamlines of up to 2 * MAX_SLINE_LEN
+// steps, too long for one GPU command where the driver resets work that does not
+// yield (Intel/Mesa preempts after 640 ms). Each command runs at most
+// params.step_budget tracking steps per row and saves where it stopped in
+// slineOutOff, after the per-seed offsets [0, nseed]:
+//   [nseed + 1 + slid]                      1 while the row has streamlines left
+//   [2 * nseed + 1 + slid * ROW_STATE_WORDS] the row's position, then each lane's
+//                                            Philox state
+// The steps, their order and the random draws are the original kernel's, so the
+// output does not depend on the budget.
+const ROW_STATE_WORDS: u32 = 16u + THR_X_SL * 13u;
+const PHASE_START: i32 = 0;
+const PHASE_BACKWARD: i32 = 1;
+const PHASE_FORWARD: i32 = 2;
+
+fn pending_index(slid: u32) -> u32 {
+    return u32(params.nseed) + 1u + slid;
+}
+
+fn row_state_index(slid: u32) -> u32 {
+    return 2u * u32(params.nseed) + 1u + slid * ROW_STATE_WORDS;
+}
+
+fn load_state_f3(idx: u32) -> vec3<f32> {
+    return vec3<f32>(bitcast<f32>(slineOutOff[idx]),
+                     bitcast<f32>(slineOutOff[idx + 1u]),
+                     bitcast<f32>(slineOutOff[idx + 2u]));
+}
+
+fn store_state_f3(idx: u32, v: vec3<f32>) {
+    slineOutOff[idx] = bitcast<i32>(v.x);
+    slineOutOff[idx + 1u] = bitcast<i32>(v.y);
+    slineOutOff[idx + 2u] = bitcast<i32>(v.z);
+}
+
+fn load_philox(idx: u32) -> PhiloxState {
+    var st: PhiloxState;
+    st.counter = vec4<u32>(u32(slineOutOff[idx]), u32(slineOutOff[idx + 1u]),
+                           u32(slineOutOff[idx + 2u]), u32(slineOutOff[idx + 3u]));
+    st.key = vec2<u32>(u32(slineOutOff[idx + 4u]), u32(slineOutOff[idx + 5u]));
+    st.output = vec4<u32>(u32(slineOutOff[idx + 6u]), u32(slineOutOff[idx + 7u]),
+                          u32(slineOutOff[idx + 8u]), u32(slineOutOff[idx + 9u]));
+    st.idx = u32(slineOutOff[idx + 10u]);
+    st.cached_normal = bitcast<f32>(slineOutOff[idx + 11u]);
+    st.has_cached = u32(slineOutOff[idx + 12u]);
+    return st;
+}
+
+fn store_philox(idx: u32, st: PhiloxState) {
+    for (var k = 0u; k < 4u; k++) {
+        slineOutOff[idx + k] = i32(st.counter[k]);
+        slineOutOff[idx + 6u + k] = i32(st.output[k]);
+    }
+    slineOutOff[idx + 4u] = i32(st.key.x);
+    slineOutOff[idx + 5u] = i32(st.key.y);
+    slineOutOff[idx + 10u] = i32(st.idx);
+    slineOutOff[idx + 11u] = bitcast<i32>(st.cached_normal);
+    slineOutOff[idx + 12u] = i32(st.has_cached);
+}
+
 // ── genStreamlinesMergeBoot_k — main bootstrap streamline kernel ────
+// Each call continues every row of its workgroups from the saved state, for at
+// most params.step_budget steps; the host calls it until no row is pending.
 @compute @workgroup_size(32, 2, 1)
 fn genStreamlinesMergeBoot_k(
     @builtin(local_invocation_id) tid: vec3<u32>,
@@ -783,10 +741,17 @@ fn genStreamlinesMergeBoot_k(
 
     if (i32(slid) >= params.nseed) { return; }
 
-    // Philox stream per (seed index in the whole run, lane), whatever the batch size (#598).
-    let global_id = (u32(params.rng_offset) + logical_group * BLOCK_Y + tidy) * THR_X_SL + tidx;
-    var st = philox_init(
-        u32(params.rng_seed_lo), u32(params.rng_seed_hi), global_id + 1u, 0u);
+    let row = row_state_index(slid);
+    let lane_state = row + 16u + tidx * 13u;
+    var st: PhiloxState;
+    if (slineOutOff[row] == 0) {
+        // Philox stream per (seed index in the whole run, lane), whatever the batch size (#598).
+        let global_id = (u32(params.rng_offset) + logical_group * BLOCK_Y + tidy) * THR_X_SL + tidx;
+        st = philox_init(
+            u32(params.rng_seed_lo), u32(params.rng_seed_hi), global_id + 1u, 0u);
+    } else {
+        st = load_philox(lane_state);
+    }
 
     let seed = load_seeds_f3(slid);
 
@@ -796,13 +761,12 @@ fn genStreamlinesMergeBoot_k(
             for (var i = 0; i < ndir; i++) {
                 slineMeta[2 * (slineOutOff[slid] + i) + 1] = -1;
             }
+            slineOutOff[pending_index(slid)] = 0;
         }
         return;
     }
 
     subgroupBarrier();
-
-    var sline_off = slineOutOff[slid];
 
     let n32dimt = u32(((params.dimt + 31) / 32) * 32);
     let sh_per_row = 2u * n32dimt + 2u * max(n32dimt, u32(params.samplm_nr));
@@ -812,72 +776,136 @@ fn genStreamlinesMergeBoot_k(
     let scratch_offset = tidy * 3u;
     let ind_offset = tidy * max(n32dimt, u32(params.samplm_nr));
 
-    for (var i = 0; i < ndir; i++) {
-        let dir_idx = slid * u32(params.samplm_nr) + u32(i);
+    var dir_i = slineOutOff[row + 1u];
+    var phase = slineOutOff[row + 2u];
+    var step = slineOutOff[row + 3u];
+    var stepsB = slineOutOff[row + 4u];
+    var point = load_state_f3(row + 5u);
+    var direction = load_state_f3(row + 8u);
+    var budget = params.step_budget;
+
+    loop {
+        if (dir_i >= ndir) { break; }
+        let sline_off = slineOutOff[slid] + dir_i;
+        let dir_idx = slid * u32(params.samplm_nr) + u32(dir_i);
         let first_step = load_shDir0_f3(dir_idx);
 
         // Flat f32 base for this streamline's sline storage
         let sline_base_f3 = u32(sline_off) * u32(MAX_SLINE_LEN) * 2u;
 
-        if (tidx == 0u) {
-            slineMeta[2 * sline_off] = i32(slid);
+        if (phase == PHASE_START) {
+            if (tidx == 0u) {
+                slineMeta[2 * sline_off] = i32(slid);
+            }
+            // ── Track backward ── starts at the seed
+            point = seed;
+            direction = vec3<f32>(-first_step.x, -first_step.y, -first_step.z);
+            if (tidx == 0u) {
+                store_sline_f3(sline_base_f3, point);
+            }
+            subgroupBarrier();
+            phase = PHASE_BACKWARD;
+            step = 1;
         }
 
-        // ── Track backward ──
-        let trB = tracker_boot(
-            st,
-            params.model_type,
-            params.max_angle,
-            params.tc_threshold,
-            params.step_size,
-            params.relative_peak_thresh,
-            params.min_separation_angle,
-            params.min_signal,
-            seed,
-            vec3<f32>(-first_step.x, -first_step.y, -first_step.z),
-            params.dimx, params.dimy, params.dimz, params.dimt,
-            params.samplm_nr, params.num_edges, params.delta_nr,
-            tidy, sline_base_f3,
-            dirs_offset, sh_offset, scratch_offset, ind_offset,
-            tidx, tidy, true);
-        st = trB.state;
+        // One tracking step; `ended` stops this direction as upstream's tracker_boot loop did.
+        var ended = step >= MAX_SLINE_LEN;
+        if (!ended) {
+            if (budget <= 0) { break; }
+            budget -= 1;
+            let base = select(sline_base_f3 + u32(stepsB - 1), sline_base_f3, phase == PHASE_BACKWARD);
+            let gdr = get_direction_boot(
+                st,
+                5,  // NATTEMPTS
+                params.model_type,
+                params.max_angle,
+                params.min_signal,
+                params.relative_peak_thresh,
+                params.min_separation_angle,
+                direction,
+                params.dimx, params.dimy, params.dimz, params.dimt,
+                point,
+                params.delta_nr, params.samplm_nr, params.num_edges,
+                dirs_offset, sh_offset, scratch_offset, ind_offset,
+                tidx, tidy);
+            st = gdr.state;
+            subgroupBarrier();
 
-        let stepsB = wg_stepsB[tidy];
+            // Read direction from scratch (closest_peak wrote it there)
+            direction = vec3<f32>(
+                wg_new_dir[scratch_offset],
+                wg_new_dir[scratch_offset + 1u],
+                wg_new_dir[scratch_offset + 2u]);
+            subgroupBarrier();
 
-        // ── Reverse backward streamline ──
-        for (var j = i32(tidx); j < stepsB / 2; j += i32(THR_X_SL)) {
-            let a_idx = sline_base_f3 + u32(j);
-            let b_idx = sline_base_f3 + u32(stepsB - 1 - j);
-            let pa = load_sline_f3(a_idx);
-            let pb = load_sline_f3(b_idx);
-            store_sline_f3(a_idx, pb);
-            store_sline_f3(b_idx, pa);
+            if (gdr.ndir == 0) {
+                ended = true;
+            } else {
+                // Advance point (voxel_size is 1.0 for boot)
+                point.x += direction.x * params.step_size;
+                point.y += direction.y * params.step_size;
+                point.z += direction.z * params.step_size;
+
+                if (tidx == 0u) {
+                    store_sline_f3(base + u32(step), point);
+                }
+                subgroupBarrier();
+
+                let tissue_class = check_point_fn(
+                    params.tc_threshold, point, params.dimx, params.dimy, params.dimz, tidx, tidy);
+
+                if (tissue_class == ENDPOINT ||
+                    tissue_class == INVALIDPOINT ||
+                    tissue_class == OUTSIDEIMAGE) {
+                    ended = true;
+                } else {
+                    step += 1;
+                }
+            }
         }
 
-        // ── Track forward ──
-        let fwd_base = sline_base_f3 + u32(stepsB - 1);
-        let trF = tracker_boot(
-            st,
-            params.model_type,
-            params.max_angle,
-            params.tc_threshold,
-            params.step_size,
-            params.relative_peak_thresh,
-            params.min_separation_angle,
-            params.min_signal,
-            seed,
-            first_step,
-            params.dimx, params.dimy, params.dimz, params.dimt,
-            params.samplm_nr, params.num_edges, params.delta_nr,
-            tidy, fwd_base,
-            dirs_offset, sh_offset, scratch_offset, ind_offset,
-            tidx, tidy, false);
-        st = trF.state;
+        if (ended) {
+            if (phase == PHASE_BACKWARD) {
+                stepsB = step;
 
-        if (tidx == 0u) {
-            slineMeta[2 * sline_off + 1] = stepsB - 1 + wg_stepsF[tidy];
+                // ── Reverse backward streamline ──
+                for (var j = i32(tidx); j < stepsB / 2; j += i32(THR_X_SL)) {
+                    let a_idx = sline_base_f3 + u32(j);
+                    let b_idx = sline_base_f3 + u32(stepsB - 1 - j);
+                    let pa = load_sline_f3(a_idx);
+                    let pb = load_sline_f3(b_idx);
+                    store_sline_f3(a_idx, pb);
+                    store_sline_f3(b_idx, pa);
+                }
+
+                // ── Track forward ── starts at the seed
+                point = seed;
+                direction = first_step;
+                if (tidx == 0u) {
+                    store_sline_f3(sline_base_f3 + u32(stepsB - 1), point);
+                }
+                subgroupBarrier();
+                phase = PHASE_FORWARD;
+                step = 1;
+            } else {
+                if (tidx == 0u) {
+                    slineMeta[2 * sline_off + 1] = stepsB - 1 + step;
+                }
+                dir_i += 1;
+                phase = PHASE_START;
+            }
         }
+    }
 
-        sline_off += 1;
+    store_philox(lane_state, st);
+    if (tidx == 0u) {
+        slineOutOff[row] = 1;
+        slineOutOff[row + 1u] = dir_i;
+        slineOutOff[row + 2u] = phase;
+        slineOutOff[row + 3u] = step;
+        slineOutOff[row + 4u] = stepsB;
+        store_state_f3(row + 5u, point);
+        store_state_f3(row + 8u, direction);
+        slineOutOff[pending_index(slid)] = select(0, 1, dir_i < ndir);
     }
 }

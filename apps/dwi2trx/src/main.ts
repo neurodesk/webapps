@@ -218,10 +218,11 @@ function num(
   return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def
 }
 
-/** Physical GPU command size and seed batch size set by e2e/dispatch.spec.js, which
- *  compares them with the defaults; results must not depend on either (#598). */
+/** Physical GPU command size, steps per command and seed batch size set by
+ *  e2e/dispatch.spec.js, which compares them with the defaults; results must not
+ *  depend on any of them (#598). */
 function trackingOverride(
-  name: 'neurodeskTrackingDispatchWorkgroups' | 'neurodeskTrackingChunkSeeds',
+  name: 'neurodeskTrackingDispatchWorkgroups' | 'neurodeskTrackingDispatchSteps' | 'neurodeskTrackingChunkSeeds',
 ): number | undefined {
   const value = (globalThis as Record<string, unknown>)[name]
   return Number.isSafeInteger(value) && (value as number) > 0 ? (value as number) : undefined
@@ -1127,6 +1128,7 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       // fragment is noise that bloats the TRX and clutters the render).
       minPts: Math.max(2, Math.ceil(5 / stepSize)),
       maxWorkgroupsPerDispatch: trackingOverride('neurodeskTrackingDispatchWorkgroups') ?? DEFAULT_PARAMS.maxWorkgroupsPerDispatch,
+      maxStepsPerDispatch: trackingOverride('neurodeskTrackingDispatchSteps') ?? DEFAULT_PARAMS.maxStepsPerDispatch,
       chunkSize: trackingOverride('neurodeskTrackingChunkSeeds') ?? DEFAULT_PARAMS.chunkSize,
     }
     const parameterReport = trackingParametersReport(params)
