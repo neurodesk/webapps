@@ -1,5 +1,14 @@
 # gliomoda
 
+## 0.1.20261109
+
+### Patch Changes
+
+- Updated dependencies [6ca6f49]
+  - @neurodesk/webapp-components@0.26.0
+  - @neurodesk/synthsr@0.6.20261109
+  - @neurodesk/gliomoda@0.1.2
+
 ## 0.1.20261108
 
 ### Minor Changes

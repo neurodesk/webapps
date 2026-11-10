@@ -20,14 +20,14 @@
     "zenodo_url": "https://zenodo.org/record/22160685"
   },
   "Generic_Spine_v1.0": {
-    "checksum": "sha256:52a2d303ae097c48bb18051bfb7701e2452b173bfbb9acde8e8c192a491c592c",
+    "checksum": "sha256:2ece537fa8b7dc25430d7500a3b343192e15575521ec5959bbe16e03ae7d29ef",
     "concept_doi": "10.5281/zenodo.20805053",
     "concept_recid": "20805053",
-    "record_id": "22160676",
-    "updated_at": "2026-08-29T11:06:40Z",
-    "version": "r20210521",
-    "version_doi": "10.5281/zenodo.22160676",
-    "zenodo_url": "https://zenodo.org/record/22160676"
+    "record_id": "23997844",
+    "updated_at": "2026-11-06T06:10:58Z",
+    "version": "r20210521-1",
+    "version_doi": "10.5281/zenodo.23997844",
+    "zenodo_url": "https://zenodo.org/record/23997844"
   },
   "HC-ChiSep_Validation_v1.0": {
     "checksum": "sha256:b41ffe45902716a11ec40cfa06ed2619f8e2ce5a608e33cfe81e824bb16d3ca4",
@@ -110,14 +110,14 @@
     "zenodo_url": "https://zenodo.org/record/22160675"
   },
   "abcd_schema_cleaned": {
-    "checksum": "sha256:6a1c12d9e4e3a1fc59148e2c8b64e4eab1ee4d603f4d107d6e8b7cd9c6ad5c98",
+    "checksum": "sha256:f899282141efe432eefa22141f75e08620ff8a50baf9439340b34e7da539d547",
     "concept_doi": "10.5281/zenodo.20805057",
     "concept_recid": "20805057",
-    "record_id": "22160681",
-    "updated_at": "2026-08-29T11:06:40Z",
-    "version": "1.1",
-    "version_doi": "10.5281/zenodo.22160681",
-    "zenodo_url": "https://zenodo.org/record/22160681"
+    "record_id": "23997846",
+    "updated_at": "2026-11-06T06:10:58Z",
+    "version": "1.2",
+    "version_doi": "10.5281/zenodo.23997846",
+    "zenodo_url": "https://zenodo.org/record/23997846"
   },
   "hcp_schema": {
     "checksum": "sha256:f9a0197854c340fdcc738276ec3de4276ed4908a0a731b971dec255675326b90",
