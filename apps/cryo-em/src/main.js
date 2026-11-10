@@ -330,7 +330,8 @@ async function refreshProject() {
   renderJobs();
   renderForm();
   const active = [...project.jobs].reverse().find(job => ACTIVE.has(job.status));
-  if (active && !state.following) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
+  // A refresh that started before a submission returned sees its job; the submit handler follows it.
+  if (active && !state.following && !state.submitting) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
 }
 
 $('projectSelect').addEventListener('change', event => {
