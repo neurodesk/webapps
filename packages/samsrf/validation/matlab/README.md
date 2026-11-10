@@ -370,6 +370,10 @@ when the final dot itself overflows. Native tests require every objective's
 finite/nonfinite decision across both vertices, both seeds and nonnegative
 controls; the two failing calls additionally have a 16-double-epsilon absolute
 objective bound. A pure-imaginary rotation checks the same correlation identity.
+Scaling rounds the terms and does not reproduce MATLAB's blocked BLAS
+accumulation order. On other inputs, MATLAB may overflow while this
+recomputation remains finite; the recordings establish agreement for these
+cases, not every representable dot product.
 Remaining CSS differences, including column 82 and cancellation-sensitive
 columns 16/17, are not treated as equivalent fits by these tests.
 
