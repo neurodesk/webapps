@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import test from 'node:test';
-import { catalogApps, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { appUrl, catalogApps, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { HUB_SITE, SITES_DIR, runtimeClosure } from '../scripts/lib/catalog-sites.mjs';
 
 const registry = await loadAppsRegistry();
@@ -98,6 +98,22 @@ for (const catalog of registry.site.catalogs) {
       assert.match(html, new RegExp(`data-brand-name="${catalog.brand.name}"`));
       assert.match(html, new RegExp(`<html\\b[^>]*\\sdata-neurodesk-catalog="${catalog.id}"`));
     }
+  });
+
+  test(`${catalog.host} app pages name their home page as canonical`, async () => {
+    for (const app of apps) {
+      const html = await readFile(join(site, app.path, 'index.html'), 'utf8');
+      const canonical = [...html.matchAll(/<link\b[^>]*\brel="canonical"[^>]*>/g)].map(([tag]) => tag);
+      assert.deepEqual(canonical, [`<link rel="canonical" href="${appUrl(registry, app)}">`], `${catalog.id}/${app.path}`);
+    }
+  });
+
+  test(`${catalog.host} offers the apps of other catalogues when a search finds none here`, async () => {
+    const landing = await readFile(join(site, 'index.html'), 'utf8');
+    const elsewhere = JSON.parse(landing.match(/<script type="application\/json" id="elsewhere-apps">([\s\S]*?)<\/script>/)[1]);
+    const served = new Set(apps.map(({ id }) => id));
+    assert.deepEqual(elsewhere.map(({ id }) => id), registry.apps.filter(({ id }) => !served.has(id)).map(({ id }) => id));
+    for (const entry of elsewhere) assert.equal(entry.url, appUrl(registry, registry.apps.find(({ id }) => id === entry.id)));
   });
 }
 

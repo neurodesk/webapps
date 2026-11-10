@@ -187,4 +187,6 @@ test('an app copy takes the URL and brand of the host that serves it', () => {
   assert.equal(copy.url, 'https://microscopyapps.sciget.org/elastix/');
   assert.equal(copy.brandName, 'SciGet');
   assert.equal(copy.siteTitle, 'Microscopy Webapps');
+  assert.equal(home.canonical, 'https://webapps.neurodesk.org/elastix/', 'the home page is its own canonical');
+  assert.equal(copy.canonical, 'https://webapps.neurodesk.org/elastix/', 'a copy names its home page as canonical');
 });

@@ -1,4 +1,4 @@
-import { ANATOMY, HARDWARE, INPUT_FORMATS, MODALITIES, primaryCatalog } from './apps-registry.mjs';
+import { ANATOMY, HARDWARE, INPUT_FORMATS, MODALITIES, appCatalogIds, appUrl, findCatalog, primaryCatalog } from './apps-registry.mjs';
 
 const escape = (value) => String(value)
   .replaceAll('&', '&amp;')
@@ -24,12 +24,17 @@ function cardFacts(app, standalone) {
   return facts;
 }
 
-function renderCard(app, category, categories, standalone) {
+// The lower-case text the landing page's search matches against an app.
+function searchText(app, categories, standalone) {
   const categoryTitles = categories
     .filter(({ id }) => app.categories.includes(id))
     .map(({ title }) => title);
+  const facts = cardFacts(app, standalone).map(({ text }) => text);
+  return [app.title, app.description, ...categoryTitles, ...facts, ...app.keywords].join(' ').toLocaleLowerCase();
+}
+
+function renderCard(app, category, categories, standalone) {
   const facts = cardFacts(app, standalone);
-  const searchText = [app.title, app.description, ...categoryTitles, ...facts.map(({ text }) => text), ...app.keywords].join(' ');
   const tags = facts
     .map(({ text, hardware }) => (hardware
       ? `<li data-hardware="${escape(hardware)}">${escape(text)}</li>`
@@ -37,7 +42,7 @@ function renderCard(app, category, categories, standalone) {
     .join('');
 
   return `
-          <a class="app-card" href="./${escape(app.path)}/" data-app-card data-app-id="${escape(app.id)}" data-category="${escape(category.id)}" data-search="${escape(searchText.toLocaleLowerCase())}">
+          <a class="app-card" href="./${escape(app.path)}/" data-app-card data-app-id="${escape(app.id)}" data-category="${escape(category.id)}" data-search="${escape(searchText(app, categories, standalone))}">
             <span class="app-card__topline">
               <span class="app-card__category">${escape(category.title)}</span>
             </span>
@@ -64,6 +69,27 @@ function renderCategory(category, apps, index, categories, standalone) {
         <div class="app-grid">${cards}
         </div>
       </section>`;
+}
+
+/**
+ * The apps of `allApps` that `catalog` does not serve, each linking to its home
+ * host. The landing page offers them when a search finds nothing here.
+ */
+function elsewhereApps(registry, allApps, catalog, standalone) {
+  return allApps
+    .filter((app) => !appCatalogIds(app).includes(catalog.id))
+    .map((app) => {
+      const home = findCatalog(registry, app.catalog);
+      return {
+        id: app.id,
+        title: app.title,
+        description: app.description,
+        url: appUrl(registry, app),
+        catalogTitle: home.title,
+        host: home.host,
+        search: searchText(app, registry.site.categories, standalone),
+      };
+    });
 }
 
 const analyticsSection = `
@@ -118,8 +144,10 @@ function desktopLink(catalog, standalone) {
  * `catalog` names and brands it (the primary catalogue by default, as the
  * all-app assembly and the desktop suite show). Only the primary catalogue
  * carries the Vessel Surfer link, which its host serves.
+ * `allApps`, every app of the registry, lets a search that finds nothing here
+ * offer the apps other catalogues serve; the offline desktop suite leaves it out.
  */
-export function renderLandingPage(registry, standalone, catalog = primaryCatalog(registry)) {
+export function renderLandingPage(registry, standalone, catalog = primaryCatalog(registry), { allApps = [] } = {}) {
   const primary = catalog.host === registry.site.domain;
   const { brand } = catalog;
   const categories = registry.site.categories.filter((category) => (
@@ -135,6 +163,13 @@ export function renderLandingPage(registry, standalone, catalog = primaryCatalog
     const apps = registry.apps.filter((app) => app.categories.includes(category.id));
     return renderCategory(category, apps, index, categories, standalone);
   }).join('');
+  const elsewhere = elsewhereApps(registry, allApps, catalog, standalone);
+  const elsewhereData = elsewhere.length ? `
+      <script type="application/json" id="elsewhere-apps">${JSON.stringify(elsewhere).replaceAll('<', '\\u003c')}</script>
+      <section id="elsewhere" class="elsewhere" aria-labelledby="elsewhere-title" hidden>
+        <h3 id="elsewhere-title">On other catalogues</h3>
+        <div id="elsewhere-results" class="app-grid"></div>
+      </section>` : '';
   const surfLink = primary ? `
         <a href="./surf/">Go surfing</a>` : '';
 
@@ -203,9 +238,9 @@ ${desktopLink(catalog, standalone)}
 
     <section id="no-results" class="no-results" hidden>
       <div aria-hidden="true">⌕</div>
-      <h2>No matching apps</h2>
+      <h2>No apps match these filters</h2>
       <p>Try a broader term, another category, or search for a file format such as DICOM or NIfTI.</p>
-      <button id="reset-filters" type="button">Show all apps</button>
+      <button id="reset-filters" type="button">Show all apps</button>${elsewhereData}
     </section>
 
 ${analyticsSection}
