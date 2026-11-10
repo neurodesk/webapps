@@ -14,8 +14,17 @@ export function compareRecordings(first, second) {
   for (const recording of [a, b]) {
     const counts = {};
     for (const item of recording.cases) counts[item.kind] = (counts[item.kind] ?? 0) + 1;
-    assert.deepEqual(counts, { 'css-coarse': 4, 'css-trace': 78, 'css-correlation': 10, glm: 146 }, 'Incomplete diagnostic matrix');
+    assert.deepEqual(counts, { 'css-coarse': 4, 'css-trace': 108, 'css-correlation': 10, glm: 146 }, 'Incomplete diagnostic matrix');
     assert.equal(new Set(recording.cases.map(item => item.id)).size, recording.cases.length, 'Duplicate case IDs');
+    const traces = new Set(recording.cases.filter(item => item.kind === 'css-trace').map(item => item.id));
+    for (const precision of ['single', 'double']) {
+      for (const vertex of [15, 16, 17, 18, 22, 26, 47, 58, 60, 67, 69, 73, 74, 79, 81, 82, 88, 89]) {
+        for (const control of ['nonnegative0_recorded', 'nonnegative0_recomputed', 'nonnegative1_recomputed']) {
+          const id = `css_pipeline_${precision}_v${vertex}_${control}`;
+          assert.ok(traces.has(id), `Missing diagnostic trace: ${id}`);
+        }
+      }
+    }
   }
   for (const key of ['matlab', 'computer', 'requested', 'observed']) {
     assert.ok(a.environment?.[key] && b.environment?.[key], `Missing ${key} provenance`);

@@ -17,11 +17,17 @@ import { fitVolume } from './fit-pool.js';
 import { TENSOR_FITS, bidsStem, maskIndices, meanVolumes, outputEntries } from './pipeline.js';
 import { fitDtifit } from './dtifit.js';
 import { multiShellPhantom, phantomTissue } from './phantom.js';
-import { loadNoddi } from './wasm.js';
+import { NODDI_METHODS, loadNoddi } from './wasm.js';
 
 const MINDGRAB_PACKAGE = import.meta.resolve('@brainchop/mindgrab/package.json');
 export const MINDGRAB_VERSION = JSON.parse(await readFile(new URL(MINDGRAB_PACKAGE), 'utf8')).version;
 const WASM = new URL('./noddi.wasm', import.meta.url);
+
+/** The source each nonlinear NODDI fit ports, as provenance records it. */
+const NODDI_SOURCES = Object.freeze({
+  dmipy: 'AthenaEPI/dmipy@2d6073218eb4ebc97645ac6e275270c36834e33d',
+  toolbox: 'NODDI toolbox 1.05 (NODDI_toolbox_v1.05.zip, SHA-256 d4f8a1fe5c5e038a29174c40c4f6de0c868728e4d4cdf59c1d7f6dd399ca8143)',
+});
 
 /** The web app's MindGrab call on the mean b0 (runtime-support's brainMask), here on the CPU. */
 export const MASK_OPTIONS = Object.freeze({ model: 'mindgrab', mask: true, gzipOutput: false });
@@ -121,7 +127,7 @@ export async function fit({ dwi, bval, bvec, output, maskFile, noMask = false, n
   if (!dwi || !bval || !bvec || !output) throw new Error('A diffusion image, its bval and bvec files and an output directory are required.');
   if (maskFile !== undefined && noMask) throw new Error('Give a mask file or no mask, not both.');
   if (!TENSOR_FITS.includes(tensorFit)) throw new Error('--tensor-fit is wls, ols or niimath-dtifit.');
-  if (!['amico', 'dmipy'].includes(method)) throw new Error('--method is amico or dmipy.');
+  if (!NODDI_METHODS.includes(method)) throw new Error('--method is amico, dmipy or toolbox.');
   const workers = threadCount(threads);
   const destination = resolve(output);
   await assertNewOutput(destination);
@@ -181,8 +187,8 @@ export async function fit({ dwi, bval, bvec, output, maskFile, noMask = false, n
     provenance: {
       app: `noddi command line ${packageJson.version}`,
       method: withNoddi ? `dti+noddi-${method}` : 'dti',
-      ...(withNoddi && method === 'dmipy' ? {
-        noddiSource: 'AthenaEPI/dmipy@2d6073218eb4ebc97645ac6e275270c36834e33d',
+      ...(withNoddi && method !== 'amico' ? {
+        noddiSource: NODDI_SOURCES[method],
         noddiDiagnostics: maps.noddiDiagnostics,
       } : {}),
       tensorFit,

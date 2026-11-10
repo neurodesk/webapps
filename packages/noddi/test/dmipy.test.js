@@ -26,7 +26,7 @@ test('the actual dmipy WASM fits source-oracle signals and reports skipped voxel
     assert.deepEqual(model.diagnostics, { fitted: 16, skipped: 1, nonconverged: 0, failed: 0 });
   } finally { model.free(); }
   assert.throws(() => model.fit(new Float32Array(fixture.bvals.length), 1), /freed/);
-  assert.throws(() => api.noddiModel(fixture.bvals, bvecs, { method: 'unknown' }), /amico or dmipy/);
+  assert.throws(() => api.noddiModel(fixture.bvals, bvecs, { method: 'unknown' }), /amico, dmipy or toolbox/);
 });
 
 test('nonfinite fitted signals reject without poisoning the model or earlier outputs', async () => {

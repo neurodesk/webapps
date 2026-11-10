@@ -1,5 +1,13 @@
 # zarro
 
+## 0.4.20261110
+
+### Patch Changes
+
+- 3877250: The musculoskeletal and microscopy catalogues are now titled "MSK Webapps" and "Microscopy Webapps", without "SciGet". The page title and the app bar's "More … web apps" link follow; the SciGet logo and hub link stay.
+- 0745d63: Also served from the new Preclinical Webapps catalogue (preclinicalapps.sciget.org). dcm2niix, DICOM View, dicompare, MRI2vid, niimath, ANTs Denoise and elastix are also served from mskapps.sciget.org, where DICOM View hands off to MuscleMap, SeedSeg and Carotid Flow again; niimath and MRI2vid are also served from microscopyapps.sciget.org. QSMbly serves its deep-learning WebAssembly gzipped (6.5 MB instead of 24.8 MB) and inflates it in the browser.
+- bed7941: On the Microscopy Webapps catalogue (microscopyapps.sciget.org), ZARRo opens with the OME-Zarr URL source instead of the DANDI Archive. A share link that names a source still opens on that source. Every other host, the standalone app and the desktop suite still open on DANDI.
+
 ## 0.4.20261109
 
 ### Patch Changes
