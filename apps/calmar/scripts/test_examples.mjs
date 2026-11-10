@@ -136,7 +136,7 @@ test('SOOP sub-2 carries its participants.tsv row and no time since onset', () =
   assert.deepEqual(example.files.map(file => file.name), ['sub-2_rec-TRACE_dwi.nii.gz', 'sub-2_rec-ADC_dwi.nii.gz']);
   assert.deepEqual([context.ageAtStroke, context.sex, context.tpo, context.tpoUnit], [undefined, 'male', undefined, 'days']);
   assert.deepEqual(context.assessments, [{ name: 'NIH Stroke Scale (NIHSS)', result: '17', date: '' }]);
-  assert.match(context.notes, /Age is at the time of the scan/);
+  assert.match(context.notes, /Age at imaging: 78 years/);
   assert.match(context.notes, /cardioembolism/);
   assert.match(context.notes, /TPO is left blank/);
   assert.match(context.source.url, /^https:\/\/github\.com\/OpenNeuroDatasets\/ds004889\/blob\/[a-f0-9]{40}\/participants\.tsv$/);
