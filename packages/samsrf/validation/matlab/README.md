@@ -233,12 +233,24 @@ model file and a fresh directory whose `SamSrf_defaults.json` sets
 
 `prepare_cli_bundle.m` makes every derived input once, in source MATLAB:
 lowercase copies of the runs, ROI and seed labels, per-precision Benson
-templates, vectorised apertures and the custom HRF. `cli_plan.py models` then
-writes the model JSON, with the HRF's doubles exact. The bundle is hashed,
-made read-only and served at `/input` to both executions. Two upstream
-behaviours shape it: `SamSrfAnalysis` lowercases the data wildcard before
-listing files, and `samsrf_fit_prf` writes vectorised apertures beside
-unvectorised ones, which would fail on read-only inputs.
+templates, vectorised apertures and a subject-HRF file. `cli_plan.py models`
+then writes the model JSON. The bundle is hashed, made read-only and served at
+`/input` to both executions. Three upstream behaviours shape it:
+
+- `SamSrfAnalysis` lowercases the data wildcard before listing files.
+- `samsrf_fit_prf` writes vectorised apertures beside unvectorised ones, which
+  would fail on read-only inputs.
+- A custom HRF cannot be a numeric vector in model JSON. `readstruct` reads a
+  flat list as a row, which fails with `MATLAB:badsubscript` (run
+  [42922209457](https://github.com/neurodesk/webapps/actions/runs/42922209457)),
+  and a nested list as a 1-by-30 cell, which `isinf` and `conv` reject (run
+  [42923773513](https://github.com/neurodesk/webapps/actions/runs/42923773513)).
+  Both hosts failed identically in source MATLAB.
+
+The custom-HRF cases therefore use SamSrf's subject-HRF file route instead:
+`Hrf` is the relative name `hrf_custom`. SamSrf recognises the route by that
+`hrf_` prefix and loads `fP = [5 15 5 0.9]` from the results directory, where
+staging copies it. That gives `samsrf_doublegamma(TR, [5 15 1 1 5 0 32]) * 0.9`.
 
 `run_source_cli.m` runs each argv in source MATLAB. `run_runtime_cli.py` runs
 it in the compiled image. Each container has no network (so no license

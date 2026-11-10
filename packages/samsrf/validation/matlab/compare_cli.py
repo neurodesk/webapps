@@ -21,11 +21,13 @@ import zlib
 
 import numpy
 
+from cli_plan import STAGED
+
 NUMERIC = {'double', 'single', 'int8', 'uint8', 'int16', 'uint16', 'int32',
            'uint32', 'int64', 'uint64', 'logical'}
 GIFTI_TYPES = {'NIFTI_TYPE_FLOAT32': '<f4', 'NIFTI_TYPE_FLOAT64': '<f8',
                'NIFTI_TYPE_INT32': '<i4', 'NIFTI_TYPE_UINT8': 'u1', 'NIFTI_TYPE_INT8': 'i1'}
-IGNORED = {'SamSrf_defaults.json'}
+IGNORED = set(STAGED)
 
 
 def read_gifti(path):

@@ -2,7 +2,6 @@ import base64
 import json
 import os
 from pathlib import Path
-import struct
 import subprocess
 import tempfile
 import unittest
@@ -63,25 +62,33 @@ class Plan(unittest.TestCase):
             if run['algorithm'] == 'cf':
                 self.assertTrue(run['model']['Template'].endswith(f'_benson_{run["precision"]}.mat'))
 
-    def test_custom_hrf_is_written_bit_for_bit(self):
+    def test_models_name_the_relative_hrf_file_and_stage_copies_it(self):
         with scratch() as root:
-            bundle = Path(root)
-            values = [0.0, 1 / 3, 2.0 ** -1074, 0.1 + 0.2]
-            (bundle / 'custom_hrf.f64').write_bytes(struct.pack('<4d', *values))
+            bundle = Path(root) / 'bundle'
+            bundle.mkdir()
+            (bundle / 'SamSrf_defaults.json').write_text('{}')
+            (bundle / 'hrf_custom.mat').write_bytes(b'parameters')
             plan = cli_plan.plan()
             cli_plan.write_models(plan, bundle)
             custom = json.loads((bundle / 'models' / 'prf_custom_hrf_lh_single.json').read_text())
-            self.assertEqual(struct.pack('<4d', *(row[0] for row in custom['Hrf'])), struct.pack('<4d', *values))
-            self.assertTrue(all(len(row) == 1 for row in custom['Hrf']))
-            canonical = json.loads((bundle / 'models' / 'prf_gaussian_rh_double.json').read_text())
-            self.assertEqual(canonical['Hrf'], 0)
+            # SamSrf takes the subject-HRF route only when the name starts with hrf_.
+            self.assertEqual(custom['Hrf'], 'hrf_custom')
+            self.assertEqual(json.loads((bundle / 'models' / 'prf_gaussian_rh_double.json').read_text())['Hrf'], 0)
             self.assertEqual(len(list((bundle / 'models').iterdir())), len(plan['runs']))
+            cli_plan.stage(plan, bundle, Path(root) / 'results')
+            for run in plan['runs']:
+                directory = Path(root) / 'results' / run['id']
+                self.assertTrue(cli_plan.is_staged(directory))
+                self.assertEqual((directory / 'hrf_custom.mat').exists(), 'custom_hrf' in run['id'])
+            (directory / 'output.mat').write_text('')
+            self.assertFalse(cli_plan.is_staged(directory))
 
     def test_stage_selects_precision_and_refuses_reuse(self):
         with scratch() as root:
             bundle = Path(root) / 'bundle'
             bundle.mkdir()
             (bundle / 'SamSrf_defaults.json').write_text('{"def_64bit": false, "def_disp": true}')
+            (bundle / 'hrf_custom.mat').write_bytes(b'')
             plan = cli_plan.plan()
             cli_plan.stage(plan, bundle, Path(root) / 'results')
             for run in plan['runs']:
@@ -114,6 +121,7 @@ class Runtime(unittest.TestCase):
         bundle = Path(root) / 'bundle'
         bundle.mkdir()
         (bundle / 'SamSrf_defaults.json').write_text('{}')
+        (bundle / 'hrf_custom.mat').write_bytes(b'')
         plan = {'runs': cli_plan.plan()['runs'][:2]}
         cli_plan.stage(plan, bundle, Path(root) / 'results')
         with mock.patch.object(run_runtime_cli, 'inspect', return_value={'id': 'x'}):

@@ -23,7 +23,7 @@ import sys
 import time
 
 from capture_environment import CONTROLS
-from cli_plan import results_argv, tree_hashes
+from cli_plan import is_staged, results_argv, tree_hashes
 
 DIGEST = re.compile(r'^(?:[a-z0-9][a-z0-9._/:-]*@)?sha256:[0-9a-f]{64}$')
 RESULTS = '/results'
@@ -70,8 +70,7 @@ def host():
 
 
 def staged(directory):
-    names = sorted(path.name for path in Path(directory).iterdir())
-    if names != ['SamSrf_defaults.json']:
+    if not is_staged(directory):
         raise ValueError(f'{directory} is not a freshly staged run directory')
 
 

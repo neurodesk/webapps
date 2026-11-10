@@ -1,7 +1,7 @@
 function prepare_cli_bundle(source, spmSource, matrixInput, bundle, planFile)
 % Build the read-only inputs that source MATLAB and the compiled CLI share.
 % Every derived input (labels, Benson templates, vectorised apertures, the
-% custom HRF) is computed once here, so neither execution writes beside its
+% custom HRF parameters) is computed once here, so neither execution writes beside its
 % inputs. cli_plan.py models then writes the model JSON files.
 assert(~isfolder(bundle), 'Use a new bundle directory');
 mkdir(bundle);
@@ -69,12 +69,10 @@ ApFrm = repmat(original.ApFrm, 1, 1, plan.datasets.x001_lh.runs);
 save(fullfile(work, 'aps_bars6.mat'), 'ApFrm', '-v7');
 VectoriseApertures(fullfile(work, 'aps_bars6'));
 movefile(fullfile(work, 'aps_bars6_vec.mat'), fullfile(apertures, 'aps_bars6_vec.mat'));
-% Raw little-endian doubles keep the HRF exact through the model JSON.
-hrf = samsrf_doublegamma(1, [5 15 1.2 0.9 5 1 30]);
-file = fopen(fullfile(bundle, 'custom_hrf.f64'), 'w', 'ieee-le');
-assert(file >= 0, 'Cannot write the custom HRF');
-fwrite(file, double(hrf(:)), 'double');
-fclose(file);
+% SamSrf's subject-HRF file: doublegamma(TR, [fP(1:2) 1 1 fP(3) 0 32]) * fP(4).
+% Latencies, ratio and scale differ from the SPM canonical [6 16 1 1 6 0 32].
+fP = [5 15 5 0.9];
+save(fullfile(bundle, 'hrf_custom.mat'), 'fP', '-v7');
 rmdir(work, 's');
 fprintf('Prepared the SamSrfAnalysis bundle in %s\n', bundle);
 end

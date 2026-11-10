@@ -26,7 +26,9 @@ for index = 1:numel(runs)
     item = runs{index};
     directory = fullfile(resultsRoot, item.id);
     contents = dir(directory);
-    assert(isequal(sort({contents(~[contents.isdir]).name}), {'SamSrf_defaults.json'}), ...
+    names = {contents(~[contents.isdir]).name};
+    assert(ismember('SamSrf_defaults.json', names) && ...
+        all(ismember(names, {'SamSrf_defaults.json', 'hrf_custom.mat'})), ...
         'Run %s was not freshly staged', item.id);
     argv = strrep(item.argv, plan.resultsToken, directory)';
     addpath(directory);

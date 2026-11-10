@@ -14,7 +14,6 @@ Usage:
 """
 import hashlib
 import json
-import struct
 from pathlib import Path
 import sys
 
@@ -76,8 +75,14 @@ RC_GAUSSIAN = {
     'SeedPar_Function': '@(V)[V(2:3);V(4)/(2*sqrt(2*log(2)))]',
     'R2_Threshold': 0.1,
 }
-# prepare_cli_bundle.m replaces this marker with samsrf_doublegamma(1, parameters).
-CUSTOM_HRF = {'doublegamma': [5, 15, 1.2, 0.9, 5, 1, 30]}
+# A subject HRF through SamSrf's own file route: Model.Hrf names an hrf_*.mat
+# holding fP = [response latency, undershoot latency, ratio, scale] (written by
+# prepare_cli_bundle.m). The name must be relative: SamSrf recognises the route
+# from the first four characters, and loads it from the results directory.
+# A numeric vector in model JSON does not work through the CLI: readstruct reads
+# a flat list as a row and a nested list as a cell, and both fail upstream.
+CUSTOM_HRF = 'hrf_custom'
+STAGED = ('SamSrf_defaults.json', f'{CUSTOM_HRF}.mat')
 
 CASES = [
     {'id': 'prf_gaussian_lh_average', 'algorithm': 'prf', 'dataset': 'x001_lh', 'average': 1,
@@ -145,26 +150,18 @@ def results_argv(run, results):
 
 def write_models(plan_data, bundle):
     """Write each run's model after prepare_cli_bundle.m has made its inputs."""
-    bundle = Path(bundle)
-    raw = (bundle / 'custom_hrf.f64').read_bytes()
-    if not raw or len(raw) % 8:
-        raise ValueError('custom_hrf.f64 must hold little-endian doubles')
-    hrf = list(struct.unpack(f'<{len(raw) // 8}d', raw))
-    directory = bundle / 'models'
+    directory = Path(bundle) / 'models'
     directory.mkdir()
     for run in plan_data['runs']:
-        content = dict(run['model'])
-        if content.get('Hrf') == CUSTOM_HRF:
-            # SamSrf expects a column; readstruct reads a flat JSON list as a row.
-            content['Hrf'] = [[value] for value in hrf]
         # json writes the shortest repr that round-trips each double exactly.
-        text = json.dumps(content, indent=2, allow_nan=False) + '\n'
+        text = json.dumps(run['model'], indent=2, allow_nan=False) + '\n'
         (directory / f'{run["model"]["Name"]}.json').write_text(text)
 
 
 def stage(plan_data, bundle, root):
     """Create one fresh directory per run with that run's defaults; never reuse one."""
-    defaults = json.loads((Path(bundle) / 'SamSrf_defaults.json').read_text())
+    bundle = Path(bundle)
+    defaults = json.loads((bundle / 'SamSrf_defaults.json').read_text())
     root = Path(root)
     root.mkdir(parents=True, exist_ok=False)
     for run in plan_data['runs']:
@@ -174,6 +171,14 @@ def stage(plan_data, bundle, root):
         # application; def_64bit selects the precision under test.
         content = {**defaults, 'def_64bit': run['precision'] == 'double'}
         (directory / 'SamSrf_defaults.json').write_text(json.dumps(content, indent=2) + '\n')
+        if run['model'].get('Hrf') == CUSTOM_HRF:
+            name = f'{CUSTOM_HRF}.mat'
+            (directory / name).write_bytes((bundle / name).read_bytes())
+
+
+def is_staged(directory):
+    names = sorted(path.name for path in Path(directory).iterdir())
+    return 'SamSrf_defaults.json' in names and set(names) <= set(STAGED)
 
 
 def tree_hashes(root):
