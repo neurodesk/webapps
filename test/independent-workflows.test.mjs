@@ -92,6 +92,12 @@ test('web releases and deployments do not wait for the desktop suite', async () 
   }
 });
 
+test('a site deploy finishes instead of being cancelled by the next push', async () => {
+  const flow = await workflow('deploy-pages');
+  assert.equal(flow.concurrency.group, 'neurodesk-webapps-pages');
+  assert.equal(flow.concurrency['cancel-in-progress'], false);
+});
+
 test('Standalone link checks run nightly and on main, never as a pull request gate', async () => {
   const flow = await workflow('standalone-links');
   assert.deepEqual(Object.keys(flow.on).sort(), ['push', 'schedule', 'workflow_dispatch']);

@@ -117,7 +117,7 @@ function desktopLink(catalog, standalone) {
  * The start page of one catalogue: `registry.apps` are the apps it lists and
  * `catalog` names and brands it (the primary catalogue by default, as the
  * all-app assembly and the desktop suite show). Only the primary catalogue
- * carries the usage report and the Vessel Surfer link, which its host serves.
+ * carries the Vessel Surfer link, which its host serves.
  */
 export function renderLandingPage(registry, standalone, catalog = primaryCatalog(registry)) {
   const primary = catalog.host === registry.site.domain;
@@ -155,6 +155,7 @@ export function renderLandingPage(registry, standalone, catalog = primaryCatalog
     <div class="site-header__inner">
       <a class="brand" href="${escape(brand.home)}" aria-label="${escape(brand.name)} home"><img src="./${escape(brand.logo)}" alt="${escape(brand.name)}"></a>
       <nav class="site-nav" aria-label="${escape(brand.name)} navigation">
+        <a href="https://${escape(registry.site.hub.host)}/" title="Browse every SciGet webapp catalogue">All catalogues</a>
         <a href="https://github.com/neurodesk/webapps">GitHub</a>
 ${desktopLink(catalog, standalone)}
         <button class="theme-toggle" type="button" data-neurodesk-theme-toggle aria-label="Use light theme" title="Use light theme">
@@ -207,7 +208,7 @@ ${desktopLink(catalog, standalone)}
       <button id="reset-filters" type="button">Show all apps</button>
     </section>
 
-${primary ? analyticsSection : ''}
+${analyticsSection}
   </main>
 
   <footer class="site-footer">

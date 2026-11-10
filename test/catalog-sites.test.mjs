@@ -60,6 +60,8 @@ for (const catalog of registry.site.catalogs) {
     const landing = await readFile(join(site, 'index.html'), 'utf8');
     const listed = new Set([...landing.matchAll(/data-app-id="([^"]+)"/g)].map((match) => match[1]));
     assert.deepEqual([...listed].sort(), apps.map(({ id }) => id).sort());
+    const report = JSON.parse(await readFile(join(site, 'analytics.json'), 'utf8'));
+    assert.deepEqual(report.apps.map(({ id }) => id).sort(), apps.map(({ id }) => id).sort());
   });
 
   test(`${catalog.host} serves every runtime family its files reference, and no other`, async () => {
@@ -83,9 +85,7 @@ for (const catalog of registry.site.catalogs) {
         if (await exists(counterpart) && !await exists(target)) missing.add(`${path} -> ${reference}`);
       }
     }
-    // landing.js fetches the usage report only where the landing page has its section.
-    const expected = primary ? [] : ['landing.js -> ./analytics.json'];
-    assert.deepEqual([...missing], expected);
+    assert.deepEqual([...missing], []);
   });
 
   test(`${catalog.host} app pages offer handoffs only to apps on the same host`, async () => {

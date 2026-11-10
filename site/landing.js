@@ -145,7 +145,6 @@ function renderAnalytics(data) {
   }
 }
 
-// Only the primary catalogue publishes the usage report.
 if (analyticsApps) {
   fetch('./analytics.json')
     .then((response) => {

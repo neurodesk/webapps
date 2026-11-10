@@ -93,12 +93,14 @@ test('each catalogue lists only its own apps under its own brand', async () => {
     assert.equal(document.querySelector('h1').textContent, catalog.heading);
     assert.equal(document.querySelector('.brand img').getAttribute('src'), `./${catalog.brand.logo}`);
     assert.equal(document.querySelector('.brand').getAttribute('href'), catalog.brand.home);
-    assert.ok(document.querySelector(`a[href="https://${registry.site.hub.host}/"]`), 'links to the hub');
+    const hub = `a[href="https://${registry.site.hub.host}/"]`;
+    assert.ok(document.querySelector(`.site-nav ${hub}`), 'the top bar links to the hub');
+    assert.ok(document.querySelector(`.site-footer ${hub}`), 'the footer links to the hub');
     for (const section of document.querySelectorAll('[data-category-section]')) {
       assert.ok(section.querySelector('[data-app-card]'), `${id} shows no empty category`);
     }
     const primary = catalog.host === registry.site.domain;
-    assert.equal(Boolean(document.querySelector('#analytics')), primary, 'only the primary host reports usage');
+    assert.ok(document.querySelector('#analytics'), `${id} reports usage`);
     assert.equal(Boolean(document.querySelector('a[href="./surf/"]')), primary, 'only the primary host serves the game');
   }
   const neuro = renderLandingPage({ ...registry, apps: catalogApps(registry, findCatalog(registry, 'neuro')) }, standalone, findCatalog(registry, 'neuro'));

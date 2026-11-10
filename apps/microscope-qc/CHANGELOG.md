@@ -1,5 +1,11 @@
 # microscope-qc
 
+## 0.1.20261110
+
+### Patch Changes
+
+- 3877250: The musculoskeletal and microscopy catalogues are now titled "MSK Webapps" and "Microscopy Webapps", without "SciGet". The page title and the app bar's "More … web apps" link follow; the SciGet logo and hub link stay.
+
 ## 0.1.20261109
 
 ### Patch Changes
