@@ -865,6 +865,15 @@ actually loaded. Select **Run lesion segmentation** to compute its candidate;
 loading a case never runs segmentation or supplies a reference lesion.
 Switching cases clears old results and demographic context.
 
+The behavioural form is then filled with what the dataset publishes for the
+loaded case, and nothing else. ISLES `sub-strokecase0001` has age 88 and sex
+female: its DWI and ADC sidecars record `PatientAge` `088Y` and `PatientSex`
+`F`, so the age is at imaging. ISLES 2022 publishes no time since onset for
+individual cases, so TPO stays blank. SOOP `sub-1` stays blank altogether:
+`participants.tsv` in ds004889 v1.1.2 has no row for it and its sidecars carry
+no patient fields. The form links the pinned sidecar the values were read from,
+and every field remains editable.
+
 SOOP is OpenNeuro ds004889 v1.1.2, source commit
 `a62344db73f18f384a95b452f4a1a423087e059b`, declared CC0. Its TRACE and ADC
 bytes match the release's git-annex SHA-256 keys. ISLES is Zenodo record

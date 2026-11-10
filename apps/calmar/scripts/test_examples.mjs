@@ -98,13 +98,56 @@ test('an incomplete diffusion bundle is rejected before replacing the current su
 });
 
 for (const id of ['stroke-dwi-adc-soop', 'stroke-dwi-adc-isles2022']) {
-  test(`${id} imports the published DWI/ADC pair and clears previous demographics`, async () => {
+  test(`${id} imports the published DWI/ADC pair and replaces previous demographics with its own`, async () => {
     const { options, loaded, contexts } = await loadAdapter();
     const example = examples.find(item => item.id === id);
     assert.deepEqual(example.files.map(file => file.role), ['dwi', 'adc']);
-    assert.equal(example.patientContext, undefined);
     await options.onLoad(example, { fetchFiles: async () => example.files.map(file => new File(['scan'], file.name)), assertCurrent() {} });
     assert.deepEqual(loaded.map(item => [item.kind, item.file.name]), example.files.map(file => [file.role, file.name]));
-    assert.deepEqual(contexts, [undefined]);
+    assert.deepEqual(contexts, [example.patientContext]);
   });
 }
+
+// Acute examples carry only what the dataset publishes for that case.
+test('SOOP sub-1 has no published demographics, so its context stays empty', () => {
+  // ds004889 v1.1.2 participants.tsv has no row for sub-1 (and the sidecars carry no patient fields).
+  const example = examples.find(item => item.id === 'stroke-dwi-adc-soop');
+  assert.equal(example.patientContext, undefined);
+  assert.match(example.description, /no entry for sub-1/);
+});
+
+test('ISLES case 0001 carries the age and sex of its sidecars and no time since onset', () => {
+  // sub-strokecase0001_ses-0001_{dwi,adc}.json: "PatientAge": "088Y", "PatientSex": "F".
+  const example = examples.find(item => item.id === 'stroke-dwi-adc-isles2022');
+  const context = example.patientContext;
+  assert.equal(context.ageAtStroke, 88);
+  assert.equal(context.sex, 'female');
+  assert.equal(context.tpo, undefined, 'ISLES 2022 publishes no per-case onset time');
+  assert.equal(context.assessments, undefined);
+  assert.match(context.notes, /088Y/);
+  assert.match(context.notes, /TPO is left blank/);
+  const sidecar = example.files.find(file => file.role === 'dwi').url.replace(/\.nii\.gz$/, '.json');
+  assert.equal(context.source.url, sidecar.replace('/resolve/', '/blob/'), 'the source link is the pinned sidecar the values were read from');
+  assert.equal(examples.find(item => item.id === 'stroke-dwi-adc').patientContext, undefined, 'the rotating entry takes the context of the case it loads');
+});
+
+test('the behavioural form shows the acute case that is loaded and empties for a case without data', async () => {
+  const { JSDOM } = await import('jsdom');
+  const { bindPatientBehavior } = await import('../web/js/modules/patient-behavior.js');
+  const doc = new JSDOM(await readFile(new URL('../web/index.html', import.meta.url), 'utf8')).window.document;
+  const behavior = bindPatientBehavior(doc);
+  const value = id => doc.getElementById(id).value;
+  const isles = examples.find(item => item.id === 'stroke-dwi-adc-isles2022');
+  behavior.loadExampleContext(isles.patientContext);
+  assert.deepEqual([value('patientAge'), value('patientSex'), value('patientTpo'), value('patientTpoUnit')], ['88', 'female', '', 'days']);
+  const report = doc.getElementById('patientBehaviorReportBody');
+  assert.match(report.textContent, /Age at stroke: 88 years; Sex: Female\. Example dataset context/);
+  assert.doesNotMatch(report.textContent, /Time post-onset at assessment/);
+  assert.match(report.textContent, /does not publish time since stroke onset/);
+  assert.equal(report.querySelector('a').href, isles.patientContext.source.url);
+  assert.equal(doc.getElementById('patientContextSource').hidden, false);
+  behavior.loadExampleContext(examples.find(item => item.id === 'stroke-dwi-adc-soop').patientContext);
+  assert.deepEqual([value('patientAge'), value('patientSex'), value('patientTpo'), value('patientTpoUnit')], ['', '', '', 'months']);
+  assert.equal(doc.getElementById('patientContextSource').hidden, true);
+  assert.equal(doc.getElementById('patientBehaviorReport').hidden, true);
+});

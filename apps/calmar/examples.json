@@ -64,7 +64,7 @@
   {
     "id": "stroke-dwi-adc-soop",
     "label": "Acute DWI + ADC — SOOP sub-1",
-    "description": "Acute-stroke TRACE/DWI and ADC from SOOP ds004889 v1.1.2, sub-1 (CC0). Review the computed lesion candidate before confirming. Demographic context is left blank.",
+    "description": "Acute-stroke TRACE/DWI and ADC from SOOP ds004889 v1.1.2, sub-1 (CC0). Review the computed lesion candidate before confirming. Demographic context is left blank: the dataset's participants table has no entry for sub-1.",
     "expectedResult": "A computed, editable lesion candidate and downloadable native-space mask. Review and confirm it before reporting.",
     "files": [
       {
@@ -86,7 +86,7 @@
   {
     "id": "stroke-dwi-adc-isles2022",
     "label": "Acute DWI + ADC — ISLES case 0001",
-    "description": "ISLES 2022 v2.3.1, sub-strokecase0001 (Zenodo CC BY 4.0). SEALS training data: this is a software demonstration, not independent accuracy validation. Demographic context is left blank.",
+    "description": "ISLES 2022 v2.3.1, sub-strokecase0001 (Zenodo CC BY 4.0). SEALS training data: this is a software demonstration, not independent accuracy validation. Includes the age and sex recorded in the scan sidecars; time since onset is not published per case.",
     "expectedResult": "A computed, editable lesion candidate and downloadable native-space mask. Review and confirm it before reporting.",
     "files": [
       {
@@ -103,6 +103,17 @@
         "sha256": "9026d12f9595e438705f7e3bbe3319345cf6ba55b339fd8b21fabcbbc9c7fc15",
         "bytes": 1605880
       }
-    ]
+    ],
+    "patientContext": {
+      "ageAtStroke": 88,
+      "sex": "female",
+      "tpoUnit": "days",
+      "notes": "Age and sex are the values recorded in this scan's DWI and ADC sidecars (PatientAge 088Y, PatientSex F); the age is at imaging.\nISLES 2022 does not publish time since stroke onset for individual cases, so TPO is left blank.",
+      "source": {
+        "label": "ISLES 2022 v2.3.1 · sub-strokecase0001 · ses-0001 · DWI sidecar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/blob/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/isles2022/sub-strokecase0001_ses-0001_dwi.json",
+        "datasetUrl": "https://zenodo.org/records/7960856"
+      }
+    }
   }
 ]
