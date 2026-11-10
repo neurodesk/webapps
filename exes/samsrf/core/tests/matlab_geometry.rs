@@ -274,7 +274,7 @@ fn hull_intermediates(root: &Path, case: &Value, prepared: &revcor_cf::Prepared,
 
 /// A recorded family: its id, its polygons and MATLAB's column-major
 /// `[centroid x, centroid y, area]` of each `polyshape(P).convhull`.
-type PolygonBatch = (String, Vec<Vec<[f64; 2]>>, Vec<f64>);
+type PolygonBatch = (String, Vec<Vec<[f64; 2]>>, Vec<f64>, Vec<Vec<[f64; 2]>>);
 
 fn polygon_batches(root: &Path, cases: &[Value]) -> Vec<PolygonBatch> {
     cases.iter().filter(|c| c["kind"] == "polygon-batch").map(|case| {
@@ -286,13 +286,64 @@ fn polygon_batches(root: &Path, cases: &[Value]) -> Vec<PolygonBatch> {
             offset += n as usize;
             polygon
         }).collect();
-        (case["id"].as_str().unwrap().to_string(), polygons, array(root, &case["estimate"]))
+        let vertices = points(&array(root, &case["hull"]));
+        let mut offset = 0;
+        let hulls = array(root, &case["hullCounts"]).iter().map(|&n| {
+            let hull = vertices[offset..offset + n as usize].to_vec();
+            offset += n as usize;
+            hull
+        }).collect();
+        assert_eq!(offset, vertices.len());
+        (case["id"].as_str().unwrap().to_string(), polygons, array(root, &case["estimate"]), hulls)
     }).collect()
+}
+
+/// Compare hulls independently of winding, starting vertex and redundant
+/// collinear vertices. Only roundoff in a two-product determinant is allowed
+/// when removing a vertex; retained coordinates must agree exactly.
+fn canonical_hull(vertices: &[[f64; 2]]) -> Vec<[f64; 2]> {
+    let mut result = vertices.to_vec();
+    while result.len() > 3 {
+        let n = result.len();
+        let redundant = (0..n).find(|&i| {
+            let a = result[(i + n - 1) % n];
+            let b = result[i];
+            let c = result[(i + 1) % n];
+            let left = (b[0] - a[0]) * (c[1] - a[1]);
+            let right = (b[1] - a[1]) * (c[0] - a[0]);
+            let roundoff = 4.0 * f64::EPSILON * (left.abs() + right.abs());
+            (left - right).abs() <= roundoff
+                && (0..2).all(|axis| b[axis] >= a[axis].min(c[axis]) && b[axis] <= a[axis].max(c[axis]))
+        });
+        match redundant {
+            Some(i) => { result.remove(i); }
+            None => break,
+        }
+    }
+    result.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));
+    result
+}
+
+// Frozen at ef9cdedcb against geometry-r2023b-44a5e92.zip (SHA-256
+// f54f4bfbc908595356ca28a9e16a18f88f9944411e27c036d4018e1dd033ddc0).
+// A deterministic FNV-1a snapshot of every port output in a known discrepancy.
+// This is a regression checksum, not an authenticity or security check. The
+// pinned MATLAB archive provides the independent reference; these snapshots
+// only prevent a documented exception from absorbing a changed port result.
+fn outcome_fingerprint(vertices: &[[f64; 2]], centre: [f64; 2], area: f64) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for value in [vertices.len() as f64, centre[0], centre[1], area].into_iter().chain(vertices.iter().flatten().copied()) {
+        let bits = if value.is_nan() { f64::NAN.to_bits() } else { value.to_bits() };
+        for byte in bits.to_le_bytes() {
+            hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+        }
+    }
+    format!("{hash:016x}")
 }
 
 /// Forward-error bounds of the shoelace area and centroid evaluated on the
 /// untranslated vertices, as MATLAB's `area` and `centroid` do (their hull
-/// vertices equal the port's; only far-from-origin cancellation differs). With
+/// vertices are checked first, after removing roundoff-collinear points). With
 /// unit roundoff u and n vertices, each cross term carries at most 2u relative
 /// error and each sum n u, so |dA| <= 2 n u sum(|x_i y_j| + |x_j y_i|) / 2,
 /// doubled for headroom; the centroid adds its numerator's bound and the
@@ -340,7 +391,8 @@ const BOUNDARY_BAND: (f64, f64) = (1e-8 * (1.0 - 1e-12), 1.00001e-8);
 /// vertices, spikes, degenerate inputs and unordered clouds as SamSrf passes them.
 /// Emptiness must agree and area and centroid stay within the error bound of
 /// MATLAB's uncentred evaluation, except in three measured classes that are
-/// counted and printed, never silently skipped: triangles in `BOUNDARY_BAND`,
+/// frozen by identity and by every port output in matlab_polygon_exceptions.json,
+/// then counted and printed: triangles in `BOUNDARY_BAND`,
 /// clouds with duplicate points (SamSrf removes duplicates before `polyshape`)
 /// and clouds within 1e-5 of the span of a line, whose near-parallel edges
 /// MATLAB resolves into slivers the port does not reproduce.
@@ -352,13 +404,15 @@ fn polygon_hulls_match_matlab() {
 }
 
 fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
+    let baseline: Value = serde_json::from_str(include_str!("matlab_polygon_exceptions.json")).unwrap();
     let mut report = Vec::new();
     let mut failures = Vec::new();
     let mut families = 0;
-    for (id, polygons, estimate) in polygon_batches(root, cases) {
+    for (id, polygons, estimate, expected_hulls) in polygon_batches(root, cases) {
         families += 1;
         let n = polygons.len();
         let mut residual = [0usize; 3];
+        let mut known = Vec::new();
         for (i, polygon) in polygons.iter().enumerate() {
             let expected = [estimate[i], estimate[n + i], estimate[2 * n + i]];
             let hull = Hull::of_polygon(polygon);
@@ -366,7 +420,9 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
                 Some(hull) => (hull.centroid(), hull.area()),
                 None => ([f64::NAN; 2], 0.0),
             };
-            let agrees = if (area == 0.0) != (expected[2] == 0.0) {
+            let vertices = hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[]);
+            let geometry_agrees = canonical_hull(vertices) == canonical_hull(&expected_hulls[i]);
+            let agrees = if !geometry_agrees || (area == 0.0) != (expected[2] == 0.0) {
                 false
             } else {
                 match &hull {
@@ -391,10 +447,14 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
                 None
             };
             match class {
-                Some(class) => residual[class] += 1,
+                Some(class) => {
+                    residual[class] += 1;
+                    known.push(json!([i, outcome_fingerprint(vertices, centre, area)]));
+                },
                 None => failures.push(format!("{id} {i}: MATLAB {expected:?}, port {centre:?} {area}")),
             }
         }
+        assert_eq!(Value::Array(known), baseline[&id], "{id}: known discrepancy identities or port outcomes changed; inspect against the pinned MATLAB recording before updating the snapshot");
         report.push(format!("{id}: {n} polygons; boundary band {}, duplicate clouds {}, near-collinear clouds {}", residual[0], residual[1], residual[2]));
     }
     println!("{}", report.join("\n"));
@@ -418,4 +478,34 @@ fn line_thickness(points: &[[f64; 2]]) -> f64 {
     }
     let (a, b) = ends;
     points.iter().map(|p| ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])).abs() / longest).fold(0.0, f64::max) / longest
+}
+
+#[test]
+fn hull_comparison_checks_geometry_before_numerical_bounds() {
+    let expected = [[0.3, 0.3], [0.5, 0.3], [0.5, 0.7], [0.3, 0.5]];
+    // A retained point on an edge differs from exact collinearity only by the
+    // rounding of 0.4 + 0.2; MATLAB removes it from six recorded grid hulls.
+    let redundant = [[0.3, 0.5], [0.4, 0.4 + 0.2], [0.5, 0.7], [0.5, 0.3], [0.3, 0.3]];
+    assert_eq!(canonical_hull(&redundant), canonical_hull(&expected));
+    let mut different = redundant;
+    different[1][1] += 1e-12;
+    assert_ne!(canonical_hull(&different), canonical_hull(&expected));
+    let translated = expected.map(|[x, y]| [x + 1e10, y + 1e10]);
+    let mut changed = translated;
+    changed[0][0] += 1e-4;
+    assert_ne!(canonical_hull(&changed), canonical_hull(&translated));
+    assert_ne!(canonical_hull(&[]), canonical_hull(&expected));
+}
+
+#[test]
+fn known_discrepancy_snapshots_cover_geometry_and_values() {
+    let vertices = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
+    let centre = [1.0 / 3.0; 2];
+    let baseline = outcome_fingerprint(&vertices, centre, 0.5);
+    assert_ne!(baseline, outcome_fingerprint(&vertices, centre, 1e30));
+    assert_ne!(baseline, outcome_fingerprint(&vertices, [f64::NAN; 2], 0.5));
+    assert_ne!(baseline, outcome_fingerprint(&[], centre, 0.5));
+    let mut different = vertices;
+    different[1][0] = 2.0;
+    assert_ne!(baseline, outcome_fingerprint(&different, centre, 0.5));
 }

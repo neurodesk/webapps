@@ -393,8 +393,12 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   MATLAB single arithmetic, left to the single-precision pipeline work.
 - **Polygons.** Emptiness is exact, and area and centroid lie within the
   forward-error bound of MATLAB's shoelace on untranslated vertices (its hull
-  vertices equal the port's), except in three measured classes that the test
-  counts and prints: 1,853 triangles whose altitude over the longest side is
+  vertices are compared first, ignoring winding and roundoff-collinear
+  redundant vertices; retained coordinates must match exactly). Three measured
+  classes remain discrepant. The gate freezes each failing case identity and
+  a checksum of its port hull, centroid and area in
+  `core/tests/matlab_polygon_exceptions.json`, so neither a new failing member
+  nor a changed result can be absorbed by a class exemption. It counts and prints: 1,853 triangles whose altitude over the longest side is
   within [1e-8, 1.00001e-8] of the span, 16 clouds with duplicate points, and
   188 clouds within 1e-5 of the span of a line. MATLAB decides on a
   fixed-point copy of the vertices (its simplified vertices come back on a
