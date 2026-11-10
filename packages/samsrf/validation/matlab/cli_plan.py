@@ -155,7 +155,8 @@ def write_models(plan_data, bundle):
     for run in plan_data['runs']:
         content = dict(run['model'])
         if content.get('Hrf') == CUSTOM_HRF:
-            content['Hrf'] = hrf
+            # SamSrf expects a column; readstruct reads a flat JSON list as a row.
+            content['Hrf'] = [[value] for value in hrf]
         # json writes the shortest repr that round-trips each double exactly.
         text = json.dumps(content, indent=2, allow_nan=False) + '\n'
         (directory / f'{run["model"]["Name"]}.json').write_text(text)

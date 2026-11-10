@@ -35,11 +35,17 @@ for index = 1:numel(runs)
     receipt = struct('id', item.id, 'execution', 'source', 'argv', {argv}, ...
         'status', 'succeeded', 'identifier', '', 'message', '');
     try
+        % The model as SamSrf reads it; a JSON vector's orientation decides how an HRF is used.
+        model = LoadModelJson(argv{2});
+        if isfield(model, 'Hrf')
+            receipt.modelHrfSize = size(model.Hrf);
+        end
         SamSrfAnalysis(argv{:});
     catch failure
         receipt.status = 'failed';
         receipt.identifier = failure.identifier;
         receipt.message = failure.message;
+        receipt.stack = failure.stack;
         failures = failures + 1;
     end
     receipt.seconds = toc(started);
