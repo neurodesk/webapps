@@ -68,8 +68,8 @@ async function checkNamedCases(page) {
     expect(await page.evaluate(() => [app.deepIslesDwiFile.name, app.deepIslesAdcFile.name])).toEqual(example.files.map(file => file.name));
     expect(await page.evaluate(() => app.maskReviewActive)).toBe(false);
     await expect(page.locator('#downloadEditedLesionMaskButton')).toBeDisabled();
-    // Behavioural context is the loaded case's published values: age and sex for both, no time since onset for either.
-    await expect(page.locator('#patientAge')).toHaveValue(String(example.patientContext.ageAtStroke));
+    // Behavioural context is the loaded case's published values: sex for both; imaging age stays in notes, no time since onset for either.
+    await expect(page.locator('#patientAge')).toHaveValue('');
     await expect(page.locator('#patientSex')).toHaveValue(example.patientContext.sex);
     await expect(page.locator('#patientTpo')).toHaveValue('');
   }
@@ -118,7 +118,7 @@ test.describe('download fault injection', () => {
     await selector.getByRole('button', { name: 'Cancel example download' }).click();
     await expect(selector).toHaveAttribute('data-example-state', 'cancelled');
     expect(await page.evaluate(() => app.deepIslesDwiFile.name)).toBe(soop.files[0].name);
-    await expect(page.locator('#patientAge')).toHaveValue(String(soop.patientContext.ageAtStroke));
+    await expect(page.locator('#patientAge')).toHaveValue('');
     release();
     await page.unroute(isles.files[0].url);
     await menu.selectOption(isles.id);

@@ -93,10 +93,9 @@
       }
     ],
     "patientContext": {
-      "ageAtStroke": 78,
       "sex": "male",
       "tpoUnit": "days",
-      "notes": "Age is at the time of the scan. Admission diagnosis: acute ischaemic stroke, with no evidence of a prior stroke; aetiology recorded as cardioembolism.\nSOOP does not publish time since stroke onset for individual participants, so TPO is left blank.",
+      "notes": "Age at imaging: 78 years; age at stroke is not published. Admission diagnosis: acute ischaemic stroke, with no evidence of a prior stroke; aetiology recorded as cardioembolism.\nSOOP does not publish time since stroke onset for individual participants, so TPO is left blank.",
       "assessments": [
         {
           "name": "NIH Stroke Scale (NIHSS)",
@@ -134,7 +133,6 @@
       }
     ],
     "patientContext": {
-      "ageAtStroke": 88,
       "sex": "female",
       "tpoUnit": "days",
       "notes": "Age and sex are the values recorded in this scan's DWI and ADC sidecars (PatientAge 088Y, PatientSex F); the age is at imaging.\nISLES 2022 does not publish time since stroke onset for individual cases, so TPO is left blank.",

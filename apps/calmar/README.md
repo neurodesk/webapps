@@ -910,3 +910,5 @@ examples.
 `node apps/calmar/scripts/prepare_diffusion_examples.mjs` restores and
 verifies the registered scans and accompanying documents under
 `$TMPDIR/calmar-acute-examples`. Large files stay outside this repository.
+
+Acute example ages are recorded at imaging, so keep them in notes and leave age at stroke blank.
