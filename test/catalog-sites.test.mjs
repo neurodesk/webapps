@@ -96,6 +96,7 @@ for (const catalog of registry.site.catalogs) {
       for (const entry of payload.catalog) assert.ok(ids.includes(entry.id), `${app.id} offers ${entry.id}, which ${catalog.host} does not serve`);
       assert.match(html, new RegExp(`data-app-url="https://${catalog.host.replaceAll('.', '\\.')}/${app.path}/"`));
       assert.match(html, new RegExp(`data-brand-name="${catalog.brand.name}"`));
+      assert.match(html, new RegExp(`<html\\b[^>]*\\sdata-neurodesk-catalog="${catalog.id}"`));
     }
   });
 }
