@@ -6,6 +6,7 @@ import YAML from 'yaml';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { commandLineClosure } from '../scripts/lib/module-closure.mjs';
+import { pathGlob } from '../scripts/lib/workflow-gate.mjs';
 import { repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 async function workflow(name) {
@@ -261,7 +262,7 @@ test('manual DWI2TRX tracking diagnostics isolate Metal from reference and publi
   assert.ok(tracking.steps.some(step => step.if === 'always()' && step.with?.name === 'dwi2trx-tracking-diagnostic'));
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const only of [false, true]) {
-      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { tracking_only: only, sign_release: true } };
+      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { tracking_only: only, sign_release: true }, needs: { gate: { outputs: { run: 'true' } } } };
       assert.equal(runInNewContext(tracking.if, context), event === 'workflow_dispatch' && only);
       for (const name of ['web-app-reference', 'portable']) {
         assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !only);
@@ -486,9 +487,6 @@ test('Brain2Print browser CPU parity skips optional CUDA installation', async ()
   assert.equal(install.env.ONNXRUNTIME_NODE_INSTALL, 'skip');
   assert.ok(job.steps.some(step => step.run === 'node packages/brain2print/validation/browser-reference.mjs --check'));
 });
-
-// GitHub's `paths` glob: `**` crosses directories, `*` does not.
-const pathGlob = (pattern) => new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/?/g, '\u0000').replace(/\*/g, '[^/]*').replaceAll('\u0000', '.*')}$`);
 
 test('a native or CLI workflow runs when a file its command line imports changes', async () => {
   const files = (await readdir(new URL('../.github/workflows/', import.meta.url))).filter((name) => name.endsWith('.yml')).sort();

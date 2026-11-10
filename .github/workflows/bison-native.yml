@@ -52,10 +52,18 @@ permissions:
   contents: read
 
 jobs:
+  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
+  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    with:
+      workflow: bison-native
+
   # Segments both pinned examples in the built web app and compares every download with
   # packages/bison/validation/browser-reference.json, the reference the archives are held to.
   web-app-reference:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 240
     steps:

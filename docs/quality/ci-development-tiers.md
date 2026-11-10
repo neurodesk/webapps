@@ -15,6 +15,39 @@ run without starting CI test jobs on the unchanged head. GitHub prevents merging
 a draft PR. Before merging a ready PR, verify the full checks on its current
 head; this change does not configure repository branch protection.
 
+## Pull request gate for shared path filters
+
+GitHub matches a workflow's `paths` against the whole pull request on every
+push. A filter on a shared tree (`packages/components/**`, `pnpm-lock.yaml`,
+`registry/**`) therefore started native suites for changes that never reached
+them: over 7-9 November 2026, 25,817 of the 27,539 pull request minutes in
+path-filtered workflows came from runs whose pull request touched none of the
+workflow's own code.
+
+Every workflow with such a filter now starts with a `gate` job that calls
+`.github/workflows/pr-gate.yml`, and its entry jobs wait for
+`needs.gate.outputs.run`. `scripts/lib/workflow-gate.mjs` decides:
+
+- A changed file under any other filter (the workflow's own package, app,
+  `exes/` directory, workflow file, or a single generated import) runs it.
+- Otherwise it runs when a command line the workflow owns imports a changed
+  file (`scripts/lib/module-closure.mjs`), when the lockfile change resolves a
+  package it owns differently, or when the app planner selects an app it
+  filters on. A dependency's `package.json` that only gained `exports` entries
+  does not count.
+- When it cannot decide (no diff, an unreadable lockfile, a script error) it
+  runs.
+
+The gate answers `false` for a draft and `true` for every event other than
+`pull_request` without a checkout, so pushes to main, schedules and dispatches
+are not narrowed. A shared change the gate skipped on a pull request is still
+tested by those. The job always finishes: a skipped gate would skip every job
+after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and fails
+when a workflow adds a shared filter without the gate.
+
+Replay a pull request locally with
+`node scripts/workflow-gate.mjs --workflow <name> --base <sha> --head <sha>`.
+
 ## Agent procedure
 
 Follow the draft lifecycle in [AGENTS.md](../../AGENTS.md#ci-scope).
