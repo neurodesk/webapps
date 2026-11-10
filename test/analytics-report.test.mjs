@@ -104,3 +104,12 @@ test('a catalogue report lists its apps with its own totals and countries', asyn
   assert.equal('catalogs' in own, false);
   assert.throws(() => catalogAnalytics({ ...report, catalogs: undefined }, [], msk), /no report for catalogue msk/);
 });
+
+test('catalogue analytics includes new apps absent from the saved report', async () => {
+  const { catalogAnalytics } = await import('../scripts/lib/catalog-sites.mjs');
+  const existing = { id: 'old', path: 'old', title: 'Old', users: 7, pageViews: 9, countries: [] };
+  const report = { apps: [existing], catalogs: { microscopy: { totals: { users: 7, pageViews: 9 }, countries: [] } } };
+  const own = catalogAnalytics(report, [existing, { id: 'new', path: 'new', title: 'New' }], { id: 'microscopy' });
+  assert.deepEqual(own.apps, [existing, { id: 'new', path: 'new', title: 'New', users: 0, pageViews: 0, countries: [] }]);
+  assert.deepEqual(own.totals, report.catalogs.microscopy.totals);
+});

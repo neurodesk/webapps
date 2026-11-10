@@ -166,8 +166,9 @@ export function catalogAnalytics(report, apps, catalog) {
   const { catalogs, ...all } = report;
   const own = catalogs?.[catalog.id];
   if (!own) throw new Error(`analytics.json has no report for catalogue ${catalog.id}; rerun scripts/write-analytics.mjs`);
-  const ids = new Set(apps.map(({ id }) => id));
-  return { ...all, ...own, apps: all.apps.filter(({ id }) => ids.has(id)) };
+  const recorded = new Map(all.apps.map((app) => [app.id, app]));
+  return { ...all, ...own, apps: apps.map(({ id, path, title }) => recorded.get(id)
+    ?? { id, path, title, users: 0, pageViews: 0, countries: [] }) };
 }
 
 /**
