@@ -53,7 +53,9 @@ pub fn objective(predicted: &[Complex64], observed: &[f64], precision: Precision
     }
     let r = correlation(predicted, observed, precision);
     if !r.re.is_finite() || !r.im.is_finite() {
-        let imaginary = if is_complex(predicted) { f64::NAN } else { 0.0 };
+        // Single correlation narrows to real when every imaginary part rounds to 0.
+        let complex = predicted.iter().any(|value| value.im as f32 != 0.0);
+        let imaginary = if complex { f64::NAN } else { 0.0 };
         return Complex64::new(f64::NAN, imaginary);
     }
     let r = num_complex::Complex32::new(r.re as f32, r.im as f32);
