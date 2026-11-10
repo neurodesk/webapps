@@ -1001,8 +1001,8 @@
           "platform": "macos-arm64",
           "version": "0.11.20261109",
           "url": "https://github.com/neurodesk/webapps/releases/download/synthseg-v0.11.20261109/synthseg-0.11.20261109-macos-arm64.pkg",
-          "sha256": "ae8eb721e5f3030669cafad5df180fd533e6bb3d3f5bceaf580f4ea3a1883414",
-          "bytes": 57296405,
+          "sha256": "a4bf017f50061aad2dfaa97632d188dc861246b2b8a1f750b148cad44b5edc43",
+          "bytes": 57296471,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/synthseg-v0.11.20261109/synthseg-0.11.20261109-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true
         },
