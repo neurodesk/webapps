@@ -346,6 +346,38 @@ test('registry rejects duplicate catalogue hosts and ids, and catalogues without
   }
 });
 
+test('every catalogue names its own desktop suite, and neuro keeps the installed identity', async () => {
+  const registry = await loadAppsRegistry();
+  assert.deepEqual(findCatalog(registry, 'neuro').desktop, {
+    product_name: 'Neurodesk Webapps',
+    app_id: 'org.neurodesk.webapps',
+    release: 'webapps',
+    executable: 'neurodesk-webapps',
+  });
+  for (const key of ['product_name', 'app_id', 'release', 'executable']) {
+    const values = registry.site.catalogs.map((catalog) => catalog.desktop[key]);
+    assert.equal(new Set(values).size, values.length, `${key} differs per catalogue`);
+  }
+  const cases = [
+    [raw => { delete raw.site.catalogs[1].desktop; }, /catalog msk\.desktop\.product_name must be a non-empty string/],
+    [raw => { raw.site.catalogs[1].desktop.app_id = 'msk'; }, /catalog msk\.desktop\.app_id must be a reverse-DNS identifier/],
+    [raw => { raw.site.catalogs[1].desktop.release = 'MSK suite'; }, /catalog msk\.desktop\.release must be an id/],
+    [raw => { raw.site.catalogs[1].desktop.executable = '../msk'; }, /catalog msk\.desktop\.executable must be an id/],
+    [raw => { raw.site.catalogs[1].desktop.app_id = 'org.neurodesk.webapps'; }, /duplicate desktop app_id: org\.neurodesk\.webapps/],
+    [raw => { raw.site.catalogs[1].desktop.product_name = 'Neurodesk Webapps'; }, /duplicate desktop product_name: Neurodesk Webapps/],
+    [raw => { raw.site.catalogs[1].desktop.executable = 'neurodesk-webapps'; }, /duplicate desktop executable: neurodesk-webapps/],
+    [raw => { raw.site.catalogs[1].desktop.release = 'webapps'; }, /duplicate desktop release: webapps/],
+    [raw => { raw.site.catalogs[1].desktop.release = 'musclemap'; }, /desktop release musclemap is an app id/],
+  ];
+  for (const [mutate, message] of cases) {
+    const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+    mutate(raw);
+    const path = join(await mkdtemp(join(tmpdir(), 'apps-desktop-')), 'apps.yml');
+    await writeFile(path, stringify(raw));
+    await assert.rejects(loadAppsRegistry(path), message);
+  }
+});
+
 test('registry rejects a former path that is repeated or still in use', async () => {
   for (const [paths, message] of [
     [['dicom2vid'], /former_paths for .* must be unique app paths/],

@@ -26,9 +26,14 @@ export function validateStandalone(value, registry) {
       throw new Error(`${id}: OpenRecon requires a package label and recipe name`);
     }
   }
-  if (value.suite) {
-    validateDownloads(value.suite.downloads, 'suite');
-    if (value.suite.models) validateDownloads([value.suite.models], 'suite model pack');
+  // Each catalogue's desktop suite, once it has been published; a catalogue without one shows no download.
+  if (Object.hasOwn(value, 'suite')) throw new Error('List desktop suites under suites, keyed by catalogue id');
+  const catalogs = new Set(registry.site.catalogs.map(catalog => catalog.id));
+  for (const [id, suite] of Object.entries(value.suites ?? {})) {
+    if (!catalogs.has(id)) throw new Error(`suites.${id}: not a declared catalogue`);
+    if (!/^\d+\.\d+\.\d{8}$/.test(suite.version ?? '')) throw new Error(`suites.${id}: missing version`);
+    validateDownloads(suite.downloads, `suites.${id}`);
+    if (suite.models) validateDownloads([suite.models], `suites.${id} model pack`);
   }
   return value;
 }

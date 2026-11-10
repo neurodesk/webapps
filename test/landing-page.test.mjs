@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { loadAppsRegistry, SUPPORT_STATUSES } from '../scripts/lib/apps-registry.mjs';
 import { renderLandingPage } from '../scripts/lib/landing-page.mjs';
@@ -104,6 +105,25 @@ test('each catalogue lists only its own apps under its own brand', async () => {
   }
   const neuro = renderLandingPage({ ...registry, apps: catalogApps(registry, findCatalog(registry, 'neuro')) }, standalone, findCatalog(registry, 'neuro'));
   for (const moved of ['musclemap', 'seedseg', 'carotid-flow']) assert.doesNotMatch(neuro, new RegExp(`data-app-id="${moved}"`));
+});
+
+test('each catalogue links its own desktop suite, and none before its first release', async () => {
+  const { catalogApps, findCatalog } = await import('../scripts/lib/apps-registry.mjs');
+  const registry = await loadAppsRegistry();
+  const standalone = await loadStandalone(registry);
+  const msk = findCatalog(registry, 'msk');
+  const page = (catalog, suites) => new JSDOM(renderLandingPage({ ...registry, apps: catalogApps(registry, catalog) }, { ...standalone, suites }, catalog)).window.document;
+  const suite = { ...standalone.suites.neuro, version: '0.49.20261111' };
+  const published = page(msk, { neuro: standalone.suites.neuro, msk: suite }).querySelectorAll('.desktop-link');
+  assert.equal(published.length, 1);
+  assert.equal(published[0].getAttribute('href'), 'https://github.com/neurodesk/webapps/releases/tag/msk-webapps-v0.49.20261111');
+  assert.match(published[0].getAttribute('title'), /Download MSK Webapps for/);
+  assert.equal(page(msk, { neuro: standalone.suites.neuro }).querySelector('.desktop-link'), null);
+  const neuro = page(findCatalog(registry, 'neuro'), { neuro: suite }).querySelector('.desktop-link');
+  assert.equal(neuro.getAttribute('href'), 'https://github.com/neurodesk/webapps/releases/tag/webapps-v0.49.20261111');
+  // The link is rendered from the catalogue's own record; nothing rewrites it to another suite's release.
+  assert.equal(page(msk, { msk: suite }).querySelector('.standalone-link'), null);
+  assert.doesNotMatch(await readFile(new URL('../site/landing.js', import.meta.url), 'utf8'), /api\.github\.com|releases/);
 });
 
 test('microscopy catalogue groups apps by task without repeating its domain', async () => {
