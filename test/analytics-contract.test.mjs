@@ -39,3 +39,18 @@ test('deployments generate static analytics without exposing credentials to the 
     assert.match(source, /GA4_SERVICE_ACCOUNT_KEY: \$\{\{ secrets\.GA4_SERVICE_ACCOUNT_KEY \}\}/);
   }
 });
+
+// The domain conditions of GA4 stream G-4Z9774J59Y (Admin > Data streams > Configure
+// tag settings): "Configure your domains" and "List unwanted referrals", both
+// matched with "contains". The Admin API cannot set them, so they are kept here
+// by hand. A host none of them contains starts a new session and shows up as a
+// referral: add a condition in GA4 first, then here.
+const GA4_DOMAIN_CONDITIONS = ['sciget.org', 'webapps.neurodesk.org'];
+
+test('GA4 cross-domain and referral conditions cover every catalogue host and the hub', async () => {
+  const { site } = await loadAppsRegistry();
+  for (const { host } of [site.hub, ...site.catalogs]) {
+    assert.ok(GA4_DOMAIN_CONDITIONS.some(condition => host.includes(condition)),
+      `${host} is not covered by the GA4 domain conditions; add it in GA4 tag settings and to GA4_DOMAIN_CONDITIONS`);
+  }
+});
