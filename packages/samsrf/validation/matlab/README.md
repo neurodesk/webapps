@@ -248,10 +248,23 @@ then writes the model JSON. The bundle is hashed, made read-only and served at
   [42923773513](https://github.com/neurodesk/webapps/actions/runs/42923773513)).
   Both hosts failed identically in source MATLAB.
 
-The custom-HRF cases therefore use SamSrf's subject-HRF file route instead:
-`Hrf` is the relative name `hrf_custom`. SamSrf recognises the route by that
-`hrf_` prefix and loads `fP = [5 15 5 0.9]` from the results directory, where
-staging copies it. That gives `samsrf_doublegamma(TR, [5 15 1 1 5 0 32]) * 0.9`.
+The custom-HRF cases therefore use SamSrf's subject-HRF file route: `Hrf` is
+the relative name `hrf_custom`, recognised by its `hrf_` prefix, and staging
+copies `fP = [5 15 5 0.9]` into each results directory. That route fails in
+the pinned source too. It returns `samsrf_doublegamma(...)' * fP(4)`, and
+`samsrf_doublegamma` already returns a column, so the HRF becomes a 1-by-33
+row. `samsrf_prfoptim_loop` and `samsrf_revcor_prf` treat any HRF with more
+than one column as vertex-wise and index it per vertex. The forward pRF run
+fails in `prf_errfun` with `MATLAB:badsubscript`, and reverse correlation
+fails at `samsrf_revcor_prf` line 319 (run
+[42925787988](https://github.com/neurodesk/webapps/actions/runs/42925787988),
+both hosts, both precisions).
+
+A fixed custom HRF is therefore unsupported through `SamSrfAnalysis` at the
+pinned commit. The four runs stay in the plan with `expect:
+"upstream-failure"` and a reason. The compiled application must fail on them
+too, and they are reported as unsupported, never as passes. Custom-HRF
+numerics remain covered only by the direct-call source recordings above.
 
 `run_source_cli.m` runs each argv in source MATLAB. `run_runtime_cli.py` runs
 it in the compiled image. Each container has no network (so no license
