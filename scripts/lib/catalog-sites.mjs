@@ -8,6 +8,7 @@ import { renderLandingPage } from './landing-page.mjs';
 import { renderNotFoundPage } from './not-found-page.mjs';
 import { writeCompositeRuntimeCacheManifests } from './runtime-cache.mjs';
 import { headersFile } from './vite-app-config.mjs';
+import { rankApps } from '../write-analytics.mjs';
 
 // Each catalogue's deployable site, and the hub's, beside the all-app `dist/`
 // that the desktop suite assembles from.
@@ -168,8 +169,9 @@ export function catalogAnalytics(report, apps, catalog) {
   const { catalogs, ...all } = report;
   const own = catalogs?.[catalog.id];
   if (!own) throw new Error(`analytics.json has no report for catalogue ${catalog.id}; rerun scripts/write-analytics.mjs`);
-  const ids = new Set(apps.map(({ id }) => id));
-  return { ...all, ...own, apps: all.apps.filter(({ id }) => ids.has(id)) };
+  const recorded = new Map(all.apps.map((app) => [app.id, app]));
+  return { ...all, ...own, apps: rankApps(apps.map(({ id, path, title }) => recorded.get(id)
+    ?? { id, path, title, users: 0, pageViews: 0, countries: [] })) };
 }
 
 /**

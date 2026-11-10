@@ -1,0 +1,23 @@
+{
+  "example": "hela-phalloidin-confocal",
+  "method": "rl",
+  "iterations": 10,
+  "dims": [
+    41,
+    256,
+    256
+  ],
+  "spacingUm": {
+    "x": 0.06589411527332022,
+    "y": 0.06589411527332022,
+    "z": 0.13
+  },
+  "psfDims": [
+    27,
+    43,
+    43
+  ],
+  "sha256": "5e531de9129b0e30358b9a140ef6f98af480cb819d031eae12f70604117ea015",
+  "mean": 7.103568099658094,
+  "max": 407.4609375
+}
