@@ -359,35 +359,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "1.5.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261108/musclemap-1.5.20261108-linux-x64.tar.gz",
-          "sha256": "5e073cad597d10b1d9be45302d76159e0df87ed9910e8b7b11378a1dc7d53715",
-          "bytes": 647557601,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261108/musclemap-1.5.20261108-linux-x64.tar.gz.validation.txt",
+          "version": "1.5.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261109/musclemap-1.5.20261109-linux-x64.tar.gz",
+          "sha256": "c935c4bf138a4d38b2653601bdf1b0be8b36b73320b1c8ff70d6194f50741fbd",
+          "bytes": 647558295,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261109/musclemap-1.5.20261109-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf musclemap-1.5.20261108-linux-x64.tar.gz\n./musclemap-1.5.20261108-linux-x64/musclemap image.nii.gz results"
+          "command": "tar -xzf musclemap-1.5.20261109-linux-x64.tar.gz\n./musclemap-1.5.20261109-linux-x64/musclemap image.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "1.5.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261108/musclemap-1.5.20261108-macos-arm64.pkg",
-          "sha256": "e44d61a5ef447e5807bcb63a3175b2b2546b7c07b7d112314d044691b3bc108d",
-          "bytes": 649126557,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261108/musclemap-1.5.20261108-macos-arm64.pkg.validation.txt",
+          "version": "1.5.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261109/musclemap-1.5.20261109-macos-arm64.pkg",
+          "sha256": "cc312a3abbf48a732100e2ef124570db950c8f6073217253739f0fb02acfea7b",
+          "bytes": 649127644,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261109/musclemap-1.5.20261109-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg musclemap-1.5.20261108-macos-arm64.pkg -target /\nmusclemap self-check\nmusclemap image.nii.gz results"
+          "command": "sudo installer -pkg musclemap-1.5.20261109-macos-arm64.pkg -target /\nmusclemap self-check\nmusclemap image.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "1.5.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261108/musclemap-1.5.20261108-windows-x64.zip",
-          "sha256": "dce7975504329b0080f0326f3d8884728e3200efed023c8dbf0b10d596b1d96c",
-          "bytes": 649295622,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261108/musclemap-1.5.20261108-windows-x64.zip.validation.txt",
+          "version": "1.5.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261109/musclemap-1.5.20261109-windows-x64.zip",
+          "sha256": "ab120ab5baa2c24cb3eb739dc738a9f7f6dbd8cc24298e21cbbaf2856fea5256",
+          "bytes": 649297940,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/musclemap-v1.5.20261109/musclemap-1.5.20261109-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\musclemap-1.5.20261108-windows-x64.zip -DestinationPath .\n.\\musclemap-1.5.20261108-windows-x64\\musclemap.exe image.nii.gz results"
+          "command": "Expand-Archive -Path .\\musclemap-1.5.20261109-windows-x64.zip -DestinationPath .\n.\\musclemap-1.5.20261109-windows-x64\\musclemap.exe image.nii.gz results"
         }
       ],
       "containers": [
@@ -657,35 +657,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.15.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261108/dicompare-0.15.20261108-linux-x64.tar.gz",
-          "sha256": "944593989bead2a593471707581a83d058f1d562737a424eb912ac3eb97f97f0",
-          "bytes": 89070982,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261108/dicompare-0.15.20261108-linux-x64.tar.gz.validation.txt",
+          "version": "0.15.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261109/dicompare-0.15.20261109-linux-x64.tar.gz",
+          "sha256": "3a0b9cea4e900f19834168cd948672250979e5648971499669618044d712665e",
+          "bytes": 89070901,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261109/dicompare-0.15.20261109-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf dicompare-0.15.20261108-linux-x64.tar.gz\n./dicompare-0.15.20261108-linux-x64/dicompare compare dicom-session --schema protocol.json --output comparison.json"
+          "command": "tar -xzf dicompare-0.15.20261109-linux-x64.tar.gz\n./dicompare-0.15.20261109-linux-x64/dicompare compare dicom-session --schema protocol.json --output comparison.json"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.15.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261108/dicompare-0.15.20261108-macos-arm64.pkg",
-          "sha256": "129d5abf68595fcace0eadcbca0529c39f45fa02ba1e2833a9b4ce934067bbae",
-          "bytes": 82730662,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261108/dicompare-0.15.20261108-macos-arm64.pkg.validation.txt",
+          "version": "0.15.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261109/dicompare-0.15.20261109-macos-arm64.pkg",
+          "sha256": "04767cd4c131f069286770c8939cdeb498f651fe3a033ffca7021b25215ba655",
+          "bytes": 82730722,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261109/dicompare-0.15.20261109-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg dicompare-0.15.20261108-macos-arm64.pkg -target /\ndicompare self-check\ndicompare compare dicom-session --schema protocol.json --output comparison.json"
+          "command": "sudo installer -pkg dicompare-0.15.20261109-macos-arm64.pkg -target /\ndicompare self-check\ndicompare compare dicom-session --schema protocol.json --output comparison.json"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.15.20261108",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261108/dicompare-0.15.20261108-windows-x64.zip",
-          "sha256": "d6f3ab36a28b3c2375aa2fccd498046db8b97efe10710717f041c039c53020fc",
-          "bytes": 78961756,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261108/dicompare-0.15.20261108-windows-x64.zip.validation.txt",
+          "version": "0.15.20261109",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261109/dicompare-0.15.20261109-windows-x64.zip",
+          "sha256": "98419b08bca76a01617a5bcee58787b2ffbd26e8e28d063112fd2706d03fb755",
+          "bytes": 78961758,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261109/dicompare-0.15.20261109-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\dicompare-0.15.20261108-windows-x64.zip -DestinationPath .\n.\\dicompare-0.15.20261108-windows-x64\\dicompare.exe compare dicom-session --schema protocol.json --output comparison.json"
+          "command": "Expand-Archive -Path .\\dicompare-0.15.20261109-windows-x64.zip -DestinationPath .\n.\\dicompare-0.15.20261109-windows-x64\\dicompare.exe compare dicom-session --schema protocol.json --output comparison.json"
         }
       ],
       "containers": [

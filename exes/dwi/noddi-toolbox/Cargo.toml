@@ -1,0 +1,16 @@
+# A port of the NODDI toolbox 1.05 fit (Artistic License 2.0); README.md lists the ported files.
+[package]
+name = "dwi-noddi-toolbox"
+version.workspace = true
+edition.workspace = true
+license = "Artistic-2.0"
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+dwi-amico = { path = "../amico" }
+dwi-gp = { path = "../gp" }
+dwi-tensor = { path = "../tensor" }
+
+[dev-dependencies]
+serde_json = { version = "1", features = ["float_roundtrip"] }

@@ -3,7 +3,8 @@
 """Download the pinned toolbox oracle, checking every cached or downloaded file.
 
 Usage: python3 fetch_reference.py DEST
-Prints NODDI_TOOLBOX_REFERENCE=DEST for a future reference test; no fit is run.
+Downloads the reference maps, the slab DWI they were fitted to and the WM selection.
+Prints NODDI_TOOLBOX_REFERENCE=DEST; prepare_reference.py stages the gate voxels from it.
 """
 
 import hashlib
@@ -28,12 +29,13 @@ def main():
     destination = Path(sys.argv[1]).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     manifest = json.loads(Path(__file__).with_name("reference.manifest.json").read_text())
-    for entry in manifest["files"] + [manifest["wmSelection"]]:
+    for entry in manifest["inputs"] + manifest["files"] + [manifest["wmSelection"]]:
         path = destination / entry["path"]
         if verified(path, entry):
             continue
+        path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=destination, prefix=".download-") as temporary:
-            partial = Path(temporary) / entry["path"]
+            partial = Path(temporary) / Path(entry["path"]).name
             with urllib.request.urlopen(entry.get("url", manifest["base"] + entry["path"]), timeout=120) as response, partial.open("wb") as output:
                 shutil.copyfileobj(response, output)
             if not verified(partial, entry):
