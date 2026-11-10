@@ -157,6 +157,8 @@ test('a catalogue offers the apps other catalogues serve, linking to their home'
       assert.equal(entry.description, app.description);
     }
     assert.ok(document.querySelector('#no-results #elsewhere[hidden] #elsewhere-results.app-grid'));
+    // A category can hide a local match, so the heading claims nothing about the whole site.
+    assert.equal(document.querySelector('#no-results h2').textContent, 'No apps match these filters');
   }
 
   const neuro = findCatalog(registry, 'neuro');

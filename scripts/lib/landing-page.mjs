@@ -226,7 +226,7 @@ export function renderLandingPage(registry, standalone, catalog = primaryCatalog
 
     <section id="no-results" class="no-results" hidden>
       <div aria-hidden="true">⌕</div>
-      <h2>${allApps.length ? 'No matching apps on this site' : 'No matching apps'}</h2>
+      <h2>No apps match these filters</h2>
       <p>Try a broader term, another category, or search for a file format such as DICOM or NIfTI.</p>
       <button id="reset-filters" type="button">Show all apps</button>${elsewhereData}
     </section>
