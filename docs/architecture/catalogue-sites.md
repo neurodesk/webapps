@@ -29,6 +29,12 @@ Pages. `sciget.org` DNS is on Cloudflare.
   host's landing page and DICOM View menu. Analytics counts every copy.
 - `former_paths:` on an app: paths it was served from before a rename.
 
+Every host sends to one GA4 stream. Its cross-domain and unwanted-referral
+lists match `sciget.org` and `webapps.neurodesk.org` by "contains", so a new
+`*.sciget.org` catalogue needs no GA4 change. A host outside both needs a new
+condition in GA4's tag settings; `test/analytics-contract.test.mjs` fails until
+it is added there and to `GA4_DOMAIN_CONDITIONS`.
+
 `scripts/lib/apps-registry.mjs` rejects an unknown, missing or repeated
 `catalog`, a duplicate catalogue id or host, a catalogue without apps, and any
 setup other than exactly one `pages` catalogue on `site.domain`. `also_in` must name other
