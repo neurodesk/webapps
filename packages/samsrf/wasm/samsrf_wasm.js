@@ -267,12 +267,13 @@ export class RunAccumulator {
      * @param {string} combine
      * @param {boolean} noise_ceiling
      * @param {boolean} global_signal
+     * @param {string | null} [precision]
      */
-    constructor(total_vertices, keep, normalise, combine, noise_ceiling, global_signal) {
-        const val4 = +total_vertices;
-        const val5 = +noise_ceiling;
-        const val6 = +global_signal;
-        let ptr0, len0, ptr1, len1, ptr2, len2;
+    constructor(total_vertices, keep, normalise, combine, noise_ceiling, global_signal, precision) {
+        const val5 = +total_vertices;
+        const val6 = +noise_ceiling;
+        const val7 = +global_signal;
+        let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3;
         try {
             ptr0 = isLikeNone(keep) ? 0 : passArray32ToWasm0(keep, wasm.__wbindgen_malloc);
             len0 = WASM_VECTOR_LEN;
@@ -280,13 +281,16 @@ export class RunAccumulator {
             len1 = WASM_VECTOR_LEN;
             ptr2 = passStringToWasm0(combine, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             len2 = WASM_VECTOR_LEN;
+            ptr3 = isLikeNone(precision) ? 0 : passStringToWasm0(precision, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len3 = WASM_VECTOR_LEN;
         } catch (e) {
+            if (ptr3) { wasm.__wbindgen_free(ptr3, len3 * 1, 1); }
             if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
             if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
             if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 4, 4); }
             throw e;
         }
-        const ret = wasm.runaccumulator_new(val4, ptr0, len0, ptr1, len1, ptr2, len2, val5, val6);
+        const ret = wasm.runaccumulator_new(val5, ptr0, len0, ptr1, len1, ptr2, len2, val6, val7, ptr3, len3);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
