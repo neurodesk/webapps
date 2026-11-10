@@ -87,19 +87,19 @@ test('theming again for another catalogue replaces every catalogue value', () =>
     ...metadata,
     measurementId: 'G-OTHER1',
     url: 'https://mskapps.sciget.org/example/',
-    siteTitle: 'SciGet MSK Webapps',
+    siteTitle: 'MSK Webapps',
     brandName: 'SciGet',
-    moreAppsLabel: 'More SciGet MSK web apps',
+    moreAppsLabel: 'More MSK web apps',
     iconHref: '../sciget-logo.svg',
   };
   const themed = injectCompositeTheme(neuro, msk);
 
-  assert.match(themed, /<title>Example App \| SciGet MSK Webapps<\/title>/);
+  assert.match(themed, /<title>Example App \| MSK Webapps<\/title>/);
   assert.match(themed, /<meta property="og:url" content="https:\/\/mskapps\.sciget\.org\/example\/">/);
   assert.match(themed, /data-ga4-measurement-id="G-OTHER1"/);
   assert.match(themed, /data-app-url="https:\/\/mskapps\.sciget\.org\/example\/"/);
   assert.match(themed, /data-brand-name="SciGet"/);
-  assert.match(themed, /data-more-apps-label="More SciGet MSK web apps"/);
+  assert.match(themed, /data-more-apps-label="More MSK web apps"/);
   assert.match(themed, /<link rel="icon" type="image\/svg\+xml" href="\.\.\/sciget-logo\.svg" data-neurodesk-app-icon>/);
   assert.doesNotMatch(themed, /Neurodesk Webapps|neurodesk\.org|G-4Z9774J59Y|neurodesk-logo/);
   assert.equal(injectCompositeTheme(themed, msk), themed);

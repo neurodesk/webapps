@@ -5300,6 +5300,13 @@
       "contentType": "application/gzip",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9e2fcb5c1e388c17d00a35ea26bf4e0602153b08/examples/dicompare/synthetic-session/dicompare-example-session.zip": {
+      "sha256": "49d6706995af7bf69cd7e9daef2bdfaee2398aa5889d20bfe082eda629603251",
+      "bytes": 112284,
+      "contentType": "application/zip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -5669,7 +5676,8 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-117.dcm",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-118.dcm",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-119.dcm",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-120.dcm"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-120.dcm",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9e2fcb5c1e388c17d00a35ea26bf4e0602153b08/examples/dicompare/synthetic-session/dicompare-example-session.zip"
     ],
     "deface": [
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/deface/avg152T1mask.nii.gz",

@@ -1,6 +1,6 @@
 {
   "name": "cryo-em",
-  "version": "0.0.20261107",
+  "version": "0.1.20261109",
   "private": true,
   "type": "module",
   "scripts": {

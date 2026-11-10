@@ -24,8 +24,11 @@ export function displayWindow(data) {
   return high > low ? [low, high] : [sample[0], sample[0] + 1];
 }
 
-/** A 2D image or 3D stack (`shape` [nx, ny(, nz)]) as a NIfTI File for NiiVue. */
-export function displayNifti(name, data, { shape, spacing }) {
+/**
+ * A 2D image or 3D stack (`shape` [nx, ny(, nz)]) as a NIfTI File for NiiVue, windowed to
+ * `window` ([min, max]) or to its own percentiles.
+ */
+export function displayNifti(name, data, { shape, spacing, window = displayWindow(data) }) {
   const [nx, ny, nz = 1] = shape;
   const [sx, sy, sz] = spacing;
   const affine = [
@@ -35,7 +38,7 @@ export function displayNifti(name, data, { shape, spacing }) {
     [0, 0, 0, 1],
   ];
   const header = createNiftiHeaderFromVolume({ hdr: { dims: [3, nx, ny, nz, 1, 1, 1, 1], pixDims: [1, sx, sy, sz, 1, 1, 1, 1], affine } });
-  const [calMin, calMax] = displayWindow(data);
+  const [calMin, calMax] = window;
   const buffer = createNiftiFromData(data, header, { dims: [nx, ny, nz], preserveScaling: true, calMin, calMax, clampCalMax: false });
   return new File([buffer], name, { type: "application/octet-stream" });
 }

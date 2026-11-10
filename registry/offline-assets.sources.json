@@ -2085,6 +2085,12 @@
         "sha256": "8f838c0b3689997b0e9f82585ce04abac36f13395705ee55ebc9587266b75e75",
         "bytes": 527994,
         "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9e2fcb5c1e388c17d00a35ea26bf4e0602153b08/examples/dicompare/synthetic-session/dicompare-example-session.zip",
+        "sha256": "49d6706995af7bf69cd7e9daef2bdfaee2398aa5889d20bfe082eda629603251",
+        "bytes": 112284,
+        "kind": "example"
       }
     ],
     "deface": [
