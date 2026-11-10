@@ -64,7 +64,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   } else {
     const report = compareGeometry(first, second);
     fs.writeFileSync(reportFile, JSON.stringify(report, null, 2) + '\n');
-    assert.ok(report.exact, 'Same-host geometry recordings differ; see the report.');
-    console.log(`Exact same-host repeat: ${report.cases} cases, ${report.arrays} arrays. Port parity is not asserted.`);
+    assert.ok(report.exact, 'Geometry recordings differ; see the report.');
+    console.log(`Exact repeat: ${report.cases} cases, ${report.arrays} arrays. Port parity is not asserted.`);
   }
 }

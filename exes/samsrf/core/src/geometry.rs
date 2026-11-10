@@ -45,19 +45,32 @@ pub struct Hull {
 }
 
 impl Hull {
-    /// Hull of a polygon after removing collinear boundary vertices, including
-    /// retraced spikes. SamSrf's CF path constructs a `polyshape` before taking
-    /// its hull; a zero-area spike is therefore not part of that hull.
+    /// `polyshape(points).convhull`. Recorded MATLAB R2023b behaviour
+    /// (`record_geometry.m`): vertices closer than 1e-8 of the bounding-box span
+    /// merge, so a spike narrower than that retraces itself; then vertices
+    /// within that distance of the chord between their neighbours go, including
+    /// retraced spikes, and the hull is taken of what remains. With fewer than
+    /// three vertices left the shape is empty. MATLAB takes these decisions on a
+    /// fixed-point copy of the vertices, so within 1e-5 relative of the cutoff
+    /// it can disagree; and it resolves self-intersections of near-parallel
+    /// edges into slivers this does not reproduce (packages/samsrf/README.md).
     pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
         let mut boundary = points.to_vec();
-        // Inferred from recorded R2023b thin triangles at three scales. Points
-        // exactly at the relative cutoff remain sensitive to rounding.
         let span = (0..2).map(|axis| {
             let low = points.iter().map(|p| p[axis]).fold(f64::INFINITY, f64::min);
             let high = points.iter().map(|p| p[axis]).fold(f64::NEG_INFINITY, f64::max);
             high - low
         }).fold(0.0, f64::max);
         let tolerance = span * 1e-8;
+        for i in 0..boundary.len() {
+            if let Some(&earlier) = boundary[..i].iter().find(|a| (a[0] - boundary[i][0]).hypot(a[1] - boundary[i][1]) < tolerance) {
+                boundary[i] = earlier;
+            }
+        }
+        boundary.dedup();
+        while boundary.len() > 1 && boundary.first() == boundary.last() {
+            boundary.pop();
+        }
         loop {
             let n = boundary.len();
             if n < 3 {
@@ -481,6 +494,14 @@ mod tests {
         let triangles = delaunay_triangles(&duplicate);
         assert_eq!(triangles.len(), 1);
         assert!(!triangles[0].contains(&3));
+    }
+
+    #[test]
+    fn a_spike_narrower_than_the_cutoff_leaves_the_hull() {
+        // MATLAB R2023b drops a spike 2e-9 of the span wide and keeps one 2e-8 wide.
+        let spike = |w: f64| [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.5 + w, 1.0], [0.5, 1.5], [0.5 - w, 1.0], [0.0, 1.0]];
+        assert_eq!(Hull::of_polygon(&spike(1.5e-9)).unwrap().area(), 1.0);
+        assert!(Hull::of_polygon(&spike(1.5e-8)).unwrap().area() > 1.0);
     }
 
     #[test]

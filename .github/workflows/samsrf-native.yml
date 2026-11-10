@@ -101,6 +101,12 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           node packages/samsrf/validation/matlab/compare.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-matrix-input"
           SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_reference
+      - name: MATLAB geometry and real-template CF gates
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-geometry" packages/samsrf/validation/matlab/geometry-reference.json
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor" packages/samsrf/validation/matlab/revcor-reference.json
+          node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-geometry/ubuntu-22.04" "$RUNNER_TEMP/samsrf-geometry/ubuntu-24.04" "$RUNNER_TEMP/samsrf-geometry-hosts.json"
+          SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_REVCOR_DIR="$RUNNER_TEMP/samsrf-revcor" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_geometry -- --nocapture
       - name: CSS extreme-scale and rank regression gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
