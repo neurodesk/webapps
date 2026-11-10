@@ -1,6 +1,8 @@
-import { resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadAppsRegistry } from '../lib/apps-registry.mjs';
+import { parseArgs } from 'node:util';
+import { catalogApps, findCatalog, loadAppsRegistry, repoRoot } from '../lib/apps-registry.mjs';
 
 // These existing workflows have separate hardware-GPU validation, recorded in
 // standalone-validation.md. New apps default to the full hosted-CI workflow.
@@ -20,6 +22,23 @@ export const cpuWorkflowApps = new Set(['fastprep', 'sdc']);
 export function ciWorkflowApps(registry) {
   return registry.apps.map(app => app.id).filter(id => !hardwareWorkflowApps.has(id));
 }
+// A catalogue suite runs the workflows of the apps it is home to. A copy is the
+// same build under another brand, so its workflow runs once, in its home suite.
+export function catalogWorkflowApps(registry, catalog) {
+  return ciWorkflowApps({ apps: registry.apps.filter(app => app.catalog === catalog.id) });
+}
+// A suite's model pack is tested by the workflows of every app it serves that reads a pinned model.
+export function modelWorkflowApps(registry, catalog, sources) {
+  return ciWorkflowApps({ apps: catalogApps(registry, catalog).filter(app => sources.apps[app.id]?.some(source => source.kind === 'model')) });
+}
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  console.log(ciWorkflowApps(await loadAppsRegistry()).join(','));
+  const { values } = parseArgs({ options: { catalog: { type: 'string' }, models: { type: 'boolean' } } });
+  const registry = await loadAppsRegistry();
+  if (values.catalog === undefined) {
+    console.log(ciWorkflowApps(registry).join(','));
+  } else {
+    const catalog = findCatalog(registry, values.catalog);
+    const sources = JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.sources.json'), 'utf8'));
+    console.log((values.models ? modelWorkflowApps(registry, catalog, sources) : catalogWorkflowApps(registry, catalog)).join(','));
+  }
 }

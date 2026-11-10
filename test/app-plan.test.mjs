@@ -1107,6 +1107,8 @@ test('only the composite build and its own tests read the composite-only site fi
     'scripts/lib/hub-page.mjs',
     'scripts/lib/not-found-page.mjs',
     'scripts/write-analytics.mjs',
+    // Each desktop suite is its catalogue site without the host-only 404 page and headers.
+    'scripts/desktop/assemble.mjs',
     'test-utils/dicompare-routes.mjs',
     'knip.config.mjs',
     // The planner names them to classify them.
@@ -1206,7 +1208,7 @@ test('a standalone catalog change selects the apps whose entries changed', async
   assert.equal(republished.site, true);
   assert.deepEqual(republished.reasons.apps.lcmodel, ['registry/standalone.json: the lcmodel entry changed']);
   const suite = plan(edit((value) => {
-    value.suite.downloads[0].version = '9.9.9';
+    value.suites.neuro.downloads[0].version = '9.9.9';
   }));
   assert.deepEqual(suite.selected, []);
   assert.equal(suite.site, true);

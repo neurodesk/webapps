@@ -1,14 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encode as encodePng } from "fast-png";
-import { fromArrayBuffer } from "geotiff";
-import { MAX_DECODED_BYTES, nucleiCsv, readImage, writeLabelTiff } from "../src/image-io.js";
+import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
+import { MAX_DECODED_BYTES, nucleiCsv, readImage } from "../src/image-io.js";
 
 const toBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
 /**
  * A little-endian TIFF with one IFD per page, every sample a strip of its own (planar
- * configuration 2). Each page is { width, height, bits, samples: [TypedArray], tags: { tag: values } }.
+ * configuration 2). Each page is { width, height, bits, samples: [TypedArray], tags: { tag: values } },
+ * a tag's values SHORTs, or ASCII when they are a string.
  */
 function tiff(pages) {
   const chunks = [];
@@ -22,6 +23,7 @@ function tiff(pages) {
   };
   const shorts = (values) => new Uint8Array(Uint16Array.from(values).buffer);
   const longs = (values) => new Uint8Array(Uint32Array.from(values).buffer);
+  const ascii = (text) => new TextEncoder().encode(`${text}\0`);
   const ifds = pages.map(({ width, height, bits, samples = [], tags = {} }) => {
     const offsets = samples.map((data) => add(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)));
     const entries = {
@@ -36,10 +38,10 @@ function tiff(pages) {
       279: [4, samples.length ? samples.map((data) => data.byteLength) : [(width * height * bits) / 8]],
       284: [3, [2]],
     };
-    for (const [tag, values] of Object.entries(tags)) entries[tag] = [3, values];
+    for (const [tag, values] of Object.entries(tags)) entries[tag] = [typeof values === "string" ? 2 : 3, values];
     return Object.entries(entries).map(([tag, [type, values]]) => {
-      const bytes = type === 3 ? shorts(values) : longs(values);
-      return { tag: Number(tag), type, count: values.length, bytes, offset: bytes.byteLength > 4 ? add(bytes) : null };
+      const bytes = type === 2 ? ascii(values) : type === 3 ? shorts(values) : longs(values);
+      return { tag: Number(tag), type, count: type === 2 ? bytes.byteLength : values.length, bytes, offset: bytes.byteLength > 4 ? add(bytes) : null };
     });
   });
   const ifdOffsets = ifds.map((entries) => add(new Uint8Array(2 + entries.length * 12 + 4)));
@@ -70,26 +72,6 @@ function tiff(pages) {
 }
 
 const ramp = (Type, length, offset) => Type.from({ length }, (_, i) => (i * 37 + offset) % 60000);
-
-test("the label TIFF reads back with geotiff as the same labels", async () => {
-  const width = 37;
-  const height = 21;
-  const labels = Int32Array.from({ length: width * height }, (_, i) => (i * 13) % 300);
-  const tiff = writeLabelTiff(labels, width, height);
-  const image = await (await fromArrayBuffer(toBuffer(tiff))).getImage();
-  assert.equal(image.getWidth(), width);
-  assert.equal(image.getHeight(), height);
-  assert.equal(image.getBitsPerSample(), 16);
-  const [values] = await image.readRasters();
-  assert.deepEqual(Array.from(values), Array.from(labels));
-});
-
-test("more than 65535 nuclei are written as 32-bit labels", async () => {
-  const labels = Int32Array.from({ length: 70000 }, (_, i) => i + 1);
-  const image = await (await fromArrayBuffer(toBuffer(writeLabelTiff(labels, 350, 200)))).getImage();
-  assert.equal(image.getBitsPerSample(), 32);
-  assert.equal((await image.readRasters())[0][69999], 70000);
-});
 
 test("TIFF pages and samples become planes, and the label TIFF is itself readable", async () => {
   const labels = Int32Array.from({ length: 32 * 16 }, (_, i) => i % 7);
@@ -141,6 +123,34 @@ test("float16 TIFF pages count at their decoded float32 size against the budget"
   const page = { width: 8192, height: 8192, bits: 16, samples: [], tags: { 277: [1], 339: [3] } };
   const pages = Array.from({ length: 5 }, () => page);
   await assert.rejects(readImage("half.tif", tiff(pages)), /GB of pixels in 5 pages; save the plane/);
+});
+
+test("a palette TIFF is its colour indices, as tifffile reads it, not its colours", async () => {
+  // Fiji saves an 8-bit channel with the Blue LUT as a palette TIFF: red and green are zero.
+  const blue = Array.from({ length: 3 * 256 }, (_, i) => (i >= 512 ? (i - 512) * 257 : 0));
+  const indices = ramp(Uint8Array, 20 * 18, 3).map((value) => value % 256);
+  const { planes } = await readImage("dapi.tif", tiff([{ width: 20, height: 18, bits: 8, samples: [indices], tags: { 262: [3], 320: blue } }]));
+  assert.deepEqual(planes.map((plane) => plane.label), ["Intensity"]);
+  assert.deepEqual(Array.from(planes[0].data), Array.from(indices));
+});
+
+test("OME-TIFF pages take channel names through TiffData, and unfollowable TiffData is refused", async () => {
+  const pages = (tiffData) => {
+    const description = `<OME UUID="urn:uuid:a"><Image ID="Image:0"><Pixels SizeC="2" SizeZ="1" SizeT="1"><Channel Name="DAPI"/><Channel Name="GFP"/>${tiffData}</Pixels></Image></OME>`;
+    return tiff([0, 1].map((c) => ({ width: 16, height: 16, bits: 16, samples: [ramp(Uint16Array, 256, c)], tags: c ? {} : { 270: description } })));
+  };
+  const plain = await readImage("plain.ome.tif", pages(""));
+  assert.deepEqual([plain.format, plain.planes.map((plane) => plane.label)], ["OME-TIFF", ["DAPI", "GFP"]]);
+  const mapped = await readImage("mapped.ome.tif", pages('<TiffData IFD="0" FirstC="1"/><TiffData IFD="1" FirstC="0"/>'));
+  assert.deepEqual(mapped.planes.map((plane) => plane.label), ["GFP", "DAPI"]);
+  assert.deepEqual(Array.from(mapped.planes[0].data), Array.from(ramp(Uint16Array, 256, 0)));
+  await assert.rejects(readImage("split.ome.tif", pages('<TiffData PlaneCount="2"><UUID>urn:uuid:b</UUID></TiffData>')), /split\.ome\.tif maps its channels to TIFF pages in a way the app cannot read \(planes in another file\)/);
+});
+
+test("an oversized TIFF is refused for its size before its sample type", async () => {
+  // Header-only and 64-bit unsigned, a sample type geotiff cannot decode.
+  const page = { width: 8193, height: 8193, bits: 64, samples: [], tags: { 277: [1] } };
+  await assert.rejects(readImage("big.tif", tiff([page])), /big\.tif is 8193 × 8193; split images over 64 megapixels into tiles first/);
 });
 
 test("PNGs below 8 bits are unpacked: 1, 2 and 4-bit grey and indexed colour", async () => {

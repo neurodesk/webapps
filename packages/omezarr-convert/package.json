@@ -1,0 +1,52 @@
+{
+  "name": "@neurodesk/omezarr-convert",
+  "version": "0.0.20261109",
+  "private": true,
+  "description": "Convert microscopy TIFF, OME-TIFF, PNG/JPEG sequences and NIfTI to multiscale OME-Zarr (NGFF 0.4 and 0.5)",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./ngff": "./src/ngff.js",
+    "./pyramid": "./src/pyramid.js",
+    "./units": "./src/units.js",
+    "./writer": "./src/writer.js",
+    "./sources": "./src/sources/index.js",
+    "./zip": "./src/zip.js",
+    "./readback": "./src/readback.js",
+    "./pacing": "./src/pacing.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node ../../scripts/lint.mjs --workspace"
+  },
+  "dependencies": {
+    "@fideus-labs/fiff": "0.8.2",
+    "@fideus-labs/ngff-zarr": "0.38.0",
+    "@neurodesk/webapp-components": "workspace:*",
+    "fast-png": "8.0.0",
+    "fflate": "0.8.3",
+    "geotiff": "3.0.5",
+    "jpeg-js": "0.4.4",
+    "zarrita": "0.7.5"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0"
+  },
+  "files": [
+    "src",
+    "schemas",
+    "validation",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/omezarr-convert"
+  }
+}

@@ -2,8 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fromArrayBuffer } from "geotiff";
-import { channelChoices, describedLayout, extraSamples, MAX_PIXELS, readImage, writeLabelTiff } from "../src/image-io.js";
+import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
+import { channelChoices, describedLayout, MAX_PIXELS, readImage } from "../src/image-io.js";
 import { channelToUint8 } from "../src/preprocess.js";
 
 const fixture = (name) => {
@@ -31,11 +31,7 @@ test("an alpha sample is left out; an unspecified extra sample is its own channe
   assert.deepEqual(channelChoices(two).map((item) => item.id), ["0", "1"]);
 });
 
-test("ExtraSamples is read as a number, an array or a typed array, in either order", async () => {
-  assert.deepEqual(extraSamples(null), []);
-  assert.deepEqual(extraSamples(2), [2]);
-  assert.deepEqual(extraSamples(Uint16Array.of(0, 2)), [0, 2]);
-  assert.deepEqual(extraSamples([2, 0]), [2, 0]);
+test("ExtraSamples alpha is left out in either order", async () => {
   // red, green, blue = base + 0..2; the unspecified sample is base + 3; alpha is 255.
   for (const name of ["extras-0-2.tif", "extras-2-0.tif"]) {
     const image = await readImage(name, fixture(name));
@@ -100,6 +96,14 @@ test("OME-XML with a namespace prefix, single quotes and entities is understood"
   assert.throws(() => describedLayout("x.ome.tif", two, [0, 1]), /holds 2 OME images/);
 });
 
+test("a palette TIFF is its red, green and blue colours, offered together", async () => {
+  const image = await readImage("palette-blue.tif", fixture("palette-blue.tif"));
+  assert.deepEqual(image.planes.map((plane) => plane.label), ["red", "green", "blue"]);
+  assert.deepEqual(channelChoices(image).map((item) => item.id), ["rgb", "0", "1", "2"]);
+  const index = Array.from({ length: 12 * 10 }, (_, i) => base(i % 10, Math.floor(i / 10)) % 4);
+  assert.deepEqual(image.planes.map((plane) => Array.from(plane.data)), [index.map(() => 0), index.map(() => 0), index.map((k) => k * 80)]);
+});
+
 test("palette, 1-bit and 16-bit PNGs are unpacked", async () => {
   const palette = await readImage("palette.png", fixture("palette.png"));
   assert.deepEqual(palette.planes.map((plane) => plane.label), ["red", "green", "blue"]);
@@ -122,22 +126,20 @@ test("images over 4096 × 4096 pixels are refused before decoding", async () => 
   const header = (width, height) => {
     const bytes = writeLabelTiff(new Uint32Array(64), 8, 8);
     const view = new DataView(bytes.buffer);
-    view.setUint32(8 + 2 + 8, width, true);
-    view.setUint32(8 + 2 + 12 + 8, height, true);
+    // ImageWidth and ImageLength are the second and third entries of the first IFD, after NewSubfileType.
+    const ifd = view.getUint32(4, true);
+    assert.deepEqual([view.getUint16(ifd + 2 + 12, true), view.getUint16(ifd + 2 + 24, true)], [256, 257]);
+    view.setUint32(ifd + 2 + 12 + 8, width, true);
+    view.setUint32(ifd + 2 + 24 + 8, height, true);
     return bytes.buffer;
   };
   await assert.rejects(readImage("big.tif", header(4097, 4096)), /4097 × 4096; split images over 16 megapixels \(4096 × 4096\) into tiles first/);
   await assert.rejects(readImage("big.tif", header(4096, 4096)), (error) => !/megapixels/.test(error.message));
-});
-
-test("the label TIFF round-trips through geotiff at 16 and 32 bits", async () => {
-  for (const max of [65535, 70000]) {
-    const labels = Uint32Array.from({ length: 6 * 4 }, (_, i) => (i === 5 ? max : i % 3));
-    const bytes = writeLabelTiff(labels, 6, 4);
-    const image = await (await fromArrayBuffer(bytes.buffer)).getImage();
-    const [data] = await image.readRasters();
-    assert.equal(image.getBitsPerSample(), max > 65535 ? 32 : 16);
-    assert.deepEqual([image.getWidth(), image.getHeight()], [6, 4]);
-    assert.deepEqual([...data], [...labels]);
-  }
+  // A sample type geotiff cannot decode (64-bit unsigned) is refused for its size first.
+  const uint64 = header(4097, 4096);
+  const view = new DataView(uint64);
+  const ifd = view.getUint32(4, true);
+  assert.equal(view.getUint16(ifd + 2 + 36, true), 258);
+  view.setUint16(ifd + 2 + 36 + 8, 64, true);
+  await assert.rejects(readImage("big.tif", uint64), /4097 × 4096; split images over 16 megapixels \(4096 × 4096\) into tiles first/);
 });

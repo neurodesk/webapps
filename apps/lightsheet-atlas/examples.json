@@ -1,0 +1,32 @@
+[
+  {
+    "id": "brainreg-test-brain",
+    "label": "Whole mouse brain (BrainGlobe test data)",
+    "description": "Cleared whole mouse brain, downsampled to 50 × 40 × 40 µm (orientation psl), that brainreg's tests register. CC0, BrainGlobe test data.",
+    "expectedResult": "In about two minutes, the Allen atlas labels over the brain and a table of region volumes; voxels are too coarse for cell detection, which stays off.",
+    "files": [
+      {
+        "role": "image",
+        "name": "brainreg-test-brain.ome.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/brainreg-test-brain.ome.tif",
+        "sha256": "7e9a73a6e5c36f9d8f9761c8e2399767cc5c56461f2e622e9ece6f6c182b03c2",
+        "bytes": 9565228
+      }
+    ]
+  },
+  {
+    "id": "cellfinder-crop",
+    "label": "Cell detection crop (BrainGlobe test data)",
+    "description": "26 full-resolution planes (5 × 2 × 2 µm) of a cleared mouse brain's signal channel that cellfinder's tests detect cells in. CC0, BrainGlobe test data.",
+    "expectedResult": "38 cell candidates, the same as cellfinder's detection, marked over the stack and listed in cells.csv. A crop cannot be registered, so registration stays off.",
+    "files": [
+      {
+        "role": "image",
+        "name": "cellfinder-crop.ome.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/cellfinder-crop.ome.tif",
+        "sha256": "aac1fcbabdbe4dfafeb861026be2ac1e1b6f379b2c1202248a0e32637d3b42c3",
+        "bytes": 21505056
+      }
+    ]
+  }
+]

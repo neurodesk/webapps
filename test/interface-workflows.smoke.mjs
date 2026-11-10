@@ -10,6 +10,7 @@ import { imagejDescription, writeTiffStack } from '../packages/components/src/fi
 import { syntheticImage } from '../apps/spot-detection/src/synthetic.js';
 import { writeTiffStack as writeSpotTiff } from '../apps/spot-detection/test/tiff-fixture.mjs';
 import { syntheticMosaic } from '../apps/stitching/test/synthetic.js';
+import { encodeTiff } from '../packages/components/test/fixtures/tiff-writer.mjs';
 
 function nifti(name, value = 20) {
   const buffer = Buffer.alloc(352 + 4096, 0);
@@ -1002,6 +1003,72 @@ try {
     await expect(page.locator('#fileInfo')).toHaveText('fork.swc');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
     await expect(page.locator('#neuronField')).toBeHidden();
+  });
+  await check('omezarr-convert', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t1.nii'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-t1.nii · 1 ch × 16 × 16 × 16 · uint8');
+    // The NIfTI states no unit, so the voxel size fields open; what is typed survives closing them.
+    const metadata = page.locator('#metadataSettings > summary');
+    await expect(page.locator('#metadataSettings')).toHaveAttribute('open', '');
+    await page.locator('#sizeX').fill('0.5');
+    await page.locator('#sizeY').fill('0.5');
+    await page.locator('#sizeZ').fill('2');
+    await page.locator('#channelName0').fill('Nuclei');
+    await metadata.tap();
+    await expect(page.locator('#sizeZ')).toBeHidden();
+    await metadata.tap();
+    await expect(page.locator('#sizeZ')).toHaveValue('2');
+    await expect(page.locator('#channelName0')).toHaveValue('Nuclei');
+    await page.locator('#method').selectOption('nearest');
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#method')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#method')).toHaveValue('nearest');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('OME-Zarr ready', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('OME-Zarr 0.5 · 1 level');
+    // A new image withdraws the result of the old one.
+    await page.locator('#imageInput').setInputFiles(nifti('interface-t2.nii', 40));
+    await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
+  await check('lightsheet-atlas', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    // A 4-plane ImageJ TIFF at 5 × 2 × 2 µm: too few planes for the ball filter, so no candidates.
+    const planes = Array.from({ length: 4 }, (_, z) => ({ width: 32, height: 24, data: Uint16Array.from({ length: 32 * 24 }, (_, i) => 100 + ((i + z) % 7)), description: z ? undefined : 'ImageJ=1.52n\nimages=4\nslices=4\nunit=micron\nspacing=5\n', xResolution: [1, 2], yResolution: [1, 2] }));
+    const stack = file => ({ name: file, mimeType: 'image/tiff', buffer: Buffer.from(encodeTiff(planes)) });
+    await page.locator('#imageInput').setInputFiles(stack('interface-stack.tif'));
+    await expect(page.locator('#fileInfo')).toHaveText('interface-stack.tif · 4 × 24 × 32 (z × y × x) · uint16');
+    await expect(page.locator('#voxelZ')).toHaveValue('5');
+    await expect(page.locator('#voxelX')).toHaveValue('2');
+    await page.locator('#orientation').fill('asr');
+    await page.locator('#register').uncheck();
+    // Detection settings and the orientation must survive closing their sections.
+    const advanced = page.locator('#advancedSettings > summary');
+    await advanced.tap();
+    await page.locator('#somaDiameterUm').fill('12');
+    await advanced.tap();
+    await expect(page.locator('#somaDiameterUm')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#somaDiameterUm')).toHaveValue('12');
+    const sample = page.locator('#sampleSection > summary');
+    await sample.tap();
+    await expect(page.locator('#orientation')).toBeHidden();
+    await sample.tap();
+    await expect(page.locator('#orientation')).toHaveValue('asr');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('0 cell candidates', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Cell candidates · 0');
+    // A new stack withdraws the old results.
+    await page.locator('#imageInput').setInputFiles(stack('interface-stack-2.tif'));
+    await expect(page.locator('#fileInfo')).toContainText('interface-stack-2.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
   await check('microsam', async page => {
     const { syntheticDiscs } = await import('../apps/microsam/test/offline.mjs');

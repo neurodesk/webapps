@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
-import { writeLabelTiff } from '../src/image-io.js';
+import { writeLabelTiff } from '@neurodesk/webapp-components/file-io/tiff';
 
 const SIZE = 128;
 const RADIUS = 12;

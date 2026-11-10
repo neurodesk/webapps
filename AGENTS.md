@@ -37,7 +37,7 @@ For catalog-wide work, use [the interface audit](docs/architecture/interface-aud
 Apps are served from several hosts: `webapps.neurodesk.org` (catalogue `neuro`, GitHub Pages), `mskapps.sciget.org` (`msk`), `microscopyapps.sciget.org` (`microscopy`) and `preclinicalapps.sciget.org` (`preclinical`, copies only), all assets-only Cloudflare Workers but the first, and the `webapps.sciget.org` hub, which lists the catalogues and hosts no apps. Read [catalogue sites](docs/architecture/catalogue-sites.md) before changing hosting, the landing page or the build.
 
 - Every app names exactly one home `catalog:` in `registry/apps.yml`, and may list other catalogues that serve a copy under `also_in:`; `site.catalogs` and `site.hub` hold the hosts and brands. A new app joins the primary catalogue unless `pnpm new-app --catalog <id>` says otherwise.
-- `dist/` stays the all-app assembly the desktop suite reads. `scripts/build-site.mjs` projects `dist-sites/<catalog>` and `dist-sites/hub` from it; `test/catalog-sites.test.mjs` (after a build) holds each site to its apps and to every file they reference.
+- `dist/` stays the all-app assembly. Each catalogue's desktop suite (`desktop:` in `site.catalogs`) is projected from it like the sites; read the catalogue sites document before changing the suites. `scripts/build-site.mjs` projects `dist-sites/<catalog>` and `dist-sites/hub` from it; `test/catalog-sites.test.mjs` (after a build) holds each site to its apps and to every file they reference.
 - A handoff only works within one host, so each site's DICOM View lists only that host's apps. A moved or renamed app keeps its old links through the 404 table generated from the registry (`former_paths`, other catalogues' apps); do not hand-edit `site/404.html` routes.
 - Reference shared runtime files (`_runtime/`) by plain string paths. The projection follows them and fails the build on a computed path.
 
@@ -446,6 +446,15 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - NeuroFlow core v0.6.0 reports undeclared `inputs.<name>` refs (`input-undeclared`) and invalid constants (`constant-invalid`: type, integer, enum, min/max). v0.7.0 adds `local-id-invalid` for input, context field, step and output names outside the spec's `localId` grammar, and `output-ref-not-step`; the builder has no copy of either. The builder's `constant-invalid` check in `workflowIssues` stays for the per-item limits in `neurodesk/parameter`; `validator.js` drops it where the core already reported that path. PR #648 also adds typed array parameters and import shape checks in `parseWorkflow`.
 - Optional-output warnings come only from the core (v0.3.2 matches the removed builder check on every catalog binding).
 - Open: `bindNewWorkflowInput` drops item bounds; carrying `minItems`/`maxItems` needs the generator to emit them and a 0.1.2 document. If it does, the core's item-count issue will duplicate the builder's `input-count` warning.
+
+## omezarr-convert
+
+- The readers, XY pyramid and OME-NGFF 0.4/0.5 writer live in `packages/omezarr-convert` and run in Node; the app adds the form, the archive or folder store and the preview. Change outputs in the package.
+- TIFF goes through `openTiffPages` in the shared `@neurodesk/webapp-components/file-io/tiff` module. OME-TIFF goes to fiff on that geotiff instance (`unequalOme`, so images of other sizes in the file do not stop it), with `omeXml` rewriting prefixed and single-quoted OME-XML, which fiff 0.8.2 does not parse, and names and units decoded with the module's `decodeXml`; plain, ImageJ and sequence TIFFs use the pages and the module's ImageJ calibration. fiff alone reads only page 0 of a non-OME stack. A file is multi-file only when a TiffData UUID differs from the root UUID, never by file name.
+- Readers return notes as `{ summary, detail }`; the app shows the summaries as one line of at most 90 characters under `#fileInfo`. A note that changes data must be visible there, not only in the console.
+- An archive is built in memory: keep `archiveBudget` an upper bound of what `zipStore` produces (tested on incompressible pixels) and re-measure the peak in the app README when `ARCHIVE_MAX_BYTES` or the zip path changes.
+- `validation/example-reference.json` is bioformats2raw 0.14.0 (SIMPLE, 256 px tiles, `--target-min-size=256`) on the example, read by zarr-python, plus the NumPy mean pyramid; `test/synthetic-reference.json` comes from `validation/synthetic_reference.py`. `nearest` must equal bioformats2raw byte for byte and `mean` NumPy; rerecord both when the pyramid rules change and say why in the package README.
+- The vendored schemas (`schemas/`, ome/ngff tag 0.5.2) are test-only; every conversion in the tests and the e2e downloads must pass the strict image schema of its version.
 
 ## Native executables (exes/)
 

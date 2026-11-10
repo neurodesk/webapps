@@ -1073,6 +1073,25 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
 
+  apps/lightsheet-atlas:
+    dependencies:
+      '@neurodesk/greedy':
+        specifier: workspace:*
+        version: link:../../packages/greedy
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
   apps/me-ica:
     dependencies:
       '@neurodesk/webapp-components':
@@ -1100,9 +1119,6 @@ importers:
       fast-png:
         specifier: 8.0.0
         version: 8.0.0
-      geotiff:
-        specifier: 3.0.5
-        version: 3.0.5
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
@@ -1110,6 +1126,9 @@ importers:
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
+      geotiff:
+        specifier: 3.0.5
+        version: 3.0.5
       vite:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
@@ -1265,6 +1284,31 @@ importers:
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
+  apps/omezarr-convert:
+    dependencies:
+      '@neurodesk/omezarr-convert':
+        specifier: workspace:*
+        version: link:../../packages/omezarr-convert
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       vite:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
@@ -1441,9 +1485,6 @@ importers:
       fast-png:
         specifier: 8.0.0
         version: 8.0.0
-      geotiff:
-        specifier: 3.0.5
-        version: 3.0.5
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
@@ -1451,6 +1492,9 @@ importers:
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
+      geotiff:
+        specifier: 3.0.5
+        version: 3.0.5
       vite:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
@@ -1874,6 +1918,9 @@ importers:
       geotiff:
         specifier: 3.0.5
         version: 3.0.5
+      zarrita:
+        specifier: 0.7.5
+        version: 0.7.5
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -2227,6 +2274,37 @@ importers:
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
+
+  packages/omezarr-convert:
+    dependencies:
+      '@fideus-labs/fiff':
+        specifier: 0.8.2
+        version: 0.8.2(@fideus-labs/ngff-zarr@0.38.0)(@fideus-labs/worker-pool@2.1.0)
+      '@fideus-labs/ngff-zarr':
+        specifier: 0.38.0
+        version: 0.38.0
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
+      geotiff:
+        specifier: 3.0.5
+        version: 3.0.5
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      zarrita:
+        specifier: 0.7.5
+        version: 0.7.5
+    devDependencies:
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
 
   packages/qsmbly:
     devDependencies:
@@ -7759,6 +7837,9 @@ packages:
 
   jose@6.2.13:
     resolution: {integrity: sha512-7TIg10ZE1x82YediN+lcrPNvGMKge9yFHQD+Qho/b8y2adfugU3AsvvHfxV0fzyFllT6l9xCjf4RWY9g/Z9PJQ==}
+
+  jpeg-js@0.4.4:
+    resolution: {integrity: sha512-WZzeDOEtTOBK4Mdsar0IqEU5sMr3vSV2RqkAIzUEV2BHnUfKGyswWFPFwK5EeDo93K3FohSHbLAjj0s1Wzd+dg==}
 
   js-md4@0.3.2:
     resolution: {integrity: sha512-/GDnfQYsltsjRswQhN9fhv3EMw2sCpUdrdxyWDOUK7eyD++r3gRhzgiQgc/x4MAv2i1iuQ4lxO5mvqM3vj4bwA==}
@@ -15841,6 +15922,8 @@ snapshots:
   jiti@2.7.0: {}
 
   jose@6.2.13: {}
+
+  jpeg-js@0.4.4: {}
 
   js-md4@0.3.2: {}
 

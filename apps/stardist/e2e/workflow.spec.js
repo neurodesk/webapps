@@ -4,7 +4,7 @@
 import { test, expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
-import { writeLabelTiff } from "../src/image-io.js";
+import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
 import { MODEL } from "../src/config.js";
 import { examples, matchLabels, readLabelTiff, reference, referenceLabels } from "./reference.mjs";
 

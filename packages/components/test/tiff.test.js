@@ -4,10 +4,14 @@ import { readFileSync } from 'node:fs';
 import {
   imagejDescription,
   inspectTiffStack,
+  openTiffStackPages,
   micrometresPerUnit,
+  omePageChannels,
+  openTiffPlanes,
   parseImagejDescription,
   parseOmeDescription,
   readTiffStack,
+  writeLabelTiff,
   writeTiffStack,
 } from '../src/file-io/tiff.js';
 import { InputTooLargeError } from '../src/file-io/input-limits.js';
@@ -20,6 +24,19 @@ function fixture(name) {
 
 function buffer(bytes) {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+/** Sets a SHORT or LONG tag's inline value in the first IFD of a little-endian TIFF. */
+function setTag(bytes, tag, value) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const ifd = view.getUint32(4, true);
+  for (let entry = ifd + 2; entry < ifd + 2 + view.getUint16(ifd, true) * 12; entry += 12) {
+    if (view.getUint16(entry, true) !== tag) continue;
+    if (view.getUint16(entry + 2, true) === 3) view.setUint16(entry + 8, value, true);
+    else view.setUint32(entry + 8, value, true);
+    return;
+  }
+  throw new Error(`No tag ${tag}`);
 }
 
 test('a deflate-compressed OME-TIFF reads every page with its time increment and pixel size', async () => {
@@ -263,6 +280,117 @@ test('a plain TIFF declares its resolution tags in their own unit, never as micr
   assert.deepEqual(metadata.declaredSpacing, { x: 0.5, y: 0.25, z: null, unit: null });
 });
 
+test('openTiffPlanes keeps colour and extra samples as planes and leaves alpha out', async () => {
+  const tiff = await openTiffPlanes(fixture('rgb-alpha-extra.tif'));
+  assert.deepEqual(tiff.pages, [{ ifd: 0, width: 6, height: 4, samples: ['red', 'green', 'blue', 'alpha', 'sample 5'] }]);
+  assert.equal(tiff.decodedBytes(), 5 * 24);
+  const [planes] = await tiff.readPlanes();
+  const base = Array.from({ length: 24 }, (_, i) => i * 7);
+  assert.deepEqual(planes.map((plane) => plane.kind), ['red', 'green', 'blue', 'sample 5']);
+  assert.deepEqual(planes.map((plane) => Array.from(plane.data)), [0, 1, 2, 3].map((offset) => base.map((value) => value + offset)));
+});
+
+test('openTiffPlanes reads a palette page as its red, green and blue colours by default', async () => {
+  const tiff = await openTiffPlanes(fixture('palette-uint8.tif'));
+  assert.deepEqual(tiff.pages[0].samples, ['red', 'green', 'blue']);
+  assert.equal(tiff.decodedBytes(), 24 * 6);
+  const [planes] = await tiff.readPlanes();
+  // Index (i * 7) % 3: 0 is black, 1 red, 2 green.
+  const index = Array.from({ length: 24 }, (_, i) => (i * 7) % 3);
+  assert.deepEqual(planes.map((plane) => Array.from(plane.data)), [1, 2, 3].map((colour) => index.map((k) => (k === colour ? 255 : 0))));
+});
+
+test('openTiffPlanes reads a palette page as its colour indices with palette: index', async () => {
+  const tiff = await openTiffPlanes(fixture('palette-uint8.tif'), { palette: 'index' });
+  assert.deepEqual(tiff.pages[0].samples, ['sample 1']);
+  assert.equal(tiff.decodedBytes(), 24);
+  const [planes] = await tiff.readPlanes();
+  assert.deepEqual(planes.map((plane) => [plane.kind, Array.from(plane.data)]), [['sample 1', Array.from({ length: 24 }, (_, i) => (i * 7) % 3)]]);
+});
+
+test('openTiffPlanes gives page sizes of a sample type it cannot decode; decodedBytes refuses it', async () => {
+  const bytes = writeTiffStack({ width: 5, height: 4, data: new Uint16Array(20) });
+  setTag(bytes, 258, 64);
+  const tiff = await openTiffPlanes(buffer(bytes));
+  assert.deepEqual(tiff.pages, [{ ifd: 0, width: 5, height: 4, samples: ['sample 1'] }]);
+  assert.throws(() => tiff.decodedBytes(), /Unsupported data format/);
+});
+
+test('openTiffPlanes leaves reduced-resolution pages out, stops at pageLimit, and returns the description', async () => {
+  const data = Uint16Array.from({ length: 3 * 4 * 5 }, (_, i) => i);
+  const bytes = writeTiffStack({ width: 5, height: 4, data, description: 'ImageJ=1.11a\nchannels=2\n' });
+  // Mark the second page a reduced-resolution image: NewSubfileType is each IFD's first entry.
+  const view = new DataView(bytes.buffer);
+  const second = view.getUint32(view.getUint32(4, true) + 2 + view.getUint16(view.getUint32(4, true), true) * 12, true);
+  assert.equal(view.getUint16(second + 2, true), 254);
+  view.setUint32(second + 2 + 8, 1, true);
+  const tiff = await openTiffPlanes(buffer(bytes));
+  assert.deepEqual(tiff.pages.map((page) => [page.ifd, page.samples]), [[0, ['sample 1']], [2, ['sample 1']]]);
+  assert.equal(tiff.decodedBytes(), 80);
+  assert.equal(tiff.description, 'ImageJ=1.11a\nchannels=2\n');
+  const planes = await tiff.readPlanes();
+  assert.deepEqual(planes.map(([plane]) => [plane.kind, plane.data[0]]), [['sample 1', 0], ['sample 1', 40]]);
+  assert.deepEqual((await openTiffPlanes(buffer(bytes), { pageLimit: 1 })).pages.map((page) => page.ifd), [0]);
+});
+
+test('OME descriptions give the first image\'s channels, its TiffData as written and the file UUID', () => {
+  const xml = '<ome:OME xmlns:ome="x" UUID="urn:uuid:a"><ome:Image ID="Image:0"><ome:Pixels SizeC="2" SizeZ="1" SizeT="1">'
+    + '<ome:Channel Name="A &amp; B" SamplesPerPixel="1"/><ome:Channel Name=""/><ome:ChannelRef/>'
+    + '<ome:TiffData IFD="1" FirstC="x"/><ome:TiffData PlaneCount="2"><ome:UUID FileName="y.ome.tif">urn:uuid:b</ome:UUID></ome:TiffData>'
+    + '</ome:Pixels></ome:Image><ome:Image ID="Image:1"><ome:Pixels SizeC="1"><ome:Channel Name="C"/></ome:Pixels></ome:Image></ome:OME>';
+  const ome = parseOmeDescription(xml);
+  assert.equal(ome.uuid, 'urn:uuid:a');
+  assert.deepEqual(ome.channels, [{ name: 'A & B', samplesPerPixel: 1 }, { name: null, samplesPerPixel: null }]);
+  assert.deepEqual(ome.tiffData, [
+    { IFD: '1', FirstC: 'x', FirstZ: undefined, FirstT: undefined, PlaneCount: undefined, uuid: null },
+    { IFD: undefined, FirstC: undefined, FirstZ: undefined, FirstT: undefined, PlaneCount: '2', uuid: 'urn:uuid:b' },
+  ]);
+});
+
+test('writeLabelTiff writes 16-bit labels when they fit and 32-bit otherwise', async () => {
+  for (const max of [65535, 70000]) {
+    const labels = Int32Array.from({ length: 6 * 4 }, (_, i) => (i === 5 ? max : i % 3));
+    const stack = await readTiffStack(buffer(writeLabelTiff(labels, 6, 4)));
+    assert.equal(stack.dtype, max > 65535 ? 'uint32' : 'uint16');
+    assert.deepEqual([stack.width, stack.height, stack.pages], [6, 4, 1]);
+    assert.deepEqual(Array.from(stack.data), Array.from(labels));
+  }
+});
+
+test('an OME start tag after Pixels without its closing bracket is not OME-XML', () => {
+  assert.equal(parseOmeDescription('<Pixels SizeC="2" SizeZ="1" SizeT="1"><OME'), null);
+});
+
+const omeXml = (tiffData, channels = '<Channel Name="DAPI"/><Channel Name="GFP"/>', sizes = 'SizeC="2" SizeZ="1" SizeT="1"') =>
+  `<OME UUID="urn:uuid:a"><Image ID="Image:0"><Pixels ${sizes}>${channels}${tiffData}</Pixels></Image></OME>`;
+
+test('omePageChannels names pages through TiffData, or in channel order without it', () => {
+  const names = (xml, ifds = [0, 1]) => omePageChannels('x.ome.tif', parseOmeDescription(xml), ifds);
+  assert.deepEqual(names(omeXml('')), ['DAPI', 'GFP']);
+  assert.deepEqual(names(omeXml('<TiffData IFD="0" FirstC="1"/><TiffData IFD="1" FirstC="0"/>')), ['GFP', 'DAPI']);
+  assert.deepEqual(names(omeXml('<TiffData IFD="2" FirstC="1"/><TiffData IFD="4" FirstC="0"/>'), [2, 4]), ['GFP', 'DAPI']);
+  assert.deepEqual(names(omeXml('<TiffData PlaneCount="2"><UUID>urn:uuid:a</UUID></TiffData>')), ['DAPI', 'GFP']);
+  assert.deepEqual(names(omeXml('', '<Channel/><Channel Name="GFP"/>')), ['Channel 1', 'GFP']);
+  // Not one 2D image's single-sample channels: no names.
+  assert.equal(names(omeXml('', undefined, 'SizeC="2" SizeZ="3" SizeT="1"')), null);
+  assert.equal(names(omeXml(''), [0]), null);
+  assert.equal(names(omeXml('', '<Channel Name="RGB" SamplesPerPixel="3"/><Channel/>')), null);
+  // An inflated SizeC is compared with the page count before any name is allocated.
+  assert.equal(names(omeXml('', undefined, 'SizeC="10000000" SizeZ="1" SizeT="1"'), [0]), null);
+});
+
+test('omePageChannels refuses TiffData it cannot follow', () => {
+  const names = (tiffData, ifds = [0, 1]) => () => omePageChannels('x.ome.tif', parseOmeDescription(omeXml(tiffData)), ifds);
+  const refusal = (why) => ({ message: new RegExp(`^x\\.ome\\.tif maps its channels to TIFF pages in a way the app cannot read \\(${why}\\); save the channels as one OME-TIFF with tifffile or Fiji\\.$`) });
+  assert.throws(names('<TiffData PlaneCount="2"><UUID>urn:uuid:b</UUID></TiffData>'), refusal('planes in another file'));
+  assert.throws(names('<TiffData FirstZ="1"/>'), refusal('a plane beyond Z 0, T 0'));
+  assert.throws(names('<TiffData IFD="a"/>'), refusal('IFD="a"'));
+  assert.throws(names('<TiffData IFD="0" FirstC="2"/>'), refusal('channel 3 of 2'));
+  assert.throws(names('<TiffData IFD="0"/><TiffData IFD="0" FirstC="1"/>'), refusal('IFD 0 named twice'));
+  assert.throws(names('<TiffData IFD="0"/><TiffData IFD="1"/>'), refusal('a channel in two IFDs'));
+  assert.throws(names('<TiffData IFD="0"/><TiffData IFD="2" FirstC="1"/>'), { message: /^x\.ome\.tif has a TIFF page \(IFD 1\) its OME-XML assigns to no channel; save the channels as one OME-TIFF with tifffile or Fiji\.$/ });
+});
+
 // Microscopy stacks. The microscopy-*, ome-*-planes and reduced-resolution fixtures are tifffile's
 // (make_tiff_fixtures.py), written independently of this reader.
 const ramp = Uint16Array.from({ length: 3 * 5 * 7 }, (_, i) => i * 3 + 1);
@@ -424,4 +552,25 @@ test('imagejDescription labels a calibrated z stack that reads back as z planes'
   assert.deepEqual(metadata.pixelSize, { x: 0.25, y: 0.25, z: 0.13 });
   // A time series written by the frames-only call is unchanged.
   assert.equal(imagejDescription({ frames: 3, frameInterval: 0.5 }), 'ImageJ=1.11a\nimages=3\nframes=3\nfinterval=0.5\n');
+});
+
+test('an OME-TIFF whose page 0 is not a plane takes its size and type from the first plane', async () => {
+  const { encodeTiff } = await import('./fixtures/tiff-writer.mjs');
+  const xml = '<OME xmlns="x" UUID="urn:uuid:a"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="3" SizeY="2" SizeC="1" SizeZ="2" SizeT="1"><TiffData IFD="1" FirstZ="0" PlaneCount="2"/></Pixels></Image></OME>';
+  const thumbnail = { width: 1, height: 1, data: Uint8Array.of(9), description: xml };
+  const planes = [10, 20].map((offset) => ({ width: 3, height: 2, data: Uint16Array.from({ length: 6 }, (_, i) => offset + i) }));
+  const bytes = encodeTiff([thumbnail, ...planes]);
+  const stack = await readTiffStack(buffer(bytes));
+  assert.deepEqual([stack.width, stack.height, stack.pages, stack.dtype], [3, 2, 2, 'uint16']);
+  assert.deepEqual(Array.from(stack.data), [10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 25]);
+  const pages = await openTiffStackPages(new Blob([bytes]));
+  assert.deepEqual(Array.from(await pages.readPage(1)), [20, 21, 22, 23, 24, 25]);
+  await assert.rejects(pages.readPage(2), RangeError);
+});
+
+test('OME TiffData that maps a plane twice or one page to two planes is refused', async () => {
+  const ome = (tiffData) => `<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="2" SizeY="2" SizeC="1" SizeZ="2" SizeT="1">${tiffData}</Pixels></Image></OME>`;
+  const file = (description) => buffer(writeTiffStack({ width: 2, height: 2, data: new Uint8Array(8), description }));
+  await assert.rejects(inspectTiffStack(file(ome('<TiffData IFD="0" FirstZ="0"/><TiffData IFD="1" FirstZ="0"/><TiffData IFD="1" FirstZ="1"/>'))), /maps plane 1 twice/);
+  await assert.rejects(inspectTiffStack(file(ome('<TiffData IFD="0" FirstZ="0"/><TiffData IFD="0" FirstZ="1"/>'))), /names page 1 for two planes/);
 });

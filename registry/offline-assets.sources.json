@@ -7475,6 +7475,50 @@
         "bytes": 2657
       }
     ],
+    "lightsheet-atlas": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/brainreg-test-brain.ome.tif",
+        "sha256": "7e9a73a6e5c36f9d8f9761c8e2399767cc5c56461f2e622e9ece6f6c182b03c2",
+        "bytes": 9565228,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/cellfinder-crop.ome.tif",
+        "sha256": "aac1fcbabdbe4dfafeb861026be2ac1e1b6f379b2c1202248a0e32637d3b42c3",
+        "bytes": 21505056,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_template.nii.gz",
+        "sha256": "cc72a32188504f64ba33b3b49ee8134df2563c5471f41cb3ab339952feae0ca3",
+        "bytes": 5932246,
+        "kind": "model",
+        "license": "Allen Institute terms of use (noncommercial redistribution with citation)"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_annotation.nii.gz",
+        "sha256": "0f495ee499c0c12c8de726fb455dd28a7fa23188d660276f6256d3ab9dd7c9a1",
+        "bytes": 1260100,
+        "kind": "model",
+        "license": "Allen Institute terms of use (noncommercial redistribution with citation)"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_structures.json",
+        "sha256": "cd2ca51d5fea23b9663b0c01f056733813cb6a595eaa77c5088459ab8a7d0da6",
+        "bytes": 117346,
+        "kind": "model",
+        "license": "Allen Institute terms of use (noncommercial redistribution with citation)"
+      }
+    ],
+    "omezarr-convert": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/34cb2e8c741240765ed75b48328ffe8676cbba24/omezarr-convert/example/retina-crop.ome.tif",
+        "sha256": "a76758337ac07c0ffd2fa9f423409a31e576eb820e91c8b0830b221b6bdb8225",
+        "bytes": 1842339,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      }
+    ],
     "histo2mri": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_r1_0.6mm_anterior.nii.gz",
