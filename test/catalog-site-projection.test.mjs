@@ -56,6 +56,7 @@ test('a catalogue site holds its own apps and only the runtime families they rea
   const payload = JSON.parse(html.match(/data-neurodesk-app-information>([\s\S]*?)<\/script>/)[1]);
   assert.deepEqual(payload.catalog.map(({ id }) => id), ['dicomview']);
   assert.match(html, /data-app-url="https:\/\/webapps\.neurodesk\.org\/dicomview\/"/);
+  assert.match(html, /<html data-neurodesk-catalog="neuro"/);
   const manifestName = html.match(/name="neurodesk-runtime-manifest" content="\.\/([^"]+)"/)[1];
   const manifest = JSON.parse(await readFile(join(neuroDir, 'dicomview', manifestName), 'utf8'));
   assert.deepEqual(manifest.assets.map(({ url }) => url), ['../_runtime/ort-web/1.21.0/ort.wasm']);
@@ -73,6 +74,9 @@ test('a catalogue site holds its own apps and only the runtime families they rea
   await assert.rejects(access(join(mskDir, '_runtime/unused')), { code: 'ENOENT' });
   const mskDicomview = await readFile(join(mskDir, 'dicomview/index.html'), 'utf8');
   assert.match(mskDicomview, /data-app-url="https:\/\/mskapps\.sciget\.org\/dicomview\/"/);
+  assert.deepEqual([...mskDicomview.matchAll(/data-neurodesk-catalog="([^"]*)"/g)].map(([, id]) => id), ['msk']);
+  // The all-app assembly also feeds the desktop suite, which no catalogue hosts.
+  assert.doesNotMatch(await readFile(join(siteDist, 'dicomview/index.html'), 'utf8'), /data-neurodesk-catalog/);
   const mskPayload = JSON.parse(mskDicomview.match(/data-neurodesk-app-information>([\s\S]*?)<\/script>/)[1]);
   assert.deepEqual(mskPayload.catalog.map(({ id }) => id).sort(), ['dicomview', 'musclemap']);
   const msHtml = await readFile(join(mskDir, 'musclemap/index.html'), 'utf8');

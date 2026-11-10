@@ -122,3 +122,9 @@ apps/fastprep/public/meica/
 
 # GlioMODA generated scientific reference outputs belong on Hugging Face.
 /packages/gliomoda/validation/container/
+
+# Personal Claude Code state (memory, transcripts, local settings).
+# Shared .claude/commands and .claude/settings.json stay tracked.
+**/.claude/projects/
+**/.claude/settings.local.json
+**/CLAUDE.local.md
