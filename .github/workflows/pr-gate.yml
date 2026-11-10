@@ -1,0 +1,68 @@
+name: pr-gate
+
+# Decides whether a path-filtered workflow has to run for a ready pull request.
+# GitHub matches `paths` against the whole pull request on every push, so a
+# filter on a shared tree starts suites the change never reaches. Callers keep
+# their filters and make their entry jobs wait for this decision
+# (scripts/lib/workflow-gate.mjs). The job always finishes, so the jobs after
+# a caller's entry jobs keep their default conditions: a draft answers false
+# and every event other than pull_request true, both without a checkout.
+
+on:
+  workflow_call:
+    inputs:
+      workflow:
+        description: The calling workflow's file name without .yml
+        type: string
+        required: true
+    outputs:
+      run:
+        description: "'true' when the pull request reaches what the workflow tests"
+        value: ${{ jobs.decide.outputs.run }}
+
+permissions:
+  contents: read
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      run: ${{ steps.event.outputs.run || steps.decide.outputs.run }}
+    steps:
+      - name: Answer for drafts and for events other than pull requests
+        id: event
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          if [ "$EVENT_NAME" != pull_request ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$DRAFT" = true ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: steps.event.outputs.run == ''
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        if: steps.event.outputs.run == ''
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.event.outputs.run == ''
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install frozen dependencies
+        if: steps.event.outputs.run == ''
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: pnpm install --frozen-lockfile
+      - name: Decide whether the pull request reaches this workflow
+        if: steps.event.outputs.run == ''
+        id: decide
+        env:
+          WORKFLOW: ${{ inputs.workflow }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --base "$BASE_SHA" --head "$HEAD_SHA"

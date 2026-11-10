@@ -40,8 +40,16 @@ permissions:
   contents: read
 
 jobs:
+  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
+  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    with:
+      workflow: white-matter-lesions-native
+
   portable:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write
@@ -64,7 +72,8 @@ jobs:
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
 
   browser-memory:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: Five-fold memory (${{ matrix.browser }})
     strategy:
       fail-fast: false

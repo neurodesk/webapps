@@ -32,8 +32,16 @@ env:
   NIIMATH_NATIVE_COMMIT: 95645c2447ae4c5853d23c3e449a5b32e8aafe23
 
 jobs:
+  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
+  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    with:
+      workflow: node-drivers
+
   node:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: Node parity (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -63,7 +71,8 @@ jobs:
         run: pnpm --filter @neurodesk/node-drivers test
 
   browser:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: Browser references still hold
     runs-on: ubuntu-latest
     timeout-minutes: 60

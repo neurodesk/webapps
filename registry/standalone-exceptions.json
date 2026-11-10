@@ -21,5 +21,6 @@
   "microsam": "micro-sam (pip or conda install micro_sam) is the Python reference the app reproduces mask for mask on the example; interactive prompting has no separate command line",
   "microscope-qc": "no command-line package yet: v1 runs its numerics (src/core) in a browser worker only; MetroloJ_QC in Fiji is the established desktop tool for batch QC",
   "cryo-em": "RELION is the command line: the app sends each step to RELION 5.1.1 in the Neurodesk relion container, run on the user's cluster by the neurodesk-compute server, whose Slurm-capable release follows ADR-0004; the app adds no command line of its own",
-  "omezarr-convert": "no command line is packaged yet: @neurodesk/omezarr-convert runs in Node (validation/check-example.mjs), and bioformats2raw is the established native converter for batch work"
+  "omezarr-convert": "no command line is packaged yet: @neurodesk/omezarr-convert runs in Node (validation/check-example.mjs), and bioformats2raw is the established native converter for batch work",
+  "deconvolution": "no command line yet: the Rust core in exes/deconvolution and the committed WebAssembly module in packages/deconvolution are ready to package through exes/node-cli in a later release"
 }

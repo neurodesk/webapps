@@ -76,8 +76,16 @@ permissions:
   contents: read
 
 jobs:
+  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
+  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    with:
+      workflow: sdc-native
+
   rust:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: exes/sdc tests, clippy and format
     runs-on: ubuntu-24.04
     steps:
@@ -97,7 +105,8 @@ jobs:
         run: cargo +1.98.0 fmt --all --check
 
   wasm-source:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: committed WASM module equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -127,7 +136,8 @@ jobs:
   # Runs the SyN-SDC pipeline on the web app's browser runtimes in Chromium and compares every output
   # with packages/sdc/validation/browser-reference.json, the reference the archives are held to.
   browser-reference:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: browser reference still holds
     runs-on: ubuntu-24.04
     timeout-minutes: 60

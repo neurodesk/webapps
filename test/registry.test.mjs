@@ -210,6 +210,7 @@ test('catalog assigns task categories and shares apps across related categories'
     microsam: ['segmentation'],
     neuromorph: ['morphometry'],
     'structure-tensor': ['fibre-orientation'],
+    deconvolution: ['preprocessing'],
     'spot-detection': ['spot-detection'],
     'microscope-qc': ['quality-control'],
     zarro: ['visualization'],
