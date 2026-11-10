@@ -82,10 +82,10 @@ function standaloneImpact({ before, after }, registry) {
   } catch (error) {
     return { shared: `it is not a valid catalog at head (${error.message}), and every themed app build validates it` };
   }
-  const field = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now)])].find((key) => key !== 'apps' && key !== 'suite' && !same(old?.[key], now[key]));
+  const field = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now)])].find((key) => key !== 'apps' && key !== 'suites' && !same(old?.[key], now[key]));
   if (field) return { shared: `its ${field} field changed` };
   const ids = [...new Set([...Object.keys(old?.apps ?? {}), ...Object.keys(now.apps)])];
-  return { changed: ids.filter((id) => !same(old?.apps?.[id], now.apps[id])), suite: !same(old?.suite, now.suite) };
+  return { changed: ids.filter((id) => !same(old?.apps?.[id], now.apps[id])), suite: !same(old?.suites, now.suites) };
 }
 
 function registryImpact({ before, after }) {
