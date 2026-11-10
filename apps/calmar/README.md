@@ -855,15 +855,39 @@ the previous snapshot in place. Existing deployments need to pull and rebuild to
 use the updated snapshot; the browser does not silently change evidence mid-run.
 
 
+### Chronic T1 examples
+
+The input menu offers two chronic T1 scans from the Aphasia Recovery Cohort
+(OpenNeuro ds004884 v1.0.1, CC0): **Stroke T1 MRI — sub-M2051** (ses-284) and
+**Stroke T1 MRI — sub-M2001** (ses-1076). Each fills the behavioural form from
+its row of the pinned `participants.tsv`: age at stroke, sex, the days since
+stroke at the WAB-R assessment and the WAB-R Aphasia Quotient (M2051: 45, male,
+day 705, 34.7; M2001: 38, female, day 895, 87.1). The session name gives the
+days since stroke at imaging, so the note states that MRI and assessment are
+not contemporaneous. The sub-M2001 image and sidecar are unchanged from the
+release (the image matches its git-annex SHA-256 key) and are mirrored with
+the dataset's README, description, a notice and a provenance record.
+
 ### Acute diffusion examples
 
-The input menu offers **Acute DWI + ADC — next case**, alternating SOOP
-`sub-1` and ISLES 2022 `sub-strokecase0001` after each successful import.
-Both named cases remain selectable to repeat a scan. A failed or cancelled
-import keeps the same next case. The status and tooltip identify the scan
-actually loaded. Select **Run lesion segmentation** to compute its candidate;
-loading a case never runs segmentation or supplies a reference lesion.
+The input menu offers two acute cases by name: **Acute DWI + ADC — SOOP
+sub-2** and **Acute DWI + ADC — ISLES case 0001** (ISLES 2022
+`sub-strokecase0001`). Each entry loads the scan it names, and choosing it
+again repeats it. A failed or cancelled import leaves the previous inputs in
+place. The status and tooltip identify the scan loaded. Select **Run lesion
+segmentation** to compute its candidate; loading a case never runs
+segmentation or supplies a reference lesion.
 Switching cases clears old results and demographic context.
+
+The behavioural form is then filled with what the dataset publishes for the
+loaded case, and nothing else. SOOP `sub-2` has age 78 (at the scan), sex male
+and NIHSS 17, with the admission diagnosis and aetiology in the notes: its row
+of `participants.tsv` in ds004889 v1.1.2. `sub-1`, the first SOOP example, was
+replaced because that table has no row for it. ISLES `sub-strokecase0001` has
+age 88 and sex female: its DWI and ADC sidecars record `PatientAge` `088Y` and
+`PatientSex` `F`, so the age is at imaging. Neither dataset publishes time
+since onset for individual cases, so TPO stays blank for both. The form links
+the pinned file the values were read from, and every field remains editable.
 
 SOOP is OpenNeuro ds004889 v1.1.2, source commit
 `a62344db73f18f384a95b452f4a1a423087e059b`, declared CC0. Its TRACE and ADC
@@ -886,3 +910,5 @@ examples.
 `node apps/calmar/scripts/prepare_diffusion_examples.mjs` restores and
 verifies the registered scans and accompanying documents under
 `$TMPDIR/calmar-acute-examples`. Large files stay outside this repository.
+
+Acute example ages are recorded at imaging, so keep them in notes and leave age at stroke blank.
