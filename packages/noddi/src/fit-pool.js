@@ -2,6 +2,7 @@
 // app's Web Workers and the command line's worker threads run the same chunks through the same
 // handler (fit-worker.js), so both fit every voxel with the same inputs.
 import { CHUNK_VOXELS, chunks, emptyMaps, gatherChunk, isEveryVolume, maskIndices, scatterChunk } from "./pipeline.js";
+import { NODDI_METHODS } from "./wasm.js";
 
 /**
  * Fits the selected tensor backend and optional NODDI on the same input and mask in both hosts.
@@ -9,7 +10,7 @@ import { CHUNK_VOXELS, chunks, emptyMaps, gatherChunk, isEveryVolume, maskIndice
  * `spawn` and `workers` select the host's chunk workers. `onStage` reports dtifit or chunk fitting.
  */
 export async function fitVolume({ input, mask, tensorFit = "wls", noddi, method = "amico", dtifit, signal, onStage, onProgress, spawn, workers }) {
-  if (!["amico", "dmipy"].includes(method)) throw new Error("NODDI method is amico or dmipy.");
+  if (!NODDI_METHODS.includes(method)) throw new Error("NODDI method is amico, dmipy or toolbox.");
   signal?.throwIfAborted();
   const indices = maskIndices(mask);
   const niimath = tensorFit === "niimath-dtifit";
@@ -62,7 +63,7 @@ function fitChunks({ data, voxels, volumes, indices, bvals, bvecs, weighted, ten
   const tensorMaps = tensor ? emptyMaps("tensor", voxels) : null;
   const noddiMaps = noddi ? emptyMaps("noddi", voxels) : null;
   const workers = [];
-  const diagnostics = method === "dmipy" && noddi ? { fitted: 0, skipped: 0, nonconverged: 0, failed: 0 } : null;
+  const diagnostics = method !== "amico" && noddi ? { fitted: 0, skipped: 0, nonconverged: 0, failed: 0 } : null;
   return new Promise((resolve, reject) => {
     let next = 0;
     let done = 0;

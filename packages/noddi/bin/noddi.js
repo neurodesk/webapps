@@ -8,7 +8,8 @@ const HELP = `Usage: noddi DWI.nii[.gz] BVAL BVEC OUTPUT_DIR [options]
        noddi download-models [--cache-dir DIR]
 
 Fits the diffusion tensor and, when the data has two or more b-value shells,
-NODDI (AMICO 1.5.4 by default, or dmipy nonlinear), as the NODDI web app does: the same
+NODDI (AMICO 1.5.4 by default, dmipy nonlinear or the NODDI toolbox 1.05 fit), as the NODDI
+web app does: the same
 WebAssembly module, inside a MindGrab brain mask of the mean b0. MindGrab runs
 on the CPU here (about 2.6 GB of memory); the web app prefers the GPU.
 
@@ -27,7 +28,8 @@ Options:
   --mask FILE         Use this brain mask (on the diffusion grid) instead of MindGrab
   --no-mask           Fit every voxel, without a brain mask
   --no-noddi          Fit the tensor only
-  --method TYPE       amico (default) or dmipy (nonlinear Watson NODDI)
+  --method TYPE       amico (default), dmipy (nonlinear Watson NODDI) or toolbox
+                      (NODDI toolbox 1.05 Rician fit; slower)
   --tensor-fit TYPE   wls (weighted least squares, default), ols or niimath-dtifit
   --threads N         Worker threads for the fit (default: one per core)
   -h, --help          Show this help

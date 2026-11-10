@@ -33,11 +33,12 @@
           <p id="noddiNote" class="nd-hint" hidden></p>
           <div class="nd-field">
             <label for="noddiMethod">NODDI fit
-              <span class="nd-info-icon" tabindex="0" aria-label="About the NODDI fit">i<span class="nd-info-tooltip">AMICO is the default accelerated fit. Nonlinear dmipy fits the full model and can take longer. Both need at least two non-zero shells.</span></span>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the NODDI fit">i<span class="nd-info-tooltip">AMICO is the default accelerated fit. Nonlinear dmipy and the NODDI toolbox port fit the full model and take longer; the toolbox fit is the slowest. All need at least two non-zero shells.</span></span>
             </label>
             <select id="noddiMethod" disabled>
               <option value="amico" selected>AMICO</option>
               <option value="dmipy">Nonlinear (dmipy)</option>
+              <option value="toolbox">NODDI toolbox</option>
             </select>
           </div>
           <details class="nd-sidebar-section" id="advancedSettings">

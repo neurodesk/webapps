@@ -16,3 +16,4 @@ dwi-gradients = { path = "../gradients" }
 dwi-tensor = { path = "../tensor" }
 dwi-amico = { path = "../amico" }
 dwi-dmipy = { path = "../dmipy" }
+dwi-noddi-toolbox = { path = "../noddi-toolbox" }
