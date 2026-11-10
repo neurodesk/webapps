@@ -1,5 +1,16 @@
 # stitching
 
+## 0.2.20261110
+
+### Minor Changes
+
+- c554700: Show what stitching changed. The viewer's Layout and Stitched views put the layout preview and the stitched mosaic on one grid with one contrast window, and switching between them keeps the zoom, so a seam that is doubled in Layout can be checked in Stitched. Tile outlines mark every tile at its layout position (cyan) and where stitching placed it (orange); an Outlines button hides them. The wheel now zooms at the pointer and right-drag pans, and the status line reports how far tiles moved.
+
+### Patch Changes
+
+- 3877250: The musculoskeletal and microscopy catalogues are now titled "MSK Webapps" and "Microscopy Webapps", without "SciGet". The page title and the app bar's "More … web apps" link follow; the SciGet logo and hub link stay.
+- 0745d63: Also served from the new Preclinical Webapps catalogue (preclinicalapps.sciget.org). dcm2niix, DICOM View, dicompare, MRI2vid, niimath, ANTs Denoise and elastix are also served from mskapps.sciget.org, where DICOM View hands off to MuscleMap, SeedSeg and Carotid Flow again; niimath and MRI2vid are also served from microscopyapps.sciget.org. QSMbly serves its deep-learning WebAssembly gzipped (6.5 MB instead of 24.8 MB) and inflates it in the browser.
+
 ## 0.1.20261109
 
 ### Patch Changes

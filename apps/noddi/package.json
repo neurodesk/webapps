@@ -1,6 +1,6 @@
 {
   "name": "noddi",
-  "version": "0.6.20261109",
+  "version": "0.7.20261110",
   "private": true,
   "type": "module",
   "scripts": {
