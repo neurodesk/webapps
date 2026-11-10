@@ -1231,8 +1231,8 @@
           "platform": "macos-arm64",
           "version": "0.5.20261109",
           "url": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261109/ants-0.5.20261109-macos-arm64.pkg",
-          "sha256": "ccfa95102d46afe6312b9bb5350025a76d25e37a010dcf494d59c65f85baf720",
-          "bytes": 40033728,
+          "sha256": "0502f8b68934e5b374aab4a07f3a5b638edada4f91043009d1750026e34f1416",
+          "bytes": 40033743,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261109/ants-0.5.20261109-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg ants-0.5.20261109-macos-arm64.pkg -target /\nants self-check\nants moving.nii.gz fixed.nii.gz results"
@@ -1242,8 +1242,8 @@
           "platform": "windows-x64",
           "version": "0.5.20261109",
           "url": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261109/ants-0.5.20261109-windows-x64.zip",
-          "sha256": "f1710a9f14c15dfcc2ba065e48907ed3b497f84d597b5f8a3064e1493b062972",
-          "bytes": 36254160,
+          "sha256": "3a36d3cd8f06629d5e724066732e87a1ba0945139b7965b5ba7210d3a98ad9e4",
+          "bytes": 36254159,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/ants-v0.5.20261109/ants-0.5.20261109-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\ants-0.5.20261109-windows-x64.zip -DestinationPath .\n.\\ants-0.5.20261109-windows-x64\\ants.exe moving.nii.gz fixed.nii.gz results"
