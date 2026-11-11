@@ -58,9 +58,14 @@ The page does make some network requests of its own. None of them carries image 
   time you run a deep-learning method, then cached in your browser's IndexedDB.
 - **Example data**, downloaded from Hugging Face only if you click to load it.
 - **dicompare**, the protocol checker, which loads its code and the QSM consensus schema from
+<<<<<<< monorepo
   `webapps.neurodesk.org/dicompare` the first time you load DICOM files, and when run, Pyodide from
   jsDelivr and the `dicompare` Python package from PyPI. The DICOM headers it checks are read in
   your browser.
+=======
+  `astewartau.github.io/dicompare-web`, and when run, Pyodide from jsDelivr and the `dicompare` Python package
+  from PyPI. The DICOM headers it checks are read in your browser.
+>>>>>>> upstream
 
 Deep-learning methods and dicompare therefore need an internet connection the first time they are
 used; the rest of the pipeline works offline once the page has loaded.

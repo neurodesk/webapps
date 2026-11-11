@@ -5,8 +5,13 @@
  * threshold detection, and BET integration.
  */
 
+<<<<<<< monorepo
 import { computeOtsuThreshold } from '@neurodesk/webapp-components/volume';
 import { createMaskNifti, createNiftiHeaderFromVolume, decodeNiftiBuffer, isValidNifti1, parseNiftiHeader, readNiftiImageData, sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
+=======
+import { computeOtsuThreshold } from '../modules/mask/ThresholdUtils.js';
+import { createMaskNifti, createNiftiHeaderFromVolume, gunzipNifti, isValidNifti1, niftiAffine, readNiftiImageData, sameNiftiGrid } from '../modules/file-io/NiftiUtils.js';
+>>>>>>> upstream
 import { gridMismatch } from '../modules/file-io/GridAgreement.js';
 
 export class MaskController {
@@ -90,6 +95,17 @@ export class MaskController {
       h.getFloat32(88, true) || 1,
     ];
     return true;
+  }
+
+  /**
+   * The mask grid's voxel-to-world affine (16 values, row-major), from the magnitude's header
+   * (the sform, else the qform, as qsm-core reads it); empty when there is no header. BET takes
+   * FSL's left-right order from it, MindGrab its orientation.
+   * @returns {number[]}
+   */
+  maskAffine() {
+    if (!this.magnitudeFileBytes || this.magnitudeFileBytes.byteLength < 348) return [];
+    return [...niftiAffine(this.magnitudeFileBytes).flat(), 0, 0, 0, 1];
   }
 
   // ==================== Mask Preparation ====================
@@ -872,6 +888,7 @@ export class MaskController {
           mask, ops, inputData, magnitude: magnitudeArr,
           dims: this.maskDims,
           voxelSize: this.voxelSize || [1, 1, 1],
+          affine: this.maskAffine(),
         },
       }, [mask.buffer, magnitudeArr.buffer, inputData.buffer]);
     });

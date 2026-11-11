@@ -221,7 +221,6 @@ export const MCPC3DS_DEFAULTS = {
 // Linear fit B0 calculation defaults
 export const LINEAR_FIT_DEFAULTS = {
   estimate_offset: _LINEAR_FIT.estimate_offset,
-  reliability_threshold_percentile: _LINEAR_FIT.reliability_threshold_percentile,
 };
 
 export const SHARP_DEFAULTS = {
@@ -347,6 +346,51 @@ export const TFI_DEFAULTS = {
   tol: _TFI.tol,
 };
 
+<<<<<<< monorepo
+=======
+// dicompare (DICOM protocol report): embed modules, worker and schema, loaded on first use.
+export const DICOMPARE_BASE = 'https://astewartau.github.io/dicompare-web';
+
+// Example data, fetched from Hugging Face at runtime.
+//
+// Previously this was downloaded from OSF during CI and baked into the deployed site,
+// which meant the whole dataset rode along in every Pages artifact and could only be
+// changed by redeploying. Hugging Face `resolve/main` is public and CORS-enabled
+// (`access-control-allow-origin` on both the redirect and the CDN response it points
+// at), so the browser can fetch it directly — same arrangement as MODEL_WEIGHT_BASE_URL
+// above. The CDN also returns Content-Length, which is what drives the download
+// progress bar in _loadExampleData.
+//
+// One in-vivo subject: 5-echo 1mm 3D GRE on a Siemens MAGNETOM Prisma Fit. Magnitude
+// and phase are split one file per echo because the loader reads 3D volumes and counts
+// files to determine the echo count — a 4D file would load as a single echo.
+export const EXAMPLE_DATA = {
+  baseUrl: 'https://huggingface.co/datasets/qsmxt/qsm-example-data/resolve/main',
+  files: [
+    'sub-1_echo-1_part-mag_MEGRE.nii.gz',
+    'sub-1_echo-1_part-mag_MEGRE.json',
+    'sub-1_echo-1_part-phase_MEGRE.nii.gz',
+    'sub-1_echo-1_part-phase_MEGRE.json',
+    'sub-1_echo-2_part-mag_MEGRE.nii.gz',
+    'sub-1_echo-2_part-mag_MEGRE.json',
+    'sub-1_echo-2_part-phase_MEGRE.nii.gz',
+    'sub-1_echo-2_part-phase_MEGRE.json',
+    'sub-1_echo-3_part-mag_MEGRE.nii.gz',
+    'sub-1_echo-3_part-mag_MEGRE.json',
+    'sub-1_echo-3_part-phase_MEGRE.nii.gz',
+    'sub-1_echo-3_part-phase_MEGRE.json',
+    'sub-1_echo-4_part-mag_MEGRE.nii.gz',
+    'sub-1_echo-4_part-mag_MEGRE.json',
+    'sub-1_echo-4_part-phase_MEGRE.nii.gz',
+    'sub-1_echo-4_part-phase_MEGRE.json',
+    'sub-1_echo-5_part-mag_MEGRE.nii.gz',
+    'sub-1_echo-5_part-mag_MEGRE.json',
+    'sub-1_echo-5_part-phase_MEGRE.nii.gz',
+    'sub-1_echo-5_part-phase_MEGRE.json',
+  ]
+};
+
+>>>>>>> upstream
 // Stage display names for UI
 export const STAGE_DISPLAY_NAMES = {
   'magnitude': 'Magnitude',
