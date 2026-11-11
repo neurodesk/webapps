@@ -578,6 +578,26 @@ test('CPU Node driver parity skips optional CUDA installation', async () => {
   assert.ok(flow.jobs.node.steps.some(step => step.run === 'pnpm install --frozen-lockfile'));
 });
 
+// onnxruntime-node's postinstall downloads CUDA libraries into a directory named by the millisecond,
+// so the postinstalls of two pinned versions can share it and one deletes it under the other.
+test('every workflow that runs install scripts skips the optional CUDA download', async () => {
+  const files = (await readdir(new URL('../.github/workflows/', import.meta.url))).filter((name) => name.endsWith('.yml')).sort();
+  const gaps = [];
+  for (const file of files) {
+    const flow = await workflow(file.slice(0, -'.yml'.length));
+    for (const [id, job] of Object.entries(flow.jobs ?? {})) {
+      for (const step of job.steps ?? []) {
+        const installs = String(step.run ?? '').split('\n')
+          .filter((line) => /\bpnpm install\b/.test(line) && !/--ignore-scripts|--lockfile-only/.test(line));
+        if (installs.length === 0) continue;
+        const flag = step.env?.ONNXRUNTIME_NODE_INSTALL ?? job.env?.ONNXRUNTIME_NODE_INSTALL ?? flow.env?.ONNXRUNTIME_NODE_INSTALL;
+        if (flag !== 'skip') gaps.push(`${file} ${id}: ${installs[0].trim()}`);
+      }
+    }
+  }
+  assert.deepEqual(gaps, []);
+});
+
 test('Brain2Print browser CPU parity skips optional CUDA installation', async () => {
   const flow = await workflow('brain2print-native');
   const job = flow.jobs['browser-reference'];
