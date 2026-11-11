@@ -13,6 +13,7 @@ pub mod commands;
 pub mod config;
 pub mod poll;
 pub mod probe;
+pub mod quickstart;
 pub mod reconcile;
 pub mod script;
 pub mod tail;

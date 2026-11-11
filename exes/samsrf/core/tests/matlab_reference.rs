@@ -140,14 +140,10 @@ fn cf_geometry_and_gaussian_residual_order_match_matlab_profiles() {
 }
 
 #[test]
-fn polygon_simplification_matches_matlab_away_from_the_rounding_boundary() {
+fn polygon_simplification_matches_matlab_outside_the_fixed_point_band() {
     let Some((root, cases)) = reference() else { return; };
-    let mut count = 0;
+    let (mut asserted, mut band) = (0, 0);
     for case in cases.iter().filter(|c| c["kind"] == "polygon") {
-        // These two inputs sit exactly on the inferred 1e-8 relative cutoff.
-        // Their scale-dependent rounding is retained as a known discrepancy.
-        if case["id"] == "polygon_191" || case["id"] == "polygon_193" { continue; }
-        count += 1;
         let points = array(&root, &case["points"]);
         let n = points.len() / 2;
         let points: Vec<_> = (0..n).map(|i| [points[i], points[n + i]]).collect();
@@ -156,8 +152,29 @@ fn polygon_simplification_matches_matlab_away_from_the_rounding_boundary() {
             Some(hull) => (hull.centroid(), hull.area()),
             None => ([f64::NAN; 2], 0.0),
         };
+        // MATLAB decides triangles within 1e-5 relative of the 1e-8 cutoff on
+        // its own fixed-point vertices (matlab_geometry.rs BOUNDARY_BAND, from
+        // 18,387 recorded boundary triangles). polygon_191 and polygon_193 are
+        // the two such cases here; they are reported, not asserted.
+        if n == 3 && (1e-8 * (1.0 - 1e-12)..=1.00001e-8).contains(&thinness(&points)) && (area == 0.0) != (expected[2] == 0.0) {
+            band += 1;
+            println!("{}: in the fixed-point band, MATLAB area {}, port {area}", case["id"], expected[2]);
+            continue;
+        }
+        asserted += 1;
         for axis in 0..2 { close(centre[axis], expected[axis], 1e-12, case["id"].as_str().unwrap()); }
         close(area, expected[2], 1e-12 * expected[2].abs().max(1.0), case["id"].as_str().unwrap());
     }
-    assert_eq!(count, 251, "missing polygon cases");
+    assert_eq!((asserted, band), (251, 2), "polygon cases");
+}
+
+fn thinness(triangle: &[[f64; 2]]) -> f64 {
+    let [a, b, c] = [triangle[0], triangle[1], triangle[2]];
+    let cross = ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])).abs();
+    let longest = [(a, b), (b, c), (c, a)].iter().map(|(p, q)| (q[0] - p[0]).hypot(q[1] - p[1])).fold(0.0, f64::max);
+    let span = (0..2).map(|axis| {
+        let values = triangle.iter().map(|p| p[axis]);
+        values.clone().fold(f64::NEG_INFINITY, f64::max) - values.fold(f64::INFINITY, f64::min)
+    }).fold(0.0, f64::max);
+    cross / longest / span
 }

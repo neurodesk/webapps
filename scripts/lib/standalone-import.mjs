@@ -1,4 +1,4 @@
-// Turn a released GitHub release into the Standalone catalog's command-line downloads, or into its suite entry.
+// Turn a released GitHub release into the Standalone catalog's command-line downloads, or into a desktop suite entry.
 // Never guess URLs: every entry comes from an uploaded asset, GitHub's own digest and a validation receipt.
 // An app can have several release sources (scripts/lib/native-releases.mjs). Each owns its platforms and
 // can version independently, so an update replaces and version-checks only the platforms of the source it
@@ -7,9 +7,12 @@ import { portableCommand, releasePlatform } from './portable-command.mjs';
 
 export const RELEASE_ARGUMENT = /^([a-z0-9][a-z0-9-]*)@(\d+\.\d+\.\d{8})$/;
 const RELEASE_TAG = /^([a-z0-9][a-z0-9-]*)-v(\d+\.\d+\.\d{8})$/;
-// The nightly desktop suite releases as webapps-vVERSION with its own catalog entry, standalone-catalog.json,
-// which scripts/desktop/publish.mjs writes after checking every archive.
-export const SUITE_ID = 'webapps';
+// Each catalogue's nightly desktop suite releases as <release>-vVERSION (`desktop.release` in registry/apps.yml)
+// with its own catalog, standalone-catalog.json, which scripts/desktop/publish.mjs writes after checking every
+// archive. `suiteReleases` maps each suite's release id to its catalogue.
+export function suiteReleases(registry) {
+  return new Map(registry.site.catalogs.map((catalog) => [catalog.desktop.release, catalog.id]));
+}
 
 export function parseReleases(values) {
   return values.map((value) => {
@@ -138,11 +141,11 @@ export async function releaseDownloads({ id, version, release, native, previous 
 // The catalog changes for a set of releases, as [{ id, version, downloads }], one entry per source whose
 // archives a release carries; each such source must have every one of its targets verified. A one-source
 // app is held to its targets even before any archive is attached. Nothing is written here.
-export async function catalogUpdate(catalog, releases, { fetchRelease, fetchText, nativeAt }) {
+export async function catalogUpdate(catalog, releases, { fetchRelease, fetchText, nativeAt, suites = new Map() }) {
   const update = [];
   for (const { id, version } of releases) {
-    if (id === SUITE_ID) {
-      update.push(await suiteUpdate(version, { fetchRelease, fetchText }));
+    if (suites.has(id)) {
+      update.push(await suiteUpdate({ release: id, catalog: suites.get(id), version }, { fetchRelease, fetchText }));
       continue;
     }
     if (!catalog.apps[id]) throw new Error(`${id}: not in the Standalone catalog`);
@@ -180,17 +183,17 @@ async function checkSuiteFiles(suite, fetchRelease) {
   }
 }
 
-// The suite's catalog entry, taken from its release and held to GitHub's digests of every listed file.
-export async function suiteUpdate(version, { fetchRelease, fetchText }) {
-  const tag = `${SUITE_ID}-v${version}`;
+// A catalogue's suite entry, taken from its release and held to GitHub's digests of every listed file.
+export async function suiteUpdate({ release: id, catalog, version }, { fetchRelease, fetchText }) {
+  const tag = `${id}-v${version}`;
   const release = await fetchRelease(tag);
-  if (release.draft || release.prerelease) throw new Error(`${SUITE_ID}: release ${tag} is not released yet`);
+  if (release.draft || release.prerelease) throw new Error(`${id}: release ${tag} is not released yet`);
   const asset = release.assets.find((item) => item.name === 'standalone-catalog.json');
-  if (!asset) throw new Error(`${SUITE_ID}: release ${tag} has no standalone-catalog.json`);
-  const { suite } = JSON.parse(await fetchText(asset.browser_download_url));
-  if (suite?.version !== version) throw new Error(`${SUITE_ID}: release ${tag} describes suite ${suite?.version}`);
+  if (!asset) throw new Error(`${id}: release ${tag} has no standalone-catalog.json`);
+  const suite = JSON.parse(await fetchText(asset.browser_download_url)).suites?.[catalog];
+  if (suite?.version !== version) throw new Error(`${id}: release ${tag} describes ${catalog} suite ${suite?.version}`);
   await checkSuiteFiles(suite, fetchRelease);
-  return { id: SUITE_ID, version, suite };
+  return { id, version, catalog, suite };
 }
 
 // Publishers re-upload with --clobber, so an update computed before a re-upload names bytes the release no
@@ -233,11 +236,12 @@ export function compareVersions(a, b) {
 // same source. Another source's version is never compared: the sources number their releases independently.
 export function applyCatalogUpdate(catalog, update) {
   if (!Array.isArray(update)) throw new Error('A catalog update is a list of { id, version, downloads } releases');
-  for (const { id, version, downloads, suite } of update) {
+  for (const { id, version, downloads, suite, catalog: suiteCatalog } of update) {
     if (suite) {
-      if (catalog.suite && compareVersions(version, catalog.suite.version) < 0) {
-        console.log(`${id}: catalog already lists suite ${catalog.suite.version}; keeping it over ${version}`);
-      } else catalog.suite = suite;
+      const current = catalog.suites?.[suiteCatalog];
+      if (current && compareVersions(version, current.version) < 0) {
+        console.log(`${id}: catalog already lists ${suiteCatalog} suite ${current.version}; keeping it over ${version}`);
+      } else catalog.suites = { ...catalog.suites, [suiteCatalog]: suite };
       continue;
     }
     const app = catalog.apps[id];

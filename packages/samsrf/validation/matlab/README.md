@@ -326,9 +326,9 @@ double epsilon units), never a map-wide scale. The measured maxima are 3.33 and
 3.15 epsilon units; the earlier double solve on rounded inputs reached 6.7 and
 7.5, under gates of 16 single epsilon units and 1e-12.
 Two polygons
-(`polygon_191`, `polygon_193`) sit exactly on the inferred relative simplification
-cutoff and retain scale-dependent rounding differences; they are explicitly
-excluded from that assertion. CF checks from identical profiles isolate parameter
+(`polygon_191`, `polygon_193`) lie in the measured fixed-point band of the
+geometry recording below; the gate reports them instead of asserting them, by
+that rule rather than by name. CF checks from identical profiles isolate parameter
 estimation, and do not establish full single-precision CF pipeline parity.
 
 General double-precision fine-fit plateaus, remaining double CSS fits, and single
@@ -464,6 +464,79 @@ python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-qr" pac
 SAMSRF_QR_REFERENCE_DIR="$TMPDIR/samsrf-qr" SAMSRF_QR_REPORT="$TMPDIR/qr-port.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_reference -- --nocapture
 python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$TMPDIR/samsrf-qr/ubuntu-24.04/compatible" "$TMPDIR/qr-port.json" "$TMPDIR/qr-accuracy.json"
 ```
+
+## Geometry: polyshape, delaunay and real templates
+
+No MATLAB license is needed:
+
+```sh
+gh workflow run samsrf-native.yml --ref BRANCH \
+  -f record_matlab=true -f geometry_only=true
+```
+
+`record_geometry.m` records MATLAB's own `polyshape`, `convhull`, `delaunay`,
+`samsrf_clusterroi` and `samsrf_cfparam_loop`, 259 cases:
+
+- 7 polygon families, 26,073 polygons: thin triangles one ULP of the apex height
+  apart across the cutoff at nine scales, three offsets, three rotations and
+  three apex positions; a coarser relative sweep; 4,000 random thin triangles
+  in random vertex order; a near-collinear vertex with local spacing 1 on
+  polygons spanning up to 1e5; spikes, retraced and collinear edges; degenerate
+  inputs; and 2,500 unordered clouds as SamSrf passes clusters (uniform,
+  integer grids with duplicates, single-rounded, near-collinear, grid subsets).
+- 168 `delaunay` cases: grids from 2x2 to 6x6, scaled, offset, rotated and
+  shuffled; integer cocircular rings of radius 5, 25 and 65; regular polygons;
+  a hexagonal lattice; centre and corner perturbations from 1e-15 to 1e-7;
+  jittered grids; duplicates; collinear inputs; integer clouds; and the
+  unique Benson V1 coordinates of both hemispheres.
+- 72 `samsrf_clusterroi` cases with tied statistics on grids, a hexagonal
+  lattice and a cocircular ring.
+- 12 real-template CF cases: `samsrf_cfparam_loop` in hull, summary and
+  Gaussian modes, double and single, on the Benson V1 vertices inside the
+  author's V123 label of each hemisphere of X001 (LH 2917, RH 3389 seed
+  vertices), converted exactly as `samsrf_benson2srf` does with SPM's GIfTI
+  reader. Profiles come from synthetic smooth courses; hull cases also record
+  the unique rows, triangles, clusters and polygon vertices.
+
+The inputs are the unmodified X001 `lh_benson.gii`, `rh_benson.gii` and
+`prf/V123.label` from OSF h92mr, pinned by `geometry-inputs.json`.
+[Run 42921602151](https://github.com/neurodesk/webapps/actions/runs/42921602151)
+recorded them at commit `44a5e9262` on an AMD EPYC 9V74 (ubuntu-22.04) and an
+AMD EPYC 9V45 (ubuntu-24.04). Each host passed an exact repeat in a new MATLAB
+process, and the two hosts' 780 arrays are identical. `geometry-reference.json`
+pins both recordings. `compare-geometry.mjs` checks the inventory and that
+identity; `tests/matlab_geometry.rs` is the port gate:
+
+- **Triangulation.** Every `delaunay` edge set is equal, cocircular ties and
+  shuffled inputs included, and the port has no triangles where MATLAB errors
+  (collinear points, fewer than three). MATLAB's choices are those of exact
+  predicates with CGAL's symbolic perturbation, which the port implements;
+  Delaunator, used before, fails the grid cases.
+- **Region growing.** All 72 cluster selections are equal, in MATLAB's order.
+- **Real templates.** Unique rows, triangulation, every cluster and every map
+  value from MATLAB's profiles agree within 1e-12 relative for hull, summary
+  and Gaussian CF in double. In single precision the hull geometry rows,
+  `Fwhm` and `Vx` agree; R² and the summary and Gaussian parameters are
+  MATLAB single arithmetic, left to the single-precision pipeline work.
+- **Polygons.** Emptiness is exact, and area and centroid lie within the
+  forward-error bound of MATLAB's shoelace on untranslated vertices (its hull
+  vertices are compared first, ignoring winding and roundoff-collinear
+  redundant vertices; retained coordinates must match exactly). Three measured
+  classes remain discrepant. The gate freezes each failing case identity and
+  a checksum of its port hull, centroid and area in
+  `core/tests/matlab_polygon_exceptions.json`, so neither a new failing member
+  nor a changed result can be absorbed by a class exemption. It counts and prints: 1,853 triangles whose altitude over the longest side is
+  within [1e-8, 1.00001e-8] of the span, 16 clouds with duplicate points, and
+  188 clouds within 1e-5 of the span of a line. MATLAB decides on a
+  fixed-point copy of the vertices (its simplified vertices come back on a
+  13-digit decimal grid, and exact power-of-two scalings of one triangle get
+  different answers), and it resolves crossings of near-parallel edges into
+  slivers. SamSrf removes duplicates before `polyshape`; the near-collinear
+  class is only reachable by a nearly collinear cluster.
+
+The same test replays the double hull and summary CF pipelines of the raw-input
+matrix (both hemispheres, smoothing and global regression on and off, both
+hosts) from their recorded profiles; all values agree within 1e-12 relative.
 
 ## Extreme CSS scales and regression rank
 
