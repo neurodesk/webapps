@@ -1,5 +1,19 @@
 # calmar
 
+## 0.12.20261111
+
+### Patch Changes
+
+- Updated dependencies [d643e8d]
+- Updated dependencies [3beb743]
+- Updated dependencies [a2675b9]
+- Updated dependencies [8fca61b]
+- Updated dependencies [83f5bb1]
+- Updated dependencies [65a2e2b]
+  - @neurodesk/webapp-components@0.27.0
+  - @neurodesk/calmar@0.12.20261111
+  - @neurodesk/nii2tvx@0.3.20261111
+
 ## 0.12.20261110
 
 ### Minor Changes
