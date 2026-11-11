@@ -2104,35 +2104,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.3.20261109",
-          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-linux-x64.tar.gz",
-          "sha256": "0610c3159790c7f76037a848a7a19e53ca575324a6e075ce13a0d54da281cfe6",
-          "bytes": 43618355,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-linux-x64.tar.gz.validation.txt",
+          "version": "0.5.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-linux-x64.tar.gz",
+          "sha256": "8df4b59b09251bcf29449575ffd8ee3be4bec48a2ac84e0d500925033fcc604a",
+          "bytes": 43642513,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf samsrf-0.3.20261109-linux-x64.tar.gz\n./samsrf-0.3.20261109-linux-x64/samsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
+          "command": "tar -xzf samsrf-0.5.20261111-linux-x64.tar.gz\n./samsrf-0.5.20261111-linux-x64/samsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.3.20261109",
-          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-macos-arm64.pkg",
-          "sha256": "c4edb4898eb2633cd3c8841a8a8f4c2e5b6681a913ef2e27d2b2bec92487d6a7",
-          "bytes": 37056463,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-macos-arm64.pkg.validation.txt",
+          "version": "0.5.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-macos-arm64.pkg",
+          "sha256": "cde72b65506e63b7121b95129bd97374a7b66178d1ee40d59efa5dc34c3839e4",
+          "bytes": 37088406,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg samsrf-0.3.20261109-macos-arm64.pkg -target /\nsamsrf self-check\nsamsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
+          "command": "sudo installer -pkg samsrf-0.5.20261111-macos-arm64.pkg -target /\nsamsrf self-check\nsamsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.3.20261109",
-          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-windows-x64.zip",
-          "sha256": "fd5d31166d30a5e12d7ddd0ae59a42cfa04cbf47758ca0a69b2e79f4a4331a8b",
-          "bytes": 33268754,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.3.20261109/samsrf-0.3.20261109-windows-x64.zip.validation.txt",
+          "version": "0.5.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-windows-x64.zip",
+          "sha256": "16ff1a187d48e27b6ec4be898ce043109e1b9e37a572018052a5c688f7bce11d",
+          "bytes": 33298521,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\samsrf-0.3.20261109-windows-x64.zip -DestinationPath .\n.\\samsrf-0.3.20261109-windows-x64\\samsrf.exe rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
+          "command": "Expand-Archive -Path .\\samsrf-0.5.20261111-windows-x64.zip -DestinationPath .\n.\\samsrf-0.5.20261111-windows-x64\\samsrf.exe rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
         }
       ],
       "containers": []
