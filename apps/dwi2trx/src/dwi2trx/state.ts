@@ -30,4 +30,6 @@ export const state: {
   input?: DwiInput
   maps?: TensorMaps
   tracts?: File // Stage 3 output: the tracked streamlines serialized to TRX
+  /** The 3D preview shows every Nth streamline of `tracts`; set with it. */
+  tractStride?: number
 } = { step: 1 }
