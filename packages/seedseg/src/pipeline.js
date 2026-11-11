@@ -34,12 +34,15 @@ export async function runInference(inputData, options) {
     voxelSize,
     affine,
     headerBytes,
+    header,
   } = parseNiftiVolume(inputData, { decompress });
+  // The parser turns a zero or NaN pixdim into 1 mm, so the stored values are checked; the sign is ignored, as nibabel does.
+  const stored = header.pixDims.slice(1, 4).map(Math.abs);
+  if (!stored.every((value) => Number.isFinite(value) && value > 0))
+    throw new Error(`Invalid voxel spacing ${stored.join(' x ')} mm; it must be finite and positive.`);
   const [nx, ny, nz] = niiDims;
   const dims = [...niiDims].reverse();
   const spacing = [...voxelSize].reverse();
-  if (!spacing.every((value) => Number.isFinite(value) && value > 0))
-    throw new Error(`Invalid voxel spacing ${voxelSize.join(' x ')} mm; it must be finite and positive.`);
   log(`nnU-Net v2: ${nx} x ${ny} x ${nz}, spacing ${voxelSize.join(' x ')} mm`);
   progress(0.04, 'Bias field correction...');
   const corrected = new Float32Array(

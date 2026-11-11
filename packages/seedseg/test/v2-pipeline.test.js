@@ -123,16 +123,18 @@ test('v2 fold and variant guards reject unknown and duplicate selections before 
 });
 
 test('invalid voxel spacing is rejected before bias correction and model loading', async () => {
-  const header = new DataView(input.slice(0));
-  header.setFloat32(80, Infinity, true);
-  const loaded = [];
-  const corrected = [];
-  const run = adapter(loaded, []);
-  run.qsm.makehomogeneous_wasm = (data) => {
-    corrected.push(data);
-    return data;
-  };
-  await assert.rejects(runInference(header.buffer, run), /Invalid voxel spacing .* finite and positive/);
-  assert.deepEqual(corrected, []);
-  assert.deepEqual(loaded, []);
+  for (const value of [0, NaN, Infinity]) {
+    const header = new DataView(input.slice(0));
+    header.setFloat32(80, value, true);
+    const loaded = [];
+    const corrected = [];
+    const run = adapter(loaded, []);
+    run.qsm.makehomogeneous_wasm = (data) => {
+      corrected.push(data);
+      return data;
+    };
+    await assert.rejects(runInference(header.buffer, run), /Invalid voxel spacing .* finite and positive/, `pixdim ${value}`);
+    assert.deepEqual(corrected, []);
+    assert.deepEqual(loaded, []);
+  }
 });
