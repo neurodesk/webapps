@@ -321,6 +321,33 @@ compiled-versus-source gate runs on one host, in one job.
   also reports, without gating, its differences from the pinned source
   recording made on another host.
 
+### Pinned source recording
+
+`cli-reference.json` pins the source recording from run
+[42928350417](https://github.com/neurodesk/webapps/actions/runs/42928350417)
+(recorder commit `2592b72`, CLI repair set, MATLAB R2023b Update 11):
+603,749,930 bytes, SHA-256
+`63649a532a1290f6f1318dcc4caf09d2e22fb7ba19e13e749fbdbbb291d995f4`, dataset
+commit `2e09c43dedac7f5f37d86e8dbc02fb3097b4de59`.
+
+- **Repeats:** all 24 runs succeeded on both hosts. Each host's two MATLAB
+  processes matched bit for bit, with 1,036 array checks per host.
+- **Custom HRF:** each custom-HRF run's saved HRF is the 33-sample column, and
+  its maps equal the direct call. Forward pRF R² reaches 0.92 and reverse
+  correlation R² 0.70, and both differ from the canonical-HRF runs.
+- **Archive layout:** the root holds the Ubuntu 22.04 host (AMD EPYC 9V74),
+  which the Runtime-only job uses. `ubuntu-24.04/` holds the Intel Xeon
+  Platinum 8573C host.
+- **Cross-host differences:** all 24 runs differ between the two hosts. The
+  largest difference is 7.4e7, in a diverged double-precision Gaussian CF map
+  (`cross-host-comparison.json`). This is why the compiled-versus-source gate
+  must run on one host.
+- **Bundle bytes:** the hosts' bundles differ only in the creation timestamps
+  of MATLAB-written MAT files; the arrays are identical. Each recording pins
+  its own bundle hashes.
+
+This is source-CLI evidence only. No compiled application has run.
+
 `test_cli.py` tests the plan, staging, the container arguments, the receipts,
 input-tree protection and the comparator, including one-ULP and nonfinite-mask
 changes. `run_runtime_cli.py` was also exercised with Docker against a
