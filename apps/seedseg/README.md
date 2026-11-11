@@ -18,7 +18,6 @@ pnpm --filter seedseg test
 pnpm --filter seedseg test:e2e
 ```
 
-<<<<<<< monorepo
 The development server listens on port 8080 with cross-origin isolation. The
 build stages the shared components, scientific package and checksum-pinned
 ONNX Runtime 1.30.0 and QSM WASM files. Models and the inference WASM binary download on first use through
@@ -43,26 +42,3 @@ synthetic fixture is unsuitable as an example.
 For offline installation, options, output names and validation commands, see
 the [command-line reference](../../packages/seedseg/README.md). Cite the methods
 from the shared application bar.
-=======
-Outputs: `results/sub_marker_prob.nii.gz` and `results/sub_detections.json` (top-K markers with mean probability, centroid in voxel and world coordinates, and `count_flag` when fewer than K candidates were found).
-
-Tests (wiring only, tiny data): `pytest scripts/deploy/tests` and `node --test web/tests/*.test.mjs`.
-
-## Training and evaluation (nnU-Net model)
-
-| Folder | Contents |
-|---|---|
-| `scripts/labels/` | Reference labels from the clinical DICOM data, and automatic labels from planning CT ([README](scripts/labels/README.md)) |
-| `scripts/nnunet/` | nnU-Net dataset conversion, cross-validation splits, training and probability export ([README](scripts/nnunet/README.md)) |
-| `scripts/evaluation/` | Marker detection evaluation: top-K candidates, one-to-one matching within 5 mm, confidence intervals, paired comparisons |
-| `scripts/deploy/` | ONNX export and the ONNX Runtime inference pipeline used by the web app and the OpenRecon container |
-| `scripts/paper/` | Manuscript figures |
-| `scripts/synth/`, `scripts/rerank/` | Synthetic marker insertion and candidate re-ranking |
-| `scripts/demo/` | Synthetic demo cases without patient data, as in the Hugging Face dataset [ash347/seedseg-demo](https://huggingface.co/datasets/ash347/seedseg-demo) used by the web app's example button ([README](scripts/demo/README.md)) |
-
-Patient identifiers in these files are replaced by study codes (S001–S127, E01–E09).
-
-## Citation
-
-Stewart et al. "Deep-Learning-Enabled Differentiation between Intraprostatic Gold Fiducial Markers and Calcification in Quantitative Susceptibility Mapping." bioRxiv (2023). https://doi.org/10.1101/2023.10.26.564293
->>>>>>> upstream
