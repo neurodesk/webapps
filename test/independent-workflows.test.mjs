@@ -249,7 +249,7 @@ test('portable Node command lines build on target runners and publish through on
     const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
     // A release with a macOS installer is published only by signing it.
     const publishInput=installer?'sign_release':'publish_release';
-    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'revcor_only', 'wasm_only'] : [];
+    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'revcor_only', 'wasm_only'] : [];
     assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs), [publishInput, ...referenceInputs], name);
     assert.equal(flow.jobs.portable.with.publish_release,`\${{ github.event_name == 'workflow_dispatch' && inputs.${publishInput} }}`,name);
     assert.equal(flow.jobs.portable.with.sign_release,installer?"${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}":undefined,name);
@@ -520,6 +520,7 @@ test('Brain2Print browser CPU parity skips optional CUDA installation', async ()
   assert.ok(job.steps.some(step => step.run === 'node packages/brain2print/validation/browser-reference.mjs --check'));
 });
 
+const OWN_PATHS_ONLY = ['neuroflow.yml', 'sdc-registration-gate.yml'];
 test('a native or CLI workflow runs when a file its command line imports changes', async () => {
   const files = (await readdir(new URL('../.github/workflows/', import.meta.url))).filter((name) => name.endsWith('.yml')).sort();
   const gaps = [];
@@ -528,6 +529,8 @@ test('a native or CLI workflow runs when a file its command line imports changes
     for (const event of ['pull_request', 'push']) {
       const filters = flow.on?.[event]?.paths;
       if (!Array.isArray(filters)) continue;
+      // These start for a pull request only on their own paths; their pushes hold the rule.
+      if (event === 'pull_request' && OWN_PATHS_ONLY.includes(file)) continue;
       const patterns = filters.filter((filter) => !filter.startsWith('!')).map(pathGlob);
       // A workflow owns the packages it filters on whole.
       const owned = filters.map((filter) => filter.match(/^((?:packages|exes)\/[^/*]+)\/\*\*$/)?.[1]).filter(Boolean);

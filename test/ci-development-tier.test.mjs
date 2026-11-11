@@ -6,6 +6,7 @@ import test from 'node:test';
 import YAML from 'yaml';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
+import { isSharedFilter, pathGlob } from '../scripts/lib/workflow-gate.mjs';
 
 const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8'));
 // What pr-gate.yml answers without a checkout: false for a draft, true for
@@ -98,10 +99,23 @@ test('returning to draft cancels the prior run without starting CI jobs', async 
   }
 });
 
-test('NeuroFlow push coverage matches PR paths and retains the scheduled backstop', async () => {
-  const flow = await workflow('neuroflow.yml');
-  assert.deepEqual(flow.on.push.paths, flow.on.pull_request.paths);
-  assert.ok(flow.on.schedule.length);
+test('NeuroFlow and the SDC registration gate start for a pull request only on their own paths', async () => {
+  // Both take hours of runner time. A shared change reaches them on main and nightly.
+  for (const file of ['neuroflow.yml', 'sdc-registration-gate.yml']) {
+    const flow = await workflow(file);
+    const own = flow.on.pull_request.paths;
+    assert.deepEqual(own.filter(isSharedFilter), [], `${file} filters pull requests on shared paths`);
+    assert.equal(flow.jobs.gate, undefined, file);
+    const push = flow.on.push.paths;
+    const covers = push.map(pathGlob);
+    // A nested file each pull request filter matches, which a push filter has to match too.
+    const sample = (filter) => filter.replace('**', 'nested/file.js').replace('*', 'name');
+    for (const filter of own) assert.ok(pathGlob(filter).test(sample(filter)), `${file}: ${sample(filter)} is a file ${filter} matches`);
+    assert.deepEqual(own.filter((filter) => !covers.some((glob) => glob.test(sample(filter)))), [], `${file}: a push to main covers every pull request path`);
+    assert.ok(push.some(isSharedFilter), `${file} keeps its shared filters on main`);
+    assert.deepEqual(flow.on.push.branches, ['main']);
+    assert.ok(flow.on.schedule.length, `${file} keeps its nightly run`);
+  }
 });
 
 test('native driver filters are generated from their imported files', () => {
