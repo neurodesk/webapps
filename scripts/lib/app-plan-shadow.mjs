@@ -178,7 +178,14 @@ export function expectedApps({ apps, changedPaths, workspace, lockClosures = nul
     owned.add('registry/app-information.yml');
     const [old, now] = [informationEntries(information.before), informationEntries(information.after)];
     for (const app of apps) {
-      if (!same(old[app.id], now[app.id])) add(app.id, 'registry/app-information.yml: its entry changed');
+      let changed;
+      try {
+        changed = !same(old[app.id], now[app.id]);
+      } catch {
+        // A recursive alias has no JSON form: expect the app.
+        changed = true;
+      }
+      if (changed) add(app.id, 'registry/app-information.yml: its entry changed');
     }
   }
   if (offlineLock) {

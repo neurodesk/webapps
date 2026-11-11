@@ -101,6 +101,9 @@ test('an app information change expects only the apps whose entries changed', ()
   const { expected, unattributed } = expectedApps({ apps, changedPaths: ['registry/app-information.yml'], workspace, information });
   assert.deepEqual([...expected.keys()].sort(), ['beta', 'gamma']);
   assert.deepEqual(unattributed, []);
+  // An entry that cannot be compared is expected, not fatal.
+  const looped = { before: information.before, after: 'apps:\n  alpha: &alpha\n    extra: *alpha\n' };
+  assert.ok(expectedApps({ apps, changedPaths: ['registry/app-information.yml'], workspace, information: looped }).expected.has('alpha'));
 });
 
 test('misses are oracle apps the planner left out; job counts follow shards and GPU flags', () => {
