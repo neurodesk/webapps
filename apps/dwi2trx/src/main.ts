@@ -45,6 +45,7 @@ import {
 import { baseName, flipBvecX } from './dwi2trx/validate'
 import { createFailureReporter } from './dwi2trx/failures'
 import { trackingParametersReport } from './dwi2trx/provenance'
+import { DEFAULT_MAX_LENGTH_MM, dropLongStreamlines } from './dwi2trx/length'
 import { TENSOR_MAPS, mapFileName } from '@neurodesk/dwi2trx'
 import { downloadBlob } from '@neurodesk/webapp-components/file-io/download'
 import { extractAffine } from '@neurodesk/webapp-components/file-io/nifti'
@@ -127,6 +128,7 @@ const seedFaIn = $<HTMLInputElement>('seedFa')
 const stopFaIn = $<HTMLInputElement>('stopFa')
 const stepSizeIn = $<HTMLInputElement>('stepSize')
 const maxAngleIn = $<HTMLInputElement>('maxAngle')
+const maxLengthIn = $<HTMLInputElement>('maxLength')
 const seedDensityIn = $<HTMLInputElement>('seedDensity')
 const aboutBtn = $<HTMLButtonElement>('aboutBtn')
 const aboutDlg = $<HTMLDialogElement>('aboutDlg')
@@ -1148,6 +1150,8 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
     )
     signal?.throwIfAborted()
     if (seq !== loadSeq) throw new DOMException('Input superseded', 'AbortError')
+    const maxLengthMm = num(maxLengthIn, DEFAULT_MAX_LENGTH_MM, 20, 1000)
+    const tooLong = dropLongStreamlines(lines, voxelToRasmm, maxLengthMm)
     if (lines.length === 0) {
       setStatus(
         'No streamlines survived — lower the Seed/Stop FA thresholds or the step size.',
@@ -1179,7 +1183,8 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
     const summary = truncated
       ? `Partial: ${count} streamlines from ${seedNote} (${deviceLost ? 'GPU device lost' : 'out of memory'}).`
       : `${count} streamlines from ${seedNote} — saved as TRX.`
-    const detail = `Mean ${meanLen} points per streamline. ${note}`.trim()
+    const longNote = tooLong > 0 ? `${tooLong.toLocaleString()} longer than ${maxLengthMm} mm removed. ` : ''
+    const detail = `Mean ${meanLen} points per streamline. ${longNote}${note}`.trim()
     gotoTab(3)
     shownView = null // force the tract render to load
     // The TRX is already built and saveable. The 3D preview is separate: NiiVue
@@ -1213,7 +1218,7 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       )
     }
     signal?.throwIfAborted()
-    return { file: state.tracts, measurements: { streamlines: streamlineCount, points: totalPts, seeds: nSeeds, processedSeeds, seedCap: MAX_SEEDS, capped, truncated, partial: capped || truncated }, provenance: { algorithm: '@dipy/gpu-streamlines', seedFa, density, parameters: parameterReport, bvecXFlipped: det3(extractAffine(header)) > 0 } }
+    return { file: state.tracts, measurements: { streamlines: streamlineCount, points: totalPts, removedTooLong: tooLong, seeds: nSeeds, processedSeeds, seedCap: MAX_SEEDS, capped, truncated, partial: capped || truncated }, provenance: { algorithm: '@dipy/gpu-streamlines', seedFa, density, maxLengthMm, parameters: parameterReport, bvecXFlipped: det3(extractAffine(header)) > 0 } }
   } catch (err) {
     if (seq === loadSeq)
       showFailure(
@@ -1420,7 +1425,7 @@ async function runAutomation(request: OperationContext, track: boolean): Promise
     const artifacts = TENSOR_MAPS.map((map) => ({ role: map.toLowerCase(), file: new File([fitted.files[map]], mapFileName(base, map)) }))
     const provenance = { tensor: { algorithm: 'niimath dtifit', version: NIIMATH_VERSION, masked: fitted.masked, maskFailure: fitted.maskFailure, mask: fitted.maskProvenance } }
     if (!track) return { artifacts, provenance }
-    for (const [input, key] of [[seedFaIn, 'seedFa'], [stopFaIn, 'stopFa'], [stepSizeIn, 'stepSize'], [maxAngleIn, 'maxAngle'], [seedDensityIn, 'density']] as const) input.value = String(parameters[key])
+    for (const [input, key] of [[seedFaIn, 'seedFa'], [stopFaIn, 'stopFa'], [stepSizeIn, 'stepSize'], [maxAngleIn, 'maxAngle'], [maxLengthIn, 'maxLength'], [seedDensityIn, 'density']] as const) input.value = String(parameters[key])
     const tracked = await runTrack({ signal, progress })
     return { artifacts: [...artifacts, { role: 'tracts', file: tracked.file }], provenance: { ...provenance, tracking: tracked.provenance }, measurements: tracked.measurements }
   } finally {
