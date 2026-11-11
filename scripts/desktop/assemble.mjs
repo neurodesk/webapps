@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs';
-import { access, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -35,7 +35,7 @@ async function disableAnalytics(directory) {
  */
 async function cached(cache, url, sha256) {
   const path = join(cache, sha256);
-  if (await access(path).then(() => true, () => false)) return;
+  if (await fileHash(path).then(received => received === sha256, () => false)) return;
   await mkdir(cache, { recursive: true });
   const partial = `${path}.partial`;
   let lastError;
@@ -108,7 +108,10 @@ export async function assembleSuite({ registry, catalog, ids, destination, dist 
     notFoundTemplate: await loadNotFoundTemplate(repoRoot),
   });
   for (const name of HOSTING_FILES) await rm(join(site, name), { force: true });
-  await stagePython({ destination, apps, sources, lock, cache });
+  await stagePython({ destination, apps, sources, assetPath: async url => {
+    await add(url);
+    return join(destination, assets[url].path);
+  } });
   await disableAnalytics(site);
   const files = await inventoryFiles(destination);
   const manifest = {

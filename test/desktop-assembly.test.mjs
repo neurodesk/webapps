@@ -182,3 +182,30 @@ test('a fetched asset whose bytes differ from the lock fails the suite and stays
   );
   assert.deepEqual(await readdir(inputs.cache), []);
 });
+
+test('a single Python app fetches the shared runtime even when dicompare is outside the suite', async t => {
+  const { origin, requested } = await assetServer(t);
+  const { root, ...inputs } = await uncached(t, origin);
+  inputs.sources.python.base = `${origin}/dicompare/`;
+  const destination = join(root, 'offline');
+  await assembleSuite({ registry, catalog: findCatalog(registry, 'msk'), ids: ['seedseg'], destination, standalone, information, version: '0.1.20261110', ...inputs });
+  assert.deepEqual(requested.sort(), ['dicompare', 'seedseg']);
+  assert.equal(await readFile(join(destination, 'site/_offline/python/model.bin'), 'utf8'), 'dicompare');
+  const manifest = JSON.parse(await readFile(join(destination, 'manifest.json')));
+  assert.deepEqual(manifest.apps.map(app => app.id), ['seedseg']);
+  assert.ok(manifest.assets[`${origin}/dicompare/model.bin`]);
+  await verifyBundle(destination);
+});
+
+test('a suite repairs a corrupt cached asset from its pinned URL', async t => {
+  const { origin, requested } = await assetServer(t);
+  const { root, ...inputs } = await uncached(t, origin);
+  const sha256 = inputs.lock.assets[`${origin}/zarro/model.bin`].sha256;
+  await mkdir(inputs.cache);
+  await writeFile(join(inputs.cache, sha256), 'corrupt');
+  const destination = join(root, 'offline');
+  await assembleSuite({ registry, catalog: findCatalog(registry, 'microscopy'), ids: ['zarro'], destination, standalone, information, version: '0.1.20261110', ...inputs });
+  assert.deepEqual(requested, ['zarro']);
+  assert.equal(await fileHash(join(inputs.cache, sha256)), sha256);
+  await verifyBundle(destination);
+});
