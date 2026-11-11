@@ -443,7 +443,9 @@ whose `alpha - beta` approaches the largest value keeps its coefficient; this
 too leaves every recorded solve unchanged.
 
 In the full pipelines (committed module from
-[run 42930052851](https://github.com/neurodesk/webapps/actions/runs/42930052851)),
+[run 42932877139](https://github.com/neurodesk/webapps/actions/runs/42932877139),
+which also contains the CF geometry port; the map and CSS reports equal those of
+the QR-only module from run 42930052851),
 the single CSS pipeline's largest Beta difference falls from 1.07e-6 to
 2.38e-7 and its largest Baseline difference from 3.12e-8 to 1.82e-8. Across the
 ten single forward pipelines (748 vertices), bit-identical Beta values rise from
