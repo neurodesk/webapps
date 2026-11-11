@@ -414,24 +414,24 @@ The remaining double CSS differences were not optimizer noise. Every stage of
 the objective differed from MATLAB by a few ULP, and CSS exponents amplify those
 differences on fit plateaus (columns 16, 17 and 82). Each stage was identified from the
 recorded traces and then checked on generated inputs
-(`record_numerics_probes.m`). The port now reproduces each stage
-(`exes/samsrf/core/src/matlab_math.rs`):
+(`record_numerics_probes.m`). `exes/samsrf/core/src/matlab_math.rs` holds two kinds of
+code: ported source (fdlibm) and empirical models inferred from MATLAB's recorded
+results. A model is established only for the inputs below.
 
-| Stage | MATLAB R2023b | Evidence |
-| --- | --- | --- |
-| pRF profile, `.^`, `log`, `sin`, `cos` | fdlibm 5.3 (`libm` 0.2.16 `exp` and `pow` are identical; `log`, `sin` and `cos` are ported) | 35,200 probe values on both hosts |
-| Raw prediction | the existing four-lane `mean` | every recorded raw prediction |
-| Negative-base power | (-x)^e = (-x)^trunc(e) × exp(f log x)(cos fπ + i sin fπ), integer part by binary exponentiation in complex arithmetic, i·sqrt(x) for f = 1/2, reciprocal by Smith's division for e < 0 | every finite probe result |
-| `conv` | fused multiply-adds; nonzero samples scattered in order when fewer than a quarter are nonzero, otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order | every recorded prediction; probe gates below |
-| `corr` | `x'*y` is MKL `ddot`/`zdotc`, norms are MKL `dnrm2`/`dznrm2`, `dot/‖x‖/‖y‖`, then values beyond 1 in magnitude divided by their magnitude | every recorded objective |
+| Stage | Kind | MATLAB R2023b, as recorded | Evidence |
+| --- | --- | --- | --- |
+| pRF profile `exp`, `.^`, `log`, `sin`, `cos` | Ported source | fdlibm 5.3 from https://netlib.org/fdlibm/: `e_log.c` 1.3, `k_sin.c` 1.3, `k_cos.c` 1.3, `s_sin.c` 1.3, `s_cos.c` 1.3, `e_rem_pio2.c` 1.4 (SCCS 95/01/18), ported. `libm` 0.2.16 `exp`/`pow` matched `e_exp.c` 1.6/`e_pow.c` 1.5 (SCCS 04/04/22) on every value tested | 35,200 probe values on both hosts |
+| Raw prediction | Empirical | the existing four-lane `mean` | every recorded raw prediction |
+| Negative-base power | Empirical | (-x)^e = (-x)^trunc(e) × exp(f log x)(cos fπ + i sin fπ), integer part by right-to-left binary exponentiation; complex products recover infinities as C99 Annex G (libgcc `__muldc3`) does; i·sqrt(x) for f = 1/2; e < 0 is Smith's reciprocal, a real division when the power is real, and a correctly signed real infinity when it underflowed to zero | all 13,776 probe values with their NaN/Inf masks |
+| `conv` | Empirical | fused multiply-adds; nonzero samples scattered in order when fewer than a quarter are nonzero; otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; all kept outputs of 188 probe convolutions |
+| `corr` | Empirical | `x'*y` reproduced by MKL 2021.3 `ddot`/`zdotc` kernels, norms by `dnrm2`/`dznrm2` (reference-BLAS scaled sums), `dot/‖x‖/‖y‖`, then values beyond 1 in magnitude divided by their magnitude | every recorded objective; AMD probe kernels |
 
 `css_diagnostics.rs` requires all 108 traces (54 double, 54 single; both seeds and
 nonnegative controls) to reproduce MATLAB's raw prediction, power, convolution
 and objective at every evaluation (the objective also from MATLAB's own
 predictions), and to follow MATLAB's optimizer parameter sequence bit for bit.
 This includes the column 82 plateau (177 evaluations) and columns 16 and 17
-(801 and 570 evaluations). The only allowance is the sign of a zero when a
-negative response's power underflows entirely.
+(801 and 570 evaluations). The only allowance is the sign of a zero part.
 
 `numerics-reference.json` pins the probes from
 [run 42926430579](https://github.com/neurodesk/webapps/actions/runs/42926430579)
@@ -441,27 +441,31 @@ ran the probes twice in fresh processes with `MKL_CBWR=COMPATIBLE`, and a third
 process with `MKL_CBWR=AUTO`. `matlab_numerics.rs` checks:
 
 - fdlibm functions bit for bit on both hosts;
-- every finite negative-base power (1,660 overflowing results are not modelled:
-  MATLAB returns NaN in some infinite parts);
-- convolution for 9-129-tap kernels on longer courses, except blocked outputs
-  from a final, partial input block (MATLAB orders some of them differently)
-  and sparse complex courses of 1,000 samples (a few outputs differ by one ULP);
-- MKL dot products and norms on the AMD host (real `x'*y` takes another path for
-  8-19 elements);
-- the reproducibility results below.
+- every negative-base power, including its NaN and infinite parts. The sign of
+  a zero part differs in 2,440 of 27,552 parts; no rule tried (product order,
+  FMA, true sign) reproduces MATLAB's zero signs;
+- every output SamSrf keeps (the first n) for 9-129-tap kernels on longer courses,
+  dense and sparse;
+- MKL dot products and norms on the AMD host;
+- the reproducibility results below, real and imaginary arrays.
+
+Not covered by these probes: kernels shorter than 9 taps or longer than the
+course, which MATLAB computes in other orders; sparse complex courses of 1,000
+samples, where a few outputs differ by one ULP; and real `x'*y` of 8-19 elements,
+which takes another MATLAB path. SamSrf's HRFs and time courses fall outside these cases.
 
 Reproducibility: repeated processes are bit-identical on each host. Across
-hosts, only the MKL results differ (51 of the probe's BLAS arrays). Elementary functions,
-powers, `conv`, `gammaln` and the HRF are identical. On the Intel host, MATLAB
-reports CNR branch `AVX512_E1`, and its MKL results are bit-identical under
-`MKL_CBWR=AUTO` and `COMPATIBLE`, so the environment request does not select
-MKL's branch inside MATLAB. The AMD hosts report `auto`, and their results equal
-MKL 2021.3's SSE2 kernels, which the port reproduces. Outside MATLAB, MKL
-2021.3 on an AMD EPYC Milan machine rejected the SSE2 and AVX2 branch requests,
-and `AUTO` and `COMPATIBLE` gave the same kernels. Double
-CSS references must therefore be recorded on AMD hosts (or with a verified
-compatible branch). An Intel recording is a different reference, not a port
-error. Every CSS trace and pin above is from AMD hosts.
+hosts, only MKL's results differ (83 BLAS arrays: 51 real and 32 imaginary).
+Elementary functions, powers, `conv`, `gammaln` and the HRF are identical. On
+the Intel host MATLAB reports CNR branch `AVX512_E1`, and its MKL results are
+bit-identical under `MKL_CBWR=AUTO` and `COMPATIBLE`, so the environment request
+does not select MKL's branch inside MATLAB. The AMD hosts report `auto`; their
+results match the modelled kernels. Outside MATLAB, MKL 2021.3 on an AMD EPYC
+Milan machine rejected the SSE2 and AVX2 branch requests, and `AUTO` and
+`COMPATIBLE` gave the same kernels. Double CSS references must therefore be
+recorded on AMD hosts (or with a verified compatible branch); an Intel recording
+is a different reference, not a port error. Every CSS trace and pin above is
+from AMD hosts.
 
 What remains:
 
@@ -472,8 +476,7 @@ What remains:
   moves the weak fits at zero-based vertices 51 and 81 (x0 by up to 7.1e-5). With
   MATLAB's kernel these vertices match exactly.
 - **Beta and Baseline** come from the least-squares solve that #731 reproduces.
-- Signed zeros of fully underflowed powers, overflowing powers, and the convolution
-  cases above.
+- Zero signs and the uncovered convolution cases above.
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics" packages/samsrf/validation/matlab/numerics-reference.json

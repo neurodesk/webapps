@@ -417,10 +417,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   MATLAB recordings in both precisions, and the recorded single-precision
   pipeline parameters and scores match exactly. Betas retain small regression
   rounding differences, and some double-precision weak fits still differ.
-  The double objective reproduces MATLAB R2023b operation by operation
-  (`exes/samsrf/core/src/matlab_math.rs`): fdlibm `exp`, `log`, `sin`, `cos`
-  and `pow`; MATLAB's complex power of a negative response; MATLAB's `conv`
-  kernels; and MKL's SSE2 `ddot`, `zdotc`, `dnrm2` and `dznrm2` inside `corr`.
+  The double objective follows MATLAB R2023b stage by stage
+  (`exes/samsrf/core/src/matlab_math.rs`). It uses ported fdlibm `log`, `sin` and
+  `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
+  response, its `conv` and the MKL dot products and norms inside `corr` are
+  empirical models, checked on recorded inputs.
   All 108 recorded CSS optimizer traces (54 double, 54 single) follow MATLAB's
   parameter sequences bit for bit. The 96-vertex double pipeline matches every
   fitted parameter, R², nR² and noise ceiling exactly when it is given MATLAB's

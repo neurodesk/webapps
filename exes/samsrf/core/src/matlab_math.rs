@@ -1,13 +1,18 @@
-//! The arithmetic MATLAB R2023b performs inside SamSrf's double CSS objective,
-//! reproduced operation by operation from pinned MATLAB recordings
-//! (`packages/samsrf/validation/matlab/README.md#double-css-arithmetic`).
+//! Models of the arithmetic MATLAB R2023b performs inside SamSrf's double CSS
+//! objective, checked against pinned MATLAB recordings on the inputs listed in
+//! `packages/samsrf/validation/matlab/README.md#double-css-arithmetic`. They are not
+//! claims about MATLAB on other inputs, releases or CPUs.
 //!
-//! MATLAB's scalar elementary functions are fdlibm 5.3. `libm` 0.2.16 `exp` and `pow`
-//! are bit-identical to it; its FreeBSD `log`, `sin` and `cos` are not, so those are
-//! ported here from fdlibm (Sun Microsystems, freely distributable; notice below).
-//! Dot products and norms are those of Intel MKL 2021.3 on the branch the AMD
-//! reference hosts select (the SSE2 path MKL also uses for `MKL_CBWR=COMPATIBLE`).
-//! Other MKL branches, such as AVX512 on Intel hosts, reduce in other orders.
+//! Two kinds of code live here:
+//! - Ported source. `log`, `sin` and `cos` are translated from fdlibm 5.3 as published
+//!   at https://netlib.org/fdlibm/ (`e_log.c` 1.3, `k_sin.c` 1.3, `k_cos.c` 1.3,
+//!   `s_sin.c` 1.3, `s_cos.c` 1.3, `e_rem_pio2.c` 1.4, all SCCS 95/01/18; SHA-256
+//!   a2b1bd1b, 75d391f3, 841086c7, 4d5edb75, bdcbea3c, 3a08dd4a). `exp` and `pow`
+//!   use `libm` 0.2.16, which matched fdlibm's `e_exp.c` 1.6 and `e_pow.c` 1.5 on
+//!   every input tested. Large `sin`/`cos` arguments (above 2^19 pi/2) use `libm`.
+//! - Empirical models, inferred from recorded results: MATLAB's complex power,
+//!   `conv` and Intel MKL 2021.3's dot products and norms. MKL's kernels are those
+//!   the AMD reference hosts select; Intel hosts reduce in other orders.
 //!
 //! ====================================================
 //! Copyright (C) 1993, 2004 by Sun Microsystems, Inc. All rights reserved.
@@ -297,9 +302,36 @@ fn reciprocal(w: Complex64) -> Complex64 {
     }
 }
 
-/// MATLAB's complex product, `(a + bi)(c + di) = (ac - bd) + (ad + bc)i`.
+/// MATLAB's complex product: `(ac - bd) + (ad + bc)i`, recovering infinities
+/// when both parts are NaN as C99 Annex G (G.5.1) specifies, like libgcc's
+/// `__muldc3`. The recovery is what the recorded overflowing powers show.
 fn multiply(x: Complex64, y: Complex64) -> Complex64 {
-    Complex64::new(x.re * y.re - x.im * y.im, x.re * y.im + x.im * y.re)
+    let (mut a, mut b, mut c, mut d) = (x.re, x.im, y.re, y.im);
+    let (ac, bd, ad, bc) = (a * c, b * d, a * d, b * c);
+    let (re, im) = (ac - bd, ad + bc);
+    if !(re.is_nan() && im.is_nan()) {
+        return Complex64::new(re, im);
+    }
+    let box_infinity = |v: f64| (if v.is_infinite() { 1.0f64 } else { 0.0 }).copysign(v);
+    let zero_nan = |v: f64| if v.is_nan() { 0.0f64.copysign(v) } else { v };
+    let mut recalculate = false;
+    if a.is_infinite() || b.is_infinite() {
+        (a, b, c, d) = (box_infinity(a), box_infinity(b), zero_nan(c), zero_nan(d));
+        recalculate = true;
+    }
+    if c.is_infinite() || d.is_infinite() {
+        (c, d, a, b) = (box_infinity(c), box_infinity(d), zero_nan(a), zero_nan(b));
+        recalculate = true;
+    }
+    if !recalculate && (ac.is_infinite() || bd.is_infinite() || ad.is_infinite() || bc.is_infinite()) {
+        (a, b, c, d) = (zero_nan(a), zero_nan(b), zero_nan(c), zero_nan(d));
+        recalculate = true;
+    }
+    if recalculate {
+        Complex64::new(f64::INFINITY * (a * c - b * d), f64::INFINITY * (a * d + b * c))
+    } else {
+        Complex64::new(re, im)
+    }
 }
 
 /// `z^n` for a whole `n >= 0` by right-to-left binary exponentiation in complex
@@ -322,15 +354,28 @@ fn integer_power(z: Complex64, mut n: f64) -> Complex64 {
 /// MATLAB's `value.^exponent` for a real base and a real exponent. Nonnegative
 /// bases and whole exponents use fdlibm `pow`. A negative base with a fractional
 /// exponent splits off the whole part: (-x)^e = (-x)^trunc(e) * exp(f*log(x)) *
-/// (cos(f*pi) + i sin(f*pi)), with i*sqrt(x) for f = 1/2, and a negative exponent
-/// is the reciprocal. When the result underflows entirely, the sign of each zero
-/// part can differ from MATLAB's.
+/// (cos(f*pi) + i sin(f*pi)), with i*sqrt(x) for f = 1/2, in complex products
+/// that recover infinities. A negative exponent is the reciprocal: a real division
+/// when the power is real, and an infinity with the true sign of the real part when
+/// the power underflowed to zero. These reproduce every recorded value, NaN and
+/// infinity (`numerics-reference.json`); the sign of a zero part can differ.
 pub fn power(value: f64, exponent: f64) -> Complex64 {
     if value >= 0.0 || value.is_nan() || exponent.fract() == 0.0 || !exponent.is_finite() {
         return Complex64::new(pow(value, exponent), 0.0);
     }
     if exponent < 0.0 {
-        return reciprocal(power(value, -exponent));
+        let w = power(value, -exponent);
+        if w.re == 0.0 && w.im == 0.0 {
+            // Zero signs are not reliable here, so take the true real part's sign.
+            let fraction = -exponent - (-exponent).trunc();
+            let cosine = if fraction == 0.5 { 1.0 } else { cos(fraction * std::f64::consts::PI) };
+            let odd = (-exponent).trunc() % 2.0 != 0.0;
+            return Complex64::new(f64::INFINITY.copysign(if odd { -cosine } else { cosine }), 0.0);
+        }
+        if w.im == 0.0 {
+            return Complex64::new(1.0 / w.re, 0.0);
+        }
+        return reciprocal(w);
     }
     let whole = exponent.trunc();
     let fraction = exponent - whole;
@@ -349,13 +394,18 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
 /// count. A sparse input is scattered, its nonzero samples in order. Otherwise each
 /// output runs over input blocks of `block` samples, the earliest first, and within
 /// a block over kernel taps grouped by `tap % lanes`: real vectors use 4 lanes and
-/// 24-sample blocks, complex vectors 2 lanes and 8-sample blocks. The recordings
+/// 24-sample blocks, complex vectors 2 lanes and 8-sample blocks. A final, partial
+/// block is grouped the same way in whole vectors of `2 * lanes` samples; its last
+/// samples, fewer than one such vector, follow in input order. The recordings
 /// (250 volumes, a 33-tap kernel) scatter with at most 62 nonzero samples and block
 /// with at least 64; this uses a quarter of the samples as the boundary.
+/// Measured for kernels of 9 to 129 taps on longer inputs (validation/matlab/README.md).
 fn convolve_prefix(parts: &[&[f64]], kernel: &[f64], lanes: usize, block: usize) -> Vec<Vec<f64>> {
     let n = parts[0].len();
     let nonzero = (0..n).filter(|&i| parts.iter().any(|part| part[i] != 0.0)).count();
     let sparse = 4 * nonzero < n;
+    let vector = 2 * lanes;
+    let vectored = if n.is_multiple_of(block) { n } else { n / block * block + n % block / vector * vector };
     parts
         .iter()
         .map(|y| {
@@ -375,12 +425,18 @@ fn convolve_prefix(parts: &[&[f64]], kernel: &[f64], lanes: usize, block: usize)
                     for start in (first / block * block..=k).step_by(block) {
                         let low = start.max(first);
                         let high = (start + block - 1).min(k);
-                        for lane in 0..lanes {
-                            for j in k - high..=k - low {
-                                if j % lanes == lane {
-                                    sum = y[k - j].mul_add(kernel[j], sum);
+                        if low < vectored {
+                            let grouped = high.min(vectored - 1);
+                            for lane in 0..lanes {
+                                for j in k - grouped..=k - low {
+                                    if j % lanes == lane {
+                                        sum = y[k - j].mul_add(kernel[j], sum);
+                                    }
                                 }
                             }
+                        }
+                        for i in low.max(vectored)..=high {
+                            sum = y[i].mul_add(kernel[k - i], sum);
                         }
                     }
                     sum

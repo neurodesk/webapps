@@ -68,36 +68,39 @@ fn elementary_functions_are_fdlibm_on_intel_and_amd() {
     }
 }
 
-/// Every finite MATLAB power is reproduced, including half-integer exponents;
-/// zero parts may differ in sign when the result underflows, and results that
-/// overflow are not modelled (MATLAB returns NaN for some infinite parts).
+/// Every MATLAB power is reproduced, including half-integer exponents and the
+/// NaN and infinite parts of overflowing results. The only difference allowed is
+/// the sign of a zero part of an underflowed result; the count of such parts is
+/// part of the evidence.
 #[test]
-fn negative_base_powers_match_every_finite_matlab_result() {
+fn negative_base_powers_match_every_matlab_result() {
     let Some(root) = root() else { return };
     let (dir, cases) = cases(&root, AMD, "compatible");
-    let (mut compared, mut overflowed) = (0, 0);
+    let (mut compared, mut nonfinite, mut zero_signs) = (0, 0, 0);
     for case in cases.values().filter(|case| case["kind"] == "power") {
         let exponent = case["exponent"].as_f64().unwrap();
         let base = real(&dir, &case["base"]);
         let result = complex(&dir, &case["result"]);
         for (x, expected) in base.iter().zip(&result) {
-            if !(expected.re.is_finite() && expected.im.is_finite()) && !x.is_nan() {
-                overflowed += 1;
-                continue;
-            }
             compared += 1;
+            nonfinite += usize::from(!(expected.re.is_finite() && expected.im.is_finite()));
             let actual = m::power(*x, exponent);
-            let part = |a: f64, b: f64| same(a, b) || a == 0.0 && b == 0.0;
-            assert!(part(actual.re, expected.re) && part(actual.im, expected.im), "({x:e})^{exponent} = {actual}, MATLAB {expected}");
+            for (a, b) in [(actual.re, expected.re), (actual.im, expected.im)] {
+                if same(a, b) {
+                    continue;
+                }
+                assert!(a == 0.0 && b == 0.0, "({x:e})^{exponent} = {actual}, MATLAB {expected}");
+                zero_signs += 1;
+            }
         }
     }
-    assert_eq!((compared, overflowed), (12_116, 1_660));
+    assert_eq!((compared, nonfinite, zero_signs), (13_776, 1_688, 2_440));
 }
 
-/// SamSrf's HRF lengths (9-129 taps) on courses longer than the kernel. Outside
-/// this gate (validation/matlab/README.md): blocked outputs from the final,
-/// partial input block, which MATLAB orders differently in some cases, and
-/// sparse complex courses of 1000 samples, where a few outputs differ by an ULP.
+/// Every output SamSrf keeps, for kernels of 9-129 taps (SamSrf's HRF lengths) on
+/// longer courses, dense and sparse. Not covered (validation/matlab/README.md):
+/// shorter kernels or courses, and sparse complex courses of 1000 samples, where
+/// a few outputs differ by one ULP.
 #[test]
 fn convolution_matches_matlab_for_hrf_lengths_and_sparse_courses() {
     let Some(root) = root() else { return };
@@ -117,14 +120,12 @@ fn convolution_matches_matlab_for_hrf_lengths_and_sparse_courses() {
         } else {
             m::convolve_complex(&y, &kernel, 1)
         };
-        let block = if case["isreal"] == true { 24 } else { 8 };
-        let gated = if sparse || y.len().is_multiple_of(block) { y.len() } else { y.len() / block * block };
-        for k in 0..gated {
+        for k in 0..y.len() {
             assert!(same(actual[k].re, expected[k].re) && same(actual[k].im, expected[k].im), "{id} output {k}: {} != {}", actual[k], expected[k]);
         }
         checked += 1;
     }
-    assert!(checked > 150, "{checked} convolutions");
+    assert_eq!(checked, 188, "convolutions");
 }
 
 /// MKL's SSE2 kernels on the AMD host. MATLAB's real `x'*y` takes another path
