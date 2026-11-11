@@ -10,6 +10,9 @@
 // is decoded. `rgb: 'mean'` reads RGB pages as the mean of their red, green and blue samples
 // instead, as ImageJ converts RGB to 8-bit. Plain TIFF resolution tags are print sizes, not voxel
 // sizes: they are reported only as `declaredSpacing` ratios.
+//
+// A 2D image with several channels (RGB, palette, multi-sample or one page per channel) is read
+// with `openTiffPlanes`, which keeps every sample as a plane of its own.
 import { GeoTIFF, fromArrayBuffer } from 'geotiff';
 import { InputTooLargeError, MAX_INPUT_BYTES } from './input-limits.js';
 
@@ -88,25 +91,6 @@ function xmlAttribute(tag, name) {
 
 const INTEGER = /^\d+$/;
 
-/**
- * The OME `TiffData` elements of the first Pixels: `{ ifd, first: { Z, C, T }, planeCount, uuid }`
- * each, with `planeCount` null when the element leaves it to the default.
- */
-function parseTiffData(text) {
-  const pixels = text.match(/<(?:[\w.-]+:)?Pixels\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?Pixels>/)?.[1] ?? '';
-  const blocks = [];
-  for (const match of pixels.matchAll(/<(?:[\w.-]+:)?TiffData\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:[\w.-]+:)?TiffData>)/g)) {
-    const tag = `<TiffData ${match[1]}>`;
-    const number = (name, fallback) => {
-      const value = xmlAttribute(tag, name);
-      return value === undefined ? fallback : INTEGER.test(value.trim()) ? Number(value) : NaN;
-    };
-    const uuid = match[2]?.match(/<(?:[\w.-]+:)?UUID\b[^>]*>([^<]*)</)?.[1]?.trim() ?? null;
-    blocks.push({ ifd: number('IFD', null), first: { Z: number('FirstZ', 0), C: number('FirstC', 0), T: number('FirstT', 0) }, planeCount: number('PlaneCount', null), uuid });
-  }
-  return blocks;
-}
-
 /** OME-XML `Pixels` attributes, whatever the namespace prefix (`<Pixels>`, `<ome:Pixels>`). */
 export function parseOmeDescription(description) {
   const text = String(description ?? '');
@@ -134,7 +118,50 @@ export function parseOmeDescription(description) {
     declaredSpacing: { x: finite(attribute('PhysicalSizeX')), y: finite(attribute('PhysicalSizeY')), z: finite(attribute('PhysicalSizeZ')), unit: attribute('PhysicalSizeXUnit') ?? 'µm' },
     frameInterval: increment && timeScale ? increment * timeScale : null,
     stagePosition: omeStagePosition(text),
+    uuid: xmlAttribute(root, 'UUID') ?? null,
+    channels: omeChannels(text),
+    tiffData: omeTiffData(text),
   };
+}
+
+/** The first image's XML, or the whole description when it has no closed Image element. */
+function firstImage(text) {
+  return text.match(/<(?:[\w.-]+:)?Image\b[\s\S]*?<\/(?:[\w.-]+:)?Image\s*>/)?.[0] ?? text;
+}
+
+/**
+ * The first image's Channel elements: Name (null when absent or empty) and SamplesPerPixel (null
+ * when absent, NaN when it is not a positive integer).
+ */
+function omeChannels(text) {
+  return (firstImage(text).match(/<(?:[\w.-]+:)?Channel\b[^>]*>/g) ?? []).map((tag) => {
+    const samples = xmlAttribute(tag, 'SamplesPerPixel')?.trim();
+    return {
+      name: xmlAttribute(tag, 'Name') || null,
+      samplesPerPixel: samples === undefined ? null : INTEGER.test(samples) && Number(samples) > 0 ? Number(samples) : NaN,
+    };
+  });
+}
+
+/**
+ * The first image's TiffData elements: IFD, FirstC, FirstZ, FirstT and PlaneCount as written
+ * (undefined when absent; the reader decides what a malformed value means), and the UUID of the
+ * file holding those planes (null when they are in this file's own pages).
+ */
+function omeTiffData(text) {
+  const elements = firstImage(text).match(/<(?:[\w.-]+:)?TiffData\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:[\w.-]+:)?TiffData\s*>)/g) ?? [];
+  return elements.map((element) => {
+    const tag = element.match(/^<[^>]*>/)[0];
+    const uuid = element.match(/<(?:[\w.-]+:)?UUID\b[^>]*>([^<]*)</)?.[1];
+    return {
+      IFD: xmlAttribute(tag, 'IFD'),
+      FirstC: xmlAttribute(tag, 'FirstC'),
+      FirstZ: xmlAttribute(tag, 'FirstZ'),
+      FirstT: xmlAttribute(tag, 'FirstT'),
+      PlaneCount: xmlAttribute(tag, 'PlaneCount'),
+      uuid: uuid ? decodeXml(uuid).trim() || null : null,
+    };
+  });
 }
 
 /**
@@ -171,16 +198,17 @@ function omeStagePosition(text) {
  * data; their `<Channel>` elements can contradict them), else the channels' SamplesPerPixel
  * when they add up to SizeC, else the first channel's when it divides SizeC.
  */
-function planeChannels(sizeC, description, pageSamples) {
+function planeChannels(sizeC, channels, pageSamples) {
   const divides = (count) => Number.isInteger(count) && count > 1 && sizeC % count === 0;
   if (divides(pageSamples)) return sizeC / pageSamples;
-  const pixels = description.match(/<(?:[\w.-]+:)?Pixels\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?Pixels>/)?.[1] ?? '';
-  const samples = (pixels.match(/<(?:[\w.-]+:)?Channel\b[^>]*>/g) ?? []).map((channel) => {
-    const value = xmlAttribute(channel, 'SamplesPerPixel')?.trim();
-    return value !== undefined && INTEGER.test(value) && Number(value) > 0 ? Number(value) : null;
-  });
+  const samples = channels.map((channel) => (Number.isInteger(channel.samplesPerPixel) ? channel.samplesPerPixel : null));
   if (samples.length && samples.every((count) => count !== null) && samples.reduce((sum, count) => sum + count, 0) === sizeC) return samples.length;
   return divides(samples[0]) ? sizeC / samples[0] : sizeC;
+}
+
+/** A TiffData attribute as a plane index or count: `fallback` when absent, NaN when malformed. */
+function tiffDataNumber(value, fallback) {
+  return value === undefined ? fallback : INTEGER.test(value.trim()) ? Number(value) : NaN;
 }
 
 /**
@@ -188,15 +216,20 @@ function planeChannels(sizeC, description, pageSamples) {
  * sequential file), or null when the description has no TiffData. Throws for planes in another
  * file, a mapping it cannot follow, planes no TiffData maps and IFDs the file does not have.
  */
-function omePlaneIfds(ome, description, ifdCount, pageSamples) {
-  const blocks = parseTiffData(description);
+function omePlaneIfds(ome, ifdCount, pageSamples) {
+  const blocks = ome.tiffData.map((entry) => ({
+    ifd: tiffDataNumber(entry.IFD, null),
+    first: { Z: tiffDataNumber(entry.FirstZ, 0), C: tiffDataNumber(entry.FirstC, 0), T: tiffDataNumber(entry.FirstT, 0) },
+    planeCount: tiffDataNumber(entry.PlaneCount, null),
+    uuid: entry.uuid,
+  }));
   if (!blocks.length) return null;
-  const fileUuid = xmlAttribute(description.match(/<(?:[\w.-]+:)?OME\b[^>]*>/)[0], 'UUID') ?? blocks[0].uuid;
+  const fileUuid = ome.uuid ?? blocks[0].uuid;
   const external = blocks.some((block) => block.uuid && block.uuid !== fileUuid);
   if (external || new Set(blocks.map((block) => block.uuid)).size > 1) {
     throw new Error('This OME-TIFF keeps some of its planes in other files; open the companion file set in Fiji and save it as one OME-TIFF.');
   }
-  const sizes = { Z: ome.sizeZ, C: planeChannels(ome.sizeC, description, pageSamples), T: ome.sizeT };
+  const sizes = { Z: ome.sizeZ, C: planeChannels(ome.sizeC, ome.channels, pageSamples), T: ome.sizeT };
   const order = String(ome.dimensionOrder ?? 'XYZCT').slice(2).split('');
   if (order.length !== 3 || !['Z', 'C', 'T'].every((axis) => order.includes(axis) && Number.isInteger(sizes[axis]) && sizes[axis] > 0)) {
     throw new Error(`This OME-TIFF's DimensionOrder (${ome.dimensionOrder}) or sizes cannot be followed.`);
@@ -258,6 +291,11 @@ export function parseImagejDescription(description, resolution = [null, null]) {
 /** A tag's value, loading it when geotiff deferred it (an out-of-line value). */
 async function tag(image, name) {
   return image.fileDirectory.hasTag(name) ? image.fileDirectory.loadValue(name) : undefined;
+}
+
+/** Whether a page is a reduced-resolution copy (NewSubfileType bit 0): a pyramid level or thumbnail. */
+async function reducedResolution(image) {
+  return Boolean(Number((await tag(image, 'NewSubfileType')) ?? 0) & 1);
 }
 
 function values(value) {
@@ -329,12 +367,12 @@ async function openStack(source, rgb) {
   if (!Type) throw new Error(`TIFF sample type (format ${format}, ${bits} bits) is not 8, 16 or 32-bit integer or 32/64-bit float.`);
   if (ome?.images > 1) throw new Error(`This OME-TIFF holds ${ome.images} image series; save the one you need as its own file.`);
   // The stack's pages: the OME planes' IFDs, else every full-resolution page in file order.
-  let ifds = ome ? omePlaneIfds(ome, description, ifdCount, first.getSamplesPerPixel()) : null;
+  let ifds = ome ? omePlaneIfds(ome, ifdCount, first.getSamplesPerPixel()) : null;
   if (!ifds) {
     ifds = [];
     for (let index = 0; index < ifdCount; index++) {
       const image = index === 0 ? first : await tiff.getImage(index);
-      if (!(Number((await tag(image, 'NewSubfileType')) ?? 0) & 1)) ifds.push(index);
+      if (!(await reducedResolution(image))) ifds.push(index);
     }
   }
   const pages = ifds.length;
@@ -399,6 +437,146 @@ export async function readTiffStack(buffer, { signal, maxBytes = MAX_INPUT_BYTES
     onProgress?.(page + 1, pages);
   }
   return { ...info, data };
+}
+
+const RGB_SAMPLES = ['red', 'green', 'blue'];
+// ExtraSamples 1 and 2 are associated and unassociated alpha; 0 is unspecified data.
+const ALPHA = new Set([1, 2]);
+
+/**
+ * What each sample of a page is: red, green and blue for the first three samples of an RGB page
+ * and the three colours of a palette page read as colour, "alpha" for an ExtraSamples alpha, and
+ * "sample N" for every other sample, a channel of its own (a MinIsBlack page with four
+ * fluorescence samples has four channels, a palette page read as indices has one).
+ */
+async function sampleKinds(image, palette) {
+  const count = image.getSamplesPerPixel();
+  const photometric = Number((await tag(image, 'PhotometricInterpretation')) ?? 1);
+  if (photometric === 3 && palette === 'rgb') return [...RGB_SAMPLES];
+  const base = photometric === 2 && count >= 3 ? 3 : Math.min(1, count);
+  const extra = values(await tag(image, 'ExtraSamples'));
+  return Array.from({ length: count }, (_, sample) => {
+    if (sample < base) return base === 3 ? RGB_SAMPLES[sample] : 'sample 1';
+    return ALPHA.has(extra[sample - base]) ? 'alpha' : `sample ${sample + 1}`;
+  });
+}
+
+function splitRgb(data, count) {
+  return [0, 1, 2].map((c) => {
+    const plane = new data.constructor(count);
+    for (let i = 0; i < count; i++) plane[i] = data[i * 3 + c];
+    return plane;
+  });
+}
+
+/**
+ * The planes of a 2D image TIFF: every sample of every full-resolution page, whatever it holds
+ * (RGB, palette, several channel samples, one page per channel). Reduced-resolution pages
+ * (NewSubfileType bit 0) are pyramid levels and are left out. A palette page is read as its red,
+ * green and blue colours (`palette: 'rgb'`, the default) or as its colour indices, one sample, as
+ * tifffile and Python StarDist read it (`palette: 'index'`).
+ *
+ * Only the page directories are read here, at most `pageLimit` full-resolution pages of them, and
+ * nothing that depends on the sample type, so the caller can refuse a file by its page count,
+ * sizes and layout first. `decodedBytes()` then sizes the decoded samples, alpha included, and
+ * throws on a sample type geotiff cannot decode; `readPlanes` decodes the pixels.
+ * @param {ArrayBuffer} buffer
+ * @param {{ pageLimit?: number, palette?: 'rgb' | 'index' }} [options]
+ */
+export async function openTiffPlanes(buffer, { pageLimit = Infinity, palette = 'rgb' } = {}) {
+  const tiff = await fromArrayBuffer(buffer);
+  const count = await tiff.getImageCount();
+  const images = [];
+  const colours = [];
+  const pages = [];
+  for (let ifd = 0; ifd < count && pages.length < pageLimit; ifd++) {
+    const image = await tiff.getImage(ifd);
+    if (await reducedResolution(image)) continue;
+    const samples = await sampleKinds(image, palette);
+    images.push(image);
+    colours.push(palette === 'rgb' && Number((await tag(image, 'PhotometricInterpretation')) ?? 1) === 3);
+    pages.push({ ifd, width: image.getWidth(), height: image.getHeight(), samples });
+  }
+  const description = images.length ? ((await tag(images[0], 'ImageDescription')) ?? null) : null;
+  return {
+    pages,
+    // geotiff keeps the NUL terminator of a value stored inline in its entry.
+    description: description == null ? null : String(description).replace(/\0+$/, ''),
+    decodedBytes() {
+      let bytes = 0;
+      for (const [index, image] of images.entries()) {
+        const { width, height } = pages[index];
+        // Decoded size, not stored size: geotiff widens some samples (float16 to Float32Array),
+        // and a palette page read as colour decodes to three 16-bit samples at most.
+        for (let sample = 0; sample < image.getSamplesPerPixel(); sample++) {
+          bytes += width * height * (colours[index] ? 3 * 2 : image.getArrayForSample(sample, 1).BYTES_PER_ELEMENT);
+        }
+      }
+      return bytes;
+    },
+    async readPlanes({ signal } = {}) {
+      const planes = [];
+      for (const [index, image] of images.entries()) {
+        signal?.throwIfAborted();
+        const { width, height, samples } = pages[index];
+        const rasters = colours[index] ? splitRgb(await image.readRGB({ interleave: true, signal }), width * height) : await image.readRasters({ interleave: false, signal });
+        planes.push(rasters.flatMap((data, sample) => (samples[sample] === 'alpha' ? [] : [{ kind: samples[sample], data }])));
+      }
+      return planes;
+    },
+  };
+}
+
+/**
+ * The OME channel name of each kept page (`ifds`, their IFD indices), when the pages are the
+ * channels of one 2D image, one sample each: from the first image's TiffData (the planes of one
+ * TiffData are consecutive channels from FirstC), or the IFDs in channel order without TiffData.
+ * A channel without a Name is "Channel N". Returns null when the pages are not that image's
+ * channels (a Z or T stack, a channel count other than the page count, multi-sample channels).
+ * Throws when TiffData puts planes in another file or beyond Z 0 and T 0, names an IFD or a
+ * channel twice, names a channel beyond SizeC, or leaves a kept page unassigned.
+ * @param {string} name the file name, for the refusal
+ * @param {ReturnType<typeof parseOmeDescription>} ome
+ * @param {number[]} ifds
+ * @returns {string[] | null}
+ */
+export function omePageChannels(name, ome, ifds) {
+  if (ome.sizeZ > 1 || ome.sizeT > 1 || ome.sizeC !== ifds.length) return null;
+  if (!ome.channels.every((channel) => (channel.samplesPerPixel ?? 1) === 1)) return null;
+  const names = ifds.map((_, i) => ome.channels[i]?.name || `Channel ${i + 1}`);
+  const map = tiffDataChannels(name, ome, names.length);
+  const missing = ifds.find((ifd) => !map.has(ifd));
+  if (missing !== undefined) throw new Error(`${name} has a TIFF page (IFD ${missing}) its OME-XML assigns to no channel; save the channels as one OME-TIFF with tifffile or Fiji.`);
+  return ifds.map((ifd) => names[map.get(ifd)]);
+}
+
+/** IFD index → channel index from the TiffData of a 2D OME image; throws on a layout it cannot follow. */
+function tiffDataChannels(name, ome, channels) {
+  const refuse = (why) => new Error(`${name} maps its channels to TIFF pages in a way the app cannot read (${why}); save the channels as one OME-TIFF with tifffile or Fiji.`);
+  const map = new Map();
+  if (!ome.tiffData.length) {
+    for (let c = 0; c < channels; c++) map.set(c, c);
+    return map;
+  }
+  if (ome.tiffData.some((entry) => entry.uuid && entry.uuid !== ome.uuid)) throw refuse('planes in another file');
+  for (const entry of ome.tiffData) {
+    const integer = (key, fallback) => {
+      if (entry[key] === undefined) return fallback;
+      if (!/^\d+$/.test(entry[key])) throw refuse(`${key}="${entry[key]}"`);
+      return Number(entry[key]);
+    };
+    if (integer('FirstZ', 0) || integer('FirstT', 0)) throw refuse('a plane beyond Z 0, T 0');
+    const ifd = integer('IFD', 0);
+    const first = integer('FirstC', 0);
+    const count = integer('PlaneCount', entry.IFD === undefined ? channels : 1);
+    for (let k = 0; k < count; k++) {
+      if (first + k >= channels) throw refuse(`channel ${first + k + 1} of ${channels}`);
+      if (map.has(ifd + k)) throw refuse(`IFD ${ifd + k} named twice`);
+      map.set(ifd + k, first + k);
+    }
+  }
+  if (new Set(map.values()).size !== map.size) throw refuse('a channel in two IFDs');
+  return map;
 }
 
 function dtypeName(Type) {
@@ -512,4 +690,17 @@ export function writeTiffStack({ width, height, data, description = '', pixelSiz
     out.set(source.subarray(page * planeBytes, (page + 1) * planeBytes), strip);
   }
   return out;
+}
+
+/**
+ * A label image as an uncompressed baseline TIFF: unsigned 16-bit when every label fits, 32-bit
+ * otherwise. 0 is background.
+ * @param {ArrayLike<number>} labels
+ * @param {number} width
+ * @param {number} height
+ */
+export function writeLabelTiff(labels, width, height) {
+  let max = 0;
+  for (let i = 0; i < labels.length; i++) if (labels[i] > max) max = labels[i];
+  return writeTiffStack({ width, height, data: max <= 0xffff ? Uint16Array.from(labels) : Uint32Array.from(labels) });
 }

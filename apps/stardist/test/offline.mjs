@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
-import { writeLabelTiff } from '../src/image-io.js';
+import { writeLabelTiff } from '@neurodesk/webapp-components/file-io/tiff';
 
 // Nine bright discs (radius 8 px, soft edges) on a dim background: a synthetic 16-bit
 // fluorescence image whose nuclei StarDist must find with the bundled model.
