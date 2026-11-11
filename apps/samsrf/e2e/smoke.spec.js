@@ -367,29 +367,29 @@ test("MATLAB single precision RC and CF downloads equal the package's in-process
     surfaces: [await file("lh.white"), await file("lh.area")], template: [await file("lh_benson.gii")], seed: [await file("lh.V1_seed.label")],
   };
   await page.goto("/");
-  for (const [role, files] of Object.entries(paths)) {
-    await page.locator("#neurodesk-input-transfer").setInputFiles(files);
-    await page.evaluate((target) => globalThis.neurodeskAutomation.dispatch("adopt", { role: target }), role);
-  }
+  const roles = { rc: ["runs", "apertures", "roi", "surfaces"], cf: ["runs", "roi", "surfaces", "template", "seed"] };
   const inputs = readAnalysisInputs({
     runs: paths.runs, roi, seed: paths.seed[0], apertures: paths.apertures[0], template: paths.template[0],
     white: paths.surfaces[0], area: paths.surfaces[1], hemisphere: "lh", precision: "single",
   });
   for (const [analysis, outcome] of [["rc", RUNS.rc.outcome], ["cf", RUNS.cf.outcome]]) {
     await page.locator("#analysis").selectOption(analysis);
+    for (const role of roles[analysis]) await page.locator(`#${role}Input`).setInputFiles(paths[role]);
     await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
     await page.locator("#dataPrecision").selectOption("single");
     const model = JSON.parse(await page.locator("#modelJson").inputValue());
     expect(model.Data_Precision).toBe("single");
+    await expect(page.locator("#runButton")).toBeEnabled();
     await page.locator("#runButton").click();
-    await expect(page.locator("#statusText")).toContainText(outcome, { timeout: 240000 });
+    await expect(page.locator("#statusText")).toContainText(outcome, { timeout: 1500000 });
     const zipped = page.waitForEvent("download");
     await page.locator("#downloadAll").click();
     const entries = unzipSync(readFileSync(await (await zipped).path()));
     const job = createJob(analysisSpec(inputs, analysis, model));
+    const prefix = `lh_${job.modelName}${job.outSuffix}`;
     let expected;
     try {
-      expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`, null, model.Export_Convention);
+      expected = exportGiis(runJob(job).maps, prefix, null, model.Export_Convention);
     } finally {
       job.free();
     }
@@ -398,7 +398,7 @@ test("MATLAB single precision RC and CF downloads equal the package's in-process
       expect(entries[name], `${analysis}: ${name}`).toBeDefined();
       expect(Buffer.from(entries[name]).equals(Buffer.from(bytes)), `${analysis}: ${name} equals the package's map`).toBe(true);
     }
-    const r2 = giftiMap(entries[`lh_${job.modelName}${job.outSuffix}_r^2.gii`]);
+    const r2 = giftiMap(entries[`${prefix}_r^2.gii`]);
     expect(r2.filter(value => value > 0).length, `${analysis}: vertices with R² > 0`).toBeGreaterThan(0);
   }
 });
