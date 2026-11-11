@@ -223,11 +223,12 @@ fn check_tissues(labels: &Path, csv: &Path) {
             load(&path)
         })
         .collect();
+    let excess = gate_value(&["tissues", "maxProbabilitySumExcess"]);
     let mut sums = [0f64; 3];
     for v in 0..maps[0].data.len() {
         let values = [maps[0].data[v], maps[1].data[v], maps[2].data[v]];
         assert!(values.iter().all(|x| (0.0..=1.0).contains(x)), "{values:?}");
-        assert!(values.iter().sum::<f64>() <= 1.0 + 1e-5, "{values:?}");
+        assert!(values.iter().sum::<f64>() <= 1.0 + excess, "{values:?}");
         for (sum, x) in sums.iter_mut().zip(values) {
             *sum += x;
         }
@@ -238,9 +239,10 @@ fn check_tissues(labels: &Path, csv: &Path) {
             .filter(|&c| groups[t].contains(&post::LABELS[c]))
             .map(|c| row[c - 1])
             .sum();
-        // 1 mm voxels; each table entry is rounded to 0.001 mm³.
+        // 1 mm voxels; each table entry is rounded to 0.001 mm³. Only the absolute limit applies here:
+        // the sum needs no float32 voxel volume, so compare.mjs's relative limit is not needed.
         assert!(
-            (sum - expected).abs() < 0.05,
+            (sum - expected).abs() <= gate_value(&["tissues", "maxVolumeErrorMm3"]),
             "{}: {sum} != {expected}",
             post::TISSUES[t]
         );
