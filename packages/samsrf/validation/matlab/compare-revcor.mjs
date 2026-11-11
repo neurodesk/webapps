@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as samsrf from '../../src/node.js';
+import { compareValues } from './compare-values.mjs';
 
 const [reference, inputs, reportFile] = process.argv.slice(2);
 if (!reference || !inputs) throw new Error('Usage: compare-revcor.mjs REVCOR_REFERENCE_DIR MATRIX_INPUT_DIR [REPORT_JSON]');
@@ -36,11 +37,7 @@ function ulps(a, e) {
 }
 
 function gate(id, name, actual, expected, accept) {
-  assert.equal(actual.length, expected.length, `${id}/${name}: shape`);
-  const failures = [];
-  for (let i = 0; i < actual.length; i++) {
-    if (!accept(actual[i], expected[i], i)) failures.push({ index: i, actual: actual[i], expected: expected[i] });
-  }
+  const failures = compareValues(actual, expected, accept, `${id}/${name}`);
   reports.push({ id, name, values: actual.length, failures });
   if (failures.length) console.log(`FAIL ${id}/${name}: ${failures.length} values, first ${JSON.stringify(failures[0])}`);
 }
