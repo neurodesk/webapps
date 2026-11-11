@@ -1,6 +1,6 @@
 # @neurodesk/vessel-surfer-easter-egg
 
-## 0.1.20260931
+## 0.1.20261111
 
 ### Patch Changes
 
