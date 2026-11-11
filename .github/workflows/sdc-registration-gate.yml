@@ -17,30 +17,12 @@ name: sdc-registration-gate
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    # Only what this gate owns: the SDC pipeline, the registration kernel and their reference
+    # pins. The files they import from other packages are covered by the push and nightly runs.
     paths:
       - '.github/workflows/sdc-registration-gate.yml'
       - 'packages/hmc-registration/**'
       - 'packages/sdc/**'
-      - 'packages/components/package.json'
-      - 'packages/components/src/file-io/**'
-      - 'packages/dwi2trx/package.json'
-      - 'packages/dwi2trx/src/gradients.js'
-      - 'packages/hmc/package.json'
-      - 'packages/hmc/src/**'
-      - 'packages/n4/src/**'
-      - 'packages/node-drivers/package.json'
-      - 'packages/ants-denoise/**'
-      - 'packages/n4/package.json'
-      - 'packages/n4/src/index.js'
-      - 'packages/n4/src/epi-reference.js'
-      - 'packages/n4/wasm/**'
-      - 'packages/runtime-support/package.json'
-      - 'packages/runtime-support/src/mindgrab/backend.js'
-      - 'packages/node-drivers/src/mindgrab*.js'
-      - 'packages/hmc/src/pool.js'
-      - 'packages/hmc/src/node-runtime.js'
-      - 'packages/components/src/file-io/NiftiUtils.js'
-      - 'packages/components/src/volume/mean.js'
       - 'models/sdc.manifest.json'
       - 'exes/dwi/sdc/**'
   push:
@@ -83,16 +65,8 @@ permissions:
   contents: read
 
 jobs:
-  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
-  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
-  gate:
-    uses: ./.github/workflows/pr-gate.yml
-    with:
-      workflow: sdc-registration-gate
-
   syn-replay:
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: SyN-only replay on the 1.2 mm grid in the WebAssembly kernel
     runs-on: ubuntu-24.04
     timeout-minutes: 150
@@ -153,8 +127,7 @@ jobs:
           if-no-files-found: warn
 
   pipeline:
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: SyN-SDC pipeline (packages/sdc) end to end on the full brain, 1.2 mm grid
     runs-on: ubuntu-24.04
     timeout-minutes: 300
