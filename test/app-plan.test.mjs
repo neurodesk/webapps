@@ -609,6 +609,32 @@ test('registry changes outside the app entries select the whole catalog with a r
   assert.equal(missingBase.reasons.fallback, 'registry/apps.yml: the base or head registry is unavailable');
 });
 
+test('a reworded or added site category selects only the site build', async () => {
+  // A new app's pull request usually rewords its category; that used to test every app.
+  const reworded = await registryPlan((registry) => {
+    registry.site.categories[0].description = 'Reworded for a new app.';
+    registry.site.categories.push({ id: 'new-category', title: 'New', description: 'Added.' });
+  });
+  assert.equal(reworded.allApps, false);
+  assert.deepEqual(Object.keys(reworded.reasons.apps), []);
+  assert.equal(reworded.site, true);
+  const withEntry = await registryPlan((registry) => {
+    registry.site.categories[0].title = 'Renamed';
+    registry.apps.find((app) => app.id === 'niimath').title = 'Renamed too';
+  });
+  assert.deepEqual(Object.keys(withEntry.reasons.apps), ['niimath']);
+  // An app entry may still name a category that went away, and the builds read the rest of the section.
+  const removed = await registryPlan((registry) => {
+    registry.site.categories.pop();
+  });
+  assert.equal(removed.allApps, true);
+  const mixed = await registryPlan((registry) => {
+    registry.site.categories[0].description = 'Reworded.';
+    registry.site.domain = 'example.org';
+  });
+  assert.equal(mixed.reasons.fallback, 'registry/apps.yml: its site section changed, and every app build reads it');
+});
+
 test('an offline asset lock change selects the apps whose assets changed', async () => {
   const registry = await loadAppsRegistry();
   const before = { schemaVersion: 1, assets: { u1: { sha256: 'a' }, u2: { sha256: 'b' } }, apps: { lcmodel: ['u1'], zarro: ['u2'] } };

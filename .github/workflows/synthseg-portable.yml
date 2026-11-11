@@ -15,14 +15,15 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - '.github/workflows/synthseg-portable.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/synthseg/**'
       - 'apps/synthseg/**'
-      - 'packages/components/src/automation/**'
-      - 'packages/components/src/file-io/**'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '49 14 * * *'
   workflow_dispatch:
     inputs:
       publish_release:

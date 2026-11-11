@@ -20,7 +20,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - '.github/workflows/brain2print-native.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
@@ -30,11 +29,13 @@ on:
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/niimath.js'
-      - 'packages/runtime-support/src/mindgrab/**'
-      - 'packages/components/src/file-io/**'
       - 'exes/synthseg/test/fixtures/small.nii.gz'
       - 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'
       - 'packages/components/src/automation/parameters.js'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '13 13 * * *'
   workflow_dispatch:
     inputs:
       sign_release:

@@ -16,7 +16,10 @@ on:
       - 'exes/node-cli/**'
       - 'packages/calmar/**'
       - 'apps/calmar/**'
-      - 'packages/components/**'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '21 13 * * *'
   workflow_dispatch:
     inputs:
       sign_release:

@@ -17,7 +17,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/runtime-support/package.json'
       - '.github/workflows/deface-native.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
@@ -27,8 +26,10 @@ on:
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/niimath.js'
-      - 'packages/runtime-support/src/niimath/**'
-      - 'packages/runtime-support/src/mindgrab/**'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '33 13 * * *'
   workflow_dispatch:
     inputs:
       sign_release:

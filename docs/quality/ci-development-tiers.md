@@ -48,15 +48,53 @@ Every workflow with such a filter now starts with a `gate` job that calls
 - When it cannot decide (no diff, an unreadable lockfile, a script error) it
   runs.
 
-The gate answers `false` for a draft and `true` for every event other than
-`pull_request` without a checkout, so pushes to main, schedules and dispatches
-are not narrowed. A shared change the gate skipped on a pull request is still
-tested by those. The job always finishes: a skipped gate would skip every job
-after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and fails
-when a workflow adds a shared filter without the gate.
+The gate answers `false` for a draft and `true` for a push or a dispatch
+without a checkout. The job always finishes: a skipped gate would skip every
+job after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and
+fails when a workflow adds a shared filter without the gate.
 
 Replay a pull request locally with
 `node scripts/workflow-gate.mjs --workflow <name> --base <sha> --head <sha>`.
+
+## Pushes to main and the nightly sweep
+
+A gated workflow's `push` filter lists only its own paths, so a merge starts
+the native suites it changed and no others. On 10 November 2026 three merges
+each started 25 to 37 native workflows on Linux, macOS and Windows through
+shared push filters, about 5,200 runner minutes in one day.
+
+Shared paths reach a gated workflow on main through its nightly sweep. Each
+has one `schedule`, and for that event the gate runs the workflow when a path
+under one of its shared pull request filters changed on main during the last
+26 hours (`sweepWorkflow`). The sweep does not ask whether the change reaches
+the workflow: it is what first tests a file read through a computed path, and
+what builds every target for a shared change the pull request built on Linux
+only. A night without such a change costs each workflow one gate job.
+
+- Do not add a shared path to a gated workflow's `push` filter. Name a single
+  file there when a push must test it at once.
+- To test a shared change on every target before merging, dispatch the
+  workflow on the branch.
+- A failed sweep opens an issue through `nightly-failures.yml`, like every
+  scheduled workflow.
+- Replay a sweep with
+  `node scripts/workflow-gate.mjs --workflow <name> --sweep-hours 26`.
+
+## Daily usage budget
+
+`ci-usage.yml` runs `scripts/ci-usage-report.mjs` once a day. It lists the
+day's workflow runs by wall time and fails, which opens an issue, when a
+budget in `scripts/lib/ci-usage.mjs` is exceeded:
+
+| Budget | Limit | What exceeding it means |
+| --- | --- | --- |
+| Whole-catalogue `ci` runs of one pull request | 2 | Fixes were pushed to a ready pull request. Convert it to draft first. |
+| Whole-catalogue pull request `ci` runs in total | 8 | A file the planner ties to every app is changing often. Read the `app-plan` summaries. |
+| Workflows one push to main runs, besides `ci` and the deploy | 10 | A `push` filter names a shared path. |
+
+A whole-catalogue run is a `ci` run with at least 100 jobs. Run the report for
+any day with `node scripts/ci-usage-report.mjs --until <ISO time>`. Change a
+budget only with the measurement that justifies it.
 
 ## Agent procedure
 

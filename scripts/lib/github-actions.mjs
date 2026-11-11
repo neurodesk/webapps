@@ -34,6 +34,26 @@ export function listRuns({ workflow = 'ci.yml', since, event, branch, limit = 10
     .then((runs) => runs.slice(0, limit));
 }
 
+// Completed and running runs of every workflow created in [since, until), as
+// the fields a usage report reads. The API returns at most 1,000 runs per
+// query, so the range is read in two-hour windows.
+export async function listAllRuns({ since, until, windowHours = 2 }) {
+  const fields = '{id, name, event, status, conclusion, head_branch, head_sha, created_at, run_started_at, updated_at}';
+  const stamp = (time) => new Date(time).toISOString().replace(/\.\d+Z$/, 'Z');
+  const runs = new Map();
+  for (let from = since.getTime(); from < until.getTime(); from += windowHours * 3600e3) {
+    const to = Math.min(from + windowHours * 3600e3, until.getTime()) - 1000;
+    const query = new URLSearchParams({ per_page: '100', created: `${stamp(from)}..${stamp(to)}` });
+    for (const run of await paginated(`repos/${REPOSITORY}/actions/runs?${query}`, `.workflow_runs[] | ${fields} | @json`)) runs.set(run.id, run);
+  }
+  return [...runs.values()];
+}
+
+// How many jobs a run's latest attempt has.
+export async function jobCount(runId) {
+  return Number(await gh(['api', `repos/${REPOSITORY}/actions/runs/${runId}/jobs?per_page=1&filter=latest`, '--jq', '.total_count']));
+}
+
 // The jobs of a run's latest attempt. Pages of 100 jobs fail with a steady
 // HTTP 502 for some full-catalog runs; pages of 30 do not.
 export function listJobs(runId) {

@@ -17,18 +17,18 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - '.github/workflows/spinalcordtoolbox-native.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/spinalcordtoolbox/**'
-      - 'packages/components/src/worker/**'
-      - 'packages/components/src/volume/**'
-      - 'packages/components/src/file-io/**'
       - 'apps/spinalcordtoolbox/**'
       - 'packages/components/src/inference/workerProtocol.js'
       - 'packages/components/src/net/fetchWithRetry.js'
       - 'packages/components/src/net/stallGuard.js'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '45 14 * * *'
   workflow_dispatch:
     inputs:
       sign_release:

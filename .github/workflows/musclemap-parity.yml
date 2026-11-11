@@ -13,12 +13,14 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - 'apps/musclemap/**'
       - 'packages/musclemap/**'
-      - 'packages/components/src/volume/**'
       - '.github/workflows/musclemap-parity.yml'
       - 'packages/components/src/file-io/NiftiUtils.js'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '21 14 * * *'
   workflow_dispatch:
     inputs:
       full_volumes:
@@ -31,7 +33,7 @@ permissions:
 
 concurrency:
   group: musclemap-parity-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.

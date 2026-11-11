@@ -26,9 +26,7 @@ on:
       - 'exes/compute-server/**'
       - 'apps/nesvor/**'
       - 'apps/cryo-em/**'
-      - 'packages/components/**'
       - 'packages/cryo-em/**'
-      - 'packages/runtime-support/**'
       - 'scripts/package-compute-server.mjs'
       - 'test/remote-compute-protocol.test.mjs'
       - 'test/remote-compute-hpc.test.mjs'
@@ -36,6 +34,11 @@ on:
       - 'test-utils/relion-simulator.mjs'
       - 'test-utils/data-roots.mjs'
       - 'test-utils/nifti-fixture.mjs'
+      - 'test/compute-server-distribution.test.mjs'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '29 13 * * *'
   workflow_dispatch:
     inputs:
       draft_release:

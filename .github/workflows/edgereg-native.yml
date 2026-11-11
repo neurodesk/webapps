@@ -19,8 +19,11 @@ on:
       - 'packages/edgereg/**'
       - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/niimath.js'
-      - 'packages/components/**'
       - 'apps/edgereg/**'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '57 13 * * *'
   workflow_dispatch:
     inputs:
       sign_release:

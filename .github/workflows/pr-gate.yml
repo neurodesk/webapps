@@ -1,12 +1,15 @@
 name: pr-gate
 
-# Decides whether a path-filtered workflow has to run for a ready pull request.
-# GitHub matches `paths` against the whole pull request on every push, so a
-# filter on a shared tree starts suites the change never reaches. Callers keep
-# their filters and make their entry jobs wait for this decision
-# (scripts/lib/workflow-gate.mjs). The job always finishes, so the jobs after
-# a caller's entry jobs keep their default conditions: a draft answers false
-# and every event other than pull_request true, both without a checkout.
+# Decides whether a path-filtered workflow has to run for a ready pull request
+# or for its nightly sweep. GitHub matches `paths` against the whole pull
+# request on every push, so a filter on a shared tree starts suites the change
+# never reaches. Callers keep those filters for pull requests and make their
+# entry jobs wait for this decision (scripts/lib/workflow-gate.mjs). A push to
+# main starts a caller only for its own paths; its schedule is the sweep, which
+# runs it when a shared path changed on main during the last day. The job
+# always finishes, so the jobs after a caller's entry jobs keep their default
+# conditions: a draft answers false and a push or a dispatch true, both without
+# a checkout.
 
 on:
   workflow_call:
@@ -17,7 +20,7 @@ on:
         required: true
     outputs:
       run:
-        description: "'true' when the pull request reaches what the workflow tests"
+        description: "'true' when the pull request, or main since the last sweep, reaches what the workflow tests"
         value: ${{ jobs.decide.outputs.run }}
 
 permissions:
@@ -30,16 +33,18 @@ jobs:
     outputs:
       run: ${{ steps.event.outputs.run || steps.decide.outputs.run }}
     steps:
-      - name: Answer for drafts and for events other than pull requests
+      - name: Answer for drafts, pushes and dispatches
         id: event
         env:
           EVENT_NAME: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          if [ "$EVENT_NAME" != pull_request ]; then
+          if [ "$EVENT_NAME" = pull_request ]; then
+            if [ "$DRAFT" = true ]; then
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "$EVENT_NAME" != schedule ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ "$DRAFT" = true ]; then
-            echo "run=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: steps.event.outputs.run == ''
@@ -58,11 +63,18 @@ jobs:
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
         run: pnpm install --frozen-lockfile
-      - name: Decide whether the pull request reaches this workflow
+      - name: Decide whether the change reaches this workflow
         if: steps.event.outputs.run == ''
         id: decide
         env:
           WORKFLOW: ${{ inputs.workflow }}
+          EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --base "$BASE_SHA" --head "$HEAD_SHA"
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        # The sweep window is two hours longer than a day, for a late start.
+        run: |
+          if [ "$EVENT_NAME" = schedule ]; then
+            node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --sweep-hours 26 --head "$HEAD_SHA"
+          else
+            node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --base "$BASE_SHA" --head "$HEAD_SHA"
+          fi

@@ -22,16 +22,13 @@ on:
       - 'exes/node-cli/**'
       - '.github/workflows/hmc-native.yml'
       - '.github/workflows/node-cli-portable.yml'
-      - 'packages/**'
       - 'packages/hmc/**'
       - 'apps/hmc/**'
       - 'exes/dwi/**'
-      - 'scripts/**'
-      - 'test-utils/**'
-      - 'registry/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '5 14 * * *'
   workflow_dispatch:
     inputs:
       sign_release:

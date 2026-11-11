@@ -16,9 +16,11 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/dwidenoise/**'
-      - 'packages/components/package.json'
-      - 'packages/components/src/file-io/**'
       - 'apps/dwidenoise/**'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '49 13 * * *'
   workflow_dispatch:
     inputs:
       sign_release:

@@ -33,7 +33,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/dcm2niix.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
@@ -51,6 +50,10 @@ on:
       - 'packages/node-drivers/src/dcm2niix.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '13 14 * * *'
   workflow_dispatch:
     inputs:
       sign_release:

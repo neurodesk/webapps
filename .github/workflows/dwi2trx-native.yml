@@ -23,8 +23,11 @@ on:
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/niimath.js'
-      - 'packages/components/**'
       - 'apps/dwi2trx/**'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main during the last day.
+  schedule:
+    - cron: '45 13 * * *'
   workflow_dispatch:
     inputs:
       sign_release:
