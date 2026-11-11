@@ -18,6 +18,9 @@
 //! is preserved.
 //! ====================================================
 
+// fdlibm's constants are kept digit for digit as published.
+#![allow(clippy::excessive_precision)]
+
 use num_complex::Complex64;
 
 pub fn exp(x: f64) -> f64 {
@@ -60,7 +63,7 @@ pub fn log(mut x: f64) -> f64 {
             return -TWO54 / 0.0;
         }
         if hx < 0 {
-            return (x - x) / 0.0;
+            return f64::NAN;
         }
         k -= 54;
         x *= TWO54;
@@ -164,7 +167,6 @@ fn kernel_cos(x: f64, y: f64) -> f64 {
 /// fdlibm `__ieee754_rem_pio2` for |x| up to 2^19 pi/2. Larger arguments, which
 /// SamSrf never passes, fall back to `libm` and return `None`.
 fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
-    const INVPIO2: f64 = 6.36619772367581382433e-01;
     const PIO2_1: f64 = 1.57079632673412561417e+00;
     const PIO2_1T: f64 = 6.07710050650619224932e-11;
     const PIO2_2: f64 = 6.07710050630396597660e-11;
@@ -210,7 +212,7 @@ fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
         return None;
     }
     let t = x.abs();
-    let n = (t * INVPIO2 + 0.5) as i32;
+    let n = (t * std::f64::consts::FRAC_2_PI + 0.5) as i32;
     let f_n = f64::from(n);
     let mut r = t - f_n * PIO2_1;
     let mut w = f_n * PIO2_1T;
@@ -248,7 +250,7 @@ pub fn sin(x: f64) -> f64 {
         return kernel_sin(x, 0.0, false);
     }
     if ix >= 0x7ff0_0000 {
-        return x - x;
+        return f64::NAN;
     }
     let Some((n, y0, y1)) = rem_pio2(x) else {
         return libm::sin(x);
@@ -268,7 +270,7 @@ pub fn cos(x: f64) -> f64 {
         return kernel_cos(x, 0.0);
     }
     if ix >= 0x7ff0_0000 {
-        return x - x;
+        return f64::NAN;
     }
     let Some((n, y0, y1)) = rem_pio2(x) else {
         return libm::cos(x);
@@ -295,17 +297,23 @@ fn reciprocal(w: Complex64) -> Complex64 {
     }
 }
 
-/// `x^n` for a whole `n >= 0` by right-to-left binary exponentiation.
-fn integer_power(x: f64, mut n: f64) -> f64 {
-    let mut result = 1.0;
-    let mut base = x;
+/// MATLAB's complex product, `(a + bi)(c + di) = (ac - bd) + (ad + bc)i`.
+fn multiply(x: Complex64, y: Complex64) -> Complex64 {
+    Complex64::new(x.re * y.re - x.im * y.im, x.re * y.im + x.im * y.re)
+}
+
+/// `z^n` for a whole `n >= 0` by right-to-left binary exponentiation in complex
+/// arithmetic, whose signed zeros MATLAB's results keep.
+fn integer_power(z: Complex64, mut n: f64) -> Complex64 {
+    let mut result = Complex64::new(1.0, 0.0);
+    let mut base = z;
     while n > 0.0 {
         if n % 2.0 == 1.0 {
-            result *= base;
+            result = multiply(result, base);
         }
         n = (n / 2.0).floor();
         if n > 0.0 {
-            base *= base;
+            base = multiply(base, base);
         }
     }
     result
@@ -314,9 +322,11 @@ fn integer_power(x: f64, mut n: f64) -> f64 {
 /// MATLAB's `value.^exponent` for a real base and a real exponent. Nonnegative
 /// bases and whole exponents use fdlibm `pow`. A negative base with a fractional
 /// exponent splits off the whole part: (-x)^e = (-x)^trunc(e) * exp(f*log(x)) *
-/// (cos(f*pi) + i sin(f*pi)), and a negative exponent is the reciprocal.
+/// (cos(f*pi) + i sin(f*pi)), with i*sqrt(x) for f = 1/2, and a negative exponent
+/// is the reciprocal. When the result underflows entirely, the sign of each zero
+/// part can differ from MATLAB's.
 pub fn power(value: f64, exponent: f64) -> Complex64 {
-    if !(value < 0.0) || exponent.fract() == 0.0 || !exponent.is_finite() {
+    if value >= 0.0 || value.is_nan() || exponent.fract() == 0.0 || !exponent.is_finite() {
         return Complex64::new(pow(value, exponent), 0.0);
     }
     if exponent < 0.0 {
@@ -324,10 +334,14 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
     }
     let whole = exponent.trunc();
     let fraction = exponent - whole;
-    let magnitude = exp(fraction * log(-value));
-    let angle = fraction * std::f64::consts::PI;
-    let scale = integer_power(value, whole);
-    Complex64::new(scale * (magnitude * cos(angle)), scale * (magnitude * sin(angle)))
+    let unit = if fraction == 0.5 {
+        Complex64::new(0.0, (-value).sqrt())
+    } else {
+        let magnitude = exp(fraction * log(-value));
+        let angle = fraction * std::f64::consts::PI;
+        Complex64::new(magnitude * cos(angle), magnitude * sin(angle))
+    };
+    multiply(integer_power(Complex64::new(value, 0.0), whole), unit)
 }
 
 /// The first `y.len()` outputs of MATLAB's `conv(y, kernel)`, accumulated with
@@ -465,16 +479,15 @@ mod tests {
     #[test]
     fn integer_power_multiplies_squares_from_the_lowest_bit() {
         let x = 1.1f64;
-        assert_eq!(integer_power(x, 3.0), x * (x * x));
-        assert_eq!(integer_power(x, 5.0), x * ((x * x) * (x * x)));
-        assert_eq!(integer_power(x, 0.0), 1.0);
+        let z = Complex64::new(x, 0.0);
+        assert_eq!(integer_power(z, 3.0).re, x * (x * x));
+        assert_eq!(integer_power(z, 5.0).re, x * ((x * x) * (x * x)));
+        assert_eq!(integer_power(z, 0.0), Complex64::new(1.0, 0.0));
     }
 
     #[test]
     fn negative_bases_with_fractional_exponents_are_complex() {
-        let value = power(-4.0, 0.5);
-        assert!(value.re.abs() < 1e-15);
-        assert_eq!(value.im, 2.0);
+        assert_eq!(power(-4.0, 0.5), Complex64::new(0.0, 2.0));
         let inverse = power(-4.0, -0.5);
         assert!(inverse.re.abs() < 1e-16 && (inverse.im + 0.5).abs() < 1e-16);
         assert_eq!(power(-4.0, 2.0), Complex64::new(16.0, 0.0));

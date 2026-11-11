@@ -194,9 +194,9 @@ fn source_reference() -> PathBuf {
     )
 }
 
-/// Equal bits, NaN to NaN, and zero to zero of either sign. MATLAB returns +0
-/// for an underflowed power of a negative response where the port can return
-/// -0; no finite or nonzero value may differ.
+/// Equal bits, NaN to NaN, and zero to zero of either sign. When a negative
+/// response's power underflows entirely, the signs of its zero parts can differ
+/// from MATLAB's (`matlab_math::power`); no nonzero value may differ.
 fn same(actual: f64, expected: f64) -> bool {
     actual.to_bits() == expected.to_bits() || actual.is_nan() && expected.is_nan() || actual == 0.0 && expected == 0.0
 }
@@ -247,7 +247,7 @@ fn check_trace(reference: &Path, root: &Path, case: &Value) -> Result<usize, Str
     let parameters = |evaluation: usize| -> Vec<f64> {
         (0..seed.len()).map(|i| trace[i * evaluations + evaluation]).collect()
     };
-    for evaluation in 0..evaluations {
+    for (evaluation, &expected) in errors.iter().enumerate() {
         let p = parameters(evaluation);
         let exponent = *p.last().unwrap();
         let profile = function.evaluate(&[Expression::column(p.clone()), coordinates.clone()]).unwrap();
@@ -268,7 +268,6 @@ fn check_trace(reference: &Path, root: &Path, case: &Value) -> Result<usize, Str
                 return Err(format!("{id}: evaluation {evaluation} prediction {k}: {value} != {}", predicted[at + k]));
             }
         }
-        let expected = errors[evaluation];
         let error = css::objective(&prediction, &observed, precision);
         let recorded = css::objective(&predicted[at..at + volumes], &observed, precision);
         if !same_complex(error, expected) || !same_complex(recorded, expected) {
