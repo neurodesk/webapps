@@ -8,7 +8,8 @@ import { parse } from 'yaml';
 //   specifiers), transitively, at the merge base or at head,
 // - the packages pnpm itself lists for it from the lockfile
 //   (`pnpm list --lockfile-only --depth Infinity --parseable`),
-// - its registry/apps.yml entry and its offline asset lock entries.
+// - its registry/apps.yml entry, its registry/app-information.yml entry and
+//   its offline asset lock entries.
 // Root files (scripts/, test-utils/, ci.yml, root package.json) have no
 // independent owner; the oracle reports them but never expects an app for them.
 // Package tests and Markdown in packages reach an app only when the app reads
@@ -110,6 +111,14 @@ function registryEntries(text) {
   }
 }
 
+function informationEntries(text) {
+  try {
+    return parse(text)?.apps ?? {};
+  } catch {
+    return {};
+  }
+}
+
 function offlineLockEntries(text) {
   try {
     const lock = JSON.parse(text);
@@ -127,8 +136,8 @@ const sample = (list, count = 3) => (list.length > count ? `${list.slice(0, coun
 // - workspace: { before, after } maps from workspaceClosures
 // - lockClosures: null when the lockfile did not change, else
 //   { before: Map(id -> Set), after: Map(id -> Set), republished: [...] }
-// - registry, offlineLock: { before, after } texts when they changed
-export function expectedApps({ apps, changedPaths, workspace, lockClosures = null, registry = null, offlineLock = null }) {
+// - registry, information, offlineLock: { before, after } texts when they changed
+export function expectedApps({ apps, changedPaths, workspace, lockClosures = null, registry = null, information = null, offlineLock = null }) {
   const expected = new Map();
   const exempt = [];
   const add = (id, reason) => expected.set(id, [...(expected.get(id) ?? []), reason]);
@@ -163,6 +172,13 @@ export function expectedApps({ apps, changedPaths, workspace, lockClosures = nul
     const [old, now] = [registryEntries(registry.before), registryEntries(registry.after)];
     for (const app of apps) {
       if (!same(old.get(app.id), now.get(app.id))) add(app.id, 'registry/apps.yml: its entry changed');
+    }
+  }
+  if (information) {
+    owned.add('registry/app-information.yml');
+    const [old, now] = [informationEntries(information.before), informationEntries(information.after)];
+    for (const app of apps) {
+      if (!same(old[app.id], now[app.id])) add(app.id, 'registry/app-information.yml: its entry changed');
     }
   }
   if (offlineLock) {

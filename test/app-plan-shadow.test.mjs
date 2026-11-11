@@ -93,6 +93,16 @@ test('registry entries and offline asset locks select only the apps they changed
   assert.deepEqual([...expected.keys()].sort(), ['alpha', 'beta']);
 });
 
+test('an app information change expects only the apps whose entries changed', () => {
+  const information = {
+    before: stringify({ shared: { builder: 'x' }, apps: { alpha: { packages: ['a'] }, beta: { packages: ['b'] } } }),
+    after: stringify({ shared: { builder: 'x' }, apps: { alpha: { packages: ['a'] }, beta: { packages: ['b', 'c'] }, gamma: { packages: ['g'] } } }),
+  };
+  const { expected, unattributed } = expectedApps({ apps, changedPaths: ['registry/app-information.yml'], workspace, information });
+  assert.deepEqual([...expected.keys()].sort(), ['beta', 'gamma']);
+  assert.deepEqual(unattributed, []);
+});
+
 test('misses are oracle apps the planner left out; job counts follow shards and GPU flags', () => {
   const oracle = { expected: new Map([['alpha', ['x']], ['beta', ['y']]]) };
   const plan = { selected: [apps[0], apps[2]], reasons: { fallback: null } };
