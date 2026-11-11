@@ -659,35 +659,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.15.20261110",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261110/dicompare-0.15.20261110-linux-x64.tar.gz",
-          "sha256": "7be2ed461a49cd9518e81423fc8ae59d6316a21b041b2ff7c04d544d4cb25ae9",
-          "bytes": 89070840,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261110/dicompare-0.15.20261110-linux-x64.tar.gz.validation.txt",
+          "version": "0.15.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-linux-x64.tar.gz",
+          "sha256": "782839db7ecfdf86dcdfd429c35080d22586e9ceb08ceeb3198df3d3ddcd28ec",
+          "bytes": 89070502,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf dicompare-0.15.20261110-linux-x64.tar.gz\n./dicompare-0.15.20261110-linux-x64/dicompare compare dicom-session --schema protocol.json --output comparison.json"
+          "command": "tar -xzf dicompare-0.15.20261111-linux-x64.tar.gz\n./dicompare-0.15.20261111-linux-x64/dicompare compare dicom-session --schema protocol.json --output comparison.json"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.15.20261110",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261110/dicompare-0.15.20261110-macos-arm64.pkg",
-          "sha256": "3805e6d21cd5540bbd4f8be9af358b3695d87bac9918b4581576095cb21fc93c",
-          "bytes": 82730761,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261110/dicompare-0.15.20261110-macos-arm64.pkg.validation.txt",
+          "version": "0.15.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-macos-arm64.pkg",
+          "sha256": "a4b6a795ba4fe0ab8e15eee21fa98b89055d709d519f451e9f51017389b3ffaf",
+          "bytes": 82730734,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg dicompare-0.15.20261110-macos-arm64.pkg -target /\ndicompare self-check\ndicompare compare dicom-session --schema protocol.json --output comparison.json"
+          "command": "sudo installer -pkg dicompare-0.15.20261111-macos-arm64.pkg -target /\ndicompare self-check\ndicompare compare dicom-session --schema protocol.json --output comparison.json"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.15.20261110",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261110/dicompare-0.15.20261110-windows-x64.zip",
-          "sha256": "5fe01ef41dcd77e9c76df5cb54cb29371c9527f14dc4d359745370aa3e08f70e",
-          "bytes": 78961754,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261110/dicompare-0.15.20261110-windows-x64.zip.validation.txt",
+          "version": "0.15.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-windows-x64.zip",
+          "sha256": "26d6b887134832108e6fa2a3ae60fd06961039e6e81502709d5e518cd34a4839",
+          "bytes": 78961755,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\dicompare-0.15.20261110-windows-x64.zip -DestinationPath .\n.\\dicompare-0.15.20261110-windows-x64\\dicompare.exe compare dicom-session --schema protocol.json --output comparison.json"
+          "command": "Expand-Archive -Path .\\dicompare-0.15.20261111-windows-x64.zip -DestinationPath .\n.\\dicompare-0.15.20261111-windows-x64\\dicompare.exe compare dicom-session --schema protocol.json --output comparison.json"
         }
       ],
       "containers": [
