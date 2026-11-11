@@ -522,10 +522,15 @@ process with `MKL_CBWR=AUTO`. `matlab_numerics.rs` checks:
 - MKL dot products and norms on the AMD host;
 - the reproducibility results below, real and imaginary arrays.
 
-Not covered by these probes: kernels shorter than 9 taps or longer than the
+Excluded from the numerical gates: kernels shorter than 9 taps or longer than the
 course, which MATLAB computes in other orders; sparse complex courses of 1,000
 samples, where a few outputs differ by one ULP; and real `x'*y` of 8-19 elements,
-which takes another MATLAB path. SamSrf's HRFs and time courses fall outside these cases.
+which takes another MATLAB path. The validated CSS fixtures avoid these cases,
+but the API accepts custom short kernels and long sparse complex courses.
+Their convolution parity is not established. The recorded
+`conv_complex_n1000_nnz244` case has eight differing outputs, beginning at
+sample 498, whose imaginary component is `0.2720763362077453` in the port and
+`0.2720763362077454` in MATLAB.
 
 Reproducibility: repeated processes are bit-identical on each host. Across
 hosts, only MKL's results differ (83 BLAS arrays: 51 real and 32 imaginary).
