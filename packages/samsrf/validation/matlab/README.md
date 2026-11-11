@@ -437,7 +437,10 @@ Nonfinite converted inputs, including finite doubles that overflow single,
 give NaN coefficients. MATLAB's handling was not recorded. When `beta - alpha`
 overflows inside a reflector (both near the largest value), the reflector is
 formed from halved values, which is exact and leaves every recorded solve
-unchanged.
+unchanged. Complex division is prescaled by powers of two near the overflow
+and underflow thresholds, as LAPACK's `xLADIV` does, so a complex reflector
+whose `alpha - beta` approaches the largest value keeps its coefficient; this
+too leaves every recorded solve unchanged.
 
 In the full pipelines (committed module from
 [run 42925749286](https://github.com/neurodesk/webapps/actions/runs/42925749286)),

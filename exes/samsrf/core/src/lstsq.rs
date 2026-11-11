@@ -61,6 +61,8 @@ trait Real:
     const EPSILON: Self;
     /// LAPACK's `xLAMCH('S') / xLAMCH('E')`, the threshold `xLARFG` rescales below.
     const RESCALE: Self;
+    const MAX: Self;
+    const MIN_POSITIVE: Self;
     fn from_f64(value: f64) -> Self;
     fn to_f64(self) -> f64;
     fn from_usize(value: usize) -> Self;
@@ -77,6 +79,8 @@ macro_rules! real {
             const ONE: Self = 1.0;
             const EPSILON: Self = <$t>::EPSILON;
             const RESCALE: Self = <$t>::MIN_POSITIVE / (<$t>::EPSILON * 0.5);
+            const MAX: Self = <$t>::MAX;
+            const MIN_POSITIVE: Self = <$t>::MIN_POSITIVE;
             fn from_f64(value: f64) -> Self {
                 value as $t
             }
@@ -143,11 +147,48 @@ impl<T: Real> C<T> {
             C::real(self.re * other.re)
         }
     }
-    /// LAPACK's `xLADIV` without its extra scaling: Smith's algorithm.
+    /// Complex division as LAPACK's `xLADIV` guards it: operands near the
+    /// overflow or underflow threshold are first scaled by powers of two
+    /// (exact, so ordinary operands round as before), then Smith's algorithm.
     fn div(self, other: Self, complex: bool) -> Self {
         if !complex {
             return C::real(self.re / other.re);
         }
+        let half = T::from_f64(0.5);
+        let two = T::from_f64(2.0);
+        // LAPACK's xLAMCH('E') is the unit roundoff, half of EPSILON.
+        let unit = T::EPSILON * half;
+        let tiny = T::MIN_POSITIVE * two / unit;
+        let blow_up = two / (unit * unit);
+        let (mut a, mut b) = (self, other);
+        let mut scale = T::ONE;
+        let largest = |z: Self| if z.re.abs() >= z.im.abs() { z.re.abs() } else { z.im.abs() };
+        let (ab, cd) = (largest(a), largest(b));
+        if ab >= half * T::MAX {
+            a = C { re: a.re * half, im: a.im * half };
+            scale = scale * two;
+        }
+        if cd >= half * T::MAX {
+            b = C { re: b.re * half, im: b.im * half };
+            scale = scale * half;
+        }
+        if ab <= tiny {
+            a = C { re: a.re * blow_up, im: a.im * blow_up };
+            scale = scale / blow_up;
+        }
+        if cd <= tiny {
+            b = C { re: b.re * blow_up, im: b.im * blow_up };
+            scale = scale * blow_up;
+        }
+        let q = a.smith(b);
+        if scale == T::ONE {
+            q
+        } else {
+            C { re: q.re * scale, im: q.im * scale }
+        }
+    }
+    /// Smith's algorithm.
+    fn smith(self, other: Self) -> Self {
         if other.im.abs() <= other.re.abs() {
             let e = other.im / other.re;
             let f = other.re + other.im * e;
@@ -481,6 +522,60 @@ mod tests {
         let x = real(&[2e38, 2e38]);
         let (beta, _) = regress_on_ones(&x, &[1.0, 1.0], Precision::Single);
         assert!((beta.re * 2e38 - 1.0).abs() < 1e-5, "{beta}");
+    }
+
+    /// The retained-column coefficient conj(x)'y / |x|^2, evaluated on x scaled
+    /// by an exact power of two so that it neither overflows nor underflows.
+    fn single_column(x: &[Complex64], y: &[f64], scale: f64) -> Complex64 {
+        let x: Vec<Complex64> = x.iter().map(|v| v * scale).collect();
+        let numerator: Complex64 = x.iter().zip(y).map(|(x, y)| x.conj() * y).sum();
+        let denominator: f64 = x.iter().map(|x| x.norm_sqr()).sum();
+        numerator / denominator * scale
+    }
+
+    fn close(actual: Complex64, expected: Complex64, relative: f64) -> bool {
+        (actual - expected).norm() <= relative * expected.norm()
+    }
+
+    #[test]
+    fn complex_reflectors_near_the_largest_value_keep_the_coefficient() {
+        // alpha - beta is about (1.2, 1.2)e308: Smith's denominator overflows
+        // unless the division is prescaled.
+        let x = [Complex64::new(0.0, 1.2e308), Complex64::new(1e307, 0.0)];
+        let (beta, baseline) = regress_on_ones(&x, &[1.0, 1.0], Precision::Double);
+        assert_eq!(baseline, Complex64::new(0.0, 0.0));
+        let expected = single_column(&x, &[1.0, 1.0], 2f64.powi(-1000));
+        assert!(close(beta, expected, 1e-14), "{beta} != {expected}");
+        assert!(expected.re > 6.8e-310 && expected.im < -8.2e-309);
+        let x = [Complex64::new(0.0, 2e38), Complex64::new(1e37, 0.0)];
+        let (beta, baseline) = regress_on_ones(&x, &[1.0, 1.0], Precision::Single);
+        assert_eq!(baseline, Complex64::new(0.0, 0.0));
+        let expected = single_column(&x, &[1.0, 1.0], 2f64.powi(-120));
+        // The single result is subnormal; its real part keeps about 17 bits.
+        assert!(close(beta, expected, 1e-4), "{beta} != {expected}");
+        assert!(beta.re > 2.4e-40);
+    }
+
+    #[test]
+    fn single_column_solves_scale_exactly_at_both_ends_of_the_range() {
+        let y = [1.0, -2.0, 0.5, 3.0];
+        for phase in [0.0, 0.3, std::f64::consts::FRAC_PI_4, 1.2, 2.5, -2.0, std::f64::consts::PI] {
+            let base: Vec<Complex64> = (0..4)
+                .map(|i| Complex64::from_polar(1.0 + 0.25 * i as f64, phase + 0.7 * i as f64))
+                .collect();
+            for (precision, exponents) in [(Precision::Double, [1020, -1000, 900, -900]), (Precision::Single, [125, -100, 100, -90])] {
+                let reference = mldivide(&[&base], &y, precision).coefficients[0];
+                for exponent in exponents {
+                    let scale = 2f64.powi(exponent);
+                    let x: Vec<Complex64> = base.iter().map(|v| v * scale).collect();
+                    let solution = mldivide(&[&x], &y, precision);
+                    assert_eq!(solution.rank, 1);
+                    let actual = solution.coefficients[0] * scale;
+                    let relative = if precision == Precision::Single { 1e-6 } else { 1e-15 };
+                    assert!(close(actual, reference, relative), "{precision:?} phase {phase} 2^{exponent}: {actual} != {reference}");
+                }
+            }
+        }
     }
 
     #[test]
