@@ -93,7 +93,12 @@ green main run, covering accumulated merges. PR pushes cancel earlier runs
 of the same PR. Schedule and manual runs keep their separate concurrency
 groups, and native release/signing conditions are unchanged.
 
-NeuroFlow push triggers now match its PR paths. Its nightly backstop remains.
+NeuroFlow and the SDC registration gate start for a pull request only on their
+own paths: the builder, the template apps and NeuroFlow's scripts and tests;
+the SDC pipeline, the registration kernel and their reference pins. Both take
+hours of runner time, so a change to a package they only build on reaches them
+on the push to main and in their nightly runs, whose filters stay broad. To
+test such a change before merging, dispatch the workflow on the branch.
 Native workflows that call the portable packager use generated Node-driver
 paths: run `node scripts/sync-native-driver-paths.mjs` after changing their
 imports. The contract suite checks the generated paths and the existing
