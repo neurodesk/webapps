@@ -365,10 +365,13 @@ test("a project read from before a step ended does not follow that step again", 
   await page.locator("#stepSelect").selectOption("import");
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Import movies finished", { timeout: STEP_TIMEOUT });
+  // Let the follower render the final state before the older snapshot arrives.
+  await expect(page.locator("#jobList")).toContainText("Import/job001 · succeeded");
+  const previousField = await page.locator("#stepForm > :first-child").elementHandle();
   releaseRead();
-  await expect.poll(() => projectReads).toBeGreaterThan(1);
-  await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
+  await expect.poll(() => previousField.evaluate(field => field.isConnected)).toBe(false);
   expect(streams).toBe(1);
+  await expect(page.locator("#jobList")).toContainText("Import/job001 · succeeded");
   await expect(page.locator("#statusText")).not.toContainText("(Import/");
   await expect(page.locator("#runButton")).toBeEnabled();
 });

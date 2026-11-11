@@ -328,6 +328,8 @@ async function refreshProject() {
     if (known && known.status === job.status && TERMINAL.has(job.status)) return;
     state.jobs.set(job.id, { ...job, ...await client.job(job.id) });
   }));
+  // Job details are newer than the project snapshot, which may predate completion.
+  for (const job of project.jobs) job.status = state.jobs.get(job.id).status;
   for (const id of state.jobs.keys()) if (!project.jobs.some(job => job.id === id)) state.jobs.delete(id);
   renderJobs();
   renderForm();
