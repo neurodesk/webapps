@@ -886,35 +886,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "1.6.20261109",
-          "url": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261109/browserqc-1.6.20261109-linux-x64.tar.gz",
-          "sha256": "9f3c52e82059fb6093612371b8b4d8beba8c3868e5dc09b79e2558aa8d3e3193",
-          "bytes": 52387153,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261109/browserqc-1.6.20261109-linux-x64.tar.gz.validation.txt",
+          "version": "1.6.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261111/browserqc-1.6.20261111-linux-x64.tar.gz",
+          "sha256": "28cfeee5b55757fe521c48a6a4cf78b576cbb684299e531eca01e6f2c3d72923",
+          "bytes": 52387204,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261111/browserqc-1.6.20261111-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf browserqc-1.6.20261109-linux-x64.tar.gz\n./browserqc-1.6.20261109-linux-x64/browserqc T1w.nii.gz results"
+          "command": "tar -xzf browserqc-1.6.20261111-linux-x64.tar.gz\n./browserqc-1.6.20261111-linux-x64/browserqc T1w.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "1.6.20261109",
-          "url": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261109/browserqc-1.6.20261109-macos-arm64.pkg",
-          "sha256": "28289a7f3fa88e0b6399073106bc82d6bab153f87f21bc07f567764c76c1c433",
-          "bytes": 45831983,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261109/browserqc-1.6.20261109-macos-arm64.pkg.validation.txt",
+          "version": "1.6.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261111/browserqc-1.6.20261111-macos-arm64.pkg",
+          "sha256": "2cefedc5b63f13d3de83168adc1e842e9626fd10aa88602201199731cd5e8c64",
+          "bytes": 45831785,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261111/browserqc-1.6.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg browserqc-1.6.20261109-macos-arm64.pkg -target /\nbrowserqc self-check\nbrowserqc T1w.nii.gz results"
+          "command": "sudo installer -pkg browserqc-1.6.20261111-macos-arm64.pkg -target /\nbrowserqc self-check\nbrowserqc T1w.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "1.6.20261109",
-          "url": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261109/browserqc-1.6.20261109-windows-x64.zip",
-          "sha256": "41d48ef6db04611831e7c193ce4437a1ed43de3ee618919b7b6e7990aaf44f4b",
+          "version": "1.6.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261111/browserqc-1.6.20261111-windows-x64.zip",
+          "sha256": "8726ee10e06f27143ad8262dfaa4223364985db9465649b26e34ff78f530bbd6",
           "bytes": 42067266,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261109/browserqc-1.6.20261109-windows-x64.zip.validation.txt",
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/browserqc-v1.6.20261111/browserqc-1.6.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\browserqc-1.6.20261109-windows-x64.zip -DestinationPath .\n.\\browserqc-1.6.20261109-windows-x64\\browserqc.exe T1w.nii.gz results"
+          "command": "Expand-Archive -Path .\\browserqc-1.6.20261111-windows-x64.zip -DestinationPath .\n.\\browserqc-1.6.20261111-windows-x64\\browserqc.exe T1w.nii.gz results"
         }
       ],
       "containers": []
