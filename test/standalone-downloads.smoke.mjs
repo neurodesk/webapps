@@ -23,7 +23,9 @@ try {
       const response = await page.goto(new URL(`${app.path}/`, base).href, { waitUntil: 'domcontentloaded' });
       assert.ok(response?.ok(), `${app.id} page must load`);
       const bar = page.locator('.nd-app-bar:visible').first();
-      await expect(bar).toBeVisible();
+      // The shell module draws the bar, on the document the isolation service worker reloads:
+      // a cold load of the deployed host can outlast the 5 s default.
+      await expect(bar).toBeVisible({ timeout: 60000 });
       const enter = page.locator('#enterAppButton:visible, #landingLaunch:visible').first();
       if (await enter.count()) await enter.click();
       const workspace = page.getByRole('link', { name: 'Open Workspace', exact: true });
