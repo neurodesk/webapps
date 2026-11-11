@@ -1,5 +1,12 @@
 # samsrf
 
+## 0.4.20261111
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/samsrf@0.4.20261111
+
 ## 0.4.20261110
 
 ### Minor Changes
