@@ -67,6 +67,7 @@ trait Real:
     fn sqrt(self) -> Self;
     fn abs(self) -> Self;
     fn copysign(self, sign: Self) -> Self;
+    fn is_finite(self) -> bool;
 }
 
 macro_rules! real {
@@ -93,6 +94,9 @@ macro_rules! real {
             }
             fn copysign(self, sign: Self) -> Self {
                 <$t>::copysign(self, sign)
+            }
+            fn is_finite(self) -> bool {
+                <$t>::is_finite(self)
             }
         }
     };
@@ -244,16 +248,21 @@ fn larfg<T: Real>(alpha: C<T>, x: &mut [C<T>], complex: bool) -> (C<T>, C<T>) {
         xnorm = nrm2(x);
         beta = -norm(alpha, xnorm).copysign(alpha.re);
     }
+    // beta and alpha have opposite signs, so beta - alpha overflows when both
+    // exceed half the range. Halving then is exact and changes no rounding:
+    // tau and 1 / (alpha - beta) get the bits of the unbounded computation.
+    let half = if (beta - alpha.re).is_finite() { T::ONE } else { T::from_f64(0.5) };
+    let (beta_h, alpha_h) = (beta * half, C { re: alpha.re * half, im: alpha.im * half });
     let tau = if complex {
-        C { re: (beta - alpha.re) / beta, im: -alpha.im / beta }
+        C { re: (beta_h - alpha_h.re) / beta_h, im: -alpha_h.im / beta_h }
     } else {
-        C::real((beta - alpha.re) / beta)
+        C::real((beta_h - alpha_h.re) / beta_h)
     };
-    let shift = alpha.sub(C::real(beta), complex);
+    let shift = alpha_h.sub(C::real(beta_h), complex);
     if complex {
-        scale(x, C::real(T::ONE).div(shift, true), true);
+        scale(x, C::real(half).div(shift, true), true);
     } else {
-        scale(x, C::real(T::ONE / shift.re), false);
+        scale(x, C::real(half / shift.re), false);
     }
     for _ in 0..rescaled {
         beta = beta * T::RESCALE;
@@ -315,6 +324,17 @@ fn solve<T: Real>(columns: &[&[Complex64]], y: &[f64]) -> Solution {
     let convert = |value: Complex64| C { re: T::from_f64(value.re), im: T::from_f64(value.im) };
     let mut a: Vec<Vec<C<T>>> = columns.iter().map(|column| column.iter().map(|&v| convert(v)).collect()).collect();
     let mut b: Vec<C<T>> = y.iter().map(|&v| C::real(T::from_f64(v))).collect();
+    // MATLAB's NaN and Inf handling inside mldivide is not recorded here.
+    // Nonfinite converted inputs (including finite doubles that overflow
+    // single) give NaN coefficients rather than a silently finite answer.
+    if a.iter().flatten().chain(&b).any(|value| !value.re.is_finite() || !value.im.is_finite()) {
+        return Solution {
+            coefficients: vec![Complex64::new(f64::NAN, f64::NAN); n],
+            rank: 0,
+            pivot: (0..n).collect(),
+            r: Vec::new(),
+        };
+    }
     let complex = a.iter().flatten().any(|value| value.im != T::ZERO);
     if !complex {
         for value in a.iter_mut().flatten() {
@@ -444,6 +464,38 @@ mod tests {
         let (beta, baseline) = regress_on_ones(&x, &y, Precision::Double);
         assert_eq!(beta.re, 0.0);
         assert_eq!(baseline.re, 6.0);
+    }
+
+    #[test]
+    fn reflectors_near_the_largest_double_stay_finite() {
+        // beta - alpha overflows here, though every result is representable.
+        let x = real(&[8e307, 8e307]);
+        let (beta, baseline) = regress_on_ones(&x, &[1.0, 1.0], Precision::Double);
+        assert_eq!(baseline, Complex64::new(0.0, 0.0));
+        assert!((beta.re / 1.25e-308 - 1.0).abs() < 1e-14 && beta.im == 0.0, "{beta}");
+        let x = [Complex64::new(8e307, 1e300), Complex64::new(8e307, -1e300)];
+        let (beta, baseline) = regress_on_ones(&x, &[1.0, 1.0], Precision::Double);
+        assert_eq!(baseline, Complex64::new(0.0, 0.0));
+        assert!((beta.re / 1.25e-308 - 1.0).abs() < 1e-14, "{beta}");
+        // In single, |beta - alpha| = 4.8e38 overflows while the norm 2.8e38 does not.
+        let x = real(&[2e38, 2e38]);
+        let (beta, _) = regress_on_ones(&x, &[1.0, 1.0], Precision::Single);
+        assert!((beta.re * 2e38 - 1.0).abs() < 1e-5, "{beta}");
+    }
+
+    #[test]
+    fn nonfinite_inputs_give_nan_coefficients() {
+        let y = [1.0, 2.0];
+        for x in [[f64::NAN, 1.0], [f64::INFINITY, 1.0]] {
+            let (beta, baseline) = regress_on_ones(&real(&x), &y, Precision::Double);
+            assert!(beta.re.is_nan() && baseline.re.is_nan(), "{x:?}");
+        }
+        let (beta, baseline) = regress_on_ones(&real(&[1.0, 2.0]), &[f64::NAN, 1.0], Precision::Double);
+        assert!(beta.re.is_nan() && baseline.re.is_nan());
+        // Finite in double, infinite once converted to single.
+        let (beta, baseline) = regress_on_ones(&real(&[1e39, 2.0]), &y, Precision::Single);
+        assert!(beta.re.is_nan() && baseline.re.is_nan());
+        assert!(regress_on_ones(&real(&[1e39, 2.0]), &y, Precision::Double).0.re.is_finite());
     }
 
     #[test]

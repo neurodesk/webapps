@@ -114,9 +114,13 @@ def main():
                 'ulpsIm': ulps(port[k][1], matlab[k][1], single),
                 'portError': error(port[k]), 'matlabError': error(matlab[k]), 'exactMagnitude': scale,
             }
+            entry['exact'] = [float(truth[k].re), float(truth[k].im)]
+            entry['portErrorRe'] = abs(float(Fraction(port[k][0]) - truth[k].re))
+            entry['matlabErrorRe'] = abs(float(Fraction(matlab[k][0]) - truth[k].re))
             if old:
                 entry['before'] = old['re'][k]
                 entry['beforeUlpsRe'] = ulps(old['re'][k], matlab[k][0], single)
+                entry['beforeErrorRe'] = abs(float(Fraction(old['re'][k]) - truth[k].re))
             row['coefficients'].append(entry)
         rows.append(row)
     summary = {}

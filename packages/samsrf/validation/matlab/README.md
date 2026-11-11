@@ -362,13 +362,20 @@ Intel hosts were not recorded. `qr-reference.json` pins the archive
 `ubuntu-24.04/compatible`.
 
 `qr_reference.rs` requires, for all 348 cases, MATLAB's rank and, for the 89
-rank warnings, its printed tolerance; a real result where MATLAB's is real; zero
-coefficients for dropped columns; and |port - MATLAB|, real and imaginary parts
-together, within the first-order least-squares rounding bound
-`eps * ||row of R^-1|| * (||A|| ||b|| + kappa ||r||)`. The largest measured
-ratio is 0.93 (`random_double_9`). It also requires at least the measured
-number of bit-identical cases: 58 real and 10 complex single, 49 real and 6
-complex double (123 of 348; the previous double solve matched 18).
+rank warnings, its printed tolerance; a real result where MATLAB's is real; and
+zero coefficients for dropped columns. Coefficients have two independent gates.
+`exes/samsrf/core/tests/data/qr-outcomes.json` freezes each case's outcome: the
+123 bit-identical cases (58 real and 10 complex single, 49 real and 6 complex
+double; the previous double solve matched 18) must stay bit-identical, and no
+real or imaginary part of any other coefficient may move further from MATLAB's,
+in ULPs, than recorded there. Regenerating that file
+(`SAMSRF_QR_WRITE_OUTCOMES=1`) is a deliberate change to review. Second,
+|port - MATLAB|, real and imaginary parts together, must stay within an
+empirical acceptance scale shaped like the first-order least-squares
+perturbation estimate, `eps * ||row of R^-1|| * (||A|| ||b|| + kappa ||r||)`,
+computed from MATLAB's own R, pivot and coefficients on the inputs converted to
+the design's class. It is not a proven error bound, and its constant 1 is not
+derived; the largest measured ratio is 0.93 (`random_double_9`).
 `qr-accuracy.py` reports each coefficient's ULP distance and its error against
 the exact rational solution of the same rounded inputs:
 
@@ -392,9 +399,12 @@ the exact rational solution of the same rounded inputs:
 "Before" is the previous solve; it had no imaginary parts and no ones-last
 order, so those columns compare real parts of ones-first designs only.
 Units are the design class's ULPs of the real part, which overstate small
-real parts of complex coefficients; the bound above is the gate. The
-remaining differences come from MKL's kernels. The Householder steps follow
-reference LAPACK; only the reflector inner products follow a measured order.
+real parts of complex coefficients. The cause of the remaining differences is
+not established. The working hypothesis is MKL's internal kernels: other
+reductions (`xNRM2`, the back substitution), blocking or code paths that differ
+from reference LAPACK would all produce them, and the recording cannot tell
+these apart. The Householder steps follow reference LAPACK; only the reflector
+inner products follow a measured order.
 For real designs the first product is taken alone, the rest accumulate in
 eight lanes over whole blocks of eight, the lanes reduce pairwise (i with
 i + 4, then i + 2, then i + 1), the remaining terms follow in sequence, and the
@@ -408,15 +418,40 @@ designs sequentially; few complex cases are bit-identical.
 separate factorisation is not evidence of `mldivide`'s internal one.
 The zero-based single CSS vertices 47 and 58 have exact zero baselines in
 MATLAB, where cancellation of the observation sum gives the port about 4e-9
-(within the bound). Other inputs, CPUs or MATLAB releases may round differently.
+(within the acceptance scale). Other inputs, CPUs or MATLAB releases may round
+differently.
+
+The irregular single designs move further from MATLAB in ULPs (266 to 1,011)
+because the previous solve was more accurate than MATLAB, not closer to it: it
+solved in double and rounded once, so its largest real-part error against the
+exact solution of the same rounded inputs was 0.44 single eps (relative to the
+coefficient's magnitude). MATLAB's own error reaches 184 single eps on these
+ill-conditioned designs, and the port's, now in single arithmetic, reaches 185.
+The two single-precision solves carry rounding errors of the same size in
+different bits. `random_single_9`, the 1,011-ULP case, is a complex coefficient
+whose real part is 5% of its magnitude; port and MATLAB differ by 28 and 6 eps
+of that magnitude from the exact value. This is accepted as the cost of
+computing in MATLAB's class; the per-case freeze keeps it from growing.
+
+Nonfinite converted inputs, including finite doubles that overflow single,
+give NaN coefficients. MATLAB's handling was not recorded. When `beta - alpha`
+overflows inside a reflector (both near the largest value), the reflector is
+formed from halved values, which is exact and leaves every recorded solve
+unchanged.
 
 In the full pipelines (committed module from
 [run 42925749286](https://github.com/neurodesk/webapps/actions/runs/42925749286)),
 the single CSS pipeline's largest Beta difference falls from 1.07e-6 to
 2.38e-7 and its largest Baseline difference from 3.12e-8 to 1.82e-8. Across the
-nine single forward pipelines the largest Beta difference stays 9.54e-7
-(`pipeline_single_x001_rh_average1_coarse0`) and the largest Baseline
-difference rises from 4.0e-8 to 5.7e-8. The double CSS replay keeps every
+ten single forward pipelines (748 vertices), bit-identical Beta values rise from
+279 to 649 (largest distance 22 to 5 single ULPs) and bit-identical Baseline
+values from 223 to 391, with the mean Baseline distance lower in every
+pipeline. The largest absolute Baseline difference rises from 4.0e-8 to 5.7e-8:
+`pipeline_single_x001_lh_average0_coarse0` vertex 29 (MATLAB -0.0064553185)
+moves from 65 to 123 ULPs. Its maximum ULP distance also rises in three
+pipelines (79 to 123, 47 to 57 and 102 to 166), all on small baselines whose
+value is a cancellation residual of the observation sum. The largest Beta
+difference stays 9.54e-7 (`pipeline_single_x001_rh_average1_coarse0`). The double CSS replay keeps every
 decision; its maximum Beta and Baseline differences are unchanged (8.3e-9 and
 5.6e-16), on 64 and 65 rather than 67 vertices. The map gates' tolerances are
 unchanged.

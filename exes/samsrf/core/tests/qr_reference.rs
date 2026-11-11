@@ -2,9 +2,11 @@
 //! designs. The native workflow downloads the pinned recording
 //! (packages/samsrf/validation/matlab/qr-reference.json) and sets
 //! SAMSRF_QR_REFERENCE_DIR. MATLAB ran MKL's `CNR branch auto` on AMD EPYC
-//! 7763 hosts. 123 of the 348 cases are bit-identical; the others are gated
-//! by the least-squares rounding scale, so this is measured agreement with
-//! that backend on this finite set, not bit parity on arbitrary inputs.
+//! 7763 hosts. Every rank and rank-warning tolerance must match. Coefficients
+//! are frozen per case in tests/data/qr-outcomes.json (123 bit-identical, the
+//! others no further in ULPs than recorded) and must stay within an empirical
+//! acceptance scale. This is measured agreement with that backend on this
+//! finite set, not bit parity on arbitrary inputs.
 use num_complex::Complex64;
 use samsrf_core::{lstsq, precision::Precision};
 use serde_json::Value;
@@ -52,7 +54,11 @@ struct Case {
     matlab: Vec<Complex64>,
     warning: Option<(usize, f64)>,
     tolerance: f64,
-    /// ||A||_F ||b||_2 and ||y - A b||_2 (MATLAB's b), for the rounding scale.
+    /// MATLAB's `qr(A,0)` R (column-major) and zero-based pivot.
+    matlab_r: Vec<Complex64>,
+    matlab_pivot: Vec<usize>,
+    /// ||A||_F ||b||_2 and ||y - A b||_2 with MATLAB's b and the inputs in
+    /// the design's class, for the acceptance scale.
     observations: f64,
     residual: f64,
 }
@@ -78,10 +84,12 @@ fn cases() -> Option<Vec<Case>> {
         let epsilon = if single { f64::from(f32::EPSILON) } else { f64::EPSILON };
         let factor = if complex_design { 10.0 } else { 1.0 };
         let matlab = complex(&root, &case["beta"]);
-        let design = norm(columns.iter().flat_map(|c| c.iter()).flat_map(|v| [v.re, v.im]));
+        let class = |v: Complex64| if single { Complex64::new(f64::from(v.re as f32), f64::from(v.im as f32)) } else { v };
+        let converted: Vec<Vec<Complex64>> = columns.iter().map(|c| c.iter().map(|&v| class(v)).collect()).collect();
+        let design = norm(converted.iter().flatten().flat_map(|v| [v.re, v.im]));
         let observations = design * norm(matlab.iter().flat_map(|b| [b.re, b.im]));
         let residuals: Vec<Complex64> = y.iter().enumerate()
-            .map(|(i, &y)| Complex64::new(y, 0.0) - columns[0][i] * matlab[0] - columns[1][i] * matlab[1])
+            .map(|(i, &y)| Complex64::new(y, 0.0) - converted[0][i] * matlab[0] - converted[1][i] * matlab[1])
             .collect();
         let residual = norm(residuals.iter().flat_map(|r| [r.re, r.im]));
         Case {
@@ -91,6 +99,9 @@ fn cases() -> Option<Vec<Case>> {
             matlab,
             warning,
             tolerance: factor * y.len() as f64 * epsilon * r11,
+            matlab_r: complex(&root, &case["rWithoutRhs"]),
+            matlab_pivot: array(&root, case["pivotWithoutRhs"]["file"].as_str().unwrap(), &case["pivotWithoutRhs"]["shape"])
+                .iter().map(|&p| p as usize - 1).collect(),
             observations,
             residual,
         }
@@ -121,40 +132,89 @@ fn rank_and_tolerance_match_every_matlab_warning() {
     assert_eq!(deficient, 89, "missing rank-deficient recordings");
 }
 
-/// The standard least-squares perturbation scale of each coefficient,
-/// eps * ||row of R^-1|| * (||A|| ||b|| + kappa ||r||), in original column order.
-/// Columns beyond the rank have none.
+/// An empirical acceptance scale for each coefficient, shaped like the
+/// first-order least-squares perturbation estimate
+/// eps * ||row of R^-1|| * (||A|| ||b|| + kappa ||r||), from MATLAB's own R,
+/// pivot and coefficients. It is not a proven bound on either solver's error
+/// and its constant (1) is not derived; 0.93 is the largest measured ratio.
+/// Columns beyond MATLAB's rank have none.
 fn scales(case: &Case) -> Vec<Option<f64>> {
     let epsilon = if case.single { f64::from(f32::EPSILON) } else { f64::EPSILON };
-    let r = &case.port.r;
-    let (rows, kappa): (Vec<f64>, f64) = match case.port.rank {
+    let r = &case.matlab_r;
+    let rank = case.warning.map_or(2, |(rank, _)| rank);
+    let (rows, kappa): (Vec<f64>, f64) = match rank {
         2 => {
-            let (r11, r12, r22) = (r[0][0].norm(), r[0][1].norm(), r[1][1].norm());
+            // Column-major 2x2: R11, R21 (zero), R12, R22.
+            let (r11, r12, r22) = (r[0].norm(), r[2].norm(), r[3].norm());
             let rows = vec![(1.0 / (r11 * r11) + (r12 / (r11 * r22)).powi(2)).sqrt(), 1.0 / r22];
             let inverse = rows.iter().map(|v| v * v).sum::<f64>().sqrt();
             (rows, (r11 * r11 + r12 * r12 + r22 * r22).sqrt() * inverse)
         }
-        1 => (vec![1.0 / r[0][0].norm()], 1.0),
+        1 => (vec![1.0 / r[0].norm()], 1.0),
         _ => (vec![], 1.0),
     };
-    let mut result = vec![None; case.port.coefficients.len()];
+    let mut result = vec![None; case.matlab.len()];
     for (position, row) in rows.into_iter().enumerate() {
-        result[case.port.pivot[position]] = Some(epsilon * row * (case.observations + kappa * case.residual));
+        result[case.matlab_pivot[position]] = Some(epsilon * row * (case.observations + kappa * case.residual));
     }
     result
 }
 
-#[test]
-fn coefficients_agree_within_the_measured_rounding_scale() {
-    let Some(cases) = cases() else { return; };
-    let mut worst: std::collections::BTreeMap<String, (f64, String)> = Default::default();
-    let mut exact: std::collections::BTreeMap<String, usize> = Default::default();
-    for case in &cases {
-        let complex_result = case.matlab.iter().any(|c| c.im != 0.0);
-        let group = format!("{}-{}", if case.single { "single" } else { "double" }, if complex_result { "complex" } else { "real" });
-        if case.port.coefficients.iter().zip(&case.matlab).all(|(p, m)| p.re.to_bits() == m.re.to_bits() && p.im.to_bits() == m.im.to_bits()) {
-            *exact.entry(group.clone()).or_default() += 1;
+/// Units in the last place of the design's class between two values.
+fn ulps(a: f64, b: f64, single: bool) -> u64 {
+    if a == b {
+        return 0;
+    }
+    if !a.is_finite() || !b.is_finite() {
+        return u64::MAX;
+    }
+    let ordered = |v: f64| -> i128 {
+        if single {
+            let bits = (v as f32).to_bits() as i32;
+            i128::from(if bits < 0 { -(bits & 0x7fff_ffff) } else { bits })
+        } else {
+            let bits = v.to_bits() as i64;
+            i128::from(if bits < 0 { -(bits & 0x7fff_ffff_ffff_ffff) } else { bits })
         }
+    };
+    (ordered(a) - ordered(b)).unsigned_abs() as u64
+}
+
+fn outcome(case: &Case) -> Value {
+    let distances: Vec<[u64; 2]> = case.port.coefficients.iter().zip(&case.matlab)
+        .map(|(p, m)| [ulps(p.re, m.re, case.single), ulps(p.im, m.im, case.single)])
+        .collect();
+    let exact = case.port.coefficients.iter().zip(&case.matlab)
+        .all(|(p, m)| p.re.to_bits() == m.re.to_bits() && p.im.to_bits() == m.im.to_bits());
+    serde_json::json!({ "exact": exact, "ulps": distances })
+}
+
+#[test]
+fn coefficients_stay_within_frozen_outcomes_and_the_acceptance_scale() {
+    let Some(cases) = cases() else { return; };
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/qr-outcomes.json");
+    if std::env::var_os("SAMSRF_QR_WRITE_OUTCOMES").is_some() {
+        let frozen: serde_json::Map<String, Value> = cases.iter().map(|case| (case.id.clone(), outcome(case))).collect();
+        std::fs::write(&path, serde_json::to_string_pretty(&frozen).unwrap() + "\n").unwrap();
+    }
+    let frozen: serde_json::Map<String, Value> = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(frozen.len(), cases.len(), "every recorded case has a frozen outcome");
+    let mut worst = (0.0, String::new());
+    let mut exact = 0;
+    for case in &cases {
+        // Per case: a bit-identical case stays bit-identical, and no part of a
+        // coefficient moves further from MATLAB's than when the file was written.
+        let expected = &frozen[&case.id];
+        let actual = outcome(case);
+        if expected["exact"] == true {
+            assert_eq!(actual["exact"], true, "{}: was bit-identical to MATLAB", case.id);
+            exact += 1;
+        }
+        let parts = |v: &Value| v["ulps"].as_array().unwrap().iter().flat_map(|c| c.as_array().unwrap().clone()).map(|n| n.as_u64().unwrap()).collect::<Vec<_>>();
+        for (now, then) in parts(&actual).into_iter().zip(parts(expected)) {
+            assert!(now <= then, "{}: {now} ULPs from MATLAB, frozen at {then}", case.id);
+        }
+        let complex_result = case.matlab.iter().any(|c| c.im != 0.0);
         for ((port, matlab), scale) in case.port.coefficients.iter().zip(&case.matlab).zip(scales(case)) {
             if !complex_result {
                 assert_eq!(port.im, 0.0, "{}: MATLAB's result is real", case.id);
@@ -164,22 +224,16 @@ fn coefficients_agree_within_the_measured_rounding_scale() {
                 assert_eq!(*matlab, Complex64::new(0.0, 0.0), "{}: dropped column", case.id);
                 continue;
             };
-            // Both the real and the imaginary part enter the distance. The
-            // largest measured ratio is 0.93 (random_double_9).
+            // Real and imaginary parts enter the distance together.
             let ratio = if port == matlab { 0.0 } else { (port - matlab).norm() / scale };
-            assert!(ratio <= 1.0, "{}: |{port} - {matlab}| is {ratio} rounding scales", case.id);
-            let entry = worst.entry(group.clone()).or_insert((0.0, String::new()));
-            if ratio > entry.0 {
-                *entry = (ratio, case.id.clone());
+            assert!(ratio <= 1.0, "{}: |{port} - {matlab}| is {ratio} acceptance scales", case.id);
+            if ratio > worst.0 {
+                worst = (ratio, case.id.clone());
             }
         }
     }
-    eprintln!("largest ratios {worst:?}; bit-identical cases {exact:?}");
-    // Bit-identical coefficients (both parts, both columns) with the recorded
-    // MKL backend. A change that loses any of them is a regression.
-    for (group, minimum) in [("double-complex", 6), ("double-real", 49), ("single-complex", 10), ("single-real", 58)] {
-        assert!(exact.get(group).copied().unwrap_or(0) >= minimum, "{group}: fewer bit-identical cases than {minimum}");
-    }
+    eprintln!("largest acceptance ratio {worst:?}; {exact} bit-identical cases");
+    assert_eq!(exact, 123, "frozen bit-identical cases");
 }
 
 /// With SAMSRF_QR_REPORT set, write the port's coefficients for the analysis

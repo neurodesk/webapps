@@ -408,8 +408,9 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   peeled term and eight lanes for real designs, two lanes for complex single,
   sequential for complex double). This is measured agreement, not bit parity: on the 348
   recorded designs every rank and rank warning tolerance matches, 123 cases
-  are bit-identical, and every other coefficient is within the first-order
-  least-squares rounding bound of MATLAB's (validation README). MATLAB ran
+  are bit-identical, and every other coefficient is within an empirical
+  acceptance scale of MATLAB's (validation README). Nonfinite converted inputs
+  give NaN coefficients. MATLAB ran
   MKL's `CNR branch auto` there; it ignored every MKL branch request, and other
   CPUs can round differently. The RC and CF `[Y 1] \ X` regressions do not use
   this solve yet.
