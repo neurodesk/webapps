@@ -161,9 +161,14 @@ fn only_blas_differs_across_hosts_and_mkl_cbwr_does_not_change_matlab() {
     let hash = |host: &str, process: &str, name: &str| files[&format!("{host}/{process}/{name}")].as_str().unwrap().to_string();
     let (_, cases) = cases(&root, AMD, "compatible");
     let mut blas_differs = 0;
+    let mut checked = 0;
     for case in cases.values() {
-        for descriptor in case.as_object().unwrap().values().filter(|v| v.get("file").is_some()) {
-            let name = descriptor["file"].as_str().unwrap();
+        let names = case.as_object().unwrap().values()
+            .filter(|v| v.get("file").is_some())
+            .flat_map(|descriptor| ["file", "imaginary"].into_iter()
+                .filter_map(move |key| descriptor[key].as_str().filter(|name| !name.is_empty())));
+        for name in names {
+            checked += 1;
             for process in ["compatible", "repeat"] {
                 assert_eq!(hash(AMD, process, name), hash(AMD, "compatible", name), "AMD repeat {name}");
                 assert_eq!(hash(INTEL, process, name), hash(INTEL, "compatible", name), "Intel repeat {name}");
@@ -177,5 +182,6 @@ fn only_blas_differs_across_hosts_and_mkl_cbwr_does_not_change_matlab() {
             }
         }
     }
-    assert_eq!(blas_differs, 51, "BLAS arrays that differ across hosts");
+    assert_eq!(checked, 1_584, "real and imaginary arrays checked per process");
+    assert_eq!(blas_differs, 83, "BLAS arrays that differ across hosts");
 }
