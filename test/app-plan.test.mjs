@@ -1251,6 +1251,36 @@ test('only the packages every app is built from are reached by most apps', async
   assert.ok(plan.selected.length < registry.apps.length / 3, `${plan.selected.length} apps`);
 });
 
+test('removing lint reason edges preserves the diffusion and Node driver consumers', async () => {
+  const workspace = await graph;
+  const registry = await loadAppsRegistry();
+  const diffusion = ['bison', 'degibbs', 'dwi2trx', 'dwicorrect', 'dwidenoise', 'fastprep', 'hmc', 'n4', 'noddi', 'sdc'];
+  const cases = [
+    ...[
+      'packages/hmc/src/pool.js',
+      'packages/noddi/src/pipeline.js',
+      'packages/sdc/src/index.js',
+      'packages/n4/src/index.js',
+      'packages/dwi2trx/src/runner.js',
+      'packages/shoreline/src/index.js',
+      'packages/hmc-registration/src/index.js',
+      'exes/dwi/sdc/src/lib.rs',
+      'exes/sdc/core/src/lib.rs',
+    ].map((path) => [path, diffusion]),
+    ['packages/ants-denoise/src/index.js', ['ants-denoise', ...diffusion]],
+    ['packages/node-drivers/src/niimath.js', [
+      ...diffusion,
+      'brain-extraction', 'brain2print', 'browserqc', 'dcm2niix', 'deface',
+      'dicomview', 'edgereg', 'lcmodel', 'mri2vid', 'niimath', 'syncro',
+    ]],
+  ];
+  for (const [path, consumers] of cases) {
+    const plan = createAppPlan(registry, [path], workspace);
+    assert.equal(plan.reasons.fallback, null, path);
+    assert.deepEqual(plan.selected.map(({ id }) => id).sort(), [...consumers].sort(), path);
+  }
+});
+
 test('an app information change selects the apps whose entries changed', async () => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
