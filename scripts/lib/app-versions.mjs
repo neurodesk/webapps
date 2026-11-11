@@ -85,11 +85,15 @@ export function nextVersion(current, bump, date) {
   return `${major}.${minor}.${date}`;
 }
 
-/** Workspace package name → directory, for apps and packages. */
+/** Workspace package name → directory, for apps, packages and site workspaces. */
 export async function workspacePackages(root = repoRoot) {
   const packages = new Map();
-  for (const group of ['apps', 'packages']) {
-    for (const entry of await readdir(join(root, group), { withFileTypes: true })) {
+  for (const group of ['apps', 'packages', 'site/easter-eggs']) {
+    const entries = await readdir(join(root, group), { withFileTypes: true }).catch((error) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    });
+    for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const directory = join(root, group, entry.name);
       try {
@@ -119,7 +123,8 @@ export async function planRelease(root = repoRoot, { date = releaseDate(), sameD
   for (const release of plan.releases) {
     if (release.type === 'none') continue;
     const pkg = packages.get(release.name);
-    if (!pkg || (pkg.group !== 'apps' && !Object.hasOwn(LINKED_PACKAGES, release.name) && release.name !== desktopName)) continue;
+    const datedSite = pkg?.group === 'site/easter-eggs' && DATE_VERSION.test(pkg.manifest.version);
+    if (!pkg || (pkg.group !== 'apps' && !Object.hasOwn(LINKED_PACKAGES, release.name) && release.name !== desktopName && !datedSite)) continue;
     const app = packages.get(LINKED_PACKAGES[release.name]);
     const series = app?.manifest.releaseSeries ?? pkg.manifest.releaseSeries;
     if (series !== undefined && !/^(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(series)) {

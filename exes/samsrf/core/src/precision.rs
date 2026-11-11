@@ -47,7 +47,8 @@ pub(crate) fn mean_complex(values: &[num_complex::Complex64]) -> num_complex::Co
     sums.iter().copied().sum::<num_complex::Complex64>() / values.len() as f64
 }
 
-fn sum_single(values: &[f32]) -> f32 {
+/// MATLAB's `sum` of a single vector, R2023b: four lanes from 44 elements.
+pub(crate) fn sum_single(values: &[f32]) -> f32 {
     if values.len() < 44 {
         return values.iter().copied().fold(0.0, |sum, value| sum + value);
     }
@@ -106,6 +107,23 @@ pub fn correlation_single(prediction: &[f64], observed: &[f64], observations_fir
     }
 }
 
+/// `corr(x, y)` of two single columns, as `samsrf_cfparam_loop` correlates a single
+/// vertex course with a single seed course: centred in single, the dot product in
+/// single and each norm divided out in turn, `x`'s first.
+pub fn correlation_single_pair(x: &[f64], y: &[f64]) -> f32 {
+    if x.len() != y.len() || x.len() < 2 {
+        return f32::NAN;
+    }
+    let centre = |values: &[f64]| {
+        let values: Vec<f32> = values.iter().map(|&value| value as f32).collect();
+        let mean = sum_single(&values) / values.len() as f32;
+        values.iter().map(|value| value - mean).collect::<Vec<f32>>()
+    };
+    let norm = |values: &[f32]| values.iter().map(|&value| f64::from(value).powi(2)).sum::<f64>().sqrt() as f32;
+    let (xc, yc) = (centre(x), centre(y));
+    (dot_single(&xc, &yc) / norm(&xc)) / norm(&yc)
+}
+
 /// Mixed complex prediction and real single observations. MATLAB accumulates
 /// these two components in sequence, unlike its real vector dot product.
 pub fn correlation_complex_single(x: &[num_complex::Complex64], y: &[f64]) -> num_complex::Complex64 {
@@ -138,6 +156,13 @@ mod tests {
     fn constant_or_mismatched_observations_have_no_correlation() {
         assert!(correlation_single(&[1.0, 2.0], &[1.0], false).is_nan());
         assert!(correlation_single(&[1.0, 2.0], &[1.0, 1.0], false).is_nan());
+    }
+
+    #[test]
+    fn single_pair_correlation_is_symmetric_in_scale_and_nan_for_a_constant_course() {
+        let x = [1.0, 2.0, 4.0, 3.0];
+        assert_eq!(correlation_single_pair(&x, &[2.0, 4.0, 8.0, 6.0]), 1.0);
+        assert!(correlation_single_pair(&x, &[5.0; 4]).is_nan());
     }
 
     #[test]

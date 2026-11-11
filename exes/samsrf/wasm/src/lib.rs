@@ -8,6 +8,7 @@ use js_sys::{Array, Float32Array, Float64Array, Object, Reflect, Uint32Array, Ui
 use samsrf_core::apertures::{Apertures as CoreApertures, Frame};
 use samsrf_core::expr::{AnonymousFunction, Value};
 use samsrf_core::model::{AnalysisKind, HrfSpec};
+use samsrf_core::precision::Precision;
 use samsrf_core::preprocess::{self, Combine, Normalise, PreprocessOptions, Preprocessed};
 use samsrf_core::surface::{Faces, Surface};
 use samsrf_core::timeseries::{RawRun, TimeSeries, VertexSelection};
@@ -562,6 +563,7 @@ impl RunAccumulator {
         combine: &str,
         noise_ceiling: bool,
         global_signal: bool,
+        precision: Option<String>,
     ) -> Result<RunAccumulator> {
         let normalise = match normalise {
             "none" => Normalise::None,
@@ -575,7 +577,12 @@ impl RunAccumulator {
             _ => return Err(JsError::new(&format!("combine {combine:?} is not 'average' or 'concatenate'"))),
         };
         let kept = keep.map_or(VertexSelection::All, VertexSelection::from_indices);
-        let options = PreprocessOptions { normalise, combine, global_signal };
+        let precision = match precision.as_deref() {
+            None | Some("double") => Precision::Double,
+            Some("single") => Precision::Single,
+            Some(other) => return Err(JsError::new(&format!("precision {other:?} is not 'double' or 'single'"))),
+        };
+        let options = PreprocessOptions { normalise, combine, global_signal, precision };
         Ok(RunAccumulator { inner: Some(preprocess::RunAccumulator::new(total_vertices, kept, options)) })
     }
 

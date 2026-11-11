@@ -52,6 +52,10 @@ on:
         description: Record raw-input RC/CF pipelines in both precisions, without MATLAB Compiler
         type: boolean
         default: false
+      revcor_edges:
+        description: With revcor_only, record the constant, low-variance and threshold-boundary RC/CF cases instead of the matrix
+        type: boolean
+        default: false
       wasm_only:
         description: Only rebuild WASM and retain its optimizer input for diagnosis
         type: boolean
@@ -121,6 +125,13 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           node packages/samsrf/validation/matlab/compare.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-matrix-input"
           SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_reference
+      - name: Reverse-correlation pRF and connective-field raw pipeline gates (both MATLAB hosts)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor-reference" packages/samsrf/validation/matlab/revcor-reference.json
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor-edges" packages/samsrf/validation/matlab/revcor-edges-reference.json
+          SAMSRF_REVCOR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-revcor-reference" SAMSRF_REVCOR_EDGES_DIR="$RUNNER_TEMP/samsrf-revcor-edges" SAMSRF_MATRIX_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test revcor_reference -- --nocapture
+          node packages/samsrf/validation/matlab/compare-revcor.mjs "$RUNNER_TEMP/samsrf-revcor-reference" "$RUNNER_TEMP/samsrf-matrix-input" "$RUNNER_TEMP/samsrf-revcor-comparison.json"
       - name: MATLAB geometry and real-template CF gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-geometry" packages/samsrf/validation/matlab/geometry-reference.json
@@ -153,6 +164,13 @@ jobs:
             ${{ runner.temp }}/samsrf-css-trace-v60.json
             ${{ runner.temp }}/samsrf-css-trace-v69.json
             ${{ runner.temp }}/samsrf-qr-accuracy.json
+          if-no-files-found: ignore
+      - name: Retain the reverse-correlation comparison
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-revcor-comparison
+          path: ${{ runner.temp }}/samsrf-revcor-comparison.json
           if-no-files-found: ignore
 
   wasm-source:
@@ -357,9 +375,9 @@ jobs:
         if: '!inputs.diagnostics_only && !inputs.qr_only && !inputs.geometry_only && !inputs.numerics_only'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if ~reverseCorrelationOnly && strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly)
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if ~reverseCorrelationOnly && strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly,false,reverseCorrelationOnly && strcmp('${{ inputs.revcor_edges }}','true'))
       - name: Require every reverse-correlation case and recorded array
-        if: inputs.revcor_only
+        if: inputs.revcor_only && !inputs.revcor_edges
         run: node packages/samsrf/validation/matlab/validate-revcor-recording.mjs "$RUNNER_TEMP/samsrf-matlab"
       - name: Record least-squares solves with MKL request compatible
         if: inputs.qr_only

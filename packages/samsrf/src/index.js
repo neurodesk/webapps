@@ -132,14 +132,14 @@ export const hrf = {
   },
 };
 
-const PREPROCESS_DEFAULTS = { normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false };
+const PREPROCESS_DEFAULTS = { normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false, precision: 'double' };
 
 export class RunAccumulator {
   #inner;
 
   constructor(totalVertices, keep = null, options = {}) {
-    const { normalise, combine, noiseCeiling, globalSignal } = { ...PREPROCESS_DEFAULTS, ...options };
-    this.#inner = new core.RunAccumulator(totalVertices, keep ?? undefined, normalise, combine, noiseCeiling, globalSignal);
+    const { normalise, combine, noiseCeiling, globalSignal, precision } = { ...PREPROCESS_DEFAULTS, ...options };
+    this.#inner = new core.RunAccumulator(totalVertices, keep ?? undefined, normalise, combine, noiseCeiling, globalSignal, precision);
   }
 
   pushRun(run) {

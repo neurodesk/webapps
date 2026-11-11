@@ -249,7 +249,7 @@ test('portable Node command lines build on target runners and publish through on
     const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
     // A release with a macOS installer is published only by signing it.
     const publishInput=installer?'sign_release':'publish_release';
-    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'revcor_only', 'wasm_only', 'qr_only', 'numerics_only', 'runtime_cli', 'runtime_image'] : [];
+    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'revcor_only', 'revcor_edges', 'wasm_only', 'qr_only', 'numerics_only', 'runtime_cli', 'runtime_image'] : [];
     assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs), [publishInput, ...referenceInputs], name);
     assert.equal(flow.jobs.portable.with.publish_release,`\${{ github.event_name == 'workflow_dispatch' && inputs.${publishInput} }}`,name);
     assert.equal(flow.jobs.portable.with.sign_release,installer?"${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}":undefined,name);
@@ -576,6 +576,26 @@ test('CPU Node driver parity skips optional CUDA installation', async () => {
   const flow = await workflow('node-drivers');
   assert.equal(flow.env.ONNXRUNTIME_NODE_INSTALL, 'skip');
   assert.ok(flow.jobs.node.steps.some(step => step.run === 'pnpm install --frozen-lockfile'));
+});
+
+// onnxruntime-node's postinstall downloads CUDA libraries into a directory named by the millisecond,
+// so the postinstalls of two pinned versions can share it and one deletes it under the other.
+test('every workflow that runs install scripts skips the optional CUDA download', async () => {
+  const files = (await readdir(new URL('../.github/workflows/', import.meta.url))).filter((name) => name.endsWith('.yml')).sort();
+  const gaps = [];
+  for (const file of files) {
+    const flow = await workflow(file.slice(0, -'.yml'.length));
+    for (const [id, job] of Object.entries(flow.jobs ?? {})) {
+      for (const step of job.steps ?? []) {
+        const installs = String(step.run ?? '').split('\n')
+          .filter((line) => /\bpnpm install\b/.test(line) && !/--ignore-scripts|--lockfile-only/.test(line));
+        if (installs.length === 0) continue;
+        const flag = step.env?.ONNXRUNTIME_NODE_INSTALL ?? job.env?.ONNXRUNTIME_NODE_INSTALL ?? flow.env?.ONNXRUNTIME_NODE_INSTALL;
+        if (flag !== 'skip') gaps.push(`${file} ${id}: ${installs[0].trim()}`);
+      }
+    }
+  }
+  assert.deepEqual(gaps, []);
 });
 
 test('Brain2Print browser CPU parity skips optional CUDA installation', async () => {

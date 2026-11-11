@@ -26,6 +26,12 @@ test('every app is versioned MAJOR.MINOR.YYYYMMDD with a valid past date', () =>
     validateReleaseDate(date);
     assert.ok(date <= releaseDate(), `${app.id} release date ${date} must not be in the future`);
   }
+  for (const pkg of packages.values()) {
+    if (pkg.group !== 'site/easter-eggs' || !/\.20\d{6}$/.test(pkg.manifest.version)) continue;
+    const date = pkg.manifest.version.split('.')[2];
+    validateReleaseDate(date);
+    assert.ok(date <= releaseDate(), `${pkg.name} release date ${date} must not be in the future`);
+  }
 });
 
 test('embedded version strings and linked packages match their app', async () => {
@@ -183,6 +189,23 @@ test('site workspace dependents retain ordinary semver during shared releases', 
   assert.equal(release.plan.releases.find(item => item.name === 'zarro').newVersion, '0.1.20261001');
   await applyRelease(release);
   assert.equal((await json('site/easter-eggs/game')).version, '0.1.1');
+});
+
+test('dated site workspaces retain UTC date versions and support same-day releases', async (t) => {
+  const { root, put, manifest, json } = await fixture(t);
+  await put('pnpm-workspace.yaml', 'packages:\n  - apps/*\n  - packages/*\n  - site/easter-eggs/*\n');
+  await manifest('site/easter-eggs/game', { name: 'game', version: '0.1.20260930', private: true });
+  await put('.changeset/site.md', '---\n"game": patch\n---\n\nRead the released version.\n');
+  await applyRelease(await planRelease(root, { date: '20261111' }));
+  assert.equal((await json('site/easter-eggs/game')).version, '0.1.20261111');
+  await put('.changeset/site.md', '---\n"game": patch\n---\n\nSame-day site fix.\n');
+  await assert.rejects(planRelease(root, { date: '20261111' }), /already at/);
+  await applyRelease(await planRelease(root, { date: '20261111', sameDay: true }));
+  assert.equal((await json('site/easter-eggs/game')).version, '0.1.20261111');
+  const changelog = await readFile(join(root, 'site/easter-eggs/game/CHANGELOG.md'), 'utf8');
+  assert.equal(changelog.split('## 0.1.20261111').length - 1, 1);
+  assert.match(changelog, /Read the released version/);
+  assert.match(changelog, /Same-day site fix/);
 });
 
 test('a linked-package changeset releases the app, package and native versions together', async (t) => {

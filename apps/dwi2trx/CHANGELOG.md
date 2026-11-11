@@ -1,5 +1,20 @@
 # dwi2trx
 
+## 0.8.20261111
+
+### Patch Changes
+
+- d13edc6: Track streamlines in short GPU commands that pause and resume. Each seed now advances at most 32 tracking steps per command and saves where it stopped, so no workgroup runs long enough for a driver to reset the GPU: on Intel Arc with Mesa, one workgroup tracking all of a seed's streamlines ran past the 640 ms preemption timeout and lost the device (#598). The steps and random draws are unchanged, so the tractogram is byte for byte the same.
+- Updated dependencies [d643e8d]
+- Updated dependencies [3beb743]
+- Updated dependencies [a2675b9]
+- Updated dependencies [8fca61b]
+- Updated dependencies [83f5bb1]
+- Updated dependencies [65a2e2b]
+  - @neurodesk/webapp-components@0.27.0
+  - @neurodesk/dwi2trx@0.8.20261111
+  - @neurodesk/runtime-support@0.9.25
+
 ## 0.8.20261109
 
 ### Patch Changes

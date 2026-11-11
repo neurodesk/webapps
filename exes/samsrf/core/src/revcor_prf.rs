@@ -17,6 +17,7 @@ use crate::hrf::{self, ResolvedHrf};
 use crate::model::{FineFit, RevCorPrfModel};
 use crate::optim::{self, FminsearchOptions};
 use crate::prf;
+use crate::precision::Precision;
 
 pub const RAW_VALUES: [&str; 5] = ["R^2", "x0", "y0", "Fwhm", "Beta"];
 
@@ -100,25 +101,43 @@ impl Prepared {
     }
 
     /// `cM = [Y ones] \ X` without the intercept row: the slope of each regressor on `y`.
-    /// All NaN when `y` is constant (a rank-deficient system).
+    /// `[Y ones] \\ X`, keeping the course's coefficient. Single courses use MATLAB's
+    /// single QR (`lstsq::mldivide`, in MATLAB's column order). A double course
+    /// with variance takes the centred solve, which agrees with MATLAB's double QR
+    /// to 1e-12 on every recorded case and is several times faster. A constant
+    /// course makes the design rank deficient: MATLAB keeps the column with the
+    /// larger norm, so its coefficient is `y'x / y'y` when `|y| > 1`, else 0.
     pub fn profile(&self, y: &[f64]) -> Vec<f64> {
-        let n = y.len() as f64;
-        let mean = y.iter().sum::<f64>() / n;
-        let centred: Vec<f64> = y.iter().map(|value| value - mean).collect();
-        let variance: f64 = centred.iter().map(|value| value * value).sum();
-        if variance == 0.0 || !variance.is_finite() {
-            return vec![f64::NAN; self.pixels];
+        let precision = self.model.data_precision;
+        if precision == Precision::Double {
+            let n = y.len() as f64;
+            let mean = y.iter().sum::<f64>() / n;
+            let centred: Vec<f64> = y.iter().map(|value| value - mean).collect();
+            let variance: f64 = centred.iter().map(|value| value * value).sum();
+            if !variance.is_finite() {
+                return vec![f64::NAN; self.pixels];
+            }
+            if variance > 0.0 {
+                return (0..self.pixels).map(|p| crate::fit_prf::dot(&centred, self.regressor(p)) / variance).collect();
+            }
         }
-        (0..self.pixels).map(|p| crate::fit_prf::dot(&centred, self.regressor(p)) / variance).collect()
+        let course: Vec<num_complex::Complex64> = y.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
+        let ones = vec![num_complex::Complex64::new(1.0, 0.0); y.len()];
+        (0..self.pixels).map(|p| crate::lstsq::mldivide(&[&course, &ones], self.regressor(p), precision).coefficients[0].re).collect()
     }
 
     /// The reverse-correlation rows `[R^2, x0, y0, Fwhm, Beta]` of one time course, and
     /// the profile they came from, with its sign as computed: the convex hull and the
     /// model fit flip a negative peak themselves and restore the fitted signs.
     pub fn reverse_correlate(&self, y: &[f64]) -> ([f64; 5], Vec<f64>) {
-        let model = &self.model;
         let profile = self.profile(y);
-        let mut cm = profile.clone();
+        (self.raw_row(y, &profile), profile)
+    }
+
+    /// The reverse-correlation rows of one time course from its profile.
+    pub fn raw_row(&self, y: &[f64], profile: &[f64]) -> [f64; 5] {
+        let model = &self.model;
+        let mut cm = profile.to_vec();
         let mut peak_sign = 1.0;
         if model.allow_negative_peaks && crate::fit_prf::nan_max(&cm).abs() < nan_min(&cm).abs() {
             for value in &mut cm {
@@ -128,15 +147,22 @@ impl Prepared {
         }
         let max = crate::fit_prf::nan_max(&cm);
         let Some(m) = cm.iter().position(|value| *value == max) else {
-            return ([0.0; 5], profile);
+            return [0.0; 5];
         };
         let above = cm.iter().filter(|value| **value > max / 2.0).count() as f64 / self.pixels as f64;
-        let r = prf::pearson(y, self.regressor(m));
-        if r.is_nan() {
-            return ([0.0; 5], profile);
+        // corr(Y, X(:,m)): single when Y is, and so is its square.
+        let r2 = match model.data_precision {
+            Precision::Double => prf::pearson(y, self.regressor(m)).powi(2),
+            Precision::Single => {
+                let r = crate::precision::correlation_single(self.regressor(m), y, true);
+                f64::from(r * r)
+            }
+        };
+        if r2.is_nan() {
+            return [0.0; 5];
         }
         let fwhm = (above * (model.scaling_factor * 2.0).powi(2)).sqrt();
-        ([r * r, self.xc[m], self.yc[m], fwhm, max * peak_sign], profile)
+        [r2, self.xc[m], self.yc[m], fwhm, max * peak_sign]
     }
 
     /// The convex hull estimate: `x0`, `y0` and `sqrt(area) / (2 sqrt(2 ln 2))` replace
@@ -151,7 +177,7 @@ impl Prepared {
             }
         }
         let max = crate::fit_prf::nan_max(&rmap);
-        let threshold = max * model.convex_hull_threshold;
+        let threshold = model.data_precision.round(max * model.convex_hull_threshold);
         let points: Vec<[f64; 2]> = (0..self.pixels).filter(|&p| rmap[p] > threshold).map(|p| [self.xc[p], self.yc[p]]).collect();
         match Hull::of(&points) {
             Some(hull) => {
@@ -310,6 +336,18 @@ mod tests {
         assert_eq!(row[3], 2.0);
         let hull = prepared.convex_hull(&row, &profile);
         assert_eq!(hull, vec![0.0; 5], "one pixel spans no area, so SamSrf zeroes the column");
+    }
+
+    #[test]
+    fn a_constant_single_course_has_a_zero_profile_and_no_estimate() {
+        // MATLAB's single QR keeps the ones column and zeroes the course's coefficient.
+        let mut model = model();
+        model.data_precision = Precision::Single;
+        let prepared = Prepared::new(&model, &apertures(), &ResolvedHrf::None, 8).unwrap();
+        let (row, profile) = prepared.reverse_correlate(&[0.0; 8]);
+        assert_eq!(profile, vec![0.0; 4]);
+        assert_eq!(row, [0.0; 5]);
+        assert_eq!(prepared.convex_hull(&row, &profile), vec![0.0; 5]);
     }
 
     #[test]

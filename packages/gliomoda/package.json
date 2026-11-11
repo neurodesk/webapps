@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/gliomoda",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "GlioMODA glioma segmentation (nnU-Net) for browsers",
   "type": "module",
   "license": "Apache-2.0",

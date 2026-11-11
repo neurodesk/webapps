@@ -15,6 +15,9 @@ on:
 permissions:
   contents: read
 
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   plan:
     runs-on: ubuntu-latest

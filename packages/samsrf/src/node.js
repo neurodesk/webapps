@@ -92,7 +92,8 @@ export function preprocessRuns(paths, { keep = null, ...options } = {}) {
 /**
  * Reads an analysis's files into the parts of a `createJob` spec, as the web app does: the runs are
  * preprocessed keeping the ROI and seed vertices (every vertex without an ROI), with the noise ceiling
- * and global signal. Every path but `runs` is optional; `hemisphere` flips a template's x0 for 'rh'.
+ * and global signal (in `precision`, the model's Data_Precision). Every path but `runs` is optional;
+ * `hemisphere` flips a template's x0 for 'rh'.
  */
 export function readAnalysisInputs({
   runs,
@@ -105,12 +106,13 @@ export function readAnalysisInputs({
   hemisphere,
   normalise = 'zscore',
   combine = 'average',
+  precision = 'double',
 }) {
   const side = resolveHemisphere([...runs, roi, seed, template, white, area], { hemisphere, required: template !== null });
   const roiVertices = roi === null ? null : readLabelFile(roi).vertices;
   const seedVertices = seed === null ? null : readLabelFile(seed).vertices;
   const keep = roiVertices === null ? null : Uint32Array.from(new Set([...roiVertices, ...(seedVertices ?? [])])).sort();
-  const data = preprocessRuns(runs, { keep, normalise, combine, noiseCeiling: true, globalSignal: true });
+  const data = preprocessRuns(runs, { keep, normalise, combine, noiseCeiling: true, globalSignal: true, precision });
   const kept = data.kept ?? Uint32Array.from({ length: data.totalVertices }, (_, index) => index);
   let serialised = null;
   if (apertures !== null) {

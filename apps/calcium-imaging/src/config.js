@@ -5,7 +5,7 @@ import { DEFAULTS } from "./core/pipeline.js";
 export const APP = Object.freeze({
   id: "calcium-imaging",
   title: automation.title,
-  version: "0.1.20261110",
+  version: "0.1.20261111",
 });
 
 /**

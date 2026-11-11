@@ -87,6 +87,7 @@ pub struct PrfModel {
 #[serde(rename_all = "camelCase")]
 pub struct RevCorPrfModel {
     pub name: String,
+    pub data_precision: Precision,
     pub scaling_factor: f64,
     pub tr: f64,
     pub hrf: HrfSpec,
@@ -123,6 +124,7 @@ pub enum CfParameterEstimate {
 #[serde(rename_all = "camelCase")]
 pub struct CfModel {
     pub name: String,
+    pub data_precision: Precision,
     pub seed_roi: String,
     pub template: String,
     pub smoothing: f64,
@@ -178,9 +180,6 @@ pub fn parse_model_json(kind: AnalysisKind, json: &str) -> Result<Model> {
         Value::Object(map) => Fields(map),
         _ => return Err(Error::Model("the model file must hold a JSON object".into())),
     };
-    if kind != AnalysisKind::Prf && fields.precision()? != Precision::Double {
-        return Err(Error::NotImplemented("Data_Precision=single for reverse-correlation analyses"));
-    }
     match kind {
         AnalysisKind::Prf => fields.prf().map(Model::Prf),
         AnalysisKind::RevCorPrf => fields.revcor_prf().map(Model::RevCorPrf),
@@ -433,8 +432,15 @@ impl Fields {
                 return Err(Error::Model("Mismatch between number of parameter names & Hooke-Jeeves step sizes!".into()));
             }
         }
+        let data_precision = self.precision()?;
+        if data_precision == Precision::Single && prf_function.is_some() {
+            // Replaying MATLAB's profiles reproduces these fits, but end to end the
+            // fit amplifies profile rounding beyond any bound established so far.
+            return Err(Error::NotImplemented("Data_Precision=single with a Prf_Function fit"));
+        }
         Ok(RevCorPrfModel {
             name,
+            data_precision,
             scaling_factor,
             tr,
             hrf,
@@ -473,8 +479,15 @@ impl Fields {
             return Err(Error::Model(format!("`Fit_pRF` must be 1, 0 or -1, got {fit_prf_flag}")));
         };
         let fine_fit = self.fine_fit()?;
+        let data_precision = self.precision()?;
+        if data_precision == Precision::Single && fit_prf == CfParameterEstimate::Gaussian {
+            // Its fit runs on single template coordinates, so MATLAB's single `exp`
+            // decides the fitted maps; that function is not reproduced yet.
+            return Err(Error::NotImplemented("Data_Precision=single with Fit_pRF=1"));
+        }
         Ok(CfModel {
             name,
+            data_precision,
             seed_roi,
             template,
             smoothing,
@@ -627,6 +640,7 @@ mod tests {
         let model = revcor_prf(REVCOR_PRF).unwrap();
         let expected = RevCorPrfModel {
             name: "pRF".into(),
+            data_precision: Precision::Double,
             scaling_factor: 9.5,
             tr: 1.0,
             hrf: HrfSpec::SpmCanonical,
@@ -652,6 +666,7 @@ mod tests {
         let model = revcor_cf(REVCOR_CF).unwrap();
         let expected = CfModel {
             name: "CF_Rcp".into(),
+            data_precision: Precision::Double,
             seed_roi: "../benson/ROIs_Benson/V1".into(),
             template: "../benson/bi_benson".into(),
             smoothing: 0.0,
@@ -698,6 +713,29 @@ mod tests {
         let seeded = with(minimal_prf(), "Seed_Fine_Fit", serde_json::json!("pRF_seed"));
         let json = with(serde_json::from_str(&seeded).unwrap(), "Coarse_Fit_Only", serde_json::json!(1));
         assert_eq!(model_error(&json, AnalysisKind::Prf), "No point running only coarse fit when seeding the fine fit!");
+    }
+
+    #[test]
+    fn reverse_correlation_reads_single_precision_except_for_fitted_models() {
+        let single = |json: &str| {
+            let mut map: Map<String, Value> = serde_json::from_str(json).unwrap();
+            map.insert("Data_Precision".into(), serde_json::json!("single"));
+            Value::Object(map).to_string()
+        };
+        assert_eq!(revcor_prf(&single(REVCOR_PRF)).unwrap().data_precision, Precision::Single);
+        let mut fit: Map<String, Value> = serde_json::from_str(&single(REVCOR_PRF)).unwrap();
+        fit.insert("Param_Names".into(), serde_json::json!(["x0", "y0", "Sigma"]));
+        fit.insert("Scaled_Param".into(), serde_json::json!([1, 1, 1]));
+        fit.insert("SeedPar_Function".into(), serde_json::json!("@(V)[V(2:3);V(4)]"));
+        let fit = with(fit, "Prf_Function", serde_json::json!("@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)"));
+        assert_eq!(parse_model_json(AnalysisKind::RevCorPrf, &fit).unwrap_err(), Error::NotImplemented("Data_Precision=single with a Prf_Function fit"));
+        assert_eq!(revcor_cf(&single(REVCOR_CF)).unwrap().data_precision, Precision::Single);
+        let summary = with(serde_json::from_str(&single(REVCOR_CF)).unwrap(), "Fit_pRF", serde_json::json!(-1));
+        assert_eq!(revcor_cf(&summary).unwrap().fit_prf, CfParameterEstimate::SummaryStatistics);
+        let gaussian = with(serde_json::from_str(&single(REVCOR_CF)).unwrap(), "Fit_pRF", serde_json::json!(1));
+        assert_eq!(parse_model_json(AnalysisKind::RevCorCf, &gaussian).unwrap_err(), Error::NotImplemented("Data_Precision=single with Fit_pRF=1"));
+        let double = with(serde_json::from_str(REVCOR_CF).unwrap(), "Fit_pRF", serde_json::json!(1));
+        assert_eq!(revcor_cf(&double).unwrap().fit_prf, CfParameterEstimate::Gaussian);
     }
 
     #[test]

@@ -6,7 +6,7 @@ import { MICROSCOPES, theoreticalResolution, wavelengthKind } from "./core/optic
 export const APP = Object.freeze({
   id: "microscope-qc",
   title: automation.title,
-  version: "0.1.20261110",
+  version: "0.1.20261111",
 });
 
 export const ANALYSES = Object.freeze({ psf: "PSF from beads", field: "Field illumination" });

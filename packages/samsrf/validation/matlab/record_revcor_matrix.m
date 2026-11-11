@@ -1,7 +1,15 @@
-function cases = record_revcor_matrix(input, output, arrayFile, writeJson, smoke)
+function cases = record_revcor_matrix(input, output, arrayFile, writeJson, smoke, edges)
 % Raw GIfTI -> preprocessing -> RC/CF, on the pinned participant subsets.
 % The synthetic meshes exercise smoothing; they are not anatomical references.
 % Global correction uses every vertex in each subset, not the original cortex.
+% edges records the constant, low-variance and threshold-boundary cases instead.
+if nargin < 6
+    edges = false;
+end
+if edges
+    cases = record_edges(input, output, arrayFile, writeJson);
+    return
+end
 manifest = jsondecode(fileread(fullfile(input, 'manifest.json')));
 datasets = manifest.datasets;
 if isstruct(datasets)
@@ -158,6 +166,145 @@ if smoke
 end
 assert(numel(cases) == expected, 'Incomplete reverse-correlation matrix');
 writeJson('revcor-matrix.json', struct('smoke', smoke, 'cases', {cases}));
+end
+
+function cases = record_edges(input, output, arrayFile, writeJson)
+% Authentic edge cases on the averaged LH subset, edited after preprocessing:
+% constant courses on either side of the ones column's norm, a low-variance
+% course with an offset, a course equal to one regressor whose aperture pixel
+% is copied at exactly half and a quarter of its value (so its profile sits
+% exactly on the half-maximum thresholds), and two identical seed courses.
+manifest = jsondecode(fileread(fullfile(input, 'manifest.json')));
+datasets = manifest.datasets;
+if isstruct(datasets)
+    datasets = num2cell(datasets);
+end
+dataset = datasets{cellfun(@(item) strcmp(item.id, 'x001_lh'), datasets)};
+folder = fullfile(input, dataset.id);
+files = cellfun(@(name) fullfile(folder, name), dataset.runs, 'UniformOutput', false);
+cases = {};
+for precision = {'double', 'single'}
+    kind = precision{1};
+    defaults = jsondecode(fileread(fullfile(output, 'SamSrf_defaults.json')));
+    defaults.def_64bit = strcmp(kind, 'double');
+    writeJson('SamSrf_defaults.json', defaults);
+    id = sprintf('edges_%s_x001_lh', kind);
+    work = fresh_directory(output, id, defaults, writeJson);
+    previous = pwd;
+    restore = onCleanup(@() cd(previous));
+    cd(work);
+    Srf = samsrf_gii2srf(files, fullfile(folder, 'surf', dataset.hemisphere), 1, true, true, '');
+    assert(strcmp(class(Srf.Data), kind), 'Processed precision was not honored');
+    count = size(Srf.Data, 2);
+    roi = unique([1:12 25 count-7:count]);
+    seed = 2:2:18;
+
+    aperture = load(fullfile(input, dataset.apertures));
+    ApFrm = aperture.ApFrm(1:5:end, 1:5:end, :);
+    frames = reshape(ApFrm, [], size(ApFrm, 3));
+    hrf = samsrf_doublegamma(dataset.tr, [6 16 1 1 6 0 32]);
+    X = frames';
+    for i = 1:size(X, 2)
+        X(:,i) = prf_convolve_hrf(X(:,i), hrf, 1);
+    end
+    [~, peak] = max(var(X));
+    [~, order] = sort(var(X));
+    others = order(order ~= peak);
+    half = others(1);
+    quarter = others(2);
+    frames(half,:) = frames(peak,:) / 2;
+    frames(quarter,:) = frames(peak,:) / 4;
+    ApFrm = reshape(frames, size(ApFrm));
+    aperturePath = fullfile(work, 'apertures.mat');
+    save(aperturePath, 'ApFrm', '-v7');
+
+    D = Srf.Data;
+    D(:,3) = 0;
+    D(:,5) = 3;
+    D(:,7) = 0.25;
+    D(:,9) = D(:,9) * 1e-4 + 5;
+    D(:,11) = cast(X(:,peak), kind);
+    D(:,12) = D(:,14);
+    D(:,16) = D(:,14);
+    Srf.Data = D;
+    samsrf_srf2label(Srf, 'roi', 1, roi);
+    samsrf_srf2label(Srf, 'seed', 1, seed);
+    samsrf_benson2srf(fullfile(folder, [dataset.hemisphere '_benson']), fullfile(folder, 'surf'), '');
+    templatePath = fullfile(work, [dataset.hemisphere '_benson.mat']);
+    template = load(templatePath);
+    cd(previous);
+    clear restore
+
+    edits = struct('constantZero', 3, 'constantAboveOnes', 5, 'constantBelowOnes', 7, ...
+        'lowVariance', 9, 'regressorCourse', 11, 'seedCopy', 12, 'tiedSeeds', [14 16]);
+    item = struct('id', id, 'kind', 'preprocess', 'precision', kind, ...
+        'dataset', dataset.id, 'average', true, 'syntheticAnatomy', true, 'edits', edits, ...
+        'globalSignalDomain', 'all vertices of the pinned participant subset', ...
+        'courses', arrayFile([id '_courses'], Srf.Data), ...
+        'vertices', arrayFile([id '_vertices'], Srf.Vertices), ...
+        'faces', arrayFile([id '_faces'], Srf.Faces), ...
+        'area', arrayFile([id '_area'], Srf.Area), ...
+        'roi', arrayFile([id '_roi'], roi), ...
+        'seedVertices', arrayFile([id '_seed'], seed));
+    if isfield(Srf, 'Noise_Ceiling')
+        item.noiseCeiling = arrayFile([id '_ceiling'], Srf.Noise_Ceiling);
+    end
+    cases{end+1} = item; %#ok<AGROW>
+    writeJson([id '.json'], item);
+    templateItem = struct('id', [id '_template'], 'kind', 'benson', 'precision', kind, ...
+        'dataset', dataset.id, 'maps', arrayFile([id '_template'], template.Srf.Data));
+    cases{end+1} = templateItem; %#ok<AGROW>
+    writeJson([templateItem.id '.json'], templateItem);
+
+    globalSignal = nanmean(Srf.Data, 2);
+    for correctGlobal = [false true]
+        corrected = Srf;
+        if correctGlobal
+            previous = pwd;
+            restore = onCleanup(@() cd(previous));
+            cd(work);
+            corrected = samsrf_removenoise(Srf, globalSignal, roi);
+            cd(previous);
+            clear restore
+        end
+        for smoothing = [0 1]
+            for mode = [0 -1]
+                fitId = sprintf('%s_cf_mode%d_smooth%d_global%d', id, mode, smoothing, correctGlobal);
+                Model = struct('Name', fitId, 'Template', templatePath, ...
+                    'SeedRoi', fullfile(work, 'seed'), 'Fit_pRF', mode, 'Smoothing', smoothing, ...
+                    'Global_Signal_Correction', correctGlobal, 'Save_Rmaps', true);
+                item = run_case(fitId, 'cf', Srf, Model, fullfile(work, 'roi'), ...
+                    defaults, output, arrayFile, writeJson, id, kind);
+                item.template = templateItem.id;
+                item.globalSignal = arrayFile([fitId '_global'], globalSignal);
+                item.recomputedCorrectedCourses = arrayFile([fitId '_corrected'], corrected.Data);
+                item.seedCourses = arrayFile([fitId '_seed_courses'], corrected.Data(:,seed));
+                cases{end+1} = item; %#ok<AGROW>
+                writeJson([fitId '.json'], item);
+            end
+        end
+    end
+    apertureArray = arrayFile([id '_apertures'], ApFrm);
+    customHrf = samsrf_doublegamma(dataset.tr, [5 15 1.2 0.9 5 1 30]);
+    configurations = {'hull', 0, false; 'custom_hrf', customHrf(:), true};
+    for config = 1:size(configurations, 1)
+        fitId = [id '_rc_' configurations{config, 1}];
+        Model = struct('Name', fitId, 'Aperture_File', aperturePath, ...
+            'Scaling_Factor', dataset.radius, 'TR', dataset.tr, ...
+            'Hrf', configurations{config, 2}, 'Rdim', size(ApFrm, 1), ...
+            'Prf_Function', 0, 'Save_Rmaps', true, ...
+            'Allow_Negative_Peaks', configurations{config, 3});
+        item = run_case(fitId, 'revcor', Srf, Model, fullfile(work, 'roi'), ...
+            defaults, output, arrayFile, writeJson, id, kind);
+        item.apertures = apertureArray;
+        item.aperturePreparation = 'Every fifth row and column of pinned aps_Bars; pixels half and quarter copy pixel peak at 1/2 and 1/4';
+        item.boundaryPixels = struct('peak', peak, 'half', half, 'quarter', quarter);
+        cases{end+1} = item; %#ok<AGROW>
+        writeJson([fitId '.json'], item);
+    end
+end
+assert(numel(cases) == 24, 'Incomplete reverse-correlation edge recording');
+writeJson('revcor-edges.json', struct('cases', {cases}));
 end
 
 function item = run_case(id, analysis, Srf, model, roiPath, defaults, output, arrayFile, writeJson, preprocessing, kind)

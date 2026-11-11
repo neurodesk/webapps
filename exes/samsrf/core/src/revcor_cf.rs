@@ -18,6 +18,7 @@ use crate::mapset::Maps;
 use crate::mesh::Adjacency;
 use crate::model::{CfModel, CfParameterEstimate, FineFit};
 use crate::optim::{self, FminsearchOptions};
+use crate::precision::{correlation_single_pair, sum_single, Precision};
 use crate::prf;
 use crate::surface::Surface;
 
@@ -34,6 +35,8 @@ pub struct Prepared {
     pub seed_vertices: Vec<u32>,
     /// Each seed course, centred and scaled to unit norm (`None` when constant or NaN).
     pub seed_normalised: Vec<Option<Vec<f64>>>,
+    /// The seed courses as stored, for single-precision correlations.
+    seed_courses: Vec<Vec<f64>>,
     /// Template `x0`, `y0` per seed vertex.
     pub seed_xy: Vec<[f64; 2]>,
     /// `Srf.Area` of the first `nsvx` vertices (SamSrf's indexing).
@@ -123,6 +126,7 @@ impl Prepared {
             model,
             seed_vertices: seed_vertices.to_vec(),
             seed_normalised,
+            seed_courses: seed_courses.iter().map(|course| course.to_vec()).collect(),
             seed_xy,
             area_prefix: area[..nsvx].to_vec(),
             weights,
@@ -140,6 +144,9 @@ impl Prepared {
 
     /// `corr(Y, X)` over the seed courses, smoothed when the model asks for it.
     pub fn profile(&self, y: &[f64]) -> Vec<f64> {
+        if self.model.data_precision == Precision::Single {
+            return self.profile_single(y);
+        }
         let nsvx = self.seed_vertices.len();
         let yn = normalise(y);
         let r: Vec<f64> = self
@@ -162,6 +169,28 @@ impl Prepared {
         }
     }
 
+    /// Single courses: `corr` and the smoothing run in single; the double weights
+    /// round each product and the quotient to single.
+    fn profile_single(&self, y: &[f64]) -> Vec<f64> {
+        let r: Vec<f32> = self.seed_courses.iter().map(|x| correlation_single_pair(y, x)).collect();
+        match &self.weights {
+            None => r.into_iter().map(f64::from).collect(),
+            Some(rows) => rows
+                .iter()
+                .map(|(entries, total)| {
+                    let mut sum = 0.0f32;
+                    for (j, w) in entries {
+                        let product = (f64::from(r[*j]) * w) as f32;
+                        if !product.is_nan() {
+                            sum += product;
+                        }
+                    }
+                    f64::from((f64::from(sum) / total) as f32)
+                })
+                .collect(),
+        }
+    }
+
     /// The output rows of one vertex.
     pub fn estimate(&self, y: &[f64]) -> Result<Vec<f64>> {
         let r = self.profile(y);
@@ -176,13 +205,12 @@ impl Prepared {
         }
         let rows = self.rows();
         let max = nan_max(r);
-        let mut fwhm = 0.0;
-        for (j, value) in r.iter().enumerate() {
-            if *value > max / 2.0 {
-                fwhm += self.area_prefix[j];
-            }
-        }
-        let fwhm = fwhm.sqrt();
+        let above: Vec<f64> = r.iter().zip(&self.area_prefix).filter(|(value, _)| **value > max / 2.0).map(|(_, area)| *area).collect();
+        let fwhm = match self.model.data_precision {
+            Precision::Double => above.iter().sum::<f64>(),
+            Precision::Single => f64::from(sum_single(&above.iter().map(|&area| area as f32).collect::<Vec<_>>())),
+        };
+        let fwhm = self.model.data_precision.round(fwhm.sqrt());
         let Some(m) = r.iter().position(|value| *value == max) else {
             return Ok(vec![0.0; rows]);
         };
@@ -214,10 +242,14 @@ impl Prepared {
                 let (unique, _) = unique_rows(&above);
                 let xs: Vec<f64> = unique.iter().map(|p| p[0]).collect();
                 let ys: Vec<f64> = unique.iter().map(|p| p[1]).collect();
-                let sigma = (mad(&xs).powi(2) + mad(&ys).powi(2)).sqrt();
-                Ok(vec![r2, nanmedian(&xs), nanmedian(&ys), sigma, fwhm, vx])
+                // The template, and so txy, has the data's precision.
+                let p = self.model.data_precision;
+                let square = |value: f64| p.round(value * value);
+                let sigma = p.round(p.round(square(mad_in(&xs, p)) + square(mad_in(&ys, p))).sqrt());
+                Ok(vec![r2, nanmedian_in(&xs, p), nanmedian_in(&ys, p), sigma, fwhm, vx])
             }
             CfParameterEstimate::Gaussian => {
+                // The model parser refuses single precision here (see `CfModel`).
                 let thresholded: Vec<f64> = r.iter().map(|value| (value - max / 2.0).max(0.0)).collect();
                 let (fit, r2_fit) = self.fit_gaussian(&thresholded, self.seed_xy[m])?;
                 Ok(vec![r2_fit, fit[0], fit[1], fit[2], fit[3], fit[4], fwhm, vx])
@@ -317,6 +349,12 @@ fn nan_min(values: &[f64]) -> f64 {
 
 /// `nanmedian`: the median of the non-NaN values, NaN when there are none.
 pub fn nanmedian(values: &[f64]) -> f64 {
+    nanmedian_in(values, Precision::Double)
+}
+
+/// `nanmedian` in the precision of `values`. An even count takes median.m's
+/// `meanof`: `a + (b - a) / 2`, or `(a + b) / 2` when the signs differ.
+fn nanmedian_in(values: &[f64], precision: Precision) -> f64 {
     let mut sorted: Vec<f64> = values.iter().copied().filter(|value| !value.is_nan()).collect();
     if sorted.is_empty() {
         return f64::NAN;
@@ -324,17 +362,26 @@ pub fn nanmedian(values: &[f64]) -> f64 {
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let n = sorted.len();
     if n % 2 == 1 {
-        sorted[n / 2]
+        return sorted[n / 2];
+    }
+    let (a, b) = (sorted[n / 2 - 1], sorted[n / 2]);
+    let round = |value| precision.round(value);
+    if a.signum() != b.signum() || a.is_infinite() || b.is_infinite() {
+        round(round(a + b) / 2.0)
     } else {
-        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+        round(a + round(round(b - a) / 2.0))
     }
 }
 
 /// `mad(x, 1)`: the median absolute deviation from the median.
 pub fn mad(values: &[f64]) -> f64 {
-    let median = nanmedian(values);
-    let deviations: Vec<f64> = values.iter().map(|value| (value - median).abs()).collect();
-    nanmedian(&deviations)
+    mad_in(values, Precision::Double)
+}
+
+fn mad_in(values: &[f64], precision: Precision) -> f64 {
+    let median = nanmedian_in(values, precision);
+    let deviations: Vec<f64> = values.iter().map(|value| precision.round((value - median).abs())).collect();
+    nanmedian_in(&deviations, precision)
 }
 
 #[cfg(test)]
@@ -358,5 +405,15 @@ mod tests {
         assert_eq!(nanmedian(&[f64::NAN, 1.0]), 1.0);
         assert!(nanmedian(&[]).is_nan());
         assert_eq!(mad(&[1.0, 2.0, 4.0, 8.0]), 1.5);
+        // median.m's meanof: (a + b) / 2 across a sign change.
+        assert_eq!(nanmedian(&[-1.0, 3.0]), 1.0);
+    }
+
+    #[test]
+    fn single_medians_round_each_step() {
+        let (a, b) = (f64::from(0.1f32), f64::from(0.3f32));
+        let expected = f64::from(0.1f32 + (0.3f32 - 0.1f32) / 2.0);
+        assert_eq!(nanmedian_in(&[b, a], Precision::Single), expected);
+        assert_ne!(nanmedian_in(&[b, a], Precision::Double), expected);
     }
 }

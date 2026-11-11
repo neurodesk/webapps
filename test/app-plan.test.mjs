@@ -1252,6 +1252,61 @@ test('a standalone catalog change selects the apps whose entries changed', async
   assert.ok(createAppPlan(registry, ['registry/standalone.json'], workspace).selected.length > 1);
 });
 
+test('only the packages every app is built from are reached by most apps', async () => {
+  // A path in a root script is an edge, so prose naming a package (a reason, a
+  // message) silently selects every app that runs the script. A package most
+  // apps reach is either listed here on purpose or such a false edge.
+  const workspace = await graph;
+  const registry = await loadAppsRegistry();
+  const users = new Map();
+  for (const app of registry.apps) {
+    for (const node of reachableFrom(workspace, `apps/${app.id}`)) {
+      if (/^(?:packages|exes)\/[^/]+$/.test(node)) users.set(node, (users.get(node) ?? 0) + 1);
+    }
+  }
+  const hubs = [...users].filter(([, count]) => count > registry.apps.length / 2).map(([node]) => node).sort();
+  assert.deepEqual(hubs, ['packages/analytics', 'packages/components', 'packages/runtime-support']);
+  // The lint inventory excludes files by exact path; it reads no package.
+  const inventory = [...workspace.edges.get('scripts/quality/lint-inventory.mjs')];
+  assert.deepEqual(inventory.filter((node) => /^(?:packages|exes)\/[^/]+$/.test(node)), []);
+  // A diffusion package change reaches the diffusion apps, not every app with a lint script.
+  const plan = createAppPlan(registry, ['packages/hmc/src/pool.js'], workspace);
+  assert.equal(plan.reasons.fallback, null);
+  assert.ok(plan.selected.some((app) => app.id === 'hmc'));
+  assert.ok(!plan.selected.some((app) => app.id === 'stardist'));
+  assert.ok(plan.selected.length < registry.apps.length / 3, `${plan.selected.length} apps`);
+});
+
+test('removing lint reason edges preserves the diffusion and Node driver consumers', async () => {
+  const workspace = await graph;
+  const registry = await loadAppsRegistry();
+  const diffusion = ['bison', 'degibbs', 'dwi2trx', 'dwicorrect', 'dwidenoise', 'fastprep', 'hmc', 'n4', 'noddi', 'sdc'];
+  const cases = [
+    ...[
+      'packages/hmc/src/pool.js',
+      'packages/noddi/src/pipeline.js',
+      'packages/sdc/src/index.js',
+      'packages/n4/src/index.js',
+      'packages/dwi2trx/src/runner.js',
+      'packages/shoreline/src/index.js',
+      'packages/hmc-registration/src/index.js',
+      'exes/dwi/sdc/src/lib.rs',
+      'exes/sdc/core/src/lib.rs',
+    ].map((path) => [path, diffusion]),
+    ['packages/ants-denoise/src/index.js', ['ants-denoise', ...diffusion]],
+    ['packages/node-drivers/src/niimath.js', [
+      ...diffusion,
+      'brain-extraction', 'brain2print', 'browserqc', 'dcm2niix', 'deface',
+      'dicomview', 'edgereg', 'lcmodel', 'mri2vid', 'niimath', 'syncro',
+    ]],
+  ];
+  for (const [path, consumers] of cases) {
+    const plan = createAppPlan(registry, [path], workspace);
+    assert.equal(plan.reasons.fallback, null, path);
+    assert.deepEqual(plan.selected.map(({ id }) => id).sort(), [...consumers].sort(), path);
+  }
+});
+
 test('an app information change selects the apps whose entries changed', async () => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
