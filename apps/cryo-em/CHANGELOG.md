@@ -1,5 +1,19 @@
 # cryo-em
 
+## 0.1.20261111
+
+### Patch Changes
+
+- 4b3736a: `neurodesk-compute cryo-em` sets up and starts Cryo-EM on a Slurm cluster in one command: it writes `slurm.json` from `sinfo`, fetches the RELION image and the tutorial, checks the compute nodes after `slurm.json` changes, serves the app on loopback and prints the SSH tunnel command and pairing code. The Standalone dialog's Slurm setup is now three steps.
+- 4a5c83d: Cryo-EM follows a step the server accepted even when the response to Run was lost on the way back: after a failed submission the page re-reads the project and follows the job it finds running.
+- Updated dependencies [d643e8d]
+- Updated dependencies [3beb743]
+- Updated dependencies [a2675b9]
+- Updated dependencies [8fca61b]
+- Updated dependencies [83f5bb1]
+- Updated dependencies [65a2e2b]
+  - @neurodesk/webapp-components@0.27.0
+
 ## 0.1.20261110
 
 ### Patch Changes

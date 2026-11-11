@@ -10,6 +10,7 @@
 
 ### Patch Changes
 
+- ef9cded: Connective-field convex hulls now triangulate the template like MATLAB's `delaunay` when points are cocircular (exact predicates with CGAL's symbolic perturbation instead of Delaunator), and drop polygon spikes narrower than 1e-8 of the span as MATLAB's `polyshape` does. Maps from real Benson templates are unchanged. New MATLAB R2023b recordings cover polygon boundary sweeps, Delaunay ties, region growing and real templates of both hemispheres.
 - Model MATLAB R2023b's double CSS objective stage by stage: ported fdlibm elementary functions, plus empirical models of MATLAB's complex power of negative responses, its `conv` and MKL's dot products and norms. All 108 recorded CSS optimizer traces now follow MATLAB bit for bit, and the recorded double pipeline matches every non-coefficient map exactly with MATLAB's HRF kernel. The remaining HRF (`gampdf`) differences, and MATLAB's Intel/AMD reference difference, are documented and gated.
 
 ## 0.4.20261110

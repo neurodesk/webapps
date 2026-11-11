@@ -1,5 +1,21 @@
 # @neurodesk/greedy
 
+## 0.9.20261111
+
+### Minor Changes
+
+- 3beb743: Add Histology to MRI, a browser app that registers 2D histology sections (RGB or greyscale TIFF, PNG or JPEG) to an MRI volume. The user gives the slice axis and an approximate slice; the app samples the MRI on that plane, chooses the section's orientation, registers it rigidly and affinely with Greedy's NMI metric, optionally searches the plane's offset and tilt, and finishes with a Greedy stationary-velocity warp, all in one worker per run. It downloads the section warped onto the MRI plane (RGBA NIfTI), the sections drawn into the MRI grid, and Greedy-compatible affine and warp files in world coordinates, and overlays the result on the MRI with adjustable opacity. On a synthetic test (an MRI slice deformed by a known affine and smooth warp and re-coloured as H&E) the mean landmark error falls from 7.5 mm (12.5 voxels of 0.6 mm) to 0.21 mm (0.35 voxels); on the AHEAD example it falls from 6.8 mm (11.3 voxels) to 1.8 mm (3.0 voxels) at six manual landmarks, where the plane search and warp did not reduce it (the affine alone gives 1.7 mm).
+
+  `@neurodesk/webapp-components/file-io/tiff` gains `readTiffImage`, which reads one greyscale or colour image (RGB with alpha dropped, white-is-zero inverted, palette, YCbCr, CMYK and CIELab converted to RGB) and refuses stacks, channel stacks and over-budget images before decoding. The new `@neurodesk/webapp-components/file-io/raster-image` reads PNG and JPEG sizes from their headers (walking JPEG segments) and decodes them to RGBA without EXIF rotation.
+
+  `@neurodesk/greedy`'s `registerAffineGreedy` and `registerRigidGreedy` take an optional `initial` matrix, and the package exports its single-threaded build as `@neurodesk/greedy/wasm-single` for bundled workers.
+
+### Patch Changes
+
+- a2675b9: Add Light-sheet atlas, a microscopy app that registers a cleared mouse brain to the Allen Mouse Brain CCFv3 (50 µm, from the BrainGlobe Atlas API) with Greedy and counts cell candidates per brain region, following BrainGlobe's brainreg and cellfinder. It reads TIFF stacks and OME-Zarr images plane by plane, detects candidates with a port of cellfinder's classical detection (identical to cellfinder 1.10.1 on its test crop: every thresholded plane and all 38 candidates), and writes the registered atlas labels, the candidate list and a per-region table of candidate counts, volumes and densities. Counts are of unclassified candidates. The Allen atlas is for research and noncommercial use only. On BrainGlobe's test brain its labels agree with brainreg's with a whole-brain Dice of 0.97.
+
+  `@neurodesk/webapp-components` gains `file-io/microscopy-stack`, plane-by-plane readers for TIFF stacks (multi-page or one file per plane, with OME-XML and ImageJ voxel sizes read by the shared `file-io/tiff` parsers; a single OME-TIFF's z planes are the pages its TiffData maps, and a mapping the reader cannot follow, such as planes in another file, is refused before any pixel is decoded; OME-TIFF folders and files with several image series are refused) and OME-Zarr folders. `micrometresPerUnit` also reads the NGFF spellings meter and centimeter. `@neurodesk/greedy` exports its single-threaded WebAssembly glue as `@neurodesk/greedy/wasm-single` for bundlers.
+
 ## 0.8.20261109
 
 ## 0.8.20261108

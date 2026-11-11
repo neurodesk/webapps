@@ -55,7 +55,7 @@
     "yaml": "2.9.0"
   },
   "name": "spinalcordtoolbox",
-  "version": "0.9.20261109",
+  "version": "0.9.20261111",
   "private": true,
   "type": "module",
   "neurodeskWebapp": {

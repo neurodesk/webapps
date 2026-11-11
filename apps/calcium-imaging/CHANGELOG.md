@@ -1,5 +1,19 @@
 # calcium-imaging
 
+## 0.1.20261111
+
+### Patch Changes
+
+- a73f0ae: Every hosted app page names its home page as canonical, so search engines index one page for an app that several catalogues serve. A copy keeps its own share link (`og:url`). When a catalogue's search finds no app of its own, its landing page lists the matching apps of other catalogues, each linking to the host that serves it.
+- 65a2e2b: Move the complex FFT (radix-2 with Bluestein for other lengths, in any number of dimensions) to `@neurodesk/webapp-components/fft` and use it from calcium imaging and stitching, replacing their two app copies. Results are unchanged.
+- Updated dependencies [d643e8d]
+- Updated dependencies [3beb743]
+- Updated dependencies [a2675b9]
+- Updated dependencies [8fca61b]
+- Updated dependencies [83f5bb1]
+- Updated dependencies [65a2e2b]
+  - @neurodesk/webapp-components@0.27.0
+
 ## 0.1.20261110
 
 ### Patch Changes
