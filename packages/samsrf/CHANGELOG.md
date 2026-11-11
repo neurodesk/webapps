@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- Reproduce MATLAB R2023b's double CSS objective operation by operation: fdlibm elementary functions, MATLAB's complex power of negative responses, its `conv` kernels and MKL's dot products and norms. All 108 recorded CSS optimizer traces now follow MATLAB bit for bit, and the double pipeline matches every non-coefficient map exactly with MATLAB's HRF kernel. The remaining HRF (`gampdf`) and coefficient differences, and MATLAB's Intel/AMD reference difference, are documented and gated.
+- Model MATLAB R2023b's double CSS objective stage by stage: ported fdlibm elementary functions, plus empirical models of MATLAB's complex power of negative responses, its `conv` and MKL's dot products and norms. All 108 recorded CSS optimizer traces now follow MATLAB bit for bit, and the recorded double pipeline matches every non-coefficient map exactly with MATLAB's HRF kernel. The remaining HRF (`gampdf`) and coefficient differences, and MATLAB's Intel/AMD reference difference, are documented and gated.
 
 ## 0.3.20261110
 

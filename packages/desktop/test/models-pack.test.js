@@ -11,6 +11,8 @@ import { withoutModels } from '../../../scripts/desktop/without-models.mjs';
 import { createModelResolver } from '../src/models.js';
 import { loadBundle } from '../src/bundle.js';
 
+const desktop = { product_name: 'Neurodesk Webapps', release: 'webapps', executable: 'neurodesk-webapps' };
+
 const hash = data => createHash('sha256').update(data).digest('hex');
 const muscleUrl = 'https://models.example/musclemap-wholebody-v1.4-fp32.onnx';
 const soloUrl = 'https://models.example/vessels.onnx';
@@ -53,7 +55,7 @@ async function fixture(t) {
 test('the pack carries one entry per model asset, named by its hash, and nothing else', async t => {
   const { root, full, light, muscle, solo, wheel, head } = await fixture(t);
   const archive = join(root, 'release/webapps-0.1.20260915-models.tar.gz');
-  const { models, release } = await modelsPack(full, light, archive, join(root, 'release/github'), { version: '0.1.20260915' });
+  const { models, release } = await modelsPack(full, light, archive, join(root, 'release/github'), { version: '0.1.20260915', desktop });
   assert.deepEqual(models, [hash(muscle), hash(solo)].sort());
   const listed = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' }).trim().split('\n').sort();
   assert.deepEqual(listed, [hash(muscle), hash(solo)].sort());
@@ -74,7 +76,7 @@ test('the pack carries one entry per model asset, named by its hash, and nothing
 test('an extracted pack resolves every model of the package without models, offline', async t => {
   const { root, full, light, muscle, solo, head, tail } = await fixture(t);
   const archive = join(root, 'release/webapps-0.1.20260915-models.tar.gz');
-  await modelsPack(full, light, archive, join(root, 'release/github'), { version: '0.1.20260915' });
+  await modelsPack(full, light, archive, join(root, 'release/github'), { version: '0.1.20260915', desktop });
   const pack = join(root, 'pack');
   await mkdir(pack);
   execFileSync('tar', ['-xzf', archive, '-C', pack]);
@@ -100,7 +102,7 @@ test('the pack omits models whose shared bytes must remain in the smaller packag
   await writeFile(join(full, 'manifest.json'), JSON.stringify(bundle));
   await withoutModels(full, light);
   const archive = join(root, 'release/models.tar.gz');
-  const { models } = await modelsPack(full, light, archive, join(root, 'release/github'), { version: '0.1.20260915' });
+  const { models } = await modelsPack(full, light, archive, join(root, 'release/github'), { version: '0.1.20260915', desktop });
   assert.deepEqual(models, [separateHash]);
   assert.deepEqual(execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' }).trim().split('\n'), [separateHash]);
   assert.deepEqual(await readFile(join(light, `assets/${hash(solo)}`)), solo);
@@ -116,7 +118,7 @@ test('a model whose bytes drifted from the pinned hash stops the pack', async t 
   const bundle = await loadBundle(full);
   await writeFile(join(full, bundle.assets[soloUrl].path), 'tampered weights');
   await assert.rejects(
-    modelsPack(full, light, join(root, 'release/models.tar.gz'), join(root, 'release/github'), { version: '0.1.20260915' }),
+    modelsPack(full, light, join(root, 'release/models.tar.gz'), join(root, 'release/github'), { version: '0.1.20260915', desktop }),
     /does not match its pinned hash/);
 });
 
@@ -124,7 +126,7 @@ test('the same models produce the same archive bytes after the sources are rebui
   const { root, full, light } = await fixture(t);
   const build = async name => {
     const archive = join(root, `release/${name}/webapps-0.1.20260915-models.tar.gz`);
-    await modelsPack(full, light, archive, join(root, `release/${name}/github`), { version: '0.1.20260915' });
+    await modelsPack(full, light, archive, join(root, `release/${name}/github`), { version: '0.1.20260915', desktop });
     return hash(await readFile(archive));
   };
   const first = await build('first');
