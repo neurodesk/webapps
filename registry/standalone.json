@@ -1041,35 +1041,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.8.20261109",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261109/syncro-0.8.20261109-linux-x64.tar.gz",
-          "sha256": "52518d6020631b5b8be943e42f94890d737628d49c90d84f02f03a73f1bf9f48",
-          "bytes": 126379044,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261109/syncro-0.8.20261109-linux-x64.tar.gz.validation.txt",
+          "version": "0.8.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261111/syncro-0.8.20261111-linux-x64.tar.gz",
+          "sha256": "f72be003bebcfd362af42d3ca4185bca41b4291f388e06cf51e65381cb1350f2",
+          "bytes": 126379056,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261111/syncro-0.8.20261111-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf syncro-0.8.20261109-linux-x64.tar.gz\n./syncro-0.8.20261109-linux-x64/syncro input.nii.gz results --threads 4"
+          "command": "tar -xzf syncro-0.8.20261111-linux-x64.tar.gz\n./syncro-0.8.20261111-linux-x64/syncro input.nii.gz results --threads 4"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.8.20261109",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261109/syncro-0.8.20261109-macos-arm64.pkg",
-          "sha256": "a22ed8b2e2f58e4d8aaca70177af5abaaee9603bcb395084ab7e44a5403c4b42",
-          "bytes": 127748599,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261109/syncro-0.8.20261109-macos-arm64.pkg.validation.txt",
+          "version": "0.8.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261111/syncro-0.8.20261111-macos-arm64.pkg",
+          "sha256": "ec16c5dbd7ac750f458e957b2dbe3b86d066c83c7f683b963207cd11a2f668c8",
+          "bytes": 127748778,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261111/syncro-0.8.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg syncro-0.8.20261109-macos-arm64.pkg -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4"
+          "command": "sudo installer -pkg syncro-0.8.20261111-macos-arm64.pkg -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.8.20261109",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261109/syncro-0.8.20261109-windows-x64.zip",
-          "sha256": "00da74c7ced41cb9d5dbfaad0d78530442ce3b456316866d464c9796bb9c892b",
-          "bytes": 127247845,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261109/syncro-0.8.20261109-windows-x64.zip.validation.txt",
+          "version": "0.8.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261111/syncro-0.8.20261111-windows-x64.zip",
+          "sha256": "8bdce9239a4b162386aca4b27e2d731df0100692bbfd153bc01c28ae9b580132",
+          "bytes": 127247846,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261111/syncro-0.8.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\syncro-0.8.20261109-windows-x64.zip -DestinationPath .\n.\\syncro-0.8.20261109-windows-x64\\syncro.exe input.nii.gz results --threads 4"
+          "command": "Expand-Archive -Path .\\syncro-0.8.20261111-windows-x64.zip -DestinationPath .\n.\\syncro-0.8.20261111-windows-x64\\syncro.exe input.nii.gz results --threads 4"
         }
       ],
       "containers": [
