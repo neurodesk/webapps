@@ -1,5 +1,8 @@
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { access, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { catalogApps, loadAppsRegistry, repoRoot } from '../lib/apps-registry.mjs';
 import { loadAppInformation } from '../lib/app-information.mjs';
@@ -24,6 +27,33 @@ async function disableAnalytics(directory) {
     }
     else if (entry.name === 'analytics.js') await writeFile(path, 'export function initAnalytics() { return { enabled: false, reason: "offline" }; }\n');
   }
+}
+
+/**
+ * Puts a locked asset in the cache unless it is there: the whole cache is larger
+ * than GitHub's 10 GB cache limit, so each suite fetches only its own assets.
+ */
+async function cached(cache, url, sha256) {
+  const path = join(cache, sha256);
+  if (await access(path).then(() => true, () => false)) return;
+  await mkdir(cache, { recursive: true });
+  const partial = `${path}.partial`;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(300000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await pipeline(Readable.fromWeb(response.body), createWriteStream(partial));
+      const received = await fileHash(partial);
+      if (received !== sha256) throw new Error(`checksum mismatch, expected ${sha256}, received ${received}`);
+      await rename(partial, path);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  await rm(partial, { force: true });
+  throw new Error(`${url}: ${lastError.message}`);
 }
 
 /**
@@ -58,6 +88,7 @@ export async function assembleSuite({ registry, catalog, ids, destination, dist 
     const asset = lock.assets[url];
     if (!asset) throw new Error(`Missing offline lock entry: ${url}`);
     assets[url] = { ...asset, path: `assets/${asset.sha256}` };
+    await cached(cache, url, asset.sha256);
     await cp(join(cache, asset.sha256), join(destination, 'assets', asset.sha256));
     for (const dependency of asset.dependencies || []) await add(dependency);
   };
