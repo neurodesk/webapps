@@ -1,5 +1,11 @@
 # @neurodesk/vessel-surfer-easter-egg
 
+## 0.1.20260931
+
+### Patch Changes
+
+- a811ddf: Read the app version from package.json, so the config always reports the released version.
+
 ## 0.1.20260930
 
 ### Patch Changes

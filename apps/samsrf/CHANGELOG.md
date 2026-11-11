@@ -4,6 +4,17 @@
 
 ### Patch Changes
 
+- a811ddf: Read the app version from package.json, so the config always reports the released version.
+- ef9cded: Connective-field convex hulls now triangulate the template like MATLAB's `delaunay` when points are cocircular (exact predicates with CGAL's symbolic perturbation instead of Delaunator), and drop polygon spikes narrower than 1e-8 of the span as MATLAB's `polyshape` does. Maps from real Benson templates are unchanged. New MATLAB R2023b recordings cover polygon boundary sweeps, Delaunay ties, region growing and real templates of both hemispheres.
+- Updated dependencies [d643e8d]
+- Updated dependencies [3beb743]
+- Updated dependencies [a2675b9]
+- Updated dependencies [8fca61b]
+- Updated dependencies [83f5bb1]
+- Updated dependencies [ef9cded]
+- Updated dependencies [65a2e2b]
+  - @neurodesk/webapp-components@0.27.0
+  - @neurodesk/samsrf@0.4.20261111
 - Updated dependencies
   - @neurodesk/samsrf@0.4.20261111
 

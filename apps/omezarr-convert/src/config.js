@@ -9,7 +9,7 @@ import { ARRAY_TYPES } from "@neurodesk/omezarr-convert/pyramid";
 export const APP = Object.freeze({
   id: "omezarr-convert",
   title: automation.title,
-  version: "0.0.20261109",
+  version: "0.1.20261111",
 });
 
 export const DISPLAY_UNITS = ["nanometer", "micrometer", "millimeter"];
