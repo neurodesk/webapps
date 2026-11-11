@@ -16,7 +16,7 @@ const generatedHtmlScripts = {
   'apps/calmar': ['wasm/ort.min.js', 'nifti-js/index.js', 'coi-serviceworker.js'],
   'apps/musclemap': ['coi-serviceworker.js', 'nifti-js/index.js'],
   'apps/qsmbly': ['coi-serviceworker.js'],
-  'apps/seedseg': ['coi-serviceworker.js'],
+  'apps/seedseg': ['coi-serviceworker.js', 'wasm/niivue.umd.js'],
   'apps/spinalcordtoolbox': ['coi-serviceworker.js', 'nifti-js/index.js'],
   'apps/vesselboost': ['coi-serviceworker.js', 'runtime/niivue.umd.js'],
 };

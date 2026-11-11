@@ -5634,8 +5634,7 @@
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/seedseg/seedseg-model-seed123.onnx",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/seedseg/seedseg-model-seed42.onnx",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/seedseg/seedseg-model-seed456.onnx",
-      "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/seedseg/seedseg-model-seed789.onnx",
-      "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js"
+      "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/seedseg/seedseg-model-seed789.onnx"
     ],
     "dicompare": [
       "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/attrs-23.2.0-py3-none-any.whl",

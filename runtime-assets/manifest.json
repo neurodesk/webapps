@@ -271,6 +271,17 @@
       ]
     },
     {
+      "id": "niivue-umd",
+      "version": "0.68.2",
+      "download_base": "https://unpkg.com/@niivue/niivue@0.68.2/dist",
+      "files": [
+        {
+          "name": "niivue.umd.js",
+          "sha256": "daccf5d9e1220a91c3bad8948c270d3f87ee6923f9fcfebc8e0a7308fdd667b9"
+        }
+      ]
+    },
+    {
       "id": "niivue-legacy",
       "deduplicate": true,
       "version": "0.68.1",

@@ -948,10 +948,6 @@
         "license": "NOASSERTION"
       },
       {
-        "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
-        "kind": "runtime-cdn"
-      },
-      {
         "url": "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/attrs-23.2.0-py3-none-any.whl",
         "sha256": "628272b8c53bf9223091b874ff9a242455ae84118b8f1a41f7189d3b81cddcc7",
         "kind": "python-runtime"

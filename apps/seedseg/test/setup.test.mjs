@@ -114,3 +114,17 @@ test('large ORT binary stays pinned outside the site bundle and in the offline i
   assert.equal(lock.assets[runtime.url].bytes, runtime.bytes);
   assert.ok(!requestedRuntimeFiles().some(file => file.name === runtime.filename));
 });
+
+test('every script the page runs at startup comes from the app origin', async () => {
+  const html = await readFile(join(appRoot, 'web', 'index.html'), 'utf8');
+  const blocking = [...html.matchAll(/<script\b([^>]*)>/g)]
+    .map(([, attributes]) => attributes)
+    .filter((attributes) => !/\b(?:defer|async)\b/.test(attributes))
+    .map((attributes) => attributes.match(/\bsrc=["']([^"']+)["']/)?.[1])
+    .filter(Boolean);
+  assert.ok(blocking.includes('wasm/niivue.umd.js'), 'the page must load the NiiVue build that prebuild fetches');
+  assert.deepEqual(blocking.filter((src) => /^(?:[a-z]+:)?\/\//i.test(src)), [],
+    'a failed CDN request leaves the app without the global it starts with');
+  const niivue = requestedRuntimeFiles().filter((file) => file.group === 'niivue-umd').map((file) => file.name);
+  assert.deepEqual(niivue, ['niivue.umd.js']);
+});

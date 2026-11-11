@@ -15,6 +15,7 @@
     "Keep Cite owned by the shared shell. Move new upstream citations from web/index.html#citationsModal into registry/app-information.yml and test/app-information.test.mjs; do not restore the local Cite button, modal or handlers. The sync refreshes upstream-citations.json from its target commit and contract tests require every recorded DOI in the registry.",
     "Keep the monorepo idle status: #statusText starts as \"Drag and drop files\" (design system); the window-wide drop comes from the shared components.",
     "SeedSeg loads dicompare's controller, worker and schema from the locally staged web/vendor/dicompare copies. The rewrite points any remaining upstream reference to dicompare.neurodesk.org, which stopped serving in October 2026, at https://webapps.neurodesk.org/dicompare instead.",
+    "Keep NiiVue on the app's own origin: web/index.html loads wasm/niivue.umd.js, which prebuild fetches and checksums through runtime-assets/manifest.json (niivue-umd). Upstream loads it from unpkg with a classic script; when that request fails the page has no `niivue` global and startup throws. Do not restore the CDN script tag; move the manifest pin when upstream changes the NiiVue version.",
     "Keep examples.json empty and do not import the upstream example button or downloader. The interface standard excludes SeedSeg because its synthetic public example was withdrawn as unsuitable; a replacement needs scientific validation and the shared example contract before adoption."
   ],
   "citationSnapshot": {
