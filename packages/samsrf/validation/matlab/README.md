@@ -443,11 +443,10 @@ vertex quota is allowed.
 Native gates additionally cover all 14 raw optimizer cases, nine double-precision
 CF modes from identical recorded profiles, 146 real/complex regression scale
 cases and 251 polygon cases. Regression rank decisions must match exactly;
-coefficient comparisons use per-value relative tolerances (16 single-precision
-epsilon units, approximately 1.9e-6, or 1e-12 for double), never a map-wide
-scale. This allows the recorded rounding difference between MATLAB's single QR
-and the stable double solve on rounded inputs. A 60-digit independent solve
-confirmed the web result in the largest observed coefficient discrepancy.
+coefficient comparisons use per-value relative tolerances (4 single or 4
+double epsilon units), never a map-wide scale. The measured maxima are 3.33 and
+3.15 epsilon units; the earlier double solve on rounded inputs reached 6.7 and
+7.5, under gates of 16 single epsilon units and 1e-12.
 Two polygons
 (`polygon_191`, `polygon_193`) lie in the measured fixed-point band of the
 geometry recording below; the gate reports them instead of asserting them, by
@@ -459,6 +458,136 @@ reverse-correlation/CF arithmetic remain diagnostic cases. The single CSS
 parameters and scores match exactly for this recorded pipeline; beta and baseline
 retain the documented least-squares rounding tolerance. A successful source
 gate does not assert those paths, arbitrary-input parity, or a rebuilt container.
+
+## Least-squares solves
+
+`record_qr_backends.m` records MATLAB's `[ones x] \ y` (and `[x ones] \ y`)
+for 348 designs: the 146 regression scale and rank cases above, the 108
+recorded CSS trace regressions, constant and nearly constant predictions,
+imaginary parts that are subnormal or vanish in single precision, scales whose
+squares overflow or underflow, the reverse column order and 48 irregular
+designs. Each case keeps the inputs, `mldivide`'s coefficients, `qr(A,0)`'s R
+and pivot, and the rank warning with its tolerance. (`qr(A,y,0)` accepts a
+right-hand side only for sparse matrices, so Q'y is not available.)
+
+The `qr_only` dispatch ran it in seven fresh MATLAB processes per host, under
+`MKL_CBWR=COMPATIBLE` twice, `AUTO`, `SSE4_2`, `AVX2`, `AVX512` and
+`MKL_ENABLE_INSTRUCTIONS=SSE4_2`
+([run 42920119400](https://github.com/neurodesk/webapps/actions/runs/42920119400),
+recorder commit `2e0eb54fd02ba0eddddcf3bb262d6b649347ec8a`). Both runner labels
+received AMD EPYC 7763 CPUs. Every process reported `CNR branch auto` with
+LAPACK 3.9.0, and every array was identical across all fourteen processes:
+MATLAB ignores these MKL requests, so they cannot select another backend.
+Intel hosts were not recorded. `qr-reference.json` pins the archive
+(`ubuntu-22.04/` and `ubuntu-24.04/`, one directory per request, with
+`compare-qr-backends.mjs`'s report). The port is gated against
+`ubuntu-24.04/compatible`.
+
+`qr_reference.rs` requires, for all 348 cases, MATLAB's rank and, for the 89
+rank warnings, its printed tolerance; a real result where MATLAB's is real; and
+zero coefficients for dropped columns. Coefficients have two independent gates.
+`exes/samsrf/core/tests/data/qr-outcomes.json` freezes each case's outcome: the
+123 bit-identical cases (58 real and 10 complex single, 49 real and 6 complex
+double; the previous double solve matched 18) must stay bit-identical, and no
+real or imaginary part of any other coefficient may move further from MATLAB's,
+in ULPs, than recorded there. Regenerating that file
+(`SAMSRF_QR_WRITE_OUTCOMES=1`) is a deliberate change to review. Second,
+|port - MATLAB|, real and imaginary parts together, must stay within an
+empirical acceptance scale shaped like the first-order least-squares
+perturbation estimate, `eps * ||row of R^-1|| * (||A|| ||b|| + kappa ||r||)`,
+computed from MATLAB's own R, pivot and coefficients on the inputs converted to
+the design's class. It is not a proven error bound, and its constant 1 is not
+derived; the largest measured ratio is 0.93 (`random_double_9`).
+`qr-accuracy.py` reports each coefficient's ULP distance and its error against
+the exact rational solution of the same rounded inputs:
+
+| Family (cases) | Bit-identical before → after | Max real-part ULP before → after |
+| --- | --- | --- |
+| Regression scale, single (33) | 6 → 24 | 12 → 1 |
+| Regression scale, double (33) | 0 → 10 | 8 → 5 |
+| Rank boundary, single (40) | 2 → 12 | 12 → 5 |
+| Rank boundary, double (40) | 0 → 8 | 14 → 6 |
+| CSS traces, single (54) | 2 → 22 | 128 → 130 (excluding vertices 47 and 58's zero baselines) |
+| CSS traces, double (54) | 0 → 22 | 293 → 16; vertex 47's baseline had the wrong sign and is now exact |
+| Constant and extreme scales, single (12) | 3 → 10 | 7 → 0 |
+| Constant and extreme scales, double (12) | 1 → 11 | 6 → 1 |
+| Nearly constant, single (5) | 0 → 4 | 351 → 1 |
+| Nearly constant, double (5) | 0 → 1 | 4.4e11 → 2 |
+| Imaginary underflow (6) and ones last (6), single | 0 → 5 | 6 → 1 |
+| Imaginary underflow (6) and ones last (6), double | 0 → 3 | 5 → 1 |
+| Irregular, single (24) | 0 → 1 | 266 → 1,011 |
+| Irregular, double (24) | 0 → 2 | 1,702 → 1,684 |
+
+"Before" is the previous solve; it had no imaginary parts and no ones-last
+order, so those columns compare real parts of ones-first designs only.
+Units are the design class's ULPs of the real part, which overstate small
+real parts of complex coefficients. The cause of the remaining differences is
+not established. The working hypothesis is MKL's internal kernels: other
+reductions (`xNRM2`, the back substitution), blocking or code paths that differ
+from reference LAPACK would all produce them, and the recording cannot tell
+these apart. The Householder steps follow reference LAPACK; only the reflector
+inner products follow a measured order.
+For real designs the first product is taken alone, the rest accumulate in
+eight lanes over whole blocks of eight, the lanes reduce pairwise (i with
+i + 4, then i + 2, then i + 1), the remaining terms follow in sequence, and the
+leading element is added last. That is consistent with an aligned vector loop
+after a one-element peel, but it was chosen among sequential, 2- to 32-lane,
+peeled, adjacent-pair, fused multiply-add and split complex accumulations by
+the number of bit-identical cases: a fit to this host, not MKL's documented
+algorithm. Complex single designs fit best with two lanes and complex double
+designs sequentially; few complex cases are bit-identical.
+`qr(A,0)`'s R12 matches less often than `mldivide`'s coefficients do, so the
+separate factorisation is not evidence of `mldivide`'s internal one.
+The zero-based single CSS vertices 47 and 58 have exact zero baselines in
+MATLAB, where cancellation of the observation sum gives the port about 4e-9
+(within the acceptance scale). Other inputs, CPUs or MATLAB releases may round
+differently.
+
+The irregular single designs move further from MATLAB in ULPs (266 to 1,011)
+because the previous solve was more accurate than MATLAB, not closer to it: it
+solved in double and rounded once, so its largest real-part error against the
+exact solution of the same rounded inputs was 0.44 single eps (relative to the
+coefficient's magnitude). MATLAB's own error reaches 184 single eps on these
+ill-conditioned designs, and the port's, now in single arithmetic, reaches 185.
+The two single-precision solves carry rounding errors of the same size in
+different bits. `random_single_9`, the 1,011-ULP case, is a complex coefficient
+whose real part is 5% of its magnitude; port and MATLAB differ by 28 and 6 eps
+of that magnitude from the exact value. This is accepted as the cost of
+computing in MATLAB's class; the per-case freeze keeps it from growing.
+
+Nonfinite converted inputs, including finite doubles that overflow single,
+give NaN coefficients. MATLAB's handling was not recorded. When `beta - alpha`
+overflows inside a reflector (both near the largest value), the reflector is
+formed from halved values, which is exact and leaves every recorded solve
+unchanged. Complex division is prescaled by powers of two near the overflow
+and underflow thresholds, as LAPACK's `xLADIV` does, so a complex reflector
+whose `alpha - beta` approaches the largest value keeps its coefficient; this
+too leaves every recorded solve unchanged.
+
+In the full pipelines (committed module from
+[run 42932877139](https://github.com/neurodesk/webapps/actions/runs/42932877139),
+which also contains the CF geometry port; the map and CSS reports equal those of
+the QR-only module from run 42930052851),
+the single CSS pipeline's largest Beta difference falls from 1.07e-6 to
+2.38e-7 and its largest Baseline difference from 3.12e-8 to 1.82e-8. Across the
+ten single forward pipelines (748 vertices), bit-identical Beta values rise from
+279 to 649 (largest distance 22 to 5 single ULPs) and bit-identical Baseline
+values from 223 to 391, with the mean Baseline distance lower in every
+pipeline. The largest absolute Baseline difference rises from 4.0e-8 to 5.7e-8:
+`pipeline_single_x001_lh_average0_coarse0` vertex 29 (MATLAB -0.0064553185)
+moves from 65 to 123 ULPs. Its maximum ULP distance also rises in three
+pipelines (79 to 123, 47 to 57 and 102 to 166), all on small baselines whose
+value is a cancellation residual of the observation sum. The largest Beta
+difference stays 9.54e-7 (`pipeline_single_x001_rh_average1_coarse0`). The double CSS replay keeps every
+decision; its maximum Beta and Baseline differences are unchanged (8.3e-9 and
+5.6e-16), on 64 and 65 rather than 67 vertices. The map gates' tolerances are
+unchanged.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-qr" packages/samsrf/validation/matlab/qr-reference.json
+SAMSRF_QR_REFERENCE_DIR="$TMPDIR/samsrf-qr" SAMSRF_QR_REPORT="$TMPDIR/qr-port.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_reference -- --nocapture
+python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$TMPDIR/samsrf-qr/ubuntu-24.04/compatible" "$TMPDIR/qr-port.json" "$TMPDIR/qr-accuracy.json"
+```
 
 ## Geometry: polyshape, delaunay and real templates
 
@@ -572,8 +701,10 @@ whose QR diagonal is 15.81078. The corrected rule passes the original 146
 scale cases and the newly recorded pipeline regression.
 The factor is measured directly for double precision. The same factor is used
 for single precision, whose recorded cases agree but do not distinguish the
-two rules. A separate native gate checks the overflowing design's tiny
-amplitude against MATLAB within eight ULP, even though its final map is rejected.
+two rules; the least-squares recording below confirms it in single precision.
+Separate native gates require vertex 80's coefficients and the overflowing
+design's tiny amplitude to equal MATLAB's bit for bit, even though the latter's
+final map is rejected.
 
 The required CSS replay checks all 96 vertices' zero and nonfinite decisions.
 At vertices 46, 59, 68, 80 and 87 it also requires exact parameters, noise ceilings and

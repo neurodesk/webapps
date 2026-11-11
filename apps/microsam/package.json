@@ -14,11 +14,11 @@
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*",
     "fast-png": "8.0.0",
-    "geotiff": "3.0.5",
     "onnxruntime-web": "1.29.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",
+    "geotiff": "3.0.5",
     "vite": "^6.3.2"
   },
   "neurodeskWebapp": {

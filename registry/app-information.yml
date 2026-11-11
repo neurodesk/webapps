@@ -2293,7 +2293,7 @@ apps:
       - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo model (BSD-3-Clause); tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
       - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
-      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF and OME-TIFF reading }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
       - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
     citations:
@@ -2537,7 +2537,7 @@ apps:
       - { name: MobileSAM, url: https://github.com/ChaoningZhang/MobileSAM, role: "TinyViT image encoder and the ONNX prompt decoder graph (Apache-2.0)" }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on WebGPU or the CPU (WebAssembly) }
       - { name: Pillow, url: https://github.com/python-pillow/Pillow, role: "bilinear resampling ported from Pillow 13.0.0 (MIT-CMU), as micro-sam resizes images" }
-      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF and OME-TIFF reading }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
       - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
     citations:
       - group: Interactive segmentation

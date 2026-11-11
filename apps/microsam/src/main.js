@@ -18,7 +18,8 @@ import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import workerUrl from "./worker.js?worker&url";
 import { APP, MODEL } from "./config.js";
-import { channelChoices, readImage, writeLabelTiff } from "./image-io.js";
+import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
+import { channelChoices, readImage } from "./image-io.js";
 import { channelToUint8, encoderTensor, resizedChannels, threeChannels } from "./preprocess.js";
 import {
   boxFromCorners,

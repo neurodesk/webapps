@@ -42,6 +42,10 @@ palette.putpalette([0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255] + [0] * 756)
 palette.save(out / "palette.png")
 Image.fromarray(((base % 2) * 255).astype(np.uint8)).convert("1").save(out / "bits.png")
 Image.fromarray(base.astype(np.uint16) * 200).save(out / "grey16.png")
+# An 8-bit image saved with Fiji's Blue LUT: a palette page whose index k is blue k * 80.
+blue = np.zeros((3, 256), dtype=np.uint16)
+blue[2] = np.minimum(np.arange(256) * 80, 255) * 257
+tifffile.imwrite(out / "palette-blue.tif", base % 4, photometric="palette", colormap=blue)
 for path in sorted(out.iterdir()):
     if path.suffix in (".tif", ".png"):
         print(path.name, path.stat().st_size)

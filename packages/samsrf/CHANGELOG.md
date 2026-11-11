@@ -1,10 +1,10 @@
 # @neurodesk/samsrf
 
-## 0.3.20261111
+## 0.4.20261110
 
-### Patch Changes
+### Minor Changes
 
-- Model MATLAB R2023b's double CSS objective stage by stage: ported fdlibm elementary functions, plus empirical models of MATLAB's complex power of negative responses, its `conv` and MKL's dot products and norms. All 108 recorded CSS optimizer traces now follow MATLAB bit for bit, and the recorded double pipeline matches every non-coefficient map exactly with MATLAB's HRF kernel. The remaining HRF (`gampdf`) and coefficient differences, and MATLAB's Intel/AMD reference difference, are documented and gated.
+- 082a3c7: Solve Beta and Baseline as MATLAB's `[ones x] \ y` does: column-pivoted Householder QR in the design's class (single arithmetic for single observations), with MATLAB's rank rule. Single and double forward and CSS fits change in the last few bits of Beta and Baseline. Coefficients are not bit-identical to MATLAB in general: on 348 recorded MATLAB R2023b solves, 123 match bit for bit the rest lie within an empirical acceptance scale and are frozen per case, and every rank decision matches. Nonfinite converted inputs now give NaN coefficients.
 
 ## 0.3.20261110
 

@@ -17,7 +17,8 @@ import { createNiftiFromVolume, downloadFile } from "@neurodesk/webapp-component
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import workerUrl from "./worker.js?worker&url";
 import { APP, MODEL } from "./config.js";
-import { readImage, writeLabelTiff, nucleiCsv } from "./image-io.js";
+import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
+import { readImage, nucleiCsv } from "./image-io.js";
 import { automaticTiles } from "./stardist.js";
 import { labelColormap, outputName, segmentationSettings } from "./settings.js";
 import examples from "../examples.json";

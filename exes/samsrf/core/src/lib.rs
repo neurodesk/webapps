@@ -22,6 +22,7 @@ pub mod gif_aps;
 pub mod gifti;
 pub mod hrf;
 pub mod job;
+pub mod lstsq;
 pub mod mapset;
 pub mod mat;
 pub mod matlab_math;

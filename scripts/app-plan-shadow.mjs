@@ -133,6 +133,7 @@ async function shadow(pr, scratch) {
       workspace: { before: workspaceClosures(workspaceBefore), after: workspaceClosures(workspaceAfter) },
       lockClosures: closures ?? null,
       registry: manifests.get('registry/apps.yml') ?? null,
+      information: manifests.get('registry/app-information.yml') ?? null,
       offlineLock: manifests.get('registry/offline-assets.lock.json') ?? null,
     });
     const comparison = compareSelection({ catalog: registry, plan, oracle });
