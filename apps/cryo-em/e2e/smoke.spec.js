@@ -343,6 +343,36 @@ test("a job the server created is followed although both submit responses were l
   await expect(page.locator("#formMessage")).toBeHidden();
 });
 
+test("a project read from before a step ended does not follow that step again", async ({ page }) => {
+  test.setTimeout(120000);
+  await connect(page);
+  const projectId = await createProject(page, "Stale read");
+  await loadExample(page);
+  // The submit handler's refresh reads the project while the step runs; its answer arrives after the step ended.
+  let projectReads = 0;
+  let releaseRead;
+  const readHeld = new Promise(resolve => { releaseRead = resolve; });
+  await page.route(`${COMPUTE_URL}/api/v1/projects/${projectId}`, async route => {
+    if (route.request().method() !== "GET") return route.fallback();
+    projectReads += 1;
+    if (projectReads !== 1) return route.fallback();
+    const response = await route.fetch();
+    await readHeld;
+    await route.fulfill({ response });
+  });
+  let streams = 0;
+  page.on("request", request => { if (/\/api\/v1\/jobs\/[^/]+\/events$/.test(request.url())) streams += 1; });
+  await page.locator("#stepSelect").selectOption("import");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Import movies finished", { timeout: STEP_TIMEOUT });
+  releaseRead();
+  await expect.poll(() => projectReads).toBeGreaterThan(1);
+  await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
+  expect(streams).toBe(1);
+  await expect(page.locator("#statusText")).not.toContainText("(Import/");
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
+
 test("a failed example download can be retried", async ({ page }) => {
   let attempts = 0;
   await page.route(example.files[0].url, route => {

@@ -73,6 +73,8 @@ const state = {
   uploads: {},
   selectedJob: null,
   following: null,
+  // Jobs a follower saw end: a project read from before that end still lists them as active.
+  ended: new Set(),
   submitting: null,
   settingsOpen: false,
   views: { image: null, classes: null, fsc: null },
@@ -331,7 +333,7 @@ async function refreshProject() {
   renderForm();
   const active = [...project.jobs].reverse().find(job => ACTIVE.has(job.status));
   // A refresh that started before a submission returned sees its job; the submit handler follows it.
-  if (active && !state.following && !state.submitting) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
+  if (active && !state.following && !state.submitting && !state.ended.has(active.id)) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
 }
 
 $('projectSelect').addEventListener('change', event => {
@@ -850,10 +852,12 @@ async function follow(id, label) {
       onProgress: event => progress.setProgress(event.fraction, `${label}: ${event.stage}`),
       onLog: event => log.log(event.line, event.level),
     }, { signal: controller.signal });
+    state.ended.add(id);
     progress.end(`${label} finished${done.simulated ? ' (simulated)' : ''}`);
     log.log(`${label} finished in ${done.directory}`, 'success');
   } catch (error) {
     if (controller.signal.aborted) return;
+    if (error instanceof ComputeError && error.job) state.ended.add(id);
     const cancelled = error instanceof ComputeError && error.code === 'cancelled';
     progress.end(cancelled ? `${label} cancelled` : `${label} failed: ${error.message}`, { success: false });
     $('statusText').classList.toggle('error', !cancelled);
