@@ -130,10 +130,12 @@ jobs:
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' exes/compute-server/Cargo.toml)
           tag="neurodesk-compute-v$version"
           cat > release-notes.md <<'NOTES'
-          Linux x86-64 backend with the production NeSVoR frontend.
+          Linux x86-64 compute server with the production NeSVoR and Cryo-EM frontends.
 
-          Requires an NVIDIA GPU, compatible driver, Docker and NVIDIA Container Toolkit. The archive does not bundle the scientific container or model weights. Run doctor and pull before reconstruction. See INSTALL.md and runtime.json inside the archive.
+          NeSVoR: requires an NVIDIA GPU, compatible driver, Docker and NVIDIA Container Toolkit. The archive does not bundle the scientific container or model weights. Run doctor and pull before reconstruction. See INSTALL.md and runtime.json inside the archive.
 
-          This draft is for validation. Do not publish until a real CUDA reconstruction and offline asset preparation have passed release checks.
+          Cryo-EM: on a Slurm cluster with Apptainer, run `./neurodesk-compute cryo-em` on a named login host. It writes slurm.json from sinfo, downloads the pinned RELION image and tutorial, checks the compute nodes and prints the SSH tunnel command and pairing code. The webapp's Standalone dialog lists the steps.
+
+          This draft is for validation. Do not publish until a real CUDA reconstruction, a real Slurm run of the RELION tutorial and offline asset preparation have passed release checks.
           NOTES
-          gh release create "$tag" release-assets/* --draft --target "$GITHUB_SHA" --title "Neurodesk Compute $version (Linux NVIDIA)" --notes-file release-notes.md
+          gh release create "$tag" release-assets/* --draft --target "$GITHUB_SHA" --title "Neurodesk Compute $version (Linux)" --notes-file release-notes.md
