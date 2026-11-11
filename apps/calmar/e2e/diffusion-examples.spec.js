@@ -125,4 +125,76 @@ test.describe('download fault injection', () => {
     await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
     await expect(selector).toHaveAttribute('data-example-id', isles.id);
   });
+
+  test('a cancelled example whose download or import finishes late leaves the next example in place', async ({ page }) => {
+    test.setTimeout(240000);
+    await page.goto('/');
+    await page.waitForFunction(() => globalThis.app?.nv?.canvas, null, { timeout: 60000 });
+    const selector = page.locator('[data-neurodesk-examples]');
+    const menu = page.locator('select[data-neurodesk-example]');
+    const cancel = selector.getByRole('button', { name: 'Cancel example download' });
+    const first = examples.find(item => item.id === 'stroke-lesion');
+    const second = examples.find(item => item.id === 'stroke-lesion-m2001');
+    const soop = examples.find(item => item.id === 'stroke-dwi-adc-soop');
+    const loaded = () => page.evaluate(() => ({
+      structural: app.nativeStructuralFile?.name,
+      dwi: app.deepIslesDwiFile?.name ?? null,
+      viewer: app.nv.volumes.map(volume => volume.name),
+      age: document.getElementById('patientAge').value,
+      report: document.getElementById('patientBehaviorReportBody').textContent.includes('87.1'),
+    }));
+    const secondLoaded = { structural: second.files[0].name, dwi: null, viewer: [second.files[0].name], age: '38', report: true };
+
+    // Cancelling aborts the first participant's download, so its response cannot arrive later.
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    await page.route(first.files[0].url, async route => {
+      await gate;
+      await route.continue().catch(() => {});
+    });
+    const requested = page.waitForRequest(first.files[0].url);
+    await menu.selectOption(first.id);
+    const aborted = (await requested).response().catch(() => null);
+    await cancel.click();
+    await menu.selectOption(second.id);
+    await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
+    await expect(page.locator('#patientAge')).toHaveValue('38');
+    release();
+    expect(await aborted).toBeNull();
+    await expect(selector).toHaveAttribute('data-example-id', second.id);
+    expect(await loaded()).toEqual(secondLoaded);
+    await page.unroute(first.files[0].url);
+
+    // An acute scan that is still being decoded when it is cancelled must not join the next participant.
+    const held = soop.files[0].name;
+    await page.evaluate(name => {
+      const read = File.prototype.arrayBuffer;
+      File.prototype.arrayBuffer = async function arrayBuffer() {
+        if (this.name === name) {
+          await new Promise(resolve => {
+            globalThis.releaseStaleRead = resolve;
+          });
+        }
+        return read.call(this);
+      };
+      const setInput = app.setDeepIslesInput.bind(app);
+      app.setDeepIslesInput = (kind, file, ...rest) => {
+        const result = setInput(kind, file, ...rest);
+        if (file.name === name) globalThis.staleImport = result.catch(() => {});
+        return result;
+      };
+    }, held);
+    await menu.selectOption(soop.id);
+    await page.waitForFunction(() => globalThis.releaseStaleRead, null, { timeout: 120000 });
+    await cancel.click();
+    await menu.selectOption(second.id);
+    await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
+    await expect(page.locator('#patientAge')).toHaveValue('38');
+    await page.evaluate(() => {
+      globalThis.releaseStaleRead();
+      return globalThis.staleImport;
+    });
+    await expect(selector).toHaveAttribute('data-example-id', second.id);
+    expect(await loaded()).toEqual(secondLoaded);
+  });
 });

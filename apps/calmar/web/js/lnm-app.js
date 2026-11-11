@@ -396,7 +396,7 @@ export class LesionNetworkMappingApp {
         }
         for (const role of ['dwi', 'adc', 'b0']) {
           if (!input(role)) continue;
-          await this.setDeepIslesInput(role, input(role));
+          await this.setDeepIslesInput(role, input(role), { assertCurrent });
           assertCurrent();
         }
         this.patientBehavior?.loadExampleContext(example.patientContext);
@@ -1677,7 +1677,9 @@ export class LesionNetworkMappingApp {
     this._autoPromotePipeline('lnm-yeo-auto');
   }
 
-  async setDeepIslesInput(kind, file) {
+  // `assertCurrent` throws when the load that asked for this input was replaced
+  // while the file was decoded, before anything of it is kept.
+  async setDeepIslesInput(kind, file, { assertCurrent } = {}) {
     if (!file) return null;
     const label = { dwi: 'DWI/TRACE', adc: 'ADC', b0: 'b0' }[kind];
     if (!label) {
@@ -1691,6 +1693,7 @@ export class LesionNetworkMappingApp {
       this.progress?.reset('Cancelled');
     }
     const decoded = await decodeNiftiBuffer(await file.arrayBuffer());
+    assertCurrent?.();
     this.tagDecodedFileSpace(file, decoded, {
       space: VOLUME_SPACES.NATIVE_DWI,
       role: `deepisles-${kind}`,

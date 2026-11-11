@@ -209,7 +209,7 @@ The two chronic examples (ARC `sub-M2051` and `sub-M2001`) each import a structu
 
 Clearing results must close and erase the NiiVue drawing, including its drawing Undo state. An unconfirmed drawing is downloadable only during active mask review, so switching examples cannot leave a previous subject's mask available.
 
-The acute browser suite also checks both named cases on a phone and hosted-download retry/cancellation. Neither failed nor cancelled downloads may replace the previous inputs or their behavioural context.
+The acute browser suite also checks both named cases on a phone and hosted-download retry/cancellation. Neither failed nor cancelled downloads may replace the previous inputs or their behavioural context. A cancelled example must not write after the next one loads: the selector aborts its downloads, and `setDeepIslesInput` takes the load's `assertCurrent` and calls it after decoding, before it keeps the file (`e2e/diffusion-examples.spec.js` forces that order). The demographics test in `e2e/manual-review.spec.js` loads two hosted scans and has a 180-second budget.
 
 ## Threaded runtime hosting
 
