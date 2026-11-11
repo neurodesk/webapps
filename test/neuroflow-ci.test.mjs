@@ -15,18 +15,22 @@ const template = JSON.parse(await readFile(new URL('apps/pipeline-builder/src/wo
 const dwi = JSON.parse(await readFile(new URL('apps/pipeline-builder/src/workflows/dwi-preprocessing.workflow.json', root)));
 
 test('the NeuroFlow scientific run covers builder, runtime and every template application change', () => {
-  const paths = flow.on.pull_request.paths;
-  const required = [
+  // A pull request starts the run on what NeuroFlow owns; a push to main also on what it builds on.
+  const own = [
     'apps/pipeline-builder/src/model.js',
     'apps/pipeline-builder/src/workflows/t1-segmentation.workflow.json',
     'packages/desktop/neuroflow/runtime/neurodesk.mjs',
     'scripts/desktop/neuroflow-smoke.mjs',
     'scripts/desktop/neuroflow-template-smoke.mjs',
-    'registry/offline-assets.lock.json',
+    'scripts/desktop/artifact-completion-smoke.mjs',
+    'scripts/lib/neuroflow-bundle.mjs',
     ...Object.values(template.steps).map(step => `apps/${step.tool.split('/')[1]}/automation.json`),
     ...Object.values(dwi.steps).map(step => `apps/${step.tool.split('/')[1]}/automation.json`),
   ];
-  for (const file of required) assert.ok(paths.some(pattern => matchesGlob(file, pattern)), `${file} must run the exported workflow`);
+  for (const event of ['pull_request', 'push']) {
+    const required = event === 'push' ? [...own, 'registry/offline-assets.lock.json', 'packages/desktop/src/main.mjs'] : own;
+    for (const file of required) assert.ok(flow.on[event].paths.some(pattern => matchesGlob(file, pattern)), `${file} must run the exported workflow on ${event}`);
+  }
   assert.deepEqual(flow.on.push.branches, ['main']);
   assert.ok(Object.hasOwn(flow.on, 'workflow_dispatch'));
 });
@@ -55,15 +59,15 @@ test('the workflow builds a fixed real upstream runtime and executes both templa
   }
 });
 
-test('scientific workflow triggers cover the actual transitive workspace graph', async () => {
+test('scientific workflow triggers on main cover the actual transitive workspace graph', async () => {
   const graph = await loadConservativeWorkspaceGraph(fileURLToPath(root));
   const apps = new Set(['pipeline-builder', ...[template, dwi].flatMap(workflow => Object.values(workflow.steps).map(step => step.tool.split('/')[1]))]);
-  const paths = flow.on.pull_request.paths;
+  const paths = flow.on.push.paths;
   for (const app of apps) {
     for (const node of reachableFrom(graph, `apps/${app}`)) {
       if (node.startsWith('(')) continue;
       const file = /^(apps|packages|exes)\/[^/]+$/.test(node) ? `${node}/new-source.js` : node;
-      assert.ok(paths.some(pattern => matchesGlob(file, pattern)), `${app} reaches ${node}, which must run scientific workflow CI`);
+      assert.ok(paths.some(pattern => matchesGlob(file, pattern)), `${app} reaches ${node}, which must run scientific workflow CI on main`);
     }
   }
 });
