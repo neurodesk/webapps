@@ -233,12 +233,12 @@ low-variance edge course.
 | --- | --- | --- | --- |
 | Raw runs to single courses, noise ceiling, area, mesh; single global signal | exact | 0 | |
 | CF correlations from MATLAB's courses | 16 units | 10.0 | MATLAB vs the exact correlation of its inputs: 9.9; host vs host: 10 |
-| RC profiles from MATLAB's courses | 32 units x peak x kappa | 8.4 per kappa | MATLAB's single QR vs exact: 20 |
-| Global-regression residuals | 32 units of the input course's peak | 18.8 | host vs host: 5.2 |
+| RC profiles from MATLAB's courses | 32 units x peak x kappa | 5.45 per kappa (30% identical) | MATLAB's single QR vs exact: 20 |
+| Global-regression residuals | 32 units of the input course's peak | 5.41 (54% identical) | host vs host: 5.2 |
 | Each host's profiles to its maps (replay) | exact | 0 | |
 | RC `R^2` where MATLAB used MKL's AVX-512 path | 16 single ULPs | 9 | the dot product order (below) |
 | Positions, `Fwhm`, `Vx`, hull and summary widths, end to end | exact | 0 | |
-| CF `R^2`, `Beta`, `Suppression`; RC `Beta` (of itself), end to end | 32 units x kappa | 6.4 per kappa | profile values |
+| CF `R^2`, `Beta`, `Suppression`; RC `Beta` (of itself), end to end | 32 units x kappa | 3.20 per kappa | profile values |
 | Production Benson reader instead of MATLAB's template | geometric bound | 0.20 of it | below |
 | Single 2D fits (`rc` with `Prf_Function`, `cf` with `Fit_pRF = 1`) | refused | | below |
 
@@ -281,11 +281,16 @@ single areas; summary statistics take single medians (`median.m`'s
 the global signal and its regression are single.
 
 The port cannot be bit-identical before the profiles, because MATLAB is not:
-the two matrix hosts' profiles differ on about 70% of entries. RC profiles use
-the shared regression (`css::fit_betas`: a double solve on the rounded inputs
-with MATLAB's rank rule). Matching MKL's single QR bit for bit belongs to the
-QR work, which would tighten the RC profile and regression limits and decide
-the rounding-only courses. `corr`'s dot product follows MKL's CNR `auto` order
+the two matrix hosts' profiles differ on about 70% of entries. Single RC profiles
+(`[Y ones] \ X`) and the single global regression (`[X ones] \ Y`) use
+`lstsq::mldivide`, the QR solve that reproduces MATLAB's on the QR recording,
+in MATLAB's column order. It brought the largest RC profile error from 8.42 to
+5.45 units per kappa, residuals from 18.81 to 5.41 and end-to-end profile
+values from 6.44 to 3.20; the limits did not change. It is not bit-identical
+on these hosts' MKL kernels (30% of profile entries and 54% of residuals are),
+so the rounding-only courses stay. Double courses with variance keep the
+centred solve, within 1e-12 of MATLAB on every recorded case; a constant double
+course goes through `mldivide` for its rank rule. `corr`'s dot product follows MKL's CNR `auto` order
 exactly (all 189 matrix `R^2` values on that host); the AVX-512 order was not
 identified (best candidate, 16 lanes x 4 accumulators with FMA: 145 of 189).
 

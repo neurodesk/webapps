@@ -359,7 +359,7 @@ fn single_cf_profiles_stay_within_single_rounding() {
 
 /// `[Y ones] \ X` in single: MATLAB's single QR differs from the exact solve of its
 /// inputs by up to 20 x 2^-24 of the profile peak; the port solves on the rounded
-/// inputs with the shared regression and rounds. The limit scales with the course's
+/// inputs with MATLAB's QR (`lstsq::mldivide`). The limit scales with the course's
 /// conditioning (`kappa`), and a zero peak allows no difference.
 #[test]
 fn single_rc_profiles_stay_within_single_rounding() {
