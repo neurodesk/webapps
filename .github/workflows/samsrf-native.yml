@@ -60,17 +60,26 @@ on:
         description: Only rebuild WASM and retain its optimizer input for diagnosis
         type: boolean
         default: false
+      runtime_cli:
+        description: SamSrfAnalysis CLI matrix (source runs it twice in public MATLAB; build needs the MLM_LICENSE_TOKEN secret for MATLAB Compiler)
+        type: choice
+        options: [none, source, build]
+        default: none
+      runtime_image:
+        description: Runtime-only validation of a published reference image, by registry digest (name@sha256:...)
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: samsrf-native-${{ github.ref }}${{ (inputs.record_matlab || inputs.revcor_only) && '-matlab' || '' }}
+  group: samsrf-native-${{ github.ref }}${{ (inputs.record_matlab || inputs.revcor_only || (inputs.runtime_cli || 'none') != 'none' || inputs.runtime_image) && '-matlab' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.wasm_only))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -87,8 +96,11 @@ jobs:
           node-version: 22
       - name: Core unit tests
         run: cargo test --release --manifest-path exes/samsrf/Cargo.toml
-      - name: Reference execution provenance tests
-        run: python3 -m unittest discover -s packages/samsrf/validation/matlab -p test_environment.py
+      - name: Reference execution provenance and CLI harness tests
+        run: |
+          python3 -m venv "$RUNNER_TEMP/samsrf-cli-venv"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/pip" install --only-binary=:all: -r packages/samsrf/validation/matlab/requirements-cli.txt
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" -m unittest discover -s packages/samsrf/validation/matlab -p 'test_*.py'
       - name: Clippy
         run: cargo clippy --manifest-path exes/samsrf/Cargo.toml --all-targets -- -D warnings
       - name: WebAssembly builds
@@ -146,7 +158,7 @@ jobs:
           if-no-files-found: ignore
 
   wasm-source:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -210,7 +222,7 @@ jobs:
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
 
   recorder-smoke:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.wasm_only)
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -364,4 +376,198 @@ jobs:
             ${{ runner.temp }}/samsrf-matlab/
             ${{ runner.temp }}/samsrf-matlab-repeat/
             ${{ runner.temp }}/samsrf-revcor-smoke/
+          if-no-files-found: error
+
+  # SamSrfAnalysis, the upstream command line, on one case matrix (cli_plan.py).
+  # source: public MATLAB runs the matrix twice in fresh directories on each host.
+  # build: MATLAB Compiler packages the repaired source; the compiled image then
+  # runs the same matrix on the same host and must reproduce source MATLAB bit for
+  # bit before it is published. Compiler is a transformation product: it needs a
+  # MathWorks batch licensing token in the MLM_LICENSE_TOKEN secret.
+  runtime-cli:
+    if: github.event_name == 'workflow_dispatch' && (inputs.runtime_cli == 'source' || inputs.runtime_cli == 'build')
+    name: SamSrfAnalysis CLI ${{ inputs.runtime_cli }} (${{ matrix.host }})
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJSON(inputs.runtime_cli == 'build' && '["ubuntu-22.04"]' || '["ubuntu-22.04","ubuntu-24.04"]') }}
+    runs-on: ${{ matrix.host }}
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      packages: write
+    env:
+      MKL_CBWR: COMPATIBLE
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_DYNAMIC: 'FALSE'
+      OMP_DYNAMIC: 'FALSE'
+    steps:
+      - name: Require a batch licensing token for MATLAB Compiler
+        if: inputs.runtime_cli == 'build'
+        env:
+          TOKEN: ${{ secrets.MLM_LICENSE_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo 'MATLAB Compiler is not covered by the public-project license. Add a MathWorks batch licensing token as the MLM_LICENSE_TOKEN secret.' >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check out the web port's exact SamSrf version
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: samsrf/samsrf
+          ref: 41ed1e96cc4d9b8b750f5594a61845df21ab8984
+          path: reference-source
+          persist-credentials: false
+      - name: Check out the pinned SPM GIfTI readers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: spm/spm12
+          ref: 03ac9473cad402407b6472228377c0167fdc54b8
+          path: reference-spm
+          sparse-checkout: |
+            @gifti
+            @xmltree
+            @file_array
+          persist-credentials: false
+      - name: Prepare verified inputs, declared source repairs and the case plan
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
+          python3 packages/samsrf/validation/matlab/prepare.py --cli reference-source "$RUNNER_TEMP/samsrf-cli/provenance"
+          python3 packages/samsrf/validation/matlab/cli_plan.py plan "$RUNNER_TEMP/samsrf-cli/plan.json"
+          python3 -m venv "$RUNNER_TEMP/samsrf-cli-venv"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/pip" install --only-binary=:all: -r packages/samsrf/validation/matlab/requirements-cli.txt
+      - name: Set up real MATLAB and required toolboxes
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3
+        with:
+          release: R2023bU11
+          products: ${{ inputs.runtime_cli == 'build' && 'MATLAB_Compiler ' || '' }}Statistics_and_Machine_Learning_Toolbox Image_Processing_Toolbox Parallel_Computing_Toolbox
+      - name: Build the version-matched Runtime image with MATLAB Compiler
+        if: inputs.runtime_cli == 'build'
+        env:
+          MLM_LICENSE_TOKEN: ${{ secrets.MLM_LICENSE_TOKEN }}
+          SAMSRF_MATLAB_BATCH: matlab-batch
+        run: python3 packages/samsrf/validation/matlab/build_container.py reference-source reference-spm "$RUNNER_TEMP/samsrf-cli/container-build"
+      - name: Prepare the shared read-only input bundle in source MATLAB
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); prepare_cli_bundle(fullfile(pwd,'reference-source'),fullfile(pwd,'reference-spm'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','bundle'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','plan.json'))
+      - name: Write models, hash and freeze the bundle at /input
+        run: |
+          cli="$RUNNER_TEMP/samsrf-cli"
+          python3 packages/samsrf/validation/matlab/cli_plan.py models "$cli/plan.json" "$cli/bundle"
+          python3 packages/samsrf/validation/matlab/cli_plan.py hash "$cli/bundle" "$cli/bundle-sha256.json"
+          chmod -R a-w "$cli/bundle"
+          sudo ln -s "$cli/bundle" /input
+          for run in source-1 source-2; do
+            python3 packages/samsrf/validation/matlab/cli_plan.py stage "$cli/plan.json" "$cli/bundle" "$cli/$run"
+            python3 packages/samsrf/validation/matlab/capture_environment.py "$cli/$run"
+          done
+      - name: Run the matrix in source MATLAB
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); run_source_cli(fullfile(pwd,'reference-source'),fullfile(pwd,'reference-spm'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','plan.json'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','source-1'))
+      - name: Check the custom-HRF runs against a direct call with the column HRF
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); verify_cli_hrf(fullfile(pwd,'reference-source'),fullfile(pwd,'reference-spm'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','plan.json'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','source-1'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','source-1-direct'))
+      - name: Repeat the matrix in a new MATLAB process
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); run_source_cli(fullfile(pwd,'reference-source'),fullfile(pwd,'reference-spm'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','plan.json'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','source-2'))
+      - name: Require every case to succeed and repeat exactly
+        run: |
+          cli="$RUNNER_TEMP/samsrf-cli"
+          python3 packages/samsrf/validation/matlab/cli_plan.py verify "$cli/bundle" "$cli/bundle-sha256.json"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" packages/samsrf/validation/matlab/compare_cli.py "$cli/plan.json" "$cli/source-1" "$cli/source-2" "$cli/source-repeat.json"
+      - name: Run, repeat, interrupt and fail the compiled image on this host
+        if: inputs.runtime_cli == 'build'
+        run: |
+          cli="$RUNNER_TEMP/samsrf-cli"
+          matlab="packages/samsrf/validation/matlab"
+          image="$(docker image inspect samsrf-reference:41ed1e96-r2023b --format '{{.Id}}')"
+          for run in compiled-1 compiled-2 interrupt; do
+            python3 "$matlab/cli_plan.py" stage "$cli/plan.json" "$cli/bundle" "$cli/$run"
+          done
+          python3 "$matlab/run_runtime_cli.py" run "$image" "$cli/plan.json" "$cli/bundle" "$cli/compiled-1"
+          python3 "$matlab/run_runtime_cli.py" run "$image" "$cli/plan.json" "$cli/bundle" "$cli/compiled-2"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_cli.py" "$cli/plan.json" "$cli/source-1" "$cli/compiled-1" "$cli/compiled-vs-source.json"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_cli.py" "$cli/plan.json" "$cli/compiled-1" "$cli/compiled-2" "$cli/compiled-repeat.json"
+          longest="$(python3 -c 'import json,pathlib,sys; r=[json.loads(p.read_text()) for p in pathlib.Path(sys.argv[1]).glob("*.json") if p.name not in ("environment.json","inputs.json")]; m=max(r,key=lambda x:x["seconds"]); print(m["id"], max(10, m["seconds"]/2))' "$cli/compiled-1/receipts")"
+          python3 "$matlab/run_runtime_cli.py" interrupt "$image" "$cli/plan.json" "$cli/bundle" "$cli/interrupt" $longest
+          mkdir -p "$cli/failure/missing-model"
+          cp "$cli/bundle/SamSrf_defaults.json" "$cli/failure/missing-model/"
+          python3 "$matlab/run_runtime_cli.py" failure "$image" "$cli/bundle" "$cli/failure/missing-model"
+      - name: Publish the validated image by digest
+        if: inputs.runtime_cli == 'build'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          target="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/samsrf-reference:41ed1e96-r2023bu11-${GITHUB_RUN_ID}"
+          echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          docker tag samsrf-reference:41ed1e96-r2023b "$target"
+          docker push "$target"
+          docker image inspect "$target" --format '{{json .RepoDigests}}' > "$RUNNER_TEMP/samsrf-cli/container-build/published.json"
+          cat "$RUNNER_TEMP/samsrf-cli/container-build/published.json"
+      - name: Retain plan, bundle, receipts, outputs and comparisons
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-cli-${{ inputs.runtime_cli }}-${{ github.sha }}-${{ matrix.host }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/samsrf-cli/
+            !${{ runner.temp }}/samsrf-cli/container-build/runtime/
+            !${{ runner.temp }}/samsrf-cli/container-build/container/
+          if-no-files-found: error
+
+  # Runtime-only host: no MATLAB, no license and no network inside the container.
+  runtime-image:
+    if: github.event_name == 'workflow_dispatch' && inputs.runtime_image != ''
+    name: Runtime-only validation of the published reference image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      IMAGE: ${{ inputs.runtime_image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Fetch the pinned bundle and source recording
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-cli" packages/samsrf/validation/matlab/cli-reference.json
+          python3 -m venv "$RUNNER_TEMP/samsrf-cli-venv"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/pip" install --only-binary=:all: -r packages/samsrf/validation/matlab/requirements-cli.txt
+      - name: Run, repeat, interrupt and fail the image without MATLAB
+        run: |
+          cli="$RUNNER_TEMP/samsrf-cli"
+          matlab="packages/samsrf/validation/matlab"
+          python3 "$matlab/cli_plan.py" verify "$cli/bundle" "$cli/bundle-sha256.json"
+          chmod -R a-w "$cli/bundle"
+          if command -v matlab; then echo 'MATLAB must not be installed on this host' >&2; exit 1; fi
+          docker pull "$IMAGE"
+          for run in runtime-1 runtime-2 interrupt; do
+            python3 "$matlab/cli_plan.py" stage "$cli/plan.json" "$cli/bundle" "$cli/$run"
+          done
+          python3 "$matlab/run_runtime_cli.py" run "$IMAGE" "$cli/plan.json" "$cli/bundle" "$cli/runtime-1"
+          python3 "$matlab/run_runtime_cli.py" run "$IMAGE" "$cli/plan.json" "$cli/bundle" "$cli/runtime-2"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_cli.py" "$cli/plan.json" "$cli/runtime-1" "$cli/runtime-2" "$cli/runtime-repeat.json"
+          longest="$(python3 -c 'import json,pathlib,sys; r=[json.loads(p.read_text()) for p in pathlib.Path(sys.argv[1]).glob("*.json") if p.name not in ("environment.json","inputs.json")]; m=max(r,key=lambda x:x["seconds"]); print(m["id"], max(10, m["seconds"]/2))' "$cli/runtime-1/receipts")"
+          python3 "$matlab/run_runtime_cli.py" interrupt "$IMAGE" "$cli/plan.json" "$cli/bundle" "$cli/interrupt" $longest
+          mkdir -p "$cli/failure/missing-model"
+          cp "$cli/bundle/SamSrf_defaults.json" "$cli/failure/missing-model/"
+          python3 "$matlab/run_runtime_cli.py" failure "$IMAGE" "$cli/bundle" "$cli/failure/missing-model"
+      - name: Report differences from the pinned source recording (other host, not gated)
+        run: |
+          cli="$RUNNER_TEMP/samsrf-cli"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" packages/samsrf/validation/matlab/compare_cli.py "$cli/plan.json" "$cli/source-1" "$cli/runtime-1" "$cli/runtime-vs-pinned-source.json" || echo 'Cross-host differences recorded; the same-host gate is in the build job.'
+      - name: Retain receipts, outputs and comparisons
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-runtime-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/samsrf-cli/
           if-no-files-found: error
