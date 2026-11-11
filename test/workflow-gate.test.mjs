@@ -19,8 +19,11 @@ const registry = await loadAppsRegistry();
 const graph = await loadConservativeWorkspaceGraph(repoRoot);
 const flowOf = (paths) => ({ on: { pull_request: { paths } } });
 const real = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
-const decideReal = async (name, changedPaths, manifests = new Map()) => {
-  const flow = await real(name);
+const decideReal = async (name, changedPaths, manifests = new Map(), event = 'pull_request') => {
+  const source = await real(name);
+  // A workflow whose pull requests filter only on its own paths is still a
+  // fixture through the shared filters of its pushes.
+  const flow = { ...source, on: { pull_request: { paths: source.on[event].paths } } };
   const calledFlows = await Promise.all(calledWorkflows(flow).map(real));
   return decideWorkflow({ flow, calledFlows, changedPaths, registry, graph, manifests, root: repoRoot });
 };
@@ -94,7 +97,7 @@ test('a root script a step names, and what it imports, runs the workflow', async
   for (const script of ['scripts/desktop/neuroflow-smoke.mjs', 'scripts/desktop/artifact-completion-smoke.mjs']) assert.ok(scripts.includes(script), script);
   // The template smoke is imported by neuroflow-smoke.mjs, not named by a step.
   for (const script of ['scripts/desktop/neuroflow-smoke.mjs', 'scripts/desktop/neuroflow-template-smoke.mjs', 'scripts/desktop/artifact-completion-smoke.mjs']) {
-    const decision = await decideReal('neuroflow', [script]);
+    const decision = await decideReal('neuroflow', [script], new Map(), 'push');
     assert.equal(decision.run, true, script);
     assert.match(decision.reason, /loads/);
   }
@@ -152,8 +155,8 @@ test('the planner reads the whole diff, not only the paths the filters matched',
   const after = YAML.parse(before);
   after.apps.find((app) => app.id === 'topofit').description += ' Reworded.';
   const manifests = new Map([[path, { before, after: YAML.stringify(after) }]]);
-  assert.equal((await decideReal('neuroflow', [path], manifests)).run, false);
-  const decision = await decideReal('neuroflow', ['apps/topofit/automation.json', path], manifests);
+  assert.equal((await decideReal('neuroflow', [path], manifests, 'push')).run, false);
+  const decision = await decideReal('neuroflow', ['apps/topofit/automation.json', path], manifests, 'push');
   assert.equal(decision.run, true);
   assert.match(decision.reason, /app planner selects pipeline-builder/);
 });

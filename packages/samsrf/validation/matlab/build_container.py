@@ -11,7 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from prepare import REPAIRS, SOURCE
+from prepare import SOURCE, repairs
 
 
 def git(directory, *args):
@@ -22,12 +22,14 @@ def verify_source(source, spm):
     if git(source, 'rev-parse', 'HEAD') != SOURCE['commit']:
         raise ValueError('Wrong SamSrf commit')
     modified = git(source, 'diff', '--name-only', 'HEAD').splitlines()
-    if sorted(modified) != sorted(name for name, _, _ in REPAIRS):
-        raise ValueError('Run prepare.py; only its declared repairs may be present')
+    # The compiled reference is the SamSrfAnalysis CLI, so it carries the CLI set.
+    declared = repairs(cli=True)
+    if sorted(modified) != sorted({name for name, _, _ in declared}):
+        raise ValueError('Run prepare.py --cli; only its declared repairs may be present')
     if git(source, 'ls-files', '--others', '--exclude-standard'):
         raise ValueError('Untracked files in the reference source')
     files = []
-    for name, before, after in REPAIRS:
+    for name, before, after in declared:
         original = subprocess.check_output(['git', '-C', str(source), 'show', f'HEAD:{name}'])
         if original.decode().count(before) != 1:
             raise ValueError(f'Unexpected repair site in {name}')
@@ -39,7 +41,7 @@ def verify_source(source, spm):
                       'patchedSha256': hashlib.sha256(expected).hexdigest()})
     if git(spm, 'rev-parse', 'HEAD') != SOURCE['spm']['commit'] or git(spm, 'status', '--porcelain'):
         raise ValueError('SPM must be the clean pinned checkout')
-    return {**SOURCE, 'files': files}
+    return {**SOURCE, 'repairSet': 'samsrfanalysis-cli', 'files': files}
 
 
 def main(source, spm, output):
@@ -50,8 +52,11 @@ def main(source, spm, output):
     quote = lambda value: "'" + str(value).replace("'", "''") + "'"
     recorder = Path(__file__).resolve().parent
     command = f'addpath({quote(recorder)}); build_container({quote(source)},{quote(spm)},{quote(output)})'
-    subprocess.run(['matlab', '-batch', command], check=True,
-                   env={**os.environ, 'MKL_CBWR': SOURCE['mklCbwr']})
+    # A batch licensing token is honoured by setup-matlab's matlab-batch launcher,
+    # not by `matlab -batch`; the CI build selects it with SAMSRF_MATLAB_BATCH.
+    launcher = os.environ.get('SAMSRF_MATLAB_BATCH')
+    argv = [launcher, command] if launcher else ['matlab', '-batch', command]
+    subprocess.run(argv, check=True, env={**os.environ, 'MKL_CBWR': SOURCE['mklCbwr']})
     image = json.loads(subprocess.check_output([
         'docker', 'image', 'inspect', 'samsrf-reference:41ed1e96-r2023b']))[0]
     (output / 'image.json').write_text(json.dumps({

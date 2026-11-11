@@ -3,6 +3,8 @@ name: neuroflow
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    # Only what this workflow owns: the builder, the template apps and NeuroFlow's runtime,
+    # scripts and tests. The shared packages they build on are covered by the push and nightly runs below.
     paths:
       - '.github/workflows/neuroflow.yml'
       - 'apps/pipeline-builder/**'
@@ -15,18 +17,13 @@ on:
       - 'apps/noddi/**'
       - 'apps/dwi2trx/**'
       - 'apps/calmar/tests/fixtures/synthstrip-mini/**'
-      - 'packages/**'
-      - 'exes/**'
-      - 'test-utils/**'
-      - 'test/**'
-      - 'scripts/**'
-      - 'registry/**'
-      - 'models/**'
+      - 'packages/desktop/neuroflow/**'
       - 'test/neuroflow*'
       - 'test/pipeline-builder*'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
+      - 'scripts/generate-neuroflow.mjs'
+      - 'scripts/desktop/neuroflow-*'
+      - 'scripts/desktop/artifact-completion-smoke.mjs'
+      - 'scripts/lib/neuroflow-*'
   push:
     branches: [main]
     paths:
@@ -70,16 +67,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
-  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
-  gate:
-    uses: ./.github/workflows/pr-gate.yml
-    with:
-      workflow: neuroflow
-
   exported-template:
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: macos-15
     timeout-minutes: ${{ matrix.timeout }}
     strategy:
