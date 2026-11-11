@@ -26,6 +26,12 @@ pub struct Solution {
     pub pivot: Vec<usize>,
     /// The leading `min(m, n)` rows of `R`, row-major, in pivoted column order.
     pub r: Vec<Vec<Complex64>>,
+    /// The factorisation as `xGEQP3` leaves it, column by column in pivoted
+    /// order (R on and above the diagonal, reflector vectors below), its
+    /// reflector scalars and `Q^H y` (`xORMQR`), for step-by-step comparison.
+    pub packed: Vec<Vec<Complex64>>,
+    pub tau: Vec<Complex64>,
+    pub qty: Vec<Complex64>,
 }
 
 /// `A \ y` with `A` given by its columns. Inputs are converted to
@@ -374,6 +380,9 @@ fn solve<T: Real>(columns: &[&[Complex64]], y: &[f64]) -> Solution {
             rank: 0,
             pivot: (0..n).collect(),
             r: Vec::new(),
+            packed: Vec::new(),
+            tau: Vec::new(),
+            qty: Vec::new(),
         };
     }
     let complex = a.iter().flatten().any(|value| value.im != T::ZERO);
@@ -388,6 +397,7 @@ fn solve<T: Real>(columns: &[&[Complex64]], y: &[f64]) -> Solution {
     let mut original = norms.clone();
     let threshold = T::EPSILON.sqrt();
     let mut diagonal = Vec::with_capacity(steps);
+    let mut taus = Vec::with_capacity(steps);
     for i in 0..steps {
         // xLAQP2: the remaining column with the largest updated norm (first on ties).
         let mut best = i;
@@ -404,6 +414,7 @@ fn solve<T: Real>(columns: &[&[Complex64]], y: &[f64]) -> Solution {
         let (beta, tau) = larfg(alpha, &mut a[i][i + 1..], complex);
         a[i][i] = beta;
         diagonal.push(beta);
+        taus.push(tau);
         let v: Vec<C<T>> = a[i][i + 1..].to_vec();
         for column in &mut a[i + 1..] {
             apply(&v, tau, &mut column[i..], complex);
@@ -447,7 +458,11 @@ fn solve<T: Real>(columns: &[&[Complex64]], y: &[f64]) -> Solution {
     let r = (0..steps)
         .map(|i| (0..n).map(|j| if j < i { Complex64::new(0.0, 0.0) } else { Complex64::new(a[j][i].re.to_f64(), a[j][i].im.to_f64()) }).collect())
         .collect();
-    Solution { coefficients, rank, pivot, r }
+    let wide = |value: &C<T>| Complex64::new(value.re.to_f64(), value.im.to_f64());
+    let packed = a.iter().map(|column| column.iter().map(wide).collect()).collect();
+    let tau = taus.iter().map(wide).collect();
+    let qty = b.iter().map(wide).collect();
+    Solution { coefficients, rank, pivot, r, packed, tau, qty }
 }
 
 #[cfg(test)]

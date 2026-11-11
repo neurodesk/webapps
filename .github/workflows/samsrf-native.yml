@@ -255,7 +255,7 @@ jobs:
           path: reference-source
           persist-credentials: false
       - name: Install Octave for recorder plumbing checks
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends octave liboctave-dev python3-numpy
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends octave octave-dev python3-numpy
       - name: Run the recorder on a pinned real input
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json
