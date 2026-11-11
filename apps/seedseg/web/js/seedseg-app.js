@@ -951,9 +951,45 @@ class SeedSegApp {
   /**
    * Callback when DICOM files are retained for validation.
    */
+<<<<<<< monorepo
   _onDicomFilesRetained(files) {
     this.dicompareFiles = Array.from(files);
     this.dicompareController?.clearFiles();
+=======
+  /**
+   * Load dicompare from its host the first time it is needed. A static import would stop the
+   * whole app booting whenever that host is unreachable, so a failure here only disables the report.
+   * @returns {Promise<boolean>} True if the dicompare modules are available
+   */
+  _loadDicompare() {
+    this.dicompareLoad ||= Promise.all([
+      import(`${Config.DICOMPARE_BASE}/embed/DicompareController.js`),
+      import(`${Config.DICOMPARE_BASE}/embed/DicompareReportRenderer.js`)
+    ]).then(([{ DicompareController }, { DicompareReportRenderer }]) => {
+      this.dicompareController = new DicompareController({
+        schemaUrl: `${Config.DICOMPARE_BASE}/schemas/SeedSeg_Prostate_T1w_v1.0.json`,
+        workerUrl: `${Config.DICOMPARE_BASE}/embed/dicompare-worker.js`,
+        updateOutput: (msg) => this.updateOutput(msg)
+      });
+      this.dicompareRenderer = new DicompareReportRenderer();
+      return true;
+    }).catch((error) => {
+      console.error('Could not load dicompare:', error);
+      const btn = document.getElementById('dicompareReportBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.title = `dicompare could not be loaded from ${Config.DICOMPARE_BASE}`;
+      }
+      this.updateOutput(`dicompare report unavailable: could not load it from ${Config.DICOMPARE_BASE}`);
+      return false;
+    });
+    return this.dicompareLoad;
+  }
+
+  async _onDicomFilesRetained(files) {
+    if (!(await this._loadDicompare())) return;
+    await this.dicompareController.retainDicomFiles(files);
+>>>>>>> upstream
     const btn = document.getElementById('dicompareReportBtn');
     if (btn) {
       btn.disabled = files.length === 0;
