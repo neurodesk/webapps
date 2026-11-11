@@ -1270,6 +1270,13 @@ test('an app information change selects the apps whose entries changed', async (
     value.defaults = { packages: [] };
   }));
   assert.match(section.reasons.fallback, /its defaults section changed/);
+  // A recursive alias parses and validates, but cannot be compared, at head or at the base.
+  const recursive = text.replace('\n  lcmodel:\n', '\n  lcmodel: &lcmodel\n    extra: *lcmodel\n');
+  assert.notEqual(recursive, text);
+  for (const looped of [plan(recursive), plan(text, recursive)]) {
+    assert.equal(looped.allApps, true);
+    assert.match(looped.reasons.fallback, /cannot be compared/);
+  }
   // Without both texts the change follows the graph: every themed app reaches the file.
   assert.ok(createAppPlan(registry, [path], workspace).selected.length > 1);
 });
@@ -1294,7 +1301,7 @@ test('an app build and its tests read only their own entry of the app informatio
     'apps/seedseg/upstream.json': 'names it in a maintenance note',
     'apps/fastprep/index.html': 'names it in a comment',
     'apps/niimath/index.html': 'names it in a comment',
-    'apps/spinalcordtoolbox/scripts/test_ui_coverage.cjs': 'reads the citations of the spinalcordtoolbox entry',
+    'apps/spinalcordtoolbox/scripts/test_ui_coverage.cjs': 'checks the parsed apps.spinalcordtoolbox.citations',
   };
   const reached = new Set(registry.apps.flatMap((app) => [...reachableFrom(workspace, `apps/${app.id}`)]));
   for (const file of filesNaming(String.raw`app-information(\.yml|\.mjs)|loadAppInformation|appInformationPath`)) {
@@ -1307,6 +1314,11 @@ test('an app build and its tests read only their own entry of the app informatio
   // The handoff catalog comes from registry/apps.yml, whose changes the planner reads per entry too.
   assert.match(loader, /catalog: deepFreeze\(registry\.apps/);
   assert.doesNotMatch(await readFile(join(repoRoot, 'apps/qsmbly/e2e/citations.spec.js'), 'utf8'), /(?<![-\w])information\.(?!apps\.qsmbly\b)/);
+  // The planner compares parsed entries, so a reader must parse too: one matching the
+  // file's text would fail on a layout change that selects no app.
+  const sct = await readFile(join(repoRoot, 'apps/spinalcordtoolbox/scripts/test_ui_coverage.cjs'), 'utf8');
+  assert.match(sct, /const appInformation = YAML\.parse\(fs\.readFileSync\([^\n]*app-information\.yml'\), 'utf8'\)\);/);
+  assert.doesNotMatch(sct, /appInformation\.(?!apps\.spinalcordtoolbox\b)/);
 });
 
 test('the shell and its tests read only their own app entry of the standalone catalog', async () => {

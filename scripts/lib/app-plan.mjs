@@ -103,10 +103,15 @@ function appInformationImpact({ before, after }, registry) {
   } catch (error) {
     return { shared: `it is not valid at head (${error.message.split('\n').slice(0, 2).join(' ')}), and every themed app build validates it` };
   }
-  const section = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now)])].find((key) => key !== 'apps' && !same(old?.[key], now[key]));
-  if (section) return { shared: `its ${section} section changed, and every app's dialogs render it` };
-  const ids = [...new Set([...Object.keys(old?.apps ?? {}), ...Object.keys(now.apps)])];
-  return { changed: ids.filter((id) => !same(old?.apps?.[id], now.apps[id])) };
+  try {
+    const section = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now)])].find((key) => key !== 'apps' && !same(old?.[key], now[key]));
+    if (section) return { shared: `its ${section} section changed, and every app's dialogs render it` };
+    const ids = [...new Set([...Object.keys(old?.apps ?? {}), ...Object.keys(now.apps)])];
+    return { changed: ids.filter((id) => !same(old?.apps?.[id], now.apps[id])) };
+  } catch (error) {
+    // A recursive alias parses but has no JSON form to compare.
+    return { shared: `its entries cannot be compared (${error.message.split('\n')[0]})` };
+  }
 }
 
 function registryImpact({ before, after }) {
