@@ -375,7 +375,7 @@ fn single_rc_profiles_stay_within_single_rounding() {
             let profiles = array(&host.root, &case["profiles"]);
             let raw = array(&host.root, &case["rawMaps"]);
             let pixels = shape(&case["profiles"])[0];
-            let mut worst = 0.0f64;
+            let (mut worst, mut identical, mut compared) = (0.0f64, 0usize, 0usize);
             for (i, course) in y.chunks(volumes).enumerate() {
                 let mut actual = prepared.profile(course);
                 let expected = &profiles[i * pixels..(i + 1) * pixels];
@@ -394,10 +394,12 @@ fn single_rc_profiles_stay_within_single_rounding() {
                     if peak > 0.0 && a.is_finite() && e.is_finite() {
                         worst = worst.max((a - e).abs() / (peak * UNIT * k));
                     }
+                    identical += usize::from(same(a, e));
+                    compared += 1;
                     failures.check(within(a, e, 32.0 * UNIT * peak * k), || format!("{} {}: vertex {i} pixel {p}: {a} vs {e}", host.name, case["id"]));
                 }
             }
-            println!("{} {}: profile error {worst:.2} x 2^-24 of the peak, per unit of conditioning", host.name, case["id"]);
+            println!("{} {}: profile error {worst:.2} x 2^-24 of the peak, per unit of conditioning; {identical}/{compared} identical", host.name, case["id"]);
         }
     }
     tally.assert_complete(&hosts, "single RC cases", |e| e.single_rc);
@@ -427,7 +429,7 @@ fn global_regression_stays_within_rounding() {
             preprocess::remove_noise_in(&mut series, &array(&host.root, &case["globalSignal"]), 1, precision).unwrap();
             let expected = array(&host.root, &case["recomputedCorrectedCourses"]);
             let relative = if single(case) { 32.0 * UNIT } else { 1e-13 };
-            let mut worst = 0.0f64;
+            let (mut worst, mut identical, mut compared) = (0.0f64, 0usize, 0usize);
             for (i, &v) in roi.iter().enumerate() {
                 let e = &expected[v as usize * volumes..(v as usize + 1) * volumes];
                 // The residual Y - X B carries rounding relative to Y, not to itself.
@@ -436,10 +438,12 @@ fn global_regression_stays_within_rounding() {
                     if peak > 0.0 && a.is_finite() && e.is_finite() {
                         worst = worst.max((a - e).abs() / peak);
                     }
+                    identical += usize::from(same(a, e));
+                    compared += 1;
                     failures.check(within(a, e, relative * peak), || format!("{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]));
                 }
             }
-            println!("{} {}: residual error {:.2} x 2^-24 of the input's peak", host.name, case["id"], worst / UNIT);
+            println!("{} {}: residual error {:.2} x 2^-24 of the input's peak; {identical}/{compared} identical", host.name, case["id"], worst / UNIT);
         }
     }
     tally.assert_complete(&hosts, "global-regression cases", |e| e.global);

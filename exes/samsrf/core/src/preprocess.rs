@@ -516,8 +516,10 @@ pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: 
                 course.fill(0.0);
                 continue;
             }
-            let (beta, baseline) = crate::css::fit_betas(&design, course, Precision::Single);
-            let (beta, baseline) = (beta as f32, baseline as f32);
+            // `[X ones] \ Y`, in MATLAB's column order.
+            let ones = vec![num_complex::Complex64::new(1.0, 0.0); design.len()];
+            let solution = crate::lstsq::mldivide(&[&design, &ones], course, Precision::Single);
+            let (beta, baseline) = (solution.coefficients[0].re as f32, solution.coefficients[1].re as f32);
             for (value, &x) in course.iter_mut().zip(&x) {
                 let modelled = x * beta + baseline;
                 *value = f64::from(*value as f32 - modelled);

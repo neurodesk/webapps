@@ -101,25 +101,29 @@ impl Prepared {
     }
 
     /// `cM = [Y ones] \ X` without the intercept row: the slope of each regressor on `y`.
-    /// All NaN when `y` is constant (a rank-deficient system).
-    /// A constant course makes `[Y ones]` rank deficient. MATLAB's QR keeps the
-    /// column with the larger norm: the course's coefficient is `y'x / y'y` when
-    /// `|y| > 1`, and 0 otherwise. The shared regression applies that rule.
+    /// `[Y ones] \\ X`, keeping the course's coefficient. Single courses use MATLAB's
+    /// single QR (`lstsq::mldivide`, in MATLAB's column order). A double course
+    /// with variance takes the centred solve, which agrees with MATLAB's double QR
+    /// to 1e-12 on every recorded case and is several times faster. A constant
+    /// course makes the design rank deficient: MATLAB keeps the column with the
+    /// larger norm, so its coefficient is `y'x / y'y` when `|y| > 1`, else 0.
     pub fn profile(&self, y: &[f64]) -> Vec<f64> {
-        let n = y.len() as f64;
-        let mean = y.iter().sum::<f64>() / n;
-        let centred: Vec<f64> = y.iter().map(|value| value - mean).collect();
-        let variance: f64 = centred.iter().map(|value| value * value).sum();
-        if !variance.is_finite() {
-            return vec![f64::NAN; self.pixels];
+        let precision = self.model.data_precision;
+        if precision == Precision::Double {
+            let n = y.len() as f64;
+            let mean = y.iter().sum::<f64>() / n;
+            let centred: Vec<f64> = y.iter().map(|value| value - mean).collect();
+            let variance: f64 = centred.iter().map(|value| value * value).sum();
+            if !variance.is_finite() {
+                return vec![f64::NAN; self.pixels];
+            }
+            if variance > 0.0 {
+                return (0..self.pixels).map(|p| crate::fit_prf::dot(&centred, self.regressor(p)) / variance).collect();
+            }
         }
-        // Single courses: `[Y ones]` is single, so MATLAB casts the regressors to
-        // single and solves by single QR.
-        if self.model.data_precision == Precision::Single || variance == 0.0 {
-            let design: Vec<num_complex::Complex64> = y.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
-            return (0..self.pixels).map(|p| crate::css::fit_betas(&design, self.regressor(p), self.model.data_precision).0).collect();
-        }
-        (0..self.pixels).map(|p| crate::fit_prf::dot(&centred, self.regressor(p)) / variance).collect()
+        let course: Vec<num_complex::Complex64> = y.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
+        let ones = vec![num_complex::Complex64::new(1.0, 0.0); y.len()];
+        (0..self.pixels).map(|p| crate::lstsq::mldivide(&[&course, &ones], self.regressor(p), precision).coefficients[0].re).collect()
     }
 
     /// The reverse-correlation rows `[R^2, x0, y0, Fwhm, Beta]` of one time course, and
