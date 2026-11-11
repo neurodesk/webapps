@@ -2320,6 +2320,52 @@ apps:
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
 
+  lightsheet-atlas:
+    packages:
+      - { name: greedy-rs (Rust/WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: "affine and deformable registration to the atlas (single-threaded @neurodesk/greedy build)" }
+      - { name: cellfinder detection (JavaScript port), url: https://github.com/brainglobe/cellfinder, role: "classical cell candidate detection, ported from cellfinder 1.10.1 (BSD-3-Clause)" }
+      - { name: Allen Mouse Brain CCFv3 (BrainGlobe allen_mouse_50um), url: https://atlas.brain-map.org, role: "atlas template and annotation, Allen Institute terms of use" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF reading }
+      - { name: zarrita, url: https://github.com/manzt/zarrita.js, role: OME-Zarr reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Cell detection
+        title: cellfinder
+        reference: "Tyson AL, Rousseau CV, Niedworok CJ, et al. A deep learning algorithm for 3D cell detection in whole mouse brain image datasets. PLOS Computational Biology. 2021;17(5):e1009074."
+        doi: 10.1371/journal.pcbi.1009074
+        code: https://github.com/brainglobe/cellfinder
+      - group: Registration
+        title: brainreg
+        reference: "Tyson AL, Vélez-Fort M, Rousseau CV, et al. Accurate determination of marker location within whole-brain microscopy images. Scientific Reports. 2022;12:867."
+        doi: 10.1038/s41598-021-04676-9
+        code: https://github.com/brainglobe/brainreg
+      - group: Registration
+        title: aMAP
+        reference: "Niedworok CJ, Brown APY, Jorge Cardoso M, et al. aMAP is a validated pipeline for registration and segmentation of high-resolution mouse brain data. Nature Communications. 2016;7:11879."
+        doi: 10.1038/ncomms11879
+      - group: Registration
+        title: Greedy
+        reference: "Greedy was created by Paul Yushkevich at the Penn Image Computing and Science Lab and is maintained by contributors to the Greedy C++ project [Computer software]."
+        url: https://sites.google.com/view/greedyreg/about
+        code: https://github.com/pyushkevich/greedy
+      - group: Atlas
+        title: Allen Mouse Brain Common Coordinate Framework
+        reference: "Wang Q, Ding SL, Li Y, et al. The Allen Mouse Brain Common Coordinate Framework: a 3D reference atlas. Cell. 2020;181(4):936-953.e20."
+        doi: 10.1016/j.cell.2020.04.007
+      - group: Atlas
+        title: Allen Mouse Brain Common Coordinate Framework, version 3 (dataset)
+        reference: "Allen Institute for Brain Science (2017). Allen Mouse Brain Common Coordinate Framework, version 3 [dataset]. Available from atlas.brain-map.org."
+        url: https://atlas.brain-map.org
+      - group: Atlas
+        title: BrainGlobe Atlas API
+        reference: "Claudi F, Petrucco L, Tyson AL, Branco T, Margrie TW, Portugues R. BrainGlobe Atlas API: a common interface for neuroanatomical atlases. Journal of Open Source Software. 2020;5(54):2668."
+        doi: 10.21105/joss.02668
+        code: https://github.com/brainglobe/brainglobe-atlasapi
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
   calcium-imaging:
     packages:
       - { name: Calcium imaging pipeline, url: https://github.com/neurodesk/webapps/tree/main/apps/calcium-imaging/src/core, role: "motion correction, summary images, ROIs, ΔF/F and OASIS AR(1) deconvolution, written from the papers below" }
@@ -2691,6 +2737,77 @@ apps:
         title: Deconvolution Test Dataset
         reference: "Guiet R. Deconvolution Test Dataset. Zenodo. 2021. CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the example is its Raw.tif crop, unchanged."
         doi: 10.5281/zenodo.5101351
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+  omezarr-convert:
+    about:
+      - "OME-Zarr Converter writes a microscopy image as OME-Zarr, the chunked, multiscale format of the OME-NGFF specification that viewers such as napari, Neuroglancer, vizarr and ZARRo stream. It writes OME-NGFF 0.5 (Zarr v3, downloaded as one .ozx archive per RFC-9) or 0.4 (Zarr v2, a zip of the store), and keeps the voxel size and unit of each axis, the channels and their names and colours. Where the browser has the File System Access API it can instead write the store into a folder chunk by chunk, so images larger than memory need not fit in an archive."
+      - "The full-resolution level holds the input's stored samples unchanged (a NIfTI with intensity scaling is written scaled, as float). Each further level halves Y and X (rounding down) until the image fits one chunk; Z, channels and time keep their size, as bioformats2raw and ome-zarr-py do. Mean averages each 2 × 2 block, rounding integers half up, and suits intensity images; Nearest keeps every second pixel and suits label images. On the example, the Nearest pyramid equals bioformats2raw 0.14.0's SIMPLE pyramid byte for byte, with the same chunks, axes, scales and channel windows, and the Mean pyramid equals an independent NumPy computation. Both versions pass the OME-NGFF strict image schemas, and ome-zarr-py reads them back unchanged."
+      - "Inputs are TIFF and OME-TIFF (OME-XML read by fiff, including a namespace-prefixed one), ImageJ hyperstacks with their calibration, plain multi-page TIFF stacks, sequences of single-page TIFF, PNG or JPEG files (one file per Z plane, in natural name order) and NIfTI. RGB images become three channels and alpha is left out. Formats without a voxel size open the Voxel size and channels settings, where any file's sizes and channel names can be changed. NIfTI's stored values are kept, or scaled by scl_slope and scl_inter into float when it sets them, and its orientation is not: OME-NGFF 0.4 and 0.5 have no affine. An OME-TIFF with several images converts the first. A line under the file description lists what the conversion changes. Vendor formats (CZI, LIF, ND2) are not read: the open readers evaluated were excluded because they are GPL or LGPL (Bio-Formats, libCZI, readlif) or Python only. Convert them with bioformats2raw, or export OME-TIFF."
+    packages:
+      - { name: omezarr-convert, url: https://github.com/neurodesk/webapps/tree/main/packages/omezarr-convert, role: readers, XY pyramid and the OME-NGFF 0.4 and 0.5 writer }
+      - { name: fiff, url: https://github.com/fideus-labs/fiff, role: OME-TIFF read as OME-Zarr }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: TIFF pages and their tags }
+      - { name: ngff-zarr, url: https://github.com/fideus-labs/ngff-zarr, role: RFC-9 .ozx entry order }
+      - { name: zarrita.js, url: https://github.com/manzt/zarrita.js, role: reading the written store back }
+      - { name: fflate, url: https://github.com/101arrowz/fflate, role: zlib, gzip and zip }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG decoding up to 16 bits }
+      - { name: jpeg-js, url: https://github.com/jpeg-js/jpeg-js, role: JPEG decoding }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Data format
+        title: OME-NGFF
+        reference: "Moore J, Allan C, Besson S, et al. OME-NGFF: a next-generation file format for expanding bioimaging data-access strategies. Nature Methods. 2021;18(12):1496–1498."
+        doi: 10.1038/s41592-021-01326-w
+      - group: Data format
+        title: OME-Zarr
+        reference: "Moore J, Basurto-Lozada D, Besson S, et al. OME-Zarr: a cloud-optimized bioimaging file format with international community support. Histochemistry and Cell Biology. 2023;160(3):223–251."
+        doi: 10.1007/s00418-023-02209-1
+      - group: Data format
+        title: OME-TIFF and Bio-Formats
+        reference: "Linkert M, Rueden CT, Allan C, et al. Metadata matters: access to image data in the real world. Journal of Cell Biology. 2010;189(5):777–782."
+        doi: 10.1083/jcb.201004104
+      - group: Example data
+        title: OME-TIFF sample data (retina_large)
+        reference: "OME Consortium. Sample OME-TIFF files: sub-resolutions/Z-stack/retina_large.ome.tiff, derived from a Bitplane Imaris sample. CC BY 4.0."
+        url: https://downloads.openmicroscopy.org/images/OME-TIFF/2016-06/sub-resolutions/Z-stack/
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+  histo2mri:
+    packages:
+      - { name: histo2mri pipeline, url: https://github.com/neurodesk/webapps/tree/main/apps/histo2mri/src/core, role: "section plane sampling, orientation and plane search, colour deconvolution, Greedy-compatible outputs" }
+      - { name: greedy-rs (Rust → WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: "NMI rigid, affine and stationary-velocity deformable registration (single-threaded build)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Registration
+        title: Greedy
+        reference: "Greedy was created by Paul Yushkevich at the Penn Image Computing and Science Lab and is maintained by contributors to the Greedy C++ project [Computer software]."
+        url: https://sites.google.com/view/greedyreg/about
+      - group: Registration
+        title: Fast deformable registration with Greedy
+        reference: "Yushkevich PA, Pluta J, Wang H, Wisse LEM, Das S, Wolk D. Fast automatic segmentation of hippocampal subfields and medial temporal lobe subregions in 3 Tesla and 7 Tesla T2-weighted MRI. Alzheimer's & Dementia. 2016;12(7S):P126–P127."
+        doi: 10.1016/j.jalz.2016.06.205
+      - group: Registration
+        title: Normalized mutual information
+        reference: "Studholme C, Hill DLG, Hawkes DJ. An overlap invariant entropy measure of 3D medical image alignment. Pattern Recognition. 1999;32(1):71–86."
+        doi: 10.1016/S0031-3203(98)00091-0
+      - group: Section contrast
+        title: Colour deconvolution
+        reference: "Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution. Analytical and Quantitative Cytology and Histology. 2001;23(4):291–299."
+        url: https://pubmed.ncbi.nlm.nih.gov/11531144/
+      - group: Section contrast
+        title: Otsu threshold (tissue masks)
+        reference: "Otsu N. A threshold selection method from gray-level histograms. IEEE Transactions on Systems, Man, and Cybernetics. 1979;9(1):62–66."
+        doi: 10.1109/TSMC.1979.4310076
+      - group: Example data
+        title: AHEAD brain 152017 (CC BY 4.0)
+        reference: "Alkemade A, Bazin P-L, Balesar R, et al. A unified 3D map of microscopic architecture and MRI of the human brain. Science Advances. 2022;8(17):eabj7892. Data: Ahead Brain 152017, original stains and 3D reconstructions, University of Amsterdam figshare, CC BY 4.0."
+        doi: 10.1126/sciadv.abj7892
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

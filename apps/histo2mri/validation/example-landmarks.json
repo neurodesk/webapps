@@ -1,0 +1,13 @@
+{
+  "description": "Manual landmarks on the ahead-152017-section150 example, placed by eye on the example MRI (voxel coordinates, slice k = 50) and on the example section (full-resolution pixel coordinates, x right, y down) independently, before comparing them with any registration.",
+  "mri": "ahead152017_r1_0.6mm_anterior.nii.gz",
+  "section": "ahead152017_thionin_section150_85um.tif",
+  "landmarks": [
+    { "id": "medial-fissure-tip", "feature": "ventral end of the widened interhemispheric fissure", "mriVoxel": [108, 116.5, 50], "sectionPixel": [612, 632], "confidence": "high" },
+    { "id": "medial-orbital-junction", "feature": "centre of the dark sulcal junction below the fissure", "mriVoxel": [107, 124.5, 50], "sectionPixel": [618, 688], "confidence": "high" },
+    { "id": "left-lateral-junction", "feature": "junction of the lateral sulcus with its ascending branch, image left", "mriVoxel": [40.5, 84.5, 50], "sectionPixel": [95, 548], "confidence": "medium" },
+    { "id": "right-lateral-fundus", "feature": "fundus of the horizontal lateral sulcus, image right", "mriVoxel": [167, 107.5, 50], "sectionPixel": [985, 503], "confidence": "medium" },
+    { "id": "right-superior-bend", "feature": "bend of the superior sulcus, image right", "mriVoxel": [155.5, 73, 50], "sectionPixel": [868, 278], "confidence": "medium" },
+    { "id": "right-inferior-fundus", "feature": "fundus of an inferior sulcus, image right", "mriVoxel": [149.5, 133, 50], "sectionPixel": [918, 662], "confidence": "low" }
+  ]
+}

@@ -321,6 +321,13 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - Raw ±4096 phase needs the VENC from the user; velocity-scaled phase does not. Aliasing is not unwrapped.
 - The detection, series reading and output naming live in `packages/carotid-flow`, which the app and the `carotid-flow` command line both import. Change the outputs there, not in the app, so the command line keeps writing the app's downloads byte for byte. `validation/pcmcalculator.json` holds the example's pins for both the open-example unit test and the command line's release check.
 
+## histo2mri
+
+- The pipeline (`apps/histo2mri/src/core`) is pure JavaScript with Greedy injected (`greedy.rigid`, `.affine`, `.svf`); the worker runs it on `@neurodesk/greedy/wasm-single`, the Node tests and `validation/run.mjs` on `@neurodesk/greedy/single`, the same committed bytes.
+- Greedy is 3D, so sections are registered in the plane's local frame: the moving image is a three-slice slab 1 m apart and linear results keep only in-plane terms. The deformable stage needs a three-slice fixed image masked on the middle slice and full-resolution iterations only: on a one-slice fixed image Greedy's across-plane NMI gradient dominates its normalised update and the warp stays near zero. Keep that if the Greedy call changes.
+- NMI scores for choosing an orientation or keeping a plane use the whole plane with the section's outside as background; overlap-only NMI picked placements far off the tissue.
+- `validation/results.json` holds the synthetic and example landmark errors; rerun `node validation/run.mjs` after changing the pipeline or Greedy and update the numbers in the README and About.
+
 ## mri2vid
 
 - DICOM pixels come from dcm2niix (`@niivue/dcm2niix` JPEG build, pinned exactly; staged into `web/vendor/dcm2niix` for the app, `@neurodesk/node-drivers/dcm2niix` for the command line). The header parser in `readers/dicom.js` only groups series, so compressed files group too. `readDicomSeries` permutes dcm2niix's volume back to `MRI2vid.py`'s [rows, cols, slices] layout from the series' ImageOrientationPatient; the parity goldens (`tools/test/pipeline_parity.test.mjs`, also run on an RLE copy) hold it bit for bit. dcm2niix reads mosaic tags only from a SIEMENS file, so phantoms must say so. A series without ImageOrientationPatient keeps dcm2niix's stored layout (rows flipped back), not an assumed orientation. A mosaic run (the files tiled and acquired like the first by name: same TE, TR, TI and flip angle, so a second echo is left out) is converted only as far as the reduction needs: one file for `first`, 256 MB batches for `mean` and `max`, the mean's float64 sum carried across batches (`readNifti`'s `total`) so batching cannot change a pixel.
@@ -439,6 +446,15 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - NeuroFlow core v0.6.0 reports undeclared `inputs.<name>` refs (`input-undeclared`) and invalid constants (`constant-invalid`: type, integer, enum, min/max). v0.7.0 adds `local-id-invalid` for input, context field, step and output names outside the spec's `localId` grammar, and `output-ref-not-step`; the builder has no copy of either. The builder's `constant-invalid` check in `workflowIssues` stays for the per-item limits in `neurodesk/parameter`; `validator.js` drops it where the core already reported that path. PR #648 also adds typed array parameters and import shape checks in `parseWorkflow`.
 - Optional-output warnings come only from the core (v0.3.2 matches the removed builder check on every catalog binding).
 - Open: `bindNewWorkflowInput` drops item bounds; carrying `minItems`/`maxItems` needs the generator to emit them and a 0.1.2 document. If it does, the core's item-count issue will duplicate the builder's `input-count` warning.
+
+## omezarr-convert
+
+- The readers, XY pyramid and OME-NGFF 0.4/0.5 writer live in `packages/omezarr-convert` and run in Node; the app adds the form, the archive or folder store and the preview. Change outputs in the package.
+- TIFF goes through `openTiffPages` in the shared `@neurodesk/webapp-components/file-io/tiff` module. OME-TIFF goes to fiff on that geotiff instance (`unequalOme`, so images of other sizes in the file do not stop it), with `omeXml` rewriting prefixed and single-quoted OME-XML, which fiff 0.8.2 does not parse, and names and units decoded with the module's `decodeXml`; plain, ImageJ and sequence TIFFs use the pages and the module's ImageJ calibration. fiff alone reads only page 0 of a non-OME stack. A file is multi-file only when a TiffData UUID differs from the root UUID, never by file name.
+- Readers return notes as `{ summary, detail }`; the app shows the summaries as one line of at most 90 characters under `#fileInfo`. A note that changes data must be visible there, not only in the console.
+- An archive is built in memory: keep `archiveBudget` an upper bound of what `zipStore` produces (tested on incompressible pixels) and re-measure the peak in the app README when `ARCHIVE_MAX_BYTES` or the zip path changes.
+- `validation/example-reference.json` is bioformats2raw 0.14.0 (SIMPLE, 256 px tiles, `--target-min-size=256`) on the example, read by zarr-python, plus the NumPy mean pyramid; `test/synthetic-reference.json` comes from `validation/synthetic_reference.py`. `nearest` must equal bioformats2raw byte for byte and `mean` NumPy; rerecord both when the pyramid rules change and say why in the package README.
+- The vendored schemas (`schemas/`, ome/ngff tag 0.5.2) are test-only; every conversion in the tests and the e2e downloads must pass the strict image schema of its version.
 
 ## Native executables (exes/)
 

@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "app": "omezarr-convert",
+  "title": "OME-Zarr Converter",
+  "description": "Convert a microscopy TIFF, OME-TIFF, PNG or JPEG sequence, or NIfTI image to a multiscale OME-Zarr (OME-NGFF 0.4 or 0.5).",
+  "defaultOperation": "convert",
+  "operations": {
+    "convert": {
+      "title": "Convert to OME-Zarr",
+      "description": "Write the image as a multiscale OME-Zarr pyramid that keeps its voxel sizes, units, channels and channel names, and return it as one archive (.ozx for 0.5, .ome.zarr.zip for 0.4) with a JSON conversion report.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tiff",
+            "nifti"
+          ],
+          "description": "One TIFF, OME-TIFF or NIfTI file, or a sequence of single-page TIFF, PNG or JPEG files (one per Z plane)",
+          "minimum": 1
+        }
+      },
+      "parameters": {
+        "version": {
+          "type": "string",
+          "enum": [
+            "0.5",
+            "0.4"
+          ],
+          "default": "0.5",
+          "description": "OME-NGFF version: 0.5 (Zarr v3) or 0.4 (Zarr v2)"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "mean",
+            "nearest"
+          ],
+          "default": "mean",
+          "description": "Pyramid downsampling: 2 x 2 mean for intensity images, nearest for label images"
+        },
+        "chunk": {
+          "type": "integer",
+          "enum": [
+            128,
+            256,
+            512,
+            1024
+          ],
+          "default": 256,
+          "description": "Chunk size in Y and X, in pixels; the pyramid halves until the image fits one chunk"
+        },
+        "compressionLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9,
+          "default": 6,
+          "description": "zlib (0.4) or gzip (0.5) compression level"
+        }
+      },
+      "artifacts": {
+        "archive": {
+          "type": "neuro:multiscale-volume",
+          "mediaType": "application/zip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "summary": {
+          "type": "file:json",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}
