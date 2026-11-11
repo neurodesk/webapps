@@ -12,6 +12,9 @@ concurrency:
   group: calmar-kb-sync
   cancel-in-progress: false
 
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   sync:
     # This automation belongs to the fork that owns the KB.
