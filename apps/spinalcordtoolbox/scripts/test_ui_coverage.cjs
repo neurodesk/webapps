@@ -4,6 +4,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const YAML = require('yaml');
 
 const ROOT = path.resolve(__dirname, '..');
 const SHARED_UI = path.resolve(ROOT, '../../packages/components/src/ui');
@@ -165,13 +166,13 @@ assert.ok(
   indexHtml.includes('downloads the pinned Pyodide Python runtime and scientific libraries from jsDelivr (cdn.jsdelivr.net)'),
   'privacy copy discloses the CDN requests made by browser SCT analysis'
 );
-const appInformation = fs.readFileSync(path.resolve(ROOT, '../../registry/app-information.yml'), 'utf8');
-const sctCitations = appInformation.split('\n  spinalcordtoolbox:\n')[1]?.split('\n    citations:\n')[1] ?? '';
-assert.match(
-  sctCitations,
-  /^ {6}- group: [^\n]+\n {8}title: Spinal Cord Toolbox\n {8}reference: "De Leener B[^\n]+\n {8}doi: 10\.1016\/j\.neuroimage\.2016\.10\.009\n/,
-  'the shared Cite list opens with the SCT NeuroImage 2017 paper'
-);
+// Parsed, not matched as text: the CI planner compares this file's parsed entries.
+const appInformation = YAML.parse(fs.readFileSync(path.resolve(ROOT, '../../registry/app-information.yml'), 'utf8'));
+const [sctCitation] = appInformation.apps.spinalcordtoolbox.citations;
+assert.equal(sctCitation.title, 'Spinal Cord Toolbox', 'the shared Cite list opens with the SCT NeuroImage 2017 paper');
+assert.match(sctCitation.reference, /^De Leener B/, 'the SCT paper names its first author');
+assert.equal(sctCitation.doi, '10.1016/j.neuroimage.2016.10.009', 'the SCT paper carries its DOI');
+assert.ok(sctCitation.group, 'the SCT paper has a citation group');
 
 // Console: one shared nd-console, collapsed at load, resizable, with an analysis and a technical log.
 const consoleTag = indexHtml.match(/<nd-console\b[^>]*>/)?.[0] || '';

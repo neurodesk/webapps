@@ -51,7 +51,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",
-    "jsdom": "^24.0.0"
+    "jsdom": "^24.0.0",
+    "yaml": "2.9.0"
   },
   "name": "spinalcordtoolbox",
   "version": "0.9.20261109",
