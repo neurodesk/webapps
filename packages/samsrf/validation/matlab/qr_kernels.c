@@ -6,8 +6,11 @@
  *
  *   [F, Fi, tau, taui, jpvt, c, ci] = qr_kernels('factor', cls, A, Ai, b, bi)
  *       ?geqp3 on A (m x n), then ?ormqr / ?unmqr applying Q' to b.
+ *       b may have several columns; ?ormqr then applies Q' to all of them.
  *   [x, xi] = qr_kernels('trsv', cls, R, Ri, c, ci)
  *       ?trsv with the upper triangle of R (r x r), no transpose, non-unit.
+ *   [X, Xi] = qr_kernels('trsm', cls, R, Ri, C, Ci)
+ *       ?trsm, the same solve for several right-hand sides at once.
  *   S = qr_kernels('probe', cls, part, m, oa, ox, M)
  *       ?gemv('T' or 'C') of one column of m values against ones. For each
  *       pair i < j the column holds +M at i, -M at j and 1 elsewhere, in the
@@ -41,6 +44,10 @@ extern void strsv_(const char *uplo, const char *trans, const char *diag, const 
 extern void dtrsv_(const char *uplo, const char *trans, const char *diag, const blasint *n, const double *a, const blasint *lda, double *x, const blasint *incx);
 extern void ctrsv_(const char *uplo, const char *trans, const char *diag, const blasint *n, const float *a, const blasint *lda, float *x, const blasint *incx);
 extern void ztrsv_(const char *uplo, const char *trans, const char *diag, const blasint *n, const double *a, const blasint *lda, double *x, const blasint *incx);
+extern void strsm_(const char *side, const char *uplo, const char *trans, const char *diag, const blasint *m, const blasint *n, const float *alpha, const float *a, const blasint *lda, float *b, const blasint *ldb);
+extern void dtrsm_(const char *side, const char *uplo, const char *trans, const char *diag, const blasint *m, const blasint *n, const double *alpha, const double *a, const blasint *lda, double *b, const blasint *ldb);
+extern void ctrsm_(const char *side, const char *uplo, const char *trans, const char *diag, const blasint *m, const blasint *n, const float *alpha, const float *a, const blasint *lda, float *b, const blasint *ldb);
+extern void ztrsm_(const char *side, const char *uplo, const char *trans, const char *diag, const blasint *m, const blasint *n, const double *alpha, const double *a, const blasint *lda, double *b, const blasint *ldb);
 extern void sgemv_(const char *trans, const blasint *m, const blasint *n, const float *alpha, const float *a, const blasint *lda, const float *x, const blasint *incx, const float *beta, float *y, const blasint *incy);
 extern void dgemv_(const char *trans, const blasint *m, const blasint *n, const double *alpha, const double *a, const blasint *lda, const double *x, const blasint *incx, const double *beta, double *y, const blasint *incy);
 extern void cgemv_(const char *trans, const blasint *m, const blasint *n, const float *alpha, const float *a, const blasint *lda, const float *x, const blasint *incx, const float *beta, float *y, const blasint *incy);
@@ -106,7 +113,9 @@ static void factor(int nlhs, mxArray *plhs[], const mxArray *prhs[]) {
     blasint m = (blasint)mxGetM(prhs[2]), n = (blasint)mxGetN(prhs[2]), one = 1, info = 0, lwork = -1;
     blasint mn = m < n ? m : n;
     void *a = pack(k, prhs[2], prhs[3], (size_t)(m * n));
-    void *b = pack(k, prhs[4], prhs[5], (size_t)m);
+    blasint nrhs = (blasint)mxGetN(prhs[4]);
+    if ((blasint)mxGetM(prhs[4]) != m) mexErrMsgTxt("b needs m rows");
+    void *b = pack(k, prhs[4], prhs[5], (size_t)(m * nrhs));
     blasint *jpvt = mxCalloc((size_t)n, sizeof(blasint));
     size_t width = complex_kind(k) ? 2 : 1, element = single_kind(k) ? sizeof(float) : sizeof(double);
     void *tau = mxCalloc((size_t)mn * width + 1, element);
@@ -133,27 +142,45 @@ static void factor(int nlhs, mxArray *plhs[], const mxArray *prhs[]) {
     blasint qlwork = -1;
     const char *trans = complex_kind(k) ? "C" : "T";
     switch (k) {
-    case REAL_SINGLE: sormqr_("L", trans, &m, &one, &mn, a, &m, tau, b, &m, queryf, &qlwork, &info); qlwork = (blasint)queryf[0]; break;
-    case REAL_DOUBLE: dormqr_("L", trans, &m, &one, &mn, a, &m, tau, b, &m, query, &qlwork, &info); qlwork = (blasint)query[0]; break;
-    case COMPLEX_SINGLE: cunmqr_("L", trans, &m, &one, &mn, a, &m, tau, b, &m, queryf, &qlwork, &info); qlwork = (blasint)queryf[0]; break;
-    case COMPLEX_DOUBLE: zunmqr_("L", trans, &m, &one, &mn, a, &m, tau, b, &m, query, &qlwork, &info); qlwork = (blasint)query[0]; break;
+    case REAL_SINGLE: sormqr_("L", trans, &m, &nrhs, &mn, a, &m, tau, b, &m, queryf, &qlwork, &info); qlwork = (blasint)queryf[0]; break;
+    case REAL_DOUBLE: dormqr_("L", trans, &m, &nrhs, &mn, a, &m, tau, b, &m, query, &qlwork, &info); qlwork = (blasint)query[0]; break;
+    case COMPLEX_SINGLE: cunmqr_("L", trans, &m, &nrhs, &mn, a, &m, tau, b, &m, queryf, &qlwork, &info); qlwork = (blasint)queryf[0]; break;
+    case COMPLEX_DOUBLE: zunmqr_("L", trans, &m, &nrhs, &mn, a, &m, tau, b, &m, query, &qlwork, &info); qlwork = (blasint)query[0]; break;
     }
     if (info) mexErrMsgTxt("ormqr workspace query failed");
     if (qlwork < 1) qlwork = 1;
     void *qwork = mxCalloc((size_t)qlwork * width + 1, element);
     switch (k) {
-    case REAL_SINGLE: sormqr_("L", trans, &m, &one, &mn, a, &m, tau, b, &m, qwork, &qlwork, &info); break;
-    case REAL_DOUBLE: dormqr_("L", trans, &m, &one, &mn, a, &m, tau, b, &m, qwork, &qlwork, &info); break;
-    case COMPLEX_SINGLE: cunmqr_("L", trans, &m, &one, &mn, a, &m, tau, b, &m, qwork, &qlwork, &info); break;
-    case COMPLEX_DOUBLE: zunmqr_("L", trans, &m, &one, &mn, a, &m, tau, b, &m, qwork, &qlwork, &info); break;
+    case REAL_SINGLE: sormqr_("L", trans, &m, &nrhs, &mn, a, &m, tau, b, &m, qwork, &qlwork, &info); break;
+    case REAL_DOUBLE: dormqr_("L", trans, &m, &nrhs, &mn, a, &m, tau, b, &m, qwork, &qlwork, &info); break;
+    case COMPLEX_SINGLE: cunmqr_("L", trans, &m, &nrhs, &mn, a, &m, tau, b, &m, qwork, &qlwork, &info); break;
+    case COMPLEX_DOUBLE: zunmqr_("L", trans, &m, &nrhs, &mn, a, &m, tau, b, &m, qwork, &qlwork, &info); break;
     }
     if (info) mexErrMsgTxt("ormqr failed");
     unpack(k, a, (size_t)m, (size_t)n, &plhs[0], &plhs[1]);
     unpack(k, tau, (size_t)mn, 1, &plhs[2], &plhs[3]);
     plhs[4] = mxCreateDoubleMatrix(1, (size_t)n, mxREAL);
     for (blasint j = 0; j < n; j++) mxGetPr(plhs[4])[j] = (double)jpvt[j];
-    unpack(k, b, (size_t)m, 1, &plhs[5], &plhs[6]);
+    unpack(k, b, (size_t)m, (size_t)nrhs, &plhs[5], &plhs[6]);
     (void)nlhs;
+}
+
+/* ?trsm with several right-hand sides, as a multi-column mldivide needs. */
+static void trsm(mxArray *plhs[], const mxArray *prhs[]) {
+    enum kind k = parse_kind(prhs[1]);
+    blasint n = (blasint)mxGetM(prhs[2]), nrhs = (blasint)mxGetN(prhs[4]);
+    if ((blasint)mxGetN(prhs[2]) != n || (blasint)mxGetM(prhs[4]) != n) mexErrMsgTxt("R must be square and C have its rows");
+    void *r = pack(k, prhs[2], prhs[3], (size_t)(n * n));
+    void *x = pack(k, prhs[4], prhs[5], (size_t)(n * nrhs));
+    float onef[2] = {1.0f, 0.0f};
+    double oned[2] = {1.0, 0.0};
+    switch (k) {
+    case REAL_SINGLE: strsm_("L", "U", "N", "N", &n, &nrhs, onef, r, &n, x, &n); break;
+    case REAL_DOUBLE: dtrsm_("L", "U", "N", "N", &n, &nrhs, oned, r, &n, x, &n); break;
+    case COMPLEX_SINGLE: ctrsm_("L", "U", "N", "N", &n, &nrhs, onef, r, &n, x, &n); break;
+    case COMPLEX_DOUBLE: ztrsm_("L", "U", "N", "N", &n, &nrhs, oned, r, &n, x, &n); break;
+    }
+    unpack(k, x, (size_t)n, (size_t)nrhs, &plhs[0], &plhs[1]);
 }
 
 static void trsv(mxArray *plhs[], const mxArray *prhs[]) {
@@ -230,6 +257,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
         plhs[0] = mxCreateDoubleScalar((double)sizeof(blasint));
     } else if (!strcmp(command, "factor") && nrhs == 6) {
         factor(nlhs, plhs, prhs);
+    } else if (!strcmp(command, "trsm") && nrhs == 6) {
+        trsm(plhs, prhs);
     } else if (!strcmp(command, "trsv") && nrhs == 6) {
         trsv(plhs, prhs);
     } else if (!strcmp(command, "probe") && nrhs == 7) {

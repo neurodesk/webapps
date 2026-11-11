@@ -48,6 +48,15 @@ cases = cell(1,numel(designs));
 for k = 1:numel(designs)
     cases{k} = record_design(recording, designs{k});
 end
+% Several right-hand sides in one solve, as reverse correlation's
+% [Y ones] \ X and the global regression [X ones] \ Y do. Every design is
+% replayed in both column orders.
+multi = {};
+for k = 1:numel(designs)
+    for order = {'ones-first','ones-last'}
+        multi{end+1} = record_multiple(recording, designs{k}, order{1}); %#ok<AGROW>
+    end
+end
 
 % Summation trees of the reflector inner product. Lengths cover the
 % recorded designs (250, 16) and their second steps, plus a sweep that
@@ -81,7 +90,7 @@ for kk = 1:size(kinds,1)
     end
 end
 write_json('kernels.json',struct('environment',environment,'smoke',smoke, ...
-    'cases',{cases},'probes',{probes}));
+    'cases',{cases},'multiple',{multi},'probes',{probes}));
 fprintf('Recorded %d least-squares chains and %d gemv probes (%s)\n',numel(cases),numel(probes),interpreter);
 end
 
@@ -133,6 +142,53 @@ for v = variants
 end
 end
 
+function item = record_multiple(root, d, order)
+x = read_array(root, d.x);
+y = read_array(root, d.y);
+if strcmp(order,'ones-first')
+    A = [ones(size(x)) x];
+else
+    A = [x ones(size(x))];
+end
+precision = d.precision;
+m = numel(y);
+t = (1:m)';
+columns = 8;
+B = zeros(m, columns);
+for j = 1:columns
+    B(:,j) = y .* cos(0.37*j) + 0.25*j*sin(j*t/7);
+end
+B = cast(B, precision);
+together = A \ B;
+separately = zeros(size(together), 'like', together);
+for j = 1:columns
+    separately(:,j) = A \ B(:,j);
+end
+Ac = cast(A, precision);
+complexDesign = ~isreal(Ac) && any(imag(Ac(:)));
+if complexDesign
+    cls = ['c' precision];
+else
+    cls = precision;
+end
+chain = run_chain(cls, double(real(Ac)), double(imag(Ac)), double(B), zeros(size(B)), precision, complexDesign);
+chainTogether = complex(chain.beta, chain.betai);
+chainSeparately = zeros(size(chainTogether));
+for j = 1:columns
+    one = run_chain(cls, double(real(Ac)), double(imag(Ac)), double(B(:,j)), zeros(m,1), precision, complexDesign);
+    chainSeparately(:,j) = complex(one.beta, one.betai);
+end
+id = sprintf('%s_multi_%s', d.id, order);
+item = struct('id',id,'design',d.id,'precision',precision,'order',order,'complex',complexDesign, ...
+    'rhs',array_file([id '_rhs'],B), ...
+    'together',array_file([id '_together'],together), ...
+    'separately',array_file([id '_separately'],separately), ...
+    'qty',array_file([id '_qty'],complex(chain.c,chain.ci)), ...
+    'togetherEqualsSeparately',same_values(together,separately,precision), ...
+    'chainTogetherMatches',same_values(chainTogether,together,precision), ...
+    'chainSeparatelyMatches',same_values(chainSeparately,separately,precision));
+end
+
 function chain = run_chain(cls, Are, Aim, bre, bim, precision, complexDesign)
 [F, Fi, tau, taui, jpvt, c, ci] = qr_kernels('factor', cls, Are, Aim, bre, bim);
 [m, n] = size(Are);
@@ -142,15 +198,18 @@ if complexDesign, factor = 10; end
 tolerance = factor * max(m,n) * double(eps(precision)) * abs(R(1,1));
 tolerance = double(cast(tolerance, precision));
 rank = sum(abs(diag(R)) > tolerance);
-x = zeros(rank,1);
-xi = zeros(rank,1);
-if rank > 0
+columns = size(c,2);
+x = zeros(rank,columns);
+xi = zeros(rank,columns);
+if rank > 0 && columns == 1
     [x, xi] = qr_kernels('trsv', cls, real(R(1:rank,1:rank)), imag(R(1:rank,1:rank)), c(1:rank), ci(1:rank));
+elseif rank > 0
+    [x, xi] = qr_kernels('trsm', cls, real(R(1:rank,1:rank)), imag(R(1:rank,1:rank)), c(1:rank,:), ci(1:rank,:));
 end
-beta = zeros(n,1);
-betai = zeros(n,1);
-beta(jpvt(1:rank)) = x;
-betai(jpvt(1:rank)) = xi;
+beta = zeros(n,columns);
+betai = zeros(n,columns);
+beta(jpvt(1:rank),:) = x;
+betai(jpvt(1:rank),:) = xi;
 chain = struct('F',F,'Fi',Fi,'tau',tau,'taui',taui,'jpvt',jpvt,'c',c,'ci',ci, ...
     'beta',beta,'betai',betai,'rank',rank,'tolerance',tolerance);
 end
