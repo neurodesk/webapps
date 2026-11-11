@@ -40,9 +40,10 @@ async function niivueVersions(app, runtimeSupport, runtimeDownloads) {
   for (const page of [`apps/${app}/index.html`, `apps/${app}/web/index.html`]) {
     for (const match of (await readText(page)).matchAll(/@niivue\/niivue@([^/"']+)\//g)) versions.push(match[1]);
   }
-  const setup = await readText(`apps/${app}/web/setup.sh`);
+  // An app stages runtime downloads from web/setup.sh, its prebuild script, or both.
+  const staging = `${await readText(`apps/${app}/web/setup.sh`)}\n${manifest.scripts?.prebuild ?? ''}`;
   for (const download of runtimeDownloads) {
-    if (!download.id.startsWith('niivue') || !setup.includes(` ${download.id}:`)) continue;
+    if (!download.id.startsWith('niivue') || !staging.includes(` ${download.id}:`)) continue;
     // The fetcher downloads from download_base; its version field is only a label.
     const fetched = /@niivue\/niivue@([^/]+)\//.exec(download.download_base)?.[1];
     assert.equal(fetched, download.version, `${download.id} downloads NiiVue ${fetched} but is labelled ${download.version}`);
