@@ -19,6 +19,21 @@ function text(value) {
  */
 export async function loadAppInformation(registry, path = appInformationPath) {
   const data = parse(await readFile(path, 'utf8'));
+  validateAppInformation(data, registry);
+  const shared = data?.shared ?? {};
+  const apps = data?.apps ?? {};
+  return Object.freeze({
+    shared: deepFreeze(shared),
+    apps: deepFreeze(apps),
+    // Every app of the site, so one can open another with its data (the handoff menu).
+    catalog: deepFreeze(registry.apps
+      .filter((app) => app.support_status !== 'retired' && app.handoff !== 'none')
+      .map((app) => ({ id: app.id, path: app.path, title: app.title, receives: app.handoff ?? 'nifti' }))),
+  });
+}
+
+/** Throws when parsed app information is not what every app build accepts. */
+export function validateAppInformation(data, registry) {
   const errors = [];
   const shared = data?.shared ?? {};
   for (const key of ['builder', 'execution', 'ecosystem', 'ecosystem_name', 'ecosystem_url']) {
@@ -64,15 +79,6 @@ export async function loadAppInformation(registry, path = appInformationPath) {
     }
   }
   if (errors.length) throw new Error(`Invalid app information:\n- ${errors.join('\n- ')}`);
-
-  return Object.freeze({
-    shared: deepFreeze(shared),
-    apps: deepFreeze(apps),
-    // Every app of the site, so one can open another with its data (the handoff menu).
-    catalog: deepFreeze(registry.apps
-      .filter((app) => app.support_status !== 'retired' && app.handoff !== 'none')
-      .map((app) => ({ id: app.id, path: app.path, title: app.title, receives: app.handoff ?? 'nifti' }))),
-  });
 }
 
 function validateCitation(item, label, errors) {

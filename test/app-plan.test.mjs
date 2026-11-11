@@ -790,7 +790,7 @@ async function plannerFixture(t) {
   for (const path of ['scripts/lib', 'registry', '.github/workflows']) {
     await mkdir(join(root, path), { recursive: true });
   }
-  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/tested-base.mjs', 'scripts/lib/standalone.mjs', 'registry/apps.yml']) {
+  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/tested-base.mjs', 'scripts/lib/standalone.mjs', 'scripts/lib/app-information.mjs', 'registry/apps.yml']) {
     await copyFile(join(repoRoot, path), join(root, path));
   }
   await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: {} }));
@@ -1224,6 +1224,101 @@ test('a standalone catalog change selects the apps whose entries changed', async
   assert.match(repository.reasons.fallback, /its repository field changed/);
   // Without both texts the change follows the graph: every themed app reaches the file.
   assert.ok(createAppPlan(registry, ['registry/standalone.json'], workspace).selected.length > 1);
+});
+
+test('an app information change selects the apps whose entries changed', async () => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  const path = 'registry/app-information.yml';
+  const text = await readFile(join(repoRoot, path), 'utf8');
+  const edit = (change) => {
+    const value = parse(text);
+    change(value);
+    return stringify(value);
+  };
+  const plan = (after, before = text) => createAppPlan(registry, [path], workspace, new Map([[path, { before, after }]]));
+  const cited = plan(edit((value) => {
+    value.apps.lcmodel.citations[0].title += ' (revised)';
+  }));
+  assert.deepEqual(cited.selected.map((app) => app.id), ['lcmodel']);
+  assert.equal(cited.site, true);
+  assert.deepEqual(cited.reasons.apps.lcmodel, [`${path}: the lcmodel entry changed`]);
+  // Comments and layout are not content.
+  const reformatted = plan(stringify(parse(text)));
+  assert.deepEqual(reformatted.selected, []);
+  assert.equal(reformatted.reasons.fallback, null);
+  // A new app arrives with its entry; the other apps' payloads are unchanged.
+  const added = plan(text, edit((value) => {
+    delete value.apps.lcmodel;
+  }));
+  assert.deepEqual(added.selected.map((app) => app.id), ['lcmodel']);
+  // The shell renders the shared statements in every app.
+  const shared = plan(edit((value) => {
+    value.shared.execution = 'It runs entirely in your browser, on your device.';
+  }));
+  assert.equal(shared.allApps, true);
+  assert.match(shared.reasons.fallback, /its shared section changed/);
+  // Every themed build validates the whole file, so an invalid entry breaks every app.
+  const invalid = plan(edit((value) => {
+    value.apps.lcmodel.citations[0].doi = 'not-a-doi';
+  }));
+  assert.equal(invalid.allApps, true);
+  assert.match(invalid.reasons.fallback, /not valid at head \(Invalid app information: - lcmodel\.citations\[0\]\.doi/);
+  const unparsed = plan('apps: [unclosed');
+  assert.equal(unparsed.allApps, true);
+  const section = plan(edit((value) => {
+    value.defaults = { packages: [] };
+  }));
+  assert.match(section.reasons.fallback, /its defaults section changed/);
+  // A recursive alias parses and validates, but cannot be compared, at head or at the base.
+  const recursive = text.replace('\n  lcmodel:\n', '\n  lcmodel: &lcmodel\n    extra: *lcmodel\n');
+  assert.notEqual(recursive, text);
+  for (const looped of [plan(recursive), plan(text, recursive)]) {
+    assert.equal(looped.allApps, true);
+    assert.match(looped.reasons.fallback, /cannot be compared/);
+  }
+  // Without both texts the change follows the graph: every themed app reaches the file.
+  assert.ok(createAppPlan(registry, [path], workspace).selected.length > 1);
+});
+
+test('an app build and its tests read only their own entry of the app information', async () => {
+  const workspace = await graph;
+  const registry = await loadAppsRegistry();
+  // Readers the per-app jobs reach, and what each does with the file.
+  const readers = {
+    'scripts/lib/app-information.mjs': 'validates the whole file; appInformationPayload returns shared and apps[appId]',
+    'scripts/lib/app-plan.mjs': 'compares the entries',
+    'scripts/lib/vite-app-config.mjs': 'passes appInformationPayload(information, app.id) to the dev shell',
+    'scripts/theme-app-dist.mjs': 'passes appInformationPayload(information, appId) to the built app',
+    'scripts/lib/catalog-sites.mjs': 'passes appInformationPayload(information, app.id, siteAppIds) per hosted app',
+    'scripts/dev-server.mjs': 'passes appInformationPayload(information, themeAppId) to static apps',
+    'scripts/new-app.mjs': 'appends the new app\'s entry',
+    'apps/qsmbly/e2e/citations.spec.js': 'checks information.apps.qsmbly',
+    // Comments saying the shell renders Cite.
+    'apps/surfannotate/src/main.js': 'names it in a comment',
+    'apps/surfannotate/e2e/smoke.spec.js': 'names it in a comment',
+    'apps/qsmbly/upstream.json': 'names it in a maintenance note',
+    'apps/seedseg/upstream.json': 'names it in a maintenance note',
+    'apps/fastprep/index.html': 'names it in a comment',
+    'apps/niimath/index.html': 'names it in a comment',
+    'apps/spinalcordtoolbox/scripts/test_ui_coverage.cjs': 'checks the parsed apps.spinalcordtoolbox.citations',
+  };
+  const reached = new Set(registry.apps.flatMap((app) => [...reachableFrom(workspace, `apps/${app.id}`)]));
+  for (const file of filesNaming(String.raw`app-information(\.yml|\.mjs)|loadAppInformation|appInformationPath`)) {
+    if (file === 'registry/app-information.yml' || (!file.startsWith('apps/') && !reached.has(file))) continue;
+    assert.ok(Object.hasOwn(readers, file), `${file} reads the app information; check it reads only its own entry, then list it`);
+  }
+  const loader = await readFile(join(repoRoot, 'scripts/lib/app-information.mjs'), 'utf8');
+  const payload = loader.slice(loader.indexOf('export function appInformationPayload'));
+  assert.deepEqual([...payload.matchAll(/information\.(\w+)(\[\w+\])?/g)].map((match) => match[0]).sort(), ['information.apps[appId]', 'information.catalog', 'information.shared']);
+  // The handoff catalog comes from registry/apps.yml, whose changes the planner reads per entry too.
+  assert.match(loader, /catalog: deepFreeze\(registry\.apps/);
+  assert.doesNotMatch(await readFile(join(repoRoot, 'apps/qsmbly/e2e/citations.spec.js'), 'utf8'), /(?<![-\w])information\.(?!apps\.qsmbly\b)/);
+  // The planner compares parsed entries, so a reader must parse too: one matching the
+  // file's text would fail on a layout change that selects no app.
+  const sct = await readFile(join(repoRoot, 'apps/spinalcordtoolbox/scripts/test_ui_coverage.cjs'), 'utf8');
+  assert.match(sct, /const appInformation = YAML\.parse\(fs\.readFileSync\([^\n]*app-information\.yml'\), 'utf8'\)\);/);
+  assert.doesNotMatch(sct, /appInformation\.(?!apps\.spinalcordtoolbox\b)/);
 });
 
 test('the shell and its tests read only their own app entry of the standalone catalog', async () => {

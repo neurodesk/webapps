@@ -60,6 +60,10 @@ on:
         description: Only rebuild WASM and retain its optimizer input for diagnosis
         type: boolean
         default: false
+      qr_only:
+        description: Record MATLAB least-squares solves under several MKL branch requests
+        type: boolean
+        default: false
       runtime_cli:
         description: SamSrfAnalysis CLI matrix (source runs it twice in public MATLAB; build needs the MLM_LICENSE_TOKEN secret for MATLAB Compiler)
         type: choice
@@ -74,12 +78,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: samsrf-native-${{ github.ref }}${{ (inputs.record_matlab || inputs.revcor_only || (inputs.runtime_cli || 'none') != 'none' || inputs.runtime_image) && '-matlab' || '' }}
+  group: samsrf-native-${{ github.ref }}${{ (inputs.record_matlab || inputs.revcor_only || inputs.qr_only || (inputs.runtime_cli || 'none') != 'none' || inputs.runtime_image) && '-matlab' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -138,6 +142,11 @@ jobs:
           cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v47_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace.json"
           cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v60_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace-v60.json"
           cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v69_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace-v69.json"
+      - name: Least-squares rank, tolerance and coefficient gates (MATLAB mldivide)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-qr-reference" packages/samsrf/validation/matlab/qr-reference.json
+          SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_REPORT="$RUNNER_TEMP/samsrf-qr-port.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_reference -- --nocapture
+          python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$RUNNER_TEMP/samsrf-qr-reference/ubuntu-24.04/compatible" "$RUNNER_TEMP/samsrf-qr-port.json" "$RUNNER_TEMP/samsrf-qr-accuracy.json"
       - name: Retain the full CSS comparison including remaining differences
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -148,6 +157,7 @@ jobs:
             ${{ runner.temp }}/samsrf-css-trace.json
             ${{ runner.temp }}/samsrf-css-trace-v60.json
             ${{ runner.temp }}/samsrf-css-trace-v69.json
+            ${{ runner.temp }}/samsrf-qr-accuracy.json
           if-no-files-found: ignore
       - name: Retain the reverse-correlation comparison
         if: always()
@@ -158,7 +168,7 @@ jobs:
           if-no-files-found: ignore
 
   wasm-source:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -249,10 +259,16 @@ jobs:
           octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); smoke_revcor_recorder(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-revcor-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-revcor-smoke'))"
           node packages/samsrf/validation/matlab/validate-revcor-recording.mjs "$RUNNER_TEMP/samsrf-revcor-smoke" --smoke
           SAMSRF_REVCOR_SMOKE="$RUNNER_TEMP/samsrf-revcor-smoke" node --test packages/samsrf/validation/matlab/test-revcor-validation.mjs
+      - name: Exercise the least-squares backend recorder and comparison
+        run: |
+          for label in compatible compatible-repeat; do
+            octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-smoke','$label'),'$label')"
+          done
+          node packages/samsrf/validation/matlab/compare-qr-backends.mjs "$RUNNER_TEMP/samsrf-qr-smoke" "$RUNNER_TEMP/samsrf-qr-smoke.json" --smoke
 
   matlab-reference:
     needs: recorder-smoke
-    if: github.event_name == 'workflow_dispatch' && (inputs.record_matlab || inputs.revcor_only)
+    if: github.event_name == 'workflow_dispatch' && (inputs.qr_only || inputs.record_matlab || inputs.revcor_only)
     name: record actual MATLAB source reference (${{ matrix.host }})
     strategy:
       fail-fast: false
@@ -278,6 +294,7 @@ jobs:
           path: reference-source
           persist-credentials: false
       - name: Prepare verified inputs and declared source repairs
+        if: '!inputs.qr_only'
         run: |
           if [ "$(printf '%s\n' '${{ inputs.revcor_only }}' '${{ inputs.diagnostics_only }}' '${{ inputs.geometry_only }}' | grep -c true)" -gt 1 ]; then
             echo 'Choose at most one of revcor_only, diagnostics_only and geometry_only.' >&2
@@ -303,6 +320,14 @@ jobs:
       - name: Fetch pinned MATLAB inputs for focused diagnostics
         if: inputs.diagnostics_only
         run: python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json
+      - name: Fetch the pinned CSS regressions replayed by the least-squares recording
+        if: inputs.qr_only
+        run: |
+          if [ '${{ inputs.record_matlab }}' = true ] || [ '${{ inputs.revcor_only }}' = true ] || [ '${{ inputs.diagnostics_only }}' = true ] || [ '${{ inputs.geometry_only }}' = true ]; then
+            echo 'qr_only records least-squares solves alone.' >&2
+            exit 1
+          fi
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
       - name: Check out the pinned SPM GIfTI readers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -341,13 +366,66 @@ jobs:
         if: inputs.geometry_only
         run: node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"
       - name: Record numerical intermediates and fitted maps
-        if: '!inputs.diagnostics_only && !inputs.geometry_only'
+        if: '!inputs.diagnostics_only && !inputs.qr_only && !inputs.geometry_only'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if ~reverseCorrelationOnly && strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly,false,reverseCorrelationOnly && strcmp('${{ inputs.revcor_edges }}','true'))
       - name: Require every reverse-correlation case and recorded array
         if: inputs.revcor_only && !inputs.revcor_edges
         run: node packages/samsrf/validation/matlab/validate-revcor-recording.mjs "$RUNNER_TEMP/samsrf-matlab"
+      - name: Record least-squares solves with MKL request compatible
+        if: inputs.qr_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        env:
+          MKL_CBWR: COMPATIBLE
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr','compatible'),'compatible',fullfile(getenv('RUNNER_TEMP'),'samsrf-css-diagnostics'))
+      - name: Record least-squares solves with MKL request compatible-repeat
+        if: inputs.qr_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        env:
+          MKL_CBWR: COMPATIBLE
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr','compatible-repeat'),'compatible-repeat',fullfile(getenv('RUNNER_TEMP'),'samsrf-css-diagnostics'))
+      - name: Record least-squares solves with MKL request auto
+        if: inputs.qr_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        env:
+          MKL_CBWR: AUTO
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr','auto'),'auto',fullfile(getenv('RUNNER_TEMP'),'samsrf-css-diagnostics'))
+      - name: Record least-squares solves with MKL request sse4_2
+        if: inputs.qr_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        env:
+          MKL_CBWR: SSE4_2
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr','sse4_2'),'sse4_2',fullfile(getenv('RUNNER_TEMP'),'samsrf-css-diagnostics'))
+      - name: Record least-squares solves with MKL request avx2
+        if: inputs.qr_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        env:
+          MKL_CBWR: AVX2
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr','avx2'),'avx2',fullfile(getenv('RUNNER_TEMP'),'samsrf-css-diagnostics'))
+      - name: Record least-squares solves with MKL request avx512
+        if: inputs.qr_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        env:
+          MKL_CBWR: AVX512
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr','avx512'),'avx512',fullfile(getenv('RUNNER_TEMP'),'samsrf-css-diagnostics'))
+      - name: Record least-squares solves with MKL request enable-sse4_2
+        if: inputs.qr_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        env:
+          MKL_CBWR: AUTO
+          MKL_ENABLE_INSTRUCTIONS: SSE4_2
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr','enable-sse4_2'),'enable-sse4_2',fullfile(getenv('RUNNER_TEMP'),'samsrf-css-diagnostics'))
+      - name: Compare least-squares solves across MKL requests
+        if: inputs.qr_only
+        run: node packages/samsrf/validation/matlab/compare-qr-backends.mjs "$RUNNER_TEMP/samsrf-qr" "$RUNNER_TEMP/samsrf-qr/backend-comparison.json"
       - name: Record focused CSS and regression diagnostics
         if: inputs.diagnostics_only
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
@@ -376,6 +454,7 @@ jobs:
             ${{ runner.temp }}/samsrf-matlab/
             ${{ runner.temp }}/samsrf-matlab-repeat/
             ${{ runner.temp }}/samsrf-revcor-smoke/
+            ${{ runner.temp }}/samsrf-qr/
           if-no-files-found: error
 
   # SamSrfAnalysis, the upstream command line, on one case matrix (cli_plan.py).

@@ -365,8 +365,8 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
   lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
-  precision rounding, and the GLM uses a stable double solve on rounded
-  inputs with the single-precision rank threshold. The reduction order targets
+  precision rounding. The GLM runs in single arithmetic, as MATLAB's mixed
+  `[ones x] \ y` does (see Correlations and regressions). The reduction order targets
   the recorded R2023b compatible backend; MATLAB's AVX-512 path can itself
   produce different fits on identical inputs. SamSrf converts Srf data to
   single precision (`samsrf_32bit_srf`). Its 64-bit opt-out tests
@@ -399,20 +399,28 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   26/08/2026, `samsrf_fit_prf`'s fine fit would mistake that kernel's row
   vector for vertex-wise HRFs.
 - **Correlations and regressions.** `corr` is a dot product of centred,
-  unit-norm courses and `[1 X] \ Y` solves the normal equations; MATLAB
-  uses QR. Well-conditioned cases agree to rounding; general QR equivalence
-  is not established. The two-column GLM uses centered variance to avoid
-  cancellation when deciding rank, with MATLAB's pivot order and real-design rank tolerance (`max(m, n) * eps * |R(1,1)|`): a
-  prediction that is constant, or constant to rounding, leaves the column with
-  the larger norm its coefficient and the other 0. Octave's `\` uses no such
+  unit-norm courses. The forward and CSS Beta and Baseline come from
+  `lstsq`, MATLAB's `[ones x] \ y`: column-pivoted Householder QR in the
+  design's class (single when the observations are single, as MATLAB converts
+  the design), MATLAB's rank rule and back substitution. Real and imaginary
+  coefficients are both computed; the exported maps keep real parts, as
+  `samsrf_expand_srf` does. The rank tolerance is `max(m, n) * eps * |R(1,1)|`,
+  ten times that when an imaginary part survives conversion to the class. A
+  constant prediction, or one constant to rounding, leaves the column with the
+  larger norm its coefficient and the other 0. Octave's `\` uses no such
   tolerance, so on the example's coarse fit it reports amplitudes near 1e13 on
-  9 vertices where the port reports 0. The opt-in complex CSS solve uses ten
-  times the real-design tolerance, directly measured in a double-precision
-  R2023b rank warning. The single-precision factor follows the same rule;
-  its recorded cases are consistent but do not distinguish it from the old rule.
-  The earlier `max(size(A)) * eps(norm(A,1))` estimate matched the synthetic
-  cases but incorrectly retained a baseline column in the double CSS pipeline.
-  Both real and complex decisions are checked across prediction scales.
+  9 vertices where the port reports 0. Scalar steps follow reference LAPACK
+  3.9, the version MATLAB's MKL reports. The reflector inner products follow
+  the accumulation order that best reproduces MKL on the recording host (one
+  peeled term and eight lanes for real designs, two lanes for complex single,
+  sequential for complex double). This is measured agreement, not bit parity: on the 348
+  recorded designs every rank and rank warning tolerance matches, 123 cases
+  are bit-identical, and every other coefficient is within an empirical
+  acceptance scale of MATLAB's (validation README). Nonfinite converted inputs
+  give NaN coefficients. MATLAB ran
+  MKL's `CNR branch auto` there; it ignored every MKL branch request, and other
+  CPUs can round differently. The RC and CF `[Y 1] \ X` regressions do not use
+  this solve yet.
 - **Compressive nonlinearity.** `Css_Convention: "nonnegative"` (the default)
   clips negative responses before the CSS power and uses the fitted Exponent
   for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex
@@ -423,7 +431,8 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   pipeline parameters and scores match exactly. Betas retain small regression
   rounding differences, and some double-precision weak fits still differ.
   Double CSS norms now retain their scale when squared predictions underflow
-  or overflow; large regressors also avoid overflow in their coefficient solve.
+  or overflow; the QR solve takes scaled norms, so large regressors do not
+  overflow either.
   If a partial double dot sum overflows, the correlation recomputes that
   component with scaled inputs, restoring the scale before normalization so
   genuinely overflowing dots retain MATLAB's invalid-objective decision.
