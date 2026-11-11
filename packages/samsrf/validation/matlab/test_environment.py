@@ -21,6 +21,13 @@ class CaptureEnvironment(unittest.TestCase):
                         capture(output, {**CONTROLS, key: value})
             self.assertFalse((Path(output) / 'environment-request.json').exists())
 
+    def test_a_probe_branch_must_be_the_one_requested(self):
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as output:
+            with self.assertRaises(ValueError):
+                capture(output, CONTROLS, 'AUTO')
+            capture(output, {**CONTROLS, 'MKL_CBWR': 'AUTO'}, 'AUTO')
+            self.assertEqual(json.loads((Path(output) / 'environment-request.json').read_text())['MKL_CBWR'], 'AUTO')
+
     def test_existing_receipt_cannot_be_relabelled(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as output:
             capture(output, CONTROLS)

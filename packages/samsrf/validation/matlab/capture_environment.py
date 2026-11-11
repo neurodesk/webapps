@@ -15,9 +15,10 @@ CONTROLS = {
 }
 
 
-def capture(output, environment):
+def capture(output, environment, branch='COMPATIBLE'):
+    expected = {**CONTROLS, 'MKL_CBWR': branch}
     requested = {key: environment.get(key, '') for key in CONTROLS}
-    if requested != CONTROLS:
+    if requested != expected:
         raise ValueError('Set the documented BLAS/thread requests before starting MATLAB')
     with (Path(output) / 'environment-request.json').open('x') as receipt:
         json.dump(requested, receipt, indent=2)
@@ -25,6 +26,7 @@ def capture(output, environment):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        raise SystemExit('Usage: capture_environment.py PREPARED_OUTPUT_DIRECTORY')
-    capture(sys.argv[1], os.environ)
+    # A numerics probe can compare a second requested branch, such as AUTO.
+    if len(sys.argv) not in (2, 3):
+        raise SystemExit('Usage: capture_environment.py PREPARED_OUTPUT_DIRECTORY [MKL_CBWR]')
+    capture(sys.argv[1], os.environ, *sys.argv[2:])

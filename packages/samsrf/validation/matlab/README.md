@@ -682,29 +682,19 @@ hosts. All 4,189 arrays and 238 case receipts from the earlier archive are
 unchanged. The new archive retains the four environments and file hashes;
 it adds no Intel-host or effective-CNR verification.
 
-The new traces isolate a second overflow: the sequential dot accumulator
-overflows before cancellation makes the final sum finite. At MATLAB column
-60, evaluation 787 (zero-based), MATLAB's dot is 1.7973782649551213e308;
-at column 69, evaluation 590, it is -1.7971496736890576e308. The old port
-returned a nonfinite objective for both. Recomputing only overflowed dot
-components with scaled inputs restores these calls and the complete native
-optimizer parameter sequences, 800 and 723 evaluations respectively.
-The scale is restored before norm division, preserving MATLAB's rejection
-when the final dot itself overflows. Native tests require every objective's
-finite/nonfinite decision across both vertices, both seeds and nonnegative
-controls; the two failing calls additionally have a 16-double-epsilon absolute
-objective bound. A pure-imaginary rotation checks the same correlation identity.
-Scaling rounds the terms and does not reproduce MATLAB's blocked BLAS
-accumulation order. On other inputs, MATLAB may overflow while this
-recomputation remains finite; the recordings establish agreement for these
-cases, not every representable dot product.
-Remaining CSS differences, including column 82 and cancellation-sensitive
-columns 16/17, are not treated as equivalent fits by these tests.
+The new traces isolated a second overflow: at MATLAB column 60, evaluation
+787 (zero-based), MATLAB's dot is 1.7973782649551213e308, and at column 69,
+evaluation 590, it is -1.7971496736890576e308, where a sequential sum overflows.
+#768 rescaled overflowed components; the port now reproduces MKL's dot product
+itself (see [Double CSS arithmetic](#double-css-arithmetic)), which gives both
+values exactly. The native tests still require every objective's
+finite/nonfinite decision across both vertices, both seeds and the
+nonnegative controls, and now require the two objectives exactly.
 
 Double CSS squared norms could underflow or overflow even when predictions
-were finite. A scaled norm for those extremes restores the recorded fit at
-zero-based vertex 46 (R² 0.4461133943 becomes 0.04894233754) and the rejected
-all-zero output at vertex 87. At vertex 80, MATLAB's rank warning reports a
+were finite. MKL's scaled `dnrm2`/`dznrm2`, now reproduced, keeps that scale and
+restores the recorded fit at zero-based vertex 46 (R² 0.4461133943 becomes
+0.04894233754) and the rejected all-zero output at vertex 87. At vertex 80, MATLAB's rank warning reports a
 tolerance of 24.78495. This is ten times the real QR tolerance; the earlier
 `eps(norm(A,1))` inference gives 15.625 and wrongly retains the baseline column,
 whose QR diagonal is 15.81078. The corrected rule passes the original 146
@@ -719,14 +709,17 @@ final map is rejected.
 The required CSS replay checks all 96 vertices' zero and nonfinite decisions.
 At vertices 46, 59, 68, 80 and 87 it also requires exact parameters, noise ceilings and
 zero coefficients. Nonzero amplitudes have a 16-double-epsilon relative bound;
-R² and near-zero baselines have a 16-double-epsilon absolute bound. Every
+R² and near-zero baselines have a 16-double-epsilon absolute bound. A second
+run of the same pipeline with MATLAB's recorded HRF kernel (`hrf` in the job
+spec, passed as binary doubles) must match every fitted parameter, R², nR² and
+noise ceiling at all 96 vertices bit for bit; only Beta and Baseline, which come
+from the least-squares solve (#731), are reported rather than gated. Every
 remaining per-value difference is written to the report without a widened
-tolerance. This is a focused regression gate, not full double CSS equivalence.
-The existing single CSS and Gaussian gates remain required.
+tolerance. The existing single CSS and Gaussian gates remain required.
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
-SAMSRF_CSS_DIAGNOSTICS_DIR="$TMPDIR/samsrf-css-diagnostics" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_diagnostics
+SAMSRF_CSS_DIAGNOSTICS_DIR="$TMPDIR/samsrf-css-diagnostics" SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_diagnostics
 node packages/samsrf/validation/matlab/compare-css.mjs "$TMPDIR/samsrf-source-reference" "$TMPDIR/css-comparison.json"
 cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$TMPDIR/samsrf-source-reference" "$TMPDIR/samsrf-css-diagnostics" css_pipeline_double_v47_nonnegative0_recorded "$TMPDIR/css-trace.json"
 ```
@@ -740,3 +733,93 @@ recorded predictions to distinguish correlation errors from prediction errors. N
 tracing is diagnostic evidence; the required pipeline replay uses the committed
 WebAssembly module. The trace does not treat a numerical difference as an
 accepted tolerance or claim that separate QR factors reproduce `mldivide`.
+
+## Double CSS arithmetic
+
+The remaining double CSS differences were not optimizer noise. Every stage of
+the objective differed from MATLAB by a few ULP, and CSS exponents amplify those
+differences on fit plateaus (columns 16, 17 and 82). Each stage was identified from the
+recorded traces and then checked on generated inputs
+(`record_numerics_probes.m`). `exes/samsrf/core/src/matlab_math.rs` holds two kinds of
+code: ported source (fdlibm) and empirical models inferred from MATLAB's recorded
+results. A model is established only for the inputs below.
+
+| Stage | Kind | MATLAB R2023b, as recorded | Evidence |
+| --- | --- | --- | --- |
+| pRF profile `exp`, `.^`, `log`, `sin`, `cos` | Ported source | fdlibm 5.3 from https://netlib.org/fdlibm/: `e_log.c` 1.3, `k_sin.c` 1.3, `k_cos.c` 1.3, `s_sin.c` 1.3, `s_cos.c` 1.3, `e_rem_pio2.c` 1.4 (SCCS 95/01/18), ported. `libm` 0.2.16 `exp`/`pow` matched `e_exp.c` 1.6/`e_pow.c` 1.5 (SCCS 04/04/22) on every value tested | 35,200 probe values on both hosts |
+| Raw prediction | Empirical | the existing four-lane `mean` | every recorded raw prediction |
+| Negative-base power | Empirical | (-x)^e = (-x)^trunc(e) × exp(f log x)(cos fπ + i sin fπ), integer part by right-to-left binary exponentiation; complex products recover infinities as C99 Annex G (libgcc `__muldc3`) does; i·sqrt(x) for f = 1/2; e < 0 is Smith's reciprocal, a real division when the power is real, and a correctly signed real infinity when it underflowed to zero | all 13,776 probe values with their NaN/Inf masks |
+| `conv` | Empirical | fused multiply-adds; nonzero samples scattered in order when fewer than a quarter are nonzero; otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; all kept outputs of 188 probe convolutions |
+| `corr` | Empirical | `x'*y` reproduced by MKL 2021.3 `ddot`/`zdotc` kernels, norms by `dnrm2`/`dznrm2` (reference-BLAS scaled sums), `dot/‖x‖/‖y‖`, then values beyond 1 in magnitude divided by their magnitude | every recorded objective; AMD probe kernels |
+
+`css_diagnostics.rs` requires all 108 traces (54 double, 54 single; both seeds and
+nonnegative controls) to reproduce MATLAB's raw prediction, power, convolution
+and objective at every evaluation (the objective also from MATLAB's own
+predictions), and to follow MATLAB's optimizer parameter sequence bit for bit.
+This includes the column 82 plateau (177 evaluations) and columns 16 and 17
+(801 and 570 evaluations). The only allowance is the sign of a zero part.
+
+`numerics-reference.json` pins the probes from
+[run 42926430579](https://github.com/neurodesk/webapps/actions/runs/42926430579)
+(recorder commit `12c26ab14e2518819aee295f4c6ae6d07cfa726e`) on an AMD EPYC 7763
+(`ubuntu-24.04`) and an Intel Xeon Platinum 8370C (`ubuntu-22.04`). Each host
+ran the probes twice in fresh processes with `MKL_CBWR=COMPATIBLE`, and a third
+process with `MKL_CBWR=AUTO`. `matlab_numerics.rs` checks:
+
+- fdlibm functions bit for bit on both hosts;
+- every negative-base power, including its NaN and infinite parts. The sign of
+  a zero part differs in 2,440 of 27,552 parts; no rule tried (product order,
+  FMA, true sign) reproduces MATLAB's zero signs;
+- every output SamSrf keeps (the first n) for 9-129-tap kernels on longer courses,
+  dense and sparse;
+- MKL dot products and norms on the AMD host;
+- the reproducibility results below, real and imaginary arrays.
+
+Excluded from the numerical gates: kernels shorter than 9 taps or longer than the
+course, which MATLAB computes in other orders; sparse complex courses of 1,000
+samples, where a few outputs differ by one ULP; and real `x'*y` of 8-19 elements,
+which takes another MATLAB path. The validated CSS fixtures avoid these cases,
+but the API accepts custom short kernels and long sparse complex courses.
+Their convolution parity is not established. The recorded
+`conv_complex_n1000_nnz244` case has eight differing outputs, beginning at
+sample 498, whose imaginary component is `0.2720763362077453` in the port and
+`0.2720763362077454` in MATLAB.
+
+Reproducibility: repeated processes are bit-identical on each host. Across
+hosts, only MKL's results differ (83 BLAS arrays: 51 real and 32 imaginary).
+Elementary functions, powers, `conv`, `gammaln` and the HRF are identical. On
+the Intel host MATLAB reports CNR branch `AVX512_E1`, and its MKL results are
+bit-identical under `MKL_CBWR=AUTO` and `COMPATIBLE`, so the environment request
+does not select MKL's branch inside MATLAB. The AMD hosts report `auto`; their
+results match the modelled kernels. Outside MATLAB, MKL 2021.3 on an AMD EPYC
+Milan machine rejected the SSE2 and AVX2 branch requests, and `AUTO` and
+`COMPATIBLE` gave the same kernels. Double CSS references must therefore be
+recorded on AMD hosts (or with a verified compatible branch); an Intel recording
+is a different reference, not a port error. Every CSS trace and pin above is
+from AMD hosts.
+
+What remains:
+
+- **HRF construction.** `gammaln` is Cody's algorithm, with log((x-1)!) for whole
+  numbers, which fits all 15 probe values. MATLAB's `gampdf` formula is not
+  identified: neither the closed forms nor Loader's saddle point reproduce the
+  recorded densities. The port's de Haas kernel differs by a few ULP, which
+  moves the weak fits at zero-based vertices 51 and 81 (x0 by up to 7.1e-5). With
+  MATLAB's kernel these vertices match exactly.
+- **Beta and Baseline** come from the column-pivoted QR solve (#731, #773). In the
+  recorded 96-vertex double pipeline with MATLAB's HRF kernel, Beta differs at 19
+  vertices by at most 2.4e-16 relative and Baseline at 42 vertices by at most
+  1.1e-17 absolute (1.3e-14 relative). With the port's own HRF they differ at 65
+  vertices (Beta up to 7.8e-5 relative, following the fits at vertices 51 and 81;
+  elsewhere a few ULP), as do R² and nR² at 41 vertices by at most 1.3e-15.
+  `compare-css.mjs` reports these differences and does not gate them.
+- Zero signs and the uncovered convolution cases above.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics" packages/samsrf/validation/matlab/numerics-reference.json
+SAMSRF_MATLAB_NUMERICS_DIR="$TMPDIR/samsrf-numerics" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_numerics
+```
+
+`record_matlab=true, numerics_only=true` repeats the recording. Octave can run
+the recorder's plumbing with a stubbed environment; its results are never
+references.
