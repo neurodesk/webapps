@@ -58,6 +58,10 @@
       "types": "./src/file-io/tiff.d.ts",
       "default": "./src/file-io/tiff.js"
     },
+    "./file-io/raster-image": {
+      "types": "./src/file-io/raster-image.d.ts",
+      "default": "./src/file-io/raster-image.js"
+    },
     "./fetch": {
       "types": "./src/net/fetchWithRetry.d.ts",
       "default": "./src/net/fetchWithRetry.js"
@@ -123,7 +127,8 @@
       "types": "./src/elements/compute-connection.d.ts",
       "default": "./src/elements/compute-connection.js"
     },
-    "./file-io/hash": "./src/file-io/hash.js"
+    "./file-io/hash": "./src/file-io/hash.js",
+    "./file-io/microscopy-stack": "./src/file-io/microscopy-stack.js"
   },
   "scripts": {
     "build:showcase": "node scripts/build-showcase.mjs",
@@ -141,7 +146,8 @@
   },
   "dependencies": {
     "geotiff": "3.0.5",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "zarrita": "0.7.5"
   },
   "devDependencies": {
     "@niivue/nv-mcp": "1.0.0-rc.7",

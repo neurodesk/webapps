@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   imagejDescription,
   inspectTiffStack,
+  openTiffStackPages,
   micrometresPerUnit,
   omePageChannels,
   openTiffPlanes,
@@ -551,4 +552,25 @@ test('imagejDescription labels a calibrated z stack that reads back as z planes'
   assert.deepEqual(metadata.pixelSize, { x: 0.25, y: 0.25, z: 0.13 });
   // A time series written by the frames-only call is unchanged.
   assert.equal(imagejDescription({ frames: 3, frameInterval: 0.5 }), 'ImageJ=1.11a\nimages=3\nframes=3\nfinterval=0.5\n');
+});
+
+test('an OME-TIFF whose page 0 is not a plane takes its size and type from the first plane', async () => {
+  const { encodeTiff } = await import('./fixtures/tiff-writer.mjs');
+  const xml = '<OME xmlns="x" UUID="urn:uuid:a"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="3" SizeY="2" SizeC="1" SizeZ="2" SizeT="1"><TiffData IFD="1" FirstZ="0" PlaneCount="2"/></Pixels></Image></OME>';
+  const thumbnail = { width: 1, height: 1, data: Uint8Array.of(9), description: xml };
+  const planes = [10, 20].map((offset) => ({ width: 3, height: 2, data: Uint16Array.from({ length: 6 }, (_, i) => offset + i) }));
+  const bytes = encodeTiff([thumbnail, ...planes]);
+  const stack = await readTiffStack(buffer(bytes));
+  assert.deepEqual([stack.width, stack.height, stack.pages, stack.dtype], [3, 2, 2, 'uint16']);
+  assert.deepEqual(Array.from(stack.data), [10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 25]);
+  const pages = await openTiffStackPages(new Blob([bytes]));
+  assert.deepEqual(Array.from(await pages.readPage(1)), [20, 21, 22, 23, 24, 25]);
+  await assert.rejects(pages.readPage(2), RangeError);
+});
+
+test('OME TiffData that maps a plane twice or one page to two planes is refused', async () => {
+  const ome = (tiffData) => `<OME xmlns="x"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="2" SizeY="2" SizeC="1" SizeZ="2" SizeT="1">${tiffData}</Pixels></Image></OME>`;
+  const file = (description) => buffer(writeTiffStack({ width: 2, height: 2, data: new Uint8Array(8), description }));
+  await assert.rejects(inspectTiffStack(file(ome('<TiffData IFD="0" FirstZ="0"/><TiffData IFD="1" FirstZ="0"/><TiffData IFD="1" FirstZ="1"/>'))), /maps plane 1 twice/);
+  await assert.rejects(inspectTiffStack(file(ome('<TiffData IFD="0" FirstZ="0"/><TiffData IFD="0" FirstZ="1"/>'))), /names page 1 for two planes/);
 });

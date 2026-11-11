@@ -1,0 +1,26 @@
+{
+  "name": "omezarr-convert",
+  "version": "0.0.20261109",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app omezarr-convert",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "node ../../scripts/lint.mjs --workspace"
+  },
+  "dependencies": {
+    "@neurodesk/omezarr-convert": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.33"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "fast-png": "8.0.0",
+    "fflate": "0.8.3",
+    "vite": "^5.0.0"
+  }
+}

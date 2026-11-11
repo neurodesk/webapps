@@ -1,6 +1,10 @@
-function environment = reference_environment(mode)
+function environment = reference_environment(mode, branch)
 % Capture requests separately from MATLAB's observations. An environment
-% variable alone is never evidence of an effective CNR branch.
+% variable alone is never evidence of an effective CNR branch. References
+% request COMPATIBLE; a numerics probe may request another branch to compare.
+if nargin < 2
+    branch = 'COMPATIBLE';
+end
 assert(startsWith(version, '23.2.0.3097123'), 'Reference requires R2023b Update 11');
 processEnvironment = struct('mklCbwr',getenv('MKL_CBWR'), ...
     'mklNumThreads',getenv('MKL_NUM_THREADS'), ...
@@ -13,7 +17,7 @@ assert(threads == 1, 'MATLAB did not honor the computational thread limit');
 assert(status == 0, 'Cannot record CPU provenance');
 assert(isfile('environment-request.json'), 'Capture execution requests before launching MATLAB');
 requested = jsondecode(fileread('environment-request.json'));
-assert(strcmp(requested.MKL_CBWR,'COMPATIBLE'), 'Request MKL_CBWR=COMPATIBLE');
+assert(strcmp(requested.MKL_CBWR,branch), ['Request MKL_CBWR=' branch]);
 assert(strcmp(requested.MKL_NUM_THREADS,'1') && strcmp(requested.OMP_NUM_THREADS,'1'), ...
     'Request one BLAS/OpenMP thread before starting MATLAB');
 assert(strcmp(requested.MKL_DYNAMIC,'FALSE') && strcmp(requested.OMP_DYNAMIC,'FALSE'), ...

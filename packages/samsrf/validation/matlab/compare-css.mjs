@@ -29,30 +29,34 @@ const array = descriptor => {
 const model = { ...recorded.model, Data_Precision: 'double', Css_Convention: 'samsrf' };
 const vertices = preprocessing.courses.shape[1];
 assert.equal(vertices, 96);
-const apertures = samsrf.readAperturesFile(path.join(reference, `${model.Aperture_File}.mat`));
-let job;
-try {
-  job = samsrf.createJob({
-    kind: 'prf',
-    model: JSON.stringify(model),
-    apertures: apertures.serialize(),
-    data: {
-      volumes: preprocessing.courses.shape[0],
-      vertices: Uint32Array.from({ length: vertices }, (_, i) => i),
-      courses: array(preprocessing.courses),
-    },
-    totalVertices: vertices,
-    noiseCeiling: array(preprocessing.noiseCeiling),
-  });
-} finally {
-  apertures.free();
+// Run the whole double CSS pipeline, with the port's HRF or with MATLAB's kernel.
+function run(hrf) {
+  const apertures = samsrf.readAperturesFile(path.join(reference, `${model.Aperture_File}.mat`));
+  let job;
+  try {
+    job = samsrf.createJob({
+      kind: 'prf',
+      model: JSON.stringify(model),
+      apertures: apertures.serialize(),
+      data: {
+        volumes: preprocessing.courses.shape[0],
+        vertices: Uint32Array.from({ length: vertices }, (_, i) => i),
+        courses: array(preprocessing.courses),
+      },
+      totalVertices: vertices,
+      noiseCeiling: array(preprocessing.noiseCeiling),
+      ...(hrf ? { hrf } : {}),
+    });
+  } finally {
+    apertures.free();
+  }
+  try {
+    return samsrf.runJob(job).maps;
+  } finally {
+    job.free();
+  }
 }
-let maps;
-try {
-  ({ maps } = samsrf.runJob(job));
-} finally {
-  job.free();
-}
+const maps = run();
 assert.deepEqual(maps.values, recorded.values);
 const expected = array(recorded.maps);
 const selectedVertices = [46, 59, 68, 80, 87];
@@ -90,6 +94,26 @@ for (const [row, name] of maps.values.entries()) {
   }
   results.push({ name, maximumAbsolute, differences });
 }
+// With MATLAB's own HRF kernel every fitted parameter, R², nR² and noise ceiling
+// must be bit-identical at every vertex. Beta and Baseline come from the least-squares
+// solve, which #731 reproduces separately; they are reported, not gated, here.
+const kernelMaps = run(array(recorded.hrf));
+assert.deepEqual(kernelMaps.values, recorded.values);
+const coefficients = new Set(['Beta', 'Baseline']);
+const kernelResults = [];
+for (const [row, name] of kernelMaps.values.entries()) {
+  const differences = [];
+  for (let vertex = 0; vertex < vertices; vertex++) {
+    const actual = kernelMaps.data[row * vertices + vertex];
+    const target = expected[vertex * recorded.maps.shape[0] + row];
+    if (Object.is(actual, target) || Number.isNaN(actual) && Number.isNaN(target)) continue;
+    differences.push({ vertex, actual: number(actual), expected: number(target) });
+    if (!coefficients.has(name)) {
+      failures.push({ vertex, name, reason: 'exact gate with the recorded HRF kernel', actual: number(actual), expected: number(target) });
+    }
+  }
+  kernelResults.push({ name, gated: !coefficients.has(name), differences });
+}
 fs.writeFileSync(reportFile, JSON.stringify({
   pipeline: recorded.id,
   execution: 'committed WebAssembly',
@@ -97,8 +121,9 @@ fs.writeFileSync(reportFile, JSON.stringify({
   vertexIndexBase: 0,
   required: { valueVertices: selectedVertices, decisions: 'all 96 vertices, every map row' },
   completeDoubleCssParityAsserted: false,
+  recordedHrfKernel: { exact: 'every vertex and map row except Beta and Baseline', results: kernelResults },
   failures,
   results,
 }, null, 2) + '\n');
 assert.equal(failures.length, 0, `CSS regression gates failed: ${JSON.stringify(failures)}`);
-console.log(`CSS gates passed for vertices ${selectedVertices.join(', ')} and all ${vertices} decision masks. Remaining differences: ${reportFile}`);
+console.log(`CSS gates passed: vertices ${selectedVertices.join(', ')}, all ${vertices} decision masks, and every non-coefficient map exactly with MATLAB's HRF kernel. Remaining differences: ${reportFile}`);

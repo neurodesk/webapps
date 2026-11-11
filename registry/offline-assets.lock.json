@@ -5341,6 +5341,65 @@
       "kind": "example",
       "dependencies": []
     },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/brainreg-test-brain.ome.tif": {
+      "sha256": "7e9a73a6e5c36f9d8f9761c8e2399767cc5c56461f2e622e9ece6f6c182b03c2",
+      "bytes": 9565228,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/cellfinder-crop.ome.tif": {
+      "sha256": "aac1fcbabdbe4dfafeb861026be2ac1e1b6f379b2c1202248a0e32637d3b42c3",
+      "bytes": 21505056,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_template.nii.gz": {
+      "sha256": "cc72a32188504f64ba33b3b49ee8134df2563c5471f41cb3ab339952feae0ca3",
+      "bytes": 5932246,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "Allen Institute terms of use (noncommercial redistribution with citation)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_annotation.nii.gz": {
+      "sha256": "0f495ee499c0c12c8de726fb455dd28a7fa23188d660276f6256d3ab9dd7c9a1",
+      "bytes": 1260100,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "Allen Institute terms of use (noncommercial redistribution with citation)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_structures.json": {
+      "sha256": "cd2ca51d5fea23b9663b0c01f056733813cb6a595eaa77c5088459ab8a7d0da6",
+      "bytes": 117346,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "model",
+      "license": "Allen Institute terms of use (noncommercial redistribution with citation)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/34cb2e8c741240765ed75b48328ffe8676cbba24/omezarr-convert/example/retina-crop.ome.tif": {
+      "sha256": "a76758337ac07c0ffd2fa9f423409a31e576eb820e91c8b0830b221b6bdb8225",
+      "bytes": 1842339,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_thionin_section150_85um.tif": {
+      "sha256": "8a35fb01f446c2306fdbb81c163368057137fc34bb61445bdcacfd5677af5839",
+      "bytes": 1724747,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_r1_0.6mm_anterior.nii.gz": {
+      "sha256": "561fd1e5943ae1a231c0c43523a3445520316e91355895bcd8a4b6995b95dfc0",
+      "bytes": 4089034,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9e2fcb5c1e388c17d00a35ea26bf4e0602153b08/examples/dicompare/synthetic-session/dicompare-example-session.zip": {
       "sha256": "49d6706995af7bf69cd7e9daef2bdfaee2398aa5889d20bfe082eda629603251",
       "bytes": 112284,
@@ -6732,6 +6791,20 @@
     ],
     "cryo-em": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/607388b20e8c7e0000ec8498d19ac7e3c35d6472/cryo-em/relion-tutorial/SHA256SUMS"
+    ],
+    "lightsheet-atlas": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/brainreg-test-brain.ome.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/example/cellfinder-crop.ome.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_template.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_annotation.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ff764f3e7a138df16f2335627016a9a8e7b0ddec/lightsheet-atlas/atlas/allen_mouse_50um_structures.json"
+    ],
+    "omezarr-convert": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/34cb2e8c741240765ed75b48328ffe8676cbba24/omezarr-convert/example/retina-crop.ome.tif"
+    ],
+    "histo2mri": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_r1_0.6mm_anterior.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/03b16e4efae541196defe05dd1b62520ff591d86/histo2mri/example/ahead152017_thionin_section150_85um.tif"
     ],
     "deconvolution": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif",

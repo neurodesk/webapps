@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Light-sheet atlas — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input stack</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF stack or an OME-Zarr folder" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a TIFF stack or an OME-Zarr folder</span>
+          </label>
+          <label class="nd-file" id="folderPick">Or choose an OME-Zarr folder<input id="folderInput" type="file" data-neurodesk-input="image" webkitdirectory multiple /></label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="sampleSection" open>
+        <summary class="nd-section-title">Sample</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="voxelZ">Voxel size <small>µm, z · y · x</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the voxel size">i<span class="nd-info-tooltip">Plane spacing, then row and column pixel size, in microns. OME and ImageJ TIFFs fill these from their metadata; check them before running.</span></span>
+            </label>
+            <div class="nd-row">
+              <input id="voxelZ" type="number" min="0" step="any" aria-label="Plane spacing in µm" />
+              <input id="voxelY" type="number" min="0" step="any" aria-label="Row pixel size in µm" />
+              <input id="voxelX" type="number" min="0" step="any" aria-label="Column pixel size in µm" />
+            </div>
+          </div>
+          <div class="nd-field">
+            <label for="orientation">Orientation
+              <span class="nd-info-icon" tabindex="0" aria-label="About the orientation">i<span class="nd-info-tooltip">Three letters, one per stack axis (planes, rows, columns), naming where each axis starts: a/p anterior or posterior, s/i superior or inferior, r/l right or left. A coronal stack imaged from the front with the dorsal side up and the right side on the left is asr. This is BrainGlobe's notation, as in brainreg --orientation. A wrong r/l letter swaps the hemispheres without any error: the brain looks the same mirrored.</span></span>
+            </label>
+            <input id="orientation" type="text" maxlength="3" autocomplete="off" spellcheck="false" placeholder="e.g. psl" />
+            <p class="nd-hint">Where each stack axis starts, as in brainreg: a/p, s/i, r/l.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Analysis</summary>
+        <div class="nd-section-content">
+          <label class="nd-check"><input id="register" type="checkbox" checked /> Register to the Allen atlas (50 µm)</label>
+          <label class="nd-check"><input id="detect" type="checkbox" checked /> Detect cell candidates</label>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Cell detection settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="somaDiameterUm">Soma <small>µm</small></label>
+                  <input id="somaDiameterUm" type="number" min="1" step="any" value="16" />
+                </div>
+                <div class="nd-field">
+                  <label for="nSdsAboveMeanThresh">Threshold <small>SD</small>
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the threshold">i<span class="nd-info-tooltip">A pixel is foreground when its filtered value is this many standard deviations above its plane's mean (cellfinder's n_sds_above_mean_thresh).</span></span>
+                  </label>
+                  <input id="nSdsAboveMeanThresh" type="number" min="0.1" step="any" value="10" />
+                </div>
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="ballXyUm">Ball xy <small>µm</small></label>
+                  <input id="ballXyUm" type="number" min="0.1" step="any" value="6" />
+                </div>
+                <div class="nd-field">
+                  <label for="ballZUm">Ball z <small>µm</small></label>
+                  <input id="ballZUm" type="number" min="0.1" step="any" value="15" />
+                </div>
+                <div class="nd-field">
+                  <label for="ballOverlapFraction">Overlap
+                    <span class="nd-info-icon" tabindex="0" aria-label="About the overlap">i<span class="nd-info-tooltip">Fraction of the ball that must be foreground to keep its centre voxel (cellfinder's ball_overlap_fraction).</span></span>
+                  </label>
+                  <input id="ballOverlapFraction" type="number" min="0.05" max="1" step="0.05" value="0.6" />
+                </div>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run analysis</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a stack anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Light-sheet atlas maps a cleared mouse brain to the Allen Mouse Brain Common Coordinate Framework (CCFv3, 50 µm) and counts cell candidates per brain region, following BrainGlobe's brainreg and cellfinder. The stack is read plane by plane, so it never has to fit in memory at once.</p>
+      <p>Registration: the stack is put in the atlas orientation, averaged to 50 µm voxels and registered with Greedy (affine, normalised mutual information; then a diffeomorphic warp, normalised cross-correlation), with the atlas template as the moving image. The same transform places the atlas labels on the sample and maps each sample voxel to its atlas coordinate. On BrainGlobe's test brain the labels agree with brainreg 1.0.16 (NiftyReg) with a Dice of 0.97 for the whole brain and 0.65 to 0.96 for the major divisions (fibre tracts 0.70, ventricles 0.65). Dice against brainreg measures how well two registration methods agree, not how accurate either is.</p>
+      <p>Cell detection is a port of cellfinder's classical candidate detection: per plane a median, Gaussian and Laplacian filter and a threshold, then a 3D ball filter, connected structures and the splitting of clusters. On cellfinder's test crop it finds the same 38 candidates as cellfinder 1.10.1. cellfinder's ResNet classifier, which sorts candidates into cells and artefacts, is not included: every count is of candidates, not of classified cells. There is no paired biological validation: no count here has been compared with cells counted by hand or by another method on the same brain.</p>
+      <p>Candidates are assigned to the region at their atlas coordinate. The region table gives, per region and hemisphere, the candidate count, the region's volume in this sample (mm³, from the registered labels) and the candidate density. Detection needs voxels at most about a third of the soma diameter and 8- or 16-bit integer or float32 samples; registration needs the whole brain or hemisphere.</p>
+      <p>The atlas is © 2015–2017 Allen Institute for Brain Science (Allen Institute for Brain Science (2017), Allen Mouse Brain Common Coordinate Framework, version 3 [dataset], atlas.brain-map.org; Wang et al. 2020, Cell). It is redistributed for research and noncommercial use only under the Allen Institute terms of use; the offline Standalone bundle includes it, and redistributing that bundle commercially needs the Allen Institute's written permission. The examples are BrainGlobe's CC0 test data.</p>
+    </template>
+    <template id="privacyContent"><p>Your images are processed locally in this browser and are never uploaded. The app downloads the Allen atlas files from the Neurodesk dataset on Hugging Face.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

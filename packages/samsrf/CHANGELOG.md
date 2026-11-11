@@ -1,10 +1,10 @@
 # @neurodesk/samsrf
 
-## 0.5.20261111
+## 0.4.20261111
 
-### Minor Changes
+### Patch Changes
 
-- 06f57ad: SamSrf: `Data_Precision: "single"` now runs reverse-correlation pRF analyses with the convex hull and connective fields with summary statistics or convex hulls, reproducing MATLAB's single correlations, regressions, smoothing, thresholds, medians and global signal. A constant course now follows MATLAB's rank rule in double too, so its hull matches. Gates hold both MATLAB R2023b hosts of the raw-input recording and of new constant, low-variance and threshold-boundary cases. Single 2D fits are still refused.
+- Model MATLAB R2023b's double CSS objective stage by stage: ported fdlibm elementary functions, plus empirical models of MATLAB's complex power of negative responses, its `conv` and MKL's dot products and norms. All 108 recorded CSS optimizer traces now follow MATLAB bit for bit, and the recorded double pipeline matches every non-coefficient map exactly with MATLAB's HRF kernel. The remaining HRF (`gampdf`) differences, and MATLAB's Intel/AMD reference difference, are documented and gated.
 
 ## 0.4.20261110
 

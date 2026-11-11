@@ -111,6 +111,7 @@ export interface ReadTiffStackOptions<Data extends TiffSampleArray = TiffSampleA
 }
 
 export function micrometresPerUnit(unit: string | null | undefined): number | null;
+export function isOmeDescription(description: string | null | undefined): boolean;
 export function parseOmeDescription(description: string | null | undefined): OmeMetadata | null;
 export function parseImagejDescription(description: string | null | undefined, resolution?: [number | null, number | null]): Omit<TiffStackMetadata, 'description'> | null;
 /**
@@ -120,6 +121,10 @@ export function parseImagejDescription(description: string | null | undefined, r
  * is read range by range, only as far as its page directories and description.
  */
 export function inspectTiffStack(source: ArrayBuffer | Blob, options?: { rgb?: 'refuse' | 'mean' }): Promise<TiffStackInfo>;
+/** `inspectTiffStack`'s result and refusals, with `readPage` decoding one plane (OME plane order) as `readTiffStack` does: the file's sample type, or a Float64Array mean with `rgb: 'mean'`. */
+export function openTiffStackPages(source: ArrayBuffer | Blob, options?: { rgb?: 'refuse' | 'mean' }): Promise<TiffStackInfo & { readPage(index: number, options?: { signal?: AbortSignal }): Promise<TiffSampleArray | Float64Array> }>;
+/** The first page's ImageDescription ('' when absent), from the page directory alone. */
+export function readTiffDescription(source: ArrayBuffer | Blob): Promise<string>;
 /**
  * Every full-resolution page of a greyscale TIFF in page (or OME plane), row, column order.
  * Reads the grey sample of grey + alpha pages, an ImageJ 8-bit palette's indices and inverted
@@ -137,3 +142,53 @@ export function openTiffPlanes(buffer: ArrayBuffer, options?: { pageLimit?: numb
 export function omePageChannels(name: string, ome: OmeMetadata, ifds: number[]): string[] | null;
 /** A label image as an uncompressed TIFF, unsigned 16-bit when the labels fit and 32-bit otherwise. */
 export function writeLabelTiff(labels: ArrayLike<number>, width: number, height: number): Uint8Array;
+
+export type TiffSampleRole = 'red' | 'green' | 'blue' | 'alpha' | 'value';
+
+export interface TiffPages {
+  /** The geotiff instance the pages come from. */
+  tiff: import('geotiff').GeoTIFF;
+  pageCount: number;
+  width: number;
+  height: number;
+  samplesPerPixel: number;
+  dtype: TiffStackInfo['dtype'];
+  photometric: string;
+  sampleRoles: TiffSampleRole[];
+  description: string | null;
+  /** True when the description holds OME-XML (with or without a namespace prefix). */
+  ome: boolean;
+  /** OME or ImageJ calibration; null for a baseline TIFF. */
+  metadata: Omit<TiffStackMetadata, 'description'> | null;
+  /** Pixels per unit as stored in XResolution/YResolution and ResolutionUnit. */
+  resolution: { x: number; y: number; unit: 'inch' | 'centimeter' | null } | null;
+  readPage(index: number, options?: { signal?: AbortSignal }): Promise<TiffSampleArray[]>;
+}
+
+/** OME-XML with a namespace prefix moved to the default namespace and attributes double-quoted, or null. */
+export function omeXml(description: unknown): string | null;
+export function sampleRoles(photometric: number, samplesPerPixel: number, extraSamples?: number[]): TiffSampleRole[] | null;
+/** A TIFF's full-resolution pages, read one at a time, samples kept apart. */
+export function openTiffPages(source: Blob | ArrayBuffer, options?: { signal?: AbortSignal; maxBytes?: number; /** Let an OME-TIFF's pages differ in size (its OME-XML maps them). */ unequalOme?: boolean }): Promise<TiffPages>;
+/** XML text with its predefined and numeric character references decoded. */
+export function decodeXml(value: string): string;
+
+export interface TiffImage {
+  width: number;
+  height: number;
+  /** 1 for greyscale, 3 for RGB. */
+  channels: 1 | 3;
+  bitsPerSample: 8 | 16;
+  /** 255 or 65535. */
+  maxValue: number;
+  /** Interleaved samples in row, column, channel order. */
+  data: Uint8Array | Uint16Array;
+  /** Micrometres from OME-XML or ImageJ; null otherwise (a plain TIFF's resolution tags are not a calibration). */
+  pixelSize: { x: number; y: number } | null;
+  /** What the file declares: OME/ImageJ declared spacing, or a plain TIFF's X/YResolution as 1/resolution in its ResolutionUnit. */
+  declaredSpacing: { x: number | null; y: number | null; z: number | null; unit: string | null } | null;
+  metadata: { kind: 'ome' | 'imagej' | 'baseline'; description: string };
+}
+
+/** One 2-D greyscale or RGB image (a section or slide overview); refuses stacks, channel stacks and over-budget images before decoding. */
+export function readTiffImage(buffer: ArrayBuffer, options?: { signal?: AbortSignal; maxBytes?: number }): Promise<TiffImage>;

@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 2,
+  "app": "lightsheet-atlas",
+  "title": "Light-sheet atlas",
+  "description": "Register a cleared mouse brain to the Allen CCFv3 (50 µm) and count cellfinder-style cell candidates per brain region.",
+  "defaultOperation": "map-cells",
+  "operations": {
+    "map-cells": {
+      "title": "Map cells to the atlas",
+      "description": "Register a TIFF stack or OME-Zarr image to the Allen atlas, detect cell candidates and report counts, volumes and densities per region and hemisphere.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tiff",
+            "ome-zarr"
+          ],
+          "description": "One TIFF stack (a multi-page file or one file per plane) or the files of one OME-Zarr image",
+          "minimum": 1
+        }
+      },
+      "parameters": {
+        "voxelSizeUm": {
+          "type": "array",
+          "description": "Voxel size in µm: plane spacing, row and column pixel size (z, y, x)",
+          "items": {
+            "type": "number",
+            "description": "Voxel size in µm",
+            "minimum": 1e-06
+          }
+        },
+        "orientation": {
+          "type": "string",
+          "default": "asr",
+          "description": "BrainGlobe orientation of the stack axes (planes, rows, columns), three letters from a/p, s/i, r/l, such as psl"
+        },
+        "register": {
+          "type": "boolean",
+          "default": true,
+          "description": "Register to the Allen atlas"
+        },
+        "detect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Detect cell candidates"
+        }
+      },
+      "artifacts": {
+        "sample": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "labels": {
+          "type": "neuro:label-map",
+          "mediaType": "application/gzip",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "candidates": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "regions": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

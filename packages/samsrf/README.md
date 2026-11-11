@@ -393,8 +393,10 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
 - **Labels.** The label reader parses five columns per line (index, x, y, z,
   value). `Read_FreeSurfer` reads six `%n` fields per row.
 - **gampdf.** The double gamma uses the closed form of the gamma density with
-  `lgamma`, not MATLAB's `gampdf` implementation; the parity check agrees to
-  about 1e-15.
+  `lgamma`, not MATLAB's `gampdf` implementation. The HRF kernel agrees to a
+  few ULP (up to 27 double epsilons near the zero crossing), which can change
+  weak CSS fits. MATLAB's `gammaln` is Cody's algorithm, with log((x-1)!) for
+  whole numbers; its `gampdf` formula is not yet identified.
 - **Old-school HRF.** An `hrf_*` file is turned into one kernel. Since
   26/08/2026, `samsrf_fit_prf`'s fine fit would mistake that kernel's row
   vector for vertex-wise HRFs.
@@ -430,17 +432,19 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   MATLAB recordings in both precisions, and the recorded single-precision
   pipeline parameters and scores match exactly. Betas retain small regression
   rounding differences, and some double-precision weak fits still differ.
-  Double CSS norms now retain their scale when squared predictions underflow
-  or overflow; the QR solve takes scaled norms, so large regressors do not
-  overflow either.
-  If a partial double dot sum overflows, the correlation recomputes that
-  component with scaled inputs, restoring the scale before normalization so
-  genuinely overflowing dots retain MATLAB's invalid-objective decision.
-  This scaling rounds terms and does not reproduce MATLAB's blocked BLAS
-  accumulation order on arbitrary inputs; the validation README states its limits.
-  The recorded 96-vertex double pipeline has matching zero/nonfinite decisions,
-  with focused value gates at vertices 46, 59, 68, 80 and 87 (zero-based). Other parameter
-  differences remain listed by `validation/matlab/compare-css.mjs`.
+  The double objective follows MATLAB R2023b stage by stage
+  (`exes/samsrf/core/src/matlab_math.rs`). It uses ported fdlibm `log`, `sin` and
+  `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
+  response, its `conv` and the MKL dot products and norms inside `corr` are
+  empirical models, checked on recorded inputs.
+  All 108 recorded CSS optimizer traces (54 double, 54 single) follow MATLAB's
+  parameter sequences bit for bit. The 96-vertex double pipeline matches every
+  fitted parameter, R², nR² and noise ceiling exactly when it is given MATLAB's
+  HRF kernel. With the port's own HRF, the kernel's `gampdf` rounding still moves
+  two weak fits (zero-based vertices 51 and 81). The limits of each operation,
+  and why MATLAB on Intel hosts gives other results, are in
+  `validation/matlab/README.md#double-css-arithmetic`.
+  The coefficient QR solve takes scaled norms, so large regressors do not overflow.
   This option does not imply arbitrary-input bit parity.
 - **Maps outside the ROI.** `samsrf_compress_srf` keeps the ROI's columns and
   `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside

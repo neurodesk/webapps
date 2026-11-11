@@ -2237,6 +2237,27 @@
         "documentation": "https://github.com/neurodesk/webapps/tree/main/exes/compute-server#hpc-single-owner-mode-and-slurm"
       }
     },
+    "lightsheet-atlas": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "omezarr-convert": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "histo2mri": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
     "deconvolution": {
       "desktop": true,
       "profile": "interactive",

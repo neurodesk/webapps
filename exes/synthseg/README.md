@@ -63,7 +63,7 @@ their own label map: same header geometry, values in [0, 1], a sum of at most
 1, and per-tissue totals equal to the `--vol` table's grouped soft volumes.
 
 Not supported: `--robust`, `--parc`, `--qc`, `--v1`, `--photo`, `--keepgeom`,
-`--crop`, `--autocrop`, `--vol`, `--post`, `--resample`, folder input, CUDA.
+`--crop`, `--autocrop`, `--post`, `--resample`, folder input, CUDA.
 
 ## Install (macOS)
 
