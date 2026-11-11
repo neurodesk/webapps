@@ -1177,14 +1177,14 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       : capped
         ? 'Seeds capped at 100,000 — lower Density for full coverage.'
         : ''
+    const longNote = tooLong > 0 ? `${tooLong.toLocaleString()} over ${maxLengthMm} mm removed` : ''
     const seedNote = truncated
       ? `${processedSeeds.toLocaleString()} of ${nSeeds.toLocaleString()} seeds`
       : `${nSeeds.toLocaleString()} seeds`
     const summary = truncated
       ? `Partial: ${count} streamlines from ${seedNote} (${deviceLost ? 'GPU device lost' : 'out of memory'}).`
-      : `${count} streamlines from ${seedNote} — saved as TRX.`
-    const longNote = tooLong > 0 ? `${tooLong.toLocaleString()} longer than ${maxLengthMm} mm removed. ` : ''
-    const detail = `Mean ${meanLen} points per streamline. ${longNote}${note}`.trim()
+      : `${count} streamlines from ${seedNote}${longNote ? `, ${longNote}` : ''} — saved as TRX.`
+    const detail = `Mean ${meanLen} points per streamline. ${longNote && truncated ? `${longNote}. ` : ''}${note}`.trim()
     gotoTab(3)
     shownView = null // force the tract render to load
     // The TRX is already built and saveable. The 3D preview is separate: NiiVue

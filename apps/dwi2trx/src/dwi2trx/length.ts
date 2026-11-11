@@ -1,4 +1,4 @@
-/** Default maximum streamline length in mm. Longer streamlines loop: no white-matter pathway is longer. */
+/** Default maximum streamline length in mm, the limit MRtrix uses for HCP data. */
 export const DEFAULT_MAX_LENGTH_MM = 250
 
 /** Length in mm of a voxel-space streamline (x, y, z triplets) under the voxel-to-RAS affine. */
