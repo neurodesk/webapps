@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as samsrf from '../src/node.js';
 import { MODELS, TOTAL_VERTICES, jobSpec, loadExample, runWhole } from '../validation/example-inputs.mjs';
+import { giftiRun } from './fixtures.js';
 
 // The web app's example files (apps/samsrf/examples.json, downloaded flat into one folder).
 const dir = process.env.SAMSRF_WEBAPP_EXAMPLE_DIR;
@@ -27,6 +28,29 @@ test('createJob validates its spec before touching the module', () => {
   assert.throws(() => samsrf.createJob({ ...base, totalVertices: 5 }), /below totalVertices/);
   // A valid spec without apertures fails inside the module with SamSrf's wording.
   assert.throws(() => samsrf.createJob(base), /needs apertures/);
+});
+
+test('single precision averages the global signal in single and refuses CF Gaussian fits', () => {
+  const globalSignal = (precision) => {
+    const run = samsrf.readGiftiRun(giftiRun([[1, 2], [1e-8, 0], [1e-8, 0]]));
+    const accumulator = new samsrf.RunAccumulator(run.vertices, null, { normalise: 'none', globalSignal: true, precision });
+    try {
+      accumulator.pushRun(run);
+      return accumulator.finish().globalSignal;
+    } finally {
+      accumulator.free();
+      run.free();
+    }
+  };
+  // f32 input values, summed vertex by vertex as nanmean(Srf.Data, 2) does.
+  const small = Math.fround(1e-8);
+  assert.equal(globalSignal('double')[0], (1 + small + small) / 3);
+  assert.equal(globalSignal('single')[0], Math.fround(1 / 3));
+  assert.throws(() => new samsrf.RunAccumulator(3, null, { precision: 'half' }), /precision "half"/);
+  const cf = { Name: 'CF', SeedRoi: 'seed', Template: 'template', Data_Precision: 'single' };
+  assert.equal(samsrf.parseModel('cf', JSON.stringify({ ...cf, Fit_pRF: -1 })).dataPrecision, 'single');
+  assert.equal(samsrf.parseModel('rc', JSON.stringify({ ...MODELS.rc, Data_Precision: 'single' })).dataPrecision, 'single');
+  assert.throws(() => samsrf.parseModel('cf', JSON.stringify({ ...cf, Fit_pRF: 1 })), /Data_Precision=single with Fit_pRF=1/);
 });
 
 let example;

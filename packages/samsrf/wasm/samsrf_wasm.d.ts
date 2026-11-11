@@ -55,7 +55,7 @@ export class RunAccumulator {
     free(): void;
     [Symbol.dispose](): void;
     finish(): any;
-    constructor(total_vertices: number, keep: Uint32Array | number[] | null | undefined, normalise: string, combine: string, noise_ceiling: boolean, global_signal: boolean);
+    constructor(total_vertices: number, keep: Uint32Array | number[] | null | undefined, normalise: string, combine: string, noise_ceiling: boolean, global_signal: boolean, precision?: string | null);
     pushRun(run: Run): void;
 }
 
@@ -196,7 +196,7 @@ export interface InitOutput {
     readonly run_vertices: (a: number) => number;
     readonly run_volumes: (a: number) => number;
     readonly runaccumulator_finish: (a: number) => [number, number, number];
-    readonly runaccumulator_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
+    readonly runaccumulator_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number];
     readonly runaccumulator_pushRun: (a: number, b: number) => [number, number];
     readonly version: () => [number, number];
     readonly writeGiftiMap: (a: number, b: number) => [number, number];

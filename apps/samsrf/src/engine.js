@@ -99,7 +99,8 @@ export async function createJob(inputs, onProgress) {
   const roi = inputs.roi ? readLabel(inputs.roi) : null;
   const seed = inputs.analysis === "cf" && inputs.seed ? readLabel(inputs.seed) : null;
   const keep = roi ? Uint32Array.from(new Set([...roi, ...(seed ?? [])])).sort() : null;
-  const data = preprocess(inputs.runs, keep, inputs);
+  const precision = inputs.model.Data_Precision === "single" ? "single" : "double";
+  const data = preprocess(inputs.runs, keep, { ...inputs, precision });
   const spec = {
     kind: inputs.analysis,
     model: JSON.stringify(inputs.model),
@@ -145,7 +146,7 @@ export async function createJob(inputs, onProgress) {
       roi ? `ROI ${inputs.roi.name}: ${roi.length} vertices` : "No ROI: every vertex is analysed",
       ...(seed ? [`Seed ${inputs.seed.name}: ${seed.length} vertices`] : []),
       `Analysis ${job.modelName}${job.outSuffix}: ${job.vertexCount} vertices, maps ${job.values.join(", ")}`,
-      `Map export: ${convention}; fitting precision: float64`,
+      `Map export: ${convention}; data precision: ${precision === "single" ? "MATLAB single" : "double"}`,
       ...(gridPoints ? [`Search space: ${gridPoints} grid points per worker (${seconds(prepared - read)})`] : []),
     ],
     spec,
@@ -218,7 +219,7 @@ function readLabel(file) {
 }
 
 /** Combine the runs as samsrf_gii2srf does, one run in WebAssembly memory at a time. */
-function preprocess(runs, keep, { normalise, average }) {
+function preprocess(runs, keep, { normalise, average, precision }) {
   let accumulator = null;
   try {
     for (const file of runs) {
@@ -229,6 +230,7 @@ function preprocess(runs, keep, { normalise, average }) {
           combine: average ? "average" : "concatenate",
           noiseCeiling: true,
           globalSignal: true,
+          precision,
         });
         fromFile(file, () => accumulator.pushRun(run));
       } finally {

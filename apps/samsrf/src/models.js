@@ -206,10 +206,8 @@ export function buildModel(presetId, settings = DEFAULT_SETTINGS) {
   const preset = PRESETS[presetId];
   if (!preset) throw new Error(`Unknown model preset ${presetId}.`);
   const model = preset.build({ ...DEFAULT_SETTINGS, ...settings });
-  if (preset.analysis === "prf") {
-    if (settings.dataPrecision === "single") model.Data_Precision = "single";
-    if (settings.cssConvention === "samsrf") model.Css_Convention = "samsrf";
-  }
+  if (settings.dataPrecision === "single") model.Data_Precision = "single";
+  if (preset.analysis === "prf" && settings.cssConvention === "samsrf") model.Css_Convention = "samsrf";
   const convention = exportConvention(settings.exportConvention);
   return convention === "samsrf-10.4" ? model : { ...model, Export_Convention: convention };
 }
@@ -266,7 +264,8 @@ export function parseModel(text, analysis) {
   exportConvention(model.Export_Convention);
   if (model.Data_Precision !== undefined && !["single", "double"].includes(model.Data_Precision)) throw new Error("Data_Precision must be single or double.");
   if (model.Css_Convention !== undefined && !["nonnegative", "samsrf"].includes(model.Css_Convention)) throw new Error("Css_Convention must be nonnegative or samsrf.");
-  if (analysis !== "prf" && model.Data_Precision === "single") throw new Error("Single precision is supported for forward pRF fits.");
+  if (analysis === "cf" && model.Data_Precision === "single" && Number(model.Fit_pRF) === 1) throw new Error("Single precision connective fields support Fit_pRF 0 or -1; Gaussian fits need double precision.");
+  if (analysis === "rc" && model.Data_Precision === "single" && typeof model.Prf_Function === "string") throw new Error("Single precision reverse correlation supports the convex hull; 2D pRF fits need double precision.");
   if (analysis === "prf") {
     for (const key of ["Prf_Function", "Param_Names", "Scaled_Param", "Only_Positive", "Scaling_Factor", "TR", "Hrf"]) {
       if (!(key in model)) throw new Error(`A forward-model pRF model needs ${key}.`);

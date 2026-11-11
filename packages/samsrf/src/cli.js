@@ -191,7 +191,7 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
   const convention = exportConvention(model.json.Export_Convention);
   checkOutput(options.output);
   log(`Reading and preprocessing ${options.runs.length} run${options.runs.length === 1 ? '' : 's'}`);
-  const inputs = readAnalysisInputs(options);
+  const inputs = readAnalysisInputs({ ...options, precision: model.json.Data_Precision === 'single' ? 'single' : 'double' });
   const spec = analysisSpec(inputs, options.kind, model.text);
   log(options.kind === 'prf' ? 'Generating the search space' : `Preparing the ${options.kind} analysis`);
   let job;
