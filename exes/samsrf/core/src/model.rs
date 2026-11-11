@@ -723,7 +723,11 @@ mod tests {
             Value::Object(map).to_string()
         };
         assert_eq!(revcor_prf(&single(REVCOR_PRF)).unwrap().data_precision, Precision::Single);
-        let fit = with(serde_json::from_str(&single(REVCOR_PRF)).unwrap(), "Prf_Function", serde_json::json!("@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)"));
+        let mut fit: Map<String, Value> = serde_json::from_str(&single(REVCOR_PRF)).unwrap();
+        fit.insert("Param_Names".into(), serde_json::json!(["x0", "y0", "Sigma"]));
+        fit.insert("Scaled_Param".into(), serde_json::json!([1, 1, 1]));
+        fit.insert("SeedPar_Function".into(), serde_json::json!("@(V)[V(2:3);V(4)]"));
+        let fit = with(fit, "Prf_Function", serde_json::json!("@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)"));
         assert_eq!(parse_model_json(AnalysisKind::RevCorPrf, &fit).unwrap_err(), Error::NotImplemented("Data_Precision=single with a Prf_Function fit"));
         assert_eq!(revcor_cf(&single(REVCOR_CF)).unwrap().data_precision, Precision::Single);
         let summary = with(serde_json::from_str(&single(REVCOR_CF)).unwrap(), "Fit_pRF", serde_json::json!(-1));

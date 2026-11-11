@@ -450,12 +450,15 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   `polyshape` result SamSrf's own `catch` or `polyshape` produces: a zeroed
   column in `rc`, area 0 and NaN centroid in `cf`. A seed region whose template
   coordinates are all collinear makes `samsrf_revcor_cf` fail in MATLAB; here
-  the cluster is the peak alone. Cocircular or nearly cocircular template points
-  can also produce different valid Delaunay edges in Delaunator and MATLAB;
-  CF region growing depends on those edges. Recorded MATLAB grid cases now
-  cover cocircular, nearly cocircular and duplicate coordinates. Thin polygon
-  simplification follows the measured relative cutoff; outcomes exactly at
-  that cutoff can still differ with rounding and scale.
+  the cluster is the peak alone. The triangulation decides incircle tests
+  exactly and breaks cocircular ties with CGAL's symbolic perturbation, which
+  gives MATLAB's `delaunay` edges on every recorded grid, ring and shuffled
+  tie. `polyshape` merges vertices closer than 1e-8 of the span and drops
+  vertices that close to their neighbours' chord. MATLAB takes those decisions
+  on a fixed-point copy of the vertices, so within 1e-5 relative of the cutoff
+  it can disagree, and it resolves crossings of near-parallel edges in a nearly
+  collinear cluster into slivers the port keeps
+  ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so

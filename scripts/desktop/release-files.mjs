@@ -5,16 +5,21 @@ import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { basename, join, resolve } from 'node:path';
 import { fileHash } from '../../packages/desktop/src/bundle.js';
+import { loadAppsRegistry } from '../lib/apps-registry.mjs';
+import { suiteCatalog } from './suite.mjs';
+import { parseArgs } from 'node:util';
 
-export async function prepareReleaseFiles(archive, destination, { version, platform, partBytes = 1_900_000_000, kind = 'desktop' }) {
+/** The release files of one archive of a catalogue's suite, `desktop` being the catalogue's registry block. */
+export async function prepareReleaseFiles(archive, destination, { desktop, version, platform, partBytes = 1_900_000_000, kind = 'desktop' }) {
   if (!Number.isSafeInteger(partBytes) || partBytes < 1 || partBytes >= 2 ** 31) throw new Error('Invalid release part size');
   const windowsSigned = platform === 'windows-x64' && signingEnabled();
-  if (windowsSigned) verifyWindowsArchive(archive);
+  if (windowsSigned) verifyWindowsArchive(archive, desktop.executable);
   const filename = basename(archive);
   if (!/^[a-zA-Z0-9._-]+$/.test(filename)) throw new Error('Archive filename must be safe in shell commands');
   const bytes = (await stat(archive)).size;
   const sha256 = await fileHash(archive);
-  const baseUrl = `https://github.com/neurodesk/webapps/releases/download/webapps-v${version}/`;
+  const baseUrl = `https://github.com/neurodesk/webapps/releases/download/${desktop.release}-v${version}/`;
+  const product = desktop.product_name;
   await mkdir(destination, { recursive: true });
   const parts = [];
   for (let start = 0, index = 1; start < bytes; start += partBytes, index++) {
@@ -31,17 +36,17 @@ export async function prepareReleaseFiles(archive, destination, { version, platf
     : `cat ${parts.map(part => part.filename).join(' ')} > ${filename}\n`;
   // The pack entries are bare hashes, so they are extracted into their own directory.
   const extract = models ? `mkdir models\ntar -xzf ${filename} -C models` : filename.endsWith('.sif') ? `apptainer run ${filename} --verify` : filename.endsWith('.zip')
-    ? windows ? `Expand-Archive ${filename} -DestinationPath NeurodeskWebapps` : `unzip ${filename}`
+    ? windows ? `Expand-Archive ${filename} -DestinationPath ${product.replaceAll(' ', '')}` : `unzip ${filename}`
     : `tar -xzf ${filename}`;
   const command = `${concatenate}${extract}`;
   const installation = `${filename}.install.txt`;
-  const heading = models ? `Neurodesk Webapps ${version} model pack` : `Neurodesk Webapps ${version} for ${platform}`;
+  const heading = models ? `${product} ${version} model pack` : `${product} ${version} for ${platform}`;
   const purpose = models
-    ? 'The pack holds every model for every platform. Install it on a machine that has no internet access.'
+    ? `The pack holds every model of ${product} for every platform. Install it on a machine that has no internet access.`
     : 'Models are not included. The application downloads a model the first time it is needed. Install the model pack as well for a fully offline machine.';
   const closing = models
-    ? 'Keep the extracted models folder in a permanent location. Set NEURODESK_MODELS_DIR to its absolute path before starting Neurodesk Webapps. On Windows, join the parts with cmd /c copy /b instead of cat.'
-    : 'Open the extracted Neurodesk Webapps application. For scheduler jobs, see STANDALONE.md included in the application resources.';
+    ? `Keep the extracted models folder in a permanent location. Set NEURODESK_MODELS_DIR to its absolute path before starting ${product}. On Windows, join the parts with cmd /c copy /b instead of cat.`
+    : `Open the extracted ${product} application. For scheduler jobs, see STANDALONE.md included in the application resources.`;
   await writeFile(join(destination, installation), `${heading}\n\nDownload every file below into one folder. ${purpose}\n\n${parts.map(part => part.filename).join('\n')}\n\nRun in ${windows ? 'PowerShell' : 'a terminal'} from that folder:\n\n${command}\n\n${closing}\n`);
   const result = {
     kind, platform, version, bytes,
@@ -57,7 +62,9 @@ export async function prepareReleaseFiles(archive, destination, { version, platf
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
-  const [archive, destination, version, platform, kind] = process.argv.slice(2);
-  if (!archive || !destination || !version || !platform) throw new Error('Usage: release-files.mjs ARCHIVE OUTPUT VERSION PLATFORM');
-  console.log(await prepareReleaseFiles(archive, destination, { version, platform, kind }));
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { catalog: { type: 'string' } } });
+  const [archive, destination, version, platform, kind] = positionals;
+  if (!archive || !destination || !version || !platform) throw new Error('Usage: release-files.mjs ARCHIVE OUTPUT VERSION PLATFORM [KIND] [--catalog ID]');
+  const { desktop } = suiteCatalog(await loadAppsRegistry(), values.catalog);
+  console.log(await prepareReleaseFiles(archive, destination, { desktop, version, platform, kind }));
 }
