@@ -411,54 +411,21 @@ pub fn prctile(values: &[f64], p: f64) -> f64 {
     sorted[i] + (p - lo) / (hi - lo) * (sorted[i + 1] - sorted[i])
 }
 
-/// `[ones(n,1) x] \ y` as `(amplitude, intercept)`: the least-squares amplitude and
-/// intercept. MATLAB solves it by QR with column pivoting: the column with the larger
-/// norm comes first, and when the second diagonal of R is within `max(n, 2) * eps` of the
-/// first the system is rank deficient, so only the first column gets a coefficient. A
-/// prediction that is constant, or constant to rounding, takes that path.
+/// `[ones(n,1) x] \ y` as `(amplitude, intercept)` in double precision. MATLAB
+/// solves it by QR with column pivoting; see `lstsq`. A prediction that is
+/// constant, or constant to rounding, is rank deficient and only the column with
+/// the larger norm gets a coefficient.
 pub fn fit_betas(x: &[f64], y: &[f64]) -> (f64, f64) {
-    fit_betas_epsilon(x, y, f64::EPSILON)
+    fit_betas_precision(x, y, Precision::Double)
 }
 
 fn fit_betas_precision(x: &[f64], y: &[f64], precision: Precision) -> (f64, f64) {
-    if precision == Precision::Double {
-        return fit_betas(x, y);
-    }
-    let x: Vec<f64> = x.iter().map(|&value| precision.round(value)).collect();
-    let y: Vec<f64> = y.iter().map(|&value| precision.round(value)).collect();
-    let (amplitude, intercept) = fit_betas_epsilon(&x, &y, f64::from(f32::EPSILON));
-    (precision.round(amplitude), precision.round(intercept))
-}
-
-fn fit_betas_epsilon(x: &[f64], y: &[f64], epsilon: f64) -> (f64, f64) {
-    let n = x.len() as f64;
     if x.is_empty() || x.len() != y.len() {
         return (f64::NAN, f64::NAN);
     }
-    let sx: f64 = x.iter().sum();
-    let sy: f64 = y.iter().sum();
-    let sxx_raw: f64 = x.iter().map(|value| value * value).sum();
-    let sxy_raw: f64 = x.iter().zip(y).map(|(a, b)| a * b).sum();
-    let mean_x = sx / n;
-    let mean_y = sy / n;
-    let mut sxx = 0.0;
-    let mut sxy = 0.0;
-    for (a, b) in x.iter().zip(y) {
-        sxx += (a - mean_x) * (a - mean_x);
-        sxy += (a - mean_x) * (b - mean_y);
-    }
-    let tolerance = n.max(2.0) * epsilon;
-    let ones_first = n >= sxx_raw;
-    let (r11, r22) = if ones_first {
-        (n.sqrt(), sxx.max(0.0).sqrt())
-    } else {
-        (sxx_raw.sqrt(), (n * (sxx / sxx_raw)).sqrt())
-    };
-    if r22 <= tolerance * r11 {
-        return if ones_first { (0.0, mean_y) } else { (sxy_raw / sxx_raw, 0.0) };
-    }
-    let amplitude = sxy / sxx;
-    (amplitude, mean_y - amplitude * mean_x)
+    let x: Vec<num_complex::Complex64> = x.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
+    let (amplitude, intercept) = crate::lstsq::regress_on_ones(&x, y, precision);
+    (amplitude.re, intercept.re)
 }
 
 /// `samsrf_normr2` after the noise ceiling row has been appended: `R^2` becomes `nR^2`
