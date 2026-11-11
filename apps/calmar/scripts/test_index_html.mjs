@@ -797,13 +797,28 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
 // =========================================================================
 // These are properties of the file itself, not of app behaviour.
 
-// Policy: CDN scripts are pinned to an exact version.
-for (const script of $$('script[src^="http"]')) {
-  assert.match(
-    script.getAttribute('src'),
-    /^https:\/\/unpkg\.com\/@niivue\/niivue@\d+\.\d+\.\d+\/dist\/niivue\.umd\.js$/,
-    `external script ${script.getAttribute('src')} must be the version-pinned NiiVue build`
+// Policy: every script the page runs at startup comes from the app origin. A failed
+// CDN request is skipped, and the app then starts without the global it needs.
+{
+  const blocking = $$('script[src]').filter(script => !script.defer && !script.async);
+  assert.deepEqual(
+    blocking.map(script => script.getAttribute('src')).filter(src => /^(?:[a-z]+:)?\/\//i.test(src)),
+    [],
+    'startup scripts must not load from another host'
   );
+  assert.ok(
+    blocking.some(script => script.getAttribute('src') === 'wasm/niivue.umd.js'),
+    'the page must load the NiiVue build that prebuild fetches'
+  );
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const prebuild = pkg.scripts.prebuild.split('&&').find(part => part.includes('fetch-app-runtime.mjs'));
+  const setup = fs.readFileSync(path.join(ROOT, 'web/setup.sh'), 'utf8');
+  for (const [name, command] of [['prebuild', prebuild], ['web/setup.sh', setup]]) {
+    assert.match(command, /\sniivue-umd:niivue\.umd\.js(?:\s|$)/, `${name} must request niivue-umd:niivue.umd.js`);
+  }
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, '../../runtime-assets/manifest.json'), 'utf8'));
+  const pinned = manifest.downloads.find(group => group.id === 'niivue-umd');
+  assert.match(pinned.files.find(file => file.name === 'niivue.umd.js').sha256, /^[0-9a-f]{64}$/);
 }
 
 // Policy: analytics belong to the shared hosting shell, never to the app.

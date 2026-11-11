@@ -1117,13 +1117,6 @@
       "kind": "runtime-cdn",
       "dependencies": []
     },
-    "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js": {
-      "sha256": "daccf5d9e1220a91c3bad8948c270d3f87ee6923f9fcfebc8e0a7308fdd667b9",
-      "bytes": 2274817,
-      "contentType": "text/javascript; charset=utf-8",
-      "kind": "runtime-cdn",
-      "dependencies": []
-    },
     "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.js": {
       "sha256": "a4e16ccd7c4ec09c9fc37ca4b2d48fe4de4c60945b4ba019822560780916f0ec",
       "bytes": 68826,
@@ -5494,7 +5487,6 @@
       "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/synthstrip.onnx",
       "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/templates/lnm-mni160.nii.gz",
       "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/d1454a611f7de10a3b36665e6fbb3fb6c770d140/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/MNI/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz",
-      "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_T1.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_lesion_mask.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/23da04c5d7adb5b20bea09eb6e508ba56093fab0/examples/calmar/chronic/arc/NOTICE.txt",
