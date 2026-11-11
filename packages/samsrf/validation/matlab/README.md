@@ -806,7 +806,13 @@ What remains:
   recorded densities. The port's de Haas kernel differs by a few ULP, which
   moves the weak fits at zero-based vertices 51 and 81 (x0 by up to 7.1e-5). With
   MATLAB's kernel these vertices match exactly.
-- **Beta and Baseline** come from the least-squares solve that #731 reproduces.
+- **Beta and Baseline** come from the column-pivoted QR solve (#731, #773). In the
+  recorded 96-vertex double pipeline with MATLAB's HRF kernel, Beta differs at 19
+  vertices by at most 2.2e-16 relative and Baseline at 42 vertices by at most
+  1.1e-17 absolute (1.3e-14 relative). With the port's own HRF they differ at 65
+  vertices (Beta up to 7.8e-5 relative, following the fits at vertices 51 and 81;
+  elsewhere a few ULP), as do R² and nR² at 41 vertices by at most 1.3e-15.
+  `compare-css.mjs` reports these differences and does not gate them.
 - Zero signs and the uncovered convolution cases above.
 
 ```sh
