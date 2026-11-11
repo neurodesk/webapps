@@ -73,6 +73,8 @@ const state = {
   uploads: {},
   selectedJob: null,
   following: null,
+  // Jobs a follower saw end: a project read from before that end still lists them as active.
+  ended: new Set(),
   submitting: null,
   settingsOpen: false,
   views: { image: null, classes: null, fsc: null },
@@ -323,15 +325,20 @@ async function refreshProject() {
   state.project = project;
   await Promise.all(project.jobs.map(async job => {
     const known = state.jobs.get(job.id);
-    if (known && known.status === job.status && TERMINAL.has(job.status)) return;
-    state.jobs.set(job.id, { ...job, ...await client.job(job.id) });
+    if (TERMINAL.has(known?.status)) return;
+    const details = await client.job(job.id);
+    // A follower or overlapping refresh may have recorded completion during this read.
+    if (TERMINAL.has(state.jobs.get(job.id)?.status)) return;
+    state.jobs.set(job.id, { ...job, ...details });
   }));
+  // Terminal details take precedence over active snapshots, regardless of arrival order.
+  for (const job of project.jobs) job.status = state.jobs.get(job.id).status;
   for (const id of state.jobs.keys()) if (!project.jobs.some(job => job.id === id)) state.jobs.delete(id);
   renderJobs();
   renderForm();
   const active = [...project.jobs].reverse().find(job => ACTIVE.has(job.status));
   // A refresh that started before a submission returned sees its job; the submit handler follows it.
-  if (active && !state.following && !state.submitting) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
+  if (active && !state.following && !state.submitting && !state.ended.has(active.id)) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
 }
 
 $('projectSelect').addEventListener('change', event => {
@@ -850,10 +857,16 @@ async function follow(id, label) {
       onProgress: event => progress.setProgress(event.fraction, `${label}: ${event.stage}`),
       onLog: event => log.log(event.line, event.level),
     }, { signal: controller.signal });
+    state.jobs.set(id, done);
+    state.ended.add(id);
     progress.end(`${label} finished${done.simulated ? ' (simulated)' : ''}`);
     log.log(`${label} finished in ${done.directory}`, 'success');
   } catch (error) {
     if (controller.signal.aborted) return;
+    if (error instanceof ComputeError && error.job) {
+      state.jobs.set(id, error.job);
+      state.ended.add(id);
+    }
     const cancelled = error instanceof ComputeError && error.code === 'cancelled';
     progress.end(cancelled ? `${label} cancelled` : `${label} failed: ${error.message}`, { success: false });
     $('statusText').classList.toggle('error', !cancelled);
