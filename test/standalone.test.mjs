@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
-import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
-import { DIALOG_FORBIDDEN, loadStandalone } from '../scripts/lib/standalone.mjs';
-import { ciWorkflowApps, cpuWorkflowApps, hardwareWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
+import { catalogApps, loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
+import { DIALOG_FORBIDDEN, loadStandalone, validateStandalone } from '../scripts/lib/standalone.mjs';
+import { catalogWorkflowApps, ciWorkflowApps, cpuWorkflowApps, hardwareWorkflowApps, modelWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
 import { prepareWorkflow, workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 import { portableCommand, releasePlatform } from '../scripts/lib/portable-command.mjs';
@@ -48,6 +48,20 @@ test('a future app cannot be silently omitted from desktop packaging', async t =
   await assert.rejects(loadStandalone({ apps: [{ id: 'new-app' }] }, root), /every registered app/);
 });
 
+test('desktop suites are keyed by catalogue, and a catalogue may have none yet', async () => {
+  const registry = await loadAppsRegistry();
+  const catalog = await loadStandalone(registry);
+  assert.equal(catalog.suite, undefined);
+  for (const id of Object.keys(catalog.suites)) assert.ok(registry.site.catalogs.some(entry => entry.id === id), id);
+  const { suites, ...withoutSuites } = catalog;
+  assert.equal(validateStandalone(withoutSuites, registry), withoutSuites);
+  assert.throws(() => validateStandalone({ ...withoutSuites, suite: suites.neuro }, registry), /keyed by catalogue id/);
+  assert.throws(() => validateStandalone({ ...withoutSuites, suites: { hub: suites.neuro } }, registry), /suites\.hub: not a declared catalogue/);
+  assert.throws(() => validateStandalone({ ...withoutSuites, suites: { msk: { ...suites.neuro, version: undefined } } }, registry), /suites\.msk: missing version/);
+  const unverified = { ...suites.neuro, downloads: [{ ...suites.neuro.downloads[0], sha256: 'unknown' }] };
+  assert.throws(() => validateStandalone({ ...withoutSuites, suites: { neuro: unverified } }, registry), /suites\.neuro: download must have a checksum/);
+});
+
 test('shared dialog displays verified releases and keeps unpublished platforms unlinked', () => {
   const dom = new JSDOM('<html><body></body></html>');
   const app = { downloads: [{ kind: 'cli', platform: 'macOS ARM64', version: '0.1.20260915', url: 'https://github.com/neurodesk/webapps/releases/download/demo-v0.1.20260915/demo.zip' }], containers: [] };
@@ -69,8 +83,7 @@ test('standalone choices are ordered, omit technical clutter and never offer the
   const dom = new JSDOM('<html><body></body></html>');
   const download = { kind: 'cli', platform: 'macos-arm64', version: '0.1.20260915', url: 'https://example.test/demo.zip', command: "echo 'hash' | shasum -a 256 -c -\nunzip app.zip" };
   const app = { downloads: [download], containers: [{ id: 'demo', label: 'Demo 1', url: 'https://hub.docker.com/r/demo', dockerImage: 'demo:1', apptainerUrl: 'https://neurocontainers.neurodesk.workers.dev/demo_1_20260915.simg' }] };
-  const { suite } = await loadStandalone(await loadAppsRegistry());
-  const dialog = openStandalone({ title: 'Demo', app, suite }, dom.window.document);
+  const dialog = openStandalone({ title: 'Demo', app }, dom.window.document);
   assert.deepEqual([...dialog.root.querySelectorAll('section > h3')].map(node => node.textContent), ['Neurodesk containers', 'Command line']);
   const links = [...dialog.root.querySelectorAll('a')].map(node => node.href);
   assert.ok(links.every(href => !/\/webapps-v\d/.test(href)), 'an app links only its own releases, never the desktop suite');
@@ -119,6 +132,19 @@ test('an app whose browser tests need a hardware GPU keeps its desktop workflow 
   }
 });
 
+test('each hosted offline workflow runs once, in its home catalogue suite, and every model pack is exercised', async () => {
+  const registry = await loadAppsRegistry();
+  const sources = JSON.parse(await readFile(new URL('../registry/offline-assets.sources.json', import.meta.url), 'utf8'));
+  const runs = registry.site.catalogs.flatMap(catalog => catalogWorkflowApps(registry, catalog));
+  assert.deepEqual([...runs].sort(), ciWorkflowApps(registry).sort());
+  assert.deepEqual(catalogWorkflowApps(registry, registry.site.catalogs.find(catalog => catalog.id === 'preclinical')), [], 'preclinical serves copies only');
+  for (const catalog of registry.site.catalogs) {
+    const tested = modelWorkflowApps(registry, catalog, sources);
+    assert.ok(tested.length, `${catalog.id}: no hosted workflow reads its model pack`);
+    for (const id of tested) assert.ok(catalogApps(registry, catalog).some(app => app.id === id), `${catalog.id} serves ${id}`);
+  }
+});
+
 test('an app whose offline workflow completed on every hosted runner without a GPU stays in hosted coverage', async () => {
   const registry = await loadAppsRegistry();
   const hosted = new Set(ciWorkflowApps(registry));
@@ -164,12 +190,8 @@ test('cryo-em setup walks through a Slurm cluster, not a Docker GPU machine', as
   const section = dialog.root.querySelector('#standalone-compute').parentElement;
   assert.match(section.textContent, /Slurm cluster/);
   assert.doesNotMatch(section.textContent, /docker|NeSVoR/i);
-  assert.match(section.querySelector('#compute-fetch').textContent, /fetch-image relion[\s\S]*fetch-example relion-tutorial/);
-  const config = JSON.parse(section.querySelector('#compute-slurm-config').textContent);
-  assert.deepEqual(Object.keys(config.image), ['path']);
-  assert.match(section.querySelector('#compute-check').textContent, /check-slurm --slurm-config slurm\.json --profile gpu/);
-  const start = section.querySelector('#compute-start').textContent;
-  for (const flag of ['--single-owner', '--runner slurm', '--listen 127.0.0.1:8765', '--www']) assert.ok(start.includes(flag), flag);
+  for (const id of ['compute-fetch', 'compute-slurm-config', 'compute-check']) assert.equal(section.querySelector(`#${id}`), null, id);
+  assert.equal(section.querySelector('#compute-start').textContent, 'tmux new -s cryo-em\n./neurodesk-compute cryo-em');
   assert.match(section.querySelector('#compute-tunnel').textContent, /^ssh -N -L 8765:127\.0\.0\.1:8765 /);
   assert.match(section.textContent, /localhost:8765\/cryo-em\//);
   assert.match(section.textContent, /released server with Slurm support is not available/);

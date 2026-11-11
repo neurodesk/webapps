@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { DIALOG_FORBIDDEN } from '../scripts/lib/standalone.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 import { siteUnderTest } from '../test-utils/site-catalog.mjs';
 
 const { apps, siteDir } = await siteUnderTest();
 const catalog = JSON.parse(await readFile(join(repoRoot, 'registry/standalone.json')));
+const suiteReleases = (await loadAppsRegistry()).site.catalogs.map(entry => entry.desktop.release);
 const server = process.env.BASE_URL ? null : await serveSite(siteDir);
 const base = `${(process.env.BASE_URL || server.origin).replace(/\/$/, '')}/`;
 const browser = await chromium.launch({ headless: true });
@@ -77,7 +78,7 @@ try {
         assert.ok(links.includes(computeServer.download.url), `${app.id}: missing compute-server download`);
       }
       for (const download of downloads) assert.ok(links.includes(download.url), `${app.id}: missing visible ${download.platform} download ${download.url}`);
-      assert.ok(links.every(href => !/\/releases\/download\/webapps-v/.test(href)), `${app.id}: links the all-apps desktop suite instead of its own release`);
+      assert.ok(links.every(href => !suiteReleases.some(release => href.includes(`/releases/download/${release}-v`))), `${app.id}: links a desktop suite instead of its own release`);
       console.log(`PASS ${app.id}: its own released downloads are visible`);
     } finally {
       await context.close();

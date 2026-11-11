@@ -1,0 +1,550 @@
+function record_geometry(source, input, output, spmSource)
+% Record MATLAB's own polyshape, convhull, delaunay and samsrf_clusterroi on
+% boundary sweeps, tie-prone point sets and real Benson V1 template coordinates.
+% source is the pinned SamSrf checkout with prepare.py's declared repairs and
+% input the extracted geometry-inputs.json archive.
+arguments
+    source (1,:) char
+    input (1,:) char
+    output (1,:) char
+    spmSource (1,:) char
+end
+assert(isfile(fullfile(output, 'source.json')), 'Run prepare.py first');
+assert(~isfile(fullfile(output, 'geometry.json')), 'Use a fresh output directory');
+addpath(genpath(source));
+addpath(spmSource);
+previous = pwd;
+cleanup = onCleanup(@() cd(previous));
+cd(output);
+set(groot, 'defaultFigureVisible', 'off');
+defaults = jsondecode(fileread(fullfile(source, 'SamSrf_defaults.json')));
+defaults.def_64bit = true;
+write_json('SamSrf_defaults.json', defaults);
+meta = reference_environment('source-geometry');
+meta.source = jsondecode(fileread('source.json'));
+meta.functions = struct('polyshape', which('polyshape'), 'convhull', which('convhull'), ...
+    'delaunay', which('delaunay'), 'delaunayTriangulation', which('delaunayTriangulation'), ...
+    'clusterroi', which('samsrf_clusterroi'), 'cfparam', which('samsrf_cfparam_loop'), ...
+    'gifti', which('gifti'));
+write_json('environment.json', meta);
+cases = {};
+cases = [cases, polygon_cases()];
+write_json('geometry.json.partial', struct('cases', {cases}));
+cases = [cases, delaunay_cases()];
+cases = [cases, cluster_cases()];
+write_json('geometry.json.partial', struct('cases', {cases}));
+pool = gcp('nocreate');
+if isempty(pool)
+    pool = parpool('local', 2);
+end
+poolCleanup = onCleanup(@() delete(pool));
+cases = [cases, template_cases(input)];
+write_json('geometry.json', struct('cases', {cases}));
+delete('geometry.json.partial');
+fprintf('Recorded %d MATLAB geometry cases. Port parity is not implied.\n', numel(cases));
+end
+
+%% Polygons: polyshape simplification, convhull, area and centroid
+
+function cases = polygon_cases()
+cases = {};
+cases{end+1} = polygon_batch('polygon_boundary_ulp', ulp_sweep());
+cases{end+1} = polygon_batch('polygon_boundary_relative', relative_sweep());
+cases{end+1} = polygon_batch('polygon_random_thin', random_thin());
+cases{end+1} = polygon_batch('polygon_collinear_vertex', collinear_vertex());
+cases{end+1} = polygon_batch('polygon_spikes', spikes());
+cases{end+1} = polygon_batch('polygon_degenerate', degenerate());
+cases{end+1} = polygon_batch('polygon_point_clouds', point_clouds());
+end
+
+function P = place(P, scale, offset, angle)
+rotation = [cos(angle) sin(angle); -sin(angle) cos(angle)];
+P = (P * rotation) * scale + offset;
+end
+
+function polygons = ulp_sweep()
+% Thin triangles one ULP of the apex height apart around the relative 1e-8
+% outcome change in the 741-case reference (polygon_191 to polygon_193).
+polygons = {};
+h0 = 2e-8;
+for scale = [1e-3 1 1e3 0.37 3 2^-10 2^10 7.1e5 1.3e-6]
+    for offset = [0 1e3 -37.25]
+        for angle = [0 0.7 pi/2]
+            for apex = [0.1 1 1.9]
+                for k = -24:24
+                    h = h0 + k * eps(h0);
+                    polygons{end+1} = place([0 0; apex h; 2 0], scale, offset, angle); %#ok<AGROW>
+                end
+            end
+        end
+    end
+end
+end
+
+function polygons = relative_sweep()
+polygons = {};
+for scale = [1e-3 1 1e3 0.37 2^10]
+    for offset = [0 1e3]
+        for angle = [0 0.7]
+            for apex = [0.1 1]
+                for h = 2e-8 * (1 + [(-50:50) * 1e-6, (-30:30) * 1e-3])
+                    polygons{end+1} = place([0 0; apex h; 2 0], scale, offset, angle); %#ok<AGROW>
+                end
+            end
+        end
+    end
+end
+end
+
+function polygons = random_thin()
+% Random scales, translations, shapes and vertex orders separate a tolerance
+% relative to the bounding box, the base, the longest edge or the coordinates.
+rng(7321, 'twister');
+polygons = cell(1, 4000);
+for i = 1:numel(polygons)
+    scale = 10^(8 * rand - 4);
+    offset = (rand(1, 2) - 0.5) * 10^(6 * rand - 2) * (rand > 0.3);
+    angle = 2 * pi * rand;
+    a = (rand(1, 2) - 0.5) * scale;
+    base = (0.2 + 0.8 * rand) * scale;
+    c = a + base * [cos(angle) sin(angle)];
+    t = 1.4 * rand - 0.2;
+    ratio = 10^(log10(3e-9) + rand);
+    normal = [-sin(angle) cos(angle)] * sign(rand - 0.5);
+    b = a + t * (c - a) + ratio * base * normal;
+    P = [a; b; c] + offset;
+    polygons{i} = P(randperm(3), :);
+end
+end
+
+function polygons = collinear_vertex()
+% A near-collinear vertex on a long edge: its neighbours are 1 apart, the
+% polygon spans L. Decides whether the cutoff is local or global.
+polygons = {};
+for L = [2.5 10 1000 1e5]
+    for r = [-logspace(-10, -6, 41), logspace(-10, -6, 41)]
+        for scale = [1 1e3]
+            polygons{end+1} = [0 0; 1 r; 2 0; L 0; L L; 0 L] * scale; %#ok<AGROW>
+        end
+    end
+end
+end
+
+function polygons = spikes()
+polygons = {};
+for scale = [1e-3 1 1e3]
+    for offset = [0 1e3]
+        for height = [0.5 1e-3 -0.5]
+            for w = [0, logspace(-11, -5, 25)]
+                square = [0 0; 1 0; 1 1; 0.5 + w 1; 0.5 1 + height; 0.5 - w 1; 0 1];
+                polygons{end+1} = square * scale + offset; %#ok<AGROW>
+            end
+        end
+        % Collinear spikes along an edge, retraced and extended.
+        polygons{end+1} = [0 0; 1 0; 1 1; 1.5 1; 0 1] * scale + offset; %#ok<AGROW>
+        polygons{end+1} = [0 0; 1 0; 1 1; 0.5 1; 0.75 1; 0 1] * scale + offset; %#ok<AGROW>
+        polygons{end+1} = [0 0; 2 0; 1 0; 1 1; 0 1] * scale + offset; %#ok<AGROW>
+        polygons{end+1} = [0 0; 1 0; 1 0; 1 1; 0 1] * scale + offset; %#ok<AGROW>
+        polygons{end+1} = [-1 -1; 0 0; 0 1; 1 -1; 1 0; 1 1] * scale + offset; %#ok<AGROW>
+    end
+end
+end
+
+function polygons = degenerate()
+polygons = {zeros(0, 2), [1 2], [0 0; 1 1], [0 0; 1 1; 2 2], [0 0; 0 0; 0 0], ...
+    [0 0; 1 0; 1 1; 0 1; 0 0], [0 0; 0 1; 1 1; 1 0], [0 0; 1 1; 1 0; 0 1], ...
+    [0 0; 2 2; 2 0; 0 2], [0 0; 1 0; 0.5 1; 0 0; -1 0; -0.5 -1], ...
+    [cos(pi/2 + (0:4)' * 4 * pi / 5), sin(pi/2 + (0:4)' * 4 * pi / 5)], ...
+    [0 0; 1 0; 1 1; 0 1; 0.25 0.25; 0.75 0.25; 0.75 0.75; 0.25 0.75], ...
+    [0 0; 3 0; 3 3; 0 3; 1 1; 1 2; 2 2; 2 1], [0 0; 1 0; 2 0; 3 0; 1 1e-20], ...
+    [0 0; 1 0; 1 1; 0 1; 0 1; 0 1; 1 1], [5 5; 5 5; 6 5; 6 6; 6 6]};
+end
+
+function polygons = point_clouds()
+% Unordered point sets as SamSrf passes them: a cluster in breadth-first order.
+rng(7322, 'twister');
+polygons = {};
+for i = 1:2500
+    n = randi([4 40]);
+    switch mod(i, 5)
+        case 0
+            P = rand(n, 2) * 10^(4 * rand - 2) + (rand > 0.5) * 100;
+        case 1
+            P = randi([0 4], n, 2) * 0.5;
+        case 2
+            P = double(single(rand(n, 2) * 8 - 4));
+        case 3
+            t = rand(n, 1);
+            P = [t, 2 * t + 1] + randn(n, 2) * 10^(-6 - 4 * rand);
+        otherwise
+            [gx, gy] = meshgrid(0:randi([2 5]), 0:randi([2 5]));
+            G = [gx(:) gy(:)];
+            P = G(randperm(size(G, 1), min(n, size(G, 1))), :) * 0.1 + 0.3;
+    end
+    polygons{end+1} = P; %#ok<AGROW>
+end
+end
+
+function item = polygon_batch(id, polygons)
+n = numel(polygons);
+counts = zeros(n, 1);
+simplifiedCounts = zeros(n, 1);
+hullCounts = zeros(n, 1);
+collinearCounts = zeros(n, 1);
+regions = zeros(n, 1);
+estimate = NaN(n, 3);
+polygonEstimate = NaN(n, 3);
+warned = zeros(n, 1);
+failed = zeros(n, 1);
+warningIds = {};
+errorIds = {};
+total = sum(cellfun(@(P) size(P, 1), polygons));
+points = zeros(total, 2);
+simplified = cell(n, 1);
+hulls = cell(n, 1);
+row = 0;
+for i = 1:n
+    P = polygons{i};
+    counts(i) = size(P, 1);
+    points(row + (1:counts(i)), :) = P;
+    row = row + counts(i);
+    lastwarn('', '');
+    warning('off', 'all');
+    try
+        shape = polyshape(P);
+        [~, warningId] = lastwarn;
+        if ~isempty(warningId)
+            warned(i) = register(warningId);
+        end
+        V = shape.Vertices;
+        simplifiedCounts(i) = size(V, 1);
+        simplified{i} = V;
+        regions(i) = shape.NumRegions;
+        [px, py] = centroid(shape);
+        polygonEstimate(i, :) = [px py area(shape)];
+        hull = convhull(shape);
+        H = hull.Vertices;
+        hullCounts(i) = size(H, 1);
+        hulls{i} = H;
+        [x, y] = centroid(hull);
+        estimate(i, :) = [x y area(hull)];
+    catch failure
+        failed(i) = numel(errorIds) + 1;
+        errorIds{end+1} = [failure.identifier ': ' failure.message]; %#ok<AGROW>
+    end
+    try
+        kept = polyshape(P, 'KeepCollinearPoints', true);
+        collinearCounts(i) = size(kept.Vertices, 1);
+    catch
+        collinearCounts(i) = -1;
+    end
+    warning('on', 'all');
+end
+assert(row == total, 'Polygon point count');
+item = struct('id', id, 'kind', 'polygon-batch', 'cases', n, ...
+    'points', array_file([id '_points'], points), ...
+    'counts', array_file([id '_counts'], counts), ...
+    'simplified', array_file([id '_simplified'], vertcat(zeros(0, 2), simplified{:})), ...
+    'simplifiedCounts', array_file([id '_simplified_counts'], simplifiedCounts), ...
+    'collinearCounts', array_file([id '_collinear_counts'], collinearCounts), ...
+    'regions', array_file([id '_regions'], regions), ...
+    'hull', array_file([id '_hull'], vertcat(zeros(0, 2), hulls{:})), ...
+    'hullCounts', array_file([id '_hull_counts'], hullCounts), ...
+    'estimate', array_file([id '_estimate'], estimate), ...
+    'polygonEstimate', array_file([id '_polygon_estimate'], polygonEstimate), ...
+    'warning', array_file([id '_warning'], warned), ...
+    'error', array_file([id '_error'], failed));
+item.warningIds = warningIds;
+item.errors = errorIds;
+fprintf('Recorded %s (%d polygons)\n', id, n);
+
+    function index = register(name)
+        index = find(strcmp(warningIds, name), 1);
+        if isempty(index)
+            warningIds{end+1} = name;
+            index = numel(warningIds);
+        end
+    end
+end
+
+%% Delaunay triangulations with exact and near ties
+
+function cases = delaunay_cases()
+cases = {};
+for nx = 2:6
+    for ny = 2:6
+        [gx, gy] = meshgrid(0:nx-1, 0:ny-1);
+        G = [gx(:) gy(:)];
+        cases{end+1} = delaunay_case(sprintf('grid_%dx%d', nx, ny), G); %#ok<AGROW>
+        cases{end+1} = delaunay_case(sprintf('grid_%dx%d_scaled', nx, ny), G * 0.1 + 100.3); %#ok<AGROW>
+        cases{end+1} = delaunay_case(sprintf('grid_%dx%d_rotated', nx, ny), [-G(:, 2) G(:, 1)]); %#ok<AGROW>
+    end
+end
+rng(7323, 'twister');
+for n = 3:5
+    [gx, gy] = meshgrid(0:n-1, 0:n-1);
+    G = [gx(:) gy(:)];
+    for p = 1:3
+        cases{end+1} = delaunay_case(sprintf('grid_%dx%d_shuffled%d', n, n, p), G(randperm(n * n), :)); %#ok<AGROW>
+    end
+    cases{end+1} = delaunay_case(sprintf('grid_%dx%d_single', n, n), double(single(G * 0.1 - 0.35))); %#ok<AGROW>
+end
+pythagorean = {[5 0; 4 3; 3 4], [25 0; 24 7; 20 15; 15 20; 7 24], [65 0; 63 16; 60 25; 56 33; 52 39; 39 52; 33 56; 25 60; 16 63]};
+for k = 1:numel(pythagorean)
+    Q = pythagorean{k};
+    C = unique([Q; -Q; [-Q(:, 1) Q(:, 2)]; [Q(:, 1) -Q(:, 2)]; Q(:, [2 1]); -Q(:, [2 1]); [-Q(:, 2) Q(:, 1)]; [Q(:, 2) -Q(:, 1)]], 'rows');
+    r = Q(1, 1);
+    cases{end+1} = delaunay_case(sprintf('circle_r%d', r), C); %#ok<AGROW>
+    cases{end+1} = delaunay_case(sprintf('circle_r%d_centre', r), [C; 0 0]); %#ok<AGROW>
+    cases{end+1} = delaunay_case(sprintf('circle_r%d_interior', r), [C; round((rand(6, 2) - 0.5) * r)]); %#ok<AGROW>
+    cases{end+1} = delaunay_case(sprintf('circle_r%d_shuffled', r), C(randperm(size(C, 1)), :)); %#ok<AGROW>
+end
+for n = 4:12
+    t = (0:n-1)' * 2 * pi / n;
+    R = [cos(t) sin(t)];
+    cases{end+1} = delaunay_case(sprintf('regular_%d', n), R); %#ok<AGROW>
+    cases{end+1} = delaunay_case(sprintf('regular_%d_centre', n), [R; 0 0] * 3.7 + 2); %#ok<AGROW>
+end
+[hx, hy] = meshgrid(0:4, 0:4);
+hx = hx + 0.5 * mod(hy, 2);
+cases{end+1} = delaunay_case('hexagonal', [hx(:) hy(:) * sqrt(3) / 2]);
+[gx, gy] = meshgrid(-1:1, -1:1);
+grid = [gx(:) gy(:)];
+for delta = [1e-15 1e-12 1e-9 1e-7]
+    for direction = {[1 0], [0 1], [1 1], [-1 0]}
+        P = grid;
+        P(5, :) = P(5, :) + delta * direction{1};
+        cases{end+1} = delaunay_case(sprintf('grid_centre_%g_%d_%d', delta, direction{1}), P); %#ok<AGROW>
+    end
+    P = grid;
+    P(9, :) = P(9, :) + delta;
+    cases{end+1} = delaunay_case(sprintf('grid_corner_%g', delta), P); %#ok<AGROW>
+end
+[gx, gy] = meshgrid(0:3, 0:3);
+for delta = [1e-15 1e-13 1e-10]
+    P = [gx(:) gy(:)] + delta * sign(rand(16, 2) - 0.5);
+    cases{end+1} = delaunay_case(sprintf('grid_4x4_jitter_%g', delta), P); %#ok<AGROW>
+end
+duplicate = grid;
+duplicate(9, :) = duplicate(8, :);
+cases{end+1} = delaunay_case('grid_duplicate', duplicate);
+cases{end+1} = delaunay_case('collinear', [(0:4)' 2 * (0:4)']);
+cases{end+1} = delaunay_case('two_points', [0 0; 1 1]);
+cases{end+1} = delaunay_case('collinear_then_apex', [(0:4)' zeros(5, 1); 2 1]);
+cases{end+1} = delaunay_case('collinear_hull', [0 0; 1 0; 2 0; 3 0; 0 1; 3 1; 1.5 2]);
+for i = 1:20
+    n = randi([5 60]);
+    cases{end+1} = delaunay_case(sprintf('integer_cloud_%d', i), randi([0 6], n, 2)); %#ok<AGROW>
+end
+end
+
+function item = delaunay_case(id, P)
+id = ['delaunay_' regexprep(id, '[^A-Za-z0-9_]', '_')];
+item = struct('id', id, 'kind', 'delaunay', 'points', array_file([id '_points'], P));
+lastwarn('', '');
+warning('off', 'all');
+try
+    triangles = delaunay(P);
+    [~, warningId] = lastwarn;
+    item.triangles = array_file([id '_triangles'], triangles);
+    item.warning = warningId;
+    item.error = '';
+catch failure
+    item.triangles = array_file([id '_triangles'], zeros(0, 3));
+    item.warning = '';
+    item.error = [failure.identifier ': ' failure.message];
+end
+warning('on', 'all');
+end
+
+%% Region growing over the triangulation
+
+function cases = cluster_cases()
+cases = {};
+rng(7324, 'twister');
+lattices = {};
+for n = 3:6
+    [gx, gy] = meshgrid(0:n-1, 0:n-1);
+    lattices{end+1} = {sprintf('grid%d', n), [gx(:) gy(:)]}; %#ok<AGROW>
+end
+[hx, hy] = meshgrid(0:4, 0:4);
+lattices{end+1} = {'hexagonal', [hx(:) + 0.5 * mod(hy(:), 2), hy(:) * sqrt(3) / 2]};
+C = [5 0; 4 3; 3 4; 0 5; -3 4; -4 3; -5 0; -4 -3; -3 -4; 0 -5; 3 -4; 4 -3];
+lattices{end+1} = {'circle_r5', [C; 0 0; 1 1; -2 1]};
+for l = 1:numel(lattices)
+    name = lattices{l}{1};
+    P = lattices{l}{2};
+    tri = delaunay(P);
+    for s = 1:12
+        statistic = round(rand(size(P, 1), 1) * 10) / 10;
+        statistic(randi(size(P, 1))) = 1.1;
+        if s > 6
+            statistic = -statistic;
+            statistic(randi(size(P, 1))) = 1.1;
+        end
+        seed = find(statistic == max(statistic), 1);
+        threshold = max(statistic) / 2;
+        id = sprintf('cluster_%s_%d', name, s);
+        selected = samsrf_clusterroi(seed, statistic, threshold, tri);
+        cases{end+1} = struct('id', id, 'kind', 'cluster', ...
+            'points', array_file([id '_points'], P), ...
+            'triangles', array_file([id '_triangles'], tri), ...
+            'statistic', array_file([id '_statistic'], statistic), ...
+            'seed', seed, 'threshold', threshold, ...
+            'selected', array_file([id '_selected'], selected(:))); %#ok<AGROW>
+    end
+end
+end
+
+%% Real Benson V1 template coordinates, both hemispheres
+
+function cases = template_cases(input)
+cases = {};
+label = read_label(fullfile(input, 'V123.label'));
+lhVertices = 134260;
+for hemisphere = {'lh', 'rh'}
+    hemi = hemisphere{1};
+    D = gifti(fullfile(input, [hemi '_benson.gii']));
+    D = D.cdata;
+    assert(isa(D, 'single') && size(D, 2) == 3, 'Unexpected Benson GIfTI');
+    % samsrf_benson2srf's conversion, verbatim.
+    D(:,1) = -D(:,1) + 90;
+    x0 = D(:,2) .* cos(D(:,1)/180*pi);
+    y0 = D(:,2) .* sin(D(:,1)/180*pi);
+    rois = D(:,3);
+    if strcmp(hemi, 'rh')
+        x0 = -x0;
+        rows = label(label >= lhVertices) - lhVertices + 1;
+    else
+        rows = label(label < lhVertices) + 1;
+    end
+    inRoi = false(size(rois));
+    inRoi(rows) = true;
+    seed = find(inRoi & abs(rois) == 1);
+    Template = [ones(1, numel(seed)); x0(seed)'; y0(seed)'; NaN(1, numel(seed)); rois(seed)'];
+    txy = unique(double(Template(2:3, :))', 'rows');
+    cases{end+1} = delaunay_case(['benson_' hemi '_v1'], txy); %#ok<AGROW>
+    rng(7325 + strcmp(hemi, 'rh'), 'twister');
+    T = 160;
+    K = 12;
+    nver = 40;
+    centres = txy(randperm(size(txy, 1), K), :);
+    widths = 0.3 + 2 * rand(1, K);
+    distance2 = (double(Template(2, :))' - centres(:, 1)').^2 + (double(Template(3, :))' - centres(:, 2)').^2;
+    basis = exp(-distance2 ./ (2 * widths.^2));
+    A = randn(T, K);
+    X = A * basis' + 0.2 * randn(T, numel(seed));
+    weights = zeros(K, nver);
+    for v = 1:nver
+        pair = randperm(K, 2);
+        weights(pair, v) = [1; -0.6];
+    end
+    Tc = A * weights + 0.5 * randn(T, nver);
+    % A compact patch keeps the quadratic Gaussian residual affordable.
+    [~, near] = sort(sum((double(Template(2:3, :))' - centres(1, :)).^2, 2));
+    patch = sort(near(1:120))';
+    for precision = {'double', 'single'}
+        kind = precision{1};
+        Temp = cast(Template, kind);
+        for mode = {'hull', 'summary', 'gaussian'}
+            switch mode{1}
+                case 'hull'
+                    fit = [];
+                    seedVx = 1:numel(seed);
+                    courses = Tc;
+                case 'summary'
+                    fit = Inf;
+                    seedVx = 1:numel(seed);
+                    courses = Tc;
+                otherwise
+                    fit = NaN;
+                    seedVx = patch;
+                    courses = Tc(:, 1:6);
+            end
+            id = sprintf('template_%s_%s_%s', hemi, kind, mode{1});
+            seedCourses = cast(X(:, seedVx), kind);
+            courses = cast(courses, kind);
+            [vx, x, y, w, r, s, b, profiles] = samsrf_cfparam_loop(courses, seedCourses, ...
+                ones(1, numel(seedVx)), seedVx, Temp, [], fit, true);
+            item = struct('id', id, 'kind', 'template-cf', 'hemisphere', hemi, ...
+                'precision', kind, 'mode', mode{1}, ...
+                'seedVertices', array_file([id '_seed_vertices'], seed(seedVx) - 1), ...
+                'template', array_file([id '_template'], Temp(:, seedVx)), ...
+                'profiles', array_file([id '_profiles'], profiles), ...
+                'maps', array_file([id '_maps'], [vx; x; y; w; r; s; b]));
+            if strcmp(mode{1}, 'hull')
+                item.clusters = hull_clusters(id, Temp, profiles);
+            end
+            cases{end+1} = item; %#ok<AGROW>
+            fprintf('Recorded %s\n', id);
+        end
+    end
+end
+end
+
+function clusters = hull_clusters(id, Temp, profiles)
+% Intermediates of samsrf_cfparam_loop's convex-hull branch, recomputed with
+% the same calls so a differing map can be traced to the operation.
+txy = double(Temp(2:3, :))';
+[txy, u] = unique(txy, 'rows');
+tri = delaunay(txy);
+selected = cell(size(profiles, 2), 1);
+vertices = cell(size(profiles, 2), 1);
+selectedCounts = zeros(size(profiles, 2), 1);
+vertexCounts = zeros(size(profiles, 2), 1);
+for v = 1:size(profiles, 2)
+    peak = max(profiles(:, v));
+    if isnan(peak) || peak <= 0
+        continue
+    end
+    R = profiles(u, v);
+    mR = max(R);
+    pos = samsrf_clusterroi(find(R == mR, 1), R, mR / 2, tri);
+    selected{v} = pos(:);
+    selectedCounts(v) = numel(pos);
+    warning('off', 'all');
+    shape = polyshape(txy(pos, :));
+    warning('on', 'all');
+    vertices{v} = shape.Vertices;
+    vertexCounts(v) = size(shape.Vertices, 1);
+end
+clusters = struct('unique', array_file([id '_unique'], u), ...
+    'triangles', array_file([id '_triangles'], tri), ...
+    'selected', array_file([id '_selected'], vertcat(zeros(0, 1), selected{:})), ...
+    'selectedCounts', array_file([id '_selected_counts'], selectedCounts), ...
+    'polygon', array_file([id '_polygon'], vertcat(zeros(0, 2), vertices{:})), ...
+    'polygonCounts', array_file([id '_polygon_counts'], vertexCounts));
+end
+
+function vertices = read_label(file)
+fid = fopen(file, 'r');
+assert(fid ~= -1, 'Cannot read label');
+closer = onCleanup(@() fclose(fid));
+fgetl(fid);
+count = str2double(fgetl(fid));
+rows = fscanf(fid, '%f', [5 count]);
+assert(size(rows, 2) == count, 'Short label');
+vertices = rows(1, :)';
+end
+
+%% Output
+
+function description = array_file(name, value)
+description = struct('file', [name '.f64'], 'shape', size(value), ...
+    'class', class(value), 'imaginary', '');
+write_array(description.file, value);
+end
+
+function write_array(path, value)
+[fid, message] = fopen(path, 'w', 'ieee-le');
+assert(fid ~= -1, message);
+cleanup = onCleanup(@() fclose(fid));
+assert(fwrite(fid, double(value), 'double') == numel(value), 'Short array write');
+end
+
+function write_json(path, value)
+[fid, message] = fopen(path, 'w');
+assert(fid ~= -1, message);
+cleanup = onCleanup(@() fclose(fid));
+assert(fprintf(fid, '%s\n', jsonencode(value, 'PrettyPrint', true)) > 0, 'Short JSON write');
+end

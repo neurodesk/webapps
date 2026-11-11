@@ -44,6 +44,10 @@ on:
         description: Record focused CSS and regression diagnostics from pinned MATLAB inputs
         type: boolean
         default: false
+      geometry_only:
+        description: Record polyshape, delaunay and CF geometry on sweeps and real Benson templates (with record_matlab)
+        type: boolean
+        default: false
       revcor_only:
         description: Record raw-input RC/CF pipelines in both precisions, without MATLAB Compiler
         type: boolean
@@ -109,6 +113,12 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           node packages/samsrf/validation/matlab/compare.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-matrix-input"
           SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_reference
+      - name: MATLAB geometry and real-template CF gates
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-geometry" packages/samsrf/validation/matlab/geometry-reference.json
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor" packages/samsrf/validation/matlab/revcor-reference.json
+          node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-geometry/ubuntu-22.04" "$RUNNER_TEMP/samsrf-geometry/ubuntu-24.04" "$RUNNER_TEMP/samsrf-geometry-hosts.json"
+          SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_REVCOR_DIR="$RUNNER_TEMP/samsrf-revcor" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_geometry -- --nocapture
       - name: CSS extreme-scale and rank regression gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
@@ -251,8 +261,8 @@ jobs:
           persist-credentials: false
       - name: Prepare verified inputs and declared source repairs
         run: |
-          if [ '${{ inputs.revcor_only }}' = true ] && [ '${{ inputs.diagnostics_only }}' = true ]; then
-            echo 'Choose either revcor_only or diagnostics_only.' >&2
+          if [ "$(printf '%s\n' '${{ inputs.revcor_only }}' '${{ inputs.diagnostics_only }}' '${{ inputs.geometry_only }}' | grep -c true)" -gt 1 ]; then
+            echo 'Choose at most one of revcor_only, diagnostics_only and geometry_only.' >&2
             exit 1
           fi
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
@@ -265,6 +275,13 @@ jobs:
           mkdir "$RUNNER_TEMP/samsrf-revcor-smoke"
           cp "$RUNNER_TEMP/samsrf-matlab/source.json" "$RUNNER_TEMP/samsrf-revcor-smoke/source.json"
           python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-revcor-smoke"
+      - name: Fetch pinned real Benson templates for geometry
+        if: inputs.geometry_only
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-geometry-input" packages/samsrf/validation/matlab/geometry-inputs.json
+          mkdir "$RUNNER_TEMP/samsrf-matlab-repeat"
+          cp "$RUNNER_TEMP/samsrf-matlab/source.json" "$RUNNER_TEMP/samsrf-matlab-repeat/source.json"
+          python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab-repeat"
       - name: Fetch pinned MATLAB inputs for focused diagnostics
         if: inputs.diagnostics_only
         run: python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json
@@ -292,8 +309,21 @@ jobs:
       - name: Validate MATLAB smoke before recording the full matrix
         if: inputs.revcor_only
         run: node packages/samsrf/validation/matlab/validate-revcor-recording.mjs "$RUNNER_TEMP/samsrf-revcor-smoke" --smoke
+      - name: Record geometry
+        if: inputs.geometry_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),fullfile(pwd,'reference-spm'))
+      - name: Repeat geometry in a new MATLAB process on this host
+        if: inputs.geometry_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'))
+      - name: Compare same-host geometry recordings
+        if: inputs.geometry_only
+        run: node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"
       - name: Record numerical intermediates and fitted maps
-        if: '!inputs.diagnostics_only'
+        if: '!inputs.diagnostics_only && !inputs.geometry_only'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if ~reverseCorrelationOnly && strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly)

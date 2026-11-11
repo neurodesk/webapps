@@ -181,6 +181,7 @@ dependencies = [
  "miniz_oxide",
  "neurodesk-nifti",
  "num-complex",
+ "robust",
  "serde",
  "serde_json",
 ]
