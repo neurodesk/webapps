@@ -8,7 +8,7 @@ import { test, expect } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
-import { readGifti } from "@neurodesk/samsrf/node";
+import { analysisSpec, createJob, exportGiis, readAnalysisInputs, readGifti, runJob } from "@neurodesk/samsrf/node";
 import { serveSite } from "../../../test-utils/serve-site.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
@@ -349,6 +349,58 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   expect(report.provenance.method).toBe("samsrf-rc");
   expect(report.provenance.model.Aperture_File).toBe("aps_Bars");
   expect(report.provenance.model.Scaling_Factor).toBe(9.5);
+});
+
+test("MATLAB single precision RC and CF downloads equal the package's in-process jobs", async ({ page }, testInfo) => {
+  test.setTimeout(1800000);
+  const byName = (name) => example.files.find(file => file.name === name);
+  const file = async (name) => {
+    const path = local ? join(local, name) : testInfo.outputPath(name);
+    if (!local) writeFileSync(path, await exampleBytes(byName(name)));
+    return path;
+  };
+  const roi = testInfo.outputPath("lh.V123_small.label");
+  const lines = (await exampleBytes(byName("lh.V123.label"))).toString("utf8").split("\n");
+  writeFileSync(roi, [lines[0], String(SMALL_ROI), ...lines.slice(2, 2 + SMALL_ROI), ""].join("\n"));
+  const paths = {
+    runs: [await file("lh_uBars1.gii")], apertures: [await file("aps_Bars.mat")], roi: [roi],
+    surfaces: [await file("lh.white"), await file("lh.area")], template: [await file("lh_benson.gii")], seed: [await file("lh.V1_seed.label")],
+  };
+  await page.goto("/");
+  for (const [role, files] of Object.entries(paths)) {
+    await page.locator("#neurodesk-input-transfer").setInputFiles(files);
+    await page.evaluate((target) => globalThis.neurodeskAutomation.dispatch("adopt", { role: target }), role);
+  }
+  const inputs = readAnalysisInputs({
+    runs: paths.runs, roi, seed: paths.seed[0], apertures: paths.apertures[0], template: paths.template[0],
+    white: paths.surfaces[0], area: paths.surfaces[1], hemisphere: "lh", precision: "single",
+  });
+  for (const [analysis, outcome] of [["rc", RUNS.rc.outcome], ["cf", RUNS.cf.outcome]]) {
+    await page.locator("#analysis").selectOption(analysis);
+    await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
+    await page.locator("#dataPrecision").selectOption("single");
+    const model = JSON.parse(await page.locator("#modelJson").inputValue());
+    expect(model.Data_Precision).toBe("single");
+    await page.locator("#runButton").click();
+    await expect(page.locator("#statusText")).toContainText(outcome, { timeout: 240000 });
+    const zipped = page.waitForEvent("download");
+    await page.locator("#downloadAll").click();
+    const entries = unzipSync(readFileSync(await (await zipped).path()));
+    const job = createJob(analysisSpec(inputs, analysis, model));
+    let expected;
+    try {
+      expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`, null, model.Export_Convention);
+    } finally {
+      job.free();
+    }
+    expect(expected.length).toBeGreaterThan(0);
+    for (const { name, bytes } of expected) {
+      expect(entries[name], `${analysis}: ${name}`).toBeDefined();
+      expect(Buffer.from(entries[name]).equals(Buffer.from(bytes)), `${analysis}: ${name} equals the package's map`).toBe(true);
+    }
+    const r2 = giftiMap(entries[`lh_${job.modelName}${job.outSuffix}_r^2.gii`]);
+    expect(r2.filter(value => value > 0).length, `${analysis}: vertices with R² > 0`).toBeGreaterThan(0);
+  }
 });
 
 test("MATLAB fit settings round-trip through JSON and remain in collapsed settings", async ({ page }) => {

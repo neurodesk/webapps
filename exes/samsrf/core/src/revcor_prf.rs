@@ -17,7 +17,7 @@ use crate::hrf::{self, ResolvedHrf};
 use crate::model::{FineFit, RevCorPrfModel};
 use crate::optim::{self, FminsearchOptions};
 use crate::prf;
-use crate::precision::{sum_single, Precision};
+use crate::precision::Precision;
 
 pub const RAW_VALUES: [&str; 5] = ["R^2", "x0", "y0", "Fwhm", "Beta"];
 
@@ -102,25 +102,24 @@ impl Prepared {
 
     /// `cM = [Y ones] \ X` without the intercept row: the slope of each regressor on `y`.
     /// All NaN when `y` is constant (a rank-deficient system).
+    /// A constant course makes `[Y ones]` rank deficient. MATLAB's QR keeps the
+    /// column with the larger norm: the course's coefficient is `y'x / y'y` when
+    /// `|y| > 1`, and 0 otherwise. The shared regression applies that rule.
     pub fn profile(&self, y: &[f64]) -> Vec<f64> {
-        if self.model.data_precision == Precision::Single {
-            return self.profile_single(y);
-        }
         let n = y.len() as f64;
         let mean = y.iter().sum::<f64>() / n;
         let centred: Vec<f64> = y.iter().map(|value| value - mean).collect();
         let variance: f64 = centred.iter().map(|value| value * value).sum();
-        if variance == 0.0 || !variance.is_finite() {
+        if !variance.is_finite() {
             return vec![f64::NAN; self.pixels];
         }
+        // Single courses: `[Y ones]` is single, so MATLAB casts the regressors to
+        // single and solves by single QR.
+        if self.model.data_precision == Precision::Single || variance == 0.0 {
+            let design: Vec<num_complex::Complex64> = y.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
+            return (0..self.pixels).map(|p| crate::css::fit_betas(&design, self.regressor(p), self.model.data_precision).0).collect();
+        }
         (0..self.pixels).map(|p| crate::fit_prf::dot(&centred, self.regressor(p)) / variance).collect()
-    }
-
-    /// Single courses: `[Y ones]` is single, so MATLAB casts the regressors to single
-    /// and solves by single QR. The shared regression applies its rank rule.
-    fn profile_single(&self, y: &[f64]) -> Vec<f64> {
-        let design: Vec<num_complex::Complex64> = y.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
-        (0..self.pixels).map(|p| crate::css::fit_betas(&design, self.regressor(p), Precision::Single).0).collect()
     }
 
     /// The reverse-correlation rows `[R^2, x0, y0, Fwhm, Beta]` of one time course, and
@@ -219,24 +218,10 @@ impl Prepared {
         seeds.push(1.0);
         seeds.push(0.0);
         let dims = self.rows;
-        let single = model.data_precision == Precision::Single;
         let mut failure: Option<Error> = None;
         let mut errfun = |p: &[f64]| {
             let n = p.len();
             match prf_function.evaluate(&[Value::column(p[..n - 2].to_vec()), Value::scalar(dims as f64)]) {
-                Ok(profile) if single => {
-                    // The single profile minus the double model is single.
-                    let squares: Vec<f32> = rmap
-                        .iter()
-                        .enumerate()
-                        .map(|(pixel, observed)| {
-                            let modelled = (profile.data[pixel] * p[n - 2] + p[n - 1]) * self.mask[pixel];
-                            let difference = (observed - modelled) as f32;
-                            difference * difference
-                        })
-                        .collect();
-                    f64::from(sum_single(&squares))
-                }
                 Ok(profile) => {
                     let mut total = 0.0;
                     for (pixel, observed) in rmap.iter().enumerate() {
@@ -272,16 +257,9 @@ impl Prepared {
         if let Some(error) = failure {
             return Err(error);
         }
-        let r2 = if single {
-            let values: Vec<f32> = rmap.iter().map(|&value| value as f32).collect();
-            let mean = sum_single(&values) / values.len() as f32;
-            let squares: Vec<f32> = values.iter().map(|value| (value - mean) * (value - mean)).collect();
-            f64::from(1.0 - (residual / f64::from(sum_single(&squares))) as f32)
-        } else {
-            let mean = rmap.iter().sum::<f64>() / rmap.len() as f64;
-            let total: f64 = rmap.iter().map(|value| (value - mean) * (value - mean)).sum();
-            1.0 - residual / total
-        };
+        let mean = rmap.iter().sum::<f64>() / rmap.len() as f64;
+        let total: f64 = rmap.iter().map(|value| (value - mean) * (value - mean)).sum();
+        let r2 = 1.0 - residual / total;
         let n = params.len();
         for (p, scaled) in model.scaled_param.iter().enumerate() {
             if *scaled {

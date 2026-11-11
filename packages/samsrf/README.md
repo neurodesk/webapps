@@ -356,11 +356,12 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   `"Data_Precision": "single"`: processed courses and noise ceilings are
   rounded before selection, the fitting objective uses mixed single/double
   arithmetic, and saved maps are rounded as in SamSrf. Reverse correlation
-  (`rc`, every estimator) and connective fields (`cf` with `Fit_pRF` 0 or -1)
-  follow MATLAB's single correlations, regressions, smoothing, thresholds,
-  medians and residuals; preprocessing's `precision` option makes the global
-  signal single too. Single `cf` Gaussian fits (`Fit_pRF = 1`) are refused:
-  their result depends on MATLAB's single `exp`, which is not reproduced.
+  with the convex hull (`rc` without `Prf_Function`) and connective fields with
+  `Fit_pRF` 0 or -1 follow MATLAB's single correlations, regressions, smoothing,
+  thresholds and medians; preprocessing's `precision` option makes the global
+  signal single too. Single 2D fits are refused: `cf` Gaussians depend on
+  MATLAB's single `exp`, which is not reproduced, and `rc` fits have no
+  established bound end to end.
   [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
   lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-

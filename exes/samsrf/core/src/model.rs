@@ -432,9 +432,15 @@ impl Fields {
                 return Err(Error::Model("Mismatch between number of parameter names & Hooke-Jeeves step sizes!".into()));
             }
         }
+        let data_precision = self.precision()?;
+        if data_precision == Precision::Single && prf_function.is_some() {
+            // Replaying MATLAB's profiles reproduces these fits, but end to end the
+            // fit amplifies profile rounding beyond any bound established so far.
+            return Err(Error::NotImplemented("Data_Precision=single with a Prf_Function fit"));
+        }
         Ok(RevCorPrfModel {
             name,
-            data_precision: self.precision()?,
+            data_precision,
             scaling_factor,
             tr,
             hrf,
@@ -710,13 +716,15 @@ mod tests {
     }
 
     #[test]
-    fn reverse_correlation_reads_single_precision_except_for_cf_gaussian_fits() {
+    fn reverse_correlation_reads_single_precision_except_for_fitted_models() {
         let single = |json: &str| {
             let mut map: Map<String, Value> = serde_json::from_str(json).unwrap();
             map.insert("Data_Precision".into(), serde_json::json!("single"));
             Value::Object(map).to_string()
         };
         assert_eq!(revcor_prf(&single(REVCOR_PRF)).unwrap().data_precision, Precision::Single);
+        let fit = with(serde_json::from_str(&single(REVCOR_PRF)).unwrap(), "Prf_Function", serde_json::json!("@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)"));
+        assert_eq!(parse_model_json(AnalysisKind::RevCorPrf, &fit).unwrap_err(), Error::NotImplemented("Data_Precision=single with a Prf_Function fit"));
         assert_eq!(revcor_cf(&single(REVCOR_CF)).unwrap().data_precision, Precision::Single);
         let summary = with(serde_json::from_str(&single(REVCOR_CF)).unwrap(), "Fit_pRF", serde_json::json!(-1));
         assert_eq!(revcor_cf(&summary).unwrap().fit_prf, CfParameterEstimate::SummaryStatistics);

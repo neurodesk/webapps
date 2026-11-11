@@ -104,7 +104,9 @@ jobs:
       - name: Reverse-correlation pRF and connective-field raw pipeline gates (both MATLAB hosts)
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor-reference" packages/samsrf/validation/matlab/revcor-reference.json
-          SAMSRF_REVCOR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-revcor-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test revcor_reference -- --nocapture
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor-edges" packages/samsrf/validation/matlab/revcor-edges-reference.json
+          SAMSRF_REVCOR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-revcor-reference" SAMSRF_REVCOR_EDGES_DIR="$RUNNER_TEMP/samsrf-revcor-edges" SAMSRF_MATRIX_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test revcor_reference -- --nocapture
           node packages/samsrf/validation/matlab/compare-revcor.mjs "$RUNNER_TEMP/samsrf-revcor-reference" "$RUNNER_TEMP/samsrf-matrix-input" "$RUNNER_TEMP/samsrf-revcor-comparison.json"
       - name: CSS extreme-scale and rank regression gates
         run: |

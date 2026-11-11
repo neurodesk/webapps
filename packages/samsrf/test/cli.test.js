@@ -168,6 +168,35 @@ test('the CLI applies and records the selected legacy export convention', async 
   }
 });
 
+test('a single-precision rc run writes the in-process single job and refuses single 2D fits', async t => {
+  const work = scratch(t);
+  const modelPath = join(work, 'model.json');
+  const apertures = join(work, 'aps.mat');
+  const runPath = join(work, 'lh_run.gii');
+  const model = { Name: 'Single', Scaling_Factor: 2, TR: 1, Hrf: 1, Aperture_File: 'aps', Data_Precision: 'single' };
+  writeFileSync(apertures, matFile({ ApFrm: { dims: [2, 2, 6], data: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0] } }));
+  // One course follows pixel 2; another is constant, which MATLAB's rank rule handles.
+  writeFileSync(runPath, giftiRun([[0.1, 0.9, 0.2, 0.1, 0.05, 0.1], [3, 3, 3, 3, 3, 3]]));
+  writeFileSync(modelPath, JSON.stringify(model));
+  const output = join(work, 'out');
+  const result = await run(['rc', modelPath, output, '--runs', runPath, '--apertures', apertures, '--no-normalise']);
+  assert.equal(result.code, 0, result.stderr);
+  const job = createJob(analysisSpec(readAnalysisInputs({ runs: [runPath], apertures, normalise: 'none', precision: 'single' }), 'rc', model));
+  let expected;
+  try {
+    expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`);
+  } finally {
+    job.free();
+  }
+  for (const { name, bytes } of expected) assert.ok(Buffer.from(bytes).equals(readFileSync(join(output, name))), name);
+  assert.equal(JSON.parse(readFileSync(join(output, 'lh_Single_Rcp_provenance.json'), 'utf8')).model.Data_Precision, 'single');
+  const fit = { ...model, Prf_Function: '@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)', Param_Names: ['x0', 'y0', 'Sigma'], Scaled_Param: [1, 1, 1], SeedPar_Function: '@(V)[V(2:3);V(4)]' };
+  writeFileSync(modelPath, JSON.stringify(fit));
+  const refused = await run(['rc', modelPath, join(work, 'refused'), '--runs', runPath, '--apertures', apertures, '--no-normalise']);
+  assert.equal(refused.code, 1);
+  assert.match(refused.stderr, /Data_Precision=single with a Prf_Function fit/);
+});
+
 test('a short rc run writes the GIfTIs an in-process job writes', { skip: !dir && 'set SAMSRF_WEBAPP_EXAMPLE_DIR' }, async (t) => {
   const work = scratch(t);
   const model = join(work, 'rc.json');
