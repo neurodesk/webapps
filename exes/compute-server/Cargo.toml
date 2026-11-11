@@ -1,6 +1,6 @@
 [package]
 name = "compute-server"
-version = "0.3.20261108"
+version = "0.3.20261111"
 edition = "2021"
 license = "MIT"
 description = "neurodesk-compute: paired HTTP + SSE server for pinned NeSVoR and SCT tools and, in single-owner mode, Slurm project jobs"
