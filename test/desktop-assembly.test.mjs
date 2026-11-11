@@ -130,3 +130,82 @@ test('the primary suite keeps the game and serves fonts offline', async t => {
   await writeFile(join(destination, 'site/fonts/inter.woff2'), 'corrupt font');
   await assert.rejects(verifyBundle(destination), /missing or corrupt: site\/fonts\/inter\.woff2/);
 });
+
+// Serves each app's pinned asset as the fixture locked it, or `body(id)` instead.
+async function assetServer(t, body = id => id) {
+  const { createServer } = await import('node:http');
+  const requested = [];
+  const server = createServer((request, response) => {
+    const id = request.url.split('/')[1];
+    requested.push(id);
+    response.end(body(id));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  return { origin: `http://127.0.0.1:${server.address().port}`, requested };
+}
+
+// The fixture's assets at the server's URLs, with an empty cache.
+async function uncached(t, origin) {
+  const inputs = await fixture(t);
+  const moved = url => url.replace('https://example.test', origin);
+  const lock = { assets: {}, apps: {} };
+  for (const [url, asset] of Object.entries(inputs.lock.assets)) lock.assets[moved(url)] = asset;
+  for (const [id, urls] of Object.entries(inputs.lock.apps)) lock.apps[id] = urls.map(moved);
+  for (const list of Object.values(inputs.sources.apps)) for (const source of list) source.url = moved(source.url);
+  await rm(inputs.cache, { recursive: true });
+  return { ...inputs, lock };
+}
+
+test('a suite fetches the locked assets of its own apps that the cache lacks, and only those', async t => {
+  const { origin, requested } = await assetServer(t);
+  const { root, ...inputs } = await uncached(t, origin);
+  const catalog = findCatalog(registry, 'microscopy');
+  const destination = join(root, 'offline');
+  await assembleSuite({ registry, catalog, destination, standalone, information, version: '0.1.20261110', ...inputs });
+  const ids = catalogApps(registry, catalog).map(app => app.id);
+  assert.deepEqual(requested.sort(), [...ids].sort());
+  for (const id of ids) {
+    const sha256 = createHash('sha256').update(id).digest('hex');
+    assert.equal(await readFile(join(destination, 'assets', sha256), 'utf8'), id);
+    assert.equal(await fileHash(join(inputs.cache, sha256)), sha256);
+  }
+});
+
+test('a fetched asset whose bytes differ from the lock fails the suite and stays out of the cache', async t => {
+  const { origin } = await assetServer(t, id => `${id} altered`);
+  const { root, ...inputs } = await uncached(t, origin);
+  const destination = join(root, 'offline');
+  await assert.rejects(
+    assembleSuite({ registry, catalog: findCatalog(registry, 'microscopy'), destination, standalone, information, version: '0.1.20261110', ...inputs }),
+    /checksum mismatch/,
+  );
+  assert.deepEqual(await readdir(inputs.cache), []);
+});
+
+test('a single Python app fetches the shared runtime even when dicompare is outside the suite', async t => {
+  const { origin, requested } = await assetServer(t);
+  const { root, ...inputs } = await uncached(t, origin);
+  inputs.sources.python.base = `${origin}/dicompare/`;
+  const destination = join(root, 'offline');
+  await assembleSuite({ registry, catalog: findCatalog(registry, 'msk'), ids: ['seedseg'], destination, standalone, information, version: '0.1.20261110', ...inputs });
+  assert.deepEqual(requested.sort(), ['dicompare', 'seedseg']);
+  assert.equal(await readFile(join(destination, 'site/_offline/python/model.bin'), 'utf8'), 'dicompare');
+  const manifest = JSON.parse(await readFile(join(destination, 'manifest.json')));
+  assert.deepEqual(manifest.apps.map(app => app.id), ['seedseg']);
+  assert.ok(manifest.assets[`${origin}/dicompare/model.bin`]);
+  await verifyBundle(destination);
+});
+
+test('a suite repairs a corrupt cached asset from its pinned URL', async t => {
+  const { origin, requested } = await assetServer(t);
+  const { root, ...inputs } = await uncached(t, origin);
+  const sha256 = inputs.lock.assets[`${origin}/zarro/model.bin`].sha256;
+  await mkdir(inputs.cache);
+  await writeFile(join(inputs.cache, sha256), 'corrupt');
+  const destination = join(root, 'offline');
+  await assembleSuite({ registry, catalog: findCatalog(registry, 'microscopy'), ids: ['zarro'], destination, standalone, information, version: '0.1.20261110', ...inputs });
+  assert.deepEqual(requested, ['zarro']);
+  assert.equal(await fileHash(join(inputs.cache, sha256)), sha256);
+  await verifyBundle(destination);
+});
