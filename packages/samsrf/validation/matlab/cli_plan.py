@@ -82,17 +82,8 @@ RC_GAUSSIAN = {
 # A numeric vector in model JSON does not work through the CLI: readstruct reads
 # a flat list as a row and a nested list as a cell, and both fail upstream.
 CUSTOM_HRF = 'hrf_custom'
-# That route is broken in the pinned source as well: it returns
-# samsrf_doublegamma(...)' * fP(4), and samsrf_doublegamma already returns a
-# column, so the HRF becomes a row. samsrf_prfoptim_loop and samsrf_revcor_prf
-# treat any HRF with more than one column as vertex-wise and index it per
-# vertex, which fails (source runs 42922209457, 42923773513 and 42925787988 on
-# both hosts). These runs stay in the matrix: the compiled application must
-# fail in the same way, and they are reported as unsupported, never as passes.
-UPSTREAM_FAILURES = {
-    'prf_custom_hrf_lh': 'MATLAB:badsubscript in prf_errfun: row HRF indexed as vertex-wise',
-    'rc_custom_hrf_lh': 'MATLAB:badsubscript in samsrf_revcor_prf: row HRF indexed as vertex-wise',
-}
+# The pinned source transposes that route's HRF into a row, which the fitting
+# loops take for one HRF per vertex; prepare.py --cli keeps it a column.
 STAGED = ('SamSrf_defaults.json', f'{CUSTOM_HRF}.mat')
 
 CASES = [
@@ -149,9 +140,7 @@ def model(case, precision):
 def plan():
     runs = [{'id': f'{case["id"]}_{precision}', 'case': case['id'], 'precision': precision,
              'algorithm': case['algorithm'], 'dataset': case['dataset'],
-             'argv': argv(case, precision), 'model': model(case, precision),
-             'expect': 'upstream-failure' if case['id'] in UPSTREAM_FAILURES else 'success',
-             **({'reason': UPSTREAM_FAILURES[case['id']]} if case['id'] in UPSTREAM_FAILURES else {})}
+             'argv': argv(case, precision), 'model': model(case, precision)}
             for case in CASES for precision in PRECISIONS]
     return {'version': 1, 'input': INPUT, 'resultsToken': RESULTS,
             'datasets': DATASETS, 'runs': runs}

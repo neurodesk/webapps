@@ -388,7 +388,7 @@ jobs:
       - name: Prepare verified inputs, declared source repairs and the case plan
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
-          python3 packages/samsrf/validation/matlab/prepare.py reference-source "$RUNNER_TEMP/samsrf-cli/provenance"
+          python3 packages/samsrf/validation/matlab/prepare.py --cli reference-source "$RUNNER_TEMP/samsrf-cli/provenance"
           python3 packages/samsrf/validation/matlab/cli_plan.py plan "$RUNNER_TEMP/samsrf-cli/plan.json"
           python3 -m venv "$RUNNER_TEMP/samsrf-cli-venv"
           "$RUNNER_TEMP/samsrf-cli-venv/bin/pip" install --only-binary=:all: -r packages/samsrf/validation/matlab/requirements-cli.txt
@@ -422,6 +422,10 @@ jobs:
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); run_source_cli(fullfile(pwd,'reference-source'),fullfile(pwd,'reference-spm'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','plan.json'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','source-1'))
+      - name: Check the custom-HRF runs against a direct call with the column HRF
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); verify_cli_hrf(fullfile(pwd,'reference-source'),fullfile(pwd,'reference-spm'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','plan.json'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','source-1'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','source-1-direct'))
       - name: Repeat the matrix in a new MATLAB process
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:

@@ -250,21 +250,39 @@ then writes the model JSON. The bundle is hashed, made read-only and served at
 
 The custom-HRF cases therefore use SamSrf's subject-HRF file route: `Hrf` is
 the relative name `hrf_custom`, recognised by its `hrf_` prefix, and staging
-copies `fP = [5 15 5 0.9]` into each results directory. That route fails in
-the pinned source too. It returns `samsrf_doublegamma(...)' * fP(4)`, and
-`samsrf_doublegamma` already returns a column, so the HRF becomes a 1-by-33
-row. `samsrf_prfoptim_loop` and `samsrf_revcor_prf` treat any HRF with more
-than one column as vertex-wise and index it per vertex. The forward pRF run
-fails in `prf_errfun` with `MATLAB:badsubscript`, and reverse correlation
-fails at `samsrf_revcor_prf` line 319 (run
+copies `fP = [5 15 5 0.9]` into each results directory. At the pinned commit
+that route is broken too. `Fitting/samsrf_fit_prf.m` line 270 and
+`Fitting/samsrf_revcor_prf.m` line 235 assign
+`samsrf_doublegamma(Model.TR, [fP(1:2) 1 1 fP(3) 0 32])' * fP(4)`.
+`samsrf_doublegamma` already returns a column (`Hrf = (g1 - g2)'` over a row
+of sample times), so the extra transpose makes a 1-by-33 row.
+`samsrf_prfoptim_loop` and `samsrf_revcor_prf` treat any HRF with more than one
+column as one HRF per vertex. The forward run then fails in `prf_errfun`, and
+reverse correlation fails at `samsrf_revcor_prf` line 319 (run
 [42925787988](https://github.com/neurodesk/webapps/actions/runs/42925787988),
 both hosts, both precisions).
 
-A fixed custom HRF is therefore unsupported through `SamSrfAnalysis` at the
-pinned commit. The four runs stay in the plan with `expect:
-"upstream-failure"` and a reason. The compiled application must fail on them
-too, and they are reported as unsupported, never as passes. Custom-HRF
-numerics remain covered only by the direct-call source recordings above.
+### The CLI repair set
+
+`prepare.py --cli` adds a fourth, CLI-only repair to the three above: it
+removes that transpose in both files, so the HRF stays the column
+`samsrf_doublegamma` returns. This is the same orientation as the SPM-canonical
+route (`Hrf = 0`), which has no transpose. Nothing else in either file changes.
+
+- The output `source.json` records `repairSet: "samsrfanalysis-cli"`, the added
+  patch description, and the original and patched SHA-256 of all five files.
+- `build_container.py` refuses a checkout without exactly this set, so the
+  compiled image and the source runs it is compared with carry the same code.
+- Without `--cli`, `prepare.py` still applies the three repairs only. The 741-case,
+  CSS-diagnostic and RC/CF references were recorded with those three and are
+  not affected or relabelled.
+
+`verify_cli_hrf.m` checks each of the four custom-HRF runs in MATLAB. The saved
+`Model.Hrf` must be a column equal to `samsrf_doublegamma(TR, [5 15 1 1 5 0 32]) * 0.9`.
+The saved maps must equal, value for value and class for class, a direct
+`samsrf_fit_prf` or `samsrf_revcor_prf` call that passes that column as
+`Model.Hrf` on the same preprocessing. All 24 runs must succeed; none is
+excused.
 
 `run_source_cli.m` runs each argv in source MATLAB. `run_runtime_cli.py` runs
 it in the compiled image. Each container has no network (so no license
@@ -288,9 +306,10 @@ compiled-versus-source gate runs on one host, in one job.
 
 `samsrf-native` dispatch modes:
 
-- `runtime_cli=source`: public MATLAB, no Compiler. Runs the matrix twice in
-  new MATLAB processes on Ubuntu 22.04 and 24.04 and requires each host to
-  repeat exactly. This is source-CLI evidence only.
+- `runtime_cli=source`: public MATLAB, no Compiler. Prepares the CLI repair set,
+  runs the matrix twice in new MATLAB processes on Ubuntu 22.04 and 24.04,
+  runs `verify_cli_hrf.m`, and requires each host to repeat exactly. This is
+  source-CLI evidence only.
 - `runtime_cli=build`: needs the `MLM_LICENSE_TOKEN` secret and fails at once
   without it. Builds the image, then runs the source matrix and the compiled
   image twice on the same host. Both repeats, compiled versus source, the

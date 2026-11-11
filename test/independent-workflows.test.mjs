@@ -319,6 +319,9 @@ test('the SamSrf Runtime reference builds only with a Compiler token and is vali
   const setup = cli.steps.find(step => step.uses?.startsWith('matlab-actions/setup-matlab@'));
   assert.equal(setup.with.release, source.release);
   assert.match(setup.with.products, /^\$\{\{ inputs\.runtime_cli == 'build' && 'MATLAB_Compiler ' \|\| '' \}\}/);
+  // The CLI reference carries prepare.py's opt-in CLI repairs in both modes.
+  assert.ok(cli.steps.some(step => /prepare\.py --cli reference-source/.test(step.run ?? '')));
+  assert.ok(cli.steps.some(step => /verify_cli_hrf\(/.test(step.with?.command ?? '')));
   // The token reaches only the guard and the Compiler build, never the source runs.
   const tokenSteps = cli.steps.filter(step => JSON.stringify(step).includes('secrets.MLM_LICENSE_TOKEN'));
   assert.deepEqual(tokenSteps.map(step => step.if), ["inputs.runtime_cli == 'build'", "inputs.runtime_cli == 'build'"]);
