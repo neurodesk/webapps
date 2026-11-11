@@ -14,7 +14,7 @@ const testEntries = ['test/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', 'tests/**/*.{js,mj
 // Build staging supplies these exact local HTML scripts before dev/build.
 const generatedHtmlScripts = {
   'apps/calmar': ['wasm/ort.min.js', 'nifti-js/index.js', 'coi-serviceworker.js'],
-  'apps/musclemap': ['coi-serviceworker.js', 'nifti-js/index.js'],
+  'apps/musclemap': ['coi-serviceworker.js', 'nifti-js/index.js', 'wasm/niivue.umd.js'],
   'apps/qsmbly': ['coi-serviceworker.js'],
   'apps/seedseg': ['coi-serviceworker.js', 'wasm/niivue.umd.js'],
   'apps/spinalcordtoolbox': ['coi-serviceworker.js', 'nifti-js/index.js'],
