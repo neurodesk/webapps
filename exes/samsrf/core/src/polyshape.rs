@@ -110,31 +110,43 @@ pub(crate) struct Stages {
 
 /// The model's stages, `None` for an empty point set.
 pub(crate) fn stages(points: &[[f64; 2]]) -> Result<Option<Stages>, Unresolved> {
-    let points: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
+    stages_of_boundaries(std::slice::from_ref(&points.to_vec()))
+}
+
+/// The model's stages for several boundaries united together (diagnostic replays
+/// of NaN-separated polyshape vertices); one boundary is `stages`.
+pub(crate) fn stages_of_boundaries(boundaries: &[Vec<[f64; 2]>]) -> Result<Option<Stages>, Unresolved> {
+    let boundaries: Vec<Vec<[f64; 2]>> = boundaries.iter().map(|b| b.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect()).collect();
+    let points: Vec<[f64; 2]> = boundaries.iter().flatten().copied().collect();
     let Some(grid) = Grid::new(&points)? else { return Ok(None) };
-    let mut ring: Vec<Point> = points.iter().map(|p| grid.snap(p)).collect();
     let mut original: HashMap<Point, [f64; 2]> = HashMap::new();
-    for (k, p) in ring.iter().zip(&points) {
-        original.entry(*k).or_insert(*p);
-    }
-    // MATLAB's result depends on the input's first vertex but not its direction:
-    // a negatively wound ring is reversed behind its first vertex.
-    let doubled: i128 = (0..ring.len()).map(|i| {
-        let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
-        a.0 as i128 * b.1 as i128 - b.0 as i128 * a.1 as i128
-    }).sum();
-    if doubled < 0 {
-        ring[1..].reverse();
+    let mut rings = Vec::with_capacity(boundaries.len());
+    for boundary in &boundaries {
+        let mut ring: Vec<Point> = boundary.iter().map(|p| grid.snap(p)).collect();
+        for (k, p) in ring.iter().zip(boundary) {
+            original.entry(*k).or_insert(*p);
+        }
+        // MATLAB's result depends on the input's first vertex but not its direction:
+        // a negatively wound ring is reversed behind its first vertex.
+        let doubled: i128 = (0..ring.len()).map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            a.0 as i128 * b.1 as i128 - b.0 as i128 * a.1 as i128
+        }).sum();
+        if doubled < 0 {
+            ring[1..].reverse();
+        }
+        rings.push(ring);
     }
     let cleaned = |paths: &[Vec<Point>]| -> Vec<Vec<Point>> {
         paths.iter().map(|path| clean(path, grid.tolerance)).filter(|path| !path.is_empty()).collect()
     };
     let union = |paths: &[Vec<Point>]| simplify_even_odd(paths).map_err(Unresolved::Clipper);
-    let (first_union, first_union_order) = crate::clipper::simplify_even_odd_traced(std::slice::from_ref(&ring)).map_err(Unresolved::Clipper)?;
+    let (first_union, first_union_order) = crate::clipper::simplify_even_odd_traced(&rings).map_err(Unresolved::Clipper)?;
     let first_clean = cleaned(&first_union);
     let second_union = union(&first_clean)?;
     let second_clean = cleaned(&second_union);
     let hull = clean(&integer_hull(second_clean.iter().flatten().copied().collect()), grid.tolerance);
+    let ring = rings.concat();
     Ok(Some(Stages { grid, original, ring, first_union, first_union_order, first_clean, second_union, second_clean, hull }))
 }
 

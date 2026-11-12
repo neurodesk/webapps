@@ -60,6 +60,15 @@ pub fn polyshape_stages(points: &[[f64; 2]]) -> crate::error::Result<Option<([f6
     Ok(stages.map(|s| (s.grid.centre, s.grid.scale, s.grid.tolerance, s.ring, [s.first_union, s.first_clean, s.second_union, s.second_clean], s.hull, s.first_union_order)))
 }
 
+/// `polyshape_stages` for several boundaries united together (diagnostic
+/// replays of NaN-separated polyshape vertices).
+#[doc(hidden)]
+#[allow(clippy::type_complexity)]
+pub fn polyshape_stages_of_boundaries(boundaries: &[Vec<[f64; 2]>]) -> crate::error::Result<Option<([f64; 2], f64, f64, Vec<(i64, i64)>, [Vec<Vec<(i64, i64)>>; 4], Vec<(i64, i64)>, Vec<Vec<usize>>)>> {
+    let stages = crate::polyshape::stages_of_boundaries(boundaries).map_err(|failure| crate::error::Error::Shape(format!("polyshape: {failure:?}")))?;
+    Ok(stages.map(|s| (s.grid.centre, s.grid.scale, s.grid.tolerance, s.ring, [s.first_union, s.first_clean, s.second_union, s.second_clean], s.hull, s.first_union_order)))
+}
+
 /// Invoke the model's actual grid cleaner for diagnostic replays.
 #[doc(hidden)]
 pub fn polyshape_clean(path: &[(i64, i64)], tolerance: f64) -> Vec<(i64, i64)> {

@@ -1136,6 +1136,20 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   A split of holes touching their outer ring at two vertices into separate
   faces before cleaning, which the kept rings suggest, fixes none of the four
   and breaks 168 strip pairs that match now, so it is not adopted.
+  Replaying the causal recording's resolved boundaries
+  (`polyshape_replay.py`, `polyshape_stages --replay`) separates the stages.
+  `KeepCollinearPoints` is a separate configuration, not a checkpoint of the
+  default: `polyshape` of MATLAB's own kept vertices equals its default for
+  every transform of cloud 177 but for none of 932, 1607, 1937 or cloud 7, and
+  the default is not idempotent for 932, 1607 and cloud 7. Given MATLAB's kept
+  boundaries, the model reproduces MATLAB's `polyshape` of them (vertex sets
+  and unoriented rings) for every transform of the four regressions and of
+  clouds 7 and 1125, and 80 of 81 of cloud 1090; on the strip, bisection, hole
+  and held-out families too. The cleaner and union therefore agree with MATLAB
+  on resolved boundaries; the four differ in how MATLAB resolves the
+  self-intersecting input into the rings its default configuration cleans,
+  which no recorded public output exposes. `simplify(polyshape(P,
+  'Simplify', false))` equals the default for every recorded polygon.
   `polyshape_causal_matches_matlab` requires every causal hull exactly except
   the listed real-cloud transforms, which must still differ and whose outcomes
   are frozen in `matlab_polyshape_causal.json`. Simplified vertex sets are
