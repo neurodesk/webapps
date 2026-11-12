@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 
 for (const width of [1440, 390]) {
   test(`example demographics follow the loaded participant at ${width}px`, async ({ page }) => {
+    // Two hosted scans load in turn and each may take 60 s; the default 30 s cannot cover either wait.
+    test.setTimeout(180000);
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/');
     await page.waitForFunction(() => globalThis.app?.patientBehavior);
