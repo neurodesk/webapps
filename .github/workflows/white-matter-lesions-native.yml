@@ -22,9 +22,12 @@ on:
       - 'apps/white-matter-lesions/**'
       - 'packages/synthsr/**'
       - 'packages/synthstrip/**'
-      - 'packages/components/package.json'
       - 'packages/components/src/net/fetchWithRetry.js'
       - 'packages/components/src/net/stallGuard.js'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main since this workflow last finished green there.
+  schedule:
+    - cron: '57 14 * * *'
   workflow_dispatch:
     inputs:
       sign_release:
@@ -44,6 +47,9 @@ jobs:
   # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
   gate:
     uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       workflow: white-matter-lesions-native
 

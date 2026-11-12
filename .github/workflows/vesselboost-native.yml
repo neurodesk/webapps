@@ -17,18 +17,18 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - '.github/workflows/vesselboost-native.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/vesselboost/**'
-      - 'packages/components/src/worker/**'
-      - 'packages/components/src/volume/**'
-      - 'packages/components/src/file-io/**'
       - 'apps/vesselboost/**'
       - 'packages/components/src/inference/workerProtocol.js'
       - 'packages/components/src/net/fetchWithRetry.js'
       - 'packages/components/src/net/stallGuard.js'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main since this workflow last finished green there.
+  schedule:
+    - cron: '53 14 * * *'
   workflow_dispatch:
     inputs:
       sign_release:
@@ -48,6 +48,9 @@ jobs:
   # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
   gate:
     uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       workflow: vesselboost-native
 

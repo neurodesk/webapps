@@ -16,12 +16,15 @@ on:
     paths:
       - '.github/workflows/node-drivers.yml'
       - 'packages/node-drivers/**'
-      - 'pnpm-lock.yaml'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main since this workflow last finished green there.
+  schedule:
+    - cron: '33 14 * * *'
   workflow_dispatch:
 
 concurrency:
   group: node-drivers-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -36,6 +39,9 @@ jobs:
   # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
   gate:
     uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       workflow: node-drivers
 

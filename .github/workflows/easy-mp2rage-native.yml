@@ -13,7 +13,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - '.github/workflows/easy-mp2rage-native.yml'
       - '.github/actions/setup-wasm-opt/**'
       - '.github/workflows/node-cli-portable.yml'
@@ -21,6 +20,10 @@ on:
       - 'packages/easy-mp2rage/**'
       - 'apps/easy-mp2rage/**'
       - 'packages/components/src/file-io/NiftiUtils.js'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main since this workflow last finished green there.
+  schedule:
+    - cron: '53 13 * * *'
   workflow_dispatch:
     inputs:
       sign_release:
@@ -40,6 +43,9 @@ jobs:
   # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
   gate:
     uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       workflow: easy-mp2rage-native
 

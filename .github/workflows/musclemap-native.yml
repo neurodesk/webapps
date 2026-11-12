@@ -13,14 +13,15 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - '.github/workflows/musclemap-native.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/musclemap/**'
-      - 'packages/components/src/file-io/**'
-      - 'packages/components/src/volume/**'
       - 'apps/musclemap/**'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main since this workflow last finished green there.
+  schedule:
+    - cron: '17 14 * * *'
   workflow_dispatch:
     inputs:
       sign_release:
@@ -40,6 +41,9 @@ jobs:
   # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
   gate:
     uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       workflow: musclemap-native
 

@@ -3,19 +3,51 @@ name: scheduled workflow failure reports
 on:
   workflow_run:
     workflows:
+      - ants-native
+      - bison-native
+      - brain2print-native
+      - browserqc-native
       - CALMaR knowledge-base sync
-      - CI approval report
+      - calmar-native
+      - carotid-flow-native
       - ci
+      - ci-usage
+      - CI approval report
+      - compute-server-native
+      - deface-native
+      - degibbs-native
       - deploy-github-pages
+      - dwi-native
+      - dwi2trx-native
+      - dwidenoise-native
+      - easy-mp2rage-native
+      - edgereg-native
+      - elastix-native
+      - hmc-native
+      - hmc-registration
+      - lcmodel-native
+      - musclemap-native
+      - musclemap-parity
       - mutation-quality
+      - n4-native
       - n4-wasm-source
       - neuroflow
+      - noddi-native
+      - node-drivers
       - sct-full-tests
+      - sdc-native
       - sdc-registration-gate
+      - seedseg-native
+      - spinalcordtoolbox-native
       - standalone
       - standalone-catalog
       - standalone-links
+      - synthseg-portable
       - upstream sync
+      - vesselboost-native
+      - white-matter-lesions-native
+    # Pull request runs never need a report, and without this each one starts a run here.
+    branches: [main]
     types: [completed]
 
 permissions:
