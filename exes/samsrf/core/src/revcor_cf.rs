@@ -18,7 +18,7 @@ use crate::mapset::Maps;
 use crate::mesh::Adjacency;
 use crate::model::{CfModel, CfParameterEstimate, FineFit};
 use crate::optim::{self, FminsearchOptions};
-use crate::precision::{correlation_single_pair, sum_single, Precision};
+use crate::precision::{gemv_t_single, sum_single, Precision};
 use crate::prf;
 use crate::surface::Surface;
 
@@ -35,8 +35,9 @@ pub struct Prepared {
     pub seed_vertices: Vec<u32>,
     /// Each seed course, centred and scaled to unit norm (`None` when constant or NaN).
     pub seed_normalised: Vec<Option<Vec<f64>>>,
-    /// The seed courses as stored, for single-precision correlations.
-    seed_courses: Vec<Vec<f64>>,
+    /// Single seed courses centred in single, and their norms, for `corr(y, X)`.
+    seed_centred: Vec<Vec<f32>>,
+    seed_norms: Vec<f32>,
     /// Template `x0`, `y0` per seed vertex.
     pub seed_xy: Vec<[f64; 2]>,
     /// `Srf.Area` of the first `nsvx` vertices (SamSrf's indexing).
@@ -85,6 +86,8 @@ impl Prepared {
             })
             .collect::<Result<_>>()?;
         let seed_normalised = seed_courses.iter().map(|course| normalise(course)).collect();
+        let seed_centred: Vec<Vec<f32>> = seed_courses.iter().map(|course| centre_single(course)).collect();
+        let seed_norms = seed_centred.iter().map(|course| norm_single(course)).collect();
         let weights = if model.smoothing > 0.0 {
             let surface = surface.ok_or_else(|| Error::Shape("Smoothing needs the cortical surface (vertices and faces)".into()))?;
             let adjacency = Adjacency::new(surface.vertices.len(), &surface.faces);
@@ -126,7 +129,8 @@ impl Prepared {
             model,
             seed_vertices: seed_vertices.to_vec(),
             seed_normalised,
-            seed_courses: seed_courses.iter().map(|course| course.to_vec()).collect(),
+            seed_centred,
+            seed_norms,
             seed_xy,
             area_prefix: area[..nsvx].to_vec(),
             weights,
@@ -169,10 +173,19 @@ impl Prepared {
         }
     }
 
-    /// Single courses: `corr` and the smoothing run in single; the double weights
-    /// round each product and the quotient to single.
+    /// Single courses: `corr(y, X)` and the smoothing run in single; the double
+    /// weights round each product and the quotient to single. `corr` centres both in
+    /// single, forms `yc' * Xc` as one product (`gemv_t_single`), divides by `y`'s
+    /// norm and then by each seed's, and limits the result to [-1, 1].
     fn profile_single(&self, y: &[f64]) -> Vec<f64> {
-        let r: Vec<f32> = self.seed_courses.iter().map(|x| correlation_single_pair(y, x)).collect();
+        let yc = centre_single(y);
+        let ny = norm_single(&yc);
+        let columns: Vec<&[f32]> = self.seed_centred.iter().map(Vec::as_slice).collect();
+        let r: Vec<f32> = gemv_t_single(&yc, &columns).iter().zip(&self.seed_norms).map(|(product, nx)| {
+            // corr.m limits each coefficient to [-1, 1]: r = r ./ abs(r) where |r| > 1.
+            let r = (product / ny) / nx;
+            if r.abs() > 1.0 { r / r.abs() } else { r }
+        }).collect();
         match &self.weights {
             None => r.into_iter().map(f64::from).collect(),
             Some(rows) => rows
@@ -394,6 +407,18 @@ pub fn fit_gaussian_single(profile: &[f32], xy: &[[f32; 2]], smoothed: bool, tol
         }
     }
     best.unwrap_or(none)
+}
+
+/// A single course minus its single `mean`.
+fn centre_single(values: &[f64]) -> Vec<f32> {
+    let values: Vec<f32> = values.iter().map(|&value| value as f32).collect();
+    let mean = sum_single(&values) / values.len() as f32;
+    values.iter().map(|value| value - mean).collect()
+}
+
+/// `vecnorm` of a single vector: squares summed in double, rounded once.
+fn norm_single(values: &[f32]) -> f32 {
+    values.iter().map(|&value| f64::from(value).powi(2)).sum::<f64>().sqrt() as f32
 }
 
 /// `polyshape(points).convhull`: `(centroid x, centroid y, sqrt(area) / (2 sqrt(2 ln 2)))`,

@@ -144,6 +144,11 @@ jobs:
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-single-kernels" packages/samsrf/validation/matlab/single-kernels-reference.json
           node packages/samsrf/validation/matlab/analyse-single-kernels.mjs "$RUNNER_TEMP/samsrf-single-kernels/amd-7763-auto" "$RUNNER_TEMP/samsrf-single-kernels/intel-8573c-avx512" --check > "$RUNNER_TEMP/samsrf-single-kernels.json"
+      - name: Single exp, y' * A order and single CF Gaussian fit gates (MATLAB's own profiles)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-gemv-order" packages/samsrf/validation/matlab/gemv-order-reference.json
+          SAMSRF_SINGLE_KERNELS_DIR="$RUNNER_TEMP/samsrf-single-kernels" SAMSRF_GEMV_ORDER_DIR="$RUNNER_TEMP/samsrf-gemv-order/ubuntu-22.04" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cf_single_replay -- --nocapture
       - name: MATLAB geometry and real-template CF gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-geometry" packages/samsrf/validation/matlab/geometry-reference.json

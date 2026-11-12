@@ -4,7 +4,7 @@
 //! - `exp_single` against MATLAB's recorded single `exp`;
 //! - `fit_gaussian_single`, started from MATLAB's own profiles, against the
 //!   replica's parameters and `R^2`, which equal the saved maps, on every vertex.
-use samsrf_core::precision::{exp_single, sum_single};
+use samsrf_core::precision::{exp_single, gemv_t_single, sum_single};
 use samsrf_core::revcor_cf::fit_gaussian_single;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -96,56 +96,66 @@ fn single_cf_gaussian_fits_equal_matlab_on_every_vertex() {
     assert_eq!(vertices, 2 * (19 + 18 + 21 + 20));
 }
 
-/// The port's single `corr` against MATLAB's, and each recorded piece.
+fn matrix(value: &Value) -> Vec<Vec<f64>> {
+    value.as_array().unwrap().iter().map(|row| match row {
+        Value::Array(entries) => entries.iter().map(|v| v.as_f64().unwrap()).collect(),
+        other => vec![other.as_f64().unwrap()],
+    }).collect()
+}
+
+/// `gemv_t_single` against MATLAB's random single `y' * A` products of the
+/// fingerprinted shapes (`record_gemv_order.m`), held out from the trees.
 #[test]
-fn single_corr_pieces() {
+fn gemv_matches_matlab_held_out_products() {
+    let Some(root) = std::env::var_os("SAMSRF_GEMV_ORDER_DIR").map(PathBuf::from) else {
+        eprintln!("SAMSRF_GEMV_ORDER_DIR not set");
+        return;
+    };
+    let recording: Value = serde_json::from_slice(&std::fs::read(root.join("gemv-order.json")).unwrap()).unwrap();
+    for case in recording["cases"].as_array().unwrap() {
+        let (n, m) = (case["n"].as_u64().unwrap() as usize, case["m"].as_u64().unwrap() as usize);
+        let ys = matrix(&case["ys"]);
+        let a = matrix(&case["As"]);
+        let products = matrix(&case["products"]);
+        let mut equal = 0;
+        for (d, expected) in products.iter().enumerate() {
+            let y: Vec<f32> = (0..n).map(|i| ys[i][d] as f32).collect();
+            let columns: Vec<Vec<f32>> = (0..m).map(|j| (0..n).map(|i| a[i][d * m + j] as f32).collect()).collect();
+            let refs: Vec<&[f32]> = columns.iter().map(Vec::as_slice).collect();
+            let got = gemv_t_single(&y, &refs);
+            equal += got.iter().zip(expected).filter(|(g, e)| g.to_bits() == (**e as f32).to_bits()).count();
+        }
+        println!("n={n} m={m}: {equal}/{} products", products.len() * m);
+        assert_eq!(equal, products.len() * m, "n={n} m={m}");
+    }
+}
+
+/// corr's product yc' * Xc on the CF kernel matrix, on the AMD host the
+/// fingerprint was taken on.
+#[test]
+fn gemv_matches_matlab_corr_product_on_amd() {
     let Some(root) = std::env::var_os("SAMSRF_SINGLE_KERNELS_DIR").map(PathBuf::from) else {
         return;
     };
-    for host in ["amd-7763-auto", "intel-8573c-avx512"] {
-        let dir = root.join(host);
-        let recording: Value = serde_json::from_slice(&std::fs::read(dir.join("kernels.json")).unwrap()).unwrap();
-        for case in recording["cases"].as_array().unwrap().iter().filter(|c| c["kind"] == "corr") {
-            let courses = read(&dir, &case["courses"]);
-            let seeds = read(&dir, &case["seedCourses"]);
-            let corr = read(&dir, &case["corr"]);
-            let mean_seed = read(&dir, &case["meanSeed"]);
-            let norm_seed = read(&dir, &case["normSeed"]);
-            let mean_course = read(&dir, &case["meanCourse"]);
-            let norm_course = read(&dir, &case["normCourse"]);
-            let product = read(&dir, &case["product"]);
-            let n = courses.shape[0];
-            let column = |a: &Array, j: usize| -> Vec<f32> { (0..n).map(|i| a.at(i, j) as f32).collect() };
-            let mean = |v: &[f32]| sum_single(v) / v.len() as f32;
-            let norm = |v: &[f32]| v.iter().map(|&x| f64::from(x).powi(2)).sum::<f64>().sqrt() as f32;
-            let centred = |v: &[f32]| { let m = mean(v); v.iter().map(|x| x - m).collect::<Vec<f32>>() };
-            let (mut port, mut means_s, mut norms_s, mut means_c, mut norms_c, mut quotient) = (0, 0, 0, 0, 0, 0);
-            let rois = courses.shape[1];
-            let nseed = seeds.shape[1];
-            for j in 0..nseed {
-                let x = column(&seeds, j);
-                means_s += usize::from(mean(&x).to_bits() == (mean_seed.data[j] as f32).to_bits());
-                norms_s += usize::from(norm(&centred(&x)).to_bits() == (norm_seed.data[j] as f32).to_bits());
-            }
-            for v in 0..rois {
-                let y = column(&courses, v);
-                means_c += usize::from(mean(&y).to_bits() == (mean_course.data[v] as f32).to_bits());
-                norms_c += usize::from(norm(&centred(&y)).to_bits() == (norm_course.data[v] as f32).to_bits());
-                for j in 0..nseed {
-                    let x: Vec<f64> = column(&seeds, j).iter().map(|&value| f64::from(value)).collect();
-                    let yd: Vec<f64> = y.iter().map(|&value| f64::from(value)).collect();
-                    let value = samsrf_core::precision::correlation_single_pair(&yd, &x);
-                    port += usize::from(value.to_bits() == (corr.at(v, j) as f32).to_bits());
-                    // MATLAB's own pieces, divided as its corr does: (product / normY) / normX.
-                    let rebuilt = (product.at(v, j) as f32 / norm_course.data[v] as f32) / norm_seed.data[j] as f32;
-                    quotient += usize::from(rebuilt.to_bits() == (corr.at(v, j) as f32).to_bits());
-                }
-            }
-            println!(
-                "{host} {}: corr {port}/{} | (product/normY)/normX from MATLAB's pieces {quotient} | seed means {means_s}/{nseed} norms {norms_s} | course means {means_c}/{rois} norms {norms_c}",
-                case["id"].as_str().unwrap(),
-                rois * nseed
-            );
+    let dir = root.join("amd-7763-auto");
+    for case in recording(&dir)["cases"].as_array().unwrap().iter().filter(|c| c["kind"] == "corr") {
+        let courses = read(&dir, &case["courses"]);
+        let seeds = read(&dir, &case["seedCourses"]);
+        let product = read(&dir, &case["product"]);
+        let n = courses.shape[0];
+        let centred = |a: &Array, j: usize| {
+            let v: Vec<f32> = (0..n).map(|i| a.at(i, j) as f32).collect();
+            let mean = sum_single(&v) / n as f32;
+            v.iter().map(|x| x - mean).collect::<Vec<f32>>()
+        };
+        let xc: Vec<Vec<f32>> = (0..seeds.shape[1]).map(|j| centred(&seeds, j)).collect();
+        let refs: Vec<&[f32]> = xc.iter().map(Vec::as_slice).collect();
+        let mut equal = 0;
+        for v in 0..courses.shape[1] {
+            let got = gemv_t_single(&centred(&courses, v), &refs);
+            equal += got.iter().enumerate().filter(|(j, g)| g.to_bits() == (product.at(v, *j) as f32).to_bits()).count();
         }
+        println!("{}: {equal}/{} products", case["id"].as_str().unwrap(), courses.shape[1] * seeds.shape[1]);
+        assert_eq!(equal, courses.shape[1] * seeds.shape[1]);
     }
 }

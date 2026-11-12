@@ -142,6 +142,40 @@ fn dot_single(x: &[f32], y: &[f32]) -> f32 {
     (lanes[0] + lanes[2]) + (lanes[1] + lanes[3])
 }
 
+/// MATLAB R2023b's single `y' * A` (MKL's `sgemv` with `trans`, CNR `auto` on the AMD
+/// CI host), as fingerprinted by `record_gemv_order.m`: columns in full blocks of four
+/// use a four-lane kernel, each remaining column an eight-lane kernel. Both start lane
+/// 0 with element 0, accumulate elements `1..=lanes * k` with element `i` in lane
+/// `(i - 1) % lanes`, fold eight lanes to four as `L[l] + L[l + 4]`, reduce four as
+/// `(L0 + L2) + (L1 + L3)` and add the remaining elements in order.
+pub fn gemv_t_single(y: &[f32], columns: &[&[f32]]) -> Vec<f32> {
+    let full = columns.len() / 4 * 4;
+    columns.iter().enumerate().map(|(j, column)| gemv_column(y, column, if j < full { 4 } else { 8 })).collect()
+}
+
+fn gemv_column(y: &[f32], a: &[f32], lanes: usize) -> f32 {
+    let n = y.len();
+    if n == 0 {
+        return 0.0;
+    }
+    let mut lane = [0.0f32; 8];
+    lane[0] = y[0] * a[0];
+    let body = (n - 1) / lanes * lanes;
+    for i in 1..=body {
+        lane[(i - 1) % lanes] += y[i] * a[i];
+    }
+    if lanes == 8 {
+        for l in 0..4 {
+            lane[l] += lane[l + 4];
+        }
+    }
+    let mut sum = (lane[0] + lane[2]) + (lane[1] + lane[3]);
+    for i in body + 1..n {
+        sum += y[i] * a[i];
+    }
+    sum
+}
+
 /// Correlate a double prediction and single observations. The coarse fit passes
 /// observations first to MATLAB's corr, reversing the order of the two divisions.
 pub fn correlation_single(prediction: &[f64], observed: &[f64], observations_first: bool) -> f32 {
@@ -164,23 +198,6 @@ pub fn correlation_single(prediction: &[f64], observed: &[f64], observations_fir
         let first = (f64::from(dot) / nx) as f32;
         (f64::from(first) / f64::from(ny)) as f32
     }
-}
-
-/// `corr(x, y)` of two single columns, as `samsrf_cfparam_loop` correlates a single
-/// vertex course with a single seed course: centred in single, the dot product in
-/// single and each norm divided out in turn, `x`'s first.
-pub fn correlation_single_pair(x: &[f64], y: &[f64]) -> f32 {
-    if x.len() != y.len() || x.len() < 2 {
-        return f32::NAN;
-    }
-    let centre = |values: &[f64]| {
-        let values: Vec<f32> = values.iter().map(|&value| value as f32).collect();
-        let mean = sum_single(&values) / values.len() as f32;
-        values.iter().map(|value| value - mean).collect::<Vec<f32>>()
-    };
-    let norm = |values: &[f32]| values.iter().map(|&value| f64::from(value).powi(2)).sum::<f64>().sqrt() as f32;
-    let (xc, yc) = (centre(x), centre(y));
-    (dot_single(&xc, &yc) / norm(&xc)) / norm(&yc)
 }
 
 /// Mixed complex prediction and real single observations. MATLAB accumulates
@@ -218,10 +235,19 @@ mod tests {
     }
 
     #[test]
-    fn single_pair_correlation_is_symmetric_in_scale_and_nan_for_a_constant_course() {
-        let x = [1.0, 2.0, 4.0, 3.0];
-        assert_eq!(correlation_single_pair(&x, &[2.0, 4.0, 8.0, 6.0]), 1.0);
-        assert!(correlation_single_pair(&x, &[5.0; 4]).is_nan());
+    fn gemv_uses_four_lanes_for_full_column_blocks_and_eight_for_the_rest() {
+        // 2^24 first, ones at elements 10 and 12. Four lanes put both ones in the
+        // body (lanes 1 and 3), which meet each other before 2^24: 2^24 + 2. Eight
+        // lanes stop the body at element 8 and add the ones one at a time after the
+        // reduction, each a tie that rounds back to 2^24.
+        let y = [1.0f32; 13];
+        let mut a = [0.0f32; 13];
+        a[0] = 2f32.powi(24);
+        a[10] = 1.0;
+        a[12] = 1.0;
+        let products = gemv_t_single(&y, &[&a, &a, &a, &a, &a]);
+        assert_eq!(products[..4], [2f32.powi(24) + 2.0; 4]);
+        assert_eq!(products[4], 2f32.powi(24));
     }
 
     #[test]
