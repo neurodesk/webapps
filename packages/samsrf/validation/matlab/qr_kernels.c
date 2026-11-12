@@ -18,6 +18,10 @@
  *       component of the result. The column starts oa elements and the ones
  *       vector ox elements after a 64-byte boundary. The values reveal which
  *       terms each partial sum absorbs (the FPRev construction).
+ *   S = qr_kernels('ormqr', cls, part, m, nrhs, cols, M)
+ *       The same pairs through ?ormqr / ?unmqr with one reflector (v = ones,
+ *       tau = 1) applied to nrhs identical columns: S(i, j, k) is w = v^H c
+ *       for column cols(k) (zero-based), read from a row neither i nor j.
  *   blas = qr_kernels('int') returns sizeof the BLAS integer.
  */
 #define _POSIX_C_SOURCE 200112L
@@ -250,6 +254,76 @@ static void probe(mxArray *plhs[], const mxArray *prhs[]) {
     free(xbuf);
 }
 
+/* ?ormqr's summation tree for w = v^H c: one reflector with v = ones and
+ * tau = 1 leaves row r as c(r) - w, so an untouched row gives w exactly.
+ * C has nrhs identical probe columns; S(i, j, k) is w for column cols(k). */
+static void probe_ormqr(mxArray *plhs[], const mxArray *prhs[]) {
+    enum kind k = parse_kind(prhs[1]);
+    int part = (int)mxGetScalar(prhs[2]);
+    blasint m = (blasint)mxGetScalar(prhs[3]), nrhs = (blasint)mxGetScalar(prhs[4]), one = 1, info = 0, lwork = -1;
+    const double *cols = mxGetPr(prhs[5]);
+    size_t ncols = mxGetNumberOfElements(prhs[5]);
+    double big = mxGetScalar(prhs[6]);
+    size_t width = complex_kind(k) ? 2 : 1, element = single_kind(k) ? sizeof(float) : sizeof(double);
+    char *a = mxCalloc((size_t)m * width + 2, element);
+    char *tau = mxCalloc(width + 2, element);
+    char *c = mxCalloc((size_t)m * (size_t)nrhs * width + 2, element);
+    const char *trans = complex_kind(k) ? "C" : "T";
+    for (blasint t = 0; t < m; t++) {
+        if (single_kind(k)) ((float *)a)[t * width] = 1.0f;
+        else ((double *)a)[t * width] = 1.0;
+    }
+    if (single_kind(k)) ((float *)tau)[0] = 1.0f;
+    else ((double *)tau)[0] = 1.0;
+    double queryd[2] = {0, 0};
+    float queryf[2] = {0, 0};
+    switch (k) {
+    case REAL_SINGLE: sormqr_("L", trans, &m, &nrhs, &one, (float *)a, &m, (float *)tau, (float *)c, &m, queryf, &lwork, &info); lwork = (blasint)queryf[0]; break;
+    case REAL_DOUBLE: dormqr_("L", trans, &m, &nrhs, &one, (double *)a, &m, (double *)tau, (double *)c, &m, queryd, &lwork, &info); lwork = (blasint)queryd[0]; break;
+    case COMPLEX_SINGLE: cunmqr_("L", trans, &m, &nrhs, &one, (float *)a, &m, (float *)tau, (float *)c, &m, queryf, &lwork, &info); lwork = (blasint)queryf[0]; break;
+    case COMPLEX_DOUBLE: zunmqr_("L", trans, &m, &nrhs, &one, (double *)a, &m, (double *)tau, (double *)c, &m, queryd, &lwork, &info); lwork = (blasint)queryd[0]; break;
+    }
+    if (lwork < 1) lwork = 1;
+    char *work = mxCalloc((size_t)lwork * width + 2, element);
+    mwSize dims[3] = {(mwSize)m, (mwSize)m, (mwSize)ncols};
+    plhs[0] = mxCreateNumericArray(3, dims, mxDOUBLE_CLASS, mxREAL);
+    double *out = mxGetPr(plhs[0]);
+    for (blasint i = 0; i < m; i++) {
+        for (blasint j = i + 1; j < m; j++) {
+            blasint row = 0;
+            while (row == i || row == j) row++;
+            for (blasint col = 0; col < nrhs; col++) {
+                for (blasint t = 0; t < m; t++) {
+                    double value = t == i ? big : t == j ? -big : 1.0;
+                    size_t at = ((size_t)col * (size_t)m + (size_t)t) * width;
+                    if (single_kind(k)) {
+                        ((float *)c)[at] = 0.0f;
+                        if (width == 2) ((float *)c)[at + 1] = 0.0f;
+                        ((float *)c)[at + (size_t)(width == 2 ? part : 0)] = (float)value;
+                    } else {
+                        ((double *)c)[at] = 0.0;
+                        if (width == 2) ((double *)c)[at + 1] = 0.0;
+                        ((double *)c)[at + (size_t)(width == 2 ? part : 0)] = value;
+                    }
+                }
+            }
+            switch (k) {
+            case REAL_SINGLE: sormqr_("L", trans, &m, &nrhs, &one, (float *)a, &m, (float *)tau, (float *)c, &m, (float *)work, &lwork, &info); break;
+            case REAL_DOUBLE: dormqr_("L", trans, &m, &nrhs, &one, (double *)a, &m, (double *)tau, (double *)c, &m, (double *)work, &lwork, &info); break;
+            case COMPLEX_SINGLE: cunmqr_("L", trans, &m, &nrhs, &one, (float *)a, &m, (float *)tau, (float *)c, &m, (float *)work, &lwork, &info); break;
+            case COMPLEX_DOUBLE: zunmqr_("L", trans, &m, &nrhs, &one, (double *)a, &m, (double *)tau, (double *)c, &m, (double *)work, &lwork, &info); break;
+            }
+            if (info) mexErrMsgTxt("ormqr probe failed");
+            for (size_t q = 0; q < ncols; q++) {
+                size_t col = (size_t)cols[q];
+                size_t at = (col * (size_t)m + (size_t)row) * width + (size_t)(width == 2 ? part : 0);
+                double got = single_kind(k) ? ((float *)c)[at] : ((double *)c)[at];
+                out[(size_t)i + (size_t)j * (size_t)m + q * (size_t)m * (size_t)m] = 1.0 - got;
+            }
+        }
+    }
+}
+
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
     char command[16];
     if (nrhs < 1 || mxGetString(prhs[0], command, sizeof command)) mexErrMsgTxt("first argument is a command");
@@ -261,6 +335,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
         trsm(plhs, prhs);
     } else if (!strcmp(command, "trsv") && nrhs == 6) {
         trsv(plhs, prhs);
+    } else if (!strcmp(command, "ormqr") && nrhs == 7) {
+        probe_ormqr(plhs, prhs);
     } else if (!strcmp(command, "probe") && nrhs == 7) {
         probe(plhs, prhs);
     } else {

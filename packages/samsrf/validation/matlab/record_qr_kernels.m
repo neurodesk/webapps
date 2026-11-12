@@ -68,6 +68,9 @@ else
     lengths = [1:40 47 48 49 63 64 65 127 128 129 249 250];
     offsets = 0:7;
 end
+% M must exceed every partial sum of ones by more than half its spacing,
+% including 250 ones added in sequence in double.
+big = 2^70;
 probes = {};
 kinds = {'single',0; 'double',0; 'csingle',0; 'csingle',1; 'cdouble',0; 'cdouble',1};
 for kk = 1:size(kinds,1)
@@ -80,17 +83,43 @@ for kk = 1:size(kinds,1)
                 if (startsWith(cls,'c') || strcmp(cls,'double')) && (oa > 3 || ox > 3)
                     continue
                 end
-                S = qr_kernels('probe',cls,part,m,oa,ox,2^60);
+                S = qr_kernels('probe',cls,part,m,oa,ox,big);
                 id = sprintf('probe_%s_part%d_m%d_a%d_x%d',cls,part,m,oa,ox);
                 probes{end+1} = struct('id',id,'class',cls,'part',part,'length',m, ... %#ok<AGROW>
-                    'alignA',oa,'alignX',ox,'big',2^60, ...
+                    'alignA',oa,'alignX',ox,'big',big, ...
                     'results',int_file(id,S));
             end
         end
     end
 end
+% ?ormqr applies the reflectors to the right-hand sides; record its tree
+% for one and for several columns (reverse correlation and the global
+% regression solve many at once).
+ormqr = {};
+if smoke
+    ormqrLengths = [5 9];
+    ormqrColumns = [1 3];
+else
+    ormqrLengths = [2:40 63 64 65 249 250];
+    ormqrColumns = [1 2 3 4 8 16 33 300];
+end
+for kk = 1:size(kinds,1)
+    cls = kinds{kk,1};
+    part = kinds{kk,2};
+    for m = ormqrLengths
+        for nrhs = ormqrColumns
+            if m > 65 || ismember(nrhs, [1 8]) || m == 16 || m == 17
+                cols = unique([0 min(1,nrhs-1) nrhs-1]);
+                S = qr_kernels('ormqr',cls,part,m,nrhs,cols,big);
+                id = sprintf('ormqr_%s_part%d_m%d_n%d',cls,part,m,nrhs);
+                ormqr{end+1} = struct('id',id,'class',cls,'part',part,'length',m, ... %#ok<AGROW>
+                    'columns',nrhs,'recordedColumns',cols,'big',big,'results',int_file(id,S));
+            end
+        end
+    end
+end
 write_json('kernels.json',struct('environment',environment,'smoke',smoke, ...
-    'cases',{cases},'multiple',{multi},'probes',{probes}));
+    'cases',{cases},'multiple',{multi},'probes',{probes},'ormqr',{ormqr}));
 fprintf('Recorded %d least-squares chains and %d gemv probes (%s)\n',numel(cases),numel(probes),interpreter);
 end
 
