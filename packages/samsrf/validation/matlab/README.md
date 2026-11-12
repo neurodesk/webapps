@@ -972,6 +972,27 @@ recorded 96-vertex double pipeline is gated at every vertex:
   of that uncertainty, and neither error exceeds 5.2 of it. The test also pins
   these counts.
 
+`css-pipelines-reference.json` pins a fresh recording of this pipeline and of a
+nonnegative control, `max(ApFrm, 0)` on the same vectorised apertures
+(`record_css_pipelines.m`,
+[run 43127425289](https://github.com/neurodesk/webapps/actions/runs/43127425289),
+recorder commit `7d2188ed226046a8cb19a770c08e43be0cb19321`). Each host ran it twice
+in new MATLAB processes.
+
+| Host | CPU | Requested | Observed | Result |
+| --- | --- | --- | --- | --- |
+| `ubuntu-24.04` | AMD EPYC 9V74 | `MKL_CBWR=COMPATIBLE`, one MKL and OpenMP thread | CNR branch `auto`, one computational thread; MATLAB's process shows `MKL_NUM_THREADS` empty | repeat identical; the original pipeline equals the old pin (from an EPYC 7763) in every course, noise ceiling, map and HRF bit |
+| `ubuntu-22.04` | Intel Xeon Platinum 8573C | the same | CNR branch `AVX512_E1`, one computational thread | repeat identical; 23,017 of 24,000 preprocessed samples, 82 noise ceilings and 336 of 864 map values (by up to 9.1e-5) differ from the AMD host, from MKL's preprocessing onward |
+
+The effective CNR branch and MKL's dynamic threading cannot be verified from
+inside MATLAB (`unverifiedControls`). So the reference is the AMD host, and the
+Intel recording is kept as evidence of the branch difference. On the AMD host,
+`css_pipeline.rs` applies the gates above to both pipelines with the port's HRF:
+the original one gives the counts above, and the nonnegative control gives 70
+identical and 56 differing coefficients, with 8 basic zeros. Its port errors
+reach 2.65 of the inherent uncertainty against MATLAB's 2.12, an excess of at
+most 0.81. Every non-coefficient map is exact and every mask matches in both.
+
 What remains:
 
 - **Beta and Baseline** are not bit-identical: the column-pivoted QR solve (#731,
@@ -986,9 +1007,11 @@ SAMSRF_MATLAB_NUMERICS_DIR="$TMPDIR/samsrf-numerics" cargo test --release --mani
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics2" packages/samsrf/validation/matlab/numerics2-reference.json
 SAMSRF_MATLAB_NUMERICS2_DIR="$TMPDIR/samsrf-numerics2" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_numerics2
 node packages/samsrf/validation/matlab/compare-css.mjs "$TMPDIR/samsrf-source-reference" "$TMPDIR/samsrf-css.json"
-SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-source-reference" SAMSRF_CSS_WASM_REPORT="$TMPDIR/samsrf-css.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_pipeline
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-css-pipelines" packages/samsrf/validation/matlab/css-pipelines-reference.json
+SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-source-reference" SAMSRF_CSS_WASM_REPORT="$TMPDIR/samsrf-css.json" SAMSRF_MATLAB_CSS_PIPELINES_DIR="$TMPDIR/samsrf-css-pipelines" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_pipeline
 ```
 
-`record_matlab=true, numerics_only=true` repeats the recording. Octave can run
+`record_matlab=true, numerics_only=true` repeats the probe recording and
+`record_matlab=true, css_pipelines_only=true` the pipelines. Octave can run
 the recorder's plumbing with a stubbed environment; its results are never
 references.

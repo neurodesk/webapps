@@ -302,29 +302,40 @@ fn recorded_original_and_nonnegative_css_pipelines_match_matlab() {
         return;
     };
     let manifest: Value = serde_json::from_slice(&std::fs::read(root.join("manifest.json")).unwrap()).unwrap();
-    let mut checked = 0;
-    for (host, info) in manifest["hosts"].as_object().unwrap() {
-        if !info["cpu"].as_str().unwrap().to_uppercase().starts_with("AMD EPYC") {
-            // Intel hosts select another MKL branch, a different reference.
-            continue;
-        }
-        let dir = root.join(host).join("compatible");
-        let recording: Value = serde_json::from_slice(&std::fs::read(dir.join("pipelines.json")).unwrap()).unwrap();
-        for case in recording["cases"].as_array().unwrap() {
-            let label = format!("{host} {}", case["id"].as_str().unwrap());
-            let stats = check(Pipeline {
-                label: &label,
-                root: &dir,
-                case,
-                courses: array(&dir, &case["courses"]),
-                ceiling: case.get("noiseCeiling").map(|d| array(&dir, d)),
-                apertures: dir.join(format!("{}.mat", case["model"]["Aperture_File"].as_str().unwrap())),
-                expected_hrf: array(&dir, &case["hrf"]),
-                wasm: None,
-            });
-            eprintln!("{label}: {stats:?}");
-            checked += 1;
-        }
+    let files = manifest["files"].as_object().unwrap();
+    let hosts = manifest["hosts"].as_object().unwrap();
+    // Each host's repeat in a new MATLAB process must be the same reference.
+    for host in hosts.keys() {
+        let prefix = format!("{host}/compatible/");
+        let compared = files.iter().filter(|(name, _)| name.starts_with(&prefix) && name.ends_with(".f64")).map(|(name, hash)| {
+            assert_eq!(&files[&name.replace("/compatible/", "/repeat/")], hash, "{name}: repeat");
+        }).count();
+        assert_eq!(compared, 13, "{host}");
     }
-    assert!(checked >= 2, "an AMD host with both pipelines is required");
+    // MKL selects other kernels on Intel hosts (branch AVX512_E1 whatever is
+    // requested), so only AMD hosts are the reference the port models.
+    let amd: Vec<&String> = hosts.iter().filter(|(_, info)| info["cpu"].as_str().unwrap().starts_with("AMD EPYC")).map(|(host, _)| host).collect();
+    assert_eq!(amd.len(), 1, "one AMD host");
+    let dir = root.join(amd[0]).join("compatible");
+    let recording: Value = serde_json::from_slice(&std::fs::read(dir.join("pipelines.json")).unwrap()).unwrap();
+    let mut results = Vec::new();
+    for case in recording["cases"].as_array().unwrap() {
+        let label = format!("{} {}", amd[0], case["id"].as_str().unwrap());
+        let stats = check(Pipeline {
+            label: &label,
+            root: &dir,
+            case,
+            courses: array(&dir, &case["courses"]),
+            ceiling: case.get("noiseCeiling").map(|d| array(&dir, d)),
+            apertures: dir.join(format!("{}.mat", case["model"]["Aperture_File"].as_str().unwrap())),
+            expected_hrf: array(&dir, &case["hrf"]),
+            wasm: None,
+        });
+        eprintln!("{label}: {stats:?}");
+        results.push((case["id"].as_str().unwrap().to_string(), stats.identical, stats.differing, stats.basic, stats.rank_deficient));
+    }
+    assert_eq!(results, [
+        ("pipeline_double_css".to_string(), 77, 61, 8, 0),
+        ("pipeline_double_css_nonnegative".to_string(), 70, 56, 8, 0),
+    ]);
 }
