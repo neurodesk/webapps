@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { build } from 'esbuild';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { LISTED_READS, SHARED_MODULE_PACKAGE, sharedModuleUsers } from '../scripts/lib/shared-module-users.mjs';
@@ -155,7 +156,24 @@ test('a change to one component module selects the apps that load it', () => {
   }
 });
 
-test('every component import an app writes selects that app', async () => {
+// esbuild resolves and bundles each export on its own, so its list of inputs
+// is a second opinion on what an import of that export loads.
+async function modulesLoadedBy(target) {
+  const result = await build({
+    entryPoints: [join(repoRoot, SHARED_MODULE_PACKAGE, target)],
+    bundle: true,
+    write: false,
+    metafile: true,
+    format: 'esm',
+    platform: 'browser',
+    packages: 'external',
+    absWorkingDir: repoRoot,
+    logLevel: 'silent',
+  });
+  return Object.keys(result.metafile.inputs).filter((path) => path.startsWith(`${SHARED_MODULE_PACKAGE}/src/`));
+}
+
+test('every module behind a component import an app writes selects that app', async () => {
   const manifest = JSON.parse(await readFile(join(repoRoot, SHARED_MODULE_PACKAGE, 'package.json'), 'utf8'));
   const sources = async function* (dir) {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -166,6 +184,7 @@ test('every component import an app writes selects that app', async () => {
       }
     }
   };
+  const loaded = new Map();
   const selections = new Map();
   let checked = 0;
   for (const app of registry.apps) {
@@ -174,14 +193,16 @@ test('every component import an app writes selects that app', async () => {
         const entry = manifest.exports[`.${subpath ?? ''}`];
         const target = typeof entry === 'string' ? entry : entry?.default;
         if (!target?.endsWith('.js')) continue;
-        const path = join(SHARED_MODULE_PACKAGE, target);
-        if (!selections.has(path)) selections.set(path, selected(path));
-        assert.ok(selections.get(path).includes(app.id), `${file} imports ${path}`);
-        checked += 1;
+        if (!loaded.has(target)) loaded.set(target, await modulesLoadedBy(target));
+        for (const path of loaded.get(target)) {
+          if (!selections.has(path)) selections.set(path, selected(path));
+          assert.ok(selections.get(path).includes(app.id), `${file} imports ${target}, which loads ${path}`);
+          checked += 1;
+        }
       }
     }
   }
-  assert.ok(checked > 100, `${checked} imports checked`);
+  assert.ok(checked > 1000, `${checked} loaded modules checked`);
 });
 
 test('a package manifest that only gains exports selects nothing', () => {
