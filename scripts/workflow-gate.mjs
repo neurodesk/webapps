@@ -5,12 +5,14 @@
 // failure to decide runs the workflow.
 //
 //   node scripts/workflow-gate.mjs --workflow elastix-native --base <sha> --head <sha>
-//   node scripts/workflow-gate.mjs --workflow elastix-native --sweep-hours 26 --head <sha>
-import { execFileSync } from 'node:child_process';
+//   node scripts/workflow-gate.mjs --workflow elastix-native --sweep --head <sha>
+//
+// --sweep needs GITHUB_REPOSITORY and a GITHUB_TOKEN that can read Actions runs.
 import { appendFile, readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
 import { changedManifests, changedPathsFromGit } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
+import { resolveTestedBase } from './lib/tested-base.mjs';
 import { calledWorkflows, decideWorkflow, sweepWorkflow } from './lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from './lib/workspace-graph.mjs';
 
@@ -20,21 +22,21 @@ function option(name) {
 }
 
 const name = option('--workflow');
-if (!name || !/^[\w-]+$/.test(name)) throw new Error('Usage: workflow-gate.mjs --workflow <name> (--base <sha> | --sweep-hours <n>) --head <sha>');
+if (!name || !/^[\w-]+$/.test(name)) throw new Error('Usage: workflow-gate.mjs --workflow <name> (--base <sha> | --sweep) --head <sha>');
 const head = option('--head') || 'HEAD';
-const sweepHours = option('--sweep-hours');
-if (sweepHours !== undefined && !/^\d+$/.test(sweepHours)) throw new Error('--sweep-hours takes a whole number of hours');
 
-// The sweep reads what main gained since its newest commit older than the
-// window. Only main's own line counts: a merged branch carries older dates.
-function sweepBase() {
-  const base = execFileSync('git', ['rev-list', '--first-parent', '-1', `--before=${sweepHours} hours ago`, head], { cwd: repoRoot, encoding: 'utf8' }).trim();
-  if (!base) throw new Error(`no commit of ${head} is older than ${sweepHours} hours`);
-  return base;
+// The sweep reads what main gained since this workflow last finished green on
+// it, by a merge or an earlier sweep. A sweep that failed or that GitHub
+// dropped leaves that commit where it was, so the next one still sees the
+// change. A dispatch does not count: its inputs can run part of the workflow.
+async function sweep(flow) {
+  const tested = await resolveTestedBase({ head, workflow: `${name}.yml`, cwd: repoRoot, atHead: true, events: new Set(['push', 'schedule']) });
+  if (!tested.base) return { run: true, reason: tested.reason };
+  return sweepWorkflow({ flow, changedPaths: changedPathsFromGit({ base: tested.base, head, cwd: repoRoot }) });
 }
 
 async function decide(flow, read) {
-  if (sweepHours !== undefined) return sweepWorkflow({ flow, changedPaths: changedPathsFromGit({ base: sweepBase(), head, cwd: repoRoot }) });
+  if (process.argv.includes('--sweep')) return sweep(flow);
   const base = option('--base');
   const calledFlows = await Promise.all(calledWorkflows(flow).map(read));
   const changedPaths = changedPathsFromGit({ base, head, cwd: repoRoot });

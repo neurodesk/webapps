@@ -17,10 +17,10 @@ const until = new Date(option('--until', new Date().toISOString()));
 if (!Number.isFinite(hours) || hours <= 0 || Number.isNaN(until.getTime())) throw new Error('Usage: ci-usage-report.mjs [--hours <n>] [--until <ISO time>]');
 const since = new Date(until.getTime() - hours * 3600e3);
 
-const runs = (await listAllRuns({ since, until })).filter((run) => run.status === 'completed');
-const candidates = largeRunCandidates(runs);
+const runs = await listAllRuns({ since, until });
+const candidates = largeRunCandidates(runs, until.toISOString());
 const counts = await mapLimited(candidates, 6, (run) => jobCount(run.id));
-const usage = summarizeUsage(runs, new Map(candidates.map((run, index) => [run.id, counts[index]])));
+const usage = summarizeUsage(runs, new Map(candidates.map((run, index) => [run.id, counts[index]])), until.toISOString());
 const findings = budgetFindings(usage);
 const text = usageMarkdown(usage, findings, { since: since.toISOString(), until: until.toISOString() });
 

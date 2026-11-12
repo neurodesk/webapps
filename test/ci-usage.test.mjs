@@ -43,18 +43,32 @@ test('many pull requests selecting every app are over the total budget', () => {
   assert.match(findings[0], new RegExp(`^${BUDGETS.largeRuns + 1} whole-catalogue pull request ci runs`));
 });
 
-test('one push to main that runs most native workflows is over budget', () => {
+test('a run still going at the end of the window counts up to then', () => {
+  const until = '2026-11-10T12:00:00Z';
+  const running = run({ status: 'in_progress', conclusion: null, updated_at: '2026-11-10T10:00:05Z' });
+  const runs = [run({ status: 'completed' }), run({ status: 'completed' }), running];
+  const usage = summarizeUsage(runs, new Map(largeRunCandidates(runs, until).map((each) => [each.id, LARGE_RUN_JOBS])), until);
+  assert.match(budgetFindings(usage)[0], /^feature started 3 whole-catalogue ci runs/);
+  assert.deepEqual(usage.largeRuns[0].runs.at(-1), { id: running.id, sha: running.head_sha.slice(0, 9), conclusion: 'in_progress', jobs: LARGE_RUN_JOBS, wallMinutes: 120 });
+  // One that only just started has done no work yet.
+  assert.deepEqual(largeRunCandidates([run({ status: 'queued', conclusion: null, run_started_at: '2026-11-10T11:59:00Z' })], until), []);
+});
+
+test('pull requests are told apart by number, and forks by repository', () => {
+  const fork = (owner) => run({ head_branch: 'main', head_repository: `${owner}/webapps`, pull_requests: [] });
+  assert.deepEqual(budgetFindings(usageOf([fork('ada'), fork('grace'), fork('alan')])), []);
+  assert.match(budgetFindings(usageOf([fork('ada'), fork('ada'), fork('ada')]))[0], /^ada\/webapps:main started 3/);
+  // The same pull request after its branch was renamed.
+  const renamed = ['one', 'two', 'three'].map((head_branch) => run({ head_branch, head_repository: 'neurodesk/webapps', pull_requests: [788] }));
+  assert.match(budgetFindings(usageOf(renamed))[0], /^#788 started 3/);
+});
+
+test('a release that runs most native workflows is listed, not over budget', () => {
   const push = (name, fields = {}) => run({ name, event: 'push', head_branch: 'main', head_sha: 'aaaaaaaaa1234', ...fields });
-  const natives = Array.from({ length: BUDGETS.workflowsPerPush + 1 }, (_, index) => push(`native-${index}`));
-  const [finding, ...rest] = budgetFindings(usageOf(natives));
-  assert.match(finding, /^push aaaaaaaaa ran 11 workflows besides ci \(budget 10\)/);
-  assert.deepEqual(rest, []);
-  // ci and the deploy run for every push, and a gate that answered false did no work.
-  const fine = [...natives.slice(1), push('ci'), push('deploy-github-pages'), push('gated-out', { minutes: 1 })];
-  assert.deepEqual(budgetFindings(usageOf(fine)), []);
-  // Pushes are counted one by one.
-  const other = natives.map((each, index) => (index < 6 ? each : { ...each, head_sha: 'bbbbbbbbb1234' }));
-  assert.deepEqual(budgetFindings(usageOf(other)), []);
+  const usage = usageOf([...Array.from({ length: 40 }, (_, index) => push(`native-${index}`)), push('ci'), push('gated-out', { minutes: 1 })]);
+  assert.deepEqual(budgetFindings(usage), []);
+  assert.equal(usage.pushes[0].workflows.length, 40);
+  assert.match(usageMarkdown(usage, [], { since: 'a', until: 'b' }), /- aaaaaaaaa: 40 \(/);
 });
 
 test('the report lists the runs behind each finding', () => {

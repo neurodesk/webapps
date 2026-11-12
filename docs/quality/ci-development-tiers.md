@@ -65,8 +65,11 @@ shared push filters, about 5,200 runner minutes in one day.
 
 Shared paths reach a gated workflow on main through its nightly sweep. Each
 has one `schedule`, and for that event the gate runs the workflow when a path
-under one of its shared pull request filters changed on main during the last
-26 hours (`sweepWorkflow`). The sweep does not ask whether the change reaches
+under one of its shared pull request filters changed on main since the
+workflow last finished green there, by a merge or an earlier sweep
+(`sweepWorkflow`, `resolveTestedBase`). A sweep that fails, or that GitHub
+drops, leaves that commit where it was, so the next sweep still sees the
+change. Without such a run the workflow runs. The sweep does not ask whether the change reaches
 the workflow: it is what first tests a file read through a computed path, and
 what builds every target for a shared change the pull request built on Linux
 only. A night without such a change costs each workflow one gate job.
@@ -78,7 +81,7 @@ only. A night without such a change costs each workflow one gate job.
 - A failed sweep opens an issue through `nightly-failures.yml`, like every
   scheduled workflow.
 - Replay a sweep with
-  `node scripts/workflow-gate.mjs --workflow <name> --sweep-hours 26`.
+  `GITHUB_REPOSITORY=neurodesk/webapps GITHUB_TOKEN=$(gh auth token) node scripts/workflow-gate.mjs --workflow <name> --sweep`.
 
 ## Daily usage budget
 
@@ -90,9 +93,12 @@ budget in `scripts/lib/ci-usage.mjs` is exceeded:
 | --- | --- | --- |
 | Whole-catalogue `ci` runs of one pull request | 2 | Fixes were pushed to a ready pull request. Convert it to draft first. |
 | Whole-catalogue pull request `ci` runs in total | 8 | A file the planner ties to every app is changing often. Read the `app-plan` summaries. |
-| Workflows one push to main runs, besides `ci` and the deploy | 10 | A `push` filter names a shared path. |
 
-A whole-catalogue run is a `ci` run with at least 100 jobs. Run the report for
+A whole-catalogue run is a `ci` run with at least 100 jobs; one still going
+when the report runs counts. Runs are grouped by pull request number, and a
+fork's by repository and branch. The report also lists the workflows each push
+to main ran. That list has no budget, because a release rightly runs most of
+them. Run the report for
 any day with `node scripts/ci-usage-report.mjs --until <ISO time>`. Change a
 budget only with the measurement that justifies it.
 

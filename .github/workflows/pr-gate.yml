@@ -6,7 +6,8 @@ name: pr-gate
 # never reaches. Callers keep those filters for pull requests and make their
 # entry jobs wait for this decision (scripts/lib/workflow-gate.mjs). A push to
 # main starts a caller only for its own paths; its schedule is the sweep, which
-# runs it when a shared path changed on main during the last day. The job
+# runs it when a shared path changed on main since the caller last finished
+# green there. The job
 # always finishes, so the jobs after a caller's entry jobs keep their default
 # conditions: a draft answers false and a push or a dispatch true, both without
 # a checkout.
@@ -23,8 +24,11 @@ on:
         description: "'true' when the pull request, or main since the last sweep, reaches what the workflow tests"
         value: ${{ jobs.decide.outputs.run }}
 
+# The sweep asks the Actions API where the calling workflow last finished green.
+# A caller's gate job grants the same two permissions.
 permissions:
   contents: read
+  actions: read
 
 jobs:
   decide:
@@ -71,10 +75,10 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        # The sweep window is two hours longer than a day, for a late start.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           if [ "$EVENT_NAME" = schedule ]; then
-            node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --sweep-hours 26 --head "$HEAD_SHA"
+            node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --sweep --head "$HEAD_SHA"
           else
             node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --base "$BASE_SHA" --head "$HEAD_SHA"
           fi

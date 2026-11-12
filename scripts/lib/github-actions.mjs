@@ -38,7 +38,7 @@ export function listRuns({ workflow = 'ci.yml', since, event, branch, limit = 10
 // the fields a usage report reads. The API returns at most 1,000 runs per
 // query, so the range is read in two-hour windows.
 export async function listAllRuns({ since, until, windowHours = 2 }) {
-  const fields = '{id, name, event, status, conclusion, head_branch, head_sha, created_at, run_started_at, updated_at}';
+  const fields = '{id, name, event, status, conclusion, head_branch, head_sha, created_at, run_started_at, updated_at, pull_requests: [.pull_requests[].number], head_repository: .head_repository.full_name}';
   const stamp = (time) => new Date(time).toISOString().replace(/\.\d+Z$/, 'Z');
   const runs = new Map();
   for (let from = since.getTime(); from < until.getTime(); from += windowHours * 3600e3) {

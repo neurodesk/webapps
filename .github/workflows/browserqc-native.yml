@@ -25,7 +25,7 @@ on:
       - 'packages/node-drivers/src/niimath.js'
       - 'apps/browserqc/**'
   # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
-  # runs it when one changed on main during the last day.
+  # runs it when one changed on main since this workflow last finished green there.
   schedule:
     - cron: '17 13 * * *'
   workflow_dispatch:
@@ -47,6 +47,9 @@ jobs:
   # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
   gate:
     uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       workflow: browserqc-native
 

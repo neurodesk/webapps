@@ -36,7 +36,7 @@ test('ready and updated PRs run deferred native jobs; push and dispatch retain t
     if (usesGate) {
       gated++;
       // The gate always finishes, so jobs after the entry jobs keep their default conditions.
-      assert.deepEqual(flow.jobs.gate, { uses: './.github/workflows/pr-gate.yml', with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+      assert.deepEqual(flow.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
     }
     if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
       for (const [id, job] of Object.entries(flow.jobs)) {
