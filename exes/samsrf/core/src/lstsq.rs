@@ -26,16 +26,54 @@ pub struct Solution {
     pub pivot: Vec<usize>,
     /// The leading `min(m, n)` rows of `R`, row-major, in pivoted column order.
     pub r: Vec<Vec<Complex64>>,
+    /// The factorisation as `xGEQP3` leaves it, column by column in pivoted
+    /// order (R on and above the diagonal, reflector vectors below), its
+    /// reflector scalars and `Q^H y` (`xORMQR`), for step-by-step comparison.
+    pub packed: Vec<Vec<Complex64>>,
+    pub tau: Vec<Complex64>,
+    pub qty: Vec<Complex64>,
 }
 
 /// `A \ y` with `A` given by its columns. Inputs are converted to
 /// `precision` first; the design is complex only when an imaginary part
 /// survives that conversion (MATLAB's complex tolerance applies only then).
 pub fn mldivide(columns: &[&[Complex64]], y: &[f64], precision: Precision) -> Solution {
-    match precision {
-        Precision::Double => solve::<f64>(columns, y),
-        Precision::Single => solve::<f32>(columns, y),
-    }
+    let solved = match precision {
+        Precision::Double => solve::<f64>(columns, &[y]),
+        Precision::Single => solve::<f32>(columns, &[y]),
+    };
+    let Solved { mut coefficients, mut qty, rank, pivot, r, packed, tau } = solved;
+    Solution { coefficients: coefficients.remove(0), rank, pivot, r, packed, tau, qty: qty.remove(0) }
+}
+
+/// The coefficients of `A \ Y` for several right-hand sides at once, in
+/// column order per right-hand side. MATLAB applies `Q^H` to all of them in
+/// one `?ormqr` call, whose summation order depends on each column's place
+/// among them, so this differs in the last bits from solving each column
+/// alone.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Solutions {
+    pub coefficients: Vec<Vec<Complex64>>,
+    pub rank: usize,
+    pub pivot: Vec<usize>,
+}
+
+pub fn mldivide_many(columns: &[&[Complex64]], ys: &[&[f64]], precision: Precision) -> Solutions {
+    let solved = match precision {
+        Precision::Double => solve::<f64>(columns, ys),
+        Precision::Single => solve::<f32>(columns, ys),
+    };
+    Solutions { coefficients: solved.coefficients, rank: solved.rank, pivot: solved.pivot }
+}
+
+struct Solved {
+    coefficients: Vec<Vec<Complex64>>,
+    qty: Vec<Vec<Complex64>>,
+    rank: usize,
+    pivot: Vec<usize>,
+    r: Vec<Vec<Complex64>>,
+    packed: Vec<Vec<Complex64>>,
+    tau: Vec<Complex64>,
 }
 
 /// `[ones(n,1) x] \ y` as SamSrf writes it: returns `(Beta, Baseline)`, the
@@ -44,6 +82,38 @@ pub fn regress_on_ones(x: &[Complex64], y: &[f64], precision: Precision) -> (Com
     let ones = vec![Complex64::new(1.0, 0.0); x.len()];
     let solution = mldivide(&[&ones, x], y, precision);
     (solution.coefficients[1], solution.coefficients[0])
+}
+
+/// Which MKL summation a probe exercises (see `probe_sum`).
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProbedKernel {
+    /// `?gemv` as `?geqp3` uses it on the next column.
+    Column,
+    /// `?ormqr` / `?unmqr` on right-hand side `index` of `count`.
+    RightHandSide { count: usize, index: usize },
+}
+
+/// `v^H c` with `v` all ones, in the given kernel's summation order and
+/// class: the quantity `record_qr_kernels.m`'s FPRev probes record from MKL.
+/// For the kernel test only.
+#[doc(hidden)]
+pub fn probe_sum(kernel: ProbedKernel, precision: Precision, complex: bool, values: &[Complex64]) -> Complex64 {
+    fn run<T: Real>(kernel: ProbedKernel, complex: bool, values: &[Complex64]) -> Complex64 {
+        let single = std::mem::size_of::<T>() == 4;
+        let c: Vec<C<T>> = values.iter().map(|v| C { re: T::from_f64(v.re), im: T::from_f64(v.im) }).collect();
+        let v = vec![C::real(T::ONE); c.len().saturating_sub(1)];
+        let chosen = match kernel {
+            ProbedKernel::Column => column_kernel(complex, single),
+            ProbedKernel::RightHandSide { count, index } => rhs_kernel(complex, single, count, index),
+        };
+        let w = kernel_dot(chosen, &v, &c, complex);
+        Complex64::new(w.re.to_f64(), w.im.to_f64())
+    }
+    match precision {
+        Precision::Double => run::<f64>(kernel, complex, values),
+        Precision::Single => run::<f32>(kernel, complex, values),
+    }
 }
 
 /// The two IEEE binary formats MATLAB's `single` and `double` use.
@@ -187,6 +257,47 @@ impl<T: Real> C<T> {
             C { re: q.re * scale, im: q.im * scale }
         }
     }
+    /// LAPACK 3.9's `xLADIV` (Baudin and Smith's robust division), which
+    /// `xLARFG` uses for 1 / (alpha - beta): the same power-of-two
+    /// prescaling as `div`, then a reciprocal of the denominator.
+    fn ladiv(self, other: Self) -> Self {
+        let half = T::from_f64(0.5);
+        let two = T::from_f64(2.0);
+        let unit = T::EPSILON * half;
+        let tiny = T::MIN_POSITIVE * two / unit;
+        let blow_up = two / (unit * unit);
+        let (mut a, mut b, mut c, mut d) = (self.re, self.im, other.re, other.im);
+        let ab = if a.abs() >= b.abs() { a.abs() } else { b.abs() };
+        let cd = if c.abs() >= d.abs() { c.abs() } else { d.abs() };
+        let mut s = T::ONE;
+        if ab >= half * T::MAX {
+            a = half * a;
+            b = half * b;
+            s = two * s;
+        }
+        if cd >= half * T::MAX {
+            c = half * c;
+            d = half * d;
+            s = half * s;
+        }
+        if ab <= tiny {
+            a = a * blow_up;
+            b = b * blow_up;
+            s = s / blow_up;
+        }
+        if cd <= tiny {
+            c = c * blow_up;
+            d = d * blow_up;
+            s = s * blow_up;
+        }
+        let (p, q) = if other.im.abs() <= other.re.abs() {
+            ladiv1(a, b, c, d)
+        } else {
+            let (p, q) = ladiv1(b, a, d, c);
+            (p, -q)
+        };
+        C { re: p * s, im: q * s }
+    }
     /// Smith's algorithm.
     fn smith(self, other: Self) -> Self {
         if other.im.abs() <= other.re.abs() {
@@ -201,6 +312,53 @@ impl<T: Real> C<T> {
     }
     fn abs(self) -> T {
         lapy2(self.re, self.im)
+    }
+}
+
+/// The division `?trsv` makes by a diagonal of R, as measured from MKL's
+/// `ctrsv` and `ztrsv` on AMD: complex single divides each part (Smith's
+/// algorithm with a real divisor), complex double uses (a c + b d) / (c² + d²).
+/// Where c² + d² is not a finite normal number MKL still returned the
+/// quotient (recorded at 1e155 and 1e300); the guarded division used there
+/// agrees with those two recordings but is not otherwise evidenced.
+fn trsv_divide<T: Real>(numerator: C<T>, divisor: C<T>, complex: bool, single: bool) -> C<T> {
+    if !complex || single {
+        return numerator.div(divisor, complex);
+    }
+    let (c, d) = (divisor.re, divisor.im);
+    let denominator = c * c + d * d;
+    if denominator.is_finite() && denominator >= T::MIN_POSITIVE {
+        let (a, b) = (numerator.re, numerator.im);
+        C { re: (a * c + b * d) / denominator, im: (b * c - a * d) / denominator }
+    } else {
+        numerator.div(divisor, true)
+    }
+}
+
+/// `?trsm`, which a solve with several right-hand sides uses, multiplies by
+/// the reciprocal of each real diagonal (measured on AMD for every recorded
+/// real design). Complex designs keep `?trsv`'s division (not established).
+fn trsm_divide<T: Real>(numerator: C<T>, divisor: C<T>, complex: bool) -> C<T> {
+    if complex {
+        return numerator.div(divisor, true);
+    }
+    C::real(numerator.re * (T::ONE / divisor.re))
+}
+
+fn ladiv1<T: Real>(a: T, b: T, c: T, d: T) -> (T, T) {
+    let r = d / c;
+    let t = T::ONE / (c + d * r);
+    let p = ladiv2(a, b, c, d, r, t);
+    let q = ladiv2(b, -a, c, d, r, t);
+    (p, q)
+}
+
+fn ladiv2<T: Real>(a: T, b: T, c: T, d: T, r: T, t: T) -> T {
+    if r != T::ZERO {
+        let br = b * r;
+        if br != T::ZERO { (a + br) * t } else { a * t + (b * t) * r }
+    } else {
+        (a + d * (b / c)) * t
     }
 }
 
@@ -301,7 +459,7 @@ fn larfg<T: Real>(alpha: C<T>, x: &mut [C<T>], complex: bool) -> (C<T>, C<T>) {
     };
     let shift = alpha_h.sub(C::real(beta_h), complex);
     if complex {
-        scale(x, C::real(half).div(shift, true), true);
+        scale(x, C::real(half).ladiv(shift), true);
     } else {
         scale(x, C::real(half / shift.re), false);
     }
@@ -311,46 +469,120 @@ fn larfg<T: Real>(alpha: C<T>, x: &mut [C<T>], complex: bool) -> (C<T>, C<T>) {
     (C::real(beta), tau)
 }
 
-/// `v^H c` with `v(1) = 1`, as MKL accumulated it for MATLAB on the recording
-/// host. The pinned least-squares recording selects this order among the
-/// sequential, lane, peeled, fused and split complex variants tried
-/// (validation README). Real designs take the first product `v(2) c(2)` on its
-/// own, accumulate the rest in eight lanes over whole blocks of eight, reduce
-/// the lanes pairwise (lane i with i + 4, then i + 2, then i + 1) and add the
-/// remaining terms in sequence; complex single designs use two lanes over every
-/// term and complex double designs add in sequence. `c(1)` is added last.
-fn reflect_dot<T: Real>(v: &[C<T>], c: &[C<T>], complex: bool) -> C<T> {
-    let single = std::mem::size_of::<T>() == 4;
-    let (peeled, lanes, sequential_tail) = match (complex, single) {
-        (false, _) => (1, 8, true),
-        (true, true) => (0, 2, false),
-        (true, false) => (0, 1, false),
+/// One of MKL's summation orders for `w = v^H c` with `v(1) = 1`, as MATLAB
+/// R2023b's MKL runs them on AMD hosts (CNR branch auto). Each was read from
+/// MKL's own summation trees: `record_qr_kernels.m` probes `?gemv` and
+/// `?ormqr` with +M and -M among ones (FPRev) at every recorded length,
+/// alignment and number of right-hand sides. Products `p(i) = v(i+1)^H
+/// c(i+1)` are summed into `lanes` accumulators over whole blocks of `block`
+/// products (every product when `mod_tail`), the accumulators combine in
+/// `strides` order (lane k with k + stride while k / stride is even), and
+/// the remaining products follow in sequence. MKL's AVX-512 branch on Intel
+/// sums in other trees, so its results differ in the last bits.
+#[derive(Debug, Clone, Copy)]
+struct Kernel {
+    /// `?ormqr` takes `p(1)` as the first term of accumulator 0 and adds
+    /// `c(1)` last; `?gemv` inside `?geqp3` starts accumulator 0 with `c(1)`.
+    first_product_seeds: bool,
+    /// `zunmqr` adds the two halves of each complex product to an
+    /// accumulator separately (re += v.re c.re, then += v.im c.im) instead of
+    /// rounding the product first.
+    split_complex: bool,
+    lanes: usize,
+    block: usize,
+    strides: &'static [usize],
+    mod_tail: bool,
+}
+
+const fn kernel(first_product_seeds: bool, lanes: usize, block: usize, strides: &'static [usize], mod_tail: bool) -> Kernel {
+    Kernel { first_product_seeds, split_complex: false, lanes, block, strides, mod_tail }
+}
+
+/// `?gemv`, which `?geqp3` uses to apply a reflector to the next column.
+fn column_kernel(complex: bool, single: bool) -> Kernel {
+    match (complex, single) {
+        (false, true) => kernel(false, 8, 8, &[4, 2, 1], false),
+        (false, false) => kernel(false, 8, 8, &[2, 4, 1], false),
+        (true, true) => kernel(false, 2, 2, &[1], true),
+        (true, false) => kernel(false, 1, 1, &[], false),
+    }
+}
+
+/// `?ormqr` / `?unmqr` applying a reflector to right-hand side `index` of
+/// `count`. Real right-hand sides are processed in groups of four columns;
+/// the one to three columns left over use narrower kernels.
+fn rhs_kernel(complex: bool, single: bool, count: usize, index: usize) -> Kernel {
+    let one = match (complex, single) {
+        (false, true) => kernel(true, 8, 8, &[4, 2, 1], false),
+        (false, false) => kernel(true, 8, 8, &[2, 4, 1], false),
+        (true, true) => return kernel(true, 2, 2, &[1], true),
+        (true, false) => return Kernel { split_complex: true, ..kernel(true, 1, 1, &[], false) },
     };
+    let grouped = count / 4 * 4;
+    if index < grouped {
+        return if single { kernel(true, 4, 4, &[2, 1], false) } else { kernel(true, 2, 2, &[1], false) };
+    }
+    let (left, position) = (count - grouped, index - grouped);
+    match (left, position, single) {
+        (1, _, _) | (3, 2, _) => one,
+        (_, 0, true) => one,
+        (_, 0, false) => kernel(true, 4, 8, &[2, 1], false),
+        (_, _, true) => kernel(true, 4, 8, &[2, 1], false),
+        (_, _, false) => kernel(true, 2, 8, &[1], false),
+    }
+}
+
+/// `w = v^H c` in `kernel`'s summation order.
+fn kernel_dot<T: Real>(kernel: Kernel, v: &[C<T>], c: &[C<T>], complex: bool) -> C<T> {
+    if complex && kernel.split_complex {
+        // Only the sequential zunmqr kernel splits products; see rhs_kernel.
+        debug_assert!(kernel.lanes == 1 && kernel.first_product_seeds);
+        let mut pairs = v.iter().zip(&c[1..]);
+        let Some((v0, c0)) = pairs.next() else { return c[0] };
+        let mut w = v0.conj().mul(*c0, true);
+        for (v, c) in pairs {
+            w = C { re: (w.re + v.re * c.re) + v.im * c.im, im: (w.im + v.re * c.im) - v.im * c.re };
+        }
+        return c[0].add(w, true);
+    }
     let products: Vec<C<T>> = v.iter().zip(&c[1..]).map(|(v, c)| v.conj().mul(*c, complex)).collect();
-    let peeled = peeled.min(products.len());
-    let body = &products[peeled..];
-    let blocked = if sequential_tail { body.len() / lanes * lanes } else { body.len() };
-    let mut sums = vec![C::real(T::ZERO); lanes];
-    for (i, product) in body[..blocked].iter().enumerate() {
-        sums[i % lanes] = sums[i % lanes].add(*product, complex);
+    if products.is_empty() {
+        return c[0];
     }
-    while sums.len() > 1 {
-        let half = sums.len() / 2;
-        sums = (0..half).map(|i| sums[i].add(sums[i + half], complex)).collect();
+    let (seed, body) = if kernel.first_product_seeds { (products[0], &products[1..]) } else { (c[0], &products[..]) };
+    let blocked = if kernel.mod_tail { body.len() } else { body.len() / kernel.block * kernel.block };
+    let mut w = seed;
+    if kernel.lanes > 1 && blocked > 0 {
+        let mut sums: Vec<Option<C<T>>> = vec![None; kernel.lanes];
+        sums[0] = Some(seed);
+        for (i, product) in body[..blocked].iter().enumerate() {
+            let lane = &mut sums[i % kernel.lanes];
+            *lane = Some(lane.map_or(*product, |sum| sum.add(*product, complex)));
+        }
+        for &stride in kernel.strides {
+            for k in 0..kernel.lanes {
+                if (k / stride) % 2 == 0 && k + stride < kernel.lanes {
+                    if let (Some(left), Some(right)) = (sums[k], sums[k + stride]) {
+                        sums[k] = Some(left.add(right, complex));
+                    }
+                }
+            }
+        }
+        w = sums[0].unwrap();
+        for product in &body[blocked..] {
+            w = w.add(*product, complex);
+        }
+    } else {
+        for product in body {
+            w = w.add(*product, complex);
+        }
     }
-    let mut w = sums[0];
-    for product in &body[blocked..] {
-        w = w.add(*product, complex);
-    }
-    for product in products[..peeled].iter().rev() {
-        w = product.add(w, complex);
-    }
-    c[0].add(w, complex)
+    if kernel.first_product_seeds { c[0].add(w, complex) } else { w }
 }
 
 /// `xLARF` from the left with `H^H`: `c -= v (tau^H (v^H c))`, `v(1) = 1`.
-fn apply<T: Real>(v: &[C<T>], tau: C<T>, c: &mut [C<T>], complex: bool) {
-    let w = reflect_dot(v, c, complex);
+fn apply<T: Real>(kernel: Kernel, v: &[C<T>], tau: C<T>, c: &mut [C<T>], complex: bool) {
+    let w = kernel_dot(kernel, v, c, complex);
     let t = tau.conj().mul(w, complex);
     c[0] = c[0].sub(t, complex);
     for (vi, ci) in v.iter().zip(&mut c[1..]) {
@@ -358,22 +590,27 @@ fn apply<T: Real>(v: &[C<T>], tau: C<T>, c: &mut [C<T>], complex: bool) {
     }
 }
 
-fn solve<T: Real>(columns: &[&[Complex64]], y: &[f64]) -> Solution {
+fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]]) -> Solved {
     let n = columns.len();
-    let m = y.len();
+    let m = ys.first().map_or(0, |y| y.len());
     assert!(columns.iter().all(|column| column.len() == m), "design columns and observations differ in length");
+    assert!(ys.iter().all(|y| y.len() == m), "right-hand sides differ in length");
     let convert = |value: Complex64| C { re: T::from_f64(value.re), im: T::from_f64(value.im) };
     let mut a: Vec<Vec<C<T>>> = columns.iter().map(|column| column.iter().map(|&v| convert(v)).collect()).collect();
-    let mut b: Vec<C<T>> = y.iter().map(|&v| C::real(T::from_f64(v))).collect();
+    let mut bs: Vec<Vec<C<T>>> = ys.iter().map(|y| y.iter().map(|&v| C::real(T::from_f64(v))).collect()).collect();
     // MATLAB's NaN and Inf handling inside mldivide is not recorded here.
     // Nonfinite converted inputs (including finite doubles that overflow
     // single) give NaN coefficients rather than a silently finite answer.
-    if a.iter().flatten().chain(&b).any(|value| !value.re.is_finite() || !value.im.is_finite()) {
-        return Solution {
-            coefficients: vec![Complex64::new(f64::NAN, f64::NAN); n],
+    // A nonfinite value makes every coefficient NaN, for all right-hand sides.
+    if a.iter().flatten().chain(bs.iter().flatten()).any(|value| !value.re.is_finite() || !value.im.is_finite()) {
+        return Solved {
+            coefficients: vec![vec![Complex64::new(f64::NAN, f64::NAN); n]; ys.len()],
+            qty: vec![Vec::new(); ys.len()],
             rank: 0,
             pivot: (0..n).collect(),
             r: Vec::new(),
+            packed: Vec::new(),
+            tau: Vec::new(),
         };
     }
     let complex = a.iter().flatten().any(|value| value.im != T::ZERO);
@@ -382,12 +619,15 @@ fn solve<T: Real>(columns: &[&[Complex64]], y: &[f64]) -> Solution {
             value.im = T::ZERO;
         }
     }
+    let single = std::mem::size_of::<T>() == 4;
+    let count = bs.len();
     let steps = m.min(n);
     let mut pivot: Vec<usize> = (0..n).collect();
     let mut norms: Vec<T> = a.iter().map(|column| nrm2(column)).collect();
     let mut original = norms.clone();
     let threshold = T::EPSILON.sqrt();
     let mut diagonal = Vec::with_capacity(steps);
+    let mut taus = Vec::with_capacity(steps);
     for i in 0..steps {
         // xLAQP2: the remaining column with the largest updated norm (first on ties).
         let mut best = i;
@@ -404,11 +644,14 @@ fn solve<T: Real>(columns: &[&[Complex64]], y: &[f64]) -> Solution {
         let (beta, tau) = larfg(alpha, &mut a[i][i + 1..], complex);
         a[i][i] = beta;
         diagonal.push(beta);
+        taus.push(tau);
         let v: Vec<C<T>> = a[i][i + 1..].to_vec();
         for column in &mut a[i + 1..] {
-            apply(&v, tau, &mut column[i..], complex);
+            apply(column_kernel(complex, single), &v, tau, &mut column[i..], complex);
         }
-        apply(&v, tau, &mut b[i..], complex);
+        for (index, b) in bs.iter_mut().enumerate() {
+            apply(rhs_kernel(complex, single, count, index), &v, tau, &mut b[i..], complex);
+        }
         // Downdate the remaining norms as xLAQP2 does.
         for j in i + 1..n {
             if norms[j] != T::ZERO {
@@ -432,22 +675,34 @@ fn solve<T: Real>(columns: &[&[Complex64]], y: &[f64]) -> Solution {
     let factor = if complex { T::from_usize(10) } else { T::ONE };
     let tolerance = factor * T::from_usize(m.max(n)) * T::EPSILON * diagonal.first().map_or(T::ZERO, |r| r.abs());
     let rank = diagonal.iter().take_while(|r| r.abs() > tolerance).count();
-    let mut x = vec![C::real(T::ZERO); n];
-    for i in (0..rank).rev() {
-        let mut sum = b[i];
-        for j in i + 1..rank {
-            sum = sum.sub(a[j][i].mul(x[j], complex), complex);
+    let wide = |value: &C<T>| Complex64::new(value.re.to_f64(), value.im.to_f64());
+    let coefficients = bs.iter().map(|b| {
+        let mut x = vec![C::real(T::ZERO); n];
+        for i in (0..rank).rev() {
+            let mut sum = b[i];
+            for j in i + 1..rank {
+                sum = sum.sub(a[j][i].mul(x[j], complex), complex);
+            }
+            x[i] = if count == 1 {
+                trsv_divide(sum, a[i][i], complex, single)
+            } else {
+                trsm_divide(sum, a[i][i], complex)
+            };
         }
-        x[i] = sum.div(a[i][i], complex);
-    }
-    let mut coefficients = vec![Complex64::new(0.0, 0.0); n];
-    for (k, &column) in pivot.iter().enumerate() {
-        coefficients[column] = Complex64::new(x[k].re.to_f64(), x[k].im.to_f64());
-    }
+        let mut coefficients = vec![Complex64::new(0.0, 0.0); n];
+        for (k, &column) in pivot.iter().enumerate() {
+            coefficients[column] = wide(&x[k]);
+        }
+        coefficients
+    }).collect();
     let r = (0..steps)
         .map(|i| (0..n).map(|j| if j < i { Complex64::new(0.0, 0.0) } else { Complex64::new(a[j][i].re.to_f64(), a[j][i].im.to_f64()) }).collect())
         .collect();
-    Solution { coefficients, rank, pivot, r }
+    let packed = a.iter().map(|column| column.iter().map(wide).collect()).collect();
+    let tau = taus.iter().map(wide).collect();
+    // Q^H y is kept only for a single right-hand side.
+    let qty = bs.iter().map(|b| if count == 1 { b.iter().map(wide).collect() } else { Vec::new() }).collect();
+    Solved { coefficients, qty, rank, pivot, r, packed, tau }
 }
 
 #[cfg(test)]
