@@ -134,9 +134,12 @@ groups, and native release/signing conditions are unchanged.
 NeuroFlow and the SDC registration gate start for a pull request only on their
 own paths: the builder, the template apps and NeuroFlow's scripts and tests;
 the SDC pipeline, the registration kernel and their reference pins. Both take
-hours of runner time, so a change to a package they only build on reaches them
-on the push to main and in their nightly runs, whose filters stay broad. To
-test such a change before merging, dispatch the workflow on the branch.
+hours of runner time. A merge starts NeuroFlow on the same paths, because
+nearly every merge touches a package its apps build on: on 10 November 2026
+that started 19 push runs, of which 14 were cancelled by the next merge. Its
+nightly run has no filter and covers those packages. The SDC gate also starts
+on main for the files it imports from other packages. To test such a change
+before merging, dispatch the workflow on the branch.
 Native workflows that call the portable packager use generated Node-driver
 paths: run `node scripts/sync-native-driver-paths.mjs` after changing their
 imports. The contract suite checks the generated paths and the existing

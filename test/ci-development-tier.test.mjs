@@ -100,7 +100,7 @@ test('returning to draft cancels the prior run without starting CI jobs', async 
 });
 
 test('NeuroFlow and the SDC registration gate start for a pull request only on their own paths', async () => {
-  // Both take hours of runner time. A shared change reaches them on main and nightly.
+  // Both take hours of runner time. A shared change reaches them nightly, and the SDC gate on main.
   for (const file of ['neuroflow.yml', 'sdc-registration-gate.yml']) {
     const flow = await workflow(file);
     const own = flow.on.pull_request.paths;
@@ -112,7 +112,10 @@ test('NeuroFlow and the SDC registration gate start for a pull request only on t
     const sample = (filter) => filter.replace('**', 'nested/file.js').replace('*', 'name');
     for (const filter of own) assert.ok(pathGlob(filter).test(sample(filter)), `${file}: ${sample(filter)} is a file ${filter} matches`);
     assert.deepEqual(own.filter((filter) => !covers.some((glob) => glob.test(sample(filter)))), [], `${file}: a push to main covers every pull request path`);
-    assert.ok(push.some(isSharedFilter), `${file} keeps its shared filters on main`);
+    // NeuroFlow runs for hours and nearly every merge touches a tree it builds on, so its nightly
+    // run alone covers those; the SDC gate lists the few files it imports from other packages.
+    if (file === 'neuroflow.yml') assert.deepEqual(push, own, `${file} starts for a merge only on its own paths`);
+    else assert.ok(push.some(isSharedFilter), `${file} keeps its shared filters on main`);
     assert.deepEqual(flow.on.push.branches, ['main']);
     assert.ok(flow.on.schedule.length, `${file} keeps its nightly run`);
   }
