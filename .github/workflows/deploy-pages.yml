@@ -83,6 +83,26 @@ jobs:
             dist-sites/hub.wrangler.json
           if-no-files-found: error
 
+  # Every build saves 1.2 GB under its own commit and restores only the newest.
+  # The repository's caches share 10 GB, and GitHub evicts the least recently used
+  # above it, so the superseded copies would push out Rust and reference-data caches.
+  turbo-cache-retention:
+    needs: build
+    runs-on: ubuntu-latest
+    # A cache left in place costs space, never a wrong result.
+    continue-on-error: true
+    permissions:
+      actions: write
+    steps:
+      - name: Delete every turbo-pages- cache but the newest
+        run: |
+          gh cache list --ref "$CACHE_REF" --key turbo-pages- --sort created_at --order desc --limit 100 --json id --jq '.[1:][].id' |
+            xargs --no-run-if-empty --max-args 1 gh cache delete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CACHE_REF: ${{ github.ref }}
+
   deploy:
     environment:
       name: github-pages

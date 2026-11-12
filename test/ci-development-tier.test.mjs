@@ -136,3 +136,67 @@ test('DWI2TRX preserves manual tracking-only selection', async () => {
     assert.equal(evaluate(flow.jobs.tracking.if, github, { tracking_only }), tracking_only);
   }
 });
+
+test('the interface audit reads the example cache the job restored, filled and saves from main', async () => {
+  const { steps } = (await workflow('ci.yml')).jobs['composite-site'];
+  const position = (description, matches) => {
+    const found = steps.flatMap((step, index) => matches(step) ? [index] : []);
+    assert.equal(found.length, 1, `composite-site has one step that ${description}`);
+    return found[0];
+  };
+  const restoreAt = position('restores the examples', step => String(step.uses).startsWith('actions/cache/restore@') && step.with.key.startsWith('example-assets-'));
+  const fillAt = position('fills the example cache', step => step.run?.includes('scripts/fetch-example-cache.mjs'));
+  const saveAt = position('saves the examples', step => String(step.uses).startsWith('actions/cache/save@') && step.with.key.includes('example-cache'));
+  const auditAt = position('audits the interfaces', step => step.run === 'pnpm audit:interfaces');
+  const [restore, fill, save, audit] = [restoreAt, fillAt, saveAt, auditAt].map(index => steps[index]);
+  assert.ok(restoreAt < fillAt && fillAt < saveAt && fillAt < auditAt, 'restore, then fill, then save and audit');
+  const directory = restore.with.path;
+  assert.match(directory, /^\$\{\{ runner\.temp \}\}\/[\w-]+$/);
+  assert.equal(fill.env.EXAMPLE_ASSET_CACHE, directory, 'the fill writes the restored directory');
+  assert.match(fill.run, /fetch-example-cache\.mjs "\$EXAMPLE_ASSET_CACHE" --prune$/);
+  assert.equal(audit.env.EXAMPLE_ASSET_CACHE, directory, 'the audit reads the filled directory instead of the network');
+  assert.equal(save.with.path, directory, 'the save stores the filled directory');
+  assert.equal(save.with.key, `\${{ steps.${restore.id}.outputs.cache-primary-key }}`, 'the save uses the key the restore looked up');
+  assert.ok(restore.with['restore-keys'] && restore.with.key.startsWith(restore.with['restore-keys']), 'an older copy is restored and topped up');
+  const saves = ref => runInNewContext(save.if.replace(/\.(\w+-[\w-]+)/g, '["$1"]'), { github: { ref }, steps: { [restore.id]: { outputs: { 'cache-hit': 'false' } } } });
+  assert.equal(saves('refs/heads/main'), true);
+  assert.equal(saves('refs/pull/809/merge'), false, 'a pull request stores no second copy');
+  const diskAt = steps.flatMap((step, index) => /^df\b/.test(step.run ?? '') ? [index] : []);
+  assert.ok(diskAt.some(index => index < restoreAt), 'free disk space is logged before the restore');
+  assert.ok(diskAt.some(index => index > fillAt && index < auditAt), 'free disk space is logged after the fill');
+});
+
+test('superseded per-commit caches are deleted by a job that holds nothing else', async () => {
+  const ci = await workflow('ci.yml');
+  const pages = await workflow('deploy-pages.yml');
+  const cacheKey = (job, prefix) => job.steps.map(step => step.with?.key).find(key => key?.startsWith(prefix));
+  for (const [file, flow, id, saver, prefix] of [
+    ['ci.yml', ci, 'example-cache-retention', 'composite-site', 'example-assets-'],
+    ['deploy-pages.yml', pages, 'turbo-cache-retention', 'build', 'turbo-pages-'],
+  ]) {
+    const job = flow.jobs[id];
+    assert.ok(job, `${file} deletes superseded ${prefix} caches`);
+    assert.ok(cacheKey(flow.jobs[saver], prefix), `${file}: ${saver} saves the ${prefix} caches`);
+    assert.equal(job.needs, saver, `${file}: ${id} runs once ${saver} has saved its cache`);
+    assert.deepEqual(job.permissions, { actions: 'write' }, `${file}: ${id} can delete caches and nothing else`);
+    assert.equal(job['continue-on-error'], true, `${file}: a failed cleanup does not fail the run`);
+    assert.ok(job.steps.every(step => !step.uses), `${file}: ${id} runs no action with its write token`);
+    const [{ run, env }] = job.steps;
+    assert.equal(job.steps.length, 1);
+    // Newest first, and everything after the first is deleted.
+    assert.match(run, new RegExp(`^gh cache list --ref "\\$CACHE_REF" --key ${prefix} --sort created_at --order desc --limit 100 --json id --jq '\\.\\[1:\\]\\[\\]\\.id' \\|\\s+xargs --no-run-if-empty --max-args 1 gh cache delete\\s*$`));
+    assert.deepEqual(Object.keys(env).sort(), ['CACHE_REF', 'GH_REPO', 'GH_TOKEN']);
+    for (const [other, { needs }] of Object.entries(flow.jobs)) {
+      assert.ok(![needs].flat().includes(id), `${file}: ${other} does not wait for the cleanup`);
+    }
+    for (const [other, { permissions }] of Object.entries(flow.jobs)) {
+      if (other !== id) assert.notEqual(permissions?.actions, 'write', `${file}: only ${id} may delete caches`);
+    }
+    assert.notEqual(flow.permissions.actions, 'write', `${file}: the write permission is the job's alone`);
+  }
+  const retention = ci.jobs['example-cache-retention'];
+  assert.equal(retention.steps[0].env.CACHE_REF, 'refs/heads/main');
+  assert.equal(retention.if, "github.ref == 'refs/heads/main'", 'only main saves, so only main has a copy to supersede');
+  assert.equal(pages.jobs['turbo-cache-retention'].if, undefined, 'every deploy build saves a cache');
+  assert.equal(pages.jobs['turbo-cache-retention'].steps[0].env.CACHE_REF, '${{ github.ref }}');
+});
