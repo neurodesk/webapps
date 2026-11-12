@@ -12,6 +12,7 @@ export function runBet({ volume, runtime, fractionalIntensity = 0.5, onProgress 
   onProgress(0, 'Extracting brain with BET…');
   const extracted = runtime.bet_wasm_with_progress(
     Float64Array.from(data), ...dims, ...spacing, fractionalIntensity, 1, 0, 1000, 4,
+    Float64Array.from(affine.flatMap(row => Array.from(row))),
     (current, total) => onProgress(total ? current / total : 0, 'Extracting brain with BET…'),
   );
   if (extracted.length !== data.length) throw new Error('BET returned an unexpected mask shape.');

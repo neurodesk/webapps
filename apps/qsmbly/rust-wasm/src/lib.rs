@@ -160,6 +160,17 @@ fn check_len_or_empty<T>(name: &str, data: &[T], expected: usize) -> Result<(), 
 // Marshalling helpers
 // ============================================================================
 
+/// A voxel-to-world affine passed from JS: 16 values (row-major 4x4), or none (empty).
+fn optional_affine(affine: &[f64]) -> Result<Option<[f64; 16]>, JsValue> {
+    match affine.len() {
+        0 => Ok(None),
+        16 => Ok(Some(affine.try_into().expect("16 values"))),
+        n => Err(js_err(format!(
+            "affine must have 16 values (or none), got {n}"
+        ))),
+    }
+}
+
 /// Forward qsm-core's `(current, total)` progress reports to a JS callback. A callback that
 /// throws is ignored: progress is advisory and must not abort the computation.
 fn js_progress(cb: &js_sys::Function) -> impl Fn(usize, usize) + '_ {
@@ -648,7 +659,11 @@ pub fn rs2_net_wasm(
 ///   signal-gated erosion). Pass an empty array when there is none; those ops then error rather
 ///   than silently gating on `input_data`.
 /// * `nx`, `ny`, `nz` - dimensions; `vsx`, `vsy`, `vsz` - voxel sizes in mm
+/// * `affine` - the image's voxel-to-world affine (16 values, row-major; the sform, else the
+///   qform), or empty when unknown: BET takes FSL's left-right order from it, MindGrab its
+///   orientation
 #[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
 pub fn apply_mask_ops_wasm(
     mask: Vec<u8>,
     ops: &str,
@@ -660,9 +675,11 @@ pub fn apply_mask_ops_wasm(
     vsx: f64,
     vsy: f64,
     vsz: f64,
+    affine: &[f64],
 ) -> Result<Vec<u8>, JsValue> {
     let n = n_elements(&[nx, ny, nz])?;
     check_len("mask", &mask, n)?;
+    let affine = optional_affine(affine)?;
     check_len_or_empty("input_data", input_data, n)?;
     check_len_or_empty("magnitude", magnitude, n)?;
 
@@ -694,7 +711,7 @@ pub fn apply_mask_ops_wasm(
         &[],
         0.0,
         (0.0, 0.0, 1.0),
-        None,
+        affine,
     );
     let magnitude = (!magnitude.is_empty()).then_some(magnitude);
     qsm_core::pipeline::apply_mask_ops(mask, &core[0].all_ops(), input_data, magnitude, &meta)
@@ -712,6 +729,9 @@ pub fn apply_mask_ops_wasm(
 /// * `gradient_threshold` - Z-gradient for threshold (-1 to 1, positive = larger brain at bottom)
 /// * `iterations` - Number of surface evolution iterations
 /// * `subdivisions` - Icosphere subdivision level (4 = 2562 vertices)
+/// * `affine` - the image's voxel-to-world affine (16 values, row-major; the sform, else the
+///   qform), or empty when unknown: FSL processes a neurologically stored image (positive
+///   determinant) with x reversed ([`qsm_core::bet::FslLeftRightOrder`])
 ///
 /// # Returns
 /// Binary mask as Uint8Array (1 = brain, 0 = background)
@@ -731,10 +751,12 @@ pub fn bet_wasm_with_progress(
     gradient_threshold: f64,
     iterations: usize,
     subdivisions: usize,
+    affine: &[f64],
     progress_callback: &js_sys::Function,
 ) -> Result<Vec<u8>, JsValue> {
     let n = n_elements(&[nx, ny, nz])?;
     check_len("data", data, n)?;
+    let order = qsm_core::bet::FslLeftRightOrder::from_affine(optional_affine(affine)?.as_ref());
 
     console_log!(
         "WASM BET with progress: {}x{}x{}, fi={:.2}, smooth={:.2}, grad={:.2}, iter={}, subdiv={}",
@@ -757,7 +779,7 @@ pub fn bet_wasm_with_progress(
         subdivisions,
         voxel_scale: 1.0,
     };
-    let mask = qsm_core::bet::run_bet(data, &grid, &params, js_progress(progress_callback));
+    let mask = qsm_core::bet::run_bet(data, &grid, &params, order, js_progress(progress_callback));
 
     let mask_count: usize = mask.iter().map(|&m| m as usize).sum();
     let coverage = 100.0 * mask_count as f64 / mask.len() as f64;
@@ -909,6 +931,7 @@ pub fn vasculature_mask_wasm_with_progress(
 /// * `lower_lim` - Proximity clamping value (default 0.6)
 /// * `curv_constant` - Curvature scaling (default 500)
 /// * `use_curvature` - Enable curvature-based weighting
+/// * `vessel_proximity` - Use the vasculature proximity term (false for stage 1, true for stage 2)
 ///
 /// # Returns
 /// Local field shift (background removed)
@@ -925,6 +948,7 @@ pub fn sdf_wasm_with_progress(
     lower_lim: f64,
     curv_constant: f64,
     use_curvature: bool,
+    vessel_proximity: bool,
     progress_callback: &js_sys::Function,
 ) -> Result<Vec<f64>, JsValue> {
     let n = n_elements(&[nx, ny, nz])?;
@@ -940,6 +964,7 @@ pub fn sdf_wasm_with_progress(
         lower_lim,
         curv_constant,
         use_curvature,
+        vessel_proximity,
     };
 
     let grid = qsm_core::Grid::new(nx, ny, nz, 1.0, 1.0, 1.0);
@@ -1006,6 +1031,7 @@ pub fn qsmart_adjust_offset_wasm(
         &grid,
         (bx, by, bz),
         ppm,
+        qsm_core::utils::qsmart::QsmartOffsetGrid::default(),
     );
 
     console_log!("WASM QSMART offset adjustment complete");

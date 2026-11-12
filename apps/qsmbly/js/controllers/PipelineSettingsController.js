@@ -166,7 +166,7 @@ export class PipelineSettingsController {
     this._setEl('b0_weight_type', D.b0_weight_type);
 
     // Linear fit defaults
-    this._setEl('linear_fit_reliability_percentile', LINEAR_FIT_DEFAULTS.reliability_threshold_percentile);
+    this._setChecked('linear_fit_estimate_offset', LINEAR_FIT_DEFAULTS.estimate_offset);
 
     // Background removal
     this._setEl('bf_algorithm', D.bf_algorithm);
@@ -421,9 +421,7 @@ export class PipelineSettingsController {
       },
       b0_weight_type: this._getEl('b0_weight_type') || 'phase_snr',
       linearFit: {
-        // estimate_offset is not exposed: qsmxt-engine's LinearFitConfig carries only the
-        // percentile, and its bridge pins estimate_offset to qsm-core's default (true).
-        reliability_threshold_percentile: parseFloat(this._getEl('linear_fit_reliability_percentile'))
+        estimate_offset: this._getChecked('linear_fit_estimate_offset') ?? LINEAR_FIT_DEFAULTS.estimate_offset,
       },
       romeo: {
         phase_gradient_coherence: romeoPhaseGradientCoherence,
@@ -867,8 +865,8 @@ export class PipelineSettingsController {
     this._setEl('b0_weight_type', settings.b0_weight_type ?? 'phase_snr');
 
     // Linear fit settings
-    this._setEl('linear_fit_reliability_percentile',
-      settings.linearFit?.reliability_threshold_percentile ?? LINEAR_FIT_DEFAULTS.reliability_threshold_percentile);
+    this._setChecked('linear_fit_estimate_offset',
+      settings.linearFit?.estimate_offset ?? LINEAR_FIT_DEFAULTS.estimate_offset);
 
     // Background removal method
     const bgMethod = settings.bf_algorithm;

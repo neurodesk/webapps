@@ -1,5 +1,12 @@
 # brain-extraction
 
+## 0.5.20261112
+
+### Patch Changes
+
+- Keep the compact BET runtime on QSMbly's qsm-core 0.41.0 and pass the image affine to its left-right ordering calculation. Test the runtime shipped by the app and CLI against the whole-head reference.
+  - @neurodesk/brain-extraction@0.5.20261112
+
 ## 0.5.20261111
 
 ### Patch Changes

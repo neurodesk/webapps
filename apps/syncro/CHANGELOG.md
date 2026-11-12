@@ -1,5 +1,12 @@
 # syncro
 
+## 0.8.20261112
+
+### Patch Changes
+
+- @neurodesk/brain-extraction@0.5.20261112
+- @neurodesk/syncro@0.8.20261112
+
 ## 0.8.20261111
 
 ### Patch Changes
