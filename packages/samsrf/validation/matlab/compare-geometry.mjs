@@ -8,8 +8,8 @@ import { pathToFileURL } from 'node:url';
 
 export const GEOMETRY_INVENTORY = { 'polygon-batch': 7, delaunay: 168, cluster: 72, 'template-cf': 12 };
 // record_geometry(..., 'polyshape-probe'): the focused polyshape probes alone.
-export const PROBE_CASES = ['probe_grid_sweep', 'probe_grid_bisection', 'probe_heldout_collinear', 'probe_heldout_clouds', 'probe_extreme_grids'];
-export const PROBE_POLYGONS = { probe_grid_sweep: 24120, probe_heldout_collinear: 1500, probe_heldout_clouds: 1500, probe_extreme_grids: 7 };
+export const PROBE_CASES = ['probe_grid_sweep', 'probe_grid_bisection', 'probe_heldout_collinear', 'probe_heldout_clouds', 'probe_extreme_grids', 'probe_point_clouds'];
+export const PROBE_POLYGONS = { probe_grid_sweep: 24120, probe_heldout_collinear: 1500, probe_heldout_clouds: 1500, probe_extreme_grids: 7, probe_point_clouds: 2500 };
 
 export function validateGeometry(root) {
   const recording = JSON.parse(fs.readFileSync(path.join(root, 'geometry.json'), 'utf8'));

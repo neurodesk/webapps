@@ -196,8 +196,15 @@ for i = 1:2500
 end
 end
 
-function item = polygon_batch(id, polygons)
+function item = polygon_batch(id, polygons, keepVertices)
+% keepVertices (probe mode) also records the vertices of
+% polyshape(P, 'KeepCollinearPoints', true), which show the rings before
+% collinear points are cleaned.
+if nargin < 3
+    keepVertices = false;
+end
 n = numel(polygons);
+kept = cell(n, 1);
 counts = zeros(n, 1);
 simplifiedCounts = zeros(n, 1);
 hullCounts = zeros(n, 1);
@@ -244,8 +251,9 @@ for i = 1:n
         errorIds{end+1} = [failure.identifier ': ' failure.message]; %#ok<AGROW>
     end
     try
-        kept = polyshape(P, 'KeepCollinearPoints', true);
-        collinearCounts(i) = size(kept.Vertices, 1);
+        keptShape = polyshape(P, 'KeepCollinearPoints', true);
+        collinearCounts(i) = size(keptShape.Vertices, 1);
+        kept{i} = keptShape.Vertices;
     catch
         collinearCounts(i) = -1;
     end
@@ -265,6 +273,9 @@ item = struct('id', id, 'kind', 'polygon-batch', 'cases', n, ...
     'polygonEstimate', array_file([id '_polygon_estimate'], polygonEstimate), ...
     'warning', array_file([id '_warning'], warned), ...
     'error', array_file([id '_error'], failed));
+if keepVertices
+    item.collinearVertices = array_file([id '_collinear_vertices'], vertcat(zeros(0, 2), kept{:}));
+end
 item.warningIds = warningIds;
 item.errors = errorIds;
 fprintf('Recorded %s (%d polygons)\n', id, n);
@@ -283,12 +294,14 @@ end
 function cases = probe_cases()
 cases = {};
 [polygons, parameters] = grid_sweep();
-cases{end+1} = with_parameters(polygon_batch('probe_grid_sweep', polygons), parameters);
+cases{end+1} = with_parameters(polygon_batch('probe_grid_sweep', polygons, true), parameters);
 [polygons, parameters] = grid_bisection();
-cases{end+1} = with_parameters(polygon_batch('probe_grid_bisection', polygons), parameters);
-cases{end+1} = polygon_batch('probe_heldout_collinear', heldout_collinear());
-cases{end+1} = polygon_batch('probe_heldout_clouds', heldout_clouds());
-cases{end+1} = polygon_batch('probe_extreme_grids', extreme_grids());
+cases{end+1} = with_parameters(polygon_batch('probe_grid_bisection', polygons, true), parameters);
+cases{end+1} = polygon_batch('probe_heldout_collinear', heldout_collinear(), true);
+cases{end+1} = polygon_batch('probe_heldout_clouds', heldout_clouds(), true);
+cases{end+1} = polygon_batch('probe_extreme_grids', extreme_grids(), true);
+% The original point clouds again, with their collinear-kept rings.
+cases{end+1} = polygon_batch('probe_point_clouds', point_clouds(), true);
 end
 
 function item = with_parameters(item, parameters)
