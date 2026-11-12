@@ -8,7 +8,8 @@ import test from 'node:test';
 import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { commandLineClosure, moduleClosure } from '../scripts/lib/module-closure.mjs';
-import { calledWorkflows, decideWorkflow, isSharedFilter, onlyAddsExports, ownedPackages, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
+import { testedBase } from '../scripts/lib/tested-base.mjs';
+import { calledWorkflows, decideWorkflow, isSharedFilter, onlyAddsExports, ownedPackages, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
 // The pull request gate skips a native suite only when no changed file can
@@ -19,14 +20,16 @@ const registry = await loadAppsRegistry();
 const graph = await loadConservativeWorkspaceGraph(repoRoot);
 const flowOf = (paths) => ({ on: { pull_request: { paths } } });
 const real = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
-const decideReal = async (name, changedPaths, manifests = new Map(), event = 'pull_request') => {
+const decideReal = async (name, changedPaths, manifests = new Map(), paths) => {
   const source = await real(name);
-  // A workflow whose pull requests filter only on its own paths is still a
-  // fixture through the shared filters of its pushes.
-  const flow = { ...source, on: { pull_request: { paths: source.on[event].paths } } };
+  // A workflow that filters only on its own paths is still a fixture when
+  // `paths` filters it on the shared trees it builds on.
+  const flow = { ...source, on: { pull_request: { paths: paths ?? source.on.pull_request.paths } } };
   const calledFlows = await Promise.all(calledWorkflows(flow).map(real));
   return decideWorkflow({ flow, calledFlows, changedPaths, registry, graph, manifests, root: repoRoot });
 };
+// The trees NeuroFlow's apps reach, which its nightly run covers instead of a filter.
+const NEUROFLOW_BUILDS_ON = ['packages/**', 'scripts/**', 'registry/**'];
 const decide = (paths, changedPaths, manifests = new Map()) => decideWorkflow({ flow: flowOf(paths), changedPaths, registry, graph, manifests, root: repoRoot });
 
 const dep = (version) => ({ specifier: version, version });
@@ -97,7 +100,7 @@ test('a root script a step names, and what it imports, runs the workflow', async
   for (const script of ['scripts/desktop/neuroflow-smoke.mjs', 'scripts/desktop/artifact-completion-smoke.mjs']) assert.ok(scripts.includes(script), script);
   // The template smoke is imported by neuroflow-smoke.mjs, not named by a step.
   for (const script of ['scripts/desktop/neuroflow-smoke.mjs', 'scripts/desktop/neuroflow-template-smoke.mjs', 'scripts/desktop/artifact-completion-smoke.mjs']) {
-    const decision = await decideReal('neuroflow', [script], new Map(), 'push');
+    const decision = await decideReal('neuroflow', [script], new Map(), NEUROFLOW_BUILDS_ON);
     assert.equal(decision.run, true, script);
     assert.match(decision.reason, /loads/);
   }
@@ -155,8 +158,9 @@ test('the planner reads the whole diff, not only the paths the filters matched',
   const after = YAML.parse(before);
   after.apps.find((app) => app.id === 'topofit').description += ' Reworded.';
   const manifests = new Map([[path, { before, after: YAML.stringify(after) }]]);
-  assert.equal((await decideReal('neuroflow', [path], manifests, 'push')).run, false);
-  const decision = await decideReal('neuroflow', ['apps/topofit/automation.json', path], manifests, 'push');
+  const filters = [...(await real('neuroflow')).on.pull_request.paths, ...NEUROFLOW_BUILDS_ON];
+  assert.equal((await decideReal('neuroflow', [path], manifests, filters)).run, false);
+  const decision = await decideReal('neuroflow', ['apps/topofit/automation.json', path], manifests, filters);
   assert.equal(decision.run, true);
   assert.match(decision.reason, /app planner selects pipeline-builder/);
 });
@@ -250,6 +254,7 @@ test('every workflow with a shared pull request filter waits for the gate', asyn
     // With nothing to follow, the gate would skip every shared change.
     assert.ok(ownedPackages(filters, repoRoot).length || workflowApps(filters, registry).length || workflowScripts(flow).length, `${file}: the gate can follow an owned package, an app or a script`);
     assert.equal(flow.jobs.gate?.uses, './.github/workflows/pr-gate.yml', `${file} filters on shared paths, so it calls the gate`);
+    assert.deepEqual(flow.jobs.gate.permissions, { contents: 'read', actions: 'read' }, `${file}: the sweep reads this workflow's runs`);
     for (const [id, job] of Object.entries(flow.jobs)) {
       if (id === 'gate' || job.needs) continue;
       // An entry job that does not wait is one no pull request starts.
@@ -259,10 +264,61 @@ test('every workflow with a shared pull request filter waits for the gate', asyn
   assert.ok(gated > 20);
 });
 
-test('the gate answers drafts and other events without a checkout, and decides ready pull requests', async () => {
+test('a push to main starts a gated workflow only for its own paths, and a nightly sweep covers the shared ones', async () => {
+  const files = (await readdir(new URL('../.github/workflows/', import.meta.url))).filter((name) => name.endsWith('.yml')).sort();
+  const crons = [];
+  for (const file of files) {
+    const flow = YAML.parse(await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8'));
+    if (!flow.jobs.gate || !flow.on.push) continue;
+    const pulls = flow.on.pull_request.paths;
+    const pushes = flow.on.push.paths;
+    // A shared filter on push starts every native suite for every merge.
+    assert.deepEqual(pushes.filter(isSharedFilter), [], `${file}: pushes filter on no shared path`);
+    assert.deepEqual(pulls.filter((filter) => !isSharedFilter(filter) && !pushes.includes(filter)), [], `${file}: a push covers each of the workflow's own paths`);
+    // Without the sweep nothing would build every target for a shared change.
+    assert.equal(flow.on.schedule?.length, 1, `${file}: one nightly sweep`);
+    crons.push(flow.on.schedule[0].cron);
+    assert.match(String(flow.concurrency['cancel-in-progress']), /github\.event_name == 'pull_request'/, `${file}: a push must not cancel a running sweep`);
+  }
+  assert.ok(crons.length > 20);
+  assert.equal(new Set(crons).size, crons.length, 'the sweeps start at different minutes, so they do not queue behind each other');
+});
+
+test('the sweep runs a workflow when a shared path changed, whether or not the change reaches it', () => {
+  const flow = flowOf(['packages/elastix/**', 'packages/components/**', 'pnpm-lock.yaml']);
+  const sweep = (changedPaths) => sweepWorkflow({ flow, changedPaths });
+  assert.equal(sweep(['packages/components/src/ui/theme.js']).run, true);
+  assert.match(sweep(['docs/readme.md', 'pnpm-lock.yaml']).reason, /^pnpm-lock\.yaml changed on main and matches pnpm-lock\.yaml/);
+  // A push already ran the workflow for its own paths.
+  assert.equal(sweep(['packages/elastix/src/index.js']).run, false);
+  assert.equal(sweep([]).run, false);
+  assert.equal(sweepWorkflow({ flow: { on: {} }, changedPaths: [] }).run, true);
+});
+
+test('the sweep starts from the last merge or sweep that finished green, however long ago', () => {
+  // main: a - b - c - head, oldest first.
+  const order = ['a', 'b', 'c', 'head'];
+  const git = { isAncestor: (a, b) => order.indexOf(a) >= 0 && order.indexOf(a) <= order.indexOf(b), distance: (a, b) => order.indexOf(b) - order.indexOf(a) };
+  const green = (head_sha, event, id) => ({ id, head_sha, event, conclusion: 'success', head_branch: 'main' });
+  const sweepBase = (runs) => testedBase({ runs, head: 'head', branch: 'main', git, workflow: 'hmc-native', atHead: true, events: new Set(['push', 'schedule']) });
+  // Two sweeps were dropped after the one at a: everything since a is still unswept.
+  assert.equal(sweepBase([green('a', 'schedule', 1)]).base, 'a');
+  // A merge of the workflow's own paths tested the tree as it was then.
+  assert.equal(sweepBase([green('a', 'schedule', 1), green('c', 'push', 2)]).base, 'c');
+  // A failed sweep and a dispatch, which may run part of the workflow, move nothing.
+  assert.equal(sweepBase([green('a', 'schedule', 1), { ...green('b', 'schedule', 2), conclusion: 'failure' }, green('c', 'workflow_dispatch', 3)]).base, 'a');
+  // Nothing merged since the last green run.
+  assert.equal(sweepBase([green('head', 'push', 4)]).base, 'head');
+  // No green run at all: the caller runs the workflow.
+  assert.equal(sweepBase([]).base, null);
+  assert.match(sweepBase([]).reason, /no successful hmc-native run on main/);
+});
+
+test('the gate answers drafts, pushes and dispatches without a checkout, and decides ready pull requests and sweeps', async () => {
   const flow = YAML.parse(await readFile(new URL('../.github/workflows/pr-gate.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(flow.on), ['workflow_call']);
-  assert.deepEqual(flow.permissions, { contents: 'read' });
+  // The sweep reads the caller's runs; a caller cannot be granted more than its gate job passes on.
+  assert.deepEqual(flow.permissions, { contents: 'read', actions: 'read' });
   const job = flow.jobs.decide;
   assert.equal(job.if, undefined, 'a skipped gate would skip every job after the entry jobs');
   assert.equal(job.outputs.run, '${{ steps.event.outputs.run || steps.decide.outputs.run }}');
@@ -275,6 +331,9 @@ test('the gate answers drafts and other events without a checkout, and decides r
   for (const step of rest) if (step.uses) assert.match(step.uses, /^[\w-]+\/[\w-]+@[0-9a-f]{40}$/);
   const decideStep = rest.find((step) => step.id === 'decide');
   assert.match(decideStep.run, /node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --base "\$BASE_SHA" --head "\$HEAD_SHA"/);
+  assert.match(decideStep.run, /"\$EVENT_NAME" = schedule \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --sweep --head "\$HEAD_SHA"/);
+  assert.equal(decideStep.env.GITHUB_TOKEN, '${{ github.token }}');
+  assert.equal(decideStep.env.HEAD_SHA, '${{ github.event.pull_request.head.sha || github.sha }}');
   assert.equal(decideStep.env.WORKFLOW, '${{ inputs.workflow }}');
 
   const answer = (EVENT_NAME, DRAFT) => {
@@ -282,7 +341,8 @@ test('the gate answers drafts and other events without a checkout, and decides r
     execFileSync('bash', ['-e', '-c', event.run], { env: { ...process.env, EVENT_NAME, DRAFT, GITHUB_OUTPUT: output } });
     return readFileSync(output, { encoding: 'utf8', flag: 'a+' }).trim();
   };
-  for (const name of ['push', 'schedule', 'workflow_dispatch']) assert.equal(answer(name, ''), 'run=true', name);
+  for (const name of ['push', 'workflow_dispatch']) assert.equal(answer(name, ''), 'run=true', name);
+  assert.equal(answer('schedule', ''), '');
   assert.equal(answer('pull_request', 'true'), 'run=false');
   assert.equal(answer('pull_request', 'false'), '');
 });
