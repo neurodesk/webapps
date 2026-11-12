@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { auditedExampleFiles, exampleCachePath, fillExampleCache, loadVerifiedExampleCache } from '../scripts/lib/example-asset-cache.mjs';
+import { OFFLINE_AUDIT_APPS, auditedExampleFiles, auditedRuntimeFiles, exampleCachePath, fillExampleCache, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from '../scripts/lib/example-asset-cache.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
 const url = 'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1234567890123456789012345678901234567890/scan.nii';
@@ -289,4 +289,41 @@ test('the audit caches the first example of each app, the one it imports', () =>
   const examples = [{ id: 'first', files: [{ url: 'a' }, { url: 'b' }] }, { id: 'second', files: [{ url: 'c' }] }];
   assert.deepEqual(auditedExampleFiles(examples), [{ url: 'a' }, { url: 'b' }]);
   assert.deepEqual(auditedExampleFiles([]), []);
+});
+
+test('an offline app\'s audit files are the runtime its lock entry pins, and no other app has any', async () => {
+  const lock = JSON.parse(await readFile(new URL('../registry/offline-assets.lock.json', import.meta.url), 'utf8'));
+  assert.ok(OFFLINE_AUDIT_APPS.includes('dicompare'));
+  const urls = auditedRuntimeFiles({ id: 'dicompare' }, lock).map(file => file.url);
+  // What the hosted page fetched from other hosts on 2026-11-12, by kind.
+  for (const expected of [
+    'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.asm.wasm',
+    'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/python_stdlib.zip',
+    'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/scipy-1.14.1-cp312-cp312-pyodide_2024_0_wasm32.whl',
+    'https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl',
+  ]) {
+    assert.ok(urls.includes(expected), `${expected} is cached for the audit`);
+  }
+  for (const url of urls) {
+    assert.match(lock.assets[url].sha256, /^[a-f0-9]{64}$/, url);
+    assert.match(url, /^https:\/\/(cdn\.jsdelivr\.net\/pyodide\/v\d+\.\d+\.\d+\/|files\.pythonhosted\.org\/packages\/[a-f0-9]{2}\/[a-f0-9]{2}\/[a-f0-9]{60}\/)/, `${url} is immutable`);
+  }
+  assert.ok(urls.every(url => lock.assets[url].kind !== 'example'), 'examples are listed by auditedExampleFiles');
+  assert.deepEqual(auditedRuntimeFiles({ id: 'neuromorph' }, lock), []);
+});
+
+test('the index answer for a project offers only its locked wheel, with its hash and no metadata shortcut', () => {
+  const wheel = 'https://files.pythonhosted.org/packages/aa/bb/cc/Typing_Extensions-1.2.3-py3-none-any.whl';
+  const other = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/numpy-2.0.2-cp312-cp312-pyodide_2024_0_wasm32.whl';
+  const locked = { [wheel]: { kind: 'python-wheel', sha256: 'a'.repeat(64) }, [other]: { kind: 'python-runtime', sha256: 'b'.repeat(64) } };
+  const answers = pythonIndexAnswers([{ url: wheel }, { url: other }], locked);
+  assert.deepEqual([...answers.keys()], ['typing-extensions']);
+  assert.deepEqual(JSON.parse(answers.get('typing-extensions')), {
+    meta: { 'api-version': '1.0' },
+    name: 'typing-extensions',
+    files: [{ filename: 'Typing_Extensions-1.2.3-py3-none-any.whl', url: wheel, hashes: { sha256: 'a'.repeat(64) } }],
+  });
+  assert.equal(pythonIndexProject('https://pypi.org/simple/typing_extensions/'), 'typing-extensions');
+  assert.equal(pythonIndexProject('https://pypi.org/pypi/typing-extensions/json'), null);
+  assert.equal(pythonIndexProject(wheel), null);
 });

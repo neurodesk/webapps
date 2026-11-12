@@ -77,8 +77,8 @@ rerun to named registered apps.
 A local `pnpm audit:interfaces` uses the network unless `EXAMPLE_ASSET_CACHE`
 is set. CI's `composite-site` job always sets it. Before the audit,
 `node scripts/fetch-example-cache.mjs <directory> --prune` brings the directory
-to the files the audit imports: the first example of each app, 324 files and
-1.61 GB for 63 apps on 2026-11-12. It keeps entries that match the lock,
+to the files the audit imports: the first example of each app and the runtime
+of the offline apps, 361 files and 1.75 GB for 63 apps on 2026-11-12. It keeps entries that match the lock,
 downloads the rest with retries, checks each download against the lock's
 SHA-256 and size before renaming it into place, and fails with the URL of a
 file it cannot get. A retry waits the whole time a `Retry-After` header names.
@@ -96,9 +96,29 @@ The audit records in `audit.json` what each app still requested from other
 hosts (`externalRequests`) and fails in cache mode when an example file was
 requested from the network (`hostedExampleRequests`). A page request that its
 service worker fetched and the page then cancelled is not counted a second time
-(`scripts/lib/external-requests.mjs`, `test/external-requests.smoke.mjs`). Models and runtimes an app
-loads from other hosts, such as dicompare's Pyodide from jsDelivr and its
-packages from PyPI, still come from the network.
+(`scripts/lib/external-requests.mjs`, `test/external-requests.smoke.mjs`).
+`externalRequestLog` lists each of those requests with its URL, outcome,
+transferred body size and duration.
+
+The apps in `OFFLINE_AUDIT_APPS` (`scripts/lib/example-asset-cache.mjs`), now
+dicompare, run in cache mode without any request to another host. The cache
+also holds their runtime as the offline lock pins it (kinds `runtime`,
+`python-runtime` and `python-wheel`: Pyodide 0.27.0, its packages and the five
+PyPI wheels, 37 files and 143 MB), checked like the examples. micropip resolves
+`dicompare` through PyPI's simple index, which changes with every release and
+cannot be pinned, so the audit answers each index request from the lock: the
+project's one locked wheel with its SHA-256. The hosted app resolves live and
+on 2026-11-12 installed tabulate 0.10.0 and nibabel 5.5.0 where the lock pins
+0.9.0 and 5.3.3; the audit installs the locked ones, as the desktop bundle
+does. For such an app any other request to another host is refused, and the
+app fails with its URL. Other apps still load models and runtimes from other
+hosts.
+
+One app at one width has 420 s (`AUDIT_DEADLINE_MS`). Past that the audit
+closes the page and fails the app with every request still open and how long
+it has been open (`scripts/lib/pending-requests.mjs`). Before, the only bound
+was each step's own timeout, and a page call without one could wait for the
+job's.
 
 Real output checks include QSMbly mask preparation, reconstruction and NIfTI
 download; EdgeReg registration and download; NiiMath arithmetic

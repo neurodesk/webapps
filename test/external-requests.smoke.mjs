@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { chromium } from '@playwright/test';
 import { trackExternalRequests } from '../scripts/lib/external-requests.mjs';
+import { startDeadline, trackPendingRequests } from '../scripts/lib/pending-requests.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
 const host = 'https://examples.invalid';
@@ -44,6 +45,7 @@ async function controlledPage(t) {
   const browser = await chromium.launch();
   t.after(() => browser.close());
   const context = await browser.newContext();
+  const pending = trackPendingRequests(context);
   const network = trackExternalRequests(context, site.origin);
   const fulfil = route => route.fulfill({ body: 'example', headers: { 'access-control-allow-origin': '*' } });
   await context.route(`${host}/cached`, route => {
@@ -66,7 +68,7 @@ async function controlledPage(t) {
     assert.equal(await page.evaluate(() => window.outcome), 'AbortError');
     await cancelled;
   };
-  return { network, requestThenCancel };
+  return { context, network, page, pending, requestThenCancel };
 }
 
 const paths = urls => urls.map(url => url.pathname);
@@ -89,4 +91,38 @@ test('a cancelled page request no worker fetch accounts for still counts', async
   const { network, requestThenCancel } = await controlledPage(t);
   await requestThenCancel('/never-fetched');
   assert.deepEqual(paths(network.sent()), ['/never-fetched']);
+});
+
+test('a page waiting on a request that never ends fails at the deadline and names the request', async t => {
+  const { context, page, pending } = await controlledPage(t);
+  await context.route(`${host}/stalled`, () => {});
+  await page.evaluate(target => window.request(target), `${host}/stalled`);
+  const began = Date.now();
+  const deadline = startDeadline(1500, { pending, close: () => context.close() });
+  t.after(deadline.clear);
+  // Without the deadline this wait has no end: timeout 0 is how page.evaluate behaves in the audit.
+  await assert.rejects(page.waitForFunction(() => window.outcome.then(() => true), null, { timeout: 0 }), /closed/);
+  assert.ok(Date.now() - began < 10_000, 'the wait ended with the deadline, not with the job');
+  assert.match(deadline.failure, /^No result within the 2 s deadline for one app and width; Unfinished requests: /);
+  assert.match(deadline.failure, /https:\/\/examples\.invalid\/stalled \(open \d+ s\)/);
+});
+
+test('a deadline cleared in time closes nothing and reports nothing', async t => {
+  const { context, page, pending } = await controlledPage(t);
+  const deadline = startDeadline(300, { pending, close: () => context.close() });
+  deadline.clear();
+  await new Promise(resolve => setTimeout(resolve, 600));
+  assert.equal(deadline.failure, null);
+  assert.equal(await page.evaluate(() => 1 + 1), 2);
+  assert.equal(pending.describe(), '');
+});
+
+test('the log gives each counted request its outcome, size and duration', async t => {
+  const { network, requestThenCancel } = await controlledPage(t);
+  await requestThenCancel('/hosted');
+  const [entry, ...rest] = await network.log();
+  assert.deepEqual(rest, []);
+  assert.equal(entry.url, `${host}/hosted`);
+  assert.equal(entry.outcome, 'finished');
+  assert.ok(entry.ms >= 0);
 });

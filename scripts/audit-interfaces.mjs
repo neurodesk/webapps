@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppExamples } from './lib/app-examples.mjs';
-import { auditedExampleFiles, loadVerifiedExampleCache } from './lib/example-asset-cache.mjs';
+import { OFFLINE_AUDIT_APPS, auditedExampleFiles, auditedRuntimeFiles, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from './lib/example-asset-cache.mjs';
 import { trackExternalRequests } from './lib/external-requests.mjs';
+import { startDeadline, trackPendingRequests } from './lib/pending-requests.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
 const { apps } = await loadAppsRegistry();
@@ -15,6 +16,8 @@ if (requested.size && selected.length !== requested.size) throw new Error('SMOKE
 const cacheDirectory = process.env.EXAMPLE_ASSET_CACHE;
 const assetLock = cacheDirectory ? JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.lock.json'), 'utf8')) : null;
 if (cacheDirectory) console.log(`Example source: checksum-verified-cache (${cacheDirectory}); every example file the audit imports must match the offline lock, with no missing-file network fallback`);
+// One app at one width gets this long: 120 s for its example control, 180 s for the import and the rest for the checks.
+const deadlineMs = Number(process.env.AUDIT_DEADLINE_MS ?? 420_000);
 const cacheFiles = new Map();
 const site = await serveSite(join(repoRoot, 'dist'), { files: cacheFiles });
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
@@ -24,8 +27,12 @@ const results = [];
 try {
   for (const app of selected) {
     const examples = await loadAppExamples(app);
+    // With the cache, an offline app's runtime comes from it too and nothing may leave for another host.
+    const offline = Boolean(cacheDirectory) && OFFLINE_AUDIT_APPS.includes(app.id);
+    const runtimeFiles = offline ? auditedRuntimeFiles(app, assetLock) : [];
+    const indexAnswers = pythonIndexAnswers(runtimeFiles, assetLock?.assets);
     const cachedExamples = cacheDirectory
-      ? await loadVerifiedExampleCache(auditedExampleFiles(examples), { directory: cacheDirectory, assets: assetLock.assets })
+      ? await loadVerifiedExampleCache([...auditedExampleFiles(examples), ...runtimeFiles], { directory: cacheDirectory, assets: assetLock.assets })
       : null;
     const cacheRedirects = new Map();
     for (const [url, asset] of cachedExamples ?? []) {
@@ -39,17 +46,29 @@ try {
       page.setDefaultTimeout(10000);
       // A failure names what the app was still waiting for: a stalled download leaves no other trace.
       // The context also sees the requests of workers and the service worker.
-      const unfinished = new Set();
+      const unfinished = trackPendingRequests(context);
+      const refused = [];
       const pageErrors = [];
       // What still depends on the network: every request this run did not answer itself.
       const network = trackExternalRequests(context, site.origin);
       const exampleUrls = new Set(auditedExampleFiles(examples).map(file => file.url));
-      context.on('request', request => unfinished.add(request));
-      context.on('requestfinished', request => unfinished.delete(request));
-      context.on('requestfailed', request => unfinished.delete(request));
       page.on('pageerror', error => pageErrors.push(error.message));
       const result = { app: app.id, width: viewport.width, exampleSource: cachedExamples ? 'checksum-verified-cache' : 'hosted-network', failures: [] };
+      const deadline = startDeadline(deadlineMs, { pending: unfinished, close: () => context.close() });
       try {
+        if (offline) {
+          // Registered first, so the routes below take what the cache and the run itself answer.
+          await context.route(url => /^https?:$/.test(url.protocol) && url.origin !== site.origin, route => {
+            const url = route.request().url();
+            network.answered(route.request());
+            const index = indexAnswers.get(pythonIndexProject(url));
+            if (index) {
+              return route.fulfill({ body: index, contentType: 'application/vnd.pypi.simple.v1+json', headers: { 'access-control-allow-origin': '*' } });
+            }
+            refused.push(url);
+            return route.abort('blockedbyclient');
+          });
+        }
         if (cachedExamples) {
           await context.route(url => cachedExamples.has(url.href), route => {
             network.answered(route.request());
@@ -66,7 +85,7 @@ try {
             });
           });
         }
-        await context.route(/googletagmanager\.com|google-analytics\.com/, route => {
+        await context.route(/googletagmanager\.com|google-analytics\.com|cloudflareinsights\.com/, route => {
           network.answered(route.request());
           return route.fulfill({ body: '' });
         });
@@ -302,17 +321,19 @@ try {
         // Artifact readback gets its own budget; interface readiness keeps the 10s default.
         if (output) await page.screenshot({ path: join(output, `${app.id}-${viewport.width}.png`), fullPage: true, timeout: 30000 });
       } catch (error) {
-        result.failures.push(error.message);
+        result.failures.push(deadline.failure ?? error.message);
         const example = page.locator('[data-neurodesk-examples]');
         try {
           if (await example.count()) result.failures.push(await example.locator('[role="status"]').textContent());
         } catch (diagnosticError) {
           result.failures.push(`Example diagnostics unavailable: ${diagnosticError.message}`);
         }
-        if (unfinished.size) result.failures.push(`Unfinished requests: ${[...unfinished].slice(0, 5).map(request => request.url()).join(', ')}${unfinished.size > 5 ? `, and ${unfinished.size - 5} more` : ''}`);
+        if (!deadline.failure && unfinished.describe()) result.failures.push(unfinished.describe());
         if (pageErrors.length) result.failures.push(`Page errors: ${pageErrors.slice(0, 3).join(' | ')}`);
         if (output) await page.screenshot({ path: join(output, `${app.id}-${viewport.width}-failure.png`), fullPage: true, timeout: 30000 }).catch(() => {});
       } finally {
+        deadline.clear();
+        result.externalRequestLog = await network.log();
         await context.close().catch(error => result.failures.push(`Context cleanup failed: ${error.message}`));
       }
       const sent = network.sent();
@@ -321,6 +342,12 @@ try {
       result.hostedExampleRequests = sent.filter(url => exampleUrls.has(url.href)).length;
       if (cachedExamples && result.hostedExampleRequests) {
         result.failures.push(`${result.hostedExampleRequests} example requests went to the network although the verified cache holds their files`);
+      }
+      if (refused.length) {
+        result.failures.push(`${app.id} runs offline in the audit, but requested what the verified cache does not hold: ${[...new Set(refused)].join(', ')}`);
+      }
+      if (offline && sent.length) {
+        result.failures.push(`${app.id} runs offline in the audit, but ${sent.length} requests left for other hosts: ${[...new Set(sent.map(url => url.href))].join(', ')}`);
       }
       results.push(result);
       console.log(`${result.failures.length ? 'FAIL' : 'PASS'} ${app.id}/${viewport.width}: ${result.failures.join('; ') || 'single shared navigation'}; ${result.mouseOnlyDisclosures?.length ?? '?'} legacy disclosure headings`);

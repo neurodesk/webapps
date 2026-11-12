@@ -18,6 +18,41 @@ export function auditedExampleFiles(examples) {
   return examples.length ? examples[0].files : [];
 }
 
+// Apps the audit must run without any request to another host. For these it also needs
+// the runtime the offline lock pins for the desktop bundle, not only the example.
+export const OFFLINE_AUDIT_APPS = ['dicompare'];
+const RUNTIME_KINDS = new Set(['runtime', 'python-runtime', 'python-wheel']);
+
+export function auditedRuntimeFiles(app, lock) {
+  if (!OFFLINE_AUDIT_APPS.includes(app.id)) return [];
+  return (lock.apps[app.id] ?? []).filter(url => RUNTIME_KINDS.has(lock.assets[url]?.kind)).map(url => ({ url }));
+}
+
+const pythonProject = name => name.toLowerCase().replace(/[-_.]+/g, '-');
+
+export function pythonIndexProject(url) {
+  const match = /^https:\/\/pypi\.org\/simple\/([^/]+)\/$/.exec(url);
+  return match ? pythonProject(decodeURIComponent(match[1])) : null;
+}
+
+// micropip resolves a requirement through PyPI's simple index, which changes with every release
+// and so cannot be pinned. The audit answers it from the lock instead: each project offers exactly
+// its locked wheel, as PEP 691 JSON without core metadata, so micropip reads the wheel itself.
+export function pythonIndexAnswers(files, assets) {
+  const answers = new Map();
+  for (const { url } of files) {
+    if (assets[url]?.kind !== 'python-wheel') continue;
+    const filename = new URL(url).pathname.split('/').pop();
+    const project = pythonProject(filename.split('-')[0]);
+    answers.set(project, JSON.stringify({
+      meta: { 'api-version': '1.0' },
+      name: project,
+      files: [{ filename, url, hashes: { sha256: assets[url].sha256 } }],
+    }));
+  }
+  return answers;
+}
+
 function lockedAsset(assets, url) {
   const locked = assets[url];
   if (!locked || !/^[a-f0-9]{64}$/.test(locked.sha256)) {
@@ -34,10 +69,10 @@ export async function loadVerifiedExampleCache(files, { directory, assets }) {
     try {
       body = await readFile(path);
     } catch (cause) {
-      throw new Error(`Cannot read cached example ${url} at ${path}; cache mode does not fall back to the network`, { cause });
+      throw new Error(`Cannot read cached audit file ${url} at ${path}; cache mode does not fall back to the network`, { cause });
     }
     if (sha256(body) !== locked.sha256 || body.length !== locked.bytes) {
-      throw new Error(`Cached example checksum or size mismatch: ${url}`);
+      throw new Error(`Cached audit file checksum or size mismatch: ${url}`);
     }
     return [url, { path, body, contentType: locked.contentType || 'application/octet-stream' }];
   }));
