@@ -68,6 +68,10 @@ on:
         description: With record_matlab, record MATLAB's arithmetic on generated inputs (elementary functions, powers, conv, HRF, BLAS)
         type: boolean
         default: false
+      kernels_only:
+        description: With record_matlab, record MATLAB's single exp, corr pieces and logged single CF Gaussian fits
+        type: boolean
+        default: false
       runtime_cli:
         description: SamSrfAnalysis CLI matrix (source runs it twice in public MATLAB; build needs the MLM_LICENSE_TOKEN secret for MATLAB Compiler)
         type: choice
@@ -132,6 +136,10 @@ jobs:
           SAMSRF_REVCOR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-revcor-reference" SAMSRF_REVCOR_EDGES_DIR="$RUNNER_TEMP/samsrf-revcor-edges" SAMSRF_MATRIX_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test revcor_reference -- --nocapture
           node packages/samsrf/validation/matlab/compare-revcor.mjs "$RUNNER_TEMP/samsrf-revcor-reference" "$RUNNER_TEMP/samsrf-matrix-input" "$RUNNER_TEMP/samsrf-revcor-comparison.json"
+      - name: Single-precision Gaussian refusal evidence (MATLAB exp and host spread)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-single-kernels" packages/samsrf/validation/matlab/single-kernels-reference.json
+          node packages/samsrf/validation/matlab/analyse-single-kernels.mjs "$RUNNER_TEMP/samsrf-single-kernels/amd-7763-auto" "$RUNNER_TEMP/samsrf-single-kernels/intel-8573c-avx512" --check > "$RUNNER_TEMP/samsrf-single-kernels.json"
       - name: MATLAB geometry and real-template CF gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-geometry" packages/samsrf/validation/matlab/geometry-reference.json
@@ -302,8 +310,8 @@ jobs:
       - name: Prepare verified inputs and declared source repairs
         if: '!inputs.qr_only'
         run: |
-          if [ "$(printf '%s\n' '${{ inputs.revcor_only }}' '${{ inputs.diagnostics_only }}' '${{ inputs.geometry_only }}' '${{ inputs.numerics_only }}' | grep -c true)" -gt 1 ]; then
-            echo 'Choose at most one of revcor_only, diagnostics_only, geometry_only and numerics_only.' >&2
+          if [ "$(printf '%s\n' '${{ inputs.revcor_only }}' '${{ inputs.diagnostics_only }}' '${{ inputs.geometry_only }}' '${{ inputs.numerics_only }}' '${{ inputs.kernels_only }}' | grep -c true)" -gt 1 ]; then
+            echo 'Choose at most one of revcor_only, diagnostics_only, geometry_only, numerics_only and kernels_only.' >&2
             exit 1
           fi
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
@@ -372,7 +380,7 @@ jobs:
         if: inputs.geometry_only
         run: node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"
       - name: Record numerical intermediates and fitted maps
-        if: '!inputs.diagnostics_only && !inputs.qr_only && !inputs.geometry_only && !inputs.numerics_only'
+        if: '!inputs.diagnostics_only && !inputs.qr_only && !inputs.geometry_only && !inputs.numerics_only && !inputs.kernels_only'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if ~reverseCorrelationOnly && strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly,false,reverseCorrelationOnly && strcmp('${{ inputs.revcor_edges }}','true'))
@@ -451,6 +459,25 @@ jobs:
       - name: Compare same-host numerical arrays and decisions
         if: inputs.diagnostics_only
         run: node packages/samsrf/validation/matlab/compare-recordings.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"
+      - name: Record MATLAB's single-precision reverse-correlation kernels
+        if: inputs.kernels_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_single_kernels(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),fullfile(pwd,'reference-spm'))
+      - name: Prepare a same-host kernel repeat
+        if: inputs.kernels_only
+        run: |
+          mkdir "$RUNNER_TEMP/samsrf-matlab-repeat"
+          cp "$RUNNER_TEMP/samsrf-matlab/source.json" "$RUNNER_TEMP/samsrf-matlab-repeat/source.json"
+          python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab-repeat"
+      - name: Repeat the kernels in a new MATLAB process on this host
+        if: inputs.kernels_only
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_single_kernels(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'))
+      - name: Require every kernel case and an exact same-host repeat
+        if: inputs.kernels_only
+        run: node packages/samsrf/validation/matlab/validate-kernel-recording.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat"
       - name: Record MATLAB arithmetic on generated inputs
         if: inputs.numerics_only
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
