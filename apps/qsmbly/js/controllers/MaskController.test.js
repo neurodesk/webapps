@@ -334,16 +334,16 @@ describe('MaskController error paths', () => {
       const listeners = new Set();
       controller.initializeWorker = async () => {};
       controller.getWorker = () => ({
-        addEventListener: (_, fn) => listeners.add(fn),
-        removeEventListener: (_, fn) => listeners.delete(fn),
-        postMessage: (msg) => {
+        subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+        send: (msg) => {
           sent = msg.data;
-          queueMicrotask(() => listeners.forEach(fn => fn({ data: { type: 'applyMaskOpsComplete', maskData: msg.data.mask } })));
+          queueMicrotask(() => listeners.forEach(fn => fn({ type: 'applyMaskOpsComplete', maskData: msg.data.mask })));
         },
       });
       // A sform (code 2) with a positive determinant: a neurologically stored image.
       const header = new ArrayBuffer(352);
       const view = new DataView(header);
+      view.setInt32(0, 348, true);
       view.setInt16(254, 2, true);
       [[1.5, 0, 0, -90], [0, 1.5, 0.1, -110], [0, 0, 2, -60]].forEach((row, r) =>
         row.forEach((v, c) => view.setFloat32(280 + 16 * r + 4 * c, v, true)));

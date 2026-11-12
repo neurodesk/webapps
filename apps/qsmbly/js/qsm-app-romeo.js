@@ -1477,14 +1477,7 @@ class QSMApp {
    * @returns {Promise<boolean>} True if the dicompare modules are available
    */
   _loadDicompare() {
-<<<<<<< monorepo
     this.dicompareLoad ||= import('https://webapps.neurodesk.org/dicompare/embed/DicompareController.js').then(({ DicompareController }) => {
-=======
-    this.dicompareLoad ||= Promise.all([
-      import(`${QSMConfig.DICOMPARE_BASE}/embed/DicompareController.js`),
-      import(`${QSMConfig.DICOMPARE_BASE}/embed/DicompareReportRenderer.js`)
-    ]).then(([{ DicompareController }, { DicompareReportRenderer }]) => {
->>>>>>> upstream
       this.dicompareController = new DicompareController({
         schemaUrl: `${QSMConfig.DICOMPARE_BASE}/schemas/QSM_Consensus_Guidelines_v1.0.json`,
         workerUrl: `${QSMConfig.DICOMPARE_BASE}/embed/dicompare-worker.js`,
