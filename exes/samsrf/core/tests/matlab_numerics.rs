@@ -97,12 +97,12 @@ fn negative_base_powers_match_every_matlab_result() {
     assert_eq!((compared, nonfinite, zero_signs), (13_776, 1_688, 2_440));
 }
 
-/// Every output SamSrf keeps, for kernels of 9-129 taps (SamSrf's HRF lengths) on
-/// longer courses, dense and sparse. Not covered (validation/matlab/README.md):
-/// shorter kernels or courses, and sparse complex courses of 1000 samples, where
-/// a few outputs differ by one ULP.
+/// Every output SamSrf keeps, for every recorded course and kernel length (1-129
+/// taps, 16-1000 samples, dense and sparse). Not covered (validation/matlab/README.md):
+/// sparse complex courses of 1000 samples, where a few outputs near output 512
+/// differ by one ULP.
 #[test]
-fn convolution_matches_matlab_for_hrf_lengths_and_sparse_courses() {
+fn convolution_matches_matlab_for_every_recorded_length() {
     let Some(root) = root() else { return };
     let (dir, cases) = cases(&root, AMD, "compatible");
     let mut checked = 0;
@@ -111,7 +111,7 @@ fn convolution_matches_matlab_for_hrf_lengths_and_sparse_courses() {
         let kernel = real(&dir, &case["kernel"]);
         let expected = complex(&dir, &case["result"]);
         let sparse = 4 * y.iter().filter(|v| v.re != 0.0 || v.im != 0.0).count() < y.len();
-        if kernel.len() < 9 || y.len() <= kernel.len() || case["isreal"] == false && sparse && y.len() >= 1000 {
+        if case["isreal"] == false && sparse && y.len() >= 1000 {
             continue;
         }
         let actual: Vec<Complex64> = if case["isreal"] == true {
@@ -125,7 +125,44 @@ fn convolution_matches_matlab_for_hrf_lengths_and_sparse_courses() {
         }
         checked += 1;
     }
-    assert_eq!(checked, 188, "convolutions");
+    assert_eq!(checked, 288, "convolutions");
+}
+
+/// The HRF kernels at six TRs: `gampdf`, both double-gamma kernels and the scaled
+/// `samsrf_hrf`, bit for bit, on both hosts. These grids were not used to identify
+/// the `gampdf` form (numerics2-reference.json).
+#[test]
+fn hrf_kernels_match_matlab_at_six_trs() {
+    let Some(root) = root() else { return };
+    use samsrf_core::hrf;
+    let mut checked = 0;
+    for host in [AMD, INTEL] {
+        let (dir, cases) = cases(&root, host, "compatible");
+        for case in cases.values().filter(|case| case["kind"] == "hrf") {
+            let tr = case["tr"].as_f64().unwrap();
+            let time = real(&dir, &case["time"]);
+            for (key, shape) in [("canonicalG1", 6.0), ("canonicalG2", 16.0), ("haasG1", 5.5278), ("haasG2", 16.8621)] {
+                let expected = real(&dir, &case[key]);
+                for (t, e) in time.iter().zip(&expected) {
+                    assert!(same(hrf::gampdf(*t, shape, 1.0), *e), "{host} TR {tr} {key} at {t}");
+                }
+            }
+            let kernels = [
+                ("canonical", hrf::spm_canonical(tr)),
+                ("haas", hrf::doublegamma(tr, &[5.5278, 16.8621, 1.0, 1.0, 1.0205, 0.0, 32.0])),
+                ("samsrfHrf", hrf::de_haas(tr)),
+            ];
+            for (key, actual) in kernels {
+                let expected = real(&dir, &case[key]);
+                assert_eq!(actual.len(), expected.len(), "{host} TR {tr} {key}");
+                for (a, e) in actual.iter().zip(&expected) {
+                    assert!(same(*a, *e), "{host} TR {tr} {key}: {a:e} != {e:e}");
+                }
+            }
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 12);
 }
 
 /// MKL's SSE2 kernels on the AMD host. MATLAB's real `x'*y` takes another path
