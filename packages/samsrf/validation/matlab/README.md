@@ -346,10 +346,13 @@ they are not tolerances for the port or another MATLAB recording.
   writes it out. The 18 remaining inputs include one with k = 0, so the
   residual is in the rational stage's constants, which are not identified;
   shifting P2 by 24 ulps fits all but 5 and is curve fitting, not used.
-  FreeBSD's published splits do worse on the same inputs, on both hosts:
-  hi = `0x3f317180`, lo = `0x3717f7d1` (5.0) differs on 465, and
-  hi = `0x3f317200`, lo = `0x35bfbe8e` (`e_expf.c` `90880193`, 2005-11-30) on
-  601, against 18 for `0x3f317000`.
+  The same structure with FreeBSD's published ln 2 splits differs from
+  MATLAB's recorded outputs on more inputs, on both hosts: hi = `0x3f317180`,
+  lo = `0x3717f7d1` (5.0) on 465, and hi = `0x3f317200`, lo = `0x35bfbe8e`
+  (`e_expf.c` `90880193`, 2005-11-30) on 601, against 18 for `0x3f317000`
+  (`candidate_exclusions.rs`, `exp_ln2_splits_differ_from_matlab_as_recorded`,
+  which first requires its reconstruction with the port's split to equal
+  `exp_single` on all 711,307 inputs).
 - Single times a double scalar runs in double and rounds the result to
   single: the logged models are single(single(e × Beta) + Baseline), not
   operations on the single-rounded scalar.
@@ -556,27 +559,46 @@ some in V1. A CF analysis whose seed region holds such a vertex can fit
 differently from MATLAB. Above 2^7 pi/2 the port rounds the double result and
 matches 193,602 (`sin`) and 193,686 (`cos`) of the 200,000 sampled inputs.
 
-**Published float revisions tested against the recording (no production change).**
-FreeBSD's msun revised these files in October and November 2005. Each revision
-below was fetched from `freebsd/freebsd-src` at the named commit and evaluated on
-every recorded input with |x| < 3 pi/4 (or the 711,307 `exp` inputs). Counts are
-inputs where the candidate's output differs from MATLAB's, against 12,610
-(`sin`) and 12,392 (`cos`) for the port on that range:
+**Candidates rejected against the recording (no production change).**
+`exes/samsrf/core/tests/candidate_exclusions.rs` evaluates reconstructed
+variants: the port's structure with one element replaced by a constant or mask
+transcribed from a FreeBSD msun revision of 2005 (the full commits are listed in
+the file's header). No upstream code is executed or imported, so these are not
+the revisions themselves. Every variant shares the port's fdlibm float range
+reduction (n = +-1 below 3 pi/4) and, unless named, its fdlibm kernels.
 
-| Candidate | `sin` | `cos` |
+MATLAB's output is reconstructed, not re-recorded: it is the port's output
+except at the recorded exception inputs, where it is the recorded value. The
+test rebuilds it for all 2,257,723,138 recorded inputs and requires every one of
+the 136 recorded SHA-256 block digests, and it requires the reconstructed port
+to equal `precision::sin_single`/`cos_single` on every evaluated input. It reads
+the AMD EPYC 9V45 host's first process; `single_trig.rs` requires the other
+three recordings to be identical. Counts are over every single with
+|x| < 3 pi/4 (bits below `0x4016CBE4`), both signs, 2,150,471,624 inputs; the
+sine-kernel rows count `sin` only, for 2^-12 <= |x| <= pi/4 (bits `0x39800000`
+to `0x3F490FD8`):
+
+| Variant | `sin` differs | `cos` differs |
 | --- | --- | --- |
-| `k_cosf.c` `11cba99f` (2005-10-09): x/4 with the low 3 bits masked (`& 0xfffffff8`) | 12,878 | 12,630 |
-| x/4 masked to keep 7, 10, 12, 15 or 19 fraction bits instead of 11 | 12,738 to 15,902 | 12,512 to 16,274 |
-| `k_sinf.c` `11dc2417` (2005-10-28) and `6e10a447` (2005-11-12): degree-9 minimax coefficients | 404,344 and 405,880 (below pi/4 alone) | |
+| The port: x/4 keeps 11 fraction bits (`& 0xfffff000`) | 12,610 | 12,392 |
+| x/4 keeps 20 bits (`& 0xfffffff8`), the mask of `k_cosf.c` `11cba99f` (2005-10-09) | 12,878 | 12,630 |
+| x/4 keeps 19, 15, 12, 10 or 7 bits | 12,738 to 15,902 | 12,512 to 16,274 |
+| Sine kernel with the minimax S1-S4 of `k_sinf.c` `11dc2417` (2005-10-28) / `6e10a447` (2005-11-12) | 404,344 / 405,880 | |
+| Sine kernel with fdlibm's coefficients rounded toward zero | 1,335,986 | |
 
-So FreeBSD's documented mask, applied for the same reason ("1-qx and
-x*x/2-qx are both exact"), is not MATLAB's: MATLAB agrees with the 11-bit mask
-on all 268 (`sin`) and 238 (`cos`) inputs where the two masks differ, and every
-neighbouring mask is worse. Its later kernels are further off. Truncating every
-sine coefficient toward zero gives 1,335,986 differences below pi/4. MATLAB's
-library looks like an fdlibm float derivative that keeps 11-bit high parts
-(here and in `exp`'s ln 2), but no published source has been identified, and the
-sine kernel's residual is still unexplained.
+FreeBSD's mask and the port's give different outputs on 268 (`sin`) and 238
+(`cos`) inputs, and MATLAB agrees with the port's on all of them. Of the five
+other masks tested, none does better than the port's. These results reject
+candidates; they do not identify MATLAB's implementation, and the sine kernel's
+residual is unexplained.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-single-trig" packages/samsrf/validation/matlab/single-trig-reference.json
+SAMSRF_SINGLE_TRIG_DIR="$TMPDIR/samsrf-single-trig" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test candidate_exclusions -- --ignored --nocapture
+```
+
+The run takes about a minute on 8 cores. Changing one recorded output bit fails
+its block's digest, so the reconstruction is checked rather than assumed.
 
 ## Building a matching Runtime container
 
@@ -1501,14 +1523,18 @@ and of sparse courses of 300-2,000 samples.
 - the kept outputs of every convolution (1,308) except 95 outputs in the 10
   sparse complex courses longer than 800 samples, which differ by one ULP near multiples of 512 samples. That
   path is not established; `matlab_numerics.rs` excludes complex sparse courses of
-  1,000 samples or more for the same reason. Every one of the 95 lies within
-  -14 and +31 outputs of 512, 1,024 or 1,536 (all ten courses use 33 taps). Of
-  the 111 real or imaginary parts that differ, some match the port's dense path
-  instead of its sparse one, some neither. Splitting the sparse sum into two
-  partial sums at one index reproduces many of them, but no single split index
-  fits all, and some parts match no split. A recording that fingerprints the
-  summation tree around 512 (FPRev's pair method, as `record_gemv_order.m` does
-  for `y' * A`) would distinguish the hypotheses; none was made.
+  1,000 samples or more for the same reason. `candidate_exclusions.rs`
+  (`sparse_complex_conv_residual_lies_near_multiples_of_512`) localises them on
+  the AMD host. With k the 0-based index into `conv(y, kernel)` (MATLAB's
+  k + 1) and only the first numel(y) outputs compared, every one of the 95 lies
+  between 15 below and 14 above the nearest multiple of 512 (all ten courses use
+  33 taps). Of the 111 real or imaginary parts that differ, 26 match the port's
+  dense path and 85 neither; 84 match a sum of two partial sparse sums split at
+  some index, 27 match none. The test first requires its reconstruction of the
+  sparse path to equal `convolve_complex` at every output. A recording that
+  fingerprints the summation tree around 512 (FPRev's pair method, as
+  `record_gemv_order.m` does for `y' * A`) would distinguish the hypotheses;
+  none was made.
 
 None of the six closed-form candidates matches `gampdf` anywhere it matters, and
 the identified formula was fitted on these probes. A bit-for-bit match on probes
