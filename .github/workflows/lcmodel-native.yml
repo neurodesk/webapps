@@ -33,7 +33,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/dcm2niix.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
@@ -51,6 +50,10 @@ on:
       - 'packages/node-drivers/src/dcm2niix.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main since this workflow last finished green there.
+  schedule:
+    - cron: '13 14 * * *'
   workflow_dispatch:
     inputs:
       sign_release:
@@ -70,6 +73,9 @@ jobs:
   # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
   gate:
     uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       workflow: lcmodel-native
 

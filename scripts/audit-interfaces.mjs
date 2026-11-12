@@ -36,6 +36,14 @@ try {
       const context = await browser.newContext({ viewport, isMobile: viewport.width < 600, hasTouch: viewport.width < 600 });
       const page = await context.newPage();
       page.setDefaultTimeout(10000);
+      // A failure names what the app was still waiting for: a stalled download leaves no other trace.
+      // The context also sees the requests of workers and the service worker.
+      const unfinished = new Set();
+      const pageErrors = [];
+      context.on('request', request => unfinished.add(request));
+      context.on('requestfinished', request => unfinished.delete(request));
+      context.on('requestfailed', request => unfinished.delete(request));
+      page.on('pageerror', error => pageErrors.push(error.message));
       const result = { app: app.id, width: viewport.width, exampleSource: cachedExamples ? 'checksum-verified-cache' : 'hosted-network', failures: [] };
       try {
         if (cachedExamples) {
@@ -293,6 +301,8 @@ try {
         } catch (diagnosticError) {
           result.failures.push(`Example diagnostics unavailable: ${diagnosticError.message}`);
         }
+        if (unfinished.size) result.failures.push(`Unfinished requests: ${[...unfinished].slice(0, 5).map(request => request.url()).join(', ')}${unfinished.size > 5 ? `, and ${unfinished.size - 5} more` : ''}`);
+        if (pageErrors.length) result.failures.push(`Page errors: ${pageErrors.slice(0, 3).join(' | ')}`);
         if (output) await page.screenshot({ path: join(output, `${app.id}-${viewport.width}-failure.png`), fullPage: true, timeout: 30000 }).catch(() => {});
       } finally {
         await context.close().catch(error => result.failures.push(`Context cleanup failed: ${error.message}`));
