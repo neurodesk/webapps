@@ -249,7 +249,7 @@ test('portable Node command lines build on target runners and publish through on
     const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
     // A release with a macOS installer is published only by signing it.
     const publishInput=installer?'sign_release':'publish_release';
-    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'revcor_only', 'revcor_edges', 'wasm_only', 'qr_only', 'numerics_only', 'kernels_only', 'gemv_order', 'runtime_cli', 'runtime_image'] : [];
+    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'revcor_only', 'revcor_edges', 'wasm_only', 'qr_only', 'qr_kernels', 'numerics_only', 'kernels_only', 'gemv_order', 'runtime_cli', 'runtime_image'] : [];
     assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs), [publishInput, ...referenceInputs], name);
     assert.equal(flow.jobs.portable.with.publish_release,`\${{ github.event_name == 'workflow_dispatch' && inputs.${publishInput} }}`,name);
     assert.equal(flow.jobs.portable.with.sign_release,installer?"${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}":undefined,name);
@@ -329,6 +329,29 @@ test('manual SamSrf MATLAB recording uses pinned source and cannot publish relea
     }
   }
   assert.deepEqual(flow.jobs.portable.needs, ['test', 'wasm-source']);
+});
+
+test('manual SamSrf least-squares kernel probe runs MATLAB alone on more runners', async () => {
+  const flow = await workflow('samsrf-native');
+  assert.equal(flow.on.workflow_dispatch.inputs.qr_kernels.default, false);
+  const recording = flow.jobs['matlab-reference'];
+  assert.equal(recording.strategy.matrix.replica, "${{ fromJSON(inputs.qr_kernels && '[1, 2, 3]' || '[1]') }}");
+  const upload = recording.steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
+  assert.match(upload.with.name, /matrix\.replica/);
+  assert.ok(recording.steps.some(step => step.if === 'inputs.qr_kernels' && /record_qr_kernels\(/.test(step.with?.command ?? '')));
+  for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
+    for (const only of [false, true]) {
+      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { qr_kernels: only, qr_only: false, record_matlab: false, revcor_only: false, diagnostics_only: false } };
+      assert.equal(runInNewContext(recording.if, context), event === 'workflow_dispatch' && only);
+      for (const name of ['test', 'wasm-source']) {
+        assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !only, name);
+      }
+      for (const name of ['Record numerical intermediates and fitted maps', 'Prepare verified inputs and declared source repairs']) {
+        const step = recording.steps.find(item => item.name === name);
+        assert.equal(runInNewContext(step.if, context), !only, name);
+      }
+    }
+  }
 });
 
 test('manual SamSrf least-squares recording runs MATLAB alone under several MKL requests', async () => {
