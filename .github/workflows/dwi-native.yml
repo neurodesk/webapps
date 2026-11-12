@@ -39,7 +39,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/components/package.json'
       - 'packages/dwi2trx/package.json'
       - 'packages/node-drivers/package.json'
       - '.github/workflows/dwi-native.yml'
@@ -55,7 +54,6 @@ on:
       - 'packages/ants-denoise/package.json'
       - 'packages/ants-denoise/src/**'
       - 'packages/ants-denoise/wasm/**'
-      - 'packages/runtime-support/package.json'
       - 'packages/runtime-support/src/mindgrab/backend.js'
       - 'packages/components/src/file-io/NiftiUtils.js'
       - 'packages/components/src/file-io/bids-derivatives.js'
@@ -71,6 +69,10 @@ on:
       - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/niimath.js'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main since this workflow last finished green there.
+  schedule:
+    - cron: '41 13 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -85,6 +87,9 @@ jobs:
   # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
   gate:
     uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       workflow: dwi-native
 
