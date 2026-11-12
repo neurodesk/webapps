@@ -294,8 +294,8 @@ course goes through `mldivide` for its rank rule. `corr`'s dot product follows M
 exactly (all 189 matrix `R^2` values on that host); the AVX-512 order was not
 identified (best candidate, 16 lanes x 4 accumulators with FMA: 145 of 189).
 
-Single 2D fits are refused, and the recording below shows why no port can be
-gated on them. `kernels_only=true` (with `record_matlab=true`) runs
+Single 2D fits are refused. The recording below shows why their parity gates
+need a specified reference host. `kernels_only=true` (with `record_matlab=true`) runs
 `record_single_kernels.m` on both hosts, repeats it in a new MATLAB process
 (byte for byte equal). It records:
 
@@ -304,7 +304,7 @@ gated on them. `kernels_only=true` (with `record_matlab=true`) runs
   whole and in chunks of 1, 9, 81 and 400 elements;
 - the pieces of single `corr` (means, products, norms) for the CF matrix;
 - a replica of `samsrf_cfparam_loop` and `samsrf_fit2dprf` that logs every
-  `fminsearch` evaluation (parameters, exponents, single `exp` values,
+  `fminsearch` evaluation (parameters, exponents, single model values,
   objective) and asserts that it reproduces SamSrf's saved maps.
 
 [Run 43123623296](https://github.com/neurodesk/webapps/actions/runs/43123623296)
