@@ -790,9 +790,29 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   by up to about the tolerance when it resolves nearly parallel crossings.
   Neither exact intersections nor Clipper 6.4.2's `IntersectPoint` (7 of 9,861
   vertices) reproduce that. The test names these 93 cases, requires each to
-  stay near-collinear and still differ, and holds every other polygon exactly.
+  stay near-collinear and still differ, and freezes each port hull, emptiness,
+  area and centroid bit for bit in `matlab_polygon_snapping.json`. These are
+  regression snapshots, not MATLAB ground truth. Every other polygon remains
+  gated against MATLAB.
+  Unrepresentable grids (nonfinite centre/span/scale or scaled coordinates
+  outside the integer arithmetic bound) return an empty hull before conversion.
+  This prevents overflow or nontermination on extreme coordinates such as
+  1e-300; it is not a MATLAB parity claim for that unsupported domain.
+  Intersection coordinates use exact arithmetic; face tracing still uses
+  floating-point turning and parity decisions. Clipper's source revision,
+  copyright, Boost license and adapted distance comparisons are recorded in
+  the module and the shipped package `NOTICE`.
+
   SamSrf passes `polyshape` a breadth-first cluster of unique template points;
   only a nearly collinear cluster of four or more points reaches this class.
+
+A native release run of `real_template_cf_maps_match_matlab` with both hosts'
+fixtures used 3.82 CPU seconds and 11,588 KiB peak resident memory on the shared
+builder (15.57 seconds elapsed under contention). It exercises the 2,917/3,389
+seed templates, 40 hull profiles per hemisphere/precision/host including centre
+and surround hulls, plus the recorded summary and Gaussian cases. This is a
+bounded workload measurement, not a full-surface or browser performance result;
+the all-pairs intersection graph can still grow quadratically.
 
 The same test replays the double hull and summary CF pipelines of the raw-input
 matrix (both hemispheres, smoothing and global regression on and off, both

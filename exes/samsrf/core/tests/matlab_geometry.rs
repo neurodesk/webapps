@@ -338,6 +338,7 @@ fn uncentred_error_bound(vertices: &[[f64; 2]], area: f64) -> [f64; 3] {
 /// vertices up to about the 1e-8 tolerance (1e5 to 1e8 grid units) away from
 /// any exact intersection, which the port does not reproduce. Each must stay a
 /// near-collinear cloud and must still differ: a fix shortens this list.
+/// Its port outcome is separately frozen, not treated as MATLAB ground truth.
 const NEAR_COLLINEAR_SNAPPING: [usize; 93] = [27, 62, 77, 102, 117, 157, 162, 182, 307, 312, 317, 377, 387, 397, 452, 482, 512, 532, 557, 562, 622, 647, 712, 737, 777, 797, 822, 852, 872, 877, 927, 1022, 1027, 1032, 1162, 1167, 1192, 1237, 1257, 1287, 1322, 1382, 1392, 1422, 1427, 1457, 1467, 1472, 1497, 1512, 1522, 1547, 1552, 1587, 1622, 1642, 1737, 1742, 1777, 1782, 1817, 1897, 1922, 1927, 1932, 1947, 1982, 2007, 2012, 2057, 2062, 2087, 2102, 2147, 2167, 2172, 2197, 2212, 2227, 2237, 2247, 2272, 2292, 2302, 2312, 2317, 2337, 2357, 2367, 2382, 2417, 2447, 2457];
 
 /// `polyshape(P).convhull` on thin triangles one ULP apart across the cutoff at
@@ -354,6 +355,11 @@ fn polygon_hulls_match_matlab() {
 }
 
 fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
+    let frozen: Value = serde_json::from_str(include_str!("matlab_polygon_snapping.json")).unwrap();
+    let outcomes = frozen["outcomes"].as_object().unwrap();
+    let frozen_ids: BTreeSet<usize> = outcomes.keys().map(|id| id.parse().unwrap()).collect();
+    assert_eq!(frozen_ids, NEAR_COLLINEAR_SNAPPING.into_iter().collect());
+    let mut checked_snapping = BTreeSet::new();
     let mut report = Vec::new();
     let mut failures = Vec::new();
     let mut families = 0;
@@ -378,6 +384,14 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
                 // record_geometry.m draws cloud kind mod(i, 5) for 1-based i.
                 assert!((i + 1) % 5 == 3 && line_thickness(polygon) < 1e-5, "{id} {i} is not a near-collinear cloud");
                 assert!(!agrees, "{id} {i} now matches MATLAB; remove it from NEAR_COLLINEAR_SNAPPING");
+                let actual = json!({
+                    "empty": hull.is_none(),
+                    "hull": sorted_vertices(vertices).iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect::<Vec<_>>(),
+                    "centroid": hull.as_ref().map(|h| h.centroid().map(f64::to_bits)),
+                    "area": hull.as_ref().map(|h| h.area().to_bits()),
+                });
+                assert_eq!(&actual, &outcomes[&i.to_string()], "{id} {i}: frozen port outcome changed");
+                checked_snapping.insert(i);
             } else if agrees {
                 agreeing += 1;
             } else {
@@ -388,6 +402,7 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
     }
     println!("{}", report.join("\n"));
     assert_eq!(families, 7, "missing polygon families");
+    assert_eq!(checked_snapping, frozen_ids, "missing snapping regression cases");
     assert!(failures.is_empty(), "{} polygons differ from MATLAB:\n{}", failures.len(), failures[..failures.len().min(20)].join("\n"));
 }
 
