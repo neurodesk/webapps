@@ -6,6 +6,10 @@
 
 - 4312c49: Solve Beta and Baseline with the summation orders of MKL's own `?gemv`, `?ormqr`, `?trsv` and `?trsm` as MATLAB R2023b runs them on AMD hosts, read from MKL's summation trees, and with LAPACK's `?ladiv` in the reflectors. On 348 recorded MATLAB solves, 300 coefficients are now bit-identical (previously 123), including every real double design; the rest stay within the empirical acceptance scale. A new multi-column solve reproduces MATLAB's `A \ B` for reverse correlation and the global regression to adopt. Results on Intel hosts, where MKL's AVX-512 branch sums differently, are not reproduced.
 
+### Patch Changes
+
+- a67952b: Single-precision reverse-correlation profiles and the connective-field global-signal regression now solve every right-hand side in one least-squares call, as MATLAB does: `[Y ones] \ X` over all aperture pixels and `[X ones] \ Y` over all ROI courses. On the AMD (MKL CNR `auto`) reference host, single CF results with global-signal correction now equal MATLAB R2023b's bit for bit, residuals and profiles alike. Single RC profiles rise from 31% to 82-96% identical. A course with a NaN keeps its column position as zeros and comes back zeroed; MATLAB's result for such a course was not recorded. Single Gaussian CF fits stay refused because the Benson reader's x0 and y0 are not yet bit-identical.
+
 ## 0.5.20261112
 
 ### Patch Changes
