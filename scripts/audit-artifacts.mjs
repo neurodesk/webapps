@@ -5,6 +5,7 @@ import { join, relative } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { catalogApps, loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { HUB_SITE, SITES_DIR } from './lib/catalog-sites.mjs';
+import { rankDuplicateGroups } from './lib/duplicate-groups.mjs';
 import { validateAssetManifest } from './lib/scientific-assets.mjs';
 
 // Per-file budget: GitHub Pages refuses files over 100 MB and Workers static assets over 25 MiB.
@@ -56,6 +57,7 @@ async function auditRoot(root, { scope, pagesBudget, apps }) {
   const uniqueBytes = [...content.values()].reduce((sum, size) => sum + size, 0);
   const duplicateBytes = totalBytes - uniqueBytes;
   let intentionalRuntimeDuplicateBytes = 0;
+  const declaredPaths = new Set();
   if (!selectedApp) {
     const runtimeManifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
     for (const app of apps) {
@@ -71,6 +73,7 @@ async function auditRoot(root, { scope, pagesBudget, apps }) {
           ));
           if (localCopy) {
             intentionalRuntimeDuplicateBytes += localCopy.size;
+            declaredPaths.add(localCopy.path);
             localCopies += 1;
           }
         }
@@ -99,6 +102,7 @@ async function auditRoot(root, { scope, pagesBudget, apps }) {
     duplicatePercent: totalBytes ? Number((budgetDuplicateBytes / totalBytes * 100).toFixed(1)) : 0,
     intentionalRuntimeDuplicateBytes,
     largestApps: [...appSizes].sort((a, b) => b[1] - a[1]).slice(0, 5),
+    largestDuplicateGroups: selectedApp ? [] : rankDuplicateGroups(walkedFiles, { declaredPaths }),
   }, null, 2));
   return [
     forbidden.length ? `${scope}: scientific assets must live in immutable external manifests:\n${forbidden.join('\n')}` : '',

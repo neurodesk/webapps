@@ -134,6 +134,85 @@
       ]
     },
     {
+      "id": "syncro-registration-wasm",
+      "version": "0.1.2",
+      "target": "syncro-registration/0.1.2",
+      "deduplicate": true,
+      "reason": "Share the ANTs SyN registration binary of packages/registration used by ANTs and SYNcro while each app keeps the pthread module inside its service-worker scope; the module finds the binary through its static new URL(\"syncro-registration.wasm\").",
+      "files": [
+        {
+          "name": "syncro-registration.wasm",
+          "source_app": "syncro",
+          "source": "registration/syncro-registration.wasm",
+          "sha256": "0583607d257eb0913bc7b7bef5c4846f99e802a4766c2c3558b6373909e78c72"
+        }
+      ]
+    },
+    {
+      "id": "niimath-wasm-20260909",
+      "version": "1.4.20260909",
+      "target": "niimath/1.4.20260909",
+      "deduplicate": true,
+      "match_by": "sha256",
+      "reason": "Share the @niivue/niimath 1.4.20260909 binary used by brain2print, EdgeReg, SynthSeg and TopoFit; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
+      "files": [
+        {
+          "name": "niimath.wasm",
+          "source_app": "brain2print",
+          "source": "assets/niimath-CWOTpNap.wasm",
+          "sha256": "5c476341bb06d75c8f2ca022037fc89076d818259d8e6b813e44d0b511151d5e"
+        }
+      ]
+    },
+    {
+      "id": "niimath-wasm-20261016",
+      "version": "1.4.20261016",
+      "target": "niimath/1.4.20261016",
+      "deduplicate": true,
+      "match_by": "sha256",
+      "reason": "Share the @niivue/niimath 1.4.20261016 binary used by BISON and fastprep; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
+      "files": [
+        {
+          "name": "niimath.wasm",
+          "source_app": "bison",
+          "source": "assets/niimath-CnyQdwnS.wasm",
+          "sha256": "1df1e54f373bef8d405c99771bdb99a60d82894907f520b044714a9746a294c1"
+        }
+      ]
+    },
+    {
+      "id": "niimath-wasm-bsd",
+      "version": "0.9.25",
+      "target": "niimath/runtime-support-bsd",
+      "deduplicate": true,
+      "match_by": "sha256",
+      "reason": "Share the BSD-only niimath binary vendored in packages/runtime-support (src/niimath) used by Deface and SYNcro; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
+      "files": [
+        {
+          "name": "niimath.wasm",
+          "source_app": "deface",
+          "source": "assets/niimath-B7cfsv2E.wasm",
+          "sha256": "7facb7870512b4b5c84c9bc21742ddbefdadb03e8198d1edef9bbac1078a266b"
+        }
+      ]
+    },
+    {
+      "id": "niimath-wasm-dtifit",
+      "version": "1.2.0-dtifit.1",
+      "target": "niimath/1.2.0-dtifit.1",
+      "deduplicate": true,
+      "match_by": "sha256",
+      "reason": "Share the dtifit-enabled niimath binary vendored in apps/dwi2trx/vendor/niimath used by DWI2TRX and NODDI; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
+      "files": [
+        {
+          "name": "niimath.wasm",
+          "source_app": "dwi2trx",
+          "source": "assets/niimath-CMuo2tfS.wasm",
+          "sha256": "02e8ca72af8f5ed72bceb3e99353831fd7feea7170ae86b8c7efe8e2d73bf856"
+        }
+      ]
+    },
+    {
       "id": "nv-mcp",
       "version": "1.0.0-rc.7",
       "target": "nv-mcp/1.0.0-rc.7",

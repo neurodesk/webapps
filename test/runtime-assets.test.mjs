@@ -261,3 +261,59 @@ test('composite apps load one NiiVue UMD script from the shared store', async ()
   }
   assert.ok(consumers > 1, 'multiple app consumers must share the NiiVue UMD script');
 });
+
+test('ants and syncro share the registration binary while each keeps its pthread module', async () => {
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+  const family = manifest.families.find(({ id }) => id === 'syncro-registration-wasm');
+  assert.equal(family?.deduplicate, true);
+  const checksum = createHash('sha256').update(await readFile(join(repoRoot, 'packages/registration/wasm/syncro-registration.wasm'))).digest('hex');
+  assert.equal(family.files[0].sha256, checksum, 'rebuild of packages/registration must update the syncro-registration-wasm pin');
+  const runtime = `_runtime/${family.target}/syncro-registration.wasm`;
+  assert.equal(createHash('sha256').update(await readFile(join(dist, runtime))).digest('hex'), checksum);
+  for (const app of ['ants', 'syncro']) {
+    await assert.rejects(access(join(dist, app, 'registration/syncro-registration.wasm')), { code: 'ENOENT' }, `${app}: app copy remains`);
+    const glue = await readFile(join(dist, app, 'registration/syncro-registration.mjs'), 'utf8');
+    assert.ok(glue.includes(`new URL("../../${runtime}",import.meta.url)`), `${app}: the module must load the shared binary`);
+    assert.ok(glue.includes('new URL("syncro-registration.mjs",import.meta.url)'), `${app}: pthread workers must start from the app's own module`);
+  }
+});
+
+test('apps on the same niimath build load one binary from the shared store', async () => {
+  const registry = await loadAppsRegistry();
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+  const families = manifest.families.filter(({ id }) => id.startsWith('niimath-wasm-'));
+  assert.equal(families.length, 4);
+  for (const family of families) {
+    assert.equal(family.deduplicate, true, family.id);
+    assert.equal(family.match_by, 'sha256', `${family.id}: Vite names differ between apps, so the checksum identifies the build`);
+    const [{ name, sha256 }] = family.files;
+    const runtimePath = `_runtime/${family.target}/${name}`;
+    let consumers = 0;
+    for (const app of registry.apps) {
+      const standalone = join(repoRoot, 'apps', app.id, 'dist');
+      const copies = [];
+      for (const file of (await readdir(standalone, { recursive: true })).filter(file => file.endsWith('.wasm'))) {
+        const bytes = await readFile(join(standalone, file));
+        if (createHash('sha256').update(bytes).digest('hex') === sha256) copies.push(file);
+      }
+      if (!copies.length) continue;
+      consumers++;
+      for (const copy of copies) await assert.rejects(access(join(dist, app.path, copy)), { code: 'ENOENT' }, `${app.id}/${copy} must not stay in the app`);
+      const modules = (await readdir(join(dist, app.path), { recursive: true })).filter(file => /\.m?js$/.test(file));
+      const loaders = [];
+      for (const module of modules) {
+        const source = await readFile(join(dist, app.path, module), 'utf8');
+        for (const [, reference] of source.matchAll(/new URL\("([^"]*niimath\.wasm)",import\.meta\.url\)/g)) {
+          // A site is served at its host root and, for a project page, below a path.
+          for (const base of ['https://example.test/', 'https://example.test/webapps/']) {
+            assert.equal(new URL(reference, new URL(`${app.path}/${module}`, base)).href, new URL(runtimePath, base).href,
+              `${app.id}/${module} must load the shared niimath binary`);
+          }
+          loaders.push(module);
+        }
+      }
+      assert.ok(loaders.length > 0, `${app.id}: no module loads ${runtimePath}`);
+    }
+    assert.ok(consumers > 1, `${family.id}: multiple apps must share the binary`);
+  }
+});
