@@ -965,7 +965,9 @@ sides too changed Q^H y in 3 recorded single designs, so the port trims only
 the column update. That also fixes the 6 double multi-RHS solves of the v82
 designs, so all 190 match. The census is rerunnable:
 `cargo run -p samsrf-core --example qr_steps` and `qr-steps.py` list the first
-differing step of each design (none now), and the chain gate above holds it.
+numerically differing step of each design (none now). This Python diagnostic
+does not distinguish signed zeros; the Rust chain gate above compares the
+recorded bits.
 
 The two remaining non-exact designs are a recording-format loss, not an
 arithmetic difference. The rest of this paragraph and the table record the

@@ -5,8 +5,9 @@ Usage: python3 -I qr-steps.py KERNELS_DIR PORT_STEPS_JSON REPORT_JSON
 
 KERNELS_DIR is one record_qr_kernels.m output (kernels.json and arrays).
 PORT_STEPS_JSON is written by the qr_steps example on the same pinned
-designs. Steps are compared in the order the algorithm produces them; every
-comparison is bit for bit in the design's class.
+designs. Steps are compared numerically in the order the algorithm produces
+them. This diagnostic does not distinguish signed zeros. The Rust
+qr_kernels chain gate performs the authoritative bitwise comparison.
 """
 import json
 from pathlib import Path
