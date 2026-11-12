@@ -1049,7 +1049,12 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   requires: the grid sweep and bisection exactly (hull and simplified vertex
   set); every held-out hull except the IDs in `matlab_polyshape_probe.json`
   (148 of 1,500 near-collinear clouds and 30 of 1,500 mixed clouds, all
-  near-collinear but one), each of which must still differ; and the extreme
+  near-collinear but one), each of which must still differ and retain its port
+  hull, emptiness, area and centroid bits in `matlab_polyshape_probe_outcomes.json`.
+  These snapshots were recorded at `708b77cb2` identically on both hosts; they
+  protect existing behavior, not MATLAB accuracy. The gate checks both complete
+  1,500-case inventories, unique and in-range exception IDs, exact correspondence
+  with the frozen IDs, and that every exception was visited. It also checks the extreme
   grids as above. The one non-collinear held-out cloud, 1125, is a half-integer
   grid whose `KeepCollinearPoints` rings hold the filled triangle (1, 1.5),
   (1.5, 2), (1.5714, 1.7857) that Clipper also gives, while MATLAB's default

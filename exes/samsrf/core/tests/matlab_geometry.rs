@@ -386,12 +386,7 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
                 // record_geometry.m draws cloud kind mod(i, 5) for 1-based i.
                 assert!((i + 1) % 5 == 3 && line_thickness(polygon) < 1e-5, "{id} {i} is not a near-collinear cloud");
                 assert!(!agrees, "{id} {i} now matches MATLAB; remove it from NEAR_COLLINEAR_SNAPPING");
-                let actual = json!({
-                    "empty": hull.is_none(),
-                    "hull": sorted_vertices(vertices).iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect::<Vec<_>>(),
-                    "centroid": hull.as_ref().map(|h| h.centroid().map(f64::to_bits)),
-                    "area": hull.as_ref().map(|h| h.area().to_bits()),
-                });
+                let actual = frozen_hull_outcome(hull.as_ref());
                 assert_eq!(&actual, &outcomes[&i.to_string()], "{id} {i}: frozen port outcome changed");
                 checked_snapping.insert(i);
             } else if agrees {
@@ -460,11 +455,22 @@ struct ProbeOutcome {
     hull: bool,
     vertices: bool,
     error: bool,
+    port: Option<Value>,
+}
+
+fn frozen_hull_outcome(hull: Option<&Hull>) -> Value {
+    let vertices = hull.map(|h| h.vertices.as_slice()).unwrap_or(&[]);
+    json!({
+        "empty": hull.is_none(),
+        "hull": sorted_vertices(vertices).iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect::<Vec<_>>(),
+        "centroid": hull.map(|h| h.centroid().map(f64::to_bits)),
+        "area": hull.map(|h| h.area().to_bits()),
+    })
 }
 
 fn probe_outcome(polygon: &[[f64; 2]], simplified: &[[f64; 2]], matlab_hull: &[[f64; 2]], expected: [f64; 3]) -> ProbeOutcome {
     match samsrf_core::geometry::polyshape_vertices(polygon) {
-        Err(_) => ProbeOutcome { hull: false, vertices: false, error: true },
+        Err(_) => ProbeOutcome { hull: false, vertices: false, error: true, port: None },
         Ok((vertices, hull)) => {
             let found = hull.as_ref().map(|h| h.vertices.clone()).unwrap_or_default();
             let hull_agrees = sorted_vertices(&found) == sorted_vertices(matlab_hull) && match &hull {
@@ -475,7 +481,7 @@ fn probe_outcome(polygon: &[[f64; 2]], simplified: &[[f64; 2]], matlab_hull: &[[
                     (0..2).all(|axis| (centre[axis] - expected[axis]).abs() <= bound[axis]) && (hull.area() - expected[2]).abs() <= bound[2]
                 }
             };
-            ProbeOutcome { hull: hull_agrees, vertices: unique_sorted(&vertices) == unique_sorted(simplified), error: false }
+            ProbeOutcome { hull: hull_agrees, vertices: unique_sorted(&vertices) == unique_sorted(simplified), error: false, port: Some(frozen_hull_outcome(hull.as_ref())) }
         }
     }
 }
@@ -485,7 +491,8 @@ fn probe_outcome(polygon: &[[f64; 2]], simplified: &[[f64; 2]], matlab_hull: &[[
 /// - the grid decade: all 27,648 swept and bisected polygons have MATLAB's hull
 ///   and simplified vertex set exactly;
 /// - held-out clouds: every hull agrees except the IDs listed in
-///   matlab_polyshape_probe.json, which must still differ; all but one are
+///   matlab_polyshape_probe.json, which must still differ and retain their frozen
+///   hull, emptiness, area and centroid bits; all but one are
 ///   near-collinear, and held-out cloud 1125 is a half-integer grid whose default
 ///   polyshape MATLAB re-traces away from its own KeepCollinearPoints rings;
 /// - extreme grids: the model reports an error, not a hull, for coordinates
@@ -499,6 +506,9 @@ fn polyshape_probe_matches_matlab() {
         return;
     }
     let listed: Value = serde_json::from_str(include_str!("matlab_polyshape_probe.json")).unwrap();
+    let frozen: Value = serde_json::from_str(include_str!("matlab_polyshape_probe_outcomes.json")).unwrap();
+    let frozen = frozen["outcomes"].as_object().unwrap();
+    assert_eq!(frozen.keys().map(String::as_str).collect::<BTreeSet<_>>(), ["probe_heldout_collinear", "probe_heldout_clouds"].into_iter().collect());
     let originals = geometry_hosts();
     for (root, cases) in hosts {
         let ids: Vec<&str> = cases.iter().map(|c| c["id"].as_str().unwrap()).collect();
@@ -525,11 +535,22 @@ fn polyshape_probe_matches_matlab() {
                     }
                 }
                 "probe_heldout_collinear" | "probe_heldout_clouds" => {
-                    let differ: BTreeSet<usize> = listed[id].as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as usize).collect();
+                    assert_eq!(n, 1500, "{id}: held-out polygon inventory");
+                    let listed_ids = listed[id].as_array().unwrap();
+                    let differ: BTreeSet<usize> = listed_ids.iter().map(|v| v.as_u64().unwrap() as usize).collect();
+                    assert_eq!(listed_ids.len(), differ.len(), "{id}: duplicate exception ID");
+                    assert_eq!(differ.len(), if id == "probe_heldout_collinear" { 148 } else { 30 }, "{id}: exception inventory");
+                    assert!(differ.iter().all(|&i| i < n), "{id}: exception outside the recording");
+                    let snapshots = frozen[id].as_object().unwrap();
+                    let snapshot_ids: BTreeSet<usize> = snapshots.keys().map(|i| i.parse().unwrap()).collect();
+                    assert_eq!(snapshot_ids, differ, "{id}: frozen and listed exception IDs differ");
+                    let mut checked = BTreeSet::new();
                     for (i, outcome) in outcomes.iter().enumerate() {
                         assert!(!outcome.error, "{}: model error", at(i));
                         if differ.contains(&i) {
-                            assert!(!outcome.hull, "{} now matches MATLAB; remove it from matlab_polyshape_probe.json", at(i));
+                            assert!(!outcome.hull, "{} now matches MATLAB; remove its exception and frozen outcome", at(i));
+                            assert_eq!(outcome.port.as_ref().unwrap(), &snapshots[&i.to_string()], "{}: frozen held-out port outcome changed", at(i));
+                            assert!(checked.insert(i));
                             if (id, i) == ("probe_heldout_clouds", 1125) {
                                 // MATLAB's KeepCollinearPoints rings keep the filled triangle at
                                 // (1.5, 2), as Clipper does; its default output does not.
@@ -544,6 +565,7 @@ fn polyshape_probe_matches_matlab() {
                             assert!(outcome.hull, "{}: hull differs from MATLAB", at(i));
                         }
                     }
+                    assert_eq!(checked, differ, "{id}: not every frozen exception was checked");
                 }
                 "probe_extreme_grids" => {
                     assert_eq!(n, 7);
