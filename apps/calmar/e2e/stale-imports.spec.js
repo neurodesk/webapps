@@ -51,8 +51,8 @@ async function holdImports(page) {
       return loadDrawing(...args);
     };
     globalThis.holdDecoded = [];
-    const decode = niivue.NVImage.loadFromUrl;
-    niivue.NVImage.loadFromUrl = async function loadFromUrl(options) {
+    const decode = globalThis.niivue.NVImage.loadFromUrl;
+    globalThis.niivue.NVImage.loadFromUrl = async function loadFromUrl(options) {
       const image = await decode.call(this, options);
       const name = options.name || (globalThis.holdDecodedDrawing ? 'decoded-drawing' : '');
       if (name.startsWith('decoded-') || globalThis.holdDecoded.includes(name)) await held(name);
