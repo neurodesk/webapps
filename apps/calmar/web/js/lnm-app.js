@@ -4,7 +4,7 @@ import { createExampleSelector, bindSectionDisclosures, bindInfoTooltips } from 
 bindSectionDisclosures(document);
 bindInfoTooltips(document);
 
-import { SimpleFileIOController, readSingleImage } from '@neurodesk/webapp-components/file-io';
+import { readSingleImage } from '@neurodesk/webapp-components/file-io';
 import { ViewerController } from '@neurodesk/webapp-components';
 import { registerCalmarAutomation } from './automation.js';
 import { CalmarPipeline } from './controllers/CalmarPipeline.js';
@@ -267,7 +267,7 @@ export class LesionNetworkMappingApp {
     this.functionProfiles = null;
     this._functionalProfileRenderPromise = Promise.resolve();
     this._resultsGeneration = 0;
-    this._diffusionImportTurn = { dwi: 0, adc: 0, b0: 0 };
+    this._importTurn = { structural: 0, lesion: 0, mask: 0, dwi: 0, adc: 0, b0: 0 };
     // Knowledge-base report (stage 'kb-report'): the evaluation shown in the
     // Results view, the loaded KB, and the disconnectome worker client.
     this.kbReport = null;
@@ -321,16 +321,6 @@ export class LesionNetworkMappingApp {
   }
 
   async init() {
-    this.structuralFileIO = new SimpleFileIOController({
-      dcm2niixModuleUrl: new URL('../dcm2niix/index.jpeg.js', import.meta.url).href,
-      updateOutput: (msg) => this.updateOutput(msg),
-      onFileLoaded: (file) => this.setStructural(file)
-    });
-    this.lesionFileIO = new SimpleFileIOController({
-      dcm2niixModuleUrl: new URL('../dcm2niix/index.jpeg.js', import.meta.url).href,
-      updateOutput: (msg) => this.updateOutput(msg),
-      onFileLoaded: (file) => this.setLesion(file)
-    });
     this.viewerController = new ViewerController({
       nv: this.nv,
       updateOutput: (msg) => this.updateOutput(msg)
@@ -397,7 +387,7 @@ export class LesionNetworkMappingApp {
         }
         for (const role of ['dwi', 'adc', 'b0']) {
           if (!input(role)) continue;
-          await this.setDeepIslesInput(role, input(role), { assertCurrent: this.beginDiffusionImport(role, assertCurrent) });
+          await this.setDeepIslesInput(role, input(role), { assertCurrent: this.beginImport(role, assertCurrent) });
           assertCurrent();
         }
         this.patientBehavior?.loadExampleContext(example.patientContext);
@@ -409,29 +399,18 @@ export class LesionNetworkMappingApp {
   }
 
   bindEvents() {
-    const structuralInput = document.getElementById('structuralFileInput');
-    if (structuralInput) {
-      structuralInput.addEventListener('change', (event) => {
-        this.structuralFileIO.handleFiles(event.target.files);
-      });
-    }
-
-    for (const [kind, id, label] of [
-      ['dwi', 'deepIslesDwiFileInput', 'DWI/TRACE'],
-      ['adc', 'deepIslesAdcFileInput', 'ADC'],
-      ['b0', 'deepIslesB0FileInput', 'b0'],
+    const setDiffusion = kind => (file, assertCurrent) => this.setDeepIslesInput(kind, file, { assertCurrent });
+    for (const [kind, id, label, keep] of [
+      ['structural', 'structuralFileInput', 'Structural', file => this.setStructural(file)],
+      ['dwi', 'deepIslesDwiFileInput', 'DeepISLES DWI/TRACE', setDiffusion('dwi')],
+      ['adc', 'deepIslesAdcFileInput', 'DeepISLES ADC', setDiffusion('adc')],
+      ['b0', 'deepIslesB0FileInput', 'DeepISLES b0', setDiffusion('b0')],
+      ['lesion', 'lesionFileInput', 'Lesion mask', file => this.setLesion(file)],
     ]) {
       document.getElementById(id)?.addEventListener('change', (event) => {
-        this.importDiffusionInput(kind, event.target.files).catch((err) => {
-          if (err.name !== 'AbortError') this.updateOutput(`DeepISLES ${label} input failed: ${err.message}`);
+        this.importInput(kind, event.target.files, keep).catch((err) => {
+          if (err.name !== 'AbortError') this.updateOutput(`${label} input failed: ${err.message}`);
         });
-      });
-    }
-
-    const lesionInput = document.getElementById('lesionFileInput');
-    if (lesionInput) {
-      lesionInput.addEventListener('change', (event) => {
-        this.lesionFileIO.handleFiles(event.target.files);
       });
     }
 
@@ -516,10 +495,13 @@ export class LesionNetworkMappingApp {
     if (manualMaskInput) {
       manualMaskInput.addEventListener('change', (event) => {
         const name = event.target.files?.[0]?.name || 'selected files';
-        this.readScanInput(event.target.files).then(file => file && this.startUploadedLesionMaskReview(file))
-          .catch(err => this.updateOutput(
-            `Manual mask input failed for ${name}: ${err.message}. Choose a NIfTI mask file (.nii or .nii.gz) or a DICOM mask series.`
-          ))
+        this.importInput('mask', event.target.files, (file, assertCurrent) => this.startUploadedLesionMaskReview(file, { assertCurrent }))
+          .catch((err) => {
+            if (err.name === 'AbortError') return;
+            this.updateOutput(
+              `Manual mask input failed for ${name}: ${err.message}. Choose a NIfTI mask file (.nii or .nii.gz) or a DICOM mask series.`
+            );
+          })
           .finally(() => { event.target.value = ''; });
       });
     }
@@ -1616,6 +1598,8 @@ export class LesionNetworkMappingApp {
     // diffusion inputs from the previous one must not seed it. Adding a T1
     // after a diffusion stand-in keeps them.
     if (this.nativeStructuralFile && !this.structuralFromDiffusion) this.clearDiffusionInputs();
+    // A mask still being read was drawn for the previous image.
+    this.cancelImports('structural', 'mask');
     // Recorded before any await, so a T1 loaded meanwhile is never marked.
     this.structuralFromDiffusion = fromDiffusion;
     this.tagFileSpace(file, {
@@ -1668,30 +1652,34 @@ export class LesionNetworkMappingApp {
     this._autoPromotePipeline('lnm-yeo-auto');
   }
 
-  // The newest import of a diffusion slot is the current one. A newer file in
-  // that slot replaces it, and so does a new subject, which clears every slot
-  // (`clearDiffusionInputs`); an import in another slot does not. The returned
-  // check throws once the import is replaced; `assertLoadCurrent` adds the
-  // cancellation of the example load that asked for it.
-  beginDiffusionImport(kind, assertLoadCurrent) {
-    const turn = ++this._diffusionImportTurn[kind];
+  // The newest import of an input (structural, lesion, mask, dwi, adc, b0) is
+  // the current one. A newer file in that input replaces it, and so does
+  // whatever clears the input (`cancelImports`); an import in another input
+  // does not. The returned check throws once the import is replaced;
+  // `assertLoadCurrent` adds the cancellation of the example load that asked for it.
+  beginImport(kind, assertLoadCurrent) {
+    const turn = ++this._importTurn[kind];
     return () => {
       assertLoadCurrent?.();
-      if (turn !== this._diffusionImportTurn[kind]) {
+      if (turn !== this._importTurn[kind]) {
         throw new DOMException(`The ${kind} import was replaced.`, 'AbortError');
       }
     };
   }
 
-  // A file the user chose: read (DICOM is converted), then kept only if still current.
-  async importDiffusionInput(kind, files) {
-    const assertCurrent = this.beginDiffusionImport(kind);
-    const file = await this.readScanInput(files);
-    assertCurrent();
-    return file ? this.setDeepIslesInput(kind, file, { assertCurrent }) : null;
+  cancelImports(...kinds) {
+    for (const kind of kinds) this._importTurn[kind] += 1;
   }
 
-  // `assertCurrent` comes from `beginDiffusionImport`; it is called after every
+  // A file the user chose: read (DICOM is converted), then kept only if still current.
+  async importInput(kind, files, keep) {
+    const assertCurrent = this.beginImport(kind);
+    const file = await this.readScanInput(files);
+    assertCurrent();
+    return file ? keep(file, assertCurrent) : null;
+  }
+
+  // `assertCurrent` comes from `beginImport`; it is called after every
   // await, before anything of the file is kept or shown.
   async setDeepIslesInput(kind, file, { assertCurrent } = {}) {
     if (!file) return null;
@@ -1699,7 +1687,7 @@ export class LesionNetworkMappingApp {
     if (!label) {
       throw new Error(`Unknown DeepISLES input kind '${kind}'.`);
     }
-    assertCurrent ??= this.beginDiffusionImport(kind);
+    assertCurrent ??= this.beginImport(kind);
     // A DeepISLES run on the old inputs must not deliver its seed.
     if (this._deepIslesRunning) {
       try { this.executor.cancel(); }
@@ -1761,6 +1749,7 @@ export class LesionNetworkMappingApp {
   async setLesion(file) {
     if (!file) return;
     if (!this.structuralFile && this.userLesionFile && this.userLesionFile !== file) this.patientBehavior?.reset();
+    this.cancelImports('lesion');
     this.lesionSource = 'other';
     this.maskOrigin = 'atlas-grid';
     if (!this.structuralFile) {
@@ -2615,7 +2604,7 @@ export class LesionNetworkMappingApp {
   }
 
   clearDiffusionInputs() {
-    for (const kind of Object.keys(this._diffusionImportTurn)) this._diffusionImportTurn[kind] += 1;
+    this.cancelImports('dwi', 'adc', 'b0');
     this.deepIslesDwiFile = null;
     this.deepIslesAdcFile = null;
     this.deepIslesB0File = null;
@@ -2889,14 +2878,16 @@ export class LesionNetworkMappingApp {
     return this.nativeLesionSeedFile;
   }
 
-  async startUploadedLesionMaskReview(file) {
+  async startUploadedLesionMaskReview(file, { assertCurrent } = {}) {
     if (!file) return null;
     const baseFile = this.nativeStructuralFile || this.structuralFile;
     if (!baseFile) {
       this.updateOutput('Drop a structural T1 before loading a manual lesion mask.');
       return null;
     }
+    assertCurrent ??= this.beginImport('mask');
     const decoded = await decodeNiftiBuffer(await file.arrayBuffer());
+    assertCurrent();
     this.tagDecodedFileSpace(file, decoded, {
       space: VOLUME_SPACES.NATIVE_T1,
       role: 'lesion-seed',
@@ -2906,16 +2897,22 @@ export class LesionNetworkMappingApp {
     this.maskOrigin = 'uploaded';
     this.autoLesionSeedFile = null;
     this.deepIslesSeedFile = null;
-    const seed = await this.startLesionMaskReview({ seedFile: file });
+    const seed = await this.startLesionMaskReview({ seedFile: file, assertCurrent });
     this.updateOutput(`Manual lesion mask ready for editing: ${file.name}`);
     return seed;
   }
 
-  async startLesionMaskReview({ seedFile = null, blank = false } = {}) {
+  // `assertCurrent` is an uploaded mask's check (`beginImport('mask')`); any
+  // other review replaces an upload that is still being read.
+  async startLesionMaskReview({ seedFile = null, blank = false, assertCurrent } = {}) {
     const baseFile = this.nativeStructuralFile || this.structuralFile;
     if (!baseFile) {
       this.updateOutput('Drop a structural T1 before editing a lesion mask.');
       return null;
+    }
+    if (!assertCurrent) {
+      this.cancelImports('mask');
+      assertCurrent = () => {};
     }
     this.nativeStructuralFile = baseFile;
     this.tagFileSpace(baseFile, {
@@ -2924,6 +2921,7 @@ export class LesionNetworkMappingApp {
       sourceStage: 'mask-review'
     });
     await this.ensureNativeStructuralInfo();
+    assertCurrent();
     this.maskReviewActive = true;
     this.refreshResultsView();
     this.lesionMaskConfirmed = false;
@@ -2939,6 +2937,7 @@ export class LesionNetworkMappingApp {
       stage: 'structural',
       visible: this.layerVisible('structural')
     });
+    assertCurrent();
     const brainmaskFile = this.getBrainmaskFileForActiveViewer();
     try {
       await this.maskDrawingController.loadBrainMaskFile?.(brainmaskFile);
@@ -2965,6 +2964,7 @@ export class LesionNetworkMappingApp {
       this.deepIslesSeedFile = null;
     }
     const seed = blank ? null : await this.resampleSeedMaskToNative(seedFile || this.autoLesionSeedFile);
+    assertCurrent();
     if (seed) await this.maskDrawingController.loadSeedFile(seed);
     else this.maskDrawingController.startBlank();
 
@@ -4590,6 +4590,8 @@ export class LesionNetworkMappingApp {
   }
 
   clearResults({ full = false } = {}) {
+    this.cancelImports('mask');
+    if (full) this.cancelImports('structural', 'lesion');
     this.maskDrawingController?.close?.({ clearDrawing: true });
     document.getElementById('resultsSection').classList.add('collapsed');
     this.clearDerivedResults();
