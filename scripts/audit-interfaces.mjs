@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppExamples } from './lib/app-examples.mjs';
-import { loadVerifiedExampleCache } from './lib/example-asset-cache.mjs';
+import { auditedExampleFiles, loadVerifiedExampleCache } from './lib/example-asset-cache.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
 const { apps } = await loadAppsRegistry();
@@ -13,7 +13,7 @@ const selected = requested.size ? apps.filter(app => requested.has(app.id)) : ap
 if (requested.size && selected.length !== requested.size) throw new Error('SMOKE_APPS contains an unknown app');
 const cacheDirectory = process.env.EXAMPLE_ASSET_CACHE;
 const assetLock = cacheDirectory ? JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.lock.json'), 'utf8')) : null;
-if (cacheDirectory) console.log(`Example source: checksum-verified-cache (${cacheDirectory}); every declared example file must match the offline lock, with no missing-file network fallback`);
+if (cacheDirectory) console.log(`Example source: checksum-verified-cache (${cacheDirectory}); every example file the audit imports must match the offline lock, with no missing-file network fallback`);
 const cacheFiles = new Map();
 const site = await serveSite(join(repoRoot, 'dist'), { files: cacheFiles });
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
@@ -24,7 +24,7 @@ try {
   for (const app of selected) {
     const examples = await loadAppExamples(app);
     const cachedExamples = cacheDirectory
-      ? await loadVerifiedExampleCache(examples.flatMap(example => example.files), { directory: cacheDirectory, assets: assetLock.assets })
+      ? await loadVerifiedExampleCache(auditedExampleFiles(examples), { directory: cacheDirectory, assets: assetLock.assets })
       : null;
     const cacheRedirects = new Map();
     for (const [url, asset] of cachedExamples ?? []) {
@@ -40,6 +40,17 @@ try {
       // The context also sees the requests of workers and the service worker.
       const unfinished = new Set();
       const pageErrors = [];
+      // What still depends on the network: every request this run did not answer itself.
+      const answeredHere = new WeakSet();
+      const external = [];
+      const exampleUrls = new Set(auditedExampleFiles(examples).map(file => file.url));
+      context.on('request', request => {
+        if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== site.origin) external.push(request);
+      });
+      // A page request its service worker answers is seen again as the worker's own fetch.
+      context.on('response', response => {
+        if (response.fromServiceWorker()) answeredHere.add(response.request());
+      });
       context.on('request', request => unfinished.add(request));
       context.on('requestfinished', request => unfinished.delete(request));
       context.on('requestfailed', request => unfinished.delete(request));
@@ -48,6 +59,7 @@ try {
       try {
         if (cachedExamples) {
           await context.route(url => cachedExamples.has(url.href), route => {
+            answeredHere.add(route.request());
             // A full DWI exceeds Chromium's DevTools message limit when fulfilled as base64.
             // Redirect only verified cache entries; the server streams their original bytes.
             return route.fulfill({
@@ -61,7 +73,10 @@ try {
             });
           });
         }
-        await context.route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
+        await context.route(/googletagmanager\.com|google-analytics\.com/, route => {
+          answeredHere.add(route.request());
+          return route.fulfill({ body: '' });
+        });
         const response = await page.goto(`${site.origin}/${app.path}/`, { waitUntil: 'domcontentloaded' });
         expect(response.status()).toBe(200);
         await expect(page.locator('.nd-app-bar:visible').first()).toBeVisible();
@@ -306,6 +321,13 @@ try {
         if (output) await page.screenshot({ path: join(output, `${app.id}-${viewport.width}-failure.png`), fullPage: true, timeout: 30000 }).catch(() => {});
       } finally {
         await context.close().catch(error => result.failures.push(`Context cleanup failed: ${error.message}`));
+      }
+      const sent = external.filter(request => !answeredHere.has(request)).map(request => new URL(request.url()));
+      result.externalRequests = {};
+      for (const url of sent) result.externalRequests[url.host] = (result.externalRequests[url.host] ?? 0) + 1;
+      result.hostedExampleRequests = sent.filter(url => exampleUrls.has(url.href)).length;
+      if (cachedExamples && result.hostedExampleRequests) {
+        result.failures.push(`${result.hostedExampleRequests} example requests went to the network although the verified cache holds their files`);
       }
       results.push(result);
       console.log(`${result.failures.length ? 'FAIL' : 'PASS'} ${app.id}/${viewport.width}: ${result.failures.join('; ') || 'single shared navigation'}; ${result.mouseOnlyDisclosures?.length ?? '?'} legacy disclosure headings`);

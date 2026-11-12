@@ -71,8 +71,25 @@ downloads. CALMaR, dicompare and SurfAnnotate were rechecked using
 mode verifies every file against the offline SHA-256 and size, fails if anything
 is missing or changed, and records `checksum-verified-cache` in its results. It
 checks the real input workflow without claiming to recheck remote availability.
-Their live hosted workflows also passed separately. Default audits use the
-network. `SMOKE_APPS` restricts a rerun to named registered apps.
+Their live hosted workflows also passed separately. `SMOKE_APPS` restricts a
+rerun to named registered apps.
+
+A local `pnpm audit:interfaces` uses the network unless `EXAMPLE_ASSET_CACHE`
+is set. CI's `composite-site` job always sets it. Before the audit,
+`node scripts/fetch-example-cache.mjs <directory> --prune` brings the directory
+to the files the audit imports: the first example of each app, 324 files and
+1.61 GB for 63 apps on 2026-11-12. It keeps entries that match the lock,
+downloads the rest with retries that honour `Retry-After`, checks each download
+against the lock's SHA-256 and size before renaming it into place, and fails
+with the URL of a file it cannot get. `actions/cache` restores the directory
+(1.35 GB compressed), and only runs on main save it, so a pull request never
+stores a second copy. A run whose cache is complete downloads no example.
+
+The audit records in `audit.json` what each app still requested from other
+hosts (`externalRequests`) and fails in cache mode when an example file was
+requested from the network (`hostedExampleRequests`). Models and runtimes an app
+loads from other hosts, such as dicompare's Pyodide from jsDelivr and its
+packages from PyPI, still come from the network.
 
 Real output checks include QSMbly mask preparation, reconstruction and NIfTI
 download; EdgeReg registration and download; NiiMath arithmetic

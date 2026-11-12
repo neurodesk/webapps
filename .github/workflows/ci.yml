@@ -234,9 +234,30 @@ jobs:
         run: pnpm test:e2e:types
       - name: Test every production workspace with e2e
         run: pnpm test:e2e:catalog --skip-build --output .e2e/workspace
+      # The audit imports one example per app at two widths. Reading them from
+      # this checked copy keeps a stalled or rate-limited download from failing it.
+      # Only main saves the copy: a pull request's would be a second one of its size.
+      - name: Restore the examples the interface audit imports
+        id: example-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/example-assets
+          key: example-assets-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json') }}
+          restore-keys: example-assets-
+      - name: Download the examples the cache lacks and check all of them
+        run: node scripts/fetch-example-cache.mjs "$EXAMPLE_ASSET_CACHE" --prune
+        env:
+          EXAMPLE_ASSET_CACHE: ${{ runner.temp }}/example-assets
+      - name: Save the examples for later runs
+        if: github.ref == 'refs/heads/main' && steps.example-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/example-assets
+          key: ${{ steps.example-cache.outputs.cache-primary-key }}
       - name: Audit interface consistency across the catalog
         run: pnpm audit:interfaces
         env:
+          EXAMPLE_ASSET_CACHE: ${{ runner.temp }}/example-assets
           INTERFACE_ARTIFACTS: interface-artifacts
       - name: Check interface workflows with image data
         run: pnpm test:interface-workflows
