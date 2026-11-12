@@ -104,6 +104,37 @@ them. Run the report for
 any day with `node scripts/ci-usage-report.mjs --until <ISO time>`. Change a
 budget only with the measurement that justifies it.
 
+## Module-level selection in the component package
+
+Every app depends on `packages/components`, so a change anywhere in it used
+to select all 63 apps. On 10 November 2026 four pull requests changed
+`src/file-io/tiff.js` or a module beside it, and each of their ready pushes
+tested the whole catalogue.
+
+The planner now asks which apps load the changed module
+(`scripts/lib/shared-module-users.mjs`). A user's entry points are the import
+specifiers and paths its text names; the modules it loads are their import
+closure inside the package. A change to `src/file-io/tiff.js` selects 30 apps,
+`src/fft/index.js` 14, and a module the shell or `/ui` loads still selects all.
+
+The analysis reads text, so it errs towards more apps:
+
+- A directory reference loads every file in that directory.
+- A computed specifier, an import-map prefix, the package root or a path that
+  does not exist loads the whole package. The six import-map apps copy the
+  source directory and are selected by every change.
+- Styles, the manifest, scripts and tests of the package reach all its users,
+  as before. A manifest that only gains `exports` entries selects nothing.
+- A root script that reads a list of modules from the source directory names
+  the list in `LISTED_READS`. When the script's text stops matching, it loads
+  the whole package again.
+
+It cannot see a module loaded through a name built at run time from a
+directory listing. `test/shared-module-users.test.mjs` checks every literal
+component import in every app against the selection. With `tiff.js` broken on
+purpose, `dcm2niix` and `niimath` (not selected) built and `structure-tensor`
+and `stardist` (selected) failed.
+
 ## Agent procedure
 
 Follow the draft lifecycle in [AGENTS.md](../../AGENTS.md#ci-scope).

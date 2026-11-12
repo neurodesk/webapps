@@ -7,9 +7,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
-import { commandLineClosure, moduleClosure } from '../scripts/lib/module-closure.mjs';
+import { commandLineClosure, moduleClosure, onlyAddsExports } from '../scripts/lib/module-closure.mjs';
 import { testedBase } from '../scripts/lib/tested-base.mjs';
-import { calledWorkflows, decideWorkflow, isSharedFilter, onlyAddsExports, ownedPackages, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
+import { calledWorkflows, decideWorkflow, isSharedFilter, ownedPackages, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
 // The pull request gate skips a native suite only when no changed file can

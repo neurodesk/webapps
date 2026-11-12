@@ -115,3 +115,23 @@ export function commandLineClosure(root, packageDir) {
     .map((file) => join(directory, file));
   return moduleClosure(root, seeds).filter((file) => !file.startsWith(`${packageDir}/`));
 }
+
+// A dependency's package.json that only gained `exports` entries resolves
+// every existing import as before. Anything else may not.
+export function onlyAddsExports({ before, after }) {
+  let old;
+  let now;
+  try {
+    [old, now] = [JSON.parse(before), JSON.parse(after)];
+  } catch {
+    return false;
+  }
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const fields = new Set([...Object.keys(old), ...Object.keys(now)]);
+  if ([...fields].some((field) => field !== 'exports' && !same(old[field], now[field]))) return false;
+  const [was, is] = [old.exports, now.exports];
+  if (!was || !is || typeof was !== 'object' || typeof is !== 'object') return false;
+  // A pattern entry can be shadowed by a more specific addition.
+  if (Object.keys(was).some((key) => key.includes('*'))) return false;
+  return Object.keys(was).every((key) => same(was[key], is[key]));
+}
