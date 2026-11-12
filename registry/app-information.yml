@@ -2242,9 +2242,6 @@ apps:
       - name: SamSrf X (Rust and WebAssembly port)
         url: https://github.com/samsrf/samsrf
         role: pRF and connective field analysis, ported under the BSD 3-clause licence
-      - name: Clipper 6.4.2 (Rust port of its polygon union)
-        url: https://github.com/skyrpex/clipper/blob/b1f1e1672745c1e1d73dd0437d1643f9633e7508/cpp/clipper.cpp
-        role: MATLAB-compatible polygon simplification for connective-field hulls, under the Boost Software License
       - name: NiiVue
         url: https://github.com/niivue/niivue
         role: surface viewer

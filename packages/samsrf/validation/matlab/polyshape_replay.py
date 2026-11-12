@@ -1,4 +1,4 @@
-"""Replays recorded resolved polyshape boundaries through the native model (#732).
+"""Replays recorded resolved polyshape boundaries through the experimental model (#732).
 
 KeepCollinearPoints output is a separate MATLAB configuration, not an internal
 checkpoint of the default polyshape. For each polygon of a polyshape-causal
@@ -7,7 +7,7 @@ fromKept against the default) and whether the model, run on the recorded P,
 KeepCollinearPoints and default boundaries, reproduces the corresponding MATLAB
 output: vertex sets, unoriented rings and new (non-source) vertices.
 
-  polyshape_stages --replay points|collinearVertices|simplified HOST CASE rp_FIELD_CASE.json
+  cargo run --release --features polyshape-experimental --example polyshape_stages -- --replay points|collinearVertices|simplified HOST CASE rp_FIELD_CASE.json
   python3 polyshape_replay.py HOST_DIR STAGES_DIR
 """
 import json, math, os, sys, collections

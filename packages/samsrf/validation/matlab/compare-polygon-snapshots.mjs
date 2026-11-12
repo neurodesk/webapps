@@ -1,5 +1,7 @@
-// Compares two frozen port snapshots of polygon_point_clouds hulls
-// (exes/samsrf/core/tests/matlab_polygon_snapping*.json) with MATLAB's recorded
+// Compares two frozen port snapshots of polygon_point_clouds hulls (the
+// production model's exes/samsrf/core/tests/matlab_polygon_snapping.json as
+// PREVIOUS, the experimental model's matlab_polygon_snapping.experimental.json
+// as CURRENT) with MATLAB's recorded
 // hulls (one host of geometry-reference.json). Each case reports MATLAB's and
 // both snapshots' area, centroid and hull vertices, the relative area and
 // connective-field sigma (sqrt(area) / (2 sqrt(2 ln 2))) errors and the centroid

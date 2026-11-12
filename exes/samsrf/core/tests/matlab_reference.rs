@@ -149,7 +149,7 @@ fn polygon_simplification_matches_matlab() {
         let n = points.len() / 2;
         let points: Vec<_> = (0..n).map(|i| [points[i], points[n + i]]).collect();
         let expected = array(&root, &case["estimate"]);
-        let (centre, area) = match Hull::of_polygon(&points).unwrap() {
+        let (centre, area) = match Hull::of_polygon(&points) {
             Some(hull) => (hull.centroid(), hull.area()),
             None => ([f64::NAN; 2], 0.0),
         };

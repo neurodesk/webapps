@@ -38,43 +38,6 @@ fn nan_last(a: f64, b: f64) -> std::cmp::Ordering {
     }
 }
 
-/// MATLAB's `polyshape(points).Vertices` as a set (the model does not reproduce
-/// their ring order), and `Hull::of_polygon(points)`.
-pub fn polyshape_vertices(points: &[[f64; 2]]) -> crate::error::Result<(Vec<[f64; 2]>, Option<Hull>)> {
-    use crate::polyshape::Unresolved;
-    let simplified = crate::polyshape::simplify(points).map_err(|failure| crate::error::Error::Shape(match failure {
-        Unresolved::Grid => "polyshape: the coordinates do not fit the fixed-point grid MATLAB's polyshape is reproduced on".into(),
-        Unresolved::Clipper(failure) => format!("polyshape: Clipper's union failed ({failure:?}); MATLAB's result for this polygon was not recorded"),
-    }))?;
-    let hull = simplified.hull.map(|vertices| Hull { vertices }).filter(|hull| hull.area() > 0.0);
-    Ok((simplified.vertices, hull))
-}
-
-/// The polyshape model's stages in grid units (diagnostics, not an API):
-/// `(centre, scale, tolerance, input ring, [first union, first clean, second
-/// union, second clean], hull, first union's creation order)`.
-#[doc(hidden)]
-#[allow(clippy::type_complexity)]
-pub fn polyshape_stages(points: &[[f64; 2]]) -> crate::error::Result<Option<([f64; 2], f64, f64, Vec<(i64, i64)>, [Vec<Vec<(i64, i64)>>; 4], Vec<(i64, i64)>, Vec<Vec<usize>>)>> {
-    let stages = crate::polyshape::stages(points).map_err(|failure| crate::error::Error::Shape(format!("polyshape: {failure:?}")))?;
-    Ok(stages.map(|s| (s.grid.centre, s.grid.scale, s.grid.tolerance, s.ring, [s.first_union, s.first_clean, s.second_union, s.second_clean], s.hull, s.first_union_order)))
-}
-
-/// `polyshape_stages` for several boundaries united together (diagnostic
-/// replays of NaN-separated polyshape vertices).
-#[doc(hidden)]
-#[allow(clippy::type_complexity)]
-pub fn polyshape_stages_of_boundaries(boundaries: &[Vec<[f64; 2]>]) -> crate::error::Result<Option<([f64; 2], f64, f64, Vec<(i64, i64)>, [Vec<Vec<(i64, i64)>>; 4], Vec<(i64, i64)>, Vec<Vec<usize>>)>> {
-    let stages = crate::polyshape::stages_of_boundaries(boundaries).map_err(|failure| crate::error::Error::Shape(format!("polyshape: {failure:?}")))?;
-    Ok(stages.map(|s| (s.grid.centre, s.grid.scale, s.grid.tolerance, s.ring, [s.first_union, s.first_clean, s.second_union, s.second_clean], s.hull, s.first_union_order)))
-}
-
-/// Invoke the model's actual grid cleaner for diagnostic replays.
-#[doc(hidden)]
-pub fn polyshape_clean(path: &[(i64, i64)], tolerance: f64) -> Vec<(i64, i64)> {
-    crate::polyshape::clean(path, tolerance)
-}
-
 /// A convex polygon: its vertices counter-clockwise, without a repeated closing vertex.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hull {
@@ -84,11 +47,10 @@ pub struct Hull {
 impl Hull {
     /// `polyshape(points).convhull`, as MATLAB R2023b computes it on its
     /// fixed-point grid with the even-odd rule and its 1e-8 cleaning tolerance
-    /// (see `polyshape.rs`). `Ok(None)` where that shape is empty. An error where
-    /// the model cannot follow MATLAB and MATLAB's result was not recorded:
-    /// coordinates outside its integer grid, or a failed Clipper sweep.
-    pub fn of_polygon(points: &[[f64; 2]]) -> crate::error::Result<Option<Hull>> {
-        Ok(polyshape_vertices(points)?.1)
+    /// (see `polyshape.rs`). `None` where that shape is empty.
+    pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
+        let hull = Hull { vertices: crate::polyshape::convex_hull(points)? };
+        (hull.area() > 0.0).then_some(hull)
     }
 
     /// The convex hull of `points` (Andrew's monotone chain), or `None` when the points
@@ -405,7 +367,7 @@ mod tests {
         // Recorded MATLAB polyshape case: uncentred shoelace arithmetic gave
         // zero area, although the triangle has three distinct vertices.
         let points = [[1000.0, 1000.0], [1000.001, 1000.0000000001], [1000.002, 1000.0]];
-        let hull = Hull::of_polygon(&points).unwrap().unwrap();
+        let hull = Hull::of_polygon(&points).unwrap();
         let expected_area = (points[2][0] - points[0][0]) * (points[1][1] - points[0][1]) / 2.0;
         assert_eq!(hull.area(), expected_area);
         let [x, y] = hull.centroid();
@@ -501,8 +463,8 @@ mod tests {
     fn a_spike_narrower_than_the_cutoff_leaves_the_hull() {
         // MATLAB R2023b drops a spike 2e-9 of the span wide and keeps one 2e-8 wide.
         let spike = |w: f64| [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.5 + w, 1.0], [0.5, 1.5], [0.5 - w, 1.0], [0.0, 1.0]];
-        assert_eq!(Hull::of_polygon(&spike(1.5e-9)).unwrap().unwrap().area(), 1.0);
-        assert!(Hull::of_polygon(&spike(1.5e-8)).unwrap().unwrap().area() > 1.0);
+        assert_eq!(Hull::of_polygon(&spike(1.5e-9)).unwrap().area(), 1.0);
+        assert!(Hull::of_polygon(&spike(1.5e-8)).unwrap().area() > 1.0);
     }
 
     #[test]

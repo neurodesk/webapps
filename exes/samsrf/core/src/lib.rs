@@ -11,10 +11,11 @@
 //! arithmetic with single observations; see `precision` and the package README.
 
 pub mod apertures;
-mod clipper;
 pub mod css;
 pub mod error;
 pub mod export;
+#[cfg(feature = "polyshape-experimental")]
+pub mod experimental;
 pub mod expr;
 pub mod fit_prf;
 pub mod freesurfer;

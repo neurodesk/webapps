@@ -1,4 +1,4 @@
-//! A port of the closed-path union of Clipper 6.4.2 (Angus Johnson, Boost
+//! Experimental (feature `polyshape-experimental`): a port of the closed-path union of Clipper 6.4.2 (Angus Johnson, Boost
 //! Software License; provenance and licence in `polyshape.rs`), restricted to
 //! what MATLAB's `polyshape` uses: one closed subject path, even-odd filling,
 //! `ctUnion`, strictly simple (`SimplifyPolygons`). Open paths, clip paths, Z values and

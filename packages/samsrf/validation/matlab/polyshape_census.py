@@ -1,6 +1,6 @@
 """Stage-by-stage census of the polyshape model against a MATLAB recording.
 
-For each polygon of a recorded batch (record_geometry.m) and the model's stages
+For each polygon of a recorded batch (record_geometry.m) and the experimental model's stages
 (core/examples/polyshape_stages.rs), it reports the first failed empirical correspondence between
 the model and the recorded MATLAB configurations, MATLAB's ring topology as the recording shows it, and
 a test of the premise that MATLAB's default polyshape is its KeepCollinearPoints
@@ -8,7 +8,7 @@ rings cleaned independently with the current Rust cleaner. KeepCollinearPoints
 is a separate configuration, not an observed internal checkpoint of default
 polyshape. Evidence for diagnosis, not a gate.
 
-  cargo run --release --example polyshape_stages -- HOST_DIR CASE STAGES.json
+  cargo run --release --features polyshape-experimental --example polyshape_stages -- HOST_DIR CASE STAGES.json
   python3 polyshape_census.py HOST_DIR CASE STAGES.json REPORT.json PATH_TO_POLYSHAPE_STAGES
 
 Correspondences, in order (not a trace of MATLAB's internal stages):

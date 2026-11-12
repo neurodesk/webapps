@@ -1,9 +1,9 @@
-//! Dumps the polyshape model's stages for every polygon of a recorded batch, for
-//! packages/samsrf/validation/matlab/polyshape_census.py:
-//!   cargo run --release --example polyshape_stages -- HOST_DIR CASE_ID OUT.json
+//! Dumps the experimental polyshape model's stages (feature `polyshape-experimental`)
+//! for every polygon of a recorded batch, for packages/samsrf/validation/matlab/polyshape_census.py:
+//!   cargo run --release --features polyshape-experimental --example polyshape_stages -- HOST_DIR CASE_ID OUT.json
 //! `--replay FIELD` (`points`, `simplified`, `collinearVertices`) runs the model on
 //! that recorded field's NaN-separated boundaries instead of the input points:
-//!   cargo run --release --example polyshape_stages -- --replay FIELD HOST_DIR CASE_ID OUT.json
+//!   cargo run --release --features polyshape-experimental --example polyshape_stages -- --replay FIELD HOST_DIR CASE_ID OUT.json
 //! `--clean` instead reads a JSON batch of grid rings and tolerances from stdin
 //! and writes the results of the model's actual cleaner to stdout.
 use serde::Deserialize;
@@ -17,7 +17,7 @@ fn main() {
         struct Request { rings: Vec<Vec<(i64, i64)>>, tolerance: f64 }
         let requests: Vec<Request> = serde_json::from_reader(std::io::stdin()).unwrap();
         let cleaned: Vec<_> = requests.iter().map(|request| {
-            request.rings.iter().map(|ring| samsrf_core::geometry::polyshape_clean(ring, request.tolerance)).collect::<Vec<_>>()
+            request.rings.iter().map(|ring| samsrf_core::experimental::polyshape_clean(ring, request.tolerance)).collect::<Vec<_>>()
         }).collect();
         serde_json::to_writer(std::io::stdout(), &cleaned).unwrap();
         return;
@@ -44,7 +44,7 @@ fn main() {
         let polygon: Vec<[f64; 2]> = (offset..offset + n).map(|i| [all[i], all[rows + i]]).collect();
         offset += n;
         let boundaries: Vec<Vec<[f64; 2]>> = polygon.split(|p| p[0].is_nan()).filter(|b| !b.is_empty()).map(<[_]>::to_vec).collect();
-        let result = if replay.is_some() { samsrf_core::geometry::polyshape_stages_of_boundaries(&boundaries) } else { samsrf_core::geometry::polyshape_stages(&polygon) };
+        let result = if replay.is_some() { samsrf_core::experimental::polyshape_stages_of_boundaries(&boundaries) } else { samsrf_core::experimental::polyshape_stages(&polygon) };
         dump.push(match result {
             Ok(Some((centre, scale, tolerance, ring, stages, hull, order))) => json!({"firstUnionOrder": order, "centre": centre, "scale": scale, "tolerance": tolerance, "ring": ring, "firstUnion": stages[0], "firstClean": stages[1], "secondUnion": stages[2], "secondClean": stages[3], "hull": hull}),
             Ok(None) => Value::Null,
