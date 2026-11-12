@@ -119,7 +119,7 @@ pub fn sin_single(x: f32) -> f32 {
         return kernel_sin_single(x, 0.0, false);
     }
     if ix >= 0x7f80_0000 {
-        return x - x;
+        return f32::NAN;
     }
     if ix > MEDIUM_LIMIT {
         return crate::matlab_math::sin(f64::from(x)) as f32;
@@ -140,7 +140,7 @@ pub fn cos_single(x: f32) -> f32 {
         return kernel_cos_single(x, 0.0);
     }
     if ix >= 0x7f80_0000 {
-        return x - x;
+        return f32::NAN;
     }
     if ix > MEDIUM_LIMIT {
         return crate::matlab_math::cos(f64::from(x)) as f32;

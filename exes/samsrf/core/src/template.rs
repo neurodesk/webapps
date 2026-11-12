@@ -79,16 +79,16 @@ mod tests {
         // the correctly rounded sine or cosine gives another single: LH 7 (cosine,
         // x/4 branch), LH 10 (sine through the reduction), RH 69 and RH 2.
         let cases: [(f32, f32, bool, f64, f64); 4] = [
-            (167.331_604, 2.149_862_8, false, 0.471_482_157_707_214_36, -2.097_525_835_037_231_4),
-            (156.560_837, 2.349_005_5, false, 0.934_376_001_358_032_2, -2.155_172_586_441_04),
-            (139.772_430, 19.362_009, true, -12.504_472_732_543_945, -14.782_610_893_249_512),
-            (55.738_869, 0.867_165_03, true, -0.716_694_891_452_789_3, 0.488_184_005_022_048_95),
+            (167.3316, 2.149_862_8, false, 0.471_482_157_707_214_36, -2.097_525_835_037_231_4),
+            (156.56084, 2.349_005_5, false, 0.934_376_001_358_032_2, -2.155_172_586_441_04),
+            (139.77243, 19.36201, true, -12.504_472_732_543_945, -14.782_610_893_249_512),
+            (55.73887, 0.867165, true, -0.716_694_891_452_789_3, 0.488_184_005_022_048_95),
         ];
         for (polar, eccentricity, right, x0, y0) in cases {
             let maps = benson_template(&[polar], &[eccentricity], &[1.0], right).unwrap();
             assert_eq!((maps.row(1)[0], maps.row(2)[0]), (x0, y0), "polar {polar}");
         }
-        let (polar, eccentricity) = (167.331_604f32, 2.149_862_8f32);
+        let (polar, eccentricity) = (167.3316f32, 2.149_862_8f32);
         let radians = ((f64::from(-polar + 90.0) / 180.0) as f32 as f64 * std::f64::consts::PI) as f32;
         assert_ne!(f64::from(eccentricity * (f64::from(radians).cos() as f32)), cases[0].3, "the case must separate the two cosines");
     }

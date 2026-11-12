@@ -480,13 +480,6 @@ impl Fields {
         };
         let fine_fit = self.fine_fit()?;
         let data_precision = self.precision()?;
-        if data_precision == Precision::Single && fit_prf == CfParameterEstimate::Gaussian {
-            // The single fit equals MATLAB's on the AMD (MKL CNR `auto`) host given
-            // MATLAB's template, with and without global-signal correction
-            // (`revcor_reference.rs`), but a one-ulp x0 or y0 from the Benson reader
-            // moves the fitted maps, and the reader is not bit-identical yet.
-            return Err(Error::NotImplemented("Data_Precision=single with Fit_pRF=1"));
-        }
         Ok(CfModel {
             name,
             data_precision,
@@ -735,7 +728,8 @@ mod tests {
         let summary = with(serde_json::from_str(&single(REVCOR_CF)).unwrap(), "Fit_pRF", serde_json::json!(-1));
         assert_eq!(revcor_cf(&summary).unwrap().fit_prf, CfParameterEstimate::SummaryStatistics);
         let gaussian = with(serde_json::from_str(&single(REVCOR_CF)).unwrap(), "Fit_pRF", serde_json::json!(1));
-        assert_eq!(parse_model_json(AnalysisKind::RevCorCf, &gaussian).unwrap_err(), Error::NotImplemented("Data_Precision=single with Fit_pRF=1"));
+        let gaussian = revcor_cf(&gaussian).unwrap();
+        assert_eq!((gaussian.fit_prf, gaussian.data_precision), (CfParameterEstimate::Gaussian, Precision::Single));
         let double = with(serde_json::from_str(REVCOR_CF).unwrap(), "Fit_pRF", serde_json::json!(1));
         assert_eq!(revcor_cf(&double).unwrap().fit_prf, CfParameterEstimate::Gaussian);
     }
