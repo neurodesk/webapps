@@ -61,12 +61,12 @@ function loadsDrawingsCorrectly(version) {
 
 test('every app that edits masks runs a NiiVue that loads drawings with the native dims', async () => {
   const runtimeSupport = await readJson('packages/runtime-support/package.json');
-  const { downloads } = await readJson('runtime-assets/manifest.json');
+  const { families, downloads } = await readJson('runtime-assets/manifest.json');
   const apps = (await readdir(new URL('apps/', root), { withFileTypes: true })).filter(entry => entry.isDirectory()).map(entry => entry.name);
   const editing = [];
   for (const app of apps) {
     if (!await editsMasks(app)) continue;
-    const versions = await niivueVersions(app, runtimeSupport, downloads);
+    const versions = await niivueVersions(app, runtimeSupport, [...families, ...downloads]);
     assert.ok(versions.length > 0, `${app} edits masks but this test cannot find which NiiVue it loads`);
     for (const version of versions) {
       assert.ok(loadsDrawingsCorrectly(version), `${app} edits masks on @niivue/niivue ${version}; it needs 0.x or 1.0.0-rc.${FIXED_RC} or later`);

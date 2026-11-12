@@ -42,7 +42,7 @@ function scriptCommands(name, seen = new Set()) {
 }
 
 test('everything that serves the page fetches the pinned NiiVue file', async () => {
-  const pinned = manifest.downloads.find((group) => group.id === 'niivue-umd');
+  const pinned = manifest.families.find((group) => group.id === 'niivue-umd');
   assert.match(pinned.files.find((file) => file.name === 'niivue.umd.js').sha256, /^[0-9a-f]{64}$/);
   const setup = await readFile(join(appRoot, 'web', 'setup.sh'), 'utf8');
   const fetches = (name) => scriptCommands(name).filter((part) => part.includes('fetch-app-runtime.mjs')).join(' ');

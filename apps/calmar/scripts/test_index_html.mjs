@@ -827,7 +827,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
     assert.match(command, /\sniivue-umd:niivue\.umd\.js(?:\s|$)/, `${name} must request niivue-umd:niivue.umd.js`);
   }
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, '../../runtime-assets/manifest.json'), 'utf8'));
-  const pinned = manifest.downloads.find(group => group.id === 'niivue-umd');
+  const pinned = manifest.families.find(group => group.id === 'niivue-umd');
   assert.match(pinned.files.find(file => file.name === 'niivue.umd.js').sha256, /^[0-9a-f]{64}$/);
 }
 

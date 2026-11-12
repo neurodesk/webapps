@@ -149,6 +149,23 @@
       ]
     },
     {
+      "id": "niivue-umd",
+      "version": "0.68.2",
+      "target": "niivue/0.68.2",
+      "download_base": "https://unpkg.com/@niivue/niivue@0.68.2/dist",
+      "deduplicate": true,
+      "match_by": "sha256",
+      "reason": "Share the NiiVue 0.68.2 UMD bundle that SeedSeg, MuscleMap and CALMaR each stage beside their page and load with a classic script tag; no worker loads it, so it needs no service-worker scope.",
+      "files": [
+        {
+          "name": "niivue.umd.js",
+          "source_app": "seedseg",
+          "source": "wasm/niivue.umd.js",
+          "sha256": "daccf5d9e1220a91c3bad8948c270d3f87ee6923f9fcfebc8e0a7308fdd667b9"
+        }
+      ]
+    },
+    {
       "id": "mindgrab-cpu",
       "version": "0.1.20260813",
       "target": "mindgrab/0.1.20260813/cpu",
@@ -268,17 +285,6 @@
       "files": [
         {"name":"qsm_wasm.js","sha256":"3586d143f1257d1a06304fbb74028cbae51c6a716efea26037a996a1941a6eca"},
         {"name":"qsm_wasm_bg.wasm","sha256":"64e10fb3e75dad7d9be2af5ca796524d8ca0efc9740e70fd50cb0782960b340b"}
-      ]
-    },
-    {
-      "id": "niivue-umd",
-      "version": "0.68.2",
-      "download_base": "https://unpkg.com/@niivue/niivue@0.68.2/dist",
-      "files": [
-        {
-          "name": "niivue.umd.js",
-          "sha256": "daccf5d9e1220a91c3bad8948c270d3f87ee6923f9fcfebc8e0a7308fdd667b9"
-        }
       ]
     },
     {
