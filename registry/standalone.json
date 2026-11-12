@@ -1793,8 +1793,8 @@
           "platform": "macos-arm64",
           "version": "0.6.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261111/n4-0.6.20261111-macos-arm64.pkg",
-          "sha256": "f14eba7b7d14ae2935126b3705f73d2a0dcf0d23cd96a510f9ce404e3694a788",
-          "bytes": 51885315,
+          "sha256": "83a7f5a9634624feb93871162ff68fde92f2d18cdc986da5ff284623c447968c",
+          "bytes": 51885269,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261111/n4-0.6.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg n4-0.6.20261111-macos-arm64.pkg -target /\nn4 self-check\nn4 sub-01_dwi.nii.gz results"
@@ -1804,8 +1804,8 @@
           "platform": "windows-x64",
           "version": "0.6.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261111/n4-0.6.20261111-windows-x64.zip",
-          "sha256": "8fe08f2fde7564cfb083b6fa2ab3a6567474c28529a9b8aabfc5dbe2f8a7eefa",
-          "bytes": 48923711,
+          "sha256": "36f43c9daa3c6f0f93f89f58c5feb815a0748f40cf2dde3dd13670c46b864e2a",
+          "bytes": 48923717,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/n4-v0.6.20261111/n4-0.6.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\n4-0.6.20261111-windows-x64.zip -DestinationPath .\n.\\n4-0.6.20261111-windows-x64\\n4.exe sub-01_dwi.nii.gz results"
