@@ -31,12 +31,22 @@ test('every script the page runs at startup comes from the app origin', async ()
     'a failed CDN request leaves the app without the global it starts with');
 });
 
-test('the build and the setup script fetch the pinned NiiVue file', async () => {
+// The commands a package script runs, with every `pnpm <script>` step replaced by that script's own.
+function scriptCommands(name, seen = new Set()) {
+  assert.ok(pkg.scripts[name], `package.json has no ${name} script`);
+  assert.ok(!seen.has(name), `${name} calls itself`);
+  return pkg.scripts[name].split('&&').map((part) => part.trim()).flatMap((part) => {
+    const called = part.match(/^pnpm (?:run )?([\w:-]+)$/)?.[1];
+    return called && pkg.scripts[called] ? scriptCommands(called, new Set([...seen, name])) : [part];
+  });
+}
+
+test('everything that serves the page fetches the pinned NiiVue file', async () => {
   const pinned = manifest.downloads.find((group) => group.id === 'niivue-umd');
   assert.match(pinned.files.find((file) => file.name === 'niivue.umd.js').sha256, /^[0-9a-f]{64}$/);
-  const prebuild = pkg.scripts.prebuild.split('&&').find((part) => part.includes('fetch-app-runtime.mjs'));
   const setup = await readFile(join(appRoot, 'web', 'setup.sh'), 'utf8');
-  for (const [name, command] of [['prebuild', prebuild], ['web/setup.sh', setup]]) {
+  const fetches = (name) => scriptCommands(name).filter((part) => part.includes('fetch-app-runtime.mjs')).join(' ');
+  for (const [name, command] of [['predev', fetches('predev')], ['prebuild', fetches('prebuild')], ['web/setup.sh', setup]]) {
     const niivue = requestedRuntimeFiles(command).filter((file) => file.group === 'niivue-umd').map((file) => file.name);
     assert.deepEqual(niivue, ['niivue.umd.js'], `${name} must request niivue-umd:niivue.umd.js`);
   }

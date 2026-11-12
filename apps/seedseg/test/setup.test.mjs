@@ -11,12 +11,19 @@ const pkg = JSON.parse(await readFile(join(appRoot, 'package.json'), 'utf8'));
 const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
 const groups = [...manifest.families, ...(manifest.downloads ?? [])];
 
-function requestedRuntimeFiles() {
-  const command = pkg.scripts.prebuild
-    .split('&&')
-    .map((part) => part.trim())
-    .find((part) => part.includes('fetch-app-runtime.mjs'));
-  assert.ok(command, 'prebuild must fetch runtime assets through the shared fetch-app-runtime.mjs');
+// The commands a package script runs, with every `pnpm <script>` step replaced by that script's own.
+function scriptCommands(name, seen = new Set()) {
+  assert.ok(pkg.scripts[name], `package.json has no ${name} script`);
+  assert.ok(!seen.has(name), `${name} calls itself`);
+  return pkg.scripts[name].split('&&').map((part) => part.trim()).flatMap((part) => {
+    const called = part.match(/^pnpm (?:run )?([\w:-]+)$/)?.[1];
+    return called && pkg.scripts[called] ? scriptCommands(called, new Set([...seen, name])) : [part];
+  });
+}
+
+function requestedRuntimeFiles(script = 'prebuild') {
+  const command = scriptCommands(script).find((part) => part.includes('fetch-app-runtime.mjs'));
+  assert.ok(command, `${script} must fetch runtime assets through the shared fetch-app-runtime.mjs`);
   return command
     .split(/\s+/)
     .filter((token) => !token.startsWith('--') && token.includes(':'))
@@ -125,6 +132,9 @@ test('every script the page runs at startup comes from the app origin', async ()
   assert.ok(blocking.includes('wasm/niivue.umd.js'), 'the page must load the NiiVue build that prebuild fetches');
   assert.deepEqual(blocking.filter((src) => /^(?:[a-z]+:)?\/\//i.test(src)), [],
     'a failed CDN request leaves the app without the global it starts with');
-  const niivue = requestedRuntimeFiles().filter((file) => file.group === 'niivue-umd').map((file) => file.name);
-  assert.deepEqual(niivue, ['niivue.umd.js']);
+  // The dev server and the build both serve this page, so both must stage NiiVue.
+  for (const script of ['predev', 'prebuild']) {
+    const niivue = requestedRuntimeFiles(script).filter((file) => file.group === 'niivue-umd').map((file) => file.name);
+    assert.deepEqual(niivue, ['niivue.umd.js'], `${script} must request niivue-umd:niivue.umd.js`);
+  }
 });

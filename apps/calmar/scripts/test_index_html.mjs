@@ -811,9 +811,19 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
     'the page must load the NiiVue build that prebuild fetches'
   );
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  const prebuild = pkg.scripts.prebuild.split('&&').find(part => part.includes('fetch-app-runtime.mjs'));
+  // The commands a package script runs, with every `pnpm <script>` step replaced by that script's own.
+  const scriptCommands = (name, seen = new Set()) => {
+    assert.ok(pkg.scripts[name], `package.json has no ${name} script`);
+    assert.ok(!seen.has(name), `${name} calls itself`);
+    return pkg.scripts[name].split('&&').map(part => part.trim()).flatMap(part => {
+      const called = part.match(/^pnpm (?:run )?([\w:-]+)$/)?.[1];
+      return called && pkg.scripts[called] ? scriptCommands(called, new Set([...seen, name])) : [part];
+    });
+  };
+  const fetches = name => ` ${scriptCommands(name).filter(part => part.includes('fetch-app-runtime.mjs')).join(' ')}`;
   const setup = fs.readFileSync(path.join(ROOT, 'web/setup.sh'), 'utf8');
-  for (const [name, command] of [['prebuild', prebuild], ['web/setup.sh', setup]]) {
+  // Every way the page is served must stage NiiVue: the dev server, the build and the setup script.
+  for (const [name, command] of [['predev', fetches('predev')], ['prebuild', fetches('prebuild')], ['web/setup.sh', setup]]) {
     assert.match(command, /\sniivue-umd:niivue\.umd\.js(?:\s|$)/, `${name} must request niivue-umd:niivue.umd.js`);
   }
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, '../../runtime-assets/manifest.json'), 'utf8'));
