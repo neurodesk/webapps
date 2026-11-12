@@ -362,24 +362,28 @@ test("MATLAB single precision RC, CF and Gaussian CF downloads equal the package
   const roi = testInfo.outputPath("lh.V123_small.label");
   const lines = (await exampleBytes(byName("lh.V123.label"))).toString("utf8").split("\n");
   writeFileSync(roi, [lines[0], String(SMALL_ROI), ...lines.slice(2, 2 + SMALL_ROI), ""].join("\n"));
+  // The single Gaussian fit costs far more per vertex: 20 vertices, smoothed.
+  const gaussianRoi = testInfo.outputPath("lh.V123_gaussian.label");
+  writeFileSync(gaussianRoi, [lines[0], "20", ...lines.slice(2, 22), ""].join("\n"));
   const paths = {
     runs: [await file("lh_uBars1.gii")], apertures: [await file("aps_Bars.mat")], roi: [roi],
     surfaces: [await file("lh.white"), await file("lh.area")], template: [await file("lh_benson.gii")], seed: [await file("lh.V1_seed.label")],
   };
   await page.goto("/");
   const roles = { rc: ["runs", "apertures", "roi", "surfaces"], cf: ["runs", "roi", "surfaces", "template", "seed"] };
-  const inputs = readAnalysisInputs({
-    runs: paths.runs, roi, seed: paths.seed[0], apertures: paths.apertures[0], template: paths.template[0],
+  const read = (roiFile) => readAnalysisInputs({
+    runs: paths.runs, roi: roiFile, seed: paths.seed[0], apertures: paths.apertures[0], template: paths.template[0],
     white: paths.surfaces[0], area: paths.surfaces[1], hemisphere: "lh", precision: "single",
   });
   for (const [analysis, outcome, gaussian] of [["rc", RUNS.rc.outcome, false], ["cf", RUNS.cf.outcome, false], ["cf", RUNS.cf.outcome, true]]) {
     await page.locator("#analysis").selectOption(analysis);
-    for (const role of roles[analysis]) await page.locator(`#${role}Input`).setInputFiles(paths[role]);
+    for (const role of roles[analysis]) await page.locator(`#${role}Input`).setInputFiles(role === "roi" && gaussian ? [gaussianRoi] : paths[role]);
+    const inputs = read(gaussian ? gaussianRoi : roi);
     await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
     await page.locator("#dataPrecision").selectOption("single");
     if (gaussian) {
       // Fit_pRF 1: the single Gaussian connective field.
-      await page.locator("#modelJson").fill(JSON.stringify({ ...JSON.parse(await page.locator("#modelJson").inputValue()), Fit_pRF: 1 }));
+      await page.locator("#modelJson").fill(JSON.stringify({ ...JSON.parse(await page.locator("#modelJson").inputValue()), Fit_pRF: 1, Smoothing: 3 }));
       await page.locator("#modelJson").dispatchEvent("change");
     }
     const model = JSON.parse(await page.locator("#modelJson").inputValue());
