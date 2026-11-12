@@ -1,5 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { parse } from 'yaml';
+import { sharedModuleUsers } from './shared-module-users.mjs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import sourceParser from '@neurodesk/code-quality';
 
@@ -216,7 +217,11 @@ export async function loadConservativeWorkspaceGraph(root) {
       }
     }
   }
-  return Object.freeze({ nodes: Object.freeze(nodes), edges, rootScriptsRun });
+  // `moduleUsers(path)`: the nodes that load one module of the shared component
+  // package, or null for a file the planner ties to the whole package.
+  let moduleUsers;
+  const graph = { nodes: Object.freeze(nodes), edges, rootScriptsRun, moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path) };
+  return Object.freeze(graph);
 }
 
 // Every directory or root file `node` uses, directly or through others.

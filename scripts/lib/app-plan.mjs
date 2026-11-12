@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { parse } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
+import { onlyAddsExports } from './module-closure.mjs';
 import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
 import { validateAppInformation } from './app-information.mjs';
 import { validateStandalone } from './standalone.mjs';
@@ -350,6 +351,18 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     if (manifest && path === OFFLINE_LOCK) {
       for (const app of lockOwners(manifest)) if (appIds.has(app)) select(app, `${path}: its locked assets changed`);
       siteBuild(path);
+      continue;
+    }
+    // New export entries resolve every existing import as before.
+    if (manifest && /^packages\/[^/]+\/package\.json$/.test(path) && onlyAddsExports(manifest)) continue;
+    // A module of the shared component package reaches the apps that load it.
+    const loadedBy = graph?.moduleUsers?.(path);
+    if (loadedBy) {
+      if (loadedBy.some((user) => site.has(user))) siteBuild(path);
+      for (const candidate of registry.apps) {
+        const user = loadedBy.find((user) => reach.get(candidate.id).has(user));
+        if (user) select(candidate.id, `${path} (loaded by ${user})`);
+      }
       continue;
     }
     // A package's tests reach only the apps that read them; any other file

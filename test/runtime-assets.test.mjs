@@ -230,3 +230,34 @@ test('brain extraction ships its compact shared BET kernel without a second QSM 
   await access(join(dist, 'qsmbly/wasm/qsm_wasm_bg.wasm'));
   await access(join(dist, 'qsmbly/wasm/snippets/rayon-base/workerHelpers.js'));
 });
+
+test('composite apps load one NiiVue UMD script from the shared store', async () => {
+  const registry = await loadAppsRegistry();
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+  const family = manifest.families.find(family => family.id === 'niivue-umd');
+  assert.ok(family?.deduplicate, 'the NiiVue UMD script must declare physical deduplication');
+  assert.equal(family.target, `niivue/${family.version}`, 'the shared path must name the NiiVue version');
+  const [{ name, sha256 }] = family.files;
+  const runtimePath = `_runtime/${family.target}/${name}`;
+  let consumers = 0;
+  for (const app of registry.apps) {
+    const standalone = join(repoRoot, 'apps', app.id, 'dist');
+    const copies = [];
+    for (const file of (await readdir(standalone, { recursive: true })).filter(file => file.endsWith('.js'))) {
+      const bytes = await readFile(join(standalone, file));
+      if (createHash('sha256').update(bytes).digest('hex') === sha256) copies.push(file);
+    }
+    if (!copies.length) continue;
+    consumers++;
+    for (const copy of copies) await assert.rejects(access(join(dist, app.path, copy)), { code: 'ENOENT' }, `${app.id}/${copy} must not stay in the app`);
+    const page = await readFile(join(dist, app.path, 'index.html'), 'utf8');
+    const scripts = [...page.matchAll(/<script\b[^>]*\bsrc="([^"]*niivue\.umd\.js)"/g)].map(match => match[1]);
+    assert.equal(scripts.length, 1, `${app.id}: the page must load NiiVue with one script tag`);
+    // A site is served at its host root and, for a project page, below a path.
+    for (const base of ['https://example.test/', 'https://example.test/webapps/']) {
+      assert.equal(new URL(scripts[0], new URL(`${app.path}/`, base)).href, new URL(runtimePath, base).href,
+        `${app.id} must load the shared NiiVue script`);
+    }
+  }
+  assert.ok(consumers > 1, 'multiple app consumers must share the NiiVue UMD script');
+});
