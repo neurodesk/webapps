@@ -133,11 +133,11 @@ test('webapps.neurodesk.org redirects the moved apps to mskapps.sciget.org', asy
   assert.equal(routes.dicom2vid, '/mri2vid');
 });
 
-test('the all-app assembly still holds every app for the desktop suite', async () => {
+test('the all-app assembly still holds every app the suites are projected from', async () => {
   for (const app of registry.apps) assert.ok(await exists(join(dist, app.path, 'index.html')), app.id);
   const html = await readFile(join(dist, 'dicomview', 'index.html'), 'utf8');
   const { catalog } = JSON.parse(html.match(/data-neurodesk-app-information>([\s\S]*?)<\/script>/)[1]);
-  for (const moved of MOVED) assert.ok(catalog.some(({ id }) => id === moved), `the desktop suite hands off to ${moved}`);
+  for (const moved of MOVED) assert.ok(catalog.some(({ id }) => id === moved), `the all-app DICOM View hands off to ${moved}`);
 });
 
 test('the hub holds only the hub page and what it loads', async () => {
