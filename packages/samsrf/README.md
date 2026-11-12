@@ -472,8 +472,12 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   tie. `polyshape(...).convhull` follows MATLAB's fixed-point grid, a port of
   Clipper 6.4.2's even-odd union and 1e-8 cleaning, and gives MATLAB's hull
   vertices on every recorded polygon except 44 nearly collinear point clouds,
-  whose touching slivers MATLAB cleans differently
+  whose touching slivers MATLAB cleans differently, and, of 3,000 held-out
+  clouds, 177 near-collinear ones and one half-integer grid
   ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
+  Coordinates outside that grid's range and a failed Clipper sweep are
+  reported as errors rather than empty hulls; MATLAB's result there is either
+  not recorded or not reproduced.
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so

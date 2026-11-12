@@ -6,7 +6,7 @@
 //! operations and libstdc++'s `std::sort` tie order are kept, because the
 //! vertices Clipper creates at nearly parallel crossings depend on them.
 
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, HashMap};
 
 pub(crate) type Point = (i64, i64);
 
@@ -2147,8 +2147,20 @@ impl Clipper {
             if op == NIL {
                 continue;
             }
+            // How often each point occurs in this ring. Splits only remove points
+            // from it, so a count of one means the scan below finds no partner and
+            // can be skipped; larger counts may be stale and just scan as Clipper does.
+            let mut counts: HashMap<Point, u32> = HashMap::new();
+            let mut walk = op;
             loop {
-                let mut op2 = self.out_pts[op].next;
+                *counts.entry(self.out_pts[walk].pt).or_insert(0) += 1;
+                walk = self.out_pts[walk].next;
+                if walk == op {
+                    break;
+                }
+            }
+            loop {
+                let mut op2 = if counts[&self.out_pts[op].pt] > 1 { self.out_pts[op].next } else { self.poly_outs[rec].pts };
                 while op2 != self.poly_outs[rec].pts {
                     if self.out_pts[op].pt == self.out_pts[op2].pt && self.out_pts[op2].next != op && self.out_pts[op2].prev != op {
                         let op3 = self.out_pts[op].prev;

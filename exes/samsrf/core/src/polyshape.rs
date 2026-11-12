@@ -3,10 +3,10 @@
 //! (`packages/samsrf/validation/matlab/record_geometry.m`):
 //!
 //! 1. The vertices move to a fixed-point grid: each axis is centred on the middle
-//!    of its range, scaled by `10^p` and truncated to integers. `p` is
-//!    `13 - floor(log10(m))` for the largest centred magnitude `m`, one less when
-//!    `m * 10^p` exceeds `GRID_LIMIT`. Vertices that survive keep their original
-//!    coordinates; new ones are `k * 10^-p + c`.
+//!    of its range, scaled by `10^p` and truncated to integers, with
+//!    `p = floor(log10(1.25e14 / span))` for the larger axis range `span`, log10
+//!    rounded to nearest (`floor_log10`). Vertices that survive keep their
+//!    original coordinates; new ones are `k * 10^-p + c`.
 //! 2. Clipper 6.4.2's strictly simple even-odd union (`clipper.rs`) resolves the
 //!    ring, and each output path is cleaned with the tolerance
 //!    `(1e-8 * span) * 10^p` in grid units, following Clipper's `CleanPolygon`
@@ -68,10 +68,11 @@ use std::collections::HashMap;
 
 pub(crate) type Point = (i64, i64);
 
-/// The largest `m * 10^p` that keeps the finer grid. Recorded MATLAB clouds keep it
-/// at 6.2033e13 and drop to the coarser one from 6.2702e13; any value between
-/// reproduces every recording, and this one is not pinned more closely.
-const GRID_LIMIT: f64 = 6.25e13;
+/// `1.25e14 / span` sets the grid: `p = floor(log10(GRID_RANGE / span))`. The
+/// polyshape probe's 27,648 polygons whose new vertices show their grid, swept and
+/// bisected across this boundary at six decades, follow it without exception,
+/// including where the larger centred half-range alone would decide otherwise.
+const GRID_RANGE: f64 = 1.25e14;
 
 /// Why the model gives no hull where MATLAB's behaviour was not recorded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,11 +84,10 @@ pub(crate) enum Unresolved {
     Clipper(Failed),
 }
 
-/// The hull MATLAB's `polyshape(points).convhull` returns, counter-clockwise, or
-/// `None` when that shape is empty (as recorded for degenerate point sets).
-pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Result<Option<Vec<[f64; 2]>>, Unresolved> {
+/// MATLAB's `polyshape(points)` vertices and `convhull` on the model's grid.
+pub(crate) fn simplify(points: &[[f64; 2]]) -> Result<Simplified, Unresolved> {
     let points: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
-    let Some(grid) = Grid::new(&points)? else { return Ok(None) };
+    let Some(grid) = Grid::new(&points)? else { return Ok(Simplified { vertices: Vec::new(), hull: None }) };
     let ring: Vec<Point> = points.iter().map(|p| grid.snap(p)).collect();
     let mut original: HashMap<Point, [f64; 2]> = HashMap::new();
     for (k, p) in ring.iter().zip(&points) {
@@ -99,12 +99,21 @@ pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Result<Option<Vec<[f64; 2]>>, 
     let union = |paths: &[Vec<Point>]| simplify_even_odd(paths).map_err(Unresolved::Clipper);
     let first = cleaned(union(&[ring])?);
     let second = cleaned(union(&first)?);
-    let hull = clean(&integer_hull(second.into_iter().flatten().collect()), grid.tolerance);
-    if hull.len() < 3 {
-        return Ok(None);
-    }
-    Ok(Some(hull.iter().map(|k| original.get(k).copied().unwrap_or_else(|| grid.unsnap(*k))).collect()))
+    let hull = clean(&integer_hull(second.iter().flatten().copied().collect()), grid.tolerance);
+    let coordinates = |k: &Point| original.get(k).copied().unwrap_or_else(|| grid.unsnap(*k));
+    Ok(Simplified {
+        vertices: second.iter().flatten().map(coordinates).collect(),
+        hull: (hull.len() >= 3).then(|| hull.iter().map(coordinates).collect()),
+    })
 }
+
+/// The vertices of MATLAB's `polyshape(points)` (in no particular ring order) and
+/// the hull `convhull` returns, counter-clockwise, or `None` when it is empty.
+pub(crate) struct Simplified {
+    pub vertices: Vec<[f64; 2]>,
+    pub hull: Option<Vec<[f64; 2]>>,
+}
+
 
 struct Grid {
     centre: [f64; 2],
@@ -132,12 +141,8 @@ impl Grid {
         if magnitude == 0.0 {
             return Ok(None);
         }
-        let power = |exponent: i32| -> f64 { format!("1e{exponent}").parse().expect("a power of ten") };
-        let mut exponent = 13 - magnitude.log10().floor() as i32;
-        if magnitude * power(exponent) > GRID_LIMIT {
-            exponent -= 1;
-        }
-        let scale = power(exponent);
+        let exponent = floor_log10(GRID_RANGE / span).ok_or(Unresolved::Grid)?;
+        let scale: f64 = format!("1e{exponent}").parse().expect("a power of ten");
         let tolerance = (1e-8 * span) * scale;
         // The model puts centred coordinates below 1e14. Enforce a conservative
         // finite bound before any float-to-integer conversion: saturating an
@@ -161,6 +166,55 @@ impl Grid {
         let inverse = 1.0 / self.scale;
         [k.0 as f64 * inverse + self.centre[0], k.1 as f64 * inverse + self.centre[1]]
     }
+}
+
+/// `floor(log10(q))` with log10 correctly rounded to the nearest double, decided
+/// exactly: `RN(log10 q) >= t` exactly when `q >= 10^(t - gap/2)`, `gap` the
+/// spacing of doubles below `t`, which is `10^t (1 - gap/2 ln 10)` to far below
+/// one unit in the last place of `q`. `None` outside 10^-22..10^38.
+fn floor_log10(q: f64) -> Option<i32> {
+    if !(q.is_finite() && q > 0.0) {
+        return None;
+    }
+    let estimate = q.log10().floor() as i32;
+    let mut floor = None;
+    for t in [estimate + 1, estimate, estimate - 1, estimate - 2] {
+        if reaches(q, t)? {
+            floor = Some(t);
+            break;
+        }
+    }
+    floor
+}
+
+/// `RN(log10 q) >= t` for `-22 <= t <= 38`, `None` beyond the integer range.
+fn reaches(q: f64, t: i32) -> Option<bool> {
+    if !(-22..=38).contains(&t) {
+        return None;
+    }
+    let target = f64::from(t);
+    // The spacing of doubles on the side of t that log10 q approaches from.
+    let gap = match t.cmp(&0) {
+        std::cmp::Ordering::Greater => target - f64::from_bits(target.to_bits() - 1),
+        std::cmp::Ordering::Less => f64::from_bits(target.to_bits() + 1) - target,
+        std::cmp::Ordering::Equal => 0.0,
+    };
+    let slack = gap.abs() / 2.0 * std::f64::consts::LN_10;
+    // q = mantissa * 2^shift exactly (q is a positive normal double here).
+    let bits = q.to_bits();
+    let mantissa = i128::from((bits & ((1u64 << 52) - 1)) | (1u64 << 52));
+    let shift = ((bits >> 52) & 0x7ff) as i32 - 1075;
+    // q >= 10^t (1 - slack), as integers a >= b (1 - slack) with a = q, b = 10^t
+    // multiplied by 2^-shift and 10^-t where those are positive.
+    let ten = |n: u32| 10i128.checked_pow(n);
+    let two = |n: u32| 1i128.checked_shl(n).filter(|&v| v > 0);
+    let (a, b) = match (t >= 0, shift >= 0) {
+        (true, true) => (mantissa.checked_mul(two(shift as u32)?)?, ten(t as u32)?),
+        (true, false) => (mantissa, ten(t as u32)?.checked_mul(two((-shift) as u32)?)?),
+        (false, true) => (mantissa.checked_mul(two(shift as u32)?)?.checked_mul(ten((-t) as u32)?)?, 1),
+        (false, false) => (mantissa.checked_mul(ten((-t) as u32)?)?, two((-shift) as u32)?),
+    };
+    Some((a - b) as f64 >= -(b as f64) * slack)
 }
 
 fn cross(o: Point, a: Point, b: Point) -> i128 {
@@ -277,6 +331,10 @@ fn integer_hull(mut points: Vec<Point>) -> Vec<Point> {
 mod tests {
     use super::*;
 
+    fn simplify_hull(points: &[[f64; 2]]) -> Result<Option<Vec<[f64; 2]>>, Unresolved> {
+        Ok(simplify(points)?.hull)
+    }
+
     #[test]
     fn unrepresentable_grids_return_without_integer_overflow() {
         for points in [
@@ -285,11 +343,11 @@ mod tests {
             [[1e308, 0.0], [1.1e308, 0.0], [1e308, 1.0]],
             [[-1e308, 0.0], [1e308, 0.0], [0.0, 1.0]],
         ] {
-            assert_eq!(convex_hull(&points), Err(Unresolved::Grid));
+            assert_eq!(simplify_hull(&points), Err(Unresolved::Grid));
         }
-        assert!(convex_hull(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]).unwrap().is_some());
-        assert_eq!(convex_hull(&[[2.0, 3.0], [2.0, 3.0], [2.0, 3.0]]), Ok(None));
-        assert_eq!(convex_hull(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), Ok(None));
+        assert!(simplify_hull(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]).unwrap().is_some());
+        assert_eq!(simplify_hull(&[[2.0, 3.0], [2.0, 3.0], [2.0, 3.0]]), Ok(None));
+        assert_eq!(simplify_hull(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), Ok(None));
     }
 
     #[test]
@@ -297,12 +355,12 @@ mod tests {
         // MATLAB R2023b keeps the triangle at scale 1 and drops the exact
         // 2^-10 copy, whose apex truncates on its (coarser) grid.
         let triangle = |s: f64| [[0.0, 0.0], [s, 2e-8 * s], [2.0 * s, 0.0]];
-        assert!(convex_hull(&triangle(1.0)).unwrap().is_some());
-        assert_eq!(convex_hull(&triangle(2f64.powi(-10))), Ok(None));
+        assert!(simplify_hull(&triangle(1.0)).unwrap().is_some());
+        assert_eq!(simplify_hull(&triangle(2f64.powi(-10))), Ok(None));
     }
 
     #[test]
-    fn the_grid_drops_a_decade_above_the_limit() {
+    fn the_grid_follows_the_span() {
         let grid = |m: f64| Grid::new(&[[-m, -m], [m, m], [m, -m]]).unwrap().unwrap().scale;
         assert_eq!(grid(0.62), 1e14);
         assert_eq!(grid(0.63), 1e13);
@@ -311,8 +369,41 @@ mod tests {
     }
 
     #[test]
+    fn floor_log10_rounds_log10_to_nearest() {
+        // log10 of the double just below 10^t rounds up to t (13 and 2 here);
+        // further below, it stays under.
+        let below = |x: f64, steps: u64| f64::from_bits(x.to_bits() - steps);
+        assert_eq!(floor_log10(1e13), Some(13));
+        assert_eq!(floor_log10(below(1e13, 1)), Some(13));
+        assert_eq!(floor_log10(below(1e13, 20)), Some(12));
+        assert_eq!(floor_log10(100.0), Some(2));
+        assert_eq!(floor_log10(below(100.0, 1)), Some(2));
+        assert_eq!(floor_log10(below(100.0, 64)), Some(1));
+        assert_eq!(floor_log10(1e-5), Some(-5));
+        assert_eq!(floor_log10(below(1e-5, 200)), Some(-6));
+        assert_eq!(floor_log10(1.0), Some(0));
+        assert_eq!(floor_log10(below(1.0, 1)), Some(-1));
+        // MATLAB's probe boundary: span 12.500000000000025 keeps 10^13 and
+        // 12.500000000000027 drops to 10^12.
+        assert_eq!(floor_log10(GRID_RANGE / 12.500000000000025), Some(13));
+        assert_eq!(floor_log10(GRID_RANGE / 12.500000000000027), Some(12));
+        // Agrees with the platform's log10 away from the boundaries.
+        let mut state = 7u64;
+        for _ in 0..100_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let q = 10f64.powf((state >> 11) as f64 / (1u64 << 53) as f64 * 50.0 - 20.0);
+            let reference = q.log10();
+            if (reference - reference.round()).abs() > 1e-12 {
+                assert_eq!(floor_log10(q), Some(reference.floor() as i32), "{q}");
+            }
+        }
+    }
+
+    #[test]
     fn even_odd_resolution_keeps_both_lobes_of_a_bowtie() {
-        let hull = convex_hull(&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0], [0.0, 1.0]]).unwrap().unwrap();
+        let hull = simplify_hull(&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0], [0.0, 1.0]]).unwrap().unwrap();
         assert_eq!(hull.len(), 4);
     }
 }

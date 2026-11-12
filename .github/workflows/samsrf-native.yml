@@ -165,8 +165,10 @@ jobs:
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-geometry" packages/samsrf/validation/matlab/geometry-reference.json
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor" packages/samsrf/validation/matlab/revcor-reference.json
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-polyshape-probe" packages/samsrf/validation/matlab/polyshape-probe-reference.json
           node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-geometry/ubuntu-22.04" "$RUNNER_TEMP/samsrf-geometry/ubuntu-24.04" "$RUNNER_TEMP/samsrf-geometry-hosts.json"
-          SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_REVCOR_DIR="$RUNNER_TEMP/samsrf-revcor" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_geometry -- --nocapture
+          node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-polyshape-probe/ubuntu-22.04" "$RUNNER_TEMP/samsrf-polyshape-probe/ubuntu-24.04" "$RUNNER_TEMP/samsrf-polyshape-probe-hosts.json"
+          SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_REVCOR_DIR="$RUNNER_TEMP/samsrf-revcor" SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR="$RUNNER_TEMP/samsrf-polyshape-probe" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_geometry -- --nocapture
       - name: CSS trace, MATLAB arithmetic, extreme-scale and rank regression gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json

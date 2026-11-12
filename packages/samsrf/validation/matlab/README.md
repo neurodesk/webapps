@@ -969,14 +969,20 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   recordings (`core/src/polyshape.rs`, `core/src/clipper.rs`):
 
   1. *Fixed-point grid.* Each axis is centred on the middle of its range and
-     scaled by `10^p` with `p = 13 - floor(log10(m))` for the largest centred
-     magnitude `m`, one decade coarser when `m * 10^p` exceeds 6.25e13, then
-     truncated to integers. New vertices come back as `k * 10^-p + c` and
-     surviving ones keep their original coordinates. Truncation, not rounding,
-     separates exact power-of-two copies of one triangle and the one-ULP apex
-     steps at scale 1. Every new vertex of the point clouds lies on the coarser
-     grid when `m * 10^p` is at least 6.2702e13 and on the finer one up to
-     6.2033e13; the limit between them is not pinned more closely.
+     scaled by `10^p` with `p = floor(log10(1.25e14 / span))` for the larger
+     axis range `span`, log10 rounded to nearest, then truncated to integers.
+     New vertices come back as `k * 10^-p + c` and surviving ones keep their
+     original coordinates. Truncation, not rounding, separates exact
+     power-of-two copies of one triangle and the one-ULP apex steps at scale 1.
+     The polyshape probe (below) established the rule: across six shapes, five
+     decades, translations and both axes, 27,648 polygons whose new vertices
+     show their grid follow it without exception. In-MATLAB bisection puts the
+     boundary between adjacent doubles (span 12.500000000000025 keeps `10^13`,
+     12.500000000000027 takes `10^12`), where log10's rounding decides, and
+     translated copies with the same largest centred offset but a half-range
+     rounded one unit lower keep the finer grid, which rules out that offset as
+     the measure. The port decides the rounding exactly (`floor_log10`) rather
+     than through the platform's log10.
   2. *Clipper union.* The ring goes through a port of Clipper 6.4.2's strictly
      simple even-odd union (`SimplifyPolygons`). Its sweep rounds each crossing
      with Clipper's floating-point `IntersectPoint`; that is where MATLAB's
@@ -1002,36 +1008,78 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   MATLAB returns the filled faces of the arrangement, clockwise and starting at
   their lowest input vertex; which crossing a face of new vertices starts at,
   and so which near-duplicate crossings its cleaning keeps, is not reproduced.
-  Forty of them were among the 93 the previous exact-intersection model missed;
-  177, 932, 1607 and 1937 matched under that model and differ under this one.
+  Forty of them were among the 93 the previous exact-intersection model missed.
+  Four (177, 932, 1607, 1937) matched under that model and differ under this
+  one; their hull area differs by 0.5 to 17.3 %, CF sigma by 0.2 to 9.1 % and
+  the centroid by 0.3 to 6.5 % of the hull's length. 177 keeps a sliver triangle
+  that MATLAB's start of the clean removes; 1937 needs the ring cleaned clockwise;
+  932's MATLAB ring spans several Clipper rings. Each fix tried (rotating rings
+  to their lowest input vertex, reversing them, face tracing, a non-strict first
+  union) resolves some of the four and breaks other clouds, so none is adopted.
   The test names these 44 cases, requires each to stay near-collinear and still
   differ, and freezes each port hull, emptiness, area and centroid bit for bit
-  in `matlab_polygon_snapping.json` (re-recorded for the new model). These are
-  regression snapshots, not MATLAB ground truth. Every other polygon remains
-  gated against MATLAB.
-  Unrepresentable grids (nonfinite centre/span/scale or scaled coordinates
-  outside the integer arithmetic bound) return an empty hull before conversion.
-  This prevents overflow or nontermination on extreme coordinates such as
-  1e-300; it is not a MATLAB parity claim for that unsupported domain. When
-  Clipper's `Execute` fails (no recorded polygon does), the port returns an
-  empty hull; what MATLAB does then is not recorded. Clipper's source revision,
-  copyright, Boost license and adapted distance comparisons are recorded in the
-  module and the shipped package `NOTICE`.
+  in `matlab_polygon_snapping.json`. These are regression snapshots, not MATLAB
+  ground truth. The previous model's snapshot is kept beside it
+  (`matlab_polygon_snapping.previous.json`); `compare-polygon-snapshots.mjs`
+  compares both with MATLAB case by case (`polygon-snapshots-732.json`: 53
+  resolved, 36 carried with changed bits, 4 carried unchanged, 4 newly
+  differing). Every other polygon remains gated against MATLAB.
+
+  Unrepresentable grids (nonfinite centre or span, or `log10(1.25e14 / span)`
+  outside -22 to 38) and a Clipper sweep that fails for a reason other than a
+  degenerate path are reported as errors (`Hull::of_polygon` returns `Err`), not
+  as empty hulls. The probe recorded MATLAB on four such inputs: a 1e-300
+  triangle keeps its vertices with area 0, subnormal and +-1e308-span triangles
+  give an empty shape, and 1e308..1.1e308 fails with
+  `MATLAB:polyshape:xyTooLarge`. The port matches none of the first three; the
+  gate requires its error there. No recorded or searched polygon (200,000 random,
+  near-collinear and nearly concurrent rings) makes Clipper's sweep fail.
+  Clipper's source revision, copyright, Boost license and adapted distance
+  comparisons are recorded in the module and the shipped package `NOTICE`.
+
+  The supplementary *polyshape probe* (`record_geometry.m` in its
+  `polyshape-probe` mode, `geometry_only` with `geometry_probe` in the
+  `samsrf-native` dispatch; pinned by `polyshape-probe-reference.json`, HF
+  commit 41f53d4ea8e4714ffe825375f024072aca9d70a3, SHA-256
+  `01d254651c688d7a764cc464fe1f8b21c3c7bb6ad151df118877ff7acf70827f`, from run
+  43207291565 at webapps 9213e385054710e537cdeb22d7e820aca025a685) leaves
+  `geometry-reference.json` untouched. Both hosts passed an exact same-host
+  repeat and their 80 arrays are identical. Its re-recorded 2,500 point clouds
+  equal the original archive's bit for bit. `polyshape_probe_matches_matlab`
+  requires: the grid sweep and bisection exactly (hull and simplified vertex
+  set); every held-out hull except the IDs in `matlab_polyshape_probe.json`
+  (148 of 1,500 near-collinear clouds and 30 of 1,500 mixed clouds, all
+  near-collinear but one), each of which must still differ; and the extreme
+  grids as above. The one non-collinear held-out cloud, 1125, is a half-integer
+  grid whose `KeepCollinearPoints` rings hold the filled triangle (1, 1.5),
+  (1.5, 2), (1.5714, 1.7857) that Clipper also gives, while MATLAB's default
+  output re-traces it as (1, 1.5), (1.6667, 1.5), (1.5714, 1.7857); the port
+  does not model that re-tracing.
 
   SamSrf passes `polyshape` a breadth-first cluster of unique template points;
   only a nearly collinear cluster of four or more points reaches this class.
 
 A native release run of `real_template_cf_maps_match_matlab` with both hosts'
 fixtures used 3.91 CPU seconds and 11,768 KiB peak resident memory on the shared
-builder (7.57 seconds elapsed under contention; the previous model used 3.82 CPU
-seconds and 11,588 KiB). It exercises the 2,917/3,389 seed templates, 40 hull
-profiles per hemisphere/precision/host including centre and surround hulls,
-plus the recorded summary and Gaussian cases. This is a bounded workload
-measurement, not a full-surface or browser performance result. Clipper sorts
-the active edges of each scanbeam by bubble sort, so a ring whose order is
-random takes time roughly cubic in its length: 1,000 random points take 8.7
-seconds (1.5 with the previous model), while the same points in angular order
-take 7 milliseconds.
+builder (the previous model used 3.82 CPU seconds and 11,588 KiB). It exercises
+the 2,917/3,389 seed templates, 40 hull profiles per hemisphere/precision/host
+including centre and surround hulls, plus the recorded summary and Gaussian
+cases.
+
+On the whole X001 example (6 runs, 6,587 V1-V3 vertices, V1 seed, Benson
+template), connective fields computed on one thread give bit-identical maps
+with this model and the previous one, in both hull (centre and surround) and
+summary modes. The hull run took 81.7 seconds against 68.4 (one core of a
+loaded builder, timings approximate); summary mode 2.5 against 4.5 seconds;
+peak memory 623 MB for both, dominated by the data. The largest single hull
+SamSrf can ask for there, over all 2,917 V1 seed coordinates in vertex order,
+takes 1.09 seconds (0.35 with the previous model); over its 1,690 unique
+points in sorted order, as the surround hull passes them, 0.064 seconds
+(0.032). Clipper sorts each scanbeam's edges by bubble sort and splits
+self-touching rings by pairwise search, so a ring in random order costs roughly
+cubic time: 1,000 random points take 4.5 seconds (1.5 with the previous model).
+Skipping that search for points that occur once in their ring, which cannot
+change a split, took the random case from 6.5 to 4.5 seconds.
 
 The same test replays the double hull and summary CF pipelines of the raw-input
 matrix (both hemispheres, smoothing and global regression on and off, both

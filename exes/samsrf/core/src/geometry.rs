@@ -38,6 +38,18 @@ fn nan_last(a: f64, b: f64) -> std::cmp::Ordering {
     }
 }
 
+/// MATLAB's `polyshape(points).Vertices` as a set (the model does not reproduce
+/// their ring order), and `Hull::of_polygon(points)`.
+pub fn polyshape_vertices(points: &[[f64; 2]]) -> crate::error::Result<(Vec<[f64; 2]>, Option<Hull>)> {
+    use crate::polyshape::Unresolved;
+    let simplified = crate::polyshape::simplify(points).map_err(|failure| crate::error::Error::Shape(match failure {
+        Unresolved::Grid => "polyshape: the coordinates do not fit the fixed-point grid MATLAB's polyshape is reproduced on".into(),
+        Unresolved::Clipper(failure) => format!("polyshape: Clipper's union failed ({failure:?}); MATLAB's result for this polygon was not recorded"),
+    }))?;
+    let hull = simplified.hull.map(|vertices| Hull { vertices }).filter(|hull| hull.area() > 0.0);
+    Ok((simplified.vertices, hull))
+}
+
 /// A convex polygon: its vertices counter-clockwise, without a repeated closing vertex.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hull {
@@ -51,12 +63,7 @@ impl Hull {
     /// the model cannot follow MATLAB and MATLAB's result was not recorded:
     /// coordinates outside its integer grid, or a failed Clipper sweep.
     pub fn of_polygon(points: &[[f64; 2]]) -> crate::error::Result<Option<Hull>> {
-        use crate::polyshape::Unresolved;
-        let vertices = crate::polyshape::convex_hull(points).map_err(|failure| crate::error::Error::Shape(match failure {
-            Unresolved::Grid => "polyshape: the coordinates do not fit the fixed-point grid MATLAB's polyshape is reproduced on".into(),
-            Unresolved::Clipper(failure) => format!("polyshape: Clipper's union failed ({failure:?}); MATLAB's result for this polygon was not recorded"),
-        }))?;
-        Ok(vertices.map(|vertices| Hull { vertices }).filter(|hull| hull.area() > 0.0))
+        Ok(polyshape_vertices(points)?.1)
     }
 
     /// The convex hull of `points` (Andrew's monotone chain), or `None` when the points

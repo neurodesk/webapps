@@ -425,3 +425,153 @@ fn line_thickness(points: &[[f64; 2]]) -> f64 {
     let (a, b) = ends;
     points.iter().map(|p| ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])).abs() / longest).fold(0.0, f64::max) / longest
 }
+
+/// The focused polyshape probe (record_geometry.m 'polyshape-probe'), on both
+/// hosts: SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR.
+fn probe_hosts() -> Vec<(PathBuf, Vec<Value>)> {
+    let Some(root) = std::env::var_os("SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR").map(PathBuf::from) else { return Vec::new() };
+    ["ubuntu-22.04", "ubuntu-24.04"].iter().map(|host| {
+        let dir = root.join(host);
+        let cases = load(&dir, "geometry.json");
+        (dir, cases)
+    }).collect()
+}
+
+fn split_rows(all: &[[f64; 2]], counts: &[f64]) -> Vec<Vec<[f64; 2]>> {
+    let mut offset = 0;
+    counts.iter().map(|&n| {
+        let n = n.max(0.0) as usize;
+        let rows = all[offset..offset + n].to_vec();
+        offset += n;
+        rows
+    }).collect()
+}
+
+fn unique_sorted(vertices: &[[f64; 2]]) -> Vec<[f64; 2]> {
+    let mut result: Vec<[f64; 2]> = vertices.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
+    result.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));
+    result.dedup();
+    result
+}
+
+/// One probe polygon against MATLAB: exact hull vertices with area and centroid
+/// within the uncentred error bound, and the same simplified vertex set.
+struct ProbeOutcome {
+    hull: bool,
+    vertices: bool,
+    error: bool,
+}
+
+fn probe_outcome(polygon: &[[f64; 2]], simplified: &[[f64; 2]], matlab_hull: &[[f64; 2]], expected: [f64; 3]) -> ProbeOutcome {
+    match samsrf_core::geometry::polyshape_vertices(polygon) {
+        Err(_) => ProbeOutcome { hull: false, vertices: false, error: true },
+        Ok((vertices, hull)) => {
+            let found = hull.as_ref().map(|h| h.vertices.clone()).unwrap_or_default();
+            let hull_agrees = sorted_vertices(&found) == sorted_vertices(matlab_hull) && match &hull {
+                None => expected[2] == 0.0 && expected[0].is_nan() && expected[1].is_nan(),
+                Some(hull) => {
+                    let bound = uncentred_error_bound(&hull.vertices, hull.area());
+                    let centre = hull.centroid();
+                    (0..2).all(|axis| (centre[axis] - expected[axis]).abs() <= bound[axis]) && (hull.area() - expected[2]).abs() <= bound[2]
+                }
+            };
+            ProbeOutcome { hull: hull_agrees, vertices: unique_sorted(&vertices) == unique_sorted(simplified), error: false }
+        }
+    }
+}
+
+/// The focused probe (record_geometry.m 'polyshape-probe', pinned by
+/// polyshape-probe-reference.json) on both hosts:
+/// - the grid decade: all 27,648 swept and bisected polygons have MATLAB's hull
+///   and simplified vertex set exactly;
+/// - held-out clouds: every hull agrees except the IDs listed in
+///   matlab_polyshape_probe.json, which must still differ; all but one are
+///   near-collinear, and held-out cloud 1125 is a half-integer grid whose default
+///   polyshape MATLAB re-traces away from its own KeepCollinearPoints rings;
+/// - extreme grids: the model reports an error, not a hull, for coordinates
+///   outside its grid (MATLAB: area 0 for 1e-300, empty for subnormal and
+///   +-1e308 spans, xyTooLarge for 1e308..1.1e308) and agrees on the rest;
+/// - the original 2,500 point clouds recorded again equal geometry-reference.json's.
+#[test]
+fn polyshape_probe_matches_matlab() {
+    let hosts = probe_hosts();
+    if hosts.is_empty() {
+        return;
+    }
+    let listed: Value = serde_json::from_str(include_str!("matlab_polyshape_probe.json")).unwrap();
+    let originals = geometry_hosts();
+    for (root, cases) in hosts {
+        let ids: Vec<&str> = cases.iter().map(|c| c["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, ["probe_grid_sweep", "probe_grid_bisection", "probe_heldout_collinear", "probe_heldout_clouds", "probe_extreme_grids", "probe_point_clouds"], "{}: probe inventory", root.display());
+        for case in &cases {
+            let id = case["id"].as_str().unwrap();
+            let polygons = split_rows(&points(&array(&root, &case["points"])), &array(&root, &case["counts"]));
+            let simplified = split_rows(&points(&array(&root, &case["simplified"])), &array(&root, &case["simplifiedCounts"]));
+            let hulls = split_rows(&points(&array(&root, &case["hull"])), &array(&root, &case["hullCounts"]));
+            let estimate = array(&root, &case["estimate"]);
+            let failed = array(&root, &case["error"]);
+            let n = polygons.len();
+            let outcomes: Vec<ProbeOutcome> = (0..n).map(|i| probe_outcome(&polygons[i], &simplified[i], &hulls[i], [estimate[i], estimate[n + i], estimate[2 * n + i]])).collect();
+            let at = |i: usize| format!("{} {id} {i}", root.display());
+            match id {
+                "probe_grid_sweep" | "probe_grid_bisection" => {
+                    for (i, outcome) in outcomes.iter().enumerate() {
+                        assert!(outcome.hull && outcome.vertices, "{}: differs from MATLAB (hull {}, vertices {})", at(i), outcome.hull, outcome.vertices);
+                    }
+                    if id == "probe_grid_sweep" {
+                        assert_eq!(n, 24120);
+                    } else {
+                        assert_eq!(n, 3528);
+                    }
+                }
+                "probe_heldout_collinear" | "probe_heldout_clouds" => {
+                    let differ: BTreeSet<usize> = listed[id].as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as usize).collect();
+                    for (i, outcome) in outcomes.iter().enumerate() {
+                        assert!(!outcome.error, "{}: model error", at(i));
+                        if differ.contains(&i) {
+                            assert!(!outcome.hull, "{} now matches MATLAB; remove it from matlab_polyshape_probe.json", at(i));
+                            if (id, i) == ("probe_heldout_clouds", 1125) {
+                                // MATLAB's KeepCollinearPoints rings keep the filled triangle at
+                                // (1.5, 2), as Clipper does; its default output does not.
+                                let kept = points(&array(&root, &case["collinearVertices"]));
+                                let offset: usize = array(&root, &case["collinearCounts"])[..i].iter().map(|&c| c.max(0.0) as usize).sum();
+                                let count = array(&root, &case["collinearCounts"])[i] as usize;
+                                assert!(kept[offset..offset + count].contains(&[1.5, 2.0]) && !simplified[i].contains(&[1.5, 2.0]), "{}", at(i));
+                            } else {
+                                assert!(line_thickness(&polygons[i]) < 1e-5, "{} is not a near-collinear cloud", at(i));
+                            }
+                        } else {
+                            assert!(outcome.hull, "{}: hull differs from MATLAB", at(i));
+                        }
+                    }
+                }
+                "probe_extreme_grids" => {
+                    assert_eq!(n, 7);
+                    assert_eq!(failed.iter().map(|&f| f != 0.0).collect::<Vec<_>>(), [false, false, true, false, false, false, false], "MATLAB's extreme-grid errors");
+                    for (i, outcome) in outcomes.iter().enumerate() {
+                        assert_eq!(outcome.error, i < 4, "{}: the model must refuse exactly the four unrepresentable grids", at(i));
+                        if i >= 4 {
+                            assert!(outcome.hull && outcome.vertices, "{}", at(i));
+                        }
+                    }
+                }
+                "probe_point_clouds" => {
+                    assert_eq!(n, 2500);
+                    let host = root.file_name().unwrap();
+                    if let Some((original, original_cases)) = originals.iter().find(|(dir, _)| dir.file_name() == Some(host)) {
+                        let first = original_cases.iter().find(|c| c["id"] == "polygon_point_clouds").unwrap();
+                        for field in ["points", "counts", "simplified", "simplifiedCounts", "collinearCounts", "regions", "hull", "hullCounts", "estimate", "polygonEstimate"] {
+                            assert_eq!(array(&root, &case[field]).iter().map(|v| v.to_bits()).collect::<Vec<_>>(), array(original, &first[field]).iter().map(|v| v.to_bits()).collect::<Vec<_>>(), "{}: {field} differs from the pinned geometry recording", at(0));
+                        }
+                    }
+                    let differing: BTreeSet<usize> = outcomes.iter().enumerate().filter(|(_, o)| !o.hull).map(|(i, _)| i).collect();
+                    assert_eq!(differing, NEAR_COLLINEAR_SNAPPING.into_iter().collect(), "{}", at(0));
+                }
+                _ => unreachable!(),
+            }
+            let hulls = outcomes.iter().filter(|o| o.hull).count();
+            let sets = outcomes.iter().filter(|o| o.vertices).count();
+            println!("{} {id}: {n} polygons, {hulls} hulls and {sets} vertex sets equal MATLAB's", root.file_name().unwrap().to_string_lossy());
+        }
+    }
+}
