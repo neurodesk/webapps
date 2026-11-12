@@ -23,7 +23,7 @@ const DOCUMENT = /^(?:packages|exes)\/.+\.md$/;
 // (scripts/lib/shared-module-users.mjs). The oracle knows packages, not
 // modules; test/shared-module-users.test.mjs holds that selection to esbuild's
 // module graph instead.
-const COMPONENT_MODULE = /^packages\/components\/src\/.+\.(?:[cm]?js|json|d\.ts)$/;
+const COMPONENT_MODULE = /^packages\/components\/src\/.+\.(?:[cm]?js|json)$/;
 
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);

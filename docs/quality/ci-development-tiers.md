@@ -123,7 +123,7 @@ The analysis reads text, so it errs towards more apps:
 - A computed specifier, an import-map prefix, the package root or a path that
   does not exist loads the whole package. The six import-map apps copy the
   source directory and are selected by every change.
-- Styles, the manifest, scripts and tests of the package reach all its users,
+- Declaration files, styles, the manifest, scripts and tests of the package reach all its users,
   as before. A manifest that only gains `exports` entries selects nothing.
 - A root script that reads a list of modules from the source directory names
   the list in `LISTED_READS`. When the script's text stops matching, it loads

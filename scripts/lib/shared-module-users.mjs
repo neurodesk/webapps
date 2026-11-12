@@ -133,7 +133,7 @@ function referencesOf(user, context, listed) {
 // Returns `usersOf(path)`: the graph nodes that load the file at `path` in the
 // package at `dir`, or null when the analysis does not follow that file (the
 // caller then treats it as the whole package). It follows JavaScript modules
-// and JSON under `src/`, and a declaration file through the module it types.
+// and JSON under `src/`.
 export function sharedModuleUsers(root, graph, dir = SHARED_MODULE_PACKAGE, listed = LISTED_READS) {
   if (!isFile(join(root, dir, 'package.json'))) return () => null;
   const manifest = JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8'));
@@ -151,16 +151,9 @@ export function sharedModuleUsers(root, graph, dir = SHARED_MODULE_PACKAGE, list
     // A module that was deleted is still loaded by the module that imports it.
     loads.set(user, references.has(WHOLE) ? WHOLE : new Set(moduleClosure(root, [...references], { missing: true }).filter(within)));
   }
-  const typed = new Map();
-  for (const value of Object.values(exports)) {
-    if (value?.types && exportTarget(value)) typed.set(posix(join(dir, value.types)), posix(join(dir, exportTarget(value))));
-  }
-  const followed = (path) => {
-    if (!path.startsWith(`${dir}/src/`)) return null;
-    if (MODULE.test(path) || path.endsWith('.json')) return path;
-    if (!path.endsWith('.d.ts')) return null;
-    return typed.get(path) ?? path.replace(/\.d\.ts$/, '.js');
-  };
+  // A declaration file stays with the whole package: TypeScript loads it
+  // through other declarations, which the import closure of modules does not follow.
+  const followed = (path) => (path.startsWith(`${dir}/src/`) && (MODULE.test(path) || path.endsWith('.json')) ? path : null);
   return (path) => {
     const module = followed(path);
     return module && users.filter((user) => loads.get(user) === WHOLE || loads.get(user).has(module));

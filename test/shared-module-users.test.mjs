@@ -62,11 +62,10 @@ test('a module reaches the users whose imports load it, through the package and 
   assert.deepEqual(repo.usersOf('src/extra/one.js'), []);
 });
 
-test('a declaration file follows the module it types, and other files stay with the whole package', async () => {
+test('declarations, styles and files outside the sources stay with the whole package', async () => {
   await using repo = await fixture({ 'apps/stack/src/main.ts': "import { read } from '@scope/shared/tiff';\n" }, ['apps/stack']);
-  assert.deepEqual(repo.usersOf('src/tiff-api.d.ts'), ['apps/stack']);
-  assert.deepEqual(repo.usersOf('src/strips.d.ts'), ['apps/stack']);
-  for (const path of ['src/base.css', 'package.json', 'test/fixtures/a.tif', 'scripts/build.mjs']) assert.equal(repo.usersOf(path), null, path);
+  // TypeScript reaches a declaration through other declarations, not through the module it types.
+  for (const path of ['src/tiff-api.d.ts', 'src/strips.d.ts', 'src/base.css', 'package.json', 'test/fixtures/a.tif', 'scripts/build.mjs']) assert.equal(repo.usersOf(path), null, path);
 });
 
 test('a deleted module still reaches the users that import it', async () => {
@@ -149,7 +148,9 @@ test('a change to one component module selects the apps that load it', () => {
   for (const app of ['stitching', 'deconvolution', 'omezarr-convert', 'calmar']) assert.ok(tiff.includes(app), app);
   for (const app of ['dcm2niix', 'niimath', 'lcmodel', 'synthsr']) assert.ok(!tiff.includes(app), app);
   assert.ok(tiff.length < registry.apps.length / 2, `${tiff.length} apps`);
-  assert.deepEqual(selected(`${SHARED_MODULE_PACKAGE}/src/file-io/tiff.d.ts`), tiff);
+  // Zarro type-checks compute/index.d.ts through /ui's declarations and never loads compute/index.js.
+  assert.ok(!selected(`${SHARED_MODULE_PACKAGE}/src/compute/index.js`).includes('zarro'));
+  for (const path of ['src/compute/index.d.ts', 'src/file-io/tiff.d.ts']) assert.equal(selected(`${SHARED_MODULE_PACKAGE}/${path}`).length, registry.apps.length, path);
   // What the shell and every sidebar load still selects the catalogue.
   for (const path of ['src/ui/renderStandalone.js', 'src/ui/index.js', 'src/styles/base.css', 'scripts/build-showcase.mjs']) {
     assert.equal(selected(`${SHARED_MODULE_PACKAGE}/${path}`).length, registry.apps.length, path);
