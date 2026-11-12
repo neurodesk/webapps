@@ -324,7 +324,7 @@ and no compiled SamSrf 10.4 with these repairs was found in the SamSrf
 releases or the Neurodesk object store checked below. Nothing below is
 evidence about a compiled application until a `build` run has passed.
 
-### Compiler access, checked 2026-11-10
+### Compiler access, checked 2026-11-10 and 2026-11-12
 
 | Route | Finding |
 | --- | --- |
@@ -333,11 +333,56 @@ evidence about a compiled application until a `build` run has passed.
 | Trial license | [Trial-built applications expire](https://www.mathworks.com/matlabcentral/answers/515199-do-apps-compiled-using-simulink-compiler-under-a-trial-license-expire) and [trials cannot download previous releases](https://www.mathworks.com/matlabcentral/answers/2026102-how-do-i-download-and-install-previous-releases-of-matlab-or-the-mathworks-product-installer), so R2023b Update 11 is out of reach. |
 | Existing binaries | SamSrf releases through v10.4 carry no assets. Neurodesk's object store holds only 2024 builds (`samsrf_v10.003.zip`, `samsrf_v10.004.zip` and their dated copies), which report SamSrf 10.003 and lack the repairs. |
 | This repository | No `MLM_LICENSE_TOKEN` secret and no self-hosted runner. |
+| Neurodesk organisation | No organisation secret holds a MATLAB token (only `AUTOCOMMIT_FOR_NEUROCOMMAND`, `NEURODESK_GITHUB_TOKEN_ISSUE_AUTOMATION` and `RCLONE_CONFIG` are visible). `neurocontainers`' `build-matlab-standalone.yml` expects a `MATLAB_BATCH_LICENSE_TOKEN` secret that does not exist; its only run failed and it has never compiled anything. |
+| Upstream distribution | SamSrf's changelog says `SamSrfAnalysis` was made "for use in NeuroDesk", and Neurodesk distributes the builds. A full listing of the Neurodesk `build` container (46 objects) on 2026-11-12 found only the 2024 SamSrf zips and a 2024 `SamSrfX.zip`. No public build of 10.4 was found. |
+| Institutional license | Many Campus-Wide Licenses include MATLAB Compiler for staff at no personal cost. Whether one covers this user, and on which machines, is for the user and their institution to confirm. Activation needs the user's MathWorks account, so only the user can take this route. |
 | MATLAB Runtime | Free, and not a compiler. The [R2023b Update 11 installer](https://ssd.mathworks.com/supportfiles/downloads/R2023b/Release/11/deployment_files/installer/complete/glnxa64/MATLAB_Runtime_R2023b_Update_11_glnxa64.zip) (4,834,714,979 bytes) is public. `containers.mathworks.com/matlab-runtime` has `r2023b-update-1` to `-9` tags and a moving `r2023b` tag. The Runtime executes a compiled archive; it cannot build one. |
 
-Building therefore needs someone with a MATLAB Compiler license for R2023b
-Update 11 to provide a batch token, or to run the recipe on their own licensed
-host. Everything else is in place and runs from one dispatch.
+Building therefore needs a MATLAB Compiler license for R2023b Update 11, as a
+batch token for the `build` dispatch, or as a license for one Linux host. That
+host can be this kind of machine, using `licensed-host/`.
+
+### Building on one licensed host
+
+`licensed-host/build_and_validate.sh` runs every gate of the `build` dispatch on
+one host:
+
+1. Clone the pinned SamSrf and SPM.
+2. Download the pinned inputs and apply `prepare.py --cli`.
+3. Build with MATLAB Compiler, then prepare the bundle.
+4. Run source MATLAB twice, plus `verify_cli_hrf.m`.
+5. Run the compiled image twice, the strict compiled-versus-source and repeat
+   comparisons, the SIGINT check and the missing-model check.
+
+It publishes nothing. MATLAB runs in `licensed-host/Dockerfile`: MathWorks'
+`matlab-deps:r2023b` (Ubuntu 22.04) by digest, plus the Docker CLI that
+Compiler's image builders call. `licensed-host/matlab_batch.sh` mounts the
+mpm installation, the license and the work directory at their own paths. It
+uses `--network host`, so a host-locked license sees this host. It accepts a
+license file or a `PORT@HOST` license server.
+
+```sh
+mpm install --release=R2023bU11 --destination="$TMPDIR/matlab-r2023bu11" \
+  --products MATLAB MATLAB_Compiler Statistics_and_Machine_Learning_Toolbox \
+  Image_Processing_Toolbox Parallel_Computing_Toolbox
+packages/samsrf/validation/matlab/licensed-host/build_and_validate.sh \
+  "$TMPDIR/samsrf-compiled" LICENSE_FILE_OR_PORT@HOST "$TMPDIR/matlab-r2023bu11"
+```
+
+Run `mpm` inside the same `matlab-deps` image; R2023b does not support newer
+host distributions. The driver refuses an installation whose `VersionInfo.xml`
+is not 23.2.0.3097123.
+
+Checked on 2026-11-12 without a license:
+
+- `mpm` installed exactly 23.2.0.3097123, R2023b Update 11 (9.8 GB, with
+  `toolbox/compiler`).
+- The driver ran through the clones, the input download, the CLI repair set
+  (verified by `build_container.py`, five files) and the Python 3.10 venv.
+- MATLAB then started in the builder container and stopped at its license check
+  (`Feature: MATLAB`, error -2,413). A `PORT@HOST` value reached the same check.
+
+No compiled step has run.
 
 ### SamSrfAnalysis case matrix
 
@@ -559,15 +604,13 @@ vertex quota is allowed.
 
 Native gates additionally cover all 14 raw optimizer cases, nine double-precision
 CF modes from identical recorded profiles, 146 real/complex regression scale
-cases and 251 polygon cases. Regression rank decisions must match exactly;
+cases and all 253 polygon cases. Regression rank decisions must match exactly;
 coefficient comparisons use per-value relative tolerances (4 single or 4
 double epsilon units), never a map-wide scale. The measured maxima are 3.33 and
 3.15 epsilon units; the earlier double solve on rounded inputs reached 6.7 and
 7.5, under gates of 16 single epsilon units and 1e-12.
-Two polygons
-(`polygon_191`, `polygon_193`) lie in the measured fixed-point band of the
-geometry recording below; the gate reports them instead of asserting them, by
-that rule rather than by name. CF checks from identical profiles isolate parameter
+Polygons `polygon_191` and `polygon_193`, once excluded, now pass with the
+others (see the fixed-point model below). CF checks from identical profiles isolate parameter
 estimation, and do not establish full single-precision CF pipeline parity.
 
 General double-precision fine-fit plateaus, remaining double CSS fits, and single
@@ -779,21 +822,62 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   and Gaussian CF in double. In single precision the hull geometry rows,
   `Fwhm` and `Vx` agree; R² and the summary and Gaussian parameters are
   MATLAB single arithmetic, left to the single-precision pipeline work.
-- **Polygons.** Emptiness is exact, and area and centroid lie within the
-  forward-error bound of MATLAB's shoelace on untranslated vertices (its hull
-  vertices are compared first, ignoring winding and roundoff-collinear
-  redundant vertices; retained coordinates must match exactly). Three measured
-  classes remain discrepant. The gate freezes each failing case identity and
-  a checksum of its port hull, centroid and area in
-  `core/tests/matlab_polygon_exceptions.json`, so neither a new failing member
-  nor a changed result can be absorbed by a class exemption. It counts and prints: 1,853 triangles whose altitude over the longest side is
-  within [1e-8, 1.00001e-8] of the span, 16 clouds with duplicate points, and
-  188 clouds within 1e-5 of the span of a line. MATLAB decides on a
-  fixed-point copy of the vertices (its simplified vertices come back on a
-  13-digit decimal grid, and exact power-of-two scalings of one triangle get
-  different answers), and it resolves crossings of near-parallel edges into
-  slivers. SamSrf removes duplicates before `polyshape`; the near-collinear
-  class is only reachable by a nearly collinear cluster.
+- **Polygons.** Emptiness is exact, the hull has exactly MATLAB's vertices,
+  bit for bit, and area and centroid then lie within the forward-error bound
+  of MATLAB's shoelace on untranslated vertices. 25,980 of the 26,073 recorded
+  polygons agree, on both hosts, and so do all 253 polygons of the 741-case
+  reference without exclusions. The model behind it, reconstructed from these
+  recordings (`core/src/polyshape.rs`):
+
+  1. *Fixed-point grid.* Each axis is centred on the middle of its range,
+     scaled by `10^p` with `p = 13 - floor(log10(m))` for the largest centred
+     magnitude `m`, and truncated to integers. New vertices come back as
+     `k * 10^-p + c` and surviving ones keep their original coordinates.
+     Truncation, not rounding, is what separates exact power-of-two copies of
+     one triangle (2^-10 lands on 976562.5 grid units) and the one-ULP apex
+     steps at scale 1.
+  2. *Thinness.* The tolerance is `(1e-8 * span) * 10^p` in grid units, and a
+     vertex goes when its distance from the line through its neighbours,
+     `|cross| / length` on the integers, is below it. This alone reproduces all
+     22,636 recorded triangles, including the 1,853 within 1e-5 of the cutoff
+     that the earlier floating-point rule missed.
+  3. *Even-odd resolution.* The ring's boundary is every sub-segment covered an
+     odd number of times (MATLAB's pentagram keeps five points, not its centre).
+     Each filled face is traced with the region on its left and cleaned with
+     Clipper 6.4.2's `CleanPolygon` loop (close neighbours, close
+     semi-adjacent pairs, near-collinear points) using the distance in step 2;
+     the hull of the survivors is cleaned the same way. Duplicate points,
+     retraced spikes and narrow spikes all follow from this.
+
+  The 93 remaining polygons are all near-collinear clouds: points within 1e-6
+  to 1e-10 of a line in random order. Their MATLAB vertices lie 1e5 to 1e8
+  grid units from any exact intersection of the edges, so MATLAB snaps vertices
+  by up to about the tolerance when it resolves nearly parallel crossings.
+  Neither exact intersections nor Clipper 6.4.2's `IntersectPoint` (7 of 9,861
+  vertices) reproduce that. The test names these 93 cases, requires each to
+  stay near-collinear and still differ, and freezes each port hull, emptiness,
+  area and centroid bit for bit in `matlab_polygon_snapping.json`. These are
+  regression snapshots, not MATLAB ground truth. Every other polygon remains
+  gated against MATLAB.
+  Unrepresentable grids (nonfinite centre/span/scale or scaled coordinates
+  outside the integer arithmetic bound) return an empty hull before conversion.
+  This prevents overflow or nontermination on extreme coordinates such as
+  1e-300; it is not a MATLAB parity claim for that unsupported domain.
+  Intersection coordinates use exact arithmetic; face tracing still uses
+  floating-point turning and parity decisions. Clipper's source revision,
+  copyright, Boost license and adapted distance comparisons are recorded in
+  the module and the shipped package `NOTICE`.
+
+  SamSrf passes `polyshape` a breadth-first cluster of unique template points;
+  only a nearly collinear cluster of four or more points reaches this class.
+
+A native release run of `real_template_cf_maps_match_matlab` with both hosts'
+fixtures used 3.82 CPU seconds and 11,588 KiB peak resident memory on the shared
+builder (15.57 seconds elapsed under contention). It exercises the 2,917/3,389
+seed templates, 40 hull profiles per hemisphere/precision/host including centre
+and surround hulls, plus the recorded summary and Gaussian cases. This is a
+bounded workload measurement, not a full-surface or browser performance result;
+the all-pairs intersection graph can still grow quadratically.
 
 The same test replays the double hull and summary CF pipelines of the raw-input
 matrix (both hemispheres, smoothing and global regression on and off, both
