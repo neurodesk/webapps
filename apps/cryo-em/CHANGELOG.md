@@ -1,5 +1,11 @@
 # cryo-em
 
+## 0.1.20261112
+
+### Patch Changes
+
+- 010ae3e: A delayed project refresh no longer follows a step again after it has ended. The job list and outputs keep the final job details even when an older response arrives later.
+
 ## 0.1.20261111
 
 ### Patch Changes
