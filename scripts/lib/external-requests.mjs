@@ -54,3 +54,15 @@ export function trackExternalRequests(context, origin) {
     },
   };
 }
+
+/**
+ * Closes every WebSocket a page opens to another host and records its URL in `refused`.
+ * Request routes and request events do not see WebSockets.
+ */
+export function refuseOtherHostWebSockets(context, siteOrigin, refused) {
+  const siteHost = new URL(siteOrigin).host;
+  return context.routeWebSocket(url => url.host !== siteHost, socket => {
+    refused.push(socket.url());
+    socket.close();
+  });
+}

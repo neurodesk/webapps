@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { chromium } from '@playwright/test';
-import { trackExternalRequests } from '../scripts/lib/external-requests.mjs';
+import { refuseOtherHostWebSockets, trackExternalRequests } from '../scripts/lib/external-requests.mjs';
 import { startDeadline, trackPendingRequests } from '../scripts/lib/pending-requests.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
@@ -93,7 +93,21 @@ test('a cancelled page request no worker fetch accounts for still counts', async
   assert.deepEqual(paths(network.sent()), ['/never-fetched']);
 });
 
-test('a page waiting on a request that never ends fails at the deadline and names the request', async t => {
+test('a WebSocket to another host is closed and named', async t => {
+  const { context, page } = await controlledPage(t);
+  const refused = [];
+  await refuseOtherHostWebSockets(context, new URL(page.url()).origin, refused);
+  const closed = await page.evaluate(() => new Promise(resolve => {
+    const socket = new WebSocket('wss://sockets.invalid/live');
+    socket.onopen = () => resolve('open');
+    socket.onclose = () => resolve('closed');
+  }));
+  assert.equal(closed, 'closed');
+  assert.deepEqual(refused, ['wss://sockets.invalid/live']);
+});
+
+// The test's own timeout ends it if the deadline under test never fires.
+test('a page waiting on a request that never ends fails at the deadline and names the request', { timeout: 60_000 }, async t => {
   const { context, page, pending } = await controlledPage(t);
   await context.route(`${host}/stalled`, () => {});
   await page.evaluate(target => window.request(target), `${host}/stalled`);

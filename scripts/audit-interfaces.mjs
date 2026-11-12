@@ -5,7 +5,7 @@ import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppExamples } from './lib/app-examples.mjs';
 import { OFFLINE_AUDIT_APPS, auditedExampleFiles, auditedRuntimeFiles, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from './lib/example-asset-cache.mjs';
-import { trackExternalRequests } from './lib/external-requests.mjs';
+import { refuseOtherHostWebSockets, trackExternalRequests } from './lib/external-requests.mjs';
 import { startDeadline, trackPendingRequests } from './lib/pending-requests.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
@@ -68,6 +68,7 @@ try {
             refused.push(url);
             return route.abort('blockedbyclient');
           });
+          await refuseOtherHostWebSockets(context, site.origin, refused);
         }
         if (cachedExamples) {
           await context.route(url => cachedExamples.has(url.href), route => {
@@ -339,7 +340,7 @@ try {
       const sent = network.sent();
       result.externalRequests = {};
       for (const url of sent) result.externalRequests[url.host] = (result.externalRequests[url.host] ?? 0) + 1;
-      result.hostedExampleRequests = sent.filter(url => exampleUrls.has(url.href)).length;
+      result.hostedExampleRequests = sent.filter(url => exampleUrls.has(url.href) || exampleUrls.has(`${url.origin}${url.pathname}`)).length;
       if (cachedExamples && result.hostedExampleRequests) {
         result.failures.push(`${result.hostedExampleRequests} example requests went to the network although the verified cache holds their files`);
       }
