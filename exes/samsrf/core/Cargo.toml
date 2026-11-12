@@ -36,6 +36,10 @@ sha2 = "0.10"
 name = "polyshape_stages"
 required-features = ["polyshape-experimental"]
 
+[[example]]
+name = "polyshape_hulls"
+required-features = ["polyshape-experimental"]
+
 [[test]]
 name = "matlab_polyshape_experimental"
 required-features = ["polyshape-experimental"]
