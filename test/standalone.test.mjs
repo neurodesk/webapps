@@ -194,7 +194,9 @@ test('cryo-em setup walks through a Slurm cluster, not a Docker GPU machine', as
   assert.equal(section.querySelector('#compute-start').textContent, 'tmux new -s cryo-em\n./neurodesk-compute cryo-em');
   assert.match(section.querySelector('#compute-tunnel').textContent, /^ssh -N -L 8765:127\.0\.0\.1:8765 /);
   assert.match(section.textContent, /localhost:8765\/cryo-em\//);
-  assert.match(section.textContent, /released server with Slurm support is not available/);
+  const download = catalog.apps['cryo-em'].computeServer.download;
+  assert.equal(section.querySelector('a[download]').href, download.url);
+  assert.match(section.textContent, new RegExp(`tar -xzf ${download.filename.replaceAll('.', '\\.')}`));
   dom.window.close();
 });
 

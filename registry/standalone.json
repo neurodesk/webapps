@@ -2234,7 +2234,15 @@
       "computeServer": {
         "name": "neurodesk-compute",
         "runner": "slurm",
-        "documentation": "https://github.com/neurodesk/webapps/tree/main/exes/compute-server#hpc-single-owner-mode-and-slurm"
+        "documentation": "https://github.com/neurodesk/webapps/tree/main/exes/compute-server#hpc-single-owner-mode-and-slurm",
+        "download": {
+          "filename": "neurodesk-compute-0.3.20261111-linux-x64.tar.gz",
+          "version": "0.3.20261111",
+          "url": "https://github.com/neurodesk/webapps/releases/download/neurodesk-compute-v0.3.20261111/neurodesk-compute-0.3.20261111-linux-x64.tar.gz",
+          "checksumUrl": "https://github.com/neurodesk/webapps/releases/download/neurodesk-compute-v0.3.20261111/neurodesk-compute-0.3.20261111-linux-x64.tar.gz.sha256",
+          "bytes": 12925749,
+          "sha256": "2fab6b011b7c72642c5da7cd897ea1ae674f9ea67f71d3d3b455a384e5c62c68"
+        }
       }
     },
     "lightsheet-atlas": {
