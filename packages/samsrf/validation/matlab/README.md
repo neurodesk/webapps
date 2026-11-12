@@ -1257,8 +1257,11 @@ parity with that AMD reference only.
      vertices of the original pipeline (both recordings), none of the
      nonnegative one. Elsewhere the closest exact ratio is 125 times from the
      tolerance (6.7 in the nonnegative pipeline).
-  2. **Error.** `|port - t|` and `|MATLAB - t|` are measured exactly, with `t`
-     the real part of the exact least-squares solution in rational arithmetic.
+  2. **Error.** For differing coefficients, `|port - t|` and `|MATLAB - t|`
+     are measured exactly, with `t` the real part of the exact least-squares
+     solution in rational arithmetic. Identical coefficients skip this
+     measurement: their excess error is zero, but their individual errors
+     against the exact solution need not be zero.
   3. **Scale.** The port's error may exceed MATLAB's by at most `S`. `S` is the
      first-order change of the coefficient when every column of the design and
      `y` moves by one unit roundoff of its norm (Wedin's expansion; Higham,
@@ -1277,10 +1280,10 @@ parity with that AMD reference only.
      with recorded rank evidence. Overflowing and subnormal designs are
      covered.
 
-| Pipeline | Bit-identical | Differing | Basic zeros | Rank from recording | Port error / `S` | MATLAB error / `S` | Largest excess / `S` |
+| Pipeline | Bit-identical | Differing | Basic zeros | Rank from recording | Port error / `S` (differing only) | MATLAB error / `S` (differing only) | Largest excess / `S` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `reference.json` original | 138 | 0 | 8 | 3 | 0 | 0 | 0 |
-| AMD recording, original | 138 | 0 | 8 | 3 | 0 | 0 | 0 |
+| `reference.json` original | 138 | 0 | 8 | 3 | Not measured | Not measured | 0 |
+| AMD recording, original | 138 | 0 | 8 | 3 | Not measured | Not measured | 0 |
 | AMD recording, nonnegative | 125 | 1 | 8 | 0 | ≤ 0.0036 | ≤ 0.0026 | 0.0010 |
 
 These counts use the MKL `?gemv` and `?ormqr` summation orders of #795 (see
