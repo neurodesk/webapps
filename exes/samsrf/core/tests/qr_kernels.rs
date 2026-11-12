@@ -140,6 +140,12 @@ fn multiple_right_hand_sides_match_matlab_on_amd() {
     let designs: Value = serde_json::from_slice(&std::fs::read(designs_root.join("qr.json")).unwrap()).unwrap();
     let (root, _) = hosts.iter().find(|(_, cpu)| cpu.contains("AMD")).unwrap();
     let metadata: Value = serde_json::from_slice(&std::fs::read(root.join("kernels.json")).unwrap()).unwrap();
+    // Current nonmatching outputs are regression metadata, not MATLAB truth.
+    // Every formerly exact case must remain exact; each other coefficient may
+    // stay unchanged or improve to MATLAB, never spend another case's gain.
+    let frozen: std::collections::BTreeMap<String, Vec<[u64; 2]>> =
+        serde_json::from_str(include_str!("data/qr-multi-outcomes.json")).unwrap();
+    let mut visited = std::collections::BTreeSet::new();
     let mut exact = std::collections::BTreeMap::<String, usize>::new();
     for item in metadata["multiple"].as_array().unwrap() {
         if item["complex"] == true {
@@ -155,8 +161,36 @@ fn multiple_right_hand_sides_match_matlab_on_amd() {
         let solved = lstsq::mldivide_many(&columns, &ys, precision);
         let together = complex_values(root, &item["together"]);
         let same = solved.coefficients.iter().enumerate().all(|(j, c)| c.iter().enumerate().all(|(i, v)| *v == together[i + j * 2]));
+        let id = item["id"].as_str().unwrap();
+        assert!(visited.insert(id.to_string()), "duplicate multi-RHS case {id}");
+        let previous = frozen.get(id);
+        if let Some(bits) = previous {
+            assert_eq!(bits.len(), together.len(), "{id}: snapshot shape");
+        }
+        for (index, value) in solved.coefficients.iter().flatten().enumerate() {
+            assert!(multi_coefficient_matches(*value, together[index], previous.map(|bits| bits[index])),
+                "{id}: coefficient {index}: {value} differs from MATLAB and the frozen result");
+        }
         *exact.entry(item["precision"].as_str().unwrap().to_string()).or_default() += usize::from(same);
     }
     eprintln!("bit-identical 8-column solves: {exact:?}");
-    assert!(exact["single"] >= 204 && exact["double"] >= 184, "{exact:?}");
+    assert_eq!(visited.len(), 404, "missing real multi-RHS designs");
+    assert_eq!(frozen.len(), 16);
+    assert!(frozen.keys().all(|id| visited.contains(id)), "unvisited frozen design");
+}
+
+fn multi_coefficient_matches(actual: Complex64, expected: Complex64, previous: Option<[u64; 2]>) -> bool {
+    actual == expected || previous == Some([actual.re.to_bits(), actual.im.to_bits()])
+}
+
+#[test]
+fn multi_rhs_regressions_cannot_replace_improvements() {
+    let expected = Complex64::new(1.0, 0.0);
+    let previous = Complex64::new(f64::from_bits(1.0f64.to_bits() + 1), 0.0);
+    let bits = Some([previous.re.to_bits(), previous.im.to_bits()]);
+    assert!(multi_coefficient_matches(previous, expected, bits));
+    assert!(multi_coefficient_matches(expected, expected, bits));
+    assert!(!multi_coefficient_matches(Complex64::new(2.0, 0.0), expected, bits));
+    assert!(!multi_coefficient_matches(previous, expected, None));
+    assert!(!multi_coefficient_matches(Complex64::new(f64::NAN, 0.0), expected, bits));
 }

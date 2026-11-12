@@ -319,8 +319,9 @@ impl<T: Real> C<T> {
 /// `ctrsv` and `ztrsv` on AMD: complex single divides each part (Smith's
 /// algorithm with a real divisor), complex double uses (a c + b d) / (c² + d²).
 /// Where c² + d² is not a finite normal number MKL still returned the
-/// quotient (recorded at 1e155 and 1e300); the guarded division used there
-/// agrees with those two recordings but is not otherwise evidenced.
+/// quotient (recorded at 1e155 and 1e300). The safe division also protects
+/// numerator products that overflow or flush to zero and overflowing sums.
+/// Those extensions have analytic tests, not MATLAB bit-parity evidence.
 fn trsv_divide<T: Real>(numerator: C<T>, divisor: C<T>, complex: bool, single: bool) -> C<T> {
     if !complex || single {
         return numerator.div(divisor, complex);
@@ -329,10 +330,21 @@ fn trsv_divide<T: Real>(numerator: C<T>, divisor: C<T>, complex: bool, single: b
     let denominator = c * c + d * d;
     if denominator.is_finite() && denominator >= T::MIN_POSITIVE {
         let (a, b) = (numerator.re, numerator.im);
-        C { re: (a * c + b * d) / denominator, im: (b * c - a * d) / denominator }
-    } else {
-        numerator.div(divisor, true)
+        let products = [(a, c, a * c), (b, d, b * d), (b, c, b * c), (a, d, a * d)];
+        let products_safe = products.iter().all(|&(x, y, product)| {
+            product.is_finite() && (product != T::ZERO || x == T::ZERO || y == T::ZERO)
+        });
+        let re = products[0].2 + products[1].2;
+        let im = products[2].2 - products[3].2;
+        // A normal denominator alone does not protect the numerator: its
+        // products may overflow or flush to zero before division. Keep finite
+        // subnormal products in the measured order, including the recorded
+        // tiny imaginary designs; this is not a universal accuracy guarantee.
+        if products_safe && re.is_finite() && im.is_finite() {
+            return C { re: re / denominator, im: im / denominator };
+        }
     }
+    numerator.div(divisor, true)
 }
 
 /// `?trsm`, which a solve with several right-hand sides uses, multiplies by
@@ -342,7 +354,14 @@ fn trsm_divide<T: Real>(numerator: C<T>, divisor: C<T>, complex: bool) -> C<T> {
     if complex {
         return numerator.div(divisor, true);
     }
-    C::real(numerator.re * (T::ONE / divisor.re))
+    let reciprocal = T::ONE / divisor.re;
+    if reciprocal.is_finite() {
+        C::real(numerator.re * reciprocal)
+    } else {
+        // A subnormal diagonal can have an overflowing reciprocal even when
+        // numerator / diagonal is representable.
+        C::real(numerator.re / divisor.re)
+    }
 }
 
 fn ladiv1<T: Real>(a: T, b: T, c: T, d: T) -> (T, T) {
@@ -721,6 +740,33 @@ mod tests {
             let (beta, baseline) = regress_on_ones(&x, &y, precision);
             assert!((beta.re - 2.0).abs() < 1e-6 && (baseline.re - 1.0).abs() < 1e-5, "{precision:?}: {beta} {baseline}");
             assert_eq!((beta.im, baseline.im), (0.0, 0.0));
+        }
+    }
+
+    #[test]
+    fn complex_triangular_solve_preserves_extreme_numerators() {
+        for (scale, rhs) in [(1e150, 1e200), (1e-150, 1e-200)] {
+            let design = [Complex64::new(scale, scale)];
+            let solved = mldivide(&[&design], &[rhs], Precision::Double);
+            let part = (rhs / scale) * 0.5;
+            assert_eq!(solved.rank, 1);
+            assert!(close(solved.coefficients[0], Complex64::new(part, -part), 1e-14),
+                "scale {scale}, rhs {rhs}: {:?}", solved.coefficients);
+        }
+    }
+
+    #[test]
+    fn multiple_rhs_with_subnormal_diagonal_preserve_unit_solution() {
+        for (precision, scale) in [(Precision::Double, 1e-310), (Precision::Single, 1e-40)] {
+            let design = real(&[scale]);
+            let rhs = [scale];
+            let solved = mldivide_many(&[&design], &[&rhs, &rhs], precision);
+            let separate = mldivide(&[&design], &rhs, precision);
+            assert_eq!(solved.rank, 1);
+            assert_eq!(separate.coefficients[0], Complex64::new(1.0, 0.0));
+            for coefficients in solved.coefficients {
+                assert_eq!(coefficients[0], separate.coefficients[0], "{precision:?}");
+            }
         }
     }
 

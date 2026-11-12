@@ -735,7 +735,17 @@ tried fixes both without breaking others), R(2,2) in nine single designs,
 complex `?unmqr` in 21 double and 12 single designs, and the Intel branch. In
 `?ztrsv`, where c² + d² is not a finite normal number the port uses the guarded
 division; MKL's result there matched it at the two recorded scales (1e155,
-1e300) but its formula is not otherwise evidenced.
+1e300) but its formula is not otherwise evidenced. The same safe division
+protects overflowing numerator products/sums and products that flush to zero;
+finite subnormal products retain the measured arithmetic. These extensions have
+analytic single-column regression tests, not MATLAB bit-parity evidence.
+Multi-RHS real solves use direct division when the reciprocal overflows, with
+unit-solution regressions for subnormal diagonals in both precisions.
+
+`qr-multi-outcomes.json` freezes the 16 currently nonmatching real multi-RHS
+outputs as regression metadata. Each coefficient must retain its bits or equal
+MATLAB, and all previously exact cases remain exact. An aggregate gain cannot
+hide a new discrepancy.
 
 The zero-based single CSS vertices 47 and 58 have exact zero baselines in
 MATLAB, where cancellation of the observation sum gives the port about 4e-9
