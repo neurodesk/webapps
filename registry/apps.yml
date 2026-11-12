@@ -830,7 +830,7 @@ apps:
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace
-    app_scoped_runtime_families: [ort-web-asyncify, mindgrab-cpu]
+    app_scoped_runtime_families: [ort-web-asyncify]
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: false

@@ -233,7 +233,8 @@ low-variance edge course.
 | --- | --- | --- | --- |
 | Raw runs to single courses, noise ceiling, area, mesh; single global signal | exact | 0 | |
 | CF correlations from MATLAB's courses | 16 units | 10.0 | MATLAB vs the exact correlation of its inputs: 9.9; host vs host: 10 |
-| RC profiles from MATLAB's courses | 32 units x peak x kappa | 5.45 per kappa (30% identical) | MATLAB's single QR vs exact: 20 |
+| RC profiles from MATLAB's courses, AMD host | exact | 0 (every profile entry identical) | |
+| RC profiles from MATLAB's courses, AVX-512 host | 32 units x peak x kappa | 4.95 per kappa (29-36% identical) | MATLAB's single QR vs exact: 20 |
 | Global-regression residuals | 32 units of the input course's peak | 5.41 (54% identical) | host vs host: 5.2 |
 | Each host's profiles to its maps (replay) | exact | 0 | |
 | RC `R^2` where MATLAB used MKL's AVX-512 path | 16 single ULPs | 9 | the dot product order (below) |
@@ -407,11 +408,17 @@ course with NaN in every AMD case and still gets MATLAB's residual for every
 other course. Dropping the course instead changes the last course in every
 case, by 80 to 705 values.
 
-Single RC profiles rise from 31% to 82-96% identical on the AMD hosts and
-keep their limit. What remains differs on whole vertices, not pixels: 1-5
-vertices per case have 247-339 of their 400 pixels different, and every other
-vertex is exact. That points at each vertex's own `[Y ones]` factorization,
-not at the order across right-hand sides.
+Single RC profiles rose from 31% to 82-96% identical on the AMD hosts with
+`mldivide_many`. What remained differed on whole vertices: 1-5 vertices per
+case had 247-339 of their 400 pixels different, every other vertex exact. The
+first differing operation was R(2,2) of that vertex's `[Y ones]`
+factorization, the norm of the updated ones column: MKL's `snrm2` rescales
+its sum as reference BLAS's Fortran reads, `ONE + SSQ*(SCALE/ABSXI)**2`
+(the ratio squared first), where the port multiplied `(SSQ*R)*R` (#731,
+"MKL's kernels" below). With that order every single RC profile and every
+single RC map value equals MATLAB's on the AMD hosts: 8,400 of 8,400 profile
+entries in each matrix case and 7,200 of 7,200 in each edge case. The Rust
+and JavaScript gates require it there; the AVX-512 host keeps its limits.
 
 `cf_single_replay.rs` runs on the pinned single-kernel and gemv recordings:
 
@@ -868,10 +875,27 @@ conclusions and is not pinned.
   columns left over use narrower kernels. Complex single sums in two
   accumulators and complex double in sequence. No order depends on memory
   alignment (offsets 0-7 recorded).
+- `cunmqr` and `zunmqr` do not round each complex product. They sum
+  v.re (c.re, c.im) and v.im (c.im, c.re) in two separate sets of
+  accumulators, each over the tree above, and combine them at the end as
+  (A.re + B.re, A.im - B.im) before adding c(1). The FPRev probes cannot see
+  this, because their v is real and the second set sums exact zeros. Nor can
+  most designs: when the ones column is pivoted first, every entry of v1 is
+  equal, so the intermediate imaginary parts are one constant and any tree
+  gives the same sum. The 26 single and 21 double designs whose x column is
+  pivoted first decide it: with this model `Q^H y` equals MKL's chain in all
+  64 complex single and 79 complex double designs (52 and 58 before).
+- `snrm2` and `scnrm2` rescale the scaled sum of squares as
+  `1 + ssq (r r)`; `dnrm2` and `dznrm2` as `(1 + (ssq r) r)` (the order
+  `matlab_numerics.rs` also holds for `corr`). With these orders R(1,1)
+  equals MKL's in every recorded design, and R(2,2) in every design whose
+  R(1,2) does (below).
 - `?trsv` divides by the diagonal; `?trsm` multiplies by its reciprocal (every
-  recorded real multi-column solve). `ztrsv` divides by (a c + b d) / (c² + d²);
-  `ctrsv` divides each part. `?larfg` uses LAPACK's `?ladiv` (Baudin and
-  Smith), and `zunmqr` adds the two halves of each complex product separately.
+  recorded real multi-column solve). `ztrsv` divides by (a c + b d) / (c² + d²).
+  `ctrsv` evaluates the same formula in double and rounds to single: its
+  coefficients, signed zeros included, equal that in all 64 complex single
+  chains, while dividing each part gave -0 for 0 / a negative diagonal in 13.
+  `?larfg` uses LAPACK's `?ladiv` (Baudin and Smith).
 - `qr(A,0)` and `mldivide` share the factorisation, but `mldivide` matched the
   MEX chain where `qr(A,0)`'s R12 alone did not settle the order: R is no
   evidence of Q'y.
@@ -880,14 +904,14 @@ conclusions and is not pinned.
 one of the 8,640 probes (23.6 million sums) on the first AMD recording must
 equal the port's sum, and the other four AMD recordings must be identical to
 it. It also requires `lstsq::mldivide_many` to reproduce MATLAB's 8-column
-`A \ B` in at least 204 single and 184 double of the recorded real solves (of
-214 and 190); complex multi-column solves are not modelled.
+`A \ B` in all 214 single and 184 of 190 double recorded real solves;
+complex multi-column solves are not modelled.
 
 `qr_reference.rs` requires, for all 348 cases, MATLAB's rank and, for the 89
 rank warnings, its printed tolerance; a real result where MATLAB's is real; and
 zero coefficients for dropped columns. Coefficients have two independent gates.
 `exes/samsrf/core/tests/data/qr-outcomes.json` freezes each case's outcome: the
-300 bit-identical cases must stay bit-identical, and no real or imaginary part
+346 bit-identical cases must stay bit-identical, and no real or imaginary part
 of any other coefficient may move further from MATLAB's, in ULPs, than
 recorded there. Regenerating that file (`SAMSRF_QR_WRITE_OUTCOMES=1`) is a
 deliberate change to review. Second, |port - MATLAB|, real and imaginary parts
@@ -915,6 +939,21 @@ measured ratio is 0.93 (`random_single_9`).
 | Irregular, single (24) | 1 → 16 | 1,011 → 1,009 |
 | Irregular, double (24) | 2 → 20 | 1,684 → 673 |
 
+After #731 (MKL's `snrm2` order, the two-accumulator `?unmqr` and `ctrsv` in
+double) 346 of 348 are bit-identical, and the other two
+(`trace_single_v58_nonnegative0_recorded` and `_recomputed`) equal MKL's own
+chain bit for bit: their coefficients are 0 + -0i, which MATLAB stores as a
+real array, so the recording cannot hold the sign. Every coefficient part is 0
+ULPs from MATLAB, and every chain's coefficients equal MKL's bit for bit on the
+five AMD recordings. No frozen part moved away from MATLAB. One intermediate is
+still not reproduced: in 8 CSS-trace designs (v60 in both classes, v82 double)
+tau(1) is exactly 1 and MKL's R(1,2) is up to 8 ULPs from the port's (its `?gemv`
+sum of v(1) seeded with 1, which no lane tree consistent with the probes
+reproduces), so R(2,2), v(2) and `Q^H y` follow. Their single-RHS coefficients
+still equal MATLAB's; the v82 designs are the 6 remaining double multi-RHS
+mismatches. The rest of this paragraph and the table record the state before
+#731.
+
 In total 123 → 300 of 348. Every real double design is bit-identical. Three
 single designs with subnormal imaginary parts (`glm_single_1e+06/08/10_1e-50`)
 equal MATLAB's values and differ only in the sign of a zero imaginary part. No
@@ -934,8 +973,9 @@ analytic single-column regression tests, not MATLAB bit-parity evidence.
 Multi-RHS real solves use direct division when the reciprocal overflows, with
 unit-solution regressions for subnormal diagonals in both precisions.
 
-`qr-multi-outcomes.json` freezes the 16 currently nonmatching real multi-RHS
-outputs as regression metadata. Each coefficient must retain its bits or equal
+`qr-multi-outcomes.json` freezes the 6 currently nonmatching real multi-RHS
+outputs (double `trace_*_v82` designs) as regression metadata; the 10 single
+ones it held before #731 now equal MATLAB. Each coefficient must retain its bits or equal
 MATLAB, and all previously exact cases remain exact. An aggregate gain cannot
 hide a new discrepancy.
 
@@ -1426,8 +1466,11 @@ parity with that AMD reference only.
      vertices of the original pipeline (both recordings), none of the
      nonnegative one. Elsewhere the closest exact ratio is 125 times from the
      tolerance (6.7 in the nonnegative pipeline).
-  2. **Error.** `|port - t|` and `|MATLAB - t|` are measured exactly, with `t`
-     the real part of the exact least-squares solution in rational arithmetic.
+  2. **Error.** For differing coefficients, `|port - t|` and `|MATLAB - t|`
+     are measured exactly, with `t` the real part of the exact least-squares
+     solution in rational arithmetic. Identical coefficients skip this
+     measurement: their excess error is zero, but their individual errors
+     against the exact solution need not be zero.
   3. **Scale.** The port's error may exceed MATLAB's by at most `S`. `S` is the
      first-order change of the coefficient when every column of the design and
      `y` moves by one unit roundoff of its norm (Wedin's expansion; Higham,
@@ -1446,15 +1489,19 @@ parity with that AMD reference only.
      with recorded rank evidence. Overflowing and subnormal designs are
      covered.
 
-| Pipeline | Bit-identical | Differing | Basic zeros | Rank from recording | Port error / `S` | MATLAB error / `S` | Largest excess / `S` |
+| Pipeline | Bit-identical | Differing | Basic zeros | Rank from recording | Port error / `S` (differing only) | MATLAB error / `S` (differing only) | Largest excess / `S` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `reference.json` original | 136 | 2 | 8 | 3 | ≤ 0.21 | ≤ 0.22 | ≤ 0 |
-| AMD recording, original | 136 | 2 | 8 | 3 | ≤ 0.21 | ≤ 0.22 | ≤ 0 |
+| `reference.json` original | 138 | 0 | 8 | 3 | Not measured | Not measured | 0 |
+| AMD recording, original | 138 | 0 | 8 | 3 | Not measured | Not measured | 0 |
 | AMD recording, nonnegative | 125 | 1 | 8 | 0 | ≤ 0.0036 | ≤ 0.0026 | 0.0010 |
 
 These counts use the MKL `?gemv` and `?ormqr` summation orders of #795 (see
 Least-squares solves). Before them, 77 and 70 coefficients were bit-identical,
-and the largest excesses were 0.40 and 0.81 of `S`.
+and the largest excesses were 0.40 and 0.81 of `S`. #731's two-accumulator
+`zunmqr` made the original pipeline's last two coefficients bit-identical
+(136 and 2 before, at most 0.21 and 0.22 of `S` for the port and MATLAB): its
+complex CSS powers make those designs complex. The nonnegative control's one
+differing coefficient is a real design and did not change.
 
 `css-pipelines-reference.json` pins a fresh recording of the original pipeline
 and of a nonnegative control, `max(ApFrm, 0)` on the same vectorised apertures

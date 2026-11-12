@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { access, readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import test from 'node:test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 
@@ -131,6 +131,45 @@ test('composite references shared runtimes from the root store', async () => {
   assert.ok(workers >= 5, `expected at least five composite inference workers, found ${workers}`);
 });
 
+
+test('MindGrab binaries are shared per release while each app keeps its model modules', async () => {
+  const registry = await loadAppsRegistry();
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+  const families = manifest.families.filter(family => family.id.startsWith('mindgrab-wasm-'));
+  assert.ok(families.length >= 2, 'expected a shared MindGrab family per release');
+  const digest = async path => createHash('sha256').update(await readFile(path)).digest('hex');
+  for (const family of families) {
+    assert.equal(family.target, `mindgrab/${family.version}`, `${family.id}: one release per directory, so two releases never share a file name`);
+    assert.equal(family.match_by, 'sha256');
+    const release = join(repoRoot, 'node_modules/.pnpm', `@brainchop+mindgrab@${family.version}`, 'node_modules/@brainchop/mindgrab/dist');
+    for (const file of family.files) {
+      const shared = `_runtime/${family.target}/${file.name}`;
+      assert.equal(await digest(join(release, file.name)), file.sha256, `${family.id}/${file.name}: not the binary of @brainchop/mindgrab ${family.version}`);
+      assert.equal(await digest(join(dist, shared)), file.sha256, shared);
+      const consumers = file.consumers ?? family.consumers;
+      assert.ok(consumers?.length > 1, `${family.id}/${file.name}: a shared binary lists the apps that load it`);
+      const moduleName = file.name.replace(/\.wasm$/, '.js');
+      for (const id of consumers) {
+        const app = registry.apps.find(candidate => candidate.id === id);
+        assert.ok(app, `${family.id}: unknown consumer ${id}`);
+        const directory = join(dist, app.path);
+        const modules = [];
+        for (const path of await readdir(directory, { recursive: true })) {
+          if (path.endsWith('.wasm')) assert.notEqual(await digest(join(directory, path)), file.sha256, `${id}/${path}: a copy of ${shared} stayed in the app`);
+          if (path.split(sep).at(-1) === moduleName) modules.push(path);
+        }
+        assert.equal(modules.length, 1, `${id}: expected one staged ${moduleName}`);
+        const source = await readFile(join(directory, modules[0]), 'utf8');
+        const binaries = [...source.matchAll(/new URL\("([^"]+\.wasm)",import\.meta\.url\)/g)].map(match => match[1]);
+        assert.equal(binaries.length, 1, `${id}/${modules[0]}: one static binary URL`);
+        assert.equal(new URL(binaries[0], `https://site.invalid/${app.path}/${modules[0].split(sep).join('/')}`).pathname, `/${shared}`);
+        if (!/-(?:gpu|gl)\.wasm$/.test(file.name)) {
+          assert.match(source, new RegExp(`new Worker\\(new URL\\("${moduleName.replaceAll('.', '\\.')}",import\\.meta\\.url\\)`), `${id}/${modules[0]}: the pthread workers must start from the app's own module`);
+        }
+      }
+    }
+  }
+});
 
 test('threaded modules stay in app scope and shared ORT references name only the pinned binary', async () => {
   const registry = await loadAppsRegistry();
@@ -284,9 +323,13 @@ test('every content-matched family names the apps that share it', async () => {
   const known = new Set(registry.apps.map(app => app.id));
   for (const family of manifest.families.filter(family => family.deduplicate)) {
     // Matching by content skips unknown bytes; only a consumer list turns an app's move to another build into a failure.
-    if (family.match_by === 'sha256') assert.ok(family.consumers?.length > 1, `${family.id}: list the apps that share it under consumers`);
-    for (const id of family.consumers ?? []) assert.ok(known.has(id), `${family.id}: unknown consumer ${id}`);
-    assert.equal(new Set(family.consumers).size, family.consumers?.length ?? 0, `${family.id}: duplicate consumer`);
+    // A file used by fewer apps than its family lists its own consumers.
+    for (const file of family.files) {
+      const consumers = file.consumers ?? family.consumers;
+      if (family.match_by === 'sha256') assert.ok(consumers?.length > 1, `${family.id}/${file.name}: list the apps that share it under consumers`);
+      for (const id of consumers ?? []) assert.ok(known.has(id), `${family.id}/${file.name}: unknown consumer ${id}`);
+      assert.equal(new Set(consumers).size, consumers?.length ?? 0, `${family.id}/${file.name}: duplicate consumer`);
+    }
     const named = family.files.every(file => family.target.includes(family.version) || family.target.includes(file.sha256.slice(0, 8)));
     assert.ok(named, `${family.id}: the target must carry the version or a hash prefix, or a rebuild replaces bytes a cached worker still requests`);
   }

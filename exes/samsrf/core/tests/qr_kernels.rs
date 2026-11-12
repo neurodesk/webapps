@@ -131,7 +131,7 @@ fn complex_values(root: &Path, descriptor: &Value) -> Vec<Complex64> {
 
 /// MATLAB solves A \ B for all right-hand sides in one ?ormqr and ?trsm call.
 /// The port's multi-column solve must equal MATLAB's in every real design it
-/// reproduced when this gate was written: 204 single and 184 double of the
+/// reproduced when this gate was written: all 214 single and 184 of 190 double
 /// recorded 8-column solves (complex multi-column solves are not modelled).
 #[test]
 fn multiple_right_hand_sides_match_matlab_on_amd() {
@@ -175,7 +175,9 @@ fn multiple_right_hand_sides_match_matlab_on_amd() {
     }
     eprintln!("bit-identical 8-column solves: {exact:?}");
     assert_eq!(visited.len(), 404, "missing real multi-RHS designs");
-    assert_eq!(frozen.len(), 16);
+    assert_eq!(exact.get("single"), Some(&214), "bit-identical single 8-column solves");
+    assert_eq!(exact.get("double"), Some(&184), "bit-identical double 8-column solves");
+    assert_eq!(frozen.len(), 6);
     assert!(frozen.keys().all(|id| visited.contains(id)), "unvisited frozen design");
 }
 

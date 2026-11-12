@@ -8,6 +8,7 @@
 
 ### Patch Changes
 
+- The single-precision least-squares solve now reproduces MATLAB R2023b's MKL in three more operations: `snrm2` squares the rescaling ratio first, as the reference Fortran reads; complex `?unmqr` sums the real and imaginary halves of `v^H c` in separate accumulators; and `ctrsv` divides in double. On MATLAB's AMD reference hosts every single reverse-correlation profile and map value now equals MATLAB's bit for bit (82-96% of profile entries before), and 346 of the 348 recorded `[ones x] \ y` designs are bit-identical (300 before); the other two differ only in the sign of an imaginary zero MATLAB does not store. In double, the recorded original CSS pipeline's Beta and Baseline now equal MATLAB's bit for bit (two coefficients differed); the nonnegative control keeps its one differing coefficient. Single Gaussian fits stay refused, and the Intel AVX-512 host is not reproduced.
 - Improve the Benson reader with empirical single-precision sine and cosine kernels adapted from fdlibm. The reader now equals all recorded MATLAB templates, including held-out V1 seeds, and the raw-input hull/summary gates require exact template coordinates. Internal Gaussian CF gates also match the recorded AMD cases, but public single Gaussian CF and RC 2D fits remain refused: remaining whole-atlas coordinate and exponential discrepancies have no established end-to-end acceptance bound. Preserve the exhaustive trig recording, fixed-exception digest gates, and upstream notices.
 - Updated dependencies
   - @neurodesk/samsrf@0.6.20261112

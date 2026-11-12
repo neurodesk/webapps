@@ -403,6 +403,87 @@ test('a content-matched family fails when a declared consumer ships other bytes 
   await assemble();
 });
 
+test('MindGrab binaries are shared per file and per version while a scoped app keeps its pinned copy', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-mindgrab-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+  const bytes = {
+    older: Buffer.from('mindgrab cpu binary of the older release'),
+    newer: Buffer.from('mindgrab cpu binary of the newer release'),
+    mindmap: Buffer.from('mindmap cpu binary of the newer release'),
+    module: Buffer.from('export default "module the scoped family pins";'),
+  };
+  // `scoped` declares the family that pins the newer MindGrab binary; `older` stages the previous release under the same names.
+  const apps = [
+    { id: 'printer', path: 'printer', directory: 'brainchop/2', files: { 'brainchop-mindgrab.wasm': bytes.newer, 'brainchop-mindmap.wasm': bytes.mindmap }, app_scoped_runtime_families: [] },
+    { id: 'spectro', path: 'spectro', directory: 'brainchop/2', files: { 'brainchop-mindmap.wasm': bytes.mindmap }, app_scoped_runtime_families: [] },
+    { id: 'scoped', path: 'scoped', directory: 'mindgrab', files: { 'brainchop-mindgrab.wasm': bytes.newer }, app_scoped_runtime_families: ['mindgrab-2'] },
+    { id: 'older', path: 'older', directory: 'mindgrab', files: { 'brainchop-mindgrab.wasm': bytes.older }, app_scoped_runtime_families: [] },
+  ];
+  const glue = name => `function findWasmBinary(){return new URL("${name}",import.meta.url).href}`;
+  const reset = async (replace = {}) => {
+    await rm(siteDist, { recursive: true, force: true });
+    for (const app of apps) {
+      const directory = join(siteDist, app.path, app.directory);
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(siteDist, app.path, 'index.html'), '<html><head></head></html>');
+      for (const [name, body] of Object.entries(app.files)) {
+        await writeFile(join(directory, name), replace[app.id]?.[name] ?? body);
+        await writeFile(join(directory, name.replace('.wasm', '.js')), app.id === 'scoped' ? bytes.module : glue(name));
+      }
+    }
+  };
+  const writeManifest = mindmapConsumers => writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({
+    schema_version: 1,
+    families: [
+      {
+        id: 'mindgrab-2', version: '2', target: 'mindgrab/2',
+        files: [
+          { name: 'brainchop-mindgrab.js', source_app: 'scoped', source: 'mindgrab/brainchop-mindgrab.js', sha256: sha(bytes.module) },
+          { name: 'brainchop-mindgrab.wasm', source_app: 'scoped', source: 'mindgrab/brainchop-mindgrab.wasm', sha256: sha(bytes.newer) },
+        ],
+      },
+      {
+        id: 'mindgrab-wasm-2', version: '2', target: 'mindgrab/2', deduplicate: true, match_by: 'sha256',
+        files: [
+          { name: 'brainchop-mindgrab.wasm', source_app: 'printer', source: 'brainchop/2/brainchop-mindgrab.wasm', sha256: sha(bytes.newer), consumers: ['printer'] },
+          { name: 'brainchop-mindmap.wasm', source_app: 'printer', source: 'brainchop/2/brainchop-mindmap.wasm', sha256: sha(bytes.mindmap), consumers: mindmapConsumers },
+        ],
+      },
+      {
+        id: 'mindgrab-wasm-1', version: '1', target: 'mindgrab/1', deduplicate: true, match_by: 'sha256', consumers: ['older'],
+        files: [{ name: 'brainchop-mindgrab.wasm', source_app: 'older', source: 'mindgrab/brainchop-mindgrab.wasm', sha256: sha(bytes.older) }],
+      },
+    ],
+  }));
+  const assemble = () => assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+
+  await reset();
+  await writeManifest(['printer', 'spectro']);
+  await assemble();
+  assert.deepEqual(await readFile(join(siteDist, '_runtime/mindgrab/2/brainchop-mindgrab.wasm')), bytes.newer);
+  assert.deepEqual(await readFile(join(siteDist, '_runtime/mindgrab/2/brainchop-mindmap.wasm')), bytes.mindmap);
+  assert.deepEqual(await readFile(join(siteDist, '_runtime/mindgrab/1/brainchop-mindgrab.wasm')), bytes.older);
+  for (const [app, name, version] of [['printer', 'brainchop-mindgrab', 2], ['printer', 'brainchop-mindmap', 2], ['spectro', 'brainchop-mindmap', 2], ['older', 'brainchop-mindgrab', 1]]) {
+    const directory = join(siteDist, app, apps.find(candidate => candidate.id === app).directory);
+    await assert.rejects(access(join(directory, `${name}.wasm`)), { code: 'ENOENT' });
+    const up = app === 'older' ? '../..' : '../../..';
+    assert.equal(await readFile(join(directory, `${name}.js`), 'utf8'), glue(`${up}/_runtime/mindgrab/${version}/${name}.wasm`), `${app}: the model module stays in the app and names the shared binary of its own release`);
+  }
+  assert.deepEqual(await readFile(join(siteDist, 'scoped/mindgrab/brainchop-mindgrab.wasm')), bytes.newer, 'the scoped app keeps the binary its family pins');
+  assert.deepEqual(await readFile(join(siteDist, 'scoped/mindgrab/brainchop-mindgrab.js')), bytes.module);
+
+  await reset({ spectro: { 'brainchop-mindmap.wasm': Buffer.from('a MindGrab release no family registers') } });
+  await assert.rejects(assemble(), /^Error: spectro: declared consumer of runtime family mindgrab-wasm-2 ships no brainchop-mindmap\.wasm with sha256 /);
+
+  await reset();
+  await writeManifest(['printer']);
+  await assert.rejects(assemble(), /^Error: spectro: shares brainchop-mindmap\.wasm of runtime family mindgrab-wasm-2 but is not in its consumers/);
+});
+
 test('asyncify shares its binary while keeping each pthread module in its app scope', async t => {
   const root = await mkdtemp(join(tmpdir(), 'runtime-asyncify-copies-'));
   t.after(() => rm(root, { recursive: true, force: true }));
