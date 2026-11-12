@@ -1086,7 +1086,8 @@ results. A model is established only for the inputs below.
 | pRF profile `exp`, `.^`, `log`, `sin`, `cos` | Ported source | fdlibm 5.3 from https://netlib.org/fdlibm/: `e_log.c` 1.3, `k_sin.c` 1.3, `k_cos.c` 1.3, `s_sin.c` 1.3, `s_cos.c` 1.3, `e_rem_pio2.c` 1.4 (SCCS 95/01/18), ported. `libm` 0.2.16 `exp`/`pow` matched `e_exp.c` 1.6/`e_pow.c` 1.5 (SCCS 04/04/22) on every value tested | 35,200 probe values on both hosts |
 | Raw prediction | Empirical | the existing four-lane `mean` | every recorded raw prediction |
 | Negative-base power | Empirical | (-x)^e = (-x)^trunc(e) × exp(f log x)(cos fπ + i sin fπ), integer part by right-to-left binary exponentiation; complex products recover infinities as C99 Annex G (libgcc `__muldc3`) does; i·sqrt(x) for f = 1/2; e < 0 is Smith's reciprocal, a real division when the power is real, and a correctly signed real infinity when it underflowed to zero | all 13,776 probe values with their NaN/Inf masks |
-| `conv` | Empirical | fused multiply-adds; nonzero samples scattered in order when fewer than a quarter are nonzero; otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; all kept outputs of 188 probe convolutions |
+| `conv` | Empirical | the shorter vector slides over the longer one (a kernel at least as long as the course swaps roles). Kernels of fewer than 9 taps: one ascending accumulator, unfused for courses of at most 16 samples and fused otherwise. Fused multiply-adds; nonzero samples scattered in order when fewer than a quarter are nonzero; otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; the kept (first n) outputs of 288 + 1,308 probe convolutions |
+| `gampdf`, `a ≥ 1` | Empirical | Loader's saddle point as MATLAB evaluates it: `exp((-log(2πk)/2 - stirlerr(k)) - bd0(k, x/b)) / b` with `k = a - 1`; `stirlerr` from a table at half-integers up to 15, Cody's `gammaln` elsewhere below 15 and the Stirling series above; `bd0` by its series near the mode, `x log(x/np) + np - x` away from it; `exp(-x/b)/b` for `a = 1` | 9,760 probe densities per host; out of sample, all six TRs' HRF kernels of the first recording and the pipeline's recorded kernel |
 | `corr` | Empirical | `x'*y` reproduced by MKL 2021.3 `ddot`/`zdotc` kernels, norms by `dnrm2`/`dznrm2` (reference-BLAS scaled sums), `dot/‖x‖/‖y‖`, then values beyond 1 in magnitude divided by their magnitude | every recorded objective; AMD probe kernels |
 
 `css_diagnostics.rs` requires all 108 traces (54 double, 54 single; both seeds and
@@ -1107,19 +1108,40 @@ process with `MKL_CBWR=AUTO`. `matlab_numerics.rs` checks:
 - every negative-base power, including its NaN and infinite parts. The sign of
   a zero part differs in 2,440 of 27,552 parts; no rule tried (product order,
   FMA, true sign) reproduces MATLAB's zero signs;
-- every output SamSrf keeps (the first n) for 9-129-tap kernels on longer courses,
-  dense and sparse;
+- every output SamSrf keeps (the first n) for all 288 convolutions of 1-129-tap
+  kernels, dense and sparse, except the 6 sparse complex courses of 1,000 samples;
+- the HRF kernels (gamma densities, SPM canonical, de Haas) at six TRs, both hosts;
 - MKL dot products and norms on the AMD host;
 - the reproducibility results below, real and imaginary arrays.
 
-Excluded from the numerical gates: kernels shorter than 9 taps or longer than the
-course, which MATLAB computes in other orders; sparse complex courses of 1,000
-samples, where a few outputs differ by one ULP; and real `x'*y` of 8-19 elements,
-which takes another MATLAB path. The validated CSS fixtures avoid these cases,
-but the API accepts custom short kernels and long sparse complex courses.
-Their convolution parity is not established. The recorded
-`conv_complex_n1000_nnz244` case has eight differing outputs, beginning at
-sample 498, whose imaginary component is `0.2720763362077453` in the port and
+`numerics2-reference.json` pins a second recording from
+[run 43123132508](https://github.com/neurodesk/webapps/actions/runs/43123132508)
+(recorder commit `04cd0ef76793c17ca796cb54723ff1f14dc21d8e`) on an AMD EPYC 7763
+(`ubuntu-22.04`) and an Intel Xeon Platinum 8573C (`ubuntu-24.04`): `gampdf` on 36
+shape and scale pairs (shapes 0.7 to 100.1, scales 0.5 to 2) beside six
+candidate formulas MATLAB evaluated itself, and 1,318 convolutions: the first
+recording's 294 again, and 1,024 of 9-65-sample courses with 2-33-tap kernels
+and of sparse courses of 300-2,000 samples.
+`matlab_numerics2.rs` checks on both hosts:
+
+- every density with shape at least 1 (9,760), and `pdf('Gamma', ...)` equal to
+  `gampdf`. The 1,220 densities with shape below 1 are declined: there MATLAB's
+  formula is not reproduced, and the port keeps the closed form. No HRF uses
+  such a shape;
+- the kept outputs of every convolution (1,308) except 95 outputs in the 10
+  sparse complex courses longer than 800 samples, which differ by one ULP near multiples of 512 samples. That
+  path is not established; `matlab_numerics.rs` excludes complex sparse courses of
+  1,000 samples or more for the same reason.
+
+None of the six closed-form candidates matches `gampdf` anywhere it matters, and
+the identified formula was fitted on these probes. A bit-for-bit match on probes
+shows agreement, not MATLAB's internal code. The out-of-sample checks are the
+first recording's kernels at TR 0.5-3 (TR 2.5 and 3 were never used in fitting)
+and the recorded pipeline kernel, all equal bit for bit.
+
+Real `x'*y` of 8-19 elements takes another MATLAB path and is not gated. The
+recorded `conv_complex_n1000_nnz244` case has eight differing outputs, beginning
+at sample 498, whose imaginary component is `0.2720763362077453` in the port and
 `0.2720763362077454` in MATLAB.
 
 Reproducibility: repeated processes are bit-identical on each host. Across
@@ -1135,28 +1157,114 @@ recorded on AMD hosts (or with a verified compatible branch); an Intel recording
 is a different reference, not a port error. Every CSS trace and pin above is
 from AMD hosts.
 
+In the second recording, repeated processes are again bit-identical on each host
+(6,112 arrays; the pinned archive keeps the `ubuntu-22.04` repeat, the
+`ubuntu-24.04` repeat was compared in the run's artifact). Across hosts only the
+83 BLAS arrays differ; all 432 `gampdf` and 4,096 short-convolution arrays are
+identical. `MKL_CBWR=AUTO` gave the `COMPATIBLE` results on both hosts. The
+Intel host again reports `AVX512_E1` whatever was requested, the AMD host `auto`.
+
+### The double CSS pipeline
+
+With the port's own HRF, which now equals MATLAB's kernel bit for bit, three
+recorded 96-vertex double pipelines are checked at every vertex: `reference.json`'s
+`pipeline_double_css`, and the original-aperture and nonnegative-aperture
+pipelines of `css-pipelines-reference.json` on its AMD host (below). This is
+parity with that AMD reference only.
+
+- `compare-css.mjs` replays each one on the committed WebAssembly through the
+  public API (`createJob`, `runJob`, `hrf.deHaas`). It requires the port's de Haas
+  kernel to equal the recorded one, every fitted parameter, R², nR² and noise
+  ceiling to be bit-identical, and every map row to keep MATLAB's NaN, infinity
+  and zero masks. A second run with MATLAB's recorded kernel is the control that
+  isolates the objective from the HRF: the same gates apply, and both runs must
+  agree in every bit. The former differences at vertices 14, 15, 51 and 81 came
+  from the kernel and are gone.
+- `css_pipeline.rs` runs the same pipelines natively and applies the same map
+  and mask gates. It requires the WebAssembly's Beta and Baseline to be the
+  native bits for all three, and checks the coefficients with a stated policy
+  (`coefficient_gate`), not a derived error bound:
+  1. **Rank.** MATLAB's rule (`|R22| > max(m, n) eps |R11|`, ten times that for a
+     complex design, as `lstsq.rs` records) is evaluated exactly. Where it gives
+     rank 1, the other coefficient must be MATLAB's and the port's exact zero,
+     and the kept one is compared with the one-column solution. A MATLAB zero
+     without rank deficiency fails. When the exact ratio lies within a factor of
+     2 of the tolerance, rounding could flip MATLAB's decision. There the
+     recorded zero pattern is the rank evidence and the port must match it: 3
+     vertices of the original pipeline (both recordings), none of the
+     nonnegative one. Elsewhere the closest exact ratio is 125 times from the
+     tolerance (6.7 in the nonnegative pipeline).
+  2. **Error.** `|port - t|` and `|MATLAB - t|` are measured exactly, with `t`
+     the real part of the exact least-squares solution in rational arithmetic.
+  3. **Scale.** The port's error may exceed MATLAB's by at most `S`. `S` is the
+     first-order change of the coefficient when every column of the design and
+     `y` moves by one unit roundoff of its norm (Wedin's expansion; Higham,
+     *Accuracy and Stability of Numerical Algorithms*, 2nd ed., section 20.1).
+     It neglects higher-order terms and assumes columnwise normwise
+     perturbations, so it is a scale, not a bound on anything. The gate fails
+     unless u times the column-scaled condition number is at most 2^-20, which
+     every recorded vertex meets (at most 2.2e-16). `S` is computed in an
+     extended exponent range, so designs whose squares overflow or underflow
+     double keep finite scales. Below the double spacing nothing is widened:
+     there a single ULP fails.
+  4. **Mutation tests.** Synthetic problems check that the gate accepts exact
+     coefficients and one-ULP changes, and rejects large mutations of either
+     coefficient. They also check the rejection of a zero in the wrong place,
+     a zero without rank deficiency, an ill-conditioned design and a mismatch
+     with recorded rank evidence. Overflowing and subnormal designs are
+     covered.
+
+| Pipeline | Bit-identical | Differing | Basic zeros | Rank from recording | Port error / `S` | MATLAB error / `S` | Largest excess / `S` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `reference.json` original | 136 | 2 | 8 | 3 | ≤ 0.21 | ≤ 0.22 | ≤ 0 |
+| AMD recording, original | 136 | 2 | 8 | 3 | ≤ 0.21 | ≤ 0.22 | ≤ 0 |
+| AMD recording, nonnegative | 125 | 1 | 8 | 0 | ≤ 0.0036 | ≤ 0.0026 | 0.0010 |
+
+These counts use the MKL `?gemv` and `?ormqr` summation orders of #795 (see
+Least-squares solves). Before them, 77 and 70 coefficients were bit-identical,
+and the largest excesses were 0.40 and 0.81 of `S`.
+
+`css-pipelines-reference.json` pins a fresh recording of the original pipeline
+and of a nonnegative control, `max(ApFrm, 0)` on the same vectorised apertures
+(`record_css_pipelines.m`,
+[run 43127425289](https://github.com/neurodesk/webapps/actions/runs/43127425289) at
+recorder commit `7d2188ed226046a8cb19a770c08e43be0cb19321`, SamSrf `41ed1e96`).
+Each host ran it twice in new MATLAB processes. `css_pipeline.rs` checks this
+provenance from each process's own `environment.json`: run, recorder mode,
+SamSrf commit, requested `MKL_CBWR`, the BLAS line and the CPU. It also checks
+that every repeat array equals its first run.
+
+| Host | CPU | Requested | Observed | Result |
+| --- | --- | --- | --- | --- |
+| `ubuntu-24.04` | AMD EPYC 9V74 | `MKL_CBWR=COMPATIBLE`, one MKL and OpenMP thread | CNR branch `auto`, one computational thread; MATLAB's process shows `MKL_NUM_THREADS` empty | repeat identical; the original pipeline equals the old pin (from an EPYC 7763) in every course, noise ceiling, map and HRF bit |
+| `ubuntu-22.04` | Intel Xeon Platinum 8573C | the same | CNR branch `AVX512_E1`, one computational thread | repeat identical; 23,017 of 24,000 preprocessed samples, 82 noise ceilings and 336 of 864 map values (by up to 9.1e-5) differ from the AMD host, from MKL's preprocessing onward |
+
+The effective CNR branch and MKL's dynamic threading cannot be verified from
+inside MATLAB (`unverifiedControls`). So the reference is the AMD host, and the
+Intel recording is kept as evidence of the branch difference; nothing here
+asserts parity with it.
+
 What remains:
 
-- **HRF construction.** `gammaln` is Cody's algorithm, with log((x-1)!) for whole
-  numbers, which fits all 15 probe values. MATLAB's `gampdf` formula is not
-  identified: neither the closed forms nor Loader's saddle point reproduce the
-  recorded densities. The port's de Haas kernel differs by a few ULP, which
-  moves the weak fits at zero-based vertices 51 and 81 (x0 by up to 7.1e-5). With
-  MATLAB's kernel these vertices match exactly.
-- **Beta and Baseline** come from the column-pivoted QR solve (#731, #773). In the
-  recorded 96-vertex double pipeline with MATLAB's HRF kernel, Beta differs at 19
-  vertices by at most 2.4e-16 relative and Baseline at 42 vertices by at most
-  1.1e-17 absolute (1.3e-14 relative). With the port's own HRF they differ at 65
-  vertices (Beta up to 7.8e-5 relative, following the fits at vertices 51 and 81;
-  elsewhere a few ULP), as do R² and nR² at 41 vertices by at most 1.3e-15.
-  `compare-css.mjs` reports these differences and does not gate them.
-- Zero signs and the uncovered convolution cases above.
+- **Beta and Baseline** are not all bit-identical: 3 of the 264 kept
+  coefficients of the original and nonnegative pipelines (the `reference.json`
+  and recorded original pipelines are the same data) still round differently from MKL's QR (#731). The
+  policy above compares their exact errors with MATLAB's at a first-order scale.
+  It does not bound them.
+- `gampdf` with shape below 1, the zero signs, sparse complex convolutions longer
+  than 800 samples, and real `x'*y` of 8-19 elements.
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics" packages/samsrf/validation/matlab/numerics-reference.json
 SAMSRF_MATLAB_NUMERICS_DIR="$TMPDIR/samsrf-numerics" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_numerics
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics2" packages/samsrf/validation/matlab/numerics2-reference.json
+SAMSRF_MATLAB_NUMERICS2_DIR="$TMPDIR/samsrf-numerics2" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_numerics2
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-css-pipelines" packages/samsrf/validation/matlab/css-pipelines-reference.json
+node packages/samsrf/validation/matlab/compare-css.mjs "$TMPDIR/samsrf-source-reference" "$TMPDIR/samsrf-css.json" "$TMPDIR/samsrf-css-pipelines"
+SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-source-reference" SAMSRF_CSS_WASM_REPORT="$TMPDIR/samsrf-css.json" SAMSRF_MATLAB_CSS_PIPELINES_DIR="$TMPDIR/samsrf-css-pipelines" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_pipeline
 ```
 
-`record_matlab=true, numerics_only=true` repeats the recording. Octave can run
+`record_matlab=true, numerics_only=true` repeats the probe recording and
+`record_matlab=true, css_pipelines_only=true` the pipelines. Octave can run
 the recorder's plumbing with a stubbed environment; its results are never
 references.

@@ -8,6 +8,8 @@
 
 ### Patch Changes
 
+- Updated dependencies [5bb36bb]
+  - @neurodesk/samsrf@0.6.20261112
 - Updated dependencies [4312c49]
   - @neurodesk/samsrf@0.6.20261112
 

@@ -1,10 +1,11 @@
 function record_numerics_probes(source, output, sections, branch)
 % Record MATLAB's results for the operations inside SamSrf's double CSS
 % objective and HRF, on generated inputs, so each can be compared alone.
-% sections: cell array of 'elementary','power','conv','hrf','blas' (default all).
+% sections: cell array of 'elementary','power','conv','hrf','blas','gampdf',
+% 'conv-short' (default all).
 % branch: the MKL_CBWR value requested before MATLAB started (default COMPATIBLE).
 if nargin < 3 || isempty(sections)
-    sections = {'elementary','power','conv','hrf','blas'};
+    sections = {'elementary','power','conv','hrf','blas','gampdf','conv-short'};
 end
 if nargin < 4
     branch = 'COMPATIBLE';
@@ -101,6 +102,58 @@ if any(strcmp(sections,'hrf'))
             'canonicalSum',array_file([id '_canonical_sum'],sum(canonical)), ...
             'haas',array_file([id '_haas'],haas), ...
             'samsrfHrf',array_file([id '_samsrf_hrf'],samsrf_hrf(tr))); %#ok<AGROW>
+    end
+end
+if any(strcmp(sections,'gampdf'))
+    % gampdf beside candidate formulas evaluated by MATLAB itself, so a
+    % formula is identified by bitwise equality rather than by a port.
+    rng(734,'twister');
+    shapes = [6 16 5.5278 16.8621 2.5 1 0.7 30.3 100.1];
+    scales = [1 1.0205 0.5 2];
+    x = unique([linspace(0,32,33) linspace(0,32,65) linspace(0,32,22) 40*rand(1,200) 1e-3*rand(1,20)]);
+    for a = shapes
+        for b = scales
+            id = strrep(sprintf('gampdf_a%g_b%g',a,b),'.','p');
+            z = x ./ b;
+            cases{end+1} = struct('id',id,'kind','gampdf','a',a,'b',b, ...
+                'x',array_file([id '_x'],x), ...
+                'gampdf',array_file([id '_gampdf'],gampdf(x,a,b)), ...
+                'pdf',array_file([id '_pdf'],pdf('Gamma',x,a,b)), ...
+                'logz',array_file([id '_logz'],log(z)), ...
+                'gammaln',array_file([id '_gammaln'],gammaln(a)), ...
+                'gamma',array_file([id '_gamma'],gamma(a)), ...
+                'c1',array_file([id '_c1'],exp((a-1).*log(z) - z - gammaln(a)) ./ b), ...
+                'c2',array_file([id '_c2'],exp(-gammaln(a) + (a-1).*log(z) - z) ./ b), ...
+                'c3',array_file([id '_c3'],z.^(a-1) .* exp(-z) ./ gamma(a) ./ b), ...
+                'c4',array_file([id '_c4'],exp((a-1).*log(x) - x./b - gammaln(a) - a.*log(b))), ...
+                'c5',array_file([id '_c5'],exp(-gammaln(a) - z + (a-1).*log(z)) ./ b), ...
+                'c6',array_file([id '_c6'],exp((a-1).*log(z) - z - gammaln(a) - log(b)))); %#ok<AGROW>
+        end
+    end
+end
+if any(strcmp(sections,'conv-short'))
+    % Short courses and kernels around the kernel switches.
+    rng(735,'twister');
+    for n = [9:40 48 63 64 65]
+        for h = [2:12 16 24 33]
+            kernel = randn(h,1);
+            y = randn(n,1);
+            cases{end+1} = conv_case(sprintf('convs_real_n%d_h%d',n,h), y, kernel); %#ok<AGROW>
+            z = randn(n,1) + 1i*randn(n,1);
+            cases{end+1} = conv_case(sprintf('convs_complex_n%d_h%d',n,h), z, kernel); %#ok<AGROW>
+        end
+    end
+    % Sparse complex courses of several lengths.
+    for n = [300 500 600 800 1000 1032 1200 2000]
+        kernel = randn(33,1);
+        nonzero = floor(n/5);
+        z = complex(zeros(n,1));
+        where = randperm(n,nonzero);
+        z(where) = randn(nonzero,1) + 1i*randn(nonzero,1);
+        cases{end+1} = conv_case(sprintf('convs_sparse_complex_n%d',n), z, kernel); %#ok<AGROW>
+        y = zeros(n,1);
+        y(where) = randn(nonzero,1);
+        cases{end+1} = conv_case(sprintf('convs_sparse_real_n%d',n), y, kernel); %#ok<AGROW>
     end
 end
 if any(strcmp(sections,'blas'))
