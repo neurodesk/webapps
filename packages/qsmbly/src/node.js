@@ -159,16 +159,20 @@ export function qsmxtVersion(executable = qsmxtExecutable()) {
   const result = spawnSync(executable, ['--version'], { encoding: 'utf8' });
   if (result.error) throw new Error(`Cannot start QSMxT at ${executable}: ${result.error.message}`);
   if (result.status !== 0) throw new Error(`QSMxT --version failed: ${result.stderr}`);
-  const version = /^qsmxt (\S+)$/m.exec(result.stdout)?.[1];
-  const core = /^(?:qsm-core|QSM\.rs \(qsm-core\)): (\S+)/m.exec(result.stdout)?.[1];
-  const deepLearning = /^deep-learning models: (\S+)$/m.exec(result.stdout)?.[1];
-  return { version, qsmCore: core, deepLearning: deepLearning === 'enabled' };
+  return parseQsmxtVersion(result.stdout);
+}
+
+export function parseQsmxtVersion(output) {
+  const banner = /^qsmxt (\S+)(?: \((?:main|rev) ([0-9a-f]{40})\))?$/m.exec(output);
+  const core = /^(?:qsm-core|QSM\.rs \(qsm-core\)): (\S+)/m.exec(output)?.[1];
+  const deepLearning = /^deep-learning models: (\S+)$/m.exec(output)?.[1];
+  return { version: banner?.[1], sourceCommit: banner?.[2], qsmCore: core, deepLearning: deepLearning === 'enabled' };
 }
 
 export async function checkInstallation() {
   const executable = qsmxtExecutable();
   const native = qsmxtVersion(executable);
-  if (native.version !== qsmxt.version || native.qsmCore !== qsmxt.qsmCore || !native.deepLearning) {
+  if (native.version !== qsmxt.version || native.qsmCore !== qsmxt.qsmCore || native.sourceCommit !== qsmxt.build.commit || !native.deepLearning) {
     throw new Error(`Expected QSMxT ${qsmxt.version} with qsm-core ${qsmxt.qsmCore} and deep learning, found ${JSON.stringify(native)}.`);
   }
   const { search, cacheDir } = modelDirectories();
