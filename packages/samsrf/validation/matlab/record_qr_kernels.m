@@ -274,9 +274,15 @@ end
 end
 
 function descriptor = int_file(name,value)
-assert(all(value(:) == round(value(:))) && all(abs(value(:)) < 32768), 'Probe results are small integers');
-descriptor = struct('file',[name '.i16'],'shape',size(value),'class','int16');
-write_array(descriptor.file,value,'int16');
+% Small integer results are the FPRev counts. Anything else is kept as is,
+% so the analysis can see a probe that did not behave as a tree.
+if all(value(:) == round(value(:))) && all(abs(value(:)) < 32768)
+    descriptor = struct('file',[name '.i16'],'shape',size(value),'class','int16');
+    write_array(descriptor.file,value,'int16');
+else
+    descriptor = struct('file',[name '.f64'],'shape',size(value),'class','double');
+    write_array(descriptor.file,value,'double');
+end
 end
 
 function write_array(path,value,precision)

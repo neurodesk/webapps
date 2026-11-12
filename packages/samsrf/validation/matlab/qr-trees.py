@@ -16,9 +16,15 @@ import struct
 import sys
 
 
-def read_probe(root, descriptor):
+def read_values(root, descriptor):
     data = (root / descriptor['file']).read_bytes()
-    values = struct.unpack(f'<{len(data) // 2}h', data)
+    if descriptor.get('class') == 'double':
+        return struct.unpack(f'<{len(data) // 8}d', data)
+    return struct.unpack(f'<{len(data) // 2}h', data)
+
+
+def read_probe(root, descriptor):
+    values = read_values(root, descriptor)
     m = descriptor['shape'][0]
     return m, values  # column-major m x m
 
@@ -87,8 +93,22 @@ def main():
             # Not a single binary tree of exact additions: e.g. the -M term
             # never meets +M before a lane is rounded, or fused operations.
             tree = f'not a tree: {error}'
-        rows.append({'id': probe['id'], 'class': probe['class'], 'part': probe['part'], 'length': m,
+        rows.append({'id': probe['id'], 'kernel': 'gemv', 'class': probe['class'], 'part': probe['part'], 'length': m,
                      'alignA': probe['alignA'], 'alignX': probe['alignX'], 'tree': tree})
+    ormqr = metadata.get('ormqr') or []
+    ormqr = ormqr if isinstance(ormqr, list) else [ormqr]
+    for probe in ormqr:
+        values = read_values(root, probe['results'])
+        m = probe['length']
+        recorded = probe['recordedColumns'] if isinstance(probe['recordedColumns'], list) else [probe['recordedColumns']]
+        for slot, column in enumerate(recorded):
+            plane = values[slot * m * m:(slot + 1) * m * m]
+            try:
+                tree = render(canonical(build(list(range(m)), subtree_sizes(m, plane))))
+            except ValueError as error:
+                tree = f'not a tree: {error}'
+            rows.append({'id': f"{probe['id']}_c{column}", 'kernel': 'ormqr', 'class': probe['class'], 'part': probe['part'],
+                         'length': m, 'columns': probe['columns'], 'column': column, 'tree': tree})
     Path(sys.argv[2]).write_text(json.dumps({'cpu': next((line.split(':', 1)[1].strip() for line in metadata['environment']['cpu'].splitlines() if line.startswith('Model name')), None),
                                              'blas': metadata['environment']['blas'], 'trees': rows}, indent=1) + '\n')
     for row in rows[:6]:
