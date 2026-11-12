@@ -14,8 +14,9 @@ const SHARED = 'packages/shared';
 
 // A repository with one shared package and the users `files` describes; every
 // user gets a graph edge to the package, as a workspace dependency gives it.
-async function fixture(files, users, listed = []) {
+async function fixture(t, files, users, listed = []) {
   const root = await mkdtemp(join(tmpdir(), 'shared-module-users-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
   const all = {
     [`${SHARED}/package.json`]: JSON.stringify({
       name: '@scope/shared',
@@ -40,11 +41,11 @@ async function fixture(files, users, listed = []) {
   }
   const graph = { edges: new Map([[SHARED, new Set()], ...users.map((user) => [user, new Set([SHARED])])]) };
   const usersOf = sharedModuleUsers(root, graph, SHARED, listed);
-  return { usersOf: (path) => usersOf(`${SHARED}/${path}`), [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }) };
+  return { usersOf: (path) => usersOf(`${SHARED}/${path}`) };
 }
 
-test('a module reaches the users whose imports load it, through the package and through each other', async () => {
-  await using repo = await fixture({
+test('a module reaches the users whose imports load it, through the package and through each other', async (t) => {
+  const repo = await fixture(t, {
     'apps/stack/package.json': JSON.stringify({ dependencies: { '@scope/shared': 'workspace:*' } }),
     'apps/stack/src/main.js': "import { read } from '@scope/shared/tiff';\n",
     'apps/spectrum/package.json': JSON.stringify({ dependencies: { '@scope/shared': 'workspace:*' } }),
@@ -62,14 +63,14 @@ test('a module reaches the users whose imports load it, through the package and 
   assert.deepEqual(repo.usersOf('src/extra/one.js'), []);
 });
 
-test('declarations, styles and files outside the sources stay with the whole package', async () => {
-  await using repo = await fixture({ 'apps/stack/src/main.ts': "import { read } from '@scope/shared/tiff';\n" }, ['apps/stack']);
+test('declarations, styles and files outside the sources stay with the whole package', async (t) => {
+  const repo = await fixture(t, { 'apps/stack/src/main.ts': "import { read } from '@scope/shared/tiff';\n" }, ['apps/stack']);
   // TypeScript reaches a declaration through other declarations, not through the module it types.
   for (const path of ['src/tiff-api.d.ts', 'src/strips.d.ts', 'src/base.css', 'package.json', 'test/fixtures/a.tif', 'scripts/build.mjs']) assert.equal(repo.usersOf(path), null, path);
 });
 
-test('a deleted module still reaches the users that import it', async () => {
-  await using repo = await fixture({
+test('a deleted module still reaches the users that import it', async (t) => {
+  const repo = await fixture(t, {
     [`${SHARED}/src/tiff.js`]: "import { strips } from './gone.js';\n",
     'apps/stack/src/main.js': "import '@scope/shared/tiff';\n",
     'apps/other/src/main.js': "import '@scope/shared/fft';\n",
@@ -77,7 +78,7 @@ test('a deleted module still reaches the users that import it', async () => {
   assert.deepEqual(repo.usersOf('src/gone.js'), ['apps/stack']);
 });
 
-test('a reference that names no single file loads the directory it names, or the whole package', async () => {
+test('a reference that names no single file loads the directory it names, or the whole package', async (t) => {
   const cases = {
     // Computed specifiers and import-map prefixes.
     'apps/computed/src/main.js': 'await import(`@scope/shared/${name}`);\n',
@@ -89,7 +90,7 @@ test('a reference that names no single file loads the directory it names, or the
     'packages/sibling/build.mjs': "cp(new URL('../shared/', import.meta.url), out);\n",
   };
   const users = Object.keys(cases).map((path) => path.split('/').slice(0, 2).join('/'));
-  await using repo = await fixture({
+  const repo = await fixture(t, {
     ...cases,
     'apps/directory/build.mjs': "cp(join(repo, 'packages/shared/src/extra'), out);\n",
     'apps/fixtures/e2e/spec.js': "const dir = '../../../packages/shared/test/fixtures/';\n",
@@ -102,22 +103,22 @@ test('a reference that names no single file loads the directory it names, or the
   assert.deepEqual(repo.usersOf('src/fft.js'), [...users, 'apps/prose']);
 });
 
-test('a script that reads a listed set of modules loads those, until its text stops matching the list', async () => {
+test('a script that reads a listed set of modules loads those, until its text stops matching the list', async (t) => {
   const script = "for (const name of LIST) cp(join(repo, 'packages/shared/src', name), out);\n";
   const listed = [{ file: 'scripts/copy.mjs', expression: "join(repo, 'packages/shared/src', name)", modules: ['strips.js'] }];
   {
-    await using repo = await fixture({ 'scripts/copy.mjs': script }, ['scripts/copy.mjs'], listed);
+    const repo = await fixture(t, { 'scripts/copy.mjs': script }, ['scripts/copy.mjs'], listed);
     assert.deepEqual(repo.usersOf('src/strips.js'), ['scripts/copy.mjs']);
     assert.deepEqual(repo.usersOf('src/fft.js'), []);
   }
   {
     // A second reference the list does not cover.
-    await using repo = await fixture({ 'scripts/copy.mjs': `${script}cp(join(repo, 'packages/shared/src'), other);\n` }, ['scripts/copy.mjs'], listed);
+    const repo = await fixture(t, { 'scripts/copy.mjs': `${script}cp(join(repo, 'packages/shared/src'), other);\n` }, ['scripts/copy.mjs'], listed);
     assert.deepEqual(repo.usersOf('src/fft.js'), ['scripts/copy.mjs']);
   }
   {
     // The expression was rewritten: the list no longer describes the script.
-    await using repo = await fixture({ 'scripts/copy.mjs': "cp(join(repo, 'packages/shared/src', file), out);\n" }, ['scripts/copy.mjs'], listed);
+    const repo = await fixture(t, { 'scripts/copy.mjs': "cp(join(repo, 'packages/shared/src', file), out);\n" }, ['scripts/copy.mjs'], listed);
     assert.deepEqual(repo.usersOf('src/fft.js'), ['scripts/copy.mjs']);
   }
 });
