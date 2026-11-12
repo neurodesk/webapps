@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { validateKernelRecording } from './validate-kernel-recording.mjs';
 
 const read = (root) => JSON.parse(fs.readFileSync(path.join(root, 'kernels.json'), 'utf8'));
 
@@ -24,6 +25,23 @@ const f32 = Math.fround;
 const fromBits = (bits) => new Float32Array(new Uint32Array([bits]).buffer)[0];
 const bitsOf = (value) => new Uint32Array(new Float32Array([value]).buffer)[0];
 
+/*
+ * Float algorithm translated from FreeBSD release/5.0.0, lib/msun/src/e_expf.c:
+ * https://github.com/freebsd/freebsd-src/blob/47227ef0ef663b7abb81ab5a60a450da9a93d24b/lib/msun/src/e_expf.c
+ * SHA-256: 816fb76717184af193fc8506a96a3f927b4bb4e9f9c05647f49f1464b927a359
+ * e_expf.c -- float version of e_exp.c.
+ * Conversion to float by Ian Lance Taylor, Cygnus Support, ian@cygnus.com.
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunPro, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
+ * This translation changes the ln2 split and overflow/underflow thresholds.
+ * It preserves this historical degree-five rational, unlike later expf revisions.
+ */
 // The candidate for MATLAB's single exp: Sun fdlibm's e_expf.c (degree-5
 // rational, k = trunc(x / ln2 +- 1/2), every operation in single, no FMA), with
 // ln2 split as hi = 0x3f317000 and lo = single(ln2 - hi), and 0 below ln(2^-149).
@@ -124,8 +142,83 @@ function modelEvidence(root, item, kernel) {
   };
 }
 
+// R2023b single sum: sequential below 44 elements, otherwise four lanes.
+// This independently replays the recorded objective, including the unsmoothed
+// row/column implicit expansion. It does not use the candidate exp kernel.
+function sumSingle(values) {
+  const lanes = [0, 0, 0, 0];
+  for (const [i, value] of values.entries()) {
+    const lane = values.length < 44 ? 0 : i % 4;
+    lanes[lane] = f32(lanes[lane] + value);
+  }
+  return lanes.reduce((sum, value) => f32(sum + value), 0);
+}
+
+export function validateGaussianEvidence(root, item) {
+  const data = Object.fromEntries(Object.entries(item).filter(([, value]) => value?.file)
+    .map(([key, descriptor]) => [key, array(root, descriptor)]));
+  const columns = item.profiles.shape[1];
+  const width = item.profiles.shape[0];
+  const rows = item.models.shape[0];
+  const profiles = [];
+  const fitted = [];
+  const variance = [];
+  const selected = new Set();
+  const starts = Array.from({ length: columns }, () => new Set());
+  for (let v = 0; v < columns; v += 1) {
+    const profile = Array.from({ length: width }, (_, j) => at(data.profiles, item.profiles.shape, j, v));
+    const peak = Math.max(...profile.filter(value => !Number.isNaN(value)));
+    fitted[v] = peak > 0;
+    const values = profile.map(value => Math.max(0, f32(value - f32(peak / 2))));
+    profiles.push(values);
+    const mean = f32(sumSingle(values) / width);
+    variance.push(sumSingle(values.map(value => f32(f32(value - mean) ** 2))));
+    const r2 = data.replicaR2[v];
+    assert.equal(Number.isFinite(r2), fitted[v], `${item.id}: fitted mask at ${v + 1}`);
+    for (let row = 0; row < 6; row += 1) {
+      const replica = row === 0 ? r2 : at(data.replicaParameters, item.replicaParameters.shape, row - 1, v);
+      const saved = at(data.savedMaps, item.savedMaps.shape, row, v);
+      if (fitted[v]) {
+        assert.ok(Number.isFinite(replica), `${item.id}: nonfinite fitted result`);
+        assert.equal(saved, f32(replica), `${item.id}: replica/export at ${v + 1}, row ${row}`);
+      } else {
+        assert.ok(Number.isNaN(replica), `${item.id}: unfitted replica must be missing`);
+        assert.equal(saved, 0, `${item.id}: unfitted export must be zero`);
+      }
+    }
+  }
+  for (let i = 0; i < rows; i += 1) {
+    const v = data.evaluationVertex[i] - 1;
+    assert.ok(Number.isInteger(v) && v >= 0 && v < columns && fitted[v], `${item.id}: evaluation vertex`);
+    const start = data.evaluationStart[i];
+    assert.ok([0.01, 0.1, 1, 10, 100].includes(start), `${item.id}: evaluation start`);
+    starts[v].add(start);
+    const model = Array.from({ length: width }, (_, j) => at(data.models, item.models.shape, i, j));
+    // MATLAB Ds(:) traverses model rows within each observation column.
+    const squares = item.smoothing
+      ? model.map((value, j) => f32(f32(profiles[v][j] - value) ** 2))
+      : profiles[v].flatMap(observation => model.map(value => f32(f32(observation - value) ** 2)));
+    const objective = sumSingle(squares);
+    assert.equal(data.objectives[i], objective, `${item.id}: objective at evaluation ${i + 1}`);
+    const isSelected = Array.from({ length: 5 }, (_, j) => j).every(j =>
+      at(data.evaluations, item.evaluations.shape, i, j) === at(data.replicaParameters, item.replicaParameters.shape, j, v));
+    if (isSelected) {
+      const r2 = f32(1 - f32(objective / variance[v]));
+      assert.equal(data.replicaR2[v], r2, `${item.id}: selected objective/R^2 at ${v + 1}`);
+      selected.add(v);
+    }
+  }
+  for (let v = 0; v < columns; v += 1) {
+    if (!fitted[v]) continue;
+    assert.equal(starts[v].size, 5, `${item.id}: missing optimizer start at ${v + 1}`);
+    assert.ok(selected.has(v), `${item.id}: fitted parameters absent from trace at ${v + 1}`);
+  }
+  return { fitted: fitted.filter(Boolean).length, objectives: rows };
+}
+
 function fitEvidence(root, item) {
-  return { correctlyRounded: modelEvidence(root, item, roundedExp), fdlibm: modelEvidence(root, item, fdlibmExpf) };
+  const results = validateGaussianEvidence(root, item);
+  return { results, correctlyRounded: modelEvidence(root, item, roundedExp), fdlibm: modelEvidence(root, item, fdlibmExpf) };
 }
 
 function mapSpread(a, b, itemA, itemB) {
@@ -149,11 +242,11 @@ function mapSpread(a, b, itemA, itemB) {
 }
 
 export function analyseSingleKernels(a, b) {
+  const recordingA = validateKernelRecording(a);
+  const recordingB = validateKernelRecording(b);
   const expA = expEvidence(a);
   const expB = expEvidence(b);
   const hostsEqual = expA.whole.every((value, index) => Object.is(value, expB.whole[index]));
-  const recordingA = read(a);
-  const recordingB = read(b);
   const fits = {};
   for (const item of recordingA.cases.filter((entry) => entry.kind === 'gaussian')) {
     const other = recordingB.cases.find((entry) => entry.id === item.id);
@@ -170,7 +263,7 @@ export function analyseSingleKernels(a, b) {
       blas: environment.observed.blas,
       run: environment.githubRun,
     })),
-    exp: { ...expA, hostsEqual },
+    exp: { ...expA, callShapesEqual: expA.callShapesEqual && expB.callShapesEqual, hostsEqual },
     fits,
   };
 }
@@ -181,9 +274,19 @@ export function checkSingleKernels(evidence) {
   assert.equal(evidence.exp.belowCorrectlyRounded + evidence.exp.aboveCorrectlyRounded, 47147, 'Values where MATLAB single exp is not correctly rounded');
   assert.equal(evidence.exp.fdlibmEqual, 711289, 'Values the fdlibm candidate reproduces');
   for (const [id, fit] of Object.entries(evidence.fits)) {
+    const expectedFitted = id.includes('_lh_') ? (id.endsWith('0') ? 19 : 18) : (id.endsWith('0') ? 21 : 20);
     for (const host of fit.exp) {
+      assert.equal(host.results.fitted, expectedFitted, `${id}: fitted vertices`);
       assert.ok(host.correctlyRounded.verticesDiffering === host.correctlyRounded.vertices, `${id}: correctly rounded exp reproduces a whole vertex`);
       assert.ok(host.fdlibm.valuesDiffering > 0 && host.fdlibm.valuesDiffering <= 8, `${id}: fdlibm candidate differences ${host.fdlibm.valuesDiffering}`);
+    }
+    // Rounded-up ceilings for the documented spread of this pinned evidence,
+    // not acceptance tolerances for a port or for another MATLAB recording.
+    for (const [name, ceiling] of Object.entries({ Sigma: 388, Beta: 3211, x0: 29, 'R^2': 0.31 })) {
+      assert.ok(Number.isFinite(fit.hosts[name].maxRelative) && fit.hosts[name].maxRelative <= ceiling, `${id}: ${name} host spread`);
+    }
+    for (const name of ['Fwhm', 'Vx', 'Noise Ceiling']) {
+      if (fit.hosts[name]) assert.equal(fit.hosts[name].unequal, 0, `${id}: ${name} differs between hosts`);
     }
     const moved = Object.entries(fit.hosts).filter(([name, spread]) => !['R^2', 'Fwhm', 'Vx', 'Noise Ceiling'].includes(name) && spread.unequal > 0);
     assert.ok(moved.length > 0, `${id}: MATLAB's fitted parameters agree between hosts`);

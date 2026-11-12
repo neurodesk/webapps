@@ -313,12 +313,24 @@ Platinum 8573C (CNR `AVX512_E1`). `single-kernels-reference.json` pins it (HF
 commit `b8da2fe7`), and `analyse-single-kernels.mjs --check` holds the
 recording to the following findings in `samsrf-native`:
 
+Completeness checks require every named array with its recorded class and shape;
+same-host repeats also require identical case metadata. Analysis recomputes every
+objective from the logged model and profile, including the unsmoothed 81-element
+row/column expansion. It checks the fitted mask, all five optimizer starts, the
+selected parameters and R² against their trace, and the single-precision exports
+against the replica. Mutation tests reject missing arrays, changed dimensions,
+corrupted objectives and fitted maps, and inconsistent fit masks. Rounded-up
+cross-host spread ceilings preserve the numerical claims below for this pin;
+they are not tolerances for the port or another MATLAB recording.
+
 - MATLAB's single `exp` is the same on both hosts and for every call shape,
   but it is not correctly rounded: 24,445 results are 1 ulp below
   `fround(exp(x))` and 22,702 are 1 ulp above. Rust `libm` `expf` matches
   706,598 of 711,307, glibc's `expf` (with or without FMA) 664,166 and
   correctly rounded `exp` 664,160.
-- Sun fdlibm's `e_expf.c` structure matches 711,289. That structure is the
+- Sun fdlibm's historical degree-five `e_expf.c` structure matches 711,289.
+  The translation identifies the immutable FreeBSD 5.0 source revision and hash
+  and retains the Sun permission notice in `analyse-single-kernels.mjs`. That structure is the
   degree-5 rational, k = trunc(x/ln2 ± 1/2), every operation in single and no
   FMA. It needs ln2 split as hi = `0x3f317000` and lo = single(ln2 − hi), and
   0 below ln(2^-149). The error has no table period, only the distance from a
