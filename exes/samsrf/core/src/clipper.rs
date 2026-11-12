@@ -309,6 +309,14 @@ struct Clipper {
 /// sweep with nothing to process gives no paths, as `SimplifyPolygons` does;
 /// any other reason `Execute` returns false is an error.
 pub(crate) fn simplify_even_odd(paths: &[Vec<Point>]) -> Result<Vec<Vec<Point>>, Failed> {
+    simplify_even_odd_traced(paths).map(|(paths, _)| paths)
+}
+
+/// Output paths with each vertex's creation order.
+pub(crate) type Traced = (Vec<Vec<Point>>, Vec<Vec<usize>>);
+
+/// `simplify_even_odd` with each output vertex's creation order (diagnostics).
+pub(crate) fn simplify_even_odd_traced(paths: &[Vec<Point>]) -> Result<Traced, Failed> {
     let mut c = Clipper {
         edges: Vec::new(),
         minima: Vec::new(),
@@ -327,8 +335,12 @@ pub(crate) fn simplify_even_odd(paths: &[Vec<Point>]) -> Result<Vec<Vec<Point>>,
         c.add_path(path);
     }
     match c.execute_internal() {
-        Ok(()) => Ok(c.build_result()),
-        Err(Failed::Nothing) => Ok(Vec::new()),
+        Ok(()) => {
+            let result = c.build_result();
+            let order = c.creation_order(&result);
+            Ok((result, order))
+        }
+        Err(Failed::Nothing) => Ok((Vec::new(), Vec::new())),
         Err(failure) => Err(failure),
     }
 }
@@ -2184,6 +2196,16 @@ impl Clipper {
                 }
             }
         }
+    }
+
+    /// Each output vertex's creation order: the arena index of the first OutPt
+    /// made at its point (diagnostics).
+    fn creation_order(&self, paths: &[Vec<Point>]) -> Vec<Vec<usize>> {
+        let mut first: HashMap<Point, usize> = HashMap::new();
+        for (i, op) in self.out_pts.iter().enumerate() {
+            first.entry(op.pt).or_insert(i);
+        }
+        paths.iter().map(|path| path.iter().map(|p| first[p]).collect()).collect()
     }
 
     fn build_result(&self) -> Vec<Vec<Point>> {

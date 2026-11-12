@@ -4,13 +4,14 @@ function record_geometry(source, input, output, spmSource, mode)
 % source is the pinned SamSrf checkout with prepare.py's declared repairs and
 % input the extracted geometry-inputs.json archive. mode 'polyshape-probe'
 % records only the focused polyshape probes (grid-decade sweep and bisection,
-% held-out clouds, extreme grids) instead of the full geometry reference.
+% held-out clouds, extreme grids) instead of the full geometry reference; mode
+% 'polyshape-causal' records polyshape_causal_cases.m's controlled polygons.
 arguments
     source (1,:) char
     input (1,:) char
     output (1,:) char
     spmSource (1,:) char
-    mode (1,:) char {mustBeMember(mode, {'full', 'polyshape-probe'})} = 'full'
+    mode (1,:) char {mustBeMember(mode, {'full', 'polyshape-probe', 'polyshape-causal'})} = 'full'
 end
 assert(isfile(fullfile(output, 'source.json')), 'Run prepare.py first');
 assert(~isfile(fullfile(output, 'geometry.json')), 'Use a fresh output directory');
@@ -29,10 +30,14 @@ meta.functions = struct('polyshape', which('polyshape'), 'convhull', which('conv
     'delaunay', which('delaunay'), 'delaunayTriangulation', which('delaunayTriangulation'), ...
     'clusterroi', which('samsrf_clusterroi'), 'cfparam', which('samsrf_cfparam_loop'), ...
     'gifti', which('gifti'));
-if strcmp(mode, 'polyshape-probe')
+if any(strcmp(mode, {'polyshape-probe', 'polyshape-causal'}))
     meta.mode = mode;
     write_json('environment.json', meta);
-    cases = probe_cases();
+    if strcmp(mode, 'polyshape-probe')
+        cases = probe_cases();
+    else
+        cases = causal_cases();
+    end
     write_json('geometry.json', struct('mode', mode, 'cases', {cases}));
     fprintf('Recorded %d MATLAB polyshape probe cases. Port parity is not implied.\n', numel(cases));
     return
@@ -196,13 +201,21 @@ for i = 1:2500
 end
 end
 
-function item = polygon_batch(id, polygons, keepVertices)
+function item = polygon_batch(id, polygons, keepVertices, causal)
 % keepVertices (probe mode) also records the vertices of
 % polyshape(P, 'KeepCollinearPoints', true), which show the rings before
-% collinear points are cleaned.
+% collinear points are cleaned. causal (causal mode) also records each
+% boundary's ishole flag for both shapes, and the vertices of polyshape built
+% again from the KeepCollinearPoints vertices, from the default vertices, and
+% simplify(polyshape(P, 'Simplify', false)).
 if nargin < 3
     keepVertices = false;
 end
+if nargin < 4
+    causal = false;
+end
+extra = struct('defaultHoles', {cell(numel(polygons), 1)}, 'keptHoles', {cell(numel(polygons), 1)}, ...
+    'fromKept', {cell(numel(polygons), 1)}, 'fromDefault', {cell(numel(polygons), 1)}, 'viaSimplify', {cell(numel(polygons), 1)});
 n = numel(polygons);
 kept = cell(n, 1);
 counts = zeros(n, 1);
@@ -235,6 +248,16 @@ for i = 1:n
             warned(i) = register(warningId);
         end
         V = shape.Vertices;
+        if causal
+            extra.defaultHoles{i} = causal_flags(shape);
+            extra.fromDefault{i} = causal_vertices(V);
+            try
+                again = simplify(polyshape(P, 'Simplify', false));
+                extra.viaSimplify{i} = again.Vertices;
+            catch
+                extra.viaSimplify{i} = [NaN NaN; NaN NaN];
+            end
+        end
         simplifiedCounts(i) = size(V, 1);
         simplified{i} = V;
         regions(i) = shape.NumRegions;
@@ -254,6 +277,10 @@ for i = 1:n
         keptShape = polyshape(P, 'KeepCollinearPoints', true);
         collinearCounts(i) = size(keptShape.Vertices, 1);
         kept{i} = keptShape.Vertices;
+        if causal
+            extra.keptHoles{i} = causal_flags(keptShape);
+            extra.fromKept{i} = causal_vertices(keptShape.Vertices);
+        end
     catch
         collinearCounts(i) = -1;
     end
@@ -275,6 +302,16 @@ item = struct('id', id, 'kind', 'polygon-batch', 'cases', n, ...
     'error', array_file([id '_error'], failed));
 if keepVertices
     item.collinearVertices = array_file([id '_collinear_vertices'], vertcat(zeros(0, 2), kept{:}));
+end
+if causal
+    for name = {'defaultHoles', 'keptHoles', 'fromKept', 'fromDefault', 'viaSimplify'}
+        values = extra.(name{1});
+        counts = cellfun(@(v) size(v, 1), values);
+        width = 1 + any(strcmp(name{1}, {'fromKept', 'fromDefault', 'viaSimplify'}));
+        rows = vertcat(zeros(0, width), values{:});
+        item.(name{1}) = array_file([id '_' name{1}], rows);
+        item.([name{1} 'Counts']) = array_file([id '_' name{1} '_counts'], counts);
+    end
 end
 item.warningIds = warningIds;
 item.errors = errorIds;
@@ -302,6 +339,79 @@ cases{end+1} = polygon_batch('probe_heldout_clouds', heldout_clouds(), true);
 cases{end+1} = polygon_batch('probe_extreme_grids', extreme_grids(), true);
 % The original point clouds again, with their collinear-kept rings.
 cases{end+1} = polygon_batch('probe_point_clouds', point_clouds(), true);
+end
+
+function cases = causal_cases()
+families = polyshape_causal_cases(point_clouds(), heldout_clouds());
+cases = {};
+for k = 1:numel(families)
+    family = families(k);
+    if strcmp(family.id, 'causal_gap_bisection')
+        [polygons, parameters] = gap_bisection(family.parameters);
+    else
+        polygons = family.polygons;
+        parameters = family.parameters;
+    end
+    cases{end+1} = with_parameters(polygon_batch(family.id, polygons, true, true), parameters); %#ok<AGROW>
+end
+end
+
+function [polygons, parameters] = gap_bisection(combinations)
+% For each [t f angle reversed], bisect the sliver width g (in tolerance units)
+% between 0.1 and 30 on MATLAB's default polyshape: merged when NumRegions is 1.
+% Every evaluated polygon is recorded; rows add [low high atLow atHigh] with
+% verdicts 1 merged, 0 separate, -1 neither (an error or other region count).
+polygons = {};
+parameters = zeros(0, 8);
+for c = 1:size(combinations, 1)
+    t = combinations(c, 1);
+    f = combinations(c, 2);
+    angle = combinations(c, 3);
+    reversed = combinations(c, 4);
+    low = 0.1;
+    high = 30;
+    P = polyshape_causal_strips(t, low, f, angle, reversed, 0);
+    polygons{end+1} = P; %#ok<AGROW>
+    atLow = merged(P);
+    P = polyshape_causal_strips(t, high, f, angle, reversed, 0);
+    polygons{end+1} = P; %#ok<AGROW>
+    atHigh = merged(P);
+    if atLow == 1 && atHigh == 0
+        for iteration = 1:45
+            middle = sqrt(low * high);
+            if middle <= low || middle >= high
+                break
+            end
+            P = polyshape_causal_strips(t, middle, f, angle, reversed, 0);
+            polygons{end+1} = P; %#ok<AGROW>
+            verdict = merged(P);
+            if verdict == 1
+                low = middle;
+            elseif verdict == 0
+                high = middle;
+            else
+                break
+            end
+        end
+    end
+    parameters(end+1, :) = [combinations(c, :) low high atLow atHigh]; %#ok<AGROW>
+end
+end
+
+function verdict = merged(P)
+verdict = -1;
+warning('off', 'all');
+restore = onCleanup(@() warning('on', 'all'));
+try
+    shape = polyshape(P);
+catch
+    return
+end
+if shape.NumRegions == 1
+    verdict = 1;
+elseif shape.NumRegions == 2
+    verdict = 0;
+end
 end
 
 function item = with_parameters(item, parameters)
@@ -469,6 +579,31 @@ function polygons = extreme_grids()
 polygons = {[0 0; 1e-300 0; 0 1e-300], [0 0; realmin * eps 0; 0 realmin * eps], ...
     [1e308 0; 1.1e308 0; 1e308 1], [-1e308 0; 1e308 0; 0 1], ...
     [1e12 1e12; 1e12 + 1e-3 1e12; 1e12 1e12 + 1e-3], [2 3; 2 3; 2 3], [0 0; 1 1; 2 2]};
+end
+
+function flags = causal_flags(shape)
+% One row per boundary: 1 for a hole, 0 for a solid boundary.
+if shape.NumRegions == 0 && shape.NumHoles == 0
+    flags = zeros(0, 1);
+else
+    flags = double(ishole(shape));
+    flags = flags(:);
+end
+end
+
+function V = causal_vertices(vertices)
+% The vertices of polyshape built again from recorded vertices (NaN-separated
+% boundaries); [NaN NaN; NaN NaN] when that fails.
+V = zeros(0, 2);
+if isempty(vertices)
+    return
+end
+try
+    again = polyshape(vertices);
+    V = again.Vertices;
+catch
+    V = [NaN NaN; NaN NaN];
+end
 end
 
 %% Delaunay triangulations with exact and near ties

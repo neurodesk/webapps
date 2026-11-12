@@ -50,6 +50,16 @@ pub fn polyshape_vertices(points: &[[f64; 2]]) -> crate::error::Result<(Vec<[f64
     Ok((simplified.vertices, hull))
 }
 
+/// The polyshape model's stages in grid units (diagnostics, not an API):
+/// `(centre, scale, tolerance, input ring, [first union, first clean, second
+/// union, second clean], hull, first union's creation order)`.
+#[doc(hidden)]
+#[allow(clippy::type_complexity)]
+pub fn polyshape_stages(points: &[[f64; 2]]) -> crate::error::Result<Option<([f64; 2], f64, f64, Vec<(i64, i64)>, [Vec<Vec<(i64, i64)>>; 4], Vec<(i64, i64)>, Vec<Vec<usize>>)>> {
+    let stages = crate::polyshape::stages(points).map_err(|failure| crate::error::Error::Shape(format!("polyshape: {failure:?}")))?;
+    Ok(stages.map(|s| (s.grid.centre, s.grid.scale, s.grid.tolerance, s.ring, [s.first_union, s.first_clean, s.second_union, s.second_clean], s.hull, s.first_union_order)))
+}
+
 /// A convex polygon: its vertices counter-clockwise, without a repeated closing vertex.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hull {

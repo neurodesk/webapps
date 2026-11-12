@@ -86,25 +86,46 @@ pub(crate) enum Unresolved {
 
 /// MATLAB's `polyshape(points)` vertices and `convhull` on the model's grid.
 pub(crate) fn simplify(points: &[[f64; 2]]) -> Result<Simplified, Unresolved> {
+    let Some(stages) = stages(points)? else { return Ok(Simplified { vertices: Vec::new(), hull: None }) };
+    let coordinates = |k: &Point| stages.original.get(k).copied().unwrap_or_else(|| stages.grid.unsnap(*k));
+    Ok(Simplified {
+        vertices: stages.second_clean.iter().flatten().map(coordinates).collect(),
+        hull: (stages.hull.len() >= 3).then(|| stages.hull.iter().map(coordinates).collect()),
+    })
+}
+
+/// Every stage of the model in grid units, for diagnostics.
+pub(crate) struct Stages {
+    pub grid: Grid,
+    pub original: HashMap<Point, [f64; 2]>,
+    pub ring: Vec<Point>,
+    pub first_union: Vec<Vec<Point>>,
+    pub first_union_order: Vec<Vec<usize>>,
+    pub first_clean: Vec<Vec<Point>>,
+    pub second_union: Vec<Vec<Point>>,
+    pub second_clean: Vec<Vec<Point>>,
+    pub hull: Vec<Point>,
+}
+
+/// The model's stages, `None` for an empty point set.
+pub(crate) fn stages(points: &[[f64; 2]]) -> Result<Option<Stages>, Unresolved> {
     let points: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
-    let Some(grid) = Grid::new(&points)? else { return Ok(Simplified { vertices: Vec::new(), hull: None }) };
+    let Some(grid) = Grid::new(&points)? else { return Ok(None) };
     let ring: Vec<Point> = points.iter().map(|p| grid.snap(p)).collect();
     let mut original: HashMap<Point, [f64; 2]> = HashMap::new();
     for (k, p) in ring.iter().zip(&points) {
         original.entry(*k).or_insert(*p);
     }
-    let cleaned = |paths: Vec<Vec<Point>>| -> Vec<Vec<Point>> {
+    let cleaned = |paths: &[Vec<Point>]| -> Vec<Vec<Point>> {
         paths.iter().map(|path| clean(path, grid.tolerance)).filter(|path| !path.is_empty()).collect()
     };
     let union = |paths: &[Vec<Point>]| simplify_even_odd(paths).map_err(Unresolved::Clipper);
-    let first = cleaned(union(&[ring])?);
-    let second = cleaned(union(&first)?);
-    let hull = clean(&integer_hull(second.iter().flatten().copied().collect()), grid.tolerance);
-    let coordinates = |k: &Point| original.get(k).copied().unwrap_or_else(|| grid.unsnap(*k));
-    Ok(Simplified {
-        vertices: second.iter().flatten().map(coordinates).collect(),
-        hull: (hull.len() >= 3).then(|| hull.iter().map(coordinates).collect()),
-    })
+    let (first_union, first_union_order) = crate::clipper::simplify_even_odd_traced(std::slice::from_ref(&ring)).map_err(Unresolved::Clipper)?;
+    let first_clean = cleaned(&first_union);
+    let second_union = union(&first_clean)?;
+    let second_clean = cleaned(&second_union);
+    let hull = clean(&integer_hull(second_clean.iter().flatten().copied().collect()), grid.tolerance);
+    Ok(Some(Stages { grid, original, ring, first_union, first_union_order, first_clean, second_union, second_clean, hull }))
 }
 
 /// The vertices of MATLAB's `polyshape(points)` (in no particular ring order) and
@@ -115,10 +136,10 @@ pub(crate) struct Simplified {
 }
 
 
-struct Grid {
-    centre: [f64; 2],
-    scale: f64,
-    tolerance: f64,
+pub(crate) struct Grid {
+    pub centre: [f64; 2],
+    pub scale: f64,
+    pub tolerance: f64,
 }
 
 impl Grid {
