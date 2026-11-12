@@ -54,14 +54,28 @@ mkdir -p "$work/home"
 in_builder python3 -m venv "$work/venv"
 in_builder "$work/venv/bin/pip" install --quiet --only-binary=:all: -r "$matlab/requirements-cli.txt"
 compare() { in_builder "$work/venv/bin/python" "$matlab/compare_cli.py" "$@"; }
-run_matlab() { "$here/matlab_batch.sh" "addpath('$matlab'); $1"; }
+matlab_string() {
+  local value="${1//\'/\'\'}"
+  printf "'%s'" "$value"
+}
+run_matlab() {
+  local function_name="$1"
+  shift
+  local command="addpath($(matlab_string "$matlab")); $function_name("
+  local separator="" argument
+  for argument in "$@"; do
+    command+="$separator$(matlab_string "$argument")"
+    separator=,
+  done
+  "$here/matlab_batch.sh" "$command)"
+}
 
 # 1. MATLAB Compiler build (build_container.py verifies the CLI repair set and pins).
 SAMSRF_MATLAB_BATCH="$here/matlab_batch.sh" \
   python3 "$matlab/build_container.py" reference-source reference-spm "$cli/container-build"
 
 # 2. The shared read-only bundle, prepared once in source MATLAB.
-run_matlab "prepare_cli_bundle('$work/reference-source','$work/reference-spm','$work/matrix-input','$cli/bundle','$cli/plan.json')"
+run_matlab prepare_cli_bundle "$work/reference-source" "$work/reference-spm" "$work/matrix-input" "$cli/bundle" "$cli/plan.json"
 python3 "$matlab/cli_plan.py" models "$cli/plan.json" "$cli/bundle"
 python3 "$matlab/cli_plan.py" hash "$cli/bundle" "$cli/bundle-sha256.json"
 chmod -R a-w "$cli/bundle"
@@ -73,9 +87,9 @@ python3 "$matlab/capture_environment.py" "$cli/source-1"
 python3 "$matlab/capture_environment.py" "$cli/source-2"
 
 # 3. Source MATLAB on this host: two processes and the custom-HRF check.
-run_matlab "run_source_cli('$work/reference-source','$work/reference-spm','$cli/plan.json','$cli/source-1')"
-run_matlab "verify_cli_hrf('$work/reference-source','$work/reference-spm','$cli/plan.json','$cli/source-1','$cli/source-1-direct')"
-run_matlab "run_source_cli('$work/reference-source','$work/reference-spm','$cli/plan.json','$cli/source-2')"
+run_matlab run_source_cli "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-1"
+run_matlab verify_cli_hrf "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-1" "$cli/source-1-direct"
+run_matlab run_source_cli "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-2"
 python3 "$matlab/cli_plan.py" verify "$cli/bundle" "$cli/bundle-sha256.json"
 compare "$cli/plan.json" "$cli/source-1" "$cli/source-2" "$cli/source-repeat.json"
 
