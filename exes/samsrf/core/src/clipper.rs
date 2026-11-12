@@ -85,8 +85,17 @@ struct IntersectNode {
     pt: Point,
 }
 
-/// Why `Execute` returned false.
-struct Failed;
+/// Why `Execute` returned false (or would have thrown).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Failed {
+    /// No local minima: `AddPath` refused a degenerate path, so the sweep has
+    /// nothing to process (`ExecuteInternal`'s first `PopScanbeam` fails).
+    Nothing,
+    /// `FixupIntersectionOrder` could not order a scanbeam's intersections.
+    IntersectionOrder,
+    /// One of Clipper's internal exceptions (`UpdateEdgeIntoAEL`, `DoMaxima`).
+    Internal,
+}
 
 /// `Round` from clipper.cpp: truncation of `val -/+ 0.5`.
 fn round(val: f64) -> i64 {
@@ -296,9 +305,10 @@ struct Clipper {
 }
 
 /// `SimplifyPolygons(paths, pftEvenOdd)`: a strictly simple `Execute(ctUnion)`
-/// of the closed `paths`, with the output paths as `BuildResult` lists them, or
-/// `None` when `Execute` returns false.
-pub(crate) fn simplify_even_odd(paths: &[Vec<Point>]) -> Option<Vec<Vec<Point>>> {
+/// of the closed `paths`, with the output paths as `BuildResult` lists them. A
+/// sweep with nothing to process gives no paths, as `SimplifyPolygons` does;
+/// any other reason `Execute` returns false is an error.
+pub(crate) fn simplify_even_odd(paths: &[Vec<Point>]) -> Result<Vec<Vec<Point>>, Failed> {
     let mut c = Clipper {
         edges: Vec::new(),
         minima: Vec::new(),
@@ -316,10 +326,11 @@ pub(crate) fn simplify_even_odd(paths: &[Vec<Point>]) -> Option<Vec<Vec<Point>>>
     for path in paths {
         c.add_path(path);
     }
-    if c.execute_internal().is_err() {
-        return None;
+    match c.execute_internal() {
+        Ok(()) => Ok(c.build_result()),
+        Err(Failed::Nothing) => Ok(Vec::new()),
+        Err(failure) => Err(failure),
     }
-    Some(c.build_result())
 }
 
 impl Clipper {
@@ -781,7 +792,7 @@ impl Clipper {
     fn update_edge_into_ael(&mut self, e: usize) -> Result<usize, Failed> {
         let next_lml = self.edges[e].next_in_lml;
         if next_lml == NIL {
-            return Err(Failed);
+            return Err(Failed::Internal);
         }
         let (out_idx, side, wind_delta, wind_cnt, wind_cnt2) = {
             let edge = &self.edges[e];
@@ -815,7 +826,7 @@ impl Clipper {
         self.reset();
         self.maxima.clear();
         self.sorted = NIL;
-        let Some(mut bot_y) = self.pop_scanbeam() else { return Err(Failed) };
+        let Some(mut bot_y) = self.pop_scanbeam() else { return Err(Failed::Nothing) };
         self.insert_local_minima_into_ael(bot_y);
         loop {
             let top_y = match self.pop_scanbeam() {
@@ -827,7 +838,7 @@ impl Clipper {
             self.process_horizontals()?;
             self.ghost_joins.clear();
             if !self.process_intersections(top_y)? {
-                return Err(Failed);
+                return Err(Failed::IntersectionOrder);
             }
             self.process_edges_at_top_of_scanbeam(top_y)?;
             bot_y = top_y;
@@ -1669,7 +1680,7 @@ impl Clipper {
             self.delete_from_ael(e);
             self.delete_from_ael(max_pair);
         } else {
-            return Err(Failed);
+            return Err(Failed::Internal);
         }
         Ok(())
     }
@@ -2254,3 +2265,4 @@ mod tests {
         assert!(out.iter().all(|p| p.len() == 3 && p.contains(&(5, 5))));
     }
 }
+

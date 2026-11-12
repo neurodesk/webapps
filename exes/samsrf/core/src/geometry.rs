@@ -47,10 +47,16 @@ pub struct Hull {
 impl Hull {
     /// `polyshape(points).convhull`, as MATLAB R2023b computes it on its
     /// fixed-point grid with the even-odd rule and its 1e-8 cleaning tolerance
-    /// (see `polyshape.rs`). `None` where that shape is empty.
-    pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
-        let hull = Hull { vertices: crate::polyshape::convex_hull(points)? };
-        (hull.area() > 0.0).then_some(hull)
+    /// (see `polyshape.rs`). `Ok(None)` where that shape is empty. An error where
+    /// the model cannot follow MATLAB and MATLAB's result was not recorded:
+    /// coordinates outside its integer grid, or a failed Clipper sweep.
+    pub fn of_polygon(points: &[[f64; 2]]) -> crate::error::Result<Option<Hull>> {
+        use crate::polyshape::Unresolved;
+        let vertices = crate::polyshape::convex_hull(points).map_err(|failure| crate::error::Error::Shape(match failure {
+            Unresolved::Grid => "polyshape: the coordinates do not fit the fixed-point grid MATLAB's polyshape is reproduced on".into(),
+            Unresolved::Clipper(failure) => format!("polyshape: Clipper's union failed ({failure:?}); MATLAB's result for this polygon was not recorded"),
+        }))?;
+        Ok(vertices.map(|vertices| Hull { vertices }).filter(|hull| hull.area() > 0.0))
     }
 
     /// The convex hull of `points` (Andrew's monotone chain), or `None` when the points
@@ -367,7 +373,7 @@ mod tests {
         // Recorded MATLAB polyshape case: uncentred shoelace arithmetic gave
         // zero area, although the triangle has three distinct vertices.
         let points = [[1000.0, 1000.0], [1000.001, 1000.0000000001], [1000.002, 1000.0]];
-        let hull = Hull::of_polygon(&points).unwrap();
+        let hull = Hull::of_polygon(&points).unwrap().unwrap();
         let expected_area = (points[2][0] - points[0][0]) * (points[1][1] - points[0][1]) / 2.0;
         assert_eq!(hull.area(), expected_area);
         let [x, y] = hull.centroid();
@@ -463,8 +469,8 @@ mod tests {
     fn a_spike_narrower_than_the_cutoff_leaves_the_hull() {
         // MATLAB R2023b drops a spike 2e-9 of the span wide and keeps one 2e-8 wide.
         let spike = |w: f64| [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.5 + w, 1.0], [0.5, 1.5], [0.5 - w, 1.0], [0.0, 1.0]];
-        assert_eq!(Hull::of_polygon(&spike(1.5e-9)).unwrap().area(), 1.0);
-        assert!(Hull::of_polygon(&spike(1.5e-8)).unwrap().area() > 1.0);
+        assert_eq!(Hull::of_polygon(&spike(1.5e-9)).unwrap().unwrap().area(), 1.0);
+        assert!(Hull::of_polygon(&spike(1.5e-8)).unwrap().unwrap().area() > 1.0);
     }
 
     #[test]

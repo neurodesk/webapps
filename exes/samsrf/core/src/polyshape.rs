@@ -63,6 +63,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
+use crate::clipper::{simplify_even_odd, Failed};
 use std::collections::HashMap;
 
 pub(crate) type Point = (i64, i64);
@@ -72,12 +73,21 @@ pub(crate) type Point = (i64, i64);
 /// reproduces every recording, and this one is not pinned more closely.
 const GRID_LIMIT: f64 = 6.25e13;
 
+/// Why the model gives no hull where MATLAB's behaviour was not recorded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Unresolved {
+    /// The coordinates do not fit the fixed-point grid's integer range (for
+    /// example 1e-300 or 1e308 spans).
+    Grid,
+    /// Clipper's `Execute` failed for a reason other than a degenerate path.
+    Clipper(Failed),
+}
+
 /// The hull MATLAB's `polyshape(points).convhull` returns, counter-clockwise, or
-/// `None` when that shape is empty, Clipper's `Execute` fails, or the grid cannot
-/// be represented safely.
-pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
+/// `None` when that shape is empty (as recorded for degenerate point sets).
+pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Result<Option<Vec<[f64; 2]>>, Unresolved> {
     let points: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
-    let grid = Grid::new(&points)?;
+    let Some(grid) = Grid::new(&points)? else { return Ok(None) };
     let ring: Vec<Point> = points.iter().map(|p| grid.snap(p)).collect();
     let mut original: HashMap<Point, [f64; 2]> = HashMap::new();
     for (k, p) in ring.iter().zip(&points) {
@@ -86,13 +96,14 @@ pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
     let cleaned = |paths: Vec<Vec<Point>>| -> Vec<Vec<Point>> {
         paths.iter().map(|path| clean(path, grid.tolerance)).filter(|path| !path.is_empty()).collect()
     };
-    let first = cleaned(crate::clipper::simplify_even_odd(&[ring])?);
-    let second = cleaned(crate::clipper::simplify_even_odd(&first)?);
+    let union = |paths: &[Vec<Point>]| simplify_even_odd(paths).map_err(Unresolved::Clipper);
+    let first = cleaned(union(&[ring])?);
+    let second = cleaned(union(&first)?);
     let hull = clean(&integer_hull(second.into_iter().flatten().collect()), grid.tolerance);
     if hull.len() < 3 {
-        return None;
+        return Ok(None);
     }
-    Some(hull.iter().map(|k| original.get(k).copied().unwrap_or_else(|| grid.unsnap(*k))).collect())
+    Ok(Some(hull.iter().map(|k| original.get(k).copied().unwrap_or_else(|| grid.unsnap(*k))).collect()))
 }
 
 struct Grid {
@@ -102,20 +113,24 @@ struct Grid {
 }
 
 impl Grid {
-    fn new(points: &[[f64; 2]]) -> Option<Grid> {
+    /// `Ok(None)` for no points or a single repeated point (an empty shape).
+    fn new(points: &[[f64; 2]]) -> Result<Option<Grid>, Unresolved> {
         let low = |axis: usize| points.iter().map(|p| p[axis]).fold(f64::INFINITY, f64::min);
         let high = |axis: usize| points.iter().map(|p| p[axis]).fold(f64::NEG_INFINITY, f64::max);
         if points.is_empty() {
-            return None;
+            return Ok(None);
         }
         let centre = [(low(0) + high(0)) / 2.0, (low(1) + high(1)) / 2.0];
         let span = (high(0) - low(0)).max(high(1) - low(1));
         if !centre.iter().all(|x| x.is_finite()) || !span.is_finite() {
-            return None;
+            return Err(Unresolved::Grid);
         }
         let magnitude = points.iter().flat_map(|p| [(p[0] - centre[0]).abs(), (p[1] - centre[1]).abs()]).fold(0.0, f64::max);
-        if !magnitude.is_finite() || magnitude == 0.0 {
-            return None;
+        if !magnitude.is_finite() {
+            return Err(Unresolved::Grid);
+        }
+        if magnitude == 0.0 {
+            return Ok(None);
         }
         let power = |exponent: i32| -> f64 { format!("1e{exponent}").parse().expect("a power of ten") };
         let mut exponent = 13 - magnitude.log10().floor() as i32;
@@ -133,9 +148,9 @@ impl Grid {
                 !scaled.is_finite() || scaled.abs() > 2e14
             }))
         {
-            return None;
+            return Err(Unresolved::Grid);
         }
-        Some(Grid { centre, scale, tolerance })
+        Ok(Some(Grid { centre, scale, tolerance }))
     }
 
     fn snap(&self, p: &[f64; 2]) -> Point {
@@ -270,9 +285,11 @@ mod tests {
             [[1e308, 0.0], [1.1e308, 0.0], [1e308, 1.0]],
             [[-1e308, 0.0], [1e308, 0.0], [0.0, 1.0]],
         ] {
-            assert!(convex_hull(&points).is_none());
+            assert_eq!(convex_hull(&points), Err(Unresolved::Grid));
         }
-        assert!(convex_hull(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]).is_some());
+        assert!(convex_hull(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]).unwrap().is_some());
+        assert_eq!(convex_hull(&[[2.0, 3.0], [2.0, 3.0], [2.0, 3.0]]), Ok(None));
+        assert_eq!(convex_hull(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), Ok(None));
     }
 
     #[test]
@@ -280,13 +297,13 @@ mod tests {
         // MATLAB R2023b keeps the triangle at scale 1 and drops the exact
         // 2^-10 copy, whose apex truncates on its (coarser) grid.
         let triangle = |s: f64| [[0.0, 0.0], [s, 2e-8 * s], [2.0 * s, 0.0]];
-        assert!(convex_hull(&triangle(1.0)).is_some());
-        assert!(convex_hull(&triangle(2f64.powi(-10))).is_none());
+        assert!(convex_hull(&triangle(1.0)).unwrap().is_some());
+        assert_eq!(convex_hull(&triangle(2f64.powi(-10))), Ok(None));
     }
 
     #[test]
     fn the_grid_drops_a_decade_above_the_limit() {
-        let grid = |m: f64| Grid::new(&[[-m, -m], [m, m], [m, -m]]).unwrap().scale;
+        let grid = |m: f64| Grid::new(&[[-m, -m], [m, m], [m, -m]]).unwrap().unwrap().scale;
         assert_eq!(grid(0.62), 1e14);
         assert_eq!(grid(0.63), 1e13);
         assert_eq!(grid(6.2e-3), 1e16);
@@ -295,7 +312,7 @@ mod tests {
 
     #[test]
     fn even_odd_resolution_keeps_both_lobes_of_a_bowtie() {
-        let hull = convex_hull(&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0], [0.0, 1.0]]).unwrap();
+        let hull = convex_hull(&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0], [0.0, 1.0]]).unwrap().unwrap();
         assert_eq!(hull.len(), 4);
     }
 }

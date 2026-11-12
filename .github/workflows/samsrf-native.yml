@@ -48,6 +48,10 @@ on:
         description: Record polyshape, delaunay and CF geometry on sweeps and real Benson templates (with record_matlab)
         type: boolean
         default: false
+      geometry_probe:
+        description: With geometry_only, record only the focused polyshape probes (grid decade, held-out clouds)
+        type: boolean
+        default: false
       revcor_only:
         description: Record raw-input RC/CF pipelines in both precisions, without MATLAB Compiler
         type: boolean
@@ -341,6 +345,10 @@ jobs:
             echo 'Choose at most one of revcor_only, diagnostics_only, geometry_only, numerics_only, css_pipelines_only, kernels_only and gemv_order.' >&2
             exit 1
           fi
+          if [ '${{ inputs.geometry_probe }}' = true ] && [ '${{ inputs.geometry_only }}' != true ]; then
+            echo 'geometry_probe narrows geometry_only; set both.' >&2
+            exit 1
+          fi
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           python3 packages/samsrf/validation/matlab/prepare.py reference-source "$RUNNER_TEMP/samsrf-matlab"
@@ -405,12 +413,12 @@ jobs:
         if: inputs.geometry_only
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),fullfile(pwd,'reference-spm'))
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),fullfile(pwd,'reference-spm'),'${{ inputs.geometry_probe && 'polyshape-probe' || 'full' }}')
       - name: Repeat geometry in a new MATLAB process on this host
         if: inputs.geometry_only
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'))
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'),'${{ inputs.geometry_probe && 'polyshape-probe' || 'full' }}')
       - name: Compare same-host geometry recordings
         if: inputs.geometry_only
         run: node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"

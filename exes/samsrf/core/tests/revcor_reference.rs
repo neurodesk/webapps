@@ -686,7 +686,7 @@ fn hull_bounds(hull: &Hull, epsilon: f64) -> Option<(f64, f64)> {
 
 /// The hull's vertices as indices into `points`, sorted.
 fn hull_indices(points: &[[f64; 2]]) -> Option<Vec<usize>> {
-    let hull = Hull::of_polygon(points)?;
+    let hull = Hull::of_polygon(points).unwrap()?;
     let mut indices: Vec<usize> = hull.vertices.iter().map(|v| points.iter().position(|p| p == v).unwrap()).collect();
     indices.sort_unstable();
     Some(indices)
@@ -722,7 +722,7 @@ fn template_bounds(prepared: &revcor_cf::Prepared, r: &[f64], theirs: &[[f64; 2]
         let pick = |set: &[[f64; 2]]| members.iter().map(|&k| set[k]).collect::<Vec<_>>();
         let (points, points_ours) = (pick(&unique_theirs), pick(&unique_ours));
         failures.check(hull_indices(&points) == hull_indices(&points_ours), || format!("{at}: the reader changes the {label} hull"));
-        match Hull::of_polygon(&points) {
+        match Hull::of_polygon(&points).unwrap() {
             None => {}
             Some(hull) => match hull_bounds(&hull, epsilon) {
                 Some((centroid, width)) => bounds.extend(rows.iter().map(|&name| (name, if name == "x0" || name == "y0" { centroid } else { width }))),

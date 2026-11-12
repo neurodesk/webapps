@@ -371,7 +371,7 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
         let mut agreeing = 0;
         for (i, polygon) in polygons.iter().enumerate() {
             let expected = [estimate[i], estimate[n + i], estimate[2 * n + i]];
-            let hull = Hull::of_polygon(polygon);
+            let hull = Hull::of_polygon(polygon).unwrap_or_else(|e| panic!("{id} {i}: {e}"));
             let vertices = hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[]);
             let agrees = sorted_vertices(vertices) == sorted_vertices(&expected_hulls[i]) && match &hull {
                 None => expected[2] == 0.0 && expected[0].is_nan() && expected[1].is_nan(),

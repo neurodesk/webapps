@@ -1,13 +1,16 @@
-function record_geometry(source, input, output, spmSource)
+function record_geometry(source, input, output, spmSource, mode)
 % Record MATLAB's own polyshape, convhull, delaunay and samsrf_clusterroi on
 % boundary sweeps, tie-prone point sets and real Benson V1 template coordinates.
 % source is the pinned SamSrf checkout with prepare.py's declared repairs and
-% input the extracted geometry-inputs.json archive.
+% input the extracted geometry-inputs.json archive. mode 'polyshape-probe'
+% records only the focused polyshape probes (grid-decade sweep and bisection,
+% held-out clouds, extreme grids) instead of the full geometry reference.
 arguments
     source (1,:) char
     input (1,:) char
     output (1,:) char
     spmSource (1,:) char
+    mode (1,:) char {mustBeMember(mode, {'full', 'polyshape-probe'})} = 'full'
 end
 assert(isfile(fullfile(output, 'source.json')), 'Run prepare.py first');
 assert(~isfile(fullfile(output, 'geometry.json')), 'Use a fresh output directory');
@@ -26,6 +29,14 @@ meta.functions = struct('polyshape', which('polyshape'), 'convhull', which('conv
     'delaunay', which('delaunay'), 'delaunayTriangulation', which('delaunayTriangulation'), ...
     'clusterroi', which('samsrf_clusterroi'), 'cfparam', which('samsrf_cfparam_loop'), ...
     'gifti', which('gifti'));
+if strcmp(mode, 'polyshape-probe')
+    meta.mode = mode;
+    write_json('environment.json', meta);
+    cases = probe_cases();
+    write_json('geometry.json', struct('mode', mode, 'cases', {cases}));
+    fprintf('Recorded %d MATLAB polyshape probe cases. Port parity is not implied.\n', numel(cases));
+    return
+end
 write_json('environment.json', meta);
 cases = {};
 cases = [cases, polygon_cases()];
@@ -265,6 +276,186 @@ fprintf('Recorded %s (%d polygons)\n', id, n);
             index = numel(warningIds);
         end
     end
+end
+
+%% Focused polyshape probes: the grid decade and held-out clouds
+
+function cases = probe_cases()
+cases = {};
+[polygons, parameters] = grid_sweep();
+cases{end+1} = with_parameters(polygon_batch('probe_grid_sweep', polygons), parameters);
+[polygons, parameters] = grid_bisection();
+cases{end+1} = with_parameters(polygon_batch('probe_grid_bisection', polygons), parameters);
+cases{end+1} = polygon_batch('probe_heldout_collinear', heldout_collinear());
+cases{end+1} = polygon_batch('probe_heldout_clouds', heldout_clouds());
+cases{end+1} = polygon_batch('probe_extreme_grids', extreme_grids());
+end
+
+function item = with_parameters(item, parameters)
+item.parameters = array_file([item.id '_parameters'], parameters);
+end
+
+function shapes = probe_shapes()
+% Self-intersecting shapes with several crossings, normalised so the largest
+% centred coordinate is 1: a {5/2} and a {7/3} star and four random 9-gons.
+shapes = {};
+for step = [2 3]
+    n = 2 * step + 1;
+    angle = 2 * pi * step * (0:n-1)' / n + 0.1234;
+    shapes{end+1} = [cos(angle) sin(angle)]; %#ok<AGROW>
+end
+rng(73211, 'twister');
+for s = 1:4
+    shapes{end+1} = rand(9, 2) * 2 - 1; %#ok<AGROW>
+end
+for s = 1:numel(shapes)
+    P = shapes{s};
+    P = P - (min(P) + max(P)) / 2;
+    shapes{s} = P / max(abs(P(:)));
+end
+end
+
+function P = probe_instance(shape, magnitude, offset, swapped)
+if swapped
+    shape = shape(:, [2 1]);
+end
+P = shape * magnitude + offset * magnitude;
+end
+
+function [polygons, parameters] = grid_sweep()
+% Centred magnitudes 6.150 to 6.350 times 10^k in steps of 0.001, so that
+% m * 10^p crosses 6.2e13 to 6.3e13 densely, translated and with the extreme
+% coordinate on either axis. Rows: shape, mantissa, k, offset index, swapped.
+shapes = probe_shapes();
+offsets = [0 0; 1.7 -0.9];
+mantissas = 6.15:0.001:6.35;
+polygons = {};
+parameters = zeros(0, 5);
+for s = 1:numel(shapes)
+    for k = [-4 -2 0 1 3]
+        for o = 1:size(offsets, 1)
+            for swapped = 0:1
+                for mantissa = mantissas
+                    polygons{end+1} = probe_instance(shapes{s}, mantissa * 10^k, offsets(o, :), swapped); %#ok<AGROW>
+                    parameters(end+1, :) = [s mantissa k o swapped]; %#ok<AGROW>
+                end
+            end
+        end
+    end
+end
+end
+
+function [polygons, parameters] = grid_bisection()
+% Bisect the mantissa between 6.18 and 6.30 on MATLAB's own result: the coarser
+% decade is taken when every new vertex lies on it. Every evaluated polygon is
+% recorded; rows give shape, k, offset index, swapped, the final bracket and the
+% classification at both ends (1 coarse, 0 fine, -1 undetermined).
+shapes = probe_shapes();
+offsets = [0 0; 1.7 -0.9];
+polygons = {};
+parameters = zeros(0, 8);
+for s = 1:numel(shapes)
+    for k = [-3 0 2]
+        for o = 1:size(offsets, 1)
+            for swapped = 0:1
+                low = 6.18;
+                high = 6.30;
+                P = probe_instance(shapes{s}, low * 10^k, offsets(o, :), swapped);
+                polygons{end+1} = P; %#ok<AGROW>
+                atLow = coarse_grid(P);
+                P = probe_instance(shapes{s}, high * 10^k, offsets(o, :), swapped);
+                polygons{end+1} = P; %#ok<AGROW>
+                atHigh = coarse_grid(P);
+                if atLow == 0 && atHigh == 1
+                    for iteration = 1:60
+                        middle = (low + high) / 2;
+                        if middle <= low || middle >= high
+                            break
+                        end
+                        P = probe_instance(shapes{s}, middle * 10^k, offsets(o, :), swapped);
+                        polygons{end+1} = P; %#ok<AGROW>
+                        verdict = coarse_grid(P);
+                        if verdict == 1
+                            high = middle;
+                        elseif verdict == 0
+                            low = middle;
+                        else
+                            break
+                        end
+                    end
+                end
+                parameters(end+1, :) = [s k o swapped low high atLow atHigh]; %#ok<AGROW>
+            end
+        end
+    end
+end
+end
+
+function verdict = coarse_grid(P)
+% 1 when every new polyshape vertex lies on the grid one decade coarser than
+% 10^(13 - floor(log10(m))), 0 when one does not, -1 without three new vertices.
+verdict = -1;
+warning('off', 'all');
+restore = onCleanup(@() warning('on', 'all'));
+try
+    shape = polyshape(P);
+catch
+    return
+end
+V = shape.Vertices;
+V = V(all(isfinite(V), 2), :);
+V = V(~ismember(V, P, 'rows'), :);
+if size(V, 1) < 3
+    return
+end
+centre = (min(P) + max(P)) / 2;
+magnitude = max(max(abs(P - centre)));
+K = round((V - centre) * 10^(13 - floor(log10(magnitude))));
+verdict = double(all(mod(K(:), 10) == 0));
+end
+
+function polygons = heldout_collinear()
+% Held-out near-collinear clouds (point_clouds kind 3, another seed).
+rng(73202, 'twister');
+polygons = cell(1, 1500);
+for i = 1:numel(polygons)
+    n = randi([4 40]);
+    t = rand(n, 1);
+    polygons{i} = [t, 2 * t + 1] + randn(n, 2) * 10^(-6 - 4 * rand);
+end
+end
+
+function polygons = heldout_clouds()
+% Held-out clouds of every point_clouds kind (another seed); random-order
+% clouds give outer rings with touching holes.
+rng(73203, 'twister');
+polygons = cell(1, 1500);
+for i = 1:numel(polygons)
+    n = randi([4 40]);
+    switch mod(i, 5)
+        case 0
+            P = rand(n, 2) * 10^(4 * rand - 2) + (rand > 0.5) * 100;
+        case 1
+            P = randi([0 4], n, 2) * 0.5;
+        case 2
+            P = double(single(rand(n, 2) * 8 - 4));
+        case 3
+            t = rand(n, 1);
+            P = [t, 2 * t + 1] + randn(n, 2) * 10^(-6 - 4 * rand);
+        otherwise
+            [gx, gy] = meshgrid(0:randi([2 5]), 0:randi([2 5]));
+            G = [gx(:) gy(:)];
+            P = G(randperm(size(G, 1), min(n, size(G, 1))), :) * 0.1 + 0.3;
+    end
+    polygons{i} = P;
+end
+end
+
+function polygons = extreme_grids()
+% Coordinates outside the port's fixed-point grid, and degenerate sets.
+polygons = {[0 0; 1e-300 0; 0 1e-300], [0 0; realmin * eps 0; 0 realmin * eps], ...
+    [1e308 0; 1.1e308 0; 1e308 1], [-1e308 0; 1e308 0; 0 1], ...
+    [1e12 1e12; 1e12 + 1e-3 1e12; 1e12 1e12 + 1e-3], [2 3; 2 3; 2 3], [0 0; 1 1; 2 2]};
 end
 
 %% Delaunay triangulations with exact and near ties
