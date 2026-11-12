@@ -359,15 +359,13 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   with the convex hull (`rc` without `Prf_Function`) and connective fields with
   `Fit_pRF` 0 or -1 follow MATLAB's single correlations, regressions, smoothing,
   thresholds and medians; preprocessing's `precision` option makes the global
-  signal single too. Single `cf` Gaussian fits (`Fit_pRF` 1) use MATLAB's
-  single `exp`, `sin` and `cos` as identified from recordings; from the raw
-  runs, Benson GIfTI and surface files every recorded map value equals
-  MATLAB's on its AMD (MKL CNR `auto`) host, and MATLAB's AVX-512 host gives
-  other fits from the same inputs. The identified `exp` departs from MATLAB on
-  18 of 711,307 recorded inputs, and `sin` and `cos` on 36,350 and 32,406 of
-  2,257,723,138 (one ULP of a template coordinate on about ten vertices of a
-  whole Benson hemisphere), so arbitrary inputs are not promised bit parity.
-  Single `rc` 2D fits are refused: they have no established bound end to end.
+  signal single too. Single `cf` Gaussian and `rc` 2D fits remain refused:
+  no end-to-end acceptance bound is established outside the recorded cases.
+  Internal raw-input CF tests match the AMD reference, but the empirical single
+  `exp`, `sin` and `cos` candidates retain discrepancies. On the whole X001
+  Benson atlases, 10 LH and 9 RH vertices have a one-ULP coordinate difference;
+  affected seed regions can change Gaussian fits. The internal evidence does
+  not enable those fits through the API, command line or app.
   [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
   lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
@@ -461,7 +459,7 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   `rc` model fit included; `nR^2` is 0 there too.
 - **Template precision.** `readBensonTemplate` retains double scalar constants
   until each mixed operation is rounded to single, as MATLAB does, and uses
-  MATLAB's single `sin` and `cos`: fdlibm's float kernels with the x/4 term of
+  empirical candidates for MATLAB's single `sin` and `cos`: fdlibm's float kernels with the x/4 term of
   `__kernel_cosf` keeping 11 fraction bits. Every recorded MATLAB template
   equals the reader's. Over every single angle up to 2^7 pi/2 the functions
   differ from MATLAB's on 36,350 (`sin`) and 32,406 (`cos`) of 2,257,723,138

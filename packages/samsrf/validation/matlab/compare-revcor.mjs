@@ -1,15 +1,13 @@
 // Raw GIfTI, FreeSurfer and aperture inputs through the public Node API, against
 // both hosts of the reverse-correlation recording (revcor-reference.json). Gates:
 // preprocessing, the global signal, the anatomy and the Benson reader exactly, then
-// every supported RC/CF job (CF on the reader's own template). The command line
-// runs each single Gaussian CF case on the same files and must write the API's maps.
+// every supported RC/CF job (CF on the reader's own template). Unsupported single
+// Gaussian CF and RC 2D jobs must still be refused by the public API.
 // exes/samsrf/core/tests/revcor_reference.rs isolates each stage from MATLAB's
 // own arrays and documents the limits used here.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import * as samsrf from '../../src/node.js';
 import { compareValues } from './compare-values.mjs';
 
@@ -46,41 +44,6 @@ function gate(id, name, actual, expected, accept) {
 }
 
 const exact = (a, e) => same(a, e);
-const BIN = fileURLToPath(new URL('../../bin/samsrf.js', import.meta.url));
-
-/** `samsrf cf` on the raw files, with the ROI and seed written as labels: its GIfTIs must equal the API's maps. */
-function commandLineMatches(id, dataset, average, model, roi, seed, spec, maps) {
-  const work = fs.mkdtempSync(path.join(process.env.TMPDIR ?? reference, 'samsrf-revcor-cli-'));
-  try {
-    const label = (name, vertices) => {
-      const file = path.join(work, `${dataset.hemisphere}.${name}.label`);
-      fs.writeFileSync(file, ['#!ascii label', String(vertices.length), ...Array.from(vertices, (v) => `${v} 0 0 0 0`), ''].join('\n'));
-      return file;
-    };
-    const modelFile = path.join(work, 'model.json');
-    fs.writeFileSync(modelFile, JSON.stringify(model));
-    const output = path.join(work, 'out');
-    const source = path.join(inputs, dataset.id);
-    const args = [BIN, 'cf', modelFile, output, '--runs', ...dataset.runs.map((run) => path.join(source, run)),
-      '--roi', label('roi', roi), '--seed', label('seed', seed), '--template', path.join(source, `${dataset.hemisphere}_benson.gii`),
-      '--surf', path.join(source, 'surf'), '--hemisphere', dataset.hemisphere];
-    if (!average) args.push('--concatenate');
-    const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
-    assert.equal(result.status, 0, `${id}: samsrf cf failed: ${result.stderr}`);
-    const job = samsrf.createJob(spec);
-    const prefix = `${dataset.hemisphere}_${job.modelName}${job.outSuffix}`;
-    job.free();
-    const expected = samsrf.exportGiis(maps, prefix, null, model.Export_Convention);
-    assert.ok(expected.length > 0, `${id}: no maps to compare`);
-    for (const { name, bytes } of expected) {
-      const written = path.join(output, name);
-      const equal = fs.existsSync(written) && Buffer.from(bytes).equals(fs.readFileSync(written));
-      gate(id, `command line ${name}`, Float64Array.of(equal ? 1 : 0), Float64Array.of(1), exact);
-    }
-  } finally {
-    fs.rmSync(work, { recursive: true, force: true });
-  }
-}
 const close = (a, e) => same(a, e) || Math.abs(a - e) <= 1e-12 * Math.max(1, Math.abs(e));
 const castFor = (precision) => (values) => precision === 'single' ? Float64Array.from(values, Math.fround) : values;
 
@@ -136,7 +99,6 @@ for (const host of HOSTS) {
   const byId = new Map(cases.map((item) => [item.id, item]));
   let pipelines = 0;
   let refused = 0;
-  let commandLineRuns = 0;
   const environment = JSON.parse(fs.readFileSync(path.join(root, 'environment.json'), 'utf8'));
   const avx512 = environment.observed.blas.includes('AVX512');
   for (const pre of cases.filter((item) => item.kind === 'preprocess')) {
@@ -175,7 +137,7 @@ for (const host of HOSTS) {
         gate(`${host}/${item.id}`, 'global signal', cast(data.globalSignal), readArray(root, item.globalSignal), accept);
       }
       const fitted = cf ? model.Fit_pRF === 1 : typeof model.Prf_Function === 'string';
-      const unsupported = precision === 'single' && fitted && !cf;
+      const unsupported = precision === 'single' && fitted;
       // The unchanged double path's unsmoothed CF Gaussian runs away on some
       // vertices and MATLAB's hosts disagree by up to 9e7; it is not gated here.
       const runaway = precision === 'double' && cf && model.Fit_pRF === 1 && model.Smoothing === 0;
@@ -199,7 +161,7 @@ for (const host of HOSTS) {
         fs.rmSync(path.dirname(file), { recursive: true });
       }
       if (unsupported) {
-        assert.throws(() => samsrf.createJob(spec), /Data_Precision=single with a Prf_Function fit/, `${item.id}: single RC fits must be refused`);
+        assert.throws(() => samsrf.createJob(spec), cf ? /Data_Precision=single with Fit_pRF=1/ : /Data_Precision=single with a Prf_Function fit/, `${item.id}: single fits must be refused`);
         refused++;
         continue;
       }
@@ -215,10 +177,6 @@ for (const host of HOSTS) {
       };
       const maps = run(spec);
       assert.deepEqual(maps.values, item.values, `${item.id}: map names`);
-      if (cf && fitted && precision === 'single' && !avx512) {
-        commandLineMatches(`${host}/${item.id}`, dataset, pre.average, model, roi, seed, spec, maps);
-        commandLineRuns++;
-      }
       const rows = item.maps.shape[0];
       const expected = readArray(root, item.maps);
       // Profile values carry rounding scaled by the course's conditioning,
@@ -238,13 +196,7 @@ for (const host of HOSTS) {
         const actual = maps.data.subarray(row * count, (row + 1) * count);
         const recorded = Float64Array.from({ length: count }, (_, v) => expected[v * rows + row]);
         let accept;
-        if (precision === 'single' && cf && fitted && avx512) {
-          // MATLAB's AVX-512 host orders corr and the regression differently, and its
-          // single Gaussian fits differ from the AMD host's; they are reported.
-          const differing = actual.filter((a, v) => !same(a, recorded[v])).length;
-          if (differing) console.log(`REPORT ${host}/${item.id}/${name}: ${differing} values differ on the AVX-512 host`);
-          return;
-        } else if (precision === 'double') {
+        if (precision === 'double') {
           accept = (a, e, v) => same(a, e) || Math.abs(a - e) <= 1e-12 * conditioning[v] * Math.max(1, Math.abs(e));
         } else if (cf && !avx512) {
           // Single CF maps are bit-identical on the AMD (CNR auto) host: corr's
@@ -261,11 +213,9 @@ for (const host of HOSTS) {
       });
     }
   }
-  // Single RC fits are refused (3); 6 runaway double CF Gaussians are left out.
-  assert.equal(refused, 3, `${host}: every single RC fit must be refused`);
-  assert.equal(pipelines, 90 - 3 - 6, `${host}: every supported pipeline must run`);
-  // The AMD host's twelve single Gaussian CF cases also run through the command line.
-  assert.equal(commandLineRuns, avx512 ? 0 : 12, `${host}: single Gaussian CF command-line runs`);
+  // Single fitted jobs are refused (3 RC and 12 CF); 6 runaway double CF Gaussians are left out.
+  assert.equal(refused, 15, `${host}: every single fitted job must be refused`);
+  assert.equal(pipelines, 90 - 15 - 6, `${host}: every supported pipeline must run`);
 }
 const failed = reports.filter((item) => item.failures.length);
 if (reportFile) fs.writeFileSync(reportFile, `${JSON.stringify({ gates: reports.length, failed: failed.length, results: reports }, null, 2)}\n`);

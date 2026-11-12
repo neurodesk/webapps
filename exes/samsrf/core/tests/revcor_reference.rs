@@ -34,7 +34,7 @@ struct Expected {
     raw_cf: usize,
 }
 
-const MATRIX: Expected = Expected { cases: 102, refused: 3, single_cf: 24, single_rc: 6, global: 6, replay: 69, pipelines: 69, templates: 6, raw_cf: 36 };
+const MATRIX: Expected = Expected { cases: 102, refused: 15, single_cf: 24, single_rc: 6, global: 6, replay: 69, pipelines: 69, templates: 6, raw_cf: 36 };
 const EDGES: Expected = Expected { cases: 24, refused: 0, single_cf: 8, single_rc: 2, global: 2, replay: 20, pipelines: 20, templates: 2, raw_cf: 0 };
 
 struct Host {
@@ -125,9 +125,15 @@ fn inputs(host: &Host, case: &Value, template: Option<Maps>) -> JobInputs {
     inputs_with(host, case, template, parse(case).unwrap())
 }
 
-/// The model of a single CF Gaussian case.
+/// The model of a single CF Gaussian case, which the parser refuses: parsed as
+/// double, then switched to single, so the gates reach the arithmetic below the
+/// refusal.
 fn single_gaussian_model(case: &Value) -> Model {
-    parse(case).unwrap()
+    let mut json = case["mapReplayModel"].clone();
+    json["Data_Precision"] = Value::from("double");
+    let Model::RevCorCf(mut model) = model::parse_model_json(AnalysisKind::RevCorCf, &json.to_string()).unwrap() else { unreachable!() };
+    model.data_precision = Precision::Single;
+    Model::RevCorCf(model)
 }
 
 fn single_gaussian_cf(case: &Value) -> bool {
@@ -305,10 +311,10 @@ fn rc_prepared(host: &Host, case: &Value) -> revcor_prf::Prepared {
     revcor_prf::Prepared::new(model, job.apertures.as_ref().unwrap(), &resolved, job.data.volumes).unwrap()
 }
 
-/// Single RC 2D fits are refused: no bound on their end-to-end parameters has been
-/// established. Single CF Gaussian fits are supported (`cf_from_raw_files_equals_the_run_on_matlabs_courses`).
+/// Single RC 2D and CF Gaussian fits remain refused: no end-to-end acceptance
+/// bound is established outside the recorded cases. Internal tests retain their evidence.
 #[test]
-fn single_rc_fits_are_refused() {
+fn single_fits_are_refused() {
     let Some(hosts) = hosts() else { return; };
     let mut tally = Tally::default();
     for host in &hosts {
@@ -316,11 +322,11 @@ fn single_rc_fits_are_refused() {
             let fitted = if kind(case) == AnalysisKind::RevCorCf { case["mapReplayModel"]["Fit_pRF"] == 1 } else { case["mapReplayModel"]["Prf_Function"].is_string() };
             match parse(case) {
                 Err(Error::NotImplemented(_)) => {
-                    assert!(single(case) && fitted && kind(case) == AnalysisKind::RevCorPrf, "{}: refused", case["id"]);
+                    assert!(single(case) && fitted, "{}: refused", case["id"]);
                     tally.add(host);
                 }
                 Err(error) => panic!("{}: {error:?}", case["id"]),
-                Ok(_) => assert!(!(single(case) && fitted && kind(case) == AnalysisKind::RevCorPrf), "{}: must be refused", case["id"]),
+                Ok(_) => assert!(!(single(case) && fitted), "{}: must be refused", case["id"]),
             }
         }
     }

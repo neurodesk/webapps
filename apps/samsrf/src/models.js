@@ -264,6 +264,7 @@ export function parseModel(text, analysis) {
   exportConvention(model.Export_Convention);
   if (model.Data_Precision !== undefined && !["single", "double"].includes(model.Data_Precision)) throw new Error("Data_Precision must be single or double.");
   if (model.Css_Convention !== undefined && !["nonnegative", "samsrf"].includes(model.Css_Convention)) throw new Error("Css_Convention must be nonnegative or samsrf.");
+  if (analysis === "cf" && model.Data_Precision === "single" && Number(model.Fit_pRF) === 1) throw new Error("Single precision connective fields support Fit_pRF 0 or -1; Gaussian fits need double precision.");
   if (analysis === "rc" && model.Data_Precision === "single" && typeof model.Prf_Function === "string") throw new Error("Single precision reverse correlation supports the convex hull; 2D pRF fits need double precision.");
   if (analysis === "prf") {
     for (const key of ["Prf_Function", "Param_Names", "Scaled_Param", "Only_Positive", "Scaling_Factor", "TR", "Hrf"]) {

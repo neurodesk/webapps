@@ -50,7 +50,7 @@ test('single precision averages the global signal in single and refuses CF Gauss
   const cf = { Name: 'CF', SeedRoi: 'seed', Template: 'template', Data_Precision: 'single' };
   assert.equal(samsrf.parseModel('cf', JSON.stringify({ ...cf, Fit_pRF: -1 })).dataPrecision, 'single');
   assert.equal(samsrf.parseModel('rc', JSON.stringify({ ...MODELS.rc, Data_Precision: 'single' })).dataPrecision, 'single');
-  assert.equal(samsrf.parseModel('cf', JSON.stringify({ ...cf, Fit_pRF: 1 })).dataPrecision, 'single');
+  assert.throws(() => samsrf.parseModel('cf', JSON.stringify({ ...cf, Fit_pRF: 1 })), /Data_Precision=single with Fit_pRF=1/);
 });
 
 let example;

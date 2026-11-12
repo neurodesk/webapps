@@ -106,13 +106,13 @@ pub fn exp_single(x: f32) -> f32 {
     }
 }
 
-/// MATLAB R2023b's single `sin`, the function `samsrf_benson2srf` applies to the
-/// GIfTI's single polar angles. It is fdlibm's float translation (`sf_sin.c`,
-/// `kf_sin.c`, `kf_cos.c`, `ef_rem_pio2.c` as in FreeBSD 5.0), every operation in
-/// single and no FMA, except for the x/4 term in `__kernel_cosf` (`kernel_cos_single`).
-/// Above 2^7 pi/2 (where fdlibm needs `__kernel_rem_pio2f`) the double result is rounded.
-/// It is inferred from MATLAB's outputs, not taken from MATLAB's source;
-/// `validation/matlab/README.md#single-sin-and-cos` gives the evidence and its range.
+/// Empirical candidate for MATLAB R2023b's single `sin`, used by the Benson reader.
+/// Adapts fdlibm's float kernels and reduction in single arithmetic without FMA;
+/// the cosine kernel's truncated x/4 term is inferred from recorded outputs.
+/// This is not MATLAB source or general bit equivalence: recorded residuals remain.
+/// Above 2^7 pi/2 the double result is rounded instead of using float large reduction.
+/// `packages/samsrf/NOTICE` gives immutable sources, hashes and the Sun notice;
+/// `validation/matlab/README.md#single-sin-and-cos` gives evidence and limits.
 pub fn sin_single(x: f32) -> f32 {
     let ix = x.to_bits() & 0x7fff_ffff;
     if ix <= 0x3f49_0fd8 {
@@ -133,7 +133,7 @@ pub fn sin_single(x: f32) -> f32 {
     }
 }
 
-/// MATLAB R2023b's single `cos`; see [`sin_single`].
+/// Empirical single `cos` candidate; see [`sin_single`].
 pub fn cos_single(x: f32) -> f32 {
     let ix = x.to_bits() & 0x7fff_ffff;
     if ix <= 0x3f49_0fd8 {

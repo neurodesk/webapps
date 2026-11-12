@@ -240,8 +240,8 @@ low-variance edge course.
 | Positions, `Fwhm`, `Vx`, hull and summary widths, end to end | exact | 0 | |
 | CF `R^2`, `Beta`, `Suppression`; RC `Beta` (of itself), end to end | 32 units x kappa | 3.20 per kappa | profile values |
 | Production Benson reader instead of MATLAB's template | exact | 0 | below |
-| Single CF from the raw files, Gaussian fits included (AMD host) | exact | 0 | below |
-| Single `rc` 2D fits (`Prf_Function`) | refused | | below |
+| Internal single CF from the raw files, Gaussian fits included (AMD host) | exact | 0 | below |
+| Public single `rc` 2D and CF Gaussian fits | refused | | below |
 
 Double precision is held to `1e-12 x kappa` (relative above 1), and its
 regression residuals to `1e-13` of the input's peak.
@@ -268,8 +268,10 @@ the white surface and areas through the FreeSurfer readers (the ROI and seed are
 MATLAB's recorded choices). The courses, noise ceiling and global signal equal
 MATLAB's, every map equals the run on MATLAB's courses and template, and on the
 AMD host every map value equals MATLAB's, the twelve Gaussian cases included.
-`compare-revcor.mjs` runs the same raw path through the Node API, with the CF
-jobs on the reader's template. The reader's `sin` and `cos` are not bit-identical
+The Gaussian cases use internal model construction below the public refusal.
+`compare-revcor.mjs` runs supported hull/summary cases through the Node API,
+with the CF jobs on the reader's template, and asserts all single fitted-job
+refusals (12 CF and 3 RC per host). It does not run Gaussian CLI success gates. The reader's `sin` and `cos` are not bit-identical
 to MATLAB's on every angle ([single sin and cos](#single-sin-and-cos)).
 
 The port reproduces these single-precision rules, each confirmed by an exact
@@ -355,13 +357,11 @@ they are not tolerances for the port or another MATLAB recording.
   (commit `06f57adca`), but end to end the hosts differ by up to 0.84 in
   `Sigma`.
 
-A gate therefore needs a reference per host, as the double paths have. A
-port pinned to the AMD (CNR `auto`) host still needs its single CF profiles
-bit for bit (`corr` matches there only in part; the recorded pieces are for
-that work), MATLAB's `exp` on the remaining inputs, and the objective and
-`fminsearch` arithmetic on single values. Single RC fits stay refused until a
-per-vertex gate against that host passes; single CF Gaussian fits now pass one
-(below).
+A gate needs a declared reference-host policy, as the double paths have.
+The AMD CF profiles and internal recorded fits now agree (below), but the
+remaining exponential and template-coordinate discrepancies do not have an
+end-to-end acceptance bound. Single RC 2D and CF Gaussian fits stay refused;
+the internal evidence does not establish general public enablement.
 
 ### Single CF profiles and Gaussian fits on the AMD host
 
@@ -430,10 +430,14 @@ not at the order across right-hand sides.
   through the 18 `exp` inputs. That host's own maps differ from the port's on
   47-120 values per case; MATLAB's two hosts differ from each other as above.
 
-Single Gaussian CF fits are no longer refused. Before the reader used MATLAB's
-`sin` and `cos`, its x0 or y0 differed from MATLAB's by an ulp on 1 of 9 seed
-vertices in both LH datasets, and the LH fits on it differed on 1-16 vertices,
-by up to 11 times in `Beta`.
+Single Gaussian CF fits remain refused in the API, command line and app.
+The empirical reader now matches the recorded templates, but 19 vertices of
+the whole X001 atlases retain coordinate discrepancies, and 18 recorded single
+`exp` inputs still differ. No general end-to-end acceptance bound covers those
+inputs or the Intel Gaussian maps. Before this reader change, a one-ULP
+coordinate difference on 1 of 9 seed vertices in the LH datasets changed
+1-16 fitted vertices, with differences up to elevenfold in `Beta`.
+The internal Gaussian gates retain evidence without enabling that public path.
 
 The double unsmoothed CF Gaussian is not gated here: on 2 of 21 vertices fits
 run away to |x0| > 1e8, do not replay, and differ between hosts by up to 9e7.
@@ -453,10 +457,12 @@ hosts), correct rounding misses 8 matrix vertices and leaves 354 entries of
 the two hemispheres' unique point sets different. fdlibm's float translation
 (`sf_sin.c`, `sf_cos.c`, `kf_sin.c`, `kf_cos.c`, `ef_rem_pio2.c`, single
 arithmetic, no FMA) matches all of them once `__kernel_cosf`'s x/4 term keeps
-11 of its 23 fraction bits, the convention MATLAB's single `exp` uses for the
-high part of ln 2. With the full x/4, as Cygnus wrote it, 412 (LH) and 476
+11 of its 23 fraction bits, also used by the empirical single `exp` candidate
+for the high part of ln 2. With the full x/4, as Cygnus wrote it, 412 (LH) and 476
 (RH) entries of the point sets differ. `precision::sin_single` and `cos_single`
-implement it.
+implement this empirical candidate, not an identified MATLAB implementation.
+The immutable float sources and their hashes are listed in
+[`NOTICE`](../../NOTICE); the truncated x/4 term is an empirical modification.
 
 The `single-trig` section of `record_numerics_probes.m` (`numerics_only=true`
 with `record_matlab=true`) evaluates MATLAB's `sin` and `cos` on every single x
