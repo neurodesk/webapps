@@ -1068,10 +1068,11 @@ test.describe('an import that finishes late', () => {
     await waiting('slow-mask.nii');
     expect(await loaded()).toMatchObject({ review: true, base: 'T1.nii' });
 
-    // Another image is put under the review while its seed is still being resampled.
+    // The app refuses to replace a review's base, so another image is put under
+    // the review past the app, while its seed is still being resampled.
     const other = await otherGrid(page);
-    await page.evaluate(bytes => app.loadViewerBaseVolume(new File([new Uint8Array(bytes)], 'other.nii'), { stage: 'structural' }), other);
-    expect(await loaded()).toMatchObject({ base: 'other.nii', viewer: ['other.nii'] });
+    await page.evaluate(bytes => app.viewerController.loadBaseVolume(new File([new Uint8Array(bytes)], 'other.nii'), { stage: 'structural' }), other);
+    expect(await loaded()).toMatchObject({ base: 'T1.nii', controllerBase: 'other.nii', viewer: ['other.nii'] });
     await resume('slow-mask.nii');
     await expect.poll(log).toContain('The viewer does not show the image under review.');
     await viewerIdle();
@@ -1082,5 +1083,125 @@ test.describe('an import that finishes late', () => {
     await expect.poll(log).toContain('Review/edit the lesion mask');
     expect(await loaded()).toMatchObject({ review: true, base: 'T1.nii', viewer: ['T1.nii'] });
     expect(await page.evaluate(() => app.nv.drawBitmap.length)).toBe(512);
+  });
+  test('a replaced structural image whose decode fails leaves the newer one its file', async ({ page }) => {
+    const { choose, hold, waiting, resume, ended, loaded, log, viewerIdle } = await holdImports(page);
+    await page.evaluate(() => {
+      const decode = globalThis.niivue.NVImage.loadFromUrl;
+      globalThis.niivue.NVImage.loadFromUrl = async function loadFromUrl(options) {
+        const image = await decode.call(this, options);
+        if (options.name === 'decoded-A.nii') throw new Error('the old decoder failed');
+        return image;
+      };
+      const fetchFile = globalThis.fetch;
+      globalThis.fetch = async (...args) => {
+        if (globalThis.holdFetch) {
+          await new Promise((resolve) => {
+            globalThis.releaseImport.fetch = resolve;
+          });
+        }
+        return fetchFile(...args);
+      };
+    });
+    await hold('structural', 'decoded-A.nii');
+    await page.evaluate(() => {
+      globalThis.holdFetch = true;
+    });
+    await choose('structural', 'B.nii');
+    await waiting('fetch');
+    await page.evaluate(() => {
+      globalThis.holdFetch = false;
+    });
+    await resume('decoded-A.nii');
+    expect(await ended('decoded-A.nii')).toBe('AbortError');
+    await resume('fetch');
+    expect(await ended('B.nii')).toBe('kept');
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ structural: 'B.nii', base: 'B.nii', controllerBase: 'B.nii', viewer: ['B.nii'] });
+    const text = await log();
+    expect(text).toContain('Structural image ready: B.nii');
+    expect(text).not.toMatch(/Error loading|failed/i);
+  });
+
+  test('a layer handler of a replaced subject does not switch off the newer subject\'s layer', async ({ page }) => {
+    const { choose, waiting, resume, loaded, log, viewerIdle, smallMask } = await holdImports(page);
+    const brainMask = name => page.evaluate(({ bytes, name }) => {
+      const file = new File([new Uint8Array(bytes)], name);
+      app.tagFileSpace(file, { space: app.structuralSpace(), role: 'brain-mask', sourceStage: 'test' });
+      app.nativeBrainmaskFile = file;
+      app.refreshViewerLayerControls();
+    }, { bytes: [...smallMask], name });
+    const reviews = async () => (await log()).split('Review/edit the lesion mask, then confirm it to continue analysis.').length - 1;
+    await choose('structural', 'A.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('A.nii');
+    await brainMask('decoded-A-brain.nii');
+    await page.locator('#startManualMaskButton').dispatchEvent('click');
+    await expect.poll(reviews).toBe(1);
+    await toggleLayer(page, 'layerToggleBrainMask', true);
+    await waiting('decoded-A-brain.nii');
+
+    await choose('structural', 'B.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('B.nii');
+    await brainMask('B-brain.nii');
+    await page.locator('#startManualMaskButton').dispatchEvent('click');
+    await expect.poll(reviews).toBe(2);
+    await toggleLayer(page, 'layerToggleBrainMask', true);
+    await expect.poll(async () => (await loaded()).viewer).toEqual(['B.nii', 'B-brain.nii']);
+    await expect(page.locator('#layerToggleBrainMask')).toBeChecked();
+
+    await resume('decoded-A-brain.nii');
+    await page.waitForTimeout(300);
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ base: 'B.nii', review: true, viewer: ['B.nii', 'B-brain.nii'] });
+    const layer = await page.evaluate(() => ({
+      checked: document.getElementById('layerToggleBrainMask').checked,
+      flag: app.viewerLayerVisibility.brainmask,
+      stage: app.viewerController.isStageVisible('brainmask'),
+      opacity: app.nv.volumes[1].opacity,
+    }));
+    expect(layer).toEqual({ checked: true, flag: true, stage: true, opacity: 0.4 });
+    expect(await log()).not.toMatch(/Could not show|failed/i);
+  });
+
+  test('an open mask review keeps its image as the base against registration QC', async ({ page }) => {
+    const { choose, loaded, log, viewerIdle, image } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await page.evaluate(({ template, registered }) => {
+      app.registrationTemplateFile = new File([new Uint8Array(template)], 'template.nii');
+      app.registeredT1MniFile = new File([new Uint8Array(registered)], 'registered.nii');
+      app.hasRegistrationDisplacement = true;
+      app.lesionFile = new File([new Uint8Array(registered)], 'lesion.nii');
+      app.tagFileSpace(app.lesionFile, { space: app.structuralSpace(), role: 'lesion', sourceStage: 'test' });
+      app.refreshViewerLayerControls();
+    }, { template: await otherGrid(page), registered: [...image] });
+    const qcControls = ['#checkAtlasAlignmentButton', '#showSubjectAtlasButton', '#registrationQcMode', '#registrationBlendValue'];
+    for (const control of qcControls) await expect(page.locator(control)).toBeEnabled();
+
+    await page.locator('#startManualMaskButton').dispatchEvent('click');
+    await expect.poll(log).toContain('Review/edit the lesion mask');
+    await drawTwoVoxels(page);
+    for (const control of qcControls) await expect(page.locator(control)).toBeDisabled();
+
+    // The viewer refuses the stack even when something asks for it past the disabled controls.
+    const refusals = await page.evaluate(async () => {
+      const outcome = load => load.then(() => 'loaded', error => error.message);
+      return [
+        await outcome(app.showRegistrationQc('mni')),
+        await outcome(app.showScanConfirmation()),
+        await outcome(app.loadViewerBaseVolume(app.registrationTemplateFile, { stage: 'structural' })),
+      ];
+    });
+    expect(refusals).toEqual(Array(3).fill('Confirm the lesion mask or start over before changing the view.'));
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ review: true, base: 'T1.nii', controllerBase: 'T1.nii', drawn: 2, viewer: ['T1.nii'] });
+    const grid = await page.evaluate(() => ({
+      drawing: app.nv.drawBitmap.length,
+      base: app.nv.volumes[0].hdr.dims.slice(1, 4),
+      exported: app.exportActiveNativeDrawingFile('edited.nii')?.size > 0,
+    }));
+    expect(grid).toEqual({ drawing: 512, base: [8, 8, 8], exported: true });
+    await page.locator('#maskUndoButton').dispatchEvent('click');
+    expect(await loaded()).toMatchObject({ review: true, drawn: 0 });
   });
 });

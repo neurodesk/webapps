@@ -32,7 +32,7 @@ async function runOperation(app, context, work, adopt) {
     app.endStatus(result.summary?.requiresReview ? 'Review and confirm the lesion mask' : 'Complete');
     return result;
   } catch (error) {
-    if (!signal.aborted) app.failStatus(error.message);
+    if (!signal.aborted && !app.superseded(error)) app.failStatus(error.message);
     throw error;
   } finally {
     signal.removeEventListener('abort', cancel);

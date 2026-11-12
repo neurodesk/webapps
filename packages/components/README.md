@@ -50,9 +50,11 @@ model defaults remain app-owned.
 optional `assertCurrent`. With it the file is decoded away from the viewer,
 `assertCurrent()` is called, and the image is inserted and recorded in one
 synchronous step that ends with `onCommit()`; a load that `assertCurrent`
-rejects with an `AbortError` never reaches the viewer. Use it wherever a newer
-load can supersede one that is still being fetched or decoded. Pass `NVImage`
-to the constructor when NiiVue is imported as a module.
+rejects never reaches the viewer, and what `assertCurrent` throws reaches the
+caller, also when the decode itself failed. Each such load creates its own
+object URL and releases only that URL. Use it wherever a newer load can
+supersede one that is still being fetched or decoded. Pass `NVImage` to the
+constructor when NiiVue is imported as a module.
 
 ## Verified downloads
 

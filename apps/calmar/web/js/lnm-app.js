@@ -499,12 +499,11 @@ export class LesionNetworkMappingApp {
       manualMaskInput.addEventListener('change', (event) => {
         const name = event.target.files?.[0]?.name || 'selected files';
         this.importInput('mask', event.target.files, (file, assertCurrent) => this.startUploadedLesionMaskReview(file, { assertCurrent }))
-          .catch((err) => {
-            if (err.name === 'AbortError') return;
+          .catch(this.unlessSuperseded((err) => {
             this.updateOutput(
               `Manual mask input failed for ${name}: ${err.message}. Choose a NIfTI mask file (.nii or .nii.gz) or a DICOM mask series.`
             );
-          })
+          }))
           .finally(() => { event.target.value = ''; });
       });
     }
@@ -1001,11 +1000,11 @@ export class LesionNetworkMappingApp {
               this.applyViewerLayerVisibility(config.layer);
               this.refreshViewerLayerControls();
             })
-            .catch(err => {
+            .catch(this.unlessSuperseded((err) => {
               this.viewerLayerVisibility[config.layer] = false;
               this.reportFailure(`Could not show ${this.getViewerLayerLabel(config.layer)}`)(err);
               this.refreshViewerLayerControls();
-            });
+            }));
         } else {
           this.applyViewerLayerVisibility(config.layer);
           this.refreshViewerLayerControls();
@@ -1148,10 +1147,16 @@ export class LesionNetworkMappingApp {
       this.hasRegistrationDisplacement &&
       this.executor?.runInverseWarpMask
     );
+    // These replace the viewer's base, which an open mask review keeps (`assertReviewKeepsBase`).
+    const review = this.maskReviewActive;
     const showBtn = document.getElementById('showSubjectAtlasButton');
-    if (showBtn) showBtn.disabled = !canProject;
+    if (showBtn) showBtn.disabled = !canProject || review;
     const checkBtn = document.getElementById('checkAtlasAlignmentButton');
-    if (checkBtn) checkBtn.disabled = !canProject;
+    if (checkBtn) checkBtn.disabled = !canProject || review;
+    for (const id of ['registrationQcMode', 'registrationBlendValue']) {
+      const control = document.getElementById(id);
+      if (control) control.disabled = review;
+    }
     const downloadBtn = document.getElementById('downloadSubjectAtlasButton');
     if (downloadBtn) downloadBtn.disabled = !this.patientAtlasFile;
   }
@@ -1510,10 +1515,22 @@ export class LesionNetworkMappingApp {
     this.refreshViewerLayerControls();
   }
 
+  // While a mask review is open its image stays the viewer's base: the
+  // drawing lives on that image's grid, for as long as it is open. This is
+  // the one place that holds it, at the commit of every base and stack. A new
+  // structural image, Start over and confirmation end the review first.
+  assertReviewKeepsBase(file) {
+    if (!this.maskReviewActive || file === this.nativeStructuralFile) return;
+    throw new Error('Confirm the lesion mask or start over before changing the view.');
+  }
+
   loadViewerBaseVolume(file, options = {}, assertCurrent) {
     return this.viewerLoad(check => this.viewerController.loadBaseVolume(file, {
       ...options,
-      assertCurrent: check,
+      assertCurrent: () => {
+        check();
+        this.assertReviewKeepsBase(file);
+      },
       onCommit: () => this.commitViewerBase(file)
     }), { assertCurrent });
   }
@@ -1554,7 +1571,10 @@ export class LesionNetworkMappingApp {
   // A stack replaces the base and every overlay in one step.
   loadViewerVolumeStack(entries = []) {
     return this.viewerLoad(check => this.viewerController.loadVolumeStack(entries, {
-      assertCurrent: check,
+      assertCurrent: () => {
+        check();
+        this.assertReviewKeepsBase(null);
+      },
       onCommit: () => this.commitViewerBase(entries[0]?.file || null)
     }), { assertCurrent: this.pipelineTurn() });
   }
@@ -1751,9 +1771,23 @@ export class LesionNetworkMappingApp {
   // A replaced turn ends with an AbortError. That is the expected end of a
   // superseded import, review or run, so it is never logged as a failure.
   reportFailure(label, options) {
-    return (err) => {
-      if (err?.name === 'AbortError') return;
+    return this.unlessSuperseded((err) => {
       this.updateOutput(label ? `${label}: ${err.message}` : err.message, options);
+    });
+  }
+
+  superseded(err) {
+    return err?.name === 'AbortError';
+  }
+
+  // Whatever handles the end of a load, review or run does nothing for one
+  // that was superseded: no state, no layer, no control, no status, no log.
+  // Its successor owns all of those by then. Every `.catch` goes through this
+  // (or `reportFailure`), so a new handler cannot forget it.
+  unlessSuperseded(handle) {
+    return (err) => {
+      if (this.superseded(err)) return undefined;
+      return handle(err);
     };
   }
 
@@ -1800,6 +1834,8 @@ export class LesionNetworkMappingApp {
     this.nativeStructuralFile = null;
     this.nativeStructuralInfo = null;
     this.structuralFromDiffusion = null;
+    this.maskReviewActive = false;
+    this.setMaskReview3DRenderEnabled(true);
     this.clearViewer();
     this.showRemainingInput();
     this.refreshViewerLayerControls();
@@ -2391,11 +2427,11 @@ export class LesionNetworkMappingApp {
         tableId: 'directFunctionProfileTable',
         emptyLabel: 'No direct-overlap functional associations'
       }))
-      .catch(err => {
+      .catch(this.unlessSuperseded((err) => {
         this.clearFunctionProfileTable('directFunctionProfileResults', 'directFunctionProfileTable');
         this.updateOutput(`Functional profiles unavailable: ${err.message}`);
         return null;
-      });
+      }));
     return this._functionalProfileRenderPromise;
   }
 
@@ -2410,11 +2446,11 @@ export class LesionNetworkMappingApp {
         tableId: 'mapFunctionProfileTable',
         emptyLabel: 'No connectivity-map functional associations'
       }))
-      .catch(err => {
+      .catch(this.unlessSuperseded((err) => {
         this.clearFunctionProfileTable('mapFunctionProfileResults', 'mapFunctionProfileTable');
         this.updateOutput(`Functional profiles unavailable: ${err.message}`);
         return null;
-      });
+      }));
     return this._functionalProfileRenderPromise;
   }
 
@@ -3725,7 +3761,7 @@ export class LesionNetworkMappingApp {
   async renderThresholdPreviewOverlay(version = this._thresholdPreviewVersion) {
     const file = this.thresholdedMaskFile;
     if (version !== this._thresholdPreviewVersion || !file) return;
-    if (!this.viewerController) return;
+    if (!this.viewerController || this.maskReviewActive) return;
     if (this.canProjectThresholdToPatientSpace()) {
       try {
         await this.projectThresholdToPatientSpace(version);
@@ -3733,6 +3769,7 @@ export class LesionNetworkMappingApp {
         await this.renderPatientLayerStack();
         return;
       } catch (err) {
+        if (this.superseded(err)) return;
         this.patientThresholdedMaskFile = null;
         this.refreshViewerLayerControls();
         this.reportFailure('Patient-space threshold projection failed')(err);

@@ -8,6 +8,8 @@ export class ViewerController {
     this.viewerConfig = options.viewerConfig || {};
     this.niivueFactory = options.niivueFactory || (config => new globalThis.niivue.Niivue(config));
     this.NVImage = options.NVImage || null;
+    this.decodedUrls = new Map();
+    this.insertedUrls = new Map();
     this.currentBaseFile = this.currentOverlayFile = this.currentFile = null;
     this.currentOverlayIndex = null;
     this.volumeStageIndices = new Map();
@@ -35,6 +37,11 @@ export class ViewerController {
     ]);
   }
   releaseUnusedObjectUrls() {
+    for (const [image, url] of this.insertedUrls) {
+      if (this.nv?.volumes?.includes(image)) continue;
+      URL.revokeObjectURL(url);
+      this.insertedUrls.delete(image);
+    }
     const activeFiles = this.getActiveObjectUrlFiles();
     for (const [file, url] of this.objectUrls) {
       if (activeFiles.has(file)) continue;
@@ -65,15 +72,57 @@ export class ViewerController {
   // Nothing can run between the check and the commit, so a superseded load
   // never reaches the viewer. Without `assertCurrent` NiiVue fetches, decodes
   // and inserts in one call that cannot be stopped.
-  decodeVolume(file, entry = {}) {
+  //
+  // A decode owns the object URL it creates. It releases that URL itself when
+  // it fails or its image is not inserted, and hands it to the image when the
+  // image is inserted, where it lives until the image leaves the viewer. No
+  // decode shares a URL with another, so the end of one, however it ends,
+  // cannot take the file away from another that is still fetching it.
+  async decodeVolume(file, entry = {}) {
     const NVImage = this.NVImage || globalThis.niivue?.NVImage;
     if (!NVImage) throw new Error('ViewerController: NVImage is required for a load with assertCurrent');
-    return NVImage.loadFromUrl({ url: this.getObjectUrl(file), name: file.name, ...entry });
+    const url = URL.createObjectURL(file);
+    try {
+      const image = await NVImage.loadFromUrl({ url, name: file.name, ...entry });
+      this.decodedUrls.set(image, url);
+      return image;
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      throw error;
+    }
+  }
+
+  discardDecodedVolume(image) {
+    const url = this.decodedUrls.get(image);
+    if (!url) return;
+    this.decodedUrls.delete(image);
+    URL.revokeObjectURL(url);
+  }
+
+  // The caller's check decides first, also when a decode failed: whatever
+  // `assertCurrent` throws leaves the load unchanged, so a superseded load is
+  // inert however it ends and a refusal reaches the caller. Only a failure of
+  // a load that is still wanted is reported (`failure`).
+  async decodeCurrent(decodes, assertCurrent) {
+    const settled = await Promise.allSettled(decodes);
+    const images = settled.filter(result => result.status === 'fulfilled').map(result => result.value);
+    const failed = settled.find(result => result.status === 'rejected');
+    try {
+      assertCurrent();
+    } catch (error) {
+      images.forEach(image => this.discardDecodedVolume(image));
+      throw error;
+    }
+    if (!failed) return { images };
+    images.forEach(image => this.discardDecodedVolume(image));
+    return { failure: failed.reason };
   }
 
   // What NiiVue's addVolumeFromUrl does once the image is decoded.
   insertDecodedVolume(image, file) {
-    const url = this.getObjectUrl(file);
+    const url = this.decodedUrls.get(image);
+    this.decodedUrls.delete(image);
+    this.insertedUrls.set(image, url);
     this.nv.document?.addImageOptions?.(image, { url, name: file.name });
     image.onColormapChange = this.nv.onColormapChange;
     this.nv.mediaUrlMap?.set(image, url);
@@ -87,26 +136,27 @@ export class ViewerController {
     });
   }
 
-  rethrowSuperseded(error, options) {
-    if (options.assertCurrent && error?.name === 'AbortError') throw error;
+  async loadCheckedBaseVolume(file, options) {
+    this.updateOutput(`Loading ${file.name}...`);
+    const { images, failure } = await this.decodeCurrent([this.decodeBaseVolume(file)], options.assertCurrent);
+    if (failure) {
+      this.updateOutput(`Error loading ${file.name}: ${failure.message}`);
+      return false;
+    }
+    this.commitBaseVolume(images[0], file, options);
+    options.onCommit?.();
+    return true;
   }
 
   async loadBaseVolume(file, options = {}) {
     if (!this.isAvailable()) return false;
+    if (options.assertCurrent) return this.loadCheckedBaseVolume(file, options);
     try {
       this.updateOutput(`Loading ${file.name}...`);
-      if (options.assertCurrent) {
-        const image = await this.decodeBaseVolume(file);
-        options.assertCurrent();
-        this.commitBaseVolume(image, file, options);
-        options.onCommit?.();
-        return true;
-      }
       await this.nv.loadVolumes([{ url: this.getObjectUrl(file), name: file.name }]);
       this.recordBaseVolume(file, options);
       return true;
     } catch (error) {
-      this.rethrowSuperseded(error, options);
       this.releaseUnusedObjectUrls();
       this.updateOutput(`Error loading ${file.name}: ${error.message}`);
       return false;
@@ -145,11 +195,14 @@ export class ViewerController {
   async loadCheckedVolumeStack(entries, options) {
     const [base, ...overlays] = entries;
     const configs = overlays.map(entry => this.overlayConfig(entry.colormap || 'labels', entry.opacity ?? 0.5, { ...entry, releaseUnusedUrls: false }));
-    const images = await Promise.all([
+    const { images, failure } = await this.decodeCurrent([
       this.decodeBaseVolume(base.file),
       ...overlays.map((entry, index) => this.decodeVolume(entry.file, { colormap: configs[index].colormap, opacity: configs[index].opacity }))
-    ]);
-    options.assertCurrent();
+    ], options.assertCurrent);
+    if (failure) {
+      this.updateOutput(`Error loading viewer volumes: ${failure.message}`);
+      return false;
+    }
     this.commitBaseVolume(images[0], base.file, { ...base, releaseUnusedUrls: false });
     if (base.labelMask) this.configureSegmentationVolume(0, base.colormap || 'labels');
     overlays.forEach((entry, index) => this.commitOverlay(images[index + 1], entry.file, configs[index]));
@@ -167,8 +220,8 @@ export class ViewerController {
       options.onCommit?.();
       return true;
     }
+    if (options.assertCurrent) return this.loadCheckedVolumeStack(entries, options);
     try {
-      if (options.assertCurrent) return await this.loadCheckedVolumeStack(entries, options);
       const [base, ...overlays] = entries;
       if (!await this.loadBaseVolume(base.file, { ...base, releaseUnusedUrls: false })) {
         this.clearVolumes();
@@ -189,8 +242,7 @@ export class ViewerController {
       this.releaseUnusedObjectUrls();
       return true;
     } catch (error) {
-      this.rethrowSuperseded(error, options);
-      if (!options.assertCurrent) this.clearVolumes();
+      this.clearVolumes();
       this.updateOutput(`Error loading viewer volumes: ${error.message}`);
       return false;
     }
@@ -199,23 +251,28 @@ export class ViewerController {
   async loadOverlay(file, colormapOrOptions = 'red', opacity = 0.5, options = {}) {
     if (!this.isAvailable()) return false;
     const config = this.overlayConfig(colormapOrOptions, opacity, options);
+    if (config.assertCurrent) return this.loadCheckedOverlay(file, config);
     try {
-      if (config.assertCurrent) {
-        const image = await this.decodeVolume(file, { colormap: config.colormap, opacity: config.opacity });
-        config.assertCurrent();
-        this.commitOverlay(image, file, config);
-        config.onCommit?.();
-        return true;
-      }
       await this.nv.addVolumeFromUrl({ url: this.getObjectUrl(file), name: file.name, colormap: config.colormap, opacity: config.opacity });
       this.recordOverlay(file, config);
       return true;
     } catch (error) {
-      this.rethrowSuperseded(error, config);
       this.releaseUnusedObjectUrls();
       this.updateOutput(`Error loading overlay: ${error.message}`);
       return false;
     }
+  }
+
+  async loadCheckedOverlay(file, config) {
+    const decode = this.decodeVolume(file, { colormap: config.colormap, opacity: config.opacity });
+    const { images, failure } = await this.decodeCurrent([decode], config.assertCurrent);
+    if (failure) {
+      this.updateOutput(`Error loading overlay: ${failure.message}`);
+      return false;
+    }
+    this.commitOverlay(images[0], file, config);
+    config.onCommit?.();
+    return true;
   }
 
   commitOverlay(image, file, config) {

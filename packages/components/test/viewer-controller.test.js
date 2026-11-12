@@ -175,3 +175,53 @@ test('a stack with assertCurrent replaces the viewer only when every entry is de
   assert.equal(viewer.getVolumeIndexForStage('map'), 1);
   assert.equal(viewer.isCurrentVolumeStack(entries), true);
 });
+
+test('a decode releases only the object URL it created, however it ends', async () => {
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  let created = 0;
+  const revoked = [];
+  URL.createObjectURL = (input) => {
+    created += 1;
+    return `blob:${input.name}#${created}`;
+  };
+  URL.revokeObjectURL = url => revoked.push(url);
+
+  try {
+    const { nv, decodes, viewer } = twoPhase();
+    const failing = [];
+    viewer.NVImage = {
+      loadFromUrl: options => new Promise((resolve, reject) => {
+        decodes.push({ options, finish: () => resolve({ name: options.name }) });
+        failing.push(() => reject(new Error('decode failed')));
+      }),
+    };
+    let supersededA = false;
+    const replaced = viewer.loadBaseVolume(file('A.nii'), {
+      assertCurrent: () => {
+        if (supersededA) throw new DOMException('superseded', 'AbortError');
+      },
+    });
+    const current = viewer.loadBaseVolume(file('B.nii'), { assertCurrent: () => {} });
+    supersededA = true;
+    failing[0]();
+    await assert.rejects(replaced, { name: 'AbortError' }, 'a superseded load that fails ends as superseded');
+    assert.deepEqual(revoked, ['blob:A.nii#1'], 'the failed decode releases its own URL and no other');
+
+    decodes[1].finish();
+    assert.equal(await current, true);
+    assert.deepEqual(nv.volumes.map(volume => volume.name), ['B.nii']);
+    assert.deepEqual(revoked, ['blob:A.nii#1'], 'an inserted image keeps its URL');
+
+    const failed = viewer.loadOverlay(file('seg.nii'), 'red', 0.5, { assertCurrent: () => {} });
+    failing[2]();
+    assert.equal(await failed, false, 'a current load that fails is reported, not thrown');
+    assert.deepEqual(revoked, ['blob:A.nii#1', 'blob:seg.nii#3']);
+
+    viewer.clearVolumes();
+    assert.deepEqual(revoked, ['blob:A.nii#1', 'blob:seg.nii#3', 'blob:B.nii#2'], 'the URL goes when the image leaves the viewer');
+  } finally {
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+  }
+});
