@@ -1016,6 +1016,24 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   932's MATLAB ring spans several Clipper rings. Each fix tried (rotating rings
   to their lowest input vertex, reversing them, face tracing, a non-strict first
   union) resolves some of the four and breaks other clouds, so none is adopted.
+  These four are unresolved regressions, not accepted results.
+
+  The probe's `KeepCollinearPoints` rings locate the obstacle. MATLAB's rings
+  before collinear cleaning are neither Clipper's strictly simple rings (157 of
+  500 random clouds match, as rings without orientation), its non-strict rings
+  (19) nor the minimal faces of the arrangement (483): MATLAB keeps a hole
+  that touches its outer ring at one vertex as a hole, and splits the region
+  where it touches at two. Its default output is then not those rings
+  cleaned: Clipper's `CleanPolygon` loop, a simultaneous removal against the
+  original neighbours, a single pass, and any of these followed by a strictly
+  simple or non-strict union all reproduce MATLAB's default vertices from
+  MATLAB's own kept rings for every random and offset cloud, but for at most
+  346 of 500 near-collinear clouds and 401 and 345 of the 500 half-integer and
+  0.1-grid clouds. In point cloud 7 MATLAB first merges two kept rings across
+  the thin unfilled sliver between them and only then removes near-collinear
+  vertices, so a vertex that is near-collinear in its kept ring survives with
+  its merged neighbours. Reproducing the four regressions needs that merge
+  rule and MATLAB's removal order, which the recorded outputs do not determine.
   The test names these 44 cases, requires each to stay near-collinear and still
   differ, and freezes each port hull, emptiness, area and centroid bit for bit
   in `matlab_polygon_snapping.json`. These are regression snapshots, not MATLAB
