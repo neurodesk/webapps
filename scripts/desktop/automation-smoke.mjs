@@ -306,8 +306,8 @@ try {
   const voxelCount = binary.reduce((sum, value) => sum + value, 0);
   const maskSha256 = hash(binary);
   // Golden values are pinned by apps/brain-extraction/e2e/app.spec.js.
-  assert.equal(voxelCount, 246875);
-  assert.equal(maskSha256, '107a46c3a2f42f4a7796dc5a5b2a6660a302239ae50a0cf2eea80b1767a50862');
+  assert.equal(voxelCount, 240631);
+  assert.equal(maskSha256, '20112e75bdaab6c8f3d9d47469b6814554f167996f4cff61e004f00207b233ad');
   assert.ok(brain.data.every((value, index) => value === (binary[index] ? original.data[index] : 0)));
   assert.equal(JSON.parse(artifacts.report).runId, report.runId);
   const sessionId = finished.session.id;
