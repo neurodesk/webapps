@@ -1410,35 +1410,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261111/brain-extraction-0.5.20261111-linux-x64.tar.gz",
-          "sha256": "7c765feb8d8fe940990d3e9f6260bb3ff6876521bd10c49b30668fbc64d688fa",
-          "bytes": 88253647,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261111/brain-extraction-0.5.20261111-linux-x64.tar.gz.validation.txt",
+          "version": "0.5.20261112",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261112/brain-extraction-0.5.20261112-linux-x64.tar.gz",
+          "sha256": "a83db359e77d71b8500f24d3bc76c51a3ae0c15386c8d7ec5912bf912e1421ec",
+          "bytes": 88252961,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261112/brain-extraction-0.5.20261112-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf brain-extraction-0.5.20261111-linux-x64.tar.gz\n./brain-extraction-0.5.20261111-linux-x64/brain-extraction head.nii.gz results"
+          "command": "tar -xzf brain-extraction-0.5.20261112-linux-x64.tar.gz\n./brain-extraction-0.5.20261112-linux-x64/brain-extraction head.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261111/brain-extraction-0.5.20261111-macos-arm64.pkg",
-          "sha256": "f0861b592191100ec3e5ab6ca55aa3ad8e53162cb066b6443240377bc48ad545",
-          "bytes": 89620222,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261111/brain-extraction-0.5.20261111-macos-arm64.pkg.validation.txt",
+          "version": "0.5.20261112",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261112/brain-extraction-0.5.20261112-macos-arm64.pkg",
+          "sha256": "895f7cee32c814eec85e5f788d5f9ef6f8163525b6f3c5af81cd1c9635604261",
+          "bytes": 89619102,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261112/brain-extraction-0.5.20261112-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg brain-extraction-0.5.20261111-macos-arm64.pkg -target /\nbrain-extraction self-check\nbrain-extraction head.nii.gz results"
+          "command": "sudo installer -pkg brain-extraction-0.5.20261112-macos-arm64.pkg -target /\nbrain-extraction self-check\nbrain-extraction head.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261111/brain-extraction-0.5.20261111-windows-x64.zip",
-          "sha256": "09d4358b81857e66fe095e2e5a1a1473bcec4553fd4cd3e0ff7aec60fdf18f8a",
-          "bytes": 89149783,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261111/brain-extraction-0.5.20261111-windows-x64.zip.validation.txt",
+          "version": "0.5.20261112",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261112/brain-extraction-0.5.20261112-windows-x64.zip",
+          "sha256": "2148fe1090fda8675482e658e0f47a41f55116d4c48fa125f5e8405d07b5495c",
+          "bytes": 89149443,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.5.20261112/brain-extraction-0.5.20261112-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\brain-extraction-0.5.20261111-windows-x64.zip -DestinationPath .\n.\\brain-extraction-0.5.20261111-windows-x64\\brain-extraction.exe head.nii.gz results"
+          "command": "Expand-Archive -Path .\\brain-extraction-0.5.20261112-windows-x64.zip -DestinationPath .\n.\\brain-extraction-0.5.20261112-windows-x64\\brain-extraction.exe head.nii.gz results"
         }
       ],
       "containers": []
