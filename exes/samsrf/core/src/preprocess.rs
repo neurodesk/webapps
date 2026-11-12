@@ -510,16 +510,22 @@ pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: 
         }
         let x: Vec<f32> = zscore_single(&covariates.iter().map(|&value| value as f32).collect::<Vec<_>>());
         let design: Vec<num_complex::Complex64> = x.iter().map(|&value| num_complex::Complex64::new(f64::from(value), 0.0)).collect();
+        let ones = vec![num_complex::Complex64::new(1.0, 0.0); design.len()];
+        // `B = [X ones] \ Y` over every course at once, as MATLAB solves it: each
+        // column's arithmetic depends on its place among the right-hand sides. A
+        // course with a NaN keeps its place as zeros and is zeroed below.
+        let missing: Vec<bool> = (0..data.vertices).map(|v| data.course(v).iter().any(|value| value.is_nan())).collect();
+        let zeros = vec![0.0; data.volumes];
+        let ys: Vec<&[f64]> = (0..data.vertices).map(|v| if missing[v] { zeros.as_slice() } else { data.course(v) }).collect();
+        let solution = crate::lstsq::mldivide_many(&[&design, &ones], &ys, Precision::Single);
         for vertex in 0..data.vertices {
             let course = data.course_mut(vertex);
-            if course.iter().any(|value| value.is_nan()) {
+            if missing[vertex] {
                 course.fill(0.0);
                 continue;
             }
-            // `[X ones] \ Y`, in MATLAB's column order.
-            let ones = vec![num_complex::Complex64::new(1.0, 0.0); design.len()];
-            let solution = crate::lstsq::mldivide(&[&design, &ones], course, Precision::Single);
-            let (beta, baseline) = (solution.coefficients[0].re as f32, solution.coefficients[1].re as f32);
+            let coefficients = &solution.coefficients[vertex];
+            let (beta, baseline) = (coefficients[0].re as f32, coefficients[1].re as f32);
             for (value, &x) in course.iter_mut().zip(&x) {
                 let modelled = x * beta + baseline;
                 *value = f64::from(*value as f32 - modelled);
