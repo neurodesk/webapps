@@ -130,9 +130,9 @@ fn complex_values(root: &Path, descriptor: &Value) -> Vec<Complex64> {
 }
 
 /// MATLAB solves A \ B for all right-hand sides in one ?ormqr and ?trsm call.
-/// The port's multi-column solve must equal MATLAB's in every real design it
-/// reproduced when this gate was written: all 214 single and 184 of 190 double
-/// recorded 8-column solves (complex multi-column solves are not modelled).
+/// Every coefficient of all 214 single and 190 double recorded real 8-column
+/// solves must equal MATLAB's bit for bit (complex multi-column solves are not
+/// modelled).
 #[test]
 fn multiple_right_hand_sides_match_matlab_on_amd() {
     let Some(hosts) = hosts() else { return; };
@@ -140,13 +140,9 @@ fn multiple_right_hand_sides_match_matlab_on_amd() {
     let designs: Value = serde_json::from_slice(&std::fs::read(designs_root.join("qr.json")).unwrap()).unwrap();
     let (root, _) = hosts.iter().find(|(_, cpu)| cpu.contains("AMD")).unwrap();
     let metadata: Value = serde_json::from_slice(&std::fs::read(root.join("kernels.json")).unwrap()).unwrap();
-    // Current nonmatching outputs are regression metadata, not MATLAB truth.
-    // Every formerly exact case must remain exact; each other coefficient may
-    // stay unchanged or improve to MATLAB, never spend another case's gain.
-    let frozen: std::collections::BTreeMap<String, Vec<[u64; 2]>> =
-        serde_json::from_str(include_str!("data/qr-multi-outcomes.json")).unwrap();
     let mut visited = std::collections::BTreeSet::new();
-    let mut exact = std::collections::BTreeMap::<String, usize>::new();
+    let mut solves = std::collections::BTreeMap::<String, usize>::new();
+    let bits = |v: Complex64| [v.re.to_bits(), v.im.to_bits()];
     for item in metadata["multiple"].as_array().unwrap() {
         if item["complex"] == true {
             continue;
@@ -160,39 +156,61 @@ fn multiple_right_hand_sides_match_matlab_on_amd() {
         let precision = if item["precision"] == "single" { Precision::Single } else { Precision::Double };
         let solved = lstsq::mldivide_many(&columns, &ys, precision);
         let together = complex_values(root, &item["together"]);
-        let same = solved.coefficients.iter().enumerate().all(|(j, c)| c.iter().enumerate().all(|(i, v)| *v == together[i + j * 2]));
         let id = item["id"].as_str().unwrap();
         assert!(visited.insert(id.to_string()), "duplicate multi-RHS case {id}");
-        let previous = frozen.get(id);
-        if let Some(bits) = previous {
-            assert_eq!(bits.len(), together.len(), "{id}: snapshot shape");
-        }
+        assert_eq!(solved.coefficients.iter().flatten().count(), together.len(), "{id}: shape");
         for (index, value) in solved.coefficients.iter().flatten().enumerate() {
-            assert!(multi_coefficient_matches(*value, together[index], previous.map(|bits| bits[index])),
-                "{id}: coefficient {index}: {value} differs from MATLAB and the frozen result");
+            assert_eq!(bits(*value), bits(together[index]), "{id}: coefficient {index}: {value} differs from MATLAB's {}", together[index]);
         }
-        *exact.entry(item["precision"].as_str().unwrap().to_string()).or_default() += usize::from(same);
+        *solves.entry(item["precision"].as_str().unwrap().to_string()).or_default() += 1;
     }
-    eprintln!("bit-identical 8-column solves: {exact:?}");
+    eprintln!("bit-identical 8-column solves: {solves:?}");
     assert_eq!(visited.len(), 404, "missing real multi-RHS designs");
-    assert_eq!(exact.get("single"), Some(&214), "bit-identical single 8-column solves");
-    assert_eq!(exact.get("double"), Some(&184), "bit-identical double 8-column solves");
-    assert_eq!(frozen.len(), 6);
-    assert!(frozen.keys().all(|id| visited.contains(id)), "unvisited frozen design");
+    assert_eq!(solves.get("single"), Some(&214), "single 8-column solves");
+    assert_eq!(solves.get("double"), Some(&190), "double 8-column solves");
 }
 
-fn multi_coefficient_matches(actual: Complex64, expected: Complex64, previous: Option<[u64; 2]>) -> bool {
-    actual == expected || previous == Some([actual.re.to_bits(), actual.im.to_bits()])
-}
-
+/// Every step of MKL's recorded chain (`?geqp3`'s pivot, packed factor and
+/// reflector scalars, `?ormqr`/`?unmqr`'s Q^H y, `?trsv`'s coefficients)
+/// equals the port's bit for bit on every recorded design, in the class
+/// MATLAB solves it. Three single designs whose imaginary parts are subnormal
+/// have no chain in the class the port uses and are counted, not compared.
 #[test]
-fn multi_rhs_regressions_cannot_replace_improvements() {
-    let expected = Complex64::new(1.0, 0.0);
-    let previous = Complex64::new(f64::from_bits(1.0f64.to_bits() + 1), 0.0);
-    let bits = Some([previous.re.to_bits(), previous.im.to_bits()]);
-    assert!(multi_coefficient_matches(previous, expected, bits));
-    assert!(multi_coefficient_matches(expected, expected, bits));
-    assert!(!multi_coefficient_matches(Complex64::new(2.0, 0.0), expected, bits));
-    assert!(!multi_coefficient_matches(previous, expected, None));
-    assert!(!multi_coefficient_matches(Complex64::new(f64::NAN, 0.0), expected, bits));
+fn every_recorded_chain_step_matches_mkl_on_amd() {
+    let Some(hosts) = hosts() else { return; };
+    let designs_root = PathBuf::from(std::env::var_os("SAMSRF_QR_REFERENCE_DIR").expect("SAMSRF_QR_REFERENCE_DIR")).join("ubuntu-24.04").join("compatible");
+    let designs: Value = serde_json::from_slice(&std::fs::read(designs_root.join("qr.json")).unwrap()).unwrap();
+    let (root, _) = hosts.iter().find(|(_, cpu)| cpu.contains("AMD")).unwrap();
+    let metadata: Value = serde_json::from_slice(&std::fs::read(root.join("kernels.json")).unwrap()).unwrap();
+    let bits = |values: &[Complex64]| values.iter().map(|v| [v.re.to_bits(), v.im.to_bits()]).collect::<Vec<_>>();
+    let (mut compared, mut unchained) = (0, 0);
+    for case in metadata["cases"].as_array().unwrap() {
+        let id = case["id"].as_str().unwrap();
+        let design = designs["cases"].as_array().unwrap().iter().find(|c| c["id"] == case["id"]).unwrap();
+        let x = complex_values(&designs_root, &design["x"]);
+        let y: Vec<f64> = values(&designs_root, &design["y"]);
+        let ones = vec![Complex64::new(1.0, 0.0); x.len()];
+        let columns: [&[Complex64]; 2] = if design["order"] == "ones-first" { [&ones, &x] } else { [&x, &ones] };
+        let precision = if case["precision"] == "single" { Precision::Single } else { Precision::Double };
+        let port = lstsq::mldivide(&columns, &y, precision);
+        let variant = if port.packed.iter().flatten().any(|v| v.im != 0.0) { "complex" } else { "real" };
+        let chains = match &case["chains"] { Value::Array(list) => list.clone(), single => vec![single.clone()] };
+        let Some(chain) = chains.iter().find(|c| c["variant"] == variant) else {
+            unchained += 1;
+            continue;
+        };
+        let pivot: Vec<usize> = values(root, &chain["pivot"]).iter().map(|&p| p as usize - 1).collect();
+        assert_eq!(pivot, port.pivot, "{id}: pivot");
+        let factor = complex_values(root, &chain["factor"]);
+        let m = x.len();
+        for (j, column) in port.packed.iter().enumerate() {
+            assert_eq!(bits(&factor[j * m..(j + 1) * m]), bits(column), "{id}: factor column {j}");
+        }
+        assert_eq!(bits(&complex_values(root, &chain["tau"])), bits(&port.tau), "{id}: tau");
+        assert_eq!(bits(&complex_values(root, &chain["qty"])), bits(&port.qty), "{id}: Q^H y");
+        assert_eq!(bits(&complex_values(root, &chain["beta"])), bits(&port.coefficients), "{id}: coefficients");
+        compared += 1;
+    }
+    eprintln!("{compared} recorded chains equal MKL's at every step; {unchained} without a chain in the port's class");
+    assert_eq!((compared, unchained), (345, 3));
 }

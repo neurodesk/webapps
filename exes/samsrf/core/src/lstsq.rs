@@ -625,7 +625,15 @@ fn tree_sum<T: Real>(kernel: Kernel, c0: C<T>, products: &[C<T>], complex: bool)
 }
 
 /// `xLARF` from the left with `H^H`: `c -= v (tau^H (v^H c))`, `v(1) = 1`.
-fn apply<T: Real>(kernel: Kernel, v: &[C<T>], tau: C<T>, c: &mut [C<T>], complex: bool) {
+/// With `trim`, `v` ends at its last nonzero entry (`xLARF`'s `ILADLR`), which
+/// moves the kernel's block and tail boundaries. `?geqp3` updates the next
+/// column so (every recorded R(1,2), including the 8 designs whose v ends in
+/// 8-11 zeros); `?ormqr` and `?unmqr` sum over the whole reflector (trimming
+/// there changes Q^H y in 3 recorded single designs).
+fn apply<T: Real>(kernel: Kernel, v: &[C<T>], tau: C<T>, c: &mut [C<T>], complex: bool, trim: bool) {
+    let zero = C::real(T::ZERO);
+    let last = if trim { v.iter().rposition(|value| *value != zero).map_or(0, |i| i + 1) } else { v.len() };
+    let v = &v[..last];
     let w = kernel_dot(kernel, v, c, complex);
     let t = tau.conj().mul(w, complex);
     c[0] = c[0].sub(t, complex);
@@ -691,10 +699,10 @@ fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]]) -> Solved {
         taus.push(tau);
         let v: Vec<C<T>> = a[i][i + 1..].to_vec();
         for column in &mut a[i + 1..] {
-            apply(column_kernel(complex, single), &v, tau, &mut column[i..], complex);
+            apply(column_kernel(complex, single), &v, tau, &mut column[i..], complex, true);
         }
         for (index, b) in bs.iter_mut().enumerate() {
-            apply(rhs_kernel(complex, single, count, index), &v, tau, &mut b[i..], complex);
+            apply(rhs_kernel(complex, single, count, index), &v, tau, &mut b[i..], complex, false);
         }
         // Downdate the remaining norms as xLAQP2 does.
         for j in i + 1..n {
