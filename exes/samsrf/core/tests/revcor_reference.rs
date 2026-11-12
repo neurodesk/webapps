@@ -366,7 +366,10 @@ fn single_cf_profiles_stay_within_single_rounding() {
                     if a.is_finite() && e.is_finite() {
                         worst = worst.max((a - e).abs() / UNIT);
                     }
-                    failures.check(within(a, e, 16.0 * UNIT), || format!("{} {}: vertex {v} seed {j}: {a} vs {e}", host.name, case["id"]));
+                    // Bit-identical on the AMD hosts: corr's gemv order and clamp, and
+                    // the single global regression over every course at once.
+                    let ok = if intel(host) { within(a, e, 16.0 * UNIT) } else { same(a, e) };
+                    failures.check(ok, || format!("{} {}: vertex {v} seed {j}: {a} vs {e}", host.name, case["id"]));
                 }
             }
             println!("{} {}: profile error {worst:.2} x 2^-24", host.name, case["id"]);
@@ -459,7 +462,10 @@ fn global_regression_stays_within_rounding() {
                     }
                     identical += usize::from(same(a, e));
                     compared += 1;
-                    failures.check(within(a, e, relative * peak), || format!("{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]));
+                    // Single residuals are bit-identical on the AMD (CNR auto) hosts:
+                    // MATLAB solves every course at once (`lstsq::mldivide_many`).
+                    let ok = if single(case) && !intel(host) { same(a, e) } else { within(a, e, relative * peak) };
+                    failures.check(ok, || format!("{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]));
                 }
             }
             println!("{} {}: residual error {:.2} x 2^-24 of the input's peak; {identical}/{compared} identical", host.name, case["id"], worst / UNIT);
@@ -467,6 +473,44 @@ fn global_regression_stays_within_rounding() {
     }
     tally.assert_complete(&hosts, "global-regression cases", |e| e.global);
     failures.assert_none();
+}
+
+/// A course with a NaN keeps its place among the right-hand sides of the single
+/// global regression and comes back zeroed; every other course is unchanged, so it
+/// still equals MATLAB's residual on the AMD hosts. MATLAB's own result for a
+/// missing course was not recorded, so only the other courses are compared.
+#[test]
+fn a_missing_course_keeps_its_place_in_the_single_regression() {
+    let Some(hosts) = hosts() else { return; };
+    let mut cases = 0;
+    for host in hosts.iter().filter(|host| !intel(host)) {
+        for case in pipelines(host, "cf").filter(|c| single(c) && c["id"].as_str().unwrap().ends_with("mode0_smooth0_global1")) {
+            let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
+            let courses = array(&host.root, &pre["courses"]);
+            let volumes = shape(&pre["courses"])[0];
+            let roi = vertices(&host.root, &pre["roi"]);
+            let missing = roi.len() / 2;
+            let mut series = TimeSeries::zeros(volumes, roi.len());
+            for (i, &v) in roi.iter().enumerate() {
+                series.course_mut(i).copy_from_slice(&courses[v as usize * volumes..(v as usize + 1) * volumes]);
+            }
+            series.course_mut(missing)[volumes / 3] = f64::NAN;
+            preprocess::remove_noise_in(&mut series, &array(&host.root, &case["globalSignal"]), 1, Precision::Single).unwrap();
+            assert!(series.course(missing).iter().all(|&value| value == 0.0), "{} {}: the missing course is zeroed", host.name, case["id"]);
+            let expected = array(&host.root, &case["recomputedCorrectedCourses"]);
+            for (i, &v) in roi.iter().enumerate().filter(|(i, _)| *i != missing) {
+                let e = &expected[v as usize * volumes..(v as usize + 1) * volumes];
+                for (t, (&a, &e)) in series.course(i).iter().zip(e).enumerate() {
+                    assert!(same(a, e), "{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]);
+                }
+            }
+            cases += 1;
+        }
+    }
+    if !hosts.is_empty() {
+        // Three matrix cases on its AMD host and one edge case on each AMD host.
+        assert_eq!(cases, 5, "single global-regression cases on the AMD hosts");
+    }
 }
 
 /// The unchanged double path's unsmoothed CF Gaussian: fits that run away to
@@ -581,6 +625,9 @@ fn pipelines_from_matlab_courses_match_matlab() {
                         a == 0.0 || name == "Noise Ceiling"
                     } else if !single(case) {
                         within(a, e, 1e-12 * k * e.abs().max(1.0))
+                    } else if cf && single(case) && !intel(host) {
+                        // Every single CF map is bit-identical on the AMD hosts.
+                        same(a, e)
                     } else if cf && matches!(name.as_str(), "R^2" | "Beta" | "Suppression") {
                         if a.is_finite() && e.is_finite() {
                             worst = worst.max((a - e).abs() / (UNIT * k));
@@ -795,11 +842,11 @@ fn threshold_boundary_is_exercised_exactly() {
 /// Single CF Gaussian fits below the parser's refusal, on MATLAB's template and
 /// preprocessed courses: corr (MKL's `y' * A` order and its clamp), smoothing, the
 /// threshold, single `exp`, the mixed-precision objective and `fminsearch`. Every
-/// map value of every vertex equals MATLAB's on the AMD (CNR `auto`) host, and the
-/// fits replay exactly from each host's recorded profiles. With global-signal
-/// correction the single regression is not bit-identical (#731), so those cases are
-/// reported, not gated; the AVX-512 host's corr order is not reproduced, so there
-/// only the rows the fit does not produce are compared.
+/// map value of every vertex equals MATLAB's on the AMD (CNR `auto`) host, with and
+/// without global-signal correction (the single regression solves every course at
+/// once), and the fits replay exactly from each host's recorded profiles. The
+/// AVX-512 host's corr and regression orders are not reproduced, so there only the
+/// rows the fit does not produce, without global-signal correction, are compared.
 #[test]
 fn single_gaussian_cf_below_the_refusal_equals_the_amd_host() {
     let Some(hosts) = hosts() else { return; };
@@ -852,18 +899,18 @@ fn single_gaussian_cf_below_the_refusal_equals_the_amd_host() {
                         continue;
                     }
                     differing += 1;
-                    if !global && !(intel(host) && fitted) {
+                    if !(intel(host) && (fitted || global)) {
                         failures.check(false, || format!("{} {id}: vertex {v} {name}: {a} vs {e}", host.name));
                     }
                 }
             }
-            if !global && !intel(host) {
+            if !intel(host) {
                 gated += 1;
             }
-            println!("{} {id}: {differing} map values differ from MATLAB{}", host.name, if global { " (global regression, not gated)" } else { "" });
+            println!("{} {id}: {differing} map values differ from MATLAB", host.name);
         }
     }
     failures.assert_none();
-    // The matrix's AMD host: six cases without global-signal correction.
-    assert_eq!(gated, 6, "single Gaussian CF cases gated on the AMD host");
+    // The matrix's AMD host: twelve cases, with and without global-signal correction.
+    assert_eq!(gated, 12, "single Gaussian CF cases gated on the AMD host");
 }

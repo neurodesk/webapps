@@ -102,7 +102,8 @@ impl Prepared {
 
     /// `cM = [Y ones] \ X` without the intercept row: the slope of each regressor on `y`.
     /// `[Y ones] \\ X`, keeping the course's coefficient. Single courses use MATLAB's
-    /// single QR (`lstsq::mldivide`, in MATLAB's column order). A double course
+    /// single QR over all pixels at once (`lstsq::mldivide_many`, in MATLAB's column
+    /// order). A double course
     /// with variance takes the centred solve, which agrees with MATLAB's double QR
     /// to 1e-12 on every recorded case and is several times faster. A constant
     /// course makes the design rank deficient: MATLAB keeps the column with the
@@ -123,7 +124,10 @@ impl Prepared {
         }
         let course: Vec<num_complex::Complex64> = y.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
         let ones = vec![num_complex::Complex64::new(1.0, 0.0); y.len()];
-        (0..self.pixels).map(|p| crate::lstsq::mldivide(&[&course, &ones], self.regressor(p), precision).coefficients[0].re).collect()
+        // `[Y ones] \ X` with every pixel's regressor as one right-hand side, as
+        // MATLAB solves it: each column's arithmetic depends on its place among them.
+        let regressors: Vec<&[f64]> = (0..self.pixels).map(|p| self.regressor(p)).collect();
+        crate::lstsq::mldivide_many(&[&course, &ones], &regressors, precision).coefficients.iter().map(|c| c[0].re).collect()
     }
 
     /// The reverse-correlation rows `[R^2, x0, y0, Fwhm, Beta]` of one time course, and

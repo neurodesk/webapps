@@ -384,10 +384,31 @@ commit `b9ead07f`).
 - `corr.m` then divides by `y`'s norm and each seed's, and limits the result to
   [-1, 1]. An ROI vertex that is also a seed gives 1, not 1.0000001.
 
-With both, every single CF profile without global-signal correction equals
-MATLAB's on the matrix and edge AMD hosts. That covers both hemispheres,
-250 and 1500 volumes, and smoothing on and off. With global-signal correction,
-the single regression `[x ones] \ y` still differs (#731).
+With both, every single CF profile equals MATLAB's on the matrix and edge AMD
+hosts. That covers both hemispheres, 250 and 1500 volumes, smoothing on and
+off, and global-signal correction on and off.
+
+MATLAB's global regression is `B = [X ones] \ Y` over every ROI course at once
+(`samsrf_removenoise`), and the RC profile is `[Y ones] \ X` over every
+aperture pixel at once (`samsrf_revcor_prf`, `prf_contour`). The port solves
+both the same way with `lstsq::mldivide_many` (#795), whose `?ormqr` order
+depends on each column's place among the right-hand sides. On the AMD hosts
+the single residuals are bit-identical (5,250 of 5,250 values at 250 volumes,
+31,500 of 31,500 at 1500, and the edge case on both edge hosts).
+
+A course with a NaN keeps its place as a column of zeros and comes back
+zeroed. MATLAB's result for such a course was not recorded, so that course
+is the port's rule, not a parity claim. The other courses are unaffected:
+`a_missing_course_keeps_its_place_in_the_single_regression` replaces one ROI
+course with NaN in every AMD case and still gets MATLAB's residual for every
+other course. Dropping the course instead changes the last course in every
+case, by 80 to 705 values.
+
+Single RC profiles rise from 31% to 82-96% identical on the AMD hosts and
+keep their limit. What remains differs on whole vertices, not pixels: 1-5
+vertices per case have 247-339 of their 400 pixels different, and every other
+vertex is exact. That points at each vertex's own `[Y ones]` factorization,
+not at the order across right-hand sides.
 
 `cf_single_replay.rs` runs on the pinned single-kernel and gemv recordings:
 
@@ -398,17 +419,16 @@ the single regression `[x ones] \ y` still differs (#731).
 `revcor_reference.rs` takes each single Gaussian CF case below the parser's
 refusal:
 
-- From MATLAB's courses and template, every map value of the six AMD cases
-  without global-signal correction equals MATLAB's.
+- From MATLAB's courses and template, every map value of all twelve AMD
+  cases, with and without global-signal correction, equals MATLAB's.
 - The fits replay exactly from each host's profiles, except two smoothed
   vertices with global-signal correction on the AVX-512 host, most likely
   through the 18 `exp` inputs.
 
-Single Gaussian CF fits stay refused for two reasons. The production Benson
-reader's x0 or y0 differs from MATLAB's by an ulp on 1 of 9 seed vertices in
-both LH datasets. Run on that template, the LH fits differ on 1-16 vertices,
-by up to 11 times in `Beta`; the RH template is exact and so are its fits.
-The single global regression (#731) also differs.
+Single Gaussian CF fits stay refused. The production Benson reader's x0 or
+y0 differs from MATLAB's by an ulp on 1 of 9 seed vertices in both LH
+datasets. Run on that template, the LH fits differ on 1-16 vertices, by up to
+11 times in `Beta`; the RH template is exact and so are its fits.
 
 The double unsmoothed CF Gaussian is not gated here: on 2 of 21 vertices fits
 run away to |x0| > 1e8, do not replay, and differ between hosts by up to 9e7.
