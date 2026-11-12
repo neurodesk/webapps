@@ -4,6 +4,7 @@ import { access, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { serveSite } from './serve-site.mjs';
+import { syntheticHeadNifti } from './synthetic-head.mjs';
 
 const PROBE = '__sharedBinaryProbe';
 // Each shared WASM family is covered here through its `consumers`, or by the check named beside it.
@@ -46,6 +47,43 @@ async function startFactory(tag, loadFactory) {
     report.instantiated = typeof module === 'object' && module !== null;
   } catch (error) {
     report.error = String(error?.stack ?? error);
+  }
+  self.postMessage({ [tag]: report });
+}
+
+// Runs inside the worker. It segments a volume with MindGrab's published API on the threaded CPU
+// backend, loading the model module from the app's own staged copy, and reports every fetch and pthread.
+async function segmentOnCpu(tag, { apiUrl, assetPath, model, input }) {
+  const fetches = [];
+  const threadUrls = [];
+  const nativeFetch = self.fetch;
+  self.fetch = async (...args) => {
+    const url = new URL(args[0] instanceof Request ? args[0].url : String(args[0]), self.location.href).href;
+    const response = await nativeFetch(...args);
+    fetches.push({ url, status: response.status });
+    return response;
+  };
+  const NativeWorker = self.Worker;
+  self.Worker = class extends NativeWorker {
+    constructor(url, options) {
+      super(url, options);
+      threadUrls.push(String(url));
+    }
+  };
+  const report = { fetches, threadUrls, isolated: self.crossOriginIsolated };
+  try {
+    const { segment } = await import(apiUrl);
+    const bytes = Uint8Array.from(atob(input), char => char.charCodeAt(0));
+    const result = await segment(bytes, { model, backend: 'cpu', worker: false, gzipOutput: false, assetPath });
+    const image = new Uint8Array(result.image);
+    const view = new DataView(result.image);
+    const offset = view.getFloat32(108, true);
+    report.backend = result.backend;
+    report.dimensions = [view.getInt16(42, true), view.getInt16(44, true), view.getInt16(46, true)];
+    report.labelled = image.subarray(offset).reduce((count, value) => count + (value !== 0), 0);
+    report.sha256 = [...new Uint8Array(await crypto.subtle.digest('SHA-256', image))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  } catch (error) {
+    report.error = `${error?.stack ?? error}${error?.log ? `\n${error.log.join('\n')}` : ''}`;
   }
   self.postMessage({ [tag]: report });
 }
@@ -98,12 +136,13 @@ function probeFor({ loader, index, app }) {
   };
 }
 
-async function runProbe({ page, workerUrl }) {
-  return page.evaluate(async ({ workerUrl, tag }) => {
+async function runProbe({ page, workerUrl, timeoutMs = 60_000, message }) {
+  return page.evaluate(async ({ workerUrl, tag, timeoutMs, message }) => {
     const worker = new Worker(workerUrl, { type: 'module' });
+    if (message) worker.postMessage(message);
     try {
       return await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('The module did not start within 60s')), 60_000);
+        const timer = setTimeout(() => reject(new Error(`The module did not finish within ${timeoutMs / 1000}s`)), timeoutMs);
         worker.addEventListener('message', ({ data }) => {
           if (!data?.[tag]) return;
           clearTimeout(timer);
@@ -117,30 +156,106 @@ async function runProbe({ page, workerUrl }) {
     } finally {
       worker.terminate();
     }
-  }, { workerUrl, tag: PROBE });
+  }, { workerUrl, tag: PROBE, timeoutMs, message });
+}
+
+// A MindGrab threaded CPU binary (`brainchop-<model>.wasm`); the WebGPU and WebGL2 builds end in -gpu and -gl.
+const MINDGRAB_CPU_BINARY = /^brainchop-([a-z0-9]+)\.wasm$/;
+// Hosted runners finish one CPU segmentation in a few minutes; MindGrab's own CPU limit is 15 minutes.
+const SEGMENTATION_TIMEOUT_MS = 16 * 60_000;
+
+// A segmentation takes minutes, so by default one runs per app and at least one per binary: every app proves
+// its staged modules run a shared binary to the end, and the start of every other pair is checked above.
+// SHARED_BINARY_EVERY_SEGMENTATION=1 runs every pair.
+function coveringSegmentations(segmentations) {
+  const binariesOf = app => segmentations.filter(job => job.app === app).length;
+  const selected = [];
+  const covered = new Set();
+  for (const sha256 of new Set(segmentations.map(job => job.file.sha256))) {
+    const jobs = segmentations.filter(job => job.file.sha256 === sha256).sort((a, b) => binariesOf(a.app) - binariesOf(b.app));
+    const job = jobs.find(candidate => !covered.has(candidate.app)) ?? jobs[0];
+    selected.push(job);
+    covered.add(job.app);
+  }
+  for (const job of segmentations) {
+    if (covered.has(job.app)) continue;
+    selected.push(job);
+    covered.add(job.app);
+  }
+  return selected;
+}
+
+// The page of `app` in a new context, cross-origin isolated as `site` serves it, with every
+// page error, failed request, HTTP error and `.wasm` response recorded.
+async function withAppPage({ browser, site, dist, app, isolationHeaders }, run) {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    const problems = [];
+    const wasmResponses = [];
+    page.on('pageerror', error => problems.push(`page error: ${error.message}`));
+    let reloading = !isolationHeaders;
+    context.on('requestfailed', request => {
+      const reason = request.failure()?.errorText;
+      // The isolation service worker reloads the page once it controls it, which aborts requests in flight.
+      if (reloading && reason === 'net::ERR_ABORTED') return;
+      problems.push(`request failed: ${request.url()} ${reason}`);
+    });
+    context.on('response', response => {
+      if (response.status() >= 400) problems.push(`HTTP ${response.status()}: ${response.url()}`);
+      if (!reloading && new URL(response.url()).pathname.endsWith('.wasm')) wasmResponses.push({ url: response.url(), status: response.status() });
+    });
+    const serviceWorker = await exists(join(dist, app.path, 'coi-serviceworker.js'));
+    await page.goto(`${site.origin}/${app.path}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    if (isolationHeaders) await page.waitForFunction(() => crossOriginIsolated);
+    else if (serviceWorker) await page.waitForFunction(() => crossOriginIsolated && navigator.serviceWorker.controller !== null);
+    reloading = false;
+    return await run({ page, problems, wasmResponses, isolated: isolationHeaders || serviceWorker });
+  } finally {
+    await context.close();
+  }
+}
+
+// The worker's fetch log must hold the shared binary, HTTP 200, and no other WebAssembly. The browser's network
+// log must agree: it saw the shared URL, and no copy of the file (its name, with or without a Vite hash) anywhere else.
+function assertOnlySharedBinary({ label, site, binaryPath, report, wasmResponses }) {
+  const expected = { url: `${site.origin}/${binaryPath}`, status: 200 };
+  const binaries = report.fetches.filter(({ url }) => new URL(url).pathname.endsWith('.wasm'));
+  assert.equal(report.error, undefined, `${label}: fetched ${JSON.stringify(binaries)}, then ${report.error}`);
+  assert.deepEqual(binaries, [expected], `${label}: the module must fetch only the shared binary`);
+  const stem = binaryPath.split('/').at(-1).replace(/\.wasm$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const copies = wasmResponses.filter(({ url }) => new RegExp(`/${stem}(?:-[\\w-]{8})?\\.wasm$`).test(new URL(url).pathname));
+  assert.ok(copies.length > 0, `${label}: the browser's network log has no request for the shared binary`);
+  for (const copy of copies) assert.deepEqual(copy, expected, `${label}: the browser loaded a copy of the binary from another URL`);
 }
 
 /**
- * For every app of every shared WASM family that lists `consumers` in `runtime-assets/manifest.json`,
- * start the module the app's build uses and require that it fetched the binary from the family's
- * `_runtime/` path with HTTP 200, once with isolation response headers and once with only the
- * service worker, as GitHub Pages serves it.
+ * For every app that must share a WASM file of `runtime-assets/manifest.json` (the `consumers` of
+ * the file or of its family), start the module the app's build uses and require that it fetched the
+ * binary from the family's `_runtime/` path with HTTP 200, once with isolation response headers and
+ * once with only the service worker, as GitHub Pages serves it. It then segments a head phantom on
+ * MindGrab's threaded CPU backend in each app that shares a MindGrab CPU binary, through the app's
+ * staged model module, with only the service worker.
  */
 export async function verifySharedBinaries({ browser, registry, repoRoot }) {
   const dist = join(repoRoot, 'dist');
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
   const shared = manifest.families.filter(family => family.deduplicate && family.files.some(file => file.name.endsWith('.wasm')));
-  const uncovered = shared.filter(family => !family.consumers && !COVERED_ELSEWHERE.has(family.id)).map(family => family.id);
+  const consumersOf = (family, file) => file.consumers ?? family.consumers;
+  const uncovered = shared
+    .filter(family => !COVERED_ELSEWHERE.has(family.id) && family.files.some(file => file.name.endsWith('.wasm') && !consumersOf(family, file)))
+    .map(family => family.id);
   assert.deepEqual(uncovered, [], 'Shared WASM families without a startup check: list their consumers in runtime-assets/manifest.json');
   const scratch = await mkdtemp(join(tmpdir(), 'shared-binary-startup-'));
   const files = new Map();
   const probes = [];
+  const segmentations = [];
   try {
-    for (const family of shared.filter(family => family.consumers)) {
-      for (const file of family.files.filter(file => file.name.endsWith('.wasm'))) {
+    for (const family of shared) {
+      for (const file of family.files.filter(file => file.name.endsWith('.wasm') && consumersOf(family, file))) {
         const binaryPath = `_runtime/${family.target}/${file.name}`;
         assert.equal(hash(await readFile(join(dist, binaryPath))), file.sha256, binaryPath);
-        for (const id of family.consumers) {
+        for (const id of consumersOf(family, file)) {
           const app = registry.apps.find(candidate => candidate.id === id);
           assert.ok(app, `${family.id}: unknown consumer ${id}`);
           const loaders = await findLoaders({ dist, app, binaryPath });
@@ -152,6 +267,20 @@ export async function verifySharedBinaries({ browser, registry, repoRoot }) {
             files.set(`/${probe.path}`, path);
             probes.push({ family, app, binaryPath, loader, probePath: probe.path });
           }
+          const model = file.name.match(MINDGRAB_CPU_BINARY)?.[1];
+          if (!model) continue;
+          // MindGrab imports `<assetPath>/brainchop-<model>.js`, so the module beside which the app staged the binary is the one it runs.
+          const module = loaders.filter(loader => loader.path.endsWith(`/${file.name.replace(/\.wasm$/, '.js')}`));
+          assert.equal(module.length, 1, `${id}: expected one staged ${file.name.replace(/\.wasm$/, '.js')} that loads ${binaryPath}`);
+          const api = join(repoRoot, 'node_modules/.pnpm', `@brainchop+mindgrab@${family.version}`, 'node_modules/@brainchop/mindgrab/dist/index.js');
+          assert.ok(await exists(api), `${family.id}: its version must be the @brainchop/mindgrab release of its binaries; ${api} is missing`);
+          const apiPath = `${app.path}/__mindgrab_api_${family.version}.js`;
+          const probePath = `${app.path}/__mindgrab_segmentation_${segmentations.length}.mjs`;
+          const path = join(scratch, `segmentation-${segmentations.length}.mjs`);
+          await writeFile(path, `self.onmessage = ({ data }) => (${segmentOnCpu.toString()})(${JSON.stringify(PROBE)}, data);\n`);
+          files.set(`/${apiPath}`, api);
+          files.set(`/${probePath}`, path);
+          segmentations.push({ family, file, app, binaryPath, model, probePath, apiPath, assetPath: module[0].path.replace(/[^/]+$/, '') });
         }
       }
     }
@@ -162,40 +291,48 @@ export async function verifySharedBinaries({ browser, registry, repoRoot }) {
       try {
         for (const { family, app, binaryPath, loader, probePath } of probes) {
           const label = `${app.id} ${loader.path} (${family.id}, ${mode})`;
-          const context = await browser.newContext();
-          try {
-            const page = await context.newPage();
-            const problems = [];
-            page.on('pageerror', error => problems.push(`page error: ${error.message}`));
-            let reloading = !isolationHeaders;
-            context.on('requestfailed', request => {
-              const reason = request.failure()?.errorText;
-              // The isolation service worker reloads the page once it controls it, which aborts requests in flight.
-              if (reloading && reason === 'net::ERR_ABORTED') return;
-              problems.push(`request failed: ${request.url()} ${reason}`);
-            });
-            context.on('response', response => {
-              if (response.status() >= 400) problems.push(`HTTP ${response.status()}: ${response.url()}`);
-            });
-            const serviceWorker = await exists(join(dist, app.path, 'coi-serviceworker.js'));
-            await page.goto(`${site.origin}/${app.path}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-            if (isolationHeaders) await page.waitForFunction(() => crossOriginIsolated);
-            else if (serviceWorker) await page.waitForFunction(() => crossOriginIsolated && navigator.serviceWorker.controller !== null);
-            reloading = false;
+          await withAppPage({ browser, site, dist, app, isolationHeaders }, async ({ page, problems, wasmResponses, isolated }) => {
             const report = await runProbe({ page, workerUrl: `${site.origin}/${probePath}` });
-            const binaryUrl = `${site.origin}/${binaryPath}`;
-            const binaries = report.fetches.filter(({ url }) => url.endsWith('.wasm'));
-            assert.equal(report.error, undefined, `${label}: fetched ${JSON.stringify(binaries)}, then ${report.error}`);
+            assertOnlySharedBinary({ label, site, binaryPath, report, wasmResponses });
             assert.equal(report.instantiated, true, `${label}: the module did not instantiate`);
-            assert.deepEqual(binaries, [{ url: binaryUrl, status: 200 }], `${label}: the module must fetch only the shared binary`);
-            if (isolationHeaders || serviceWorker) assert.equal(report.isolated, true, `${label}: the worker is not cross-origin isolated`);
+            if (isolated) assert.equal(report.isolated, true, `${label}: the worker is not cross-origin isolated`);
             const escaped = report.threadUrls.filter(url => !url.startsWith(`${site.origin}/${app.path}/`));
             assert.deepEqual(escaped, [], `${label}: pthread workers must start inside the app`);
             assert.deepEqual(problems, [], `${label}: the page reported problems`);
             console.log(`PASS ${label}: instantiated from /${binaryPath}${report.threadUrls.length ? ` with ${report.threadUrls.length} app-local pthread workers` : ''}`);
-          } finally {
-            await context.close();
-          }
+          });
+        }
+        if (isolationHeaders) continue;
+        const input = Buffer.from(syntheticHeadNifti()).toString('base64');
+        const outputs = new Map();
+        const selected = process.env.SHARED_BINARY_EVERY_SEGMENTATION === '1' ? segmentations : coveringSegmentations(segmentations);
+        for (const { family, file, app, binaryPath, model, probePath, apiPath, assetPath } of selected) {
+          const label = `${app.id} MindGrab ${model} on the threaded CPU backend (${family.id}, ${mode})`;
+          await withAppPage({ browser, site, dist, app, isolationHeaders }, async ({ page, problems, wasmResponses }) => {
+            const started = Date.now();
+            const report = await runProbe({
+              page,
+              workerUrl: `${site.origin}/${probePath}`,
+              timeoutMs: SEGMENTATION_TIMEOUT_MS,
+              message: { apiUrl: `${site.origin}/${apiPath}`, assetPath: `${site.origin}/${assetPath}`, model, input },
+            });
+            assertOnlySharedBinary({ label, site, binaryPath, report, wasmResponses });
+            assert.equal(report.isolated, true, `${label}: the worker is not cross-origin isolated`);
+            assert.equal(report.backend, 'cpu', `${label}: ran on another backend`);
+            assert.deepEqual(report.dimensions, [64, 64, 64], `${label}: the output is not on the input grid`);
+            assert.ok(report.labelled > 0, `${label}: the segmentation is empty`);
+            assert.ok(report.threadUrls.length > 0, `${label}: the threaded module started no pthread worker`);
+            const escaped = report.threadUrls.filter(url => !url.startsWith(`${site.origin}/${app.path}/`));
+            assert.deepEqual(escaped, [], `${label}: pthread workers must start inside the app`);
+            const modules = report.fetches.filter(({ url }) => !new URL(url).pathname.endsWith('.wasm'));
+            assert.deepEqual(modules, [], `${label}: the run fetched more than the shared binary`);
+            assert.deepEqual(problems, [], `${label}: the page reported problems`);
+            // The CPU build is deterministic, so every app running the same shared bytes must give the same file.
+            const first = outputs.get(file.sha256) ?? outputs.set(file.sha256, { sha256: report.sha256, label }).get(file.sha256);
+            assert.equal(report.sha256, first.sha256, `${label}: the output differs from ${first.label}`);
+            console.log(`PASS ${label}: segmented a 64x64x64 head phantom from /${binaryPath} in ${Math.round((Date.now() - started) / 1000)}s `
+              + `(${report.threadUrls.length} app-local pthread workers, ${report.labelled} nonzero output bytes, sha256 ${report.sha256.slice(0, 12)})`);
+          });
         }
       } finally {
         await site.close();
