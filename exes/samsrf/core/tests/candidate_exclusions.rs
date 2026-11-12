@@ -41,7 +41,10 @@ fn same(a: f64, b: f64) -> bool {
 }
 
 fn doubles(path: &Path) -> Vec<f64> {
-    std::fs::read(path).unwrap().as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
+    let bytes = std::fs::read(path).unwrap();
+    let (values, remainder) = bytes.as_chunks::<8>();
+    assert!(remainder.is_empty(), "{}: incomplete f64 record", path.display());
+    values.iter().map(|b| f64::from_le_bytes(*b)).collect()
 }
 
 fn count(value: &Value) -> u64 {
@@ -356,7 +359,8 @@ fn exp_ln2_splits_differ_from_matlab_as_recorded() {
         let input = doubles(&dir.join(case["input"]["file"].as_str().unwrap()));
         let whole = doubles(&dir.join(case["whole"]["file"].as_str().unwrap()));
         assert_eq!(input.len(), 711_307);
-        for (&x, _) in input.iter().zip(&whole) {
+        assert_eq!(whole.len(), input.len(), "{host}: one exp reference per input");
+        for &x in &input {
             assert_eq!(exp_variant(x as f32, 0x3f31_7000, None).to_bits(), exp_single(x as f32).to_bits(), "reconstruction at {x}");
         }
         for (name, hi, lo, expected) in [
