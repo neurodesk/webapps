@@ -250,3 +250,14 @@ test("the automation operation runs RL-TV with its parameters and reports its ar
   const stack = await readTiffStack(readFileSync(await (await pending).path()));
   expect(sha256(stack.data)).toBe(sha256(want.estimate));
 });
+
+test("a millimetre-scale volume is refused before the PSF is computed", async ({ page }) => {
+  const dims = [9, 20, 17];
+  const input = Buffer.from(stackNifti(new Float32Array(dims[0] * dims[1] * dims[2]).fill(10), dims, { x: 2000, y: 2000, z: 2000 }));
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles({ name: "mri.nii", mimeType: "application/octet-stream", buffer: input });
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#runButton").click();
+  await expect(status(page)).toContainText("The lateral voxel size, 2000 µm, is over 10 times this objective's Airy radius");
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
