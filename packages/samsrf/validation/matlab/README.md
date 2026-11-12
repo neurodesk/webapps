@@ -1362,15 +1362,18 @@ parity with that AMD reference only.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `reference.json` original | 138 | 0 | 8 | 3 | Not measured | Not measured | 0 |
 | AMD recording, original | 138 | 0 | 8 | 3 | Not measured | Not measured | 0 |
-| AMD recording, nonnegative | 125 | 1 | 8 | 0 | ≤ 0.0036 | ≤ 0.0026 | 0.0010 |
+| AMD recording, nonnegative | 126 | 0 | 8 | 0 | Not measured | Not measured | 0 |
 
 These counts use the MKL `?gemv` and `?ormqr` summation orders of #795 (see
 Least-squares solves). Before them, 77 and 70 coefficients were bit-identical,
 and the largest excesses were 0.40 and 0.81 of `S`. #731's two-accumulator
 `zunmqr` made the original pipeline's last two coefficients bit-identical
 (136 and 2 before, at most 0.21 and 0.22 of `S` for the port and MATLAB): its
-complex CSS powers make those designs complex. The nonnegative control's one
-differing coefficient is a real design and did not change.
+complex CSS powers make those designs complex. The nonnegative control's last
+differing coefficient (125 and 1 before, at most 0.0036 and 0.0026 of `S`,
+excess 0.0010) became bit-identical with the reflector trim of `?geqp3`'s
+column update: clipped responses leave exact zeros at the end of the first
+reflector.
 
 `css-pipelines-reference.json` pins a fresh recording of the original pipeline
 and of a nonnegative control, `max(ApFrm, 0)` on the same vectorised apertures
