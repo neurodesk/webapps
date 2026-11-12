@@ -19,6 +19,11 @@ const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependenc
 const LOCAL_SPEC = /^(?:workspace:|link:|file:)/;
 const PACKAGE_TESTS = /^packages\/[^/]+\/tests?\//;
 const DOCUMENT = /^(?:packages|exes)\/.+\.md$/;
+// A module of the component package reaches only the apps that load it
+// (scripts/lib/shared-module-users.mjs). The oracle knows packages, not
+// modules; test/shared-module-users.test.mjs holds that selection to esbuild's
+// module graph instead.
+const COMPONENT_MODULE = /^packages\/components\/src\/.+\.(?:[cm]?js|json|d\.ts)$/;
 
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -154,7 +159,7 @@ export function expectedApps({ apps, changedPaths, workspace, lockClosures = nul
       const user = [...used].find((pkg) => path.startsWith(`${pkg}/`));
       if (!user) continue;
       owned.add(path);
-      if (PACKAGE_TESTS.test(path) || DOCUMENT.test(path)) exempt.push({ app: app.id, path });
+      if (PACKAGE_TESTS.test(path) || DOCUMENT.test(path) || COMPONENT_MODULE.test(path)) exempt.push({ app: app.id, path });
       else add(app.id, `${path} (declared dependency ${user})`);
     }
     if (lockClosures) {
