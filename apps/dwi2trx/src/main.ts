@@ -46,6 +46,7 @@ import { baseName, flipBvecX } from './dwi2trx/validate'
 import { createFailureReporter } from './dwi2trx/failures'
 import { trackingParametersReport } from './dwi2trx/provenance'
 import { DEFAULT_MAX_LENGTH_MM, dropLongStreamlines } from './dwi2trx/length'
+import { previewStride } from './dwi2trx/preview'
 import { TENSOR_MAPS, mapFileName } from '@neurodesk/dwi2trx'
 import { downloadBlob } from '@neurodesk/webapp-components/file-io/download'
 import { extractAffine } from '@neurodesk/webapp-components/file-io/nifti'
@@ -1167,6 +1168,8 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
     const trx = writeTrx(lines, voxelToRasmm, dims3)
     if (!isArrayBufferBacked(trx)) throw new Error('The TRX writer returned shared memory, which cannot become a file.')
     state.tracts = new File([trx], trxName)
+    const stride = previewStride(totalPts)
+    state.tractStride = stride
     // Free the voxel-space lines now that the TRX is serialized — the 3D preview
     // below allocates a large cylinder mesh, and there is no need to hold both.
     lines.length = 0
@@ -1183,8 +1186,13 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       : `${nSeeds.toLocaleString()} seeds`
     const summary = truncated
       ? `Partial: ${count} streamlines from ${seedNote} (${deviceLost ? 'GPU device lost' : 'out of memory'}).`
-      : `${count} streamlines from ${seedNote}${longNote ? `, ${longNote}` : ''} — saved as TRX.`
-    const detail = `Mean ${meanLen} points per streamline. ${longNote && truncated ? `${longNote}. ` : ''}${note}`.trim()
+      : stride > 1
+        ? `${count} streamlines from ${seedNote}; the 3D view shows 1 in ${stride}.`
+        : `${count} streamlines from ${seedNote}${longNote ? `, ${longNote}` : ''} — saved as TRX.`
+    const previewNote = stride > 1
+      ? `The 3D view shows 1 in ${stride} streamlines to fit in memory; the saved TRX holds all of them.`
+      : ''
+    const detail = `Mean ${meanLen} points per streamline. ${longNote && (truncated || stride > 1) ? `${longNote}. ` : ''}${previewNote} ${note}`.replace(/ +/g, ' ').trim()
     gotoTab(3)
     shownView = null // force the tract render to load
     // The TRX is already built and saveable. The 3D preview is separate: NiiVue
@@ -1253,7 +1261,7 @@ async function doSyncView(): Promise<void> {
   const seq = loadSeq
   if (state.step >= 3 && state.tracts) {
     if (shownView === 'tracts') return
-    await showTracts(state.tracts)
+    await showTracts(state.tracts, state.tractStride ?? 1)
     if (seq !== loadSeq) return
     shownView = 'tracts'
   } else if (state.step >= 2 && state.maps) {
@@ -1285,7 +1293,7 @@ async function clearTractScene(): Promise<void> {
  * render with direction-encoded colour — modelled on niivue's tract.groups
  * demo (clip planes + volume illumination so the FA slices show through).
  */
-async function showTracts(trx: File): Promise<void> {
+async function showTracts(trx: File, stride: number): Promise<void> {
   if (state.maps) {
     await nv.loadVolumes([
       { url: state.maps.fa, name: 'FA.nii.gz', opacity: 1 },
@@ -1293,7 +1301,7 @@ async function showTracts(trx: File): Promise<void> {
   }
   nv.volumeIsV1SliceShader = false // plain FA backdrop, not the V1 colour shader
   await nv.loadMeshes([
-    { url: trx, name: 'streamlines.trx', rgba255: TRACT_RGBA },
+    { url: trx, name: 'streamlines.trx', rgba255: TRACT_RGBA, tractOptions: { decimation: stride } },
   ])
   if (nv.meshes.length) await applyFiberColor()
   nv.setClipPlanes([
