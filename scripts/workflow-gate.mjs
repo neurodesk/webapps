@@ -32,7 +32,9 @@ const head = option('--head') || 'HEAD';
 async function sweep(flow) {
   const tested = await resolveTestedBase({ head, workflow: `${name}.yml`, cwd: repoRoot, atHead: true, events: new Set(['push', 'schedule']) });
   if (!tested.base) return { run: true, reason: tested.reason };
-  return sweepWorkflow({ flow, changedPaths: changedPathsFromGit({ base: tested.base, head, cwd: repoRoot }) });
+  const changedPaths = changedPathsFromGit({ base: tested.base, head, cwd: repoRoot });
+  const manifests = changedManifests({ base: tested.base, head, cwd: repoRoot, changedPaths });
+  return sweepWorkflow({ flow, changedPaths, manifests, registry: await loadAppsRegistry() });
 }
 
 async function decide(flow, read) {

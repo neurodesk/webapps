@@ -135,3 +135,17 @@ export function onlyAddsExports({ before, after }) {
   if (Object.keys(was).some((key) => key.includes('*'))) return false;
   return Object.keys(was).every((key) => same(was[key], is[key]));
 }
+
+// A manifest whose only change is its `version`: what a release writes into a
+// package that nothing else changed in. No build reads a workspace package's
+// version but that package's own.
+export function onlyBumpsVersion({ before, after }) {
+  let old;
+  let now;
+  try {
+    [old, now] = [JSON.parse(before), JSON.parse(after)];
+  } catch {
+    return false;
+  }
+  return old.version !== now.version && JSON.stringify({ ...old, version: null }) === JSON.stringify({ ...now, version: null });
+}
