@@ -12,6 +12,10 @@ const catalog = JSON.parse(await readFile(join(repoRoot, 'registry/standalone.js
 const suiteReleases = (await loadAppsRegistry()).site.catalogs.map(entry => entry.desktop.release);
 const server = process.env.BASE_URL ? null : await serveSite(siteDir);
 const base = `${(process.env.BASE_URL || server.origin).replace(/\/$/, '')}/`;
+// The shell module draws the bar, on the document the isolation service worker reloads, and
+// imports the Standalone dialog on the first click: on a cold load of the deployed host either
+// can outlast the 5 s default.
+const STARTUP_TIMEOUT = 60000;
 const browser = await chromium.launch({ headless: true });
 try {
   for (const app of apps) {
@@ -23,7 +27,7 @@ try {
       const response = await page.goto(new URL(`${app.path}/`, base).href, { waitUntil: 'domcontentloaded' });
       assert.ok(response?.ok(), `${app.id} page must load`);
       const bar = page.locator('.nd-app-bar:visible').first();
-      await expect(bar).toBeVisible();
+      await expect(bar, `${app.id}: the app bar (.nd-app-bar) must appear within ${STARTUP_TIMEOUT / 1000} s`).toBeVisible({ timeout: STARTUP_TIMEOUT });
       const enter = page.locator('#enterAppButton:visible, #landingLaunch:visible').first();
       if (await enter.count()) await enter.click();
       const workspace = page.getByRole('link', { name: 'Open Workspace', exact: true });
@@ -51,7 +55,7 @@ try {
           releaseStyles();
         }
       }
-      await expect(dialog).toBeVisible();
+      await expect(dialog, `${app.id}: the Standalone dialog (#neurodeskStandaloneDialog) must open within ${STARTUP_TIMEOUT / 1000} s`).toBeVisible({ timeout: STARTUP_TIMEOUT });
       await expect(dialog).not.toContainText(DIALOG_FORBIDDEN);
       const sections = await dialog.locator('section > h3').allTextContents();
       const downloads = catalog.apps[app.id].downloads;

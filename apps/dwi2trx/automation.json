@@ -236,6 +236,13 @@
           "maximum": 90,
           "description": "Maximum turn angle in degrees"
         },
+        "maxLength": {
+          "type": "number",
+          "default": 250,
+          "minimum": 20,
+          "maximum": 1000,
+          "description": "Longest streamline kept, in mm"
+        },
         "density": {
           "type": "integer",
           "default": 1,

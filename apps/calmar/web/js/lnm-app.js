@@ -267,6 +267,7 @@ export class LesionNetworkMappingApp {
     this.functionProfiles = null;
     this._functionalProfileRenderPromise = Promise.resolve();
     this._resultsGeneration = 0;
+    this._diffusionImportTurn = { dwi: 0, adc: 0, b0: 0 };
     // Knowledge-base report (stage 'kb-report'): the evaluation shown in the
     // Results view, the loaded KB, and the disconnectome worker client.
     this.kbReport = null;
@@ -396,7 +397,7 @@ export class LesionNetworkMappingApp {
         }
         for (const role of ['dwi', 'adc', 'b0']) {
           if (!input(role)) continue;
-          await this.setDeepIslesInput(role, input(role));
+          await this.setDeepIslesInput(role, input(role), { assertCurrent: this.beginDiffusionImport(role, assertCurrent) });
           assertCurrent();
         }
         this.patientBehavior?.loadExampleContext(example.patientContext);
@@ -415,25 +416,15 @@ export class LesionNetworkMappingApp {
       });
     }
 
-    const deepIslesDwiInput = document.getElementById('deepIslesDwiFileInput');
-    if (deepIslesDwiInput) {
-      deepIslesDwiInput.addEventListener('change', (event) => {
-        this.readScanInput(event.target.files).then(file => file && this.setDeepIslesInput('dwi', file))
-          .catch(err => this.updateOutput(`DeepISLES DWI/TRACE input failed: ${err.message}`));
-      });
-    }
-    const deepIslesAdcInput = document.getElementById('deepIslesAdcFileInput');
-    if (deepIslesAdcInput) {
-      deepIslesAdcInput.addEventListener('change', (event) => {
-        this.readScanInput(event.target.files).then(file => file && this.setDeepIslesInput('adc', file))
-          .catch(err => this.updateOutput(`DeepISLES ADC input failed: ${err.message}`));
-      });
-    }
-    const deepIslesB0Input = document.getElementById('deepIslesB0FileInput');
-    if (deepIslesB0Input) {
-      deepIslesB0Input.addEventListener('change', (event) => {
-        this.readScanInput(event.target.files).then(file => file && this.setDeepIslesInput('b0', file))
-          .catch(err => this.updateOutput(`DeepISLES b0 input failed: ${err.message}`));
+    for (const [kind, id, label] of [
+      ['dwi', 'deepIslesDwiFileInput', 'DWI/TRACE'],
+      ['adc', 'deepIslesAdcFileInput', 'ADC'],
+      ['b0', 'deepIslesB0FileInput', 'b0'],
+    ]) {
+      document.getElementById(id)?.addEventListener('change', (event) => {
+        this.importDiffusionInput(kind, event.target.files).catch((err) => {
+          if (err.name !== 'AbortError') this.updateOutput(`DeepISLES ${label} input failed: ${err.message}`);
+        });
       });
     }
 
@@ -1677,12 +1668,38 @@ export class LesionNetworkMappingApp {
     this._autoPromotePipeline('lnm-yeo-auto');
   }
 
-  async setDeepIslesInput(kind, file) {
+  // The newest import of a diffusion slot is the current one. A newer file in
+  // that slot replaces it, and so does a new subject, which clears every slot
+  // (`clearDiffusionInputs`); an import in another slot does not. The returned
+  // check throws once the import is replaced; `assertLoadCurrent` adds the
+  // cancellation of the example load that asked for it.
+  beginDiffusionImport(kind, assertLoadCurrent) {
+    const turn = ++this._diffusionImportTurn[kind];
+    return () => {
+      assertLoadCurrent?.();
+      if (turn !== this._diffusionImportTurn[kind]) {
+        throw new DOMException(`The ${kind} import was replaced.`, 'AbortError');
+      }
+    };
+  }
+
+  // A file the user chose: read (DICOM is converted), then kept only if still current.
+  async importDiffusionInput(kind, files) {
+    const assertCurrent = this.beginDiffusionImport(kind);
+    const file = await this.readScanInput(files);
+    assertCurrent();
+    return file ? this.setDeepIslesInput(kind, file, { assertCurrent }) : null;
+  }
+
+  // `assertCurrent` comes from `beginDiffusionImport`; it is called after every
+  // await, before anything of the file is kept or shown.
+  async setDeepIslesInput(kind, file, { assertCurrent } = {}) {
     if (!file) return null;
     const label = { dwi: 'DWI/TRACE', adc: 'ADC', b0: 'b0' }[kind];
     if (!label) {
       throw new Error(`Unknown DeepISLES input kind '${kind}'.`);
     }
+    assertCurrent ??= this.beginDiffusionImport(kind);
     // A DeepISLES run on the old inputs must not deliver its seed.
     if (this._deepIslesRunning) {
       try { this.executor.cancel(); }
@@ -1691,6 +1708,7 @@ export class LesionNetworkMappingApp {
       this.progress?.reset('Cancelled');
     }
     const decoded = await decodeNiftiBuffer(await file.arrayBuffer());
+    assertCurrent();
     this.tagDecodedFileSpace(file, decoded, {
       space: VOLUME_SPACES.NATIVE_DWI,
       role: `deepisles-${kind}`,
@@ -1711,20 +1729,21 @@ export class LesionNetworkMappingApp {
     if (kind === 'dwi') this.deepIslesDwiFile = file;
     else if (kind === 'adc') this.deepIslesAdcFile = file;
     else this.deepIslesB0File = file;
-    await this.showDeepIslesInput(file, kind);
+    await this.showDeepIslesInput(file, kind, assertCurrent);
     this.updateOutput(`DeepISLES ${label} input ready: ${file.name}`);
     return file;
   }
 
   // Display only. With a T1 or lesion loaded, the DWI/ADC is an overlay so the
   // base, and every space check against it, stays the T1 or lesion.
-  async showDeepIslesInput(file, kind) {
+  async showDeepIslesInput(file, kind, assertCurrent) {
     if (this.maskReviewActive) return;
     if (!this.structuralFile && !this.lesionFile) {
       await this.loadViewerBaseVolume(file, { stage: `deepisles-${kind}` });
     } else {
       // A pending base load would clear an overlay added now.
       await this._viewerBaseLoad;
+      assertCurrent();
       if (this.maskReviewActive) return;
       await this.viewerController.replaceOverlayForStage('deepisles-input', file, 'hot', 0.7, { scalar: true });
     }
@@ -2596,6 +2615,7 @@ export class LesionNetworkMappingApp {
   }
 
   clearDiffusionInputs() {
+    for (const kind of Object.keys(this._diffusionImportTurn)) this._diffusionImportTurn[kind] += 1;
     this.deepIslesDwiFile = null;
     this.deepIslesAdcFile = null;
     this.deepIslesB0File = null;

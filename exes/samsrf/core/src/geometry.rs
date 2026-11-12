@@ -45,49 +45,12 @@ pub struct Hull {
 }
 
 impl Hull {
-    /// `polyshape(points).convhull`. Recorded MATLAB R2023b behaviour
-    /// (`record_geometry.m`): vertices closer than 1e-8 of the bounding-box span
-    /// merge, so a spike narrower than that retraces itself; then vertices
-    /// within that distance of the chord between their neighbours go, including
-    /// retraced spikes, and the hull is taken of what remains. With fewer than
-    /// three vertices left the shape is empty. MATLAB takes these decisions on a
-    /// fixed-point copy of the vertices, so within 1e-5 relative of the cutoff
-    /// it can disagree; and it resolves self-intersections of near-parallel
-    /// edges into slivers this does not reproduce (packages/samsrf/README.md).
+    /// `polyshape(points).convhull`, as MATLAB R2023b computes it on its
+    /// fixed-point grid with the even-odd rule and its 1e-8 cleaning tolerance
+    /// (see `polyshape.rs`). `None` where that shape is empty.
     pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
-        let mut boundary = points.to_vec();
-        let span = (0..2).map(|axis| {
-            let low = points.iter().map(|p| p[axis]).fold(f64::INFINITY, f64::min);
-            let high = points.iter().map(|p| p[axis]).fold(f64::NEG_INFINITY, f64::max);
-            high - low
-        }).fold(0.0, f64::max);
-        let tolerance = span * 1e-8;
-        for i in 0..boundary.len() {
-            if let Some(&earlier) = boundary[..i].iter().find(|a| (a[0] - boundary[i][0]).hypot(a[1] - boundary[i][1]) < tolerance) {
-                boundary[i] = earlier;
-            }
-        }
-        boundary.dedup();
-        while boundary.len() > 1 && boundary.first() == boundary.last() {
-            boundary.pop();
-        }
-        loop {
-            let n = boundary.len();
-            if n < 3 {
-                return None;
-            }
-            let redundant = (0..n).find(|&i| {
-                let a = boundary[(i + n - 1) % n];
-                let b = boundary[i];
-                let c = boundary[(i + 1) % n];
-                let cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
-                cross == 0.0 || cross.abs() < tolerance * (c[0] - a[0]).hypot(c[1] - a[1])
-            });
-            match redundant {
-                Some(i) => { boundary.remove(i); }
-                None => return Self::of(&boundary),
-            }
-        }
+        let hull = Hull { vertices: crate::polyshape::convex_hull(points)? };
+        (hull.area() > 0.0).then_some(hull)
     }
 
     /// The convex hull of `points` (Andrew's monotone chain), or `None` when the points
