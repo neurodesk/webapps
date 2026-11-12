@@ -125,4 +125,161 @@ test.describe('download fault injection', () => {
     await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
     await expect(selector).toHaveAttribute('data-example-id', isles.id);
   });
+
+  test('a cancelled example whose download or import finishes late leaves the next example in place', async ({ page }) => {
+    test.setTimeout(240000);
+    await page.goto('/');
+    await page.waitForFunction(() => globalThis.app?.nv?.canvas, null, { timeout: 60000 });
+    const selector = page.locator('[data-neurodesk-examples]');
+    const menu = page.locator('select[data-neurodesk-example]');
+    const cancel = selector.getByRole('button', { name: 'Cancel example download' });
+    const first = examples.find(item => item.id === 'stroke-lesion');
+    const second = examples.find(item => item.id === 'stroke-lesion-m2001');
+    const soop = examples.find(item => item.id === 'stroke-dwi-adc-soop');
+    const loaded = () => page.evaluate(() => ({
+      structural: app.nativeStructuralFile?.name,
+      dwi: app.deepIslesDwiFile?.name ?? null,
+      viewer: app.nv.volumes.map(volume => volume.name),
+      age: document.getElementById('patientAge').value,
+      report: document.getElementById('patientBehaviorReportBody').textContent.includes('87.1'),
+    }));
+    const secondLoaded = { structural: second.files[0].name, dwi: null, viewer: [second.files[0].name], age: '38', report: true };
+
+    // Cancelling aborts the first participant's download, so its response cannot arrive later.
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    await page.route(first.files[0].url, async route => {
+      await gate;
+      await route.continue().catch(() => {});
+    });
+    const requested = page.waitForRequest(first.files[0].url);
+    await menu.selectOption(first.id);
+    const aborted = (await requested).response().catch(() => null);
+    await cancel.click();
+    await menu.selectOption(second.id);
+    await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
+    await expect(page.locator('#patientAge')).toHaveValue('38');
+    release();
+    expect(await aborted).toBeNull();
+    await expect(selector).toHaveAttribute('data-example-id', second.id);
+    expect(await loaded()).toEqual(secondLoaded);
+    await page.unroute(first.files[0].url);
+
+    // An acute scan that is still being decoded when it is cancelled must not join the next participant.
+    const held = soop.files[0].name;
+    await page.evaluate(name => {
+      const read = File.prototype.arrayBuffer;
+      File.prototype.arrayBuffer = async function arrayBuffer() {
+        if (this.name === name) {
+          await new Promise(resolve => {
+            globalThis.releaseStaleRead = resolve;
+          });
+        }
+        return read.call(this);
+      };
+      const setInput = app.setDeepIslesInput.bind(app);
+      app.setDeepIslesInput = (kind, file, ...rest) => {
+        const result = setInput(kind, file, ...rest);
+        if (file.name === name) globalThis.staleImport = result.catch(() => {});
+        return result;
+      };
+    }, held);
+    await menu.selectOption(soop.id);
+    await page.waitForFunction(() => globalThis.releaseStaleRead, null, { timeout: 120000 });
+    await cancel.click();
+    await menu.selectOption(second.id);
+    await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
+    await expect(page.locator('#patientAge')).toHaveValue('38');
+    await page.evaluate(() => {
+      globalThis.releaseStaleRead();
+      return globalThis.staleImport;
+    });
+    await expect(selector).toHaveAttribute('data-example-id', second.id);
+    expect(await loaded()).toEqual(secondLoaded);
+  });
+});
+
+test.describe('a local diffusion file that finishes decoding late', () => {
+  // Reads of files named `held-*` wait until `release(name)`, which returns how that import ended.
+  async function holdReads(page) {
+    await page.goto('/');
+    await page.waitForFunction(() => globalThis.app?.nv?.canvas, null, { timeout: 60000 });
+    const scan = Buffer.from(await page.evaluate(async () => {
+      const { writeNifti1 } = await import('/js/modules/nifti-writer.js');
+      const affine = [2, 0, 0, -8, 0, 2, 0, -8, 0, 0, 2, -8, 0, 0, 0, 1];
+      return [...new Uint8Array(writeNifti1(new Float32Array(512).fill(1), { dims: [8, 8, 8], affine }))];
+    }));
+    const choose = (slot, name) => page.locator(`#deepIsles${slot}FileInput`).setInputFiles({ name, mimeType: 'application/octet-stream', buffer: scan });
+    await page.evaluate(() => {
+      globalThis.releaseRead = {};
+      globalThis.settled = {};
+      const read = File.prototype.arrayBuffer;
+      File.prototype.arrayBuffer = async function arrayBuffer() {
+        if (this.name.startsWith('held-')) {
+          await new Promise(resolve => {
+            globalThis.releaseRead[this.name] = resolve;
+          });
+        }
+        return read.call(this);
+      };
+      const setInput = app.setDeepIslesInput.bind(app);
+      app.setDeepIslesInput = (kind, file, ...rest) => {
+        const result = setInput(kind, file, ...rest);
+        globalThis.settled[file.name] = result.then(() => 'kept', error => error.name);
+        return result;
+      };
+    });
+    const hold = async (slot, name) => {
+      await choose(slot, name);
+      await page.waitForFunction(held => globalThis.releaseRead[held], name);
+    };
+    const release = name => page.evaluate((held) => {
+      globalThis.releaseRead[held]();
+      return globalThis.settled[held];
+    }, name);
+    const loaded = () => page.evaluate(() => ({
+      structural: app.nativeStructuralFile?.name ?? null,
+      dwi: app.deepIslesDwiFile?.name ?? null,
+      adc: app.deepIslesAdcFile?.name ?? null,
+      viewer: app.nv.volumes.map(volume => volume.name),
+      age: document.getElementById('patientAge').value,
+    }));
+    return { choose, hold, release, loaded };
+  }
+
+  test('is kept beside a file in another slot and dropped for a newer file in its own slot', async ({ page }) => {
+    test.setTimeout(120000);
+    const { choose, hold, release, loaded } = await holdReads(page);
+    // A file in another slot leaves the pending one current.
+    await hold('Dwi', 'held-first-DWI.nii');
+    await choose('Adc', 'local-ADC.nii');
+    await expect.poll(async () => (await loaded()).adc).toBe('local-ADC.nii');
+    expect(await release('held-first-DWI.nii')).toBe('kept');
+    expect(await loaded()).toMatchObject({ dwi: 'held-first-DWI.nii', adc: 'local-ADC.nii' });
+
+    // A newer file in the same slot replaces the pending one.
+    await hold('Dwi', 'held-old-DWI.nii');
+    await choose('Dwi', 'new-local-DWI.nii');
+    await expect.poll(async () => (await loaded()).dwi).toBe('new-local-DWI.nii');
+    expect(await release('held-old-DWI.nii')).toBe('AbortError');
+    const sameSlot = await loaded();
+    expect(sameSlot).toMatchObject({ dwi: 'new-local-DWI.nii', adc: 'local-ADC.nii' });
+    expect(sameSlot.viewer).not.toContain('held-old-DWI.nii');
+  });
+
+  test('is dropped once an example replaced the subject', async ({ page }) => {
+    test.setTimeout(240000);
+    const { hold, release, loaded } = await holdReads(page);
+    const selector = page.locator('[data-neurodesk-examples]');
+    const second = examples.find(item => item.id === 'stroke-lesion-m2001');
+    // An example loaded meanwhile is a new subject: the pending local file must not join it.
+    await hold('Dwi', 'held-local-DWI.nii');
+    await page.locator('select[data-neurodesk-example]').selectOption(second.id);
+    await expect(selector).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
+    await expect(page.locator('#patientAge')).toHaveValue('38');
+    expect(await release('held-local-DWI.nii')).toBe('AbortError');
+    await expect(selector).toHaveAttribute('data-example-id', second.id);
+    expect(await loaded()).toEqual({ structural: second.files[0].name, dwi: null, adc: null, viewer: [second.files[0].name], age: '38' });
+    expect(await page.evaluate(() => document.getElementById('technicalConsoleOutput').textContent)).not.toContain('input failed');
+  });
 });

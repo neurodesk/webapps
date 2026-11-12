@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { parse } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
+import { onlyAddsExports } from './module-closure.mjs';
 import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
 import { validateAppInformation } from './app-information.mjs';
 import { validateStandalone } from './standalone.mjs';
@@ -68,8 +69,6 @@ function analyseLockfile(manifest) {
   }
 }
 
-// The app entries a registry/apps.yml change touched, or why the change is
-// shared: every app build embeds the site section's analytics id.
 // The app entries a registry/standalone.json change touched, whether the
 // suite (read only by the catalog page and the desktop bundle) changed, or why
 // the change is shared. Every themed app build copies the file and validates
@@ -114,6 +113,19 @@ function appInformationImpact({ before, after }, registry) {
   }
 }
 
+// Only the landing page renders the site categories, so a new category or a
+// reworded title or description reaches no app build. A category that goes
+// away can leave an app entry invalid, so that stays a shared change.
+function onlyDescribesCategories(old, now) {
+  const fields = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])];
+  if (fields.some((field) => field !== 'categories' && !same(old?.[field], now?.[field]))) return false;
+  if (!Array.isArray(old?.categories) || !Array.isArray(now?.categories)) return false;
+  const kept = new Set(now.categories.map((category) => category?.id));
+  return old.categories.every((category) => category?.id && kept.has(category.id));
+}
+
+// The app entries a registry/apps.yml change touched, or why the change is
+// shared: every app build embeds the site section's analytics id.
 function registryImpact({ before, after }) {
   let old;
   let now;
@@ -123,7 +135,7 @@ function registryImpact({ before, after }) {
     return { shared: `it does not parse (${error.message})` };
   }
   const section = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].find((key) => key !== 'apps' && !same(old?.[key], now?.[key]));
-  if (section) return { shared: `its ${section} section changed, and every app build reads it` };
+  if (section && !(section === 'site' && onlyDescribesCategories(old.site, now.site))) return { shared: `its ${section} section changed, and every app build reads it` };
   const entries = (registry) => (Array.isArray(registry?.apps) ? registry.apps : []);
   const byId = (registry) => new Map(entries(registry).map((app) => [app?.id, app]));
   const [was, is] = [byId(old), byId(now)];
@@ -339,6 +351,18 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     if (manifest && path === OFFLINE_LOCK) {
       for (const app of lockOwners(manifest)) if (appIds.has(app)) select(app, `${path}: its locked assets changed`);
       siteBuild(path);
+      continue;
+    }
+    // New export entries resolve every existing import as before.
+    if (manifest && /^packages\/[^/]+\/package\.json$/.test(path) && onlyAddsExports(manifest)) continue;
+    // A module of the shared component package reaches the apps that load it.
+    const loadedBy = graph?.moduleUsers?.(path);
+    if (loadedBy) {
+      if (loadedBy.some((user) => site.has(user))) siteBuild(path);
+      for (const candidate of registry.apps) {
+        const user = loadedBy.find((user) => reach.get(candidate.id).has(user));
+        if (user) select(candidate.id, `${path} (loaded by ${user})`);
+      }
       continue;
     }
     // A package's tests reach only the apps that read them; any other file

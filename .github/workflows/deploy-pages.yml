@@ -95,6 +95,9 @@ jobs:
       - name: Deploy composite site
         id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          # Pages sometimes needs more than the default ten minutes to sync the site.
+          timeout: 1200000
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7

@@ -1,10 +1,7 @@
 import { chromium } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { loadAsset } from '../src/node.js';
-import offlineAssets from '../../../registry/offline-assets.lock.json' with { type: 'json' };
 import assets from '../assets.lock.json' with { type: 'json' };
 import { serveSite } from '../../../test-utils/serve-site.mjs';
 
@@ -21,11 +18,6 @@ if (digest !== '725a37bf9556c6776a7be552597999df67d175a44eafc03252db058e8f5c5cad
   throw new Error('Reference input differs from the pinned example.');
 }
 if (mapOnly && !process.env.CALMAR_REVIEWED_INPUT) throw new Error('Map needs a reviewed input.');
-const viewerUrl = 'https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js';
-const viewer = await loadAsset(
-  { ...offlineAssets.assets[viewerUrl], url: viewerUrl, filename: 'niivue-0.68.2.js' },
-  { cacheDir: join(tmpdir(), 'calmar-browser-runtime'), offline: false }
-);
 const site = await serveSite(resolve('apps/calmar/dist'), {
   files: new Map(
     assets.map((asset) => [`/__calmar_assets/${asset.id}`, join(cacheDir, asset.filename)])
@@ -42,9 +34,6 @@ async function referencePage(browser) {
   );
   page.on('crash', () => console.log('Reference page crashed.'));
   page.on('console', (message) => console.log(message.text()));
-  await context.route(viewerUrl, (route) =>
-    route.fulfill({ body: viewer, contentType: 'application/javascript' })
-  );
   await context.route('**/__structural-image.nii.gz', (route) => route.fulfill({ body: inputBytes }));
   for (const asset of assets) {
     // Large ONNX bodies exceed Chromium's DevTools message limit when base64-fulfilled.

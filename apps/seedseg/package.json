@@ -9,7 +9,7 @@
     "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
     "predev": "pnpm prebuild",
     "dev": "node ../../scripts/dev-server.mjs --dir web --app seedseg --port 8080",
-    "prebuild": "pnpm vendor && pnpm runtime-support && node ../../scripts/fetch-app-runtime.mjs --dest web/wasm ort-web-seedseg:ort.webgpu.bundle.min.mjs,ort-wasm-simd-threaded.asyncify.mjs qsm-wasm:qsm_wasm.js,qsm_wasm_bg.wasm",
+    "prebuild": "pnpm vendor && pnpm runtime-support && node ../../scripts/fetch-app-runtime.mjs --dest web/wasm ort-web-seedseg:ort.webgpu.bundle.min.mjs,ort-wasm-simd-threaded.asyncify.mjs niivue-umd:niivue.umd.js qsm-wasm:qsm_wasm.js,qsm_wasm_bg.wasm",
     "build": "node ../../scripts/build-static.mjs && node ../../scripts/theme-app-dist.mjs --app seedseg",
     "lint": "node ../../scripts/check-app-js.mjs web",
     "pretest": "pnpm vendor && pnpm runtime-support",

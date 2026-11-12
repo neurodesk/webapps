@@ -43,9 +43,6 @@ on:
       - 'packages/ants-denoise/package.json'
       - 'packages/ants-denoise/src/**'
       - 'packages/ants-denoise/wasm/**'
-      - 'packages/components/package.json'
-      - 'packages/components/src/file-io/**'
-      - 'packages/components/src/volume/**'
       - 'packages/dwi2trx/package.json'
       - 'packages/dwi2trx/src/gradients.js'
       - 'packages/hmc-registration/package.json'
@@ -59,8 +56,10 @@ on:
       - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
-      - 'packages/runtime-support/package.json'
-      - 'packages/runtime-support/src/mindgrab/**'
+  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
+  # runs it when one changed on main since this workflow last finished green there.
+  schedule:
+    - cron: '37 14 * * *'
   workflow_dispatch:
     inputs:
       sign_release:
@@ -80,6 +79,9 @@ jobs:
   # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
   gate:
     uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       workflow: sdc-native
 

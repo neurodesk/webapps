@@ -40,9 +40,10 @@ async function niivueVersions(app, runtimeSupport, runtimeDownloads) {
   for (const page of [`apps/${app}/index.html`, `apps/${app}/web/index.html`]) {
     for (const match of (await readText(page)).matchAll(/@niivue\/niivue@([^/"']+)\//g)) versions.push(match[1]);
   }
-  const setup = await readText(`apps/${app}/web/setup.sh`);
+  // An app stages runtime downloads from web/setup.sh, a package script, or both.
+  const staging = [await readText(`apps/${app}/web/setup.sh`), ...Object.values(manifest.scripts ?? {})].join('\n');
   for (const download of runtimeDownloads) {
-    if (!download.id.startsWith('niivue') || !setup.includes(` ${download.id}:`)) continue;
+    if (!download.id.startsWith('niivue') || !staging.includes(` ${download.id}:`)) continue;
     // The fetcher downloads from download_base; its version field is only a label.
     const fetched = /@niivue\/niivue@([^/]+)\//.exec(download.download_base)?.[1];
     assert.equal(fetched, download.version, `${download.id} downloads NiiVue ${fetched} but is labelled ${download.version}`);
@@ -60,12 +61,12 @@ function loadsDrawingsCorrectly(version) {
 
 test('every app that edits masks runs a NiiVue that loads drawings with the native dims', async () => {
   const runtimeSupport = await readJson('packages/runtime-support/package.json');
-  const { downloads } = await readJson('runtime-assets/manifest.json');
+  const { families, downloads } = await readJson('runtime-assets/manifest.json');
   const apps = (await readdir(new URL('apps/', root), { withFileTypes: true })).filter(entry => entry.isDirectory()).map(entry => entry.name);
   const editing = [];
   for (const app of apps) {
     if (!await editsMasks(app)) continue;
-    const versions = await niivueVersions(app, runtimeSupport, downloads);
+    const versions = await niivueVersions(app, runtimeSupport, [...families, ...downloads]);
     assert.ok(versions.length > 0, `${app} edits masks but this test cannot find which NiiVue it loads`);
     for (const version of versions) {
       assert.ok(loadsDrawingsCorrectly(version), `${app} edits masks on @niivue/niivue ${version}; it needs 0.x or 1.0.0-rc.${FIXED_RC} or later`);

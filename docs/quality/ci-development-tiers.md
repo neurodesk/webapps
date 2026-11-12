@@ -48,15 +48,92 @@ Every workflow with such a filter now starts with a `gate` job that calls
 - When it cannot decide (no diff, an unreadable lockfile, a script error) it
   runs.
 
-The gate answers `false` for a draft and `true` for every event other than
-`pull_request` without a checkout, so pushes to main, schedules and dispatches
-are not narrowed. A shared change the gate skipped on a pull request is still
-tested by those. The job always finishes: a skipped gate would skip every job
-after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and fails
-when a workflow adds a shared filter without the gate.
+The gate answers `false` for a draft and `true` for a push or a dispatch
+without a checkout. The job always finishes: a skipped gate would skip every
+job after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and
+fails when a workflow adds a shared filter without the gate.
 
 Replay a pull request locally with
 `node scripts/workflow-gate.mjs --workflow <name> --base <sha> --head <sha>`.
+
+## Pushes to main and the nightly sweep
+
+A gated workflow's `push` filter lists only its own paths, so a merge starts
+the native suites it changed and no others. On 10 November 2026 three merges
+each started 25 to 37 native workflows on Linux, macOS and Windows through
+shared push filters, about 5,200 runner minutes in one day.
+
+Shared paths reach a gated workflow on main through its nightly sweep. Each
+has one `schedule`, and for that event the gate runs the workflow when a path
+under one of its shared pull request filters changed on main since the
+workflow last finished green there, by a merge or an earlier sweep
+(`sweepWorkflow`, `resolveTestedBase`). A sweep that fails, or that GitHub
+drops, leaves that commit where it was, so the next sweep still sees the
+change. Without such a run the workflow runs. The sweep does not ask whether the change reaches
+the workflow: it is what first tests a file read through a computed path, and
+what builds every target for a shared change the pull request built on Linux
+only. A night without such a change costs each workflow one gate job.
+
+- Do not add a shared path to a gated workflow's `push` filter. Name a single
+  file there when a push must test it at once.
+- To test a shared change on every target before merging, dispatch the
+  workflow on the branch.
+- A failed sweep opens an issue through `nightly-failures.yml`, like every
+  scheduled workflow.
+- Replay a sweep with
+  `GITHUB_REPOSITORY=neurodesk/webapps GITHUB_TOKEN=$(gh auth token) node scripts/workflow-gate.mjs --workflow <name> --sweep`.
+
+## Daily usage budget
+
+`ci-usage.yml` runs `scripts/ci-usage-report.mjs` at 06:41 UTC. It lists, by
+wall time, the workflow runs created in the UTC day that ended at the last
+midnight, so consecutive reports share a boundary and every run has had hours
+to start its jobs. It fails, which opens an issue, when a budget in
+`scripts/lib/ci-usage.mjs` is exceeded:
+
+| Budget | Limit | What exceeding it means |
+| --- | --- | --- |
+| Whole-catalogue `ci` runs of one pull request | 2 | Fixes were pushed to a ready pull request. Convert it to draft first. |
+| Whole-catalogue pull request `ci` runs in total | 8 | A file the planner ties to every app is changing often. Read the `app-plan` summaries. |
+
+A whole-catalogue run is a `ci` run with at least 100 jobs; one still going
+when the report runs counts. Runs are grouped by pull request number, and a
+fork's by repository and branch. The report also lists the workflows each push
+to main ran. That list has no budget, because a release rightly runs most of
+them. Run the report for
+any day with `node scripts/ci-usage-report.mjs --until <ISO time>`. Change a
+budget only with the measurement that justifies it.
+
+## Module-level selection in the component package
+
+Every app depends on `packages/components`, so a change anywhere in it used
+to select all 63 apps. On 10 November 2026 four pull requests changed
+`src/file-io/tiff.js` or a module beside it, and each of their ready pushes
+tested the whole catalogue.
+
+The planner now asks which apps load the changed module
+(`scripts/lib/shared-module-users.mjs`). A user's entry points are the import
+specifiers and paths its text names; the modules it loads are their import
+closure inside the package. A change to `src/file-io/tiff.js` selects 30 apps,
+`src/fft/index.js` 14, and a module the shell or `/ui` loads still selects all.
+
+The analysis reads text, so it errs towards more apps:
+
+- A directory reference loads every file in that directory.
+- A computed specifier, an import-map prefix, the package root or a path that
+  does not exist loads the whole package. The six import-map apps copy the
+  source directory and are selected by every change.
+- Declaration files, styles, the manifest, scripts and tests of the package reach all its users,
+  as before. A manifest that only gains `exports` entries selects nothing.
+- A root script that reads a list of modules from the source directory names
+  the list in `LISTED_READS`. When the script's text stops matching, it loads
+  the whole package again.
+
+It cannot see a module loaded through a name built at run time from a
+directory listing. `test/shared-module-users.test.mjs` checks every literal
+component import in every app against the selection. With `tiff.js` broken on
+purpose, `dcm2niix` and `niimath` (not selected) built and `structure-tensor`
+and `stardist` (selected) failed.
 
 ## Agent procedure
 
@@ -96,9 +173,12 @@ groups, and native release/signing conditions are unchanged.
 NeuroFlow and the SDC registration gate start for a pull request only on their
 own paths: the builder, the template apps and NeuroFlow's scripts and tests;
 the SDC pipeline, the registration kernel and their reference pins. Both take
-hours of runner time, so a change to a package they only build on reaches them
-on the push to main and in their nightly runs, whose filters stay broad. To
-test such a change before merging, dispatch the workflow on the branch.
+hours of runner time. A merge starts NeuroFlow on the same paths, because
+nearly every merge touches a package its apps build on: on 10 November 2026
+that started 19 push runs, of which 14 were cancelled by the next merge. Its
+nightly run has no filter and covers those packages. The SDC gate also starts
+on main for the files it imports from other packages. To test such a change
+before merging, dispatch the workflow on the branch.
 Native workflows that call the portable packager use generated Node-driver
 paths: run `node scripts/sync-native-driver-paths.mjs` after changing their
 imports. The contract suite checks the generated paths and the existing
