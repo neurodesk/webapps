@@ -14,8 +14,10 @@
 export const BUDGETS = Object.freeze({
   // Whole-catalogue `ci` runs one pull request may start in the window.
   largeRunsPerPullRequest: 2,
-  // Whole-catalogue pull request `ci` runs over all pull requests.
-  largeRuns: 8,
+  // Whole-catalogue pull request `ci` runs over all pull requests: five pull
+  // requests at their own budget, the most that merged in one day when the
+  // planner was replayed over 60 merged pull requests in November 2026.
+  largeRuns: 10,
 });
 
 // A `ci` run with this many jobs tested most of the catalogue.

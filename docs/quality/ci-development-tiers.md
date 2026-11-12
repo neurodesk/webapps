@@ -74,6 +74,16 @@ the workflow: it is what first tests a file read through a computed path, and
 what builds every target for a shared change the pull request built on Linux
 only. A night without such a change costs each workflow one gate job.
 
+Release bookkeeping is left aside, because every release writes it into the
+shared packages: a `CHANGELOG.md`, a workspace `package.json` whose only
+change is its `version`, and, for a workflow that builds registry apps, a
+valid `registry/standalone.json` in which none of their entries changed.
+Replayed over the releases of 3, 8 and 11 November 2026, such a release ran
+27 of the 29 scheduled gated workflows before this rule and 1 after it
+(`hmc-native`, for a generated source file the same release changed). The
+version a portable package lists for a bundled workspace package in its
+notices is the one thing such a skipped sweep leaves a day stale.
+
 - Do not add a shared path to a gated workflow's `push` filter. Name a single
   file there when a push must test it at once.
 - To test a shared change on every target before merging, dispatch the
@@ -94,7 +104,13 @@ to start its jobs. It fails, which opens an issue, when a budget in
 | Budget | Limit | What exceeding it means |
 | --- | --- | --- |
 | Whole-catalogue `ci` runs of one pull request | 2 | Fixes were pushed to a ready pull request. Convert it to draft first. |
-| Whole-catalogue pull request `ci` runs in total | 8 | A file the planner ties to every app is changing often. Read the `app-plan` summaries. |
+| Whole-catalogue pull request `ci` runs in total | 10 | A file the planner ties to every app is changing often. Read the `app-plan` summaries. |
+
+The total is five pull requests at their own budget. Replayed over the 60
+pull requests merged from 8 to 12 November 2026, the planner selected every
+app for 13 of them, at most 5 on one day (`scripts/app-plan-shadow.mjs --last
+60`). The seven days before the limit existed had 11 to 32 such runs each,
+because ready pull requests took several pushes.
 
 A whole-catalogue run is a `ci` run with at least 100 jobs; one still going
 when the report runs counts. Runs are grouped by pull request number, and a
