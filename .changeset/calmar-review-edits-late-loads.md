@@ -7,3 +7,5 @@ CALMaR keeps the edits drawn in an open mask review when an older viewer load fi
 A brain mask overlay that finishes loading after Clear results, or after a new structural image, is removed again. It could become the viewer's base image, below the structural image.
 
 A registration QC view, network map or other viewer stack that finishes loading after Clear results or a new structural image is removed again, and can no longer replace the image under an open mask review. The brain mask shown during a mask review is removed when it finishes loading after Clear results. Switching a viewer layer on, off and on while it loads no longer leaves a second copy of the overlay that stayed visible with the layer switched off.
+
+Start over no longer waits for a viewer load that is still in progress: the structural image returns at once and a new mask review opens on it, also when the earlier load never finishes. A threshold preview that finishes loading after a newer one no longer leaves a second copy that stayed visible with the threshold layer switched off.

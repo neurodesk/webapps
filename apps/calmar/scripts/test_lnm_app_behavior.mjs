@@ -1585,7 +1585,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   });
   const previewCalls = [];
   app.viewerController = {
-    replaceOverlayForStage: async (...args) => { previewCalls.push(args); },
+    loadOverlay: async (file, colormap, opacity, options) => { previewCalls.push([options.stage, file, colormap, opacity]); },
     removeVolumeForStage: () => {}
   };
   app.networkMapData = new Float32Array([-1.0, 0.25, 0.75, 2.0]);
@@ -1646,7 +1646,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   const originalCreateElement = globalThis.document.createElement;
   globalThis.document.createElement = tag => dom.window.document.createElement(tag);
   app.viewerController = {
-    replaceOverlayForStage: async () => {},
+    loadOverlay: async () => {},
     removeVolumeForStage: () => {}
   };
   app.networkMapData = new Float32Array([0.1, 2.0, 3.0, 4.0]);
@@ -1826,7 +1826,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   };
   const restoreDocument = useMockElements(elements);
   app.viewerController = {
-    replaceOverlayForStage: async () => {},
+    loadOverlay: async () => {},
     removeVolumeForStage: () => {}
   };
   app.networkMapData = new Float32Array([1, 2, 3, 4]);
@@ -3259,7 +3259,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
             app.clearDerivedResults();
           },
           getVolumeIndexForStage: stage => (stage === 'network-map' ? stale.volumeFiles.length - 1 : null),
-          removeVolumeAtIndex: index => removed.push(stale.volumeFiles[index].name)
+          removeVolumeForStage: stage => removed.push(stale.volumeFiles[stale.getVolumeIndexForStage(stage)].name)
         };
         app.viewerController = stale;
         app.overlapResult = nonemptyOverlap;

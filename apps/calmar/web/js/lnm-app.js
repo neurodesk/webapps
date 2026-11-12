@@ -1481,8 +1481,9 @@ export class LesionNetworkMappingApp {
       try {
         check();
       } catch (err) {
+        // The undo keeps this load's place in the queue until it is done.
+        if (turn === this._viewerTurn) await undo?.();
         if (turn !== this._viewerTurn) this.rebuildViewer();
-        else undo?.();
         throw err;
       }
       return result;
@@ -1491,9 +1492,10 @@ export class LesionNetworkMappingApp {
     return load;
   }
 
-  // A full clear and a new structural image leave nothing to wait for: loads
-  // asked before them are stale, and one NiiVue never finishes must not hold
-  // up the loads asked after.
+  // A clear and a new structural image leave nothing to wait for: loads asked
+  // before them are stale, and one NiiVue never finishes must not hold up the
+  // loads asked after. Whatever such a load still puts into the viewer is
+  // taken out by the rebuild it asks for when it lands.
   resetViewerQueue() {
     this._viewerTurn += 1;
     this._viewerLoad = Promise.resolve();
@@ -1509,19 +1511,21 @@ export class LesionNetworkMappingApp {
   // base is the image the drawing was made on, whatever was displayed last.
   rebuildViewer() {
     if (!this.maskReviewActive) this.maskDrawingController?.close?.({ clearDrawing: true });
-    this.viewerLoad(() => {
-      const review = this.maskReviewActive;
-      const base = review ? this.nativeStructuralFile : this.viewerBaseFile;
-      const options = review ? { stage: 'structural', visible: this.layerVisible('structural') } : this._viewerBaseOptions;
-      this.viewerController.clearVolumes();
-      this.viewerBaseFile = null;
-      if (!base) return null;
-      return this.viewerController.loadBaseVolume(base, options).then(() => {
-        this.viewerBaseFile = base;
-        this._viewerBaseOptions = options;
-        this.refreshViewerLayerControls();
-      });
-    }).catch(this.reportFailure('Viewer reload failed'));
+    this.viewerLoad(() => this.reloadViewerBase()).catch(this.reportFailure('Viewer reload failed'));
+  }
+
+  // Runs inside a queued load, never on its own.
+  async reloadViewerBase() {
+    const review = this.maskReviewActive;
+    const base = review ? this.nativeStructuralFile : this.viewerBaseFile;
+    const options = review ? { stage: 'structural', visible: this.layerVisible('structural') } : this._viewerBaseOptions;
+    this.viewerController.clearVolumes();
+    this.viewerBaseFile = null;
+    if (!base) return;
+    await this.viewerController.loadBaseVolume(base, options);
+    this.viewerBaseFile = base;
+    this._viewerBaseOptions = options;
+    this.refreshViewerLayerControls();
   }
 
   async loadViewerBaseVolume(file, options = {}, assertCurrent) {
@@ -1549,14 +1553,25 @@ export class LesionNetworkMappingApp {
   loadViewerOverlay(file, colormap, opacity, options, assertCurrent = this.pipelineTurn()) {
     const viewer = this.viewerController;
     return this.viewerLoad(() => {
-      const index = viewer.getVolumeIndexForStage?.(options.stage) ?? null;
-      if (index !== null && viewer.volumeFiles?.[index] === file) return true;
+      if (this.viewerOverlayFile(options.stage) === file) return true;
       viewer.removeVolumeForStage(options.stage);
       return viewer.loadOverlay(file, colormap, opacity, options);
     }, {
       assertCurrent,
-      undo: () => viewer.removeVolumeForStage(options.stage)
+      undo: () => this.removeViewerOverlay(options.stage, file)
     });
+  }
+
+  viewerOverlayFile(stage) {
+    const index = this.viewerController?.getVolumeIndexForStage?.(stage) ?? null;
+    return index === null ? null : this.viewerController.volumeFiles?.[index] ?? null;
+  }
+
+  // Takes a stage's overlay out; with `file`, only if the stage still holds
+  // that file, so a stale owner never removes its successor.
+  removeViewerOverlay(stage, file) {
+    if (file && this.viewerOverlayFile(stage) !== file) return;
+    this.viewerController?.removeVolumeForStage?.(stage);
   }
 
   // A stack replaces the base, so it takes its place in the queue like one.
@@ -1565,7 +1580,7 @@ export class LesionNetworkMappingApp {
   async loadViewerVolumeStack(entries = []) {
     await this.viewerLoad(() => this.viewerController.loadVolumeStack(entries), {
       assertCurrent: this.pipelineTurn(),
-      undo: () => this.rebuildViewer()
+      undo: () => this.reloadViewerBase()
     });
     this.viewerBaseFile = entries[0]?.file || null;
     this._viewerBaseOptions = { stage: entries[0]?.stage, visible: entries[0]?.visible };
@@ -1737,8 +1752,10 @@ export class LesionNetworkMappingApp {
         visible: this.layerVisible('structural')
       }, assertCurrent);
     } catch (err) {
-      if (this.nativeStructuralFile === file && !this.isCurrent(assertCurrent)) this.withdrawStructural();
-      throw err;
+      const current = this.isCurrent(assertCurrent);
+      if (this.nativeStructuralFile === file && !current) this.withdrawStructural();
+      // Clear results reset the viewer under this load and loads the image again itself.
+      if (err.name !== 'AbortError' || !current || this.nativeStructuralFile !== file) throw err;
     }
     this.refreshViewerLayerControls();
     this.refreshMaskDrawingControls();
@@ -3458,13 +3475,8 @@ export class LesionNetworkMappingApp {
     const mapFile = this.networkMapFile;
     await this.displayNetworkMapOnAtlasTemplate(atlas, flatAffine);
     if (generation !== this._resultsGeneration) {
-      const viewer = this.viewerController;
-      const index = viewer?.getVolumeIndexForStage?.('network-map');
       // A newer run may already own the network-map stage; remove only this run's overlay.
-      if (index !== null && index !== undefined && viewer.volumeFiles?.[index] === mapFile) {
-        try { viewer.removeVolumeAtIndex(index); }
-        catch (e) { /* non-fatal: stale viewer state is cosmetic */ }
-      }
+      this.removeViewerOverlay('network-map', mapFile);
       return this.discardStaleResult('Network map');
     }
     const dlBtn = document.getElementById('downloadNetworkMapButton');
@@ -3699,10 +3711,7 @@ export class LesionNetworkMappingApp {
       clearTimeout(this._thresholdPreviewTimer);
       this._thresholdPreviewTimer = null;
     }
-    if (removeOverlay) {
-      try { this.viewerController?.removeVolumeForStage?.('threshold-preview'); }
-      catch (e) { /* non-fatal: stale viewer state is cosmetic */ }
-    }
+    if (removeOverlay) this.removeViewerOverlay('threshold-preview');
   }
 
   scheduleThresholdPreviewOverlay() {
@@ -4152,21 +4161,19 @@ export class LesionNetworkMappingApp {
   async renderAtlasThresholdPreviewOverlay(version) {
     const file = this.thresholdedMaskFile;
     if (version !== this._thresholdPreviewVersion || !file) return;
-    if (!this.viewerController?.replaceOverlayForStage) return;
+    const assertRun = this.pipelineTurn();
+    const assertCurrent = () => {
+      assertRun();
+      if (version !== this._thresholdPreviewVersion) throw new DOMException('The threshold preview was replaced.', 'AbortError');
+    };
     try {
-      await this.viewerController.replaceOverlayForStage(
-        'threshold-preview',
-        file,
-        'red',
-        0.65,
-        { visible: this.layerVisible('threshold') }
-      );
-      if (version !== this._thresholdPreviewVersion) {
-        this.viewerController?.removeVolumeForStage?.('threshold-preview');
-      }
+      await this.loadViewerOverlay(file, 'red', 0.65, {
+        stage: 'threshold-preview',
+        visible: this.layerVisible('threshold')
+      }, assertCurrent);
       this.refreshViewerLayerControls();
     } catch (err) {
-      this.updateOutput(`Threshold preview render error: ${err.message}`);
+      this.reportFailure('Threshold preview render error')(err);
     }
   }
 
@@ -4902,9 +4909,10 @@ export class LesionNetworkMappingApp {
       this.executor.clearResults();
     }
 
-    // Restore the structural file in the viewer (or clear entirely on full reset).
+    // What the viewer was still loading showed the cleared results: nothing
+    // waits for it, and the input that stays is loaded again.
+    this.resetViewerQueue();
     if (full) {
-      this.resetViewerQueue();
       this.viewerController.clearVolumes();
     } else if (this.structuralFile) {
       this.loadViewerBaseVolume(this.structuralFile, {
@@ -4912,6 +4920,8 @@ export class LesionNetworkMappingApp {
         visible: this.layerVisible('structural')
       })
         .catch(this.reportFailure('Viewer reload after reset failed'));
+    } else {
+      this.showRemainingInput();
     }
     this.refreshViewerLayerControls();
     this.refreshMaskDrawingControls();

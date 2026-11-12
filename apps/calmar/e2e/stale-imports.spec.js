@@ -844,4 +844,117 @@ test.describe('an import that finishes late', () => {
     expect(state.viewer).not.toContain('lnm-lesion-edited-native.nii');
     expect(await log()).not.toMatch(/failed/i);
   });
+  test('a threshold preview that lands after a newer one leaves one tracked overlay', async ({ page }) => {
+    const { choose, waiting, loaded, viewerIdle, image } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    const preview = name => page.evaluate(({ name, bytes }) => {
+      const file = new File([new Uint8Array(bytes)], name);
+      app.tagFileSpace(file, { space: app.structuralSpace(), role: 'threshold', sourceStage: 'test' });
+      app.thresholdedMaskFile = file;
+      app.scheduleThresholdPreviewOverlay();
+    }, { name, bytes: [...image] });
+    const previewIdle = async () => {
+      await page.waitForTimeout(200);
+      await page.evaluate(() => app._thresholdPreviewRenderPromise);
+      await viewerIdle();
+    };
+    const shown = () => page.evaluate(() => app.nv.volumes.slice(1).filter(volume => volume.opacity > 0).map(volume => volume.name));
+    await page.evaluate(() => {
+      globalThis.holdDecoded.push('preview-A.nii');
+    });
+    await preview('preview-A.nii');
+    await waiting('preview-A.nii');
+    await preview('preview-B.nii');
+    await toggleLayer(page, 'layerToggleThresholdMap', false);
+    await toggleLayer(page, 'layerToggleThresholdMap', true);
+    await page.waitForTimeout(300);
+    await drain(page, 'preview-A.nii');
+    await previewIdle();
+    expect((await loaded()).viewer).toEqual(['T1.nii', 'preview-B.nii']);
+
+    await preview('preview-C.nii');
+    await previewIdle();
+    expect((await loaded()).viewer).toEqual(['T1.nii', 'preview-C.nii']);
+    await toggleLayer(page, 'layerToggleThresholdMap', false);
+    expect(await shown()).toEqual([]);
+    await expect(page.locator('#layerToggleThresholdMap')).not.toBeChecked();
+  });
+
+  test('a registration QC stack that never lands does not block a review after Start over', async ({ page }) => {
+    const { choose, waiting, resume, loaded, log, viewerIdle, image, smallMask } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await page.evaluate((bytes) => {
+      const scan = name => new File([new Uint8Array(bytes)], name);
+      app.registrationTemplateFile = scan('decoded-template.nii');
+      app.registeredT1MniFile = scan('registered.nii');
+      app.hasRegistrationDisplacement = true;
+      globalThis.qc = app.showRegistrationQc('mni').then(() => 'shown', error => error.name);
+    }, [...image]);
+    await waiting('decoded-template.nii');
+
+    await page.locator('#clearResultsButton').dispatchEvent('click');
+    await expect.poll(async () => (await loaded()).viewer, { timeout: 15000 }).toEqual(['T1.nii']);
+    await page.locator('#startManualMaskButton').dispatchEvent('click');
+    await expect.poll(log, { timeout: 15000 }).toContain('Review/edit the lesion mask');
+    expect(await loaded()).toMatchObject({ review: true, base: 'T1.nii', maskOrigin: 'blank', viewer: ['T1.nii'] });
+    expect(await page.evaluate(() => app.nv.drawBitmap?.length)).toBe(512);
+
+    await page.locator('#clearResultsButton').dispatchEvent('click');
+    await choose('manualMask', 'mask.nii', smallMask);
+    await expect.poll(log, { timeout: 15000 }).toContain('Manual lesion mask ready for editing: mask.nii');
+    await drawTwoVoxels(page);
+    expect(await loaded()).toMatchObject({ review: true, base: 'T1.nii', drawn: 5, viewer: ['T1.nii'] });
+    expect(await page.evaluate(() => Boolean(globalThis.releaseImport['decoded-template.nii']))).toBe(true);
+
+    // When the stale stack does land, the review keeps its base and its edits.
+    await resume('decoded-template.nii');
+    expect(await page.evaluate(() => globalThis.qc)).toBe('AbortError');
+    await viewerIdle();
+    await page.waitForTimeout(300);
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({
+      structural: 'T1.nii',
+      base: 'T1.nii',
+      controllerBase: 'T1.nii',
+      review: true,
+      drawn: 5,
+      viewer: ['T1.nii'],
+    });
+    expect(await log()).not.toMatch(/failed/i);
+  });
+  test('a structural image still loading when the results are cleared is kept', async ({ page }) => {
+    const { choose, ended, loaded, log, viewerIdle } = await holdImports(page);
+    await page.evaluate(() => {
+      const load = app.nv.loadVolumes;
+      let first = true;
+      app.nv.loadVolumes = async (volumes) => {
+        if (first) {
+          first = false;
+          await new Promise((resolve) => {
+            globalThis.releaseImport.first = resolve;
+          });
+        }
+        return load(volumes);
+      };
+    });
+    await choose('structural', 'T1.nii');
+    await page.waitForFunction(() => globalThis.releaseImport.first);
+    await page.locator('#clearResultsButton').dispatchEvent('click');
+    await expect.poll(async () => (await loaded()).viewer).toEqual(['T1.nii']);
+    await page.evaluate(() => globalThis.releaseImport.first());
+    expect(await ended('T1.nii')).toBe('kept');
+    await viewerIdle();
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({
+      structural: 'T1.nii',
+      shown: 'T1.nii',
+      base: 'T1.nii',
+      controllerBase: 'T1.nii',
+      viewer: ['T1.nii'],
+    });
+    expect(await log()).toContain('Structural image ready: T1.nii');
+    expect(await log()).not.toMatch(/failed/i);
+  });
 });
