@@ -481,10 +481,10 @@ impl Fields {
         let fine_fit = self.fine_fit()?;
         let data_precision = self.precision()?;
         if data_precision == Precision::Single && fit_prf == CfParameterEstimate::Gaussian {
-            // The single fit's arithmetic equals MATLAB's on the AMD (MKL CNR `auto`)
-            // host given MATLAB's template (`revcor_reference.rs`), but a one-ulp x0 or
-            // y0 from the Benson reader, or the single global regression, moves the
-            // fitted maps, and neither is bit-identical yet.
+            // The single fit equals MATLAB's on the AMD (MKL CNR `auto`) host given
+            // MATLAB's template, with and without global-signal correction
+            // (`revcor_reference.rs`), but a one-ulp x0 or y0 from the Benson reader
+            // moves the fitted maps, and the reader is not bit-identical yet.
             return Err(Error::NotImplemented("Data_Precision=single with Fit_pRF=1"));
         }
         Ok(CfModel {

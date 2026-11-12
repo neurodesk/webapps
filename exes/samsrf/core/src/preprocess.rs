@@ -508,18 +508,38 @@ pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: 
         if n_covariates != 1 || covariates.len() != data.volumes {
             return Err(Error::Shape("single-precision noise removal takes one covariate per volume".into()));
         }
+        if data.vertices == 0 {
+            return Ok(());
+        }
         let x: Vec<f32> = zscore_single(&covariates.iter().map(|&value| value as f32).collect::<Vec<_>>());
         let design: Vec<num_complex::Complex64> = x.iter().map(|&value| num_complex::Complex64::new(f64::from(value), 0.0)).collect();
-        for vertex in 0..data.vertices {
-            let course = data.course_mut(vertex);
+        let ones = vec![num_complex::Complex64::new(1.0, 0.0); design.len()];
+        // `B = [X ones] \ Y` over every course at once, as MATLAB solves it: each
+        // column's arithmetic depends on its place among the right-hand sides. A
+        // nonfinite course keeps its place as zeros so it cannot poison other RHS.
+        // Preserve the port's outputs: NaN-containing courses become zero; otherwise
+        // nonfinite single-converted courses become NaN. MATLAB's handling of these
+        // inputs was not recorded, so these replacements are not parity claims.
+        let replacements: Vec<Option<f64>> = (0..data.vertices).map(|v| {
+            let course = data.course(v);
             if course.iter().any(|value| value.is_nan()) {
-                course.fill(0.0);
+                Some(0.0)
+            } else if course.iter().any(|&value| !(value as f32).is_finite()) {
+                Some(f64::NAN)
+            } else {
+                None
+            }
+        }).collect();
+        let zeros = vec![0.0; data.volumes];
+        let ys: Vec<&[f64]> = (0..data.vertices).map(|v| if replacements[v].is_some() { zeros.as_slice() } else { data.course(v) }).collect();
+        let solution = crate::lstsq::mldivide_many(&[&design, &ones], &ys, Precision::Single);
+        for (vertex, (&replacement, coefficients)) in replacements.iter().zip(&solution.coefficients).enumerate() {
+            let course = data.course_mut(vertex);
+            if let Some(value) = replacement {
+                course.fill(value);
                 continue;
             }
-            // `[X ones] \ Y`, in MATLAB's column order.
-            let ones = vec![num_complex::Complex64::new(1.0, 0.0); design.len()];
-            let solution = crate::lstsq::mldivide(&[&design, &ones], course, Precision::Single);
-            let (beta, baseline) = (solution.coefficients[0].re as f32, solution.coefficients[1].re as f32);
+            let (beta, baseline) = (coefficients[0].re as f32, coefficients[1].re as f32);
             for (value, &x) in course.iter_mut().zip(&x) {
                 let modelled = x * beta + baseline;
                 *value = f64::from(*value as f32 - modelled);
@@ -605,6 +625,80 @@ fn solve(a: &[Vec<f64>], mut b: Vec<f64>) -> Vec<f64> {
 #[allow(clippy::excessive_precision)]
 mod tests {
     use super::*;
+
+    /// Deterministic courses for the single regression tests.
+    fn courses(volumes: usize, vertices: usize, seed: u64) -> TimeSeries {
+        let mut state = seed;
+        let mut next = move || {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((state >> 33) as f64 / (1u64 << 31) as f64 - 0.5) as f32 as f64
+        };
+        let mut series = TimeSeries::zeros(volumes, vertices);
+        for v in 0..vertices {
+            for value in series.course_mut(v) {
+                *value = next() * 3.0 + v as f64 * 0.25;
+            }
+        }
+        series
+    }
+
+    #[test]
+    fn single_regression_isolates_courses_nonfinite_after_conversion() {
+        let signal = [1.0, 2.0, 3.0, 4.0];
+        for invalid in [f64::INFINITY, f64::NEG_INFINITY, 1e39, -1e39] {
+            for vertex in [0, 1, 4, 8] {
+                let mut data = courses(4, 9, 11);
+                data.course_mut(vertex)[1] = invalid;
+                let mut control = data.clone();
+                control.course_mut(vertex).fill(0.0);
+                remove_noise_in(&mut control, &signal, 1, Precision::Single).unwrap();
+                remove_noise_in(&mut data, &signal, 1, Precision::Single).unwrap();
+                assert!(data.course(vertex).iter().all(|value| value.is_nan()));
+                for v in (0..9).filter(|&v| v != vertex) {
+                    assert!(control.course(v).iter().all(|value| value.is_finite()));
+                    assert_eq!(data.course(v), control.course(v), "invalid {invalid} at {vertex}, course {v}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn single_noise_removal_accepts_an_empty_roi() {
+        let mut data = TimeSeries::zeros(4, 0);
+        remove_noise_in(&mut data, &[1.0, 2.0, 3.0, 4.0], 1, Precision::Single).unwrap();
+        assert_eq!(data.volumes, 4);
+        assert_eq!(data.vertices, 0);
+        assert!(matches!(remove_noise_in(&mut data, &[1.0], 1, Precision::Single), Err(Error::Shape(_))));
+    }
+
+    #[test]
+    fn a_missing_course_keeps_its_place_in_the_single_regression() {
+        // MATLAB's result for a course with a NaN was not recorded. The port zeroes
+        // that course and solves it as a column of zeros in its place, so every other
+        // course gets the residual it would have with that column present.
+        let (volumes, vertices, missing) = (250, 97, 48);
+        let signal: Vec<f64> = courses(volumes, 1, 7).course(0).to_vec();
+        let mut with_nan = courses(volumes, vertices, 11);
+        with_nan.course_mut(missing)[17] = f64::NAN;
+        let mut with_zeros = courses(volumes, vertices, 11);
+        with_zeros.course_mut(missing).fill(0.0);
+        remove_noise_in(&mut with_nan, &signal, 1, Precision::Single).unwrap();
+        remove_noise_in(&mut with_zeros, &signal, 1, Precision::Single).unwrap();
+        assert!(with_nan.course(missing).iter().all(|&value| value == 0.0));
+        for v in (0..vertices).filter(|&v| v != missing) {
+            assert_eq!(with_nan.course(v), with_zeros.course(v), "course {v}");
+        }
+        // Dropping the course instead moves the later columns, and MATLAB's ?ormqr
+        // order depends on each column's place.
+        let full = courses(volumes, vertices, 11);
+        let mut dropped = TimeSeries::zeros(volumes, vertices - 1);
+        for (k, v) in (0..vertices).filter(|&v| v != missing).enumerate() {
+            dropped.course_mut(k).copy_from_slice(full.course(v));
+        }
+        remove_noise_in(&mut dropped, &signal, 1, Precision::Single).unwrap();
+        let moved = (0..vertices).filter(|&v| v != missing).enumerate().any(|(k, v)| dropped.course(k) != with_zeros.course(v));
+        assert!(moved, "dropping a course changes a later column");
+    }
 
     // Expected values: Octave 9.2, preprocess-agent/preprocess_expected.m. The runs are
     // `mod(37t + 11v^2 + 23rt, 17) / 4 + t / 2 + v` (t, r 1-based), vertex 2 zero in
