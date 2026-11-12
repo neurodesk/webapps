@@ -414,16 +414,17 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   9 vertices where the port reports 0. Scalar steps follow reference LAPACK
   3.9, the version MATLAB's MKL reports. The inner products, divisions and
   multi-column back substitution follow MKL's own kernels as MATLAB runs them
-  on AMD hosts, read from MKL's summation trees (validation README, "MKL's
-  kernels"): `?gemv` inside `?geqp3`, `?ormqr` by number and position of
-  right-hand sides, `?trsv` and `?trsm`. On the 348 recorded designs every rank
-  and rank warning tolerance matches and 300 are bit-identical (every real
-  double design); the rest are within an empirical acceptance scale. MKL's
-  AVX-512 branch on Intel rounds differently, and MATLAB ignores MKL branch
-  requests, so results on Intel hosts are not reproduced. `mldivide_many`
-  solves several right-hand sides at once as MATLAB's `A \ B` does; the RC and
-  CF `[Y 1] \ X` regressions do not use it yet. Nonfinite converted inputs give
-  NaN coefficients.
+  on AMD hosts, read from MKL's summation trees and recorded chains (validation
+  README, "MKL's kernels"): `?nrm2`, `?gemv` inside `?geqp3`, `?ormqr` and
+  `?unmqr` by number and position of right-hand sides, `?trsv` and `?trsm`.
+  On the 348 recorded designs every rank and rank warning tolerance matches,
+  346 are bit-identical and the other two differ only in the sign of an
+  imaginary zero MATLAB stores as real. MKL's AVX-512 branch on Intel rounds
+  differently, and MATLAB ignores MKL branch requests, so results on Intel
+  hosts are not reproduced. `mldivide_many` solves several right-hand sides
+  at once as MATLAB's `A \ B` does, which the single RC profile and global
+  regression use; complex multi-column solves are not modelled. Nonfinite
+  converted inputs give NaN coefficients.
 - **Compressive nonlinearity.** `Css_Convention: "nonnegative"` (the default)
   clips negative responses before the CSS power and uses the fitted Exponent
   for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex

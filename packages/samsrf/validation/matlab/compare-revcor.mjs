@@ -204,9 +204,10 @@ for (const host of HOSTS) {
         let accept;
         if (precision === 'double') {
           accept = (a, e, v) => same(a, e) || Math.abs(a - e) <= 1e-12 * conditioning[v] * Math.max(1, Math.abs(e));
-        } else if (cf && !avx512) {
-          // Single CF maps are bit-identical on the AMD (CNR auto) host: corr's
-          // y' * A order and clamp, and the regression over every course at once.
+        } else if (!avx512) {
+          // Single CF and RC maps are bit-identical on the AMD (CNR auto) host:
+          // corr's y' * A order and clamp, MKL's snrm2 order, and each
+          // regression over all its right-hand sides at once.
           accept = exact;
         } else if (cf ? ['R^2', 'Beta', 'Suppression'].includes(name) : name === 'Beta') {
           accept = (a, e, v) => same(a, e) || Math.abs(a - e) <= 32 * UNIT * conditioning[v] * (cf ? 1 : Math.abs(e));

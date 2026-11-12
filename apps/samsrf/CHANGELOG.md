@@ -8,6 +8,9 @@
 
 ### Patch Changes
 
+- The single-precision least-squares solve now reproduces MATLAB R2023b's MKL in three more operations: `snrm2` squares the rescaling ratio first, as the reference Fortran reads; complex `?unmqr` sums the real and imaginary halves of `v^H c` in separate accumulators; and `ctrsv` divides in double. On MATLAB's AMD reference hosts every single reverse-correlation profile and map value now equals MATLAB's bit for bit (82-96% of profile entries before), and 346 of the 348 recorded `[ones x] \ y` designs are bit-identical (300 before); the other two differ only in the sign of an imaginary zero MATLAB does not store. In double, the recorded original CSS pipeline's Beta and Baseline now equal MATLAB's bit for bit (two coefficients differed); the nonnegative control keeps its one differing coefficient. Single Gaussian fits stay refused, and the Intel AVX-512 host is not reproduced.
+- Updated dependencies
+  - @neurodesk/samsrf@0.6.20261112
 - a67952b: Single-precision reverse-correlation profiles and the connective-field global-signal regression now solve every right-hand side in one least-squares call, as MATLAB does: `[Y ones] \ X` over all aperture pixels and `[X ones] \ Y` over all ROI courses. On the AMD (MKL CNR `auto`) reference host, single CF results with global-signal correction now equal MATLAB R2023b's bit for bit, residuals and profiles alike. Single RC profiles rise from 31% to 82-96% identical. A course with a NaN keeps its column position as zeros and comes back zeroed; MATLAB's result for such a course was not recorded. Single Gaussian CF fits stay refused because the Benson reader's x0 and y0 are not yet bit-identical.
 - Updated dependencies [a67952b]
   - @neurodesk/samsrf@0.6.20261112

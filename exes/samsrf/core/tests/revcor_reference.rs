@@ -379,9 +379,9 @@ fn single_cf_profiles_stay_within_single_rounding() {
     failures.assert_none();
 }
 
-/// `[Y ones] \ X` in single: MATLAB's single QR differs from the exact solve of its
-/// inputs by up to 20 x 2^-24 of the profile peak; the port solves on the rounded
-/// inputs with MATLAB's QR (`lstsq::mldivide`). The limit scales with the course's
+/// `[Y ones] \ X` in single, every pixel in one solve (`lstsq::mldivide_many`): every
+/// profile is bit-identical to MATLAB's on the AMD hosts. On the Intel AVX-512 host,
+/// whose MKL orders are not reproduced, the limit scales with the course's
 /// conditioning (`kappa`), and a zero peak allows no difference.
 #[test]
 fn single_rc_profiles_stay_within_single_rounding() {
@@ -418,7 +418,10 @@ fn single_rc_profiles_stay_within_single_rounding() {
                     }
                     identical += usize::from(same(a, e));
                     compared += 1;
-                    failures.check(within(a, e, 32.0 * UNIT * peak * k), || format!("{} {}: vertex {i} pixel {p}: {a} vs {e}", host.name, case["id"]));
+                    // Bit-identical on the AMD (CNR auto) hosts, where MKL's `snrm2`
+                    // order and every right-hand side's `?ormqr` order are reproduced.
+                    let ok = if intel(host) { within(a, e, 32.0 * UNIT * peak * k) } else { same(a, e) };
+                    failures.check(ok, || format!("{} {}: vertex {i} pixel {p}: {a} vs {e}", host.name, case["id"]));
                 }
             }
             println!("{} {}: profile error {worst:.2} x 2^-24 of the peak, per unit of conditioning; {identical}/{compared} identical", host.name, case["id"]);
@@ -625,8 +628,8 @@ fn pipelines_from_matlab_courses_match_matlab() {
                         a == 0.0 || name == "Noise Ceiling"
                     } else if !single(case) {
                         within(a, e, 1e-12 * k * e.abs().max(1.0))
-                    } else if cf && single(case) && !intel(host) {
-                        // Every single CF map is bit-identical on the AMD hosts.
+                    } else if single(case) && !intel(host) {
+                        // Every single CF and RC map is bit-identical on the AMD hosts.
                         same(a, e)
                     } else if cf && matches!(name.as_str(), "R^2" | "Beta" | "Suppression") {
                         if a.is_finite() && e.is_finite() {
