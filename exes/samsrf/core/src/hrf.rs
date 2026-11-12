@@ -66,7 +66,7 @@ pub fn spm_canonical(tr: f64) -> Vec<f64> {
 /// `samsrf_hrf(TR)`: the de Haas et al. (2014) HRF, scaled to the canonical's peak (`Hrf = []`).
 pub fn de_haas(tr: f64) -> Vec<f64> {
     let canonical = spm_canonical(tr);
-    let canonical_sum: f64 = canonical.iter().sum();
+    let canonical_sum = crate::matlab_math::sum(&canonical);
     let canonical_peak = max(canonical.iter().map(|value| value / canonical_sum));
     let [response, undershoot, ratio, amplitude] = DE_HAAS_PARAMS;
     let hrf: Vec<f64> = doublegamma(tr, &[response, undershoot, 1.0, 1.0, ratio, 0.0, 32.0])
@@ -91,10 +91,14 @@ pub fn old_school(tr: f64, fp: [f64; 4]) -> Vec<f64> {
         .collect()
 }
 
-/// `gampdf(x, a, b)` as MATLAB defines it, including `x = 0` for every shape.
+/// `gampdf(x, a, b)` as MATLAB defines it, including `x = 0` for every shape: MATLAB's
+/// saddle-point form for a >= 1 (`matlab_math::gampdf`), the closed form below otherwise.
 pub fn gampdf(x: f64, a: f64, b: f64) -> f64 {
     if x.is_nan() || a.is_nan() || b.is_nan() || a <= 0.0 || b <= 0.0 {
         return f64::NAN;
+    }
+    if let Some(density) = crate::matlab_math::gampdf(x, a, b) {
+        return density;
     }
     if x < 0.0 {
         return 0.0;

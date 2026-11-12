@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { selectAffectedApps } from './app-plan.mjs';
+import { selectAffectedApps, standaloneImpact } from './app-plan.mjs';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
-import { moduleClosure, onlyAddsExports, packageSources } from './module-closure.mjs';
+import { moduleClosure, onlyAddsExports, onlyBumpsVersion, packageSources } from './module-closure.mjs';
 import { reachableFrom } from './workspace-graph.mjs';
 
 // Whether a path-filtered workflow has to run for a pull request.
@@ -154,16 +154,44 @@ export function decideWorkflow({ flow, calledFlows = [], changedPaths, registry,
   };
 }
 
+const CHANGELOG = /(?:^|\/)CHANGELOG\.md$/;
+const STANDALONE = 'registry/standalone.json';
+
+// What a release leaves on main without changing what a workflow builds: a
+// changelog, a manifest that only gained a version, and the download catalog's
+// entries for other apps. Returns why the path is inert, or null.
+function releaseBookkeeping(path, { manifests, registry, apps }) {
+  if (CHANGELOG.test(path)) return 'a changelog';
+  const manifest = manifests.get(path);
+  if (!manifest) return null;
+  if (WORKSPACE_MANIFEST.test(path) && onlyBumpsVersion(manifest)) return 'only its version changed';
+  if (path === STANDALONE && registry && apps.length) {
+    const impact = standaloneImpact(manifest, registry);
+    if (!impact.shared && !impact.changed.some((id) => apps.includes(id))) return `no entry of ${apps.join(', ')} changed`;
+  }
+  return null;
+}
+
 // The nightly sweep: a workflow runs when a path under one of its shared
 // filters changed on main since the last sweep. Reach is deliberately not
 // asked here, because the sweep covers what the reach analysis cannot see.
-export function sweepWorkflow({ flow, changedPaths }) {
+// Release bookkeeping is the exception: every release writes it into the
+// shared packages, and it would otherwise run every workflow the night after.
+export function sweepWorkflow({ flow, changedPaths, manifests = new Map(), registry }) {
   const filters = flow?.on?.pull_request?.paths;
   if (!Array.isArray(filters)) return { run: true, reason: 'the workflow has no pull request path filter' };
   const shared = filters.filter(isSharedFilter).map((filter) => ({ filter, glob: pathGlob(filter) }));
+  const apps = registry ? workflowApps(filters, registry) : [];
+  let inert = 0;
   for (const path of changedPaths) {
     const hit = shared.find(({ glob }) => glob.test(path));
-    if (hit) return { run: true, reason: `${path} changed on main and matches ${hit.filter}, which no push starts this workflow for` };
+    if (!hit) continue;
+    if (releaseBookkeeping(path, { manifests, registry, apps })) {
+      inert += 1;
+      continue;
+    }
+    return { run: true, reason: `${path} changed on main and matches ${hit.filter}, which no push starts this workflow for` };
   }
-  return { run: false, reason: 'no path under a shared filter changed on main since the last sweep' };
+  const bookkeeping = inert ? ` (${inert} release bookkeeping ${inert === 1 ? 'file' : 'files'} aside)` : '';
+  return { run: false, reason: `no path under a shared filter changed on main since the last sweep${bookkeeping}` };
 }

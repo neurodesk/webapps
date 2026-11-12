@@ -389,35 +389,56 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
     multiply(integer_power(Complex64::new(value, 0.0), whole), unit)
 }
 
-/// The first `y.len()` outputs of MATLAB's `conv(y, kernel)`, accumulated with
-/// fused multiply-adds. MATLAB picks one of two kernels from the input's nonzero
-/// count. A sparse input is scattered, its nonzero samples in order. Otherwise each
-/// output runs over input blocks of `block` samples, the earliest first, and within
-/// a block over kernel taps grouped by `tap % lanes`: real vectors use 4 lanes and
-/// 24-sample blocks, complex vectors 2 lanes and 8-sample blocks. A final, partial
-/// block is grouped the same way in whole vectors of `2 * lanes` samples; its last
-/// samples, fewer than one such vector, follow in input order. The recordings
-/// (250 volumes, a 33-tap kernel) scatter with at most 62 nonzero samples and block
-/// with at least 64; this uses a quarter of the samples as the boundary.
-/// Measured for kernels of 9 to 129 taps on longer inputs (validation/matlab/README.md).
+/// The first `y.len()` outputs of MATLAB's `conv(y, kernel)`. MATLAB slides the
+/// shorter vector over the longer one (the kernel over `y` unless the kernel is at
+/// least as long), and picks its arithmetic from the sliding vector's length K:
+/// - K < 9: one accumulator over taps in order, unfused when the longer vector has
+///   at most 16 samples and with fused multiply-adds otherwise.
+/// - K >= 9, fewer than a quarter of the longer vector's samples nonzero: the
+///   nonzero samples scattered in order with fused multiply-adds.
+/// - Otherwise fused multiply-adds over input blocks of `block` samples, the
+///   earliest first, and within a block over taps grouped by `tap % lanes`. A final
+///   partial block is grouped the same way in whole vectors of `2 * lanes` samples;
+///   its last samples, fewer than one such vector, follow in input order.
+///
+/// Real vectors use 4 lanes and 24-sample blocks, complex vectors 2 lanes and
+/// 8-sample blocks. Every output was checked against MATLAB for 9-1000-sample
+/// courses with 1-129-tap kernels and sparse courses; sparse complex courses longer
+/// than 800 samples differ at a few outputs near multiples of 512
+/// (validation/matlab/README.md#double-css-arithmetic).
 fn convolve_prefix(parts: &[&[f64]], kernel: &[f64], lanes: usize, block: usize) -> Vec<Vec<f64>> {
     let n = parts[0].len();
-    let nonzero = (0..n).filter(|&i| parts.iter().any(|part| part[i] != 0.0)).count();
-    let sparse = 4 * nonzero < n;
-    let vector = 2 * lanes;
-    let vectored = if n.is_multiple_of(block) { n } else { n / block * block + n % block / vector * vector };
+    let swapped = kernel.len() >= n;
     parts
         .iter()
         .map(|y| {
+            let (signal, taps): (&[f64], &[f64]) = if swapped { (kernel, y) } else { (y, kernel) };
+            let length = signal.len();
+            let nonzero_at = |i: usize| {
+                if swapped {
+                    signal[i] != 0.0
+                } else {
+                    parts.iter().any(|part| part[i] != 0.0)
+                }
+            };
+            let sparse = 4 * (0..length).filter(|&i| nonzero_at(i)).count() < length;
+            let vector = 2 * lanes;
+            let vectored = if length.is_multiple_of(block) { length } else { length / block * block + length % block / vector * vector };
             (0..n)
                 .map(|k| {
-                    let taps = kernel.len().min(k + 1);
-                    let first = k + 1 - taps;
+                    let count = taps.len().min(k + 1);
+                    let first = k + 1 - count;
                     let mut sum = 0.0f64;
+                    if taps.len() < 9 {
+                        for (j, tap) in taps.iter().enumerate().take(count) {
+                            sum = if length <= 16 { sum + signal[k - j] * tap } else { signal[k - j].mul_add(*tap, sum) };
+                        }
+                        return sum;
+                    }
                     if sparse {
                         for i in first..=k {
-                            if parts.iter().any(|part| part[i] != 0.0) {
-                                sum = y[i].mul_add(kernel[k - i], sum);
+                            if nonzero_at(i) {
+                                sum = signal[i].mul_add(taps[k - i], sum);
                             }
                         }
                         return sum;
@@ -430,13 +451,13 @@ fn convolve_prefix(parts: &[&[f64]], kernel: &[f64], lanes: usize, block: usize)
                             for lane in 0..lanes {
                                 for j in k - grouped..=k - low {
                                     if j % lanes == lane {
-                                        sum = y[k - j].mul_add(kernel[j], sum);
+                                        sum = signal[k - j].mul_add(taps[j], sum);
                                     }
                                 }
                             }
                         }
                         for i in low.max(vectored)..=high {
-                            sum = y[i].mul_add(kernel[k - i], sum);
+                            sum = signal[i].mul_add(taps[k - i], sum);
                         }
                     }
                     sum
@@ -528,9 +549,240 @@ pub fn nrm2(values: impl IntoIterator<Item = f64>) -> f64 {
     scale * ssq.sqrt()
 }
 
+/// MATLAB's `sum` of a vector: one accumulator below 44 elements, otherwise four
+/// lanes by index, combined in order (as the recorded `mean` and HRF sums show).
+pub fn sum(values: &[f64]) -> f64 {
+    if values.len() < 44 {
+        return values.iter().fold(0.0, |s, v| s + v);
+    }
+    let mut lanes = [0.0f64; 4];
+    for (i, v) in values.iter().enumerate() {
+        lanes[i % 4] += v;
+    }
+    ((lanes[0] + lanes[1]) + lanes[2]) + lanes[3]
+}
+
+/// `gammaln` for positive arguments: W. J. Cody and L. Stoltz's `DLGAMA`
+/// (netlib SPECFUN `algama`, latest modification 16 June 1988), with fdlibm `log`.
+/// It matches all 15 recorded MATLAB values except whole numbers, where MATLAB
+/// gives log((x - 1)!); this port is only used for non-integral arguments.
+pub fn gammaln(y: f64) -> f64 {
+    #[allow(clippy::approx_constant, reason = "Preserve the published DLGAMA coefficient")]
+    const D1: f64 = -5.772156649015328605195174e-1;
+    const P1: [f64; 8] = [4.945235359296727046734888e0, 2.018112620856775083915565e2, 2.290838373831346393026739e3, 1.131967205903380828685045e4, 2.855724635671635335736389e4, 3.848496228443793359990269e4, 2.637748787624195437963534e4, 7.225813979700288197698961e3];
+    const Q1: [f64; 8] = [6.748212550303777196073036e1, 1.113332393857199323513008e3, 7.738757056935398733233834e3, 2.763987074403340708898585e4, 5.499310206226157329794414e4, 6.161122180066002127833352e4, 3.635127591501940507276287e4, 8.785536302431013170870835e3];
+    const D2: f64 = 4.227843350984671393993777e-1;
+    const P2: [f64; 8] = [4.974607845568932035012064e0, 5.424138599891070494101986e2, 1.550693864978364947665077e4, 1.847932904445632425417223e5, 1.088204769468828767498470e6, 3.338152967987029735917223e6, 5.106661678927352456275255e6, 3.074109054850539556250927e6];
+    const Q2: [f64; 8] = [1.830328399370592604055942e2, 7.765049321445005871323047e3, 1.331903827966074194402448e5, 1.136705821321969608938755e6, 5.267964117437946917577538e6, 1.346701454311101692290052e7, 1.782736530353274213975932e7, 9.533095591844353613395747e6];
+    const D4: f64 = 1.791759469228055000094023e0;
+    const P4: [f64; 8] = [1.474502166059939948905062e4, 2.426813369486704502836312e6, 1.214755574045093227939592e8, 2.663432449630976949898078e9, 2.940378956634553899906876e10, 1.702665737765398868392998e11, 4.926125793377430887588120e11, 5.606251856223951465078242e11];
+    const Q4: [f64; 8] = [2.690530175870899333379843e3, 6.393885654300092398984238e5, 4.135599930241388052042842e7, 1.120872109616147941376570e9, 1.488613728678813811542398e10, 1.016803586272438228077304e11, 3.417476345507377132798597e11, 4.463158187419713286462081e11];
+    const C: [f64; 7] = [-1.910444077728e-03, 8.4171387781295e-04, -5.952379913043012e-04, 7.93650793500350248e-04, -2.777777777777681622553e-03, 8.333333333333333331554247e-02, 5.7083835261e-03];
+    const SQRTPI: f64 = 0.9189385332046727417803297;
+    const XBIG: f64 = 2.55e305;
+    const EPS: f64 = 2.22e-16;
+    const FRTBIG: f64 = 2.25e76;
+    let rational = |xm: f64, p: &[f64; 8], q: &[f64; 8], first: f64| {
+        let (mut num, mut den) = (0.0, first);
+        for i in 0..8 {
+            num = num * xm + p[i];
+            den = den * xm + q[i];
+        }
+        num / den
+    };
+    if !(y > 0.0 && y <= XBIG) {
+        return 1.79e308;
+    }
+    if y <= EPS {
+        return -log(y);
+    }
+    if y <= 1.5 {
+        let (corr, xm1) = if y < 0.6796875 { (-log(y), y) } else { (0.0, (y - 0.5) - 0.5) };
+        if y <= 0.5 || y >= 0.6796875 {
+            return corr + (xm1 * (D1 + xm1 * rational(xm1, &P1, &Q1, 1.0)));
+        }
+        let xm2 = (y - 0.5) - 0.5;
+        return corr + xm2 * (D2 + xm2 * rational(xm2, &P2, &Q2, 1.0));
+    }
+    if y <= 4.0 {
+        let xm2 = y - 2.0;
+        return xm2 * (D2 + xm2 * rational(xm2, &P2, &Q2, 1.0));
+    }
+    if y <= 12.0 {
+        let xm4 = y - 4.0;
+        return D4 + xm4 * rational(xm4, &P4, &Q4, -1.0);
+    }
+    let mut res = 0.0;
+    if y <= FRTBIG {
+        res = C[6];
+        let ysq = y * y;
+        for c in &C[..6] {
+            res = res / ysq + c;
+        }
+    }
+    res /= y;
+    let corr = log(y);
+    res = res + SQRTPI - 0.5 * corr;
+    res + y * (corr - 1.0)
+}
+
+/// ln(n!) - ln(sqrt(2 pi n) (n/e)^n), as in Loader's saddle-point algorithm (2000):
+/// a table of exact values at half-integers up to 15, `gammaln` between them, and
+/// the Stirling series above 15 with its terms cut at 35, 80 and 500.
+fn stirlerr(n: f64) -> f64 {
+    const S0: f64 = 0.0833333333333333333333;
+    const S1: f64 = 0.00277777777777777777778;
+    const S2: f64 = 0.00079365079365079365079365;
+    const S3: f64 = 0.000595238095238095238095238;
+    const S4: f64 = 0.0008417508417508417508417508;
+    const LN_SQRT_2PI: f64 = 0.9189385332046727418;
+    // Correctly rounded values at n = 0, 1/2, 1, ..., 15 (60-digit computation).
+    const TABLE: [f64; 31] = [
+    f64::from_bits(0x0000000000000000),
+    f64::from_bits(0x3fc3a37a020b8c22),
+    f64::from_bits(0x3fb4c071bcda0a5b),
+    f64::from_bits(0x3fac1098b28dcf33),
+    f64::from_bits(0x3fa52a9b923ea649),
+    f64::from_bits(0x3fa0fab9626b44ff),
+    f64::from_bits(0x3f9c579a268d80b3),
+    f64::from_bits(0x3f9850ea113caf0e),
+    f64::from_bits(0x3f954a2662fd78a9),
+    f64::from_bits(0x3f92eea2e990f134),
+    f64::from_bits(0x3f910b4e513fcbed),
+    f64::from_bits(0x3f8eff15b81c9cc5),
+    f64::from_bits(0x3f8c6b167bebdf36),
+    f64::from_bits(0x3f8a3c5f8a1e7d1d),
+    f64::from_bits(0x3f885d4d612e4a86),
+    f64::from_bits(0x3f86bdfcc7fbdb0a),
+    f64::from_bits(0x3f8552805e7b3076),
+    f64::from_bits(0x3f8411b75e41049c),
+    f64::from_bits(0x3f82f4871b12ab64),
+    f64::from_bits(0x3f81f553026fbce1),
+    f64::from_bits(0x3f810f9d4c0743a7),
+    f64::from_bits(0x3f803fc2d49c8fb9),
+    f64::from_bits(0x3f7f0593088014f8),
+    f64::from_bits(0x3f7dac773cc5b3cd),
+    f64::from_bits(0x3f7c7018733aa9c6),
+    f64::from_bits(0x3f7b4d04a067629f),
+    f64::from_bits(0x3f7a40514700f36c),
+    f64::from_bits(0x3f7947826547fe6c),
+    f64::from_bits(0x3f786076c002d4a7),
+    f64::from_bits(0x3f7789583ffc5e8c),
+    f64::from_bits(0x3f76c08f6f194a10),
+    ];
+    if n <= 15.0 {
+        let doubled = (2.0 * n).round();
+        if doubled == 2.0 * n {
+            return TABLE[doubled as usize];
+        }
+        return gammaln(n + 1.0) - (n + 0.5) * log(n) + n - LN_SQRT_2PI;
+    }
+    let nn = n * n;
+    if n > 500.0 {
+        (S0 - S1 / nn) / n
+    } else if n > 80.0 {
+        (S0 - (S1 - S2 / nn) / nn) / n
+    } else if n > 35.0 {
+        (S0 - (S1 - (S2 - S3 / nn) / nn) / nn) / n
+    } else {
+        (S0 - (S1 - (S2 - (S3 - S4 / nn) / nn) / nn) / nn) / n
+    }
+}
+
+/// The deviance x log(x/np) + np - x, by its series near np.
+fn deviance(x: f64, np: f64) -> f64 {
+    if !x.is_finite() || !np.is_finite() {
+        return f64::INFINITY;
+    }
+    let delta = x - np;
+    let sum = x + np;
+    let v = if sum.is_finite() {
+        delta / sum
+    } else {
+        // Positive finite operands can have an overflowing sum. Halving is
+        // exact here and keeps the near-mean comparison and ratio finite.
+        (x * 0.5 - np * 0.5) / (x * 0.5 + np * 0.5)
+    };
+    let near = if sum.is_finite() { delta.abs() < 0.1 * sum } else { v.abs() < 0.1 };
+    if near {
+        let initial = delta * delta / sum;
+        let mut s = if initial.is_finite() { initial } else { delta * v };
+        let initial_ej = 2.0 * x * v;
+        let mut ej = if initial_ej.is_finite() { initial_ej } else { x * (2.0 * v) };
+        // |v| < 0.1, so terms shrink by at least 100-fold. Keep a finite
+        // iteration limit and propagate a nonfinite state rather than looping.
+        for j in 1..=1000 {
+            ej = ej * v * v;
+            let next = s + ej / (2.0 * f64::from(j) + 1.0);
+            if !next.is_finite() || next == s {
+                return next;
+            }
+            s = next;
+        }
+        return f64::NAN;
+    }
+    let ratio = x / np;
+    let log_ratio = if ratio.is_finite() && ratio > 0.0 { log(ratio) } else { log(x) - log(np) };
+    x * log_ratio + np - x
+}
+
+/// The Poisson density at a real `k >= 0`, exp(-stirlerr(k) - deviance(k, z)) /
+/// sqrt(2 pi k), with the normalisation inside the exponent as MATLAB evaluates it.
+fn poisson_raw(k: f64, z: f64) -> f64 {
+    if k == 0.0 {
+        return exp(-z);
+    }
+    let normalisation = 2.0 * std::f64::consts::PI * k;
+    let log_normalisation = if normalisation.is_finite() {
+        log(normalisation)
+    } else {
+        log(2.0 * std::f64::consts::PI) + log(k)
+    };
+    exp((-0.5 * log_normalisation - stirlerr(k)) - deviance(k, z))
+}
+
+/// MATLAB's `gampdf(x, a, b)` for a shape `a >= 1`, which covers every SamSrf HRF.
+/// It matched all 9,760 recorded values with a >= 1 (shapes 1 to 100.1, scales
+/// 0.5 to 2, on AMD and Intel hosts) and the double-gamma kernels at six TRs. For
+/// a < 1 MATLAB uses another form, not reproduced; this returns `None` there.
+pub fn gampdf(x: f64, a: f64, b: f64) -> Option<f64> {
+    if !(a >= 1.0 && a.is_finite()) || !(b > 0.0 && b.is_finite()) || x.is_nan() {
+        return None;
+    }
+    if x < 0.0 || x == f64::INFINITY {
+        return Some(0.0);
+    }
+    let z = x / b;
+    if z == 0.0 {
+        return Some(if a == 1.0 { 1.0 / b } else { 0.0 });
+    }
+    Some(poisson_raw(a - 1.0, z) / b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gamma_density_preserves_subnormal_values_and_large_shape_peaks() {
+        // Shape two has the analytic density x * exp(-x), equal to x at
+        // these tiny inputs. Permit logarithmic rounding, but never zero.
+        for x in [1e-300, 1e-310, 1e-320] {
+            let actual = gampdf(x, 2.0, 1.0).unwrap();
+            assert!(actual > 0.0 && actual.is_finite());
+            assert!((actual - x).abs() <= (2e-13 * x).max(f64::from_bits(1)));
+        }
+        // At this shape Stirling's relative correction is below 1e-308.
+        let expected = 1.0 / (2.0 * std::f64::consts::PI).sqrt() / 1e154;
+        let actual = gampdf(1e308, 1e308, 1.0).unwrap();
+        assert!(actual > 0.0 && actual.is_finite());
+        assert!((actual / expected - 1.0).abs() < 2e-13);
+        assert_eq!(deviance(1e308, 1e308), 0.0);
+        assert!(deviance(0.99e308, 1e308).is_finite());
+        assert!(deviance(1e-300, 1e308).is_finite());
+        assert_eq!(gampdf(f64::INFINITY, 2.0, 1.0), Some(0.0));
+        assert_eq!(gampdf(1e308, 2.0, 1e-308), Some(0.0));
+    }
 
     #[test]
     fn integer_power_multiplies_squares_from_the_lowest_bit() {

@@ -392,11 +392,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   code's default selects only the rows of `Srf.Values`, which leaves them out.
 - **Labels.** The label reader parses five columns per line (index, x, y, z,
   value). `Read_FreeSurfer` reads six `%n` fields per row.
-- **gampdf.** The double gamma uses the closed form of the gamma density with
-  `lgamma`, not MATLAB's `gampdf` implementation. The HRF kernel agrees to a
-  few ULP (up to 27 double epsilons near the zero crossing), which can change
-  weak CSS fits. MATLAB's `gammaln` is Cody's algorithm, with log((x-1)!) for
-  whole numbers; its `gampdf` formula is not yet identified.
+- **gampdf.** For shapes of at least 1, which every HRF uses, `gampdf` is
+  Loader's saddle-point form as MATLAB evaluates it (`stirlerr`, `bd0`), and the
+  de Haas and SPM kernels equal MATLAB's bit for bit. Shapes below 1 keep the
+  closed form with `lgamma`, which differs from MATLAB by a few ULP. The formula
+  was identified from MATLAB's recorded densities; see `validation/matlab/README.md`.
 - **Old-school HRF.** An `hrf_*` file is turned into one kernel. Since
   26/08/2026, `samsrf_fit_prf`'s fine fit would mistake that kernel's row
   vector for vertex-wise HRFs.
@@ -439,10 +439,12 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   response, its `conv` and the MKL dot products and norms inside `corr` are
   empirical models, checked on recorded inputs.
   All 108 recorded CSS optimizer traces (54 double, 54 single) follow MATLAB's
-  parameter sequences bit for bit. The 96-vertex double pipeline matches every
-  fitted parameter, R², nR² and noise ceiling exactly when it is given MATLAB's
-  HRF kernel. With the port's own HRF, the kernel's `gampdf` rounding still moves
-  two weak fits (zero-based vertices 51 and 81). The limits of each operation,
+  parameter sequences bit for bit. With the port's own HRF, which equals MATLAB's
+  kernel, the recorded 96-vertex double pipelines (original apertures and a
+  nonnegative control, on MATLAB's AMD reference host) match every fitted
+  parameter, R², nR² and noise ceiling exactly; Beta and Baseline are compared
+  with the exact least-squares solution under a stated policy, not bit for bit.
+  The limits of each operation,
   and why MATLAB on Intel hosts gives other results, are in
   `validation/matlab/README.md#double-css-arithmetic`.
   The coefficient QR solve takes scaled norms, so large regressors do not overflow.

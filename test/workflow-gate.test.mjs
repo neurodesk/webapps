@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
-import { commandLineClosure, moduleClosure, onlyAddsExports } from '../scripts/lib/module-closure.mjs';
+import { commandLineClosure, moduleClosure, onlyAddsExports, onlyBumpsVersion } from '../scripts/lib/module-closure.mjs';
 import { testedBase } from '../scripts/lib/tested-base.mjs';
 import { calledWorkflows, decideWorkflow, isSharedFilter, ownedPackages, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
@@ -293,6 +293,44 @@ test('the sweep runs a workflow when a shared path changed, whether or not the c
   assert.equal(sweep(['packages/elastix/src/index.js']).run, false);
   assert.equal(sweep([]).run, false);
   assert.equal(sweepWorkflow({ flow: { on: {} }, changedPaths: [] }).run, true);
+});
+
+test('the sweep leaves release bookkeeping aside: changelogs, version bumps and other apps\' downloads', async () => {
+  const manifest = (fields) => JSON.stringify({ name: '@neurodesk/webapp-components', version: '0.26.0', exports: { './ui': './src/ui/index.js' }, ...fields });
+  const bump = { before: manifest({}), after: manifest({ version: '0.27.0' }) };
+  assert.equal(onlyBumpsVersion(bump), true);
+  assert.equal(onlyBumpsVersion({ before: manifest({}), after: manifest({}) }), false);
+  assert.equal(onlyBumpsVersion({ before: manifest({}), after: manifest({ version: '0.27.0', dependencies: { left: '1.0.0' } }) }), false);
+  assert.equal(onlyBumpsVersion({ before: manifest({}), after: 'not json' }), false);
+
+  const flow = flowOf(['packages/elastix/**', 'apps/elastix/**', 'packages/components/**', 'registry/**']);
+  const release = ['packages/components/CHANGELOG.md', 'packages/components/package.json'];
+  const sweep = (changedPaths, manifests) => sweepWorkflow({ flow, changedPaths, manifests, registry });
+  const released = sweep(release, new Map([['packages/components/package.json', bump]]));
+  assert.equal(released.run, false);
+  assert.match(released.reason, /2 release bookkeeping files aside/);
+  // Code that merged beside the release still runs the workflow.
+  assert.equal(sweep([...release, 'packages/components/src/ui/theme.js'], new Map([['packages/components/package.json', bump]])).run, true);
+  // A dependency changed with the version, or the manifest texts are unknown.
+  const dependency = { before: manifest({}), after: manifest({ version: '0.27.0', dependencies: { left: '1.0.0' } }) };
+  assert.equal(sweep(release, new Map([['packages/components/package.json', dependency]])).run, true);
+  assert.equal(sweep(release, new Map()).run, true);
+
+  const text = await readFile(new URL('../registry/standalone.json', import.meta.url), 'utf8');
+  const other = registry.apps.map((app) => app.id).find((id) => id !== 'elastix');
+  const downloads = (id) => {
+    const catalog = JSON.parse(text);
+    catalog.apps[id].profile = catalog.apps[id].profile === 'batch' ? 'interactive' : 'batch';
+    return new Map([['registry/standalone.json', { before: text, after: JSON.stringify(catalog) }]]);
+  };
+  const standalone = (manifests) => sweepWorkflow({ flow, changedPaths: ['registry/standalone.json'], manifests, registry });
+  assert.equal(standalone(downloads(other)).run, false);
+  assert.equal(standalone(downloads('elastix')).run, true);
+  // An invalid catalog, or one without its texts, stays a shared change.
+  assert.equal(standalone(new Map([['registry/standalone.json', { before: '{', after: '{' }]])).run, true);
+  assert.equal(standalone(new Map()).run, true);
+  // A workflow that builds no registry app cannot be matched to an entry.
+  assert.equal(sweepWorkflow({ flow: flowOf(['packages/node-drivers/**', 'registry/**']), changedPaths: ['registry/standalone.json'], manifests: downloads(other), registry }).run, true);
 });
 
 test('the sweep starts from the last merge or sweep that finished green, however long ago', () => {

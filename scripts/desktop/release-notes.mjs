@@ -67,5 +67,6 @@ function renderModels(models, { release }) {
 export function renderInstallationNotes(downloads, models, desktop) {
   const sections = downloads.map(download => renderPlatform(download, desktop));
   if (models) sections.push(renderModels(models, desktop));
-  return `## Download and install\n\nChoose your platform below, then add the optional model pack for offline use. Run its commands from a writable folder. Each block creates a new folder, downloads the exact release files, joins split archives in order, checks SHA-256, and installs or opens the application. Do not extract individual parts. Allow space for the downloaded parts, combined archive, and extracted app. After a successful installation, you can delete the parts and archive; keep the SIF for Apptainer.\n\n${sections.join('\n\n')}\n`;
+  const sif = downloads.some(download => download.kind === 'container') ? '; keep the SIF for Apptainer' : '';
+  return `## Download and install\n\nChoose your platform below, then add the optional model pack for offline use. Run its commands from a writable folder. Each block creates a new folder, downloads the exact release files, joins split archives in order, checks SHA-256, and installs or opens the application. Do not extract individual parts. Allow space for the downloaded parts, combined archive, and extracted app. After a successful installation, you can delete the parts and archive${sif}.\n\n${sections.join('\n\n')}\n`;
 }

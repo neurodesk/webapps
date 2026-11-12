@@ -74,7 +74,7 @@ function analyseLockfile(manifest) {
 // the change is shared. Every themed app build copies the file and validates
 // all of it, but the shell renders only the app's own entry, so a valid head
 // catalog reaches only the apps whose entries changed.
-function standaloneImpact({ before, after }, registry) {
+export function standaloneImpact({ before, after }, registry) {
   let old;
   let now;
   try {
