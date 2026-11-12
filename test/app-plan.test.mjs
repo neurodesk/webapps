@@ -609,6 +609,32 @@ test('registry changes outside the app entries select the whole catalog with a r
   assert.equal(missingBase.reasons.fallback, 'registry/apps.yml: the base or head registry is unavailable');
 });
 
+test('a reworded or added site category selects only the site build', async () => {
+  // A new app's pull request usually rewords its category; that used to test every app.
+  const reworded = await registryPlan((registry) => {
+    registry.site.categories[0].description = 'Reworded for a new app.';
+    registry.site.categories.push({ id: 'new-category', title: 'New', description: 'Added.' });
+  });
+  assert.equal(reworded.allApps, false);
+  assert.deepEqual(Object.keys(reworded.reasons.apps), []);
+  assert.equal(reworded.site, true);
+  const withEntry = await registryPlan((registry) => {
+    registry.site.categories[0].title = 'Renamed';
+    registry.apps.find((app) => app.id === 'niimath').title = 'Renamed too';
+  });
+  assert.deepEqual(Object.keys(withEntry.reasons.apps), ['niimath']);
+  // An app entry may still name a category that went away, and the builds read the rest of the section.
+  const removed = await registryPlan((registry) => {
+    registry.site.categories.pop();
+  });
+  assert.equal(removed.allApps, true);
+  const mixed = await registryPlan((registry) => {
+    registry.site.categories[0].description = 'Reworded.';
+    registry.site.domain = 'example.org';
+  });
+  assert.equal(mixed.reasons.fallback, 'registry/apps.yml: its site section changed, and every app build reads it');
+});
+
 test('an offline asset lock change selects the apps whose assets changed', async () => {
   const registry = await loadAppsRegistry();
   const before = { schemaVersion: 1, assets: { u1: { sha256: 'a' }, u2: { sha256: 'b' } }, apps: { lcmodel: ['u1'], zarro: ['u2'] } };
@@ -790,7 +816,7 @@ async function plannerFixture(t) {
   for (const path of ['scripts/lib', 'registry', '.github/workflows']) {
     await mkdir(join(root, path), { recursive: true });
   }
-  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/tested-base.mjs', 'scripts/lib/standalone.mjs', 'scripts/lib/app-information.mjs', 'registry/apps.yml']) {
+  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/module-closure.mjs', 'scripts/lib/shared-module-users.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/tested-base.mjs', 'scripts/lib/standalone.mjs', 'scripts/lib/app-information.mjs', 'registry/apps.yml']) {
     await copyFile(join(repoRoot, path), join(root, path));
   }
   await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: {} }));

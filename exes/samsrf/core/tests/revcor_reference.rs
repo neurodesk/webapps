@@ -121,12 +121,31 @@ fn template_maps(host: &Host, case: &Value) -> Maps {
 
 /// Job inputs for one supported pipeline case, from MATLAB's preprocessed courses.
 fn inputs(host: &Host, case: &Value, template: Option<Maps>) -> JobInputs {
+    inputs_with(host, case, template, parse(case).unwrap())
+}
+
+/// The model of a single CF Gaussian case, which the parser refuses: parsed as
+/// double, then switched to single, so the gates reach the arithmetic below the
+/// refusal.
+fn single_gaussian_model(case: &Value) -> Model {
+    let mut json = case["mapReplayModel"].clone();
+    json["Data_Precision"] = Value::from("double");
+    let Model::RevCorCf(mut model) = model::parse_model_json(AnalysisKind::RevCorCf, &json.to_string()).unwrap() else { unreachable!() };
+    model.data_precision = Precision::Single;
+    Model::RevCorCf(model)
+}
+
+fn single_gaussian_cf(case: &Value) -> bool {
+    single(case) && kind(case) == AnalysisKind::RevCorCf && case["mapReplayModel"]["Fit_pRF"] == 1
+}
+
+fn inputs_with(host: &Host, case: &Value, template: Option<Maps>, model: Model) -> JobInputs {
     let root = &host.root;
     let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
     let courses = array(root, &pre["courses"]);
     let [volumes, count] = shape(&pre["courses"])[..] else { unreachable!() };
     let mut job = JobInputs {
-        model: parse(case).unwrap(),
+        model,
         apertures: None,
         hrf: None,
         data: TimeSeries { volumes, vertices: count, data: courses },
@@ -771,4 +790,80 @@ fn threshold_boundary_is_exercised_exactly() {
         let seen = tally.0.iter().find(|(root, _)| *root == host.root).map_or(0, |entry| entry.1);
         assert_eq!(seen, EDGES.single_rc * 2, "{}: boundary cases", host.root.display());
     }
+}
+
+/// Single CF Gaussian fits below the parser's refusal, on MATLAB's template and
+/// preprocessed courses: corr (MKL's `y' * A` order and its clamp), smoothing, the
+/// threshold, single `exp`, the mixed-precision objective and `fminsearch`. Every
+/// map value of every vertex equals MATLAB's on the AMD (CNR `auto`) host, and the
+/// fits replay exactly from each host's recorded profiles. With global-signal
+/// correction the single regression is not bit-identical (#731), so those cases are
+/// reported, not gated; the AVX-512 host's corr order is not reproduced, so there
+/// only the rows the fit does not produce are compared.
+#[test]
+fn single_gaussian_cf_below_the_refusal_equals_the_amd_host() {
+    let Some(hosts) = hosts() else { return; };
+    let mut failures = Failures::default();
+    let mut gated = 0;
+    for host in hosts.iter().filter(|host| host.expected.refused > 0) {
+        for case in pipelines(host, "cf").filter(|c| single_gaussian_cf(c)) {
+            let id = case["id"].as_str().unwrap();
+            let global = case["mapReplayModel"]["Global_Signal_Correction"] != false;
+            let model = single_gaussian_model(case);
+            let template = template_maps(host, case);
+            // From the recorded profiles: exact on both hosts.
+            let job = inputs_with(host, case, Some(template.clone()), model.clone());
+            let Model::RevCorCf(cf) = &job.model else { unreachable!() };
+            let seed = job.seed.as_ref().unwrap();
+            let x = array(&host.root, &case["seedCourses"]);
+            let courses: Vec<&[f64]> = x.chunks(shape(&case["seedCourses"])[0]).collect();
+            let prepared = revcor_cf::Prepared::new(cf, &seed.vertices, &courses, &template, job.area.as_ref().unwrap(), job.surface.as_ref()).unwrap();
+            let profiles = array(&host.root, &case["profiles"]);
+            let nsvx = shape(&case["profiles"])[0];
+            let saved = array(&host.root, &case["savedMaps"]);
+            let rows = shape(&case["savedMaps"])[0];
+            let mut replay_differing = Vec::new();
+            for (i, &v) in vertices(&host.root, &case["savedVertices"]).iter().enumerate() {
+                let actual = prepared.estimate_profile(&profiles[v as usize * nsvx..(v as usize + 1) * nsvx]).unwrap();
+                for (r, name) in prepared.values.iter().enumerate() {
+                    let (a, e) = (f64::from(actual[r] as f32), saved[i * rows + r]);
+                    if !same(a, e) && !replay_differing.contains(&v) {
+                        replay_differing.push(v);
+                    }
+                    // With global-signal correction (refused for its regression too),
+                    // replay differences are reported: on the AVX-512 host two
+                    // smoothed fits differ from their own recorded profiles, most
+                    // likely through the 18 inputs where `exp_single` and MATLAB's
+                    // `exp` disagree.
+                    failures.check(same(a, e) || global, || format!("{} {id} replay: vertex {v} {name}: {a} vs {e}", host.name));
+                }
+            }
+            if !replay_differing.is_empty() {
+                println!("{} {id}: replay from MATLAB's profiles differs at vertices {replay_differing:?}", host.name);
+            }
+            // The whole pipeline from MATLAB's courses.
+            let expected = recorded_maps(host, case);
+            let actual = run(inputs_with(host, case, None, model));
+            let mut differing = 0;
+            for (r, name) in expected.values.iter().enumerate() {
+                let fitted = matches!(name.as_str(), "R^2" | "x0" | "y0" | "Sigma" | "Beta" | "Baseline");
+                for (v, (&a, &e)) in actual.row(r).iter().zip(expected.row(r)).enumerate() {
+                    if same(a, e) {
+                        continue;
+                    }
+                    differing += 1;
+                    if !global && !(intel(host) && fitted) {
+                        failures.check(false, || format!("{} {id}: vertex {v} {name}: {a} vs {e}", host.name));
+                    }
+                }
+            }
+            if !global && !intel(host) {
+                gated += 1;
+            }
+            println!("{} {id}: {differing} map values differ from MATLAB{}", host.name, if global { " (global regression, not gated)" } else { "" });
+        }
+    }
+    failures.assert_none();
+    // The matrix's AMD host: six cases without global-signal correction.
+    assert_eq!(gated, 6, "single Gaussian CF cases gated on the AMD host");
 }

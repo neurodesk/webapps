@@ -45,10 +45,6 @@
         "license": "MIT"
       },
       {
-        "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
-        "kind": "runtime-cdn"
-      },
-      {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/musclemap/body-mri/body_mri_s0175.nii.gz",
         "sha256": "0f311daa4f19d8b89c1380832332db11d5f32cf406d2b591ba6800e6433eb379",
         "bytes": 16134253,
@@ -395,10 +391,6 @@
         "sha256": "54c01314ea7ad26b092266ac6cb39bc9f35ac84d8983186af734f05b1cd1c329",
         "bytes": 62429252,
         "kind": "model"
-      },
-      {
-        "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
-        "kind": "runtime-cdn"
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_T1.nii.gz",
@@ -946,10 +938,6 @@
         "bytes": 90495381,
         "kind": "model",
         "license": "NOASSERTION"
-      },
-      {
-        "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
-        "kind": "runtime-cdn"
       },
       {
         "url": "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/attrs-23.2.0-py3-none-any.whl",

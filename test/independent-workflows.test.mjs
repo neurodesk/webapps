@@ -7,7 +7,7 @@ import YAML from 'yaml';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { commandLineClosure } from '../scripts/lib/module-closure.mjs';
-import { pathGlob } from '../scripts/lib/workflow-gate.mjs';
+import { isSharedFilter, pathGlob } from '../scripts/lib/workflow-gate.mjs';
 import { repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 async function workflow(name) {
@@ -249,7 +249,7 @@ test('portable Node command lines build on target runners and publish through on
     const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
     // A release with a macOS installer is published only by signing it.
     const publishInput=installer?'sign_release':'publish_release';
-    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'revcor_only', 'revcor_edges', 'wasm_only', 'qr_only', 'numerics_only', 'runtime_cli', 'runtime_image'] : [];
+    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'revcor_only', 'revcor_edges', 'wasm_only', 'qr_only', 'qr_kernels', 'numerics_only', 'kernels_only', 'gemv_order', 'runtime_cli', 'runtime_image'] : [];
     assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs), [publishInput, ...referenceInputs], name);
     assert.equal(flow.jobs.portable.with.publish_release,`\${{ github.event_name == 'workflow_dispatch' && inputs.${publishInput} }}`,name);
     assert.equal(flow.jobs.portable.with.sign_release,installer?"${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}":undefined,name);
@@ -329,6 +329,29 @@ test('manual SamSrf MATLAB recording uses pinned source and cannot publish relea
     }
   }
   assert.deepEqual(flow.jobs.portable.needs, ['test', 'wasm-source']);
+});
+
+test('manual SamSrf least-squares kernel probe runs MATLAB alone on more runners', async () => {
+  const flow = await workflow('samsrf-native');
+  assert.equal(flow.on.workflow_dispatch.inputs.qr_kernels.default, false);
+  const recording = flow.jobs['matlab-reference'];
+  assert.equal(recording.strategy.matrix.replica, "${{ fromJSON(inputs.qr_kernels && '[1, 2, 3]' || '[1]') }}");
+  const upload = recording.steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
+  assert.match(upload.with.name, /matrix\.replica/);
+  assert.ok(recording.steps.some(step => step.if === 'inputs.qr_kernels' && /record_qr_kernels\(/.test(step.with?.command ?? '')));
+  for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
+    for (const only of [false, true]) {
+      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { qr_kernels: only, qr_only: false, record_matlab: false, revcor_only: false, diagnostics_only: false } };
+      assert.equal(runInNewContext(recording.if, context), event === 'workflow_dispatch' && only);
+      for (const name of ['test', 'wasm-source']) {
+        assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !only, name);
+      }
+      for (const name of ['Record numerical intermediates and fitted maps', 'Prepare verified inputs and declared source repairs']) {
+        const step = recording.steps.find(item => item.name === name);
+        assert.equal(runInNewContext(step.if, context), !only, name);
+      }
+    }
+  }
 });
 
 test('manual SamSrf least-squares recording runs MATLAB alone under several MKL requests', async () => {
@@ -618,6 +641,8 @@ test('a native or CLI workflow runs when a file its command line imports changes
       // These start for a pull request only on their own paths; their pushes hold the rule.
       if (event === 'pull_request' && OWN_PATHS_ONLY.includes(file)) continue;
       const patterns = filters.filter((filter) => !filter.startsWith('!')).map(pathGlob);
+      // A gated workflow's pushes leave its shared pull request filters to the nightly sweep.
+      if (event === 'push' && flow.jobs.gate && flow.on.schedule) patterns.push(...flow.on.pull_request.paths.filter(isSharedFilter).map(pathGlob));
       // A workflow owns the packages it filters on whole.
       const owned = filters.map((filter) => filter.match(/^((?:packages|exes)\/[^/*]+)\/\*\*$/)?.[1]).filter(Boolean);
       for (const directory of owned) {

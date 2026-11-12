@@ -1,5 +1,30 @@
 # samsrf
 
+## 0.6.20261112
+
+### Minor Changes
+
+- 4312c49: Solve Beta and Baseline with the summation orders of MKL's own `?gemv`, `?ormqr`, `?trsv` and `?trsm` as MATLAB R2023b runs them on AMD hosts, read from MKL's summation trees, and with LAPACK's `?ladiv` in the reflectors. On 348 recorded MATLAB solves, 300 coefficients are now bit-identical (previously 123), including every real double design; the rest stay within the empirical acceptance scale. A new multi-column solve reproduces MATLAB's `A \ B` for reverse correlation and the global regression to adopt. Results on Intel hosts, where MKL's AVX-512 branch sums differently, are not reproduced.
+
+### Patch Changes
+
+- Updated dependencies [4312c49]
+  - @neurodesk/samsrf@0.6.20261112
+
+## 0.5.20261112
+
+### Patch Changes
+
+- 36dee9d: Single-precision connective-field profiles now equal MATLAB R2023b's bit for bit on the AMD (MKL CNR `auto`) reference host. `corr(y, X)` forms its product in MKL's recorded `y' * A` order (four-lane blocks of four columns, eight lanes for the rest) and limits coefficients to [-1, 1] as `corr.m` does. Without global-signal correction, every single convex-hull and summary-statistics map and every recorded profile matches. Single Gaussian CF fits (`Fit_pRF = 1`) stay refused. Their arithmetic (MATLAB's single `exp` and the mixed single and double objective) reproduces MATLAB's maps from MATLAB's template, but the Benson reader's x0 and y0, and the single global regression, are not yet bit-identical.
+- Updated dependencies [36dee9d]
+  - @neurodesk/samsrf@0.5.20261112
+- c95c6ab: Connective-field convex hulls now use an empirical compatibility model of MATLAB R2023b `polyshape`: vertices move to its fixed-point grid (centred, scaled by a power of ten and truncated), self-intersecting clusters are resolved with the even-odd rule, and the 1e-8 thinness cleaning works on that grid. All 253 polygons of the 741-case MATLAB reference now pass without exclusions, and 25,980 of 26,073 recorded polygons give MATLAB's hull vertices bit for bit; the remaining 93 are nearly collinear point clouds whose crossings MATLAB resolves by snapping. Maps from the real Benson templates are unchanged.
+
+  The unresolved cases retain frozen port regression outcomes. Unrepresentable grid scales return an empty hull before integer conversion, preventing overflow or nontermination on extreme coordinates. The package includes Clipper and fdlibm notices.
+
+- Updated dependencies [c95c6ab]
+  - @neurodesk/samsrf@0.5.20261112
+
 ## 0.5.20261111
 
 ### Minor Changes

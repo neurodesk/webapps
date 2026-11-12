@@ -3,7 +3,7 @@
 //! (packages/samsrf/validation/matlab/qr-reference.json) and sets
 //! SAMSRF_QR_REFERENCE_DIR. MATLAB ran MKL's `CNR branch auto` on AMD EPYC
 //! 7763 hosts. Every rank and rank-warning tolerance must match. Coefficients
-//! are frozen per case in tests/data/qr-outcomes.json (123 bit-identical, the
+//! are frozen per case in tests/data/qr-outcomes.json (300 bit-identical, the
 //! others no further in ULPs than recorded) and must stay within an empirical
 //! acceptance scale. This is measured agreement with that backend on this
 //! finite set, not bit parity on arbitrary inputs.
@@ -233,7 +233,7 @@ fn coefficients_stay_within_frozen_outcomes_and_the_acceptance_scale() {
         }
     }
     eprintln!("largest acceptance ratio {worst:?}; {exact} bit-identical cases");
-    assert_eq!(exact, 123, "frozen bit-identical cases");
+    assert_eq!(exact, 300, "frozen bit-identical cases");
 }
 
 /// With SAMSRF_QR_REPORT set, write the port's coefficients for the analysis

@@ -360,7 +360,7 @@
       <p>SeedSeg uses ONNX Runtime Web to run deep learning models directly in the browser via WebGPU or WebAssembly. Your NIfTI or DICOM files are read into browser memory, processed locally, and results are displayed without any network transfer.</p>
 
       <h4>Third-party services</h4>
-      <p>The website downloads NiiVue from unpkg, pinned model weights from Hugging Face and other runtime assets, and counts page views using shared site analytics. The optional dicompare report uses bundled controller, worker and schema assets. When requested on the website, it downloads Pyodide and Python packages from jsDelivr and PyPI. These requests contain no input images or DICOM metadata.</p>
+      <p>The website downloads pinned model weights from Hugging Face and other runtime assets, and counts page views using shared site analytics. The optional dicompare report uses bundled controller, worker and schema assets. When requested on the website, it downloads Pyodide and Python packages from jsDelivr and PyPI. These requests contain no input images or DICOM metadata.</p>
     </div>
   </div>
 </div>
@@ -396,7 +396,7 @@
 </script>
 
 <!-- NiiVue -->
-<script src="https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js"></script>
+<script src="wasm/niivue.umd.js"></script>
 
 <!-- Main app -->
 <script type="module" src="js/seedseg-app.js"></script>

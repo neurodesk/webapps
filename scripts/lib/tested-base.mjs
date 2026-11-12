@@ -14,19 +14,25 @@ const BRANCH_EVENTS = new Set(['push', 'schedule', 'workflow_dispatch']);
 // Of `runs` (GitHub workflow runs), the head of the green branch run nearest
 // to `head`, or why there is none. `git.isAncestor(a, b)` and
 // `git.distance(a, b)` (commits in a..b) answer for the checked-out history.
-export function testedBase({ runs, head, branch, git }) {
+// With `atHead`, a green run of `head` itself answers with `head`: nothing is
+// left to test. `events` narrows which runs count as having tested the branch.
+export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = false, events = BRANCH_EVENTS }) {
   const candidates = new Map();
   for (const run of runs) {
-    if (run.conclusion !== 'success' || run.head_branch !== branch || !BRANCH_EVENTS.has(run.event)) continue;
-    if (run.head_sha === head || candidates.has(run.head_sha)) continue;
+    if (run.conclusion !== 'success' || run.head_branch !== branch || !events.has(run.event)) continue;
+    if (run.head_sha === head) {
+      if (atHead) return { base: head, reason: `${workflow} run ${run.id} (${run.event}) already finished green at ${head}` };
+      continue;
+    }
+    if (candidates.has(run.head_sha)) continue;
     if (!git.isAncestor(run.head_sha, head)) continue;
     candidates.set(run.head_sha, run);
   }
   if (!candidates.size) {
-    return { base: null, reason: `no successful ci run on ${branch} has a head that is an ancestor of ${head}` };
+    return { base: null, reason: `no successful ${workflow} run on ${branch} has a head that is an ancestor of ${head}` };
   }
   const [base, run] = [...candidates].reduce((best, entry) => (git.distance(entry[0], head) < git.distance(best[0], head) ? entry : best));
-  return { base, reason: `base ${base} is the head of the last successful ci run on ${branch} (${run.event} run ${run.id})` };
+  return { base, reason: `base ${base} is the head of the last successful ${workflow} run on ${branch} (${run.event} run ${run.id})` };
 }
 
 export function gitAncestry(cwd) {
@@ -67,7 +73,7 @@ export async function successfulRuns({ repository, workflow, branch, token, apiU
 
 // The base a push run on `branch` diffs from, or null and why: the caller
 // then selects the whole catalog.
-export async function resolveTestedBase({ head, branch = 'main', workflow = 'ci.yml', cwd, env = process.env, fetchImpl }) {
+export async function resolveTestedBase({ head, branch = 'main', workflow = 'ci.yml', cwd, env = process.env, fetchImpl, atHead = false, events }) {
   const git = gitAncestry(cwd);
   const sha = git.resolve(head);
   if (!sha) return { base: null, reason: `${head} is not a commit in this checkout` };
@@ -75,7 +81,7 @@ export async function resolveTestedBase({ head, branch = 'main', workflow = 'ci.
   try {
     runs = await successfulRuns({ repository: env.GITHUB_REPOSITORY, workflow, branch, token: env.GITHUB_TOKEN, apiUrl: env.GITHUB_API_URL, fetchImpl });
   } catch (error) {
-    return { base: null, reason: `the last successful ci run on ${branch} is unknown: ${error.message}` };
+    return { base: null, reason: `the last successful ${workflow.replace(/\.yml$/, '')} run on ${branch} is unknown: ${error.message}` };
   }
-  return testedBase({ runs, head: sha, branch, git });
+  return testedBase({ runs, head: sha, branch, git, workflow: workflow.replace(/\.yml$/, ''), atHead, events });
 }
