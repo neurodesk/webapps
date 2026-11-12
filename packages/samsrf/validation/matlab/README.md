@@ -709,23 +709,16 @@ whose `alpha - beta` approaches the largest value keeps its coefficient; this
 too leaves every recorded solve unchanged.
 
 In the full pipelines (committed module from
-[run 42932877139](https://github.com/neurodesk/webapps/actions/runs/42932877139),
-which also contains the CF geometry port; the map and CSS reports equal those of
-the QR-only module from run 42930052851),
-the single CSS pipeline's largest Beta difference falls from 1.07e-6 to
-2.38e-7 and its largest Baseline difference from 3.12e-8 to 1.82e-8. Across the
-ten single forward pipelines (748 vertices), bit-identical Beta values rise from
-279 to 649 (largest distance 22 to 5 single ULPs) and bit-identical Baseline
-values from 223 to 391, with the mean Baseline distance lower in every
-pipeline. The largest absolute Baseline difference rises from 4.0e-8 to 5.7e-8:
-`pipeline_single_x001_lh_average0_coarse0` vertex 29 (MATLAB -0.0064553185)
-moves from 65 to 123 ULPs. Its maximum ULP distance also rises in three
-pipelines (79 to 123, 47 to 57 and 102 to 166), all on small baselines whose
-value is a cancellation residual of the observation sum. The largest Beta
-difference stays 9.54e-7 (`pipeline_single_x001_rh_average1_coarse0`). The double CSS replay keeps every
-decision; its maximum Beta and Baseline differences are unchanged (8.3e-9 and
-5.6e-16), on 64 and 65 rather than 67 vertices. The map gates' tolerances are
-unchanged.
+[run 43136443327](https://github.com/neurodesk/webapps/actions/runs/43136443327)),
+against the previous module on main: across the ten single forward pipelines
+(748 vertices) bit-identical Beta values rise from 649 to 724 and Baseline
+values from 391 to 670. The largest Beta difference falls from 9.54e-7 to
+2.38e-7; the largest Baseline difference moves from 5.73e-8 to 5.82e-8, on the
+small cancellation-dominated baselines described above, and one analyzePRF
+baseline loses bit identity (6 to 5 of 10). The single CSS pipeline's Baseline
+is bit-identical at 93 of 96 vertices (from 53) with its largest difference
+falling from 1.82e-8 to 1.86e-9. All 114 map gates, the CSS replay and all 1,858
+reverse-correlation gates pass with unchanged tolerances.
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-qr" packages/samsrf/validation/matlab/qr-reference.json
