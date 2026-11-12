@@ -94,3 +94,84 @@ test('a stage removed from a stack is visible when explicitly added again', asyn
   assert.equal(viewer.isStageVisible('segmentation'), true);
   assert.equal(nv.volumes[1].opacity, 0.5);
 });
+
+function twoPhase() {
+  const nv = niivue();
+  nv.addVolume = function addVolume(image) {
+    this.volumes.push(image);
+  };
+  const decodes = [];
+  const NVImage = {
+    loadFromUrl: (options) => new Promise((resolve) => {
+      decodes.push({ options, finish: () => resolve({ name: options.name, img: new Uint8Array([0, 1]) }) });
+    }),
+  };
+  return { nv, decodes, viewer: new ViewerController({ nv, NVImage }) };
+}
+
+test('a load with assertCurrent decodes away from the viewer and commits in one step', async () => {
+  const { nv, decodes, viewer } = twoPhase();
+  const previous = { name: 'previous.nii' };
+  nv.volumes = [previous];
+  const order = [];
+  const load = viewer.loadBaseVolume(file('base.nii'), {
+    stage: 'input',
+    assertCurrent: () => order.push(`check ${nv.volumes.map(volume => volume.name)}`),
+    onCommit: () => order.push(`commit ${nv.volumes.map(volume => volume.name)} ${viewer.currentBaseFile.name}`),
+  });
+  await Promise.resolve();
+  assert.deepEqual(nv.volumes, [previous], 'the viewer keeps its volumes while the file is decoded');
+  decodes[0].finish();
+  assert.equal(await load, true);
+  assert.deepEqual(order, ['check previous.nii', 'commit base.nii base.nii']);
+  assert.equal(viewer.getVolumeIndexForStage('input'), 0);
+});
+
+test('a superseded load never reaches the viewer or the controller record', async () => {
+  const { nv, decodes, viewer } = twoPhase();
+  const superseded = () => {
+    throw new DOMException('superseded', 'AbortError');
+  };
+  const committed = [];
+  const onCommit = () => committed.push('commit');
+
+  const base = viewer.loadBaseVolume(file('base.nii'), { stage: 'input', assertCurrent: superseded, onCommit });
+  decodes[0].finish();
+  await assert.rejects(base, { name: 'AbortError' });
+
+  const overlay = viewer.loadOverlay(file('seg.nii'), 'red', 0.5, { stage: 'segmentation', assertCurrent: superseded, onCommit });
+  decodes[1].finish();
+  await assert.rejects(overlay, { name: 'AbortError' });
+
+  const stack = viewer.loadVolumeStack([
+    { file: file('template.nii'), stage: 'template' },
+    { file: file('map.nii'), stage: 'map', scalar: true },
+  ], { assertCurrent: superseded, onCommit });
+  decodes[2].finish();
+  decodes[3].finish();
+  await assert.rejects(stack, { name: 'AbortError' });
+
+  assert.deepEqual(nv.volumes, []);
+  assert.deepEqual(committed, []);
+  assert.equal(viewer.currentBaseFile, null);
+  assert.deepEqual(viewer.volumeFiles, []);
+});
+
+test('a stack with assertCurrent replaces the viewer only when every entry is decoded', async () => {
+  const { nv, decodes, viewer } = twoPhase();
+  const previous = { name: 'previous.nii' };
+  nv.volumes = [previous];
+  const entries = [
+    { file: file('template.nii'), stage: 'template' },
+    { file: file('map.nii'), stage: 'map', scalar: true },
+  ];
+  const stack = viewer.loadVolumeStack(entries, { assertCurrent: () => {} });
+  decodes[0].finish();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(nv.volumes, [previous], 'a decoded base waits for the overlays');
+  decodes[1].finish();
+  assert.equal(await stack, true);
+  assert.deepEqual(nv.volumes.map(volume => volume.name), ['template.nii', 'map.nii']);
+  assert.equal(viewer.getVolumeIndexForStage('map'), 1);
+  assert.equal(viewer.isCurrentVolumeStack(entries), true);
+});

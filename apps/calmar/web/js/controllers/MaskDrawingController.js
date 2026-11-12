@@ -86,8 +86,10 @@ export class MaskDrawingController {
     }
   }
 
-  startBlank() {
+  // `assertCurrent` runs first, in the step that creates or clears the drawing.
+  startBlank(assertCurrent) {
     if (!this.nv) throw new Error('MaskDrawingController: NiiVue instance is required');
+    assertCurrent?.();
     if (this.nv.drawBitmap && this.currentDrawingMatchesBase()) {
       this.pushManualUndoSnapshot(this.copyDrawingBitmap());
       this.drawAddUndoBitmap();

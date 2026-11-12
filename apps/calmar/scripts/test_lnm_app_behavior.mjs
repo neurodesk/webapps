@@ -101,8 +101,34 @@ globalThis.File = class {
 const { LesionNetworkMappingApp, formatVersionLabel } =
   await import(path.join(ROOT, 'web/js/lnm-app.js'));
 
+// A stub stands for the shared ViewerController, whose loads run the caller's
+// check and then commit in one step.
+function checkThenCommit(stub) {
+  for (const [name, optionsAt] of [['loadBaseVolume', 1], ['loadOverlay', 3], ['loadVolumeStack', 1]]) {
+    const load = stub?.[name];
+    if (!load) continue;
+    stub[name] = async (...args) => {
+      const { assertCurrent, onCommit, ...options } = args[optionsAt] || {};
+      const recorded = [...args];
+      if (args[optionsAt]) recorded[optionsAt] = options;
+      const result = await load(...recorded);
+      assertCurrent?.();
+      onCommit?.();
+      return result;
+    };
+  }
+  return stub;
+}
+
 function makeApp() {
   const app = new LesionNetworkMappingApp();
+  let viewerController = checkThenCommit(app.viewerController);
+  Object.defineProperty(app, 'viewerController', {
+    get: () => viewerController,
+    set: (stub) => {
+      viewerController = checkThenCommit(stub);
+    }
+  });
   // Capture updateOutput so we can inspect status messages without
   // dragging in ConsoleOutput's DOM dependency.
   app._messages = [];

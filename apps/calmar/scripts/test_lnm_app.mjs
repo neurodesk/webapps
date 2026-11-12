@@ -460,7 +460,8 @@ for (const [input, load] of [
   assert.ok(document.getElementById('outsideAtlasWarning').classList.contains('hidden'));
   assert.equal(document.getElementById('networkThresholdSummary').textContent, 'Run analysis first to enable thresholding.');
   assert.equal(executorCleared, 1, 'worker results are dropped too');
-  assert.deepEqual(viewer, ['remove threshold-preview', 'base T1.nii'], 'the viewer goes back to the structural image');
+  assert.deepEqual(viewer, ['remove threshold-preview', 'clearVolumes', 'base T1.nii'],
+    'the viewer is emptied at once and goes back to the structural image');
   assert.equal(app.messages.at(-1), 'Results cleared (structural retained).');
 
   viewer.length = 0;

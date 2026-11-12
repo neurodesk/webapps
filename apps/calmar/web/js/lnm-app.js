@@ -221,7 +221,7 @@ export class LesionNetworkMappingApp {
     this.viewerBaseFile = null;
     this._viewerLoad = Promise.resolve();
     this._viewerTurn = 0;
-    this._viewerBaseOptions = {};
+    this._viewerBase = 0;
     this.nativeStructuralFile = null;
     this.deepIslesDwiFile = null;
     this.deepIslesAdcFile = null;
@@ -1460,106 +1460,83 @@ export class LesionNetworkMappingApp {
     });
   }
 
-  // The one way an import puts a base, an overlay or a drawing into the
-  // viewer. Loads run one at a time, in the order asked, so a slow one cannot
-  // land on top of a later one. A load whose import was replaced
-  // (`assertCurrent`), or that was queued before the viewer was reset
-  // (`resetViewerQueue`), does not start. NiiVue cannot be stopped, so one that
-  // became stale while NiiVue was loading is taken out again when it lands:
-  // `undo` removes what it loaded, and a load the queue no longer waited for,
-  // which landed beside newer loads, has the viewer rebuilt from the current base.
-  // `run` receives the check, for a load that can stop before it reaches NiiVue.
-  viewerLoad(run, { assertCurrent, undo } = {}) {
+  // The one way a base, an overlay, a stack or a drawing reaches the viewer.
+  // A load has two parts. Fetching and decoding happen away from the viewer
+  // and can take any time, or never end. The commit puts the decoded image
+  // into NiiVue and writes the viewer's app state in one synchronous step,
+  // immediately after `check()`: the viewer turn (`resetViewerQueue`) and the
+  // caller's `assertCurrent` must both still be current, with no await between
+  // the check and the commit. So a superseded load never reaches the viewer,
+  // and there is nothing to undo. `run(check)` hands `check` to the controller
+  // (`assertCurrent`), which calls it just before its commit. Loads of one
+  // turn run in the order asked, so an overlay cannot commit before its base.
+  viewerLoad(run, { assertCurrent } = {}) {
     const turn = this._viewerTurn;
     const check = () => {
       if (turn !== this._viewerTurn) throw new DOMException('The viewer was reset.', 'AbortError');
       assertCurrent?.();
     };
-    const load = this._viewerLoad.then(async () => {
+    const load = this._viewerLoad.then(() => {
       check();
-      const result = await run(check);
-      try {
-        check();
-      } catch (err) {
-        // The undo keeps this load's place in the queue until it is done.
-        if (turn === this._viewerTurn) await undo?.();
-        if (turn !== this._viewerTurn) this.rebuildViewer();
-        throw err;
-      }
-      return result;
+      return run(check);
     });
     this._viewerLoad = load.catch(() => {});
     return load;
   }
 
-  // A clear and a new structural image leave nothing to wait for: loads asked
-  // before them are stale, and one NiiVue never finishes must not hold up the
-  // loads asked after. Whatever such a load still puts into the viewer is
-  // taken out by the rebuild it asks for when it lands.
+  // A clear and a new structural image leave nothing to wait for. The viewer
+  // is emptied at once and a new queue starts; a load of the old turn, also
+  // one whose decode never ends, holds neither the viewer nor the new queue,
+  // and its check fails when it gets as far as its commit.
   resetViewerQueue() {
     this._viewerTurn += 1;
     this._viewerLoad = Promise.resolve();
-    this.viewerBaseFile = null;
+    this.maskDrawingController?.close?.({ clearDrawing: true });
+    this.clearViewer();
   }
 
-  // An abandoned load put its volume beside the newer ones and rewrote the
-  // controller's record, and neither can be separated again. So, after the
-  // loads now pending, the viewer is emptied and the current base loaded once
-  // more; overlays return through their layer toggles. A review keeps its
-  // drawing and its Undo history: NiiVue holds them apart from the volumes,
-  // and an abandoned seed stops before it reaches them (`loadSeedFile`). Its
-  // base is the image the drawing was made on, whatever was displayed last.
-  rebuildViewer() {
-    if (!this.maskReviewActive) this.maskDrawingController?.close?.({ clearDrawing: true });
-    this.viewerLoad(() => this.reloadViewerBase()).catch(this.reportFailure('Viewer reload failed'));
+  // `_viewerBase` counts base changes: an overlay belongs to the base that was
+  // shown when its load started and is dropped if that base is gone.
+  clearViewer() {
+    this.viewerController?.clearVolumes?.();
+    this.viewerBaseFile = null;
+    this._viewerBase += 1;
   }
 
-  // Runs inside a queued load, never on its own.
-  async reloadViewerBase() {
-    const review = this.maskReviewActive;
-    const base = review ? this.nativeStructuralFile : this.viewerBaseFile;
-    const options = review ? { stage: 'structural', visible: this.layerVisible('structural') } : this._viewerBaseOptions;
-    this.viewerController.clearVolumes();
-    this.viewerBaseFile = null;
-    if (!base) return;
-    await this.viewerController.loadBaseVolume(base, options);
-    this.viewerBaseFile = base;
-    this._viewerBaseOptions = options;
+  // The layer controls follow what the viewer holds, so they are read again with every new base.
+  commitViewerBase(file) {
+    this.viewerBaseFile = file;
+    this._viewerBase += 1;
     this.refreshViewerLayerControls();
   }
 
-  async loadViewerBaseVolume(file, options = {}, assertCurrent) {
-    await this.viewerLoad(() => this.viewerController.loadBaseVolume(file, options), {
-      assertCurrent,
-      undo: () => {
-        // Still this subject's image (its review or reload was replaced): it stays the base.
-        if (file === this.structuralFile || file === this.nativeStructuralFile) {
-          this.viewerBaseFile = file;
-          this._viewerBaseOptions = options;
-          return;
-        }
-        this.viewerController.clearVolumes();
-        this.viewerBaseFile = null;
-      }
-    });
-    this.viewerBaseFile = file;
-    this._viewerBaseOptions = options;
+  loadViewerBaseVolume(file, options = {}, assertCurrent) {
+    return this.viewerLoad(check => this.viewerController.loadBaseVolume(file, {
+      ...options,
+      assertCurrent: check,
+      onCommit: () => this.commitViewerBase(file)
+    }), { assertCurrent });
   }
 
-  // A result overlay belongs to the run current when it is asked for: one that
-  // lands after Clear results or a new structural image is taken out again.
-  // A stage holds one overlay: a load asked twice (a layer toggled on, off and
-  // on while it loads) finds its file in place, and another file replaces it.
+  // A result overlay belongs to the run current when it is asked for, so one
+  // decoded after Clear results or a new structural image is not shown. A
+  // stage holds one overlay: a load asked twice (a layer toggled on, off and
+  // on while it loads) finds its file in place, and another file replaces it
+  // in the same step that inserts the new one.
   loadViewerOverlay(file, colormap, opacity, options, assertCurrent = this.pipelineTurn()) {
     const viewer = this.viewerController;
-    return this.viewerLoad(() => {
+    return this.viewerLoad((check) => {
       if (this.viewerOverlayFile(options.stage) === file) return true;
-      viewer.removeVolumeForStage(options.stage);
-      return viewer.loadOverlay(file, colormap, opacity, options);
-    }, {
-      assertCurrent,
-      undo: () => this.removeViewerOverlay(options.stage, file)
-    });
+      const base = this._viewerBase;
+      return viewer.loadOverlay(file, colormap, opacity, {
+        ...options,
+        assertCurrent: () => {
+          check();
+          if (base !== this._viewerBase || this.nv?.volumes?.length === 0) throw new DOMException('The viewer base changed.', 'AbortError');
+          viewer.removeVolumeForStage(options.stage);
+        }
+      });
+    }, { assertCurrent });
   }
 
   viewerOverlayFile(stage) {
@@ -1574,16 +1551,22 @@ export class LesionNetworkMappingApp {
     this.viewerController?.removeVolumeForStage?.(stage);
   }
 
-  // A stack replaces the base, so it takes its place in the queue like one.
-  // The base is recorded only for a stack that is still current when it has
-  // landed; a stale one is taken out by loading the recorded base again.
-  async loadViewerVolumeStack(entries = []) {
-    await this.viewerLoad(() => this.viewerController.loadVolumeStack(entries), {
-      assertCurrent: this.pipelineTurn(),
-      undo: () => this.reloadViewerBase()
-    });
-    this.viewerBaseFile = entries[0]?.file || null;
-    this._viewerBaseOptions = { stage: entries[0]?.stage, visible: entries[0]?.visible };
+  // A stack replaces the base and every overlay in one step.
+  loadViewerVolumeStack(entries = []) {
+    return this.viewerLoad(check => this.viewerController.loadVolumeStack(entries, {
+      assertCurrent: check,
+      onCommit: () => this.commitViewerBase(entries[0]?.file || null)
+    }), { assertCurrent: this.pipelineTurn() });
+  }
+
+  // A drawing is made only on the review's own image: the volume NiiVue shows
+  // as the base must be the one loaded from that file, on its grid.
+  assertReviewBase(baseFile) {
+    const shown = this.nv?.volumes?.[0]?.hdr?.dims;
+    const grid = this.nativeStructuralInfo?.dims;
+    const own = this.viewerBaseFile === baseFile && this.viewerController.currentBaseFile === baseFile;
+    if (own && shown && grid && grid.every((size, axis) => size === shown[axis + 1])) return;
+    throw new Error('The viewer does not show the image under review.');
   }
 
   getActiveViewerBaseFile() {
@@ -1817,20 +1800,20 @@ export class LesionNetworkMappingApp {
     this.nativeStructuralFile = null;
     this.nativeStructuralInfo = null;
     this.structuralFromDiffusion = null;
-    this.viewerController.clearVolumes();
-    this.viewerBaseFile = null;
+    this.clearViewer();
     this.showRemainingInput();
     this.refreshViewerLayerControls();
     this.refreshMaskDrawingControls();
   }
 
   // With no structural image, a lesion mask or else the DWI/TRACE is the viewer base.
+  // The lesion mask has a layer toggle and is shown as that was left; the DWI/TRACE has none.
   showRemainingInput() {
-    const [file, stage] = this.lesionFile
-      ? [this.lesionFile, 'lesion']
-      : [this.deepIslesDwiFile, 'deepisles-dwi'];
+    const [file, options] = this.lesionFile
+      ? [this.lesionFile, { stage: 'lesion', visible: this.layerVisible('lesion') }]
+      : [this.deepIslesDwiFile, { stage: 'deepisles-dwi' }];
     if (!file || this.structuralFile) return;
-    this.loadViewerBaseVolume(file, { stage }).catch(this.reportFailure('Viewer reload failed'));
+    this.loadViewerBaseVolume(file, options).catch(this.reportFailure('Viewer reload failed'));
   }
 
   // A pipeline run belongs to the structural image it started on. The turn is
@@ -1945,10 +1928,10 @@ export class LesionNetworkMappingApp {
     if (!this.structuralFile && !this.lesionFile) {
       await this.loadViewerBaseVolume(file, { stage: `deepisles-${kind}` }, assertCurrent);
     } else {
-      await this.viewerLoad(
-        () => !this.maskReviewActive && this.viewerController.replaceOverlayForStage('deepisles-input', file, 'hot', 0.7, { scalar: true }),
-        { assertCurrent, undo: () => this.viewerController.removeVolumeForStage('deepisles-input') }
-      );
+      await this.loadViewerOverlay(file, 'hot', 0.7, { stage: 'deepisles-input', scalar: true }, () => {
+        assertCurrent?.();
+        if (this.maskReviewActive) throw new DOMException('A mask review took over the viewer.', 'AbortError');
+      });
     }
     this.refreshViewerLayerControls();
   }
@@ -1980,14 +1963,10 @@ export class LesionNetworkMappingApp {
     try {
       if (this.structuralFile) {
         this.assertViewerOverlaySpace(file, 'Lesion mask overlay');
-        const removeLesion = () => this.viewerController.removeVolumeForStage('lesion');
-        await this.viewerLoad(() => {
-          removeLesion();
-          return this.viewerController.loadOverlay(file, LESION_MASK_COLORMAP_ID, 0.5, {
-            stage: 'lesion',
-            visible: this.layerVisible('lesion')
-          });
-        }, { assertCurrent, undo: removeLesion });
+        await this.loadViewerOverlay(file, LESION_MASK_COLORMAP_ID, 0.5, {
+          stage: 'lesion',
+          visible: this.layerVisible('lesion')
+        }, assertCurrent);
       } else {
         await this.loadViewerBaseVolume(file, {
           stage: 'lesion',
@@ -2929,7 +2908,7 @@ export class LesionNetworkMappingApp {
 
     const displayFile = this.nativeStructuralFile || this.structuralFile;
     if (displayFile && displayFile !== this.getActiveViewerBaseFile()) {
-      this.viewerController?.clearVolumes?.();
+      this.clearViewer();
       await this.loadViewerBaseVolume(displayFile, {
         stage: 'structural',
         visible: this.layerVisible('structural')
@@ -3169,7 +3148,7 @@ export class LesionNetworkMappingApp {
     this.lesionMaskFile = null;
     this.viewerLayerVisibility.brainmask = false;
     if (this.viewerController?.clearVolumes) {
-      this.viewerController.clearVolumes();
+      this.clearViewer();
     } else {
       this.viewerController?.removeVolumeForStage?.('brainmask');
     }
@@ -3207,12 +3186,29 @@ export class LesionNetworkMappingApp {
     const seed = blank ? null : await this.resampleSeedMaskToNative(seedFile || this.autoLesionSeedFile);
     assertCurrent();
     if (seed) this.nativeLesionSeedFile = seed;
-    // A seed stops before it reaches the drawing once its review is replaced;
-    // a drawing put in place in the same turn as the replacement is closed again.
-    await this.viewerLoad(check => (seed ? this.maskDrawingController.loadSeedFile(seed, check) : this.maskDrawingController.startBlank()), {
-      assertCurrent,
-      undo: () => this.maskDrawingController.close({ clearDrawing: true })
-    });
+    // The drawing is created or loaded in the step that checked the turn and
+    // the base. A review that cannot get its drawing ends, so that it can be
+    // started again; one that was replaced is its replacement's to end.
+    try {
+      await this.viewerLoad((check) => {
+        const onReviewBase = () => {
+          check();
+          this.assertReviewBase(baseFile);
+        };
+        return seed
+          ? this.maskDrawingController.loadSeedFile(seed, onReviewBase)
+          : this.maskDrawingController.startBlank(onReviewBase);
+      }, { assertCurrent });
+    } catch (err) {
+      if (this.isCurrent(assertCurrent)) {
+        this.maskReviewActive = false;
+        this.setMaskReview3DRenderEnabled(true);
+        this.refreshResultsView();
+        this.refreshViewerLayerControls();
+        this.refreshMaskDrawingControls();
+      }
+      throw err;
+    }
 
     this.setMaskDrawingTool('paint');
     this.applyMaskDrawingVisibility();
@@ -4912,15 +4908,13 @@ export class LesionNetworkMappingApp {
     // What the viewer was still loading showed the cleared results: nothing
     // waits for it, and the input that stays is loaded again.
     this.resetViewerQueue();
-    if (full) {
-      this.viewerController.clearVolumes();
-    } else if (this.structuralFile) {
+    if (!full && this.structuralFile) {
       this.loadViewerBaseVolume(this.structuralFile, {
         stage: 'structural',
         visible: this.layerVisible('structural')
       })
         .catch(this.reportFailure('Viewer reload after reset failed'));
-    } else {
+    } else if (!full) {
       this.showRemainingInput();
     }
     this.refreshViewerLayerControls();

@@ -11,6 +11,7 @@
 // back to the broken pattern fails immediately.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -592,4 +593,19 @@ function fakeFile(name) {
     'clearDrawing close must remove the stale editable drawing overlay');
 }
 
-console.log('ViewerController OK: 15 cases (Phase 4 call-shape, drawing wrapper, overlay replace path, scalar overlays, visibility, view + stage + colormap + live opacity).');
+// ---- Test 16: the app reaches the viewer only through check-then-commit loads ----
+{
+  const source = fs.readFileSync(path.join(ROOT, 'web/js/lnm-app.js'), 'utf8');
+  const drawing = fs.readFileSync(path.join(ROOT, 'web/js/controllers/MaskDrawingController.js'), 'utf8');
+  for (const call of ['.loadVolumes(', '.addVolumeFromUrl(', '.loadDrawingFromUrl(', '.replaceOverlayForStage(', '.replaceOverlay(', '.loadSegmentationAsBase(', '.showResultAsOverlay(']) {
+    assert.ok(!source.includes(call) && !drawing.includes(call),
+      `${call} cannot be stopped once it starts: load through viewerLoad with assertCurrent`);
+  }
+  for (const [call, owner] of [['.loadBaseVolume(', 'loadViewerBaseVolume'], ['.loadOverlay(', 'loadViewerOverlay'], ['.loadVolumeStack(', 'loadViewerVolumeStack']]) {
+    assert.equal(source.split(call).length - 1, 1, `${call} is called only by ${owner}`);
+  }
+  assert.equal(source.split('.clearVolumes').length - 1, 2,
+    'the viewer is emptied only by clearViewer(), which also drops the recorded base');
+}
+
+console.log('ViewerController OK: 16 cases (Phase 4 call-shape, drawing wrapper, overlay replace path, scalar overlays, visibility, view + stage + colormap + live opacity).');

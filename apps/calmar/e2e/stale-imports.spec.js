@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url)));
 
 // A file named `held-*` waits in the read step (where a DICOM series is converted), one named
-// `slow-*` in each read of its bytes and one named `late-*` before NiiVue loads it as a volume;
-// with `holdDrawing` set, a seed waits before NiiVue loads it as the drawing (`drawing`).
+// `slow-*` in each read of its bytes and one named `late-*` before it is decoded for the viewer;
+// with `holdDrawing` set, a seed waits before it is decoded as the drawing (`drawing`).
 // A volume named `decoded-*`, or listed in `holdDecoded`, waits after NiiVue decoded it and
-// before NiiVue inserts it; with `holdDecodedDrawing` set a drawing does (`decoded-drawing`).
+// before it is put into the viewer; with `holdDecodedDrawing` set a drawing does (`decoded-drawing`).
 // `resume(name)` lets the import go on, `ended(name)` is how it ended and `release(name)` is both.
 async function holdImports(page) {
   await page.goto('/');
@@ -37,14 +37,11 @@ async function holdImports(page) {
       if (this.name.startsWith('slow-')) await held(this.name);
       return read.call(this);
     };
-    for (const method of ['loadVolumes', 'addVolumeFromUrl']) {
-      const load = app.nv[method].bind(app.nv);
-      app.nv[method] = async (volumes) => {
-        const { name } = [volumes].flat()[0];
-        if (name.startsWith('late-')) await held(name);
-        return load(volumes);
-      };
-    }
+    const decodeVolume = app.viewerController.decodeVolume.bind(app.viewerController);
+    app.viewerController.decodeVolume = async (file, entry) => {
+      if (file.name.startsWith('late-')) await held(file.name);
+      return decodeVolume(file, entry);
+    };
     const loadSeed = app.maskDrawingController.loadSeedFile.bind(app.maskDrawingController);
     app.maskDrawingController.loadSeedFile = async (...args) => {
       if (globalThis.holdDrawing) await held('drawing');
@@ -927,16 +924,16 @@ test.describe('an import that finishes late', () => {
   test('a structural image still loading when the results are cleared is kept', async ({ page }) => {
     const { choose, ended, loaded, log, viewerIdle } = await holdImports(page);
     await page.evaluate(() => {
-      const load = app.nv.loadVolumes;
+      const decode = app.viewerController.decodeVolume;
       let first = true;
-      app.nv.loadVolumes = async (volumes) => {
+      app.viewerController.decodeVolume = async (file, entry) => {
         if (first) {
           first = false;
           await new Promise((resolve) => {
             globalThis.releaseImport.first = resolve;
           });
         }
-        return load(volumes);
+        return decode(file, entry);
       };
     });
     await choose('structural', 'T1.nii');
@@ -956,5 +953,134 @@ test.describe('an import that finishes late', () => {
     });
     expect(await log()).toContain('Structural image ready: T1.nii');
     expect(await log()).not.toMatch(/failed/i);
+  });
+  const otherGrid = page => page.evaluate(async () => {
+    const { writeNifti1 } = await import('/js/modules/nifti-writer.js');
+    const affine = [0, 2, 0, -8, 0, 0, 2, -8, 2, 0, 0, -8, 0, 0, 0, 1];
+    return [...new Uint8Array(writeNifti1(new Float32Array(2688).fill(1), { dims: [12, 14, 16], affine }))];
+  });
+
+  for (const blank of [true, false]) {
+    test(`a stale QC stack on another grid never reaches a ${blank ? 'blank' : 'seeded'} review's drawing`, async ({ page }) => {
+      const { choose, waiting, resume, loaded, log, viewerIdle, image, smallMask } = await holdImports(page);
+      await choose('structural', 'T1.nii');
+      await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+      await page.evaluate(({ template, registered }) => {
+        app.registrationTemplateFile = new File([new Uint8Array(template)], 'decoded-template.nii');
+        app.registeredT1MniFile = new File([new Uint8Array(registered)], 'registered.nii');
+        app.hasRegistrationDisplacement = true;
+        globalThis.holdDecoded.push('registered.nii');
+        globalThis.qc = app.showRegistrationQc('mni').then(() => 'shown', error => error.name);
+      }, { template: await otherGrid(page), registered: [...image] });
+      await waiting('decoded-template.nii');
+      await page.locator('#clearResultsButton').dispatchEvent('click');
+      await expect.poll(async () => (await loaded()).viewer).toEqual(['T1.nii']);
+      await page.evaluate(() => {
+        globalThis.holdDecoded.push('T1.nii');
+      });
+      if (blank) await page.locator('#startManualMaskButton').dispatchEvent('click');
+      else await choose('manualMask', 'mask.nii', smallMask);
+      await waiting('T1.nii');
+      await resume('decoded-template.nii');
+      await waiting('registered.nii');
+      await page.evaluate(() => {
+        globalThis.holdDecoded = [];
+      });
+      await resume('T1.nii');
+      await expect.poll(log, { timeout: 15000 }).toContain(blank ? 'Review/edit the lesion mask' : 'Manual lesion mask ready for editing: mask.nii');
+      await resume('registered.nii');
+      expect(await page.evaluate(() => globalThis.qc)).toBe('AbortError');
+      await viewerIdle();
+      await page.waitForTimeout(300);
+      await viewerIdle();
+      const grid = await page.evaluate(() => {
+        let exported;
+        try {
+          exported = app.exportActiveNativeDrawingFile('edited.nii')?.size > 0;
+        } catch (error) {
+          exported = error.message;
+        }
+        return { drawing: app.nv.drawBitmap?.length, base: app.nv.volumes[0]?.hdr.dims.slice(1, 4), exported };
+      });
+      expect(grid).toEqual({ drawing: 512, base: [8, 8, 8], exported: true });
+      expect(await loaded()).toMatchObject({ review: true, base: 'T1.nii', drawn: blank ? 0 : 3, viewer: ['T1.nii'] });
+      expect(await log()).not.toMatch(/failed/i);
+    });
+  }
+
+  for (const cleared of [false, true]) {
+    test(`a structural image replaced twice does not return after ${cleared ? 'a full clear' : 'the newest image'}`, async ({ page }) => {
+      const { choose, hold, release, loaded, viewerIdle } = await holdImports(page);
+      await hold('structural', 'decoded-old.nii');
+      await choose('structural', 'A.nii');
+      await expect.poll(async () => (await loaded()).base).toBe('A.nii');
+      await page.evaluate(() => {
+        globalThis.holdDecoded.push('A.nii');
+      });
+      expect(await release('decoded-old.nii')).toBe('AbortError');
+      await page.waitForTimeout(300);
+      if (cleared) {
+        await page.evaluate(() => app.clearResults({ full: true }));
+      } else {
+        await choose('structural', 'B.nii', Buffer.from(await otherGrid(page)));
+        await expect.poll(async () => (await loaded()).base).toBe('B.nii');
+      }
+      await page.evaluate(() => {
+        globalThis.holdDecoded = [];
+      });
+      await drain(page, 'A.nii');
+      await viewerIdle();
+      await viewerIdle();
+      expect(await loaded()).toMatchObject(cleared
+        ? { structural: null, base: null, controllerBase: null, viewer: [] }
+        : { structural: 'B.nii', base: 'B.nii', controllerBase: 'B.nii', viewer: ['B.nii'] });
+    });
+  }
+
+  test('Start over shows a lesion mask loaded on its own as its layer was left', async ({ page }) => {
+    const { choose, loaded, viewerIdle, smallMask } = await holdImports(page);
+    await choose('lesion', 'input.nii', smallMask);
+    await expect.poll(async () => (await loaded()).base).toBe('input.nii');
+    const lesionLayer = () => page.evaluate(() => ({
+      opacity: app.nv.volumes[0].opacity,
+      checked: document.getElementById('layerToggleLesionMask').checked,
+      flag: app.viewerLayerVisibility.lesion,
+      stage: app.viewerController.isStageVisible('lesion'),
+    }));
+    await page.locator('#clearResultsButton').dispatchEvent('click');
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ lesion: 'input.nii', base: 'input.nii', viewer: ['input.nii'] });
+    expect(await lesionLayer()).toMatchObject({ opacity: 1, checked: true, stage: true });
+
+    await toggleLayer(page, 'layerToggleLesionMask', false);
+    expect(await lesionLayer()).toMatchObject({ opacity: 0, checked: false, flag: false, stage: false });
+    await page.locator('#clearResultsButton').dispatchEvent('click');
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ lesion: 'input.nii', base: 'input.nii', viewer: ['input.nii'] });
+    expect(await lesionLayer()).toMatchObject({ opacity: 0, checked: false, flag: false, stage: false });
+  });
+  test('a review whose image is not the viewer base ends without a drawing and can be started again', async ({ page }) => {
+    const { choose, hold, waiting, resume, loaded, log, viewerIdle, smallMask } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await hold('manualMask', 'slow-mask.nii', smallMask);
+    await resume('slow-mask.nii');
+    await waiting('slow-mask.nii');
+    expect(await loaded()).toMatchObject({ review: true, base: 'T1.nii' });
+
+    // Another image is put under the review while its seed is still being resampled.
+    const other = await otherGrid(page);
+    await page.evaluate(bytes => app.loadViewerBaseVolume(new File([new Uint8Array(bytes)], 'other.nii'), { stage: 'structural' }), other);
+    expect(await loaded()).toMatchObject({ base: 'other.nii', viewer: ['other.nii'] });
+    await resume('slow-mask.nii');
+    await expect.poll(log).toContain('The viewer does not show the image under review.');
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ review: false, drawn: 0 });
+    expect(await page.evaluate(() => app.nv.drawBitmap)).toBeNull();
+
+    await page.locator('#startManualMaskButton').dispatchEvent('click');
+    await expect.poll(log).toContain('Review/edit the lesion mask');
+    expect(await loaded()).toMatchObject({ review: true, base: 'T1.nii', viewer: ['T1.nii'] });
+    expect(await page.evaluate(() => app.nv.drawBitmap.length)).toBe(512);
   });
 });

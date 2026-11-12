@@ -63,17 +63,21 @@ function makeApp(manifestForApp) {
   app.viewerController = {
     loadBaseVolume: async (file, options) => {
       await app.viewerDelay?.(file);
+      options.assertCurrent?.();
       app.viewerStack = [[file.name, options.stage]];
+      options.onCommit?.();
       return true;
     },
     loadOverlay: async (file, colormap, opacity, options) => {
+      options.assertCurrent?.();
       app.viewerStack.push([file.name, options.stage]);
       return true;
     },
-    replaceOverlayForStage: async (stage, file) => {
+    removeVolumeForStage: (stage) => {
       app.viewerStack = app.viewerStack.filter(([, s]) => s !== stage);
-      app.viewerStack.push([file.name, stage]);
-      return true;
+    },
+    clearVolumes: () => {
+      app.viewerStack = [];
     }
   };
   app.refreshViewerLayerControls = () => {};

@@ -46,6 +46,14 @@ The package provides the shared workspace, worker protocol, executor, viewer,
 volume operations, NIfTI I/O, and UI bindings. Scientific task definitions and
 model defaults remain app-owned.
 
+`ViewerController.loadBaseVolume`, `loadOverlay` and `loadVolumeStack` take an
+optional `assertCurrent`. With it the file is decoded away from the viewer,
+`assertCurrent()` is called, and the image is inserted and recorded in one
+synchronous step that ends with `onCommit()`; a load that `assertCurrent`
+rejects with an `AbortError` never reaches the viewer. Use it wherever a newer
+load can supersede one that is still being fetched or decoded. Pass `NVImage`
+to the constructor when NiiVue is imported as a module.
+
 ## Verified downloads
 
 `fetchModel` from `@neurodesk/webapp-components/worker` downloads model and example bytes,
