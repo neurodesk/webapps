@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { selectAffectedApps } from './app-plan.mjs';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
-import { moduleClosure, packageSources } from './module-closure.mjs';
+import { moduleClosure, onlyAddsExports, packageSources } from './module-closure.mjs';
 import { reachableFrom } from './workspace-graph.mjs';
 
 // Whether a path-filtered workflow has to run for a pull request.
@@ -80,26 +80,6 @@ const UNFOLLOWED_SCRIPT = /^(?:scripts|test-utils|test)\/.*\.(?:py|sh|ps1)$/;
 // The shared packager reads every package's release specification.
 const PACKAGER = 'node-cli-portable';
 const RELEASE_SPEC = /^packages\/[^/]+\/release\.json$/;
-
-// A dependency's package.json that only gained `exports` entries resolves
-// every existing import as before. Anything else may not.
-export function onlyAddsExports({ before, after }) {
-  let old;
-  let now;
-  try {
-    [old, now] = [JSON.parse(before), JSON.parse(after)];
-  } catch {
-    return false;
-  }
-  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const fields = new Set([...Object.keys(old), ...Object.keys(now)]);
-  if ([...fields].some((field) => field !== 'exports' && !same(old[field], now[field]))) return false;
-  const [was, is] = [old.exports, now.exports];
-  if (!was || !is || typeof was !== 'object' || typeof is !== 'object') return false;
-  // A pattern entry can be shadowed by a more specific addition.
-  if (Object.keys(was).some((key) => key.includes('*'))) return false;
-  return Object.keys(was).every((key) => same(was[key], is[key]));
-}
 
 export function decideWorkflow({ flow, calledFlows = [], changedPaths, registry, graph, manifests = new Map(), root }) {
   const run = (reason) => ({ run: true, reason });
