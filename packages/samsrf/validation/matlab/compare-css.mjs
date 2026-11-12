@@ -1,5 +1,5 @@
-// Full double CSS replay with narrow, explicit gates for the corrected failures.
-// Every other numerical difference is retained in the report, not tolerated away.
+// Full double CSS replay on the committed WebAssembly, with the port's own HRF and,
+// as a control, MATLAB's recorded HRF kernel. Every difference is reported.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -56,74 +56,84 @@ function run(hrf) {
     job.free();
   }
 }
+const kernel = array(recorded.hrf);
+const portKernel = samsrf.hrf.deHaas(model.TR);
+assert.equal(portKernel.length, kernel.length, 'HRF length');
+const hrfDifferences = [...kernel].flatMap((value, i) => Object.is(portKernel[i], value) ? [] : [{ index: i, actual: portKernel[i], expected: value }]);
+const failures = [];
+if (hrfDifferences.length) failures.push({ name: 'HRF', reason: "the port's de Haas HRF must equal MATLAB's bit for bit", differences: hrfDifferences });
 const maps = run();
 assert.deepEqual(maps.values, recorded.values);
 const expected = array(recorded.maps);
-const selectedVertices = [46, 59, 68, 80, 87];
-const exactParameters = new Set(['x0', 'y0', 'Sigma', 'Exponent', 'Noise Ceiling']);
+const coefficients = new Set(['Beta', 'Baseline']);
 const number = value => Number.isFinite(value) ? value : String(value);
-const mask = value => Number.isNaN(value) ? 'NaN' : Number.isFinite(value) ? 'finite' : String(value);
+const mask = value => Number.isNaN(value) ? 'NaN' : value === 0 ? 'zero' : Number.isFinite(value) ? 'finite' : String(value);
+const same = (a, b) => Object.is(a, b) || Number.isNaN(a) && Number.isNaN(b);
+// With the port's own HRF: every fitted parameter, R², nR² and noise ceiling is
+// bit-identical at every vertex, and every map row keeps MATLAB's NaN, infinity
+// and zero masks (acceptance and rejection decisions). Beta and Baseline come from
+// the least-squares solve; their accuracy against the exact solution is gated by
+// exes/samsrf/core/tests/css_pipeline.rs, which requires these bits.
 const results = [];
-const failures = [];
 for (const [row, name] of maps.values.entries()) {
   let maximumAbsolute = 0;
   const differences = [];
   for (let vertex = 0; vertex < vertices; vertex++) {
     const actual = maps.data[row * vertices + vertex];
     const target = expected[vertex * recorded.maps.shape[0] + row];
-    const equal = actual === target || Number.isNaN(actual) && Number.isNaN(target);
+    if (same(actual, target)) continue;
     const difference = Math.abs(actual - target);
     if (Number.isFinite(difference)) maximumAbsolute = Math.max(maximumAbsolute, difference);
-    if (!equal) differences.push({ vertex, actual: number(actual), expected: number(target), absolute: number(difference) });
-    // Preserve every acceptance, zero-column and nonfinite decision across
-    // the complete ROI, including vertices outside the focused value gates.
-    if (mask(actual) !== mask(target) || (actual === 0) !== (target === 0)) {
-      failures.push({ vertex, name, reason: 'nonfinite or zero decision' });
-    }
-    if (selectedVertices.includes(vertex)) {
-      let tolerance = 0;
-      if (!exactParameters.has(name) && target !== 0) {
-        // R² and the near-zero intercepts have an absolute roundoff bound.
-        // Amplitudes retain a relative bound even at extremely small scales.
-        tolerance = 16 * Number.EPSILON * (name === 'Beta' ? Math.abs(target) : 1);
-      }
-      if (!equal && (!Number.isFinite(difference) || difference > tolerance)) {
-        failures.push({ vertex, name, reason: 'focused value gate', tolerance, actual: number(actual), expected: number(target) });
-      }
-    }
+    differences.push({ vertex, actual: number(actual), expected: number(target), absolute: number(difference) });
+    if (mask(actual) !== mask(target)) failures.push({ vertex, name, reason: 'nonfinite, zero or acceptance decision', actual: number(actual), expected: number(target) });
+    else if (!coefficients.has(name)) failures.push({ vertex, name, reason: "exact gate with the port's HRF", actual: number(actual), expected: number(target) });
   }
-  results.push({ name, maximumAbsolute, differences });
+  results.push({ name, gated: coefficients.has(name) ? 'mask; accuracy in css_pipeline.rs' : 'exact', maximumAbsolute, differences });
 }
-// With MATLAB's own HRF kernel every fitted parameter, R², nR² and noise ceiling
-// must be bit-identical at every vertex. Beta and Baseline come from the least-squares
-// solve, which #731 reproduces separately; they are reported, not gated, here.
-const kernelMaps = run(array(recorded.hrf));
+// The control: MATLAB's recorded HRF kernel in place of the port's isolates the
+// objective from the HRF. The same exact gates apply, and since the two kernels
+// are equal the two runs must agree in every bit, coefficients included.
+const kernelMaps = run(kernel);
 assert.deepEqual(kernelMaps.values, recorded.values);
-const coefficients = new Set(['Beta', 'Baseline']);
 const kernelResults = [];
 for (const [row, name] of kernelMaps.values.entries()) {
   const differences = [];
   for (let vertex = 0; vertex < vertices; vertex++) {
     const actual = kernelMaps.data[row * vertices + vertex];
     const target = expected[vertex * recorded.maps.shape[0] + row];
-    if (Object.is(actual, target) || Number.isNaN(actual) && Number.isNaN(target)) continue;
-    differences.push({ vertex, actual: number(actual), expected: number(target) });
-    if (!coefficients.has(name)) {
-      failures.push({ vertex, name, reason: 'exact gate with the recorded HRF kernel', actual: number(actual), expected: number(target) });
+    if (!same(actual, maps.data[row * vertices + vertex])) {
+      failures.push({ vertex, name, reason: "the recorded-kernel run differs from the port's HRF run", actual: number(actual), production: number(maps.data[row * vertices + vertex]) });
     }
+    if (same(actual, target)) continue;
+    differences.push({ vertex, actual: number(actual), expected: number(target) });
+    if (mask(actual) !== mask(target)) failures.push({ vertex, name, reason: 'decision with the recorded HRF kernel', actual: number(actual), expected: number(target) });
+    else if (!coefficients.has(name)) failures.push({ vertex, name, reason: 'exact gate with the recorded HRF kernel', actual: number(actual), expected: number(target) });
   }
   kernelResults.push({ name, gated: !coefficients.has(name), differences });
 }
+const bits = name => {
+  const row = maps.values.indexOf(name);
+  const view = new DataView(new ArrayBuffer(8));
+  return Array.from(maps.data.subarray(row * vertices, (row + 1) * vertices), value => {
+    view.setFloat64(0, value);
+    return view.getBigUint64(0).toString(16).padStart(16, '0');
+  });
+};
 fs.writeFileSync(reportFile, JSON.stringify({
   pipeline: recorded.id,
   execution: 'committed WebAssembly',
   vertices,
   vertexIndexBase: 0,
-  required: { valueVertices: selectedVertices, decisions: 'all 96 vertices, every map row' },
-  completeDoubleCssParityAsserted: false,
-  recordedHrfKernel: { exact: 'every vertex and map row except Beta and Baseline', results: kernelResults },
+  required: {
+    portHrf: 'bit-identical to the recorded kernel',
+    exact: 'every vertex and map row except Beta and Baseline, with the port\'s HRF and with the recorded kernel',
+    decisions: 'NaN, infinity and zero masks at every vertex and map row',
+    coefficients: 'accuracy against the exact least-squares solution in exes/samsrf/core/tests/css_pipeline.rs',
+  },
+  recordedHrfKernel: { results: kernelResults },
+  coefficientBits: { Beta: bits('Beta'), Baseline: bits('Baseline') },
   failures,
   results,
 }, null, 2) + '\n');
 assert.equal(failures.length, 0, `CSS regression gates failed: ${JSON.stringify(failures)}`);
-console.log(`CSS gates passed: vertices ${selectedVertices.join(', ')}, all ${vertices} decision masks, and every non-coefficient map exactly with MATLAB's HRF kernel. Remaining differences: ${reportFile}`);
+console.log(`CSS gates passed: the port's HRF equals MATLAB's, and with it and with the recorded kernel every non-coefficient map is exact and every decision mask matches at all ${vertices} vertices. Coefficient differences: ${reportFile}`);
