@@ -1841,8 +1841,8 @@
           "platform": "macos-arm64",
           "version": "0.4.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261111/dwidenoise-0.4.20261111-macos-arm64.pkg",
-          "sha256": "327975d0b2f36c0ef981916438453d2ca3867fc922bfed48ba95d6e72bcd7e06",
-          "bytes": 41290521,
+          "sha256": "c6b5432dc14415d5474f33b6c19985e14c67c7d2980b31a302e831e9e6e2015c",
+          "bytes": 41290369,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261111/dwidenoise-0.4.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg dwidenoise-0.4.20261111-macos-arm64.pkg -target /\ndwidenoise self-check\ndwidenoise sub-01_dwi.nii.gz results"
@@ -1852,8 +1852,8 @@
           "platform": "windows-x64",
           "version": "0.4.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261111/dwidenoise-0.4.20261111-windows-x64.zip",
-          "sha256": "cfcb10694d73fdc9c94079838da12efe3c40c52f6000af3e62fcc242435efa9a",
-          "bytes": 38349682,
+          "sha256": "1ae1bc718e6026b47a6a0e32326461da1d7770f76013885cf027f62c7d94a071",
+          "bytes": 38349683,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwidenoise-v0.4.20261111/dwidenoise-0.4.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\dwidenoise-0.4.20261111-windows-x64.zip -DestinationPath .\n.\\dwidenoise-0.4.20261111-windows-x64\\dwidenoise.exe sub-01_dwi.nii.gz results"
