@@ -1,5 +1,12 @@
 # qsmbly
 
+## 0.31.20261112
+
+### Patch Changes
+
+- b14944a: Update the QSM engine to QSMxT 11.0.0 and pass image geometry to N4 and BET.
+  Preserve the shared file readers, worker protocol and dicompare report renderer.
+
 ## 0.31.20261111
 
 ### Patch Changes
