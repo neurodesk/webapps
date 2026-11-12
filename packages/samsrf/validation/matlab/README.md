@@ -1090,9 +1090,16 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   The failed premise was that MATLAB's default polyshape equals its
   `KeepCollinearPoints` rings with each ring cleaned on its own.
   `polyshape_census.py` (with `core/examples/polyshape_stages.rs`) reports, per
-  recorded polygon, the first model stage that departs from MATLAB (grid,
+  recorded polygon, the first failed empirical correspondence (grid,
   union vertices, kept-ring structure, final vertices, hull) and MATLAB's kept
-  ring topology. On the 2,500 original clouds the grid and union vertices
+  ring topology. `KeepCollinearPoints=true` is a separate configuration, not
+  an observed internal checkpoint of default `polyshape`. These comparisons
+  do not identify MATLAB's internal execution stages. The census invokes the
+  current Rust cleaner through the `polyshape_stages --clean` diagnostic;
+  it has no independent Python implementation of the cleaner. Replaying that
+  cleaner on the recorded kept rings still disagrees with default MATLAB in
+  30 of the 158 near-collinear cases whose kept-ring structure matches the
+  model. On the 2,500 original clouds the grid and union vertices
   agree wherever the recording can tell (137 offset clouds are ambiguous: a
   double coarser than the grid); 177 and 932 first depart at the final
   vertices, with MATLAB's kept rings equal to the model's union rings, and
@@ -1131,8 +1138,11 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   and breaks 168 strip pairs that match now, so it is not adopted.
   `polyshape_causal_matches_matlab` requires every causal hull exactly except
   the listed real-cloud transforms, which must still differ and whose outcomes
-  are frozen in `matlab_polyshape_causal.json`, and every simplified vertex set
-  except eight strip pairs and one held-out pair listed there.
+  are frozen in `matlab_polyshape_causal.json`. Simplified vertex sets are
+  checked only for the controlled families, except eight strip pairs and one
+  held-out pair listed there; real-cloud transforms have no vertex-set gate.
+  The gate requires family sizes 8,424 / 1,152 / 170 / 403 / 600, matching
+  descriptor dimensions and complete consumption of flattened arrays.
   The test names these 44 cases, requires each to stay near-collinear and still
   differ, and freezes each port hull, emptiness, area and centroid bit for bit
   in `matlab_polygon_snapping.json`. These are regression snapshots, not MATLAB

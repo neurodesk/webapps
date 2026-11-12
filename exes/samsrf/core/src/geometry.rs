@@ -60,6 +60,12 @@ pub fn polyshape_stages(points: &[[f64; 2]]) -> crate::error::Result<Option<([f6
     Ok(stages.map(|s| (s.grid.centre, s.grid.scale, s.grid.tolerance, s.ring, [s.first_union, s.first_clean, s.second_union, s.second_clean], s.hull, s.first_union_order)))
 }
 
+/// Invoke the model's actual grid cleaner for diagnostic replays.
+#[doc(hidden)]
+pub fn polyshape_clean(path: &[(i64, i64)], tolerance: f64) -> Vec<(i64, i64)> {
+    crate::polyshape::clean(path, tolerance)
+}
+
 /// A convex polygon: its vertices counter-clockwise, without a repeated closing vertex.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hull {

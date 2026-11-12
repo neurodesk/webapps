@@ -290,7 +290,7 @@ fn points_are_close(p1: Point, p2: Point, tolerance: f64) -> bool {
 }
 
 /// Clipper 6.4.2's `CleanPolygon` loop with its own squared-distance comparisons.
-fn clean(path: &[Point], tolerance: f64) -> Vec<Point> {
+pub(crate) fn clean(path: &[Point], tolerance: f64) -> Vec<Point> {
     let n = path.len();
     if n == 0 {
         return Vec::new();

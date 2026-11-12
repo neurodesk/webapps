@@ -120,6 +120,7 @@ fn geometry_hosts() -> Vec<(PathBuf, Vec<Value>)> {
 
 /// A column-major MATLAB n x 2 array as points.
 fn points(values: &[f64]) -> Vec<[f64; 2]> {
+    assert_eq!(values.len() % 2, 0, "incomplete point row");
     let n = values.len() / 2;
     (0..n).map(|i| [values[i], values[n + i]]).collect()
 }
@@ -434,12 +435,42 @@ fn probe_hosts() -> Vec<(PathBuf, Vec<Value>)> {
 
 fn split_rows(all: &[[f64; 2]], counts: &[f64]) -> Vec<Vec<[f64; 2]>> {
     let mut offset = 0;
-    counts.iter().map(|&n| {
-        let n = n.max(0.0) as usize;
+    let result = counts.iter().map(|&n| {
+        assert!(n.is_finite() && n >= 0.0 && n.fract() == 0.0, "invalid polygon row count: {n}");
+        let n = n as usize;
         let rows = all[offset..offset + n].to_vec();
         offset += n;
         rows
-    }).collect()
+    }).collect();
+    assert_eq!(offset, all.len(), "unconsumed polygon rows");
+    result
+}
+
+fn validate_causal_case(root: &Path, case: &Value, n: usize, parameter_shape: [usize; 2]) {
+    for field in ["counts", "simplifiedCounts", "collinearCounts", "hullCounts", "regions", "warning", "error", "defaultHolesCounts", "keptHolesCounts", "fromKeptCounts", "fromDefaultCounts", "viaSimplifyCounts"] {
+        assert_eq!(shape(&case[field]), [n, 1], "{}: {field} inventory", case["id"]);
+        assert_eq!(array(root, &case[field]).len(), n);
+    }
+    for field in ["estimate", "polygonEstimate"] {
+        assert_eq!(shape(&case[field]), [n, 3], "{}: {field} shape", case["id"]);
+        assert_eq!(array(root, &case[field]).len(), n * 3);
+    }
+    assert_eq!(shape(&case["parameters"]), parameter_shape, "{}: parameter inventory", case["id"]);
+    for (field, counts, columns) in [
+        ("points", "counts", 2), ("simplified", "simplifiedCounts", 2),
+        ("collinearVertices", "collinearCounts", 2), ("hull", "hullCounts", 2),
+        ("fromKept", "fromKeptCounts", 2), ("fromDefault", "fromDefaultCounts", 2),
+        ("viaSimplify", "viaSimplifyCounts", 2), ("defaultHoles", "defaultHolesCounts", 1),
+        ("keptHoles", "keptHolesCounts", 1),
+    ] {
+        let dimensions = shape(&case[field]);
+        assert_eq!(dimensions.len(), 2, "{field}: matrix required");
+        assert_eq!(dimensions[1], columns, "{field}: column count");
+        let counts = array(root, &case[counts]);
+        assert!(counts.iter().all(|n| n.is_finite() && *n >= 0.0 && n.fract() == 0.0), "{field}: invalid row count");
+        assert_eq!(counts.iter().sum::<f64>(), dimensions[0] as f64, "{field}: incomplete flattened rows");
+        assert_eq!(array(root, &case[field]).len(), dimensions[0] * columns);
+    }
 }
 
 fn unique_sorted(vertices: &[[f64; 2]]) -> Vec<[f64; 2]> {
@@ -626,7 +657,8 @@ fn outcome_bits(polygon: &[[f64; 2]]) -> Value {
 /// vertex sets too, except the IDs listed in matlab_polyshape_causal.json. The
 /// listed real-cloud transforms (of clouds 177, 932, 1607, 1937 and held-out
 /// 1125) must still differ, with their port outcomes frozen; every other
-/// transform (of clouds 7 and 1090, and 1125 at scale 1e-2) must match.
+/// transform (of clouds 7 and 1090, and 1125 at scale 1e-2) must match in hull.
+/// Simplified vertex-set equality is not asserted for real-cloud transforms.
 #[test]
 fn polyshape_causal_matches_matlab() {
     let hosts = causal_hosts();
@@ -639,7 +671,11 @@ fn polyshape_causal_matches_matlab() {
     for (root, cases) in hosts {
         let ids: Vec<&str> = cases.iter().map(|c| c["id"].as_str().unwrap()).collect();
         assert_eq!(ids, ["causal_gap_sweep", "causal_gap_bisection", "causal_hole_contact", "causal_real", "causal_heldout"], "{}: causal inventory", root.display());
-        for case in &cases {
+        for (case, (expected_n, parameter_shape)) in cases.iter().zip([
+            (8424, [8424, 6]), (1152, [36, 8]), (170, [170, 3]),
+            (403, [403, 5]), (600, [600, 6]),
+        ]) {
+            validate_causal_case(&root, case, expected_n, parameter_shape);
             let id = case["id"].as_str().unwrap();
             let polygons = split_rows(&points(&array(&root, &case["points"])), &array(&root, &case["counts"]));
             let simplified = split_rows(&points(&array(&root, &case["simplified"])), &array(&root, &case["simplifiedCounts"]));
@@ -647,6 +683,9 @@ fn polyshape_causal_matches_matlab() {
             let estimate = array(&root, &case["estimate"]);
             let parameters = array(&root, &case["parameters"]);
             let n = polygons.len();
+            assert_eq!(n, expected_n, "{id}: polygon inventory");
+            assert_eq!(simplified.len(), n);
+            assert_eq!(hulls.len(), n);
             let at = |i: usize| format!("{} {id} {i}", root.display());
             let vertex_exceptions = ids_of(&format!("{id}Vertices"));
             let mut visited = BTreeSet::new();

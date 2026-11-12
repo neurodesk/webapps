@@ -1,15 +1,17 @@
 """Stage-by-stage census of the polyshape model against a MATLAB recording.
 
 For each polygon of a recorded batch (record_geometry.m) and the model's stages
-(core/examples/polyshape_stages.rs), it reports the first stage at which the
-model departs from MATLAB, MATLAB's ring topology as the recording shows it, and
+(core/examples/polyshape_stages.rs), it reports the first failed empirical correspondence between
+the model and the recorded MATLAB configurations, MATLAB's ring topology as the recording shows it, and
 a test of the premise that MATLAB's default polyshape is its KeepCollinearPoints
-rings cleaned independently. Evidence for diagnosis, not a gate.
+rings cleaned independently with the current Rust cleaner. KeepCollinearPoints
+is a separate configuration, not an observed internal checkpoint of default
+polyshape. Evidence for diagnosis, not a gate.
 
   cargo run --release --example polyshape_stages -- HOST_DIR CASE STAGES.json
-  python3 polyshape_census.py HOST_DIR CASE STAGES.json REPORT.json
+  python3 polyshape_census.py HOST_DIR CASE STAGES.json REPORT.json PATH_TO_POLYSHAPE_STAGES
 
-Stages, in order (the first failing one is the case's first divergence):
+Correspondences, in order (not a trace of MATLAB's internal stages):
   grid     every MATLAB vertex (default and KeepCollinearPoints) is an input
            vertex or exactly k / 10^p + c on the model's grid ('grid ambiguous'
            when the double cannot tell neighbouring grid points apart)
@@ -26,6 +28,7 @@ import json
 import math
 import os
 import struct
+import subprocess
 import sys
 
 import numpy as np
@@ -42,10 +45,16 @@ def load(root, case_id):
 
     def split(rows, counts):
         out, offset = [], 0
-        for n in counts.astype(int).ravel():
-            n = max(n, 0)
+        for raw in counts.ravel():
+            if not np.isfinite(raw) or raw < 0 or raw != int(raw):
+                raise ValueError('invalid polygon row count')
+            n = int(raw)
+            if offset + n > len(rows):
+                raise ValueError('polygon rows truncated')
             out.append(rows[offset:offset + n])
             offset += n
+        if offset != len(rows):
+            raise ValueError('unconsumed polygon rows')
         return out
 
     data = {
@@ -123,77 +132,6 @@ def area(ring):
     return sum(ring[i][0] * ring[(i + 1) % len(ring)][1] - ring[(i + 1) % len(ring)][0] * ring[i][1] for i in range(len(ring))) / 2
 
 
-def distance(a, b):
-    return math.hypot(b[0] - a[0], b[1] - a[1])
-
-
-def altitude(a, p, b):
-    length = distance(a, b)
-    cross = (p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])
-    return abs(cross) / length if length > 0 else distance(a, p)
-
-
-def near_collinear(p1, p2, p3, tolerance):
-    if abs(p1[0] - p2[0]) > abs(p1[1] - p2[1]):
-        if (p1[0] > p2[0]) == (p1[0] < p3[0]):
-            x, m, y = p2, p1, p3
-        elif (p2[0] > p1[0]) == (p2[0] < p3[0]):
-            x, m, y = p1, p2, p3
-        else:
-            x, m, y = p1, p3, p2
-    else:
-        if (p1[1] > p2[1]) == (p1[1] < p3[1]):
-            x, m, y = p2, p1, p3
-        elif (p2[1] > p1[1]) == (p2[1] < p3[1]):
-            x, m, y = p1, p2, p3
-        else:
-            x, m, y = p1, p3, p2
-    return altitude(x, m, y) < tolerance
-
-
-def clean(path, tolerance):
-    """The model's clean (polyshape.rs), Clipper's CleanPolygon loop."""
-    n = len(path)
-    if n == 0:
-        return []
-    nxt = [(i + 1) % n for i in range(n)]
-    prv = [(i - 1) % n for i in range(n)]
-    done = [False] * n
-    size = n
-
-    def exclude(op):
-        result = prv[op]
-        nxt[result] = nxt[op]
-        prv[nxt[op]] = result
-        done[result] = False
-        return result
-
-    op = 0
-    while not done[op] and nxt[op] != prv[op]:
-        a, b, c = path[prv[op]], path[op], path[nxt[op]]
-        if distance(b, a) < tolerance:
-            op = exclude(op)
-            size -= 1
-        elif distance(a, c) < tolerance:
-            following = nxt[op]
-            exclude(following)
-            op = exclude(op)
-            size -= 2
-        elif near_collinear(a, b, c, tolerance):
-            op = exclude(op)
-            size -= 1
-        else:
-            done[op] = True
-            op = nxt[op]
-    if size < 3:
-        return []
-    out = []
-    for _ in range(size):
-        out.append(path[op])
-        op = nxt[op]
-    return out
-
-
 def topology(kept, input_vertices):
     """MATLAB's KeepCollinearPoints ring topology, from the geometry alone.
     Solid boundaries and holes are told apart by orientation (the sign of the
@@ -221,10 +159,14 @@ def topology(kept, input_vertices):
     return dict(features)
 
 
-def census(root, case_id, stages_file, kind_of=None):
+def census(root, case_id, stages_file, cleaner_binary, kind_of=None):
     data = load(root, case_id)
     stages = json.load(open(stages_file))
+    if any(len(values) != len(stages) for values in data.values()):
+        raise ValueError('recording and model stage inventories differ')
     rows = []
+    cleaning_requests = []
+    cleaning_targets = []
     for i, stage in enumerate(stages):
         P = [tuple(map(float, p)) for p in data['points'][i]]
         if stage is None or 'error' in (stage or {}):
@@ -276,14 +218,21 @@ def census(root, case_id, stages_file, kind_of=None):
             input_vertices = set(inputs.values())
             row['topology'] = topology(kept, input_vertices)
             tolerance = stage['tolerance']
-            premise = [c for c in (clean(r, tolerance) for r in kept) if c]
-            row['premise'] = set(p for r in premise for p in r) == set(p for r in default for p in r)
+            cleaning_requests.append({'rings': kept, 'tolerance': tolerance})
+            cleaning_targets.append((row, set(p for r in default for p in r)))
             kept_of = {}
             for k, r in enumerate(kept):
                 for p in r:
                     kept_of.setdefault(p, set()).add(k)
             row['default rings spanning two+ kept rings'] = sum(1 for r in default if len(set.union(*[kept_of.get(p, set()) for p in r]) if r else set()) >= 2 and not any(set(r) <= set(k) for k in kept))
         rows.append(row)
+    result = subprocess.run([cleaner_binary, '--clean'], input=json.dumps(cleaning_requests),
+                            text=True, capture_output=True, check=True)
+    cleaned = json.loads(result.stdout)
+    if len(cleaned) != len(cleaning_targets):
+        raise ValueError('Rust cleaner returned an incomplete batch')
+    for (row, expected), paths in zip(cleaning_targets, cleaned):
+        row['premise'] = set(tuple(p) for path in paths for p in path) == expected
     return rows
 
 
@@ -299,12 +248,12 @@ def summarise(rows):
 
 
 if __name__ == '__main__':
-    root, case_id, stages_file, report = sys.argv[1:5]
+    root, case_id, stages_file, report, cleaner_binary = sys.argv[1:6]
     kind = (lambda i: (i + 1) % 5) if case_id in ('probe_point_clouds', 'probe_heldout_clouds', 'polygon_point_clouds') else None
-    rows = census(root, case_id, stages_file, kind)
+    rows = census(root, case_id, stages_file, cleaner_binary, kind)
     summary, by_topology = summarise(rows)
     for key, count in sorted(summary.items(), key=str):
-        print('first divergence', key, count)
+        print('first failed correspondence', key, count)
     for features, counts in sorted(by_topology.items(), key=lambda kv: -sum(kv[1].values())):
         print('topology', features, dict(counts))
     json.dump({'case': case_id, 'rows': rows}, open(report, 'w'), indent=0)

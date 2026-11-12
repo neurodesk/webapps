@@ -1,11 +1,24 @@
 //! Dumps the polyshape model's stages for every polygon of a recorded batch, for
 //! packages/samsrf/validation/matlab/polyshape_census.py:
 //!   cargo run --release --example polyshape_stages -- HOST_DIR CASE_ID OUT.json
+//! `--clean` instead reads a JSON batch of grid rings and tolerances from stdin
+//! and writes the results of the model's actual cleaner to stdout.
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::Path;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--clean") {
+        #[derive(Deserialize)]
+        struct Request { rings: Vec<Vec<(i64, i64)>>, tolerance: f64 }
+        let requests: Vec<Request> = serde_json::from_reader(std::io::stdin()).unwrap();
+        let cleaned: Vec<_> = requests.iter().map(|request| {
+            request.rings.iter().map(|ring| samsrf_core::geometry::polyshape_clean(ring, request.tolerance)).collect::<Vec<_>>()
+        }).collect();
+        serde_json::to_writer(std::io::stdout(), &cleaned).unwrap();
+        return;
+    }
     let (root, id, out) = (Path::new(&args[1]), &args[2], &args[3]);
     let meta: Value = serde_json::from_slice(&std::fs::read(root.join("geometry.json")).unwrap()).unwrap();
     let case = meta["cases"].as_array().unwrap().iter().find(|c| c["id"] == id.as_str()).unwrap_or_else(|| panic!("no {id}"));
