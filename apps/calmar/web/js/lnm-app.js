@@ -219,7 +219,8 @@ export class LesionNetworkMappingApp {
     this.progress = new ProgressManager(Config.PROGRESS_CONFIG);
     this.structuralFile = null;
     this.viewerBaseFile = null;
-    this._viewerBaseLoad = Promise.resolve();
+    this._viewerLoad = Promise.resolve();
+    this._viewerTurn = 0;
     this.nativeStructuralFile = null;
     this.deepIslesDwiFile = null;
     this.deepIslesAdcFile = null;
@@ -358,7 +359,10 @@ export class LesionNetworkMappingApp {
   readScanInput(files) {
     return readSingleImage(files, {
       moduleUrl: new URL('../dcm2niix/index.jpeg.js', import.meta.url).href,
-      updateOutput: message => this.updateOutput(message)
+      // The input that asked reports the failure, once.
+      updateOutput: (message) => {
+        if (!message.startsWith('DICOM conversion failed')) this.updateOutput(message);
+      }
     });
   }
 
@@ -1475,11 +1479,36 @@ export class LesionNetworkMappingApp {
     });
   }
 
-  // Serialised so a slow base load cannot finish after, and replace, a later one.
-  async loadViewerBaseVolume(file, options = {}) {
-    const load = this._viewerBaseLoad.then(() => this.viewerController.loadBaseVolume(file, options));
-    this._viewerBaseLoad = load.catch(() => {});
-    await load;
+  // The one way an import puts a base, an overlay or a drawing into the
+  // viewer. Loads run one at a time, in the order asked, so a slow one cannot
+  // land on top of a later one. A load whose import was replaced
+  // (`assertCurrent`), or under which the viewer was cleared, does not start;
+  // if that happened while NiiVue was loading, what it loaded is taken out
+  // again (`undo`, and every volume once the viewer was cleared).
+  viewerLoad(run, { assertCurrent, undo } = {}) {
+    const turn = this._viewerTurn;
+    const check = () => {
+      if (turn !== this._viewerTurn) throw new DOMException('The viewer was cleared.', 'AbortError');
+      assertCurrent?.();
+    };
+    const load = this._viewerLoad.then(async () => {
+      check();
+      const result = await run();
+      try {
+        check();
+      } catch (err) {
+        if (turn !== this._viewerTurn) this.viewerController.clearVolumes();
+        undo?.();
+        throw err;
+      }
+      return result;
+    });
+    this._viewerLoad = load.catch(() => {});
+    return load;
+  }
+
+  async loadViewerBaseVolume(file, options = {}, assertCurrent) {
+    await this.viewerLoad(() => this.viewerController.loadBaseVolume(file, options), { assertCurrent });
     this.viewerBaseFile = file;
   }
 
@@ -1599,7 +1628,10 @@ export class LesionNetworkMappingApp {
     // after a diffusion stand-in keeps them.
     if (this.nativeStructuralFile && !this.structuralFromDiffusion) this.clearDiffusionInputs();
     // A mask still being read was drawn for the previous image.
-    this.cancelImports('structural', 'mask');
+    this.cancelImports('mask');
+    // A diffusion stand-in is not the user's choice: a T1 still being read
+    // stays current and replaces the stand-in when it arrives.
+    const assertCurrent = fromDiffusion ? undefined : this.beginImport('structural');
     // Recorded before any await, so a T1 loaded meanwhile is never marked.
     this.structuralFromDiffusion = fromDiffusion;
     this.tagFileSpace(file, {
@@ -1643,7 +1675,7 @@ export class LesionNetworkMappingApp {
     await this.loadViewerBaseVolume(file, {
       stage: 'structural',
       visible: this.layerVisible('structural')
-    });
+    }, assertCurrent);
     this.refreshViewerLayerControls();
     this.refreshMaskDrawingControls();
     this.updateOutput(`Structural image ready: ${file.name}`);
@@ -1657,6 +1689,9 @@ export class LesionNetworkMappingApp {
   // whatever clears the input (`cancelImports`); an import in another input
   // does not. The returned check throws once the import is replaced;
   // `assertLoadCurrent` adds the cancellation of the example load that asked for it.
+  // Nothing of an import is written after an await without this check: helpers
+  // return what they read and the import writes it, and the viewer is reached
+  // through `viewerLoad`, which makes the check when the load starts and lands.
   beginImport(kind, assertLoadCurrent) {
     const turn = ++this._importTurn[kind];
     return () => {
@@ -1727,13 +1762,12 @@ export class LesionNetworkMappingApp {
   async showDeepIslesInput(file, kind, assertCurrent) {
     if (this.maskReviewActive) return;
     if (!this.structuralFile && !this.lesionFile) {
-      await this.loadViewerBaseVolume(file, { stage: `deepisles-${kind}` });
+      await this.loadViewerBaseVolume(file, { stage: `deepisles-${kind}` }, assertCurrent);
     } else {
-      // A pending base load would clear an overlay added now.
-      await this._viewerBaseLoad;
-      assertCurrent();
-      if (this.maskReviewActive) return;
-      await this.viewerController.replaceOverlayForStage('deepisles-input', file, 'hot', 0.7, { scalar: true });
+      await this.viewerLoad(
+        () => !this.maskReviewActive && this.viewerController.replaceOverlayForStage('deepisles-input', file, 'hot', 0.7, { scalar: true }),
+        { assertCurrent, undo: () => this.viewerController.removeVolumeForStage('deepisles-input') }
+      );
     }
     this.refreshViewerLayerControls();
   }
@@ -1749,7 +1783,7 @@ export class LesionNetworkMappingApp {
   async setLesion(file) {
     if (!file) return;
     if (!this.structuralFile && this.userLesionFile && this.userLesionFile !== file) this.patientBehavior?.reset();
-    this.cancelImports('lesion');
+    const assertCurrent = this.beginImport('lesion');
     this.lesionSource = 'other';
     this.maskOrigin = 'atlas-grid';
     if (!this.structuralFile) {
@@ -1764,15 +1798,19 @@ export class LesionNetworkMappingApp {
     this.clearDerivedResults();
     if (this.structuralFile) {
       this.assertViewerOverlaySpace(file, 'Lesion mask overlay');
-      await this.viewerController.loadOverlay(file, LESION_MASK_COLORMAP_ID, 0.5, {
-        stage: 'lesion',
-        visible: this.layerVisible('lesion')
-      });
+      const removeLesion = () => this.viewerController.removeVolumeForStage('lesion');
+      await this.viewerLoad(() => {
+        removeLesion();
+        return this.viewerController.loadOverlay(file, LESION_MASK_COLORMAP_ID, 0.5, {
+          stage: 'lesion',
+          visible: this.layerVisible('lesion')
+        });
+      }, { assertCurrent, undo: removeLesion });
     } else {
       await this.loadViewerBaseVolume(file, {
         stage: 'lesion',
         visible: this.layerVisible('lesion')
-      });
+      }, assertCurrent);
     }
     this.refreshViewerLayerControls();
     this.updateOutput(`Lesion mask ready: ${file.name}`);
@@ -2236,6 +2274,9 @@ export class LesionNetworkMappingApp {
       throw new Error('Native structural image is not available.');
     }
     const decoded = await decodeNiftiBuffer(await file.arrayBuffer());
+    if (file !== (this.nativeStructuralFile || this.structuralFile)) {
+      throw new DOMException('The structural image was replaced.', 'AbortError');
+    }
     this.nativeStructuralFile = file;
     this.tagDecodedFileSpace(file, decoded, {
       space: VOLUME_SPACES.NATIVE_T1,
@@ -2274,7 +2315,7 @@ export class LesionNetworkMappingApp {
     }
     const { base, name } = splitModelUrl(entry.sourceUrl);
     // A pending T1 base load must finish so the brain mask overlays the T1.
-    await this._viewerBaseLoad;
+    await this._viewerLoad;
 
     this.updateOutput('Starting SynthStrip brain extraction...');
     const brainmaskReady = this._waitForStageData('brainmask');
@@ -2870,12 +2911,11 @@ export class LesionNetworkMappingApp {
       spacing: [1, 1, 1],
       description: 'LNM editable lesion seed projected to native T1 grid'
     });
-    this.nativeLesionSeedFile = arrayBufferToFile(nativeNifti, 'lnm-lesion-seed-native.nii', {
+    return arrayBufferToFile(nativeNifti, 'lnm-lesion-seed-native.nii', {
       space: VOLUME_SPACES.NATIVE_T1,
       role: 'lesion-seed',
       sourceStage: 'mask-review'
     });
-    return this.nativeLesionSeedFile;
   }
 
   async startUploadedLesionMaskReview(file, { assertCurrent } = {}) {
@@ -2903,17 +2943,15 @@ export class LesionNetworkMappingApp {
   }
 
   // `assertCurrent` is an uploaded mask's check (`beginImport('mask')`); any
-  // other review replaces an upload that is still being read.
+  // other review takes a turn of its own, which replaces an upload that is
+  // still being read and ends this review once something replaces it.
   async startLesionMaskReview({ seedFile = null, blank = false, assertCurrent } = {}) {
     const baseFile = this.nativeStructuralFile || this.structuralFile;
     if (!baseFile) {
       this.updateOutput('Drop a structural T1 before editing a lesion mask.');
       return null;
     }
-    if (!assertCurrent) {
-      this.cancelImports('mask');
-      assertCurrent = () => {};
-    }
+    assertCurrent ??= this.beginImport('mask');
     this.nativeStructuralFile = baseFile;
     this.tagFileSpace(baseFile, {
       space: VOLUME_SPACES.NATIVE_T1,
@@ -2936,8 +2974,7 @@ export class LesionNetworkMappingApp {
     await this.loadViewerBaseVolume(baseFile, {
       stage: 'structural',
       visible: this.layerVisible('structural')
-    });
-    assertCurrent();
+    }, assertCurrent);
     const brainmaskFile = this.getBrainmaskFileForActiveViewer();
     try {
       await this.maskDrawingController.loadBrainMaskFile?.(brainmaskFile);
@@ -2955,6 +2992,7 @@ export class LesionNetworkMappingApp {
         this.updateOutput(`Mask-review brain mask render warning: ${err.message}`);
       }
     }
+    assertCurrent();
 
     if (blank) {
       // A manual mask replaces the automatic seed, so review re-entry cannot restore it.
@@ -2965,8 +3003,13 @@ export class LesionNetworkMappingApp {
     }
     const seed = blank ? null : await this.resampleSeedMaskToNative(seedFile || this.autoLesionSeedFile);
     assertCurrent();
-    if (seed) await this.maskDrawingController.loadSeedFile(seed);
-    else this.maskDrawingController.startBlank();
+    if (seed) this.nativeLesionSeedFile = seed;
+    // NiiVue cannot be stopped once it loads a drawing, so a seed that lands
+    // after the review was replaced is closed again.
+    await this.viewerLoad(() => (seed ? this.maskDrawingController.loadSeedFile(seed) : this.maskDrawingController.startBlank()), {
+      assertCurrent,
+      undo: () => this.maskDrawingController.close({ clearDrawing: true })
+    });
 
     this.setMaskDrawingTool('paint');
     this.applyMaskDrawingVisibility();
@@ -4647,8 +4690,9 @@ export class LesionNetworkMappingApp {
     }
 
     // Restore the structural file in the viewer (or clear entirely on full reset).
-    if (full || !this.structuralFile) {
-      try { this.viewerController.clearAll?.(); } catch (e) { /* non-fatal */ }
+    if (full) {
+      this._viewerTurn += 1;
+      this.viewerController.clearVolumes();
     } else if (this.structuralFile) {
       this.loadViewerBaseVolume(this.structuralFile, {
         stage: 'structural',

@@ -409,6 +409,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   const renderedStacks = [];
   app.structuralFile = { name: 'subject-t1.nii' };
   app.viewerController = {
+    removeVolumeForStage: () => false,
     loadOverlay: async (...args) => { overlayCalls.push(args); },
     loadVolumeStack: async (entries) => { renderedStacks.push(entries); }
   };
@@ -445,7 +446,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     }]
   };
   app.structuralFile = { name: 't1.nii.gz', arrayBuffer: async () => new ArrayBuffer(8) };
-  app.viewerController = { loadOverlay: async () => {} };
+  app.viewerController = { removeVolumeForStage: () => false, loadOverlay: async () => {} };
   const calls = [];
   app.executor = {
     loadVolume: async () => { calls.push('load'); },
