@@ -690,22 +690,39 @@ fn stirlerr(n: f64) -> f64 {
 
 /// The deviance x log(x/np) + np - x, by its series near np.
 fn deviance(x: f64, np: f64) -> f64 {
-    if (x - np).abs() < 0.1 * (x + np) {
-        let mut s = (x - np) * (x - np) / (x + np);
-        let v = (x - np) / (x + np);
-        let mut ej = 2.0 * x * v;
-        let mut j = 0.0;
-        loop {
+    if !x.is_finite() || !np.is_finite() {
+        return f64::INFINITY;
+    }
+    let delta = x - np;
+    let sum = x + np;
+    let v = if sum.is_finite() {
+        delta / sum
+    } else {
+        // Positive finite operands can have an overflowing sum. Halving is
+        // exact here and keeps the near-mean comparison and ratio finite.
+        (x * 0.5 - np * 0.5) / (x * 0.5 + np * 0.5)
+    };
+    let near = if sum.is_finite() { delta.abs() < 0.1 * sum } else { v.abs() < 0.1 };
+    if near {
+        let initial = delta * delta / sum;
+        let mut s = if initial.is_finite() { initial } else { delta * v };
+        let initial_ej = 2.0 * x * v;
+        let mut ej = if initial_ej.is_finite() { initial_ej } else { x * (2.0 * v) };
+        // |v| < 0.1, so terms shrink by at least 100-fold. Keep a finite
+        // iteration limit and propagate a nonfinite state rather than looping.
+        for j in 1..=1000 {
             ej = ej * v * v;
-            j += 1.0;
-            let next = s + ej / (2.0 * j + 1.0);
-            if next == s {
+            let next = s + ej / (2.0 * f64::from(j) + 1.0);
+            if !next.is_finite() || next == s {
                 return next;
             }
             s = next;
         }
+        return f64::NAN;
     }
-    x * log(x / np) + np - x
+    let ratio = x / np;
+    let log_ratio = if ratio.is_finite() && ratio > 0.0 { log(ratio) } else { log(x) - log(np) };
+    x * log_ratio + np - x
 }
 
 /// The Poisson density at a real `k >= 0`, exp(-stirlerr(k) - deviance(k, z)) /
@@ -714,7 +731,13 @@ fn poisson_raw(k: f64, z: f64) -> f64 {
     if k == 0.0 {
         return exp(-z);
     }
-    exp((-0.5 * log(2.0 * std::f64::consts::PI * k) - stirlerr(k)) - deviance(k, z))
+    let normalisation = 2.0 * std::f64::consts::PI * k;
+    let log_normalisation = if normalisation.is_finite() {
+        log(normalisation)
+    } else {
+        log(2.0 * std::f64::consts::PI) + log(k)
+    };
+    exp((-0.5 * log_normalisation - stirlerr(k)) - deviance(k, z))
 }
 
 /// MATLAB's `gampdf(x, a, b)` for a shape `a >= 1`, which covers every SamSrf HRF.
@@ -725,7 +748,7 @@ pub fn gampdf(x: f64, a: f64, b: f64) -> Option<f64> {
     if !(a >= 1.0 && a.is_finite()) || !(b > 0.0 && b.is_finite()) || x.is_nan() {
         return None;
     }
-    if x < 0.0 {
+    if x < 0.0 || x == f64::INFINITY {
         return Some(0.0);
     }
     let z = x / b;
@@ -738,6 +761,27 @@ pub fn gampdf(x: f64, a: f64, b: f64) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gamma_density_preserves_subnormal_values_and_large_shape_peaks() {
+        // Shape two has the analytic density x * exp(-x), equal to x at
+        // these tiny inputs. Permit logarithmic rounding, but never zero.
+        for x in [1e-300, 1e-310, 1e-320] {
+            let actual = gampdf(x, 2.0, 1.0).unwrap();
+            assert!(actual > 0.0 && actual.is_finite());
+            assert!((actual - x).abs() <= (2e-13 * x).max(f64::from_bits(1)));
+        }
+        // At this shape Stirling's relative correction is below 1e-308.
+        let expected = 1.0 / (2.0 * std::f64::consts::PI).sqrt() / 1e154;
+        let actual = gampdf(1e308, 1e308, 1.0).unwrap();
+        assert!(actual > 0.0 && actual.is_finite());
+        assert!((actual / expected - 1.0).abs() < 2e-13);
+        assert_eq!(deviance(1e308, 1e308), 0.0);
+        assert!(deviance(0.99e308, 1e308).is_finite());
+        assert!(deviance(1e-300, 1e308).is_finite());
+        assert_eq!(gampdf(f64::INFINITY, 2.0, 1.0), Some(0.0));
+        assert_eq!(gampdf(1e308, 2.0, 1e-308), Some(0.0));
+    }
 
     #[test]
     fn integer_power_multiplies_squares_from_the_lowest_bit() {
