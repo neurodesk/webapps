@@ -43,7 +43,7 @@ test('many pull requests selecting every app are over the total budget', () => {
   assert.match(findings[0], new RegExp(`^${BUDGETS.largeRuns + 1} whole-catalogue pull request ci runs`));
 });
 
-test('a run still going at the end of the window counts up to then', () => {
+test('a run still going when the report is made counts up to then', () => {
   const until = '2026-11-10T12:00:00Z';
   const running = run({ status: 'in_progress', conclusion: null, updated_at: '2026-11-10T10:00:05Z' });
   const runs = [run({ status: 'completed' }), run({ status: 'completed' }), running];

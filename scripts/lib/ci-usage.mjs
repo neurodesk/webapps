@@ -24,20 +24,20 @@ export const LARGE_RUN_JOBS = 100;
 export const WORKED_SECONDS = 180;
 const PER_PUSH_EXEMPT = new Set(['ci', 'deploy-github-pages']);
 
-// A run that has not finished has used its runners up to `until`, the end of
-// the reported window. Leaving it out would lose it: the next report starts
-// after it was created.
-export function wallSeconds(run, until) {
-  const end = run.status && run.status !== 'completed' ? Date.parse(until) : Date.parse(run.updated_at);
+// A run that has not finished has used its runners up to `now`, when the
+// report is made. Leaving it out would lose it: the next report's window
+// starts after it was created.
+export function wallSeconds(run, now) {
+  const end = run.status && run.status !== 'completed' ? Date.parse(now) : Date.parse(run.updated_at);
   const seconds = (end - Date.parse(run.run_started_at ?? run.created_at)) / 1000;
   return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
 }
 
-export const worked = (run, until) => run.conclusion !== 'skipped' && wallSeconds(run, until) >= WORKED_SECONDS;
+export const worked = (run, now) => run.conclusion !== 'skipped' && wallSeconds(run, now) >= WORKED_SECONDS;
 
 // The `ci` runs whose job count is worth asking for.
-export function largeRunCandidates(runs, until) {
-  return runs.filter((run) => run.name === 'ci' && run.event === 'pull_request' && worked(run, until));
+export function largeRunCandidates(runs, now) {
+  return runs.filter((run) => run.name === 'ci' && run.event === 'pull_request' && worked(run, now));
 }
 
 // What names a run's pull request. A fork's run lists no pull request, and
@@ -48,29 +48,29 @@ export function pullRequestOf(run) {
 }
 
 // `jobCounts` maps a run id to its number of jobs.
-export function summarizeUsage(runs, jobCounts = new Map(), until = undefined) {
+export function summarizeUsage(runs, jobCounts = new Map(), now = undefined) {
   const byWorkflow = new Map();
   for (const run of runs) {
     const key = `${run.name}\u0000${run.event}`;
     const row = byWorkflow.get(key) ?? { workflow: run.name, event: run.event, runs: 0, worked: 0, cancelled: 0, wallMinutes: 0 };
     row.runs += 1;
-    if (worked(run, until)) row.worked += 1;
+    if (worked(run, now)) row.worked += 1;
     if (run.conclusion === 'cancelled') row.cancelled += 1;
-    row.wallMinutes += wallSeconds(run, until) / 60;
+    row.wallMinutes += wallSeconds(run, now) / 60;
     byWorkflow.set(key, row);
   }
 
   const largeByPullRequest = new Map();
-  for (const run of largeRunCandidates(runs, until)) {
+  for (const run of largeRunCandidates(runs, now)) {
     if ((jobCounts.get(run.id) ?? 0) < LARGE_RUN_JOBS) continue;
     const list = largeByPullRequest.get(pullRequestOf(run)) ?? [];
-    list.push({ id: run.id, sha: run.head_sha.slice(0, 9), conclusion: run.conclusion ?? run.status, jobs: jobCounts.get(run.id), wallMinutes: Math.round(wallSeconds(run, until) / 60) });
+    list.push({ id: run.id, sha: run.head_sha.slice(0, 9), conclusion: run.conclusion ?? run.status, jobs: jobCounts.get(run.id), wallMinutes: Math.round(wallSeconds(run, now) / 60) });
     largeByPullRequest.set(pullRequestOf(run), list);
   }
 
   const byPush = new Map();
   for (const run of runs) {
-    if (run.event !== 'push' || run.head_branch !== 'main' || PER_PUSH_EXEMPT.has(run.name) || !worked(run, until)) continue;
+    if (run.event !== 'push' || run.head_branch !== 'main' || PER_PUSH_EXEMPT.has(run.name) || !worked(run, now)) continue;
     const workflows = byPush.get(run.head_sha) ?? new Set();
     workflows.add(run.name);
     byPush.set(run.head_sha, workflows);

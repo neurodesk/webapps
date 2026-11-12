@@ -4,7 +4,8 @@ name: ci-usage
 # scripts/lib/ci-usage.mjs is exceeded; nightly-failures.yml then opens an issue.
 on:
   schedule:
-    - cron: '41 21 * * *'
+    # Late enough that a run created just before midnight UTC has all its jobs.
+    - cron: '41 6 * * *'
   workflow_dispatch:
 
 permissions:

@@ -85,9 +85,11 @@ only. A night without such a change costs each workflow one gate job.
 
 ## Daily usage budget
 
-`ci-usage.yml` runs `scripts/ci-usage-report.mjs` once a day. It lists the
-day's workflow runs by wall time and fails, which opens an issue, when a
-budget in `scripts/lib/ci-usage.mjs` is exceeded:
+`ci-usage.yml` runs `scripts/ci-usage-report.mjs` at 06:41 UTC. It lists, by
+wall time, the workflow runs created in the UTC day that ended at the last
+midnight, so consecutive reports share a boundary and every run has had hours
+to start its jobs. It fails, which opens an issue, when a budget in
+`scripts/lib/ci-usage.mjs` is exceeded:
 
 | Budget | Limit | What exceeding it means |
 | --- | --- | --- |
