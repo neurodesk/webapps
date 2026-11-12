@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { autoPsfSize, memoryPlan, nextFastLength, normaliseSum, opticsSettings, prepareImage, prepareMeasuredPsf, runSettings } from "../src/index.js";
+import { autoPsfSize, checkSampling, memoryPlan, nextFastLength, normaliseSum, opticsSettings, prepareImage, prepareMeasuredPsf, runSettings } from "../src/index.js";
 import { loadDeconvolution } from "../src/node.js";
 import { Worker } from "node:worker_threads";
 
@@ -107,4 +107,14 @@ test("a measured PSF whose peak is on the stack's edge is refused", () => {
   const plane = new Float64Array(6 * 7).fill(10);
   plane[2 * 7 + 3] = 110;
   assert.deepEqual(prepareMeasuredPsf(plane, [1, 6, 7]).dims, [1, 5, 7]);
+});
+
+test("a computed PSF is refused for voxels far coarser than the optics resolve", () => {
+  const optics = { na: 1.4, ni: 1.518, emissionUm: 0.52 };
+  checkSampling({ ...optics, spacingUm: { x: 0.0659, y: 0.0659, z: 0.13 }, dims: [41, 256, 256] });
+  checkSampling({ na: 0.3, ni: 1, emissionUm: 0.52, spacingUm: { x: 1, y: 1, z: 5 }, dims: [40, 512, 512] });
+  // A 2 mm MRI read as micrometres: its Gibson-Lanni quadrature ran WebAssembly out of memory.
+  assert.throws(() => checkSampling({ ...optics, spacingUm: { x: 2000, y: 2000, z: 2000 }, dims: [44, 52, 44] }), /lateral voxel size, 2000 µm, is over 10 times this objective's Airy radius \(0\.227 µm\)/);
+  assert.throws(() => checkSampling({ ...optics, spacingUm: { x: 0.1, y: 0.1, z: 50 }, dims: [9, 64, 64] }), /axial voxel size, 50 µm, is over 10 times this objective's depth of field/);
+  checkSampling({ ...optics, spacingUm: { x: 0.1, y: 0.1, z: 50 }, dims: [1, 64, 64] });
 });

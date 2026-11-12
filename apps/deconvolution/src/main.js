@@ -19,7 +19,7 @@ import {
 import { createFloat32Nifti, downloadFile } from "@neurodesk/webapp-components/file-io";
 import { gzipFile } from "@neurodesk/webapp-components/file-io/bids-derivatives";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
-import { autoPsfSize, memoryPlan, normaliseSum, opticsSettings, prepareImage, prepareMeasuredPsf, runSettings, MAX_PSF_SIDE, METHODS } from "@neurodesk/deconvolution";
+import { autoPsfSize, checkSampling, memoryPlan, normaliseSum, opticsSettings, prepareImage, prepareMeasuredPsf, runSettings, MAX_PSF_SIDE, METHODS } from "@neurodesk/deconvolution";
 import workerUrl from "@neurodesk/deconvolution/worker?worker&url";
 import { APP, DEFAULT_OPTICS, EXAMPLE_OPTICS, checkPsfSpacing, outputNames, provenance, setNiftiSpacing, spacingComplete, stackNifti, stackTiff } from "./config.js";
 import { readVolume } from "./input.js";
@@ -326,6 +326,7 @@ async function makePsf(spacingUm, optics, signal) {
     const peak = prepared.data.reduce((max, v) => Math.max(max, v), 0);
     return { data: prepared.data.map((v) => v / peak), dims: prepared.dims, source: "measured", file: measured.file.name, background: prepared.background };
   }
+  checkSampling({ ...optics, spacingUm, dims: input.dims });
   const auto = autoPsfSize({ ...optics, spacingUm, dims: input.dims });
   const size = { xy: psfOverride("psfXY") ?? auto.xy, z: input.dims[0] === 1 ? 1 : psfOverride("psfZ") ?? auto.z };
   log.log(`Gibson-Lanni ${optics.modality} PSF ${size.xy} × ${size.xy} × ${size.z}: NA ${optics.na}, immersion ${optics.ni}, emission ${optics.emissionUm * 1000} nm${optics.excitationUm ? `, excitation ${optics.excitationUm * 1000} nm` : ""}, depth ${optics.depthUm} µm`, "info");

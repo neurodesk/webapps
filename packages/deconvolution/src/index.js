@@ -25,6 +25,27 @@ function largestOddAtMost(n) {
   return floor % 2 ? floor : floor - 1;
 }
 
+/** How many Airy radii (lateral) or depths of field (axial) a voxel may span before the PSF is refused. */
+export const MAX_VOXEL_PER_RESOLUTION = 10;
+
+/**
+ * Refuses a computed PSF for voxels far coarser than the optics resolve: past
+ * MAX_VOXEL_PER_RESOLUTION Airy radii or depths of field the PSF lies inside one voxel, there is
+ * nothing to deconvolve, and the Gibson-Lanni quadrature, which grows with the PSF's physical
+ * extent, can exhaust WebAssembly memory. An axis one voxel long is not checked.
+ */
+export function checkSampling({ na, ni, emissionUm, spacingUm, dims }) {
+  const airy = (0.61 * emissionUm) / na;
+  const depthOfField = (ni * emissionUm) / (na * na);
+  const limits = [["lateral", spacingUm.x, airy, "Airy radius"], ["axial", dims[0] > 1 ? spacingUm.z : 0, depthOfField, "depth of field"]];
+  for (const [axis, spacing, resolution, name] of limits) {
+    if (spacing > MAX_VOXEL_PER_RESOLUTION * resolution) {
+      const um = (value) => Number(value.toPrecision(3));
+      throw new Error(`The ${axis} voxel size, ${um(spacing)} µm, is over ${MAX_VOXEL_PER_RESOLUTION} times this objective's ${name} (${um(resolution)} µm), so a computed PSF fits inside one voxel. Check the voxel size and numerical aperture.`);
+    }
+  }
+}
+
 /**
  * The theoretical PSF's size `{ xy, z }` in voxels (odd, so the source sits on a voxel centre).
  * Axially it spans four widefield depths of field each side (confocal) or the whole stack

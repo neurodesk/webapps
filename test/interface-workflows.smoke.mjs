@@ -884,6 +884,9 @@ try {
     await page.locator('#imageInput').setInputFiles(nifti('interface-t1.nii'));
     await expect(page.locator('#fileInfo')).toHaveText('interface-t1.nii · 16 × 16 × 16 · 1000 × 1000 × 1000 µm');
     await expect(page.locator('#spacingZ')).toHaveValue('1000');
+    // Millimetre voxels are refused for a computed PSF; give the stack a microscope's.
+    await page.locator('#spacingXY').fill('0.1');
+    await page.locator('#spacingZ').fill('0.25');
     await page.locator('#method').selectOption('rltv');
     await expect(page.locator('#tvWeight')).toBeEnabled();
     await page.locator('#iterations').fill('2');
