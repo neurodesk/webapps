@@ -315,15 +315,26 @@ recording to the following findings in `samsrf-native`:
 
 - MATLAB's single `exp` is the same on both hosts and for every call shape,
   but it is not correctly rounded: 24,445 results are 1 ulp below
-  `fround(exp(x))` and 22,702 are 1 ulp above. No open implementation
-  reproduces it: Rust `libm` `expf` matches 706,598 of 711,307, glibc's
-  `expf` (with or without FMA) 664,166, and correctly rounded `exp` 664,160.
-  `libm`'s misses lie on both sides, for |x| from 2^-24 to 2^-14 and from
-  2^-6 to 128, so the kernel is not one we could identify, and a table of its
-  exceptions would span most of the single range.
-- Within one host, the first `fminsearch` evaluation of the first vertex whose
-  `exp` differs from correctly rounded is evaluation 5. Over 99% of the logged
-  evaluations contain such a value in every case.
+  `fround(exp(x))` and 22,702 are 1 ulp above. Rust `libm` `expf` matches
+  706,598 of 711,307, glibc's `expf` (with or without FMA) 664,166 and
+  correctly rounded `exp` 664,160.
+- Sun fdlibm's `e_expf.c` structure matches 711,289. That structure is the
+  degree-5 rational, k = trunc(x/ln2 ± 1/2), every operation in single and no
+  FMA. It needs ln2 split as hi = `0x3f317000` and lo = single(ln2 − hi), and
+  0 below ln(2^-149). The error has no table period, only the distance from a
+  multiple of ln2, and this split is a sharp optimum: lo one ulp either way
+  loses 700 or more matches. `fdlibmExpf` in `analyse-single-kernels.mjs`
+  writes it out. The 18 remaining inputs include one with k = 0, so the
+  residual is in the rational stage's constants, which are not identified;
+  shifting P2 by 24 ulps fits all but 5 and is curve fitting, not used.
+- Single times a double scalar runs in double and rounds the result to
+  single: the logged models are single(single(e × Beta) + Baseline), not
+  operations on the single-rounded scalar.
+- With those two rules the candidate reproduces every logged model value but
+  2-8 per case (300,000-510,000 values), on 2-7 of 18-21 vertices, first at
+  evaluation 686 or later. Correctly rounded `exp` departs on every vertex by
+  evaluation 15-62. Given MATLAB's profiles, the other 13-19 vertices' traces
+  contain no `exp` difference.
 - MATLAB does not agree with itself across the two hosts. Their CF profiles
   differ by at most 3.1e-7 relative (1-2 single ulps), and the fitted maps
   differ on 15-18 of 21 vertices per case: `Sigma` by up to 387 times
@@ -333,12 +344,12 @@ recording to the following findings in `samsrf-native`:
   (commit `06f57adca`), but end to end the hosts differ by up to 0.84 in
   `Sigma`.
 
-A gate needs one reference per vertex. Here the reference depends on the CPU
-MATLAB runs on, by more than the parameters' own size, so no per-parameter
-limit is both independent of the port and tighter than the host spread, and
-a bit-exact port would need MATLAB's proprietary `exp` and the unidentified
-AVX-512 dot order. Single RC and CF Gaussian fits therefore stay refused;
-double precision is the supported fitted path.
+A gate therefore needs a reference per host, as the double paths have. A
+port pinned to the AMD (CNR `auto`) host still needs its single CF profiles
+bit for bit (`corr` matches there only in part; the recorded pieces are for
+that work), MATLAB's `exp` on the remaining inputs, and the objective and
+`fminsearch` arithmetic on single values. Single RC and CF Gaussian fits stay
+refused until a per-vertex gate against that host passes.
 
 The double unsmoothed CF Gaussian is not gated here: on 2 of 21 vertices fits
 run away to |x0| > 1e8, do not replay, and differ between hosts by up to 9e7.
