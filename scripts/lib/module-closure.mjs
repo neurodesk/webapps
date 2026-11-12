@@ -137,8 +137,9 @@ export function onlyAddsExports({ before, after }) {
 }
 
 // A manifest whose only change is its `version`: what a release writes into a
-// package that nothing else changed in. No build reads a workspace package's
-// version but that package's own.
+// package that nothing else changed in. The portable packager writes each
+// bundled workspace package's version into its notices, and nothing else
+// reads another package's version.
 export function onlyBumpsVersion({ before, after }) {
   let old;
   let now;

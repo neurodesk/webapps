@@ -79,8 +79,10 @@ shared packages: a `CHANGELOG.md`, a workspace `package.json` whose only
 change is its `version`, and, for a workflow that builds registry apps, a
 valid `registry/standalone.json` in which none of their entries changed.
 Replayed over the releases of 3, 8 and 11 November 2026, such a release ran
-28 of the 30 swept workflows before this rule and 1 after it (`hmc-native`,
-for a generated source file the same release changed).
+27 of the 29 scheduled gated workflows before this rule and 1 after it
+(`hmc-native`, for a generated source file the same release changed). The
+version a portable package lists for a bundled workspace package in its
+notices is the one thing such a skipped sweep leaves a day stale.
 
 - Do not add a shared path to a gated workflow's `push` filter. Name a single
   file there when a push must test it at once.
