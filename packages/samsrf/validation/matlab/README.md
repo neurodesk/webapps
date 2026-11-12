@@ -240,8 +240,9 @@ low-variance edge course.
 | RC `R^2` where MATLAB used MKL's AVX-512 path | 16 single ULPs | 9 | the dot product order (below) |
 | Positions, `Fwhm`, `Vx`, hull and summary widths, end to end | exact | 0 | |
 | CF `R^2`, `Beta`, `Suppression`; RC `Beta` (of itself), end to end | 32 units x kappa | 3.20 per kappa | profile values |
-| Production Benson reader instead of MATLAB's template | geometric bound | 0.20 of it | below |
-| Single 2D fits (`rc` with `Prf_Function`, `cf` with `Fit_pRF = 1`) | refused | | below |
+| Production Benson reader instead of MATLAB's template | exact | 0 | below |
+| Internal single CF from the raw files, Gaussian fits included (AMD host) | exact | 0 | below |
+| Public single `rc` 2D and CF Gaussian fits | refused | | below |
 
 Double precision is held to `1e-12 x kappa` (relative above 1), and its
 regression residuals to `1e-13` of the input's peak.
@@ -259,20 +260,20 @@ it; the port's residual is exactly 0 and it reports no estimate. The gates list
 those vertices (only the two constant edge courses) and require the empty
 estimate there. Reproducing MATLAB's rounding would need its QR bit for bit.
 
-The production reader gate replaces MATLAB's template with
-`template::read_benson_gifti` on the raw `*_benson.gii`. Its x0 and y0 differ
-from MATLAB's by `delta` up to 2e-6 (`compare.mjs` gates the reader). The gate
-requires every discrete decision to stay: the unique seed coordinates, each
-cluster, each hull's vertex set and the summary's suprathreshold set. Values
-that do not use the coordinates must equal the MATLAB-template run. Summary
-medians may move by `delta` and `Sigma` by `2 sqrt(2) delta`. Hull positions and
-widths may move by the bound for a convex region whose points move by
-`e = sqrt(2) delta`: the area changes by at most `P e + pi e^2`, and the centroid
-by `(2 P e + pi e^2)(R + e) / (A - P e - pi e^2)`, with `P` the perimeter, `A`
-the area and `R` the farthest vertex. Two single spacings cover output
-rounding. Gaussian fits are not covered. `compare-revcor.mjs` runs the same
-production template through the Node API and requires the coordinate-free
-values and the summary bounds; it runs its hull positions on MATLAB's template.
+The production reader gate reads every recorded template's raw `*_benson.gii`
+with `template::read_benson_gifti` and requires MATLAB's template bit for bit (all
+8: six matrix, two edge). `cf_from_raw_files_equals_the_run_on_matlabs_courses`
+then runs all 36 single CF cases of the matrix from the raw files alone: the
+runs through the production preprocessing, the Benson GIfTI through the reader,
+the white surface and areas through the FreeSurfer readers (the ROI and seed are
+MATLAB's recorded choices). The courses, noise ceiling and global signal equal
+MATLAB's, every map equals the run on MATLAB's courses and template, and on the
+AMD host every map value equals MATLAB's, the twelve Gaussian cases included.
+The Gaussian cases use internal model construction below the public refusal.
+`compare-revcor.mjs` runs supported hull/summary cases through the Node API,
+with the CF jobs on the reader's template, and asserts all single fitted-job
+refusals (12 CF and 3 RC per host). It does not run Gaussian CLI success gates. The reader's `sin` and `cos` are not bit-identical
+to MATLAB's on every angle ([single sin and cos](#single-sin-and-cos)).
 
 The port reproduces these single-precision rules, each confirmed by an exact
 replay on both hosts: `corr` centres, multiplies and divides by each norm in
@@ -295,8 +296,8 @@ course goes through `mldivide` for its rank rule. `corr`'s dot product follows M
 exactly (all 189 matrix `R^2` values on that host); the AVX-512 order was not
 identified (best candidate, 16 lanes x 4 accumulators with FMA: 145 of 189).
 
-Single 2D fits are refused. The recording below shows why their parity gates
-need a specified reference host. `kernels_only=true` (with `record_matlab=true`) runs
+Single RC 2D fits are refused. The recording below shows why single 2D parity
+gates need a specified reference host. `kernels_only=true` (with `record_matlab=true`) runs
 `record_single_kernels.m` on both hosts, repeats it in a new MATLAB process
 (byte for byte equal). It records:
 
@@ -357,12 +358,11 @@ they are not tolerances for the port or another MATLAB recording.
   (commit `06f57adca`), but end to end the hosts differ by up to 0.84 in
   `Sigma`.
 
-A gate therefore needs a reference per host, as the double paths have. A
-port pinned to the AMD (CNR `auto`) host still needs its single CF profiles
-bit for bit (`corr` matches there only in part; the recorded pieces are for
-that work), MATLAB's `exp` on the remaining inputs, and the objective and
-`fminsearch` arithmetic on single values. Single RC and CF Gaussian fits stay
-refused until a per-vertex gate against that host passes.
+A gate needs a declared reference-host policy, as the double paths have.
+The AMD CF profiles and internal recorded fits now agree (below), but the
+remaining exponential and template-coordinate discrepancies do not have an
+end-to-end acceptance bound. Single RC 2D and CF Gaussian fits stay refused;
+the internal evidence does not establish general public enablement.
 
 ### Single CF profiles and Gaussian fits on the AMD host
 
@@ -426,19 +426,25 @@ and JavaScript gates require it there; the AVX-512 host keeps its limits.
 - `fit_gaussian_single`, started from MATLAB's profiles, gives every parameter
   and `R^2` of all 156 fitted vertices on both hosts.
 
-`revcor_reference.rs` takes each single Gaussian CF case below the parser's
-refusal:
+`revcor_reference.rs` takes each single Gaussian CF case:
 
 - From MATLAB's courses and template, every map value of all twelve AMD
   cases, with and without global-signal correction, equals MATLAB's.
+- From the raw files, with the production Benson reader, so does every map
+  value of the same twelve cases (`cf_from_raw_files_equals_the_run_on_matlabs_courses`).
 - The fits replay exactly from each host's profiles, except two smoothed
   vertices with global-signal correction on the AVX-512 host, most likely
-  through the 18 `exp` inputs.
+  through the 18 `exp` inputs. That host's own maps differ from the port's on
+  47-120 values per case; MATLAB's two hosts differ from each other as above.
 
-Single Gaussian CF fits stay refused. The production Benson reader's x0 or
-y0 differs from MATLAB's by an ulp on 1 of 9 seed vertices in both LH
-datasets. Run on that template, the LH fits differ on 1-16 vertices, by up to
-11 times in `Beta`; the RH template is exact and so are its fits.
+Single Gaussian CF fits remain refused in the API, command line and app.
+The empirical reader now matches the recorded templates, but 19 vertices of
+the whole X001 atlases retain coordinate discrepancies, and 18 recorded single
+`exp` inputs still differ. No general end-to-end acceptance bound covers those
+inputs or the Intel Gaussian maps. Before this reader change, a one-ULP
+coordinate difference on 1 of 9 seed vertices in the LH datasets changed
+1-16 fitted vertices, with differences up to elevenfold in `Beta`.
+The internal Gaussian gates retain evidence without enabling that public path.
 
 The double unsmoothed CF Gaussian is not gated here: on 2 of 21 vertices fits
 run away to |x0| > 1e8, do not replay, and differ between hosts by up to 9e7.
@@ -446,6 +452,63 @@ That path is unchanged and gated by the 741-case pin's nine CF cases. Geodesic
 distances are computed in double from the single mesh; MATLAB computes them in
 single and stores them as double. That difference is inside the correlation
 limit but should move to the geometry work.
+
+## Single sin and cos
+
+`samsrf_benson2srf` computes `x0` and `y0` with single `sin` and `cos` of the
+GIfTI's single polar angles. MATLAB's single `sin` and `cos` are not correctly
+rounded and are not glibc's (2.35, 2.39, 2.43), MKL VML's or the older Cygnus
+float kernels. On the matrix templates (172 vertices) and the geometry
+recording's whole-hemisphere V1 seeds (6,306 vertices, 3,705 unique points, both
+hosts), correct rounding misses 8 matrix vertices and leaves 354 entries of
+the two hemispheres' unique point sets different. fdlibm's float translation
+(`sf_sin.c`, `sf_cos.c`, `kf_sin.c`, `kf_cos.c`, `ef_rem_pio2.c`, single
+arithmetic, no FMA) matches all of them once `__kernel_cosf`'s x/4 term keeps
+11 of its 23 fraction bits, also used by the empirical single `exp` candidate
+for the high part of ln 2. With the full x/4, as Cygnus wrote it, 412 (LH) and 476
+(RH) entries of the point sets differ. `precision::sin_single` and `cos_single`
+implement this empirical candidate, not an identified MATLAB implementation.
+The immutable float sources and their hashes are listed in
+[`NOTICE`](../../NOTICE); the truncated x/4 term is an empirical modification.
+
+The `single-trig` section of `record_numerics_probes.m` (`numerics_only=true`
+with `record_matlab=true`) evaluates MATLAB's `sin` and `cos` on every single x
+with |x| <= 2^7 pi/2 (bits `0x43490F80`, the end of fdlibm's medium reduction),
+both signs, in chunks of 2^20. It records a SHA-256 of the output bits per 2^24
+inputs and every input where MATLAB's output differs from the model, which the
+recorder writes in MATLAB's own single arithmetic (checked against the Rust port
+on 4,009,730 inputs in Octave before the run). Above that range it records
+200,000 random inputs and the specials whole.
+[Run 43196169557](https://github.com/neurodesk/webapps/actions/runs/43196169557)
+recorded it at `35201acf1` on an AMD EPYC 9V45 and an AMD EPYC 9V74, each twice
+in new processes; all four recordings are identical. `single-trig-reference.json`
+pins the `single-trig` files (HF commit `3e17f69e`).
+
+| Inputs (2,257,723,138) | `sin` differs | `cos` differs |
+| --- | --- | --- |
+| The model | 36,350 | 32,406 |
+| `single(sin(double(x)))`, correctly rounded but for double rounding | 5,348,648 | 5,686,424 |
+
+`single_trig.rs` rebuilds MATLAB's output in every block from the port, with
+MATLAB's value at the recorded inputs, and requires MATLAB's digest, so the port
+equals MATLAB on every other input; the number of inputs where the port differs
+may only fall. Truncating the x/4 term to 20 bits (fdlibm's double kernel) or
+not at all fails it.
+
+What remains is in the sine kernel, used by `sin` below pi/4 and by `cos` from
+pi/4 to 3 pi/4: every differing input there needs a value of the polynomial
+`r` one or two ulps lower than both single Horner and the exact polynomial
+give. Its evaluation order, FMA, double evaluation of any step, double
+coefficients and fdlibm's later grouping all leave it or make it worse, and
+shifting a coefficient is curve fitting, which is not used. The `exp`
+residual (`cf_single_replay.rs`) sits in the same stage. Intel's compiler
+runtime (`libimf`, `libsvml`) was not tested. Below |x| = 0.078 there is no
+difference. Within the Benson range (|x| <= single(pi/2)) 12,598 `sin` and
+9,384 `cos` inputs differ; on the whole X001 Benson hemispheres that moves `x0`
+or `y0` by one single ulp on 10 (LH) and 9 (RH) of 134,260 and 138,314 vertices,
+some in V1. A CF analysis whose seed region holds such a vertex can fit
+differently from MATLAB. Above 2^7 pi/2 the port rounds the double result and
+matches 193,602 (`sin`) and 193,686 (`cos`) of the 200,000 sampled inputs.
 
 ## Building a matching Runtime container
 

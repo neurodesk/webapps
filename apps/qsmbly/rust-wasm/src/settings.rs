@@ -37,32 +37,23 @@ fn to_json(config: &PipelineConfig) -> Result<String, String> {
     config.to_json().map_err(|e| e.to_string())
 }
 
-/// What `settings_view` needs to know about the scan: its echo count, whether its coils are
-/// uncombined and whether it has magnitude images (motion correction needs them); with `scan` (the facts are a loaded scan's, not the example's the page plans with
-/// before one is loaded), also its field strength, matrix size and, once read, voxel size, which
-/// the pipeline rules that depend on the scan need. Without facts, nothing is known.
-///
-/// QSMxT has no conversion from `ScanFacts` to `ViewFacts` (its TUI fills `ViewFacts` from its
-/// form), so it is written here; QSMxT/QSMxT#377 asks for it in the engine.
-fn view_facts(facts_json: Option<&str>, scan: bool) -> Result<ViewFacts, String> {
+/// The facts as the engine's settings view takes them: everything a loaded scan's say (`scan`), or
+/// only what example facts may (`ViewFacts::of_example`). Without facts, nothing is known.
+fn parse_view_facts(facts_json: Option<&str>, scan: bool) -> Result<ViewFacts, String> {
     let Some(json) = facts_json.filter(|j| !j.trim().is_empty() && j.trim() != "null") else {
         return Ok(ViewFacts::default());
     };
     let facts = parse_facts(json)?;
-    let (x, y, z) = facts.dims;
-    Ok(ViewFacts {
-        num_echoes: Some(facts.n_echoes),
-        multi_coil: Some(facts.n_coils > 1),
-        has_magnitude: Some(facts.has_magnitude),
-        field_strength: scan.then_some(facts.field_strength),
-        voxel_size: facts.voxel_size.filter(|_| scan).map(|(a, b, c)| [a, b, c]),
-        dims: scan.then_some([x, y, z]),
+    Ok(if scan {
+        ViewFacts::from(&facts)
+    } else {
+        ViewFacts::of_example(&facts)
     })
 }
 
-/// [`view_facts`], as the pipeline rules take them.
+/// [`parse_view_facts`], as the pipeline rules take them.
 fn rule_facts(facts_json: Option<&str>, scan: bool) -> Result<Facts, String> {
-    Ok(Facts::of_view(&view_facts(facts_json, scan)?))
+    Ok(Facts::of_view(&parse_view_facts(facts_json, scan)?))
 }
 
 /// An item's key ([`Item::key`]) and what it is ([`Item::meta`]).
@@ -97,11 +88,13 @@ pub fn browser_config_wasm() -> Result<String, JsValue> {
 }
 
 /// `config` with each default the browser cannot run replaced by the browser profile's value,
-/// and every value the user set left alone (`PipelineConfig::apply_browser_profile`).
+/// and every other value the user set left alone (`PipelineConfig::apply_browser_profile`):
+/// `{ config, warnings }`, `warnings` naming each setting it cleared.
 pub fn apply_browser_profile(config_json: &str) -> Result<String, String> {
     let mut config = parse_config(config_json)?;
-    config.apply_browser_profile();
-    to_json(&config)
+    let warnings = config.apply_browser_profile();
+    let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
+    Ok(json!({ "config": config, "warnings": warnings }).to_string())
 }
 
 /// [`apply_browser_profile`].
@@ -118,6 +111,8 @@ pub fn apply_browser_profile_wasm(config_json: &str) -> Result<String, JsValue> 
 /// run uses while `masking.two_pass_sections` is unset (`default_two_pass_sections`). A mask builder writes these, so choosing a preset or adding a step
 /// never brings back a default the browser cannot run.
 pub fn browser_mask_defaults() -> Result<String, String> {
+    // Each config below starts from the browser's defaults, so the profile has no setting of the
+    // user's to clear, and no warning to show.
     let mask = schema::mask_schema();
     let mut presets = serde_json::Map::new();
     for p in &mask.presets {
@@ -125,7 +120,7 @@ pub fn browser_mask_defaults() -> Result<String, String> {
         c.masking.sections = p.sections.clone();
         c.masking.combine = p.combine;
         c.masking.refinements = p.refinements.clone();
-        c.apply_browser_profile();
+        let _ = c.apply_browser_profile();
         let m = &c.masking;
         presets.insert(
             p.value.to_string(),
@@ -138,12 +133,12 @@ pub fn browser_mask_defaults() -> Result<String, String> {
             serde_json::from_value(step.default.clone()).map_err(|e| e.to_string())?;
         let mut c = PipelineConfig::browser();
         c.masking.refinements = vec![op];
-        c.apply_browser_profile();
+        let _ = c.apply_browser_profile();
         steps.insert(step.kind.to_string(), json!(c.masking.refinements[0]));
     }
     let mut c = PipelineConfig::browser();
     c.masking.two_pass_sections = Some(qsmxt_engine::default_two_pass_sections());
-    c.apply_browser_profile();
+    let _ = c.apply_browser_profile();
     let two_pass = c.masking.resolved_two_pass_sections();
     Ok(json!({ "presets": presets, "steps": steps, "two_pass_sections": two_pass }).to_string())
 }
@@ -164,14 +159,14 @@ pub fn browser_mask_defaults_wasm() -> Result<String, JsValue> {
 /// range, not a finite number, or refused by its own rule. `reference` is every pipeline rule of
 /// the chosen methods that covers the setting, and `recommendations` the ones it departs from
 /// (`recommendations::Recommendation`). `scan`: the facts are a loaded scan's (see
-/// [`view_facts`]).
+/// [`parse_view_facts`]).
 pub fn settings_view(
     config_json: &str,
     facts_json: Option<&str>,
     scan: bool,
 ) -> Result<String, String> {
     let config = parse_config(config_json)?;
-    let view = schema::settings_view(&config, &view_facts(facts_json, scan)?);
+    let view = schema::settings_view(&config, &parse_view_facts(facts_json, scan)?);
     serde_json::to_string(&view).map_err(|e| e.to_string())
 }
 
@@ -375,12 +370,14 @@ pub fn keep_findings_wasm(config_json: &str, findings_json: &str) -> Result<Stri
     keep_findings(config_json, findings_json).map_err(js_err)
 }
 
-/// "Apply all": `config` with each finding's recommended value applied
-/// (`recommendations::apply_all`); refused, with each reason, if any could not be.
+/// "Apply all": `config` with what `recommendations::settle` takes of the findings applied
+/// (`recommendations::apply_all`): `{ config, settled }`, `settled` saying what was left and why.
+/// Refused, with each reason, if any could not be applied.
 pub fn apply_all(config_json: &str, findings_json: &str) -> Result<String, String> {
     let mut config = parse_config(config_json)?;
-    rec::apply_all(&mut config, &parse_findings(findings_json)?)?;
-    to_json(&config)
+    let settled = rec::apply_all(&mut config, &parse_findings(findings_json)?)?;
+    let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
+    Ok(json!({ "config": config, "settled": settled }).to_string())
 }
 
 /// [`apply_all`].
@@ -389,13 +386,26 @@ pub fn apply_all_wasm(config_json: &str, findings_json: &str) -> Result<String, 
     apply_all(config_json, findings_json).map_err(js_err)
 }
 
+/// What findings chosen together come to, setting by setting, with nothing changed
+/// (`recommendations::settle`): `{ apply, conflicting, outranked }`. Choose per setting asks this
+/// of the picks it was given, each finding wanting the value picked for it.
+pub fn settle(findings_json: &str) -> Result<String, String> {
+    serde_json::to_string(&rec::settle(&parse_findings(findings_json)?)).map_err(|e| e.to_string())
+}
+
+/// [`settle`].
+#[wasm_bindgen]
+pub fn settle_wasm(findings_json: &str) -> Result<String, JsValue> {
+    settle(findings_json).map_err(js_err)
+}
+
 /// `config` with every setting that does not apply to it put back to QSMxT's default
 /// (`schema::prune_hidden`).
 pub fn prune_hidden(config_json: &str, facts_json: Option<&str>) -> Result<String, String> {
     let config = parse_config(config_json)?;
     to_json(&schema::prune_hidden(
         &config,
-        &view_facts(facts_json, false)?,
+        &parse_view_facts(facts_json, false)?,
     ))
 }
 
@@ -491,12 +501,13 @@ pub fn config_to_toml_changed_wasm(config_json: &str) -> Result<String, JsValue>
 /// A QSMxT configuration file, read as `qsmxt run --config` reads it
 /// (`PipelineConfig::from_toml_migrating`), then given the browser profile
 /// (`apply_browser_profile`: a default the browser cannot run becomes the browser's value; every
-/// value the file sets is kept): `{ config, warnings }`, `warnings` being the engine's notes on
-/// settings older QSMxT versions wrote. A file QSMxT would refuse is refused with its reason.
+/// value the file sets is kept, but for what a page cannot hold, which it clears): `{ config,
+/// warnings }`, `warnings` being the engine's notes on settings older QSMxT versions wrote and on
+/// what the profile cleared. A file QSMxT would refuse is refused with its reason.
 pub fn config_from_toml(toml: &str) -> Result<String, String> {
-    let (mut config, warnings) =
+    let (mut config, mut warnings) =
         PipelineConfig::from_toml_migrating(toml).map_err(|e| e.to_string())?;
-    config.apply_browser_profile();
+    warnings.extend(config.apply_browser_profile());
     let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
     Ok(json!({ "config": config, "warnings": warnings }).to_string())
 }
@@ -515,11 +526,12 @@ pub fn config_from_toml_wasm(toml: &str) -> Result<String, JsValue> {
 pub fn config_from_json(json: &str) -> Result<String, String> {
     let (mut config, migration) =
         PipelineConfig::from_json_migrating(json).map_err(|e| e.to_string())?;
-    config.apply_browser_profile();
+    let cleared = config.apply_browser_profile();
     let warnings: Vec<String> = migration
         .warnings
         .into_iter()
         .chain(migration.notes)
+        .chain(cleared)
         .collect();
     let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
     Ok(json!({ "config": config, "warnings": warnings }).to_string())
@@ -782,8 +794,9 @@ mod tests {
     }
 
     /// Choosing MEDI chooses a method with a reference pipeline: the bindings name it, offer where
-    /// the config differs from it under its title, and Keep mine and Apply all each leave nothing
-    /// to offer. The view's marker says whose rule a setting departs from.
+    /// the config differs from it under its title; Keep mine records nothing (a reference
+    /// difference is information only) and Apply all leaves nothing to offer. The view's marker
+    /// says whose rule a setting departs from.
     #[test]
     fn a_chosen_methods_reference_pipeline_is_offered_kept_or_applied() {
         let facts = example_facts();
@@ -819,9 +832,15 @@ mod tests {
             !found.is_empty(),
             "the browser profile differs from MEDI's reference"
         );
-        let found = Value::from(found).to_string();
-        assert!(differences(&keep_findings(&medi, &found).unwrap()).is_empty());
-        assert!(differences(&apply_all(&medi, &found).unwrap()).is_empty());
+        let found_json = Value::from(found.clone()).to_string();
+        // A reference difference is information only: keeping it records nothing, so it stays.
+        assert_eq!(
+            differences(&keep_findings(&medi, &found_json).unwrap()),
+            found
+        );
+        let found = found_json;
+        let applied: Value = serde_json::from_str(&apply_all(&medi, &found).unwrap()).unwrap();
+        assert!(differences(&applied["config"].to_string()).is_empty());
         assert_eq!(
             reference_titles(&chosen).unwrap(),
             Value::from(
@@ -853,15 +872,96 @@ mod tests {
         facts["voxel_size"] = json!([1.0, 1.0, 2.0]);
         let facts = facts.to_string();
         assert_eq!(
-            view_facts(Some(&facts), false).unwrap().field_strength,
+            parse_view_facts(Some(&facts), false)
+                .unwrap()
+                .field_strength,
             None
         );
-        let loaded = view_facts(Some(&facts), true).unwrap();
+        let loaded = parse_view_facts(Some(&facts), true).unwrap();
         assert_eq!(loaded.field_strength, Some(2.8946));
         assert_eq!(loaded.dims, Some([184, 256, 128]));
         assert_eq!(loaded.voxel_size, Some([1.0, 1.0, 2.0]));
         assert_eq!(loaded.num_echoes, Some(5));
         assert_eq!(loaded.has_magnitude, Some(true));
+    }
+
+    /// The scan's manufacturer reaches the vendor rules, and a loaded scan gets the rule its
+    /// vendor's data calls for: on the setting's reference list always, and among its findings
+    /// and the method's reference offer when the current value departs from it.
+    #[test]
+    fn a_loaded_scans_manufacturer_reaches_the_vendor_rules() {
+        let chi_sepnet = |tukey: f64| {
+            let mut config: Value = serde_json::from_str(&browser()).unwrap();
+            config["pipeline"]["do_chi_separation"] = json!(true);
+            config["separation"]["algorithm"] = json!("chi-sepnet");
+            config["pipeline"]["tukey_window"] = json!(tukey);
+            config.to_string()
+        };
+        let facts = |manufacturer: Option<&str>| {
+            let mut facts: Value = serde_json::from_str(&example_facts()).unwrap();
+            if let Some(m) = manufacturer {
+                facts["manufacturer"] = json!(m);
+            }
+            facts.to_string()
+        };
+        let rules = |config: &str, facts: &str, scan: bool, list: &str| -> Vec<String> {
+            let view: Value =
+                serde_json::from_str(&settings_view(config, Some(facts), scan).unwrap()).unwrap();
+            let row = view
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|v| v["path"] == "pipeline.tukey_window")
+                .unwrap();
+            row[list].as_array().map_or(vec![], |rs| {
+                rs.iter()
+                    .map(|r| r["rule"].as_str().unwrap().to_string())
+                    .collect()
+            })
+        };
+        let offered = |config: &str, facts: &str, scan: bool| -> Vec<String> {
+            let methods = chosen_methods(config, Some(facts), scan).unwrap();
+            let offers: Value = serde_json::from_str(
+                &reference_offers(config, Some(facts), scan, &methods).unwrap(),
+            )
+            .unwrap();
+            offers
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|o| o["differences"].as_array().unwrap())
+                .filter(|d| d["setting"] == "pipeline.tukey_window")
+                .map(|d| d["rule"].as_str().unwrap().to_string())
+                .collect()
+        };
+        const SIEMENS: &str = "chi-sepnet.tukey-siemens-ge";
+        const PHILIPS: &str = "chi-sepnet.tukey-philips";
+
+        let siemens = facts(Some("Siemens"));
+        let config = chi_sepnet(0.0);
+        assert_eq!(rules(&config, &siemens, true, "recommendations"), [SIEMENS]);
+        assert_eq!(offered(&config, &siemens, true), [SIEMENS]);
+
+        // Philips' value is the default: nothing to offer until the window departs from it.
+        let philips = facts(Some("Philips"));
+        assert_eq!(rules(&config, &philips, true, "reference"), [PHILIPS]);
+        assert!(rules(&config, &philips, true, "recommendations").is_empty());
+        assert!(offered(&config, &philips, true).is_empty());
+        let windowed = chi_sepnet(0.4);
+        assert_eq!(
+            rules(&windowed, &philips, true, "recommendations"),
+            [PHILIPS]
+        );
+        assert_eq!(offered(&windowed, &philips, true), [PHILIPS]);
+
+        // No manufacturer: no vendor rule at all.
+        let unknown = facts(None);
+        assert!(rules(&config, &unknown, true, "reference").is_empty());
+        assert!(offered(&config, &unknown, true).is_empty());
+
+        // The example preview is silent, whatever its facts name.
+        assert!(rules(&config, &siemens, false, "reference").is_empty());
+        assert!(offered(&config, &siemens, false).is_empty());
     }
 
     #[test]
@@ -875,7 +975,13 @@ mod tests {
             PipelineConfig::browser().to_json().unwrap()
         );
         // The profile is idempotent.
-        assert_eq!(apply_browser_profile(&browser()).unwrap(), browser());
+        let again: Value =
+            serde_json::from_str(&apply_browser_profile(&browser()).unwrap()).unwrap();
+        assert_eq!(
+            again["config"],
+            serde_json::from_str::<Value>(&browser()).unwrap()
+        );
+        assert_eq!(again["warnings"], json!([]));
     }
 
     #[test]
@@ -1014,6 +1120,50 @@ mod tests {
         assert!(config_from_json("{ not json").is_err());
     }
 
+    /// A file's or a saved config's multi-orientation settings are cleared, and the warning says
+    /// so: a page holds one scan, and would export a command it did not run (QSMxT#499).
+    #[test]
+    fn multi_orientation_settings_are_cleared_with_a_warning() {
+        let read = |answer: String| -> Value { serde_json::from_str(&answer).unwrap() };
+        let default = serde_json::to_value(PipelineConfig::default().multi_orientation).unwrap();
+        let file = read(config_from_toml("[multi_orientation]\ngroup_by = \"acq\"\n").unwrap());
+        assert_eq!(file["config"]["multi_orientation"], default);
+        let warning = file["warnings"][0].as_str().unwrap();
+        assert!(warning.contains("multi_orientation.group_by"), "{warning}");
+        let command = command(&file["config"].to_string()).unwrap();
+        assert!(!command.contains("orientation"), "{command}");
+
+        let mut saved: Value = serde_json::from_str(&browser()).unwrap();
+        saved["multi_orientation"]["group_by"] = json!("acq");
+        let saved = read(config_from_json(&saved.to_string()).unwrap());
+        assert_eq!(saved["config"]["multi_orientation"], default);
+        assert!(saved["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("multi_orientation.group_by"));
+    }
+
+    /// MEDI's PDF and DECOMPOSE's V-SHARP disagree when LBV is chosen: the engine leaves Background
+    /// removal as it is, through both the plain answer and Apply all (QSMxT#498).
+    #[test]
+    fn findings_chosen_together_are_settled_by_the_engine() {
+        let mut c = set(&browser(), "inversion.algorithm", json!("medi"));
+        c = set(&c, "pipeline.do_chi_separation", json!(true));
+        c = set(&c, "separation.algorithm", json!("chi-sep-ilsqr"));
+        c = set(&c, "bg_removal.algorithm", json!("lbv"));
+        let found = row(&view(&c), "bg_removal.algorithm")["recommendations"].clone();
+        let found = found.to_string();
+        let settled: Value = serde_json::from_str(&settle(&found).unwrap()).unwrap();
+        assert!(
+            settled["conflicting"].as_array().unwrap().len() >= 2,
+            "{settled}"
+        );
+        assert_eq!(settled["apply"], json!([]));
+        let applied: Value = serde_json::from_str(&apply_all(&c, &found).unwrap()).unwrap();
+        assert_eq!(applied["settled"], settled);
+        assert_eq!(applied["config"]["bg_removal"]["algorithm"], "lbv");
+    }
+
     /// The short settings file holds the browser profile's and the user's changes from QSMxT's
     /// defaults, and nothing else: read by `qsmxt run --config`, it is the same run.
     #[test]
@@ -1110,6 +1260,7 @@ mod tests {
             dims: (N, N, N),
             voxel_size: (1.0, 1.0, 1.0),
             affine,
+            orientation: None,
             sidecar: None,
         };
         let mut store = MemoryStore::new(header, json!("phantom-1"));
@@ -1212,14 +1363,25 @@ mod tests {
             "{nodes:?}"
         );
         assert!(after["mermaid"].as_str().unwrap().contains("computed"));
-        // The same methods as planned; the run's Note may say more, since the run's own scan
-        // reaches the rules (its echo count, say) where the planned Note has only the config.
+        // The same methods as planned, and what the run found on the phantom, whose background
+        // has no phase; the run's Note may say more, since the run's own scan reaches the rules
+        // (its echo count, say) where the planned Note has only the config.
         let after: Value =
             serde_json::from_str(&methods_after(&config_json, &facts_json, &record).unwrap())
                 .unwrap();
         let planned: Value =
             serde_json::from_str(&super::methods(&config_json, &facts_json).unwrap()).unwrap();
-        assert_eq!(after["sentences"], planned["sentences"]);
+        let text = |s: &Value| s["text"].as_str().unwrap_or_default().to_owned();
+        let mut sentences = after["sentences"].as_array().unwrap().clone();
+        sentences.retain(|s| {
+            !text(s).starts_with("Voxels where the scanner recorded no phase")
+                && !text(s).starts_with("Voxels where the phase offset could not be estimated")
+        });
+        assert_eq!(
+            after["sentences"].as_array().unwrap().len(),
+            sentences.len() + 2
+        );
+        assert_eq!(Value::Array(sentences), planned["sentences"]);
         assert_eq!(after["references"], planned["references"]);
         for line in planned["note"]["differences"]
             .as_array()
@@ -1268,12 +1430,15 @@ mod tests {
             far[5 * i] = 1.0;
         }
         far[3] = 1000.0;
-        store.supply_mask(Supplied::Found {
-            origin: "drawn mask".into(),
-            data: vec![1.0; 8],
-            dims: (2, 2, 2),
-            affine: far,
-        });
+        store.supply_mask(
+            Supplied::Found {
+                origin: "drawn mask".into(),
+                data: vec![1.0; 8],
+                dims: (2, 2, 2),
+                affine: far,
+            },
+            "drawn mask",
+        );
         let record = recorded_run("run-mask-computed.json", &config, &facts, &mut store);
         let (config_json, facts_json) = (
             config.to_json().unwrap(),

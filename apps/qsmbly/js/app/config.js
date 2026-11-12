@@ -6,7 +6,7 @@
  */
 
 // Application version. `pnpm release` writes the date version (scripts/lib/app-versions.mjs).
-export const VERSION = '0.31.20261111';
+export const VERSION = '0.31.20261112';
 
 // Where deep-learning model weights are fetched from in the browser. The qsm-core model
 // registry points at OSF, which does NOT send CORS headers, so a browser fetch from it
@@ -221,7 +221,6 @@ export const MCPC3DS_DEFAULTS = {
 // Linear fit B0 calculation defaults
 export const LINEAR_FIT_DEFAULTS = {
   estimate_offset: _LINEAR_FIT.estimate_offset,
-  reliability_threshold_percentile: _LINEAR_FIT.reliability_threshold_percentile,
 };
 
 export const SHARP_DEFAULTS = {
@@ -471,3 +470,5 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
     lbvMaxit: maxDim
   };
 }
+
+export const DICOMPARE_BASE = 'https://webapps.neurodesk.org/dicompare';

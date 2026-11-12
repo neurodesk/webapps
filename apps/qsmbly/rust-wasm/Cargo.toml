@@ -1,6 +1,6 @@
 [package]
 name = "qsm_wasm"
-version = "0.31.20261111"
+version = "0.31.20261112"
 edition = "2021"
 authors = ["QSM-WASM"]
 description = "WASM bindings for QSM processing pipeline (powered by qsm-core)"
@@ -28,7 +28,7 @@ debug-log = []
 # features, so qsmbly always runs the same qsm-core QSMxT was built and tested against.
 # Pinned by commit on QSMxT main until a QSMxT release includes QSMxT/QSMxT#331; then it moves to a
 # release tag, which the bump-qsmxt-engine workflow maintains.
-qsmxt-engine = { git = "https://github.com/QSMxT/QSMxT.git", rev = "999445010a067d9597299f217a9a1165d4b7d62d" }
+qsmxt-engine = { git = "https://github.com/QSMxT/QSMxT.git", rev = "dc94cf4dd93b21b1bf68c91f3e0d43da0cc4956d" }
 
 # WASM bindings
 wasm-bindgen = "0.2"

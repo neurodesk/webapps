@@ -12,18 +12,33 @@ export const RTS_DEFAULTS = {
   "max_iter": 20,
   "lsmr_iter": 4,
   "tau": 0.7,
-  "gamma": 5
+  "gamma": 5,
+  "pad": [
+    0,
+    0,
+    0
+  ]
 };
 
 export const TV_DEFAULTS = {
   "lambda": 0.001,
   "rho": null,
   "tol": 0.001,
-  "max_iter": 250
+  "max_iter": 250,
+  "pad": [
+    0,
+    0,
+    0
+  ]
 };
 
 export const TKD_DEFAULTS = {
-  "threshold": 0.15
+  "threshold": 0.15,
+  "pad": [
+    0,
+    0,
+    0
+  ]
 };
 
 export const TGV_DEFAULTS = {
@@ -46,7 +61,7 @@ export const BET_DEFAULTS = {
 
 export const VSHARP_DEFAULTS = {
   "deconvolve": false,
-  "threshold": 0.2,
+  "threshold": 0.05,
   "max_radius": 12,
   "min_radius": 2,
   "radius_step": 1,
@@ -56,19 +71,26 @@ export const VSHARP_DEFAULTS = {
 
 export const PDF_DEFAULTS = {
   "tol": 0.1,
-  "n_cg": 300,
+  "n_cg": 30,
   "space": "image",
   "n_pad": 40
 };
 
 export const LBV_DEFAULTS = {
-  "tol": 0.000001
+  "tol": 0.01,
+  "depth": null,
+  "peel": 0,
+  "n1": 30,
+  "n2": 100,
+  "n3": 100,
+  "precision": "double"
 };
 
 export const ISMV_DEFAULTS = {
-  "tol": 0.000001,
-  "max_iter": 50,
-  "radius": 5
+  "variant": "wen2014",
+  "tol": 0.00005,
+  "max_iter": null,
+  "radius": null
 };
 
 export const SWI_DEFAULTS = {
@@ -84,8 +106,8 @@ export const SWI_DEFAULTS = {
 };
 
 export const SHARP_DEFAULTS = {
-  "threshold": 0.05,
-  "radius": 6
+  "threshold": 0.03,
+  "radius": 4
 };
 
 export const RESHARP_DEFAULTS = {
@@ -108,7 +130,12 @@ export const HARPERELLA_DEFAULTS = {
 
 export const TIKHONOV_DEFAULTS = {
   "lambda": 0.01,
-  "reg": "identity"
+  "reg": "identity",
+  "pad": [
+    0,
+    0,
+    0
+  ]
 };
 
 export const NLTV_DEFAULTS = {
@@ -119,7 +146,12 @@ export const NLTV_DEFAULTS = {
   "max_iter": 250,
   "tol_newton": 0.000001,
   "max_iter_newton": 10,
-  "te": "first"
+  "te": "first",
+  "pad": [
+    0,
+    0,
+    0
+  ]
 };
 
 export const NDI_DEFAULTS = {
@@ -264,14 +296,14 @@ export const MCPC3DS_DEFAULTS = {
 };
 
 export const LINEAR_FIT_DEFAULTS = {
-  "estimate_offset": true,
-  "reliability_threshold_percentile": 90
+  "estimate_offset": true
 };
 
 export const ILSQR_DEFAULTS = {
   "tol": 0.001,
-  "max_iter": 40,
-  "pad_mm": 12
+  "max_iter": 100,
+  "pad_mm": 12,
+  "precision": "double"
 };
 
 export const DL_TILING_DEFAULTS = {

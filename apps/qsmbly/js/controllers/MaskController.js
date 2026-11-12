@@ -92,6 +92,17 @@ export class MaskController {
     return true;
   }
 
+  /**
+   * The mask grid's voxel-to-world affine (16 values, row-major), from the magnitude's header
+   * (the sform, else the qform, as qsm-core reads it); empty when there is no header. BET takes
+   * FSL's left-right order from it, MindGrab its orientation.
+   * @returns {number[]}
+   */
+  maskAffine() {
+    if (!this.magnitudeFileBytes || this.magnitudeFileBytes.byteLength < 348) return [];
+    return parseNiftiHeader(this.magnitudeFileBytes).affine.flatMap(row => Array.from(row));
+  }
+
   // ==================== Mask Preparation ====================
 
   /**
@@ -872,6 +883,7 @@ export class MaskController {
           mask, ops, inputData, magnitude: magnitudeArr,
           dims: this.maskDims,
           voxelSize: this.voxelSize || [1, 1, 1],
+          affine: this.maskAffine(),
         },
       }, [mask.buffer, magnitudeArr.buffer, inputData.buffer]);
     });

@@ -1,5 +1,7 @@
 # @neurodesk/calmar
 
+## 0.12.20261112
+
 ## 0.12.20261111
 
 ### Patch Changes

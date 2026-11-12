@@ -59,7 +59,7 @@ const DERIVED = {
     extras: { weighting: 'string' },
   },
   MCPC3DS_DEFAULTS: { from: 'MCPC3DS_DEFAULTS', keys: ['sigma'] },
-  LINEAR_FIT_DEFAULTS: { from: 'LINEAR_FIT_DEFAULTS', keys: ['estimate_offset', 'reliability_threshold_percentile'] },
+  LINEAR_FIT_DEFAULTS: { from: 'LINEAR_FIT_DEFAULTS', keys: ['estimate_offset'] },
   TIKHONOV_DEFAULTS: { from: 'TIKHONOV_DEFAULTS', keys: ['lambda', 'reg'] },
   DL_TILING_DEFAULTS: {
     from: 'DL_TILING_DEFAULTS',

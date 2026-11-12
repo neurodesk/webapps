@@ -1,14 +1,15 @@
 # QSMbly command line
 
-QSMbly builds QSMxT commit `999445010a067d9597299f217a9a1165d4b7d62d`
-with QSM.rs `046e2e3bd21b1f35ce2760c115145c52956645a2`, matching the browser.
-Upstream reports version `0.0.0`; this is not the published 10.0.0 executable.
+QSMbly builds QSMxT commit `dc94cf4dd93b21b1bf68c91f3e0d43da0cc4956d`
+with QSM.rs `8a655f4c31b9b0f657c35fe812e7f0bf8867d368`, matching the browser.
+Upstream reports version `0.0.0`; the published 11.0.0 executable is validated separately.
 Use the exported command together with its exported TOML configuration.
 The schema version and V-SHARP radius step must be preserved: legacy migration
 otherwise selects a different radius step.
 
-The packaged default-feature build passes the unchanged reference bounds (correlation
-0.999548, RMS 0.000283 ppm). The portable packaging check repeats the comparison on each target.
+The published QSMxT 11.0.0 Linux release passes the unchanged browser reference
+bounds (correlation 0.999625, RMS 0.000256 ppm). The portable packaging check
+repeats the comparison for the source build on each target.
 
 `qsmxt.json` pins the source archive checksum and Rust toolchain. Staging builds
 with `cargo build --locked --release` on each target. The checksum-pinned 10.0.0

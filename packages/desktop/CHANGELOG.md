@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.49.20261112
+
+### Patch Changes
+
+- 133a626: Download each desktop suite's locked offline assets when assembling it instead of requiring a shared GitHub Actions cache. Verify downloaded and cached files against their hashes, and include the shared Python runtime when assembling a single Python app.
+
 ## 0.49.20261111
 
 ### Minor Changes

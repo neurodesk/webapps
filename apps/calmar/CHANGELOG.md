@@ -1,5 +1,13 @@
 # calmar
 
+## 0.12.20261112
+
+### Patch Changes
+
+- 27c5e4f: CALMaR no longer attaches a superseded diffusion scan to the subject loaded after it: a DWI/TRACE, ADC or b0 import that is still being read or decoded is discarded when an example, a newer file in the same input or a new structural image replaces it. This holds for a cancelled acute example and for the user's own files.
+- 6faab22: Serve NiiVue from CALMaR's own origin. The page loaded NiiVue from unpkg with a classic script tag, so one failed request to that host left the app without its viewer and startup stopped with `niivue is not defined`. The build now fetches the same pinned NiiVue 0.68.2 file, checks its SHA-256 and ships it with the app.
+  - @neurodesk/calmar@0.12.20261112
+
 ## 0.12.20261111
 
 ### Patch Changes

@@ -17,14 +17,21 @@ test('bet.wasm builds from the qsm-core QSMbly\'s browser bundle locks', async (
   assert.equal(node, browser);
 });
 
-test('bet.wasm reproduces the browser\'s BET mask on the e2e fixture', async () => {
-  const bytes = await read('../../../apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz');
-  const volume = readVolume(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-  const runtime = betRuntime(await WebAssembly.compile(await read('../wasm/bet.wasm')));
-  const progress = [];
-  const { mask } = runBet({ volume, runtime, onProgress: (value) => progress.push(value) });
-  // apps/brain-extraction/e2e/app.spec.js pins the browser's mask of this image to the same digest.
-  assert.equal(mask.data.reduce((sum, value) => sum + value, 0), 246875);
-  assert.equal(createHash('sha256').update(mask.data).digest('hex'), '107a46c3a2f42f4a7796dc5a5b2a6660a302239ae50a0cf2eea80b1767a50862');
-  assert.ok(progress.length > 2 && progress.at(-1) > 0.9, 'progress reaches the end');
-});
+for (const { sign, voxels, sha256 } of [
+  { sign: 1, voxels: 240631, sha256: '20112e75bdaab6c8f3d9d47469b6814554f167996f4cff61e004f00207b233ad' },
+  { sign: -1, voxels: 240604, sha256: '96d2ef983c9c2f1c0fc4ade67d444909893b8c4cbdb1c60528774bf7c60b8566' },
+]) {
+  test(`bet.wasm reproduces QSMbly's browser BET with affine x sign ${sign}`, async () => {
+    const bytes = await read('../../../apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz');
+    const volume = readVolume(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    volume.affine = volume.affine.map(row => Array.from(row));
+    for (let row = 0; row < 3; row++) volume.affine[row][0] *= sign;
+    const runtime = betRuntime(await WebAssembly.compile(await read('../wasm/bet.wasm')));
+    const progress = [];
+    const { mask } = runBet({ volume, runtime, onProgress: value => progress.push(value) });
+    // Recorded from QSMbly's production WASM in Chromium with qsm-core 8a655f4.
+    assert.equal(mask.data.reduce((sum, value) => sum + value, 0), voxels);
+    assert.equal(createHash('sha256').update(mask.data).digest('hex'), sha256);
+    assert.ok(progress.length > 2 && progress.at(-1) > 0.9, 'progress reaches the end');
+  });
+}

@@ -1,6 +1,6 @@
 {
   "example": "t1-head",
-  "recorded": "2026-10-07, e2e/app.spec.js on the production build in Chromium (Playwright 1.63), linux-x64 with 8 cores: BET on QSMbly's threaded WebAssembly bundle, SynthStrip on ONNX Runtime Web 1.29.0 WebAssembly with 4 threads. MindGrab added 2026-10-08 on the same setup: @brainchop/mindgrab 0.1.20260925 on its CPU backend. SynthStrip without CSF added 2026-10-19 on the production build in Chromium (Playwright 1.64), linux-x64 with 8 cores: the same runtime with the synthstrip-nocsf-browser.onnx graph",
+  "recorded": "2026-10-07, e2e/app.spec.js on the production build in Chromium (Playwright 1.63), linux-x64 with 8 cores: BET on QSMbly's threaded WebAssembly bundle, SynthStrip on ONNX Runtime Web 1.29.0 WebAssembly with 4 threads. MindGrab added 2026-10-08 on the same setup: @brainchop/mindgrab 0.1.20260925 on its CPU backend. SynthStrip without CSF added 2026-10-19 on the production build in Chromium (Playwright 1.64), linux-x64 with 8 cores: the same runtime with the synthstrip-nocsf-browser.onnx graph. BET updated 2026-11-12 from the production app in Chromium with qsm-core 0.41.0 (8a655f4), the shared affine-aware compact WASM. Whole-head SynthSeg Dice 0.9317 passes the unchanged 0.93 gate.",
   "methods": {
     "bet": {
       "tolerance": {
@@ -8,14 +8,14 @@
         "relative": 0,
         "minimumDice": 1
       },
-      "maskVoxels": 1474433,
-      "maskSha256": "8b1a40a3984036933a6e80644f8b6ff71e04faa33df2cea7968743c61e3270d0",
-      "brainSha256": "1b7262b787639ecf59ed861fe83eeb791d1cc3ac6b09240d3c94168dac42ee4d",
+      "maskVoxels": 1406841,
+      "maskSha256": "2dab3b789bb31336b739e34a9f805e9094fd815c3a43ac4a78781c4958dc689e",
+      "brainSha256": "d11fc29e1c6a6bfdb2f8d8de6b915baeaa86b6dea90861daf6ec85071ade591c",
       "brainHeaderSha256": "f6d0d240380458d5328c87625178204d46a9d5ec09f9dee8d217d2524a9dd7cf",
       "maskHeaderSha256": "a2659a350b6b39b3bd1886daf7e27bfaafe2a20fe6679056529c40a562856abe",
       "background": 0,
-      "brainMean": 147.396,
-      "brainMax": 342
+      "brainMean": 149.358,
+      "brainMax": 308
     },
     "synthstrip": {
       "tolerance": {

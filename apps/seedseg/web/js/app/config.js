@@ -1,4 +1,4 @@
-export const VERSION = '0.7.20261111';
+export const VERSION = '0.7.20261112';
 export { FOLDS, INFERENCE_DEFAULTS } from '../../vendor/seedseg/src/assets.js';
 
 export const VIEWER_CONFIG = {
