@@ -397,8 +397,11 @@ the single residuals are bit-identical (5,250 of 5,250 values at 250 volumes,
 31,500 of 31,500 at 1500, and the edge case on both edge hosts).
 
 A course with a NaN keeps its place as a column of zeros and comes back
-zeroed. MATLAB's result for such a course was not recorded, so that course
-is the port's rule, not a parity claim. The other courses are unaffected:
+zeroed. Courses without NaNs that contain infinities or overflow when converted
+to single also retain a zero placeholder, but return NaN residuals, preserving
+the previous isolated-solve behavior. An empty ROI remains a successful no-op
+after input-shape validation. MATLAB's result for invalid courses was not
+recorded; these are port rules, not parity claims. The other courses are unaffected:
 `a_missing_course_keeps_its_place_in_the_single_regression` replaces one ROI
 course with NaN in every AMD case and still gets MATLAB's residual for every
 other course. Dropping the course instead changes the last course in every

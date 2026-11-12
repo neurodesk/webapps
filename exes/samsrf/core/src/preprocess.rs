@@ -508,22 +508,35 @@ pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: 
         if n_covariates != 1 || covariates.len() != data.volumes {
             return Err(Error::Shape("single-precision noise removal takes one covariate per volume".into()));
         }
+        if data.vertices == 0 {
+            return Ok(());
+        }
         let x: Vec<f32> = zscore_single(&covariates.iter().map(|&value| value as f32).collect::<Vec<_>>());
         let design: Vec<num_complex::Complex64> = x.iter().map(|&value| num_complex::Complex64::new(f64::from(value), 0.0)).collect();
         let ones = vec![num_complex::Complex64::new(1.0, 0.0); design.len()];
         // `B = [X ones] \ Y` over every course at once, as MATLAB solves it: each
         // column's arithmetic depends on its place among the right-hand sides. A
-        // course with a NaN keeps its place as a column of zeros, so the others are
-        // unaffected, and comes back zeroed. MATLAB's result for such a course was
-        // not recorded; the zeroed course is the port's rule, not a parity claim.
-        let missing: Vec<bool> = (0..data.vertices).map(|v| data.course(v).iter().any(|value| value.is_nan())).collect();
+        // nonfinite course keeps its place as zeros so it cannot poison other RHS.
+        // Preserve the port's outputs: NaN-containing courses become zero; otherwise
+        // nonfinite single-converted courses become NaN. MATLAB's handling of these
+        // inputs was not recorded, so these replacements are not parity claims.
+        let replacements: Vec<Option<f64>> = (0..data.vertices).map(|v| {
+            let course = data.course(v);
+            if course.iter().any(|value| value.is_nan()) {
+                Some(0.0)
+            } else if course.iter().any(|&value| !(value as f32).is_finite()) {
+                Some(f64::NAN)
+            } else {
+                None
+            }
+        }).collect();
         let zeros = vec![0.0; data.volumes];
-        let ys: Vec<&[f64]> = (0..data.vertices).map(|v| if missing[v] { zeros.as_slice() } else { data.course(v) }).collect();
+        let ys: Vec<&[f64]> = (0..data.vertices).map(|v| if replacements[v].is_some() { zeros.as_slice() } else { data.course(v) }).collect();
         let solution = crate::lstsq::mldivide_many(&[&design, &ones], &ys, Precision::Single);
-        for (vertex, (&absent, coefficients)) in missing.iter().zip(&solution.coefficients).enumerate() {
+        for (vertex, (&replacement, coefficients)) in replacements.iter().zip(&solution.coefficients).enumerate() {
             let course = data.course_mut(vertex);
-            if absent {
-                course.fill(0.0);
+            if let Some(value) = replacement {
+                course.fill(value);
                 continue;
             }
             let (beta, baseline) = (coefficients[0].re as f32, coefficients[1].re as f32);
@@ -627,6 +640,35 @@ mod tests {
             }
         }
         series
+    }
+
+    #[test]
+    fn single_regression_isolates_courses_nonfinite_after_conversion() {
+        let signal = [1.0, 2.0, 3.0, 4.0];
+        for invalid in [f64::INFINITY, f64::NEG_INFINITY, 1e39, -1e39] {
+            for vertex in [0, 1, 4, 8] {
+                let mut data = courses(4, 9, 11);
+                data.course_mut(vertex)[1] = invalid;
+                let mut control = data.clone();
+                control.course_mut(vertex).fill(0.0);
+                remove_noise_in(&mut control, &signal, 1, Precision::Single).unwrap();
+                remove_noise_in(&mut data, &signal, 1, Precision::Single).unwrap();
+                assert!(data.course(vertex).iter().all(|value| value.is_nan()));
+                for v in (0..9).filter(|&v| v != vertex) {
+                    assert!(control.course(v).iter().all(|value| value.is_finite()));
+                    assert_eq!(data.course(v), control.course(v), "invalid {invalid} at {vertex}, course {v}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn single_noise_removal_accepts_an_empty_roi() {
+        let mut data = TimeSeries::zeros(4, 0);
+        remove_noise_in(&mut data, &[1.0, 2.0, 3.0, 4.0], 1, Precision::Single).unwrap();
+        assert_eq!(data.volumes, 4);
+        assert_eq!(data.vertices, 0);
+        assert!(matches!(remove_noise_in(&mut data, &[1.0], 1, Precision::Single), Err(Error::Shape(_))));
     }
 
     #[test]
