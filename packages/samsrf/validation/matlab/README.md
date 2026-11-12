@@ -941,8 +941,13 @@ conclusions and is not pinned.
 one of the 8,640 probes (23.6 million sums) on the first AMD recording must
 equal the port's sum, and the other four AMD recordings must be identical to
 it. It also requires `lstsq::mldivide_many` to reproduce MATLAB's 8-column
-`A \ B` in all 214 single and 184 of 190 double recorded real solves;
-complex multi-column solves are not modelled.
+`A \ B` bit for bit in all 214 single and 190 double recorded real solves;
+complex multi-column solves are not modelled. Finally,
+`every_recorded_chain_step_matches_mkl_on_amd` compares every step of each
+recorded chain with the port's, bit for bit: pivot, packed factor, reflector
+scalars, Q^H y and coefficients. All 345 chains in the class the port uses
+match. The three single designs with subnormal imaginary parts have no chain in
+that class and are counted, not compared.
 
 `qr_reference.rs` requires, for all 348 cases, MATLAB's rank and, for the 89
 rank warnings, its printed tolerance; a real result where MATLAB's is real; and
@@ -982,14 +987,28 @@ double) 346 of 348 are bit-identical, and the other two
 chain bit for bit: their coefficients are 0 + -0i, which MATLAB stores as a
 real array, so the recording cannot hold the sign. Every coefficient part is 0
 ULPs from MATLAB, and every chain's coefficients equal MKL's bit for bit on the
-five AMD recordings. No frozen part moved away from MATLAB. One intermediate is
-still not reproduced: in 8 CSS-trace designs (v60 in both classes, v82 double)
-tau(1) is exactly 1 and MKL's R(1,2) is up to 8 ULPs from the port's (its `?gemv`
-sum of v(1) seeded with 1, which no lane tree consistent with the probes
-reproduces), so R(2,2), v(2) and `Q^H y` follow. Their single-RHS coefficients
-still equal MATLAB's; the v82 designs are the 6 remaining double multi-RHS
-mismatches. The rest of this paragraph and the table record the state before
-#731.
+five AMD recordings. No frozen part moved away from MATLAB.
+
+The last intermediate that differed was R(1,2) in 8 CSS-trace designs (v60 in
+both classes, v82 double), up to 8 ULPs. tau(1) = 1 there, but that was not the
+cause: 42 real designs have tau(1) = 1 and the port already matched 34 of them.
+All 8 have a first reflector whose v ends in 8-11 exact zeros, the clipped
+nonnegative responses. Reference `xLARF` scans v for its last nonzero entry
+(`ILADLR`) and applies the reflector only that far, which moves the end of the
+`?gemv` blocks of eight. `?geqp3` trims so: with it, R(1,2) equals MKL's in all
+95 double and 93 single real designs (90 and 90 before), including the passing
+designs with trailing zeros. `?ormqr` does not trim. Trimming its right-hand
+sides too changed Q^H y in 3 recorded single designs, so the port trims only
+the column update. That also fixes the 6 double multi-RHS solves of the v82
+designs, so all 190 match. The census is rerunnable:
+`cargo run -p samsrf-core --example qr_steps` and `qr-steps.py` list the first
+numerically differing step of each design (none now). This Python diagnostic
+does not distinguish signed zeros; the Rust chain gate above compares the
+recorded bits.
+
+The two remaining non-exact designs are a recording-format loss, not an
+arithmetic difference. The rest of this paragraph and the table record the
+state before #731.
 
 In total 123 → 300 of 348. Every real double design is bit-identical. Three
 single designs with subnormal imaginary parts (`glm_single_1e+06/08/10_1e-50`)
@@ -1010,11 +1029,9 @@ analytic single-column regression tests, not MATLAB bit-parity evidence.
 Multi-RHS real solves use direct division when the reciprocal overflows, with
 unit-solution regressions for subnormal diagonals in both precisions.
 
-`qr-multi-outcomes.json` freezes the 6 currently nonmatching real multi-RHS
-outputs (double `trace_*_v82` designs) as regression metadata; the 10 single
-ones it held before #731 now equal MATLAB. Each coefficient must retain its bits or equal
-MATLAB, and all previously exact cases remain exact. An aggregate gain cannot
-hide a new discrepancy.
+Every recorded real multi-RHS coefficient must equal MATLAB's bit for bit. The
+frozen `qr-multi-outcomes.json` snapshots of earlier nonmatching solves are
+gone: none remains.
 
 The zero-based single CSS vertices 47 and 58 have exact zero baselines in
 MATLAB, where cancellation of the observation sum gives the port about 4e-9
@@ -1541,15 +1558,18 @@ parity with that AMD reference only.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `reference.json` original | 138 | 0 | 8 | 3 | Not measured | Not measured | 0 |
 | AMD recording, original | 138 | 0 | 8 | 3 | Not measured | Not measured | 0 |
-| AMD recording, nonnegative | 125 | 1 | 8 | 0 | ≤ 0.0036 | ≤ 0.0026 | 0.0010 |
+| AMD recording, nonnegative | 126 | 0 | 8 | 0 | Not measured | Not measured | 0 |
 
 These counts use the MKL `?gemv` and `?ormqr` summation orders of #795 (see
 Least-squares solves). Before them, 77 and 70 coefficients were bit-identical,
 and the largest excesses were 0.40 and 0.81 of `S`. #731's two-accumulator
 `zunmqr` made the original pipeline's last two coefficients bit-identical
 (136 and 2 before, at most 0.21 and 0.22 of `S` for the port and MATLAB): its
-complex CSS powers make those designs complex. The nonnegative control's one
-differing coefficient is a real design and did not change.
+complex CSS powers make those designs complex. The nonnegative control's last
+differing coefficient (125 and 1 before, at most 0.0036 and 0.0026 of `S`,
+excess 0.0010) became bit-identical with the reflector trim of `?geqp3`'s
+column update: clipped responses leave exact zeros at the end of the first
+reflector.
 
 `css-pipelines-reference.json` pins a fresh recording of the original pipeline
 and of a nonnegative control, `max(ApFrm, 0)` on the same vectorised apertures

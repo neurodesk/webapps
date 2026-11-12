@@ -581,7 +581,7 @@ fn recorded_original_and_nonnegative_css_pipelines_match_matlab() {
         eprintln!("{label}: {stats:?}");
         results.push((id.to_string(), stats.identical, stats.differing, stats.basic, stats.rank_from_recording));
     }
-    assert_eq!(results, [("pipeline_double_css".to_string(), 138, 0, 8, 3), ("pipeline_double_css_nonnegative".to_string(), 125, 1, 8, 0)]);
+    assert_eq!(results, [("pipeline_double_css".to_string(), 138, 0, 8, 3), ("pipeline_double_css_nonnegative".to_string(), 126, 0, 8, 0)]);
 }
 
 // The gate itself, on synthetic least-squares problems: it must accept MATLAB's
