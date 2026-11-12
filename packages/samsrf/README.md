@@ -412,17 +412,18 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   larger norm its coefficient and the other 0. Octave's `\` uses no such
   tolerance, so on the example's coarse fit it reports amplitudes near 1e13 on
   9 vertices where the port reports 0. Scalar steps follow reference LAPACK
-  3.9, the version MATLAB's MKL reports. The reflector inner products follow
-  the accumulation order that best reproduces MKL on the recording host (one
-  peeled term and eight lanes for real designs, two lanes for complex single,
-  sequential for complex double). This is measured agreement, not bit parity: on the 348
-  recorded designs every rank and rank warning tolerance matches, 123 cases
-  are bit-identical, and every other coefficient is within an empirical
-  acceptance scale of MATLAB's (validation README). Nonfinite converted inputs
-  give NaN coefficients. MATLAB ran
-  MKL's `CNR branch auto` there; it ignored every MKL branch request, and other
-  CPUs can round differently. The RC and CF `[Y 1] \ X` regressions do not use
-  this solve yet.
+  3.9, the version MATLAB's MKL reports. The inner products, divisions and
+  multi-column back substitution follow MKL's own kernels as MATLAB runs them
+  on AMD hosts, read from MKL's summation trees (validation README, "MKL's
+  kernels"): `?gemv` inside `?geqp3`, `?ormqr` by number and position of
+  right-hand sides, `?trsv` and `?trsm`. On the 348 recorded designs every rank
+  and rank warning tolerance matches and 300 are bit-identical (every real
+  double design); the rest are within an empirical acceptance scale. MKL's
+  AVX-512 branch on Intel rounds differently, and MATLAB ignores MKL branch
+  requests, so results on Intel hosts are not reproduced. `mldivide_many`
+  solves several right-hand sides at once as MATLAB's `A \ B` does; the RC and
+  CF `[Y 1] \ X` regressions do not use it yet. Nonfinite converted inputs give
+  NaN coefficients.
 - **Compressive nonlinearity.** `Css_Convention: "nonnegative"` (the default)
   clips negative responses before the CSS power and uses the fitted Exponent
   for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex

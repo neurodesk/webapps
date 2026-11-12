@@ -64,6 +64,10 @@ on:
         description: Record MATLAB least-squares solves under several MKL branch requests
         type: boolean
         default: false
+      qr_kernels:
+        description: Record MKL's least-squares steps and gemv summation trees through a MEX probe, on three runners per label
+        type: boolean
+        default: false
       numerics_only:
         description: With record_matlab, record MATLAB's arithmetic on generated inputs (elementary functions, powers, conv, HRF, BLAS)
         type: boolean
@@ -94,12 +98,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: samsrf-native-${{ github.ref }}${{ (inputs.record_matlab || inputs.revcor_only || inputs.qr_only || (inputs.runtime_cli || 'none') != 'none' || inputs.runtime_image) && '-matlab' || '' }}
+  group: samsrf-native-${{ github.ref }}${{ (inputs.record_matlab || inputs.revcor_only || inputs.qr_only || inputs.qr_kernels || (inputs.runtime_cli || 'none') != 'none' || inputs.runtime_image) && '-matlab' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -178,6 +182,8 @@ jobs:
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-qr-reference" packages/samsrf/validation/matlab/qr-reference.json
           SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_REPORT="$RUNNER_TEMP/samsrf-qr-port.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_reference -- --nocapture
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-qr-kernels" packages/samsrf/validation/matlab/qr-kernels-reference.json
+          SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_KERNELS_DIR="$RUNNER_TEMP/samsrf-qr-kernels" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_kernels -- --nocapture
           python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$RUNNER_TEMP/samsrf-qr-reference/ubuntu-24.04/compatible" "$RUNNER_TEMP/samsrf-qr-port.json" "$RUNNER_TEMP/samsrf-qr-accuracy.json"
       - name: Retain the full CSS comparison including remaining differences
         if: always()
@@ -200,7 +206,7 @@ jobs:
           if-no-files-found: ignore
 
   wasm-source:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -277,7 +283,7 @@ jobs:
           path: reference-source
           persist-credentials: false
       - name: Install Octave for recorder plumbing checks
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends octave python3-numpy
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends octave octave-dev python3-numpy
       - name: Run the recorder on a pinned real input
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json
@@ -297,15 +303,18 @@ jobs:
             octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-smoke','$label'),'$label')"
           done
           node packages/samsrf/validation/matlab/compare-qr-backends.mjs "$RUNNER_TEMP/samsrf-qr-smoke" "$RUNNER_TEMP/samsrf-qr-smoke.json" --smoke
+          octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_kernels(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-kernels-smoke'),fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-smoke','compatible'),true)"
 
   matlab-reference:
     needs: recorder-smoke
-    if: github.event_name == 'workflow_dispatch' && (inputs.qr_only || inputs.record_matlab || inputs.revcor_only)
-    name: record actual MATLAB source reference (${{ matrix.host }})
+    if: github.event_name == 'workflow_dispatch' && (inputs.qr_kernels || inputs.qr_only || inputs.record_matlab || inputs.revcor_only)
+    name: record actual MATLAB source reference (${{ matrix.host }} ${{ matrix.replica }})
     strategy:
       fail-fast: false
       matrix:
         host: [ubuntu-22.04, ubuntu-24.04]
+        # Runner labels do not choose the CPU; more kernel runs reach more of them.
+        replica: ${{ fromJSON(inputs.qr_kernels && '[1, 2, 3]' || '[1]') }}
     runs-on: ${{ matrix.host }}
     timeout-minutes: 90
     env:
@@ -326,7 +335,7 @@ jobs:
           path: reference-source
           persist-credentials: false
       - name: Prepare verified inputs and declared source repairs
-        if: '!inputs.qr_only'
+        if: '!inputs.qr_only && !inputs.qr_kernels'
         run: |
           if [ "$(printf '%s\n' '${{ inputs.revcor_only }}' '${{ inputs.diagnostics_only }}' '${{ inputs.geometry_only }}' '${{ inputs.numerics_only }}' '${{ inputs.css_pipelines_only }}' '${{ inputs.kernels_only }}' '${{ inputs.gemv_order }}' | grep -c true)" -gt 1 ]; then
             echo 'Choose at most one of revcor_only, diagnostics_only, geometry_only, numerics_only, css_pipelines_only, kernels_only and gemv_order.' >&2
@@ -352,6 +361,14 @@ jobs:
       - name: Fetch pinned MATLAB inputs for focused diagnostics
         if: inputs.diagnostics_only
         run: python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json
+      - name: Fetch the pinned least-squares designs for the kernel probe
+        if: inputs.qr_kernels
+        run: |
+          if [ '${{ inputs.record_matlab }}' = true ] || [ '${{ inputs.revcor_only }}' = true ] || [ '${{ inputs.qr_only }}' = true ]; then
+            echo 'qr_kernels records the least-squares kernels alone.' >&2
+            exit 1
+          fi
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-qr-reference" packages/samsrf/validation/matlab/qr-reference.json
       - name: Fetch the pinned CSS regressions replayed by the least-squares recording
         if: inputs.qr_only
         run: |
@@ -398,7 +415,7 @@ jobs:
         if: inputs.geometry_only
         run: node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"
       - name: Record numerical intermediates and fitted maps
-        if: '!inputs.diagnostics_only && !inputs.qr_only && !inputs.geometry_only && !inputs.numerics_only && !inputs.css_pipelines_only && !inputs.kernels_only && !inputs.gemv_order'
+        if: '!inputs.diagnostics_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.geometry_only && !inputs.numerics_only && !inputs.css_pipelines_only && !inputs.kernels_only && !inputs.gemv_order'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if ~reverseCorrelationOnly && strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly,false,reverseCorrelationOnly && strcmp('${{ inputs.revcor_edges }}','true'))
@@ -455,6 +472,11 @@ jobs:
           MKL_ENABLE_INSTRUCTIONS: SSE4_2
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_backends(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr','enable-sse4_2'),'enable-sse4_2',fullfile(getenv('RUNNER_TEMP'),'samsrf-css-diagnostics'))
+      - name: Record MKL's least-squares steps and gemv summation trees
+        if: inputs.qr_kernels
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_kernels(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-kernels'),fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-reference','ubuntu-24.04','compatible'))
       - name: Compare least-squares solves across MKL requests
         if: inputs.qr_only
         run: node packages/samsrf/validation/matlab/compare-qr-backends.mjs "$RUNNER_TEMP/samsrf-qr" "$RUNNER_TEMP/samsrf-qr/backend-comparison.json"
@@ -557,8 +579,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: samsrf-matlab-${{ github.sha }}-${{ matrix.host }}-${{ github.run_attempt }}
+          name: samsrf-matlab-${{ github.sha }}-${{ matrix.host }}-${{ matrix.replica }}-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/samsrf-qr-kernels/
             ${{ runner.temp }}/samsrf-matlab/
             ${{ runner.temp }}/samsrf-matlab-repeat/
             ${{ runner.temp }}/samsrf-matlab-auto/

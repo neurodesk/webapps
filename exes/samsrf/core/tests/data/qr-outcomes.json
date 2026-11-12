@@ -104,14 +104,14 @@
     ]
   },
   "extreme_double_1e+155_0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -169,7 +169,7 @@
     ]
   },
   "extreme_double_1e-160_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
@@ -195,7 +195,7 @@
     ]
   },
   "extreme_double_1e-300_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
@@ -221,7 +221,7 @@
     ]
   },
   "extreme_single_1e+20_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
@@ -229,7 +229,7 @@
       ],
       [
         0,
-        17
+        0
       ]
     ]
   },
@@ -247,7 +247,7 @@
     ]
   },
   "extreme_single_1e+30_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
@@ -255,7 +255,7 @@
       ],
       [
         0,
-        18
+        0
       ]
     ]
   },
@@ -325,24 +325,24 @@
     ]
   },
   "glm_double_0.0001_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        32
+        0,
+        0
       ],
       [
         0,
-        53
+        0
       ]
     ]
   },
   "glm_double_0.0001_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        5
+        0,
+        0
       ],
       [
         0,
@@ -364,28 +364,28 @@
     ]
   },
   "glm_double_0.01_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        35
+        0,
+        0
       ],
       [
         0,
-        35
+        0
       ]
     ]
   },
   "glm_double_0.01_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        47
+        0,
+        0
       ],
       [
-        2,
-        35
+        0,
+        0
       ]
     ]
   },
@@ -406,25 +406,25 @@
     "exact": false,
     "ulps": [
       [
-        2,
-        1
+        1,
+        9
       ],
       [
         0,
-        18
+        8
       ]
     ]
   },
   "glm_double_10000_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        1,
-        10
+        0,
+        0
       ]
     ]
   },
@@ -445,25 +445,25 @@
     "exact": false,
     "ulps": [
       [
-        2,
-        8
+        1,
+        17
       ],
       [
         0,
-        21
+        7
       ]
     ]
   },
   "glm_double_100_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        1,
-        13
+        0,
+        0
       ]
     ]
   },
@@ -481,28 +481,28 @@
     ]
   },
   "glm_double_1_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        7
+        0
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
   "glm_double_1_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        8
+        0,
+        0
       ],
       [
         0,
-        23
+        0
       ]
     ]
   },
@@ -523,12 +523,12 @@
     "exact": false,
     "ulps": [
       [
-        3,
+        1,
         0
       ],
       [
         0,
-        58
+        12
       ]
     ]
   },
@@ -541,7 +541,7 @@
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
@@ -562,25 +562,25 @@
     "exact": false,
     "ulps": [
       [
-        2,
+        1,
         0
       ],
       [
         0,
-        29
+        6
       ]
     ]
   },
   "glm_double_1e+08_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        8
+        0,
+        0
       ],
       [
-        1,
-        30
+        0,
+        0
       ]
     ]
   },
@@ -598,67 +598,67 @@
     ]
   },
   "glm_double_1e+10_0.3": {
-    "exact": false,
-    "ulps": [
-      [
-        2,
-        8
-      ],
-      [
-        0,
-        132
-      ]
-    ]
-  },
-  "glm_double_1e+10_1e-50": {
-    "exact": false,
-    "ulps": [
-      [
-        0,
-        8
-      ],
-      [
-        1,
-        20
-      ]
-    ]
-  },
-  "glm_double_1e-06_0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        5,
+        0,
+        0
+      ]
+    ]
+  },
+  "glm_double_1e+10_1e-50": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ]
+  },
+  "glm_double_1e-06_0": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
         0
       ]
     ]
   },
   "glm_double_1e-06_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        28
+        0
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
   "glm_double_1e-06_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        4
+        0,
+        0
       ],
       [
         0,
-        43
+        0
       ]
     ]
   },
@@ -676,11 +676,11 @@
     ]
   },
   "glm_double_1e-08_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        21
+        0,
+        0
       ],
       [
         0,
@@ -689,15 +689,15 @@
     ]
   },
   "glm_double_1e-08_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        25
+        0,
+        0
       ],
       [
-        1,
-        34
+        0,
+        0
       ]
     ]
   },
@@ -715,24 +715,24 @@
     ]
   },
   "glm_double_1e-10_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        78
+        0
       ],
       [
         0,
-        26
+        0
       ]
     ]
   },
   "glm_double_1e-10_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        33
+        0,
+        0
       ],
       [
         0,
@@ -741,14 +741,14 @@
     ]
   },
   "glm_single_0.0001_0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -767,14 +767,14 @@
     ]
   },
   "glm_single_0.0001_1e-50": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -793,15 +793,15 @@
     ]
   },
   "glm_single_0.01_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        5
+        0
       ],
       [
         0,
-        34
+        0
       ]
     ]
   },
@@ -832,15 +832,15 @@
     ]
   },
   "glm_single_10000_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
-        5
+        0,
+        0
       ]
     ]
   },
@@ -878,8 +878,8 @@
         16
       ],
       [
-        1,
-        7
+        0,
+        0
       ]
     ]
   },
@@ -910,11 +910,11 @@
     ]
   },
   "glm_single_1_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        15
+        0
       ],
       [
         0,
@@ -988,15 +988,15 @@
     ]
   },
   "glm_single_1e+08_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
-        11
+        0,
+        0
       ]
     ]
   },
@@ -1008,7 +1008,7 @@
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -1027,15 +1027,15 @@
     ]
   },
   "glm_single_1e+10_0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
-        5
+        0,
+        0
       ]
     ]
   },
@@ -1170,10 +1170,10 @@
     ]
   },
   "imaginary_double_1e-310": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -1183,11 +1183,11 @@
     ]
   },
   "imaginary_double_1e-40": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        32
+        0,
+        0
       ],
       [
         0,
@@ -1196,11 +1196,11 @@
     ]
   },
   "imaginary_double_1e-46": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        87
+        0,
+        0
       ],
       [
         0,
@@ -1248,53 +1248,53 @@
     ]
   },
   "nearly_constant_double_0.001": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        2,
+        0,
         0
       ]
     ]
   },
   "nearly_constant_double_1e-05": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
   },
   "nearly_constant_double_1e-07": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        2,
+        0,
         0
       ]
     ]
   },
   "nearly_constant_double_1e-09": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        2,
+        0,
         0
       ]
     ]
@@ -1326,14 +1326,14 @@
     ]
   },
   "nearly_constant_single_1e-05": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -1417,10 +1417,10 @@
     ]
   },
   "ones_last_single_0.0001": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -1469,53 +1469,53 @@
     ]
   },
   "random_double_10": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        7,
+        0,
         0
       ]
     ]
   },
   "random_double_11": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        16,
+        0,
         0
       ]
     ]
   },
   "random_double_12": {
-    "exact": false,
-    "ulps": [
-      [
-        0,
-        19
-      ],
-      [
-        3,
-        4
-      ]
-    ]
-  },
-  "random_double_13": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        10,
+        0,
+        0
+      ]
+    ]
+  },
+  "random_double_13": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
         0
       ]
     ]
@@ -1538,88 +1538,88 @@
     "ulps": [
       [
         2,
-        0
+        16
       ],
       [
-        26,
+        12,
         0
       ]
     ]
   },
   "random_double_16": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        20,
+        0,
         0
       ]
     ]
   },
   "random_double_17": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        31,
+        0,
         0
       ]
     ]
   },
   "random_double_18": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        38
+        0
       ],
       [
-        46,
-        3
+        0,
+        0
       ]
     ]
   },
   "random_double_19": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        11,
+        0,
         0
       ]
     ]
   },
   "random_double_2": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        81,
+        0,
         0
       ]
     ]
   },
   "random_double_20": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        24,
+        0,
         0
       ]
     ]
@@ -1628,51 +1628,51 @@
     "exact": false,
     "ulps": [
       [
-        4,
-        65
+        2,
+        130
       ],
       [
-        26,
-        0
+        3,
+        17
       ]
     ]
   },
   "random_double_22": {
-    "exact": false,
-    "ulps": [
-      [
-        1,
-        0
-      ],
-      [
-        10,
-        0
-      ]
-    ]
-  },
-  "random_double_23": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        13,
+        0,
+        0
+      ]
+    ]
+  },
+  "random_double_23": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
         0
       ]
     ]
   },
   "random_double_24": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        14
+        0,
+        0
       ],
       [
-        14,
-        39
+        0,
+        0
       ]
     ]
   },
@@ -1680,76 +1680,76 @@
     "exact": false,
     "ulps": [
       [
-        0,
-        49
+        7,
+        437
       ],
       [
-        0,
+        1,
         1
       ]
     ]
   },
   "random_double_4": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        82,
+        0,
         0
       ]
     ]
   },
   "random_double_5": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        62,
+        0,
         0
       ]
     ]
   },
   "random_double_6": {
-    "exact": false,
-    "ulps": [
-      [
-        0,
-        16
-      ],
-      [
-        10,
-        38
-      ]
-    ]
-  },
-  "random_double_7": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        8,
+        0,
+        0
+      ]
+    ]
+  },
+  "random_double_7": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
         0
       ]
     ]
   },
   "random_double_8": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -1758,24 +1758,24 @@
     "exact": false,
     "ulps": [
       [
-        4,
-        0
+        2,
+        5
       ],
       [
-        1684,
-        3
+        673,
+        1
       ]
     ]
   },
   "random_single_1": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        52,
+        0,
         0
       ]
     ]
@@ -1801,21 +1801,21 @@
         0
       ],
       [
-        19,
+        0,
         0
       ]
     ]
   },
   "random_single_12": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        27
+        0,
+        0
       ],
       [
         0,
-        2
+        0
       ]
     ]
   },
@@ -1833,10 +1833,10 @@
     ]
   },
   "random_single_14": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -1850,62 +1850,62 @@
     "ulps": [
       [
         2,
-        49
+        16
       ],
       [
-        7,
-        2
+        6,
+        0
       ]
     ]
   },
   "random_single_16": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        62,
+        0,
         0
       ]
     ]
   },
   "random_single_17": {
-    "exact": false,
-    "ulps": [
-      [
-        1,
-        0
-      ],
-      [
-        17,
-        0
-      ]
-    ]
-  },
-  "random_single_18": {
-    "exact": false,
-    "ulps": [
-      [
-        1,
-        6
-      ],
-      [
-        8,
-        1
-      ]
-    ]
-  },
-  "random_single_19": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        13,
+        0,
+        0
+      ]
+    ]
+  },
+  "random_single_18": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ]
+  },
+  "random_single_19": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
         0
       ]
     ]
@@ -1924,14 +1924,14 @@
     ]
   },
   "random_single_20": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        9,
+        0,
         0
       ]
     ]
@@ -1945,46 +1945,46 @@
       ],
       [
         1,
-        16
+        8
       ]
     ]
   },
   "random_single_22": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        23,
+        0,
         0
       ]
     ]
   },
   "random_single_23": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        6,
+        0,
         0
       ]
     ]
   },
   "random_single_24": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        31
+        0
       ],
       [
-        5,
-        6
+        0,
+        0
       ]
     ]
   },
@@ -1993,36 +1993,36 @@
     "ulps": [
       [
         3,
-        130
+        356
       ],
       [
-        1,
+        0,
         0
       ]
     ]
   },
   "random_single_4": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        90,
+        0,
         0
       ]
     ]
   },
   "random_single_5": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        39,
+        0,
         0
       ]
     ]
@@ -2032,19 +2032,19 @@
     "ulps": [
       [
         0,
-        37
+        8
       ],
       [
-        31,
-        44
+        11,
+        1
       ]
     ]
   },
   "random_single_7": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
@@ -2054,14 +2054,14 @@
     ]
   },
   "random_single_8": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        2,
+        0,
         0
       ]
     ]
@@ -2070,34 +2070,34 @@
     "exact": false,
     "ulps": [
       [
-        1,
-        0
+        4,
+        4
       ],
       [
-        1011,
-        12
+        1009,
+        9
       ]
     ]
   },
   "rank_double_n16_e-10_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        2,
+        0,
         0
       ]
     ]
   },
   "rank_double_n16_e-10_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        1
+        0
       ],
       [
         0,
@@ -2106,132 +2106,132 @@
     ]
   },
   "rank_double_n16_e-6_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        6,
+        0,
         0
       ]
     ]
   },
   "rank_double_n16_e-6_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        1
+        0
       ],
       [
-        1,
-        1
+        0,
+        0
       ]
     ]
   },
   "rank_double_n16_e-7_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
   },
   "rank_double_n16_e-7_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        4
+        0
       ],
       [
         0,
-        6
+        0
       ]
     ]
   },
   "rank_double_n16_e-8_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        2,
+        0,
         0
       ]
     ]
   },
   "rank_double_n16_e-8_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        2
+        0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
   },
   "rank_double_n16_e-9_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        5,
+        0,
         0
       ]
     ]
   },
   "rank_double_n16_e-9_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        1
+        0
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
   "rank_double_n16_e10_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
   },
   "rank_double_n16_e10_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        8
+        0,
+        0
       ],
       [
-        2,
-        1
+        0,
+        0
       ]
     ]
   },
@@ -2252,50 +2252,50 @@
     "exact": false,
     "ulps": [
       [
-        1,
+        0,
         8
       ],
       [
-        1,
-        5
+        0,
+        0
       ]
     ]
   },
   "rank_double_n16_e7_i0": {
-    "exact": false,
-    "ulps": [
-      [
-        1,
-        0
-      ],
-      [
-        1,
-        0
-      ]
-    ]
-  },
-  "rank_double_n16_e7_i0.3": {
-    "exact": false,
-    "ulps": [
-      [
-        1,
-        0
-      ],
-      [
-        2,
-        9
-      ]
-    ]
-  },
-  "rank_double_n16_e8_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        2,
+        0,
+        0
+      ]
+    ]
+  },
+  "rank_double_n16_e7_i0.3": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ]
+  },
+  "rank_double_n16_e8_i0": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
         0
       ]
     ]
@@ -2304,20 +2304,20 @@
     "exact": false,
     "ulps": [
       [
-        3,
+        2,
         0
       ],
       [
-        2,
-        22
+        0,
+        15
       ]
     ]
   },
   "rank_double_n16_e9_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -2330,11 +2330,11 @@
     "exact": false,
     "ulps": [
       [
-        0,
-        12
+        1,
+        4
       ],
       [
-        1,
+        0,
         6
       ]
     ]
@@ -2353,67 +2353,67 @@
     ]
   },
   "rank_double_n250_e-10_i0.3": {
-    "exact": false,
-    "ulps": [
-      [
-        0,
-        78
-      ],
-      [
-        0,
-        26
-      ]
-    ]
-  },
-  "rank_double_n250_e-6_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        5,
+        0,
+        0
+      ]
+    ]
+  },
+  "rank_double_n250_e-6_i0": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
         0
       ]
     ]
   },
   "rank_double_n250_e-6_i0.3": {
-    "exact": false,
-    "ulps": [
-      [
-        0,
-        28
-      ],
-      [
-        0,
-        1
-      ]
-    ]
-  },
-  "rank_double_n250_e-7_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
+        0
+      ]
+    ]
+  },
+  "rank_double_n250_e-7_i0": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
         0
       ]
     ]
   },
   "rank_double_n250_e-7_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        10
+        0,
+        0
       ],
       [
-        1,
-        1
+        0,
+        0
       ]
     ]
   },
@@ -2431,11 +2431,11 @@
     ]
   },
   "rank_double_n250_e-8_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        21
+        0,
+        0
       ],
       [
         0,
@@ -2457,15 +2457,15 @@
     ]
   },
   "rank_double_n250_e-9_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        29
+        0,
+        0
       ],
       [
-        1,
-        82
+        0,
+        0
       ]
     ]
   },
@@ -2483,15 +2483,15 @@
     ]
   },
   "rank_double_n250_e10_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
-        8
+        0,
+        0
       ],
       [
         0,
-        132
+        0
       ]
     ]
   },
@@ -2512,38 +2512,38 @@
     "exact": false,
     "ulps": [
       [
-        3,
+        1,
         0
       ],
       [
         0,
-        58
+        12
       ]
     ]
   },
   "rank_double_n250_e7_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
   },
   "rank_double_n250_e7_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        7
+        0,
+        0
       ],
       [
-        1,
-        26
+        0,
+        0
       ]
     ]
   },
@@ -2564,12 +2564,12 @@
     "exact": false,
     "ulps": [
       [
-        2,
+        1,
         0
       ],
       [
         0,
-        29
+        6
       ]
     ]
   },
@@ -2590,34 +2590,34 @@
     "exact": false,
     "ulps": [
       [
-        2,
-        7
+        1,
+        0
       ],
       [
         0,
-        47
+        12
       ]
     ]
   },
   "rank_single_n16_e-2.5_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        4,
+        0,
         0
       ],
       [
-        2,
+        0,
         0
       ]
     ]
   },
   "rank_single_n16_e-2.5_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        1
+        0
       ],
       [
         0,
@@ -2626,14 +2626,14 @@
     ]
   },
   "rank_single_n16_e-2_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        4,
+        0,
         0
       ],
       [
-        2,
+        0,
         0
       ]
     ]
@@ -2652,24 +2652,24 @@
     ]
   },
   "rank_single_n16_e-3.5_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        4,
+        0,
         0
       ],
       [
-        3,
+        0,
         0
       ]
     ]
   },
   "rank_single_n16_e-3.5_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        1
+        0
       ],
       [
         0,
@@ -2678,14 +2678,14 @@
     ]
   },
   "rank_single_n16_e-3_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        4,
+        0,
         0
       ],
       [
-        3,
+        0,
         0
       ]
     ]
@@ -2704,24 +2704,24 @@
     ]
   },
   "rank_single_n16_e-4_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        4,
+        0,
         0
       ],
       [
-        3,
+        0,
         0
       ]
     ]
   },
   "rank_single_n16_e-4_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        1
+        0
       ],
       [
         0,
@@ -2730,14 +2730,14 @@
     ]
   },
   "rank_single_n16_e2.5_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -2746,12 +2746,12 @@
     "exact": false,
     "ulps": [
       [
-        5,
-        3
+        4,
+        5
       ],
       [
-        2,
-        13
+        1,
+        18
       ]
     ]
   },
@@ -2772,38 +2772,38 @@
     "exact": false,
     "ulps": [
       [
-        0,
+        1,
         4
       ],
       [
         0,
-        7
+        14
       ]
     ]
   },
   "rank_single_n16_e3.5_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        2,
+        0,
         0
       ]
     ]
   },
   "rank_single_n16_e3.5_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        2
+        0
       ],
       [
         0,
-        7
+        0
       ]
     ]
   },
@@ -2821,15 +2821,15 @@
     ]
   },
   "rank_single_n16_e3_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        2
+        0
       ],
       [
         0,
-        33
+        0
       ]
     ]
   },
@@ -2841,7 +2841,7 @@
         0
       ],
       [
-        2,
+        1,
         0
       ]
     ]
@@ -2850,12 +2850,12 @@
     "exact": false,
     "ulps": [
       [
-        1,
-        3
+        2,
+        1
       ],
       [
-        5,
-        13
+        1,
+        9
       ]
     ]
   },
@@ -2873,11 +2873,11 @@
     ]
   },
   "rank_single_n250_e-2.5_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        36
+        0
       ],
       [
         0,
@@ -2899,27 +2899,27 @@
     ]
   },
   "rank_single_n250_e-2_i0.3": {
-    "exact": false,
-    "ulps": [
-      [
-        0,
-        5
-      ],
-      [
-        0,
-        34
-      ]
-    ]
-  },
-  "rank_single_n250_e-3.5_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
+        0
+      ]
+    ]
+  },
+  "rank_single_n250_e-3.5_i0": {
+    "exact": true,
+    "ulps": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
         0
       ]
     ]
@@ -2951,7 +2951,7 @@
     ]
   },
   "rank_single_n250_e-3_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
@@ -2959,19 +2959,19 @@
       ],
       [
         0,
-        42
+        0
       ]
     ]
   },
   "rank_single_n250_e-4_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -2990,10 +2990,10 @@
     ]
   },
   "rank_single_n250_e2.5_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -3007,11 +3007,11 @@
     "ulps": [
       [
         0,
-        0
+        8
       ],
       [
-        1,
-        35
+        0,
+        0
       ]
     ]
   },
@@ -3036,8 +3036,8 @@
         16
       ],
       [
-        1,
-        7
+        0,
+        0
       ]
     ]
   },
@@ -3055,23 +3055,23 @@
     ]
   },
   "rank_single_n250_e3.5_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        24
+        0
       ],
       [
         0,
-        107
+        0
       ]
     ]
   },
   "rank_single_n250_e3_i0": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        3,
+        0,
         0
       ],
       [
@@ -3081,15 +3081,15 @@
     ]
   },
   "rank_single_n250_e3_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        8
+        0
       ],
       [
-        1,
-        78
+        0,
+        0
       ]
     ]
   },
@@ -3107,49 +3107,49 @@
     ]
   },
   "rank_single_n250_e4_i0.3": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
         0
       ],
       [
-        1,
-        5
+        0,
+        0
       ]
     ]
   },
   "trace_double_v15_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        4
+        0,
+        0
       ],
       [
         0,
-        2
+        0
       ]
     ]
   },
   "trace_double_v15_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        4
+        0,
+        0
       ],
       [
         0,
-        2
+        0
       ]
     ]
   },
   "trace_double_v15_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        4,
+        0,
         0
       ],
       [
@@ -3159,36 +3159,36 @@
     ]
   },
   "trace_double_v16_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        1,
-        1
+        0,
+        0
       ]
     ]
   },
   "trace_double_v16_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        1,
-        1
+        0,
+        0
       ]
     ]
   },
   "trace_double_v16_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        4,
+        0,
         0
       ],
       [
@@ -3198,11 +3198,11 @@
     ]
   },
   "trace_double_v17_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        1
+        0,
+        0
       ],
       [
         0,
@@ -3211,11 +3211,11 @@
     ]
   },
   "trace_double_v17_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        1
+        0,
+        0
       ],
       [
         0,
@@ -3224,53 +3224,53 @@
     ]
   },
   "trace_double_v17_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
   },
   "trace_double_v18_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        1
+        0
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
   "trace_double_v18_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
         0,
-        1
+        0
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
   "trace_double_v18_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        5,
+        0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -3393,36 +3393,36 @@
     ]
   },
   "trace_double_v58_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        4
+        0,
+        0
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
   "trace_double_v58_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        4
+        0,
+        0
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
   "trace_double_v58_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
@@ -3471,10 +3471,10 @@
     ]
   },
   "trace_double_v67_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        13,
+        0,
         0
       ],
       [
@@ -3484,10 +3484,10 @@
     ]
   },
   "trace_double_v67_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        13,
+        0,
         0
       ],
       [
@@ -3549,11 +3549,11 @@
     ]
   },
   "trace_double_v73_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        1
+        0,
+        0
       ],
       [
         0,
@@ -3562,11 +3562,11 @@
     ]
   },
   "trace_double_v73_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        1
+        0,
+        0
       ],
       [
         0,
@@ -3575,10 +3575,10 @@
     ]
   },
   "trace_double_v73_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
@@ -3588,27 +3588,27 @@
     ]
   },
   "trace_double_v74_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        4
+        0,
+        0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
   },
   "trace_double_v74_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
-        4
+        0,
+        0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -3631,11 +3631,11 @@
     "ulps": [
       [
         9,
-        48
+        29
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
@@ -3644,19 +3644,19 @@
     "ulps": [
       [
         9,
-        48
+        29
       ],
       [
         0,
-        1
+        0
       ]
     ]
   },
   "trace_double_v79_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        16,
+        0,
         0
       ],
       [
@@ -3705,10 +3705,10 @@
     ]
   },
   "trace_double_v82_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        8,
+        0,
         0
       ],
       [
@@ -3718,10 +3718,10 @@
     ]
   },
   "trace_double_v82_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        8,
+        0,
         0
       ],
       [
@@ -3731,10 +3731,10 @@
     ]
   },
   "trace_double_v82_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        8,
+        0,
         0
       ],
       [
@@ -3770,10 +3770,10 @@
     ]
   },
   "trace_double_v88_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -3783,10 +3783,10 @@
     ]
   },
   "trace_double_v89_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -3796,10 +3796,10 @@
     ]
   },
   "trace_double_v89_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -3809,10 +3809,10 @@
     ]
   },
   "trace_double_v89_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
@@ -3822,10 +3822,10 @@
     ]
   },
   "trace_single_v15_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        8,
+        0,
         0
       ],
       [
@@ -3835,10 +3835,10 @@
     ]
   },
   "trace_single_v15_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        8,
+        0,
         0
       ],
       [
@@ -3887,10 +3887,10 @@
     ]
   },
   "trace_single_v16_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        5,
+        0,
         0
       ],
       [
@@ -3900,10 +3900,10 @@
     ]
   },
   "trace_single_v17_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        4,
+        0,
         0
       ],
       [
@@ -3913,10 +3913,10 @@
     ]
   },
   "trace_single_v17_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        4,
+        0,
         0
       ],
       [
@@ -3926,10 +3926,10 @@
     ]
   },
   "trace_single_v17_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
@@ -3965,10 +3965,10 @@
     ]
   },
   "trace_single_v18_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        3,
+        0,
         0
       ],
       [
@@ -4004,14 +4004,14 @@
     ]
   },
   "trace_single_v22_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
-        1,
+        0,
         0
       ]
     ]
@@ -4056,10 +4056,10 @@
     ]
   },
   "trace_single_v47_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        830572258,
+        0,
         0
       ],
       [
@@ -4069,10 +4069,10 @@
     ]
   },
   "trace_single_v47_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        830572258,
+        0,
         0
       ],
       [
@@ -4082,10 +4082,10 @@
     ]
   },
   "trace_single_v47_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        830572258,
+        0,
         0
       ],
       [
@@ -4098,7 +4098,7 @@
     "exact": false,
     "ulps": [
       [
-        838960866,
+        0,
         0
       ],
       [
@@ -4111,7 +4111,7 @@
     "exact": false,
     "ulps": [
       [
-        838960866,
+        0,
         0
       ],
       [
@@ -4121,10 +4121,10 @@
     ]
   },
   "trace_single_v58_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        130,
+        0,
         0
       ],
       [
@@ -4173,36 +4173,36 @@
     ]
   },
   "trace_single_v67_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        8,
+        0,
         0
       ],
       [
         0,
-        6
+        0
       ]
     ]
   },
   "trace_single_v67_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        8,
+        0,
         0
       ],
       [
         0,
-        6
+        0
       ]
     ]
   },
   "trace_single_v67_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -4251,10 +4251,10 @@
     ]
   },
   "trace_single_v73_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        8,
+        0,
         0
       ],
       [
@@ -4264,10 +4264,10 @@
     ]
   },
   "trace_single_v73_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        8,
+        0,
         0
       ],
       [
@@ -4277,10 +4277,10 @@
     ]
   },
   "trace_single_v73_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [
@@ -4290,10 +4290,10 @@
     ]
   },
   "trace_single_v74_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        17,
+        0,
         0
       ],
       [
@@ -4303,10 +4303,10 @@
     ]
   },
   "trace_single_v74_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        17,
+        0,
         0
       ],
       [
@@ -4316,10 +4316,10 @@
     ]
   },
   "trace_single_v74_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        1,
+        0,
         0
       ],
       [
@@ -4358,7 +4358,7 @@
     "exact": false,
     "ulps": [
       [
-        23,
+        7,
         0
       ],
       [
@@ -4407,10 +4407,10 @@
     ]
   },
   "trace_single_v82_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        7,
+        0,
         0
       ],
       [
@@ -4420,10 +4420,10 @@
     ]
   },
   "trace_single_v82_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        7,
+        0,
         0
       ],
       [
@@ -4433,10 +4433,10 @@
     ]
   },
   "trace_single_v82_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        7,
+        0,
         0
       ],
       [
@@ -4485,36 +4485,36 @@
     ]
   },
   "trace_single_v89_nonnegative0_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        33,
-        1
+        0,
+        0
       ],
       [
         0,
-        2
+        0
       ]
     ]
   },
   "trace_single_v89_nonnegative0_recorded": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        33,
-        1
+        0,
+        0
       ],
       [
         0,
-        2
+        0
       ]
     ]
   },
   "trace_single_v89_nonnegative1_recomputed": {
-    "exact": false,
+    "exact": true,
     "ulps": [
       [
-        2,
+        0,
         0
       ],
       [

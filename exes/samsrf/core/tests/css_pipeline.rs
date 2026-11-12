@@ -518,7 +518,7 @@ fn double_css_pipeline_matches_matlab_with_the_ports_own_hrf() {
     );
     eprintln!("pipeline_double_css: {stats:?}");
     // Exact counts, so that any change is reviewed rather than absorbed.
-    assert_eq!((stats.identical, stats.differing, stats.basic, stats.rank_from_recording), (77, 61, 8, 3));
+    assert_eq!((stats.identical, stats.differing, stats.basic, stats.rank_from_recording), (136, 2, 8, 3));
 }
 
 #[test]
@@ -581,7 +581,7 @@ fn recorded_original_and_nonnegative_css_pipelines_match_matlab() {
         eprintln!("{label}: {stats:?}");
         results.push((id.to_string(), stats.identical, stats.differing, stats.basic, stats.rank_from_recording));
     }
-    assert_eq!(results, [("pipeline_double_css".to_string(), 77, 61, 8, 3), ("pipeline_double_css_nonnegative".to_string(), 70, 56, 8, 0)]);
+    assert_eq!(results, [("pipeline_double_css".to_string(), 136, 2, 8, 3), ("pipeline_double_css_nonnegative".to_string(), 125, 1, 8, 0)]);
 }
 
 // The gate itself, on synthetic least-squares problems: it must accept MATLAB's
