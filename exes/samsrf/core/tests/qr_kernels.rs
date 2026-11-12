@@ -129,10 +129,13 @@ fn complex_values(root: &Path, descriptor: &Value) -> Vec<Complex64> {
     re.into_iter().zip(im).map(|(re, im)| Complex64::new(re, im)).collect()
 }
 
-/// MATLAB solves A \ B for all right-hand sides in one ?ormqr and ?trsm call.
-/// Every coefficient of all 214 single and 190 double recorded real 8-column
-/// solves must equal MATLAB's bit for bit (complex multi-column solves are not
-/// modelled).
+/// MATLAB solves A \ B for all right-hand sides in one ?ormqr/?unmqr and
+/// ?trsm call. For every recorded 8-column solve (214 single and 190 double
+/// real, 134 single and 158 double complex), the port's Q^H y must equal the
+/// MEX chain's bit for bit, and its coefficients MATLAB's. MATLAB stores a
+/// result whose imaginary parts are all zero as a real array (30 complex
+/// solves): there the real parts must match bit for bit and every imaginary
+/// part must be zero, because the recording holds no sign for it.
 #[test]
 fn multiple_right_hand_sides_match_matlab_on_amd() {
     let Some(hosts) = hosts() else { return; };
@@ -142,32 +145,47 @@ fn multiple_right_hand_sides_match_matlab_on_amd() {
     let metadata: Value = serde_json::from_slice(&std::fs::read(root.join("kernels.json")).unwrap()).unwrap();
     let mut visited = std::collections::BTreeSet::new();
     let mut solves = std::collections::BTreeMap::<String, usize>::new();
+    let mut complex_stored_real = 0;
     let bits = |v: Complex64| [v.re.to_bits(), v.im.to_bits()];
     for item in metadata["multiple"].as_array().unwrap() {
-        if item["complex"] == true {
-            continue;
-        }
         let design = designs["cases"].as_array().unwrap().iter().find(|c| c["id"] == item["design"]).unwrap();
         let x = complex_values(&designs_root, &design["x"]);
-        let ones = vec![Complex64::new(1.0, 0.0); x.len()];
+        let m = x.len();
+        let ones = vec![Complex64::new(1.0, 0.0); m];
         let columns: [&[Complex64]; 2] = if item["order"] == "ones-first" { [&ones, &x] } else { [&x, &ones] };
         let rhs: Vec<f64> = values(root, &item["rhs"]);
-        let ys: Vec<&[f64]> = rhs.chunks(x.len()).collect();
+        let ys: Vec<&[f64]> = rhs.chunks(m).collect();
         let precision = if item["precision"] == "single" { Precision::Single } else { Precision::Double };
-        let solved = lstsq::mldivide_many(&columns, &ys, precision);
-        let together = complex_values(root, &item["together"]);
+        let (solved, qty) = lstsq::mldivide_many_with_qty(&columns, &ys, precision);
         let id = item["id"].as_str().unwrap();
         assert!(visited.insert(id.to_string()), "duplicate multi-RHS case {id}");
+        let recorded_qty = complex_values(root, &item["qty"]);
+        for (j, column) in qty.iter().enumerate() {
+            for (i, value) in column.iter().enumerate() {
+                assert_eq!(bits(*value), bits(recorded_qty[i + j * m]), "{id}: Q^H y row {i} of right-hand side {j}");
+            }
+        }
+        let together = complex_values(root, &item["together"]);
+        let stored_real = item["together"]["imaginary"].as_str().is_none_or(str::is_empty);
         assert_eq!(solved.coefficients.iter().flatten().count(), together.len(), "{id}: shape");
         for (index, value) in solved.coefficients.iter().flatten().enumerate() {
-            assert_eq!(bits(*value), bits(together[index]), "{id}: coefficient {index}: {value} differs from MATLAB's {}", together[index]);
+            let expected = together[index];
+            if stored_real {
+                assert!(value.re.to_bits() == expected.re.to_bits() && value.im == 0.0,
+                    "{id}: coefficient {index}: {value} differs from MATLAB's real {}", expected.re);
+            } else {
+                assert_eq!(bits(*value), bits(expected), "{id}: coefficient {index}: {value} differs from MATLAB's {expected}");
+            }
         }
-        *solves.entry(item["precision"].as_str().unwrap().to_string()).or_default() += 1;
+        let class = if item["complex"] == true { "complex " } else { "" };
+        complex_stored_real += usize::from(stored_real && item["complex"] == true);
+        *solves.entry(format!("{class}{}", item["precision"].as_str().unwrap())).or_default() += 1;
     }
-    eprintln!("bit-identical 8-column solves: {solves:?}");
-    assert_eq!(visited.len(), 404, "missing real multi-RHS designs");
-    assert_eq!(solves.get("single"), Some(&214), "single 8-column solves");
-    assert_eq!(solves.get("double"), Some(&190), "double 8-column solves");
+    eprintln!("8-column solves equal to MATLAB: {solves:?}");
+    assert_eq!(visited.len(), 696, "missing multi-RHS designs");
+    assert_eq!(complex_stored_real, 30, "complex solves MATLAB stored as real");
+    let expected = [("complex double", 158), ("complex single", 134), ("double", 190), ("single", 214)];
+    assert_eq!(solves.into_iter().collect::<Vec<_>>(), expected.map(|(k, n)| (k.to_string(), n)).to_vec());
 }
 
 /// Every step of MKL's recorded chain (`?geqp3`'s pivot, packed factor and

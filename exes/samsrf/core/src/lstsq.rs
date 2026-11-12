@@ -39,8 +39,8 @@ pub struct Solution {
 /// survives that conversion (MATLAB's complex tolerance applies only then).
 pub fn mldivide(columns: &[&[Complex64]], y: &[f64], precision: Precision) -> Solution {
     let solved = match precision {
-        Precision::Double => solve::<f64>(columns, &[y]),
-        Precision::Single => solve::<f32>(columns, &[y]),
+        Precision::Double => solve::<f64>(columns, &[y], true),
+        Precision::Single => solve::<f32>(columns, &[y], true),
     };
     let Solved { mut coefficients, mut qty, rank, pivot, r, packed, tau } = solved;
     Solution { coefficients: coefficients.remove(0), rank, pivot, r, packed, tau, qty: qty.remove(0) }
@@ -60,10 +60,20 @@ pub struct Solutions {
 
 pub fn mldivide_many(columns: &[&[Complex64]], ys: &[&[f64]], precision: Precision) -> Solutions {
     let solved = match precision {
-        Precision::Double => solve::<f64>(columns, ys),
-        Precision::Single => solve::<f32>(columns, ys),
+        Precision::Double => solve::<f64>(columns, ys, false),
+        Precision::Single => solve::<f32>(columns, ys, false),
     };
     Solutions { coefficients: solved.coefficients, rank: solved.rank, pivot: solved.pivot }
+}
+
+/// `mldivide_many` with `Q^H y` of every right-hand side, for the kernel test.
+#[doc(hidden)]
+pub fn mldivide_many_with_qty(columns: &[&[Complex64]], ys: &[&[f64]], precision: Precision) -> (Solutions, Vec<Vec<Complex64>>) {
+    let solved = match precision {
+        Precision::Double => solve::<f64>(columns, ys, true),
+        Precision::Single => solve::<f32>(columns, ys, true),
+    };
+    (Solutions { coefficients: solved.coefficients, rank: solved.rank, pivot: solved.pivot }, solved.qty)
 }
 
 struct Solved {
@@ -360,10 +370,25 @@ fn trsv_divide<T: Real>(numerator: C<T>, divisor: C<T>, complex: bool, single: b
 }
 
 /// `?trsm`, which a solve with several right-hand sides uses, multiplies by
-/// the reciprocal of each real diagonal (measured on AMD for every recorded
-/// real design). Complex designs keep `?trsv`'s division (not established).
+/// the reciprocal of each diagonal of R (measured on AMD in every recorded
+/// multi-column solve). A real diagonal's reciprocal is `1 / c`. A complex
+/// solve's is `(c, -d) / (c² + d²)`, rounded once from double (single
+/// designs) and with both parts prescaled by a power of two, which is exact
+/// and only keeps c² + d² from overflowing or underflowing (the 1e155 and
+/// 1e300 recorded designs), then a complex multiplication.
 fn trsm_divide<T: Real>(numerator: C<T>, divisor: C<T>, complex: bool) -> C<T> {
     if complex {
+        let (c, d) = (divisor.re.to_f64(), divisor.im.to_f64());
+        let largest = c.abs().max(d.abs());
+        if largest.is_normal() {
+            let scale = 2f64.powi(-largest.log2().floor() as i32);
+            let (cs, ds) = (c * scale, d * scale);
+            let denominator = cs * cs + ds * ds;
+            let reciprocal = C { re: T::from_f64(cs / denominator * scale), im: T::from_f64(-ds / denominator * scale) };
+            if reciprocal.re.is_finite() && reciprocal.im.is_finite() {
+                return numerator.mul(reciprocal, true);
+            }
+        }
         return numerator.div(divisor, true);
     }
     let reciprocal = T::ONE / divisor.re;
@@ -549,7 +574,9 @@ fn column_kernel(complex: bool, single: bool) -> Kernel {
 
 /// `?ormqr` / `?unmqr` applying a reflector to right-hand side `index` of
 /// `count`. Real right-hand sides are processed in groups of four columns;
-/// the one to three columns left over use narrower kernels.
+/// the one to three columns left over use narrower kernels. Complex ones all
+/// use the single-column kernel, whatever their number and position (Q^H y of
+/// every recorded 8-column complex solve).
 fn rhs_kernel(complex: bool, single: bool, count: usize, index: usize) -> Kernel {
     let one = match (complex, single) {
         (false, true) => kernel(true, 8, 8, &[4, 2, 1], false),
@@ -642,7 +669,7 @@ fn apply<T: Real>(kernel: Kernel, v: &[C<T>], tau: C<T>, c: &mut [C<T>], complex
     }
 }
 
-fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]]) -> Solved {
+fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]], keep_qty: bool) -> Solved {
     let n = columns.len();
     let m = ys.first().map_or(0, |y| y.len());
     assert!(columns.iter().all(|column| column.len() == m), "design columns and observations differ in length");
@@ -752,8 +779,7 @@ fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]]) -> Solved {
         .collect();
     let packed = a.iter().map(|column| column.iter().map(wide).collect()).collect();
     let tau = taus.iter().map(wide).collect();
-    // Q^H y is kept only for a single right-hand side.
-    let qty = bs.iter().map(|b| if count == 1 { b.iter().map(wide).collect() } else { Vec::new() }).collect();
+    let qty = bs.iter().map(|b| if keep_qty { b.iter().map(wide).collect() } else { Vec::new() }).collect();
     Solved { coefficients, qty, rank, pivot, r, packed, tau }
 }
 
@@ -801,6 +827,33 @@ mod tests {
                 assert_eq!(coefficients[0], separate.coefficients[0], "{precision:?}");
             }
         }
+    }
+
+    #[test]
+    fn complex_multiple_rhs_keep_the_coefficient_at_both_ends_of_the_range() {
+        // ?trsm's complex reciprocal (c, -d) / (c^2 + d^2) would overflow or
+        // flush to zero here without its power-of-two prescaling.
+        let y = [1.0, -2.0, 0.5, 3.0];
+        let base: Vec<Complex64> = (0..4).map(|i| Complex64::from_polar(1.0 + 0.25 * i as f64, 0.3 + 0.7 * i as f64)).collect();
+        for (precision, exponents, relative) in [(Precision::Double, [1020, -1000, 300, -300], 1e-15), (Precision::Single, [125, -100, 100, -90], 1e-6)] {
+            let reference = mldivide(&[&base], &y, precision).coefficients[0];
+            for exponent in exponents {
+                let scale = 2f64.powi(exponent);
+                let x: Vec<Complex64> = base.iter().map(|v| v * scale).collect();
+                let solved = mldivide_many(&[&x], &[&y, &y], precision);
+                assert_eq!(solved.rank, 1);
+                for coefficients in &solved.coefficients {
+                    let actual = coefficients[0] * scale;
+                    assert!(close(actual, reference, relative), "{precision:?} 2^{exponent}: {actual} != {reference}");
+                }
+            }
+        }
+        // A subnormal complex diagonal.
+        let x = [Complex64::new(3e-310, 1e-310)];
+        let solved = mldivide_many(&[&x], &[&[3e-310], &[6e-310]], Precision::Double);
+        // 3 / (3 + i) = 0.9 - 0.3i; the subnormal inputs keep about 34 bits.
+        let expected = Complex64::new(0.9, -0.3);
+        assert!(close(solved.coefficients[0][0], expected, 1e-4) && close(solved.coefficients[1][0], expected * 2.0, 1e-4), "{:?}", solved.coefficients);
     }
 
     #[test]

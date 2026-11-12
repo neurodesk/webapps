@@ -874,7 +874,7 @@ recorder commit `2e0eb54fd02ba0eddddcf3bb262d6b649347ec8a`). Both runner labels
 received AMD EPYC 7763 CPUs. Every process reported `CNR branch auto` with
 LAPACK 3.9.0, and every array was identical across all fourteen processes:
 MATLAB ignores these MKL requests, so they cannot select another backend.
-Intel hosts were not recorded. `qr-reference.json` pins the archive
+No Intel host ran this recording (the kernel recording below has one). `qr-reference.json` pins the archive
 (`ubuntu-22.04/` and `ubuntu-24.04/`, one directory per request, with
 `compare-qr-backends.mjs`'s report). The port is gated against
 `ubuntu-24.04/compatible`.
@@ -910,7 +910,9 @@ conclusions and is not pinned.
   and adds c(1) last. For several right-hand sides it works in groups of four
   columns with four (single) or two (double) accumulators; the one to three
   columns left over use narrower kernels. Complex single sums in two
-  accumulators and complex double in sequence. No order depends on memory
+  accumulators and complex double in sequence, and complex right-hand sides
+  all use that single-column kernel whatever their number and position (Q^H y
+  of every recorded complex 8-column solve). No order depends on memory
   alignment (offsets 0-7 recorded).
 - `cunmqr` and `zunmqr` do not round each complex product. They sum
   v.re (c.re, c.im) and v.im (c.im, c.re) in two separate sets of
@@ -928,7 +930,12 @@ conclusions and is not pinned.
   equals MKL's in every recorded design, and R(2,2) in every design whose
   R(1,2) does (below).
 - `?trsv` divides by the diagonal; `?trsm` multiplies by its reciprocal (every
-  recorded real multi-column solve). `ztrsv` divides by (a c + b d) / (c² + d²).
+  recorded multi-column solve). A real reciprocal is 1 / c. `ctrsm` and
+  `ztrsm` form (c, -d) / (c² + d²), rounded once from double for single, and
+  multiply by it as a complex number. Near the ends of the exponent range
+  (the 1e155 and 1e300 designs) MKL's reciprocal equals that formula on c and d
+  prescaled by a power of two, which is exact; dividing directly or scaling by
+  1 / max(|c|, |d|) gave other last bits. `ztrsv` divides by (a c + b d) / (c² + d²).
   `ctrsv` evaluates the same formula in double and rounds to single: its
   coefficients, signed zeros included, equal that in all 64 complex single
   chains, while dividing each part gave -0 for 0 / a negative diagonal in 13.
@@ -937,57 +944,88 @@ conclusions and is not pinned.
   MEX chain where `qr(A,0)`'s R12 alone did not settle the order: R is no
   evidence of Q'y.
 
-`lstsq.rs` implements these kernels. `qr_kernels.rs` holds them to MKL: every
-one of the 8,640 probes (23.6 million sums) on the first AMD recording must
-equal the port's sum, and the other four AMD recordings must be identical to
-it. It also requires `lstsq::mldivide_many` to reproduce MATLAB's 8-column
-`A \ B` bit for bit in all 214 single and 190 double recorded real solves;
-complex multi-column solves are not modelled. Finally,
-`every_recorded_chain_step_matches_mkl_on_amd` compares every step of each
-recorded chain with the port's, bit for bit: pivot, packed factor, reflector
-scalars, Q^H y and coefficients. All 345 chains in the class the port uses
-match. The three single designs with subnormal imaginary parts have no chain in
-that class and are counted, not compared.
+`lstsq.rs` implements these kernels.
 
-`qr_reference.rs` requires, for all 348 cases, MATLAB's rank and, for the 89
-rank warnings, its printed tolerance; a real result where MATLAB's is real; and
-zero coefficients for dropped columns. Coefficients have two independent gates.
-`exes/samsrf/core/tests/data/qr-outcomes.json` freezes each case's outcome: the
-346 bit-identical cases must stay bit-identical, and no real or imaginary part
-of any other coefficient may move further from MATLAB's, in ULPs, than
-recorded there. Regenerating that file (`SAMSRF_QR_WRITE_OUTCOMES=1`) is a
-deliberate change to review. Second, |port - MATLAB|, real and imaginary parts
-together, must stay within an empirical acceptance scale shaped like the
-first-order least-squares perturbation estimate,
-`eps * ||row of R^-1|| * (||A|| ||b|| + kappa ||r||)`, computed from MATLAB's own
-R, pivot and coefficients on the inputs converted to the design's class. It is
-not a proven error bound, and its constant 1 is not derived; the largest
-measured ratio is 0.93 (`random_single_9`).
+#### Current behaviour
 
-| Family (cases) | Bit-identical, measured order (#773) → MKL kernels | Max ULP of any part (#773 → now) |
-| --- | --- | --- |
-| Regression scale, single (33) | 18 → 25 | 34 → 16 |
-| Regression scale, double (33) | 10 → 28 | 132 → 17 |
-| Rank boundary, single (40) | 10 → 32 | 107 → 18 |
-| Rank boundary, double (40) | 8 → 34 | 132 → 15 |
-| CSS traces, single (54) | 22 → 49 | 130 → 7 (excluding vertices 47 and 58's zero baselines) |
-| CSS traces, double (54) | 22 → 52 | 48 → 29 |
-| Constant and extreme scales, single (12) | 8 → 10 | 18 → 0 |
-| Constant and extreme scales, double (12) | 9 → 12 | 1 → 0 |
-| Nearly constant, single (5) | 4 → 5 | 1 → 0 |
-| Nearly constant, double (5) | 1 → 5 | 2 → 0 |
-| Imaginary underflow and ones last, single (6) | 5 → 6 | 1 → 0 |
-| Imaginary underflow and ones last, double (6) | 3 → 6 | 87 → 0 |
-| Irregular, single (24) | 1 → 16 | 1,011 → 1,009 |
-| Irregular, double (24) | 2 → 20 | 1,684 → 673 |
+`lstsq::mldivide` (one right-hand side) and `lstsq::mldivide_many` (several, in
+MATLAB's column order) run the chain above in the design's class: column
+norms with MKL's `?nrm2` orders, column pivoting, `xLARFG` reflectors, the
+`?gemv` column update ending each reflector at its last nonzero entry
+(`xLARF`'s `ILADLR`), `?ormqr`/`?unmqr` on the whole reflector, MATLAB's rank
+rule, then `?trsv` division or `?trsm` reciprocal multiplication. The summation
+trees are those of MKL's CNR `auto` branch on AMD. Nothing selects another
+branch: MATLAB on an Intel host with MKL's `AVX512_E1` branch rounds
+differently, and the port does not follow it. Nonfinite inputs and the
+extreme-range guards are described below.
 
-After #731 (MKL's `snrm2` order, the two-accumulator `?unmqr` and `ctrsv` in
-double) 346 of 348 are bit-identical, and the other two
-(`trace_single_v58_nonnegative0_recorded` and `_recomputed`) equal MKL's own
-chain bit for bit: their coefficients are 0 + -0i, which MATLAB stores as a
-real array, so the recording cannot hold the sign. Every coefficient part is 0
-ULPs from MATLAB, and every chain's coefficients equal MKL's bit for bit on the
-five AMD recordings. No frozen part moved away from MATLAB.
+#### Recorded evidence and acceptance checklist
+
+This is agreement with MATLAB R2023b Update 11 and MKL 2021.3 (CNR `auto`, AMD
+EPYC hosts) on a finite set of recorded designs, not a proof for arbitrary
+inputs. Every item is a test that fails the native workflow:
+
+- `qr_reference.rs`, 348 designs: MATLAB's rank for all, and its printed
+  tolerance for the 89 rank warnings. 346 coefficients are bit-identical. The
+  other two (`trace_single_v58_nonnegative0_recorded` and `_recomputed`) have
+  MATLAB results 0 + 0i that MATLAB stores as a real array, so the recording
+  holds no sign for the port's -0 imaginary part. The test requires their real
+  parts at 0 ULPs from MATLAB's and their imaginary parts equal to zero. `qr-outcomes.json` keeps
+  each case's frozen distance (now 0 ULPs in every part), and the empirical
+  acceptance scale below still applies.
+- `qr_kernels.rs`, 8,640 FPRev probes (23.6 million sums): every `?gemv` and
+  `?ormqr` sum equals MKL's on the first AMD recording, and the other four AMD
+  recordings are identical to it.
+- `every_recorded_chain_step_matches_mkl_on_amd`: pivot, packed factor,
+  reflector scalars, Q^H y and coefficients of all 345 chains in the port's
+  class, bit for bit. The three single designs with subnormal imaginary parts
+  have no chain in that class and are counted.
+- `multiple_right_hand_sides_match_matlab_on_amd`: all 696 recorded 8-column
+  solves (214 single and 190 double real, 134 single and 158 double complex).
+  Q^H y equals the MEX chain's bit for bit. Coefficients equal MATLAB's bit for
+  bit, except where MATLAB stored an all-zero imaginary result as a real array
+  (30 complex solves). There the real parts must match bit for bit and the
+  imaginary parts must be zero. In 26 of those 30 the port's imaginary zeros
+  are -0. The 30 are a fixed count, so a new real-stored result fails the test.
+- Unit tests without recordings cover the extreme ranges: halved reflectors
+  near the largest value, prescaled complex division, the `ztrsv` and
+  `ztrsm` guards at 2^1020 and 2^-1000 (single 2^125 and 2^-100), subnormal
+  real and complex diagonals in multi-column solves, and NaN coefficients for
+  nonfinite inputs.
+- Through the pipelines, the reverse-correlation gates hold the single RC
+  profiles (`[Y ones] \ X` over 400 aperture pixels) and the single global
+  regression (`[X ones] \ Y` over every ROI course) to MATLAB's bits on the AMD
+  hosts.
+
+Diagnostics, not gates: `cargo run -p samsrf-core --example qr_steps` with
+`qr-steps.py` reports the first numerically differing step per design (none on
+AMD); it does not distinguish signed zeros.
+
+#### Remaining limits
+
+- MKL's AVX-512 branch on Intel hosts is not reproduced: the Intel kernel
+  recording differs from AMD in 12,841 of 16,326 arrays, and MATLAB ignores MKL
+  branch requests. Its FPRev probes are recorded, but a port of them would be a
+  second, non-default target that nothing in the app could select, so none is
+  attempted.
+- Signed zeros of MATLAB results that MATLAB itself returns as real cannot be
+  recorded through MATLAB. A MEX-level recording of `?trsm`'s own output could
+  show MKL's sign there, but MATLAB's visible result has none, so it would not
+  change what the port must match.
+- Designs, sizes and right-hand-side counts other than those recorded (two
+  columns; 16 and 250 rows; 1 and 8 right-hand sides in the QR recordings, 400
+  pixels and the ROI courses in the pipelines; the probe lengths) rest on the
+  kernel probes and the tree model, not on recorded MATLAB outputs. Other
+  MATLAB or MKL releases were not recorded.
+
+#### History
+
+In order, for #731: #812 added MKL's `snrm2` order, the two-accumulator
+`?unmqr` and `ctrsv` in double, taking the bit-identical single-RHS count from
+300 to 346. #818 trimmed `?geqp3`'s reflector (next paragraph). The complex
+`?trsm` reciprocal then took the 292 recorded complex 8-column solves to
+MATLAB's values (20 single and 2 double had them before; Q^H y already matched
+in all 292, so the difference was only in the back substitution).
 
 The last intermediate that differed was R(1,2) in 8 CSS-trace designs (v60 in
 both classes, v82 double), up to 8 ULPs. tau(1) = 1 there, but that was not the
@@ -1006,9 +1044,24 @@ numerically differing step of each design (none now). This Python diagnostic
 does not distinguish signed zeros; the Rust chain gate above compares the
 recorded bits.
 
-The two remaining non-exact designs are a recording-format loss, not an
-arithmetic difference. The rest of this paragraph and the table record the
-state before #731.
+The table and paragraph below record the state before #812.
+
+| Family (cases) | Bit-identical, measured order (#773) → MKL kernels (#795) | Max ULP of any part (#773 → #795) |
+| --- | --- | --- |
+| Regression scale, single (33) | 18 → 25 | 34 → 16 |
+| Regression scale, double (33) | 10 → 28 | 132 → 17 |
+| Rank boundary, single (40) | 10 → 32 | 107 → 18 |
+| Rank boundary, double (40) | 8 → 34 | 132 → 15 |
+| CSS traces, single (54) | 22 → 49 | 130 → 7 (excluding vertices 47 and 58's zero baselines) |
+| CSS traces, double (54) | 22 → 52 | 48 → 29 |
+| Constant and extreme scales, single (12) | 8 → 10 | 18 → 0 |
+| Constant and extreme scales, double (12) | 9 → 12 | 1 → 0 |
+| Nearly constant, single (5) | 4 → 5 | 1 → 0 |
+| Nearly constant, double (5) | 1 → 5 | 2 → 0 |
+| Imaginary underflow and ones last, single (6) | 5 → 6 | 1 → 0 |
+| Imaginary underflow and ones last, double (6) | 3 → 6 | 87 → 0 |
+| Irregular, single (24) | 1 → 16 | 1,011 → 1,009 |
+| Irregular, double (24) | 2 → 20 | 1,684 → 673 |
 
 In total 123 → 300 of 348. Every real double design is bit-identical. Three
 single designs with subnormal imaginary parts (`glm_single_1e+06/08/10_1e-50`)
@@ -1019,24 +1072,23 @@ part moved further from MATLAB while the others came closer (for example
 records them. What remains: the single `?nrm2` in two designs (reference
 LAPACK 3.9's scaled sum matches 91 of 93 single R(1,1) values; no candidate
 tried fixes both without breaking others), R(2,2) in nine single designs,
-complex `?unmqr` in 21 double and 12 single designs, and the Intel branch. In
-`?ztrsv`, where c² + d² is not a finite normal number the port uses the guarded
-division; MKL's result there matched it at the two recorded scales (1e155,
-1e300) but its formula is not otherwise evidenced. The same safe division
-protects overflowing numerator products/sums and products that flush to zero;
-finite subnormal products retain the measured arithmetic. These extensions have
-analytic single-column regression tests, not MATLAB bit-parity evidence.
-Multi-RHS real solves use direct division when the reciprocal overflows, with
-unit-solution regressions for subnormal diagonals in both precisions.
+complex `?unmqr` in 21 double and 12 single designs, and the Intel branch.
+The zero-based single CSS vertices 47 and 58 had exact zero baselines in
+MATLAB, where cancellation of the observation sum gave the port about 4e-9
+(within the acceptance scale). Both now equal MATLAB's (v58 up to the
+unrecorded sign of an imaginary zero).
 
-Every recorded real multi-RHS coefficient must equal MATLAB's bit for bit. The
-frozen `qr-multi-outcomes.json` snapshots of earlier nonmatching solves are
-gone: none remains.
-
-The zero-based single CSS vertices 47 and 58 have exact zero baselines in
-MATLAB, where cancellation of the observation sum gives the port about 4e-9
-(within the acceptance scale). Other inputs, CPUs or MATLAB releases may round
-differently.
+Extreme-range guards (current behaviour). In `ztrsv`, where c² + d² is not a
+finite normal number the port uses the guarded division; MKL's result there
+matched it at the two recorded scales (1e155, 1e300), but its formula is not
+otherwise evidenced. The same safe division protects overflowing numerator
+products and sums and products that flush to zero; finite subnormal products
+keep the measured arithmetic. Multi-column real solves divide directly when the
+reciprocal overflows (a subnormal diagonal). Multi-column complex solves use the
+prescaled reciprocal, which the 1e155 and 1e300 recordings support, and fall
+back to the guarded division only for a diagonal whose largest part is zero or
+subnormal. These fallbacks have analytic regression tests, not MATLAB bit-parity
+evidence.
 
 Nonfinite converted inputs, including finite doubles that overflow single,
 give NaN coefficients. MATLAB's handling was not recorded. When `beta - alpha`

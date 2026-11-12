@@ -428,12 +428,15 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   `xLARF` does. On the 348 recorded designs every rank and rank warning
   tolerance matches, every step of every recorded MKL chain is reproduced bit
   for bit, 346 are bit-identical to MATLAB and the other two differ only in
-  the sign of an imaginary zero MATLAB stores as real. All 404 recorded real
-  8-column solves are bit-identical. MKL's AVX-512 branch on Intel rounds
+  the sign of an imaginary zero MATLAB stores as real. All 696 recorded
+  8-column solves (404 real, 292 complex) equal MATLAB's, bit for bit except
+  for imaginary zeros MATLAB stores as real. This is agreement on recorded
+  designs on MATLAB's AMD hosts, not a proof for every input. MKL's AVX-512
+  branch on Intel rounds
   differently, and MATLAB ignores MKL branch requests, so results on Intel
   hosts are not reproduced. `mldivide_many` solves several right-hand sides
   at once as MATLAB's `A \ B` does, which the single RC profile and global
-  regression use; complex multi-column solves are not modelled. Nonfinite
+  regression use; complex ones multiply by MKL's `?trsm` reciprocal. Nonfinite
   converted inputs give NaN coefficients.
 - **Compressive nonlinearity.** `Css_Convention: "nonnegative"` (the default)
   clips negative responses before the CSS power and uses the fitted Exponent
