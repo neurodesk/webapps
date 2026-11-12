@@ -1771,6 +1771,8 @@ export class LesionNetworkMappingApp {
   // could not be read): it had already been written, so it is taken out of
   // the app and the viewer together.
   withdrawStructural() {
+    // A review waiting behind this image's load has nothing left to draw on.
+    this.cancelImports('mask');
     this.invalidatePipeline('the structural image changed');
     this.structuralFile = null;
     this.nativeStructuralFile = null;
