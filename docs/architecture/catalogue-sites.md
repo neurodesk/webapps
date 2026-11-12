@@ -101,6 +101,21 @@ requires that it fetched the binary from the family's `_runtime/` path. The
 target path carries the version, or a hash prefix when the build has none, so
 new bytes never replace a URL that a cached worker still requests.
 
+A file that fewer apps load than its family lists its own `consumers`. An app
+keeps a file that one of its `app_scoped_runtime_families` pins, even when a
+shared family holds the same bytes.
+
+MindGrab's binaries are shared per release (`mindgrab-wasm-<date>`, under
+`_runtime/mindgrab/<version>/`). Each app keeps the model modules
+(`brainchop-<model>.js`): MindGrab imports them from `assetPath`, a computed
+path, and the threaded CPU module starts its pthread workers from its own URL.
+Only the binary each module names in a static `new URL` moves. For each app
+that shares a threaded CPU binary, `pnpm test:runtime-startup` also segments a
+head phantom on the CPU backend through the app's staged module, once per app
+and at least once per binary (`SHARED_BINARY_EVERY_SEGMENTATION=1` runs every
+pair). The WebGPU and WebGL2 binaries are instantiated there but not run:
+hosted runners have neither backend.
+
 ## Shared tools
 
 General tools keep their home and are copied, through `also_in`, to the
