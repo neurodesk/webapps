@@ -18,6 +18,7 @@ pub mod expr;
 pub mod fit_prf;
 pub mod freesurfer;
 pub mod geometry;
+mod polyshape;
 pub mod gif_aps;
 pub mod gifti;
 pub mod hrf;
