@@ -324,7 +324,7 @@ and no compiled SamSrf 10.4 with these repairs was found in the SamSrf
 releases or the Neurodesk object store checked below. Nothing below is
 evidence about a compiled application until a `build` run has passed.
 
-### Compiler access, checked 2026-11-10
+### Compiler access, checked 2026-11-10 and 2026-11-12
 
 | Route | Finding |
 | --- | --- |
@@ -333,11 +333,56 @@ evidence about a compiled application until a `build` run has passed.
 | Trial license | [Trial-built applications expire](https://www.mathworks.com/matlabcentral/answers/515199-do-apps-compiled-using-simulink-compiler-under-a-trial-license-expire) and [trials cannot download previous releases](https://www.mathworks.com/matlabcentral/answers/2026102-how-do-i-download-and-install-previous-releases-of-matlab-or-the-mathworks-product-installer), so R2023b Update 11 is out of reach. |
 | Existing binaries | SamSrf releases through v10.4 carry no assets. Neurodesk's object store holds only 2024 builds (`samsrf_v10.003.zip`, `samsrf_v10.004.zip` and their dated copies), which report SamSrf 10.003 and lack the repairs. |
 | This repository | No `MLM_LICENSE_TOKEN` secret and no self-hosted runner. |
+| Neurodesk organisation | No organisation secret holds a MATLAB token (only `AUTOCOMMIT_FOR_NEUROCOMMAND`, `NEURODESK_GITHUB_TOKEN_ISSUE_AUTOMATION` and `RCLONE_CONFIG` are visible). `neurocontainers`' `build-matlab-standalone.yml` expects a `MATLAB_BATCH_LICENSE_TOKEN` secret that does not exist; its only run failed and it has never compiled anything. |
+| Upstream distribution | SamSrf's changelog says `SamSrfAnalysis` was made "for use in NeuroDesk", and Neurodesk distributes the builds. A full listing of the Neurodesk `build` container (46 objects) on 2026-11-12 found only the 2024 SamSrf zips and a 2024 `SamSrfX.zip`. No public build of 10.4 was found. |
+| Institutional license | Many Campus-Wide Licenses include MATLAB Compiler for staff at no personal cost. Whether one covers this user, and on which machines, is for the user and their institution to confirm. Activation needs the user's MathWorks account, so only the user can take this route. |
 | MATLAB Runtime | Free, and not a compiler. The [R2023b Update 11 installer](https://ssd.mathworks.com/supportfiles/downloads/R2023b/Release/11/deployment_files/installer/complete/glnxa64/MATLAB_Runtime_R2023b_Update_11_glnxa64.zip) (4,834,714,979 bytes) is public. `containers.mathworks.com/matlab-runtime` has `r2023b-update-1` to `-9` tags and a moving `r2023b` tag. The Runtime executes a compiled archive; it cannot build one. |
 
-Building therefore needs someone with a MATLAB Compiler license for R2023b
-Update 11 to provide a batch token, or to run the recipe on their own licensed
-host. Everything else is in place and runs from one dispatch.
+Building therefore needs a MATLAB Compiler license for R2023b Update 11, as a
+batch token for the `build` dispatch, or as a license for one Linux host. That
+host can be this kind of machine, using `licensed-host/`.
+
+### Building on one licensed host
+
+`licensed-host/build_and_validate.sh` runs every gate of the `build` dispatch on
+one host:
+
+1. Clone the pinned SamSrf and SPM.
+2. Download the pinned inputs and apply `prepare.py --cli`.
+3. Build with MATLAB Compiler, then prepare the bundle.
+4. Run source MATLAB twice, plus `verify_cli_hrf.m`.
+5. Run the compiled image twice, the strict compiled-versus-source and repeat
+   comparisons, the SIGINT check and the missing-model check.
+
+It publishes nothing. MATLAB runs in `licensed-host/Dockerfile`: MathWorks'
+`matlab-deps:r2023b` (Ubuntu 22.04) by digest, plus the Docker CLI that
+Compiler's image builders call. `licensed-host/matlab_batch.sh` mounts the
+mpm installation, the license and the work directory at their own paths. It
+uses `--network host`, so a host-locked license sees this host. It accepts a
+license file or a `PORT@HOST` license server.
+
+```sh
+mpm install --release=R2023bU11 --destination="$TMPDIR/matlab-r2023bu11" \
+  --products MATLAB MATLAB_Compiler Statistics_and_Machine_Learning_Toolbox \
+  Image_Processing_Toolbox Parallel_Computing_Toolbox
+packages/samsrf/validation/matlab/licensed-host/build_and_validate.sh \
+  "$TMPDIR/samsrf-compiled" LICENSE_FILE_OR_PORT@HOST "$TMPDIR/matlab-r2023bu11"
+```
+
+Run `mpm` inside the same `matlab-deps` image; R2023b does not support newer
+host distributions. The driver refuses an installation whose `VersionInfo.xml`
+is not 23.2.0.3097123.
+
+Checked on 2026-11-12 without a license:
+
+- `mpm` installed exactly 23.2.0.3097123, R2023b Update 11 (9.8 GB, with
+  `toolbox/compiler`).
+- The driver ran through the clones, the input download, the CLI repair set
+  (verified by `build_container.py`, five files) and the Python 3.10 venv.
+- MATLAB then started in the builder container and stopped at its license check
+  (`Feature: MATLAB`, error -2,413). A `PORT@HOST` value reached the same check.
+
+No compiled step has run.
 
 ### SamSrfAnalysis case matrix
 
