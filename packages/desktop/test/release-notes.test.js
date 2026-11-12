@@ -34,6 +34,7 @@ test('single-file and Apptainer downloads need no concatenation or archive extra
   assert.match(notes, /sha256sum -c -/);
   assert.match(notes, /apptainer run 'suite.sif' --verify/);
   assert.doesNotMatch(notes, /cat '|tar -x|unzip|Expand-Archive/);
+  assert.match(notes, /keep the SIF for Apptainer/);
 });
 
 test('the model pack is offered once for every platform and names the directory variable', () => {
@@ -63,5 +64,5 @@ test('each catalogue suite installs and launches its own executable', () => {
   assert.match(mac, /cp -R microscopy-webapps\.app "\$HOME\/Applications\/"/);
   assert.match(renderInstallationNotes([download], undefined, microscopy), /Start-Process '\.\\app\\microscopy-webapps\.exe'/);
   assert.match(renderInstallationNotes([{ ...download, platform: 'linux-x64' }], undefined, microscopy), /\.\/app\/microscopy-webapps\n/);
-  assert.doesNotMatch(mac, /neurodesk-webapps/);
+  assert.doesNotMatch(mac, /neurodesk-webapps|SIF/);
 });

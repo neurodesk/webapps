@@ -142,7 +142,7 @@ function desktopLink(catalog, standalone) {
 /**
  * The start page of one catalogue: `registry.apps` are the apps it lists and
  * `catalog` names and brands it (the primary catalogue by default, as the
- * all-app assembly and the desktop suite show). Only the primary catalogue
+ * all-app assembly shows; each desktop suite shows its own). Only the primary catalogue
  * carries the Vessel Surfer link, which its host serves.
  * `allApps`, every app of the registry, lets a search that finds nothing here
  * offer the apps other catalogues serve; the offline desktop suite leaves it out.

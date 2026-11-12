@@ -76,7 +76,7 @@ test('a catalogue site holds its own apps and only the runtime families they rea
   const mskDicomview = await readFile(join(mskDir, 'dicomview/index.html'), 'utf8');
   assert.match(mskDicomview, /data-app-url="https:\/\/mskapps\.sciget\.org\/dicomview\/"/);
   assert.deepEqual([...mskDicomview.matchAll(/data-neurodesk-catalog="([^"]*)"/g)].map(([, id]) => id), ['msk']);
-  // The all-app assembly also feeds the desktop suite, which no catalogue hosts.
+  // Only the projection names a catalogue; the all-app assembly it reads from has none.
   assert.doesNotMatch(await readFile(join(siteDist, 'dicomview/index.html'), 'utf8'), /data-neurodesk-catalog/);
   const mskPayload = JSON.parse(mskDicomview.match(/data-neurodesk-app-information>([\s\S]*?)<\/script>/)[1]);
   assert.deepEqual(mskPayload.catalog.map(({ id }) => id).sort(), ['dicomview', 'musclemap']);
