@@ -236,7 +236,8 @@ low-variance edge course.
 | RC profiles from MATLAB's courses, AMD host | exact | 0 (every profile entry identical) | |
 | RC profiles from MATLAB's courses, AVX-512 host | 32 units x peak x kappa | 4.95 per kappa (29-36% identical) | MATLAB's single QR vs exact: 20 |
 | Single global-regression residuals, AMD host | exact | 0 (every residual identical) | |
-| Single global-regression residuals, AVX-512 host; double residuals | 32 units of the input course's peak (double: `1e-13`) | 4.34 (31-51% identical) | host vs host: 5.2 |
+| Single global-regression residuals, AVX-512 matrix host | 32 units of the input course's peak | Not summarized here | Matrix reference; the edge recording has AMD hosts only |
+| Double global-regression residuals, both recordings and hosts | `1e-13` x input course peak | Not summarized here | Separate double-precision gate |
 | Each host's profiles to its maps (replay) | exact | 0 | |
 | RC `R^2` where MATLAB used MKL's AVX-512 path | 16 single ULPs | 9 | the dot product order (below) |
 | Positions, `Fwhm`, `Vx`, hull and summary widths, end to end | exact | 0 | |
@@ -287,7 +288,7 @@ the global signal and its regression are single.
 The port cannot be bit-identical before the profiles, because MATLAB is not:
 the two matrix hosts' profiles differ on about 70% of entries. Single RC profiles
 (`[Y ones] \ X`) and the single global regression (`[X ones] \ Y`) use
-`lstsq::mldivide`, the QR solve that reproduces MATLAB's on the QR recording,
+`lstsq::mldivide_many`, which solves all right-hand sides together,
 in MATLAB's column order. Historically it brought the largest RC profile error
 from 8.42 to 5.45 units per kappa, residuals from 18.81 to 5.41 and end-to-end
 profile values from 6.44 to 3.20, with 30% of profile entries and 54% of
