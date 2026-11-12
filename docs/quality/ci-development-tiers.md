@@ -102,7 +102,13 @@ to start its jobs. It fails, which opens an issue, when a budget in
 | Budget | Limit | What exceeding it means |
 | --- | --- | --- |
 | Whole-catalogue `ci` runs of one pull request | 2 | Fixes were pushed to a ready pull request. Convert it to draft first. |
-| Whole-catalogue pull request `ci` runs in total | 8 | A file the planner ties to every app is changing often. Read the `app-plan` summaries. |
+| Whole-catalogue pull request `ci` runs in total | 10 | A file the planner ties to every app is changing often. Read the `app-plan` summaries. |
+
+The total is five pull requests at their own budget. Replayed over the 60
+pull requests merged from 8 to 12 November 2026, the planner selected every
+app for 13 of them, at most 5 on one day (`scripts/app-plan-shadow.mjs --last
+60`). The seven days before the limit existed had 11 to 32 such runs each,
+because ready pull requests took several pushes.
 
 A whole-catalogue run is a `ci` run with at least 100 jobs; one still going
 when the report runs counts. Runs are grouped by pull request number, and a
