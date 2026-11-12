@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- 5bb36bb: SamSrf: the de Haas and SPM HRF kernels now equal MATLAB R2023b's bit for bit. `gampdf` for shapes of at least 1 follows the saddle-point formula MATLAB's densities show, and `sum` and `conv` follow MATLAB's order for short kernels, kernels longer than the course and sparse courses. With the port's own HRF, the recorded double CSS pipeline now matches every fitted parameter, R², nR² and noise ceiling exactly at all 96 vertices, including the weak fits at vertices 14, 15, 51 and 81. The same holds for a nonnegative-aperture control recorded afresh. Beta and Baseline are gated against the exact least-squares solution. Shapes below 1 and sparse complex convolutions longer than 800 samples keep their previous few-ULP differences.
+- 5bb36bb: SamSrf: the de Haas and SPM HRF kernels now equal MATLAB R2023b's bit for bit. `gampdf` for shapes of at least 1 follows the saddle-point formula found in MATLAB's recorded densities, stays finite at extreme finite inputs, and `sum` and `conv` follow MATLAB's order for short kernels, kernels longer than the course and sparse courses. With the port's own HRF, the recorded double CSS pipelines (original apertures and a nonnegative control, on MATLAB's AMD reference host) match every fitted parameter, R², nR² and noise ceiling exactly at all 96 vertices, including the weak fits at vertices 14, 15, 51 and 81, and keep MATLAB's NaN, infinity and zero masks. Beta and Baseline are not bit-identical; they are compared with the exact least-squares solution under a stated first-order policy. Shapes below 1 and sparse complex convolutions longer than 800 samples keep their previous few-ULP differences.
 
 ## 0.5.20261111
 

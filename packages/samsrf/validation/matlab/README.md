@@ -946,38 +946,69 @@ Intel host again reports `AVX512_E1` whatever was requested, the AMD host `auto`
 
 ### The double CSS pipeline
 
-With the port's own HRF, which now equals MATLAB's kernel bit for bit, the
-recorded 96-vertex double pipeline is gated at every vertex:
+With the port's own HRF, which now equals MATLAB's kernel bit for bit, three
+recorded 96-vertex double pipelines are checked at every vertex: `reference.json`'s
+`pipeline_double_css`, and the original-aperture and nonnegative-aperture
+pipelines of `css-pipelines-reference.json` on its AMD host (below). This is
+parity with that AMD reference only.
 
-- `compare-css.mjs` (committed WebAssembly) requires the port's de Haas kernel to
-  equal the recorded one, every fitted parameter, R², nR² and noise ceiling to be
-  bit-identical, and every map row to keep MATLAB's NaN, infinity and zero masks.
-  It runs the pipeline a second time with MATLAB's recorded kernel as a control,
-  which isolates the objective from the HRF: the same gates apply, and the two
-  runs must agree in every bit. The former differences at vertices 14, 15, 51
-  and 81 came from the kernel and are gone.
-- `css_pipeline.rs` runs the same pipeline natively, requires the WebAssembly's
-  Beta and Baseline to be its bits, and checks them against the exact
-  least-squares solution, computed in rational arithmetic from the design. Where
-  MATLAB returned a basic solution (8 coefficients, exactly zero because `\`
-  found `[1 x]` rank deficient), the port returns the same zero, and the kept
-  coefficient is checked against the one-column solution. Every other
-  coefficient must be no further from the exact solution than MATLAB's, plus
-  its inherent double-precision uncertainty: the first-order change of that
-  coefficient when every input column moves by one unit roundoff of its norm
-  (Wedin's least-squares perturbation bound; Higham, *Accuracy and Stability of
-  Numerical Algorithms*, 2nd ed., section 20.1). The limit depends on the
-  problem alone, not on any observed difference. 77 coefficients are
-  bit-identical and 61 differ. The port's error exceeds MATLAB's by at most 0.40
-  of that uncertainty, and neither error exceeds 5.2 of it. The test also pins
-  these counts.
+- `compare-css.mjs` replays each one on the committed WebAssembly through the
+  public API (`createJob`, `runJob`, `hrf.deHaas`). It requires the port's de Haas
+  kernel to equal the recorded one, every fitted parameter, R², nR² and noise
+  ceiling to be bit-identical, and every map row to keep MATLAB's NaN, infinity
+  and zero masks. A second run with MATLAB's recorded kernel is the control that
+  isolates the objective from the HRF: the same gates apply, and both runs must
+  agree in every bit. The former differences at vertices 14, 15, 51 and 81 came
+  from the kernel and are gone.
+- `css_pipeline.rs` runs the same pipelines natively and applies the same map
+  and mask gates. It requires the WebAssembly's Beta and Baseline to be the
+  native bits for all three, and checks the coefficients with a stated policy
+  (`coefficient_gate`), not a derived error bound:
+  1. **Rank.** MATLAB's rule (`|R22| > max(m, n) eps |R11|`, ten times that for a
+     complex design, as `lstsq.rs` records) is evaluated exactly. Where it gives
+     rank 1, the other coefficient must be MATLAB's and the port's exact zero,
+     and the kept one is compared with the one-column solution. A MATLAB zero
+     without rank deficiency fails. When the exact ratio lies within a factor of
+     2 of the tolerance, rounding could flip MATLAB's decision. There the
+     recorded zero pattern is the rank evidence and the port must match it: 3
+     vertices of the original pipeline (both recordings), none of the
+     nonnegative one. Elsewhere the closest exact ratio is 125 times from the
+     tolerance (6.7 in the nonnegative pipeline).
+  2. **Error.** `|port - t|` and `|MATLAB - t|` are measured exactly, with `t`
+     the real part of the exact least-squares solution in rational arithmetic.
+  3. **Scale.** The port's error may exceed MATLAB's by at most `S`. `S` is the
+     first-order change of the coefficient when every column of the design and
+     `y` moves by one unit roundoff of its norm (Wedin's expansion; Higham,
+     *Accuracy and Stability of Numerical Algorithms*, 2nd ed., section 20.1).
+     It neglects higher-order terms and assumes columnwise normwise
+     perturbations, so it is a scale, not a bound on anything. The gate fails
+     unless u times the column-scaled condition number is at most 2^-20, which
+     every recorded vertex meets (at most 2.2e-16). `S` is computed in an
+     extended exponent range, so designs whose squares overflow or underflow
+     double keep finite scales. Below the double spacing nothing is widened:
+     there a single ULP fails.
+  4. **Mutation tests.** Synthetic problems check that the gate accepts exact
+     coefficients and one-ULP changes, and rejects large mutations of either
+     coefficient. They also check the rejection of a zero in the wrong place,
+     a zero without rank deficiency, an ill-conditioned design and a mismatch
+     with recorded rank evidence. Overflowing and subnormal designs are
+     covered.
 
-`css-pipelines-reference.json` pins a fresh recording of this pipeline and of a
-nonnegative control, `max(ApFrm, 0)` on the same vectorised apertures
+| Pipeline | Bit-identical | Differing | Basic zeros | Rank from recording | Port error / `S` | MATLAB error / `S` | Largest excess / `S` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `reference.json` original | 77 | 61 | 8 | 3 | ≤ 4.62 | ≤ 4.99 | 0.40 |
+| AMD recording, original | 77 | 61 | 8 | 3 | ≤ 4.62 | ≤ 4.99 | 0.40 |
+| AMD recording, nonnegative | 70 | 56 | 8 | 0 | ≤ 2.77 | ≤ 2.23 | 0.81 |
+
+`css-pipelines-reference.json` pins a fresh recording of the original pipeline
+and of a nonnegative control, `max(ApFrm, 0)` on the same vectorised apertures
 (`record_css_pipelines.m`,
-[run 43127425289](https://github.com/neurodesk/webapps/actions/runs/43127425289),
-recorder commit `7d2188ed226046a8cb19a770c08e43be0cb19321`). Each host ran it twice
-in new MATLAB processes.
+[run 43127425289](https://github.com/neurodesk/webapps/actions/runs/43127425289) at
+recorder commit `7d2188ed226046a8cb19a770c08e43be0cb19321`, SamSrf `41ed1e96`).
+Each host ran it twice in new MATLAB processes. `css_pipeline.rs` checks this
+provenance from each process's own `environment.json`: run, recorder mode,
+SamSrf commit, requested `MKL_CBWR`, the BLAS line and the CPU. It also checks
+that every repeat array equals its first run.
 
 | Host | CPU | Requested | Observed | Result |
 | --- | --- | --- | --- | --- |
@@ -986,18 +1017,14 @@ in new MATLAB processes.
 
 The effective CNR branch and MKL's dynamic threading cannot be verified from
 inside MATLAB (`unverifiedControls`). So the reference is the AMD host, and the
-Intel recording is kept as evidence of the branch difference. On the AMD host,
-`css_pipeline.rs` applies the gates above to both pipelines with the port's HRF:
-the original one gives the counts above, and the nonnegative control gives 70
-identical and 56 differing coefficients, with 8 basic zeros. Its port errors
-reach 2.65 of the inherent uncertainty against MATLAB's 2.12, an excess of at
-most 0.81. Every non-coefficient map is exact and every mask matches in both.
+Intel recording is kept as evidence of the branch difference; nothing here
+asserts parity with it.
 
 What remains:
 
 - **Beta and Baseline** are not bit-identical: the column-pivoted QR solve (#731,
-  #773) rounds differently from MKL's. The gate above bounds them against the
-  exact solution, not against MATLAB's rounding.
+  #773) rounds differently from MKL's. The policy above compares their exact
+  errors with MATLAB's at a first-order scale. It does not bound them.
 - `gampdf` with shape below 1, the zero signs, sparse complex convolutions longer
   than 800 samples, and real `x'*y` of 8-19 elements.
 
@@ -1006,8 +1033,8 @@ python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numeric
 SAMSRF_MATLAB_NUMERICS_DIR="$TMPDIR/samsrf-numerics" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_numerics
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics2" packages/samsrf/validation/matlab/numerics2-reference.json
 SAMSRF_MATLAB_NUMERICS2_DIR="$TMPDIR/samsrf-numerics2" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_numerics2
-node packages/samsrf/validation/matlab/compare-css.mjs "$TMPDIR/samsrf-source-reference" "$TMPDIR/samsrf-css.json"
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-css-pipelines" packages/samsrf/validation/matlab/css-pipelines-reference.json
+node packages/samsrf/validation/matlab/compare-css.mjs "$TMPDIR/samsrf-source-reference" "$TMPDIR/samsrf-css.json" "$TMPDIR/samsrf-css-pipelines"
 SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-source-reference" SAMSRF_CSS_WASM_REPORT="$TMPDIR/samsrf-css.json" SAMSRF_MATLAB_CSS_PIPELINES_DIR="$TMPDIR/samsrf-css-pipelines" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_pipeline
 ```
 
