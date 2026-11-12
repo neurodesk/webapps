@@ -248,8 +248,19 @@ impl Prepared {
                 let sigma = p.round(p.round(square(mad_in(&xs, p)) + square(mad_in(&ys, p))).sqrt());
                 Ok(vec![r2, nanmedian_in(&xs, p), nanmedian_in(&ys, p), sigma, fwhm, vx])
             }
+            CfParameterEstimate::Gaussian if self.model.data_precision == Precision::Single => {
+                // Reached only by validation: the model parser still refuses single
+                // precision here until the raw-input gates pass (see `CfModel`).
+                let profile: Vec<f32> = r.iter().map(|&value| value as f32).collect();
+                let xy: Vec<[f32; 2]> = self.seed_xy.iter().map(|p| [p[0] as f32, p[1] as f32]).collect();
+                let tolerance = match &self.model.fine_fit {
+                    FineFit::NelderMead { tolerance: Some(tolerance) } => *tolerance,
+                    _ => 1e-4,
+                };
+                let (fit, r2_fit) = fit_gaussian_single(&profile, &xy, self.weights.is_some(), tolerance);
+                Ok(vec![f64::from(r2_fit), fit[0], fit[1], fit[2], fit[3], fit[4], fwhm, vx])
+            }
             CfParameterEstimate::Gaussian => {
-                // The model parser refuses single precision here (see `CfModel`).
                 let thresholded: Vec<f64> = r.iter().map(|value| (value - max / 2.0).max(0.0)).collect();
                 let (fit, r2_fit) = self.fit_gaussian(&thresholded, self.seed_xy[m])?;
                 Ok(vec![r2_fit, fit[0], fit[1], fit[2], fit[3], fit[4], fwhm, vx])
@@ -329,6 +340,60 @@ impl Prepared {
         }
         Ok(best.unwrap_or((vec![f64::NAN; 5], f64::NAN)))
     }
+}
+
+/// `samsrf_cfparam_loop`'s `Fit_pRF = 1` branch with single profiles and template
+/// coordinates, as R2023b computes it: the profile is thresholded at half its peak
+/// in single; each `fminsearch` starts from `[x y Sigma 1 0]` built as a single row
+/// (so `Sigma = single(10^e)`); `errfun` mixes single data with double parameters,
+/// and every single-double operation runs in double and rounds to single; the
+/// residuals and their sum are single, and `R^2` is single. Unsmoothed profiles are
+/// rows, so `Rmap - M` expands to N x N. Returns `[x0, y0, Sigma, Beta, Baseline]`
+/// and `R^2` of the best of the five starts (`NaN`s when none fits).
+pub fn fit_gaussian_single(profile: &[f32], xy: &[[f32; 2]], smoothed: bool, tolerance: f64) -> ([f64; 5], f32) {
+    let none = ([f64::NAN; 5], f32::NAN);
+    let peak = profile.iter().copied().fold(f32::NAN, f32::max);
+    let Some(m) = profile.iter().position(|&value| value == peak) else {
+        return none;
+    };
+    if peak.is_nan() || peak <= 0.0 {
+        return none;
+    }
+    let half = (f64::from(peak) / 2.0) as f32;
+    let observed: Vec<f32> = profile.iter().map(|&value| (value - half).max(0.0)).collect();
+    let mean = sum_single(&observed) / observed.len() as f32;
+    let spread = sum_single(&observed.iter().map(|value| (value - mean) * (value - mean)).collect::<Vec<_>>());
+    let objective = |p: &[f64]| -> f64 {
+        let denominator = 2.0 * p[2] * p[2];
+        let model: Vec<f32> = xy
+            .iter()
+            .map(|&[x, y]| {
+                let dx = (f64::from(x) - p[0]) as f32;
+                let dy = (f64::from(y) - p[1]) as f32;
+                let exponent = -((f64::from(dx * dx + dy * dy) / denominator) as f32);
+                let field = crate::precision::exp_single(exponent);
+                ((f64::from((f64::from(field) * p[3]) as f32)) + p[4]) as f32
+            })
+            .collect();
+        let squares: Vec<f32> = if smoothed {
+            observed.iter().zip(&model).map(|(o, m)| (o - m) * (o - m)).collect()
+        } else {
+            // Ds(i, j) = observed(j) - model(i), taken column-major.
+            observed.iter().flat_map(|o| model.iter().map(move |m| (o - m) * (o - m))).collect()
+        };
+        f64::from(sum_single(&squares))
+    };
+    let mut best: Option<([f64; 5], f32)> = None;
+    for exponent in -2..=2 {
+        let seed = [f64::from(xy[m][0]), f64::from(xy[m][1]), f64::from(10f64.powi(exponent) as f32), 1.0, 0.0];
+        let result = optim::fminsearch(objective, &seed, &FminsearchOptions { tol_x: tolerance, ..Default::default() });
+        let r2 = 1.0 - (result.fval / f64::from(spread)) as f32;
+        // nanmax: the first of the best; a NaN never wins.
+        if best.as_ref().map_or(!r2.is_nan(), |(_, b)| r2 > *b) {
+            best = Some((result.x.as_slice().try_into().expect("five parameters"), r2));
+        }
+    }
+    best.unwrap_or(none)
 }
 
 /// `polyshape(points).convhull`: `(centroid x, centroid y, sqrt(area) / (2 sqrt(2 ln 2)))`,
