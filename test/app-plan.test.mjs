@@ -1169,7 +1169,7 @@ test('a runtime manifest change selects the apps that stage its files and the si
   // Every other reader belongs to a selected app, a package only selected apps
   // reach, the composite build, or a check outside the per-app jobs.
   const selected = new Set(plan.selected.map((app) => app.id));
-  const composite = new Set(['scripts/lib/runtime-assets.mjs', 'scripts/audit-artifacts.mjs', 'test-utils/asyncify-runtime-startup.mjs']);
+  const composite = new Set(['scripts/lib/runtime-assets.mjs', 'scripts/audit-artifacts.mjs', 'test-utils/asyncify-runtime-startup.mjs', 'test-utils/shared-binary-startup.mjs']);
   // The planner names the manifest to classify it.
   const planner = 'scripts/lib/app-plan.mjs';
   const catalog = reachableFrom(workspace, CATALOG);

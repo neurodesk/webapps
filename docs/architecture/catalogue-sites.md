@@ -85,7 +85,21 @@ A catalogue site holds:
 catalogue's apps and exactly the runtime families its files reach. Every
 reference that resolves in `dist/` also resolves in the site. Every handoff menu
 lists only same-host apps. `pnpm audit:artifacts` audits `dist/` and each site,
-and applies the 750 MiB Pages budget to the `pages` site only.
+and applies the 750 MiB Pages budget to the `pages` site only. Undeclared
+duplicate content may be at most 10 % of a site. The audit prints the groups of
+identical files that cost the most as `largestDuplicateGroups`. To lower the
+share, move a group to a `deduplicate` family in `runtime-assets/manifest.json`,
+which needs every reference to the file to be a plain string path.
+
+A family matched by content (`match_by: "sha256"`) lists the apps that share it
+under `consumers`. Assembly fails, naming the app and the family, when a listed
+app ships other bytes or an unlisted app ships the family's bytes. An app that
+moves to another build therefore needs that build registered as a family. A
+shared WebAssembly family with `consumers` is also started in a browser:
+`pnpm test:runtime-startup` instantiates each consumer's built module and
+requires that it fetched the binary from the family's `_runtime/` path. The
+target path carries the version, or a hash prefix when the build has none, so
+new bytes never replace a URL that a cached worker still requests.
 
 ## Shared tools
 

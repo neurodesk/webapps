@@ -131,6 +131,24 @@ function unhashedName(file) {
   return basename(file).replace(/-[\w-]{8}(?=\.[^.]+$)/, '');
 }
 
+// A content-matched family skips bytes it does not know, so an app that moves to another build would
+// silently keep its own copy. A family that lists `consumers` must be shared by exactly those apps.
+function assertDeclaredConsumers({ family, asset, sharing, registry }) {
+  if (!family.consumers) return;
+  const built = new Set(registry.apps.map(app => app.id));
+  for (const id of family.consumers) {
+    if (built.has(id) && !sharing.has(id)) {
+      throw new Error(`${id}: declared consumer of runtime family ${family.id} ships no ${asset.name} with sha256 ${asset.sha256}; `
+        + 'register the build it now uses in runtime-assets/manifest.json and move the app to that family');
+    }
+  }
+  for (const id of sharing) {
+    if (!family.consumers.includes(id)) {
+      throw new Error(`${id}: shares ${asset.name} of runtime family ${family.id} but is not in its consumers; add it in runtime-assets/manifest.json`);
+    }
+  }
+}
+
 // Runtime binaries can move to the shared store independently of their worker
 // modules. Worker families retain their app scope policy and cannot opt in.
 async function deduplicateSources({ manifest, files, siteDist, registry }) {
@@ -139,6 +157,7 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
   for (const family of families) {
     for (const asset of family.files) {
       const targetPath = join(siteDist, '_runtime', family.target, asset.name);
+      const sharing = new Set();
       for (const app of registry.apps) {
         // An app's vendored components are not its own copies: removeAppCopies replaces them with the shared store.
         const vendored = join(siteDist, app.path, 'vendor', 'webapp-components') + sep;
@@ -197,8 +216,10 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
           if (!references) throw new Error(`No static references found for deduplicated runtime ${sourcePath}`);
           await rm(sourcePath);
           claimed.add(sourcePath);
+          sharing.add(app.id);
         }
       }
+      assertDeclaredConsumers({ family, asset, sharing, registry });
     }
   }
 }
