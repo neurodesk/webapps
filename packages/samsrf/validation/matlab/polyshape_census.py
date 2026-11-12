@@ -231,8 +231,9 @@ def census(root, case_id, stages_file, kind_of=None):
             rows.append({'case': i, 'first': 'model empty or error'})
             continue
         inputs = {}
-        for p, k in zip(P, stage['ring']):
-            inputs.setdefault(p, tuple(k))
+        centre, scale = stage['centre'], stage['scale']
+        for p in P:
+            inputs.setdefault(p, (math.trunc((p[0] - centre[0]) * scale), math.trunc((p[1] - centre[1]) * scale)))
         try:
             default = [to_grid(r, inputs, stage) for r in rings(data['default'][i])]
             kept = [to_grid(r, inputs, stage) for r in rings(data['kept'][i])] if 'kept' in data else []

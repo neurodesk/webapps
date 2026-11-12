@@ -597,3 +597,88 @@ fn polyshape_probe_matches_matlab() {
         }
     }
 }
+
+fn causal_hosts() -> Vec<(PathBuf, Vec<Value>)> {
+    let Some(root) = std::env::var_os("SAMSRF_MATLAB_POLYSHAPE_CAUSAL_DIR").map(PathBuf::from) else { return Vec::new() };
+    ["ubuntu-22.04", "ubuntu-24.04"].iter().map(|host| {
+        let dir = root.join(host);
+        let cases = load(&dir, "geometry.json");
+        (dir, cases)
+    }).collect()
+}
+
+/// One polygon's port outcome, IEEE bits, as the frozen snapshots store it.
+fn outcome_bits(polygon: &[[f64; 2]]) -> Value {
+    let hull = Hull::of_polygon(polygon).unwrap();
+    let vertices = hull.as_ref().map(|h| h.vertices.clone()).unwrap_or_default();
+    json!({
+        "empty": hull.is_none(),
+        "hull": sorted_vertices(&vertices).iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect::<Vec<_>>(),
+        "centroid": hull.as_ref().map(|h| h.centroid().map(f64::to_bits)),
+        "area": hull.as_ref().map(|h| h.area().to_bits()),
+    })
+}
+
+/// The causal probe (record_geometry.m 'polyshape-causal', pinned by
+/// polyshape-causal-reference.json) on both hosts: thin strips around an unfilled
+/// sliver (swept, bisected and held out), holes at and near one contact, and
+/// transforms of real clouds. Every strip and hole hull equals MATLAB's; their
+/// vertex sets too, except the IDs listed in matlab_polyshape_causal.json. The
+/// listed real-cloud transforms (of clouds 177, 932, 1607, 1937 and held-out
+/// 1125) must still differ, with their port outcomes frozen; every other
+/// transform (of clouds 7 and 1090, and 1125 at scale 1e-2) must match.
+#[test]
+fn polyshape_causal_matches_matlab() {
+    let hosts = causal_hosts();
+    if hosts.is_empty() {
+        return;
+    }
+    let listed: Value = serde_json::from_str(include_str!("matlab_polyshape_causal.json")).unwrap();
+    let ids_of = |key: &str| -> BTreeSet<usize> { listed[key].as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as usize).collect() };
+    let frozen = listed["realOutcomes"].as_object().unwrap();
+    for (root, cases) in hosts {
+        let ids: Vec<&str> = cases.iter().map(|c| c["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, ["causal_gap_sweep", "causal_gap_bisection", "causal_hole_contact", "causal_real", "causal_heldout"], "{}: causal inventory", root.display());
+        for case in &cases {
+            let id = case["id"].as_str().unwrap();
+            let polygons = split_rows(&points(&array(&root, &case["points"])), &array(&root, &case["counts"]));
+            let simplified = split_rows(&points(&array(&root, &case["simplified"])), &array(&root, &case["simplifiedCounts"]));
+            let hulls = split_rows(&points(&array(&root, &case["hull"])), &array(&root, &case["hullCounts"]));
+            let estimate = array(&root, &case["estimate"]);
+            let parameters = array(&root, &case["parameters"]);
+            let n = polygons.len();
+            let at = |i: usize| format!("{} {id} {i}", root.display());
+            let vertex_exceptions = ids_of(&format!("{id}Vertices"));
+            let mut visited = BTreeSet::new();
+            for i in 0..n {
+                let outcome = probe_outcome(&polygons[i], &simplified[i], &hulls[i], [estimate[i], estimate[n + i], estimate[2 * n + i]]);
+                assert!(!outcome.error, "{}: model error", at(i));
+                if id == "causal_real" {
+                    let rows = parameters.len() / 5;
+                    let source = parameters[i] as usize;
+                    let transform = parameters[4 * rows + i] as usize;
+                    if frozen.contains_key(&i.to_string()) {
+                        assert!(!outcome.hull, "{} now matches MATLAB; remove it from matlab_polyshape_causal.json", at(i));
+                        assert!([2, 3, 4, 5, 7].contains(&source), "{}: only the four regressions and held-out 1125 may differ", at(i));
+                        assert_eq!(&outcome_bits(&polygons[i]), &frozen[&i.to_string()], "{}: frozen port outcome changed", at(i));
+                        visited.insert(i);
+                    } else {
+                        assert!(outcome.hull, "{}: hull differs from MATLAB (source {source}, transform {transform})", at(i));
+                    }
+                } else {
+                    assert!(outcome.hull, "{}: hull differs from MATLAB", at(i));
+                    if vertex_exceptions.contains(&i) {
+                        assert!(!outcome.vertices, "{} now has MATLAB's vertices; remove it from matlab_polyshape_causal.json", at(i));
+                        visited.insert(i);
+                    } else {
+                        assert!(outcome.vertices, "{}: vertex set differs from MATLAB", at(i));
+                    }
+                }
+            }
+            let expected: BTreeSet<usize> = if id == "causal_real" { frozen.keys().map(|k| k.parse().unwrap()).collect() } else { vertex_exceptions };
+            assert_eq!(visited, expected, "{}: listed exceptions not all visited", at(0));
+            println!("{} {id}: {n} polygons, {} listed exceptions", root.file_name().unwrap().to_string_lossy(), visited.len());
+        }
+    }
+}
+

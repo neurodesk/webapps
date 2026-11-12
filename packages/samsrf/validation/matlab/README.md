@@ -1058,11 +1058,17 @@ identity; `tests/matlab_geometry.rs` is the port gate:
      by reference, 128-bit slope equality and the minima and intersection sort
      orders.
   3. *Cleaning.* Each output path is cleaned with the tolerance
-     `(1e-8 * span) * 10^p` in grid units, following Clipper's `CleanPolygon`
-     loop (close neighbours, close semi-adjacent pairs, near-collinear points),
-     the cleaned paths are united and cleaned once more, and the hull of the
-     survivors is cleaned the same way. Duplicate points, retraced spikes and
-     narrow spikes all follow from this.
+     `(1e-8 * span) * 10^p` in grid units by Clipper's `CleanPolygon` loop and
+     its own comparisons: squared distances in floating point, `<` for
+     near-collinear points and `<=` for close neighbours and close
+     semi-adjacent pairs. The cleaned paths are united and cleaned once more,
+     and the hull of the survivors is cleaned the same way. Duplicate points,
+     retraced spikes and narrow spikes all follow from this.
+  4. *Input winding.* Before the union, a ring wound negatively on the grid is
+     reversed behind its first vertex (`[p0, pn-1, ..., p1]`).
+
+  Steps 3 and 4 come from the causal probe below; they change no recorded
+  original or held-out polygon and none of the frozen snapshots.
 
   The 44 remaining polygons are all near-collinear clouds: points within 1e-6
   to 1e-10 of a line in random order. Every vertex MATLAB keeps for them is a
@@ -1081,22 +1087,52 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   union) resolves some of the four and breaks other clouds, so none is adopted.
   These four are unresolved regressions, not accepted results.
 
-  The probe's `KeepCollinearPoints` rings locate the obstacle. MATLAB's rings
-  before collinear cleaning are neither Clipper's strictly simple rings (157 of
-  500 random clouds match, as rings without orientation), its non-strict rings
-  (19) nor the minimal faces of the arrangement (483): MATLAB keeps a hole
-  that touches its outer ring at one vertex as a hole, and splits the region
-  where it touches at two. Its default output is then not those rings
-  cleaned: Clipper's `CleanPolygon` loop, a simultaneous removal against the
-  original neighbours, a single pass, and any of these followed by a strictly
-  simple or non-strict union all reproduce MATLAB's default vertices from
-  MATLAB's own kept rings for every random and offset cloud, but for at most
-  346 of 500 near-collinear clouds and 401 and 345 of the 500 half-integer and
-  0.1-grid clouds. In point cloud 7 MATLAB first merges two kept rings across
-  the thin unfilled sliver between them and only then removes near-collinear
-  vertices, so a vertex that is near-collinear in its kept ring survives with
-  its merged neighbours. Reproducing the four regressions needs that merge
-  rule and MATLAB's removal order, which the recorded outputs do not determine.
+  The failed premise was that MATLAB's default polyshape equals its
+  `KeepCollinearPoints` rings with each ring cleaned on its own.
+  `polyshape_census.py` (with `core/examples/polyshape_stages.rs`) reports, per
+  recorded polygon, the first model stage that departs from MATLAB (grid,
+  union vertices, kept-ring structure, final vertices, hull) and MATLAB's kept
+  ring topology. On the 2,500 original clouds the grid and union vertices
+  agree wherever the recording can tell (137 offset clouds are ambiguous: a
+  double coarser than the grid); 177 and 932 first depart at the final
+  vertices, with MATLAB's kept rings equal to the model's union rings, and
+  1607 and 1937 at the kept-ring structure. MATLAB's default vertices are a
+  subset of both its kept vertices and the model's union vertices for every
+  near-collinear cloud, so positions are right and the choice of survivors is
+  not.
+
+  The *causal probe* (`polyshape-causal` mode, `polyshape_causal_cases.m`,
+  pinned by `polyshape-causal-reference.json`, HF commit
+  f742a23f395ee6fc11f14677e121a57cb01d7d37, SHA-256
+  `bec4a653acdc9b5ea8d9213bba860af4361be3e8283abf9cad776208ab2f2243`, run
+  43226907674 at webapps 9b4e1a0f2f864c8bafcdd47bc5c96ffc5913e11a; both hosts'
+  120 arrays identical and same-host repeats exact) records controlled
+  polygons. Two thin strips touching at two vertices around an unfilled sliver
+  showed that MATLAB's result depends on where the input starts but not on its
+  direction: the drawn ring started at vertex k and the reversed ring started
+  at the same vertex give the same hull, which the model reproduced only for
+  the drawn order (147 of 8,424 strip pairs and 12 of 600 held-out pairs
+  differed). Reversing negatively wound rings behind their first vertex
+  removes all of them. A bisection of the sliver width showed MATLAB merging
+  strips one tolerance thick up to 2.478 tolerances, where an edge lies
+  exactly at the tolerance: Clipper's squared floating-point comparison
+  removes it and the previous exact strict comparison kept it (90 of 1,152
+  bisection polygons differed). Both rules now match every strip, bisection,
+  hole-contact and held-out strip hull, change no original or held-out probe
+  polygon, and leave every frozen snapshot bit for bit.
+
+  The four regressions are not explained by either. Every cyclic start,
+  reversal, translation and scale by 1e-2 and 1e2 of clouds 177, 932, 1607
+  and 1937 differs from MATLAB (the probe's 246 listed real-cloud transforms,
+  also held-out cloud 1125 except at scale 1e-2), while every transform of
+  clouds 7 and 1090 matches: their cause is structural, not the input order.
+  A split of holes touching their outer ring at two vertices into separate
+  faces before cleaning, which the kept rings suggest, fixes none of the four
+  and breaks 168 strip pairs that match now, so it is not adopted.
+  `polyshape_causal_matches_matlab` requires every causal hull exactly except
+  the listed real-cloud transforms, which must still differ and whose outcomes
+  are frozen in `matlab_polyshape_causal.json`, and every simplified vertex set
+  except eight strip pairs and one held-out pair listed there.
   The test names these 44 cases, requires each to stay near-collinear and still
   differ, and freezes each port hull, emptiness, area and centroid bit for bit
   in `matlab_polygon_snapping.json`. These are regression snapshots, not MATLAB

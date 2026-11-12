@@ -7,12 +7,14 @@
 //!    `p = floor(log10(1.25e14 / span))` for the larger axis range `span`, log10
 //!    rounded to nearest (`floor_log10`). Vertices that survive keep their
 //!    original coordinates; new ones are `k * 10^-p + c`.
-//! 2. Clipper 6.4.2's strictly simple even-odd union (`clipper.rs`) resolves the
+//! 2. A ring wound negatively (shoelace on the grid) is reversed behind its
+//!    first vertex: MATLAB's result depends on where the input starts but not
+//!    on its direction.
+//! 3. Clipper 6.4.2's strictly simple even-odd union (`clipper.rs`) resolves the
 //!    ring, and each output path is cleaned with the tolerance
-//!    `(1e-8 * span) * 10^p` in grid units, following Clipper's `CleanPolygon`
-//!    loop with the distance measures below. The cleaned paths are united and
-//!    cleaned once more.
-//! 3. The hull of the surviving vertices is cleaned the same way.
+//!    `(1e-8 * span) * 10^p` in grid units by Clipper's `CleanPolygon` loop and
+//!    comparisons. The cleaned paths are united and cleaned once more.
+//! 4. The hull of the surviving vertices is cleaned the same way.
 //!
 //! Clipper's sweep rounds each crossing of nearly parallel edges through its own
 //! floating-point `IntersectPoint`, which is what MATLAB's vertices show. Near-
@@ -32,11 +34,10 @@ https://github.com/skyrpex/clipper/blob/b1f1e1672745c1e1d73dd0437d1643f9633e7508
 SHA-256: 5c642a3668311701f72572443aa42c1a981edb037298efc015166d9d90be0755
 
 The union keeps Clipper's arithmetic and libstdc++'s std::sort order. It leaves
-out open paths, clip paths, Z values and the polygon tree. The clean adaptation
-uses a strict unsquared perpendicular-distance comparison and strict Euclidean
-neighbour-distance comparisons for the empirical MATLAB grid model. Clipper uses
-squared distances, with < for near-collinearity and <= for neighbours. The grid
-scaling is a separate implementation.
+out open paths, clip paths, Z values and the polygon tree. The clean keeps
+Clipper's squared-distance comparisons (< for near-collinearity, <= for close
+points). The grid scaling and the input-winding rule are separate
+implementations.
 
 Boost Software License - Version 1.0 - August 17th, 2003
 
@@ -111,10 +112,19 @@ pub(crate) struct Stages {
 pub(crate) fn stages(points: &[[f64; 2]]) -> Result<Option<Stages>, Unresolved> {
     let points: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
     let Some(grid) = Grid::new(&points)? else { return Ok(None) };
-    let ring: Vec<Point> = points.iter().map(|p| grid.snap(p)).collect();
+    let mut ring: Vec<Point> = points.iter().map(|p| grid.snap(p)).collect();
     let mut original: HashMap<Point, [f64; 2]> = HashMap::new();
     for (k, p) in ring.iter().zip(&points) {
         original.entry(*k).or_insert(*p);
+    }
+    // MATLAB's result depends on the input's first vertex but not its direction:
+    // a negatively wound ring is reversed behind its first vertex.
+    let doubled: i128 = (0..ring.len()).map(|i| {
+        let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+        a.0 as i128 * b.1 as i128 - b.0 as i128 * a.1 as i128
+    }).sum();
+    if doubled < 0 {
+        ring[1..].reverse();
     }
     let cleaned = |paths: &[Vec<Point>]| -> Vec<Vec<Point>> {
         paths.iter().map(|path| clean(path, grid.tolerance)).filter(|path| !path.is_empty()).collect()
@@ -242,16 +252,6 @@ fn cross(o: Point, a: Point, b: Point) -> i128 {
     (a.0 as i128 - o.0 as i128) * (b.1 as i128 - o.1 as i128) - (a.1 as i128 - o.1 as i128) * (b.0 as i128 - o.0 as i128)
 }
 
-fn distance(a: Point, b: Point) -> f64 {
-    ((b.0 - a.0) as f64).hypot((b.1 - a.1) as f64)
-}
-
-/// The distance of `point` from the line through `a` and `b`.
-fn altitude(a: Point, point: Point, b: Point) -> f64 {
-    let length = distance(a, b);
-    if length > 0.0 { cross(a, point, b).unsigned_abs() as f64 / length } else { distance(a, point) }
-}
-
 /// Clipper's `SlopesNearCollinear` choice: the point geometrically between the
 /// other two is measured against the line through them.
 fn near_collinear(p1: Point, p2: Point, p3: Point, tolerance: f64) -> bool {
@@ -270,10 +270,26 @@ fn near_collinear(p1: Point, p2: Point, p3: Point, tolerance: f64) -> bool {
     } else {
         (p1, p3, p2)
     };
-    altitude(x, mid, y) < tolerance
+    distance_from_line_squared(mid, x, y) < tolerance * tolerance
 }
 
-/// Clipper 6.4.2's `CleanPolygon` loop with MATLAB's distance measures.
+/// Clipper's `DistanceFromLineSqrd(pt, ln1, ln2)`, in its double arithmetic.
+fn distance_from_line_squared(pt: Point, ln1: Point, ln2: Point) -> f64 {
+    let a = (ln1.1 - ln2.1) as f64;
+    let b = (ln2.0 - ln1.0) as f64;
+    let mut c = a * ln1.0 as f64 + b * ln1.1 as f64;
+    c = a * pt.0 as f64 + b * pt.1 as f64 - c;
+    (c * c) / (a * a + b * b)
+}
+
+/// Clipper's `PointsAreClose(pt1, pt2, distSqrd)`.
+fn points_are_close(p1: Point, p2: Point, tolerance: f64) -> bool {
+    let dx = p1.0 as f64 - p2.0 as f64;
+    let dy = p1.1 as f64 - p2.1 as f64;
+    dx * dx + dy * dy <= tolerance * tolerance
+}
+
+/// Clipper 6.4.2's `CleanPolygon` loop with its own squared-distance comparisons.
 fn clean(path: &[Point], tolerance: f64) -> Vec<Point> {
     let n = path.len();
     if n == 0 {
@@ -293,10 +309,10 @@ fn clean(path: &[Point], tolerance: f64) -> Vec<Point> {
     let mut op = 0;
     while !done[op] && next[op] != previous[op] {
         let (a, b, c) = (path[previous[op]], path[op], path[next[op]]);
-        if distance(b, a) < tolerance {
+        if points_are_close(b, a, tolerance) {
             op = exclude(op, &mut next, &mut previous, &mut done);
             size -= 1;
-        } else if distance(a, c) < tolerance {
+        } else if points_are_close(a, c, tolerance) {
             let following = next[op];
             exclude(following, &mut next, &mut previous, &mut done);
             op = exclude(op, &mut next, &mut previous, &mut done);
