@@ -618,35 +618,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.7.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261111/seedseg-0.7.20261111-linux-x64.tar.gz",
-          "sha256": "0f6d6fbe5c961a1e67d1c0cd8b1e2f53db0d2102480efb728338db96381697c5",
-          "bytes": 1348039864,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261111/seedseg-0.7.20261111-linux-x64.tar.gz.validation.txt",
+          "version": "0.7.20261112",
+          "url": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261112/seedseg-0.7.20261112-linux-x64.tar.gz",
+          "sha256": "0e65c6728e755109907fc69a07f855c444d24b9c0f178a48ec7167ac006b5d6d",
+          "bytes": 1348041094,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261112/seedseg-0.7.20261112-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf seedseg-0.7.20261111-linux-x64.tar.gz\n./seedseg-0.7.20261111-linux-x64/seedseg image.nii.gz results"
+          "command": "tar -xzf seedseg-0.7.20261112-linux-x64.tar.gz\n./seedseg-0.7.20261112-linux-x64/seedseg image.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.7.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261111/seedseg-0.7.20261111-macos-arm64.pkg",
-          "sha256": "64de53c319fb2fb8b23b7b62b2fbb0327763f4e632c82778f9b7a2990d5c9871",
-          "bytes": 1349645782,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261111/seedseg-0.7.20261111-macos-arm64.pkg.validation.txt",
+          "version": "0.7.20261112",
+          "url": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261112/seedseg-0.7.20261112-macos-arm64.pkg",
+          "sha256": "251fdae5bc97d5b69c63d2f13839298a273bb2522da5f14def4f7af242e4e02d",
+          "bytes": 1349645567,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261112/seedseg-0.7.20261112-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg seedseg-0.7.20261111-macos-arm64.pkg -target /\nseedseg self-check\nseedseg image.nii.gz results"
+          "command": "sudo installer -pkg seedseg-0.7.20261112-macos-arm64.pkg -target /\nseedseg self-check\nseedseg image.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.7.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261111/seedseg-0.7.20261111-windows-x64.zip",
-          "sha256": "5f772ec4d92e653f055f68cce8d9a337562e541fbc22786c99e99d33a2e488c3",
-          "bytes": 1349864876,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261111/seedseg-0.7.20261111-windows-x64.zip.validation.txt",
+          "version": "0.7.20261112",
+          "url": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261112/seedseg-0.7.20261112-windows-x64.zip",
+          "sha256": "97dd03d94c2dfc3f70694888432ea5a329221d78975ff57d1eb21c86aba0f291",
+          "bytes": 1349865056,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/seedseg-v0.7.20261112/seedseg-0.7.20261112-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\seedseg-0.7.20261111-windows-x64.zip -DestinationPath .\n.\\seedseg-0.7.20261111-windows-x64\\seedseg.exe image.nii.gz results"
+          "command": "Expand-Archive -Path .\\seedseg-0.7.20261112-windows-x64.zip -DestinationPath .\n.\\seedseg-0.7.20261112-windows-x64\\seedseg.exe image.nii.gz results"
         }
       ],
       "containers": []
