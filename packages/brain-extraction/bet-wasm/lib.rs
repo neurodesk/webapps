@@ -30,8 +30,11 @@ pub extern "C" fn bet(
     gradient_threshold: f64,
     iterations: usize,
     subdivisions: usize,
+    affine: *const f64,
 ) -> *const u8 {
     let image = unsafe { std::slice::from_raw_parts(data, nx * ny * nz) };
+    let affine: &[f64; 16] = unsafe { &*(affine as *const [f64; 16]) };
+    let order = qsm_core::bet::FslLeftRightOrder::from_affine(Some(affine));
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let params = qsm_core::bet::BetParams {
         fractional_intensity,
@@ -41,7 +44,7 @@ pub extern "C" fn bet(
         subdivisions,
         voxel_scale: 1.0,
     };
-    let mask = qsm_core::bet::run_bet(image, &grid, &params, |current, total| unsafe {
+    let mask = qsm_core::bet::run_bet(image, &grid, &params, order, |current, total| unsafe {
         progress(current as u32, total as u32)
     });
     Box::leak(mask.into_boxed_slice()).as_ptr()

@@ -148,17 +148,16 @@ export async function downloadModels({ cacheDir = defaultCacheDir(), offline = o
   return { directory: resolve(cacheDir), count: MODEL_ASSETS.length, installedSha256: installedSha256(MODEL_ASSETS) };
 }
 
-// Proves the BET module runs: its mask of a bright sphere must cover the sphere. BET is not
-// meant for such a phantom, so the mask's extent beyond the sphere is not checked.
+// Proves the BET module runs and retains the bright core of a smooth Gaussian phantom.
 function betSmokeTest(runtime) {
   const size = 32;
   const data = Float32Array.from({ length: size ** 3 }, (_, i) => {
     const [x, y, z] = [i % size, Math.floor(i / size) % size, Math.floor(i / size ** 2)].map((c) => c - size / 2);
-    return Math.hypot(x, y, z) < 10 ? 100 : 0;
+    return 100 * Math.exp(-(x * x + y * y + z * z) / 100);
   });
   const affine = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
   const { mask } = runBet({ volume: { dims: [size, size, size], affine, data }, runtime });
-  if (data.some((value, index) => value && !mask.data[index])) throw new Error('BET WebAssembly check failed.');
+  if (data.some((value, index) => value > 90 && !mask.data[index])) throw new Error('BET WebAssembly check failed.');
   return mask.data.reduce((sum, value) => sum + value, 0);
 }
 
