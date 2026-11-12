@@ -8,6 +8,9 @@
 
 ### Patch Changes
 
+- Single-precision connective-field Gaussian fits (`Fit_pRF = 1` with `Data_Precision: "single"`) are no longer refused. The Benson template reader now uses MATLAB R2023b's single `sin` and `cos`: fdlibm's float kernels, with the x/4 term of `__kernel_cosf` keeping 11 fraction bits. Every recorded MATLAB template now equals the reader's (before, x0 or y0 differed by one ulp on some vertices). From the raw runs, Benson GIfTI and surface files, every map value of all 36 recorded single CF cases equals MATLAB's on its AMD (MKL CNR `auto`) host, the 12 Gaussian cases included, through the core, the Node API and the command line. MATLAB's AVX-512 host gives other single Gaussian fits from the same inputs. An exhaustive MATLAB recording of single `sin` and `cos` shows the port differs on 36,350 and 32,406 of 2,257,723,138 inputs (one ulp of x0 or y0 on about ten vertices of a whole Benson hemisphere), and single `exp` on 18 of 711,307, so arbitrary inputs are not promised bit parity. Single reverse-correlation 2D fits stay refused.
+- Updated dependencies
+  - @neurodesk/samsrf@0.6.20261112
 - a67952b: Single-precision reverse-correlation profiles and the connective-field global-signal regression now solve every right-hand side in one least-squares call, as MATLAB does: `[Y ones] \ X` over all aperture pixels and `[X ones] \ Y` over all ROI courses. On the AMD (MKL CNR `auto`) reference host, single CF results with global-signal correction now equal MATLAB R2023b's bit for bit, residuals and profiles alike. Single RC profiles rise from 31% to 82-96% identical. A course with a NaN keeps its column position as zeros and comes back zeroed; MATLAB's result for such a course was not recorded. Single Gaussian CF fits stay refused because the Benson reader's x0 and y0 are not yet bit-identical.
 - Updated dependencies [a67952b]
   - @neurodesk/samsrf@0.6.20261112

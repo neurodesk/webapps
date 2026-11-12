@@ -351,7 +351,7 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   expect(report.provenance.model.Scaling_Factor).toBe(9.5);
 });
 
-test("MATLAB single precision RC and CF downloads equal the package's in-process jobs", async ({ page }, testInfo) => {
+test("MATLAB single precision RC, CF and Gaussian CF downloads equal the package's in-process jobs", async ({ page }, testInfo) => {
   test.setTimeout(1800000);
   const byName = (name) => example.files.find(file => file.name === name);
   const file = async (name) => {
@@ -372,13 +372,19 @@ test("MATLAB single precision RC and CF downloads equal the package's in-process
     runs: paths.runs, roi, seed: paths.seed[0], apertures: paths.apertures[0], template: paths.template[0],
     white: paths.surfaces[0], area: paths.surfaces[1], hemisphere: "lh", precision: "single",
   });
-  for (const [analysis, outcome] of [["rc", RUNS.rc.outcome], ["cf", RUNS.cf.outcome]]) {
+  for (const [analysis, outcome, gaussian] of [["rc", RUNS.rc.outcome, false], ["cf", RUNS.cf.outcome, false], ["cf", RUNS.cf.outcome, true]]) {
     await page.locator("#analysis").selectOption(analysis);
     for (const role of roles[analysis]) await page.locator(`#${role}Input`).setInputFiles(paths[role]);
     await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
     await page.locator("#dataPrecision").selectOption("single");
+    if (gaussian) {
+      // Fit_pRF 1: the single Gaussian connective field.
+      await page.locator("#modelJson").fill(JSON.stringify({ ...JSON.parse(await page.locator("#modelJson").inputValue()), Fit_pRF: 1 }));
+      await page.locator("#modelJson").dispatchEvent("change");
+    }
     const model = JSON.parse(await page.locator("#modelJson").inputValue());
     expect(model.Data_Precision).toBe("single");
+    expect(model.Fit_pRF === 1).toBe(gaussian);
     await expect(page.locator("#runButton")).toBeEnabled();
     await page.locator("#runButton").click();
     await expect(page.locator("#statusText")).toContainText(outcome, { timeout: 1500000 });

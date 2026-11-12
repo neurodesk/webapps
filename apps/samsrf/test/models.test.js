@@ -107,12 +107,12 @@ test("forward precision and CSS conventions survive JSON and radius edits", () =
   assert.throws(() => parseModel(JSON.stringify({ ...model, Css_Convention: "unknown" }), "prf"), /Css_Convention/);
 });
 
-test("reverse correlation takes single precision except for 2D fits", () => {
+test("reverse correlation takes single precision except for 2D pRF fits", () => {
   const cf = buildModel("example-cf", { dataPrecision: "single" });
   assert.equal(cf.Data_Precision, "single");
   assert.deepEqual(parseModel(JSON.stringify(cf), "cf"), cf);
   assert.deepEqual(parseModel(JSON.stringify({ ...cf, Fit_pRF: -1 }), "cf"), { ...cf, Fit_pRF: -1 });
-  assert.throws(() => parseModel(JSON.stringify({ ...cf, Fit_pRF: 1 }), "cf"), /Gaussian fits need double precision/);
+  assert.deepEqual(parseModel(JSON.stringify({ ...cf, Fit_pRF: 1 }), "cf"), { ...cf, Fit_pRF: 1 });
   const rc = buildModel("example-revcor", { dataPrecision: "single" });
   assert.equal(rc.Data_Precision, "single");
   assert.deepEqual(parseModel(JSON.stringify(rc), "rc"), rc);
