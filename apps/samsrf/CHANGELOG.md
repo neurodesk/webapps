@@ -8,6 +8,9 @@
 
 ### Patch Changes
 
+- 891900e: Connective-field hulls now resolve polygons with a port of Clipper 6.4.2's even-odd union, the library MATLAB's `polyshape` builds on, on MATLAB's fixed-point grid `floor(log10(1.25e14 / span))`, established with a dedicated MATLAB R2023b probe. MATLAB's hull vertices are reproduced on 26,029 of 26,073 recorded polygons (previously 25,980), on all 253 reference cases, on all 27,648 grid-probe polygons and on 2,822 of 3,000 held-out clouds. The remaining differences are nearly collinear clouds, plus one held-out half-integer grid that MATLAB re-traces; four nearly collinear clouds that the previous model matched now differ, with hull areas off by 0.5 to 17 %. Coordinates outside the supported grid, or a failed Clipper sweep, now raise an error instead of an empty hull. Full-surface hull connective fields on the X001 example give bit-identical maps and take about 1.2 times as long.
+- Updated dependencies [891900e]
+  - @neurodesk/samsrf@0.6.20261112
 - a67952b: Single-precision reverse-correlation profiles and the connective-field global-signal regression now solve every right-hand side in one least-squares call, as MATLAB does: `[Y ones] \ X` over all aperture pixels and `[X ones] \ Y` over all ROI courses. On the AMD (MKL CNR `auto`) reference host, single CF results with global-signal correction now equal MATLAB R2023b's bit for bit, residuals and profiles alike. Single RC profiles rise from 31% to 82-96% identical. A course with a NaN keeps its column position as zeros and comes back zeroed; MATLAB's result for such a course was not recorded. Single Gaussian CF fits stay refused because the Benson reader's x0 and y0 are not yet bit-identical.
 - Updated dependencies [a67952b]
   - @neurodesk/samsrf@0.6.20261112
