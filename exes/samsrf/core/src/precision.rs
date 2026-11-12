@@ -106,6 +106,151 @@ pub fn exp_single(x: f32) -> f32 {
     }
 }
 
+/// MATLAB R2023b's single `sin`, the function `samsrf_benson2srf` applies to the
+/// GIfTI's single polar angles. It is fdlibm's float translation (`sf_sin.c`,
+/// `kf_sin.c`, `kf_cos.c`, `ef_rem_pio2.c` as in FreeBSD 5.0), every operation in
+/// single and no FMA, except for the x/4 term in `__kernel_cosf` (`kernel_cos_single`).
+/// Above 2^7 pi/2 (where fdlibm needs `__kernel_rem_pio2f`) the double result is rounded.
+/// It is inferred from MATLAB's outputs, not taken from MATLAB's source;
+/// `validation/matlab/README.md#single-sin-and-cos` gives the evidence and its range.
+pub fn sin_single(x: f32) -> f32 {
+    let ix = x.to_bits() & 0x7fff_ffff;
+    if ix <= 0x3f49_0fd8 {
+        return kernel_sin_single(x, 0.0, false);
+    }
+    if ix >= 0x7f80_0000 {
+        return x - x;
+    }
+    if ix > MEDIUM_LIMIT {
+        return crate::matlab_math::sin(f64::from(x)) as f32;
+    }
+    let (n, y0, y1) = rem_pio2_single(x);
+    match n & 3 {
+        0 => kernel_sin_single(y0, y1, true),
+        1 => kernel_cos_single(y0, y1),
+        2 => -kernel_sin_single(y0, y1, true),
+        _ => -kernel_cos_single(y0, y1),
+    }
+}
+
+/// MATLAB R2023b's single `cos`; see [`sin_single`].
+pub fn cos_single(x: f32) -> f32 {
+    let ix = x.to_bits() & 0x7fff_ffff;
+    if ix <= 0x3f49_0fd8 {
+        return kernel_cos_single(x, 0.0);
+    }
+    if ix >= 0x7f80_0000 {
+        return x - x;
+    }
+    if ix > MEDIUM_LIMIT {
+        return crate::matlab_math::cos(f64::from(x)) as f32;
+    }
+    let (n, y0, y1) = rem_pio2_single(x);
+    match n & 3 {
+        0 => kernel_cos_single(y0, y1),
+        1 => -kernel_sin_single(y0, y1, true),
+        2 => -kernel_cos_single(y0, y1),
+        _ => kernel_sin_single(y0, y1, true),
+    }
+}
+
+/// |x| ~<= 2^7 pi/2: the largest argument `ef_rem_pio2.c` reduces without `__kernel_rem_pio2f`.
+const MEDIUM_LIMIT: u32 = 0x4349_0f80;
+
+/// `__kernel_sinf(x, y, iy)` on x + y, |x| ~<= pi/4.
+fn kernel_sin_single(x: f32, y: f32, tail: bool) -> f32 {
+    const S: [u32; 6] = [0xbe2a_aaab, 0x3c08_8889, 0xb950_0d01, 0x3638_ef1b, 0xb2d7_2f34, 0x2f2e_c9d3];
+    let s = S.map(f32::from_bits);
+    if x.to_bits() & 0x7fff_ffff < 0x3200_0000 {
+        return x;
+    }
+    let z = x * x;
+    let v = z * x;
+    let r = s[1] + z * (s[2] + z * (s[3] + z * (s[4] + z * s[5])));
+    if tail {
+        x - ((z * (0.5 * y - v * r) - y) - v * s[0])
+    } else {
+        x + v * (s[0] + z * r)
+    }
+}
+
+/// `__kernel_cosf(x, y)` on x + y, |x| ~<= pi/4. Between 0.3 and 0.78125 fdlibm
+/// subtracts x/4 exactly from 1 and from z/2; MATLAB's x/4 keeps 11 of its 23
+/// fraction bits, as its single `exp` keeps 11 in the high part of ln 2.
+fn kernel_cos_single(x: f32, y: f32) -> f32 {
+    const C: [u32; 6] = [0x3d2a_aaab, 0xbab6_0b61, 0x37d0_0d01, 0xb493_f27c, 0x310f_74f6, 0xad47_d74e];
+    let c = C.map(f32::from_bits);
+    let ix = x.to_bits() & 0x7fff_ffff;
+    if ix < 0x3200_0000 {
+        return 1.0;
+    }
+    let z = x * x;
+    let r = z * (c[0] + z * (c[1] + z * (c[2] + z * (c[3] + z * (c[4] + z * c[5])))));
+    if ix < 0x3e99_999a {
+        return 1.0 - (0.5 * z - (z * r - x * y));
+    }
+    let quarter = if ix > 0x3f48_0000 { 0.28125 } else { f32::from_bits((ix - 0x0100_0000) & 0xffff_f000) };
+    let hz = 0.5 * z - quarter;
+    let a = 1.0 - quarter;
+    a - (hz - (z * r - x * y))
+}
+
+/// `__ieee754_rem_pio2f` for pi/4 < |x| <= 2^7 pi/2: n and x - n pi/2 as y0 + y1.
+fn rem_pio2_single(x: f32) -> (i32, f32, f32) {
+    const PIO2_1: f32 = f32::from_bits(0x3fc9_0f80);
+    const PIO2_1T: f32 = f32::from_bits(0x3735_4443);
+    const PIO2_2: f32 = f32::from_bits(0x3735_4400);
+    const PIO2_2T: f32 = f32::from_bits(0x2e85_a308);
+    const PIO2_3: f32 = f32::from_bits(0x2e85_a300);
+    const PIO2_3T: f32 = f32::from_bits(0x248d_3132);
+    const INV_PIO2: f32 = f32::from_bits(0x3f22_f984);
+    let hx = x.to_bits();
+    let ix = hx & 0x7fff_ffff;
+    let negative = hx >> 31 == 1;
+    if ix < 0x4016_cbe4 {
+        // |x| < 3 pi/4: n = +-1, with a third term of pi/2 near +-pi/2.
+        let sign = if negative { -1.0f32 } else { 1.0 };
+        let mut z = x - sign * PIO2_1;
+        let tail = if ix & 0xffff_fff0 == 0x3fc9_0fd0 {
+            z -= sign * PIO2_2;
+            PIO2_2T
+        } else {
+            PIO2_1T
+        };
+        let y0 = z - sign * tail;
+        let y1 = (z - y0) - sign * tail;
+        return (if negative { -1 } else { 1 }, y0, y1);
+    }
+    let t = x.abs();
+    let n = (t * INV_PIO2 + 0.5) as i32;
+    let n_float = n as f32;
+    let mut r = t - n_float * PIO2_1;
+    let mut w = n_float * PIO2_1T;
+    let mut y0 = r - w;
+    // fdlibm's npio2_hw[n - 1]: the high bits of n pi/2 in single.
+    let cancels = n >= 32 || ix & 0xffff_ff00 == ((n_float as f64 * std::f64::consts::FRAC_PI_2) as f32).to_bits() & 0xffff_ff00;
+    if cancels {
+        let exponent = (ix >> 23) as i32;
+        let lost = |y: f32| exponent - ((y.to_bits() >> 23) & 0xff) as i32;
+        if lost(y0) > 8 {
+            let t = r;
+            w = n_float * PIO2_2;
+            r = t - w;
+            w = n_float * PIO2_2T - ((t - r) - w);
+            y0 = r - w;
+            if lost(y0) > 25 {
+                let t = r;
+                w = n_float * PIO2_3;
+                r = t - w;
+                w = n_float * PIO2_3T - ((t - r) - w);
+                y0 = r - w;
+            }
+        }
+    }
+    let y1 = (r - y0) - w;
+    if negative { (-n, -y0, -y1) } else { (n, y0, y1) }
+}
+
 /// MATLAB's `sum` of a single vector, R2023b: four lanes from 44 elements.
 pub fn sum_single(values: &[f32]) -> f32 {
     if values.len() < 44 {
