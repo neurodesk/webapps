@@ -152,7 +152,6 @@ const STAGE_METHODS = [
   app.viewerController = {
     setViewType: view => viewTypes.push(view),
     clearVolumes() {},
-    clearAll() {},
     removeVolumeForStage() {}
   };
   const tab = document.querySelector('.view-tab[data-view="results"]');
@@ -409,7 +408,7 @@ for (const [input, load] of [
   app.maskDrawingController.manualUndoSnapshots = [new Uint8Array([1, 0, 0, 1])];
   const viewer = [];
   app.viewerController = {
-    clearAll: () => viewer.push('clearAll'),
+    clearVolumes: () => viewer.push('clearVolumes'),
     removeVolumeForStage: stage => viewer.push(`remove ${stage}`),
     getVolumeIndexForStage: () => null
   };
@@ -467,7 +466,7 @@ for (const [input, load] of [
   viewer.length = 0;
   app.clearResults({ full: true });
   assert.equal(app.structuralFile, null, 'a full reset also drops the input');
-  assert.deepEqual(viewer, ['remove threshold-preview', 'clearAll']);
+  assert.deepEqual(viewer, ['remove threshold-preview', 'clearVolumes']);
   assert.equal(app.messages.at(-1), 'All state cleared.');
 }
 

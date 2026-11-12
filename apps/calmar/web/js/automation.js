@@ -7,7 +7,9 @@ import { getSpatialMetadata } from './modules/spatial-file.js';
 import { serializeOverlapCsv } from './modules/overlap-export.js';
 import { VERSION } from './app/config.js';
 
-async function runOperation(app, context, work) {
+// `adopt` loads the inputs a run is about: replacing the structural image stops
+// whatever ran on the previous one, so it happens before this run's status begins.
+async function runOperation(app, context, work, adopt) {
   const { signal, progress } = context;
   if (app._pipelineRunning || app.executor.isRunning()) throw new Error('CALMaR is already processing an analysis.');
   const cancel = () => {
@@ -22,6 +24,8 @@ async function runOperation(app, context, work) {
   try {
     signal.throwIfAborted();
     app.clearResults({ full: true });
+    await adopt?.(context);
+    signal.throwIfAborted();
     app.beginStatus('Running analysis…');
     const result = await work(context);
     signal.throwIfAborted();
@@ -90,9 +94,7 @@ export function registerCalmarAutomation(app) {
           },
         };
       }),
-      'prepare-lesion': context => runOperation(app, context, async ({ inputs, signal, progress }) => {
-        await app.setStructural(inputs.structural[0]);
-        signal.throwIfAborted();
+      'prepare-lesion': context => runOperation(app, context, async ({ signal, progress }) => {
         progress({ value: 0.05, message: 'Extracting brain' });
         const prepared = await prepare(null, {
           extractBrain: async () => {
@@ -123,7 +125,7 @@ export function registerCalmarAutomation(app) {
             spatial: getSpatialMetadata(candidate),
           },
         };
-      }),
+      }, ({ inputs }) => app.setStructural(inputs.structural[0])),
     },
   });
   automation.registerViewer('main', createNiivueAdapter(app.nv));
