@@ -33,6 +33,54 @@ fn recording(root: &Path) -> Value {
     serde_json::from_slice(&std::fs::read(root.join("kernels.json")).unwrap()).unwrap()
 }
 
+// Regression metadata from the pinned single-kernel recording at PR #801's
+// initial head 237e56bf: (input bits, MATLAB output bits, candidate output bits).
+// There are 18 differing entries but 17 distinct inputs (one occurs twice).
+// These are test-only exceptions, not corrections to the production kernel.
+const SINGLE_EXP_EXCEPTIONS: [(u32, u32, u32); 17] = [
+    (0x3ea89800, 0x3fb1eaa7, 0x3fb1eaa6),
+    (0x41386800, 0x47c5c328, 0x47c5c329),
+    (0xc23ade93, 0x1dc228e0, 0x1dc228e1),
+    (0xc273045f, 0x13a32838, 0x13a32837),
+    (0xc1ae86ec, 0x2fb85abd, 0x2fb85abc),
+    (0xc2a98b0e, 0x02500039, 0x0250003a),
+    (0xc206b066, 0x272b6570, 0x272b656f),
+    (0xc2969e3b, 0x09235f34, 0x09235f33),
+    (0xc1e4dd00, 0x2ad3f08f, 0x2ad3f08e),
+    (0xc213f5a6, 0x24c6c1fe, 0x24c6c1ff),
+    (0xc18200d5, 0x33bc2264, 0x33bc2265),
+    (0xc1585331, 0x35b44eb6, 0x35b44eb5),
+    (0xc0fe8d03, 0x39b806f0, 0x39b806f1),
+    (0xc0a37b7e, 0x3bc605e0, 0x3bc605e1),
+    (0xc0bc214c, 0x3b375499, 0x3b37549a),
+    (0xc01b2911, 0x3db550b7, 0x3db550b8),
+    (0xc193d954, 0x3221b92b, 0x3221b92a),
+];
+
+fn single_exp_matches(input: u32, expected: u32, actual: u32) -> bool {
+    match SINGLE_EXP_EXCEPTIONS.iter().find(|entry| entry.0 == input) {
+        Some(&(_, reference, previous)) => {
+            expected == reference && (actual == reference || actual == previous)
+        }
+        None => actual == expected,
+    }
+}
+
+#[test]
+fn single_exp_exceptions_allow_improvements_but_not_replacements() {
+    for &(input, expected, previous) in &SINGLE_EXP_EXCEPTIONS {
+        assert!(single_exp_matches(input, expected, previous));
+        assert!(single_exp_matches(input, expected, expected));
+        assert!(!single_exp_matches(input, expected, previous ^ 0x10));
+        assert!(!single_exp_matches(input, expected ^ 0x10, previous));
+    }
+    // Correcting a known input cannot buy a new discrepancy at another input.
+    let (input, expected, _) = SINGLE_EXP_EXCEPTIONS[0];
+    assert!(single_exp_matches(input, expected, expected));
+    assert!(!single_exp_matches(0.0f32.to_bits(), 1.0f32.to_bits(), 1.0f32.to_bits() + 1));
+    assert!(single_exp_matches(0.0f32.to_bits(), 1.0f32.to_bits(), 1.0f32.to_bits()));
+}
+
 #[test]
 fn matlab_single_exp() {
     let Some(root) = std::env::var_os("SAMSRF_SINGLE_KERNELS_DIR").map(PathBuf::from) else {
@@ -44,16 +92,22 @@ fn matlab_single_exp() {
         let case = &recording(&dir)["cases"][0];
         let input = read(&dir, &case["input"]);
         let whole = read(&dir, &case["whole"]);
-        let differing: Vec<f32> = input
-            .data
-            .iter()
-            .zip(&whole.data)
-            .filter(|(x, w)| exp_single(**x as f32).to_bits() != (**w as f32).to_bits())
-            .map(|(x, _)| *x as f32)
-            .collect();
-        println!("{host}: exp_single differs from MATLAB on {} of {} inputs", differing.len(), input.data.len());
-        // The 18 normal-range inputs the candidate does not explain; any other is a regression.
-        assert!(differing.len() <= 18, "{host}: {differing:?}");
+        let mut differing = 0;
+        let mut known_inputs = std::collections::BTreeSet::new();
+        assert_eq!(input.data.len(), whole.data.len());
+        for (&x, &reference) in input.data.iter().zip(&whole.data) {
+            let input_bits = (x as f32).to_bits();
+            let expected = (reference as f32).to_bits();
+            let actual = exp_single(x as f32).to_bits();
+            assert!(single_exp_matches(input_bits, expected, actual),
+                "{host}: input {input_bits:#010x}, expected {expected:#010x}, actual {actual:#010x}");
+            if SINGLE_EXP_EXCEPTIONS.iter().any(|entry| entry.0 == input_bits) {
+                known_inputs.insert(input_bits);
+            }
+            differing += usize::from(actual != expected);
+        }
+        assert_eq!(known_inputs.len(), SINGLE_EXP_EXCEPTIONS.len());
+        println!("{host}: exp_single differs from MATLAB on {differing} of {} inputs", input.data.len());
     }
 }
 
