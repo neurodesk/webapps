@@ -294,15 +294,51 @@ course goes through `mldivide` for its rank rule. `corr`'s dot product follows M
 exactly (all 189 matrix `R^2` values on that host); the AVX-512 order was not
 identified (best candidate, 16 lanes x 4 accumulators with FMA: 145 of 189).
 
-Single 2D fits are refused. CF Gaussian fits run on single template
-coordinates, so MATLAB's single `exp` decides them. Its implementation is not
-reproduced: replaying the recorded profiles with Rust's `libm` `expf` leaves
-1-5 of 21 vertices per case different; glibc's `expf` and a correctly rounded
-`exp` leave more. RC Gaussian fits replay exactly from either host's recorded
-profiles (single residuals, a four-lane sum and single `R^2`, commit
-`06f57adca`), but end to end the fit amplifies profile rounding: the two hosts
-differ by up to 0.84 in `Sigma`, and no bound on the parameters has been
-established. A recording of MATLAB's single `exp`, and such a bound, come first.
+Single 2D fits are refused, and the recording below shows why no port can be
+gated on them. `kernels_only=true` (with `record_matlab=true`) runs
+`record_single_kernels.m` on both hosts, repeats it in a new MATLAB process
+(byte for byte equal). It records:
+
+- single `exp` on 711,307 inputs (every binade from 2^-30 to 2^7 at 4,096
+  mantissas, both signs, 400,000 uniform values in [-104, 0] and specials),
+  whole and in chunks of 1, 9, 81 and 400 elements;
+- the pieces of single `corr` (means, products, norms) for the CF matrix;
+- a replica of `samsrf_cfparam_loop` and `samsrf_fit2dprf` that logs every
+  `fminsearch` evaluation (parameters, exponents, single `exp` values,
+  objective) and asserts that it reproduces SamSrf's saved maps.
+
+[Run 43123623296](https://github.com/neurodesk/webapps/actions/runs/43123623296)
+recorded it at `6f63fb349` on an AMD EPYC 7763 (CNR `auto`) and an Intel Xeon
+Platinum 8573C (CNR `AVX512_E1`). `single-kernels-reference.json` pins it (HF
+commit `b8da2fe7`), and `analyse-single-kernels.mjs --check` holds the
+recording to the following findings in `samsrf-native`:
+
+- MATLAB's single `exp` is the same on both hosts and for every call shape,
+  but it is not correctly rounded: 24,445 results are 1 ulp below
+  `fround(exp(x))` and 22,702 are 1 ulp above. No open implementation
+  reproduces it: Rust `libm` `expf` matches 706,598 of 711,307, glibc's
+  `expf` (with or without FMA) 664,166, and correctly rounded `exp` 664,160.
+  `libm`'s misses lie on both sides, for |x| from 2^-24 to 2^-14 and from
+  2^-6 to 128, so the kernel is not one we could identify, and a table of its
+  exceptions would span most of the single range.
+- Within one host, the first `fminsearch` evaluation of the first vertex whose
+  `exp` differs from correctly rounded is evaluation 5. Over 99% of the logged
+  evaluations contain such a value in every case.
+- MATLAB does not agree with itself across the two hosts. Their CF profiles
+  differ by at most 3.1e-7 relative (1-2 single ulps), and the fitted maps
+  differ on 15-18 of 21 vertices per case: `Sigma` by up to 387 times
+  (LH, unsmoothed), `Beta` by 3,210 times, `x0` by 28 times, and `R^2` by up
+  to 30% (RH, smoothed). `Fwhm`, `Vx` and the noise ceiling agree exactly.
+  RC Gaussian fits replay exactly from either host's recorded profiles
+  (commit `06f57adca`), but end to end the hosts differ by up to 0.84 in
+  `Sigma`.
+
+A gate needs one reference per vertex. Here the reference depends on the CPU
+MATLAB runs on, by more than the parameters' own size, so no per-parameter
+limit is both independent of the port and tighter than the host spread, and
+a bit-exact port would need MATLAB's proprietary `exp` and the unidentified
+AVX-512 dot order. Single RC and CF Gaussian fits therefore stay refused;
+double precision is the supported fitted path.
 
 The double unsmoothed CF Gaussian is not gated here: on 2 of 21 vertices fits
 run away to |x0| > 1e8, do not replay, and differ between hosts by up to 9e7.
