@@ -151,6 +151,10 @@ test('the interface audit reads the example cache the job restored, filled and s
   const [restore, fill, save, audit] = [restoreAt, fillAt, saveAt, auditAt].map(index => steps[index]);
   assert.ok(restoreAt < fillAt && fillAt < saveAt && fillAt < auditAt, 'restore, then fill, then save and audit');
   const directory = restore.with.path;
+  // The cache's contents follow the lock, the examples and the list of apps the audit runs offline.
+  for (const source of ['registry/offline-assets.lock.json', 'apps/*/examples.json', 'scripts/lib/example-asset-cache.mjs']) {
+    assert.ok(restore.with.key.includes(`'${source}'`), `the cache key changes with ${source}`);
+  }
   assert.match(directory, /^\$\{\{ runner\.temp \}\}\/[\w-]+$/);
   assert.equal(fill.env.EXAMPLE_ASSET_CACHE, directory, 'the fill writes the restored directory');
   assert.match(fill.run, /fetch-example-cache\.mjs "\$EXAMPLE_ASSET_CACHE" --prune$/);
