@@ -235,13 +235,15 @@ low-variance edge course.
 | CF correlations from MATLAB's courses | 16 units | 10.0 | MATLAB vs the exact correlation of its inputs: 9.9; host vs host: 10 |
 | RC profiles from MATLAB's courses, AMD host | exact | 0 (every profile entry identical) | |
 | RC profiles from MATLAB's courses, AVX-512 host | 32 units x peak x kappa | 4.95 per kappa (29-36% identical) | MATLAB's single QR vs exact: 20 |
-| Global-regression residuals | 32 units of the input course's peak | 5.41 (54% identical) | host vs host: 5.2 |
+| Single global-regression residuals, AMD host | exact | 0 (every residual identical) | |
+| Single global-regression residuals, AVX-512 host; double residuals | 32 units of the input course's peak (double: `1e-13`) | 4.34 (31-51% identical) | host vs host: 5.2 |
 | Each host's profiles to its maps (replay) | exact | 0 | |
 | RC `R^2` where MATLAB used MKL's AVX-512 path | 16 single ULPs | 9 | the dot product order (below) |
 | Positions, `Fwhm`, `Vx`, hull and summary widths, end to end | exact | 0 | |
 | CF `R^2`, `Beta`, `Suppression`; RC `Beta` (of itself), end to end | 32 units x kappa | 3.20 per kappa | profile values |
 | Production Benson reader instead of MATLAB's template | exact | 0 | below |
 | Internal single CF from the raw files, Gaussian fits included (AMD host) | exact | 0 | below |
+| Internal single RC 2D fits from the raw files (AMD host); replay from each host's profiles | exact | 0 | below |
 | Public single `rc` 2D and CF Gaussian fits | refused | | below |
 
 Double precision is held to `1e-12 x kappa` (relative above 1), and its
@@ -286,11 +288,13 @@ The port cannot be bit-identical before the profiles, because MATLAB is not:
 the two matrix hosts' profiles differ on about 70% of entries. Single RC profiles
 (`[Y ones] \ X`) and the single global regression (`[X ones] \ Y`) use
 `lstsq::mldivide`, the QR solve that reproduces MATLAB's on the QR recording,
-in MATLAB's column order. It brought the largest RC profile error from 8.42 to
-5.45 units per kappa, residuals from 18.81 to 5.41 and end-to-end profile
-values from 6.44 to 3.20; the limits did not change. It is not bit-identical
-on these hosts' MKL kernels (30% of profile entries and 54% of residuals are),
-so the rounding-only courses stay. Double courses with variance keep the
+in MATLAB's column order. Historically it brought the largest RC profile error
+from 8.42 to 5.45 units per kappa, residuals from 18.81 to 5.41 and end-to-end
+profile values from 6.44 to 3.20, with 30% of profile entries and 54% of
+residuals bit-identical. With the multi-RHS solves (#808) and MKL's `snrm2`
+order (#812), every single profile entry and residual is now bit-identical on
+the AMD host (above); the AVX-512 host keeps the limits. The rounding-only
+courses stay, because MATLAB's residual there is rounding the port does not have. Double courses with variance keep the
 centred solve, within 1e-12 of MATLAB on every recorded case; a constant double
 course goes through `mldivide` for its rank rule. `corr`'s dot product follows MKL's CNR `auto` order
 exactly (all 189 matrix `R^2` values on that host); the AVX-512 order was not
@@ -849,11 +853,13 @@ Polygons `polygon_191` and `polygon_193`, once excluded, now pass with the
 others (see the fixed-point model below). CF checks from identical profiles isolate parameter
 estimation, and do not establish full single-precision CF pipeline parity.
 
-General double-precision fine-fit plateaus, remaining double CSS fits, and single
-reverse-correlation/CF arithmetic remain diagnostic cases. The single CSS
-parameters and scores match exactly for this recorded pipeline; beta and baseline
-retain the documented least-squares rounding tolerance. A successful source
-gate does not assert those paths, arbitrary-input parity, or a rebuilt container.
+General double-precision fine-fit plateaus and the remaining double CSS fits
+are diagnostic cases in this comparator; single reverse-correlation and CF
+arithmetic is gated separately (`revcor_reference.rs`, below). Every map value
+of the recorded single CSS pipeline, Beta and Baseline included, now equals
+MATLAB's; the gate keeps its per-value least-squares tolerance for coefficients.
+A successful source gate does not assert the diagnostic paths, arbitrary-input
+parity, or a rebuilt container.
 
 ## Least-squares solves
 
@@ -1593,11 +1599,11 @@ asserts parity with it.
 
 What remains:
 
-- **Beta and Baseline** are not all bit-identical: 3 of the 264 kept
-  coefficients of the original and nonnegative pipelines (the `reference.json`
-  and recorded original pipelines are the same data) still round differently from MKL's QR (#731). The
-  policy above compares their exact errors with MATLAB's at a first-order scale.
-  It does not bound them.
+- **Coefficients beyond these cases.** Every kept Beta and Baseline of the three
+  pinned AMD pipelines is bit-identical (the table above). The policy above
+  stays in the gate for any coefficient that differs; it compares exact errors
+  at a first-order scale and does not bound them. Other inputs, and MATLAB's
+  AVX-512 host, are not covered.
 - `gampdf` with shape below 1, the zero signs, sparse complex convolutions longer
   than 800 samples, and real `x'*y` of 8-19 elements.
 
