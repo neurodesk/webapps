@@ -363,6 +363,53 @@ that work), MATLAB's `exp` on the remaining inputs, and the objective and
 `fminsearch` arithmetic on single values. Single RC and CF Gaussian fits stay
 refused until a per-vertex gate against that host passes.
 
+### Single CF profiles and Gaussian fits on the AMD host
+
+`gemv_order=true` (with `record_matlab=true`) runs `record_gemv_order.m`, which
+fingerprints the summation order of single `y' * A`, the product `corr(y, X)`
+forms. It uses FPRev's pair method: 2^40 and -2^40 at two rows, ones elsewhere.
+It covers four shapes, a vector-dot control and 100 random products per shape.
+[Run 43129541262](https://github.com/neurodesk/webapps/actions/runs/43129541262)
+recorded it at `1b68590c7`. Both runners reported MKL CNR `auto` (AMD), and
+each repeated the recording exactly. `gemv-order-reference.json` pins it (HF
+commit `b9ead07f`).
+
+- Columns in full blocks of four use four single lanes, the remaining columns
+  eight. Both start lane 0 with element 0 and put element i in lane
+  (i - 1) mod lanes. Eight lanes fold to four as L[l] + L[l + 4], and four
+  reduce as (L0 + L2) + (L1 + L3). The elements left over are then added in
+  order. `analyse-gemv-order.mjs` rebuilds the trees.
+  `precision::gemv_t_single` reproduces all 3,200 held-out products and all
+  378 `corr` products of the single-kernel recording.
+- `corr.m` then divides by `y`'s norm and each seed's, and limits the result to
+  [-1, 1]. An ROI vertex that is also a seed gives 1, not 1.0000001.
+
+With both, every single CF profile without global-signal correction equals
+MATLAB's on the matrix and edge AMD hosts. That covers both hemispheres,
+250 and 1500 volumes, and smoothing on and off. With global-signal correction,
+the single regression `[x ones] \ y` still differs (#731).
+
+`cf_single_replay.rs` runs on the pinned single-kernel and gemv recordings:
+
+- `exp_single` differs from MATLAB on exactly the 18 known inputs.
+- `fit_gaussian_single`, started from MATLAB's profiles, gives every parameter
+  and `R^2` of all 156 fitted vertices on both hosts.
+
+`revcor_reference.rs` takes each single Gaussian CF case below the parser's
+refusal:
+
+- From MATLAB's courses and template, every map value of the six AMD cases
+  without global-signal correction equals MATLAB's.
+- The fits replay exactly from each host's profiles, except two smoothed
+  vertices with global-signal correction on the AVX-512 host, most likely
+  through the 18 `exp` inputs.
+
+Single Gaussian CF fits stay refused for two reasons. The production Benson
+reader's x0 or y0 differs from MATLAB's by an ulp on 1 of 9 seed vertices in
+both LH datasets. Run on that template, the LH fits differ on 1-16 vertices,
+by up to 11 times in `Beta`; the RH template is exact and so are its fits.
+The single global regression (#731) also differs.
+
 The double unsmoothed CF Gaussian is not gated here: on 2 of 21 vertices fits
 run away to |x0| > 1e8, do not replay, and differ between hosts by up to 9e7.
 That path is unchanged and gated by the 741-case pin's nine CF cases. Geodesic
