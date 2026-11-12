@@ -5,6 +5,9 @@
 ### Patch Changes
 
 - 5bb36bb: SamSrf: the de Haas and SPM HRF kernels now equal MATLAB R2023b's bit for bit. `gampdf` for shapes of at least 1 follows the saddle-point formula found in MATLAB's recorded densities, stays finite at extreme finite inputs, and `sum` and `conv` follow MATLAB's order for short kernels, kernels longer than the course and sparse courses. With the port's own HRF, the recorded double CSS pipelines (original apertures and a nonnegative control, on MATLAB's AMD reference host) match every fitted parameter, R², nR² and noise ceiling exactly at all 96 vertices, including the weak fits at vertices 14, 15, 51 and 81, and keep MATLAB's NaN, infinity and zero masks. Beta and Baseline are not bit-identical; they are compared with the exact least-squares solution under a stated first-order policy. Shapes below 1 and sparse complex convolutions longer than 800 samples keep their previous few-ULP differences.
+- c95c6ab: Connective-field convex hulls now use an empirical compatibility model of MATLAB R2023b `polyshape`: vertices move to its fixed-point grid (centred, scaled by a power of ten and truncated), self-intersecting clusters are resolved with the even-odd rule, and the 1e-8 thinness cleaning works on that grid. All 253 polygons of the 741-case MATLAB reference now pass without exclusions, and 25,980 of 26,073 recorded polygons give MATLAB's hull vertices bit for bit; the remaining 93 are nearly collinear point clouds whose crossings MATLAB resolves by snapping. Maps from the real Benson templates are unchanged.
+
+  The unresolved cases retain frozen port regression outcomes. Unrepresentable grid scales return an empty hull before integer conversion, preventing overflow or nontermination on extreme coordinates. The package includes Clipper and fdlibm notices.
 
 ## 0.5.20261111
 

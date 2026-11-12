@@ -438,10 +438,12 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   response, its `conv` and the MKL dot products and norms inside `corr` are
   empirical models, checked on recorded inputs.
   All 108 recorded CSS optimizer traces (54 double, 54 single) follow MATLAB's
-  parameter sequences bit for bit. The 96-vertex double pipeline matches every
-  fitted parameter, R², nR² and noise ceiling exactly when it is given MATLAB's
-  HRF kernel. With the port's own HRF, the kernel's `gampdf` rounding still moves
-  two weak fits (zero-based vertices 51 and 81). The limits of each operation,
+  parameter sequences bit for bit. With the port's own HRF, which equals MATLAB's
+  kernel, the recorded 96-vertex double pipelines (original apertures and a
+  nonnegative control, on MATLAB's AMD reference host) match every fitted
+  parameter, R², nR² and noise ceiling exactly; Beta and Baseline are compared
+  with the exact least-squares solution under a stated policy, not bit for bit.
+  The limits of each operation,
   and why MATLAB on Intel hosts gives other results, are in
   `validation/matlab/README.md#double-css-arithmetic`.
   The coefficient QR solve takes scaled norms, so large regressors do not overflow.
@@ -466,12 +468,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   the cluster is the peak alone. The triangulation decides incircle tests
   exactly and breaks cocircular ties with CGAL's symbolic perturbation, which
   gives MATLAB's `delaunay` edges on every recorded grid, ring and shuffled
-  tie. `polyshape` merges vertices closer than 1e-8 of the span and drops
-  vertices that close to their neighbours' chord. MATLAB takes those decisions
-  on a fixed-point copy of the vertices, so within 1e-5 relative of the cutoff
-  it can disagree, and it resolves crossings of near-parallel edges in a nearly
-  collinear cluster into slivers the port keeps
-  ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
+  tie. `polyshape(...).convhull` follows MATLAB's fixed-point grid, even-odd
+  resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on every
+  recorded polygon except 93 nearly collinear point clouds, whose crossings of
+  nearly parallel edges MATLAB resolves by snapping vertices the port does not
+  reproduce ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so
