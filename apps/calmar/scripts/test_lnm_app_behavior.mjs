@@ -108,11 +108,12 @@ function checkThenCommit(stub) {
     const load = stub?.[name];
     if (!load) continue;
     stub[name] = async (...args) => {
-      const { assertCurrent, onCommit, ...options } = args[optionsAt] || {};
+      const { assertCurrent, onCommit, replaceStage, ...options } = args[optionsAt] || {};
       const recorded = [...args];
       if (args[optionsAt]) recorded[optionsAt] = options;
       const result = await load(...recorded);
       assertCurrent?.();
+      if (replaceStage) stub.removeVolumeForStage?.(options.stage);
       onCommit?.();
       return result;
     };
@@ -144,6 +145,30 @@ function useMockElements(elementsById) {
 
 function waitMs(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ---- A handler without a check is refused, and ownership decides what it may write ----
+{
+  const app = makeApp();
+  assert.throws(() => app.unlessSuperseded(() => {}), TypeError, 'a handler without a check is refused');
+  assert.throws(() => app.reportFailure('Load failed'), TypeError, 'a report without a check is refused');
+
+  const owner = app.owner('pipeline', 'lesion');
+  app.reportFailure('Load failed', owner)(new Error('disk'));
+  assert.deepEqual(app._messages, ['Load failed: disk'], 'a current action reports its failure');
+  app.cancelImports('pipeline');
+  app.reportFailure('Load failed', owner)(new Error('disk'));
+  let handled = 0;
+  app.unlessSuperseded(owner, () => {
+    handled += 1;
+  })(new Error('disk'));
+  assert.deepEqual(app._messages, ['Load failed: disk'], 'an ordinary error from a superseded action is not reported');
+  assert.equal(handled, 0, 'and its handler writes nothing');
+  owner.renew();
+  app.reportFailure('Load failed', owner)(new Error('again'));
+  assert.equal(app._messages.at(-1), 'Load failed: again', 'an action that replaced the subject itself still owns it');
+  app.reportFailure('Load failed', owner)(new DOMException('replaced', 'AbortError'));
+  assert.equal(app._messages.length, 2, 'an AbortError from a nested turn is not reported either');
 }
 
 // ---- One log: every message reaches the technical log once, in full, with its level ----

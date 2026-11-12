@@ -51,8 +51,12 @@ optional `assertCurrent`. With it the file is decoded away from the viewer,
 `assertCurrent()` is called, and the image is inserted and recorded in one
 synchronous step that ends with `onCommit()`; a load that `assertCurrent`
 rejects never reaches the viewer, and what `assertCurrent` throws reaches the
-caller, also when the decode itself failed. Each such load creates its own
-object URL and releases only that URL. Use it wherever a newer load can
+caller, also when the decode itself failed. `assertCurrent` is asked whenever
+a member of the load is decoded and whenever the viewer changes, so it must
+have no side effects; a stack ends on its first failed or superseded member
+without waiting for the others. Each such load creates its own object URL per
+file and releases only those. `replaceStage` makes an overlay take the place
+of its stage's overlay in the commit. Use it wherever a newer load can
 supersede one that is still being fetched or decoded. Pass `NVImage` to the
 constructor when NiiVue is imported as a module.
 

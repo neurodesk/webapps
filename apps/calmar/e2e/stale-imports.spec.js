@@ -1190,9 +1190,10 @@ test.describe('an import that finishes late', () => {
         await outcome(app.showRegistrationQc('mni')),
         await outcome(app.showScanConfirmation()),
         await outcome(app.loadViewerBaseVolume(app.registrationTemplateFile, { stage: 'structural' })),
+        await outcome(app.prealignToMni160()),
       ];
     });
-    expect(refusals).toEqual(Array(3).fill('Confirm the lesion mask or start over before changing the view.'));
+    expect(refusals).toEqual(Array(4).fill('Confirm the lesion mask or start over before changing the view.'));
     await viewerIdle();
     expect(await loaded()).toMatchObject({ review: true, base: 'T1.nii', controllerBase: 'T1.nii', drawn: 2, viewer: ['T1.nii'] });
     const grid = await page.evaluate(() => ({
@@ -1203,5 +1204,75 @@ test.describe('an import that finishes late', () => {
     expect(grid).toEqual({ drawing: 512, base: [8, 8, 8], exported: true });
     await page.locator('#maskUndoButton').dispatchEvent('click');
     expect(await loaded()).toMatchObject({ review: true, drawn: 0 });
+  });
+  test('a threshold projection of a replaced subject that fails leaves the newer subject its map', async ({ page }) => {
+    const { choose, loaded, log, viewerIdle, image } = await holdImports(page);
+    await choose('structural', 'A.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('A.nii');
+    await page.evaluate((bytes) => {
+      const threshold = new File([new Uint8Array(bytes)], 'old-threshold.nii');
+      app.tagFileSpace(threshold, { space: 'mni160', role: 'threshold-map' });
+      app.tagFileSpace(app.structuralFile, { space: 'mni160', role: 'structural' });
+      app.networkMapFile = threshold;
+      app.thresholdedMaskFile = threshold;
+      app.networkMapAffine = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+      app.hasRegistrationDisplacement = true;
+      threshold.arrayBuffer = () => new Promise((resolve, reject) => {
+        globalThis.failOldThreshold = reject;
+      });
+      globalThis.oldThresholdRender = app.renderThresholdPreviewOverlay();
+    }, [...image]);
+    await page.waitForFunction(() => globalThis.failOldThreshold);
+
+    await choose('structural', 'B.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('B.nii');
+    await page.evaluate(async (bytes) => {
+      const file = new File([new Uint8Array(bytes)], 'B-threshold.nii');
+      app.tagFileSpace(file, { space: app.structuralSpace(), role: 'threshold-map' });
+      app.patientThresholdedMaskFile = file;
+      app.thresholdedMaskFile = file;
+      await app.loadViewerOverlay(file, 'red', 0.65, { stage: 'threshold-preview', visible: true });
+      app.refreshViewerLayerControls();
+    }, [...image]);
+    await page.evaluate(async () => {
+      globalThis.failOldThreshold(new Error('the old threshold could not be read'));
+      await globalThis.oldThresholdRender;
+    });
+    await viewerIdle();
+    expect(await page.evaluate(() => app.patientThresholdedMaskFile?.name)).toBe('B-threshold.nii');
+    expect((await loaded()).viewer).toEqual(['B.nii', 'B-threshold.nii']);
+    await expect(page.locator('#layerToggleThresholdMap')).toBeChecked();
+    expect(await log()).not.toMatch(/the old threshold could not be read|failed/i);
+  });
+
+  test('a threshold changed during a review that fails is drawn when the review ends', async ({ page }) => {
+    const { choose, waiting, resume, loaded, log, viewerIdle, image, smallMask } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await page.evaluate(() => {
+      globalThis.holdDecodedDrawing = true;
+    });
+    await choose('manualMask', 'mask.nii', smallMask);
+    await waiting('decoded-drawing');
+    await page.evaluate((bytes) => {
+      const threshold = new File([new Uint8Array(bytes)], 'threshold.nii');
+      app.tagFileSpace(threshold, { space: app.structuralSpace(), role: 'threshold-map' });
+      app.thresholdedMaskFile = threshold;
+      app.scheduleThresholdPreviewOverlay();
+    }, [...image]);
+    await page.waitForTimeout(250);
+    expect(await loaded()).toMatchObject({ review: true, viewer: ['T1.nii'] });
+
+    await page.evaluate(() => {
+      app.nv.loadDrawing = () => {
+        throw new Error('the drawing could not be made');
+      };
+    });
+    await resume('decoded-drawing');
+    await expect.poll(log).toContain('the drawing could not be made');
+    await expect.poll(async () => (await loaded()).viewer).toEqual(['T1.nii', 'threshold.nii']);
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ review: false });
+    await expect(page.locator('#layerToggleThresholdMap')).toBeChecked();
   });
 });

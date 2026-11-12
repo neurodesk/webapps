@@ -21,18 +21,22 @@ async function runOperation(app, context, work, adopt) {
   signal.addEventListener('abort', cancel, { once: true });
   const previousProgress = app.automationProgress;
   app.automationProgress = progress;
+  // Once the run has begun its status it owns the status bar until something
+  // else takes it; before that it has written nothing that could be stale.
+  let status = null;
   try {
     signal.throwIfAborted();
     app.clearResults({ full: true });
     await adopt?.(context);
     signal.throwIfAborted();
-    app.beginStatus('Running analysis…');
+    status = app.beginStatus('Running analysis…');
     const result = await work(context);
     signal.throwIfAborted();
     app.endStatus(result.summary?.requiresReview ? 'Review and confirm the lesion mask' : 'Complete');
     return result;
   } catch (error) {
-    if (!signal.aborted && !app.superseded(error)) app.failStatus(error.message);
+    const owned = status ? app.ownsStatus(status) : !app.superseded(error);
+    if (!signal.aborted && owned) app.failStatus(error.message);
     throw error;
   } finally {
     signal.removeEventListener('abort', cancel);

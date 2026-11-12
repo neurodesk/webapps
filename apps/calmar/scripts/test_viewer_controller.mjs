@@ -606,11 +606,20 @@ function fakeFile(name) {
   }
   assert.equal(source.split('.clearVolumes').length - 1, 2,
     'the viewer is emptied only by clearViewer(), which also drops the recorded base');
-  const handlers = source.split('\n').filter(line => line.includes('.catch('));
-  const allowed = ['.catch(this.reportFailure(', '.catch(this.unlessSuperseded(', '.catch(() => {})', '.catch(() => null)'];
-  for (const line of handlers) {
-    assert.ok(allowed.some(form => line.includes(form)),
-      `a superseded load must end silently: use reportFailure or unlessSuperseded in "${line.trim()}"`);
+  // A handler is `reportFailure(label, check)` or `unlessSuperseded(check, handler)`:
+  // the check is what decides whether its action was superseded.
+  const forms = [
+    /\.catch\(this\.reportFailure\((?:'[^']*'|`[^`]*`|null), [\w.]+(?:\([^()]*\))?[,)]/,
+    /\.catch\(this\.unlessSuperseded\([\w.]+(?:\([^()]*\))?, /,
+    /\.catch\(\(\) => (?:\{\}|null)\)/
+  ];
+  for (const line of source.split('\n').filter(text => text.includes('.catch('))) {
+    assert.ok(forms.some(form => form.test(line)),
+      `a handler needs the check of the action it handles: "${line.trim()}"`);
+  }
+  for (const line of source.split('\n').filter(text => /this\.reportFailure\(/.test(text) && !text.includes('.catch('))) {
+    assert.match(line, /this\.reportFailure\((?:'[^']*'|`[^`]*`|null), \w+(?:, [^)]*)?\)\(err\)/,
+      `a failure reported from a catch block needs the check of its action: "${line.trim()}"`);
   }
 }
 

@@ -70,6 +70,7 @@ function makeApp(manifestForApp) {
     },
     loadOverlay: async (file, colormap, opacity, options) => {
       options.assertCurrent?.();
+      if (options.replaceStage) app.viewerController.removeVolumeForStage(options.stage);
       app.viewerStack.push([file.name, options.stage]);
       return true;
     },

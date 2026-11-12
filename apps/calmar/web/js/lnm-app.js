@@ -69,6 +69,7 @@ const NETWORK_TOP_PERCENT_MAX = 10;
 const NETWORK_TOP_PERCENT_STEP = 0.1;
 const MASK_DOWNLOAD_CACHE = 'lnm-mask-downloads-v1';
 const MASK_DOWNLOAD_PATH = '__lnm_downloads';
+const REVIEW_KEEPS_VIEW = 'Confirm the lesion mask or start over before changing the view.';
 
 function splitModelUrl(url) {
   const i = url.lastIndexOf('/');
@@ -415,7 +416,16 @@ export class LesionNetworkMappingApp {
       ['lesion', 'lesionFileInput', 'Lesion mask', file => this.setLesion(file)],
     ]) {
       document.getElementById(id)?.addEventListener('change', (event) => {
-        this.importInput(kind, event.target.files, keep).catch(this.reportFailure(`${label} input failed`));
+        let owner = null;
+        // Keeping the file replaces the subject or takes the input's turn again: both are this import's own.
+        const kept = (file, assertCurrent) => {
+          const result = keep(file, assertCurrent);
+          owner.renew();
+          return result;
+        };
+        const imported = this.importInput(kind, event.target.files, kept);
+        owner = this.owner(kind);
+        imported.catch(this.reportFailure(`${label} input failed`, owner));
       });
     }
 
@@ -426,10 +436,11 @@ export class LesionNetworkMappingApp {
     }
 
     document.getElementById('captureReportScan')?.addEventListener('click', () => {
-      this.showScanConfirmation().catch(this.reportFailure(null, { level: 'error' }));
+      this.showScanConfirmation().catch(this.reportFailure(null, this.owner(), { level: 'error' }));
     });
     document.getElementById('runLesionPreparationButton')?.addEventListener('click', () => {
-      this.runLesionPreparation().catch(this.reportFailure(null, { level: 'error' }));
+      const owner = this.owner();
+      this.runLesionPreparation(owner).catch(this.reportFailure(null, owner, { level: 'error' }));
     });
     const kbEvidenceSelect = document.getElementById('kbEvidenceSelect');
     if (kbEvidenceSelect) {
@@ -451,7 +462,7 @@ export class LesionNetworkMappingApp {
     const runBrainBtn = document.getElementById('runBrainExtractionButton');
     if (runBrainBtn) {
       runBrainBtn.addEventListener('click', () => {
-        this.runBrainExtraction().catch(this.reportFailure('Brain extraction failed'));
+        this.runBrainExtraction().catch(this.reportFailure('Brain extraction failed', this.owner()));
       });
     }
     const downloadBrainBtn = document.getElementById('downloadBrainMaskButton');
@@ -465,22 +476,23 @@ export class LesionNetworkMappingApp {
       runLesionBtn.addEventListener('click', () => {
         this.runLesionSegmentation()
           .then(() => this.startLesionMaskReview({ seedFile: this.autoLesionSeedFile }))
-          .catch(this.reportFailure('Lesion segmentation failed'));
+          .catch(this.reportFailure('Lesion segmentation failed', this.owner()));
       });
     }
     const runDeepIslesBtn = document.getElementById('runDeepIslesSegmentationButton');
     if (runDeepIslesBtn) {
       runDeepIslesBtn.addEventListener('click', () => {
-        this.runDeepIslesSegmentation()
+        const owner = this.owner();
+        this.runDeepIslesSegmentation(owner)
           .then(() => this.startLesionMaskReview({ seedFile: this.autoLesionSeedFile }))
-          .catch(this.reportFailure('DeepISLES lesion seed failed'));
+          .catch(this.reportFailure('DeepISLES lesion seed failed', owner));
       });
     }
     const manualMaskBtn = document.getElementById('startManualMaskButton');
     if (manualMaskBtn) {
       manualMaskBtn.addEventListener('click', () => {
         this.startLesionMaskReview({ blank: true })
-          .catch(this.reportFailure('Manual mask failed'));
+          .catch(this.reportFailure('Manual mask failed', this.owner()));
       });
     }
     const manualMaskInput = document.getElementById('manualMaskFileInput');
@@ -498,8 +510,9 @@ export class LesionNetworkMappingApp {
     if (manualMaskInput) {
       manualMaskInput.addEventListener('change', (event) => {
         const name = event.target.files?.[0]?.name || 'selected files';
-        this.importInput('mask', event.target.files, (file, assertCurrent) => this.startUploadedLesionMaskReview(file, { assertCurrent }))
-          .catch(this.unlessSuperseded((err) => {
+        const imported = this.importInput('mask', event.target.files, (file, assertCurrent) => this.startUploadedLesionMaskReview(file, { assertCurrent }));
+        imported
+          .catch(this.unlessSuperseded(this.owner('mask'), (err) => {
             this.updateOutput(
               `Manual mask input failed for ${name}: ${err.message}. Choose a NIfTI mask file (.nii or .nii.gz) or a DICOM mask series.`
             );
@@ -512,14 +525,14 @@ export class LesionNetworkMappingApp {
       downloadLesionBtn.disabled = true;
       downloadLesionBtn.addEventListener('click', () => {
         this.downloadLesionMask()
-          .catch(this.reportFailure('Lesion mask download failed'));
+          .catch(this.reportFailure('Lesion mask download failed', this.owner()));
       });
     }
 
     const runRegBtn = document.getElementById('runRegistrationButton');
     if (runRegBtn) {
       runRegBtn.addEventListener('click', () => {
-        this.runRegistration().catch(this.reportFailure('Registration failed'));
+        this.runRegistration().catch(this.reportFailure('Registration failed', this.owner()));
       });
     }
 
@@ -527,7 +540,7 @@ export class LesionNetworkMappingApp {
     if (checkAtlasAlignmentBtn) {
       checkAtlasAlignmentBtn.disabled = true;
       checkAtlasAlignmentBtn.addEventListener('click', () => {
-        this.showRegistrationQc().catch(this.reportFailure('Atlas alignment QC failed'));
+        this.showRegistrationQc().catch(this.reportFailure('Atlas alignment QC failed', this.owner()));
       });
     }
 
@@ -537,7 +550,7 @@ export class LesionNetworkMappingApp {
       registrationQcMode.addEventListener('change', () => {
         this.registrationQcMode = registrationQcMode.value || 'patient';
         if (this.hasRegistrationDisplacement) {
-          this.showRegistrationQc().catch(this.reportFailure('Registration QC failed'));
+          this.showRegistrationQc().catch(this.reportFailure('Registration QC failed', this.owner()));
         }
       });
     }
@@ -546,7 +559,7 @@ export class LesionNetworkMappingApp {
       this.registrationBlendValue = this.getRegistrationBlendValue();
       this.updateRegistrationBlendLabel(this.registrationBlendValue);
       const handleRegistrationBlendInput = () => {
-        this.handleRegistrationBlendInput().catch(this.reportFailure('Registration blend update failed'));
+        this.handleRegistrationBlendInput().catch(this.reportFailure('Registration blend update failed', this.owner()));
       };
       registrationBlendValue.addEventListener('input', handleRegistrationBlendInput);
       registrationBlendValue.addEventListener('change', handleRegistrationBlendInput);
@@ -555,21 +568,22 @@ export class LesionNetworkMappingApp {
     const applyRegBtn = document.getElementById('applyRegistrationToLesionButton');
     if (applyRegBtn) {
       applyRegBtn.addEventListener('click', () => {
-        this.applyRegistrationToLesion().catch(this.reportFailure('Apply registration failed'));
+        this.applyRegistrationToLesion().catch(this.reportFailure('Apply registration failed', this.owner()));
       });
     }
 
     const prealignBtn = document.getElementById('prealignToMniButton');
     if (prealignBtn) {
       prealignBtn.addEventListener('click', () => {
-        this.prealignToMni160().catch(this.reportFailure('Prealign failed'));
+        this.prealignToMni160().catch(this.reportFailure('Prealign failed', this.owner()));
       });
     }
 
     const runFullBtn = document.getElementById('runFullPipelineButton');
     if (runFullBtn) {
       runFullBtn.addEventListener('click', () => {
-        this.runReportingAnalysis().catch(this.reportFailure('Full pipeline failed'));
+        const owner = this.owner();
+        this.runReportingAnalysis(owner).catch(this.reportFailure('Full pipeline failed', owner));
       });
     }
 
@@ -597,7 +611,7 @@ export class LesionNetworkMappingApp {
     const runFcBtn = document.getElementById('computeNetworkMapButton');
     if (runFcBtn) {
       runFcBtn.addEventListener('click', () => {
-        this.runFcNetworkMap().catch(this.reportFailure('Network map failed'));
+        this.runFcNetworkMap().catch(this.reportFailure('Network map failed', this.owner()));
       });
     }
     const downloadFcBtn = document.getElementById('downloadNetworkMapButton');
@@ -649,7 +663,7 @@ export class LesionNetworkMappingApp {
     if (showAtlasQcBtn) {
       showAtlasQcBtn.disabled = true;
       showAtlasQcBtn.addEventListener('click', () => {
-        this.showSubjectSpaceAtlas().catch(this.reportFailure('Subject-space atlas failed'));
+        this.showSubjectSpaceAtlas().catch(this.reportFailure('Subject-space atlas failed', this.owner()));
       });
     }
 
@@ -817,7 +831,7 @@ export class LesionNetworkMappingApp {
     bindClick('maskUndoButton', () => this.maskDrawingController?.undo());
     bindClick('maskBlankButton', () => {
       this.startLesionMaskReview({ blank: true })
-        .catch(this.reportFailure('Blank mask failed'));
+        .catch(this.reportFailure('Blank mask failed', this.owner()));
     });
     bindClick('maskSmoothButton', () => {
       if (!this.maskDrawingController?.smoothDrawing()) {
@@ -832,11 +846,11 @@ export class LesionNetworkMappingApp {
     });
     bindClick('confirmLesionMaskButton', () => {
       this.confirmLesionDrawing({ resumePipeline: true })
-        .catch(this.reportFailure('Confirm lesion mask failed'));
+        .catch(this.reportFailure('Confirm lesion mask failed', this.owner()));
     });
     bindClick('downloadEditedLesionMaskButton', () => {
       this.downloadEditedLesionMask()
-        .catch(this.reportFailure('Edited mask download failed'));
+        .catch(this.reportFailure('Edited mask download failed', this.owner()));
     });
 
     const brush = document.getElementById('maskBrushSize');
@@ -995,14 +1009,16 @@ export class LesionNetworkMappingApp {
       el.addEventListener('change', (event) => {
         this.viewerLayerVisibility[config.layer] = !!event.target.checked;
         if (event.target.checked) {
+          const owner = this.owner();
           this.ensureViewerLayerLoaded(config.layer)
             .then(() => {
+              if (!this.isCurrent(owner)) return;
               this.applyViewerLayerVisibility(config.layer);
               this.refreshViewerLayerControls();
             })
-            .catch(this.unlessSuperseded((err) => {
+            .catch(this.unlessSuperseded(owner, (err) => {
               this.viewerLayerVisibility[config.layer] = false;
-              this.reportFailure(`Could not show ${this.getViewerLayerLabel(config.layer)}`)(err);
+              this.updateOutput(`Could not show ${this.getViewerLayerLabel(config.layer)}: ${err.message}`);
               this.refreshViewerLayerControls();
             }));
         } else {
@@ -1515,13 +1531,36 @@ export class LesionNetworkMappingApp {
     this.refreshViewerLayerControls();
   }
 
+  get maskReviewActive() {
+    return this._maskReviewActive === true;
+  }
+
+  // Every path that ends a review sets this to false, so this is the one
+  // place a review ends, whatever ended it: confirmation, Start over, a new
+  // image, a withdrawn image, prealign or a failed drawing.
+  set maskReviewActive(active) {
+    const ended = this._maskReviewActive === true && !active;
+    this._maskReviewActive = Boolean(active);
+    if (ended) this.reviewEnded();
+  }
+
+  // What a review held back is derived from the current state again: the
+  // controls that replace the base, the Results view, the 3D tile, and the
+  // threshold preview for whatever threshold map there is now.
+  reviewEnded() {
+    this.setMaskReview3DRenderEnabled(true);
+    this.refreshResultsView();
+    this.refreshSubjectAtlasControls();
+    this.scheduleThresholdPreviewOverlay();
+  }
+
   // While a mask review is open its image stays the viewer's base: the
   // drawing lives on that image's grid, for as long as it is open. This is
   // the one place that holds it, at the commit of every base and stack. A new
   // structural image, Start over and confirmation end the review first.
   assertReviewKeepsBase(file) {
     if (!this.maskReviewActive || file === this.nativeStructuralFile) return;
-    throw new Error('Confirm the lesion mask or start over before changing the view.');
+    throw new Error(REVIEW_KEEPS_VIEW);
   }
 
   loadViewerBaseVolume(file, options = {}, assertCurrent) {
@@ -1539,7 +1578,8 @@ export class LesionNetworkMappingApp {
   // decoded after Clear results or a new structural image is not shown. A
   // stage holds one overlay: a load asked twice (a layer toggled on, off and
   // on while it loads) finds its file in place, and another file replaces it
-  // in the same step that inserts the new one.
+  // in the same step that inserts the new one (`replaceStage`). The checks
+  // have no side effects: the controller asks them more than once.
   loadViewerOverlay(file, colormap, opacity, options, assertCurrent = this.pipelineTurn()) {
     const viewer = this.viewerController;
     return this.viewerLoad((check) => {
@@ -1547,10 +1587,10 @@ export class LesionNetworkMappingApp {
       const base = this._viewerBase;
       return viewer.loadOverlay(file, colormap, opacity, {
         ...options,
+        replaceStage: true,
         assertCurrent: () => {
           check();
           if (base !== this._viewerBase || this.nv?.volumes?.length === 0) throw new DOMException('The viewer base changed.', 'AbortError');
-          viewer.removeVolumeForStage(options.stage);
         }
       });
     }, { assertCurrent });
@@ -1770,8 +1810,8 @@ export class LesionNetworkMappingApp {
 
   // A replaced turn ends with an AbortError. That is the expected end of a
   // superseded import, review or run, so it is never logged as a failure.
-  reportFailure(label, options) {
-    return this.unlessSuperseded((err) => {
+  reportFailure(label, assertCurrent, options) {
+    return this.unlessSuperseded(assertCurrent, (err) => {
       this.updateOutput(label ? `${label}: ${err.message}` : err.message, options);
     });
   }
@@ -1780,15 +1820,42 @@ export class LesionNetworkMappingApp {
     return err?.name === 'AbortError';
   }
 
-  // Whatever handles the end of a load, review or run does nothing for one
-  // that was superseded: no state, no layer, no control, no status, no log.
-  // Its successor owns all of those by then. Every `.catch` goes through this
-  // (or `reportFailure`), so a new handler cannot forget it.
-  unlessSuperseded(handle) {
+  // Whatever handles the end of an action does nothing once the action was
+  // superseded: no state, no layer, no control, no status, no log line. Its
+  // successor owns all of those by then. Supersession is decided by
+  // ownership: `assertCurrent` is the check the action captured when it
+  // started (`owner()`, an import's or a review's check, `pipelineTurn()`),
+  // so an ordinary error from superseded work, such as a failed file read,
+  // is dropped like an AbortError from a nested turn. Every handler goes
+  // through this or `reportFailure`, and neither works without a check.
+  unlessSuperseded(assertCurrent, handle) {
+    if (typeof assertCurrent !== 'function' || typeof handle !== 'function') {
+      throw new TypeError('unlessSuperseded needs the check of the action it handles.');
+    }
     return (err) => {
-      if (this.superseded(err)) return undefined;
+      if (this.superseded(err) || !this.isCurrent(assertCurrent)) return undefined;
       return handle(err);
     };
+  }
+
+  // An action owns the subject it started on: the returned check passes while
+  // none of the named turns has moved. An action that replaces the subject
+  // itself (a new structural image, an input that clears the results, a
+  // diffusion stand-in) calls `renew()` in the same synchronous step, so it
+  // still owns what it loaded and its later failure is still reported.
+  owner(...kinds) {
+    const names = kinds.length ? kinds : ['pipeline'];
+    const now = () => names.map(kind => this._importTurn[kind]);
+    let turns = now();
+    const assertCurrent = () => {
+      if (now().some((turn, index) => turn !== turns[index])) {
+        throw new DOMException('The action was replaced.', 'AbortError');
+      }
+    };
+    assertCurrent.renew = () => {
+      turns = now();
+    };
+    return assertCurrent;
   }
 
   // The newest import of an input (structural, lesion, mask, dwi, adc, b0) is
@@ -1849,7 +1916,15 @@ export class LesionNetworkMappingApp {
       ? [this.lesionFile, { stage: 'lesion', visible: this.layerVisible('lesion') }]
       : [this.deepIslesDwiFile, { stage: 'deepisles-dwi' }];
     if (!file || this.structuralFile) return;
-    this.loadViewerBaseVolume(file, options).catch(this.reportFailure('Viewer reload failed'));
+    this.loadViewerBaseVolume(file, options).catch(this.reportFailure('Viewer reload failed', this.owner()));
+  }
+
+  // Results belong to the generation they were computed for (`clearDerivedResults`).
+  resultsTurn() {
+    const generation = this._resultsGeneration;
+    return () => {
+      if (generation !== this._resultsGeneration) throw new DOMException('The results were replaced.', 'AbortError');
+    };
   }
 
   // A pipeline run belongs to the structural image it started on. The turn is
@@ -1892,6 +1967,7 @@ export class LesionNetworkMappingApp {
     }
     this._rejectPendingWorkerWaits(new DOMException(`The run was replaced: ${reason}.`, 'AbortError'));
     this._pipelineRunning = false;
+    this._statusOwner = null;
     this.setStatusError(false);
     this.progress?.reset('Cancelled');
     this.updateOutput(`Analysis stopped: ${reason}.`, { level: 'warning' });
@@ -2427,7 +2503,7 @@ export class LesionNetworkMappingApp {
         tableId: 'directFunctionProfileTable',
         emptyLabel: 'No direct-overlap functional associations'
       }))
-      .catch(this.unlessSuperseded((err) => {
+      .catch(this.unlessSuperseded(this.resultsTurn(), (err) => {
         this.clearFunctionProfileTable('directFunctionProfileResults', 'directFunctionProfileTable');
         this.updateOutput(`Functional profiles unavailable: ${err.message}`);
         return null;
@@ -2446,7 +2522,7 @@ export class LesionNetworkMappingApp {
         tableId: 'mapFunctionProfileTable',
         emptyLabel: 'No connectivity-map functional associations'
       }))
-      .catch(this.unlessSuperseded((err) => {
+      .catch(this.unlessSuperseded(this.resultsTurn(), (err) => {
         this.clearFunctionProfileTable('mapFunctionProfileResults', 'mapFunctionProfileTable');
         this.updateOutput(`Functional profiles unavailable: ${err.message}`);
         return null;
@@ -2567,22 +2643,32 @@ export class LesionNetworkMappingApp {
 
   // Status footer: a run begins with an indeterminate bar, elapsed timer
   // and (once the worker reports progress) the cancel ×.
+  // The returned token owns the status bar until the status is ended, failed
+  // or reset by whatever replaced the run.
   beginStatus(text) {
     this._pipelineRunning = true;
+    this._statusOwner = {};
     this.setStatusError(false);
     this.progress.begin(text, { cancellable: false });
     // Node test harnesses must not be kept alive by the elapsed counter.
     this.progress.timer?.unref?.();
+    return this._statusOwner;
+  }
+
+  ownsStatus(token) {
+    return this._statusOwner === token;
   }
 
   endStatus(text) {
     this._pipelineRunning = false;
+    this._statusOwner = null;
     this.setStatusError(false);
     this.progress.end(text);
   }
 
   failStatus(text) {
     this._pipelineRunning = false;
+    this._statusOwner = null;
     this.progress.end(text, { success: false });
     this.setStatusError(true);
   }
@@ -2663,7 +2749,7 @@ export class LesionNetworkMappingApp {
       }
       if (this.maskReviewActive) {
         this.maskDrawingController?.loadBrainMaskFile?.(this.getBrainmaskFileForActiveViewer())
-          ?.catch(this.reportFailure('Wand brain mask'))
+          ?.catch(this.reportFailure('Wand brain mask', this.owner()))
           .finally(() => this.refreshMaskDrawingControls());
       }
       // Render as a translucent overlay over the structural; if the user
@@ -2679,7 +2765,7 @@ export class LesionNetworkMappingApp {
               visible: this.layerVisible('brainmask')
             });
           })
-          .catch(this.reportFailure('Brain mask render error'));
+          .catch(this.reportFailure('Brain mask render error', this.owner()));
       }
       const btn = document.getElementById('downloadBrainMaskButton');
       if (btn) btn.disabled = false;
@@ -2847,14 +2933,17 @@ export class LesionNetworkMappingApp {
   // With diffusion data and no structural image, the b0 (or else the
   // DWI/TRACE) stands in: SynthStrip, prealign and SynthMorph do not depend
   // on contrast. The lesion seed then needs SEALS, so ADC or b0 is required.
-  async ensureStructuralForDiffusion() {
+  // `owner` is the action that asked: the stand-in replaces the subject on its behalf.
+  async ensureStructuralForDiffusion(owner) {
     if (this.structuralFile || !this.deepIslesDwiFile) return;
     if (!this.diffusionSeedReady()) {
       throw new Error('DWI/TRACE needs ADC or b0 for the lesion seed; add one, or a structural T1.');
     }
     const source = this.deepIslesB0File || this.deepIslesDwiFile;
     this.updateOutput(`No structural image: using the ${source === this.deepIslesB0File ? 'b0' : 'DWI/TRACE'} as the structural image.`);
-    await this.setStructural(new File([source], source.name, { type: source.type }), { fromDiffusion: source });
+    const adopted = this.setStructural(new File([source], source.name, { type: source.type }), { fromDiffusion: source });
+    owner?.renew();
+    await adopted;
   }
 
   clearDiffusionInputs() {
@@ -2874,8 +2963,8 @@ export class LesionNetworkMappingApp {
     return !!(this.deepIslesDwiFile && (this.deepIslesAdcFile || this.deepIslesB0File));
   }
 
-  async runDeepIslesSegmentation() {
-    await this.ensureStructuralForDiffusion();
+  async runDeepIslesSegmentation(owner) {
+    await this.ensureStructuralForDiffusion(owner);
     const assertRun = this.pipelineTurn();
     if (!this.deepIslesDwiFile) {
       throw new Error('DeepISLES requires a DWI/TRACE input.');
@@ -3197,7 +3286,7 @@ export class LesionNetworkMappingApp {
     try {
       await this.maskDrawingController.loadBrainMaskFile?.(brainmaskFile);
     } catch (err) {
-      this.updateOutput(`Wand brain-mask restriction unavailable: ${err.message}`);
+      this.reportFailure('Wand brain-mask restriction unavailable', assertCurrent)(err);
     }
     if (brainmaskFile && this.layerVisible('brainmask')) {
       try {
@@ -3207,7 +3296,7 @@ export class LesionNetworkMappingApp {
           visible: true
         }, assertCurrent);
       } catch (err) {
-        this.reportFailure('Mask-review brain mask render warning')(err);
+        this.reportFailure('Mask-review brain mask render warning', assertCurrent)(err);
       }
     }
     assertCurrent();
@@ -3263,7 +3352,7 @@ export class LesionNetworkMappingApp {
     const assertRun = this.pipelineTurn();
 
     if (!this.prealignSamplingAffine || !this.fixedMni160Info) {
-      await this.prealignToMni160({ skipIfAligned: true });
+      await this.prealignToMni160({ skipIfAligned: true, confirming: true });
     }
     const fixed = await this.ensureFixedMni160Info();
     const native = await decodeNiftiBuffer(await nativeFile.arrayBuffer());
@@ -3570,6 +3659,7 @@ export class LesionNetworkMappingApp {
 
   async displayNetworkMapOnAtlasTemplate(atlas, flatAffine) {
     if (!this.networkMapFile) return;
+    const owner = this.owner();
     try {
       this.networkMapBaseFile = this.buildAtlasBrainMaskBaseFile(atlas, flatAffine);
       const entries = [
@@ -3603,7 +3693,7 @@ export class LesionNetworkMappingApp {
       this.refreshViewerLayerControls();
       this.updateOutput('Network map displayed on the selected atlas grid.');
     } catch (err) {
-      this.reportFailure('Network-map render error')(err);
+      this.reportFailure('Network-map render error', owner)(err);
     }
   }
 
@@ -3762,22 +3852,32 @@ export class LesionNetworkMappingApp {
     const file = this.thresholdedMaskFile;
     if (version !== this._thresholdPreviewVersion || !file) return;
     if (!this.viewerController || this.maskReviewActive) return;
+    const assertCurrent = this.thresholdPreviewTurn(version);
     if (this.canProjectThresholdToPatientSpace()) {
       try {
         await this.projectThresholdToPatientSpace(version);
-        if (version !== this._thresholdPreviewVersion || !this.patientThresholdedMaskFile) return;
+        if (!this.isCurrent(assertCurrent) || !this.patientThresholdedMaskFile) return;
         await this.renderPatientLayerStack();
         return;
       } catch (err) {
-        if (this.superseded(err)) return;
+        if (this.superseded(err) || !this.isCurrent(assertCurrent)) return;
         this.patientThresholdedMaskFile = null;
         this.refreshViewerLayerControls();
-        this.reportFailure('Patient-space threshold projection failed')(err);
+        this.reportFailure('Patient-space threshold projection failed', assertCurrent)(err);
       }
     } else {
       this.noteThresholdProjectionUnavailable();
     }
     await this.renderAtlasThresholdPreviewOverlay(version);
+  }
+
+  // A preview belongs to its version and to the subject it was asked for.
+  thresholdPreviewTurn(version) {
+    const assertRun = this.pipelineTurn();
+    return () => {
+      assertRun();
+      if (version !== this._thresholdPreviewVersion) throw new DOMException('The threshold preview was replaced.', 'AbortError');
+    };
   }
 
   canProjectThresholdToPatientSpace() {
@@ -4194,11 +4294,7 @@ export class LesionNetworkMappingApp {
   async renderAtlasThresholdPreviewOverlay(version) {
     const file = this.thresholdedMaskFile;
     if (version !== this._thresholdPreviewVersion || !file) return;
-    const assertRun = this.pipelineTurn();
-    const assertCurrent = () => {
-      assertRun();
-      if (version !== this._thresholdPreviewVersion) throw new DOMException('The threshold preview was replaced.', 'AbortError');
-    };
+    const assertCurrent = this.thresholdPreviewTurn(version);
     try {
       await this.loadViewerOverlay(file, 'red', 0.65, {
         stage: 'threshold-preview',
@@ -4206,7 +4302,7 @@ export class LesionNetworkMappingApp {
       }, assertCurrent);
       this.refreshViewerLayerControls();
     } catch (err) {
-      this.reportFailure('Threshold preview render error')(err);
+      this.reportFailure('Threshold preview render error', assertCurrent)(err);
     }
   }
 
@@ -4317,7 +4413,7 @@ export class LesionNetworkMappingApp {
   // MNI160 1mm grid with the centroid placed at MNI voxel (80, 80, 96).
   // The lesion seg + lesion file are cleared because they were
   // computed in the old space; user re-runs them on the aligned grid.
-  async prealignToMni160({ skipIfAligned = false } = {}) {
+  async prealignToMni160({ skipIfAligned = false, confirming = false } = {}) {
     if (!this.structuralFile) {
       this.updateOutput('Drop a structural T1 first.');
       return;
@@ -4362,6 +4458,9 @@ export class LesionNetworkMappingApp {
         return;
       }
     }
+    // The prealigned image replaces the base under an open review's drawing.
+    // Confirmation has written the drawing out before it asks for this.
+    if (this.maskReviewActive && !confirming) throw new Error(REVIEW_KEEPS_VIEW);
 
     if (!this.brainmaskFile) {
       this.updateOutput('Running brain extraction (prealign needs the brain mask)...');
@@ -4479,7 +4578,7 @@ export class LesionNetworkMappingApp {
       });
     } catch (err) {
       // Non-fatal: the overlay is cosmetic.
-      this.reportFailure('Brainmask overlay re-render warning')(err);
+      this.reportFailure('Brainmask overlay re-render warning', assertRun)(err);
     }
     assertRun();
     this.refreshViewerLayerControls();
@@ -4591,8 +4690,8 @@ export class LesionNetworkMappingApp {
   // Stages declared as required:false are still run when their module is
   // implemented (e.g. threshold runs with the pipeline's `defaults` if
   // present, falling back to whatever the UI has set).
-  async runLesionPreparation() {
-    await this.ensureStructuralForDiffusion();
+  async runLesionPreparation(owner) {
+    await this.ensureStructuralForDiffusion(owner);
     if (!this.structuralFile) {
       this.updateOutput('Load a structural or supported diffusion image first.');
       return;
@@ -4606,13 +4705,13 @@ export class LesionNetworkMappingApp {
     this._pendingMaskResume = null;
   }
 
-  async runReportingAnalysis() {
+  async runReportingAnalysis(owner) {
     if (this.maskReviewActive || ((this.structuralFile || this.diffusionSeedReady()) && !this.lesionMaskConfirmed)) {
       this.updateOutput('Review and accept the lesion mask before running reporting analysis.', { level: 'warning' });
       if (this.maskReviewActive) this.setViewerView('multiplanar');
       return;
     }
-    if (!this.structuralFile) return this.runFullPipeline();
+    if (!this.structuralFile) return this.runFullPipeline(owner);
     const source = getPipelineById('lnm-yeo-auto');
     const pipeline = { ...source, stages: source.stages.filter(stage => ['registration', 'parcel-overlap', 'fc-weighted-sum', 'threshold', 'kb-report'].includes(stage.module)) };
     this._perfStats = [];
@@ -4642,9 +4741,9 @@ export class LesionNetworkMappingApp {
     this.refreshViewerLayerControls();
   }
 
-  async runFullPipeline() {
+  async runFullPipeline(owner) {
     try {
-      await this.ensureStructuralForDiffusion();
+      await this.ensureStructuralForDiffusion(owner);
     } catch (err) {
       this.updateOutput(err.message);
       return;
@@ -4950,7 +5049,7 @@ export class LesionNetworkMappingApp {
         stage: 'structural',
         visible: this.layerVisible('structural')
       })
-        .catch(this.reportFailure('Viewer reload after reset failed'));
+        .catch(this.reportFailure('Viewer reload after reset failed', this.owner()));
     } else if (!full) {
       this.showRemainingInput();
     }
@@ -4965,13 +5064,14 @@ export class LesionNetworkMappingApp {
 
   async _lesionFileMatchesAtlasGrid() {
     if (!this.lesionFile) return false;
+    const owner = this.owner('pipeline', 'lesion');
     try {
       const buf = await this.lesionFile.arrayBuffer();
       const decoded = await decodeNiftiBuffer(buf);
       const atlas = await loadAtlasFromManifest(this.getAtlasOption().overlapAtlasAssetId);
       return dimsEqual(decoded.dims, atlas.dims);
     } catch (err) {
-      this.updateOutput(`Could not inspect lesion file: ${err.message}`);
+      this.reportFailure('Could not inspect lesion file', owner)(err);
       return false;
     }
   }

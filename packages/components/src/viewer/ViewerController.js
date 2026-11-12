@@ -10,6 +10,7 @@ export class ViewerController {
     this.NVImage = options.NVImage || null;
     this.decodedUrls = new Map();
     this.insertedUrls = new Map();
+    this.pendingLoads = new Set();
     this.currentBaseFile = this.currentOverlayFile = this.currentFile = null;
     this.currentOverlayIndex = null;
     this.volumeStageIndices = new Map();
@@ -37,6 +38,7 @@ export class ViewerController {
     ]);
   }
   releaseUnusedObjectUrls() {
+    this.releaseSupersededLoads();
     for (const [image, url] of this.insertedUrls) {
       if (this.nv?.volumes?.includes(image)) continue;
       URL.revokeObjectURL(url);
@@ -69,6 +71,8 @@ export class ViewerController {
   // from the viewer, calls `assertCurrent()`, which throws when the load is no
   // longer wanted, and then puts the decoded image into NiiVue and into this
   // controller's record in one synchronous step, ending with `onCommit()`.
+  // An overlay given `replaceStage` takes the place of its stage's overlay in
+  // that same step.
   // Nothing can run between the check and the commit, so a superseded load
   // never reaches the viewer. Without `assertCurrent` NiiVue fetches, decodes
   // and inserts in one call that cannot be stopped.
@@ -99,23 +103,65 @@ export class ViewerController {
     URL.revokeObjectURL(url);
   }
 
-  // The caller's check decides first, also when a decode failed: whatever
-  // `assertCurrent` throws leaves the load unchanged, so a superseded load is
-  // inert however it ends and a refusal reaches the caller. Only a failure of
-  // a load that is still wanted is reported (`failure`).
-  async decodeCurrent(decodes, assertCurrent) {
-    const settled = await Promise.allSettled(decodes);
-    const images = settled.filter(result => result.status === 'fulfilled').map(result => result.value);
-    const failed = settled.find(result => result.status === 'rejected');
+  // Decodes the members of one load. It ends as soon as its outcome is known,
+  // without waiting for members that are still decoding or never finish:
+  // with `{ images }` when every member is decoded, with `{ failure }` on the
+  // first member that fails, or by throwing what `assertCurrent` throws. The
+  // caller's check decides first, also when a member failed, so a superseded
+  // load is inert however it ends. The check is asked whenever a member
+  // settles and whenever the viewer changes (`releaseSupersededLoads`), so a
+  // superseded load gives up its decoded members then. Members decoded so far
+  // are released with any ending but `{ images }`, and a member that settles
+  // after the end releases itself. `assertCurrent` must have no side effects.
+  decodeCurrent(decodes, assertCurrent) {
+    return new Promise((resolve, reject) => {
+      const images = new Array(decodes.length);
+      let waiting = decodes.length;
+      let ended = false;
+      const end = (settle, outcome) => {
+        ended = true;
+        this.pendingLoads.delete(load);
+        if (!outcome?.images) images.filter(Boolean).forEach(image => this.discardDecodedVolume(image));
+        settle(outcome);
+      };
+      const load = {
+        stillWanted: () => {
+          try {
+            assertCurrent();
+            return true;
+          } catch (error) {
+            end(reject, error);
+            return false;
+          }
+        }
+      };
+      this.pendingLoads.add(load);
+      decodes.forEach((decode, index) => decode.then((image) => {
+        if (ended) {
+          this.discardDecodedVolume(image);
+          return;
+        }
+        images[index] = image;
+        waiting -= 1;
+        if (load.stillWanted() && waiting === 0) end(resolve, { images });
+      }, (error) => {
+        if (!ended && load.stillWanted()) end(resolve, { failure: error });
+      }));
+    });
+  }
+
+  releaseSupersededLoads() {
+    for (const load of [...this.pendingLoads]) load.stillWanted();
+  }
+
+  // The last step before a commit, with nothing awaited between the two.
+  assertStillCurrent(images, assertCurrent) {
     try {
       assertCurrent();
     } catch (error) {
       images.forEach(image => this.discardDecodedVolume(image));
       throw error;
     }
-    if (!failed) return { images };
-    images.forEach(image => this.discardDecodedVolume(image));
-    return { failure: failed.reason };
   }
 
   // What NiiVue's addVolumeFromUrl does once the image is decoded.
@@ -143,6 +189,7 @@ export class ViewerController {
       this.updateOutput(`Error loading ${file.name}: ${failure.message}`);
       return false;
     }
+    this.assertStillCurrent(images, options.assertCurrent);
     this.commitBaseVolume(images[0], file, options);
     options.onCommit?.();
     return true;
@@ -203,6 +250,7 @@ export class ViewerController {
       this.updateOutput(`Error loading viewer volumes: ${failure.message}`);
       return false;
     }
+    this.assertStillCurrent(images, options.assertCurrent);
     this.commitBaseVolume(images[0], base.file, { ...base, releaseUnusedUrls: false });
     if (base.labelMask) this.configureSegmentationVolume(0, base.colormap || 'labels');
     overlays.forEach((entry, index) => this.commitOverlay(images[index + 1], entry.file, configs[index]));
@@ -270,6 +318,8 @@ export class ViewerController {
       this.updateOutput(`Error loading overlay: ${failure.message}`);
       return false;
     }
+    this.assertStillCurrent(images, config.assertCurrent);
+    if (config.replaceStage) this.removeVolumeForStage(config.stage);
     this.commitOverlay(images[0], file, config);
     config.onCommit?.();
     return true;
