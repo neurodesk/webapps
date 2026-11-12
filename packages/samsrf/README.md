@@ -359,9 +359,13 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   with the convex hull (`rc` without `Prf_Function`) and connective fields with
   `Fit_pRF` 0 or -1 follow MATLAB's single correlations, regressions, smoothing,
   thresholds and medians; preprocessing's `precision` option makes the global
-  signal single too. Single 2D fits are refused: `cf` Gaussians depend on
-  MATLAB's single `exp`, which is not reproduced, and `rc` fits have no
-  established bound end to end.
+  signal single too. Single `cf` Gaussian and `rc` 2D fits remain refused:
+  no end-to-end acceptance bound is established outside the recorded cases.
+  Internal raw-input CF tests match the AMD reference, but the empirical single
+  `exp`, `sin` and `cos` candidates retain discrepancies. On the whole X001
+  Benson atlases, 10 LH and 9 RH vertices have a one-ULP coordinate difference;
+  affected seed regions can change Gaussian fits. The internal evidence does
+  not enable those fits through the API, command line or app.
   [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
   lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
@@ -454,9 +458,14 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected
   `rc` model fit included; `nR^2` is 0 there too.
 - **Template precision.** `readBensonTemplate` retains double scalar constants
-  until each mixed operation is rounded to single, as MATLAB does. Its sine
-  and cosine implementation can still differ from MATLAB's by a few float32
-  ULPs. Both hemispheres are covered by the actual MATLAB importer fixture.
+  until each mixed operation is rounded to single, as MATLAB does, and uses
+  empirical candidates for MATLAB's single `sin` and `cos`: fdlibm's float kernels with the x/4 term of
+  `__kernel_cosf` keeping 11 fraction bits. Every recorded MATLAB template
+  equals the reader's. Over every single angle up to 2^7 pi/2 the functions
+  differ from MATLAB's on 36,350 (`sin`) and 32,406 (`cos`) of 2,257,723,138
+  inputs, at the sine kernel's polynomial; on the whole X001 Benson
+  hemispheres that is one ULP of `x0` or `y0` on 10 (LH) and 9 (RH) vertices
+  ([single sin and cos](validation/matlab/README.md#single-sin-and-cos)).
 - **`fminsearch` stop.** SamSrf stops a fine fit when its `OutputFcn` sees a
   non-finite best value; that can only be the first value (NaN sorts last), and
   the port does the same. MATLAB's exit flag for that case is not reproduced;

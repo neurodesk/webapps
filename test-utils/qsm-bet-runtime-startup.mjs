@@ -5,7 +5,7 @@ import { decompressIfNeeded } from './nifti-fixture.mjs';
 import { serveSite } from './serve-site.mjs';
 
 // This is the existing scientific regression pin, also used by both app and package BET tests.
-const maskSha256 = '107a46c3a2f42f4a7796dc5a5b2a6660a302239ae50a0cf2eea80b1767a50862';
+const maskSha256 = '20112e75bdaab6c8f3d9d47469b6814554f167996f4cff61e004f00207b233ad';
 
 export async function verifyQsmBetRuntime({ browser, repoRoot }) {
   const site = await serveSite(join(repoRoot, 'dist'), { isolationHeaders: false });
@@ -71,7 +71,7 @@ export async function verifyQsmBetRuntime({ browser, repoRoot }) {
           } finally { worker.terminate(); }
         }, { app, appUrl, workerUrl, nifti: bytes.toString('base64') });
         assert.equal(result.sha256, maskSha256, `${app}: unchanged BET regression mask`);
-        assert.equal(result.voxels, 246875, app);
+        assert.equal(result.voxels, 240631, app);
         if (app === 'qsmbly') {
           assert.ok(result.logs.some(line => /Threadpool ready: \d+ threads \[base\]/.test(line)), 'QSM worker must initialize its actual Rayon pool');
           assert.ok(requests.some(({ url, status }) => url.includes('/qsmbly/wasm/snippets/rayon-base/') && status === 200), 'QSM Rayon helper must remain in app scope');

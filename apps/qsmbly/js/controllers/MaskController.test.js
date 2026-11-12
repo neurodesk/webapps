@@ -329,6 +329,34 @@ describe('MaskController error paths', () => {
       expect(listeners.size).toBe(0);
     });
 
+    it("sends the magnitude header's affine, which BET takes FSL's left-right order from", async () => {
+      let sent;
+      const listeners = new Set();
+      controller.initializeWorker = async () => {};
+      controller.getWorker = () => ({
+        subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+        send: (msg) => {
+          sent = msg.data;
+          queueMicrotask(() => listeners.forEach(fn => fn({ type: 'applyMaskOpsComplete', maskData: msg.data.mask })));
+        },
+      });
+      // A sform (code 2) with a positive determinant: a neurologically stored image.
+      const header = new ArrayBuffer(352);
+      const view = new DataView(header);
+      view.setInt32(0, 348, true);
+      view.setInt16(254, 2, true);
+      [[1.5, 0, 0, -90], [0, 1.5, 0.1, -110], [0, 0, 2, -60]].forEach((row, r) =>
+        row.forEach((v, c) => view.setFloat32(280 + 16 * r + 4 * c, v, true)));
+      controller.magnitudeFileBytes = header;
+
+      await controller.applyMaskOps('erode:1');
+      expect(sent.affine).toEqual([1.5, 0, 0, -90, 0, 1.5, Math.fround(0.1), -110, 0, 0, 2, -60, 0, 0, 0, 1]);
+
+      controller.magnitudeFileBytes = null;
+      await controller.applyMaskOps('erode:1');
+      expect(sent.affine).toEqual([]);
+    });
+
     it('rejects with the init error instead of dereferencing a null worker', async () => {
       controller.getWorker = () => null;
       controller.initializeWorker = async () => { throw new Error('WASM init failed'); };

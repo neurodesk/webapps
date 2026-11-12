@@ -248,7 +248,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     await expect(page.locator('#statusText')).toHaveText('Brain image and mask ready', { timeout: 120000 });
     const brain = await download('#resultList .nd-volume-toggle:nth-child(2) .nd-download-btn');
     const mask = await download('#resultList .nd-volume-toggle:nth-child(3) .nd-download-btn');
-    assert.equal(createHash('sha256').update(mask.bytes.subarray(352)).digest('hex'), '107a46c3a2f42f4a7796dc5a5b2a6660a302239ae50a0cf2eea80b1767a50862');
+    assert.equal(createHash('sha256').update(mask.bytes.subarray(352)).digest('hex'), '20112e75bdaab6c8f3d9d47469b6814554f167996f4cff61e004f00207b233ad');
     return { brain: nifti(brain), mask: nifti(mask) };
   }
   if (['vesselboost', 'spinalcordtoolbox', 'seedseg'].includes(id)) {

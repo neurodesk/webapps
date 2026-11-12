@@ -20,7 +20,7 @@ use qsmxt_engine::masking::MaskSection;
 use qsmxt_engine::observe::{Observer, StageEvent, VolumeData};
 use qsmxt_engine::qsm_core;
 use qsmxt_engine::qsm_core::pipeline::VolumeRef;
-use qsmxt_engine::scan::{QsmSidecar, RunMetadata, ScanFacts};
+use qsmxt_engine::scan::{HeaderOrientation, QsmSidecar, RunMetadata, ScanFacts};
 use qsmxt_engine::stages::mask::{MaskInputs, Upto};
 use qsmxt_engine::store::{Geometry, Header, Item, MemoryStore, Recorded, Supplied, Volumes};
 use qsmxt_engine::{EngineError, PipelineConfig};
@@ -122,12 +122,29 @@ pub fn scan_report_wasm(inputs_json: &str) -> Result<String, JsValue> {
 #[wasm_bindgen]
 pub fn nifti_geometry_wasm(nifti: &[u8]) -> Result<String, JsValue> {
     let file = qsm_core::io::load_nifti(nifti).map_err(js_err)?;
-    let geometry = Geometry {
+    serde_json::to_string(&file_geometry(&file, nifti)).map_err(js_err)
+}
+
+/// The grid of a NIfTI file (`bytes`, decoded as `file`), with its header's orientation fields as
+/// the file stores them: N4 is given the image geometry ITK reads from them
+/// (`qsmxt_engine::scan::itk_geometry`), as `qsmxt run` reads them from its first phase image.
+pub(crate) fn file_geometry(file: &qsm_core::io::NiftiData, bytes: &[u8]) -> Geometry {
+    Geometry {
         dims: file.dims,
         voxel_size: file.voxel_size,
         affine: file.affine,
-    };
-    serde_json::to_string(&geometry).map_err(js_err)
+        orientation: HeaderOrientation::read(bytes).ok(),
+    }
+}
+
+/// What a file supplied for the run is known by in the keys of the steps that read it (and in the
+/// log): changes when its bytes do, so replacing it recomputes those steps and nothing else.
+fn file_identity(bytes: &[u8]) -> String {
+    // FNV-1a: stable across builds, which a recorded step key needs.
+    let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
+    });
+    format!("(file {hash:016x})")
 }
 
 /// The threads the run worker computes a plan on, of the page's `threads`: a plan with networks
@@ -270,8 +287,8 @@ impl PageVolumes {
         ))
     }
 
-    /// The NIfTI file kept under `item`, decoded.
-    fn nifti(&self, item: &Item) -> Result<Option<qsm_core::io::NiftiData>, EngineError> {
+    /// The NIfTI file kept under `item`, as its bytes.
+    fn nifti_bytes(&self, item: &Item) -> Result<Option<Vec<u8>>, EngineError> {
         let key = JsValue::from_str(&item_key(item));
         let value = self
             .get
@@ -280,21 +297,40 @@ impl PageVolumes {
         let Ok(file) = Reflect::get(&value, &JsValue::from_str("nifti")) else {
             return Ok(None);
         };
-        let Some(bytes) = file.dyn_ref::<Uint8Array>() else {
+        Ok(file.dyn_ref::<Uint8Array>().map(Uint8Array::to_vec))
+    }
+
+    /// The NIfTI file kept under `item`, decoded, and its bytes.
+    fn nifti_file(
+        &self,
+        item: &Item,
+    ) -> Result<Option<(qsm_core::io::NiftiData, Vec<u8>)>, EngineError> {
+        let Some(bytes) = self.nifti_bytes(item)? else {
             return Ok(None);
         };
-        qsm_core::io::load_nifti(&bytes.to_vec())
-            .map(Some)
+        qsm_core::io::load_nifti(&bytes)
+            .map(|file| Some((file, bytes)))
             .map_err(|e| EngineError::InvalidInput(format!("{}: {e}", item_key(item))))
     }
 
-    /// The grid of the input file kept under `item` (`None` if there is none), decoding it as a
-    /// read does (and so keeping its decoded values beside the file when they are exact in
-    /// float32).
-    ///
-    /// The grid is kept beside the file too (`geometry`, Geometry JSON), so a page that hands the
-    /// same input object to later engines (a mask preview after each edit) has it read once.
+    /// The NIfTI file kept under `item`, decoded.
+    fn nifti(&self, item: &Item) -> Result<Option<qsm_core::io::NiftiData>, EngineError> {
+        Ok(self.nifti_file(item)?.map(|(file, _)| file))
+    }
+
+    /// The grid of the input file kept under `item` (`None` if there is none), with its header's
+    /// orientation fields ([`file_geometry`]), decoding it as a read does (and so keeping its
+    /// decoded values beside the file when they are exact in float32).
     fn input_geometry(&self, item: &Item) -> Result<Option<Geometry>, EngineError> {
+        Ok(self.input_file(item)?.map(|(geometry, _)| geometry))
+    }
+
+    /// [`Self::input_geometry`], and what the file is known by ([`file_identity`]).
+    ///
+    /// Both are kept beside the file too (`geometry`, Geometry JSON, and `identity`), so a page
+    /// that hands the same input object to later engines (a mask preview after each edit) has it
+    /// read once.
+    fn input_file(&self, item: &Item) -> Result<Option<(Geometry, String)>, EngineError> {
         let key = JsValue::from_str(&item_key(item));
         let value = self
             .get
@@ -303,29 +339,33 @@ impl PageVolumes {
         if value.is_undefined() || value.is_null() {
             return Ok(None);
         }
-        let kept = Reflect::get(&value, &JsValue::from_str("geometry"))
-            .ok()
-            .and_then(|g| g.as_string())
-            .and_then(|g| serde_json::from_str::<Geometry>(&g).ok());
-        if let Some(geometry) = kept {
-            return Ok(Some(geometry));
+        let kept = |name: &str| {
+            Reflect::get(&value, &JsValue::from_str(name))
+                .ok()
+                .and_then(|v| v.as_string())
+        };
+        let geometry = kept("geometry").and_then(|g| serde_json::from_str::<Geometry>(&g).ok());
+        if let (Some(geometry), Some(identity)) = (geometry, kept("identity")) {
+            return Ok(Some((geometry, identity)));
         }
-        let Some(nifti) = self.nifti(item)? else {
+        let Some((nifti, bytes)) = self.nifti_file(item)? else {
             return Err(EngineError::Config(format!(
                 "the page keeps {} as something that is not a NIfTI file",
                 item_key(item)
             )));
         };
         keep_decoded(&value, &nifti.data);
-        let geometry = Geometry {
-            dims: nifti.dims,
-            voxel_size: nifti.voxel_size,
-            affine: nifti.affine,
-        };
+        let geometry = file_geometry(&nifti, &bytes);
+        let identity = file_identity(&bytes);
         if let Ok(json) = serde_json::to_string(&geometry) {
             let _ = Reflect::set(&value, &JsValue::from_str("geometry"), &json.into());
+            let _ = Reflect::set(
+                &value,
+                &JsValue::from_str("identity"),
+                &identity.clone().into(),
+            );
         }
-        Ok(Some(geometry))
+        Ok(Some((geometry, identity)))
     }
 
     /// Keep `from`'s volume under `to` as well: `true` if there was one.
@@ -738,18 +778,24 @@ impl Engine {
         // An unreadable mask is still a mask supplied: the run says so and computes one, as
         // `qsmxt run` does.
         let origin = || "the supplied file".to_string();
-        let mask = match volumes.nifti(&Item::SuppliedMask) {
+        let mask = match volumes.nifti_file(&Item::SuppliedMask) {
             Ok(None) => None,
-            Ok(Some(m)) => Some(Supplied::Found {
-                origin: origin(),
-                data: m.data,
-                dims: m.dims,
-                affine: m.affine,
-            }),
-            Err(e) => Some(Supplied::Unreadable {
-                origin: origin(),
-                error: e.to_string(),
-            }),
+            Ok(Some((m, bytes))) => Some((
+                Supplied::Found {
+                    origin: origin(),
+                    data: m.data,
+                    dims: m.dims,
+                    affine: m.affine,
+                },
+                file_identity(&bytes),
+            )),
+            Err(e) => Some((
+                Supplied::Unreadable {
+                    origin: origin(),
+                    error: e.to_string(),
+                },
+                origin(),
+            )),
         };
         let mut supplied = Vec::new();
         for item in [
@@ -758,11 +804,11 @@ impl Engine {
             Item::SuppliedR2prime,
             Item::SuppliedSegmentation,
         ] {
-            if let Some(geometry) = volumes.input_geometry(&item).map_err(js_err)? {
-                supplied.push((item, geometry));
+            if let Some((geometry, identity)) = volumes.input_file(&item).map_err(js_err)? {
+                supplied.push((item, geometry, identity));
             }
         }
-        let found = |item: Item| supplied.iter().any(|(i, _)| *i == item);
+        let found = |item: Item| supplied.iter().any(|(i, _, _)| *i == item);
         facts.custom_mask = mask.is_some();
         facts.custom_qsm = found(Item::SuppliedChi);
         facts.custom_r2 = found(Item::SuppliedR2);
@@ -771,11 +817,11 @@ impl Engine {
         let mut store = MemoryStore::with_volumes(header, identity.into(), volumes);
         // A MESE for R2, and the grids of its echoes.
         inputs.supply(&report, &mut store);
-        if let Some(mask) = mask {
-            store.supply_mask(mask);
+        if let Some((mask, identity)) = mask {
+            store.supply_mask(mask, identity);
         }
-        for (item, geometry) in supplied {
-            store.set_geometry(item, geometry);
+        for (item, geometry, identity) in supplied {
+            store.supply(item, geometry, identity);
         }
         if let Some(json) = recorded_json {
             let recorded: Recorded = serde_json::from_str(&json)
@@ -816,22 +862,22 @@ impl Engine {
     #[wasm_bindgen(js_name = supplyMask)]
     pub fn supply_mask(&mut self, nifti: &[u8], origin: &str) {
         let origin = origin.to_string();
-        self.store
-            .supply_mask(match qsm_core::io::load_nifti(nifti) {
-                Ok(m) => Supplied::Found {
-                    origin,
-                    data: m.data,
-                    dims: m.dims,
-                    affine: m.affine,
-                },
-                Err(error) => Supplied::Unreadable { origin, error },
-            });
+        let mask = match qsm_core::io::load_nifti(nifti) {
+            Ok(m) => Supplied::Found {
+                origin,
+                data: m.data,
+                dims: m.dims,
+                affine: m.affine,
+            },
+            Err(error) => Supplied::Unreadable { origin, error },
+        };
+        self.store.supply_mask(mask, file_identity(nifti));
         self.facts.custom_mask = true;
     }
 
     /// The mask a recipe makes on this scan, computed by the run's own masking
     /// (`qsmxt_engine::run::preview_mask`): `sections_json` (a JSON array of mask sections; the
-    /// config's `masking.sections` when absent, or e.g. its two-pass sections), combined and
+    /// config's `masking.sections` when absent), combined (`masking.combine`) and
     /// refined as `config_json` says, up to `upto_json` (`"recipe"`, the whole recipe and the mask
     /// a run makes; or `{ "section": { "index": i, "ops": n } }`, section `i` after its first `n`
     /// steps). The steps the mask step reads from run first, cached as a run caches them, and
@@ -873,6 +919,7 @@ impl Engine {
                 &mut relay,
                 &mut inputs.inner,
                 &sections,
+                config.masking.combine,
                 upto,
             )
             .map_err(|e| engine_error(&e))
@@ -1000,6 +1047,7 @@ pub fn plan_state(
         dims: first.dims,
         voxel_size: first.voxel_size,
         affine: first.affine,
+        orientation: first.orientation,
         sidecar: inputs.facts().sidecars.into_iter().next(),
     };
     let mut store = MemoryStore::with_volumes(header, identity.into(), Held(held));
@@ -1039,16 +1087,23 @@ pub fn plan_state_wasm(
 mod tests {
     use super::*;
 
+    const N: usize = 16;
+
     /// A sphere of tissue in a 16³ box at 1 mm, three echoes, as the page describes it
     /// (`ScanInputs`), and a store holding it under `identity`.
     fn phantom(identity: &str) -> (String, ScanFacts, MemoryStore) {
-        const N: usize = 16;
-        let tes = [0.005, 0.010, 0.015];
         let mut affine = [0.0; 16];
         for i in 0..4 {
             affine[5 * i] = 1.0;
         }
         let grid = serde_json::json!({ "dims": [N, N, N], "voxel_size": [1.0, 1.0, 1.0], "affine": affine });
+        phantom_on(identity, grid)
+    }
+
+    /// [`phantom`], every image on `grid` (Geometry JSON), the store's header the page's
+    /// (`ScanInputs::header`, as [`Engine::new`] makes it).
+    fn phantom_on(identity: &str, grid: serde_json::Value) -> (String, ScanFacts, MemoryStore) {
+        let tes = [0.005, 0.010, 0.015];
         let inputs = serde_json::json!({
             "echoes": tes.iter().map(|te| serde_json::json!({
                 "phase": grid, "magnitude": grid,
@@ -1056,14 +1111,10 @@ mod tests {
             })).collect::<Vec<_>>(),
             "overrides": {},
         });
-        let report = parse_scan_inputs(&inputs.to_string()).unwrap().facts();
+        let scan = parse_scan_inputs(&inputs.to_string()).unwrap();
+        let report = scan.facts();
         let facts = report.facts.clone().expect("facts");
-        let header = Header {
-            dims: (N, N, N),
-            voxel_size: (1.0, 1.0, 1.0),
-            affine,
-            sidecar: report.sidecars.into_iter().next(),
-        };
+        let header = scan.header(&report).expect("a header");
         let mut store = MemoryStore::new(header, identity.into());
         let c = (N as f64 - 1.0) / 2.0;
         let mut field = vec![0.0; N * N * N];
@@ -1196,6 +1247,52 @@ mod tests {
         let new_data = state(&quick_config(), "inputs-2", Some(&recorded), &held);
         assert_eq!(of(&new_data, "load").as_deref(), Some("changed"));
         assert_eq!(of(&new_data, "invert").as_deref(), Some("stale"));
+    }
+
+    /// An oblique file whose qform and sform disagree (an axis-aligned `ALIGNED_ANAT` sform): the
+    /// grid the page reads from it carries the header's orientation fields, the run on it gives
+    /// N4 the image geometry ITK (ANTs) reads from the file, bit for bit, and BET FSL's
+    /// left-right order (from the sform, which FSL reads first).
+    #[test]
+    fn n4_and_bet_get_the_geometry_the_file_header_gives() {
+        let (c, s) = (0.3f64.cos(), 0.3f64.sin());
+        let oblique = [
+            c, 0.0, -s, -7.5, 0.0, 1.0, 0.0, -8.25, s, 0.0, c, -6.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let mut file =
+            qsm_core::io::save_nifti(&vec![0.0; N * N * N], (N, N, N), (1.0, 1.0, 1.0), &oblique)
+                .unwrap();
+        // sform_code (offset 254) ALIGNED_ANAT, srow_x/y/z (280, 296, 312) axis-aligned.
+        file[254..256].copy_from_slice(&2i16.to_le_bytes());
+        let aligned: [f32; 12] = [
+            1.0, 0.0, 0.0, -8.0, 0.0, 1.0, 0.0, -9.0, 0.0, 0.0, 1.0, -5.0,
+        ];
+        for (k, v) in aligned.iter().enumerate() {
+            file[280 + 4 * k..284 + 4 * k].copy_from_slice(&v.to_le_bytes());
+        }
+        let grid: serde_json::Value =
+            serde_json::from_str(&nifti_geometry_wasm(&file).unwrap()).unwrap();
+        assert!(grid["orientation"].is_object(), "{grid}");
+
+        let (_, facts, mut store) = phantom_on("oblique", grid);
+        let config = quick_config();
+        let plan = qsmxt_engine::plan::plan(&config, &facts);
+        qsmxt_engine::run::run(&plan, &config, &facts, &mut store, &mut ()).unwrap();
+        let meta = store.grid().expect("the run's grid").clone();
+        let itk = qsm_core::io::load_itk_geometry(&file).unwrap();
+        assert_eq!(qsmxt_engine::scan::itk_geometry(&meta).unwrap(), itk);
+        let mut from_affine = meta.clone();
+        from_affine.orientation = None;
+        assert_ne!(
+            qsmxt_engine::scan::itk_geometry(&from_affine).unwrap(),
+            itk,
+            "ITK reads the qform here, not the sform the run's affine is"
+        );
+        assert_eq!(meta.affine[3], -8.0, "the run's affine is the sform");
+        assert_eq!(
+            qsm_core::bet::FslLeftRightOrder::from_affine(Some(&meta.affine)),
+            qsm_core::bet::FslLeftRightOrder::Neurological
+        );
     }
 
     /// The page's scan report is the engine's `ScanInputs::facts`, as JSON.

@@ -722,12 +722,20 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
 // ---- file inputs reach their loaders ----
 {
   const handled = [];
-  app.structuralFileIO.handleFiles = files => handled.push(['structural', files]);
-  app.lesionFileIO.handleFiles = files => handled.push(['lesion', files]);
+  const image = { name: 'image.nii' };
+  let read;
+  app.readScanInput = async (files) => {
+    read = files;
+    return image;
+  };
+  app.setStructural = async file => handled.push(['structural', file]);
+  app.setLesion = async file => handled.push(['lesion', file]);
   fire('structuralFileInput', 'change');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(read, $('#structuralFileInput').files);
   fire('lesionFileInput', 'change');
-  assert.deepEqual(handled.map(([kind]) => kind), ['structural', 'lesion']);
-  assert.equal(handled[0][1], $('#structuralFileInput').files);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(handled, [['structural', image], ['lesion', image]]);
 
   // Diffusion inputs: each lands in its own DeepISLES slot.
   const diffusion = [];

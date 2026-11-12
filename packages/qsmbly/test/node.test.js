@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import appManifest from '../../../models/qsmbly.manifest.json' with { type: 'json' };
-import { EXAMPLE_ASSETS, MODEL_ASSETS, QSMXT, ensureModels, ensureNativeModelDirectory, nativeModelAssets, qsmxtEnvironment, runQsmxt } from '../src/node.js';
+import { EXAMPLE_ASSETS, MODEL_ASSETS, QSMXT, ensureModels, ensureNativeModelDirectory, nativeModelAssets, qsmxtEnvironment, parseQsmxtVersion, runQsmxt } from '../src/node.js';
 import { verifyNativeExamples, verifyNativeWeights } from '../src/native-registry.js';
 
 const bin = fileURLToPath(new URL('../bin/qsmbly.js', import.meta.url));
@@ -266,4 +266,22 @@ test('the wrapper keeps its own commands and refuses to replace the pinned QSMxT
 
 test('the exported native runner also refuses the mutable updater before preflight', async () => {
   await assert.rejects(runQsmxt(['update']), /Install a newer QSMbly release/);
+});
+
+for (const kind of ['main', 'rev']) {
+  test(`native version parsing retains the ${kind} source revision`, () => {
+    const banner = `qsmxt 0.0.0 (${kind} ${QSMXT.build.commit})\nQSM.rs (qsm-core): v0.41.0 (${QSMXT.build.commit})\ndeep-learning models: enabled\n`;
+    for (const output of [banner, banner.replaceAll('\n', '\r\n')]) {
+      assert.deepEqual(parseQsmxtVersion(output), {
+        version: '0.0.0', sourceCommit: QSMXT.build.commit, qsmCore: 'v0.41.0', deepLearning: true,
+      });
+    }
+  });
+}
+
+test('native version parsing accepts published release banners and rejects unrecognized suffixes', () => {
+  assert.deepEqual(parseQsmxtVersion('qsmxt 11.0.0\nQSM.rs (qsm-core): v0.41.0\ndeep-learning models: enabled\n'), {
+    version: '11.0.0', sourceCommit: undefined, qsmCore: 'v0.41.0', deepLearning: true,
+  });
+  assert.equal(parseQsmxtVersion('qsmxt 0.0.0 (rev unknown)\n').version, undefined);
 });

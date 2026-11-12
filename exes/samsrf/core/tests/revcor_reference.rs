@@ -6,20 +6,20 @@
 //! downloads all three pinned fixtures; any missing one fails.
 use samsrf_core::apertures::Apertures;
 use samsrf_core::error::Error;
-use samsrf_core::geometry::{cluster_roi, unique_rows, Hull, Triangulation};
 use samsrf_core::job::{Job, JobInputs, SeedInputs};
 use samsrf_core::mapset::Maps;
 use samsrf_core::model::{self, AnalysisKind, Model};
 use samsrf_core::precision::Precision;
 use samsrf_core::surface::{Faces, Surface};
 use samsrf_core::timeseries::TimeSeries;
-use samsrf_core::{preprocess, revcor_cf, revcor_prf, template};
+use samsrf_core::preprocess::{Combine, Normalise, PreprocessOptions, Preprocessed, RunAccumulator};
+use samsrf_core::timeseries::VertexSelection;
+use samsrf_core::{freesurfer, gifti, preprocess, revcor_cf, revcor_prf, template};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 const HOSTS: [&str; 2] = ["ubuntu-22.04", "ubuntu-24.04"];
 const UNIT: f64 = 1.0 / 16_777_216.0; // 2^-24
-const SIGMA_PER_FWHM: f64 = 2.0 * 1.177_410_022_515_474_6; // 2 sqrt(2 ln 2)
 
 /// What each recording must contain per host. A missing case fails its gate.
 struct Expected {
@@ -30,11 +30,12 @@ struct Expected {
     global: usize,
     replay: usize,
     pipelines: usize,
-    reader: usize,
+    templates: usize,
+    raw_cf: usize,
 }
 
-const MATRIX: Expected = Expected { cases: 102, refused: 15, single_cf: 24, single_rc: 6, global: 6, replay: 69, pipelines: 69, reader: 48 };
-const EDGES: Expected = Expected { cases: 24, refused: 0, single_cf: 8, single_rc: 2, global: 2, replay: 20, pipelines: 20, reader: 16 };
+const MATRIX: Expected = Expected { cases: 102, refused: 15, single_cf: 24, single_rc: 6, global: 6, replay: 69, pipelines: 69, templates: 6, raw_cf: 36 };
+const EDGES: Expected = Expected { cases: 24, refused: 0, single_cf: 8, single_rc: 2, global: 2, replay: 20, pipelines: 20, templates: 2, raw_cf: 0 };
 
 struct Host {
     name: &'static str,
@@ -209,19 +210,10 @@ fn within(a: f64, e: f64, limit: f64) -> bool {
     same(a, e) || a.is_finite() && e.is_finite() && (a - e).abs() <= limit
 }
 
-/// The spacing of single values at `value`.
-fn spacing(value: f64) -> f64 {
-    let v = (value as f32).abs();
-    f64::from(f32::from_bits(v.to_bits() + 1) - v)
-}
-
 fn nan_max(values: &[f64]) -> f64 {
     values.iter().copied().filter(|x| !x.is_nan()).fold(f64::NAN, |m, x| if m.is_nan() || x > m { x } else { m })
 }
 
-fn nan_min(values: &[f64]) -> f64 {
-    values.iter().copied().filter(|x| !x.is_nan()).fold(f64::NAN, |m, x| if m.is_nan() || x < m { x } else { m })
-}
 
 /// The conditioning of statistics computed from a course: centring loses
 /// `max|y| / std(y)` in relative precision, in MATLAB as in the port. A constant
@@ -319,10 +311,10 @@ fn rc_prepared(host: &Host, case: &Value) -> revcor_prf::Prepared {
     revcor_prf::Prepared::new(model, job.apertures.as_ref().unwrap(), &resolved, job.data.volumes).unwrap()
 }
 
-/// Single 2D fits are refused: CF because MATLAB's single `exp` decides them, RC
-/// because no bound on their end-to-end parameters has been established.
+/// Single RC 2D and CF Gaussian fits remain refused: no end-to-end acceptance
+/// bound is established outside the recorded cases. Internal tests retain their evidence.
 #[test]
-fn single_fitted_models_are_refused() {
+fn single_fits_are_refused() {
     let Some(hosts) = hosts() else { return; };
     let mut tally = Tally::default();
     for host in &hosts {
@@ -349,7 +341,7 @@ fn single_cf_profiles_stay_within_single_rounding() {
     let mut failures = Failures::default();
     let mut tally = Tally::default();
     for host in &hosts {
-        for case in pipelines(host, "cf").filter(|c| single(c) && parse(c).is_ok()) {
+        for case in pipelines(host, "cf").filter(|c| single(c) && parse(c).is_ok() && !single_gaussian_cf(c)) {
             tally.add(host);
             let prepared = cf_prepared(host, case, &template_maps(host, case));
             let y = array(&host.root, &case["savedCourses"]);
@@ -528,7 +520,7 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
     let mut failures = Failures::default();
     let mut tally = Tally::default();
     for host in &hosts {
-        for case in pipelines(host, "cf").filter(|c| parse(c).is_ok() && !runaway_double_gaussian(c)) {
+        for case in pipelines(host, "cf").filter(|c| parse(c).is_ok() && !single_gaussian_cf(c) && !runaway_double_gaussian(c)) {
             tally.add(host);
             let prepared = cf_prepared(host, case, &template_maps(host, case));
             let profiles = array(&host.root, &case["profiles"]);
@@ -602,7 +594,7 @@ fn pipelines_from_matlab_courses_match_matlab() {
     let mut failures = Failures::default();
     let mut tally = Tally::default();
     for host in &hosts {
-        for case in host.cases.iter().filter(|c| c["kind"] == "pipeline" && parse(c).is_ok() && !runaway_double_gaussian(c)) {
+        for case in host.cases.iter().filter(|c| c["kind"] == "pipeline" && parse(c).is_ok() && !single_gaussian_cf(c) && !runaway_double_gaussian(c)) {
             tally.add(host);
             let expected = recorded_maps(host, case);
             let actual = run(inputs(host, case, None));
@@ -656,149 +648,146 @@ fn pipelines_from_matlab_courses_match_matlab() {
     failures.assert_none();
 }
 
-fn perimeter(hull: &Hull) -> f64 {
-    let n = hull.vertices.len();
-    (0..n).map(|i| {
-        let (a, b) = (hull.vertices[i], hull.vertices[(i + 1) % n]);
-        (b[0] - a[0]).hypot(b[1] - a[1])
-    }).sum()
-}
-
-/// Bounds on a convex hull's centroid and `sqrt(area) / (2 sqrt(2 ln 2))` when every
-/// point moves by at most `epsilon` and the hull keeps its vertex set. The regions
-/// are then within Hausdorff distance `epsilon`: the area changes by at most
-/// `P e + pi e^2`, the symmetric difference is at most `2 P e + pi e^2`, and each of
-/// its points lies within `R + e` of the centroid (`P` the perimeter, `R` the
-/// farthest vertex), which bounds the centroid's move by that moment over the area.
-fn hull_bounds(hull: &Hull, epsilon: f64) -> Option<(f64, f64)> {
-    let area = hull.area();
-    let p = perimeter(hull);
-    let c = hull.centroid();
-    let reach = hull.vertices.iter().map(|v| (v[0] - c[0]).hypot(v[1] - c[1])).fold(0.0, f64::max);
-    let change = p * epsilon + std::f64::consts::PI * epsilon * epsilon;
-    if change >= area {
-        return None;
-    }
-    let centroid = (2.0 * p * epsilon + std::f64::consts::PI * epsilon * epsilon) * (reach + epsilon) / (area - change);
-    let width = change / ((area.sqrt() + (area - change).sqrt()) * SIGMA_PER_FWHM);
-    Some((centroid, width))
-}
-
-/// The hull's vertices as indices into `points`, sorted.
-fn hull_indices(points: &[[f64; 2]]) -> Option<Vec<usize>> {
-    let hull = Hull::of_polygon(points).unwrap()?;
-    let mut indices: Vec<usize> = hull.vertices.iter().map(|v| points.iter().position(|p| p == v).unwrap()).collect();
-    indices.sort_unstable();
-    Some(indices)
-}
-
-/// Bounds on each position and width when the template coordinates move by at most
-/// `delta`, or `None` for a vertex without an estimate. Fails on any discrete change.
-fn template_bounds(prepared: &revcor_cf::Prepared, r: &[f64], theirs: &[[f64; 2]], ours: &[[f64; 2]], delta: f64, failures: &mut Failures, at: &str) -> Vec<(&'static str, f64)> {
-    let max = nan_max(r);
-    if max.is_nan() || max <= 0.0 {
-        return Vec::new();
-    }
-    if prepared.model.fit_prf == samsrf_core::model::CfParameterEstimate::SummaryStatistics {
-        // Order statistics move by at most delta; absolute deviations by 2 delta.
-        let above = |xy: &[[f64; 2]]| unique_rows(&r.iter().zip(xy).filter(|(x, _)| **x > max / 2.0).map(|(_, p)| *p).collect::<Vec<_>>()).1;
-        failures.check(above(theirs) == above(ours), || format!("{at}: the reader merges different suprathreshold coordinates"));
-        return vec![("x0", delta), ("y0", delta), ("Sigma", std::f64::consts::SQRT_2 * 2.0 * delta)];
-    }
-    let epsilon = std::f64::consts::SQRT_2 * delta;
-    let (unique_theirs, first) = unique_rows(theirs);
-    let (unique_ours, first_ours) = unique_rows(ours);
-    failures.check(first == first_ours, || format!("{at}: the reader merges different seed coordinates"));
-    let unique_r: Vec<f64> = first.iter().map(|&j| r[j]).collect();
-    let max_u = nan_max(&unique_r);
-    let Some(peak) = unique_r.iter().position(|x| *x == max_u) else { return Vec::new() };
-    let cluster = cluster_roi(peak, &unique_r, max_u / 2.0, &Triangulation::delaunay(&unique_theirs));
-    let cluster_ours = cluster_roi(peak, &unique_r, max_u / 2.0, &Triangulation::delaunay(&unique_ours));
-    failures.check(cluster == cluster_ours, || format!("{at}: the reader changes the cluster"));
-    let min_u = nan_min(&unique_r);
-    let negative: Vec<usize> = (0..unique_r.len()).filter(|&k| unique_r[k] < min_u / 2.0).collect();
-    let mut bounds = Vec::new();
-    for (label, members, rows) in [("centre", cluster, &["x0", "y0", "Centre"][..]), ("surround", negative, &["Surround"][..])] {
-        let pick = |set: &[[f64; 2]]| members.iter().map(|&k| set[k]).collect::<Vec<_>>();
-        let (points, points_ours) = (pick(&unique_theirs), pick(&unique_ours));
-        failures.check(hull_indices(&points) == hull_indices(&points_ours), || format!("{at}: the reader changes the {label} hull"));
-        match Hull::of_polygon(&points).unwrap() {
-            None => {}
-            Some(hull) => match hull_bounds(&hull, epsilon) {
-                Some((centroid, width)) => bounds.extend(rows.iter().map(|&name| (name, if name == "x0" || name == "y0" { centroid } else { width }))),
-                None => failures.check(false, || format!("{at}: the {label} hull is too thin for a bound")),
-            },
-        }
-    }
-    bounds
-}
-
-/// The production reader's Benson template instead of MATLAB's, through the job.
-/// Its x0 and y0 differ from MATLAB's by up to 2e-6 (`compare.mjs` gates the reader).
-/// Discrete decisions must not change: unique seed coordinates, clusters and hull
-/// vertex sets. Values that do not depend on the coordinates must equal the
-/// MATLAB-template run; positions and widths may differ from MATLAB only by the
-/// geometric bound for the measured coordinate error, plus two single spacings of
-/// output rounding. Gaussian fits are not covered (single ones are refused).
+/// The production Benson reader on the raw GIfTI gives MATLAB's `samsrf_benson2srf`
+/// template bit for bit: every row and vertex of every recorded template.
 #[test]
-fn production_template_reader_moves_positions_within_bounds() {
+fn production_template_reader_equals_matlabs_template() {
     let Some(hosts) = hosts() else { return; };
     let input = PathBuf::from(std::env::var_os("SAMSRF_MATRIX_INPUT_DIR").expect("set SAMSRF_MATRIX_INPUT_DIR with SAMSRF_REVCOR_REFERENCE_DIR"));
     let mut failures = Failures::default();
     let mut tally = Tally::default();
     for host in &hosts {
-        for case in pipelines(host, "cf").filter(|c| c["mapReplayModel"]["Fit_pRF"] != 1) {
+        for template in host.cases.iter().filter(|c| c["kind"] == "benson") {
             tally.add(host);
-            let id = case["id"].as_str().unwrap();
-            let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
-            let dataset = pre["dataset"].as_str().unwrap();
+            let dataset = template["dataset"].as_str().unwrap();
             let right = dataset.ends_with("_rh");
             let file = input.join(dataset).join(if right { "rh_benson.gii" } else { "lh_benson.gii" });
             let reader = template::read_benson_gifti(&std::fs::read(file).unwrap(), right).unwrap();
-            let recorded = template_maps(host, case);
-            let mut production_template = recorded.clone();
-            production_template.data.copy_from_slice(&reader.data[..recorded.data.len()]);
-            let seeds = vertices(&host.root, &pre["seedVertices"]);
-            let xy = |maps: &Maps| -> Vec<[f64; 2]> { seeds.iter().map(|&v| [maps.row(1)[v as usize], maps.row(2)[v as usize]]).collect() };
-            let (theirs, ours) = (xy(&recorded), xy(&production_template));
-            let delta = theirs.iter().zip(&ours).map(|(a, b)| (a[0] - b[0]).abs().max((a[1] - b[1]).abs())).fold(0.0, f64::max);
-            let expected = recorded_maps(host, case);
-            let matlab_template = run(inputs(host, case, Some(recorded.clone())));
-            let production = run(inputs(host, case, Some(production_template)));
-            let prepared = cf_prepared(host, case, &recorded);
-            let y = array(&host.root, &case["savedCourses"]);
-            let volumes = shape(&case["savedCourses"])[0];
-            let roi = vertices(&host.root, &case["savedVertices"]);
-            let mut worst = 0.0f64;
-            let rounding = rounding_courses(host, case);
-            for (i, course) in y.chunks(volumes).enumerate() {
-                let v = roi[i] as usize;
-                let at = format!("{} {id}: vertex {v}", host.name);
-                if rounding.contains(&v) {
-                    let empty = production.values.iter().enumerate().all(|(row, name)| name == "Noise Ceiling" || production.row(row)[v] == 0.0);
-                    failures.check(empty, || format!("{at}: a rounding-only course must give no estimate"));
-                    continue;
-                }
-                let bounds = template_bounds(&prepared, &prepared.profile(course), &theirs, &ours, delta, &mut failures, &at);
-                for (row, name) in production.values.iter().enumerate() {
-                    let (a, e) = (production.row(row)[v], expected.row(row)[v]);
-                    let ok = match bounds.iter().find(|(n, _)| n == name) {
-                        Some(&(_, bound)) => {
-                            if bound > 0.0 && a.is_finite() && e.is_finite() {
-                                worst = worst.max((a - e).abs() / bound);
-                            }
-                            let rounding = if single(case) { 2.0 * spacing(e.abs().max(a.abs())) } else { 1e-12 * e.abs().max(1.0) };
-                            within(a, e, bound + rounding)
-                        }
-                        None => same(a, matlab_template.row(row)[v]),
-                    };
-                    failures.check(ok, || format!("{at} {name}: {a} vs {e}, delta {delta:e}, bounds {bounds:?}"));
+            let rows = shape(&template["maps"])[0];
+            let recorded = array(&host.root, &template["maps"]);
+            assert_eq!(recorded.len(), rows * reader.vertices, "{} {}: template size", host.name, template["id"]);
+            for row in 0..rows {
+                for v in 0..reader.vertices {
+                    let (a, e) = (reader.row(row)[v], recorded[v * rows + row]);
+                    failures.check(same(a, e), || format!("{} {}: {} vertex {v}: {a} vs {e}", host.name, template["id"], reader.values[row]));
                 }
             }
-            println!("{} {id}: template delta {delta:.3e}, worst fraction of the bound {worst:.3}", host.name);
         }
     }
-    tally.assert_complete(&hosts, "template-reader cases", |e| e.reader);
+    tally.assert_complete(&hosts, "Benson templates", |e| e.templates);
+    failures.assert_none();
+}
+
+/// A CF case from the raw files alone: the runs through the production
+/// preprocessing (MATLAB's average or concatenation, z-scored, with the noise
+/// ceiling and global signal), the Benson GIfTI through the production reader, and
+/// the white surface and areas through the FreeSurfer readers. The ROI and seed
+/// are the recorded analysis choices.
+fn raw_cf_inputs(host: &Host, case: &Value, input: &Path, model: Model) -> (JobInputs, Preprocessed) {
+    let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
+    let dataset = pre["dataset"].as_str().unwrap();
+    let manifest: Value = serde_json::from_slice(&std::fs::read(input.join("manifest.json")).unwrap()).unwrap();
+    let entry = manifest["datasets"].as_array().unwrap().iter().find(|d| d["id"] == dataset).unwrap();
+    let hemisphere = entry["hemisphere"].as_str().unwrap();
+    let dir = input.join(dataset);
+    let options = PreprocessOptions {
+        normalise: Normalise::DetrendZscore,
+        combine: if pre["average"] == true { Combine::Average { noise_ceiling: true } } else { Combine::Concatenate },
+        global_signal: true,
+        precision: if single(case) { Precision::Single } else { Precision::Double },
+    };
+    let mut accumulator = None;
+    for run in entry["runs"].as_array().unwrap() {
+        let run = gifti::read_run(&std::fs::read(dir.join(run.as_str().unwrap())).unwrap()).unwrap();
+        accumulator.get_or_insert_with(|| RunAccumulator::new(run.vertices, VertexSelection::All, options.clone())).push_run(&run).unwrap();
+    }
+    let data = accumulator.unwrap().finish().unwrap();
+    let anatomy = dir.join("surf");
+    let surface = freesurfer::read_surface(&std::fs::read(anatomy.join(format!("{hemisphere}.white"))).unwrap()).unwrap();
+    let area = freesurfer::read_curv(&std::fs::read(anatomy.join(format!("{hemisphere}.area"))).unwrap()).unwrap();
+    let template = template::read_benson_gifti(&std::fs::read(dir.join(format!("{hemisphere}_benson.gii"))).unwrap(), hemisphere == "rh").unwrap();
+    let count = data.total_vertices;
+    let job = JobInputs {
+        model,
+        apertures: None,
+        hrf: None,
+        data: data.data.clone(),
+        kept: (0..count as u32).collect(),
+        roi: Some(vertices(&host.root, &pre["roi"])),
+        noise_ceiling: data.noise_ceiling.clone(),
+        global_signal: data.global_signal.clone(),
+        seed: Some(SeedInputs { vertices: vertices(&host.root, &pre["seedVertices"]), template }),
+        surface: Some(surface),
+        area: Some(area),
+        seed_fine_fit: None,
+        total_vertices: count,
+    };
+    (job, data)
+}
+
+/// Every single-precision CF case of the matrix from the raw files
+/// (`raw_cf_inputs`). The preprocessed courses and global signal equal MATLAB's bit
+/// for bit, every map value equals the run on MATLAB's own courses and template, and
+/// on the AMD (CNR `auto`) host every map value equals MATLAB's. That includes the
+/// single Gaussian fits; on the AVX-512 host, whose corr and regression orders are not reproduced, their
+/// differences from MATLAB are reported. (Double preprocessing is within 1e-12 of
+/// MATLAB's, not bitwise, so double cases have no bitwise chain to check.)
+#[test]
+fn cf_from_raw_files_equals_the_run_on_matlabs_courses() {
+    let Some(hosts) = hosts() else { return; };
+    let input = PathBuf::from(std::env::var_os("SAMSRF_MATRIX_INPUT_DIR").expect("set SAMSRF_MATRIX_INPUT_DIR with SAMSRF_REVCOR_REFERENCE_DIR"));
+    let mut failures = Failures::default();
+    let mut tally = Tally::default();
+    let mut gaussian_amd = 0;
+    // The edge recording edits its courses, so only the matrix starts from raw files.
+    for host in hosts.iter().filter(|host| std::ptr::eq(host.expected, &MATRIX)) {
+        for case in pipelines(host, "cf").filter(|c| single(c)) {
+            let id = case["id"].as_str().unwrap();
+            let gaussian = single_gaussian_cf(case);
+            let model = if gaussian { single_gaussian_model(case) } else { parse(case).unwrap() };
+            let (job, data) = raw_cf_inputs(host, case, &input, model.clone());
+            let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
+            let at = format!("{} {id}", host.name);
+            let courses = array(&host.root, &pre["courses"]);
+            // The accumulator keeps double values; the single job stores them in single.
+            let stored = |values: &[f64], recorded: &[f64]| values.len() == recorded.len() && values.iter().zip(recorded).all(|(a, e)| same(f64::from(*a as f32), *e));
+            failures.check(stored(&data.data.data, &courses), || format!("{at}: preprocessed courses"));
+            let ceiling = pre.get("noiseCeiling").map(|d| array(&host.root, d));
+            let ceiling_ok = match (data.noise_ceiling.as_deref(), ceiling.as_deref()) {
+                (Some(ours), Some(theirs)) => stored(ours, theirs),
+                (None, None) => true,
+                _ => false,
+            };
+            failures.check(ceiling_ok, || format!("{at}: noise ceiling"));
+            let global = array(&host.root, &case["globalSignal"]);
+            failures.check(data.global_signal.as_deref().is_some_and(|g| g.len() == global.len() && g.iter().zip(&global).all(|(a, e)| same(*a, *e))), || format!("{at}: global signal"));
+            let actual = run(job);
+            let from_courses = run(inputs_with(host, case, None, model));
+            for (r, name) in from_courses.values.iter().enumerate() {
+                for (v, (&a, &e)) in actual.row(r).iter().zip(from_courses.row(r)).enumerate() {
+                    failures.check(same(a, e), || format!("{at}: vertex {v} {name}: raw {a} vs MATLAB's courses {e}"));
+                }
+            }
+            tally.add(host);
+            if gaussian || !intel(host) {
+                let expected = recorded_maps(host, case);
+                let mut differing = 0;
+                for (r, name) in expected.values.iter().enumerate() {
+                    for (v, (&a, &e)) in actual.row(r).iter().zip(expected.row(r)).enumerate() {
+                        if !same(a, e) {
+                            differing += 1;
+                            failures.check(intel(host), || format!("{at}: vertex {v} {name}: {a} vs MATLAB {e}"));
+                        }
+                    }
+                }
+                println!("{at}: from raw files, {differing} map values differ from MATLAB");
+                gaussian_amd += usize::from(gaussian && !intel(host));
+            }
+        }
+    }
+    tally.assert_complete(&hosts, "raw CF cases", |e| e.raw_cf);
+    // The matrix's AMD host: twelve single Gaussian cases, with and without global-signal correction.
+    assert_eq!(gaussian_amd, 12, "single Gaussian CF cases gated on the AMD host");
     failures.assert_none();
 }
 
@@ -839,7 +828,7 @@ fn threshold_boundary_is_exercised_exactly() {
     }
 }
 
-/// Single CF Gaussian fits below the parser's refusal, on MATLAB's template and
+/// Single CF Gaussian fits on MATLAB's template and
 /// preprocessed courses: corr (MKL's `y' * A` order and its clamp), smoothing, the
 /// threshold, single `exp`, the mixed-precision objective and `fminsearch`. Every
 /// map value of every vertex equals MATLAB's on the AMD (CNR `auto`) host, with and
@@ -848,11 +837,11 @@ fn threshold_boundary_is_exercised_exactly() {
 /// AVX-512 host's corr and regression orders are not reproduced, so there only the
 /// rows the fit does not produce, without global-signal correction, are compared.
 #[test]
-fn single_gaussian_cf_below_the_refusal_equals_the_amd_host() {
+fn single_gaussian_cf_from_matlabs_courses_equals_the_amd_host() {
     let Some(hosts) = hosts() else { return; };
     let mut failures = Failures::default();
     let mut gated = 0;
-    for host in hosts.iter().filter(|host| host.expected.refused > 0) {
+    for host in hosts.iter().filter(|host| std::ptr::eq(host.expected, &MATRIX)) {
         for case in pipelines(host, "cf").filter(|c| single_gaussian_cf(c)) {
             let id = case["id"].as_str().unwrap();
             let global = case["mapReplayModel"]["Global_Signal_Correction"] != false;
@@ -877,7 +866,7 @@ fn single_gaussian_cf_below_the_refusal_equals_the_amd_host() {
                     if !same(a, e) && !replay_differing.contains(&v) {
                         replay_differing.push(v);
                     }
-                    // With global-signal correction (refused for its regression too),
+                    // With global-signal correction,
                     // replay differences are reported: on the AVX-512 host two
                     // smoothed fits differ from their own recorded profiles, most
                     // likely through the 18 inputs where `exp_single` and MATLAB's

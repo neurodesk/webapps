@@ -154,8 +154,7 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
     expect(back.inversion.nltv.max_iter_newton).toBe(s.nltv.newton_max_iter);
     expect(back.inversion.fansi).toMatchObject(closeTo(s.fansi));
     expect(back.field_mapping.phase_offset_sigma_mm).toEqual(s.mcpc3ds.sigma);
-    expect(back.field_mapping.linear_fit.reliability_threshold_percentile)
-      .toBe(s.linearFit.reliability_threshold_percentile);
+    expect(back.field_mapping.linear_fit.estimate_offset).toBe(s.linearFit.estimate_offset);
     expect(back.field_mapping.romeo.template).toBe(s.romeo.template);
     expect(back.inversion.qsmart.vasc_sphere_radius).toBe(s.qsmart.vasc_sphere_radius);
     expect(back.inversion.qsmart.inversion).toBe(s.qsmart.inversion_algorithm);
@@ -262,7 +261,7 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
   describe('null and NaN dropping', () => {
     // serde rejects null for a typed field — the whole config, and so the whole run, fails.
     test('a null scalar is fatal to the schema, which is why buildConfigJson drops it', () => {
-      expect(() => wasm.config_json_to_toml_wasm('{"bg_removal":{"ismv":{"radius":null}}}', ''))
+      expect(() => wasm.config_json_to_toml_wasm('{"bg_removal":{"ismv":{"tol":null}}}', ''))
         .toThrow(/invalid type: null/);
     });
 
@@ -273,26 +272,29 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
         rts: { ...PIPELINE_DEFAULTS.rts, delta: NaN, mu: Infinity },
         mcpc3ds: { sigma: [NaN, 3, 3] },
         swi: { hp_sigma: [4, null, 0], scaling: 'tanh', strength: NaN, mip_window: 9 },
-        linearFit: { reliability_threshold_percentile: NaN },
+        linearFit: {},
       });
       const { back } = roundTrip(s, { doSwi: true });
 
-      expect(back.bg_removal.ismv).toEqual({ ...defaults.bg_removal.ismv, max_iter: 77 });
+      // An unset optional setting (iSMV's radius: derived from the voxel size) is null in the
+      // defaults and absent from the TOML.
+      const set = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null));
+      expect(back.bg_removal.ismv).toEqual(set({ ...defaults.bg_removal.ismv, max_iter: 77 }));
       expect(back.inversion.rts.delta).toBe(defaults.inversion.rts.delta);
       expect(back.inversion.rts.mu).toBe(defaults.inversion.rts.mu);
       expect(back.field_mapping.phase_offset_sigma_mm).toEqual(defaults.field_mapping.phase_offset_sigma_mm);
       expect(back.swi.hp_sigma).toEqual(defaults.swi.hp_sigma);
       expect(back.swi.strength).toBe(defaults.swi.strength);
       expect(back.swi.mip_window).toBe(9);
-      expect(back.field_mapping.linear_fit.reliability_threshold_percentile)
-        .toBe(defaults.field_mapping.linear_fit.reliability_threshold_percentile);
+      expect(back.field_mapping.linear_fit.estimate_offset)
+        .toBe(defaults.field_mapping.linear_fit.estimate_offset);
     });
 
     test('PIPELINE_DEFAULTS placeholders (null radii) take the schema defaults', () => {
       const defaults = JSON.parse(wasm.get_default_config_json_wasm());
       const { back } = roundTrip(PIPELINE_DEFAULTS);
       expect(back.bg_removal.vsharp.max_radius).toBe(defaults.bg_removal.vsharp.max_radius);
-      expect(back.bg_removal.ismv.radius).toBe(defaults.bg_removal.ismv.radius);
+      expect(back.bg_removal.ismv.radius ?? null).toBe(defaults.bg_removal.ismv.radius);
     });
   });
 
@@ -305,7 +307,7 @@ describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () =
     expect(command).not.toContain('--mask-preset bet');
     expect(command).not.toContain('--mask-preset');
     const methods = wasm.generate_methods_wasm(json, 'QSMbly', mask);
-    const description = methods.split('\n## References')[0];
+    const description = methods.split('\n## ')[0];
     expect(description).toContain('A brain mask was generated using Otsu thresholding');
     expect(description).not.toMatch(/\bBET\b/);
     const toml = wasm.config_json_to_toml_selected_wasm(json, mask);

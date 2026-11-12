@@ -161,27 +161,17 @@ describe('buildConfigJson fixed-size f64 arrays', () => {
 });
 
 describe('buildConfigJson linear-fit parameters', () => {
-  test('carries the reliability percentile the user set', () => {
+  test('carries whether the fit estimates the phase offset', () => {
     const fm = JSON.parse(buildConfigJson(
-      settingsFixture({ b0_estimation: 'linear_fit', linearFit: { reliability_threshold_percentile: 75 } }),
+      settingsFixture({ b0_estimation: 'linear_fit', linearFit: { estimate_offset: false } }),
     )).field_mapping;
 
     expect(fm.b0_estimation).toBe('linear-fit');
-    expect(fm.linear_fit).toEqual({ reliability_threshold_percentile: 75 });
+    expect(fm.linear_fit).toEqual({ estimate_offset: false });
   });
 
-  test('keeps 0 (reliability masking disabled) rather than treating it as unset', () => {
-    const fm = JSON.parse(buildConfigJson(
-      settingsFixture({ linearFit: { reliability_threshold_percentile: 0 } }),
-    )).field_mapping;
-
-    expect(fm.linear_fit).toEqual({ reliability_threshold_percentile: 0 });
-  });
-
-  test('omits a blank percentile so qsmxt-engine supplies its default', () => {
-    const fm = JSON.parse(buildConfigJson(
-      settingsFixture({ linearFit: { reliability_threshold_percentile: NaN } }),
-    )).field_mapping;
+  test('omits an unset choice so qsmxt-engine supplies its default', () => {
+    const fm = JSON.parse(buildConfigJson(settingsFixture({ linearFit: {} }))).field_mapping;
 
     expect(fm.linear_fit).toEqual({});
   });

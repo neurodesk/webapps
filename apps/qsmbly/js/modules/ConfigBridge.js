@@ -54,10 +54,8 @@ export function buildConfig(settings, options = {}) {
       unwrapping_algorithm: settings.unwrapping_algorithm || 'romeo',
       b0_estimation: (settings.b0_estimation || 'weighted_avg').replace(/_/g, '-'),
       b0_weight_type: (settings.b0_weight_type || 'phase_snr').replace(/_/g, '-'),
-      // qsmxt-engine's LinearFitConfig carries only the reliability percentile; its bridge
-      // pins qsm-core's estimate_offset to the default, so the UI does not offer it.
       linear_fit: {
-        reliability_threshold_percentile: settings.linearFit?.reliability_threshold_percentile,
+        estimate_offset: settings.linearFit?.estimate_offset,
       },
       romeo: {
         individual: settings.romeo?.individual ?? true,

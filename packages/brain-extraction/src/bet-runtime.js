@@ -3,12 +3,14 @@
 // the module never frees its buffers.
 export function betRuntime(module) {
   return {
-    bet_wasm_with_progress(data, nx, ny, nz, vsx, vsy, vsz, fractionalIntensity, smoothness, gradientThreshold, iterations, subdivisions, onProgress) {
+    bet_wasm_with_progress(data, nx, ny, nz, vsx, vsy, vsz, fractionalIntensity, smoothness, gradientThreshold, iterations, subdivisions, affine, onProgress) {
       const instance = new WebAssembly.Instance(module, { env: { progress: (current, total) => onProgress(current >>> 0, total >>> 0) } });
       const { memory, input, bet } = instance.exports;
       const image = input(data.length) >>> 0;
       new Float64Array(memory.buffer, image, data.length).set(data);
-      const mask = bet(image, nx, ny, nz, vsx, vsy, vsz, fractionalIntensity, smoothness, gradientThreshold, iterations, subdivisions) >>> 0;
+      const geometry = input(16) >>> 0;
+      new Float64Array(memory.buffer, geometry, 16).set(affine);
+      const mask = bet(image, nx, ny, nz, vsx, vsy, vsz, fractionalIntensity, smoothness, gradientThreshold, iterations, subdivisions, geometry) >>> 0;
       return new Uint8Array(memory.buffer, mask, data.length).slice();
     },
   };

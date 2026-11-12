@@ -134,7 +134,7 @@ test('BET runs offline without a model and writes the web app\'s file names', as
   }
   assert.deepEqual(requests, []);
   assert.deepEqual(await readdir(output), ['T1_bet_brain.nii', 'T1_bet_mask.nii']);
-  assert.equal(result.maskVoxels, 246875);
+  assert.equal(result.maskVoxels, 240631);
   assert.equal(result.provenance.method, 'bet');
   assert.equal(result.provenance.fractionalIntensity, 0.5);
   const mask = await readFile(join(output, 'T1_bet_mask.nii'));

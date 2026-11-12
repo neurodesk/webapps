@@ -18,6 +18,7 @@ test('runBet hands the runtime float64 data, physical spacing of a rotated grid 
     assert.ok(data instanceof Float64Array);
     assert.deepEqual([...data], [0, 10, 20, 30, 40, 50, 60, 70]);
     const callback = args.pop();
+    assert.deepEqual(Array.from(args.pop()), volume.affine.flat());
     assert.deepEqual(args, [2, 2, 2, 2, 3, 4, 0, 1, 0, 1000, 4]);
     callback(5, 10);
     return Uint8Array.from([0, 1, 1, 0, 1, 0, 1, 0]);

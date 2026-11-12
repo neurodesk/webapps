@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmod, copyFile, mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { downloadBytes } from '../../../scripts/lib/download-bytes.mjs';
 import { EXAMPLE_ASSETS, MODEL_ASSETS, QSMXT, nativeDirectory, qsmxtVersion, releasePlatform } from '../src/node.js';
 import { verifyNativeExamples, verifyNativeWeights } from '../src/native-registry.js';
@@ -48,18 +48,19 @@ try {
   }
   const sourceArchive = join(work, 'source.tar.gz');
   const source = join(work, 'source');
+  const targetDirectory = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(source, 'target');
   await writeFile(sourceArchive, sourceBytes);
   await mkdir(source);
   for (const [command, args] of [
     [tar, ['-xf', sourceArchive, '-C', source, '--strip-components=1']],
     ['rustup', ['toolchain', 'install', QSMXT.build.toolchain, '--profile', 'minimal']],
-    ['cargo', [`+${QSMXT.build.toolchain}`, 'build', '--locked', '--release', '--manifest-path', join(source, 'Cargo.toml')]],
+    ['cargo', [`+${QSMXT.build.toolchain}`, 'build', '--locked', '--release', '--target-dir', targetDirectory, '--manifest-path', join(source, 'Cargo.toml')]],
   ]) {
-    const result = spawnSync(command, args, { stdio: 'inherit' });
+    const result = spawnSync(command, args, { stdio: 'inherit', env: { ...process.env, QSMXT_BUILD_COMMIT: QSMXT.build.commit } });
     if (result.status !== 0) throw new Error(`${command} failed building pinned QSMxT`);
   }
   const executable = platform === 'windows-x64' ? 'qsmxt.exe' : 'qsmxt';
-  await copyFile(join(source, 'target', 'release', executable), join(extracted, executable));
+  await copyFile(join(targetDirectory, 'release', executable), join(extracted, executable));
   await writeFile(join(extracted, 'source.json'), `${JSON.stringify(QSMXT.build, null, 2)}\n`);
   await writeFile(join(extracted, 'archive.sha256'), `${target.sha256}\n`);
   await rm(directory, { recursive: true, force: true });
@@ -71,7 +72,7 @@ console.log(`Staged QSMxT ${QSMXT.version} for ${platform} in ${directory}`);
 
 if (platform === releasePlatform()) {
   const native = qsmxtVersion();
-  if (native.version !== QSMXT.version || native.qsmCore !== QSMXT.qsmCore || !native.deepLearning) {
+  if (native.version !== QSMXT.version || native.qsmCore !== QSMXT.qsmCore || native.sourceCommit !== QSMXT.build.commit || !native.deepLearning) {
     throw new Error(`Staged QSMxT reports ${JSON.stringify(native)}`);
   }
 }

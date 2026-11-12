@@ -14,7 +14,7 @@ async function loadAdapter() {
   const app = {
     updateOutput() {},
     clearDiffusionInputs() {},
-    beginDiffusionImport: (kind, assertLoadCurrent) => assertLoadCurrent,
+    beginImport: (kind, assertLoadCurrent) => assertLoadCurrent,
     clearResults() {},
     async setDeepIslesInput(kind, file) { loaded.push({ kind, file }); },
     patientBehavior: { loadExampleContext(context) { contexts.push(context); } },
