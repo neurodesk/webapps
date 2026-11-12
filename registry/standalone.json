@@ -672,8 +672,8 @@
           "platform": "macos-arm64",
           "version": "0.15.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-macos-arm64.pkg",
-          "sha256": "a4b6a795ba4fe0ab8e15eee21fa98b89055d709d519f451e9f51017389b3ffaf",
-          "bytes": 82730734,
+          "sha256": "ad77a15c67d66bd31d8012df3a94022bca60a2f18efca6757615465c4d448eae",
+          "bytes": 82730789,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg dicompare-0.15.20261111-macos-arm64.pkg -target /\ndicompare self-check\ndicompare compare dicom-session --schema protocol.json --output comparison.json"
@@ -683,8 +683,8 @@
           "platform": "windows-x64",
           "version": "0.15.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-windows-x64.zip",
-          "sha256": "26d6b887134832108e6fa2a3ae60fd06961039e6e81502709d5e518cd34a4839",
-          "bytes": 78961755,
+          "sha256": "6cde052b0a538d90fd19ee590464605696b424b232f342d0c35a59fce0e43c6a",
+          "bytes": 78961754,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dicompare-v0.15.20261111/dicompare-0.15.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\dicompare-0.15.20261111-windows-x64.zip -DestinationPath .\n.\\dicompare-0.15.20261111-windows-x64\\dicompare.exe compare dicom-session --schema protocol.json --output comparison.json"
