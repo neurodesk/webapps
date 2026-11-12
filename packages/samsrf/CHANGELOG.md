@@ -5,6 +5,9 @@
 ### Patch Changes
 
 - 36dee9d: Single-precision connective-field profiles now equal MATLAB R2023b's bit for bit on the AMD (MKL CNR `auto`) reference host. `corr(y, X)` forms its product in MKL's recorded `y' * A` order (four-lane blocks of four columns, eight lanes for the rest) and limits coefficients to [-1, 1] as `corr.m` does. Without global-signal correction, every single convex-hull and summary-statistics map and every recorded profile matches. Single Gaussian CF fits (`Fit_pRF = 1`) stay refused. Their arithmetic (MATLAB's single `exp` and the mixed single and double objective) reproduces MATLAB's maps from MATLAB's template, but the Benson reader's x0 and y0, and the single global regression, are not yet bit-identical.
+- c95c6ab: Connective-field convex hulls now use an empirical compatibility model of MATLAB R2023b `polyshape`: vertices move to its fixed-point grid (centred, scaled by a power of ten and truncated), self-intersecting clusters are resolved with the even-odd rule, and the 1e-8 thinness cleaning works on that grid. All 253 polygons of the 741-case MATLAB reference now pass without exclusions, and 25,980 of 26,073 recorded polygons give MATLAB's hull vertices bit for bit; the remaining 93 are nearly collinear point clouds whose crossings MATLAB resolves by snapping. Maps from the real Benson templates are unchanged.
+
+  The unresolved cases retain frozen port regression outcomes. Unrepresentable grid scales return an empty hull before integer conversion, preventing overflow or nontermination on extreme coordinates. The package includes Clipper and fdlibm notices.
 
 ## 0.5.20261111
 

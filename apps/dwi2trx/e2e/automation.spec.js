@@ -48,6 +48,7 @@ test('hardware tractography returns tensor maps and a hashed TRX for the referen
   expect(snapshot.state, snapshot.error?.message).toBe('succeeded');
   expect(snapshot.report.measurements.streamlines).toBeGreaterThan(0);
   expect(snapshot.report.provenance.tracking.parameters.maxPts).toBe('unbounded');
+  expect(snapshot.report.provenance.tracking.maxLengthMm).toBe(250);
   const reportDownload = page.waitForEvent('download');
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('download', { artifactId: 'report' }));
   const downloadedReport = JSON.parse(await readFile(await (await reportDownload).path(), 'utf8'));

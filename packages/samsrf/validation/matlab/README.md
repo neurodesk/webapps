@@ -710,15 +710,13 @@ vertex quota is allowed.
 
 Native gates additionally cover all 14 raw optimizer cases, nine double-precision
 CF modes from identical recorded profiles, 146 real/complex regression scale
-cases and 251 polygon cases. Regression rank decisions must match exactly;
+cases and all 253 polygon cases. Regression rank decisions must match exactly;
 coefficient comparisons use per-value relative tolerances (4 single or 4
 double epsilon units), never a map-wide scale. The measured maxima are 3.33 and
 3.15 epsilon units; the earlier double solve on rounded inputs reached 6.7 and
 7.5, under gates of 16 single epsilon units and 1e-12.
-Two polygons
-(`polygon_191`, `polygon_193`) lie in the measured fixed-point band of the
-geometry recording below; the gate reports them instead of asserting them, by
-that rule rather than by name. CF checks from identical profiles isolate parameter
+Polygons `polygon_191` and `polygon_193`, once excluded, now pass with the
+others (see the fixed-point model below). CF checks from identical profiles isolate parameter
 estimation, and do not establish full single-precision CF pipeline parity.
 
 General double-precision fine-fit plateaus, remaining double CSS fits, and single
@@ -910,21 +908,62 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   and Gaussian CF in double. In single precision the hull geometry rows,
   `Fwhm` and `Vx` agree; R² and the summary and Gaussian parameters are
   MATLAB single arithmetic, left to the single-precision pipeline work.
-- **Polygons.** Emptiness is exact, and area and centroid lie within the
-  forward-error bound of MATLAB's shoelace on untranslated vertices (its hull
-  vertices are compared first, ignoring winding and roundoff-collinear
-  redundant vertices; retained coordinates must match exactly). Three measured
-  classes remain discrepant. The gate freezes each failing case identity and
-  a checksum of its port hull, centroid and area in
-  `core/tests/matlab_polygon_exceptions.json`, so neither a new failing member
-  nor a changed result can be absorbed by a class exemption. It counts and prints: 1,853 triangles whose altitude over the longest side is
-  within [1e-8, 1.00001e-8] of the span, 16 clouds with duplicate points, and
-  188 clouds within 1e-5 of the span of a line. MATLAB decides on a
-  fixed-point copy of the vertices (its simplified vertices come back on a
-  13-digit decimal grid, and exact power-of-two scalings of one triangle get
-  different answers), and it resolves crossings of near-parallel edges into
-  slivers. SamSrf removes duplicates before `polyshape`; the near-collinear
-  class is only reachable by a nearly collinear cluster.
+- **Polygons.** Emptiness is exact, the hull has exactly MATLAB's vertices,
+  bit for bit, and area and centroid then lie within the forward-error bound
+  of MATLAB's shoelace on untranslated vertices. 25,980 of the 26,073 recorded
+  polygons agree, on both hosts, and so do all 253 polygons of the 741-case
+  reference without exclusions. The model behind it, reconstructed from these
+  recordings (`core/src/polyshape.rs`):
+
+  1. *Fixed-point grid.* Each axis is centred on the middle of its range,
+     scaled by `10^p` with `p = 13 - floor(log10(m))` for the largest centred
+     magnitude `m`, and truncated to integers. New vertices come back as
+     `k * 10^-p + c` and surviving ones keep their original coordinates.
+     Truncation, not rounding, is what separates exact power-of-two copies of
+     one triangle (2^-10 lands on 976562.5 grid units) and the one-ULP apex
+     steps at scale 1.
+  2. *Thinness.* The tolerance is `(1e-8 * span) * 10^p` in grid units, and a
+     vertex goes when its distance from the line through its neighbours,
+     `|cross| / length` on the integers, is below it. This alone reproduces all
+     22,636 recorded triangles, including the 1,853 within 1e-5 of the cutoff
+     that the earlier floating-point rule missed.
+  3. *Even-odd resolution.* The ring's boundary is every sub-segment covered an
+     odd number of times (MATLAB's pentagram keeps five points, not its centre).
+     Each filled face is traced with the region on its left and cleaned with
+     Clipper 6.4.2's `CleanPolygon` loop (close neighbours, close
+     semi-adjacent pairs, near-collinear points) using the distance in step 2;
+     the hull of the survivors is cleaned the same way. Duplicate points,
+     retraced spikes and narrow spikes all follow from this.
+
+  The 93 remaining polygons are all near-collinear clouds: points within 1e-6
+  to 1e-10 of a line in random order. Their MATLAB vertices lie 1e5 to 1e8
+  grid units from any exact intersection of the edges, so MATLAB snaps vertices
+  by up to about the tolerance when it resolves nearly parallel crossings.
+  Neither exact intersections nor Clipper 6.4.2's `IntersectPoint` (7 of 9,861
+  vertices) reproduce that. The test names these 93 cases, requires each to
+  stay near-collinear and still differ, and freezes each port hull, emptiness,
+  area and centroid bit for bit in `matlab_polygon_snapping.json`. These are
+  regression snapshots, not MATLAB ground truth. Every other polygon remains
+  gated against MATLAB.
+  Unrepresentable grids (nonfinite centre/span/scale or scaled coordinates
+  outside the integer arithmetic bound) return an empty hull before conversion.
+  This prevents overflow or nontermination on extreme coordinates such as
+  1e-300; it is not a MATLAB parity claim for that unsupported domain.
+  Intersection coordinates use exact arithmetic; face tracing still uses
+  floating-point turning and parity decisions. Clipper's source revision,
+  copyright, Boost license and adapted distance comparisons are recorded in
+  the module and the shipped package `NOTICE`.
+
+  SamSrf passes `polyshape` a breadth-first cluster of unique template points;
+  only a nearly collinear cluster of four or more points reaches this class.
+
+A native release run of `real_template_cf_maps_match_matlab` with both hosts'
+fixtures used 3.82 CPU seconds and 11,588 KiB peak resident memory on the shared
+builder (15.57 seconds elapsed under contention). It exercises the 2,917/3,389
+seed templates, 40 hull profiles per hemisphere/precision/host including centre
+and surround hulls, plus the recorded summary and Gaussian cases. This is a
+bounded workload measurement, not a full-surface or browser performance result;
+the all-pairs intersection graph can still grow quadratically.
 
 The same test replays the double hull and summary CF pipelines of the raw-input
 matrix (both hemispheres, smoothing and global regression on and off, both
