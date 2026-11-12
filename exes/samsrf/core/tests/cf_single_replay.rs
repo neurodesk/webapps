@@ -128,11 +128,12 @@ fn single_cf_gaussian_fits_equal_matlab_on_every_vertex() {
             let maps = read(&dir, &case["savedMaps"]);
             let seeds = coordinates.shape[0];
             let xy: Vec<[f32; 2]> = (0..seeds).map(|i| [coordinates.at(i, 0) as f32, coordinates.at(i, 1) as f32]).collect();
-            for v in 0..profiles.shape[1] {
+            assert_eq!(r2.data.len(), profiles.shape[1], "one R^2 per profile");
+            for (v, &expected_r2) in r2.data.iter().enumerate() {
                 let profile: Vec<f32> = (0..seeds).map(|i| profiles.at(i, v) as f32).collect();
                 let (fit, fit_r2) = fit_gaussian_single(&profile, &xy, smoothed, 1e-4);
                 let id = format!("{host} {} vertex {}", case["id"].as_str().unwrap(), v + 1);
-                if r2.data[v].is_nan() {
+                if expected_r2.is_nan() {
                     assert!(fit_r2.is_nan(), "{id}: MATLAB did not fit");
                     continue;
                 }
@@ -140,7 +141,7 @@ fn single_cf_gaussian_fits_equal_matlab_on_every_vertex() {
                     assert_eq!(value.to_bits(), parameters.at(j, v).to_bits(), "{id}: parameter {j}");
                     assert_eq!((*value as f32).to_bits(), (maps.at(j + 1, v) as f32).to_bits(), "{id}: saved map row {}", j + 2);
                 }
-                assert_eq!(fit_r2.to_bits(), (r2.data[v] as f32).to_bits(), "{id}: R^2");
+                assert_eq!(fit_r2.to_bits(), (expected_r2 as f32).to_bits(), "{id}: R^2");
                 assert_eq!(fit_r2.to_bits(), (maps.at(0, v) as f32).to_bits(), "{id}: saved R^2");
                 vertices += 1;
             }
