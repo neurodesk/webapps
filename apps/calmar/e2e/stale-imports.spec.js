@@ -6,6 +6,8 @@ const examples = JSON.parse(await readFile(new URL('../examples.json', import.me
 // A file named `held-*` waits in the read step (where a DICOM series is converted), one named
 // `slow-*` in each read of its bytes and one named `late-*` before NiiVue loads it as a volume;
 // with `holdDrawing` set, a seed waits before NiiVue loads it as the drawing (`drawing`).
+// A volume named `decoded-*`, or listed in `holdDecoded`, waits after NiiVue decoded it and
+// before NiiVue inserts it; with `holdDecodedDrawing` set a drawing does (`decoded-drawing`).
 // `resume(name)` lets the import go on, `ended(name)` is how it ended and `release(name)` is both.
 async function holdImports(page) {
   await page.goto('/');
@@ -48,6 +50,14 @@ async function holdImports(page) {
       if (globalThis.holdDrawing) await held('drawing');
       return loadDrawing(...args);
     };
+    globalThis.holdDecoded = [];
+    const decode = niivue.NVImage.loadFromUrl;
+    niivue.NVImage.loadFromUrl = async function loadFromUrl(options) {
+      const image = await decode.call(this, options);
+      const name = options.name || (globalThis.holdDecodedDrawing ? 'decoded-drawing' : '');
+      if (name.startsWith('decoded-') || globalThis.holdDecoded.includes(name)) await held(name);
+      return image;
+    };
     const importInput = app.importInput.bind(app);
     app.importInput = (kind, files, keep) => {
       const name = files[0].name;
@@ -80,6 +90,9 @@ async function holdImports(page) {
     dwi: app.deepIslesDwiFile?.name ?? null,
     seed: app.nativeLesionSeedFile !== null,
     base: app.viewerBaseFile?.name ?? null,
+    controllerBase: app.viewerController.currentBaseFile?.name ?? null,
+    brainmask: app.brainmaskFile !== null || app.nativeBrainmaskFile !== null,
+    autoSeed: app.autoLesionSeedFile !== null,
     overlay: app.viewerController.currentOverlayFile?.name ?? null,
     lesion: app.lesionFile?.name ?? null,
     review: app.maskReviewActive,
@@ -88,7 +101,9 @@ async function holdImports(page) {
     viewer: app.nv.volumes.map(volume => volume.name),
   }));
   const log = () => page.evaluate(() => document.getElementById('technicalConsoleOutput').textContent);
-  return { choose, hold, waiting, resume, ended, release, loaded, log, smallMask };
+  const logLines = () => page.evaluate(() => [...document.querySelectorAll('#technicalConsoleOutput .nd-console-line')].map(line => line.textContent));
+  const viewerIdle = () => page.evaluate(() => app._viewerLoad);
+  return { choose, hold, waiting, resume, ended, release, loaded, log, logLines, viewerIdle, image, smallMask };
 }
 
 test.describe('an import that finishes late', () => {
@@ -304,9 +319,190 @@ test.describe('an import that finishes late', () => {
   });
 
   test('a failed DICOM conversion is reported once', async ({ page }) => {
-    const { choose, log } = await holdImports(page);
+    const { choose, log, logLines } = await holdImports(page);
     await choose('structural', 'scan.dcm', Buffer.from('not a DICOM file'));
     await expect.poll(log, { timeout: 60000 }).toContain('Structural input failed');
-    expect(await log()).not.toContain('DICOM conversion failed');
+    await page.waitForTimeout(500);
+    const errors = (await logLines()).filter(line => /fail|error/i.test(line));
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('Structural input failed');
+  });
+
+  test('a worker result for a replaced structural image is not published', async ({ page }) => {
+    const { choose, loaded, log, image } = await holdImports(page);
+    await choose('deepIslesDwi', 'dwi.nii');
+    await choose('deepIslesAdc', 'adc.nii');
+    await expect.poll(log).toContain('DeepISLES ADC input ready: adc.nii');
+    // The worker is replaced by a recorder; its responses are delivered by hand, late.
+    await page.evaluate(() => {
+      globalThis.sent = [];
+      globalThis.terminated = 0;
+      const { executor } = app;
+      const send = step => async () => {
+        executor.running = true;
+        executor.currentRunningStep = step;
+        globalThis.sent.push(step);
+        return true;
+      };
+      executor.loadVolume = send('load');
+      executor.runSynthStrip = send('brainmask');
+      executor.runDeepIslesInference = send('deepisles');
+      const terminate = executor.terminateWorker.bind(executor);
+      executor.terminateWorker = () => {
+        globalThis.terminated += 1;
+        terminate();
+      };
+      globalThis.preparation = app.runLesionPreparation().then(() => 'ended', error => error.name);
+    });
+    await page.waitForFunction(() => globalThis.sent.includes('brainmask'));
+    expect(await loaded()).toMatchObject({ structural: 'dwi.nii', standIn: true });
+    await page.evaluate(() => app.executor.handleMessage({ type: 'progress', value: 0.3, text: 'Brain extraction' }));
+    await expect(page.locator('#cancelButton')).toBeVisible();
+
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    expect(await page.evaluate(() => globalThis.terminated)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => globalThis.preparation)).toBe('ended');
+    const late = (stage, extra = {}) => page.evaluate(async ({ stage, extra, bytes }) => {
+      app.executor.handleMessage({ type: 'progress', value: 0.9, text: 'Late progress' });
+      app.executor.handleMessage({ type: 'stageData', stage, niftiData: new Uint8Array(bytes).buffer, ...extra });
+      app.executor.handleMessage({ type: 'step-complete', step: stage === 'brainmask' ? 'brainmask' : 'inference' });
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await app._viewerLoad;
+    }, { stage, extra, bytes: [...image] });
+    await late('brainmask');
+    expect(await loaded()).toMatchObject({ structural: 'T1.nii', brainmask: false, viewer: ['T1.nii'] });
+    await expect(page.locator('#downloadBrainMaskButton')).toBeDisabled();
+    await expect(page.locator('#statusText')).toHaveText('Cancelled');
+    await expect(page.locator('#cancelButton')).toBeHidden();
+    await expect(page.locator('#progress')).toHaveJSProperty('value', 0);
+    expect(await page.evaluate(() => Boolean(app.progress.timer))).toBe(false);
+    expect(await log()).toContain('Analysis stopped: the structural image changed.');
+    expect(await log()).not.toContain('Brain mask ready');
+
+    // A DeepISLES seed that arrives for the replaced image does not enter review.
+    expect(await loaded()).toMatchObject({ dwi: 'dwi.nii' });
+    await page.evaluate(() => document.getElementById('runDeepIslesSegmentationButton').click());
+    await page.waitForFunction(() => globalThis.sent.includes('deepisles'));
+    await choose('structural', 'next-T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('next-T1.nii');
+    await late('segmentation', { taskId: 'lnm-deepisles-seed' });
+    expect(await loaded()).toMatchObject({
+      structural: 'next-T1.nii',
+      autoSeed: false,
+      review: false,
+      maskOrigin: null,
+      viewer: ['next-T1.nii'],
+    });
+    await expect(page.locator('#downloadLesionMaskButton')).toBeDisabled();
+    const text = await log();
+    expect(text).not.toContain('DeepISLES lesion seed ready');
+    expect(text).not.toMatch(/failed/i);
+  });
+
+  test('a cancelled structural example that NiiVue was loading is not kept', async ({ page }) => {
+    test.setTimeout(240000);
+    const { resume, loaded, viewerIdle } = await holdImports(page);
+    const selector = page.locator('[data-neurodesk-examples]');
+    const example = examples.find(item => item.id === 'stroke-lesion-m2001');
+    const { name } = example.files[0];
+    await page.evaluate((held) => {
+      globalThis.holdDecoded.push(held);
+    }, name);
+    await page.locator('select[data-neurodesk-example]').selectOption(example.id);
+    await page.waitForFunction(held => globalThis.releaseImport[held], name, { timeout: 180000 });
+    await selector.getByRole('button', { name: 'Cancel example download' }).click();
+    await expect(selector).toHaveAttribute('data-example-state', 'cancelled');
+    await resume(name);
+    await viewerIdle();
+    await expect(selector).toHaveAttribute('data-example-state', 'cancelled');
+    expect(await loaded()).toMatchObject({
+      structural: null,
+      shown: null,
+      base: null,
+      controllerBase: null,
+      viewer: [],
+    });
+  });
+
+  test('a structural image replaced by a failed import while NiiVue loaded it is taken out', async ({ page }) => {
+    const { choose, hold, release, loaded, log, viewerIdle } = await holdImports(page);
+    await hold('structural', 'decoded-T1.nii');
+    await choose('structural', 'scan.dcm', Buffer.from('not a DICOM file'));
+    await expect.poll(log, { timeout: 60000 }).toContain('Structural input failed');
+    expect(await release('decoded-T1.nii')).toBe('AbortError');
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({
+      structural: null,
+      shown: null,
+      base: null,
+      controllerBase: null,
+      viewer: [],
+    });
+  });
+
+  test('a replaced review is not logged as a failure', async ({ page }) => {
+    const { choose, waiting, resume, loaded, log, viewerIdle } = await holdImports(page);
+    await choose('structural', 'slow-T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('slow-T1.nii');
+    const replaceReview = async (start) => {
+      await page.evaluate(() => {
+        app.nativeStructuralInfo = null;
+      });
+      await start();
+      await waiting('slow-T1.nii');
+      await page.evaluate(() => app.clearResults({ full: false }));
+      await resume('slow-T1.nii');
+      await viewerIdle();
+      await page.waitForTimeout(200);
+    };
+    await replaceReview(() => page.locator('#startManualMaskButton').dispatchEvent('click'));
+    await page.evaluate(() => {
+      app.runLesionSegmentation = async () => {};
+      app.runDeepIslesSegmentation = async () => {};
+    });
+    await replaceReview(() => page.locator('#runLesionSegmentationButton').dispatchEvent('click'));
+    await replaceReview(() => page.locator('#runDeepIslesSegmentationButton').dispatchEvent('click'));
+    expect(await loaded()).toMatchObject({ structural: 'slow-T1.nii', review: false, viewer: ['slow-T1.nii'] });
+    expect(await log()).not.toMatch(/failed/i);
+
+    // A real error is still reported.
+    await page.evaluate(() => {
+      app.startLesionMaskReview = async () => {
+        throw new Error('no drawing surface');
+      };
+    });
+    await page.locator('#startManualMaskButton').dispatchEvent('click');
+    await expect.poll(log).toContain('Manual mask failed: no drawing surface');
+  });
+
+  test('a viewer load that never settles does not block the loads after a clear', async ({ page }) => {
+    const { choose, hold, release, loaded, log, viewerIdle } = await holdImports(page);
+    await hold('structural', 'decoded-stuck-T1.nii');
+    await page.evaluate(() => app.clearResults({ full: true }));
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base, { timeout: 15000 }).toBe('T1.nii');
+    await choose('lesion', 'lesion.nii');
+    await expect.poll(log, { timeout: 15000 }).toContain('Lesion mask ready: lesion.nii');
+    expect(await loaded()).toMatchObject({ viewer: ['T1.nii', 'lesion.nii'] });
+
+    // The abandoned load lands beside the newer image and is taken out again.
+    expect(await release('decoded-stuck-T1.nii')).toBe('AbortError');
+    await viewerIdle();
+    await viewerIdle();
+    const state = await loaded();
+    expect(state).toMatchObject({ structural: 'T1.nii', shown: 'T1.nii', base: 'T1.nii', controllerBase: 'T1.nii', lesion: 'lesion.nii' });
+    expect(state.viewer[0]).toBe('T1.nii');
+    expect(state.viewer).not.toContain('decoded-stuck-T1.nii');
+
+    // So does a load a new structural image replaced.
+    await hold('structural', 'decoded-stuck-next-T1.nii');
+    await choose('structural', 'last-T1.nii');
+    await expect.poll(async () => (await loaded()).base, { timeout: 15000 }).toBe('last-T1.nii');
+    expect(await release('decoded-stuck-next-T1.nii')).toBe('AbortError');
+    await viewerIdle();
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ structural: 'last-T1.nii', base: 'last-T1.nii', controllerBase: 'last-T1.nii', viewer: ['last-T1.nii'] });
+    expect(await log()).not.toContain('input failed');
   });
 });
