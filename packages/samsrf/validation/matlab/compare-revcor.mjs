@@ -1,7 +1,8 @@
 // Raw GIfTI, FreeSurfer and aperture inputs through the public Node API, against
 // both hosts of the reverse-correlation recording (revcor-reference.json). Gates:
-// preprocessing, the global signal and the anatomy exactly, the Benson reader at
-// compare.mjs's limit, then every supported RC/CF job (CF on MATLAB's template).
+// preprocessing, the global signal, the anatomy and the Benson reader exactly, then
+// every supported RC/CF job (CF on the reader's own template). Unsupported single
+// Gaussian CF and RC 2D jobs must still be refused by the public API.
 // exes/samsrf/core/tests/revcor_reference.rs isolates each stage from MATLAB's
 // own arrays and documents the limits used here.
 import assert from 'node:assert/strict';
@@ -124,12 +125,8 @@ for (const host of HOSTS) {
     const templateRows = recordedTemplate.maps.shape[0];
     const expectedTemplate = readArray(root, recordedTemplate.maps);
     for (let row = 0; row < templateRows; row++) {
-      // compare.mjs's Benson limit: x0 and y0 within 3 x 2^-23, absolute and relative.
-      const limit = row === 1 || row === 2 ? 3 * 2 ** -23 : 0;
-      gate(id, `template ${template.values[row]}`, cast(template.data.subarray(row * count, (row + 1) * count)), Float64Array.from({ length: count }, (_, v) => expectedTemplate[v * templateRows + row]),
-        (a, e) => same(a, e) || Math.abs(a - e) <= limit * (1 + Math.abs(e)));
+      gate(id, `template ${template.values[row]}`, template.data.subarray(row * count, (row + 1) * count), Float64Array.from({ length: count }, (_, v) => expectedTemplate[v * templateRows + row]), exact);
     }
-    const recordedRows = Float64Array.from({ length: templateRows * count }, (_, i) => expectedTemplate[(i % count) * templateRows + Math.floor(i / count)]);
     const roi = Uint32Array.from(readArray(root, pre.roi), (v) => v - 1);
     const seed = Uint32Array.from(readArray(root, pre.seedVertices), (v) => v - 1);
     const fitCases = cases.filter((item) => item.kind === 'pipeline' && item.preprocessing === pre.id);
@@ -150,9 +147,7 @@ for (const host of HOSTS) {
         noiseCeiling: data.noiseCeiling ?? undefined, globalSignal: data.globalSignal ?? undefined,
       };
       if (cf) {
-        // The reader's x0 and y0 are gated above; a 1-ULP coordinate moves a hull
-        // centroid, so the fit runs on the template MATLAB used.
-        spec.seed = { vertices: seed, template: { values: template.values, data: recordedRows } };
+        spec.seed = { vertices: seed, template };
         spec.area = area;
         spec.surface = { vertices: white.vertices, faces: white.faces };
       } else {
@@ -166,7 +161,7 @@ for (const host of HOSTS) {
         fs.rmSync(path.dirname(file), { recursive: true });
       }
       if (unsupported) {
-        assert.throws(() => samsrf.createJob(spec), /Data_Precision=single with (Fit_pRF=1|a Prf_Function fit)/, `${item.id}: single fits must be refused`);
+        assert.throws(() => samsrf.createJob(spec), cf ? /Data_Precision=single with Fit_pRF=1/ : /Data_Precision=single with a Prf_Function fit/, `${item.id}: single fits must be refused`);
         refused++;
         continue;
       }
@@ -197,7 +192,6 @@ for (const host of HOSTS) {
         const peak = Math.max(...input.map(Math.abs), ...course.map(Math.abs));
         conditioning[vertex - 1] = std > 0 ? Math.max(1, peak / std) : 1;
       });
-      const rowOf = (values, name) => values.data.subarray(values.values.indexOf(name) * count, (values.values.indexOf(name) + 1) * count);
       maps.values.forEach((name, row) => {
         const actual = maps.data.subarray(row * count, (row + 1) * count);
         const recorded = Float64Array.from({ length: count }, (_, v) => expected[v * rows + row]);
@@ -217,33 +211,10 @@ for (const host of HOSTS) {
         }
         gate(`${host}/${item.id}`, name, actual, recorded, accept);
       });
-      if (cf && !fitted) {
-        // The production reader's template: values that do not depend on the
-        // coordinates must not change. Positions and widths are bounded by the
-        // hull geometry in revcor_reference.rs; summary medians move by at most
-        // the coordinate error delta, deviations by 2 delta.
-        const production = run({ ...spec, seed: { vertices: seed, template } });
-        const delta = Math.max(...Array.from(seed, (v) => Math.max(Math.abs(template.data[count + v] - recordedRows[count + v]), Math.abs(template.data[2 * count + v] - recordedRows[2 * count + v]))));
-        const spacing = (x) => {
-          const v = Math.abs(Math.fround(x));
-          const bits = new Uint32Array(new Float32Array([v]).buffer);
-          bits[0] += 1;
-          return new Float32Array(bits.buffer)[0] - v;
-        };
-        production.values.forEach((name) => {
-          const summaryBound = model.Fit_pRF === -1 && { x0: delta, y0: delta, Sigma: 2 * Math.SQRT2 * delta }[name];
-          const hullPosition = model.Fit_pRF === 0 && ['x0', 'y0', 'Centre', 'Surround'].includes(name);
-          if (hullPosition) return;
-          const accept = summaryBound === undefined || summaryBound === false
-            ? exact
-            : (a, e) => same(a, e) || Math.abs(a - e) <= summaryBound + (precision === 'single' ? 2 * spacing(Math.max(Math.abs(a), Math.abs(e))) : 1e-12 * Math.max(1, Math.abs(e)));
-          gate(`${host}/${item.id}`, `production template ${name}`, rowOf(production, name), rowOf(maps, name), accept);
-        });
-      }
     }
   }
-  // Single fits are refused (12 CF, 3 RC); 6 runaway double CF Gaussians are left out.
-  assert.equal(refused, 15, `${host}: every single fit must be refused`);
+  // Single fitted jobs are refused (3 RC and 12 CF); 6 runaway double CF Gaussians are left out.
+  assert.equal(refused, 15, `${host}: every single fitted job must be refused`);
   assert.equal(pipelines, 90 - 15 - 6, `${host}: every supported pipeline must run`);
 }
 const failed = reports.filter((item) => item.failures.length);

@@ -8,6 +8,9 @@
 
 ### Patch Changes
 
+- Improve the Benson reader with empirical single-precision sine and cosine kernels adapted from fdlibm. The reader now equals all recorded MATLAB templates, including held-out V1 seeds, and the raw-input hull/summary gates require exact template coordinates. Internal Gaussian CF gates also match the recorded AMD cases, but public single Gaussian CF and RC 2D fits remain refused: remaining whole-atlas coordinate and exponential discrepancies have no established end-to-end acceptance bound. Preserve the exhaustive trig recording, fixed-exception digest gates, and upstream notices.
+- Updated dependencies
+  - @neurodesk/samsrf@0.6.20261112
 - a67952b: Single-precision reverse-correlation profiles and the connective-field global-signal regression now solve every right-hand side in one least-squares call, as MATLAB does: `[Y ones] \ X` over all aperture pixels and `[X ones] \ Y` over all ROI courses. On the AMD (MKL CNR `auto`) reference host, single CF results with global-signal correction now equal MATLAB R2023b's bit for bit, residuals and profiles alike. Single RC profiles rise from 31% to 82-96% identical. A course with a NaN keeps its column position as zeros and comes back zeroed; MATLAB's result for such a course was not recorded. Single Gaussian CF fits stay refused because the Benson reader's x0 and y0 are not yet bit-identical.
 - Updated dependencies [a67952b]
   - @neurodesk/samsrf@0.6.20261112

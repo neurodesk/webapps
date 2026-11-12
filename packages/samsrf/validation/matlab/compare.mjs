@@ -67,7 +67,7 @@ for (const kind of ['double', 'single']) {
     const maps = samsrf.readBensonTemplate(fs.readFileSync(path.join(inputs, dataset.id, `${side}_benson.gii`)), side);
     const expected = array(recorded.maps);
     for (let row = 0; row < maps.values.length; row++) {
-      compare(id, maps.values[row], maps.data.subarray(row * maps.vertices, (row + 1) * maps.vertices), columnRow(expected, recorded.maps.shape[0], row), row === 1 || row === 2 ? 3 * 2 ** -23 : 0, row === 1 || row === 2 ? 3 * 2 ** -23 : 0);
+      compare(id, maps.values[row], maps.data.subarray(row * maps.vertices, (row + 1) * maps.vertices), columnRow(expected, recorded.maps.shape[0], row), 0, 0);
     }
   }
 }

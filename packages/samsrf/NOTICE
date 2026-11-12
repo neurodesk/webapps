@@ -57,3 +57,34 @@ Developed at SunSoft, a Sun Microsystems, Inc. business.
 Permission to use, copy, modify, and distribute this
 software is freely granted, provided that this notice
 is preserved.
+
+The float trigonometric routines in exes/samsrf/core/src/precision.rs adapt
+the float translation of fdlibm in FreeBSD release/5.0.0, commit
+47227ef0ef663b7abb81ab5a60a450da9a93d24b:
+
+https://github.com/freebsd/freebsd-src/blob/47227ef0ef663b7abb81ab5a60a450da9a93d24b/lib/msun/src/s_sinf.c
+SHA-256: 0bfa2c36f51a78417c4820a63e489bf18d876dbedd47b02b2eafd89d978eec35
+https://github.com/freebsd/freebsd-src/blob/47227ef0ef663b7abb81ab5a60a450da9a93d24b/lib/msun/src/s_cosf.c
+SHA-256: 03fcb7ef9a60c344f492e1364c7cd0d50b5f28b734c1567eac985cb04a8a78fa
+https://github.com/freebsd/freebsd-src/blob/47227ef0ef663b7abb81ab5a60a450da9a93d24b/lib/msun/src/k_sinf.c
+SHA-256: 89dd43854d9713a2705ef761b0d96e9ec6a76c93a018be4f76be94732d2813da
+https://github.com/freebsd/freebsd-src/blob/47227ef0ef663b7abb81ab5a60a450da9a93d24b/lib/msun/src/k_cosf.c
+SHA-256: a2e8c239a84919e5dc36f886c8d0fd6df37ff58eb1f2f824d86a0340cbd71621
+https://github.com/freebsd/freebsd-src/blob/47227ef0ef663b7abb81ab5a60a450da9a93d24b/lib/msun/src/e_rem_pio2f.c
+SHA-256: f19997b601916d58652d2973a296be5a10b6e6fb3f7bbcd9b3377fd7e457149d
+
+The cosine kernel's x/4 term retains 11 fraction bits as an empirical
+modification inferred from MATLAB recordings, not from these sources.
+Arguments beyond the medium-reduction range use the attributed double
+matlab_math routines rounded to single instead of __kernel_rem_pio2f.
+Inf and NaN return a NaN constant; sign and payload are not preserved.
+
+Conversion to float by Ian Lance Taylor, Cygnus Support, ian@cygnus.com.
+====================================================
+Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+Developed at SunPro, a Sun Microsystems, Inc. business.
+Permission to use, copy, modify, and distribute this
+software is freely granted, provided that this notice
+is preserved.
+====================================================
