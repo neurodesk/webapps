@@ -1,5 +1,12 @@
 # @neurodesk/sdc
 
+## 0.5.20261112
+
+### Patch Changes
+
+- @neurodesk/hmc@0.4.20261112
+- @neurodesk/n4@0.6.20261111
+
 ## 0.5.20261111
 
 ### Patch Changes

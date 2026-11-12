@@ -1,5 +1,11 @@
 # @neurodesk/hmc
 
+## 0.4.20261112
+
+### Patch Changes
+
+- @neurodesk/dwi2trx@0.8.20261112
+
 ## 0.4.20261111
 
 ### Patch Changes
