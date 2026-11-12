@@ -752,7 +752,7 @@ whose `alpha - beta` approaches the largest value keeps its coefficient; this
 too leaves every recorded solve unchanged.
 
 In the full pipelines (committed module from
-[run 43136443327](https://github.com/neurodesk/webapps/actions/runs/43136443327)),
+[run 43137834494](https://github.com/neurodesk/webapps/actions/runs/43137834494), with the #799 polygon hulls; the map and CSS reports equal those of the QR-only module from run 43136443327),
 against the previous module on main: across the ten single forward pipelines
 (748 vertices) bit-identical Beta values rise from 649 to 724 and Baseline
 values from 391 to 670. The largest Beta difference falls from 9.54e-7 to
