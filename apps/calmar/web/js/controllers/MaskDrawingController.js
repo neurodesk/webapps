@@ -106,15 +106,22 @@ export class MaskDrawingController {
     this.updateOutput('Blank editable lesion mask ready.');
   }
 
-  async loadSeedFile(file) {
+  // NiiVue's `loadDrawingFromUrl` cannot be stopped and replaces the open
+  // drawing and its Undo history when it lands. The seed is decoded here
+  // instead, and `assertCurrent` runs between the decode and the synchronous
+  // `loadDrawing`, so a seed whose review was replaced never reaches the drawing.
+  async loadSeedFile(file, assertCurrent) {
     if (!file) throw new Error('loadSeedFile: seed file is required');
     const url = URL.createObjectURL(file);
+    let image;
     try {
-      const ok = await this.nv.loadDrawingFromUrl(url, true);
-      if (ok === false) throw new Error('NiiVue rejected the drawing mask');
+      image = await globalThis.niivue.NVImage.loadFromUrl({ url });
     } finally {
       URL.revokeObjectURL(url);
     }
+    assertCurrent?.();
+    this.nv.binarize(image);
+    if (!this.nv.loadDrawing(image)) throw new Error('NiiVue rejected the drawing mask');
     this.applyDrawingStyle();
     this.nv.setDrawingEnabled?.(true);
     this.setTool('paint');

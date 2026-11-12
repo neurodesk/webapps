@@ -1089,7 +1089,7 @@ export class LesionNetworkMappingApp {
           : 'No brain mask is available.');
       }
       this.assertViewerOverlaySpace(brainmaskFile, 'Brain mask overlay');
-      await this.viewerController.loadOverlay(brainmaskFile, 'green', 0.4, {
+      await this.loadViewerOverlay(brainmaskFile, 'green', 0.4, {
         stage: 'brainmask',
         visible: this.layerVisible('brainmask')
       });
@@ -1100,7 +1100,7 @@ export class LesionNetworkMappingApp {
       const lesionOverlay = this.getLesionFileForActiveViewer();
       if (!lesionOverlay) throw new Error('No lesion mask is available.');
       this.assertViewerOverlaySpace(lesionOverlay, 'Lesion mask overlay');
-      await this.viewerController.loadOverlay(lesionOverlay, LESION_MASK_COLORMAP_ID, 0.5, {
+      await this.loadViewerOverlay(lesionOverlay, LESION_MASK_COLORMAP_ID, 0.5, {
         stage: this.getLesionViewerStage(lesionOverlay),
         visible: this.layerVisible('lesion')
       });
@@ -1110,7 +1110,7 @@ export class LesionNetworkMappingApp {
       const thresholdFile = this.patientThresholdedMaskFile || this.thresholdedMaskFile;
       if (!thresholdFile) throw new Error('No threshold map is available.');
       this.assertViewerOverlaySpace(thresholdFile, 'Threshold map overlay');
-      await this.viewerController.loadOverlay(thresholdFile, 'red', 0.65, {
+      await this.loadViewerOverlay(thresholdFile, 'red', 0.65, {
         stage: 'threshold-preview',
         visible: this.layerVisible('threshold')
       });
@@ -1122,7 +1122,7 @@ export class LesionNetworkMappingApp {
       }
       if (!this.patientAtlasFile) throw new Error('No atlas projection is available.');
       this.assertViewerOverlaySpace(this.patientAtlasFile, 'Atlas QC overlay');
-      await this.viewerController.loadOverlay(this.patientAtlasFile, this.getAtlasOption().colormap, 0.45, {
+      await this.loadViewerOverlay(this.patientAtlasFile, this.getAtlasOption().colormap, 0.45, {
         stage: 'atlas-qc',
         visible: this.layerVisible('atlasQc')
       });
@@ -1468,6 +1468,7 @@ export class LesionNetworkMappingApp {
   // became stale while NiiVue was loading is taken out again when it lands:
   // `undo` removes what it loaded, and a load the queue no longer waited for,
   // which landed beside newer loads, has the viewer rebuilt from the current base.
+  // `run` receives the check, for a load that can stop before it reaches NiiVue.
   viewerLoad(run, { assertCurrent, undo } = {}) {
     const turn = this._viewerTurn;
     const check = () => {
@@ -1476,7 +1477,7 @@ export class LesionNetworkMappingApp {
     };
     const load = this._viewerLoad.then(async () => {
       check();
-      const result = await run();
+      const result = await run(check);
       try {
         check();
       } catch (err) {
@@ -1499,20 +1500,14 @@ export class LesionNetworkMappingApp {
     this.viewerBaseFile = null;
   }
 
-  // An abandoned load put its volume or drawing beside the newer ones and
-  // rewrote the controller's record, and neither can be separated again. So,
-  // after the loads now pending, the viewer is emptied and the current base
-  // loaded once more; overlays return through their layer toggles. A review
-  // in progress is started again from its seed, because its drawing may be
-  // the one that was overwritten.
+  // An abandoned load put its volume beside the newer ones and rewrote the
+  // controller's record, and neither can be separated again. So, after the
+  // loads now pending, the viewer is emptied and the current base loaded once
+  // more; overlays return through their layer toggles. A review keeps its
+  // drawing and its Undo history: NiiVue holds them apart from the volumes,
+  // and an abandoned seed stops before it reaches them (`loadSeedFile`).
   rebuildViewer() {
-    if (this.maskReviewActive) {
-      this.updateOutput('A load that finished late disturbed the mask review; it was started again from its seed.', { level: 'warning' });
-      this.startLesionMaskReview({ seedFile: this.nativeLesionSeedFile, blank: !this.nativeLesionSeedFile })
-        .catch(this.reportFailure('Mask review restart failed'));
-      return;
-    }
-    this.maskDrawingController?.close?.({ clearDrawing: true });
+    if (!this.maskReviewActive) this.maskDrawingController?.close?.({ clearDrawing: true });
     this.viewerLoad(() => {
       const base = this.viewerBaseFile;
       this.viewerController.clearVolumes();
@@ -1541,6 +1536,15 @@ export class LesionNetworkMappingApp {
     });
     this.viewerBaseFile = file;
     this._viewerBaseOptions = options;
+  }
+
+  // A result overlay belongs to the run current when it is asked for: one that
+  // lands after Clear results or a new structural image is taken out again.
+  loadViewerOverlay(file, colormap, opacity, options) {
+    return this.viewerLoad(() => this.viewerController.loadOverlay(file, colormap, opacity, options), {
+      assertCurrent: this.pipelineTurn(),
+      undo: () => this.viewerController.removeVolumeForStage(options.stage)
+    });
   }
 
   async loadViewerVolumeStack(entries = []) {
@@ -1610,7 +1614,7 @@ export class LesionNetworkMappingApp {
       });
     }
     this.assertViewerOverlaySpace(this.confirmedNativeLesionFile, 'Confirmed lesion mask overlay');
-    await this.viewerController.loadOverlay(this.confirmedNativeLesionFile, LESION_MASK_COLORMAP_ID, 0.5, {
+    await this.loadViewerOverlay(this.confirmedNativeLesionFile, LESION_MASK_COLORMAP_ID, 0.5, {
       stage: 'segmentation',
       visible: this.layerVisible('lesion')
     });
@@ -2620,7 +2624,7 @@ export class LesionNetworkMappingApp {
         Promise.resolve()
           .then(() => {
             this.assertViewerOverlaySpace(file, 'Brain mask overlay');
-            return this.viewerController.loadOverlay(file, 'green', 0.4, {
+            return this.loadViewerOverlay(file, 'green', 0.4, {
               stage: 'brainmask',
               visible: this.layerVisible('brainmask')
             });
@@ -3168,9 +3172,9 @@ export class LesionNetworkMappingApp {
     const seed = blank ? null : await this.resampleSeedMaskToNative(seedFile || this.autoLesionSeedFile);
     assertCurrent();
     if (seed) this.nativeLesionSeedFile = seed;
-    // NiiVue cannot be stopped once it loads a drawing, so a seed that lands
-    // after the review was replaced is closed again.
-    await this.viewerLoad(() => (seed ? this.maskDrawingController.loadSeedFile(seed) : this.maskDrawingController.startBlank()), {
+    // A seed stops before it reaches the drawing once its review is replaced;
+    // a drawing put in place in the same turn as the replacement is closed again.
+    await this.viewerLoad(check => (seed ? this.maskDrawingController.loadSeedFile(seed, check) : this.maskDrawingController.startBlank()), {
       assertCurrent,
       undo: () => this.maskDrawingController.close({ clearDrawing: true })
     });
@@ -4411,13 +4415,13 @@ export class LesionNetworkMappingApp {
     }, assertRun);
     try {
       this.assertViewerOverlaySpace(this.brainmaskFile, 'Prealign brain-mask overlay');
-      await this.viewerController.loadOverlay(this.brainmaskFile, 'green', 0.4, {
+      await this.loadViewerOverlay(this.brainmaskFile, 'green', 0.4, {
         stage: 'brainmask',
         visible: this.layerVisible('brainmask')
       });
     } catch (err) {
       // Non-fatal: the overlay is cosmetic.
-      this.updateOutput(`Brainmask overlay re-render warning: ${err.message}`);
+      this.reportFailure('Brainmask overlay re-render warning')(err);
     }
     assertRun();
     this.refreshViewerLayerControls();

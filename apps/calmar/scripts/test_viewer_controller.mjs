@@ -373,11 +373,21 @@ function fakeFile(name) {
 
 // ---- Test 15: MaskDrawingController wraps NiiVue drawing calls ----
 {
-  globalThis.niivue = { PEN_TYPE: { PEN: 0, RECTANGLE: 1, ELLIPSE: 2 } };
+  const decoded = [];
+  globalThis.niivue = {
+    PEN_TYPE: { PEN: 0, RECTANGLE: 1, ELLIPSE: 2 },
+    NVImage: {
+      async loadFromUrl({ url }) {
+        decoded.push(url);
+        return { url };
+      }
+    }
+  };
   const drawBytes = new Uint8Array([1, 0, 1, 0]);
   const calls = {
     createEmptyDrawing: 0,
-    loadDrawingFromUrl: [],
+    binarize: [],
+    loadDrawing: [],
     setDrawingEnabled: [],
     setPenValue: [],
     setDrawOpacity: [],
@@ -405,8 +415,9 @@ function fakeFile(name) {
       calls.closeDrawing += 1;
       this.drawBitmap = null;
     },
-    async loadDrawingFromUrl(url, asDrawing) {
-      calls.loadDrawingFromUrl.push([url, asDrawing]);
+    binarize(image) { calls.binarize.push(image.url); },
+    loadDrawing(image) {
+      calls.loadDrawing.push(image.url);
       this.drawBitmap = new Uint8Array(8);
       return true;
     },
@@ -472,14 +483,25 @@ function fakeFile(name) {
     'erase-cluster tool must pass NiiVue negative zero sentinel');
 
   await controller.loadSeedFile(fakeFile('seed.nii'));
-  assert.equal(calls.loadDrawingFromUrl.length, 1,
-    'seed masks must load through NiiVue loadDrawingFromUrl');
-  assert.equal(calls.loadDrawingFromUrl[0][0], 'blob:fake-seed.nii');
-  assert.equal(calls.loadDrawingFromUrl[0][1], true);
+  assert.deepEqual(decoded, ['blob:fake-seed.nii'],
+    'seed masks must be decoded by NiiVue NVImage');
+  assert.deepEqual(calls.binarize, ['blob:fake-seed.nii'],
+    'seed masks must be binarized before they become the drawing');
+  assert.deepEqual(calls.loadDrawing, ['blob:fake-seed.nii'],
+    'seed masks must become the drawing through NiiVue loadDrawing');
   assert.equal(calls.setDrawColormap.at(-1), lesionDrawColormap,
     'seed drawings must pass the lesion drawing colormap object to NiiVue');
   assert.ok(messages.at(-1).includes('Editable lesion seed loaded'),
     'seed load should report an editable drawing');
+
+  nv.drawBitmap = new Uint8Array([1, 1, 0, 0, 0, 0, 0, 0]);
+  await assert.rejects(controller.loadSeedFile(fakeFile('stale.nii'), () => {
+    throw new DOMException('The mask import was replaced.', 'AbortError');
+  }), { name: 'AbortError' });
+  assert.equal(calls.loadDrawing.length, 1,
+    'a seed whose review was replaced must not reach the drawing');
+  assert.deepEqual([...nv.drawBitmap], [1, 1, 0, 0, 0, 0, 0, 0],
+    'a seed whose review was replaced must leave the open drawing as it is');
 
   controller.setPenShape('rectangle');
   assert.equal(nv.document.opts.penType, 1,

@@ -45,10 +45,10 @@ async function holdImports(page) {
         return load(volumes);
       };
     }
-    const loadDrawing = app.nv.loadDrawingFromUrl.bind(app.nv);
-    app.nv.loadDrawingFromUrl = async (...args) => {
+    const loadSeed = app.maskDrawingController.loadSeedFile.bind(app.maskDrawingController);
+    app.maskDrawingController.loadSeedFile = async (...args) => {
       if (globalThis.holdDrawing) await held('drawing');
-      return loadDrawing(...args);
+      return loadSeed(...args);
     };
     globalThis.holdDecoded = [];
     const decode = globalThis.niivue.NVImage.loadFromUrl;
@@ -504,5 +504,118 @@ test.describe('an import that finishes late', () => {
     await viewerIdle();
     expect(await loaded()).toMatchObject({ structural: 'last-T1.nii', base: 'last-T1.nii', controllerBase: 'last-T1.nii', viewer: ['last-T1.nii'] });
     expect(await log()).not.toContain('input failed');
+  });
+  const drawTwoVoxels = page => page.evaluate(() => {
+    app.nv.drawBitmap[100] = 1;
+    app.nv.drawBitmap[101] = 1;
+    app.nv.drawAddUndoBitmap();
+    app.nv.refreshDrawing(true);
+  });
+
+  test('an abandoned structural image that lands during a review keeps the edits drawn since', async ({ page }) => {
+    const { choose, hold, release, loaded, log, viewerIdle, smallMask } = await holdImports(page);
+    await hold('structural', 'decoded-old-T1.nii');
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await choose('manualMask', 'mask.nii', smallMask);
+    await expect.poll(log).toContain('Manual lesion mask ready for editing: mask.nii');
+    expect(await loaded()).toMatchObject({ review: true, drawn: 3 });
+    await drawTwoVoxels(page);
+
+    expect(await release('decoded-old-T1.nii')).toBe('AbortError');
+    await viewerIdle();
+    await viewerIdle();
+    await page.waitForTimeout(200);
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({
+      structural: 'T1.nii',
+      base: 'T1.nii',
+      controllerBase: 'T1.nii',
+      review: true,
+      seed: true,
+      drawn: 5,
+      viewer: ['T1.nii'],
+    });
+    await page.locator('#maskUndoButton').dispatchEvent('click');
+    expect(await loaded()).toMatchObject({ review: true, drawn: 3 });
+    expect(await log()).not.toMatch(/failed|started again/i);
+  });
+
+  test('an abandoned seed that lands during a newer review keeps the edits drawn since', async ({ page }) => {
+    const { choose, waiting, resume, ended, loaded, log, viewerIdle, image, smallMask } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await page.evaluate(() => {
+      globalThis.holdDecodedDrawing = true;
+    });
+    await choose('manualMask', 'old-mask.nii', image);
+    await waiting('decoded-drawing');
+    await page.evaluate(() => {
+      globalThis.holdDecodedDrawing = false;
+    });
+    await choose('structural', 'next-T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('next-T1.nii');
+    await choose('manualMask', 'mask.nii', smallMask);
+    await expect.poll(log).toContain('Manual lesion mask ready for editing: mask.nii');
+    await drawTwoVoxels(page);
+    expect(await loaded()).toMatchObject({ review: true, drawn: 5 });
+
+    await resume('decoded-drawing');
+    expect(await ended('old-mask.nii')).toBe('AbortError');
+    await viewerIdle();
+    await page.waitForTimeout(200);
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({
+      structural: 'next-T1.nii',
+      base: 'next-T1.nii',
+      review: true,
+      drawn: 5,
+      viewer: ['next-T1.nii'],
+    });
+    await page.locator('#maskUndoButton').dispatchEvent('click');
+    expect(await loaded()).toMatchObject({ review: true, drawn: 3 });
+    expect(await log()).not.toMatch(/failed|started again/i);
+  });
+
+  test('a brain mask overlay that lands after Clear results is taken out again', async ({ page }) => {
+    const { choose, waiting, resume, loaded, log, viewerIdle, image } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await page.evaluate(() => {
+      globalThis.sent = [];
+      const { executor } = app;
+      const send = step => async () => {
+        executor.running = true;
+        executor.currentRunningStep = step;
+        globalThis.sent.push(step);
+        return true;
+      };
+      executor.loadVolume = send('load');
+      executor.runSynthStrip = send('brainmask');
+      globalThis.holdDecoded.push('brainmask.nii');
+      globalThis.extraction = app.runBrainExtraction().then(() => 'ended', error => error.name);
+    });
+    await page.waitForFunction(() => globalThis.sent.includes('brainmask'));
+    await page.evaluate((bytes) => {
+      app.executor.handleMessage({ type: 'stageData', stage: 'brainmask', niftiData: new Uint8Array(bytes).buffer });
+      app.executor.handleMessage({ type: 'step-complete', step: 'brainmask' });
+    }, [...image]);
+    await waiting('brainmask.nii');
+    expect(await loaded()).toMatchObject({ brainmask: true });
+
+    await page.evaluate(() => app.clearResults({ full: false }));
+    await resume('brainmask.nii');
+    await page.waitForTimeout(200);
+    await viewerIdle();
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({
+      structural: 'T1.nii',
+      base: 'T1.nii',
+      controllerBase: 'T1.nii',
+      brainmask: false,
+      viewer: ['T1.nii'],
+    });
+    await expect(page.locator('#layerToggleBrainMask')).not.toBeChecked();
+    expect(await log()).not.toMatch(/failed|error/i);
   });
 });
