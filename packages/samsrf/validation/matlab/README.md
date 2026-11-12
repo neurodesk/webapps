@@ -446,6 +446,43 @@ coordinate difference on 1 of 9 seed vertices in the LH datasets changed
 1-16 fitted vertices, with differences up to elevenfold in `Beta`.
 The internal Gaussian gates retain evidence without enabling that public path.
 
+### Single RC 2D fits
+
+`samsrf_fit2dprf`'s `errfun` builds `ModelRfp` in double, but `ObsRfp` (the
+profile) is single, so `Ds = ObsRfp - ModelRfp.*Mask` is single and
+`R = sum(Ds(:).^2)` is a single sum. Its `R2 = 1 - R/sum(Resid(:))` uses
+`Resid = (Rmap - mean(Rmap(:))).^2`, also single. `fminsearch` keeps each
+single objective in its double `fv`. The port evaluated the objective and `R^2`
+in double. `revcor_prf::Prepared::fit_model` now follows MATLAB's single
+arithmetic when `Data_Precision` is single, with `precision::sum_single` (four
+lanes from 44 elements) for both sums; double fits are unchanged.
+
+`revcor_reference.rs` builds the three refused single RC 2D cases of the matrix
+(LH averaged and concatenated, RH averaged) with a test-only model:
+
+- `single_rc_2d_fits_replay_from_each_hosts_profiles`: from each host's
+  recorded profiles, the reverse-correlation rows follow the replay policy,
+  and every fitted parameter and `R^2` equals MATLAB's on both hosts. So does
+  every acceptance class: 6, 2 and 5 vertices fitted, 7, 8 and 9 below
+  `R2_Threshold`, 8, 11 and 7 rejected for a scaled parameter beyond
+  `1.5 * Scaling_Factor`. With the double objective, 8, 3 and 5 vertices
+  differed on both hosts, 4 of them fitted where MATLAB rejected them.
+- `single_rc_2d_end_to_end_equals_the_amd_host`: on the AMD host every map value
+  of every vertex equals MATLAB's, from MATLAB's courses and from the raw runs
+  through the production preprocessing (raw courses and noise ceilings equal
+  MATLAB's stored singles; the apertures are MATLAB's recorded subsample, whose
+  derivation `compare-revcor.mjs` gates). On the AVX-512 host 6, 2 and 5
+  vertices differ. There the first divergence is the profile: only 3,035,
+  2,431 and 2,742 of 8,400 profile entries are identical, while the fit replays
+  exactly from that host's profiles.
+- `single_rc_profiles_stay_within_single_rounding` now includes these cases:
+  8,400 of 8,400 profile entries identical on the AMD host.
+
+Single RC 2D fits remain refused in the API, command line and app. The
+evidence covers three recorded cases with `fminsearch`; the Hooke-Jeeves fine
+fit uses the same objective but has no recording, and nothing bounds the fits on
+other inputs or on MATLAB's AVX-512 host.
+
 The double unsmoothed CF Gaussian is not gated here: on 2 of 21 vertices fits
 run away to |x0| > 1e8, do not replay, and differ between hosts by up to 9e7.
 That path is unchanged and gated by the 741-case pin's nine CF cases. Geodesic

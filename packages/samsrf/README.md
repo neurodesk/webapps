@@ -365,7 +365,10 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   `exp`, `sin` and `cos` candidates retain discrepancies. On the whole X001
   Benson atlases, 10 LH and 9 RH vertices have a one-ULP coordinate difference;
   affected seed regions can change Gaussian fits. The internal evidence does
-  not enable those fits through the API, command line or app.
+  not enable those fits through the API, command line or app. Internally, single
+  `rc` 2D fits evaluate `samsrf_fit2dprf`'s objective and `R^2` in single as
+  MATLAB does and equal its recorded maps on the AMD host from raw runs; they
+  stay refused for the same reason.
   [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
   lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
