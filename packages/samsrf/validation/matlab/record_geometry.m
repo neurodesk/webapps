@@ -1,13 +1,17 @@
-function record_geometry(source, input, output, spmSource)
+function record_geometry(source, input, output, spmSource, mode)
 % Record MATLAB's own polyshape, convhull, delaunay and samsrf_clusterroi on
 % boundary sweeps, tie-prone point sets and real Benson V1 template coordinates.
 % source is the pinned SamSrf checkout with prepare.py's declared repairs and
-% input the extracted geometry-inputs.json archive.
+% input the extracted geometry-inputs.json archive. mode 'polyshape-probe'
+% records only the focused polyshape probes (grid-decade sweep and bisection,
+% held-out clouds, extreme grids) instead of the full geometry reference; mode
+% 'polyshape-causal' records polyshape_causal_cases.m's controlled polygons.
 arguments
     source (1,:) char
     input (1,:) char
     output (1,:) char
     spmSource (1,:) char
+    mode (1,:) char {mustBeMember(mode, {'full', 'polyshape-probe', 'polyshape-causal'})} = 'full'
 end
 assert(isfile(fullfile(output, 'source.json')), 'Run prepare.py first');
 assert(~isfile(fullfile(output, 'geometry.json')), 'Use a fresh output directory');
@@ -26,6 +30,18 @@ meta.functions = struct('polyshape', which('polyshape'), 'convhull', which('conv
     'delaunay', which('delaunay'), 'delaunayTriangulation', which('delaunayTriangulation'), ...
     'clusterroi', which('samsrf_clusterroi'), 'cfparam', which('samsrf_cfparam_loop'), ...
     'gifti', which('gifti'));
+if any(strcmp(mode, {'polyshape-probe', 'polyshape-causal'}))
+    meta.mode = mode;
+    write_json('environment.json', meta);
+    if strcmp(mode, 'polyshape-probe')
+        cases = probe_cases();
+    else
+        cases = causal_cases();
+    end
+    write_json('geometry.json', struct('mode', mode, 'cases', {cases}));
+    fprintf('Recorded %d MATLAB polyshape probe cases. Port parity is not implied.\n', numel(cases));
+    return
+end
 write_json('environment.json', meta);
 cases = {};
 cases = [cases, polygon_cases()];
@@ -185,8 +201,23 @@ for i = 1:2500
 end
 end
 
-function item = polygon_batch(id, polygons)
+function item = polygon_batch(id, polygons, keepVertices, causal)
+% keepVertices (probe mode) also records the vertices of
+% polyshape(P, 'KeepCollinearPoints', true), which show the rings before
+% collinear points are cleaned. causal (causal mode) also records each
+% boundary's ishole flag for both shapes, and the vertices of polyshape built
+% again from the KeepCollinearPoints vertices, from the default vertices, and
+% simplify(polyshape(P, 'Simplify', false)).
+if nargin < 3
+    keepVertices = false;
+end
+if nargin < 4
+    causal = false;
+end
+extra = struct('defaultHoles', {cell(numel(polygons), 1)}, 'keptHoles', {cell(numel(polygons), 1)}, ...
+    'fromKept', {cell(numel(polygons), 1)}, 'fromDefault', {cell(numel(polygons), 1)}, 'viaSimplify', {cell(numel(polygons), 1)});
 n = numel(polygons);
+kept = cell(n, 1);
 counts = zeros(n, 1);
 simplifiedCounts = zeros(n, 1);
 hullCounts = zeros(n, 1);
@@ -217,6 +248,16 @@ for i = 1:n
             warned(i) = register(warningId);
         end
         V = shape.Vertices;
+        if causal
+            extra.defaultHoles{i} = causal_flags(shape);
+            extra.fromDefault{i} = causal_vertices(V);
+            try
+                again = simplify(polyshape(P, 'Simplify', false));
+                extra.viaSimplify{i} = again.Vertices;
+            catch
+                extra.viaSimplify{i} = [NaN NaN; NaN NaN];
+            end
+        end
         simplifiedCounts(i) = size(V, 1);
         simplified{i} = V;
         regions(i) = shape.NumRegions;
@@ -233,8 +274,13 @@ for i = 1:n
         errorIds{end+1} = [failure.identifier ': ' failure.message]; %#ok<AGROW>
     end
     try
-        kept = polyshape(P, 'KeepCollinearPoints', true);
-        collinearCounts(i) = size(kept.Vertices, 1);
+        keptShape = polyshape(P, 'KeepCollinearPoints', true);
+        collinearCounts(i) = size(keptShape.Vertices, 1);
+        kept{i} = keptShape.Vertices;
+        if causal
+            extra.keptHoles{i} = causal_flags(keptShape);
+            extra.fromKept{i} = causal_vertices(keptShape.Vertices);
+        end
     catch
         collinearCounts(i) = -1;
     end
@@ -254,6 +300,19 @@ item = struct('id', id, 'kind', 'polygon-batch', 'cases', n, ...
     'polygonEstimate', array_file([id '_polygon_estimate'], polygonEstimate), ...
     'warning', array_file([id '_warning'], warned), ...
     'error', array_file([id '_error'], failed));
+if keepVertices
+    item.collinearVertices = array_file([id '_collinear_vertices'], vertcat(zeros(0, 2), kept{:}));
+end
+if causal
+    for name = {'defaultHoles', 'keptHoles', 'fromKept', 'fromDefault', 'viaSimplify'}
+        values = extra.(name{1});
+        counts = cellfun(@(v) size(v, 1), values);
+        width = 1 + any(strcmp(name{1}, {'fromKept', 'fromDefault', 'viaSimplify'}));
+        rows = vertcat(zeros(0, width), values{:});
+        item.(name{1}) = array_file([id '_' name{1}], rows);
+        item.([name{1} 'Counts']) = array_file([id '_' name{1} '_counts'], counts);
+    end
+end
 item.warningIds = warningIds;
 item.errors = errorIds;
 fprintf('Recorded %s (%d polygons)\n', id, n);
@@ -265,6 +324,286 @@ fprintf('Recorded %s (%d polygons)\n', id, n);
             index = numel(warningIds);
         end
     end
+end
+
+%% Focused polyshape probes: the grid decade and held-out clouds
+
+function cases = probe_cases()
+cases = {};
+[polygons, parameters] = grid_sweep();
+cases{end+1} = with_parameters(polygon_batch('probe_grid_sweep', polygons, true), parameters);
+[polygons, parameters] = grid_bisection();
+cases{end+1} = with_parameters(polygon_batch('probe_grid_bisection', polygons, true), parameters);
+cases{end+1} = polygon_batch('probe_heldout_collinear', heldout_collinear(), true);
+cases{end+1} = polygon_batch('probe_heldout_clouds', heldout_clouds(), true);
+cases{end+1} = polygon_batch('probe_extreme_grids', extreme_grids(), true);
+% The original point clouds again, with their collinear-kept rings.
+cases{end+1} = polygon_batch('probe_point_clouds', point_clouds(), true);
+end
+
+function cases = causal_cases()
+families = polyshape_causal_cases(point_clouds(), heldout_clouds());
+cases = {};
+for k = 1:numel(families)
+    family = families(k);
+    if strcmp(family.id, 'causal_gap_bisection')
+        [polygons, parameters] = gap_bisection(family.parameters);
+    else
+        polygons = family.polygons;
+        parameters = family.parameters;
+    end
+    cases{end+1} = with_parameters(polygon_batch(family.id, polygons, true, true), parameters); %#ok<AGROW>
+end
+end
+
+function [polygons, parameters] = gap_bisection(combinations)
+% For each [t f angle reversed], bisect the sliver width g (in tolerance units)
+% between 0.1 and 30 on MATLAB's default polyshape: merged when NumRegions is 1.
+% Every evaluated polygon is recorded; rows add [low high atLow atHigh] with
+% verdicts 1 merged, 0 separate, -1 neither (an error or other region count).
+polygons = {};
+parameters = zeros(0, 8);
+for c = 1:size(combinations, 1)
+    t = combinations(c, 1);
+    f = combinations(c, 2);
+    angle = combinations(c, 3);
+    reversed = combinations(c, 4);
+    low = 0.1;
+    high = 30;
+    P = polyshape_causal_strips(t, low, f, angle, reversed, 0);
+    polygons{end+1} = P; %#ok<AGROW>
+    atLow = merged(P);
+    P = polyshape_causal_strips(t, high, f, angle, reversed, 0);
+    polygons{end+1} = P; %#ok<AGROW>
+    atHigh = merged(P);
+    if atLow == 1 && atHigh == 0
+        for iteration = 1:45
+            middle = sqrt(low * high);
+            if middle <= low || middle >= high
+                break
+            end
+            P = polyshape_causal_strips(t, middle, f, angle, reversed, 0);
+            polygons{end+1} = P; %#ok<AGROW>
+            verdict = merged(P);
+            if verdict == 1
+                low = middle;
+            elseif verdict == 0
+                high = middle;
+            else
+                break
+            end
+        end
+    end
+    parameters(end+1, :) = [combinations(c, :) low high atLow atHigh]; %#ok<AGROW>
+end
+end
+
+function verdict = merged(P)
+verdict = -1;
+warning('off', 'all');
+restore = onCleanup(@() warning('on', 'all'));
+try
+    shape = polyshape(P);
+catch
+    return
+end
+if shape.NumRegions == 1
+    verdict = 1;
+elseif shape.NumRegions == 2
+    verdict = 0;
+end
+end
+
+function item = with_parameters(item, parameters)
+item.parameters = array_file([item.id '_parameters'], parameters);
+end
+
+function shapes = probe_shapes()
+% Self-intersecting shapes with several crossings, normalised so the largest
+% centred coordinate is 1: a {5/2} and a {7/3} star and four random 9-gons.
+shapes = {};
+for step = [2 3]
+    n = 2 * step + 1;
+    angle = 2 * pi * step * (0:n-1)' / n + 0.1234;
+    shapes{end+1} = [cos(angle) sin(angle)]; %#ok<AGROW>
+end
+rng(73211, 'twister');
+for s = 1:4
+    shapes{end+1} = rand(9, 2) * 2 - 1; %#ok<AGROW>
+end
+for s = 1:numel(shapes)
+    P = shapes{s};
+    P = P - (min(P) + max(P)) / 2;
+    shapes{s} = P / max(abs(P(:)));
+end
+end
+
+function P = probe_instance(shape, magnitude, offset, swapped)
+if swapped
+    shape = shape(:, [2 1]);
+end
+P = shape * magnitude + offset * magnitude;
+end
+
+function [polygons, parameters] = grid_sweep()
+% Centred magnitudes 6.150 to 6.350 times 10^k in steps of 0.001, so that
+% m * 10^p crosses 6.2e13 to 6.3e13 densely, translated and with the extreme
+% coordinate on either axis. Rows: shape, mantissa, k, offset index, swapped.
+shapes = probe_shapes();
+offsets = [0 0; 1.7 -0.9];
+mantissas = 6.15:0.001:6.35;
+polygons = {};
+parameters = zeros(0, 5);
+for s = 1:numel(shapes)
+    for k = [-4 -2 0 1 3]
+        for o = 1:size(offsets, 1)
+            for swapped = 0:1
+                for mantissa = mantissas
+                    polygons{end+1} = probe_instance(shapes{s}, mantissa * 10^k, offsets(o, :), swapped); %#ok<AGROW>
+                    parameters(end+1, :) = [s mantissa k o swapped]; %#ok<AGROW>
+                end
+            end
+        end
+    end
+end
+end
+
+function [polygons, parameters] = grid_bisection()
+% Bisect the mantissa between 6.18 and 6.30 on MATLAB's own result: the coarser
+% decade is taken when every new vertex lies on it. Every evaluated polygon is
+% recorded; rows give shape, k, offset index, swapped, the final bracket and the
+% classification at both ends (1 coarse, 0 fine, -1 undetermined).
+shapes = probe_shapes();
+offsets = [0 0; 1.7 -0.9];
+polygons = {};
+parameters = zeros(0, 8);
+for s = 1:numel(shapes)
+    for k = [-3 0 2]
+        for o = 1:size(offsets, 1)
+            for swapped = 0:1
+                low = 6.18;
+                high = 6.30;
+                P = probe_instance(shapes{s}, low * 10^k, offsets(o, :), swapped);
+                polygons{end+1} = P; %#ok<AGROW>
+                atLow = coarse_grid(P);
+                P = probe_instance(shapes{s}, high * 10^k, offsets(o, :), swapped);
+                polygons{end+1} = P; %#ok<AGROW>
+                atHigh = coarse_grid(P);
+                if atLow == 0 && atHigh == 1
+                    for iteration = 1:60
+                        middle = (low + high) / 2;
+                        if middle <= low || middle >= high
+                            break
+                        end
+                        P = probe_instance(shapes{s}, middle * 10^k, offsets(o, :), swapped);
+                        polygons{end+1} = P; %#ok<AGROW>
+                        verdict = coarse_grid(P);
+                        if verdict == 1
+                            high = middle;
+                        elseif verdict == 0
+                            low = middle;
+                        else
+                            break
+                        end
+                    end
+                end
+                parameters(end+1, :) = [s k o swapped low high atLow atHigh]; %#ok<AGROW>
+            end
+        end
+    end
+end
+end
+
+function verdict = coarse_grid(P)
+% 1 when every new polyshape vertex lies on the grid one decade coarser than
+% 10^(13 - floor(log10(m))), 0 when one does not, -1 without three new vertices.
+verdict = -1;
+warning('off', 'all');
+restore = onCleanup(@() warning('on', 'all'));
+try
+    shape = polyshape(P);
+catch
+    return
+end
+V = shape.Vertices;
+V = V(all(isfinite(V), 2), :);
+V = V(~ismember(V, P, 'rows'), :);
+if size(V, 1) < 3
+    return
+end
+centre = (min(P) + max(P)) / 2;
+magnitude = max(max(abs(P - centre)));
+K = round((V - centre) * 10^(13 - floor(log10(magnitude))));
+verdict = double(all(mod(K(:), 10) == 0));
+end
+
+function polygons = heldout_collinear()
+% Held-out near-collinear clouds (point_clouds kind 3, another seed).
+rng(73202, 'twister');
+polygons = cell(1, 1500);
+for i = 1:numel(polygons)
+    n = randi([4 40]);
+    t = rand(n, 1);
+    polygons{i} = [t, 2 * t + 1] + randn(n, 2) * 10^(-6 - 4 * rand);
+end
+end
+
+function polygons = heldout_clouds()
+% Held-out clouds of every point_clouds kind (another seed); random-order
+% clouds give outer rings with touching holes.
+rng(73203, 'twister');
+polygons = cell(1, 1500);
+for i = 1:numel(polygons)
+    n = randi([4 40]);
+    switch mod(i, 5)
+        case 0
+            P = rand(n, 2) * 10^(4 * rand - 2) + (rand > 0.5) * 100;
+        case 1
+            P = randi([0 4], n, 2) * 0.5;
+        case 2
+            P = double(single(rand(n, 2) * 8 - 4));
+        case 3
+            t = rand(n, 1);
+            P = [t, 2 * t + 1] + randn(n, 2) * 10^(-6 - 4 * rand);
+        otherwise
+            [gx, gy] = meshgrid(0:randi([2 5]), 0:randi([2 5]));
+            G = [gx(:) gy(:)];
+            P = G(randperm(size(G, 1), min(n, size(G, 1))), :) * 0.1 + 0.3;
+    end
+    polygons{i} = P;
+end
+end
+
+function polygons = extreme_grids()
+% Coordinates outside the port's fixed-point grid, and degenerate sets.
+polygons = {[0 0; 1e-300 0; 0 1e-300], [0 0; realmin * eps 0; 0 realmin * eps], ...
+    [1e308 0; 1.1e308 0; 1e308 1], [-1e308 0; 1e308 0; 0 1], ...
+    [1e12 1e12; 1e12 + 1e-3 1e12; 1e12 1e12 + 1e-3], [2 3; 2 3; 2 3], [0 0; 1 1; 2 2]};
+end
+
+function flags = causal_flags(shape)
+% One row per boundary: 1 for a hole, 0 for a solid boundary.
+if shape.NumRegions == 0 && shape.NumHoles == 0
+    flags = zeros(0, 1);
+else
+    flags = double(ishole(shape));
+    flags = flags(:);
+end
+end
+
+function V = causal_vertices(vertices)
+% The vertices of polyshape built again from recorded vertices (NaN-separated
+% boundaries); [NaN NaN; NaN NaN] when that fails.
+V = zeros(0, 2);
+if isempty(vertices)
+    return
+end
+try
+    again = polyshape(vertices);
+    V = again.Vertices;
+catch
+    V = [NaN NaN; NaN NaN];
+end
 end
 
 %% Delaunay triangulations with exact and near ties

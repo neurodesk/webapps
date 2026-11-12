@@ -484,6 +484,9 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   recorded polygon except 93 nearly collinear point clouds, whose crossings of
   nearly parallel edges MATLAB resolves by snapping vertices the port does not
   reproduce ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
+  An experimental Clipper-based model that matches more of them but not four
+  that this one matches is kept out of every shipped build
+  ([experimental model](validation/matlab/README.md#experimental-clipper-model-not-in-production-732-open)).
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so

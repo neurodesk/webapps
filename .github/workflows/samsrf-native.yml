@@ -48,6 +48,14 @@ on:
         description: Record polyshape, delaunay and CF geometry on sweeps and real Benson templates (with record_matlab)
         type: boolean
         default: false
+      geometry_probe:
+        description: With geometry_only, record only the focused polyshape probes (grid decade, held-out clouds)
+        type: boolean
+        default: false
+      geometry_causal:
+        description: With geometry_only, record only the controlled polyshape cleaning polygons (polyshape_causal_cases.m)
+        type: boolean
+        default: false
       revcor_only:
         description: Record raw-input RC/CF pipelines in both precisions, without MATLAB Compiler
         type: boolean
@@ -129,6 +137,23 @@ jobs:
         run: cargo clippy --manifest-path exes/samsrf/Cargo.toml --all-targets -- -D warnings
       - name: WebAssembly builds
         run: cargo build --release --target wasm32-unknown-unknown -p samsrf-wasm --manifest-path exes/samsrf/Cargo.toml
+      - name: Experimental polyshape model stays out of shipped builds
+        run: |
+          # The shipped module's feature graph must not contain the experimental model,
+          # and a WebAssembly build that enables it must fail.
+          if cargo tree --manifest-path exes/samsrf/Cargo.toml -p samsrf-wasm --target wasm32-unknown-unknown -e features -i samsrf-core | grep -F polyshape-experimental; then
+            echo 'samsrf-wasm enables polyshape-experimental' >&2
+            exit 1
+          fi
+          if cargo build --release --target wasm32-unknown-unknown -p samsrf-core --features polyshape-experimental --manifest-path exes/samsrf/Cargo.toml 2> "$RUNNER_TEMP/experimental-wasm.log"; then
+            echo 'polyshape-experimental built for WebAssembly' >&2
+            exit 1
+          fi
+          grep -F 'polyshape-experimental must never be enabled in a WebAssembly build' "$RUNNER_TEMP/experimental-wasm.log"
+      - name: Experimental polyshape model unit tests and clippy
+        run: |
+          cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --features polyshape-experimental --lib
+          cargo clippy --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --features polyshape-experimental --all-targets -- -D warnings
       - name: Package tests on the committed module
         run: node --test packages/samsrf/test/*.test.js
       - name: MATLAB Runtime reference gates (matched precision and legacy exports)
@@ -163,6 +188,14 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor" packages/samsrf/validation/matlab/revcor-reference.json
           node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-geometry/ubuntu-22.04" "$RUNNER_TEMP/samsrf-geometry/ubuntu-24.04" "$RUNNER_TEMP/samsrf-geometry-hosts.json"
           SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_REVCOR_DIR="$RUNNER_TEMP/samsrf-revcor" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_geometry -- --nocapture
+      - name: Experimental polyshape model gates (original, grid-probe and causal recordings)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-polyshape-probe" packages/samsrf/validation/matlab/polyshape-probe-reference.json
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-polyshape-causal" packages/samsrf/validation/matlab/polyshape-causal-reference.json
+          node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-polyshape-probe/ubuntu-22.04" "$RUNNER_TEMP/samsrf-polyshape-probe/ubuntu-24.04" "$RUNNER_TEMP/samsrf-polyshape-probe-hosts.json"
+          node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-polyshape-causal/ubuntu-22.04" "$RUNNER_TEMP/samsrf-polyshape-causal/ubuntu-24.04" "$RUNNER_TEMP/samsrf-polyshape-causal-hosts.json"
+          SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR="$RUNNER_TEMP/samsrf-polyshape-probe" SAMSRF_MATLAB_POLYSHAPE_CAUSAL_DIR="$RUNNER_TEMP/samsrf-polyshape-causal" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --features polyshape-experimental --test matlab_polyshape_experimental -- --nocapture
       - name: CSS trace, MATLAB arithmetic, extreme-scale and rank regression gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
@@ -343,6 +376,14 @@ jobs:
             echo 'Choose at most one of revcor_only, diagnostics_only, geometry_only, numerics_only, css_pipelines_only, kernels_only and gemv_order.' >&2
             exit 1
           fi
+          if [ '${{ inputs.geometry_probe }}' = true ] && [ '${{ inputs.geometry_only }}' != true ]; then
+            echo 'geometry_probe narrows geometry_only; set both.' >&2
+            exit 1
+          fi
+          if [ '${{ inputs.geometry_causal }}' = true ] && { [ '${{ inputs.geometry_only }}' != true ] || [ '${{ inputs.geometry_probe }}' = true ]; }; then
+            echo 'geometry_causal narrows geometry_only and excludes geometry_probe.' >&2
+            exit 1
+          fi
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           python3 packages/samsrf/validation/matlab/prepare.py reference-source "$RUNNER_TEMP/samsrf-matlab"
@@ -407,12 +448,12 @@ jobs:
         if: inputs.geometry_only
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),fullfile(pwd,'reference-spm'))
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),fullfile(pwd,'reference-spm'),'${{ inputs.geometry_probe && 'polyshape-probe' || inputs.geometry_causal && 'polyshape-causal' || 'full' }}')
       - name: Repeat geometry in a new MATLAB process on this host
         if: inputs.geometry_only
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'))
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'),'${{ inputs.geometry_probe && 'polyshape-probe' || inputs.geometry_causal && 'polyshape-causal' || 'full' }}')
       - name: Compare same-host geometry recordings
         if: inputs.geometry_only
         run: node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"

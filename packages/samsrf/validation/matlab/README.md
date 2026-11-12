@@ -1125,6 +1125,163 @@ The same test replays the double hull and summary CF pipelines of the raw-input
 matrix (both hemispheres, smoothing and global regression on and off, both
 hosts) from their recorded profiles; all values agree within 1e-12 relative.
 
+### Experimental Clipper model (not in production, #732 open)
+
+`core/src/experimental` holds a second model of `polyshape(...).convhull`,
+compiled only with the `samsrf-core` feature `polyshape-experimental`. No
+shipped build enables it: the WebAssembly module, and with it the web app and
+the `samsrf` command line, uses the production model above, and a WebAssembly
+build with the feature fails to compile. Its gates are
+`tests/matlab_polyshape_experimental.rs`, with their own frozen baselines; the
+production gates and `matlab_polygon_snapping.json` (the 93 clouds above) do
+not depend on it. It is not adopted because it regresses four clouds that the
+production model matches (below).
+
+The model, reconstructed from the recordings:
+
+1. *Fixed-point grid.* Each axis is centred on the middle of its range and
+   scaled by `10^p` with `p = floor(log10(1.25e14 / span))` for the larger
+   axis range `span`, log10 rounded to nearest, then truncated to integers.
+   The polyshape probe (below) supports the rule: across six shapes, five
+   decades, translations and both axes, 27,648 polygons whose new vertices
+   show their grid follow it without exception. In-MATLAB bisection puts the
+   boundary between adjacent doubles (span 12.500000000000025 keeps `10^13`,
+   12.500000000000027 takes `10^12`), where log10's rounding decides, and
+   translated copies with the same largest centred offset but a half-range
+   rounded one unit lower keep the finer grid, which rules out that offset as
+   the measure. The model decides the rounding exactly (`floor_log10`).
+2. *Clipper union.* The ring goes through a port of Clipper 6.4.2's strictly
+   simple even-odd union (`SimplifyPolygons`, `experimental/clipper.rs`). Its
+   sweep rounds each crossing with Clipper's floating-point `IntersectPoint`.
+   Ties keep libstdc++'s `std::sort` order (`gnu-sort-probe.cpp` pins it). The
+   port agrees ring for ring with `clipper-lib` 6.4.2 (the JavaScript
+   translation) on 36,700 rings, once seven places where that translation
+   departs from the C++ source are put back.
+3. *Cleaning.* Each output path is cleaned with the tolerance
+   `(1e-8 * span) * 10^p` in grid units by Clipper's `CleanPolygon` loop and
+   its own comparisons (squared distances, `<` for near-collinear points, `<=`
+   for close neighbours). The cleaned paths are united and cleaned once more,
+   and the hull of the survivors is cleaned the same way.
+4. *Input winding.* Before the union, a ring wound negatively on the grid is
+   reversed behind its first vertex (`[p0, pn-1, ..., p1]`).
+
+It gives MATLAB's hull vertices on 26,029 of the 26,073 original polygons
+(production: 25,980) and on all 253 reference polygons. The 44 that differ are
+near-collinear clouds; their outcomes are frozen in
+`matlab_polygon_snapping.experimental.json` as regression snapshots, not MATLAB
+ground truth. Forty are among the production model's 93. Four (177, 932, 1607,
+1937) match under the production model and differ under this one: hull area
+by 0.5 to 17.3 %, CF sigma by 0.2 to 9.1 % and the centroid by 0.3 to 6.5 % of
+the hull's length (`compare-polygon-snapshots.mjs` on the production and
+experimental snapshots, `polygon-snapshots-732.json`: 53 resolved, 36 carried
+with changed bits, 4 carried unchanged, 4 newly differing).
+`experimental_exceptions_are_production_exceptions_but_four_regressions`
+requires exactly those four. Each correction tried (rotating rings to their
+lowest input vertex, reversing them, face tracing, a non-strict first union,
+splitting holes that touch their outer ring at two vertices) resolves some of
+the four and breaks other polygons, so none is adopted. No general correction
+has been established from the current evidence.
+
+Where the model cannot follow MATLAB (nonfinite centre or span,
+`log10(1.25e14 / span)` outside -22 to 38, or a Clipper sweep that fails for a
+reason other than a degenerate path) it returns an error, not an empty hull.
+The probe recorded MATLAB on four such inputs: a 1e-300 triangle keeps its
+vertices with area 0, subnormal and +-1e308-span triangles give an empty shape,
+and 1e308..1.1e308 fails with `MATLAB:polyshape:xyTooLarge`. The gate requires
+the model's error on the first four extreme grids.
+
+The *polyshape probe* (`record_geometry.m` in its `polyshape-probe` mode,
+`geometry_only` with `geometry_probe` in the `samsrf-native` dispatch; pinned
+by `polyshape-probe-reference.json`, HF commit
+41f53d4ea8e4714ffe825375f024072aca9d70a3, SHA-256
+`01d254651c688d7a764cc464fe1f8b21c3c7bb6ad151df118877ff7acf70827f`, run
+43207291565 at webapps 9213e385054710e537cdeb22d7e820aca025a685) leaves
+`geometry-reference.json` untouched. Both hosts passed an exact same-host
+repeat, their 80 arrays are identical, and its re-recorded 2,500 point clouds
+equal the original archive's bit for bit. `polyshape_probe_matches_matlab`
+requires the grid sweep and bisection exactly (hull and simplified vertex set)
+and every held-out hull except the IDs in `matlab_polyshape_probe.json` (148 of
+1,500 near-collinear clouds, 30 of 1,500 mixed clouds), whose outcomes are
+frozen in `matlab_polyshape_probe_outcomes.json`. Held-out cloud 1125 is a
+half-integer grid whose `KeepCollinearPoints` rings hold the filled triangle
+(1, 1.5), (1.5, 2), (1.5714, 1.7857) that Clipper also gives, while MATLAB's
+default output has (1, 1.5), (1.6667, 1.5), (1.5714, 1.7857).
+
+The *causal probe* (`polyshape-causal` mode, `polyshape_causal_cases.m`,
+pinned by `polyshape-causal-reference.json`, HF commit
+f742a23f395ee6fc11f14677e121a57cb01d7d37, SHA-256
+`bec4a653acdc9b5ea8d9213bba860af4361be3e8283abf9cad776208ab2f2243`, run
+43226907674 at webapps 9b4e1a0f2f864c8bafcdd47bc5c96ffc5913e11a; both hosts'
+120 arrays identical and same-host repeats exact) records 10,749 controlled
+polygons per host: 8,424 strip pairs around an unfilled sliver, 1,152
+sliver-width bisection polygons, 170 holes at and near one contact, 403
+transforms of real clouds and 600 held-out strip pairs. The strip pairs showed
+MATLAB's hull depending on where the input starts but not on its direction
+(step 4: 147 of 8,424 strip pairs and 12 of 600 held-out pairs differed
+without it). The bisection showed MATLAB merging strips one tolerance thick up
+to 2.478 tolerances, where an edge lies exactly at the tolerance; Clipper's
+squared floating-point comparison removes it (step 3: 90 of 1,152 differed
+without it). With both rules, every strip, bisection, hole-contact and
+held-out strip hull matches, and no original or held-out probe polygon or
+frozen snapshot changes. Every cyclic start, reversal, translation and scale
+by 1e-2 and 1e2 of clouds 177, 932, 1607 and 1937 differs from MATLAB, while
+every transform of clouds 7 and 1090 matches, so input order does not explain
+the four. `polyshape_causal_matches_matlab` requires every causal hull except
+the listed real-cloud transforms, whose outcomes are frozen in
+`matlab_polyshape_causal.json`, and checks simplified vertex sets for the
+controlled families except eight strip pairs and one held-out pair listed
+there. It requires the family sizes, the descriptor dimensions and complete
+consumption of every flattened array.
+
+`polyshape_census.py` and `polyshape_replay.py` (with
+`core/examples/polyshape_stages.rs`, built with the feature) report empirical
+correspondences between the model and MATLAB's recorded configurations. They
+do not observe MATLAB's internal stages: `KeepCollinearPoints=true` is a
+separate configuration, not a checkpoint of the default. The census invokes
+the model's own cleaner (`polyshape_stages --clean`); it has no independent
+implementation of it. Replaying that cleaner on the recorded kept rings
+disagrees with default MATLAB in 30 of the 158 near-collinear cases whose
+kept-ring structure matches the model, so the premise that the default is the
+kept rings cleaned one by one fails. The replay runs the model on the recorded
+`P`, kept and default boundaries of the causal probe and compares each with
+MATLAB's `polyshape` of the same boundaries. On both hosts, of 10,749 polygons:
+
+- `simplify(polyshape(P, 'Simplify', false))` equals the default for all.
+- `polyshape` of MATLAB's own kept vertices equals the default for every
+  transform of cloud 177 but none of 932, 1607, 1937 or cloud 7.
+- `polyshape` of the default is not the default for 932, 1607 and cloud 7.
+- Given MATLAB's kept boundaries, the model reproduces MATLAB's `polyshape` of
+  them, in vertex set and unoriented rings, for every transform of the four
+  regressions and of cloud 7 and for 80 of 81 of cloud 1090. For cloud 1125 the
+  vertex sets agree in all 35 transforms but the rings in 1. On the controlled
+  families every vertex set agrees, but the rings only in 5,928 of 8,424 strip
+  pairs, 794 of 1,152 bisection polygons, 170 of 170 holes and 455 of 600
+  held-out pairs.
+- Given MATLAB's default boundaries, the model reproduces MATLAB's
+  `polyshape` of them, in vertex set and rings, for every transform of 177 and
+  1937 and for 60 of 81 of 1090, for none of 932, 1607 or cloud 7, and for
+  1125 in vertex set (35 of 35) but not in rings (1 of 35).
+
+This empirical correspondence narrows the plausible causes towards how MATLAB
+resolves the self-intersecting input in its default configuration, rather than
+the cleaning of already resolved boundaries. It does not establish that the
+cleaner matches MATLAB in general or that the mismatch lies only in a hidden
+construction stage: the kept configuration is not the default, the default is
+not idempotent, the model's replay of default boundaries differs for three of
+the seven clouds, and its rings differ from MATLAB's on replayed kept
+boundaries in 2,999 of the 10,346 controlled polygons even where the vertex sets
+and hulls agree.
+
+Performance, measured before the extraction (one core of a loaded builder,
+timings approximate): on the whole X001 example (6 runs, 6,587 V1-V3 vertices,
+V1 seed, Benson template) the experimental and production models give
+bit-identical connective-field maps in hull and summary modes; the hull run
+took 81.7 seconds against 68.4, with 623 MB peak for both. The largest single
+hull SamSrf can ask for there takes 1.09 seconds (production 0.35). Clipper
+sorts each scanbeam's edges by bubble sort and splits self-touching rings by
+pairwise search, so a ring in random order costs roughly cubic time: 1,000
+random points take 4.5 seconds (production 1.5).
+
 ## Extreme CSS scales and regression rank
 
 The previous 238-case recording came from
