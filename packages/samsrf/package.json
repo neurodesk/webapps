@@ -3,7 +3,7 @@
   "version": "0.5.20261112",
   "description": "Population receptive field and connective field mapping (a port of SamSrf) for browsers and the command line, one WebAssembly binary for both",
   "type": "module",
-  "license": "BSD-3-Clause",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "engines": {
     "node": ">=22"

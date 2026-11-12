@@ -1,6 +1,10 @@
 @neurodesk/samsrf contains a Rust port of SamSrf, compiled to
-wasm/samsrf_wasm_bg.wasm, and the JavaScript around it. All of it is distributed
-under the BSD 3-Clause License below, with these copyright notices:
+wasm/samsrf_wasm_bg.wasm, and the JavaScript around it. The port and wrappers
+use the BSD 3-Clause License below. Adapted third-party portions retain their
+licenses; see NOTICE for the Clipper Boost Software License, the fdlibm
+permission notice and their attributions.
+
+BSD-licensed portions carry these copyright notices:
 
 SamSrf: Copyright (c) 2025, Dietrich Samuel Schwarzkopf.
 Port, JavaScript and packaging: Copyright (c) 2026, Neurodesk contributors.
