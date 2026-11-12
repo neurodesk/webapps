@@ -235,13 +235,16 @@ low-variance edge course.
 | CF correlations from MATLAB's courses | 16 units | 10.0 | MATLAB vs the exact correlation of its inputs: 9.9; host vs host: 10 |
 | RC profiles from MATLAB's courses, AMD host | exact | 0 (every profile entry identical) | |
 | RC profiles from MATLAB's courses, AVX-512 host | 32 units x peak x kappa | 4.95 per kappa (29-36% identical) | MATLAB's single QR vs exact: 20 |
-| Global-regression residuals | 32 units of the input course's peak | 5.41 (54% identical) | host vs host: 5.2 |
+| Single global-regression residuals, AMD host | exact | 0 (every residual identical) | |
+| Single global-regression residuals, AVX-512 matrix host | 32 units of the input course's peak | Not summarized here | Matrix reference; the edge recording has AMD hosts only |
+| Double global-regression residuals, both recordings and hosts | `1e-13` x input course peak | Not summarized here | Separate double-precision gate |
 | Each host's profiles to its maps (replay) | exact | 0 | |
 | RC `R^2` where MATLAB used MKL's AVX-512 path | 16 single ULPs | 9 | the dot product order (below) |
 | Positions, `Fwhm`, `Vx`, hull and summary widths, end to end | exact | 0 | |
 | CF `R^2`, `Beta`, `Suppression`; RC `Beta` (of itself), end to end | 32 units x kappa | 3.20 per kappa | profile values |
 | Production Benson reader instead of MATLAB's template | exact | 0 | below |
 | Internal single CF from the raw files, Gaussian fits included (AMD host) | exact | 0 | below |
+| Internal single RC 2D fits from the raw files (AMD host); replay from each host's profiles | exact | 0 | below |
 | Public single `rc` 2D and CF Gaussian fits | refused | | below |
 
 Double precision is held to `1e-12 x kappa` (relative above 1), and its
@@ -285,12 +288,14 @@ the global signal and its regression are single.
 The port cannot be bit-identical before the profiles, because MATLAB is not:
 the two matrix hosts' profiles differ on about 70% of entries. Single RC profiles
 (`[Y ones] \ X`) and the single global regression (`[X ones] \ Y`) use
-`lstsq::mldivide`, the QR solve that reproduces MATLAB's on the QR recording,
-in MATLAB's column order. It brought the largest RC profile error from 8.42 to
-5.45 units per kappa, residuals from 18.81 to 5.41 and end-to-end profile
-values from 6.44 to 3.20; the limits did not change. It is not bit-identical
-on these hosts' MKL kernels (30% of profile entries and 54% of residuals are),
-so the rounding-only courses stay. Double courses with variance keep the
+`lstsq::mldivide_many`, which solves all right-hand sides together,
+in MATLAB's column order. Historically it brought the largest RC profile error
+from 8.42 to 5.45 units per kappa, residuals from 18.81 to 5.41 and end-to-end
+profile values from 6.44 to 3.20, with 30% of profile entries and 54% of
+residuals bit-identical. With the multi-RHS solves (#808) and MKL's `snrm2`
+order (#812), every single profile entry and residual is now bit-identical on
+the AMD host (above); the AVX-512 host keeps the limits. The rounding-only
+courses stay, because MATLAB's residual there is rounding the port does not have. Double courses with variance keep the
 centred solve, within 1e-12 of MATLAB on every recorded case; a constant double
 course goes through `mldivide` for its rank rule. `corr`'s dot product follows MKL's CNR `auto` order
 exactly (all 189 matrix `R^2` values on that host); the AVX-512 order was not
@@ -341,6 +346,13 @@ they are not tolerances for the port or another MATLAB recording.
   writes it out. The 18 remaining inputs include one with k = 0, so the
   residual is in the rational stage's constants, which are not identified;
   shifting P2 by 24 ulps fits all but 5 and is curve fitting, not used.
+  The same structure with FreeBSD's published ln 2 splits differs from
+  MATLAB's recorded outputs on more inputs, on both hosts: hi = `0x3f317180`,
+  lo = `0x3717f7d1` (5.0) on 465, and hi = `0x3f317200`, lo = `0x35bfbe8e`
+  (`e_expf.c` `90880193`, 2005-11-30) on 601, against 18 for `0x3f317000`
+  (`candidate_exclusions.rs`, `exp_ln2_splits_differ_from_matlab_as_recorded`,
+  which first requires its reconstruction with the port's split to equal
+  `exp_single` on all 711,307 inputs).
 - Single times a double scalar runs in double and rounds the result to
   single: the logged models are single(single(e × Beta) + Baseline), not
   operations on the single-rounded scalar.
@@ -546,6 +558,47 @@ or `y0` by one single ulp on 10 (LH) and 9 (RH) of 134,260 and 138,314 vertices,
 some in V1. A CF analysis whose seed region holds such a vertex can fit
 differently from MATLAB. Above 2^7 pi/2 the port rounds the double result and
 matches 193,602 (`sin`) and 193,686 (`cos`) of the 200,000 sampled inputs.
+
+**Candidates rejected against the recording (no production change).**
+`exes/samsrf/core/tests/candidate_exclusions.rs` evaluates reconstructed
+variants: the port's structure with one element replaced by a constant or mask
+transcribed from a FreeBSD msun revision of 2005 (the full commits are listed in
+the file's header). No upstream code is executed or imported, so these are not
+the revisions themselves. Every variant shares the port's fdlibm float range
+reduction (n = +-1 below 3 pi/4) and, unless named, its fdlibm kernels.
+
+MATLAB's output is reconstructed, not re-recorded: it is the port's output
+except at the recorded exception inputs, where it is the recorded value. The
+test rebuilds it for all 2,257,723,138 recorded inputs and requires every one of
+the 136 recorded SHA-256 block digests, and it requires the reconstructed port
+to equal `precision::sin_single`/`cos_single` on every evaluated input. It reads
+the AMD EPYC 9V45 host's first process; `single_trig.rs` requires the other
+three recordings to be identical. Counts are over every single with
+|x| < 3 pi/4 (bits below `0x4016CBE4`), both signs, 2,150,471,624 inputs; the
+sine-kernel rows count `sin` only, for 2^-12 <= |x| <= pi/4 (bits `0x39800000`
+to `0x3F490FD8`):
+
+| Variant | `sin` differs | `cos` differs |
+| --- | --- | --- |
+| The port: x/4 keeps 11 fraction bits (`& 0xfffff000`) | 12,610 | 12,392 |
+| x/4 keeps 20 bits (`& 0xfffffff8`), the mask of `k_cosf.c` `11cba99f` (2005-10-09) | 12,878 | 12,630 |
+| x/4 keeps 19, 15, 12, 10 or 7 bits | 12,738 to 15,902 | 12,512 to 16,274 |
+| Sine kernel with the minimax S1-S4 of `k_sinf.c` `11dc2417` (2005-10-28) / `6e10a447` (2005-11-12) | 404,344 / 405,880 | |
+| Sine kernel with fdlibm's coefficients rounded toward zero | 1,335,986 | |
+
+FreeBSD's mask and the port's give different outputs on 268 (`sin`) and 238
+(`cos`) inputs, and MATLAB agrees with the port's on all of them. Of the five
+other masks tested, none does better than the port's. These results reject
+candidates; they do not identify MATLAB's implementation, and the sine kernel's
+residual is unexplained.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-single-trig" packages/samsrf/validation/matlab/single-trig-reference.json
+SAMSRF_SINGLE_TRIG_DIR="$TMPDIR/samsrf-single-trig" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test candidate_exclusions -- --ignored --nocapture
+```
+
+The run takes about a minute on 8 cores. Changing one recorded output bit fails
+its block's digest, so the reconstruction is checked rather than assumed.
 
 ## Building a matching Runtime container
 
@@ -849,11 +902,13 @@ Polygons `polygon_191` and `polygon_193`, once excluded, now pass with the
 others (see the fixed-point model below). CF checks from identical profiles isolate parameter
 estimation, and do not establish full single-precision CF pipeline parity.
 
-General double-precision fine-fit plateaus, remaining double CSS fits, and single
-reverse-correlation/CF arithmetic remain diagnostic cases. The single CSS
-parameters and scores match exactly for this recorded pipeline; beta and baseline
-retain the documented least-squares rounding tolerance. A successful source
-gate does not assert those paths, arbitrary-input parity, or a rebuilt container.
+General double-precision fine-fit plateaus and the remaining double CSS fits
+are diagnostic cases in this comparator; single reverse-correlation and CF
+arithmetic is gated separately (`revcor_reference.rs`, below). Every map value
+of the recorded single CSS pipeline, Beta and Baseline included, now equals
+MATLAB's; the gate keeps its per-value least-squares tolerance for coefficients.
+A successful source gate does not assert the diagnostic paths, arbitrary-input
+parity, or a rebuilt container.
 
 ## Least-squares solves
 
@@ -1468,7 +1523,18 @@ and of sparse courses of 300-2,000 samples.
 - the kept outputs of every convolution (1,308) except 95 outputs in the 10
   sparse complex courses longer than 800 samples, which differ by one ULP near multiples of 512 samples. That
   path is not established; `matlab_numerics.rs` excludes complex sparse courses of
-  1,000 samples or more for the same reason.
+  1,000 samples or more for the same reason. `candidate_exclusions.rs`
+  (`sparse_complex_conv_residual_lies_near_multiples_of_512`) localises them on
+  the AMD host. With k the 0-based index into `conv(y, kernel)` (MATLAB's
+  k + 1) and only the first numel(y) outputs compared, every one of the 95 lies
+  between 15 below and 14 above the nearest multiple of 512 (all ten courses use
+  33 taps). Of the 111 real or imaginary parts that differ, 26 match the port's
+  dense path and 85 neither; 84 match a sum of two partial sparse sums split at
+  some index, 27 match none. The test first requires its reconstruction of the
+  sparse path to equal `convolve_complex` at every output. A recording that
+  fingerprints the summation tree around 512 (FPRev's pair method, as
+  `record_gemv_order.m` does for `y' * A`) would distinguish the hypotheses;
+  none was made.
 
 None of the six closed-form candidates matches `gampdf` anywhere it matters, and
 the identified formula was fitted on these probes. A bit-for-bit match on probes
@@ -1593,11 +1659,11 @@ asserts parity with it.
 
 What remains:
 
-- **Beta and Baseline** are not all bit-identical: 3 of the 264 kept
-  coefficients of the original and nonnegative pipelines (the `reference.json`
-  and recorded original pipelines are the same data) still round differently from MKL's QR (#731). The
-  policy above compares their exact errors with MATLAB's at a first-order scale.
-  It does not bound them.
+- **Coefficients beyond these cases.** Every kept Beta and Baseline of the three
+  pinned AMD pipelines is bit-identical (the table above). The policy above
+  stays in the gate for any coefficient that differs; it compares exact errors
+  at a first-order scale and does not bound them. Other inputs, and MATLAB's
+  AVX-512 host, are not covered.
 - `gampdf` with shape below 1, the zero signs, sparse complex convolutions longer
   than 800 samples, and real `x'*y` of 8-19 elements.
 
