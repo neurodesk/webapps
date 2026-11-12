@@ -5,6 +5,7 @@ import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppExamples } from './lib/app-examples.mjs';
 import { auditedExampleFiles, loadVerifiedExampleCache } from './lib/example-asset-cache.mjs';
+import { trackExternalRequests } from './lib/external-requests.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
 const { apps } = await loadAppsRegistry();
@@ -41,16 +42,8 @@ try {
       const unfinished = new Set();
       const pageErrors = [];
       // What still depends on the network: every request this run did not answer itself.
-      const answeredHere = new WeakSet();
-      const external = [];
+      const network = trackExternalRequests(context, site.origin);
       const exampleUrls = new Set(auditedExampleFiles(examples).map(file => file.url));
-      context.on('request', request => {
-        if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== site.origin) external.push(request);
-      });
-      // A page request its service worker answers is seen again as the worker's own fetch.
-      context.on('response', response => {
-        if (response.fromServiceWorker()) answeredHere.add(response.request());
-      });
       context.on('request', request => unfinished.add(request));
       context.on('requestfinished', request => unfinished.delete(request));
       context.on('requestfailed', request => unfinished.delete(request));
@@ -59,7 +52,7 @@ try {
       try {
         if (cachedExamples) {
           await context.route(url => cachedExamples.has(url.href), route => {
-            answeredHere.add(route.request());
+            network.answered(route.request());
             // A full DWI exceeds Chromium's DevTools message limit when fulfilled as base64.
             // Redirect only verified cache entries; the server streams their original bytes.
             return route.fulfill({
@@ -74,7 +67,7 @@ try {
           });
         }
         await context.route(/googletagmanager\.com|google-analytics\.com/, route => {
-          answeredHere.add(route.request());
+          network.answered(route.request());
           return route.fulfill({ body: '' });
         });
         const response = await page.goto(`${site.origin}/${app.path}/`, { waitUntil: 'domcontentloaded' });
@@ -322,7 +315,7 @@ try {
       } finally {
         await context.close().catch(error => result.failures.push(`Context cleanup failed: ${error.message}`));
       }
-      const sent = external.filter(request => !answeredHere.has(request)).map(request => new URL(request.url()));
+      const sent = network.sent();
       result.externalRequests = {};
       for (const url of sent) result.externalRequests[url.host] = (result.externalRequests[url.host] ?? 0) + 1;
       result.hostedExampleRequests = sent.filter(url => exampleUrls.has(url.href)).length;

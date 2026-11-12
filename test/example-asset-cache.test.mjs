@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { auditedExampleFiles, exampleCachePath, fillExampleCache, loadVerifiedExampleCache } from '../scripts/lib/example-asset-cache.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
@@ -124,46 +125,102 @@ test('a download that does not match the lock is rejected by URL, not retried, a
   assert.deepEqual(await readdir(directory), []);
 });
 
-test('a 429 is retried after its Retry-After, not after the backoff', async t => {
-  const content = Buffer.from('rate limited once');
+// A clock the test advances itself: sleeping records the wait and moves the time.
+function fakeClock() {
+  const clock = { time: Date.parse('2026-11-12T00:00:00Z'), waits: [] };
+  clock.now = () => clock.time;
+  clock.sleep = async ms => {
+    clock.waits.push(ms);
+    clock.time += ms;
+  };
+  return clock;
+}
+
+for (const [form, header] of [
+  ['seconds', () => '120'],
+  ['an HTTP date', clock => new Date(clock.time + 120_000).toUTCString()],
+]) {
+  test(`a 429 is retried after the whole wait its Retry-After names in ${form}, not after the backoff`, async t => {
+    const content = Buffer.from('rate limited once');
+    const clock = fakeClock();
+    const server = await fixtureServer(t, (_request, response, count) => {
+      if (count === 1) response.writeHead(429, { 'retry-after': header(clock) }).end();
+      else response.end(content);
+    });
+    const directory = await cacheDirectory(t);
+    const url = `${server.origin}/a`;
+    const events = [];
+    const summary = await fillExampleCache([{ url }], {
+      directory,
+      assets: lockFor(server.origin, { '/a': content }),
+      baseDelay: 1,
+      maxDelay: 5,
+      now: clock.now,
+      sleep: clock.sleep,
+      onEvent: event => events.push(event),
+    });
+    assert.deepEqual(clock.waits, [120_000]);
+    assert.deepEqual(events, [{ type: 'retry', url, attempt: 1, delay: 120_000, reason: 'HTTP 429' }]);
+    assert.deepEqual(summary.downloaded, [url]);
+    assert.deepEqual(await readFile(exampleCachePath(directory, url)), content);
+  });
+}
+
+test('a five-minute rate limit is waited out within the default deadline', async t => {
+  const content = Buffer.from('rate limited three times');
+  const clock = fakeClock();
   const server = await fixtureServer(t, (_request, response, count) => {
-    if (count === 1) response.writeHead(429, { 'retry-after': '0' }).end();
+    if (count <= 3) response.writeHead(429, { 'retry-after': '300' }).end();
     else response.end(content);
   });
   const directory = await cacheDirectory(t);
   const url = `${server.origin}/a`;
-  const events = [];
-  const summary = await fillExampleCache([{ url }], {
-    directory,
-    assets: lockFor(server.origin, { '/a': content }),
-    baseDelay: 3_600_000,
-    maxDelay: 3_600_000,
-    onEvent: event => events.push(event),
-  });
-  assert.deepEqual(events, [{ type: 'retry', url, attempt: 1, delay: 0, reason: 'HTTP 429' }]);
-  assert.deepEqual(summary.downloaded, [url]);
+  await fillExampleCache([{ url }], { directory, assets: lockFor(server.origin, { '/a': content }), now: clock.now, sleep: clock.sleep });
+  assert.deepEqual(clock.waits, [300_000, 300_000, 300_000]);
   assert.deepEqual(await readFile(exampleCachePath(directory, url)), content);
+});
+
+test('a Retry-After longer than what is left of the deadline fails at once, naming the URL and the wait', async t => {
+  const clock = fakeClock();
+  const server = await fixtureServer(t, (_request, response) => response.writeHead(429, { 'retry-after': '300' }).end());
+  const directory = await cacheDirectory(t);
+  const url = `${server.origin}/a`;
+  const options = { directory, assets: lockFor(server.origin, { '/a': Buffer.from('x') }), now: clock.now, sleep: clock.sleep };
+  await assert.rejects(fillExampleCache([{ url }], { ...options, deadline: 120_000 }), error => error.message ===
+    `Cannot download example ${url}: HTTP 429; the server asked for a wait of 300 s (Retry-After: 300), but 120 s of the 120 s deadline for filling the cache remain`);
+  assert.deepEqual(clock.waits, []);
+  assert.equal(server.requests.length, 1);
+  // Two waits fit in eleven minutes; the third would end after them.
+  await assert.rejects(fillExampleCache([{ url }], { ...options, deadline: 660_000 }), error =>
+    error.message.includes(url) && error.message.includes('a wait of 300 s') && error.message.includes('60 s of the 660 s deadline'));
+  assert.deepEqual(clock.waits, [300_000, 300_000]);
+  assert.equal(server.requests.length, 4);
+  assert.deepEqual(await readdir(directory), []);
 });
 
 test('a response that stalls is abandoned at the timeout, never visible under its final name, and the next attempt completes', async t => {
   const content = Buffer.from('arrives on the second attempt');
-  const entriesMidDownload = [];
-  const server = await fixtureServer(t, (_request, response, count) => {
+  const directory = await cacheDirectory(t);
+  let entriesMidDownload;
+  const server = await fixtureServer(t, async (_request, response, count) => {
     if (count > 1) return response.end(content);
     response.writeHead(200, { 'content-length': content.length }).write(content.subarray(0, 5));
-    setTimeout(async () => entriesMidDownload.push(...await readdir(directory)), 100);
+    // The client gives up only after its partial file exists, so look once it does.
+    while (!response.destroyed && !entriesMidDownload?.length) {
+      entriesMidDownload = await readdir(directory);
+      await delay(5);
+    }
   });
-  const directory = await cacheDirectory(t);
   const url = `${server.origin}/a`;
   const events = [];
   await fillExampleCache([{ url }], {
     directory,
     assets: lockFor(server.origin, { '/a': content }),
-    timeout: 200,
+    timeout: 1000,
     ...quick,
     onEvent: event => events.push(event.reason),
   });
-  assert.deepEqual(events, ['no complete response within 200 ms']);
+  assert.deepEqual(events, ['no complete response within 1000 ms']);
   // An interrupted run must not leave bytes under the name the audit reads.
   assert.equal(entriesMidDownload.length, 1);
   assert.match(entriesMidDownload[0], /\.partial$/);

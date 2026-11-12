@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { setTimeout as sleep } from 'node:timers/promises';
+import { setTimeout as timer } from 'node:timers/promises';
 import { retryDelay } from '../../packages/components/src/net/fetchWithRetry.js';
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -52,6 +52,17 @@ async function entryMatches(path, locked) {
   return hash.digest('hex') === locked.sha256;
 }
 
+// The wait a response asks for in Retry-After, in ms, or null when it names none.
+function requestedDelay(response, now) {
+  const header = response?.headers.get('retry-after');
+  if (!header) return null;
+  const seconds = Number(header);
+  const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - now();
+  return Number.isFinite(delay) ? Math.max(delay, 0) : null;
+}
+
+const inSeconds = ms => `${Math.ceil(ms / 1000)} s`;
+
 // One request. Resolves to null when the verified file is in place, or to what
 // a later attempt may fix; throws what no retry can fix.
 async function attemptDownload(url, path, locked, { fetchImpl, timeout, signal }) {
@@ -90,22 +101,33 @@ async function attemptDownload(url, path, locked, { fetchImpl, timeout, signal }
   return null;
 }
 
-async function download(url, path, locked, { retries, baseDelay, maxDelay, onEvent, ...request }) {
+async function download(url, path, locked, { retries, baseDelay, maxDelay, timeout, deadline, endsAt, now, sleep, onEvent, ...request }) {
   for (let attempt = 0; ; attempt++) {
-    const failed = await attemptDownload(url, path, locked, request);
+    const left = endsAt - now();
+    if (left <= 0) throw new Error(`Cannot download example ${url}: the ${inSeconds(deadline)} deadline for filling the cache has passed`);
+    const failed = await attemptDownload(url, path, locked, { ...request, timeout: Math.min(timeout, left) });
     if (!failed) return;
     if (attempt >= retries) {
       throw new Error(`Cannot download example ${url} after ${attempt + 1} attempts: ${failed.reason}`);
     }
-    const delay = retryDelay(failed.response, attempt, { baseDelay, maxDelay });
+    // The server's own delay is kept whole: a shorter wait only spends an attempt on another refusal.
+    const requested = requestedDelay(failed.response, now);
+    const delay = requested ?? retryDelay(undefined, attempt, { baseDelay, maxDelay });
+    const remaining = endsAt - now();
+    if (delay > remaining) {
+      const asked = requested === null ? `the next attempt is due in ${inSeconds(delay)}` : `the server asked for a wait of ${inSeconds(delay)} (Retry-After: ${failed.response.headers.get('retry-after')})`;
+      throw new Error(`Cannot download example ${url}: ${failed.reason}; ${asked}, but ${inSeconds(Math.max(remaining, 0))} of the ${inSeconds(deadline)} deadline for filling the cache remain`);
+    }
     onEvent({ type: 'retry', url, attempt: attempt + 1, delay, reason: failed.reason });
-    await sleep(delay, undefined, { signal: request.signal });
+    await sleep(delay, request.signal);
   }
 }
 
 /**
  * Brings the cache directory to the state loadVerifiedExampleCache accepts for these files.
  * Entries already matching the lock are kept; the rest are downloaded, checked and renamed into place.
+ * `deadline` bounds the whole fill in ms: no attempt runs and no wait ends after it.
+ * `now` and `sleep` are the clock, replaceable so a test can observe the waits without spending them.
  */
 export async function fillExampleCache(files, {
   directory,
@@ -115,6 +137,9 @@ export async function fillExampleCache(files, {
   retries = 4,
   baseDelay,
   maxDelay,
+  deadline = 1_500_000,
+  now = Date.now,
+  sleep = (ms, signal) => timer(ms, undefined, { signal }),
   prune = false,
   fetch: fetchImpl = globalThis.fetch,
   onEvent = () => {},
@@ -123,6 +148,7 @@ export async function fillExampleCache(files, {
   await mkdir(directory, { recursive: true });
   const summary = { reused: [], downloaded: [], pruned: [], bytes: 0, downloadedBytes: 0 };
   const stop = new AbortController();
+  const endsAt = now() + deadline;
   const queue = wanted.entries();
   const worker = async () => {
     for (const [url, locked] of queue) {
@@ -134,7 +160,7 @@ export async function fillExampleCache(files, {
         continue;
       }
       try {
-        await download(url, path, locked, { fetchImpl, timeout, retries, baseDelay, maxDelay, onEvent, signal: stop.signal });
+        await download(url, path, locked, { fetchImpl, timeout, retries, baseDelay, maxDelay, deadline, endsAt, now, sleep, onEvent, signal: stop.signal });
       } catch (error) {
         if (!stop.signal.aborted) stop.abort(error);
         return;

@@ -237,6 +237,8 @@ jobs:
       # The audit imports one example per app at two widths. Reading them from
       # this checked copy keeps a stalled or rate-limited download from failing it.
       # Only main saves the copy: a pull request's would be a second one of its size.
+      - name: Record free disk space before the examples are restored
+        run: df -h
       - name: Restore the examples the interface audit imports
         id: example-cache
         uses: actions/cache/restore@v6
@@ -248,12 +250,16 @@ jobs:
         run: node scripts/fetch-example-cache.mjs "$EXAMPLE_ASSET_CACHE" --prune
         env:
           EXAMPLE_ASSET_CACHE: ${{ runner.temp }}/example-assets
+      - name: Record free disk space with the examples in place
+        run: df -h
       - name: Save the examples for later runs
         if: github.ref == 'refs/heads/main' && steps.example-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/example-assets
           key: ${{ steps.example-cache.outputs.cache-primary-key }}
+      - name: Check which requests the audit counts as sent to other hosts
+        run: node test/external-requests.smoke.mjs
       - name: Audit interface consistency across the catalog
         run: pnpm audit:interfaces
         env:
@@ -315,6 +321,26 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
+
+  # The repository's caches share 10 GB, and GitHub evicts the least recently used
+  # above it: a superseded copy of the examples would push out Rust and reference-data caches.
+  example-cache-retention:
+    needs: composite-site
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # A cache left in place costs space, never a wrong result.
+    continue-on-error: true
+    permissions:
+      actions: write
+    steps:
+      - name: Delete every example-assets- cache but the newest
+        run: |
+          gh cache list --ref "$CACHE_REF" --key example-assets- --sort created_at --order desc --limit 100 --json id --jq '.[1:][].id' |
+            xargs --no-run-if-empty --max-args 1 gh cache delete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CACHE_REF: refs/heads/main
 
   agent-interactions:
     needs: composite-site
