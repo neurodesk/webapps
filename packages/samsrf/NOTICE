@@ -10,16 +10,20 @@ Example data used for validation: the SamSrf example dataset X001, OSF h92mr
 Clipper 6.4.2 (27 February 2017)
 Copyright: Angus Johnson 2010-2017
 
-The near_collinear selection and clean loop in exes/samsrf/core/src/polyshape.rs
-adapt SlopesNearCollinear and CleanPolygon from cpp/clipper.cpp:
+exes/samsrf/core/src/clipper.rs ports the closed-path union of cpp/clipper.cpp
+(ClipperBase::AddPath through Clipper::ExecuteInternal, the strictly simple
+DoSimplePolygons and BuildResult), and the near_collinear selection and clean
+loop in exes/samsrf/core/src/polyshape.rs adapt SlopesNearCollinear and
+CleanPolygon, from:
 https://github.com/skyrpex/clipper/blob/b1f1e1672745c1e1d73dd0437d1643f9633e7508/cpp/clipper.cpp
 SHA-256: 5c642a3668311701f72572443aa42c1a981edb037298efc015166d9d90be0755
 
-The adaptation uses a strict unsquared perpendicular-distance comparison and
-strict Euclidean neighbour-distance comparisons for the empirical MATLAB grid
-model. Clipper uses squared distances, with < for near-collinearity and <=
-for neighbours. The grid scaling, exact intersection representation and face
-tracing are separate implementations.
+The union keeps Clipper's arithmetic and libstdc++'s std::sort order. It leaves
+out open paths, clip paths, Z values and the polygon tree. The clean adaptation
+uses a strict unsquared perpendicular-distance comparison and strict Euclidean
+neighbour-distance comparisons for the empirical MATLAB grid model. Clipper uses
+squared distances, with < for near-collinearity and <= for neighbours. The grid
+scaling is a separate implementation.
 
 Boost Software License - Version 1.0 - August 17th, 2003
 

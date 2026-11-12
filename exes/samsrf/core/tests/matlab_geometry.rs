@@ -332,14 +332,16 @@ fn uncentred_error_bound(vertices: &[[f64; 2]], area: f64) -> [f64; 3] {
     [centroid(0), centroid(1), area_bound]
 }
 
-/// The 93 near-collinear clouds (kind 3 of record_geometry.m's point clouds:
+/// The 44 near-collinear clouds (kind 3 of record_geometry.m's point clouds:
 /// points within 1e-6 to 1e-10 of a line, in random order) whose hulls still
-/// differ. MATLAB resolves their crossings of nearly parallel edges by snapping
-/// vertices up to about the 1e-8 tolerance (1e5 to 1e8 grid units) away from
-/// any exact intersection, which the port does not reproduce. Each must stay a
-/// near-collinear cloud and must still differ: a fix shortens this list.
-/// Its port outcome is separately frozen, not treated as MATLAB ground truth.
-const NEAR_COLLINEAR_SNAPPING: [usize; 93] = [27, 62, 77, 102, 117, 157, 162, 182, 307, 312, 317, 377, 387, 397, 452, 482, 512, 532, 557, 562, 622, 647, 712, 737, 777, 797, 822, 852, 872, 877, 927, 1022, 1027, 1032, 1162, 1167, 1192, 1237, 1257, 1287, 1322, 1382, 1392, 1422, 1427, 1457, 1467, 1472, 1497, 1512, 1522, 1547, 1552, 1587, 1622, 1642, 1737, 1742, 1777, 1782, 1817, 1897, 1922, 1927, 1932, 1947, 1982, 2007, 2012, 2057, 2062, 2087, 2102, 2147, 2167, 2172, 2197, 2212, 2227, 2237, 2247, 2272, 2292, 2302, 2312, 2317, 2337, 2357, 2367, 2382, 2417, 2447, 2457];
+/// differ. Clipper's union yields every vertex MATLAB keeps, but MATLAB cleans
+/// these clouds' many touching slivers differently: it returns the filled faces
+/// of the arrangement where Clipper returns an outer ring with touching holes,
+/// and the port does not reproduce which near-duplicate crossings its cleaning
+/// keeps. Each must stay a near-collinear cloud and must still differ: a fix
+/// shortens this list. Its port outcome is separately frozen, not treated as
+/// MATLAB ground truth.
+const NEAR_COLLINEAR_SNAPPING: [usize; 44] = [77, 102, 157, 177, 377, 387, 397, 512, 532, 557, 562, 737, 797, 822, 852, 932, 1027, 1162, 1192, 1237, 1257, 1322, 1382, 1392, 1607, 1622, 1777, 1782, 1817, 1922, 1937, 1982, 2087, 2102, 2147, 2167, 2212, 2272, 2292, 2317, 2337, 2357, 2382, 2457];
 
 /// `polyshape(P).convhull` on thin triangles one ULP apart across the cutoff at
 /// nine scales, three offsets and rotations, a relative sweep, random thin

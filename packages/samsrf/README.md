@@ -469,11 +469,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   the cluster is the peak alone. The triangulation decides incircle tests
   exactly and breaks cocircular ties with CGAL's symbolic perturbation, which
   gives MATLAB's `delaunay` edges on every recorded grid, ring and shuffled
-  tie. `polyshape(...).convhull` follows MATLAB's fixed-point grid, even-odd
-  resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on every
-  recorded polygon except 93 nearly collinear point clouds, whose crossings of
-  nearly parallel edges MATLAB resolves by snapping vertices the port does not
-  reproduce ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
+  tie. `polyshape(...).convhull` follows MATLAB's fixed-point grid, a port of
+  Clipper 6.4.2's even-odd union and 1e-8 cleaning, and gives MATLAB's hull
+  vertices on every recorded polygon except 44 nearly collinear point clouds,
+  whose touching slivers MATLAB cleans differently
+  ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so

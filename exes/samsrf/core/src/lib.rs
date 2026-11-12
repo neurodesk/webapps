@@ -11,6 +11,7 @@
 //! arithmetic with single observations; see `precision` and the package README.
 
 pub mod apertures;
+mod clipper;
 pub mod css;
 pub mod error;
 pub mod export;

@@ -963,60 +963,75 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   MATLAB single arithmetic, left to the single-precision pipeline work.
 - **Polygons.** Emptiness is exact, the hull has exactly MATLAB's vertices,
   bit for bit, and area and centroid then lie within the forward-error bound
-  of MATLAB's shoelace on untranslated vertices. 25,980 of the 26,073 recorded
+  of MATLAB's shoelace on untranslated vertices. 26,029 of the 26,073 recorded
   polygons agree, on both hosts, and so do all 253 polygons of the 741-case
   reference without exclusions. The model behind it, reconstructed from these
-  recordings (`core/src/polyshape.rs`):
+  recordings (`core/src/polyshape.rs`, `core/src/clipper.rs`):
 
-  1. *Fixed-point grid.* Each axis is centred on the middle of its range,
+  1. *Fixed-point grid.* Each axis is centred on the middle of its range and
      scaled by `10^p` with `p = 13 - floor(log10(m))` for the largest centred
-     magnitude `m`, and truncated to integers. New vertices come back as
-     `k * 10^-p + c` and surviving ones keep their original coordinates.
-     Truncation, not rounding, is what separates exact power-of-two copies of
-     one triangle (2^-10 lands on 976562.5 grid units) and the one-ULP apex
-     steps at scale 1.
-  2. *Thinness.* The tolerance is `(1e-8 * span) * 10^p` in grid units, and a
-     vertex goes when its distance from the line through its neighbours,
-     `|cross| / length` on the integers, is below it. This alone reproduces all
-     22,636 recorded triangles, including the 1,853 within 1e-5 of the cutoff
-     that the earlier floating-point rule missed.
-  3. *Even-odd resolution.* The ring's boundary is every sub-segment covered an
-     odd number of times (MATLAB's pentagram keeps five points, not its centre).
-     Each filled face is traced with the region on its left and cleaned with
-     Clipper 6.4.2's `CleanPolygon` loop (close neighbours, close
-     semi-adjacent pairs, near-collinear points) using the distance in step 2;
-     the hull of the survivors is cleaned the same way. Duplicate points,
-     retraced spikes and narrow spikes all follow from this.
+     magnitude `m`, one decade coarser when `m * 10^p` exceeds 6.25e13, then
+     truncated to integers. New vertices come back as `k * 10^-p + c` and
+     surviving ones keep their original coordinates. Truncation, not rounding,
+     separates exact power-of-two copies of one triangle and the one-ULP apex
+     steps at scale 1. Every new vertex of the point clouds lies on the coarser
+     grid when `m * 10^p` is at least 6.2702e13 and on the finer one up to
+     6.2033e13; the limit between them is not pinned more closely.
+  2. *Clipper union.* The ring goes through a port of Clipper 6.4.2's strictly
+     simple even-odd union (`SimplifyPolygons`). Its sweep rounds each crossing
+     with Clipper's floating-point `IntersectPoint`; that is where MATLAB's
+     crossings of nearly parallel edges lie, up to the tolerance away from the
+     exact intersection. Ties keep libstdc++'s `std::sort` order
+     (`gnu-sort-probe.cpp` pins it). The port agrees ring for ring with
+     `clipper-lib` 6.4.2 (the JavaScript translation) on 36,700 rings, once
+     seven places where that translation departs from the C++ source are put
+     back: three join tests, the right-to-left maxima search, a point compared
+     by reference, 128-bit slope equality and the minima and intersection sort
+     orders.
+  3. *Cleaning.* Each output path is cleaned with the tolerance
+     `(1e-8 * span) * 10^p` in grid units, following Clipper's `CleanPolygon`
+     loop (close neighbours, close semi-adjacent pairs, near-collinear points),
+     the cleaned paths are united and cleaned once more, and the hull of the
+     survivors is cleaned the same way. Duplicate points, retraced spikes and
+     narrow spikes all follow from this.
 
-  The 93 remaining polygons are all near-collinear clouds: points within 1e-6
-  to 1e-10 of a line in random order. Their MATLAB vertices lie 1e5 to 1e8
-  grid units from any exact intersection of the edges, so MATLAB snaps vertices
-  by up to about the tolerance when it resolves nearly parallel crossings.
-  Neither exact intersections nor Clipper 6.4.2's `IntersectPoint` (7 of 9,861
-  vertices) reproduce that. The test names these 93 cases, requires each to
-  stay near-collinear and still differ, and freezes each port hull, emptiness,
-  area and centroid bit for bit in `matlab_polygon_snapping.json`. These are
+  The 44 remaining polygons are all near-collinear clouds: points within 1e-6
+  to 1e-10 of a line in random order. Every vertex MATLAB keeps for them is a
+  vertex of the port's union, but MATLAB cleans their many touching slivers
+  differently. Where Clipper returns an outer ring with a hole that touches it,
+  MATLAB returns the filled faces of the arrangement, clockwise and starting at
+  their lowest input vertex; which crossing a face of new vertices starts at,
+  and so which near-duplicate crossings its cleaning keeps, is not reproduced.
+  Forty of them were among the 93 the previous exact-intersection model missed;
+  177, 932, 1607 and 1937 matched under that model and differ under this one.
+  The test names these 44 cases, requires each to stay near-collinear and still
+  differ, and freezes each port hull, emptiness, area and centroid bit for bit
+  in `matlab_polygon_snapping.json` (re-recorded for the new model). These are
   regression snapshots, not MATLAB ground truth. Every other polygon remains
   gated against MATLAB.
   Unrepresentable grids (nonfinite centre/span/scale or scaled coordinates
   outside the integer arithmetic bound) return an empty hull before conversion.
   This prevents overflow or nontermination on extreme coordinates such as
-  1e-300; it is not a MATLAB parity claim for that unsupported domain.
-  Intersection coordinates use exact arithmetic; face tracing still uses
-  floating-point turning and parity decisions. Clipper's source revision,
-  copyright, Boost license and adapted distance comparisons are recorded in
-  the module and the shipped package `NOTICE`.
+  1e-300; it is not a MATLAB parity claim for that unsupported domain. When
+  Clipper's `Execute` fails (no recorded polygon does), the port returns an
+  empty hull; what MATLAB does then is not recorded. Clipper's source revision,
+  copyright, Boost license and adapted distance comparisons are recorded in the
+  module and the shipped package `NOTICE`.
 
   SamSrf passes `polyshape` a breadth-first cluster of unique template points;
   only a nearly collinear cluster of four or more points reaches this class.
 
 A native release run of `real_template_cf_maps_match_matlab` with both hosts'
-fixtures used 3.82 CPU seconds and 11,588 KiB peak resident memory on the shared
-builder (15.57 seconds elapsed under contention). It exercises the 2,917/3,389
-seed templates, 40 hull profiles per hemisphere/precision/host including centre
-and surround hulls, plus the recorded summary and Gaussian cases. This is a
-bounded workload measurement, not a full-surface or browser performance result;
-the all-pairs intersection graph can still grow quadratically.
+fixtures used 3.91 CPU seconds and 11,768 KiB peak resident memory on the shared
+builder (7.57 seconds elapsed under contention; the previous model used 3.82 CPU
+seconds and 11,588 KiB). It exercises the 2,917/3,389 seed templates, 40 hull
+profiles per hemisphere/precision/host including centre and surround hulls,
+plus the recorded summary and Gaussian cases. This is a bounded workload
+measurement, not a full-surface or browser performance result. Clipper sorts
+the active edges of each scanbeam by bubble sort, so a ring whose order is
+random takes time roughly cubic in its length: 1,000 random points take 8.7
+seconds (1.5 with the previous model), while the same points in angular order
+take 7 milliseconds.
 
 The same test replays the double hull and summary CF pipelines of the raw-input
 matrix (both hemispheres, smoothing and global regression on and off, both

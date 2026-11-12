@@ -1,41 +1,42 @@
 //! An empirical compatibility model for MATLAB R2023b `polyshape(points).convhull`,
-//! reconstructed from
-//! recorded MATLAB output (`packages/samsrf/validation/matlab/record_geometry.m`):
+//! reconstructed from recorded MATLAB output
+//! (`packages/samsrf/validation/matlab/record_geometry.m`):
 //!
 //! 1. The vertices move to a fixed-point grid: each axis is centred on the middle
-//!    of its range, scaled by `10^p` with `p = 13 - floor(log10(m))` for the
-//!    largest centred magnitude `m`, and truncated to integers. Vertices that
-//!    survive keep their original coordinates; new ones are `k * 10^-p + c`.
-//! 2. The ring is resolved with the even-odd rule. Every boundary piece is a
-//!    sub-segment covered by an odd number of edges; the filled faces are traced
-//!    with the region on their left, turning as far right as possible.
-//! 3. Each ring, and finally the hull of the survivors, is cleaned with the
-//!    tolerance `(1e-8 * span) * 10^p` in grid units, following the loop of
-//!    Clipper 6.4.2's `CleanPolygon` (Angus Johnson, Boost Software License):
-//!    a vertex closer than the tolerance to its predecessor goes, a vertex whose
-//!    neighbours are that close goes with its successor, and a vertex goes when
-//!    the point geometrically between its neighbours lies within the tolerance
-//!    of the line through the other two.
+//!    of its range, scaled by `10^p` and truncated to integers. `p` is
+//!    `13 - floor(log10(m))` for the largest centred magnitude `m`, one less when
+//!    `m * 10^p` exceeds `GRID_LIMIT`. Vertices that survive keep their original
+//!    coordinates; new ones are `k * 10^-p + c`.
+//! 2. Clipper 6.4.2's strictly simple even-odd union (`clipper.rs`) resolves the
+//!    ring, and each output path is cleaned with the tolerance
+//!    `(1e-8 * span) * 10^p` in grid units, following Clipper's `CleanPolygon`
+//!    loop with the distance measures below. The cleaned paths are united and
+//!    cleaned once more.
+//! 3. The hull of the surviving vertices is cleaned the same way.
 //!
-//! Intersection coordinates here are exact and rounded half away from zero.
-//! Turning and parity decisions use floating-point arithmetic. MATLAB's are
-//! not: for nearly parallel edges its own intersection arithmetic moves them by
-//! many grid units, so clouds within about 1e-5 of a line can still differ.
+//! Clipper's sweep rounds each crossing of nearly parallel edges through its own
+//! floating-point `IntersectPoint`, which is what MATLAB's vertices show. Near-
+//! collinear clouds whose cleaning still differs from MATLAB are listed and frozen
+//! in the geometry test.
 
 /*
 Clipper 6.4.2 (27 February 2017)
 Copyright: Angus Johnson 2010-2017
 
-The near_collinear selection and clean loop in exes/samsrf/core/src/polyshape.rs
-adapt SlopesNearCollinear and CleanPolygon from cpp/clipper.cpp:
+exes/samsrf/core/src/clipper.rs ports the closed-path union of cpp/clipper.cpp
+(ClipperBase::AddPath through Clipper::ExecuteInternal, the strictly simple
+DoSimplePolygons and BuildResult), and the near_collinear selection and clean
+loop in exes/samsrf/core/src/polyshape.rs adapt SlopesNearCollinear and
+CleanPolygon, from:
 https://github.com/skyrpex/clipper/blob/b1f1e1672745c1e1d73dd0437d1643f9633e7508/cpp/clipper.cpp
 SHA-256: 5c642a3668311701f72572443aa42c1a981edb037298efc015166d9d90be0755
 
-The adaptation uses a strict unsquared perpendicular-distance comparison and
-strict Euclidean neighbour-distance comparisons for the empirical MATLAB grid
-model. Clipper uses squared distances, with < for near-collinearity and <=
-for neighbours. The grid scaling, exact intersection representation and face
-tracing are separate implementations.
+The union keeps Clipper's arithmetic and libstdc++'s std::sort order. It leaves
+out open paths, clip paths, Z values and the polygon tree. The clean adaptation
+uses a strict unsquared perpendicular-distance comparison and strict Euclidean
+neighbour-distance comparisons for the empirical MATLAB grid model. Clipper uses
+squared distances, with < for near-collinearity and <= for neighbours. The grid
+scaling is a separate implementation.
 
 Boost Software License - Version 1.0 - August 17th, 2003
 
@@ -62,13 +63,18 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
-use std::cmp::Ordering;
 use std::collections::HashMap;
 
-type Point = (i64, i64);
+pub(crate) type Point = (i64, i64);
+
+/// The largest `m * 10^p` that keeps the finer grid. Recorded MATLAB clouds keep it
+/// at 6.2033e13 and drop to the coarser one from 6.2702e13; any value between
+/// reproduces every recording, and this one is not pinned more closely.
+const GRID_LIMIT: f64 = 6.25e13;
 
 /// The hull MATLAB's `polyshape(points).convhull` returns, counter-clockwise, or
-/// `None` when that shape is empty or its grid cannot be represented safely.
+/// `None` when that shape is empty, Clipper's `Execute` fails, or the grid cannot
+/// be represented safely.
 pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
     let points: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
     let grid = Grid::new(&points)?;
@@ -77,11 +83,12 @@ pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
     for (k, p) in ring.iter().zip(&points) {
         original.entry(*k).or_insert(*p);
     }
-    let mut survivors = Vec::new();
-    for face in filled_rings(&ring) {
-        survivors.extend(clean(&face, grid.tolerance));
-    }
-    let hull = clean(&integer_hull(survivors), grid.tolerance);
+    let cleaned = |paths: Vec<Vec<Point>>| -> Vec<Vec<Point>> {
+        paths.iter().map(|path| clean(path, grid.tolerance)).filter(|path| !path.is_empty()).collect()
+    };
+    let first = cleaned(crate::clipper::simplify_even_odd(&[ring])?);
+    let second = cleaned(crate::clipper::simplify_even_odd(&first)?);
+    let hull = clean(&integer_hull(second.into_iter().flatten().collect()), grid.tolerance);
     if hull.len() < 3 {
         return None;
     }
@@ -110,12 +117,16 @@ impl Grid {
         if !magnitude.is_finite() || magnitude == 0.0 {
             return None;
         }
-        let exponent = 13 - magnitude.log10().floor() as i32;
-        let scale: f64 = format!("1e{exponent}").parse().expect("a power of ten");
+        let power = |exponent: i32| -> f64 { format!("1e{exponent}").parse().expect("a power of ten") };
+        let mut exponent = 13 - magnitude.log10().floor() as i32;
+        if magnitude * power(exponent) > GRID_LIMIT {
+            exponent -= 1;
+        }
+        let scale = power(exponent);
         let tolerance = (1e-8 * span) * scale;
-        // The model normally puts centred coordinates below 1e14. Enforce a
-        // conservative finite bound before any float-to-integer conversion:
-        // saturating an infinity to i64 would invalidate the exact arithmetic.
+        // The model puts centred coordinates below 1e14. Enforce a conservative
+        // finite bound before any float-to-integer conversion: saturating an
+        // infinity to i64 would invalidate Clipper's integer arithmetic.
         if !scale.is_finite() || scale <= 0.0 || !tolerance.is_finite() || tolerance <= 0.0
             || points.iter().any(|p| (0..2).any(|axis| {
                 let scaled = (p[axis] - centre[axis]) * scale;
@@ -139,420 +150,6 @@ impl Grid {
 
 fn cross(o: Point, a: Point, b: Point) -> i128 {
     (a.0 as i128 - o.0 as i128) * (b.1 as i128 - o.1 as i128) - (a.1 as i128 - o.1 as i128) * (b.0 as i128 - o.0 as i128)
-}
-
-/// A signed 256-bit integer, enough for products of two grid-scale `i128` values.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Wide {
-    high: i128,
-    low: u128,
-}
-
-impl Wide {
-    fn product(a: i128, b: i128) -> Wide {
-        let negative = (a < 0) != (b < 0);
-        let (x, y) = (a.unsigned_abs(), b.unsigned_abs());
-        let mask = u64::MAX as u128;
-        let (x0, x1, y0, y1) = (x & mask, x >> 64, y & mask, y >> 64);
-        let (p00, p01, p10, p11) = (x0 * y0, x0 * y1, x1 * y0, x1 * y1);
-        let middle = (p00 >> 64) + (p01 & mask) + (p10 & mask);
-        let low = (p00 & mask) | (middle << 64);
-        let high = p11 + (p01 >> 64) + (p10 >> 64) + (middle >> 64);
-        let magnitude = Wide { high: high as i128, low };
-        if negative { magnitude.negate() } else { magnitude }
-    }
-
-    fn negate(self) -> Wide {
-        let low = (!self.low).wrapping_add(1);
-        let high = (!self.high).wrapping_add(i128::from(low == 0));
-        Wide { high, low }
-    }
-
-    fn add(self, other: Wide) -> Wide {
-        let (low, carry) = self.low.overflowing_add(other.low);
-        Wide { high: self.high.wrapping_add(other.high).wrapping_add(i128::from(carry)), low }
-    }
-}
-
-impl Ord for Wide {
-    fn cmp(&self, other: &Wide) -> Ordering {
-        self.high.cmp(&other.high).then(self.low.cmp(&other.low))
-    }
-}
-
-impl PartialOrd for Wide {
-    fn partial_cmp(&self, other: &Wide) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// `start + numerator / denominator * delta` rounded half away from zero, exactly
-/// (`denominator > 0`).
-fn round_along(start: i64, numerator: i128, denominator: i128, delta: i64) -> i64 {
-    // Twice the value, times the denominator: 2 (start d + n delta).
-    let twice = Wide::product(2 * i128::from(start), denominator).add(Wide::product(2 * numerator, i128::from(delta)));
-    let estimate = start as f64 + numerator as f64 / denominator as f64 * delta as f64;
-    let mut q = estimate.round() as i64;
-    // q is right when (2q - 1) d <= 2v < (2q + 1) d for v >= 0, mirrored below 0.
-    loop {
-        let below = Wide::product(2 * i128::from(q) - 1, denominator);
-        let above = Wide::product(2 * i128::from(q) + 1, denominator);
-        let positive = twice >= Wide { high: 0, low: 0 };
-        let too_high = if positive { twice < below } else { twice <= below };
-        let too_low = if positive { twice >= above } else { twice > above };
-        if too_high {
-            q -= 1;
-        } else if too_low {
-            q += 1;
-        } else {
-            return q;
-        }
-    }
-}
-
-/// A parameter `numerator / denominator` in [0, 1] along an edge.
-#[derive(Clone, Copy)]
-struct Cut {
-    numerator: i128,
-    denominator: i128,
-}
-
-impl Cut {
-    fn cmp(&self, other: &Cut) -> Ordering {
-        Wide::product(self.numerator, other.denominator).cmp(&Wide::product(other.numerator, self.denominator))
-    }
-}
-
-/// An exact boundary vertex `(x / d, y / d)`, its rounding to the grid and an
-/// approximation for turning decisions.
-struct Vertex {
-    x: Wide,
-    y: Wide,
-    d: i128,
-    rounded: Point,
-}
-
-impl Wide {
-    fn magnitude(self) -> (bool, [u64; 4]) {
-        let negative = self.high < 0;
-        let w = if negative { self.negate() } else { self };
-        let (h, l) = (w.high as u128, w.low);
-        (negative, [l as u64, (l >> 64) as u64, h as u64, (h >> 64) as u64])
-    }
-
-}
-
-/// `n * d` as a sign and six little-endian limbs (`d > 0`).
-fn scaled(n: Wide, d: i128) -> (bool, [u64; 6]) {
-    let (negative, limbs) = n.magnitude();
-    let d = d as u128;
-    let factor = [d as u64, (d >> 64) as u64];
-    let mut product = [0u64; 6];
-    for (i, &x) in limbs.iter().enumerate() {
-        let mut carry = 0u128;
-        for (j, &y) in factor.iter().enumerate() {
-            let t = product[i + j] as u128 + x as u128 * y as u128 + carry;
-            product[i + j] = t as u64;
-            carry = t >> 64;
-        }
-        let mut k = i + factor.len();
-        while carry > 0 {
-            let t = product[k] as u128 + carry;
-            product[k] = t as u64;
-            carry = t >> 64;
-            k += 1;
-        }
-    }
-    let zero = product.iter().all(|&limb| limb == 0);
-    (negative && !zero, product)
-}
-
-fn limbs_to_f64(limbs: &[u64]) -> f64 {
-    limbs.iter().rev().fold(0.0, |total, &limb| total * 2f64.powi(64) + limb as f64)
-}
-
-/// `n1 / d1` against `n2 / d2` exactly, for positive denominators.
-fn compare_ratio(n1: Wide, d1: i128, n2: Wide, d2: i128) -> Ordering {
-    let (n1, p1) = scaled(n1, d2);
-    let (n2, p2) = scaled(n2, d1);
-    let magnitude = p1.iter().rev().cmp(p2.iter().rev());
-    match (n1, n2) {
-        (false, true) => Ordering::Greater,
-        (true, false) => Ordering::Less,
-        (false, false) => magnitude,
-        (true, true) => magnitude.reverse(),
-    }
-}
-
-/// `n2 / d2 - n1 / d1`, evaluated exactly and then rounded to `f64`.
-fn difference(n1: Wide, d1: i128, n2: Wide, d2: i128) -> f64 {
-    let (negative1, p1) = scaled(n1, d2);
-    let (negative2, p2) = scaled(n2, d1);
-    // Signed sum of +p2 and -p1 in sign-magnitude form.
-    let (big, small, negative) = match (negative2, !negative1) {
-        (a, b) if a == b => {
-            let mut sum = [0u64; 7];
-            let mut carry = 0u128;
-            for i in 0..6 {
-                let t = p1[i] as u128 + p2[i] as u128 + carry;
-                sum[i] = t as u64;
-                carry = t >> 64;
-            }
-            sum[6] = carry as u64;
-            let value = limbs_to_f64(&sum) / (d1 as f64 * d2 as f64);
-            return if a { -value } else { value };
-        }
-        _ => {
-            if p2.iter().rev().cmp(p1.iter().rev()) != Ordering::Less { (p2, p1, negative2) } else { (p1, p2, !negative1) }
-        }
-    };
-    let mut result = [0u64; 6];
-    let mut borrow = 0i128;
-    for i in 0..6 {
-        let t = big[i] as i128 - small[i] as i128 - borrow;
-        result[i] = t.rem_euclid(1i128 << 64) as u64;
-        borrow = i128::from(t < 0);
-    }
-    let value = limbs_to_f64(&result) / (d1 as f64 * d2 as f64);
-    if negative { -value } else { value }
-}
-
-impl Vertex {
-    /// `other - self`, exact before rounding.
-    fn to(&self, other: &Vertex) -> [f64; 2] {
-        [difference(self.x, self.d, other.x, other.d), difference(self.y, self.d, other.y, other.d)]
-    }
-}
-
-/// The boundary of the even-odd region of `ring`: its exact vertices and the
-/// sub-segments covered an odd number of times, each from its lexicographically
-/// smaller end, in order of first appearance along the ring.
-fn odd_segments(ring: &[Point]) -> (Vec<Vertex>, Vec<(usize, usize)>) {
-    let n = ring.len();
-    let edges: Vec<(Point, Point)> = (0..n).map(|i| (ring[i], ring[(i + 1) % n])).filter(|(a, b)| a != b).collect();
-    let mut cuts: Vec<Vec<Cut>> = edges.iter().map(|_| vec![Cut { numerator: 0, denominator: 1 }, Cut { numerator: 1, denominator: 1 }]).collect();
-    let vector = |a: Point, b: Point| (b.0 as i128 - a.0 as i128, b.1 as i128 - a.1 as i128);
-    for i in 0..edges.len() {
-        for j in i + 1..edges.len() {
-            let ((a, b), (c, e)) = (edges[i], edges[j]);
-            let (r, s, q) = (vector(a, b), vector(c, e), vector(a, c));
-            let mut denominator = r.0 * s.1 - r.1 * s.0;
-            if denominator != 0 {
-                let mut t = q.0 * s.1 - q.1 * s.0;
-                let mut u = q.0 * r.1 - q.1 * r.0;
-                if denominator < 0 {
-                    (denominator, t, u) = (-denominator, -t, -u);
-                }
-                if (0..=denominator).contains(&t) && (0..=denominator).contains(&u) {
-                    cuts[i].push(Cut { numerator: t, denominator });
-                    cuts[j].push(Cut { numerator: u, denominator });
-                }
-            } else if q.0 * r.1 - q.1 * r.0 == 0 {
-                let dot = |v: (i128, i128), w: (i128, i128)| v.0 * w.0 + v.1 * w.1;
-                let (rr, ss) = (dot(r, r), dot(s, s));
-                for numerator in [dot(q, r), dot(vector(a, e), r)] {
-                    if 0 < numerator && numerator < rr {
-                        cuts[i].push(Cut { numerator, denominator: rr });
-                    }
-                }
-                for numerator in [dot(vector(c, a), s), dot(vector(c, b), s)] {
-                    if 0 < numerator && numerator < ss {
-                        cuts[j].push(Cut { numerator, denominator: ss });
-                    }
-                }
-            }
-        }
-    }
-    let mut vertices: Vec<Vertex> = Vec::new();
-    let mut buckets: HashMap<Point, Vec<usize>> = HashMap::new();
-    let mut order: Vec<(usize, usize)> = Vec::new();
-    let mut cover: HashMap<(usize, usize), usize> = HashMap::new();
-    for ((a, b), mut parameters) in edges.into_iter().zip(cuts) {
-        parameters.sort_by(Cut::cmp);
-        let mut along: Vec<usize> = Vec::with_capacity(parameters.len());
-        for cut in parameters {
-            let (t, d) = (cut.numerator, cut.denominator);
-            let x = Wide::product(i128::from(a.0), d).add(Wide::product(t, i128::from(b.0 - a.0)));
-            let y = Wide::product(i128::from(a.1), d).add(Wide::product(t, i128::from(b.1 - a.1)));
-            let rounded = (round_along(a.0, t, d, b.0 - a.0), round_along(a.1, t, d, b.1 - a.1));
-            let bucket = buckets.entry(rounded).or_default();
-            let found = bucket.iter().copied().find(|&v| {
-                let w = &vertices[v];
-                compare_ratio(w.x, w.d, x, d) == Ordering::Equal && compare_ratio(w.y, w.d, y, d) == Ordering::Equal
-            });
-            let id = found.unwrap_or_else(|| {
-                vertices.push(Vertex { x, y, d, rounded });
-                bucket.push(vertices.len() - 1);
-                vertices.len() - 1
-            });
-            if along.last() != Some(&id) {
-                along.push(id);
-            }
-        }
-        for pair in along.windows(2) {
-            let (p, q) = (&vertices[pair[0]], &vertices[pair[1]]);
-            let p_first = compare_ratio(p.x, p.d, q.x, q.d).then_with(|| compare_ratio(p.y, p.d, q.y, q.d)) == Ordering::Less;
-            let key = if p_first { (pair[0], pair[1]) } else { (pair[1], pair[0]) };
-            let count = cover.entry(key).or_insert(0);
-            if *count == 0 {
-                order.push(key);
-            }
-            *count += 1;
-        }
-    }
-    let segments = order.into_iter().filter(|key| cover[key] % 2 == 1).collect();
-    (vertices, segments)
-}
-
-/// The rings of the filled faces, each with the face on its left, traced in the
-/// order their first boundary segment appears.
-fn filled_rings(ring: &[Point]) -> Vec<Vec<Point>> {
-    let (exact, segments) = odd_segments(ring);
-    if segments.is_empty() {
-        return Vec::new();
-    }
-    // Half-edges 2s (a -> b) and 2s + 1 (b -> a) of segment s.
-    let tails: Vec<usize> = segments.iter().flat_map(|&(a, b)| [a, b]).collect();
-    let mut outgoing: Vec<Vec<usize>> = vec![Vec::new(); exact.len()];
-    for (h, &tail) in tails.iter().enumerate() {
-        outgoing[tail].push(h);
-    }
-    let head = |h: usize| tails[h ^ 1];
-    let angle = |from: usize, to: usize| {
-        let d = exact[from].to(&exact[to]);
-        d[1].atan2(d[0])
-    };
-    // The outgoing half-edge among `candidates` turning least counter-clockwise
-    // from the reverse of `h`.
-    let rightmost = |h: usize, candidates: &mut dyn Iterator<Item = usize>| -> Option<usize> {
-        let back = angle(head(h), tails[h]);
-        let turn = |g: usize| {
-            let mut t = angle(head(h), head(g)) - back;
-            while t <= 0.0 {
-                t += std::f64::consts::TAU;
-            }
-            t
-        };
-        let mut best: Option<(usize, f64)> = None;
-        for candidate in candidates {
-            let t = turn(candidate);
-            if best.is_none_or(|(_, b)| t < b) {
-                best = Some((candidate, t));
-            }
-        }
-        best.map(|(g, _)| g)
-    };
-    // Faces of the boundary graph, each on the right of its half-edges.
-    let mut face = vec![usize::MAX; tails.len()];
-    let mut faces: Vec<Vec<usize>> = Vec::new();
-    for start in 0..tails.len() {
-        if face[start] != usize::MAX {
-            continue;
-        }
-        let mut cycle = Vec::new();
-        let mut h = start;
-        while face[h] == usize::MAX {
-            face[h] = faces.len();
-            cycle.push(h);
-            let mut options = outgoing[head(h)].iter().copied().filter(|&g| g != (h ^ 1));
-            h = rightmost(h, &mut options).unwrap_or(h ^ 1);
-        }
-        faces.push(cycle);
-    }
-    // Even-odd parity: each component's outer face (the one counter-clockwise
-    // cycle) takes the parity of a ray from it across the other components, and
-    // crossing any boundary segment flips it.
-    let mut component: Vec<usize> = (0..exact.len()).collect();
-    fn root(component: &mut [usize], v: usize) -> usize {
-        let mut r = v;
-        while component[r] != r {
-            r = component[r];
-        }
-        let mut v = v;
-        while component[v] != r {
-            let parent = component[v];
-            component[v] = r;
-            v = parent;
-        }
-        r
-    }
-    for h in (0..tails.len()).step_by(2) {
-        let (a, b) = (root(&mut component, tails[h]), root(&mut component, tails[h + 1]));
-        component[a] = b;
-    }
-    let roots: Vec<usize> = (0..exact.len()).map(|v| root(&mut component, v)).collect();
-    let area = |cycle: &[usize]| -> f64 {
-        let origin = &exact[tails[cycle[0]]];
-        cycle.iter().map(|&h| {
-            let (a, b) = (origin.to(&exact[tails[h]]), origin.to(&exact[head(h)]));
-            a[0] * b[1] - b[0] * a[1]
-        }).sum()
-    };
-    let mut parity = vec![u8::MAX; faces.len()];
-    for (f, cycle) in faces.iter().enumerate() {
-        if parity[f] != u8::MAX || area(cycle) <= 0.0 {
-            continue;
-        }
-        let own = roots[tails[cycle[0]]];
-        let o = &exact[tails[cycle[0]]];
-        let mut crossings = 0u8;
-        for h in (0..tails.len()).step_by(2) {
-            if roots[tails[h]] == own {
-                continue;
-            }
-            let (p, q) = (o.to(&exact[tails[h]]), o.to(&exact[head(h)]));
-            if (p[1] > 0.0) != (q[1] > 0.0) {
-                let (low, high) = if p[1] < q[1] { (p, q) } else { (q, p) };
-                if (high[0] - low[0]) * (-low[1]) - (high[1] - low[1]) * (-low[0]) > 0.0 {
-                    crossings ^= 1;
-                }
-            }
-        }
-        let mut stack = vec![(f, crossings)];
-        while let Some((g, value)) = stack.pop() {
-            if parity[g] != u8::MAX {
-                continue;
-            }
-            parity[g] = value;
-            for &h in &faces[g] {
-                let neighbour = face[h ^ 1];
-                if parity[neighbour] == u8::MAX {
-                    stack.push((neighbour, value ^ 1));
-                }
-            }
-        }
-    }
-    // Each segment once, with the filled side (the face right of its twin) on
-    // its left; rings follow the rightmost unused such half-edge.
-    let filled_left: Vec<usize> = (0..segments.len()).map(|s| if parity[face[2 * s + 1]] == 1 { 2 * s } else { 2 * s + 1 }).collect();
-    let mut is_filled_left = vec![false; tails.len()];
-    for &h in &filled_left {
-        is_filled_left[h] = true;
-    }
-    let mut used = vec![false; tails.len()];
-    let mut rings = Vec::new();
-    for &start in &filled_left {
-        if used[start] {
-            continue;
-        }
-        let mut cycle = Vec::new();
-        let mut h = start;
-        while !used[h] {
-            used[h] = true;
-            cycle.push(exact[tails[h]].rounded);
-            let at = &outgoing[head(h)];
-            let mut unused = at.iter().copied().filter(|&g| is_filled_left[g] && !used[g]);
-            h = match rightmost(h, &mut unused) {
-                Some(g) => g,
-                None => {
-                    let mut any = at.iter().copied().filter(|&g| is_filled_left[g]);
-                    rightmost(h, &mut any).unwrap_or_else(|| panic!("open boundary at {:?} for ring {ring:?}", exact[head(h)].rounded))
-                }
-            };
-        }
-        rings.push(cycle);
-    }
-    rings
 }
 
 fn distance(a: Point, b: Point) -> f64 {
@@ -679,29 +276,21 @@ mod tests {
     }
 
     #[test]
-    fn wide_products_order_exactly() {
-        let big = 4_000_000_000_000_000_000_000_000_000i128;
-        assert!(Wide::product(big, big + 1) > Wide::product(big, big));
-        assert!(Wide::product(-big, big) < Wide::product(big - 1, -big + 1).negate().negate());
-        assert_eq!(Wide::product(-3, 5), Wide::product(3, -5));
-        assert_eq!(Wide::product(7, 6).add(Wide::product(-2, 21)), Wide { high: 0, low: 0 });
-    }
-
-    #[test]
-    fn rounding_is_exact_and_half_away_from_zero() {
-        assert_eq!(round_along(0, 1, 2, 3), 2);
-        assert_eq!(round_along(0, 1, 2, -3), -2);
-        assert_eq!(round_along(10, 1, 3, 3), 11);
-        assert_eq!(round_along(-10, 0, 1, 7), -10);
-    }
-
-    #[test]
     fn power_of_two_copies_of_a_triangle_differ_as_in_matlab() {
         // MATLAB R2023b keeps the triangle at scale 1 and drops the exact
-        // 2^-10 copy: its centred apex truncates from 976562.5 grid units.
+        // 2^-10 copy, whose apex truncates on its (coarser) grid.
         let triangle = |s: f64| [[0.0, 0.0], [s, 2e-8 * s], [2.0 * s, 0.0]];
         assert!(convex_hull(&triangle(1.0)).is_some());
         assert!(convex_hull(&triangle(2f64.powi(-10))).is_none());
+    }
+
+    #[test]
+    fn the_grid_drops_a_decade_above_the_limit() {
+        let grid = |m: f64| Grid::new(&[[-m, -m], [m, m], [m, -m]]).unwrap().scale;
+        assert_eq!(grid(0.62), 1e14);
+        assert_eq!(grid(0.63), 1e13);
+        assert_eq!(grid(6.2e-3), 1e16);
+        assert_eq!(grid(6.3e-3), 1e15);
     }
 
     #[test]
@@ -710,4 +299,3 @@ mod tests {
         assert_eq!(hull.len(), 4);
     }
 }
-
