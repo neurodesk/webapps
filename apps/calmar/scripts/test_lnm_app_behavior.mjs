@@ -572,6 +572,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   app.nv.drawScene = () => { calls.push('draw-scene'); };
   app.viewerController = {
     clearVolumes: () => { calls.push('clear-volumes'); },
+    removeVolumeForStage: () => false,
     loadOverlay: async () => {},
     setStageVisible: (stage, visible) => { calls.push(`visible:${stage}:${visible}`); }
   };
@@ -976,6 +977,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     app.viewerController = {
       clearVolumes: () => calls.push({ type: 'clearVolumes' }),
       getVolumeIndexForStage: () => null,
+      removeVolumeForStage: () => false,
       loadOverlay: async (file, colormap, opacity, options) => {
         calls.push({ type: 'overlay', file, colormap, opacity, options });
       }
@@ -1251,6 +1253,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   app.viewerBaseFile = app.structuralFile;
   app.viewerController = {
     loadBaseVolume: async (file, options) => { baseLoads.push({ file, options }); },
+    removeVolumeForStage: () => false,
     loadOverlay: async (file, colormap, opacity, options) => {
       overlayLoads.push({ file, colormap, opacity, options });
     }
@@ -2154,6 +2157,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   const restoreDocument = useMockElements(toggles);
   app.viewerController = {
     getVolumeIndexForStage: stage => activeStages.has(stage) ? 1 : null,
+    removeVolumeForStage: () => false,
     loadOverlay: async (file, colormap, opacity, options = {}) => {
       overlayCalls.push([file, colormap, opacity, options]);
       if (options.stage) activeStages.add(options.stage);
@@ -2250,6 +2254,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       if (stage === 'structural') return 0;
       return activeStages.has(stage) ? 1 : null;
     },
+    removeVolumeForStage: () => false,
     loadOverlay: async (file, colormap, opacity, options = {}) => {
       overlayCalls.push([file, colormap, opacity, options]);
       if (options.stage) activeStages.add(options.stage);
@@ -2303,6 +2308,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   let overlayCalls = 0;
   app.viewerController = {
     getVolumeIndexForStage: stage => stage === 'structural' ? 0 : null,
+    removeVolumeForStage: () => false,
     loadOverlay: async () => { overlayCalls += 1; }
   };
   await assert.rejects(
@@ -3286,6 +3292,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     let overlayLoads = 0;
     app.viewerController = {
       loadBaseVolume: async () => { baseLoads += 1; },
+      removeVolumeForStage: () => false,
       loadOverlay: async () => { overlayLoads += 1; },
       getVolumeIndexForStage: () => null
     };

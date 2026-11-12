@@ -618,4 +618,230 @@ test.describe('an import that finishes late', () => {
     await expect(page.locator('#layerToggleBrainMask')).not.toBeChecked();
     expect(await log()).not.toMatch(/failed|error/i);
   });
+  // The hold is keyed by file name, so a second load of one file waits under the same key.
+  const drain = async (page, name) => {
+    for (let round = 0; round < 10; round += 1) {
+      await page.evaluate((held) => {
+        const go = globalThis.releaseImport[held];
+        delete globalThis.releaseImport[held];
+        go?.();
+      }, name);
+      await page.waitForTimeout(150);
+    }
+  };
+
+  const brainMaskFromWorker = async (page, bytes) => {
+    await page.evaluate(() => {
+      globalThis.sent = [];
+      const { executor } = app;
+      const send = step => async () => {
+        executor.running = true;
+        executor.currentRunningStep = step;
+        globalThis.sent.push(step);
+        return true;
+      };
+      executor.loadVolume = send('load');
+      executor.runSynthStrip = send('brainmask');
+      globalThis.extraction = app.runBrainExtraction().then(() => 'ended', error => error.name);
+    });
+    await page.waitForFunction(() => globalThis.sent.includes('brainmask'));
+    await page.evaluate((data) => {
+      app.executor.handleMessage({ type: 'stageData', stage: 'brainmask', niftiData: new Uint8Array(data).buffer });
+      app.executor.handleMessage({ type: 'step-complete', step: 'brainmask' });
+      app.executor.running = false;
+    }, [...bytes]);
+    await expect.poll(() => page.evaluate(() => app.nv.volumes.map(volume => volume.name))).toEqual(['T1.nii', 'brainmask.nii']);
+  };
+
+  const toggleLayer = (page, id, checked) => page.evaluate(({ id, checked }) => {
+    const toggle = document.getElementById(id);
+    toggle.checked = checked;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+  }, { id, checked });
+
+  test('a registration QC stack that lands late leaves an open review on another grid its base', async ({ page }) => {
+    const { choose, hold, waiting, resume, release, loaded, log, viewerIdle, image } = await holdImports(page);
+    const onOtherGrid = voxels => page.evaluate(async (count) => {
+      const { writeNifti1 } = await import('/js/modules/nifti-writer.js');
+      const affine = [0, 2, 0, -8, 0, 0, 2, -8, 2, 0, 0, -8, 0, 0, 0, 1];
+      const data = new Float32Array(12 * 14 * 16);
+      data.fill(1, 0, count);
+      return [...new Uint8Array(writeNifti1(data, { dims: [12, 14, 16], affine }))];
+    }, voxels);
+    const otherImage = Buffer.from(await onOtherGrid(2688));
+    const otherMask = Buffer.from(await onOtherGrid(3));
+
+    await choose('structural', 'A.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('A.nii');
+    await page.evaluate((bytes) => {
+      const scan = name => new File([new Uint8Array(bytes)], name);
+      app.registrationTemplateFile = scan('decoded-template.nii');
+      app.registeredT1MniFile = scan('registered.nii');
+      app.hasRegistrationDisplacement = true;
+      globalThis.qc = app.showRegistrationQc('mni').then(() => 'shown', error => error.name);
+    }, [...image]);
+    await waiting('decoded-template.nii');
+    await hold('structural', 'decoded-B.nii');
+    await choose('structural', 'C.nii', otherImage);
+    await expect.poll(async () => (await loaded()).base).toBe('C.nii');
+    await choose('manualMask', 'mask.nii', otherMask);
+    await expect.poll(log).toContain('Manual lesion mask ready for editing: mask.nii');
+    await drawTwoVoxels(page);
+    expect(await loaded()).toMatchObject({ review: true, drawn: 5 });
+
+    await resume('decoded-template.nii');
+    expect(await page.evaluate(() => globalThis.qc)).toBe('AbortError');
+    await viewerIdle();
+    expect(await release('decoded-B.nii')).toBe('AbortError');
+    await viewerIdle();
+    await page.waitForTimeout(300);
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({
+      structural: 'C.nii',
+      base: 'C.nii',
+      controllerBase: 'C.nii',
+      review: true,
+      drawn: 5,
+      viewer: ['C.nii'],
+    });
+    const grid = await page.evaluate(() => ({
+      base: app.nv.back.dims.slice(1, 4).reduce((voxels, size) => voxels * size, 1),
+      drawing: app.nv.drawBitmap.length,
+      exported: app.exportActiveNativeDrawingFile('edited.nii')?.size > 0,
+    }));
+    expect(grid).toEqual({ base: 2688, drawing: 2688, exported: true });
+    expect(await log()).not.toMatch(/failed/i);
+  });
+
+  test('a review brain mask overlay that lands after Clear results is taken out again', async ({ page }) => {
+    const { choose, waiting, resume, loaded, log, viewerIdle, image } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await brainMaskFromWorker(page, image);
+    await page.evaluate(() => {
+      const restrict = app.maskDrawingController.loadBrainMaskFile.bind(app.maskDrawingController);
+      app.maskDrawingController.loadBrainMaskFile = async (file) => {
+        await new Promise((resolve) => {
+          globalThis.releaseImport.wand = resolve;
+        });
+        return restrict(file);
+      };
+    });
+    await page.locator('#startManualMaskButton').dispatchEvent('click');
+    await waiting('wand');
+    await page.evaluate(() => {
+      globalThis.holdDecoded.push('brainmask.nii');
+    });
+    await toggleLayer(page, 'layerToggleBrainMask', true);
+    await resume('wand');
+    await waiting('brainmask.nii');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => app.clearResults({ full: false }));
+    await drain(page, 'brainmask.nii');
+    await viewerIdle();
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({
+      structural: 'T1.nii',
+      base: 'T1.nii',
+      brainmask: false,
+      review: false,
+      viewer: ['T1.nii'],
+    });
+    expect(await log()).not.toMatch(/failed|render warning/i);
+  });
+
+  const layers = [
+    { id: 'layerToggleBrainMask', name: 'layer-brainmask.nii', field: 'brainmaskFile' },
+    { id: 'layerToggleLesionMask', name: 'layer-lesion.nii', field: 'lesionFile' },
+    { id: 'layerToggleThresholdMap', name: 'layer-threshold.nii', field: 'patientThresholdedMaskFile' },
+    { id: 'layerToggleAtlasQc', name: 'layer-atlas.nii', field: 'patientAtlasFile' },
+  ];
+
+  const layerResult = (page, layer, bytes) => page.evaluate(({ layer, bytes }) => {
+    const file = new File([new Uint8Array(bytes)], layer.name);
+    app.tagFileSpace(file, { space: app.structuralSpace(), role: 'overlay', sourceStage: 'test' });
+    app[layer.field] = file;
+    app.refreshViewerLayerControls();
+    globalThis.holdDecoded.push(layer.name);
+  }, { layer, bytes: [...bytes] });
+
+  for (const layer of layers) {
+    test(`a layer toggled on, off and on while it loads has one overlay: ${layer.name}`, async ({ page }) => {
+      const { choose, waiting, loaded, viewerIdle, image } = await holdImports(page);
+      await choose('structural', 'T1.nii');
+      await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+      await layerResult(page, layer, image);
+      await toggleLayer(page, layer.id, true);
+      await waiting(layer.name);
+      await toggleLayer(page, layer.id, false);
+      await toggleLayer(page, layer.id, true);
+      await drain(page, layer.name);
+      await viewerIdle();
+      expect((await loaded()).viewer).toEqual(['T1.nii', layer.name]);
+
+      await toggleLayer(page, layer.id, false);
+      const shown = await page.evaluate(() => app.nv.volumes.slice(1).filter(volume => volume.opacity > 0).map(volume => volume.name));
+      expect(shown).toEqual([]);
+      await expect(page.locator(`#${layer.id}`)).not.toBeChecked();
+    });
+  }
+
+  test('a layer overlay that lands after Clear results is taken out again', async ({ page }) => {
+    const { choose, waiting, loaded, log, viewerIdle, image } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await layerResult(page, layers[2], image);
+    await toggleLayer(page, layers[2].id, true);
+    await waiting(layers[2].name);
+    await page.evaluate(() => app.clearResults({ full: false }));
+    await drain(page, layers[2].name);
+    await viewerIdle();
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ base: 'T1.nii', viewer: ['T1.nii'] });
+    await expect(page.locator(`#${layers[2].id}`)).not.toBeChecked();
+    expect(await log()).not.toMatch(/failed/i);
+  });
+
+  test('a prealign brain mask and a confirmed lesion that land after Clear results are taken out again', async ({ page }) => {
+    test.setTimeout(300000);
+    const { choose, waiting, loaded, log, viewerIdle, image } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await brainMaskFromWorker(page, image);
+    await page.evaluate(() => {
+      globalThis.holdDecoded.push('lnm-prealign-brainmask.nii');
+      globalThis.prealign = app.prealignToMni160().then(() => 'ended', error => error.name);
+    });
+    await page.waitForFunction(() => globalThis.releaseImport['lnm-prealign-brainmask.nii'], null, { timeout: 240000 });
+    await page.evaluate(() => app.clearResults({ full: false }));
+    await drain(page, 'lnm-prealign-brainmask.nii');
+    expect(await page.evaluate(() => globalThis.prealign)).toBe('AbortError');
+    await viewerIdle();
+    await viewerIdle();
+    expect(await loaded()).toMatchObject({ brainmask: false, viewer: ['lnm-prealign-t1.nii'] });
+    expect(await log()).not.toMatch(/failed|re-render warning/i);
+
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await brainMaskFromWorker(page, image);
+    await page.locator('#startManualMaskButton').dispatchEvent('click');
+    await expect.poll(log).toContain('Review/edit the lesion mask');
+    await drawTwoVoxels(page);
+    await page.evaluate(() => {
+      globalThis.holdDecoded = ['lnm-lesion-edited-native.nii'];
+      globalThis.confirmed = app.confirmLesionDrawing().then(() => 'ended', error => error.name);
+    });
+    await waiting('lnm-lesion-edited-native.nii');
+    await page.evaluate(() => app.clearResults({ full: false }));
+    await drain(page, 'lnm-lesion-edited-native.nii');
+    expect(await page.evaluate(() => globalThis.confirmed)).toBe('AbortError');
+    await viewerIdle();
+    await viewerIdle();
+    const state = await loaded();
+    expect(state).toMatchObject({ review: false, drawn: 0 });
+    expect(state.viewer).toHaveLength(1);
+    expect(state.viewer).not.toContain('lnm-lesion-edited-native.nii');
+    expect(await log()).not.toMatch(/failed/i);
+  });
 });

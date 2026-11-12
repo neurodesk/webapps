@@ -1505,16 +1505,20 @@ export class LesionNetworkMappingApp {
   // loads now pending, the viewer is emptied and the current base loaded once
   // more; overlays return through their layer toggles. A review keeps its
   // drawing and its Undo history: NiiVue holds them apart from the volumes,
-  // and an abandoned seed stops before it reaches them (`loadSeedFile`).
+  // and an abandoned seed stops before it reaches them (`loadSeedFile`). Its
+  // base is the image the drawing was made on, whatever was displayed last.
   rebuildViewer() {
     if (!this.maskReviewActive) this.maskDrawingController?.close?.({ clearDrawing: true });
     this.viewerLoad(() => {
-      const base = this.viewerBaseFile;
+      const review = this.maskReviewActive;
+      const base = review ? this.nativeStructuralFile : this.viewerBaseFile;
+      const options = review ? { stage: 'structural', visible: this.layerVisible('structural') } : this._viewerBaseOptions;
       this.viewerController.clearVolumes();
       this.viewerBaseFile = null;
       if (!base) return null;
-      return this.viewerController.loadBaseVolume(base, this._viewerBaseOptions).then(() => {
+      return this.viewerController.loadBaseVolume(base, options).then(() => {
         this.viewerBaseFile = base;
+        this._viewerBaseOptions = options;
         this.refreshViewerLayerControls();
       });
     }).catch(this.reportFailure('Viewer reload failed'));
@@ -1540,15 +1544,29 @@ export class LesionNetworkMappingApp {
 
   // A result overlay belongs to the run current when it is asked for: one that
   // lands after Clear results or a new structural image is taken out again.
-  loadViewerOverlay(file, colormap, opacity, options) {
-    return this.viewerLoad(() => this.viewerController.loadOverlay(file, colormap, opacity, options), {
-      assertCurrent: this.pipelineTurn(),
-      undo: () => this.viewerController.removeVolumeForStage(options.stage)
+  // A stage holds one overlay: a load asked twice (a layer toggled on, off and
+  // on while it loads) finds its file in place, and another file replaces it.
+  loadViewerOverlay(file, colormap, opacity, options, assertCurrent = this.pipelineTurn()) {
+    const viewer = this.viewerController;
+    return this.viewerLoad(() => {
+      const index = viewer.getVolumeIndexForStage?.(options.stage) ?? null;
+      if (index !== null && viewer.volumeFiles?.[index] === file) return true;
+      viewer.removeVolumeForStage(options.stage);
+      return viewer.loadOverlay(file, colormap, opacity, options);
+    }, {
+      assertCurrent,
+      undo: () => viewer.removeVolumeForStage(options.stage)
     });
   }
 
+  // A stack replaces the base, so it takes its place in the queue like one.
+  // The base is recorded only for a stack that is still current when it has
+  // landed; a stale one is taken out by loading the recorded base again.
   async loadViewerVolumeStack(entries = []) {
-    await this.viewerController.loadVolumeStack(entries);
+    await this.viewerLoad(() => this.viewerController.loadVolumeStack(entries), {
+      assertCurrent: this.pipelineTurn(),
+      undo: () => this.rebuildViewer()
+    });
     this.viewerBaseFile = entries[0]?.file || null;
     this._viewerBaseOptions = { stage: entries[0]?.stage, visible: entries[0]?.visible };
   }
@@ -3152,12 +3170,12 @@ export class LesionNetworkMappingApp {
     if (brainmaskFile && this.layerVisible('brainmask')) {
       try {
         this.assertViewerOverlaySpace(brainmaskFile, 'Mask-review brain-mask overlay');
-        await this.viewerController.loadOverlay(brainmaskFile, 'green', 0.4, {
+        await this.loadViewerOverlay(brainmaskFile, 'green', 0.4, {
           stage: 'brainmask',
           visible: true
-        });
+        }, assertCurrent);
       } catch (err) {
-        this.updateOutput(`Mask-review brain mask render warning: ${err.message}`);
+        this.reportFailure('Mask-review brain mask render warning')(err);
       }
     }
     assertCurrent();
@@ -3541,7 +3559,7 @@ export class LesionNetworkMappingApp {
       this.refreshViewerLayerControls();
       this.updateOutput('Network map displayed on the selected atlas grid.');
     } catch (err) {
-      this.updateOutput(`Network-map render error: ${err.message}`);
+      this.reportFailure('Network-map render error')(err);
     }
   }
 
@@ -3712,7 +3730,7 @@ export class LesionNetworkMappingApp {
       } catch (err) {
         this.patientThresholdedMaskFile = null;
         this.refreshViewerLayerControls();
-        this.updateOutput(`Patient-space threshold projection failed: ${err.message}`);
+        this.reportFailure('Patient-space threshold projection failed')(err);
       }
     } else {
       this.noteThresholdProjectionUnavailable();
