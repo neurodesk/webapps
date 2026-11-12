@@ -7,6 +7,7 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 import { verifyAsyncifyRuntime } from '../test-utils/asyncify-runtime-startup.mjs';
 import { verifyQsmBetRuntime } from '../test-utils/qsm-bet-runtime-startup.mjs';
+import { verifySharedBinaries } from '../test-utils/shared-binary-startup.mjs';
 
 // A two-element Neg graph: exercise real ORT pthread startup without downloading a scientific model.
 const modelBase64 = 'CAcSDGJhY2tlbmQtdGVzdDpBCgsKAXgSAXkiA05lZxIQdGVzdF9uZWdfZXhhbXBsZVoPCgF4EgoKCAgBEgQKAggCYg8KAXkSCgoICAESBAoCCAJCBAoAEA0=';
@@ -117,6 +118,7 @@ try {
   if (!requested.size) {
     await verifyAsyncifyRuntime({ browser, base, apps: registry.apps, repoRoot });
     await verifyQsmBetRuntime({ browser, repoRoot });
+    await verifySharedBinaries({ browser, registry, repoRoot });
   }
 } finally {
   await browser.close();

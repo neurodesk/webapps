@@ -355,6 +355,54 @@ test('a declared WASM runtime is shared across app-relative and root-relative wo
   assert.match(await readFile(join(siteDist, 'synthseg/assets/worker.jpeg.js'), 'utf8'), /_runtime\/dcm2niix-jpeg\/1\.4\.0\//);
 });
 
+test('a content-matched family fails when a declared consumer ships other bytes or an undeclared app shares it', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-consumers-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  const body = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]);
+  const apps = ['brain2print', 'topofit', 'edgereg'].map(id => ({ id, path: id, app_scoped_runtime_families: [] }));
+  const copies = { brain2print: 'niimath-AAAAAAAA.wasm', topofit: 'niimath-BBBBBBBB.wasm', edgereg: 'niimath-CCCCCCCC.wasm' };
+  const reset = async (bytes = {}) => {
+    await rm(siteDist, { recursive: true, force: true });
+    for (const app of apps) {
+      const assets = join(siteDist, app.path, 'assets');
+      await mkdir(assets, { recursive: true });
+      await writeFile(join(siteDist, app.path, 'index.html'), '<html><head></head></html>');
+      await writeFile(join(assets, copies[app.id]), bytes[app.id] ?? body);
+      await writeFile(join(assets, 'worker.js'), `export const wasm = new URL("${copies[app.id]}", import.meta.url);`);
+    }
+  };
+  const writeManifest = consumers => writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({
+    schema_version: 1,
+    families: [{
+      id: 'niimath-wasm-1', version: '1', target: 'niimath/1', deduplicate: true, match_by: 'sha256', consumers,
+      files: [{ name: 'niimath.wasm', source_app: 'brain2print', source: `assets/${copies.brain2print}`, sha256: createHash('sha256').update(body).digest('hex') }],
+    }],
+  }));
+  const assemble = () => assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+
+  await reset();
+  await writeManifest(['brain2print', 'topofit', 'edgereg']);
+  await assemble();
+  for (const app of apps) {
+    await assert.rejects(access(join(siteDist, app.path, 'assets', copies[app.id])), { code: 'ENOENT' });
+  }
+
+  await reset({ topofit: Buffer.from('an unregistered niimath build') });
+  await assert.rejects(assemble(), /^Error: topofit: declared consumer of runtime family niimath-wasm-1 ships no niimath\.wasm with sha256 /);
+
+  await reset();
+  await writeManifest(['brain2print', 'topofit']);
+  await assert.rejects(assemble(), /^Error: edgereg: shares niimath\.wasm of runtime family niimath-wasm-1 but is not in its consumers/);
+
+  // A consumer the assembled registry does not hold (a fixture or a partial build) is not missing.
+  await reset();
+  await writeManifest(['brain2print', 'topofit', 'edgereg', 'synthseg']);
+  await assemble();
+});
+
 test('asyncify shares its binary while keeping each pthread module in its app scope', async t => {
   const root = await mkdtemp(join(tmpdir(), 'runtime-asyncify-copies-'));
   t.after(() => rm(root, { recursive: true, force: true }));

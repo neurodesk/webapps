@@ -138,6 +138,7 @@
       "version": "0.1.2",
       "target": "syncro-registration/0.1.2",
       "deduplicate": true,
+      "consumers": ["ants", "syncro"],
       "reason": "Share the ANTs SyN registration binary of packages/registration used by ANTs and SYNcro while each app keeps the pthread module inside its service-worker scope; the module finds the binary through its static new URL(\"syncro-registration.wasm\").",
       "files": [
         {
@@ -153,6 +154,7 @@
       "version": "1.4.20260909",
       "target": "niimath/1.4.20260909",
       "deduplicate": true,
+      "consumers": ["brain2print", "edgereg", "synthseg", "topofit"],
       "match_by": "sha256",
       "reason": "Share the @niivue/niimath 1.4.20260909 binary used by brain2print, EdgeReg, SynthSeg and TopoFit; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
       "files": [
@@ -169,6 +171,7 @@
       "version": "1.4.20261016",
       "target": "niimath/1.4.20261016",
       "deduplicate": true,
+      "consumers": ["bison", "fastprep"],
       "match_by": "sha256",
       "reason": "Share the @niivue/niimath 1.4.20261016 binary used by BISON and fastprep; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
       "files": [
@@ -183,8 +186,9 @@
     {
       "id": "niimath-wasm-bsd",
       "version": "0.9.25",
-      "target": "niimath/runtime-support-bsd",
+      "target": "niimath/runtime-support-bsd-7facb787",
       "deduplicate": true,
+      "consumers": ["deface", "syncro"],
       "match_by": "sha256",
       "reason": "Share the BSD-only niimath binary vendored in packages/runtime-support (src/niimath) used by Deface and SYNcro; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
       "files": [
@@ -201,6 +205,7 @@
       "version": "1.2.0-dtifit.1",
       "target": "niimath/1.2.0-dtifit.1",
       "deduplicate": true,
+      "consumers": ["dwi2trx", "noddi"],
       "match_by": "sha256",
       "reason": "Share the dtifit-enabled niimath binary vendored in apps/dwi2trx/vendor/niimath used by DWI2TRX and NODDI; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
       "files": [
@@ -233,6 +238,7 @@
       "target": "niivue/0.68.2",
       "download_base": "https://unpkg.com/@niivue/niivue@0.68.2/dist",
       "deduplicate": true,
+      "consumers": ["calmar", "musclemap", "seedseg"],
       "match_by": "sha256",
       "reason": "Share the NiiVue 0.68.2 UMD bundle that SeedSeg, MuscleMap and CALMaR each stage beside their page and load with a classic script tag; no worker loads it, so it needs no service-worker scope.",
       "files": [
@@ -313,6 +319,7 @@
       "version": "0.38.0",
       "target": "ngff-codecs/0.38.0",
       "deduplicate": true,
+      "consumers": ["brainchop", "elastix", "lightsheet-atlas", "omezarr-convert", "stitching", "surfannotate"],
       "match_by": "sha256",
       "reason": "Identical Blosc and Zstd codec chunks shared by microscopy apps; embedded WASM stays with its loader.",
       "files": [
