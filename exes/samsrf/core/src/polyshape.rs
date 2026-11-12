@@ -33,8 +33,9 @@ SHA-256: 5c642a3668311701f72572443aa42c1a981edb037298efc015166d9d90be0755
 
 The adaptation uses a strict unsquared perpendicular-distance comparison and
 strict Euclidean neighbour-distance comparisons for the empirical MATLAB grid
-model, instead of Clipper's squared-distance tests with <=. The grid scaling,
-exact intersection representation and face tracing are separate implementations.
+model. Clipper uses squared distances, with < for near-collinearity and <=
+for neighbours. The grid scaling, exact intersection representation and face
+tracing are separate implementations.
 
 Boost Software License - Version 1.0 - August 17th, 2003
 
