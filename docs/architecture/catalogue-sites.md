@@ -63,7 +63,7 @@ A catalogue site holds:
   `<html data-neurodesk-catalog="<id>">`, so an app can open with defaults for
   that audience (ZARRo opens on an OME-Zarr URL on `microscopy`). The all-app
   assembly in `dist/`, standalone builds and the dev server carry no attribute;
-  the desktop suite is built from `dist/`.
+  a catalogue's desktop suite is projected the same way and keeps it.
   Each page's `rel=canonical` names the app's home URL, so a copy points search
   engines at its home; `og:url` stays the host's own URL, so a shared link opens
   where it was shared from;
