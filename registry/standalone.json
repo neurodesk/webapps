@@ -1752,8 +1752,8 @@
           "platform": "macos-arm64",
           "version": "0.4.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-macos-arm64.pkg",
-          "sha256": "3ad080ba03bfb0f472633c68b0208b2c9c34e6420db442020a50b3d9f166618f",
-          "bytes": 41359417,
+          "sha256": "052aff6f4319398e76278e505be4e9a9c5a8ce7282d8478bb946895b3bccb580",
+          "bytes": 41359391,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg degibbs-0.4.20261111-macos-arm64.pkg -target /\ndegibbs self-check\ndegibbs sub-01_dwi.nii.gz results"
@@ -1763,8 +1763,8 @@
           "platform": "windows-x64",
           "version": "0.4.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-windows-x64.zip",
-          "sha256": "5f23d4dc1a788fa04c567a038eb3d31c40aaa80f5efc3402fcccd1e13c151d2c",
-          "bytes": 38401064,
+          "sha256": "2336f9a1953e4f46ba7e7c0dd9532601f8d026183db45fdb68eafab775481fd5",
+          "bytes": 38401067,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\degibbs-0.4.20261111-windows-x64.zip -DestinationPath .\n.\\degibbs-0.4.20261111-windows-x64\\degibbs.exe sub-01_dwi.nii.gz results"
