@@ -34,7 +34,7 @@ struct Expected {
     raw_cf: usize,
 }
 
-const MATRIX: Expected = Expected { cases: 102, refused: 15, single_cf: 24, single_rc: 6, global: 6, replay: 69, pipelines: 69, templates: 6, raw_cf: 36 };
+const MATRIX: Expected = Expected { cases: 102, refused: 15, single_cf: 24, single_rc: 9, global: 6, replay: 69, pipelines: 69, templates: 6, raw_cf: 36 };
 const EDGES: Expected = Expected { cases: 24, refused: 0, single_cf: 8, single_rc: 2, global: 2, replay: 20, pipelines: 20, templates: 2, raw_cf: 0 };
 
 struct Host {
@@ -120,20 +120,43 @@ fn template_maps(host: &Host, case: &Value) -> Maps {
     maps(names, &array(&host.root, &template["maps"]), rows)
 }
 
-/// Job inputs for one supported pipeline case, from MATLAB's preprocessed courses.
+/// Job inputs for one pipeline case, from MATLAB's preprocessed courses. A single
+/// 2D fit, which the parser refuses, gets its internal model (`internal_model`).
 fn inputs(host: &Host, case: &Value, template: Option<Maps>) -> JobInputs {
-    inputs_with(host, case, template, parse(case).unwrap())
+    inputs_with(host, case, template, internal_model(case))
 }
 
-/// The model of a single CF Gaussian case, which the parser refuses: parsed as
-/// double, then switched to single, so the gates reach the arithmetic below the
-/// refusal.
-fn single_gaussian_model(case: &Value) -> Model {
+/// The parsed model, or for a refused single 2D fit (`single_fit`) the model parsed
+/// as double and switched to single: test-only, so the gates reach the arithmetic
+/// below the public refusal.
+fn internal_model(case: &Value) -> Model {
+    if !single_fit(case) {
+        return parse(case).unwrap();
+    }
     let mut json = case["mapReplayModel"].clone();
     json["Data_Precision"] = Value::from("double");
-    let Model::RevCorCf(mut model) = model::parse_model_json(AnalysisKind::RevCorCf, &json.to_string()).unwrap() else { unreachable!() };
-    model.data_precision = Precision::Single;
-    Model::RevCorCf(model)
+    let mut model = model::parse_model_json(kind(case), &json.to_string()).unwrap();
+    match &mut model {
+        Model::RevCorCf(model) => model.data_precision = Precision::Single,
+        Model::RevCorPrf(model) => model.data_precision = Precision::Single,
+        _ => unreachable!(),
+    }
+    model
+}
+
+/// A single 2D fit: CF with `Fit_pRF = 1` or RC with a `Prf_Function`. Both are refused.
+fn single_fit(case: &Value) -> bool {
+    single_gaussian_cf(case) || single_rc_fit(case)
+}
+
+fn single_rc_fit(case: &Value) -> bool {
+    single(case) && kind(case) == AnalysisKind::RevCorPrf && case["mapReplayModel"]["Prf_Function"].is_string()
+}
+
+/// The internal model of a single CF Gaussian case.
+fn single_gaussian_model(case: &Value) -> Model {
+    assert!(single_gaussian_cf(case));
+    internal_model(case)
 }
 
 fn single_gaussian_cf(case: &Value) -> bool {
@@ -381,7 +404,8 @@ fn single_rc_profiles_stay_within_single_rounding() {
     let mut failures = Failures::default();
     let mut tally = Tally::default();
     for host in &hosts {
-        for case in pipelines(host, "revcor").filter(|c| single(c) && parse(c).is_ok()) {
+        // The profile does not depend on the fit, so single 2D fits are included.
+        for case in pipelines(host, "revcor").filter(|c| single(c)) {
             tally.add(host);
             let prepared = rc_prepared(host, case);
             let y = array(&host.root, &case["savedCourses"]);
@@ -686,12 +710,14 @@ fn production_template_reader_equals_matlabs_template() {
 /// ceiling and global signal), the Benson GIfTI through the production reader, and
 /// the white surface and areas through the FreeSurfer readers. The ROI and seed
 /// are the recorded analysis choices.
-fn raw_cf_inputs(host: &Host, case: &Value, input: &Path, model: Model) -> (JobInputs, Preprocessed) {
+/// A case's runs from the raw files through the production preprocessing (MATLAB's
+/// average or concatenation, z-scored, with the noise ceiling and global signal),
+/// with the dataset's folder and hemisphere.
+fn raw_runs(host: &Host, case: &Value, input: &Path) -> (Preprocessed, PathBuf, String) {
     let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
     let dataset = pre["dataset"].as_str().unwrap();
     let manifest: Value = serde_json::from_slice(&std::fs::read(input.join("manifest.json")).unwrap()).unwrap();
     let entry = manifest["datasets"].as_array().unwrap().iter().find(|d| d["id"] == dataset).unwrap();
-    let hemisphere = entry["hemisphere"].as_str().unwrap();
     let dir = input.join(dataset);
     let options = PreprocessOptions {
         normalise: Normalise::DetrendZscore,
@@ -704,7 +730,12 @@ fn raw_cf_inputs(host: &Host, case: &Value, input: &Path, model: Model) -> (JobI
         let run = gifti::read_run(&std::fs::read(dir.join(run.as_str().unwrap())).unwrap()).unwrap();
         accumulator.get_or_insert_with(|| RunAccumulator::new(run.vertices, VertexSelection::All, options.clone())).push_run(&run).unwrap();
     }
-    let data = accumulator.unwrap().finish().unwrap();
+    (accumulator.unwrap().finish().unwrap(), dir, entry["hemisphere"].as_str().unwrap().to_string())
+}
+
+fn raw_cf_inputs(host: &Host, case: &Value, input: &Path, model: Model) -> (JobInputs, Preprocessed) {
+    let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
+    let (data, dir, hemisphere) = raw_runs(host, case, input);
     let anatomy = dir.join("surf");
     let surface = freesurfer::read_surface(&std::fs::read(anatomy.join(format!("{hemisphere}.white"))).unwrap()).unwrap();
     let area = freesurfer::read_curv(&std::fs::read(anatomy.join(format!("{hemisphere}.area"))).unwrap()).unwrap();
@@ -905,4 +936,113 @@ fn single_gaussian_cf_from_matlabs_courses_equals_the_amd_host() {
     failures.assert_none();
     // The matrix's AMD host: twelve cases, with and without global-signal correction.
     assert_eq!(gated, 12, "single Gaussian CF cases gated on the AMD host");
+}
+
+/// Single RC 2D fits (refused publicly; internal model) replayed from each host's
+/// recorded profiles: `samsrf_revcorprf_loop`'s rows from the profile, then
+/// `samsrf_fit2dprf`. Every fitted parameter and `R^2`, and which vertices are fitted,
+/// fall below `R2_Threshold` or are rejected for a scaled parameter beyond
+/// `1.5 * Scaling_Factor`, must equal MATLAB's on both hosts. The rows before the fit
+/// follow the replay policy above (`R^2` within 16 ulps on the AVX-512 host).
+#[test]
+fn single_rc_2d_fits_replay_from_each_hosts_profiles() {
+    let Some(hosts) = hosts() else { return; };
+    let mut failures = Failures::default();
+    let mut cases = 0;
+    for host in &hosts {
+        for case in pipelines(host, "revcor").filter(|c| single_rc_fit(c)) {
+            cases += 1;
+            let id = case["id"].as_str().unwrap();
+            let prepared = rc_prepared(host, case);
+            let y = array(&host.root, &case["savedCourses"]);
+            let volumes = shape(&case["savedCourses"])[0];
+            let profiles = array(&host.root, &case["profiles"]);
+            let pixels = shape(&case["profiles"])[0];
+            let raw = array(&host.root, &case["rawMaps"]);
+            let saved = array(&host.root, &case["savedMaps"]);
+            let rows = shape(&case["savedMaps"])[0];
+            let (mut fitted, mut below, mut rejected) = (0, 0, 0);
+            for (i, course) in y.chunks(volumes).enumerate() {
+                let at = format!("{} {id}: vertex {i}", host.name);
+                let mut profile = profiles[i * pixels..(i + 1) * pixels].to_vec();
+                if raw[i * 5 + 4] < 0.0 {
+                    profile.iter_mut().for_each(|value| *value = -*value);
+                }
+                let raw_row = prepared.raw_row(course, &profile);
+                for (name, (&a, &e)) in revcor_prf::RAW_VALUES.iter().zip(raw_row.iter().zip(&raw[i * 5..i * 5 + 5])) {
+                    let a = f64::from(a as f32);
+                    let ok = if *name == "R^2" && intel(host) { ulps(a, e) <= 16.0 } else { same(a, e) };
+                    failures.check(ok, || format!("{at}: raw {name}: {a} vs {e}"));
+                }
+                let row = prepared.fit_model(&raw_row, &profile).unwrap();
+                assert!(row.len() <= rows, "{at}: the fit gives at most the saved rows");
+                for (r, name) in prepared.values.iter().enumerate().take(row.len()) {
+                    let (a, e) = (f64::from(row[r] as f32), saved[i * rows + r]);
+                    failures.check(same(a, e), || format!("{at}: {name}: {a} vs {e}"));
+                }
+                if row.iter().all(|value| value.is_finite()) {
+                    fitted += 1;
+                } else if raw_row[0].is_nan() || raw_row[0] <= prepared.model.r2_threshold {
+                    below += 1;
+                } else {
+                    rejected += 1;
+                }
+            }
+            println!("{} {id}: {fitted} fitted, {below} below R2_Threshold, {rejected} rejected", host.name);
+        }
+    }
+    // Three matrix cases (LH averaged and concatenated, RH averaged) on each host.
+    assert_eq!(cases, 6, "single RC 2D cases");
+    failures.assert_none();
+}
+
+/// Single RC 2D fits (internal model) end to end: from MATLAB's preprocessed courses,
+/// and from the raw runs through the production preprocessing with MATLAB's
+/// recorded apertures (`compare-revcor.mjs` gates their derivation from
+/// `aps_Bars.mat`). On the AMD (CNR `auto`) host every map value of every vertex
+/// equals MATLAB's; the raw courses and noise ceilings equal MATLAB's stored single
+/// values. On the AVX-512 host, whose profile and `corr` orders are not reproduced,
+/// the differences are reported, not gated.
+#[test]
+fn single_rc_2d_end_to_end_equals_the_amd_host() {
+    let Some(hosts) = hosts() else { return; };
+    let input = PathBuf::from(std::env::var_os("SAMSRF_MATRIX_INPUT_DIR").expect("set SAMSRF_MATRIX_INPUT_DIR with SAMSRF_REVCOR_REFERENCE_DIR"));
+    let mut failures = Failures::default();
+    let mut gated = 0;
+    for host in hosts.iter().filter(|host| std::ptr::eq(host.expected, &MATRIX)) {
+        for case in pipelines(host, "revcor").filter(|c| single_rc_fit(c)) {
+            let id = case["id"].as_str().unwrap();
+            let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
+            let (data, _, _) = raw_runs(host, case, &input);
+            let stored = |values: &[f64], recorded: &[f64]| values.len() == recorded.len() && values.iter().zip(recorded).all(|(a, e)| same(f64::from(*a as f32), *e));
+            failures.check(stored(&data.data.data, &array(&host.root, &pre["courses"])), || format!("{} {id}: raw courses", host.name));
+            let ceiling = pre.get("noiseCeiling").map(|d| array(&host.root, d));
+            let ceiling_ok = match (data.noise_ceiling.as_deref(), ceiling.as_deref()) {
+                (Some(ours), Some(theirs)) => stored(ours, theirs),
+                (None, None) => true,
+                _ => false,
+            };
+            failures.check(ceiling_ok, || format!("{} {id}: raw noise ceiling", host.name));
+            let mut raw_job = inputs(host, case, None);
+            raw_job.data = data.data;
+            raw_job.noise_ceiling = data.noise_ceiling;
+            let expected = recorded_maps(host, case);
+            for (label, actual) in [("MATLAB's courses", run(inputs(host, case, None))), ("raw runs", run(raw_job))] {
+                assert_eq!(actual.values, expected.values, "{id}: map names");
+                let mut differing = std::collections::BTreeSet::new();
+                for (r, name) in expected.values.iter().enumerate() {
+                    for (v, (&a, &e)) in actual.row(r).iter().zip(expected.row(r)).enumerate() {
+                        if !same(a, e) {
+                            differing.insert(v);
+                            failures.check(intel(host), || format!("{} {id} from {label}: vertex {v} {name}: {a} vs {e}", host.name));
+                        }
+                    }
+                }
+                println!("{} {id} from {label}: {} vertices differ from MATLAB", host.name, differing.len());
+            }
+            gated += usize::from(!intel(host));
+        }
+    }
+    assert_eq!(gated, 3, "single RC 2D cases gated on the AMD host");
+    failures.assert_none();
 }

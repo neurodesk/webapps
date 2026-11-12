@@ -1,0 +1,2787 @@
+{
+ "summary": {
+  "resolved": 53,
+  "carried, changed": 36,
+  "newly differs": 4,
+  "carried, unchanged": 4
+ },
+ "cases": [
+  {
+   "case": 27,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 7,
+    "area": 7.945771197809259e-7,
+    "centroid": [
+     0.5240412879475301,
+     2.048082406149713
+    ],
+    "hullLength": 1.9905709228438973
+   },
+   "previous": {
+    "hullVertices": 8,
+    "area": 8.098576828909076e-7,
+    "centroid": [
+     0.5313922045879735,
+     2.062784243758415
+    ],
+    "areaRelativeError": 0.019231063580329045,
+    "sigmaRelativeError": 0.00956974181100006,
+    "centroidShiftPerHullLength": 0.008257506922887257
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 62,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 4.1959273500147276e-8,
+    "centroid": [
+     0.47663283000662204,
+     1.9532656471853898
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 77,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 1.3028687415733708e-7,
+    "centroid": [
+     0.5268273049119152,
+     2.05365461846468
+    ],
+    "hullLength": 1.6860406434170145
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 9.391770880440298e-8,
+    "centroid": [
+     0.45326727189697635,
+     1.9065345455898068
+    ],
+    "areaRelativeError": -0.2791468103610649,
+    "sigmaRelativeError": -0.1509692646087924,
+    "centroidShiftPerHullLength": 0.09755710279766917
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 9.167552318493921e-8,
+    "centroid": [
+     0.5284665772301196,
+     2.0569331621431957
+    ],
+    "areaRelativeError": -0.29635641519628464,
+    "sigmaRelativeError": -0.16116534120023682,
+    "centroidShiftPerHullLength": 0.0021740421826039196
+   }
+  },
+  {
+   "case": 102,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 3.0222371064092535e-8,
+    "centroid": [
+     0.4935694624098494,
+     1.9871389549517067
+    ],
+    "hullLength": 1.4416674269823728
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 1.518132026340213e-8,
+    "centroid": [
+     0.3699630190809273,
+     1.7399260671166985
+    ],
+    "areaRelativeError": -0.49767937693547837,
+    "sigmaRelativeError": -0.29125419009032466,
+    "centroidShiftPerHullLength": 0.19171717805393135
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 3.565551364576036e-9,
+    "centroid": [
+     0.7511587784799758,
+     2.5023175890687526
+    ],
+    "areaRelativeError": -0.8820227785234132,
+    "sigmaRelativeError": -0.6565218762765423,
+    "centroidShiftPerHullLength": 0.3995284987358057
+   }
+  },
+  {
+   "case": 117,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 1.2996717263166757e-8,
+    "centroid": [
+     0.5322882007638386,
+     2.0645763760589952
+    ],
+    "hullLength": 0.5494375856191137
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 2.7311745399126452e-8,
+    "centroid": [
+     0.5486721438405198,
+     2.0973442469876318
+    ],
+    "areaRelativeError": 1.1014341426453191,
+    "sigmaRelativeError": 0.4496324163888303,
+    "centroidShiftPerHullLength": 0.06667835947236214
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 157,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 7.277111064608877e-8,
+    "centroid": [
+     0.5744858396781829,
+     2.1489716770826583
+    ],
+    "hullLength": 1.59680775856989
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 6.132609470244077e-8,
+    "centroid": [
+     0.5702268622729321,
+     2.140453699526006
+    ],
+    "areaRelativeError": -0.15727416885677464,
+    "sigmaRelativeError": -0.08199900264584399,
+    "centroidShiftPerHullLength": 0.005964013693224328
+   },
+   "current": {
+    "hullVertices": 5,
+    "area": 4.5011024791055676e-8,
+    "centroid": [
+     0.6738323861951585,
+     2.347664773903034
+    ],
+    "areaRelativeError": -0.3814712405591835,
+    "sigmaRelativeError": -0.21353400617648036,
+    "centroidShiftPerHullLength": 0.13911858427306137
+   }
+  },
+  {
+   "case": 162,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 1.1130429563742036e-7,
+    "centroid": [
+     0.5170897961809496,
+     2.034179593694299
+    ],
+    "hullLength": 1.8530891842225143
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 1.0837036279465195e-7,
+    "centroid": [
+     0.46641975431001015,
+     1.9328395029384637
+    ],
+    "areaRelativeError": -0.026359565243787648,
+    "sigmaRelativeError": -0.013267799878704571,
+    "centroidShiftPerHullLength": 0.061142046094878943
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 177,
+   "status": "newly differs",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 7.929916917281954e-7,
+    "centroid": [
+     0.4824112303047291,
+     1.9648223619460123
+    ],
+    "hullLength": 2.194953048168145
+   },
+   "previous": "matches MATLAB",
+   "current": {
+    "hullVertices": 6,
+    "area": 8.367721938233597e-7,
+    "centroid": [
+     0.4660248377215055,
+     1.9320495951627663
+    ],
+    "areaRelativeError": 0.05520928220540601,
+    "sigmaRelativeError": 0.027233801140425076,
+    "centroidShiftPerHullLength": 0.016693328046461883
+   }
+  },
+  {
+   "case": 182,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 9.777925367993046e-8,
+    "centroid": [
+     0.5926597198268174,
+     2.185319498558374
+    ],
+    "hullLength": 1.573186339861983
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 1.244777325104529e-7,
+    "centroid": [
+     0.5286252887286196,
+     2.0572506252647145
+    ],
+    "areaRelativeError": 0.2730485028850493,
+    "sigmaRelativeError": 0.12829451070411987,
+    "centroidShiftPerHullLength": 0.09101614165703549
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 307,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 2.710434876540546e-8,
+    "centroid": [
+     0.41051411395847026,
+     1.8210282258366988
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 312,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 4.720857750290658e-9,
+    "centroid": [
+     0.7082482114296221,
+     2.4164963900344305
+    ],
+    "hullLength": 0.4174899999428519
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 2.5217513910380518e-8,
+    "centroid": [
+     0.6033084731590179,
+     2.2066169549789265
+    ],
+    "areaRelativeError": 4.341722891105521,
+    "sigmaRelativeError": 1.3112167555436078,
+    "centroidShiftPerHullLength": 0.5620550222527156
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 317,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 0.0000011624169747315172,
+    "centroid": [
+     0.48430836011622436,
+     1.9686165522410564
+    ],
+    "hullLength": 2.0269789920413226
+   },
+   "previous": {
+    "hullVertices": 7,
+    "area": 0.0000012372466847328234,
+    "centroid": [
+     0.4597054001226297,
+     1.9194106506608932
+    ],
+    "areaRelativeError": 0.06437424059347516,
+    "sigmaRelativeError": 0.03168514605642888,
+    "centroidShiftPerHullLength": 0.027140821264377366
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 377,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 1.0091770002995659e-7,
+    "centroid": [
+     0.5005906832926393,
+     2.001181365911712
+    ],
+    "hullLength": 2.1388059867208646
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 1.0603113664853225e-7,
+    "centroid": [
+     0.486815351861253,
+     1.9736307059599767
+    ],
+    "areaRelativeError": 0.05066937333151449,
+    "sigmaRelativeError": 0.02502164529902226,
+    "centroidShiftPerHullLength": 0.01440176204887271
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 3.5661711542123165e-8,
+    "centroid": [
+     0.6871738595312422,
+     2.3743477181128583
+    ],
+    "areaRelativeError": -0.6466257997205913,
+    "sigmaRelativeError": -0.4055471420882825,
+    "centroidShiftPerHullLength": 0.19506802761482772
+   }
+  },
+  {
+   "case": 387,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 3.513183056830238e-7,
+    "centroid": [
+     0.5546121338606823,
+     2.109224263937811
+    ],
+    "hullLength": 1.9767651409163847
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 3.570756394628838e-7,
+    "centroid": [
+     0.538574045377004,
+     2.0771480773323674
+    ],
+    "areaRelativeError": 0.016387799003717524,
+    "sigmaRelativeError": 0.008160601791062662,
+    "centroidShiftPerHullLength": 0.01814189453108401
+   },
+   "current": {
+    "hullVertices": 6,
+    "area": 3.785243709447661e-7,
+    "centroid": [
+     0.5256122018460019,
+     2.051224399415787
+    ],
+    "areaRelativeError": 0.07743993074556414,
+    "sigmaRelativeError": 0.03799803985632088,
+    "centroidShiftPerHullLength": 0.032804008137399664
+   }
+  },
+  {
+   "case": 397,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 2.3056202661225073e-7,
+    "centroid": [
+     0.43157353002913545,
+     1.863146993773357
+    ],
+    "hullLength": 1.486817674532698
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 2.9873519975798235e-7,
+    "centroid": [
+     0.38792462907272807,
+     1.775849251049408
+    ],
+    "areaRelativeError": 0.2956825724835527,
+    "sigmaRelativeError": 0.13828053329728532,
+    "centroidShiftPerHullLength": 0.06564480528672156
+   },
+   "current": {
+    "hullVertices": 5,
+    "area": 2.951157278691108e-7,
+    "centroid": [
+     0.3861341450838722,
+     1.7722682810923516
+    ],
+    "areaRelativeError": 0.27998409887949016,
+    "sigmaRelativeError": 0.1313638225078131,
+    "centroidShiftPerHullLength": 0.06833756698216234
+   }
+  },
+  {
+   "case": 452,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 4.636092766630018e-8,
+    "centroid": [
+     0.5235088516943806,
+     2.0470177523527955
+    ],
+    "hullLength": 1.5160289672690164
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 4.636095785048866e-8,
+    "centroid": [
+     0.5235088001634836,
+     2.047017649290865
+    ],
+    "areaRelativeError": 6.510695536391816e-7,
+    "sigmaRelativeError": 3.255347239386571e-7,
+    "centroidShiftPerHullLength": 7.600561285334021e-8
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 482,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 8.996810550027101e-9,
+    "centroid": [
+     0.11919909859453526,
+     1.238398180682566
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 512,
+   "status": "carried, unchanged",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 4.2284704594025557e-7,
+    "centroid": [
+     0.5388591821643047,
+     2.077718383294215
+    ],
+    "hullLength": 2.1885915232631725
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 4.4491015349645835e-7,
+    "centroid": [
+     0.517432975546626,
+     2.0348659663886792
+    ],
+    "areaRelativeError": 0.05217751375593172,
+    "sigmaRelativeError": 0.025757044214628405,
+    "centroidShiftPerHullLength": 0.02189100033996232
+   },
+   "current": {
+    "hullVertices": 5,
+    "area": 4.4491015349645835e-7,
+    "centroid": [
+     0.517432975546626,
+     2.0348659663886792
+    ],
+    "areaRelativeError": 0.05217751375593172,
+    "sigmaRelativeError": 0.025757044214628405,
+    "centroidShiftPerHullLength": 0.02189100033996232
+   }
+  },
+  {
+   "case": 532,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 1.372550849157439e-7,
+    "centroid": [
+     0.5194719825014027,
+     2.0389440089256943
+    ],
+    "hullLength": 1.6063644398790342
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 1.5152181562227973e-7,
+    "centroid": [
+     0.49662773031093366,
+     1.9932555044794071
+    ],
+    "areaRelativeError": 0.10394318516719205,
+    "sigmaRelativeError": 0.050687006280743754,
+    "centroidShiftPerHullLength": 0.03179932248458753
+   },
+   "current": {
+    "hullVertices": 5,
+    "area": 1.1547801240241462e-7,
+    "centroid": [
+     0.45534871026106316,
+     1.9106974876725644
+    ],
+    "areaRelativeError": -0.15866131682259685,
+    "sigmaRelativeError": -0.08275484019952284,
+    "centroidShiftPerHullLength": 0.08925992840365081
+   }
+  },
+  {
+   "case": 557,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 10,
+    "area": 0.0000010621782906704465,
+    "centroid": [
+     0.448667858310888,
+     1.8973356440044653
+    ],
+    "hullLength": 2.0730914639819438
+   },
+   "previous": {
+    "hullVertices": 10,
+    "area": 0.0000010695671629912945,
+    "centroid": [
+     0.4504088355113254,
+     1.9008175949879842
+    ],
+    "areaRelativeError": 0.0069563390494303745,
+    "sigmaRelativeError": 0.0034721416409280465,
+    "centroidShiftPerHullLength": 0.0018778430081430534
+   },
+   "current": {
+    "hullVertices": 10,
+    "area": 0.0000010593145676075083,
+    "centroid": [
+     0.447786198550574,
+     1.8955723231287038
+    ],
+    "areaRelativeError": -0.002696085099922901,
+    "sigmaRelativeError": -0.0013489523862315032,
+    "centroidShiftPerHullLength": 0.0009509722090938935
+   }
+  },
+  {
+   "case": 562,
+   "status": "carried, unchanged",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 2.1321035560337154e-8,
+    "centroid": [
+     0.48116677754465664,
+     1.9623335790352683
+    ],
+    "hullLength": 1.2145777877827757
+   },
+   "previous": {
+    "empty": true
+   },
+   "current": {
+    "empty": true
+   }
+  },
+  {
+   "case": 622,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 3.474337916132414e-7,
+    "centroid": [
+     0.5298942811938034,
+     2.0597885513433427
+    ],
+    "hullLength": 2.0545100840467145
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 3.474337255285169e-7,
+    "centroid": [
+     0.5298942197579777,
+     2.05978842847162
+    ],
+    "areaRelativeError": -1.9020810897913488e-7,
+    "sigmaRelativeError": -9.510405884260091e-8,
+    "centroidShiftPerHullLength": 6.68649656542545e-8
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 647,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 5.427437243122474e-9,
+    "centroid": [
+     0.3524258448127276,
+     1.704851661982047
+    ],
+    "hullLength": 0.4885988599436053
+   },
+   "previous": {
+    "empty": true
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 712,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 2.425580426790308e-8,
+    "centroid": [
+     0.6112101556597439,
+     2.2224203301860053
+    ],
+    "hullLength": 1.7178005064908521
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 2.6162388366834932e-8,
+    "centroid": [
+     0.5840761024437597,
+     2.1681522159765336
+    ],
+    "areaRelativeError": 0.07860321092113909,
+    "sigmaRelativeError": 0.038558236653650185,
+    "centroidShiftPerHullLength": 0.03532051261085772
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 737,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 1.0931732609409384e-8,
+    "centroid": [
+     0.8087783109874831,
+     2.617556648016607
+    ],
+    "hullLength": 0.5361670591843727
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 5.252950902034925e-8,
+    "centroid": [
+     0.6464689841066615,
+     2.292937982778767
+    ],
+    "areaRelativeError": 3.8052317868747525,
+    "sigmaRelativeError": 1.1920838913861744,
+    "centroidShiftPerHullLength": 0.676905998485764
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 2.3739519884602434e-8,
+    "centroid": [
+     0.7816328804486261,
+     2.5632657631522306
+    ],
+    "areaRelativeError": 1.1716154915981818,
+    "sigmaRelativeError": 0.47364021782733046,
+    "centroidShiftPerHullLength": 0.11320921007560232
+   }
+  },
+  {
+   "case": 777,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 5.704867815994885e-9,
+    "centroid": [
+     0.1887105236868084,
+     1.3774210729680232
+    ],
+    "hullLength": 0.6052280283912538
+   },
+   "previous": {
+    "empty": true
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 797,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 4.020161782636311e-8,
+    "centroid": [
+     0.6061213076972647,
+     2.2122426577497243
+    ],
+    "hullLength": 1.5451970741879524
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 4.691755722818769e-8,
+    "centroid": [
+     0.5725406553454491,
+     2.14508134780408
+    ],
+    "areaRelativeError": 0.1670564461070134,
+    "sigmaRelativeError": 0.0803038674868351,
+    "centroidShiftPerHullLength": 0.04859485390593836
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 4.019312708700151e-8,
+    "centroid": [
+     0.6061648720768744,
+     2.212329786515511
+    ],
+    "areaRelativeError": -0.00021120392214742204,
+    "sigmaRelativeError": -0.00010560753754976022,
+    "centroidShiftPerHullLength": 0.00006304239226574157
+   }
+  },
+  {
+   "case": 822,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 1.4717498745099936e-8,
+    "centroid": [
+     0.8047582259677946,
+     2.6095164664037154
+    ],
+    "hullLength": 0.4544547356719716
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 9.101913948927898e-8,
+    "centroid": [
+     0.609949640580453,
+     2.219899282430106
+    ],
+    "areaRelativeError": 5.184416324110985,
+    "sigmaRelativeError": 1.486848673343633,
+    "centroidShiftPerHullLength": 0.9585228563809476
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 2.9682079898118996e-8,
+    "centroid": [
+     0.7157543140638722,
+     2.4315086747824353
+    ],
+    "areaRelativeError": 1.0167883423806228,
+    "sigmaRelativeError": 0.42013673369173266,
+    "centroidShiftPerHullLength": 0.43792869315743715
+   }
+  },
+  {
+   "case": 852,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 1.2003144407579658e-7,
+    "centroid": [
+     0.5330467173699325,
+     2.0660933893109523
+    ],
+    "hullLength": 1.64091624519828
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 1.1530227334067037e-7,
+    "centroid": [
+     0.5427591683380228,
+     2.0855182909185714
+    ],
+    "areaRelativeError": -0.039399432136631336,
+    "sigmaRelativeError": -0.01989767479952958,
+    "centroidShiftPerHullLength": 0.013235105912602506
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 4.706387207904783e-8,
+    "centroid": [
+     0.3875043574223582,
+     1.775008658210595
+    ],
+    "areaRelativeError": -0.6079038085276365,
+    "sigmaRelativeError": -0.37382415291520255,
+    "centroidShiftPerHullLength": 0.19832981812635864
+   }
+  },
+  {
+   "case": 872,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 4.682685128543085e-8,
+    "centroid": [
+     0.2929743298742969,
+     1.5859486423196865
+    ],
+    "hullLength": 1.260855973493705
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 1.1315942883768915e-7,
+    "centroid": [
+     0.5058347108902694,
+     2.0116694111166
+    ],
+    "areaRelativeError": 1.4165500291260504,
+    "sigmaRelativeError": 0.5545256604913443,
+    "centroidShiftPerHullLength": 0.37749774575769035
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 877,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 3.028573314876881e-9,
+    "centroid": [
+     0.16025029241609365,
+     1.3205006062568037
+    ],
+    "hullLength": 0.2663955818568817
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 3.02857192189393e-9,
+    "centroid": [
+     0.1602502778506647,
+     1.3205005771259266
+    ],
+    "areaRelativeError": -4.599469143991993e-7,
+    "sigmaRelativeError": -2.299734836079172e-7,
+    "centroidShiftPerHullLength": 1.2225918368394846e-7
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 927,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 1.0245453285068207e-7,
+    "centroid": [
+     0.6026816598327708,
+     2.2053633390123526
+    ],
+    "hullLength": 1.6423487522707796
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 1.2459451445567815e-7,
+    "centroid": [
+     0.637263811770481,
+     2.274527631843739
+    ],
+    "areaRelativeError": 0.21609567667701968,
+    "sigmaRelativeError": 0.10276728128695373,
+    "centroidShiftPerHullLength": 0.04708380759929647
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 932,
+   "status": "newly differs",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 1.4964642593151556e-7,
+    "centroid": [
+     0.5767014440022386,
+     2.1534028386056394
+    ],
+    "hullLength": 1.9762950923537017
+   },
+   "previous": "matches MATLAB",
+   "current": {
+    "hullVertices": 4,
+    "area": 1.3774248977527215e-7,
+    "centroid": [
+     0.5700597722165526,
+     2.1401194869804385
+    ],
+    "areaRelativeError": -0.07954707960543707,
+    "sigmaRelativeError": -0.04059762331201056,
+    "centroidShiftPerHullLength": 0.00751468586754064
+   }
+  },
+  {
+   "case": 1022,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 7,
+    "area": 2.832860143062166e-7,
+    "centroid": [
+     0.47275426530454784,
+     1.9455085399049021
+    ],
+    "hullLength": 2.200925276264211
+   },
+   "previous": {
+    "hullVertices": 7,
+    "area": 2.8442941854556203e-7,
+    "centroid": [
+     0.47462570565372175,
+     1.9492514205307998
+    ],
+    "areaRelativeError": 0.004036218456268335,
+    "sigmaRelativeError": 0.0020160769450099795,
+    "centroidShiftPerHullLength": 0.0019013220561900955
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1027,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 8.104764130656417e-8,
+    "centroid": [
+     0.47197256534267945,
+     1.9439451380225865
+    ],
+    "hullLength": 1.9418179561608706
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 1.0714143769408047e-7,
+    "centroid": [
+     0.48526053416219384,
+     1.970521080163394
+    ],
+    "areaRelativeError": 0.321956271235779,
+    "sigmaRelativeError": 0.14976357188588083,
+    "centroidShiftPerHullLength": 0.015301540237370993
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 6.209295269621329e-8,
+    "centroid": [
+     0.4115101426168337,
+     1.8230203112981371
+    ],
+    "areaRelativeError": -0.23387094682563836,
+    "sigmaRelativeError": -0.12471201700562481,
+    "centroidShiftPerHullLength": 0.06962448262475764
+   }
+  },
+  {
+   "case": 1032,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 3.635767241438881e-8,
+    "centroid": [
+     0.8439442913882659,
+     2.6878887517224186
+    ],
+    "hullLength": 0.8046042565468509
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 3.635767241438881e-8,
+    "centroid": [
+     0.843944291392404,
+     2.6878887517304975
+    ],
+    "areaRelativeError": 0,
+    "sigmaRelativeError": 0,
+    "centroidShiftPerHullLength": 1.1281348484911542e-11
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1162,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 3.567529067299846e-8,
+    "centroid": [
+     0.6316384427015291,
+     2.2632769215486115
+    ],
+    "hullLength": 1.2494465957600411
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 6.197202702395987e-8,
+    "centroid": [
+     0.44642358570072815,
+     1.8928471468211683
+    ],
+    "areaRelativeError": 0.7371134433633252,
+    "sigmaRelativeError": 0.3179959952000331,
+    "centroidShiftPerHullLength": 0.3314692011783089
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 1.5899678816599927e-8,
+    "centroid": [
+     0.5438816074390047,
+     2.087763282991091
+    ],
+    "areaRelativeError": -0.5543223750483999,
+    "sigmaRelativeError": -0.33240908862417834,
+    "centroidShiftPerHullLength": 0.15705370778593547
+   }
+  },
+  {
+   "case": 1167,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 1.4608325081067255e-7,
+    "centroid": [
+     0.6483178280982854,
+     2.296635623663982
+    ],
+    "hullLength": 1.3820926490104988
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 1.460832149968727e-7,
+    "centroid": [
+     0.6483178689999249,
+     2.2966357054674518
+    ],
+    "areaRelativeError": -2.451602058666242e-7,
+    "sigmaRelativeError": -1.2258011030163177e-7,
+    "centroidShiftPerHullLength": 6.617430244103022e-8
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1192,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 1.5231840150287113e-8,
+    "centroid": [
+     0.3058231197662453,
+     1.611646206024639
+    ],
+    "hullLength": 1.2536017895524132
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 6.935257430840114e-9,
+    "centroid": [
+     0.19205430627627607,
+     1.384108584105661
+    ],
+    "areaRelativeError": -0.5446868295352096,
+    "sigmaRelativeError": -0.32523102437590506,
+    "centroidShiftPerHullLength": 0.20293110481856833
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 4.895671649324251e-9,
+    "centroid": [
+     0.18303390031694278,
+     1.3660677657165934
+    ],
+    "areaRelativeError": -0.6785896122188513,
+    "sigmaRelativeError": -0.43306932718263624,
+    "centroidShiftPerHullLength": 0.21902094041478087
+   }
+  },
+  {
+   "case": 1237,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 2.474413478932222e-8,
+    "centroid": [
+     0.6466347195487695,
+     2.2932694207681843
+    ],
+    "hullLength": 0.7836508849253273
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 2.7775716185396426e-8,
+    "centroid": [
+     0.6970556550672313,
+     2.3941112921620515
+    ],
+    "areaRelativeError": 0.12251717111492692,
+    "sigmaRelativeError": 0.05948910854002022,
+    "centroidShiftPerHullLength": 0.14387100403570338
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 1.9176901407125246e-8,
+    "centroid": [
+     0.645867225903487,
+     2.2917344341885837
+    ],
+    "areaRelativeError": -0.22499204072390475,
+    "sigmaRelativeError": -0.11965463636360565,
+    "centroidShiftPerHullLength": 0.0021899641284887413
+   }
+  },
+  {
+   "case": 1257,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 1.5676334353623839e-7,
+    "centroid": [
+     0.5513255966652192,
+     2.102651233066713
+    ],
+    "hullLength": 1.8532700289769886
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 1.7142178233321703e-7,
+    "centroid": [
+     0.523415841632243,
+     2.0468317147337984
+    ],
+    "areaRelativeError": 0.09350680118397775,
+    "sigmaRelativeError": 0.04570875543048675,
+    "centroidShiftPerHullLength": 0.03367459458552131
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 7.552603747962294e-8,
+    "centroid": [
+     0.6707972227590631,
+     2.341594520471972
+    ],
+    "areaRelativeError": -0.5182162119286268,
+    "sigmaRelativeError": -0.30589353261090185,
+    "centroidShiftPerHullLength": 0.14414883133640938
+   }
+  },
+  {
+   "case": 1287,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 8.225998855693195e-7,
+    "centroid": [
+     0.4547620565741995,
+     1.9095240382432266
+    ],
+    "hullLength": 2.08006914617968
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 8.356912365870949e-7,
+    "centroid": [
+     0.4599217997676419,
+     1.919843529321838
+    ],
+    "areaRelativeError": 0.01591460349974996,
+    "sigmaRelativeError": 0.007925891868915949,
+    "centroidShiftPerHullLength": 0.005546710187292289
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1322,
+   "status": "carried, unchanged",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 4.758696046588962e-9,
+    "centroid": [
+     0.5004047915383429,
+     2.0008095518851903
+    ],
+    "hullLength": 0.39702385898308656
+   },
+   "previous": {
+    "empty": true
+   },
+   "current": {
+    "empty": true
+   }
+  },
+  {
+   "case": 1382,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 8.378681588816494e-9,
+    "centroid": [
+     0.7843289236770374,
+     2.568657850180898
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 2.313335347933765e-9,
+    "centroid": [
+     0.48966384964271015,
+     1.979327679199514
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   }
+  },
+  {
+   "case": 1392,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 3.561341362784409e-8,
+    "centroid": [
+     0.7501045203226052,
+     2.5002090205746232
+    ],
+    "hullLength": 0.7524416971879918
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 4.2050208315380644e-8,
+    "centroid": [
+     0.715843504816462,
+     2.431687009228426
+    ],
+    "areaRelativeError": 0.1807407387227825,
+    "sigmaRelativeError": 0.08661894826235302,
+    "centroidShiftPerHullLength": 0.1018151204888445
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 3.7253950341264996e-8,
+    "centroid": [
+     0.7366990564170237,
+     2.4733981003942063
+    ],
+    "areaRelativeError": 0.04606513519215866,
+    "sigmaRelativeError": 0.02277325697935543,
+    "centroidShiftPerHullLength": 0.03983766695768904
+   }
+  },
+  {
+   "case": 1422,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 6.211497085781281e-9,
+    "centroid": [
+     0.1736971937666837,
+     1.3473943801845762
+    ],
+    "hullLength": 0.5486242251322476
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 3.640451631987951e-9,
+    "centroid": [
+     0.2834727667550965,
+     1.5669455222499664
+    ],
+    "areaRelativeError": -0.4139171955306399,
+    "sigmaRelativeError": -0.23443954878183518,
+    "centroidShiftPerHullLength": 0.44742034479687126
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1427,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 7,
+    "area": 0.0000014616043348160412,
+    "centroid": [
+     0.44639338390999217,
+     1.8927870283246468
+    ],
+    "hullLength": 1.8031404927337231
+   },
+   "previous": {
+    "hullVertices": 7,
+    "area": 0.0000014616043410940055,
+    "centroid": [
+     0.44639338248515514,
+     1.892787025474945
+    ],
+    "areaRelativeError": 4.295255637942682e-9,
+    "sigmaRelativeError": 2.1476279616119653e-9,
+    "centroidShiftPerHullLength": 1.7669489901195163e-9
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1457,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 1.5503402131349098e-7,
+    "centroid": [
+     0.4851173842201259,
+     1.9702347398638622
+    ],
+    "hullLength": 1.9151197949078937
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 1.587676905223656e-7,
+    "centroid": [
+     0.4816132047358508,
+     1.9632263796235065
+    ],
+    "areaRelativeError": 0.024082902431620878,
+    "sigmaRelativeError": 0.011969813004133422,
+    "centroidShiftPerHullLength": 0.004091433178525288
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1467,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 2.727857795203903e-8,
+    "centroid": [
+     0.41776826722579585,
+     1.8355365339890568
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1472,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 1.5227324554056842e-8,
+    "centroid": [
+     0.3405458149107403,
+     1.681091617756806
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1497,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 0.0000021052109547697873,
+    "centroid": [
+     0.4718474393301751,
+     1.9436950761884473
+    ],
+    "hullLength": 2.0992679469706843
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 0.0000021052109231631255,
+    "centroid": [
+     0.4718474330628908,
+     1.9436950636538768
+    ],
+    "areaRelativeError": -1.5013536605766775e-8,
+    "sigmaRelativeError": -7.506768269747399e-9,
+    "centroidShiftPerHullLength": 6.675696374714432e-9
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1512,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 3.7696251668772884e-8,
+    "centroid": [
+     0.6098980833524916,
+     2.219796151977498
+    ],
+    "hullLength": 1.2415891552121994
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 4.847059612012039e-8,
+    "centroid": [
+     0.5401010451228103,
+     2.080202119122987
+    ],
+    "areaRelativeError": 0.2858200477336276,
+    "sigmaRelativeError": 0.13394005473553494,
+    "centroidShiftPerHullLength": 0.12570251798122475
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1522,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 3.905604428963705e-7,
+    "centroid": [
+     0.48595794552817134,
+     1.971915929689677
+    ],
+    "hullLength": 2.107618856463393
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 4.028690384627609e-7,
+    "centroid": [
+     0.49657399655768586,
+     1.9931480296926338
+    ],
+    "areaRelativeError": 0.031515213048998715,
+    "sigmaRelativeError": 0.01563537406344749,
+    "centroidShiftPerHullLength": 0.011263046846822718
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1547,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 3.3439289517933624e-8,
+    "centroid": [
+     0.6014791632397305,
+     2.2029583432504296
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1552,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 3.4144510170641684e-7,
+    "centroid": [
+     0.47429648871498226,
+     1.948592998861428
+    ],
+    "hullLength": 2.081671142235479
+   },
+   "previous": {
+    "hullVertices": 7,
+    "area": 3.614003007920176e-7,
+    "centroid": [
+     0.4608141723994663,
+     1.9216283554158053
+    ],
+    "areaRelativeError": 0.058443360252854765,
+    "sigmaRelativeError": 0.028806765263941495,
+    "centroidShiftPerHullLength": 0.01448229974314656
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1587,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 3.564387105609024e-8,
+    "centroid": [
+     0.4047775583922162,
+     1.809555102184412
+    ],
+    "hullLength": 1.6075288545519946
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 4.336747744249081e-8,
+    "centroid": [
+     0.33342916318130733,
+     1.6668583059571347
+    ],
+    "areaRelativeError": 0.2166882035412618,
+    "sigmaRelativeError": 0.10303590310617813,
+    "centroidShiftPerHullLength": 0.09924541417586942
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1607,
+   "status": "newly differs",
+   "matlab": {
+    "hullVertices": 8,
+    "area": 9.380248565671323e-7,
+    "centroid": [
+     0.518755287607844,
+     2.037510598296512
+    ],
+    "hullLength": 2.0119354528456337
+   },
+   "previous": "matches MATLAB",
+   "current": {
+    "hullVertices": 8,
+    "area": 9.425093060060931e-7,
+    "centroid": [
+     0.5165024262615248,
+     2.0330048754940435
+    ],
+    "areaRelativeError": 0.004780736254018279,
+    "sigmaRelativeError": 0.0023875180058948813,
+    "centroidShiftPerHullLength": 0.002503833413423617
+   }
+  },
+  {
+   "case": 1622,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 5.0419353740671635e-8,
+    "centroid": [
+     0.5773224371297555,
+     2.1546448949031634
+    ],
+    "hullLength": 1.3751521362313273
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 9.989965002454859e-8,
+    "centroid": [
+     0.46120514958894887,
+     1.9224102933649192
+    ],
+    "areaRelativeError": 0.9813750596323655,
+    "sigmaRelativeError": 0.4076132493097547,
+    "centroidShiftPerHullLength": 0.18881268852131267
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 2.5582346201819504e-8,
+    "centroid": [
+     0.5398115691301655,
+     2.079623153828379
+    ],
+    "areaRelativeError": -0.49260860554856606,
+    "sigmaRelativeError": -0.2876858877914646,
+    "centroidShiftPerHullLength": 0.06099460057687286
+   }
+  },
+  {
+   "case": 1642,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 8.389889848692267e-7,
+    "centroid": [
+     0.41686428578642226,
+     1.8337292169751638
+    ],
+    "hullLength": 1.9944150116908856
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 8.389889568777287e-7,
+    "centroid": [
+     0.4168642817663226,
+     1.833729208934983
+    ],
+    "areaRelativeError": -3.336336771182377e-8,
+    "sigmaRelativeError": -1.6681684149893493e-8,
+    "centroidShiftPerHullLength": 4.5071860369905384e-9
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1737,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 1.5041805539323105e-7,
+    "centroid": [
+     0.4459513634106008,
+     1.8919027441842509
+    ],
+    "hullLength": 2.2028567373101393
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 1.9441527600305708e-7,
+    "centroid": [
+     0.48896902432773004,
+     1.9779380901197783
+    ],
+    "areaRelativeError": 0.29249959717140406,
+    "sigmaRelativeError": 0.13688152292637965,
+    "centroidShiftPerHullLength": 0.043666223940656196
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1742,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 2.630600304254216e-8,
+    "centroid": [
+     0.46290813910937345,
+     1.9258162717936784
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1777,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 1.0901761174353375e-8,
+    "centroid": [
+     0.43977327814217837,
+     1.8795464785211173
+    ],
+    "hullLength": 0.9839692350106647
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 6.570870550448582e-8,
+    "centroid": [
+     0.4912500349956872,
+     1.9825000491937317
+    ],
+    "areaRelativeError": 5.027347733416409,
+    "sigmaRelativeError": 1.4550657289401459,
+    "centroidShiftPerHullLength": 0.1169808713948336
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 1.3161756809432212e-8,
+    "centroid": [
+     0.39593567731296275,
+     1.79187126722195
+    ],
+    "areaRelativeError": 0.20730555356464103,
+    "sigmaRelativeError": 0.09877456903799915,
+    "centroidShiftPerHullLength": 0.09962086268530697
+   }
+  },
+  {
+   "case": 1782,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 3.4058716912727105e-8,
+    "centroid": [
+     0.37582532498919796,
+     1.7516507014019216
+    ],
+    "hullLength": 1.0231440766404813
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 1.2644608109180222e-7,
+    "centroid": [
+     0.42960658623877634,
+     1.8592131779058718
+    ],
+    "areaRelativeError": 2.7125908593623995,
+    "sigmaRelativeError": 0.926808464628075,
+    "centroidShiftPerHullLength": 0.11753820178018594
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 3.314547360189213e-8,
+    "centroid": [
+     0.3796411294159441,
+     1.7592823120473895
+    ],
+    "areaRelativeError": -0.026813790818224128,
+    "sigmaRelativeError": -0.013497993320958256,
+    "centroidShiftPerHullLength": 0.00833939215858737
+   }
+  },
+  {
+   "case": 1817,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 2.6985768557252765e-7,
+    "centroid": [
+     0.5247672861276579,
+     2.0495346514730683
+    ],
+    "hullLength": 1.9328065344520309
+   },
+   "previous": {
+    "hullVertices": 7,
+    "area": 3.076355940753728e-7,
+    "centroid": [
+     0.48697363486778045,
+     1.973947325858262
+    ],
+    "areaRelativeError": 0.13999196807271155,
+    "sigmaRelativeError": 0.06770406390193719,
+    "centroidShiftPerHullLength": 0.04372356595731827
+   },
+   "current": {
+    "hullVertices": 6,
+    "area": 2.798586901942013e-7,
+    "centroid": [
+     0.5372550102433706,
+     2.0745100954222835
+    ],
+    "areaRelativeError": 0.0370602919848497,
+    "sigmaRelativeError": 0.01836157232333255,
+    "centroidShiftPerHullLength": 0.014447072523369953
+   }
+  },
+  {
+   "case": 1897,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 8,
+    "area": 9.125016045830048e-7,
+    "centroid": [
+     0.5825845945214548,
+     2.1651691836461313
+    ],
+    "hullLength": 2.0702430509778167
+   },
+   "previous": {
+    "hullVertices": 8,
+    "area": 9.058831656031958e-7,
+    "centroid": [
+     0.5840761046222269,
+     2.168152199850738
+    ],
+    "areaRelativeError": -0.00725307105934734,
+    "sigmaRelativeError": -0.003633135365967361,
+    "centroidShiftPerHullLength": 0.0016109772221717894
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1922,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 5.406592585958936e-9,
+    "centroid": [
+     0.4490311401548117,
+     1.8980622310223132
+    ],
+    "hullLength": 0.48402579466744844
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 1.5172979851707513e-8,
+    "centroid": [
+     0.5459889597656797,
+     2.091977880399554
+    ],
+    "areaRelativeError": 1.8063849107314178,
+    "sigmaRelativeError": 0.6752268236664009,
+    "centroidShiftPerHullLength": 0.4479188652174601
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 6.736860394540578e-8,
+    "centroid": [
+     0.40167425452980865,
+     1.8033485302599956
+    ],
+    "areaRelativeError": 11.460455060062012,
+    "sigmaRelativeError": 2.529936976783299,
+    "centroidShiftPerHullLength": 0.21877584537998251
+   }
+  },
+  {
+   "case": 1927,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 8,
+    "area": 5.55647927225067e-7,
+    "centroid": [
+     0.5275978743979327,
+     2.0551957929404576
+    ],
+    "hullLength": 2.130047273528527
+   },
+   "previous": {
+    "hullVertices": 8,
+    "area": 5.599732833032008e-7,
+    "centroid": [
+     0.531056636066694,
+     2.062113312620113
+    ],
+    "areaRelativeError": 0.0077843466450688206,
+    "sigmaRelativeError": 0.00388462815458483,
+    "centroidShiftPerHullLength": 0.003630916099253201
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1932,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 2.7350383169366665e-7,
+    "centroid": [
+     0.6163040858963905,
+     2.2326081973528447
+    ],
+    "hullLength": 2.085572251101274
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 2.70808184210658e-7,
+    "centroid": [
+     0.6131492076609675,
+     2.22629844087578
+    ],
+    "areaRelativeError": -0.009855977030800324,
+    "sigmaRelativeError": -0.0049401912602441015,
+    "centroidShiftPerHullLength": 0.0033825355112858248
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1937,
+   "status": "newly differs",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 1.3338641252809424e-7,
+    "centroid": [
+     0.5107174956593864,
+     2.021434983334592
+    ],
+    "hullLength": 2.180935569440822
+   },
+   "previous": "matches MATLAB",
+   "current": {
+    "hullVertices": 5,
+    "area": 1.1030179752086352e-7,
+    "centroid": [
+     0.44721671397437035,
+     1.8944334227232957
+    ],
+    "areaRelativeError": -0.1730657161378306,
+    "sigmaRelativeError": -0.09064072894033262,
+    "centroidShiftPerHullLength": 0.06510603247256277
+   }
+  },
+  {
+   "case": 1947,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 1.1674263156874476e-8,
+    "centroid": [
+     0.2457006791919177,
+     1.4914013099896086
+    ],
+    "hullLength": 0.9222373751945256
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 1.1674273200923402e-8,
+    "centroid": [
+     0.2457006254218328,
+     1.491401202449424
+    ],
+    "areaRelativeError": 8.603582762301534e-7,
+    "sigmaRelativeError": 4.301790456742355e-7,
+    "centroidShiftPerHullLength": 1.3037161734206564e-7
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 1982,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 7,
+    "area": 4.183197170985753e-7,
+    "centroid": [
+     0.590015270558278,
+     2.180030514764844
+    ],
+    "hullLength": 1.4840268365909357
+   },
+   "previous": {
+    "hullVertices": 7,
+    "area": 5.166593156028659e-7,
+    "centroid": [
+     0.6119363744112434,
+     2.2238727815415587
+    ],
+    "areaRelativeError": 0.2350823891026808,
+    "sigmaRelativeError": 0.11134260653620241,
+    "centroidShiftPerHullLength": 0.03302981454445012
+   },
+   "current": {
+    "hullVertices": 6,
+    "area": 5.017108244027846e-7,
+    "centroid": [
+     0.6224225250555264,
+     2.244845077150785
+    ],
+    "areaRelativeError": 0.19934778088539998,
+    "sigmaRelativeError": 0.09514737861412963,
+    "centroidShiftPerHullLength": 0.04882989309088974
+   }
+  },
+  {
+   "case": 2007,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 1.2426913681418128e-7,
+    "centroid": [
+     0.5743043465204958,
+     2.148608681674037
+    ],
+    "hullLength": 1.4681392088890908
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 1.133823396906597e-7,
+    "centroid": [
+     0.5897358364934462,
+     2.179471655379075
+    ],
+    "areaRelativeError": -0.0876066045248269,
+    "sigmaRelativeError": -0.044807142261222115,
+    "centroidShiftPerHullLength": 0.023503122035502304
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2012,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 2.4109450419418366e-7,
+    "centroid": [
+     0.6286468900022429,
+     2.257293810945833
+    ],
+    "hullLength": 1.8257449906601233
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 2.410945156416239e-7,
+    "centroid": [
+     0.6286468836153176,
+     2.2572937981722134
+    ],
+    "areaRelativeError": 4.74811329948479e-8,
+    "sigmaRelativeError": 2.3740566124777603e-8,
+    "centroidShiftPerHullLength": 7.822227372987315e-9
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2057,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 1.2157964307535352e-7,
+    "centroid": [
+     0.5116647628289384,
+     2.023329449625103
+    ],
+    "hullLength": 1.503278349385723
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 1.7471941163305083e-7,
+    "centroid": [
+     0.43361728377314535,
+     1.8672345280897389
+    ],
+    "areaRelativeError": 0.437077846369083,
+    "sigmaRelativeError": 0.19878181766703618,
+    "centroidShiftPerHullLength": 0.11609256263006149
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2062,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 2.5450999918685824e-8,
+    "centroid": [
+     0.4257463729656479,
+     1.8514927555108898
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2087,
+   "status": "carried, unchanged",
+   "matlab": {
+    "hullVertices": 7,
+    "area": 0.0000027471300313129665,
+    "centroid": [
+     0.49528596126609153,
+     1.9905720354845493
+    ],
+    "hullLength": 1.9914864405412984
+   },
+   "previous": {
+    "hullVertices": 7,
+    "area": 0.0000028577122854179203,
+    "centroid": [
+     0.5122621901819002,
+     2.0245244903312596
+    ],
+    "areaRelativeError": 0.04025373857243371,
+    "sigmaRelativeError": 0.019928300701786354,
+    "centroidShiftPerHullLength": 0.019061138662458565
+   },
+   "current": {
+    "hullVertices": 7,
+    "area": 0.0000028577122854179203,
+    "centroid": [
+     0.5122621901819002,
+     2.0245244903312596
+    ],
+    "areaRelativeError": 0.04025373857243371,
+    "sigmaRelativeError": 0.019928300701786354,
+    "centroidShiftPerHullLength": 0.019061138662458565
+   }
+  },
+  {
+   "case": 2102,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 3.079762550955989e-7,
+    "centroid": [
+     0.5761520290587283,
+     2.152304057111898
+    ],
+    "hullLength": 2.022761839383159
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 3.3828379439326817e-7,
+    "centroid": [
+     0.5133683829345728,
+     2.0267367368501255
+    ],
+    "areaRelativeError": 0.09840868832001841,
+    "sigmaRelativeError": 0.04804994552741541,
+    "centroidShiftPerHullLength": 0.06940437718941571
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 3.5623092246167554e-7,
+    "centroid": [
+     0.5211729616528373,
+     2.042345904643298
+    ],
+    "areaRelativeError": 0.15668307724275013,
+    "sigmaRelativeError": 0.07549201635472408,
+    "centroidShiftPerHullLength": 0.06077677829306046
+   }
+  },
+  {
+   "case": 2147,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 4.1053377239363975e-8,
+    "centroid": [
+     0.7223754337638285,
+     2.4447509307525364
+    ],
+    "hullLength": 1.383197788743366
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 6.878306867130757e-8,
+    "centroid": [
+     0.6588666886010515,
+     2.317733412333837
+    ],
+    "areaRelativeError": 0.675454573938317,
+    "sigmaRelativeError": 0.2943935158746419,
+    "centroidShiftPerHullLength": 0.10266781629687968
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 2.712675561261646e-8,
+    "centroid": [
+     0.6178915981159321,
+     2.2357832715420045
+    ],
+    "areaRelativeError": -0.3392320574638131,
+    "sigmaRelativeError": -0.18712366098145833,
+    "centroidShiftPerHullLength": 0.16890783816353663
+   }
+  },
+  {
+   "case": 2167,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 5.997369211391268e-7,
+    "centroid": [
+     0.5158525687315343,
+     2.0317050779832617
+    ],
+    "hullLength": 2.02495196646051
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 6.099973348105969e-7,
+    "centroid": [
+     0.5109710698917524,
+     2.021942074110939
+    ],
+    "areaRelativeError": 0.01710819079135853,
+    "sigmaRelativeError": 0.00851781877731773,
+    "centroidShiftPerHullLength": 0.005390433431312692
+   },
+   "current": {
+    "hullVertices": 6,
+    "area": 6.002577967942346e-7,
+    "centroid": [
+     0.49766542458900176,
+     1.9953307809917078
+    ],
+    "areaRelativeError": 0.0008685069015235774,
+    "sigmaRelativeError": 0.0004341592036547501,
+    "centroidShiftPerHullLength": 0.02008329040895475
+   }
+  },
+  {
+   "case": 2172,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 8,
+    "area": 7.773270495406437e-7,
+    "centroid": [
+     0.46160860879554494,
+     1.9232172092065987
+    ],
+    "hullLength": 2.204301911198332
+   },
+   "previous": {
+    "hullVertices": 8,
+    "area": 7.632538755011128e-7,
+    "centroid": [
+     0.46844529290930836,
+     1.936890584463299
+    ],
+    "areaRelativeError": -0.01810457264782869,
+    "sigmaRelativeError": -0.009093633408195669,
+    "centroidShiftPerHullLength": 0.006935210022043461
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2197,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 6.534873723679224e-7,
+    "centroid": [
+     0.5283980560422277,
+     2.0567960720818386
+    ],
+    "hullLength": 1.9737136490632854
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 6.638689826754529e-7,
+    "centroid": [
+     0.5348629093707018,
+     2.0697257799042745
+    ],
+    "areaRelativeError": 0.015886474240370627,
+    "sigmaRelativeError": 0.00791193774077811,
+    "centroidShiftPerHullLength": 0.00732418938093604
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2212,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 3.74002476898061e-7,
+    "centroid": [
+     0.5782510330512992,
+     2.1565020472129253
+    ],
+    "hullLength": 2.032048291422205
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 3.853850587126617e-7,
+    "centroid": [
+     0.572991479344978,
+     2.1459829248265123
+    ],
+    "areaRelativeError": 0.030434509174930374,
+    "sigmaRelativeError": 0.015103201243563388,
+    "centroidShiftPerHullLength": 0.005787624763269499
+   },
+   "current": {
+    "hullVertices": 5,
+    "area": 3.732587415677946e-7,
+    "centroid": [
+     0.5787438239090079,
+     2.1574876285812934
+    ],
+    "areaRelativeError": -0.001988583969910732,
+    "sigmaRelativeError": -0.0009947867853294596,
+    "centroidShiftPerHullLength": 0.0005422674012070696
+   }
+  },
+  {
+   "case": 2227,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 2.230902482261432e-7,
+    "centroid": [
+     0.5849895746303768,
+     2.1699791198262104
+    ],
+    "hullLength": 2.089996313785565
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 2.431953634723927e-7,
+    "centroid": [
+     0.6040532742823075,
+     2.208106521433365
+    ],
+    "areaRelativeError": 0.09012099545413219,
+    "sigmaRelativeError": 0.04408859559624161,
+    "centroidShiftPerHullLength": 0.020396079219524254
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2237,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 8.396051348960598e-8,
+    "centroid": [
+     0.7050927363394508,
+     2.410185523587624
+    ],
+    "hullLength": 1.6498078680156203
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 8.676923846095974e-8,
+    "centroid": [
+     0.6568710192141793,
+     2.3137421021656337
+    ],
+    "areaRelativeError": 0.03345292750861356,
+    "sigmaRelativeError": 0.01658886847565562,
+    "centroidShiftPerHullLength": 0.06535732317688635
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2247,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 2.996385198572593e-7,
+    "centroid": [
+     0.5272287446120814,
+     2.054457479490883
+    ],
+    "hullLength": 1.8617626536361762
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 2.996385486085662e-7,
+    "centroid": [
+     0.5272287645770461,
+     2.0544575194207937
+    ],
+    "areaRelativeError": 9.59533070198586e-8,
+    "sigmaRelativeError": 4.797665234851418e-8,
+    "centroidShiftPerHullLength": 2.3978889724428733e-8
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2272,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 1.9194078244161306e-7,
+    "centroid": [
+     0.4530994882603962,
+     1.9061989476917838
+    ],
+    "hullLength": 1.7959436309853039
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 2.567389993813479e-7,
+    "centroid": [
+     0.4651487088115118,
+     1.9302973896478761
+    ],
+    "areaRelativeError": 0.3375948358418618,
+    "sigmaRelativeError": 0.1565443510051234,
+    "centroidShiftPerHullLength": 0.015002072741624413
+   },
+   "current": {
+    "hullVertices": 4,
+    "area": 1.915999078005992e-7,
+    "centroid": [
+     0.45229254490510584,
+     1.9045850610187927
+    ],
+    "areaRelativeError": -0.0017759364981099607,
+    "sigmaRelativeError": -0.0008883628433256561,
+    "centroidShiftPerHullLength": 0.0010046975482242235
+   }
+  },
+  {
+   "case": 2292,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 3.3983113989499714e-7,
+    "centroid": [
+     0.4746177131412416,
+     1.9492355234449505
+    ],
+    "hullLength": 1.8697351648927014
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 4.090558190054938e-7,
+    "centroid": [
+     0.5062401173503304,
+     2.012480315884204
+    ],
+    "areaRelativeError": 0.20370316602500316,
+    "sigmaRelativeError": 0.0971340693028376,
+    "centroidShiftPerHullLength": 0.037818099835316574
+   },
+   "current": {
+    "hullVertices": 6,
+    "area": 3.2767831504090794e-7,
+    "centroid": [
+     0.47640584855443535,
+     1.9528118191290105
+    ],
+    "areaRelativeError": -0.03576136329897325,
+    "sigmaRelativeError": -0.018043464963429803,
+    "centroidShiftPerHullLength": 0.0021384924696000586
+   }
+  },
+  {
+   "case": 2302,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 5,
+    "area": 2.268219458402554e-7,
+    "centroid": [
+     0.5336238536333617,
+     2.067247822600361
+    ],
+    "hullLength": 1.3348400212671447
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 2.9174724334567886e-7,
+    "centroid": [
+     0.4898277179796935,
+     1.9796554920292238
+    ],
+    "areaRelativeError": 0.28623904651249493,
+    "sigmaRelativeError": 0.1341247931830496,
+    "centroidShiftPerHullLength": 0.07336548793884552
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2312,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 1.7422074160937384e-8,
+    "centroid": [
+     0.35244154501580044,
+     1.7048829772867737
+    ],
+    "hullLength": 0.6428605465221978
+   },
+   "previous": {
+    "hullVertices": 5,
+    "area": 1.727210383675737e-7,
+    "centroid": [
+     0.44776007757167235,
+     1.8955201175475622
+    ],
+    "areaRelativeError": 8.913919362990505,
+    "sigmaRelativeError": 2.1486376995441234,
+    "centroidShiftPerHullLength": 0.33154746652110545
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2317,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 4.17332010650695e-8,
+    "centroid": [
+     0.4703977684583615,
+     1.9407955390546585
+    ],
+    "hullLength": 0.909695408087972
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 5.726334073585804e-8,
+    "centroid": [
+     0.4077086705457589,
+     1.8154173437503687
+    ],
+    "areaRelativeError": 0.37212912679701415,
+    "sigmaRelativeError": 0.17137915586585972,
+    "centroidShiftPerHullLength": 0.15409232878225423
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 6.9766370180968096e-9,
+    "centroid": [
+     0.4334282778517604,
+     1.8668566090975673
+    ],
+    "areaRelativeError": -0.832827656636763,
+    "sigmaRelativeError": -0.5911328536514128,
+    "centroidShiftPerHullLength": 0.0908724475358125
+   }
+  },
+  {
+   "case": 2337,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 1.851765049631915e-8,
+    "centroid": [
+     0.519507087930784,
+     2.0390141585887838
+    ],
+    "hullLength": 1.4925570740168617
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 1.6632246968573128e-8,
+    "centroid": [
+     0.5419437991147902,
+     2.0838875754916444
+    ],
+    "areaRelativeError": -0.10181656296627874,
+    "sigmaRelativeError": -0.05227459829667883,
+    "centroidShiftPerHullLength": 0.03361345933376384
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 1.4748983478973798e-8,
+    "centroid": [
+     0.47422453274080567,
+     1.948449055438573
+    ],
+    "areaRelativeError": -0.20351755845561878,
+    "sigmaRelativeError": -0.10754135023275103,
+    "centroidShiftPerHullLength": 0.067839861467202
+   }
+  },
+  {
+   "case": 2357,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 7,
+    "area": 3.536775372552786e-7,
+    "centroid": [
+     0.4769396936050581,
+     1.9538794239472639
+    ],
+    "hullLength": 2.0262549951126885
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 3.5501580295275656e-7,
+    "centroid": [
+     0.47925260947704373,
+     1.9585052556906248
+    ],
+    "areaRelativeError": 0.003783858335656764,
+    "sigmaRelativeError": 0.0018901428478357335,
+    "centroidShiftPerHullLength": 0.0025524117783431123
+   },
+   "current": {
+    "hullVertices": 6,
+    "area": 3.550158020151385e-7,
+    "centroid": [
+     0.4792526105138961,
+     1.9585052577642728
+    ],
+    "areaRelativeError": 0.0037838556846033606,
+    "sigmaRelativeError": 0.001890141524809801,
+    "centroidShiftPerHullLength": 0.002552412922533538
+   }
+  },
+  {
+   "case": 2367,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 6,
+    "area": 6.016855593777432e-7,
+    "centroid": [
+     0.5065358832761112,
+     2.0130718908687846
+    ],
+    "hullLength": 1.761696841361603
+   },
+   "previous": {
+    "hullVertices": 6,
+    "area": 6.016855753909756e-7,
+    "centroid": [
+     0.5065358823053998,
+     2.013071888927243
+    ],
+    "areaRelativeError": 2.6613955008829896e-8,
+    "sigmaRelativeError": 1.3306977243324639e-8,
+    "centroidShiftPerHullLength": 1.2321546360403608e-9
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2382,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 3,
+    "area": 1.3309260603333595e-8,
+    "centroid": [
+     0.2555169530720411,
+     1.5110338624086554
+    ],
+    "hullLength": 0.7405293805315704
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 6.905118575453034e-8,
+    "centroid": [
+     0.48372826736334673,
+     1.9674565121996466
+    ],
+    "areaRelativeError": 4.188206002761338,
+    "sigmaRelativeError": 1.277763377254393,
+    "centroidShiftPerHullLength": 0.6890962659617599
+   },
+   "current": {
+    "hullVertices": 3,
+    "area": 2.5729722784023493e-10,
+    "centroid": [
+     0.14725812538314642,
+     1.2945162189919301
+    ],
+    "areaRelativeError": -0.9806678045078034,
+    "sigmaRelativeError": -0.8609597342774526,
+    "centroidShiftPerHullLength": 0.326893292207714
+   }
+  },
+  {
+   "case": 2417,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 9,
+    "area": 0.000002031975110274205,
+    "centroid": [
+     0.4991819880200015,
+     1.998363678099492
+    ],
+    "hullLength": 2.031260413879121
+   },
+   "previous": {
+    "hullVertices": 9,
+    "area": 0.0000020319750833352503,
+    "centroid": [
+     0.4991819825889081,
+     1.9983636672372995
+    ],
+    "areaRelativeError": -1.325752190718397e-8,
+    "sigmaRelativeError": -6.628760825795457e-9,
+    "centroidShiftPerHullLength": 5.9787012214598105e-9
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2447,
+   "status": "resolved",
+   "matlab": {
+    "hullVertices": 0,
+    "area": 0,
+    "centroid": [
+     null,
+     null
+    ],
+    "hullLength": 0
+   },
+   "previous": {
+    "hullVertices": 3,
+    "area": 1.862297716037631e-8,
+    "centroid": [
+     0.2623821792718388,
+     1.524764350032683
+    ],
+    "areaRelativeError": null,
+    "sigmaRelativeError": null,
+    "centroidShiftPerHullLength": null
+   },
+   "current": "matches MATLAB"
+  },
+  {
+   "case": 2457,
+   "status": "carried, changed",
+   "matlab": {
+    "hullVertices": 4,
+    "area": 7.001583923749166e-8,
+    "centroid": [
+     0.5590729282639849,
+     2.1181459372850844
+    ],
+    "hullLength": 2.150649023814533
+   },
+   "previous": {
+    "hullVertices": 4,
+    "area": 7.001583890442475e-8,
+    "centroid": [
+     0.5590729246567889,
+     2.1181459300705683
+    ],
+    "areaRelativeError": -4.7570222825979965e-9,
+    "sigmaRelativeError": -2.378511098664019e-9,
+    "centroidShiftPerHullLength": 3.750517338466361e-9
+   },
+   "current": {
+    "hullVertices": 5,
+    "area": 9.759533547981647e-8,
+    "centroid": [
+     0.5200368147558265,
+     2.040073693766317
+    ],
+    "areaRelativeError": 0.3939036729785666,
+    "sigmaRelativeError": 0.18063697764324083,
+    "centroidShiftPerHullLength": 0.04058654721218165
+   }
+  }
+ ]
+}

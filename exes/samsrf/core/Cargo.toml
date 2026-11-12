@@ -10,6 +10,11 @@ description = "Population receptive field and connective field mapping (a port o
 name = "samsrf_core"
 path = "src/lib.rs"
 
+[features]
+# An experimental Clipper-based polyshape model with its diagnostics and gates
+# (src/experimental). No shipped build enables it; WebAssembly refuses it.
+polyshape-experimental = []
+
 [dependencies]
 base64 = "0.22"
 robust = "1.2.0"
@@ -26,3 +31,11 @@ delaunator = "1.0.2"
 num-rational = "0.4.2"
 num-traits = "0.2.19"
 sha2 = "0.10"
+
+[[example]]
+name = "polyshape_stages"
+required-features = ["polyshape-experimental"]
+
+[[test]]
+name = "matlab_polyshape_experimental"
+required-features = ["polyshape-experimental"]

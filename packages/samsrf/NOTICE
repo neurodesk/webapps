@@ -21,6 +21,14 @@ model. Clipper uses squared distances, with < for near-collinearity and <=
 for neighbours. The grid scaling, exact intersection representation and face
 tracing are separate implementations.
 
+Repository source only, not compiled into the shipped WebAssembly module or
+command line: exes/samsrf/core/src/experimental/clipper.rs ports the closed-path
+union of cpp/clipper.cpp (ClipperBase::AddPath through Clipper::ExecuteInternal,
+the strictly simple DoSimplePolygons and BuildResult) from the same file, and
+exes/samsrf/core/src/experimental/polyshape.rs adapts SlopesNearCollinear and
+CleanPolygon with Clipper's own squared-distance comparisons. Both are built
+only with the samsrf-core feature polyshape-experimental, for validation.
+
 Boost Software License - Version 1.0 - August 17th, 2003
 
 Permission is hereby granted, free of charge, to any person or organization

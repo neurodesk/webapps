@@ -131,19 +131,31 @@ function unhashedName(file) {
   return basename(file).replace(/-[\w-]{8}(?=\.[^.]+$)/, '');
 }
 
+/** The apps that must share `asset`: its own `consumers`, or else its family's. */
+function assetConsumers(family, asset) {
+  return asset.consumers ?? family.consumers;
+}
+
+// An app keeps a file that one of its app-scoped families pins, even when another family shares the same bytes.
+function keepsScopedCopy({ manifest, app, asset }) {
+  return manifest.families.some(family => app.app_scoped_runtime_families?.includes(family.id)
+    && family.files.some(file => file.name === asset.name && file.sha256 === asset.sha256));
+}
+
 // A content-matched family skips bytes it does not know, so an app that moves to another build would
 // silently keep its own copy. A family that lists `consumers` must be shared by exactly those apps.
 function assertDeclaredConsumers({ family, asset, sharing, registry }) {
-  if (!family.consumers) return;
+  const consumers = assetConsumers(family, asset);
+  if (!consumers) return;
   const built = new Set(registry.apps.map(app => app.id));
-  for (const id of family.consumers) {
+  for (const id of consumers) {
     if (built.has(id) && !sharing.has(id)) {
       throw new Error(`${id}: declared consumer of runtime family ${family.id} ships no ${asset.name} with sha256 ${asset.sha256}; `
         + 'register the build it now uses in runtime-assets/manifest.json and move the app to that family');
     }
   }
   for (const id of sharing) {
-    if (!family.consumers.includes(id)) {
+    if (!consumers.includes(id)) {
       throw new Error(`${id}: shares ${asset.name} of runtime family ${family.id} but is not in its consumers; add it in runtime-assets/manifest.json`);
     }
   }
@@ -168,6 +180,7 @@ async function deduplicateSources({ manifest, files, siteDist, registry }) {
           : unhashedName(file) === unhashedName(asset.source)));
         if (!copies.length) continue;
         if (app.app_scoped_runtime_families?.includes(family.id)) throw new Error(`Cannot deduplicate scoped runtime ${family.id}`);
+        if (keepsScopedCopy({ manifest, app, asset })) continue;
         for (const sourcePath of copies) {
           const actual = await sha256(sourcePath);
           if (byContent && actual !== asset.sha256) continue;

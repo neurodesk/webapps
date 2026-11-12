@@ -231,6 +231,17 @@ impl Prepared {
             let n = p.len();
             match prf_function.evaluate(&[Value::column(p[..n - 2].to_vec()), Value::scalar(dims as f64)]) {
                 Ok(profile) => {
+                    if model.data_precision == Precision::Single {
+                        // samsrf_fit2dprf's errfun: ModelRfp is double, but ObsRfp is single,
+                        // so Ds = ObsRfp - ModelRfp.*Mask is single and sum(Ds(:).^2) sums
+                        // singles; fminsearch keeps that value in its double fv.
+                        let squares: Vec<f32> = rmap.iter().enumerate().map(|(pixel, observed)| {
+                            let modelled = (profile.data[pixel] * p[n - 2] + p[n - 1]) * self.mask[pixel];
+                            let difference = (observed - modelled) as f32;
+                            difference * difference
+                        }).collect();
+                        return f64::from(crate::precision::sum_single(&squares));
+                    }
                     let mut total = 0.0;
                     for (pixel, observed) in rmap.iter().enumerate() {
                         let modelled = (profile.data[pixel] * p[n - 2] + p[n - 1]) * self.mask[pixel];
@@ -265,9 +276,17 @@ impl Prepared {
         if let Some(error) = failure {
             return Err(error);
         }
-        let mean = rmap.iter().sum::<f64>() / rmap.len() as f64;
-        let total: f64 = rmap.iter().map(|value| (value - mean) * (value - mean)).sum();
-        let r2 = 1.0 - residual / total;
+        let r2 = if model.data_precision == Precision::Single {
+            // Resid = (Rmap - mean(Rmap(:))).^2 and R2 = 1 - R/sum(Resid(:)), all single.
+            let observed: Vec<f32> = rmap.iter().map(|&value| value as f32).collect();
+            let mean = crate::precision::sum_single(&observed) / observed.len() as f32;
+            let total = crate::precision::sum_single(&observed.iter().map(|value| (value - mean) * (value - mean)).collect::<Vec<_>>());
+            f64::from(1.0 - residual as f32 / total)
+        } else {
+            let mean = rmap.iter().sum::<f64>() / rmap.len() as f64;
+            let total: f64 = rmap.iter().map(|value| (value - mean) * (value - mean)).sum();
+            1.0 - residual / total
+        };
         let n = params.len();
         for (p, scaled) in model.scaled_param.iter().enumerate() {
             if *scaled {

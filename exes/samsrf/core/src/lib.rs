@@ -14,6 +14,8 @@ pub mod apertures;
 pub mod css;
 pub mod error;
 pub mod export;
+#[cfg(feature = "polyshape-experimental")]
+pub mod experimental;
 pub mod expr;
 pub mod fit_prf;
 pub mod freesurfer;

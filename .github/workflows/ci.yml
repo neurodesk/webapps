@@ -236,6 +236,7 @@ jobs:
         run: pnpm test:e2e:catalog --skip-build --output .e2e/workspace
       # The audit imports one example per app at two widths. Reading them from
       # this checked copy keeps a stalled or rate-limited download from failing it.
+      # It also holds the runtime of the apps the audit runs offline (OFFLINE_AUDIT_APPS).
       # Only main saves the copy: a pull request's would be a second one of its size.
       - name: Record free disk space before the examples are restored
         run: df -h
@@ -244,7 +245,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/example-assets
-          key: example-assets-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json') }}
+          key: example-assets-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'scripts/lib/example-asset-cache.mjs') }}
           restore-keys: example-assets-
       - name: Download the examples the cache lacks and check all of them
         run: node scripts/fetch-example-cache.mjs "$EXAMPLE_ASSET_CACHE" --prune

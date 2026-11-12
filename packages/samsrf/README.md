@@ -365,7 +365,10 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   `exp`, `sin` and `cos` candidates retain discrepancies. On the whole X001
   Benson atlases, 10 LH and 9 RH vertices have a one-ULP coordinate difference;
   affected seed regions can change Gaussian fits. The internal evidence does
-  not enable those fits through the API, command line or app.
+  not enable those fits through the API, command line or app. Internally, single
+  `rc` 2D fits evaluate `samsrf_fit2dprf`'s objective and `R^2` in single as
+  MATLAB does and equal its recorded maps on the AMD host from raw runs; they
+  stay refused for the same reason.
   [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
   lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
@@ -487,6 +490,9 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   recorded polygon except 93 nearly collinear point clouds, whose crossings of
   nearly parallel edges MATLAB resolves by snapping vertices the port does not
   reproduce ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
+  An experimental Clipper-based model that matches more of them but not four
+  that this one matches is kept out of every shipped build
+  ([experimental model](validation/matlab/README.md#experimental-clipper-model-not-in-production-732-open)).
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so
