@@ -22,3 +22,5 @@ While a mask review is open, its image stays in the viewer: Check atlas alignmen
 A failure in work for an image that has since been replaced no longer changes the newer image's results: a threshold projection that failed late cleared the newer image's threshold map. A threshold changed during a mask review is drawn when the review ends, however it ends. Pre-align is refused during a mask review, like the registration QC views, so it can no longer leave a drawing over the pre-aligned image.
 
 A `ViewerController` load given `assertCurrent` now ends as soon as its outcome is known: on the first stack member that fails, or when `assertCurrent` throws, which is asked whenever a member is decoded and whenever the viewer changes. Members decoded so far are released then, and a member that is decoded later releases itself. `assertCurrent` is called several times and must have no side effects; `replaceStage` makes an overlay take its stage's place in the commit.
+
+Failed decodes also recheck ownership when the controller resumes, before reporting an error, so a load superseded between decode completion and its continuation stays silent and rejects as superseded.

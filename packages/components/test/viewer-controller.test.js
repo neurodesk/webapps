@@ -247,6 +247,35 @@ function countingUrls() {
   };
 }
 
+for (const kind of ['base', 'overlay', 'stack']) {
+  test(`a ${kind} decode failure superseded before its continuation is silent`, async () => {
+    const messages = [];
+    let fail;
+    let current = true;
+    const decoded = new Promise((resolve, reject) => { fail = reject; });
+    // Another asynchronous action replaces the load after the decode settles,
+    // before the controller resumes from awaiting the outcome.
+    decoded.catch(() => queueMicrotask(() => { current = false; }));
+    const viewer = new ViewerController({ nv: niivue(), updateOutput: message => messages.push(message) });
+    viewer.decodeVolume = () => decoded;
+    const options = {
+      assertCurrent: () => {
+        if (!current) throw new DOMException('superseded', 'AbortError');
+      },
+    };
+    const input = file('broken.nii');
+    const loading = kind === 'base'
+      ? viewer.loadBaseVolume(input, options)
+      : kind === 'overlay'
+        ? viewer.loadOverlay(input, options)
+        : viewer.loadVolumeStack([{ file: input }], options);
+    fail(new Error('broken header'));
+    await assert.rejects(loading, { name: 'AbortError' });
+    assert.ok(messages.every(message => !message.startsWith('Error')), 'superseded failures do not write to the log');
+    assert.deepEqual(viewer.nv.volumes, []);
+  });
+}
+
 test('a superseded stack releases a decoded member while a sibling never ends', async () => {
   const urls = countingUrls();
   try {

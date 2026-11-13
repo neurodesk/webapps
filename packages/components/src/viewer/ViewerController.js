@@ -191,11 +191,11 @@ export class ViewerController {
   async loadCheckedBaseVolume(file, options) {
     this.updateOutput(`Loading ${file.name}...`);
     const { images, failure } = await this.decodeCurrent([this.decodeBaseVolume(file)], options.assertCurrent);
+    this.assertStillCurrent(images || [], options.assertCurrent);
     if (failure) {
       this.updateOutput(`Error loading ${file.name}: ${failure.message}`);
       return false;
     }
-    this.assertStillCurrent(images, options.assertCurrent);
     this.commitBaseVolume(images[0], file, options);
     options.onCommit?.();
     return true;
@@ -252,11 +252,11 @@ export class ViewerController {
       this.decodeBaseVolume(base.file),
       ...overlays.map((entry, index) => this.decodeVolume(entry.file, { colormap: configs[index].colormap, opacity: configs[index].opacity }))
     ], options.assertCurrent);
+    this.assertStillCurrent(images || [], options.assertCurrent);
     if (failure) {
       this.updateOutput(`Error loading viewer volumes: ${failure.message}`);
       return false;
     }
-    this.assertStillCurrent(images, options.assertCurrent);
     this.commitBaseVolume(images[0], base.file, { ...base, releaseUnusedUrls: false });
     if (base.labelMask) this.configureSegmentationVolume(0, base.colormap || 'labels');
     overlays.forEach((entry, index) => this.commitOverlay(images[index + 1], entry.file, configs[index]));
@@ -320,11 +320,11 @@ export class ViewerController {
   async loadCheckedOverlay(file, config) {
     const decode = this.decodeVolume(file, { colormap: config.colormap, opacity: config.opacity });
     const { images, failure } = await this.decodeCurrent([decode], config.assertCurrent);
+    this.assertStillCurrent(images || [], config.assertCurrent);
     if (failure) {
       this.updateOutput(`Error loading overlay: ${failure.message}`);
       return false;
     }
-    this.assertStillCurrent(images, config.assertCurrent);
     if (config.replaceStage) this.removeVolumeForStage(config.stage);
     this.commitOverlay(images[0], file, config);
     config.onCommit?.();
