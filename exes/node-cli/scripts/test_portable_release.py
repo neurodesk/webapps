@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import shutil
 import plistlib
 import struct
 import subprocess
@@ -507,6 +508,150 @@ class ReleaseMakefileTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("Set PACKAGE", result.stderr)
 
+
+
+def pe_file(imports=(), version=None):
+    """A minimal PE32+ file importing the named DLLs, with an optional VS_FIXEDFILEINFO version."""
+    section_rva, section_offset = 0x1000, 0x200
+    descriptors = 20 * (len(imports) + 1)
+    names, name_rvas = b"", []
+    for name in imports:
+        name_rvas.append(section_rva + descriptors + len(names))
+        names += name.encode("ascii") + b"\0"
+    table = b"".join(struct.pack("<5I", 0, 0, 0, rva, 0) for rva in name_rvas) + bytes(20) + names
+    if version is not None:
+        major, minor, build, private = version
+        table += b"\xbd\x04\xef\xfe" + struct.pack("<5I", 0x10000, major << 16 | minor, build << 16 | private, 0, 0)
+    raw = table + bytes(-len(table) % 0x200)
+    optional = bytearray(240)
+    struct.pack_into("<H", optional, 0, 0x20B)
+    struct.pack_into("<I", optional, 108, 16)
+    struct.pack_into("<II", optional, 112 + 8, section_rva if imports else 0, descriptors if imports else 0)
+    coff = struct.pack("<HHIIIHH", 0x8664, 1, 0, 0, 0, len(optional), 0x2022)
+    section = struct.pack("<8sIIIIIIHHI", b".rdata", len(table), section_rva, len(raw), section_offset, 0, 0, 0, 0, 0x40000040)
+    header = bytearray(b"MZ" + bytes(0x3E))
+    struct.pack_into("<I", header, 0x3C, 0x40)
+    headers = bytes(header) + b"PE\0\0" + coff + bytes(optional) + section
+    return headers + bytes(section_offset - len(headers)) + raw
+
+
+CURRENT_VC_RUNTIME = (14, 44, 35211, 0)
+
+
+def write_vc_runtime(folder, version=CURRENT_VC_RUNTIME):
+    """A Microsoft.VC143.CRT-like folder whose C++ library imports the C runtime, as the real one does."""
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "vcruntime140.dll").write_bytes(pe_file((), version))
+    (folder / "vcruntime140_1.dll").write_bytes(pe_file(("vcruntime140.dll",), version))
+    for name in ("msvcp140.dll", "msvcp140_1.dll", "msvcp140_atomic_wait.dll"):
+        (folder / name).write_bytes(pe_file(("vcruntime140.dll", "vcruntime140_1.dll", "kernel32.dll"), version))
+    return folder
+
+
+class VisualCppRuntimeTests(unittest.TestCase):
+    """The scanner-host failure: ONNX Runtime's binding needs a Visual C++ runtime >= 14.40 beside it."""
+
+    BINDING = "app/node_modules/onnxruntime-node/bin/napi-v6/win32/x64"
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = pathlib.Path(temporary.name) / "release"
+        self.runtime = write_vc_runtime(pathlib.Path(temporary.name) / "Microsoft.VC143.CRT")
+        self.binding = self.root / self.BINDING
+        self.binding.mkdir(parents=True)
+        (self.binding / "onnxruntime_binding.node").write_bytes(
+            pe_file(("kernel32.dll", "MSVCP140.dll", "VCRUNTIME140.dll", "onnxruntime.dll"))
+        )
+        (self.binding / "onnxruntime.dll").write_bytes(
+            pe_file(("MSVCP140.dll", "MSVCP140_1.dll", "MSVCP140_ATOMIC_WAIT.dll", "VCRUNTIME140_1.dll"))
+        )
+        (self.root / "runtime").mkdir()
+        (self.root / "runtime/node.exe").write_bytes(pe_file(("kernel32.dll", "ws2_32.dll")))
+
+    def test_pe_imports_reads_the_import_table(self):
+        self.assertEqual(
+            portable_release.pe_imports((self.binding / "onnxruntime_binding.node").read_bytes()),
+            {"kernel32.dll", "msvcp140.dll", "vcruntime140.dll", "onnxruntime.dll"},
+        )
+
+    def test_pe_file_version_reads_the_fixed_file_info(self):
+        data = (self.runtime / "msvcp140.dll").read_bytes()
+        self.assertEqual(portable_release.pe_file_version(data), CURRENT_VC_RUNTIME)
+        self.assertIsNone(portable_release.pe_file_version(pe_file(("kernel32.dll",))))
+
+    def test_release_without_the_runtime_is_reported(self):
+        problems = portable_release.vc_runtime_problems(self.root)
+        self.assertIn(f"{self.BINDING}/onnxruntime_binding.node imports msvcp140.dll, which is not beside it", problems)
+        self.assertIn(f"{self.BINDING}/onnxruntime.dll imports msvcp140_atomic_wait.dll, which is not beside it", problems)
+        self.assertFalse(any(problem.startswith("runtime/") for problem in problems))
+
+    def test_runtime_older_than_14_40_is_reported(self):
+        write_vc_runtime(self.binding, version=(14, 29, 30157, 0))
+        problems = portable_release.vc_runtime_problems(self.root)
+        self.assertIn(f"{self.BINDING}/onnxruntime_binding.node uses msvcp140.dll 14.29.30157.0, older than 14.40", problems)
+
+    def test_deploy_copies_imported_dlls_and_their_dependencies_beside_the_binding(self):
+        copied = portable_release.deploy_vc_runtime(self.root, self.runtime)
+        self.assertEqual(
+            sorted(pathlib.PurePosixPath(path).name for path in copied),
+            ["msvcp140.dll", "msvcp140_1.dll", "msvcp140_atomic_wait.dll", "vcruntime140.dll", "vcruntime140_1.dll"],
+        )
+        self.assertTrue(all(path.startswith(self.BINDING + "/") for path in copied))
+        self.assertEqual(portable_release.vc_runtime_problems(self.root), [])
+        self.assertFalse((self.root / "runtime/msvcp140.dll").exists())
+
+    def test_deploy_does_nothing_and_needs_no_runtime_when_nothing_imports_it(self):
+        shutil.rmtree(self.binding)
+        with mock.patch.object(portable_release, "find_vc_runtime", side_effect=AssertionError("looked for a runtime")):
+            self.assertEqual(portable_release.deploy_vc_runtime(self.root), [])
+
+    def test_deploy_fails_when_the_runtime_lacks_an_imported_dll(self):
+        (self.runtime / "msvcp140_atomic_wait.dll").unlink()
+        with self.assertRaisesRegex(FileNotFoundError, "msvcp140_atomic_wait.dll is missing"):
+            portable_release.deploy_vc_runtime(self.root, self.runtime)
+
+    def test_packaging_rejects_a_runtime_older_than_14_40(self):
+        old = write_vc_runtime(self.runtime.parent / "old", version=(14, 29, 30157, 0))
+        with mock.patch.object(portable_release, "find_vc_runtime", return_value=old):
+            with self.assertRaisesRegex(ValueError, "older than 14.40"):
+                portable_release._deploy_vc_runtime(self.root)
+
+    def test_packaging_adds_the_runtime_and_its_notice(self):
+        with mock.patch.object(portable_release, "find_vc_runtime", return_value=self.runtime):
+            portable_release._deploy_vc_runtime(self.root)
+        self.assertTrue((self.binding / "msvcp140.dll").is_file())
+        notice = self.root / "licenses/microsoft-visual-cpp-runtime/README.txt"
+        self.assertIn("Visual Studio redistribution terms", notice.read_text(encoding="utf8"))
+
+    def test_verify_rejects_a_windows_archive_without_the_runtime(self):
+        target = portable_release.load_target(ROOT, "packages/topofit", "windows-x64")
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+            dist = pathlib.Path(temporary)
+            archive = dist / target.archive_name
+            with zipfile.ZipFile(archive, "w") as bundle:
+                for path in self.root.rglob("*"):
+                    if path.is_file():
+                        bundle.write(path, f"{target.directory}/{path.relative_to(self.root).as_posix()}")
+            archive.with_name(archive.name + ".sha256").write_text(
+                f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n", encoding="ascii"
+            )
+            stack.enter_context(mock.patch.object(portable_release, "DIST", dist))
+            stack.enter_context(mock.patch.object(portable_release, "_assert_native_host"))
+            exercise = stack.enter_context(mock.patch.object(portable_release, "_exercise"))
+            with self.assertRaisesRegex(ValueError, "lacks a usable Visual C\\+\\+ runtime"):
+                portable_release.verify_target(ROOT, target)
+            exercise.assert_not_called()
+
+    def test_real_windows_onnx_runtime_binding_needs_the_runtime(self):
+        bindings = sorted(ROOT.glob(
+            "node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v6/win32/x64/onnxruntime_binding.node"
+        ))
+        if not bindings:
+            self.skipTest("onnxruntime-node is not installed")
+        for binding in bindings:
+            imports = portable_release.pe_imports(binding.read_bytes())
+            self.assertTrue(imports & portable_release.VC_RUNTIME_DLLS, f"{binding} imports {sorted(imports)}")
 
 if __name__ == "__main__":
     unittest.main()

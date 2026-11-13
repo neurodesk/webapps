@@ -225,6 +225,15 @@ test('portable Node command lines build on target runners and publish through on
   for(const command of ['portable_release\\.py package','portable_release\\.py verify','test_portable_release\\.py','cargo test --manifest-path exes/node-cli/Cargo\\.toml','cargo clippy --manifest-path exes/node-cli/Cargo\\.toml --locked -- -D warnings','cargo fmt --manifest-path exes/node-cli/Cargo\\.toml --check']) {
     assert.match(build,new RegExp(command));
   }
+  // GitHub's Windows runners have a current Visual C++ runtime, so the archive must also pass in clean containers.
+  const portableSteps=shared.jobs.portable.steps;
+  const packaged=portableSteps.findIndex(step=>/portable_release\.py verify/.test(step.run??''));
+  const clean=portableSteps.findIndex(step=>step.name==='Check the archive on clean Windows');
+  assert.ok(packaged>=0&&clean>packaged,'clean Windows check runs after verify');
+  assert.equal(portableSteps[clean].if,"runner.os == 'Windows'");
+  assert.match(portableSteps[clean].run,/verify_clean_windows\.ps1 -Archive/);
+  const uploaded=portableSteps.findIndex(step=>step.uses?.startsWith('actions/upload-artifact@'));
+  assert.ok(clean<uploaded,'only archives that ran on clean Windows are uploaded');
   const steps=shared.jobs.release.steps;
   const target=steps.findIndex(step=>step.name==='Check release target');
   const signStep=steps.indexOf(sign);

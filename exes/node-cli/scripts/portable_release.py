@@ -366,6 +366,166 @@ def _prune_onnx_runtime(app: pathlib.Path, target: ReleaseTarget) -> None:
         raise ValueError(f"foreign ONNX Runtime bindings remain: {foreign}")
 
 
+# The Microsoft Visual C++ 2015-2022 runtime. Windows does not ship it, and an older copy installed
+# by other software is not enough: ONNX Runtime 1.29 fails to initialise against msvcp140.dll
+# older than 14.40 ("A dynamic link library (DLL) initialization routine failed"). Releases
+# therefore carry it next to every binary that imports it, where the loader looks first.
+VC_RUNTIME_DLLS = frozenset({
+    "concrt140.dll",
+    "msvcp140.dll",
+    "msvcp140_1.dll",
+    "msvcp140_2.dll",
+    "msvcp140_atomic_wait.dll",
+    "msvcp140_codecvt_ids.dll",
+    "vccorlib140.dll",
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "vcruntime140_threads.dll",
+})
+MINIMUM_VC_RUNTIME = (14, 40)
+VC_RUNTIME_NOTICE = """The msvcp140*.dll, vcruntime140*.dll and concrt140.dll files next to native
+modules in this release are the Microsoft Visual C++ 2015-2022 runtime
+(Visual Studio 2022 redistributable, Microsoft.VC143.CRT), distributed
+app-locally under the Visual Studio redistribution terms
+(https://learn.microsoft.com/visualstudio/releases/2022/redistribution).
+They let the release run on Windows without installing the Visual C++
+Redistributable and regardless of an older copy installed by other software.
+"""
+PE_SUFFIXES = (".exe", ".dll", ".node")
+
+
+def _pe_sections(data: bytes) -> tuple[int, list[tuple[int, int, int, int]]] | None:
+    """The optional header offset and (address, virtual size, raw size, raw offset) per section."""
+    if data[:2] != b"MZ" or len(data) < 0x40:
+        return None
+    offset = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[offset:offset + 4] != b"PE\0\0":
+        return None
+    count, _, _, _, optional_size = struct.unpack_from("<HIIIH", data, offset + 6)
+    optional = offset + 24
+    sections = []
+    for index in range(count):
+        header = optional + optional_size + 40 * index
+        virtual_size, address, raw_size, raw_offset = struct.unpack_from("<IIII", data, header + 8)
+        sections.append((address, virtual_size, raw_size, raw_offset))
+    return optional, sections
+
+
+def _rva_offset(sections: list[tuple[int, int, int, int]], rva: int) -> int:
+    for address, virtual_size, raw_size, raw_offset in sections:
+        if address <= rva < address + max(virtual_size, raw_size):
+            return raw_offset + rva - address
+    raise ValueError(f"PE address {rva:#x} is outside every section")
+
+
+def _c_string(data: bytes, offset: int) -> str:
+    return data[offset:data.index(b"\0", offset)].decode("ascii")
+
+
+def pe_imports(data: bytes) -> frozenset[str]:
+    """Lower-case names of the DLLs a PE file imports at load time (not delay-loaded)."""
+    parsed = _pe_sections(data)
+    if parsed is None:
+        raise ValueError("not a PE file")
+    optional, sections = parsed
+    magic = struct.unpack_from("<H", data, optional)[0]
+    directories = optional + {0x10B: 96, 0x20B: 112}[magic]
+    import_rva, import_size = struct.unpack_from("<II", data, directories + 8)
+    if not import_rva or not import_size:
+        return frozenset()
+    names = set()
+    descriptor = _rva_offset(sections, import_rva)
+    while True:
+        fields = struct.unpack_from("<IIIII", data, descriptor)
+        if not any(fields):
+            return frozenset(names)
+        names.add(_c_string(data, _rva_offset(sections, fields[3])).lower())
+        descriptor += 20
+
+
+def pe_file_version(data: bytes) -> tuple[int, int, int, int] | None:
+    """The file version from a PE file's VS_FIXEDFILEINFO, or None without a version resource."""
+    index = data.find(b"\xbd\x04\xef\xfe")
+    if index < 0:
+        return None
+    most, least = struct.unpack_from("<II", data, index + 8)
+    return most >> 16, most & 0xFFFF, least >> 16, least & 0xFFFF
+
+
+def _pe_files(root: pathlib.Path) -> list[pathlib.Path]:
+    files = []
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and path.suffix.lower() in PE_SUFFIXES:
+            with path.open("rb") as source:
+                if source.read(2) == b"MZ":
+                    files.append(path)
+    return files
+
+
+def vc_runtime_problems(root: pathlib.Path) -> list[str]:
+    """Binaries importing a Visual C++ runtime DLL that is not beside them or is too old."""
+    problems = []
+    for path in _pe_files(root):
+        present = {entry.name.lower(): entry for entry in path.parent.iterdir() if entry.is_file()}
+        relative = path.relative_to(root).as_posix()
+        for name in sorted(pe_imports(path.read_bytes()) & VC_RUNTIME_DLLS):
+            dependency = present.get(name)
+            if dependency is None:
+                problems.append(f"{relative} imports {name}, which is not beside it")
+                continue
+            version = pe_file_version(dependency.read_bytes())
+            if version is None or version[:2] < MINIMUM_VC_RUNTIME:
+                shown = ".".join(map(str, version)) if version else "unknown"
+                problems.append(f"{relative} uses {name} {shown}, older than {'.'.join(map(str, MINIMUM_VC_RUNTIME))}")
+    return problems
+
+
+def find_vc_runtime(environment=None) -> pathlib.Path:
+    """The newest Microsoft.VC14x.CRT folder: VC_RUNTIME_DIR, or Visual Studio's redistributables."""
+    environment = os.environ if environment is None else environment
+    if environment.get("VC_RUNTIME_DIR"):
+        return pathlib.Path(environment["VC_RUNTIME_DIR"])
+    vswhere = pathlib.Path(environment.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Microsoft Visual Studio/Installer/vswhere.exe")
+    if not vswhere.is_file():
+        raise FileNotFoundError("vswhere.exe not found; set VC_RUNTIME_DIR to a Microsoft.VC143.CRT folder")
+    installation = subprocess.run(
+        [str(vswhere), "-latest", "-products", "*", "-property", "installationPath"],
+        check=True, text=True, stdout=subprocess.PIPE,
+    ).stdout.strip()
+    folders = list(pathlib.Path(installation, "VC/Redist/MSVC").glob("*/x64/Microsoft.VC14*.CRT"))
+    if not folders:
+        raise FileNotFoundError(f"no Microsoft.VC14x.CRT redistributable under {installation}")
+    return max(folders, key=lambda folder: pe_file_version((folder / "msvcp140.dll").read_bytes()) or (0, 0, 0, 0))
+
+
+def deploy_vc_runtime(root: pathlib.Path, runtime: pathlib.Path | None = None) -> list[str]:
+    """Copy the Visual C++ runtime DLLs each binary imports, and theirs, into that binary's folder."""
+    copied = []
+    while True:
+        needed = set()
+        for path in _pe_files(root):
+            present = {entry.name.lower() for entry in path.parent.iterdir() if entry.is_file()}
+            needed.update((path.parent, name) for name in pe_imports(path.read_bytes()) & VC_RUNTIME_DLLS - present)
+        if not needed:
+            return copied
+        runtime = runtime or find_vc_runtime()
+        for directory, name in sorted(needed):
+            source = runtime / name
+            if not source.is_file():
+                raise FileNotFoundError(f"{name} is missing from the Visual C++ runtime {runtime}")
+            shutil.copy2(source, directory / name)
+            copied.append((directory / name).relative_to(root).as_posix())
+
+
+def _deploy_vc_runtime(stage: pathlib.Path) -> None:
+    if deploy_vc_runtime(stage):
+        (stage / "licenses/microsoft-visual-cpp-runtime").mkdir(parents=True, exist_ok=True)
+        (stage / "licenses/microsoft-visual-cpp-runtime/README.txt").write_text(VC_RUNTIME_NOTICE, encoding="utf8")
+    problems = vc_runtime_problems(stage)
+    if problems:
+        raise ValueError("Visual C++ runtime deployment is incomplete:\n" + "\n".join(problems))
+
+
 def _copy_dependency_licenses(app: pathlib.Path, destination: pathlib.Path) -> None:
     notices = []
     for package_json in sorted((app / "node_modules").rglob("package.json")):
@@ -610,6 +770,8 @@ def package_target(target: ReleaseTarget) -> pathlib.Path:
         (stage / "README.txt").write_text(readme_text(target), encoding="utf8")
         if target.installer:
             _sign_macos(stage, target, signing)
+        if target.windows:
+            _deploy_vc_runtime(stage)
         if target.id.startswith("windows-"):
             windows_signing.sign_tree(stage, target.executables)
         manifest = create_manifest(stage, target.version, target.id)
@@ -819,6 +981,10 @@ def verify_target(repo: pathlib.Path, target: ReleaseTarget) -> pathlib.Path:
             root = extracted / target.directory
             if target.id.startswith("windows-"):
                 windows_signing.verify_tree(root, target.executables, native=True)
+            if target.windows:
+                problems = vc_runtime_problems(root)
+                if problems:
+                    raise ValueError("portable archive lacks a usable Visual C++ runtime:\n" + "\n".join(problems))
             report, validation = _exercise(repo, target, root, root / target.executable)
     receipt.write_text(
         f"PASS {target.id}\narchive_sha256={expected}\nself_check={json.dumps(report, sort_keys=True)}\n{validation}{evidence}",

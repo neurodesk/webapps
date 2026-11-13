@@ -52,6 +52,36 @@ every file against `manifest.json`, runs `self-check` and then the package's
 validation script, and writes a `.validation.txt` receipt next to the archive
 in `exes/node-cli/dist/`.
 
+### Visual C++ runtime on Windows
+
+Windows releases carry the Microsoft Visual C++ 2015-2022 runtime. ONNX
+Runtime's `onnxruntime_binding.node` and `onnxruntime.dll` import
+`msvcp140.dll`, `vcruntime140.dll` and related DLLs, which Windows does not
+include. When they are missing the self-check fails with "The specified module
+could not be found"; when another program installed a copy older than 14.40 it
+fails with "A dynamic link library (DLL) initialization routine failed", as
+SynthSeg 0.11 did on MRI scanner hosts.
+
+Packaging reads the import table of every `.exe`, `.dll` and `.node` file in the
+release and copies each Visual C++ runtime DLL it imports, and the DLLs those
+import, into that file's folder, where Windows looks first. The DLLs come from
+`VC_RUNTIME_DIR` or the newest `Microsoft.VC14x.CRT` redistributable folder of the
+local Visual Studio installation (found with `vswhere`), and must be at least
+14.40. The release then holds
+`licenses/microsoft-visual-cpp-runtime/README.txt`.
+
+Two checks keep this from regressing:
+
+- `verify` rejects a Windows archive in which any binary imports a Visual C++
+  runtime DLL that is not beside it or is older than 14.40. This is a static
+  check because GitHub's Windows runners have a current runtime installed
+  system-wide, so running the release there passes either way.
+- `scripts/verify_clean_windows.ps1` runs in the portable workflow after
+  `verify`. It runs the extracted release's `self-check` in Windows Server Core
+  containers without a Visual C++ runtime and with the too-old 14.29 runtime,
+  after a negative control that removes the release's runtime DLLs and requires
+  the self-check to fail.
+
 ## macOS installer
 
 On Apple silicon, `make` builds and verifies the package:
