@@ -90,9 +90,23 @@ export const DEFAULT_PARAMS: Omit<TrackingParams, 'tcThreshold'> = {
  *  from the reference's 17 — Dawn/Metal caps this at 10 in the browser). */
 const REQUIRED_STORAGE_BUFFERS = 10
 
-/** The Boot kernel's `var<workgroup>` arrays total ~20.8 KB; Dawn defaults the
- *  limit to the 16 KB spec minimum (wgpu-native defaults higher). */
-const REQUIRED_WORKGROUP_STORAGE = 20800
+/** The Boot kernel's `var<workgroup>` arrays total ~10.4 KB with one row per workgroup. */
+const REQUIRED_WORKGROUP_STORAGE = 10400
+
+/** The Boot kernel's workgroup arrays hold one row of MAX_N32DIMT (512, `globals.wgsl`)
+ *  volumes, sphere vertices or model coefficients; larger inputs would write past them. */
+const MAX_ROW_ENTRIES = 512
+
+function checkRowCapacity(inputs: TrackingInputs): void {
+  const volumes = Math.ceil(inputs.dims[3] / 32) * 32
+  const largest = Math.max(volumes, inputs.samplmNr, inputs.deltaNr)
+  if (largest > MAX_ROW_ENTRIES) {
+    throw new Error(
+      `tracking supports at most ${MAX_ROW_ENTRIES} volumes, sphere vertices and model ` +
+        `coefficients; this run needs ${largest}.`,
+    )
+  }
+}
 
 /** Lanes per tidy row in the Boot kernel (THR_X_SL). Its reductions and ballots
  *  need exactly this subgroup; another size gives wrong streamlines or loses the device. */
@@ -439,6 +453,7 @@ export async function trackStreamlines(
   shouldStop?: () => boolean,
   replaceDevice?: () => Promise<GPUDevice>,
 ): Promise<TrackResult> {
+  checkRowCapacity(inputs)
   const nSeedsTotal = seeds.length / 3
   const off = modelOffsets(inputs)
   let device = initialDevice

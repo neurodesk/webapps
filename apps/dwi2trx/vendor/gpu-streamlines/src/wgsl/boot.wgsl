@@ -10,7 +10,8 @@
 //   - No ptr<storage> function params; use module-scope buffer access
 //     with read_matrix() dispatch for H/R/delta_b/delta_q/sampling_matrix
 //   - Workgroup arrays at module scope with compile-time constant sizes
-//   - subgroupShuffleXor / subgroupShuffleDown / subgroupBallot / subgroupBarrier
+//   - subgroupShuffleXor / subgroupShuffleDown / subgroupBallot
+//   - one subgroup per workgroup, so upstream's subgroupBarrier is workgroupBarrier
 //   - float3 stored as 3 contiguous f32 in flat storage buffers
 
 // ── parameter struct ────────────────────────────────────────────────
@@ -100,22 +101,23 @@ fn load_sline_f3(idx: u32) -> vec3<f32> {
 }
 
 // ── workgroup memory ────────────────────────────────────────────────
-// Boot pool: BLOCK_Y * sh_per_row where sh_per_row = 2*MAX_N32DIMT + 2*MAX_N32DIMT = 2048
-// Total = 2 * 2048 = 4096
-var<workgroup> wg_sh_mem: array<f32, 4096>;
-// For peak_directions atomics
-var<workgroup> wg_sh_ind: array<atomic<i32>, 1024>;
-// BLOCK_Y * MAX_SLINES_PER_SEED * 3 = 2 * 10 * 3 = 60
-var<workgroup> wg_dirs_sh: array<f32, 60>;
-// For check_point (one per tidy row)
-var<workgroup> wg_interp_out: array<f32, 2>;
-// Scratch for closest_peak / new direction: BLOCK_Y * 3
-var<workgroup> wg_new_dir: array<f32, 6>;
+// One row per workgroup (BLOCK_Y = 1).
+// Boot pool: sh_per_row = 2*MAX_N32DIMT + 2*MAX_N32DIMT = 2048
+var<workgroup> wg_sh_mem: array<f32, 2048>;
+// For peak_directions atomics: max(n32dimt, samplm_nr) <= MAX_N32DIMT
+var<workgroup> wg_sh_ind: array<atomic<i32>, 512>;
+// MAX_SLINES_PER_SEED * 3 = 30
+var<workgroup> wg_dirs_sh: array<f32, 30>;
+// Scratch for closest_peak / new direction
+var<workgroup> wg_new_dir: array<f32, 3>;
 // Set when the compiled subgroup layout differs from the one the kernel assumes
 var<workgroup> wg_lane_mismatch: atomic<u32>;
 
-// The reductions, ballots and removed subgroupBarrier() calls assume that each
-// tidy row is one 32-lane subgroup whose lane IDs equal tid.x. WGSL allows other
+// Each workgroup is one 32-lane subgroup (one tidy row). Upstream runs two rows
+// per workgroup and orders each row's workgroup-memory traffic with
+// subgroupBarrier(), which WGSL lacks; with one row, workgroupBarrier() gives
+// that ordering on every GPU (#598). The reductions and ballots assume the
+// subgroup's lane IDs equal tid.x. WGSL allows other
 // sizes (Intel 8/16/32, AMD 64), where the kernel would compute wrong results or
 // write outside its row; such a workgroup reports -1 instead (SUBGROUP_LAYOUT_ERROR).
 fn subgroupLayoutMismatch(tidx: u32, sg_size: u32, sg_lane: u32) -> bool {
@@ -123,7 +125,7 @@ fn subgroupLayoutMismatch(tidx: u32, sg_size: u32, sg_lane: u32) -> bool {
         atomicStore(&wg_lane_mismatch, 1u);
     }
     workgroupBarrier();
-    return atomicLoad(&wg_lane_mismatch) != 0u;
+    return workgroup_uniform_i32(i32(atomicLoad(&wg_lane_mismatch)), tidx) != 0;
 }
 
 // ── matrix access dispatch ──────────────────────────────────────────
@@ -278,16 +280,22 @@ fn closest_peak_d(
 
     if (cpeak_idx >= 0) {
         let base = dirs_offset + u32(cpeak_idx) * 3u;
+        // Lanes can keep different peaks when two tie, so only lane 0 writes the
+        // scratch; the caller takes lane 0's return value (workgroup_uniform_i32).
         if (cpeak_dot >= cos_similarity) {
-            wg_new_dir[peak_offset] = wg_dirs_sh[base];
-            wg_new_dir[peak_offset + 1u] = wg_dirs_sh[base + 1u];
-            wg_new_dir[peak_offset + 2u] = wg_dirs_sh[base + 2u];
+            if (tidx == 0u) {
+                wg_new_dir[peak_offset] = wg_dirs_sh[base];
+                wg_new_dir[peak_offset + 1u] = wg_dirs_sh[base + 1u];
+                wg_new_dir[peak_offset + 2u] = wg_dirs_sh[base + 2u];
+            }
             return 1;
         }
         if (cpeak_dot <= -cos_similarity) {
-            wg_new_dir[peak_offset] = -wg_dirs_sh[base];
-            wg_new_dir[peak_offset + 1u] = -wg_dirs_sh[base + 1u];
-            wg_new_dir[peak_offset + 2u] = -wg_dirs_sh[base + 2u];
+            if (tidx == 0u) {
+                wg_new_dir[peak_offset] = -wg_dirs_sh[base];
+                wg_new_dir[peak_offset + 1u] = -wg_dirs_sh[base + 1u];
+                wg_new_dir[peak_offset + 2u] = -wg_dirs_sh[base + 2u];
+            }
             return 1;
         }
     }
@@ -385,11 +393,11 @@ fn fit_opdt(delta_nr: i32, hr_side: i32,
             msk_data_off: u32, h_off: u32, r_off: u32, tidx: u32) {
     ndotp_log_opdt_d(delta_nr, hr_side, msk_data_off, MAT_DELTA_Q, r_off, tidx);
     ndotp_d(delta_nr, hr_side, msk_data_off, MAT_DELTA_B, h_off, tidx);
-    subgroupBarrier();
+    workgroupBarrier();
     for (var j = i32(tidx); j < delta_nr; j += i32(THR_X_SL)) {
         wg_sh_mem[r_off + u32(j)] -= wg_sh_mem[h_off + u32(j)];
     }
-    subgroupBarrier();
+    workgroupBarrier();
 }
 
 // ── fit_csa — CSA model fitting ─────────────────────────────────────
@@ -399,11 +407,11 @@ fn fit_csa(delta_nr: i32, hr_side: i32,
            msk_data_off: u32, r_off: u32, tidx: u32) {
     let n0_const: f32 = 0.28209479177387814;
     ndotp_log_csa_d(delta_nr, hr_side, msk_data_off, MAT_DELTA_Q, r_off, tidx);
-    subgroupBarrier();
+    workgroupBarrier();
     if (tidx == 0u) {
         wg_sh_mem[r_off] = n0_const;
     }
-    subgroupBarrier();
+    workgroupBarrier();
 }
 
 // ── fit_model_coef — dispatch to OPDT or CSA ────────────────────────
@@ -475,19 +483,20 @@ fn get_direction_boot(
     for (var attempt = 0; attempt < nattempts; attempt++) {
 
         // Trilinear interpolation of dataf at point -> wg_sh_mem[vox_data_off..]
-        let rv = trilinear_interp_dataf(dimx, dimy, dimz, dimt, point, vox_data_off, tidx);
+        let rv = workgroup_uniform_i32(
+            trilinear_interp_dataf(dimx, dimy, dimz, dimt, point, vox_data_off, tidx), tidx);
 
         // maskGet: compact non-b0 entries from vox_data -> msk_data
         maskGet(dimt, vox_data_off, msk_data_off, tidx);
 
-        subgroupBarrier();
+        workgroupBarrier();
 
         if (rv == 0) {
             // Multiply masked data by R and H matrices
             ndotp_d(hr_side, hr_side, msk_data_off, MAT_R, r_off, tidx);
             ndotp_d(hr_side, hr_side, msk_data_off, MAT_H, h_off, tidx);
 
-            subgroupBarrier();
+            workgroupBarrier();
 
             // Bootstrap: add permuted residuals
             for (var j = 0; j < hr_side; j += i32(THR_X_SL)) {
@@ -498,17 +507,17 @@ fn get_direction_boot(
                     wg_sh_mem[h_off + u32(j) + tidx] += wg_sh_mem[r_off + u32(srcPermInd)];
                 }
             }
-            subgroupBarrier();
+            workgroupBarrier();
 
             // Scatter back: vox_data[dwi_mask] = masked_data
             maskPut(dimt, h_off, vox_data_off, tidx);
-            subgroupBarrier();
+            workgroupBarrier();
 
             // Clamp to min_signal
             for (var j = i32(tidx); j < dimt; j += i32(THR_X_SL)) {
                 wg_sh_mem[vox_data_off + u32(j)] = max(min_signal, wg_sh_mem[vox_data_off + u32(j)]);
             }
-            subgroupBarrier();
+            workgroupBarrier();
 
             // Normalize by b0 average
             let denom = avgMask(dimt, vox_data_off, tidx);
@@ -516,11 +525,11 @@ fn get_direction_boot(
             for (var j = i32(tidx); j < dimt; j += i32(THR_X_SL)) {
                 wg_sh_mem[vox_data_off + u32(j)] /= denom;
             }
-            subgroupBarrier();
+            workgroupBarrier();
 
             // Re-compact after normalization
             maskGet(dimt, vox_data_off, msk_data_off, tidx);
-            subgroupBarrier();
+            workgroupBarrier();
 
             // Fit model coefficients
             fit_model_coef(model_type, delta_nr, hr_side,
@@ -537,12 +546,12 @@ fn get_direction_boot(
                 wg_sh_mem[h_off + u32(j)] = 0.0;
             }
         }
-        subgroupBarrier();
+        workgroupBarrier();
 
         // Absolute PMF threshold
         let abs_pmf_thr = PMF_THRESHOLD_P *
             sg_max_reduce_wg(samplm_nr, h_off, REAL_MIN, tidx);
-        subgroupBarrier();
+        workgroupBarrier();
 
         // Zero entries below threshold
         for (var j = i32(tidx); j < samplm_nr; j += i32(THR_X_SL)) {
@@ -550,7 +559,7 @@ fn get_direction_boot(
                 wg_sh_mem[h_off + u32(j)] = 0.0;
             }
         }
-        subgroupBarrier();
+        workgroupBarrier();
 
         // Find peak directions
         let ndir = peak_directions_fn(
@@ -565,9 +574,8 @@ fn get_direction_boot(
         } else {
             // init=False: find closest peak to current direction
             if (ndir > 0) {
-                let foundPeak = closest_peak_d(
-                    max_angle, dir, ndir, dirs_offset, scratch_offset, tidx);
-                subgroupBarrier();
+                let foundPeak = workgroup_uniform_i32(closest_peak_d(
+                    max_angle, dir, ndir, dirs_offset, scratch_offset, tidx), tidx);
                 if (foundPeak != 0) {
                     // Copy result from scratch to dirs[0]
                     if (tidx == 0u) {
@@ -588,7 +596,7 @@ fn get_direction_boot(
 // ═══════════════════════════════════════════════════════════════════
 
 // ── getNumStreamlinesBoot_k — count streamlines per seed ────────────
-@compute @workgroup_size(32, 2, 1)
+@compute @workgroup_size(32, 1, 1)
 fn getNumStreamlinesBoot_k(
     @builtin(local_invocation_id) tid: vec3<u32>,
     @builtin(workgroup_id) gid: vec3<u32>,
@@ -597,7 +605,7 @@ fn getNumStreamlinesBoot_k(
 ) {
     let layout_mismatch = subgroupLayoutMismatch(tid.x, sg_size, sg_lane);
     let tidx = tid.x;
-    let tidy = tid.y;
+    let tidy = 0u;  // one row (subgroup) per workgroup
     let logical_group = gid.x + u32(params.workgroup_offset);
     let slid = logical_group * BLOCK_Y + tidy;
 
@@ -726,7 +734,7 @@ fn store_philox(idx: u32, st: PhiloxState) {
 // ── genStreamlinesMergeBoot_k — main bootstrap streamline kernel ────
 // Each call continues every row of its workgroups from the saved state, for at
 // most params.step_budget steps; the host calls it until no row is pending.
-@compute @workgroup_size(32, 2, 1)
+@compute @workgroup_size(32, 1, 1)
 fn genStreamlinesMergeBoot_k(
     @builtin(local_invocation_id) tid: vec3<u32>,
     @builtin(workgroup_id) gid: vec3<u32>,
@@ -735,7 +743,7 @@ fn genStreamlinesMergeBoot_k(
 ) {
     let layout_mismatch = subgroupLayoutMismatch(tid.x, sg_size, sg_lane);
     let tidx = tid.x;
-    let tidy = tid.y;
+    let tidy = 0u;  // one row (subgroup) per workgroup
     let logical_group = gid.x + u32(params.workgroup_offset);
     let slid = logical_group * BLOCK_Y + tidy;
 
@@ -755,7 +763,7 @@ fn genStreamlinesMergeBoot_k(
 
     let seed = load_seeds_f3(slid);
 
-    let ndir = slineOutOff[slid + 1u] - slineOutOff[slid];
+    let ndir = workgroup_uniform_i32(slineOutOff[slid + 1u] - slineOutOff[slid], tidx);
     if (layout_mismatch) {
         if (tidx == 0u) {
             for (var i = 0; i < ndir; i++) {
@@ -766,7 +774,7 @@ fn genStreamlinesMergeBoot_k(
         return;
     }
 
-    subgroupBarrier();
+    workgroupBarrier();
 
     let n32dimt = u32(((params.dimt + 31) / 32) * 32);
     let sh_per_row = 2u * n32dimt + 2u * max(n32dimt, u32(params.samplm_nr));
@@ -776,10 +784,10 @@ fn genStreamlinesMergeBoot_k(
     let scratch_offset = tidy * 3u;
     let ind_offset = tidy * max(n32dimt, u32(params.samplm_nr));
 
-    var dir_i = slineOutOff[row + 1u];
-    var phase = slineOutOff[row + 2u];
-    var step = slineOutOff[row + 3u];
-    var stepsB = slineOutOff[row + 4u];
+    var dir_i = workgroup_uniform_i32(slineOutOff[row + 1u], tidx);
+    var phase = workgroup_uniform_i32(slineOutOff[row + 2u], tidx);
+    var step = workgroup_uniform_i32(slineOutOff[row + 3u], tidx);
+    var stepsB = workgroup_uniform_i32(slineOutOff[row + 4u], tidx);
     var point = load_state_f3(row + 5u);
     var direction = load_state_f3(row + 8u);
     var budget = params.step_budget;
@@ -803,7 +811,7 @@ fn genStreamlinesMergeBoot_k(
             if (tidx == 0u) {
                 store_sline_f3(sline_base_f3, point);
             }
-            subgroupBarrier();
+            workgroupBarrier();
             phase = PHASE_BACKWARD;
             step = 1;
         }
@@ -829,16 +837,17 @@ fn genStreamlinesMergeBoot_k(
                 dirs_offset, sh_offset, scratch_offset, ind_offset,
                 tidx, tidy);
             st = gdr.state;
-            subgroupBarrier();
+            workgroupBarrier();
 
             // Read direction from scratch (closest_peak wrote it there)
             direction = vec3<f32>(
                 wg_new_dir[scratch_offset],
                 wg_new_dir[scratch_offset + 1u],
                 wg_new_dir[scratch_offset + 2u]);
-            subgroupBarrier();
+            workgroupBarrier();
 
-            if (gdr.ndir == 0) {
+            // The rng state is per lane; the direction count is the same in every lane.
+            if (workgroup_uniform_i32(gdr.ndir, tidx) == 0) {
                 ended = true;
             } else {
                 // Advance point (voxel_size is 1.0 for boot)
@@ -849,10 +858,10 @@ fn genStreamlinesMergeBoot_k(
                 if (tidx == 0u) {
                     store_sline_f3(base + u32(step), point);
                 }
-                subgroupBarrier();
+                workgroupBarrier();
 
-                let tissue_class = check_point_fn(
-                    params.tc_threshold, point, params.dimx, params.dimy, params.dimz, tidx, tidy);
+                let tissue_class = workgroup_uniform_i32(check_point_fn(
+                    params.tc_threshold, point, params.dimx, params.dimy, params.dimz, tidx, tidy), tidx);
 
                 if (tissue_class == ENDPOINT ||
                     tissue_class == INVALIDPOINT ||
@@ -884,7 +893,7 @@ fn genStreamlinesMergeBoot_k(
                 if (tidx == 0u) {
                     store_sline_f3(sline_base_f3 + u32(stepsB - 1), point);
                 }
-                subgroupBarrier();
+                workgroupBarrier();
                 phase = PHASE_FORWARD;
                 step = 1;
             } else {

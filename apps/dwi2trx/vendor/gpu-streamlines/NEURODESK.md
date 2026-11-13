@@ -8,21 +8,21 @@ The small sphere lookup table is the package's original `src/sphere.bin`.
 
 Local changes:
 
-- `src/dispatch.ts`, `src/tracker.ts`, `src/wgsl/boot.wgsl`: submit at most 16
-  workgroups per physical GPU command, completing each command before submitting
+- `src/dispatch.ts`, `src/tracker.ts`, `src/wgsl/boot.wgsl`: submit at most 32
+  workgroups (32 seeds) per physical GPU command, completing each command before submitting
   another. An appended workgroup-offset field restores the original logical
   workgroup ID for seed indexing and Philox initialization. Logical seed batches,
   count/generation algorithms and output order are unchanged.
   Completion is awaited before the offset is changed, and the host yields to
   UI/abort tasks. Cancellation is checked between commands; a cancelled logical batch is not
   committed. GPU command failures still reject through the existing host logic.
-- `src/tracker.ts`: `TrackingParams.maxWorkgroupsPerDispatch` (default 16) sets the
+- `src/tracker.ts`: `TrackingParams.maxWorkgroupsPerDispatch` (default 32) sets the
   physical command size, and `TrackResult.deviceLost` tells a lost device apart from
   out-of-memory salvage. The app's hardware test runs the example with one command
   per pass and with the default, and requires the same TRX bytes.
 - `src/wgsl/boot.wgsl`, `src/tracker.ts`: both Boot kernels assume each tidy row is
-  one 32-lane subgroup whose lane IDs equal `tid.x` (their shuffles, ballots and the
-  removed `subgroupBarrier()` calls depend on it). WGSL allows other sizes (Intel
+  one 32-lane subgroup whose lane IDs equal `tid.x` (their shuffles and ballots
+  depend on it). WGSL allows other sizes (Intel
   8/16/32, AMD 64). `getTrackingDevice` refuses an adapter whose subgroup range
   excludes 32, and each kernel checks the layout it was compiled with: a mismatched
   workgroup writes -1 instead of tracking, and the host throws. On a matching GPU the
@@ -53,6 +53,21 @@ Local changes:
   `@subgroup_size(32)` (Vulkan `requiredSubgroupSize` with full subgroups), so a GPU
   that offers 16 to 32 lanes cannot run them at 16. Other devices keep the checks
   above. Output on a 32-lane GPU is unchanged.
+- `src/wgsl/*.wgsl`, `src/shaders.ts`, `src/globals.ts`: each workgroup is one
+  32-lane row (`@workgroup_size(32, 1, 1)`, `BLOCK_Y` 1) instead of two, and every
+  `subgroupBarrier()` is a `workgroupBarrier()`. WGSL has no subgroup barrier, and
+  the browser build used to strip them, which left each row's workgroup-memory
+  traffic unordered on GPUs whose lanes are not in lockstep (NVIDIA Volta and
+  later, #598). Values the barriers branch on (direction and peak counts, the
+  interpolation and tissue results, the saved step state) pass through
+  `workgroup_uniform_i32` (`utils.wgsl`), a `workgroupUniformLoad` of lane 0's value,
+  so Tint's uniformity analysis accepts the barriers. Two shared-memory races go
+  too: only lane 0 writes `closest_peak_d`'s chosen direction (lanes can keep
+  different peaks on a tie), and `check_point_fn` interpolates in each lane instead
+  of every lane writing one workgroup slot. Workgroup memory halves to about
+  10.4 KB, and `trackStreamlines` refuses inputs with more than 512 volumes, sphere
+  vertices or model coefficients, which would write past it. Seeds, Philox streams
+  and the arithmetic are unchanged, so the TRX should be the same bytes.
 - `src/tracker.ts`: `trackStreamlines` takes an optional `replaceDevice`. When the
   device is lost it uploads the static inputs to the replacement and reruns the
   interrupted batch, within `MAX_DEVICE_RECOVERIES` (2) attempts per run, and

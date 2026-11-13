@@ -43,15 +43,15 @@ function gpu({ onComplete = () => {} } = {}) {
   return { device, parameters, commands };
 }
 
-test('all 5000 logical workgroups execute exactly once in completed windows of at most 16', async () => {
+test('all 5000 logical workgroups execute exactly once in completed windows of at most 32', async () => {
   const f = gpu();
   assert.equal(await dispatchBootWindows(f.device, 'generate', 5000, ['data', 'model', 'output'], f.parameters), true);
-  assert.equal(f.commands.length, 313);
+  assert.equal(f.commands.length, 157);
   assert.deepEqual(f.commands.at(-1).counts, [8, 1, 1]);
   const logical = f.commands.flatMap(command => {
     assert.equal(command.pipeline, 'generate');
     assert.deepEqual(command.groups, ['data', 'model', 'output']);
-    assert.ok(command.counts[0] <= 16);
+    assert.ok(command.counts[0] <= 32);
     return Array.from({ length: command.counts[0] }, (_, group) => command.first + group);
   });
   assert.deepEqual(logical, Array.from({ length: 5000 }, (_, index) => index));
@@ -62,8 +62,8 @@ test('physical window size preserves each logical workgroup and its original see
   for (const window of [1, 7, 16, 37]) {
     const f = gpu();
     await dispatchBootWindows(f.device, 'count', 37, [], f.parameters, undefined, window);
-    const laneIds = f.commands.flatMap(command => Array.from({ length: command.counts[0] * 64 }, (_, lane) => command.first * 64 + lane));
-    assert.deepEqual(laneIds, Array.from({ length: 37 * 64 }, (_, lane) => lane));
+    const laneIds = f.commands.flatMap(command => Array.from({ length: command.counts[0] * 32 }, (_, lane) => command.first * 32 + lane));
+    assert.deepEqual(laneIds, Array.from({ length: 37 * 32 }, (_, lane) => lane));
   }
 });
 

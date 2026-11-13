@@ -1,5 +1,6 @@
-/** Physical GPU commands stay small; logical seed batches and RNG IDs stay unchanged. */
-export const MAX_WORKGROUPS_PER_DISPATCH = 16
+/** Physical GPU commands stay small; logical seed batches and RNG IDs stay unchanged.
+ *  32 one-seed workgroups: the 32 seeds per command measured on Intel/Mesa (#598). */
+export const MAX_WORKGROUPS_PER_DISPATCH = 32
 
 /** Tracking steps per seed row in one generation command (#598): Intel/Mesa resets
  *  a workgroup that does not yield to preemption within 640 ms. */

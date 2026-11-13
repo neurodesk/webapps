@@ -99,32 +99,19 @@ fn trilinear_interp_dataf(
     return 0;
 }
 
-// ── trilinear interp: single channel from metric_map → wg_interp_out
-fn trilinear_interp_metric(
-    dimx: i32, dimy: i32, dimz: i32,
-    point: vec3<f32>, interp_idx: u32
-) -> i32 {
-    let setup = trilinear_setup(dimx, dimy, dimz, point);
-    if (setup.status != 0) { return -1; }
-
-    wg_interp_out[interp_idx] =
-        interpolation_helper_metric(setup.wgh, setup.coo, dimy, dimz);
-    return 0;
-}
-
 // ── tissue check at a point ──────────────────────────────────────────
+// Every lane interpolates the metric map itself (upstream had all lanes write
+// the same value to one workgroup slot), so no lane reads another's write.
 fn check_point_fn(
     tc_threshold: f32, point: vec3<f32>,
     dimx: i32, dimy: i32, dimz: i32,
     tidx: u32, tidy: u32
 ) -> i32 {
-    let rv = trilinear_interp_metric(dimx, dimy, dimz, point, tidy);
-    subgroupBarrier();
-
-    if (rv != 0) {
+    let setup = trilinear_setup(dimx, dimy, dimz, point);
+    if (setup.status != 0) {
         return OUTSIDEIMAGE;
     }
-    if (wg_interp_out[tidy] > tc_threshold) {
+    if (interpolation_helper_metric(setup.wgh, setup.coo, dimy, dimz) > tc_threshold) {
         return TRACKPOINT;
     }
     return ENDPOINT;
@@ -149,7 +136,7 @@ fn peak_directions_fn(
     let odf_min_raw = sg_min_reduce_wg(samplm_nr, odf_offset, REAL_MAX, tidx);
     let odf_min = max(0.0, odf_min_raw);
 
-    subgroupBarrier();
+    workgroupBarrier();
 
     // Local maxima detection using sphere edges (atomic ops)
     for (var j = 0; j < num_edges; j += i32(THR_X_SL)) {
@@ -170,7 +157,7 @@ fn peak_directions_fn(
             }
         }
     }
-    subgroupBarrier();
+    workgroupBarrier();
 
     let comp_thres = relative_peak_thres *
         sg_max_mask_transl(samplm_nr, ind_offset, odf_offset, -odf_min, REAL_MIN, tidx);
@@ -196,7 +183,7 @@ fn peak_directions_fn(
         }
         n += i32(countOneBits(msk));
     }
-    subgroupBarrier();
+    n = workgroup_uniform_i32(n, tidx);
 
     // Sort local maxima by ODF value (descending)
     if (n > 0 && n < i32(THR_X_SL)) {
@@ -207,13 +194,13 @@ fn peak_directions_fn(
             k = wg_sh_mem[odf_offset + u32(val)];
         }
         let sorted = warp_sort_kv_dec(k, val, tidx);
-        subgroupBarrier();
+        workgroupBarrier();
 
         if (i32(tidx) < n) {
             atomicStore(&wg_sh_ind[ind_offset + tidx], sorted.val);
         }
     }
-    subgroupBarrier();
+    workgroupBarrier();
 
     // Remove similar vertices (single-threaded on lane 0)
     if (n != 0) {
@@ -252,8 +239,8 @@ fn peak_directions_fn(
             }
             n = k;
         }
-        n = i32(subgroupBroadcastFirst(u32(n)));
-        subgroupBarrier();
+        n = workgroup_uniform_i32(n, tidx);
+        workgroupBarrier();
     }
 
     return n;

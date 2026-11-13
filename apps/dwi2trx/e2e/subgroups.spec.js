@@ -8,20 +8,22 @@ test.use({ ...gpuBrowser, serviceWorkers: 'block' });
 const sourceRoot = new URL('../vendor/gpu-streamlines/src/', import.meta.url);
 
 test('the Boot kernel flags every workgroup whose subgroups are not 32 lanes matching tid.x', async ({ page }) => {
-  const [boot, globals] = await Promise.all(['wgsl/boot.wgsl', 'wgsl/globals.wgsl']
+  const [boot, globals, utils] = await Promise.all(['wgsl/boot.wgsl', 'wgsl/globals.wgsl', 'wgsl/utils.wgsl']
     .map(name => readFile(new URL(name, sourceRoot), 'utf8')));
   const guard = boot.match(/var<workgroup> wg_lane_mismatch[^\n]*\n[\s\S]*?\nfn subgroupLayoutMismatch[\s\S]*?\n\}\n/)[0];
+  const uniform = utils.match(/var<workgroup> wg_uniform_i32[^\n]*\n[\s\S]*?\nfn workgroup_uniform_i32[\s\S]*?\n\}\n/)[0];
   const workgroupSizes = [...boot.matchAll(/@workgroup_size\(([^)]+)\)/g)].map(match => match[1]);
-  expect(new Set(workgroupSizes)).toEqual(new Set(['32, 2, 1']));
+  expect(new Set(workgroupSizes)).toEqual(new Set(['32, 1, 1']));
   const shader = `enable subgroups;
     ${globals}
+    ${uniform}
     ${guard}
     @group(0) @binding(0) var<storage, read_write> output: array<u32>;
     @compute @workgroup_size(${workgroupSizes[0]})
     fn probe(@builtin(local_invocation_id) tid: vec3<u32>, @builtin(workgroup_id) gid: vec3<u32>,
              @builtin(subgroup_size) sg_size: u32, @builtin(subgroup_invocation_id) sg_lane: u32) {
       let mismatch = subgroupLayoutMismatch(tid.x, sg_size, sg_lane);
-      let index = (gid.x * 64u + tid.y * 32u + tid.x) * 3u;
+      let index = (gid.x * 32u + tid.x) * 3u;
       output[index] = select(0u, 1u, mismatch);
       output[index + 1u] = sg_size;
       output[index + 2u] = sg_lane;
@@ -32,7 +34,7 @@ test('the Boot kernel flags every workgroup whose subgroups are not 32 lanes mat
     const device = await adapter.requestDevice({ requiredFeatures: ['subgroups'] });
     try {
       const groups = 8;
-      const bytes = groups * 64 * 3 * 4;
+      const bytes = groups * 32 * 3 * 4;
       const module = device.createShaderModule({ code: shader });
       const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'probe' } });
       const output = device.createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
@@ -57,12 +59,12 @@ test('the Boot kernel flags every workgroup whose subgroups are not 32 lanes mat
     size: result.values[index * 3 + 1],
     lane: result.values[index * 3 + 2],
     tidx: index % 32,
-    group: Math.floor(index / 64),
+    group: Math.floor(index / 32),
   }));
   for (let group = 0; group < 8; group++) {
     const members = invocations.filter(invocation => invocation.group === group);
     const matches = members.every(({ size, lane, tidx }) => size === 32 && lane === tidx);
-    expect(members.map(({ flagged }) => flagged), `workgroup ${group}`).toEqual(new Array(64).fill(!matches));
+    expect(members.map(({ flagged }) => flagged), `workgroup ${group}`).toEqual(new Array(32).fill(!matches));
   }
   // SwiftShader runs 4-lane subgroups, so the software run is the negative control.
   if (!hardwareGpu) expect(invocations.every(({ flagged }) => flagged)).toBe(true);

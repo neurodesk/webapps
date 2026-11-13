@@ -15,7 +15,7 @@ const PMF_THRESHOLD_P: f32 = 0.05;
 
 const THR_X_BL: u32 = 64u;
 const THR_X_SL: u32 = 32u;
-const BLOCK_Y: u32 = 2u;  // THR_X_BL / THR_X_SL
+const BLOCK_Y: u32 = 1u;  // one 32-lane subgroup per workgroup (see boot.wgsl)
 const MAX_N32DIMT: u32 = 512u;
 const MAX_SLINES_PER_SEED: u32 = 10u;
 

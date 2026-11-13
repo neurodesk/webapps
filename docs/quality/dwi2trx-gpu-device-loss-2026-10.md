@@ -145,14 +145,16 @@ limits are handled as follows.
   as `measurements.deviceRecoveries`. This also covers a
   transient hang such as the 29 October Metal `kIOGPUCommandBufferCallbackErrorHang`,
   which has not recurred in the nightlies since #633; its cause is still unknown.
-- **Removed subgroup barriers.** WGSL has no `subgroupBarrier()`, so the kernels
-  run without the barriers the CUDA original places between a lane's write to
+- **Subgroup barriers.** WGSL has no `subgroupBarrier()`, and the browser build
+  used to strip the barriers the CUDA original places between a lane's write to
   workgroup memory and another lane's read. The
-  [WGSL memory model](https://www.w3.org/TR/WGSL/#memory-model) gives those
-  accesses no ordering on any GPU, so correctness rests on observation: complete,
-  deterministic runs on Apple (Metal) and Intel Arc (Mesa Vulkan), whose subgroups
-  execute in lockstep. NVIDIA GPUs since Volta schedule lanes independently, so
-  they are the most likely to differ. A workgroup barrier cannot replace the
-  removed ones, because the kernels call them in control flow that differs between
-  the two rows of a workgroup. No NVIDIA or AMD run has been checked; the
-  `tracking.gpus` provenance identifies one.
+  [WGSL memory model](https://www.w3.org/TR/WGSL/#memory-model) gave those accesses
+  no ordering, so the result rested on GPUs whose subgroups execute in lockstep
+  (Apple, Intel); NVIDIA GPUs since Volta schedule lanes independently. A workgroup
+  barrier could not stand in while a workgroup held two rows, because the rows
+  branch differently. Each workgroup now holds one 32-lane row, so every one of
+  those barriers is a `workgroupBarrier()`, which orders workgroup memory on every
+  GPU. The values the barriers branch on go through `workgroupUniformLoad` so
+  Tint's uniformity analysis accepts them, and generation commands hold 32
+  one-seed workgroups, the 32 seeds per command measured on Intel. Seeds, random
+  streams and arithmetic are unchanged.
