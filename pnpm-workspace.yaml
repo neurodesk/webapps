@@ -22,7 +22,7 @@ minimumReleaseAgeExclude:
   - '@fideus-labs/ngff-zarr@0.38.0'
   - '@fideus-labs/fiff@0.8.2'
   - '@niivue/niimath@1.4.20261016'
-  - '@niivue/niivue@1.0.0-rc.33'
+  - '@niivue/niivue@1.0.0-rc.33 || 1.0.0-rc.186'
   - '@niivue/meica@0.1.20261021'
   - '@niivue/nv-mcp@1.0.0-rc.7'
 overrides:

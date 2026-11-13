@@ -8,6 +8,7 @@ import './nvslide_view.css'
 import {
   PLANE_DEFINITIONS,
   VolumePlaneSource,
+  windowFor,
   type PlaneDefinition,
   type Shape3,
   type VolumePlane,
@@ -87,8 +88,6 @@ interface PaneIdentity {
   source: ChunkedVolumeSource
   sourceId: string
   normalIndex: number
-  windowMin: number
-  windowMax: number
 }
 
 interface NavigationPointerGesture {
@@ -204,9 +203,7 @@ const sameIdentity = (
 ): boolean =>
   left?.source === right.source &&
   left.sourceId === right.sourceId &&
-  left.normalIndex === right.normalIndex &&
-  left.windowMin === right.windowMin &&
-  left.windowMax === right.windowMax
+  left.normalIndex === right.normalIndex
 
 const sameCrosshair = (left: Fraction3, right: Fraction3): boolean =>
   left.every((value, axis) => value === right[axis])
@@ -563,7 +560,7 @@ export const mountNvSlideView = (
     const height = Math.max(1, Math.round(screen.heightCss * dpr))
     if (pane.canvas.width !== width) pane.canvas.width = width
     if (pane.canvas.height !== height) pane.canvas.height = height
-    pane.renderer.draw(pane.gl, [pane.slide], screen)
+    pane.renderer.render([pane.slide], screen)
     updateCrosshair(pane)
     updateScaleBar(pane)
     updateMeasurements(pane)
@@ -667,6 +664,20 @@ export const mountNvSlideView = (
     pane.element.dataset.cacheBytes = '0'
   }
 
+  const applyWindow = (
+    pane: PaneRuntime,
+    window: readonly [number, number],
+  ): void => {
+    const slide = pane.slide
+    if (!slide) return
+    const { calMin, calMax } = windowFor(window)
+    const channel = slide.channels[0]
+    if (channel && (channel.calMin !== calMin || channel.calMax !== calMax)) {
+      slide.setChannel(0, { calMin, calMax })
+    }
+    pane.element.dataset.window = `${window[0]}:${window[1]}`
+  }
+
   const buildPane = (
     pane: PaneRuntime,
     ready: Extract<NvSlideViewState, { kind: 'ready' }>,
@@ -728,7 +739,8 @@ export const mountNvSlideView = (
       pane.retainedFraming = null
       pane.status.value = ''
       pane.element.dataset.slice = String(identity.normalIndex)
-      pane.element.dataset.window = `${identity.windowMin}:${identity.windowMax}`
+      pane.element.dataset.generation = String(pane.generation)
+      applyWindow(pane, ready.window)
       requestDraw(pane)
     } catch (error) {
       slide?.dispose()
@@ -765,13 +777,16 @@ export const mountNvSlideView = (
           ready.crosshair,
           base.shape as Shape3,
         ),
-        windowMin: ready.window[0],
-        windowMax: ready.window[1],
       }
       try {
-        if (!sameIdentity(pane.identity, identity)) {
+        const rebuild = !sameIdentity(pane.identity, identity)
+        if (rebuild) {
           buildPane(pane, ready, identity)
-        } else if (
+        } else {
+          applyWindow(pane, ready.window)
+        }
+        if (
+          !rebuild &&
           pane.slide &&
           previous.kind === 'ready' &&
           previous.zoom !== ready.zoom

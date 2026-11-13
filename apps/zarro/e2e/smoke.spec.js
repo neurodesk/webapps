@@ -1363,6 +1363,90 @@ test("DANDI assets are grouped by stain and selectable as a chunk set", async ({
   await expect(page).not.toHaveURL(new RegExp(`url=.*${zarrIds[0]}`));
 });
 
+async function nvSlidePaneState(page) {
+  return await page.locator(".nvslide-pane").evaluateAll((panes) =>
+    panes.map((pane) => ({
+      plane: pane.dataset.plane,
+      generation: pane.dataset.generation,
+      window: pane.dataset.window,
+      pending: pane.dataset.pending,
+    })),
+  );
+}
+
+// Mean grey of the middle of the axial pane, inside the fitted square slide.
+async function axialPaneCenterLuma(page) {
+  return await page.locator('[data-plane="axial"] canvas').evaluate((canvas) => {
+    const width = Math.max(1, Math.round(canvas.width * 0.2));
+    const height = Math.max(1, Math.round(canvas.height * 0.5));
+    const copy = document.createElement("canvas");
+    copy.width = width;
+    copy.height = height;
+    const context = copy.getContext("2d", { willReadFrequently: true });
+    context.drawImage(
+      canvas,
+      Math.round(canvas.width * 0.4),
+      Math.round(canvas.height * 0.25),
+      width,
+      height,
+      0,
+      0,
+      width,
+      height,
+    );
+    const { data } = context.getImageData(0, 0, width, height);
+    let sum = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      sum += (data[index] + data[index + 1] + data[index + 2]) / 3;
+    }
+    return sum / (data.length / 4);
+  });
+}
+
+async function setWindowLevelWidth(page, level, width) {
+  await page.locator("#windowLevel").evaluate((input, value) => {
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, String(level));
+  await page.locator("#windowWidth").evaluate((input, value) => {
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, String(width));
+}
+
+// NVSlide tiles carry the raw uint16 voxels; the window is a channel setting
+// applied on the GPU, so a window change must neither rebuild the pane nor
+// refetch a tile, and the drawn pixels must follow it.
+async function expectNvSlideWindowOnGpu(page) {
+  await expect.poll(async () => (await nvSlidePaneState(page))
+    .every((pane) => pane.generation && pane.pending === "0" && pane.window))
+    .toBe(true);
+  const before = await nvSlidePaneState(page);
+  const level = await page.locator("#windowLevel").inputValue();
+  const width = await page.locator("#windowWidth").inputValue();
+
+  // A window far below the 500-6500 signal draws it white, one far above black.
+  for (const [windowLevel, windowWidth, check] of [
+    [1, 2, (luma) => luma > 200],
+    [65000, 100, (luma) => luma < 40],
+    [level, width, (luma) => luma > 40 && luma < 200],
+  ]) {
+    await setWindowLevelWidth(page, windowLevel, windowWidth);
+    await expect.poll(async () => {
+      const canvas = page.locator("#nv-canvas");
+      const expected = `${await canvas.getAttribute("data-window-min")}:` +
+        `${await canvas.getAttribute("data-window-max")}`;
+      return (await nvSlidePaneState(page)).map((pane) => pane.window === expected);
+    }).toEqual(before.map(() => true));
+    await expect.poll(async () => check(await axialPaneCenterLuma(page))).toBe(true);
+  }
+
+  const after = await nvSlidePaneState(page);
+  expect(after.map((pane) => pane.generation))
+    .toEqual(before.map((pane) => pane.generation));
+  expect(after.every((pane) => pane.pending === "0")).toBe(true);
+}
+
 test("generic uint16 share contrast is replaced from streamed signal", async ({ page }) => {
   const group = JSON.stringify({ zarr_format: 2 });
   const values = Buffer.alloc(32 * 32 * 32 * 2);
@@ -1440,6 +1524,7 @@ test("generic uint16 share contrast is replaced from streamed signal", async ({ 
     checkbox.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await expect(page.locator(".nvslide-scale-bar").first()).toBeVisible();
+  await expectNvSlideWindowOnGpu(page);
   await openTools(page);
   const nvSlideMeasureButton = page.getByRole("button", { name: "Measure distance" });
   await expect(nvSlideMeasureButton).toBeEnabled();

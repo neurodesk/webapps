@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   VolumePlaneSource,
+  planeTileSamples,
   planeViewportExportGeometry,
-  windowVoxelsToRgba,
+  windowFor,
 } from '../src/volume_plane_source.ts'
 
 const levels = [
@@ -67,10 +68,12 @@ test('maps native tiles into all three orthogonal volume planes', async () => {
     )
     const level = source.manifest.levels[0]
     const tile = level.tiles[expected.tile]
-    const rgba = await source.fetchTileBytes(level, tile, expected.plane)
+    const tileSamples = await source.fetchTileSamples(level, tile, [0])
     assert.deepEqual(calls[0].texOrigin, expected.origin)
     assert.deepEqual(calls[0].texDims, expected.dimensions)
-    assert.equal(rgba.byteLength, tile.width * tile.height * 4)
+    assert.ok(tileSamples.samples instanceof Uint8Array)
+    assert.equal(tileSamples.samples.length, tile.width * tile.height)
+    assert.equal(tileSamples.planes, 1)
   }
 })
 
@@ -85,24 +88,83 @@ test('maps one anatomical plane consistently across pyramid levels', async () =>
     tileSize: 4,
   })
   const level = source.manifest.levels[1]
-  await source.fetchTileBytes(level, level.tiles[0], 'coarse')
+  await source.fetchTileSamples(level, level.tiles[0], [0])
 
   assert.equal(calls[0].texOrigin[2], 1)
   assert.equal(level.downsample, 2)
 })
 
-test('windows uint16 voxels into grayscale RGBA', () => {
-  const values = new Uint16Array([0, 100, 200, 300])
+test('serves uint16 voxels unwindowed as raw-gray samples', () => {
+  const values = new Uint16Array([0, 100, 4095, 65535])
   const bytes = new Uint8Array(values.buffer)
-  assert.deepEqual(
-    [...windowVoxelsToRgba(bytes, 2, 4, [100, 300])],
-    [
-      0, 0, 0, 255,
-      0, 0, 0, 255,
-      128, 128, 128, 255,
-      255, 255, 255, 255,
-    ],
+  const tile = planeTileSamples(bytes, 2, 2, 2)
+  assert.ok(tile.samples instanceof Uint16Array)
+  assert.deepEqual([...tile.samples], [0, 100, 4095, 65535])
+  assert.equal(tile.bitsStored, 16)
+  assert.equal(tile.planes, 1)
+  assert.notEqual(tile.samples.buffer, bytes.buffer)
+})
+
+test('copies voxels that start at an odd byte offset', () => {
+  const backing = new Uint8Array(9)
+  const view = new Uint8Array(backing.buffer, 1, 8)
+  view.set([1, 0, 2, 0, 3, 0, 4, 1])
+  const tile = planeTileSamples(view, 2, 4, 1)
+  assert.deepEqual([...tile.samples], [1, 2, 3, 260])
+})
+
+test('rejects a tile with the wrong byte count', () => {
+  assert.throws(
+    () => planeTileSamples(new Uint8Array(6), 2, 2, 2),
+    /returned 6 bytes; expected 8/,
   )
+})
+
+test('states one gray channel with the initial window for GPU windowing', () => {
+  const source = new VolumePlaneSource(
+    { ...mockVolume([]), datatypeCode: 512 },
+    {
+      id: 'u16',
+      name: 'u16 axial',
+      plane: 'axial',
+      index: 0,
+      window: [100, 3000],
+      tileSize: 4,
+    },
+  )
+  assert.equal(source.manifest.dtype, 'uint16')
+  assert.deepEqual(source.manifest.channelInfo, [{
+    name: 'u16 axial',
+    colormap: 'gray',
+    window: { calMin: 100, calMax: 3000 },
+    active: true,
+  }])
+  for (const level of source.manifest.levels) {
+    assert.equal(level.codec, 'raw-gray')
+    assert.equal(level.bitsStored, 16)
+  }
+})
+
+test('returns no planes when no channel is visible', async () => {
+  const calls = []
+  const source = new VolumePlaneSource(mockVolume(calls), {
+    id: 'hidden',
+    name: 'hidden',
+    plane: 'axial',
+    index: 0,
+    window: [0, 255],
+    tileSize: 4,
+  })
+  const level = source.manifest.levels[0]
+  const tile = await source.fetchTileSamples(level, level.tiles[0], [])
+  assert.equal(tile.planes, 0)
+  assert.equal(calls.length, 0)
+})
+
+test('widens an empty window to one stored step', () => {
+  assert.deepEqual(windowFor([40, 40]), { calMin: 40, calMax: 41 })
+  assert.deepEqual(windowFor([40, 30]), { calMin: 40, calMax: 41 })
+  assert.deepEqual(windowFor([0, 610]), { calMin: 0, calMax: 610 })
 })
 
 test('maps every zoomed NVSlide plane to a cropped 3D NIfTI geometry', () => {
@@ -200,7 +262,7 @@ test('forwards the NVSlide tile signal to the volume request', async () => {
   })
   const level = source.manifest.levels[0]
   const controller = new AbortController()
-  const pending = source.fetchTileBytes(level, level.tiles[0], 'pending', controller.signal)
+  const pending = source.fetchTileSamples(level, level.tiles[0], [0], controller.signal)
   controller.abort()
 
   await assert.rejects(pending)

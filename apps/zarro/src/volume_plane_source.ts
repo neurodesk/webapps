@@ -4,6 +4,7 @@ import type {
   NVSlideLevelManifest,
   NVSlideManifest,
   NVSlideTileManifest,
+  NVSlideTileSamples,
   SlideSourceHost,
   SlideTileSource,
 } from '@niivue/niivue'
@@ -83,6 +84,17 @@ const bytesPerVoxelFor = (datatypeCode: number): number => {
     `NVSlide supports uint8 and uint16 volumes, not datatype ${datatypeCode}`,
   )
 }
+
+/**
+ * NVSlide's channel window; it needs calMax > calMin, as the old CPU path's
+ * one-step minimum span did.
+ */
+export const windowFor = (
+  window: readonly [number, number],
+): { calMin: number; calMax: number } => ({
+  calMin: window[0],
+  calMax: window[1] > window[0] ? window[1] : window[0] + 1,
+})
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
@@ -195,36 +207,30 @@ export function planeChunkRequest(
   }
 }
 
-export function windowVoxelsToRgba(
+export function planeTileSamples(
   voxels: Uint8Array,
   bytesPerVoxel: number,
-  count: number,
-  window: readonly [number, number],
-): Uint8Array {
+  width: number,
+  height: number,
+): NVSlideTileSamples {
+  const count = width * height
   const expected = count * bytesPerVoxel
   if (voxels.byteLength !== expected) {
     throw new Error(
       `Plane tile returned ${voxels.byteLength} bytes; expected ${expected}`,
     )
   }
-  const aligned = voxels.byteOffset % bytesPerVoxel === 0
-    ? voxels
-    : voxels.slice()
-  const values: Uint8Array | Uint16Array = bytesPerVoxel === 1
-    ? new Uint8Array(aligned.buffer, aligned.byteOffset, count)
-    : new Uint16Array(aligned.buffer, aligned.byteOffset, count)
-  const windowSpan = Math.max(1, window[1] - window[0])
-  const rgba = new Uint8Array(count * 4)
-  for (let index = 0; index < count; index++) {
-    const t = (values[index] - window[0]) / windowSpan
-    const shade = t >= 1 ? 255 : t > 0 ? Math.round(t * 255) : 0
-    const offset = index * 4
-    rgba[offset] = shade
-    rgba[offset + 1] = shade
-    rgba[offset + 2] = shade
-    rgba[offset + 3] = 255
+  const copy = voxels.slice()
+  const samples = bytesPerVoxel === 1
+    ? copy
+    : new Uint16Array(copy.buffer, 0, count)
+  return {
+    samples,
+    width,
+    height,
+    bitsStored: bytesPerVoxel * 8,
+    planes: 1,
   }
-  return rgba
 }
 
 export class VolumePlaneSource implements SlideTileSource {
@@ -234,7 +240,6 @@ export class VolumePlaneSource implements SlideTileSource {
   private readonly definition: PlaneDefinition
   private readonly planeForLevel: number[] = []
   private readonly volume: ChunkedVolumeSource
-  private readonly window: readonly [number, number]
   private host: SlideSourceHost | null = null
 
   constructor(
@@ -253,7 +258,7 @@ export class VolumePlaneSource implements SlideTileSource {
     }
 
     this.bytesPerVoxel = bytesPerVoxelFor(volume.datatypeCode)
-    this.window = options.window
+    const bitsStored = this.bytesPerVoxel * 8
     const tileSize = options.tileSize ?? 256
     const inPlaneSpacing = [
       base.spacing[this.definition.uAxis],
@@ -294,7 +299,8 @@ export class VolumePlaneSource implements SlideTileSource {
         tileHeight: tileSize,
         columns,
         rows,
-        codec: 'raw-rgba',
+        codec: 'raw-gray',
+        bitsStored,
         tiles,
       })
       this.planeForLevel.push(
@@ -314,10 +320,16 @@ export class VolumePlaneSource implements SlideTileSource {
       width: manifestWidth,
       height: manifestHeight,
       tileSize,
-      dtype: 'uint8',
-      channels: 'rgba',
+      dtype: this.bytesPerVoxel === 1 ? 'uint8' : 'uint16',
+      channels: 'gray',
       displayYAxis: 'up',
       levels,
+      channelInfo: [{
+        name: options.name,
+        colormap: 'gray',
+        window: windowFor(options.window),
+        active: true,
+      }],
     }
   }
 
@@ -325,12 +337,27 @@ export class VolumePlaneSource implements SlideTileSource {
     this.host = host
   }
 
-  async fetchTileBytes(
+  fetchTileBytes(): Promise<Uint8Array> {
+    return Promise.reject(
+      new Error('VolumePlaneSource serves samples (fetchTileSamples)'),
+    )
+  }
+
+  async fetchTileSamples(
     level: NVSlideLevelManifest,
     tile: NVSlideTileManifest,
-    label: string,
+    channels: readonly number[],
     signal?: AbortSignal,
-  ): Promise<Uint8Array> {
+  ): Promise<NVSlideTileSamples> {
+    if (channels.length === 0) {
+      return {
+        samples: new Uint8Array(0),
+        width: tile.width,
+        height: tile.height,
+        bitsStored: this.bytesPerVoxel * 8,
+        planes: 0,
+      }
+    }
     const normalIndex = this.planeForLevel[level.index]
     if (normalIndex === undefined) {
       throw new Error(`Missing pyramid level ${level.index}`)
@@ -343,24 +370,23 @@ export class VolumePlaneSource implements SlideTileSource {
       this.bytesPerVoxel,
     )
     request.signal = signal
+    const label = `L${level.index}/${tile.x}/${tile.y}`
     this.host?.pushRangeEvent({ label, status: 'pending' })
     let voxels: Uint8Array
     try {
       voxels = await this.volume.fetchChunk(request)
       signal?.throwIfAborted()
     } catch (error) {
-      if (!signal?.aborted) {
-        this.host?.updateRangeEvent(label, 'failed')
-      }
+      this.host?.updateRangeEvent(label, signal?.aborted ? 'aborted' : 'failed')
       throw error
     }
     this.host?.addWireBytes(voxels.byteLength)
     this.host?.updateRangeEvent(label, 'hit')
-    return windowVoxelsToRgba(
+    return planeTileSamples(
       voxels,
       this.bytesPerVoxel,
-      tile.width * tile.height,
-      this.window,
+      tile.width,
+      tile.height,
     )
   }
 
