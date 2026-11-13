@@ -351,6 +351,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [desktop, phone]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -371,23 +372,26 @@ jobs:
           sha256sum --check agent-catalog-site.tar.gz.sha256
           mkdir -p "$GITHUB_WORKSPACE/dist"
           tar -xzf agent-catalog-site.tar.gz -C "$GITHUB_WORKSPACE/dist"
-      # Both targets keep the full selected catalog and the existing per-target bounds.
-      # Desktop alone took about 70 minutes; serializing both targets exceeded 120 minutes.
+      # Each target runs the selected tests in three shards on one worker each. Agent
+      # actions accounted for 95-98% of the measured step time across four nightlies.
+      # At the slow nights' observed throughput, 329 actions project to 186-192 minutes.
+      # Sharding reduces each job's exposure to variable model and browser latency.
       - name: Run Neurodesk agent interactions across the catalog
         timeout-minutes: 120
         env:
           NEURODESK_API_KEY: ${{ secrets.NEURODESK_API_KEY }}
           AGENTIC_APPS: ${{ inputs.agentic_apps }}
           AGENTIC_TARGET: ${{ matrix.target }}
+          AGENTIC_SHARD: ${{ matrix.shard }}/3
         run: |
-          args=(--skip-build --site-dir dist --target "$AGENTIC_TARGET" --output ".e2e/agent-$AGENTIC_TARGET")
+          args=(--skip-build --site-dir dist --target "$AGENTIC_TARGET" --shard "$AGENTIC_SHARD" --output ".e2e/agent-$AGENTIC_TARGET-${AGENTIC_SHARD%/*}")
           if [ -n "$AGENTIC_APPS" ]; then args+=(--app "$AGENTIC_APPS"); fi
           pnpm test:e2e:agent "${args[@]}"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: catalog-agent-${{ matrix.target }}
-          path: .e2e/agent-${{ matrix.target }}/
+          name: catalog-agent-${{ matrix.target }}-${{ matrix.shard }}
+          path: .e2e/agent-${{ matrix.target }}-${{ matrix.shard }}/
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
