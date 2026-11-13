@@ -29,6 +29,7 @@ const shell = (script, cwd, environment) => execFileSync('bash', ['-e', '-o', 'p
 test('both full-catalog agent targets run in three shards on isolated runners and retain the existing time and worker bounds', async () => {
   assert.deepEqual(job.strategy.matrix.target, ['desktop', 'phone']);
   assert.deepEqual(job.strategy.matrix.shard, [1, 2, 3]);
+  assert.equal(job.strategy['max-parallel'], 4, 'the model key allows four concurrent requests');
   assert.equal(interact.env.AGENTIC_SHARD, `\${{ matrix.shard }}/${job.strategy.matrix.shard.length}`);
   const upload = job.steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
   assert.equal(upload.with.name, 'catalog-agent-${{ matrix.target }}-${{ matrix.shard }}');
