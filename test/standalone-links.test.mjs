@@ -15,7 +15,7 @@ test('every link a Standalone dialog offers is checked, with where the catalog n
   const links = standaloneLinks(catalog);
   const where = (url) => links.get(url) ?? [];
   for (const suite of Object.values(catalog.suites)) {
-    for (const download of [...suite.downloads, suite.models, ...suite.models.parts]) {
+    for (const download of [...suite.downloads, suite.models, ...(suite.models.parts ?? [])]) {
       assert.ok(links.has(download.url), download.url);
     }
   }
