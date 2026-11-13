@@ -89,8 +89,12 @@ make test          # fixture parity and CLI tests on every device whose probe su
 make lint fmt
 ```
 
-Requires current stable Rust. The first build downloads pyke's static ONNX Runtime
-binaries for the host target (checksum-pinned in `ort-sys`).
+Requires Rust 1.99.1. ort-sys 2.0.0-rc.13's library-copying code assumes Cargo's
+build directory layout before 1.100. ort-sys rc.14 and rc.15 fix the directory
+handling but ship ONNX Runtime 1.31, while `validation/report.json` records 1.28.0.
+Update the toolchain and `ort` together, and re-record that report before removing
+the Rust pin. The first build downloads pyke's ONNX Runtime binaries for the host
+target (checksum-pinned in `ort-sys`), including the WebGPU shared library.
 
 The model is `synthsr/models/synthsr-v2.onnx` in the Hugging Face dataset
 `neurodeskorg/webapps`, pinned by commit in
