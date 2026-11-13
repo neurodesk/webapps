@@ -161,7 +161,8 @@ test("a step whose input file is gone fails, and runs again once the input is re
 
   await run(page, "ctffind", "failed");
   await expect(page.locator("#statusText")).toHaveClass(/error/);
-  await expect(page.locator("#statusText")).toContainText("which does not exist");
+  expect((await page.locator("#statusText").textContent()).length).toBeLessThanOrEqual(90);
+  await expect(page.locator("#technicalLog")).toContainText("which does not exist");
   await expect(page.locator("#technicalLog")).not.toHaveClass(/collapsed/);
   await expect(page.locator("#jobList")).toContainText("CtfFind/job003 · failed");
 
@@ -423,14 +424,14 @@ test("tutorial guidance names a missing project only in the footer", async ({ pa
   await connect(page);
   await loadExample(page);
   const status = page.locator("footer#status #statusText");
-  await expect(status).toHaveText("24 tutorial movies found on the server. A project is needed before importing.");
+  await expect(status).toHaveText("24 tutorial movies found on the server · choose or create a project before importing.");
   expect((await status.textContent()).length).toBeLessThanOrEqual(90);
   await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
   await expect(page.locator("#runButton")).toBeDisabled();
   await createProject(page, "Tutorial guidance");
   await expect(page.locator("#runButton")).toBeEnabled();
   await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
-  await expect(status).not.toContainText("A project is needed");
+  await expect(status).not.toContainText("choose or create a project");
 });
 
 test("tutorial guidance explains a missing server data root", async ({ page }) => {
@@ -512,14 +513,14 @@ test("opening an existing project and reconnecting replace the previous guidance
   const id = await createProject(page, "Existing project");
   await page.locator("#projectSelect").selectOption("");
   await page.locator("#projectSelect").selectOption(id);
-  await expect(page.locator("#statusText")).toHaveText("Project ready · choose a processing step");
+  await expect(page.locator("#statusText")).toHaveText("Import movies selected · review its inputs");
   await loadExample(page);
   const panel = page.locator("#computeConnection");
   await panel.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.locator("#statusText")).toContainText("Connect a server");
   await panel.locator('input[type="password"]').fill(COMPUTE_TOKEN);
   await panel.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(page.locator("#statusText")).toHaveText("Project ready · choose a processing step");
+  await expect(page.locator("#statusText")).toHaveText("Tutorial settings ready. Load the example again to check this server’s movies.");
   await expect(page.locator("#runButton")).toBeEnabled();
 });
 
@@ -529,9 +530,68 @@ test("changing the movie selection or step withdraws tutorial readiness", async 
   await loadExample(page);
   await page.locator("#input-movies-pattern").fill("missing*.tiff");
   await page.locator("#input-movies-pattern").dispatchEvent("change");
-  await expect(page.locator("#statusText")).toHaveText("Movies changed · review the processing step");
+  await expect(page.locator("#statusText")).toHaveText("Import movies selected · review its inputs");
   await loadExample(page);
   await page.locator("#stepSelect").selectOption("motioncorr");
+  await expect(page.locator("#statusText")).toHaveText("Motion correction selected · review its inputs");
+});
+
+test("tutorial guidance follows the current selection rather than the last edit", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "State-derived guidance");
+  await loadExample(page);
+  const pattern = page.locator("#input-movies-pattern");
+  await pattern.fill("missing*.tiff");
+  await pattern.dispatchEvent("change");
+  await pattern.fill("*.tiff");
+  await pattern.dispatchEvent("change");
+  await expect(page.locator("#statusText")).toContainText("Ready to import into this project");
+  await page.locator("#stepSelect").selectOption("motioncorr");
+  await page.locator("#stepSelect").selectOption("import");
+  await expect(page.locator("#statusText")).toContainText("Ready to import into this project");
+});
+
+test("a late project creation error cannot replace disconnected guidance", async ({ page }) => {
+  await connect(page);
+  await loadExample(page);
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let creating = false;
+  await page.route(`${COMPUTE_URL}/api/v1/projects`, async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    creating = true;
+    await held;
+    await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid", message: "Creation rejected" } }) });
+  });
+  await page.locator("#projectName").fill("Late creation");
+  await page.locator("#createProject").click();
+  await expect.poll(() => creating).toBe(true);
+  await page.locator("#computeConnection").getByRole("button", { name: "Disconnect", exact: true }).click();
+  const completed = page.waitForResponse(response => response.url().endsWith("/projects") && response.request().method() === "POST");
+  release();
+  await completed;
+  await expect(page.locator("#statusText")).toContainText("Connect a server");
+  await expect(page.locator("#runButton")).toBeDisabled();
+});
+
+test("editing the step supersedes a pending tutorial check", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "Edit during example");
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let checking = false;
+  await page.route(`${COMPUTE_URL}/api/v1/roots/examples/entries*`, async route => {
+    const response = await route.fetch();
+    checking = true;
+    await held;
+    await route.fulfill({ response });
+  });
+  await page.locator("select[data-neurodesk-example]").selectOption(example.id);
+  await expect.poll(() => checking).toBe(true);
+  await page.locator("#stepSelect").selectOption("motioncorr");
+  release();
+  await expect(page.locator("nd-example-selector")).toHaveAttribute("data-example-state", "cancelled");
+  await expect(page.locator("#stepSelect")).toHaveValue("motioncorr");
   await expect(page.locator("#statusText")).toHaveText("Motion correction selected · review its inputs");
 });
 
