@@ -36,19 +36,24 @@ const env = {
   E2E_OUTPUT: values.output,
 };
 
-function run(args) {
+function run(args, { capture = false } = {}) {
   return new Promise((resolveRun, reject) => {
-    const child = spawn('pnpm', args, { cwd: repoRoot, env, stdio: 'inherit' });
+    const child = spawn('pnpm', args, { cwd: repoRoot, env, stdio: capture ? ['inherit', 'pipe', 'inherit'] : 'inherit' });
+    let stdout = '';
+    if (capture) {
+      child.stdout.setEncoding('utf8');
+      child.stdout.on('data', chunk => { stdout += chunk; });
+    }
     const forward = signal => child.kill(signal);
     const interrupt = () => forward('SIGINT');
     const terminate = () => forward('SIGTERM');
     process.once('SIGINT', interrupt);
     process.once('SIGTERM', terminate);
     child.once('error', reject);
-    child.once('exit', (code, signal) => {
+    child.once('close', (code, signal) => {
       process.removeListener('SIGINT', interrupt);
       process.removeListener('SIGTERM', terminate);
-      if (code === 0) resolveRun();
+      if (code === 0) resolveRun(stdout);
       else reject(new Error(`pnpm ${args[0]} failed (${signal ?? code})`));
     });
   });
@@ -78,10 +83,24 @@ try {
     }
   }
   const args = ['exec', 'e2e', values.list ? 'list' : 'run', '--tag', modes.get(values.mode), '--target', values.target];
-  if (values['no-cache'] && !values.list) args.push('--no-cache');
   if (values.grep) args.push('--grep', values.grep);
-  // A narrowed selection may have fewer tests than shards; an empty shard is not a failure.
-  if (values.shard && !values.list) args.push('--shard', values.shard, '--pass-with-no-tests');
+  if (values.shard && !values.list) {
+    const match = /^([1-9]\d*)\/([1-9]\d*)$/.exec(values.shard);
+    const index = Number(match?.[1]);
+    const total = Number(match?.[2]);
+    if (!Number.isSafeInteger(index) || !Number.isSafeInteger(total) || index > total) {
+      throw new Error('Use --shard index/total with the index from 1 through the total');
+    }
+    const listing = [...args];
+    listing[2] = 'list';
+    const { pairs } = JSON.parse(await run([...listing, '--reporter', 'json'], { capture: true }));
+    const count = pairs.filter(pair => pair.kind === 'test' && pair.disposition === 'run').length;
+    if (count === 0) throw new Error('No runnable tests before sharding');
+    args.push('--shard', values.shard);
+    // Only trailing shards of a nonempty selection smaller than the shard count may be empty.
+    if (count < total && index > count) args.push('--pass-with-no-tests');
+  }
+  if (values['no-cache'] && !values.list) args.push('--no-cache');
   if (!values.list) args.push('--output', values.output);
   await run(args);
 } finally {

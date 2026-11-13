@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
+import { promisify } from 'node:util';
 import YAML from 'yaml';
+import { agenticCatalog } from '../test-utils/agentic-catalog.mjs';
 
 const ci = YAML.parse(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
 const site = ci.jobs['composite-site'];
@@ -69,22 +71,65 @@ test('the actual agent command runs each target shard without dropping cases and
   }
 });
 
-test('the runner hands the shard to e2e and lets a narrowed selection leave a shard empty', async t => {
+test('the runner only permits an empty shard when the unsharded selection proves it is empty', async t => {
   const root = await scratch(t);
   const bin = join(root, 'bin');
   await mkdir(bin);
-  await writeFile(join(bin, 'pnpm'), '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.CAPTURE_ARGS, JSON.stringify(process.argv.slice(2)));\n', { mode: 0o755 });
+  await writeFile(join(bin, 'pnpm'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(process.env.CAPTURE_ARGS, JSON.stringify(args));
+if (args[2] === 'list') {
+  fs.writeFileSync(process.env.CAPTURE_LIST, JSON.stringify(args));
+  process.stdout.write(JSON.stringify({ pairs: JSON.parse(process.env.LIST_PAIRS) }));
+  process.exit(Number(process.env.LIST_EXIT || 0));
+}
+process.exit(Number(process.env.RUN_EXIT || 0));
+`, { mode: 0o755 });
   const runner = new URL('../scripts/run-agentic-tests.mjs', import.meta.url).pathname;
-  const invoke = async (...flags) => {
+  const pairs = Array.from({ length: 3 }, () => ({ kind: 'test', disposition: 'run' }));
+  const invoke = async (flags, environment = {}) => {
     const capture = join(root, 'args.json');
     execFileSync(process.execPath, [runner, '--mode', 'agent', '--skip-build', '--site-dir', root, '--target', 'desktop', ...flags], {
-      cwd: root, env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}`, CAPTURE_ARGS: capture, NEURODESK_API_KEY: 'test-fixture-only' }, stdio: 'pipe',
+      cwd: root, env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}`, CAPTURE_ARGS: capture, CAPTURE_LIST: join(root, 'list.json'), LIST_PAIRS: JSON.stringify(pairs), NEURODESK_API_KEY: 'test-fixture-only', ...environment }, stdio: 'pipe',
     });
     return JSON.parse(await readFile(capture, 'utf8'));
   };
-  assert.deepEqual(await invoke('--shard', '2/3', '--output', 'out'), ['exec', 'e2e', 'run', '--tag', 'help,example', '--target', 'desktop', '--shard', '2/3', '--pass-with-no-tests', '--output', 'out']);
-  assert.deepEqual(await invoke('--output', 'out'), ['exec', 'e2e', 'run', '--tag', 'help,example', '--target', 'desktop', '--output', 'out']);
-  assert.deepEqual(await invoke('--shard', '2/3', '--list'), ['exec', 'e2e', 'list', '--tag', 'help,example', '--target', 'desktop']);
+  assert.deepEqual(await invoke(['--shard', '2/3', '--grep', 'About', '--output', 'out']), ['exec', 'e2e', 'run', '--tag', 'help,example', '--target', 'desktop', '--grep', 'About', '--shard', '2/3', '--output', 'out']);
+  assert.deepEqual(JSON.parse(await readFile(join(root, 'list.json'), 'utf8')), ['exec', 'e2e', 'list', '--tag', 'help,example', '--target', 'desktop', '--grep', 'About', '--reporter', 'json']);
+  assert.deepEqual(await invoke(['--shard', '2/3', '--output', 'out'], { LIST_PAIRS: JSON.stringify(pairs.slice(0, 1)) }), ['exec', 'e2e', 'run', '--tag', 'help,example', '--target', 'desktop', '--shard', '2/3', '--pass-with-no-tests', '--output', 'out']);
+  assert.ok(!(await invoke(['--shard', '1/3'], { LIST_PAIRS: JSON.stringify(pairs.slice(0, 1)) })).includes('--pass-with-no-tests'));
+  await assert.rejects(invoke(['--shard', '2/3'], { LIST_PAIRS: '[]' }), /Command failed/);
+  await assert.rejects(invoke(['--shard', '2/3'], { LIST_EXIT: '2' }), /Command failed/);
+  for (const code of [1, 2, 3, 4]) {
+    await assert.rejects(invoke(['--shard', '2/3'], { LIST_PAIRS: JSON.stringify(pairs.slice(0, 1)), RUN_EXIT: String(code) }), /Command failed/);
+  }
+  for (const shard of ['0/3', '4/3', '2/0', '2', '1/9007199254740992']) {
+    await assert.rejects(invoke(['--shard', shard]), /Command failed/);
+  }
+  assert.deepEqual(await invoke(['--output', 'out']), ['exec', 'e2e', 'run', '--tag', 'help,example', '--target', 'desktop', '--output', 'out']);
+  assert.deepEqual(await invoke(['--shard', '2/3', '--list']), ['exec', 'e2e', 'list', '--tag', 'help,example', '--target', 'desktop']);
+});
+
+test('the real e2e selector partitions every catalog interaction exactly once per target', async () => {
+  const cli = new URL('../node_modules/e2e/dist/cli/bin.js', import.meta.url).pathname;
+  const catalog = await agenticCatalog('');
+  const list = async (target, shard) => {
+    const { stdout } = await promisify(execFile)(process.execPath, [cli, 'list', '--tag', 'help,example', '--target', target, '--reporter', 'json', ...(shard ? ['--shard', `${shard}/3`] : [])], {
+      cwd: new URL('..', import.meta.url), env: { ...process.env, E2E_APPS: '', E2E_TELEMETRY_DISABLED: '1' }, maxBuffer: 1024 * 1024,
+    });
+    return JSON.parse(stdout).pairs.filter(pair => pair.disposition === 'run');
+  };
+  for (const target of job.strategy.matrix.target) {
+    const [whole, ...shards] = await Promise.all([list(target), ...job.strategy.matrix.shard.map(shard => list(target, shard))]);
+    const key = pair => JSON.stringify([pair.target, pair.titlePath]);
+    assert.equal(whole.length, catalog.reduce((count, app) => count + 1 + app.examples.length, 0));
+    assert.deepEqual([...new Set(whole.map(pair => pair.titlePath[0]))].sort(), catalog.map(app => app.id).sort());
+    const partition = shards.flat().map(key);
+    assert.equal(new Set(partition).size, partition.length, `${target}: duplicate tests across shards`);
+    assert.deepEqual(partition.sort(), whole.map(key).sort(), `${target}: shard coverage differs from the full catalog`);
+    assert.ok(shards.every(shard => shard.length > 0));
+  }
 });
 
 test('the transferred composite is checksum-verified before use, and missing credentials do not create a partial artifact', async t => {

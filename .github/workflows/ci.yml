@@ -372,10 +372,10 @@ jobs:
           sha256sum --check agent-catalog-site.tar.gz.sha256
           mkdir -p "$GITHUB_WORKSPACE/dist"
           tar -xzf agent-catalog-site.tar.gz -C "$GITHUB_WORKSPACE/dist"
-      # Each target runs the selected catalog in three shards on one worker each. The step's
-      # time is the model's latency: the same 330 agent actions took 71 minutes on 2026-11-10
-      # and would have taken about 190 minutes at the latency of 2026-11-12 and 2026-11-13,
-      # when the unsharded job timed out. A third of that stays well inside 120 minutes.
+      # Each target runs the selected tests in three shards on one worker each. Agent
+      # actions accounted for 95-98% of the measured step time across four nightlies.
+      # At the slow nights' observed throughput, 329 actions project to 186-192 minutes.
+      # Sharding reduces each job's exposure to variable model and browser latency.
       - name: Run Neurodesk agent interactions across the catalog
         timeout-minutes: 120
         env:
