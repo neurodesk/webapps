@@ -385,14 +385,22 @@ test("job details read before a step ended cannot replace its final details", as
   let jobReads = 0;
   let releaseRead;
   const readHeld = new Promise(resolve => { releaseRead = resolve; });
+  let snapshotReady;
+  const snapshotRead = new Promise(resolve => { snapshotReady = resolve; });
+  // Queue the stale snapshot before delivering completion, even when the simulator finishes quickly.
+  await page.route(`${COMPUTE_URL}/api/v1/jobs/*/events`, async route => {
+    await snapshotRead;
+    await route.continue();
+  });
   await page.route(new RegExp(`${COMPUTE_URL}/api/v1/jobs/[^/]+$`), async route => {
     if (route.request().method() !== "GET") return route.fallback();
     jobReads += 1;
     if (jobReads !== 1) return route.fallback();
     const response = await route.fetch();
-    expect((await response.json()).status).toBe("running");
+    const snapshot = { ...await response.json(), status: "running", outputs: [] };
+    snapshotReady();
     await readHeld;
-    await route.fulfill({ response });
+    await route.fulfill({ response, json: snapshot });
   });
   let streams = 0;
   page.on("request", request => { if (/\/api\/v1\/jobs\/[^/]+\/events$/.test(request.url())) streams += 1; });
