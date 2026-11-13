@@ -67,6 +67,8 @@ const state = {
   client: null,
   info: null,
   project: null,
+  projectSelection: null,
+  projectLoading: false,
   jobs: new Map(),
   command: 'import',
   values: Object.fromEntries(STEPS.map(step => [step.command, { inputs: {}, options: {}, profile: '' }])),
@@ -84,6 +86,12 @@ function status(message, level = 'info') {
   progress.setText(message);
   $('statusText').classList.toggle('error', level === 'error');
   log.log(message, level);
+}
+
+function readyStatus(message) {
+  if (state.following || state.submitting || state.projectLoading) return;
+  status(!state.client ? 'Connect a server to continue; see Standalone for setup.'
+    : !state.project ? 'No project selected · choose or create a project' : message);
 }
 
 function remember(key, value) {
@@ -261,22 +269,35 @@ function serverFits(serverInfo) {
     && Boolean(serverInfo.tools?.some(tool => tool.id === 'relion'));
 }
 
+function stopFollowing() {
+  state.following?.controller.abort();
+  state.following = null;
+  state.submitting = null;
+}
+
 connection.addEventListener('nd-compute-change', ({ detail }) => {
   const ready = detail.state === 'connected' || detail.state === 'simulated';
   const fits = ready && serverFits(detail.info);
+  stopFollowing();
+  state.projectSelection = null;
+  state.projectLoading = false;
+  $('statusText').classList.remove('error');
   $('serverNeeds').hidden = !ready || fits;
   state.client = fits ? detail.client : null;
   state.info = fits ? detail.info : null;
   if (fits) {
     log.log(`Compute server ready: ${connection.message.textContent}`, detail.state === 'simulated' ? 'warning' : 'success');
     progress.reset('Connected · choose or create a project');
-    loadProjects(recall('cryo-em.project')).catch(error => status(`Projects unavailable: ${error.message}`, 'error'));
-  } else if (detail.state !== 'connecting') {
+    const client = state.client;
+    loadProjects(recall('cryo-em.project')).catch(error => {
+      if (client === state.client) status(`Projects unavailable: ${error.message}`, 'error');
+    });
+  } else {
     state.project = null;
     state.jobs.clear();
     renderProjects([]);
     renderJobs();
-    progress.reset('Connect a server to continue; see Standalone for setup.');
+    progress.reset(detail.state === 'connecting' ? 'Connecting to server…' : 'Connect a server to continue; see Standalone for setup.');
   }
   syncControls();
 });
@@ -291,7 +312,10 @@ function renderProjects(projects) {
 }
 
 async function loadProjects(preferred = state.project?.id) {
-  const { projects } = await state.client.projects();
+  const client = state.client;
+  const selection = state.projectSelection;
+  const { projects } = await client.projects();
+  if (client !== state.client || selection !== state.projectSelection) return;
   if (preferred && projects.some(project => project.id === preferred)) {
     state.project = { id: preferred };
     renderProjects(projects);
@@ -305,34 +329,57 @@ async function loadProjects(preferred = state.project?.id) {
 }
 
 async function openProject(id) {
+  stopFollowing();
+  const selection = {};
+  state.projectSelection = selection;
+  state.projectLoading = Boolean(id);
   state.project = id ? { id } : null;
   state.selectedJob = null;
   state.jobs.clear();
   remember('cryo-em.project', id);
-  if (id) await refreshProject();
-  else {
+  progress.reset(id ? 'Opening project…' : 'No project selected · choose or create a project');
+  syncControls();
+  try {
+    if (id) await refreshProject();
+    else {
+      renderJobs();
+      renderForm();
+    }
+  } catch (error) {
+    if (selection !== state.projectSelection) return;
+    state.project = null;
     renderJobs();
     renderForm();
+    throw error;
+  } finally {
+    if (selection === state.projectSelection) {
+      state.projectLoading = false;
+      syncControls();
+    }
   }
+  if (selection !== state.projectSelection) return;
   $('jobsSection').open = Boolean(id);
   syncControls();
-  if (!state.following) status(id ? 'Project ready · choose a processing step' : 'No project selected · choose or create a project');
+  readyStatus('Project ready · choose a processing step');
 }
 
 /** Re-read the project and the details (outputs) of jobs that changed. */
 async function refreshProject() {
   const client = state.client;
+  const selection = state.projectSelection;
   const project = await client.project(state.project.id);
-  if (client !== state.client || state.project?.id !== project.id) return;
+  if (client !== state.client || selection !== state.projectSelection) return;
   state.project = project;
   await Promise.all(project.jobs.map(async job => {
     const known = state.jobs.get(job.id);
     if (TERMINAL.has(known?.status)) return;
     const details = await client.job(job.id);
+    if (client !== state.client || selection !== state.projectSelection) return;
     // A follower or overlapping refresh may have recorded completion during this read.
     if (TERMINAL.has(state.jobs.get(job.id)?.status)) return;
     state.jobs.set(job.id, { ...job, ...details });
   }));
+  if (client !== state.client || selection !== state.projectSelection) return;
   // Terminal details take precedence over active snapshots, regardless of arrival order.
   for (const job of project.jobs) job.status = state.jobs.get(job.id).status;
   for (const id of state.jobs.keys()) if (!project.jobs.some(job => job.id === id)) state.jobs.delete(id);
@@ -355,7 +402,9 @@ $('createProject').addEventListener('click', async () => {
     return;
   }
   try {
-    const project = await state.client.createProject(name);
+    const client = state.client;
+    const project = await client.createProject(name);
+    if (client !== state.client) return;
     $('projectName').value = '';
     status(`Project ${project.name} created`);
     await loadProjects(project.id);
@@ -520,6 +569,7 @@ stepSelect.replaceChildren(...STEPS.map(step => new Option(step.label, step.comm
 stepSelect.addEventListener('change', () => {
   state.command = stepSelect.value;
   renderForm();
+  readyStatus(`${stepLabel(state.command)} selected · review its inputs`);
 });
 
 function fieldElement(id, label, unit, help, control) {
@@ -652,9 +702,10 @@ function rootBrowser(id, input, value, onChange) {
   pattern.type = 'text';
   pattern.id = `${id}-pattern`;
   pattern.value = current.pattern;
-  const emit = () => {
+  const emit = (changed = true) => {
     onChange(pickFile ? { root: current.root, path: current.path } : { root: current.root, path: folder, pattern: current.pattern });
     $('formMessage').hidden = true;
+    if (changed) readyStatus(`${input.label} changed · review the processing step`);
   };
   let token = 0;
   const load = async () => {
@@ -717,7 +768,7 @@ function rootBrowser(id, input, value, onChange) {
   });
   box.append(fieldElement(rootSelect.id, `${input.label} from`, '', '', rootSelect), where, list);
   if (!pickFile) box.append(fieldElement(pattern.id, 'File pattern', '', 'Matches names in this folder: * is any run of characters, ? one character.', pattern));
-  if (value === undefined || (!pickFile && value.path === undefined)) emit();
+  if (value === undefined || (!pickFile && value.path === undefined)) emit(false);
   void load();
   return box;
 }
@@ -761,7 +812,7 @@ function renderForm() {
 
 function syncControls() {
   const connected = Boolean(state.client);
-  const busy = Boolean(state.following || state.submitting);
+  const busy = Boolean(state.following || state.submitting || state.projectLoading);
   $('projectSelect').disabled = !connected;
   $('projectName').disabled = !connected;
   $('createProject').disabled = !connected;
@@ -769,6 +820,7 @@ function syncControls() {
   $('deleteJob').disabled = busy;
   $('runButton').disabled = !connected || !state.project || busy;
   $('runButton').title = !connected ? 'Connect to a compute server first' : !state.project ? 'Choose or create a project first' : busy ? 'Wait for the running job to end' : '';
+  document.querySelector('nd-example-selector')?.setDisabled(busy);
 }
 
 /** The spec of the current step, checked by the same validation the servers apply. */
@@ -814,18 +866,26 @@ $('runButton').addEventListener('click', async () => {
   // Only this submission clears its own guard: an earlier step's handler can
   // still be finishing its project refresh after this one starts.
   const submission = {};
+  const client = state.client;
+  const selection = state.projectSelection;
+  exampleControl.cancel();
   state.submitting = submission;
+  status(`Submitting ${label}…`);
+  progress.begin(`Submitting ${label}…`, { cancellable: false });
   syncControls();
   try {
-    const receipt = await state.client.submit(request.spec, request.files);
+    const receipt = await client.submit(request.spec, request.files);
+    if (state.submitting !== submission) return;
     state.submitting = null;
     log.log(`Submitted ${label}: ${JSON.stringify(request.spec)}`);
     const following = follow(receipt.id, label);
     await refreshProject();
     await following;
   } catch (error) {
+    if (client !== state.client || selection !== state.projectSelection) return;
     $('formMessage').textContent = error.message;
     $('formMessage').hidden = false;
+    progress.end(`${label} was not accepted: ${error.message}`, { success: false });
     status(`${label} was not accepted: ${error.message}`, 'error');
     // The server may have created the job although no receipt arrived; a refresh follows it.
     if (state.submitting === submission) state.submitting = null;
@@ -845,20 +905,26 @@ function queuedText(label, event, job) {
 
 async function follow(id, label) {
   const client = state.client;
+  const selection = state.projectSelection;
   const controller = new AbortController();
-  state.following = { id, controller };
+  const following = { id, controller };
+  state.following = following;
+  exampleControl.cancel();
   syncControls();
+  status(`${label}: queued`);
   progress.begin(`${label}: queued`);
   try {
     const done = await client.watch(id, {
       onStatus: event => {
+        if (controller.signal.aborted) return;
         if (event.status === 'queued') progress.setText(queuedText(label, event));
         else if (event.status === 'running') progress.setText(`${label}: running`);
         else if (event.status === 'cancelling') progress.setText(`${label}: cancelling…`);
       },
-      onProgress: event => progress.setProgress(event.fraction, `${label}: ${event.stage}`),
+      onProgress: event => { if (!controller.signal.aborted) progress.setProgress(event.fraction, `${label}: ${event.stage}`); },
       onLog: event => log.log(event.line, event.level),
     }, { signal: controller.signal });
+    if (controller.signal.aborted) return;
     state.jobs.set(id, done);
     state.ended.add(id);
     progress.end(`${label} finished${done.simulated ? ' (simulated)' : ''}`);
@@ -874,11 +940,12 @@ async function follow(id, label) {
     $('statusText').classList.toggle('error', !cancelled);
     log.log(cancelled ? `${label} cancelled` : `${label} failed: ${error.message}`, cancelled ? 'warning' : 'error');
   } finally {
-    if (state.following?.id === id) state.following = null;
+    if (state.following === following) state.following = null;
     syncControls();
   }
-  if (client !== state.client || !state.project) return;
+  if (client !== state.client || selection !== state.projectSelection || !state.project) return;
   await refreshProject();
+  if (client !== state.client || selection !== state.projectSelection) return;
   selectJob(id, { show: state.jobs.get(id)?.status === 'succeeded' });
 }
 
@@ -890,6 +957,7 @@ $('cancelButton').addEventListener('click', async () => {
   try {
     await state.client.cancel(running.id);
   } catch (error) {
+    if (state.following !== running) return;
     status(`Cancel failed: ${error.message}`, 'error');
     progress.setCancellable(true);
   }
@@ -923,14 +991,19 @@ const exampleControl = createExampleSelector({
     assertCurrent();
     // The movies stay on the server, so the status says what to do next.
     let next = 'Tutorial settings ready. Connect a server with its movies; see Standalone for setup.';
-    if (state.client && state.info.dataRoots?.some(root => root.id === EXAMPLE_ROOT)) {
-      const listing = await state.client.entries(EXAMPLE_ROOT, EXAMPLE_SETTINGS.import.inputs.movies.path).catch(() => ({ entries: [] }));
+    const client = state.client;
+    if (client && state.info.dataRoots?.some(root => root.id === EXAMPLE_ROOT)) {
+      const listing = await client.entries(EXAMPLE_ROOT, EXAMPLE_SETTINGS.import.inputs.movies.path).catch(() => ({ entries: [] }));
       const present = new Set(listing.entries.map(entry => entry.name));
       const missing = movies.filter(name => !present.has(name));
-      if (missing.length) throw new Error(`The server's examples root lacks ${missing.length} of the ${movies.length} tutorial movies; run neurodesk-compute fetch-example relion-tutorial`);
-      next = state.project
-        ? `${movies.length} tutorial movies found on the server. Ready to import into this project.`
-        : `${movies.length} tutorial movies found on the server. A project is needed before importing.`;
+      if (client === state.client) {
+        if (missing.length) throw new Error(`The server's examples root lacks ${missing.length} of the ${movies.length} tutorial movies; run neurodesk-compute fetch-example relion-tutorial`);
+        next = state.projectLoading ? 'Tutorial settings ready. Wait for the project to open.' : state.project
+          ? `${movies.length} tutorial movies found on the server. Ready to import into this project.`
+          : `${movies.length} tutorial movies found on the server. A project is needed before importing.`;
+      } else if (state.client) {
+        next = 'Tutorial settings ready. Load the example again to check this server’s movies.';
+      }
     } else if (state.client) {
       next = 'Fetch movies on the server: neurodesk-compute fetch-example relion-tutorial';
     }

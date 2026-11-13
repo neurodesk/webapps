@@ -196,6 +196,7 @@ test("the footer × cancels a running step", async ({ page }) => {
   await page.locator("#stepSelect").selectOption("motioncorr");
   await page.locator("#runButton").click();
   await expect(page.locator("#cancelButton")).toBeVisible();
+  await expect(page.locator("select[data-neurodesk-example]")).toBeDisabled();
   await page.locator("#cancelButton").click();
   await expect(page.locator("#statusText")).toContainText("Motion correction cancelled", { timeout: STEP_TIMEOUT });
   await expect(page.locator("#cancelButton")).toBeHidden();
@@ -221,6 +222,7 @@ test("a second Run click while the step is being submitted sends nothing", async
   await page.locator("#runButton").evaluate(button => { button.click(); button.click(); });
   await expect(page.locator("#runButton")).toBeDisabled();
   await expect.poll(() => submissions).toBe(1);
+  await expect(page.locator("#statusText")).toHaveText("Submitting Import movies…");
   release();
   await expect(page.locator("#statusText")).toContainText("Import movies finished", { timeout: STEP_TIMEOUT });
   expect(submissions).toBe(1);
@@ -459,6 +461,169 @@ for (const change of ["clear project", "disconnect"]) {
     await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
   });
 }
+
+test("a tutorial check finishing after disconnect cannot claim server readiness", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "Disconnect during example");
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let checking = false;
+  await page.route(`${COMPUTE_URL}/api/v1/roots/examples/entries*`, async route => {
+    const response = await route.fetch();
+    checking = true;
+    await held;
+    await route.fulfill({ response });
+  });
+  await page.locator("select[data-neurodesk-example]").selectOption(example.id);
+  await expect.poll(() => checking).toBe(true);
+  await page.locator("#computeConnection").getByRole("button", { name: "Disconnect", exact: true }).click();
+  release();
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(page.locator("#statusText")).toContainText("Connect a server");
+  await expect(page.locator("#statusText")).not.toContainText("movies found on the server");
+  await expect(page.locator("#runButton")).toBeDisabled();
+});
+
+test("a project read finishing after clear cannot restore project guidance", async ({ page }) => {
+  await connect(page);
+  const id = await createProject(page, "Clear during project read");
+  await page.locator("#projectSelect").selectOption("");
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let reading = false;
+  await page.route(`${COMPUTE_URL}/api/v1/projects/${id}`, async route => {
+    const response = await route.fetch();
+    reading = true;
+    await held;
+    await route.fulfill({ response });
+  });
+  await page.locator("#projectSelect").selectOption(id);
+  await expect.poll(() => reading).toBe(true);
+  await page.locator("#projectSelect").selectOption("");
+  const completed = page.waitForResponse(`${COMPUTE_URL}/api/v1/projects/${id}`);
+  release();
+  await completed;
+  await expect(page.locator("#statusText")).toHaveText("No project selected · choose or create a project");
+  await expect(page.locator("#runButton")).toBeDisabled();
+});
+
+test("opening an existing project and reconnecting replace the previous guidance", async ({ page }) => {
+  await connect(page);
+  const id = await createProject(page, "Existing project");
+  await page.locator("#projectSelect").selectOption("");
+  await page.locator("#projectSelect").selectOption(id);
+  await expect(page.locator("#statusText")).toHaveText("Project ready · choose a processing step");
+  await loadExample(page);
+  const panel = page.locator("#computeConnection");
+  await panel.getByRole("button", { name: "Disconnect", exact: true }).click();
+  await expect(page.locator("#statusText")).toContainText("Connect a server");
+  await panel.locator('input[type="password"]').fill(COMPUTE_TOKEN);
+  await panel.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.locator("#statusText")).toHaveText("Project ready · choose a processing step");
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
+
+test("changing the movie selection or step withdraws tutorial readiness", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "Edited tutorial");
+  await loadExample(page);
+  await page.locator("#input-movies-pattern").fill("missing*.tiff");
+  await page.locator("#input-movies-pattern").dispatchEvent("change");
+  await expect(page.locator("#statusText")).toHaveText("Movies changed · review the processing step");
+  await loadExample(page);
+  await page.locator("#stepSelect").selectOption("motioncorr");
+  await expect(page.locator("#statusText")).toHaveText("Motion correction selected · review its inputs");
+});
+
+test("an unavailable project replaces readiness and keeps Run disabled", async ({ page }) => {
+  await connect(page);
+  const id = await createProject(page, "Unavailable project");
+  await loadExample(page);
+  await page.locator("#projectSelect").selectOption("");
+  await page.route(`${COMPUTE_URL}/api/v1/projects/${id}`, route => route.fulfill({
+    status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: "not_found", message: "Project removed" } }),
+  }));
+  await page.locator("#projectSelect").selectOption(id);
+  await expect(page.locator("#statusText")).toContainText("Project unavailable:");
+  await expect(page.locator("#runButton")).toBeDisabled();
+});
+
+for (const [change, phase] of [
+  ["clear project", "submission"], ["clear project", "running"],
+  ["disconnect", "submission"], ["disconnect", "running"],
+]) {
+  test(`${change} during ${phase} ignores the old job's completion`, async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await connect(page);
+    await createProject(page, `Disconnect during ${phase}`);
+    await loadExample(page);
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    let receipt;
+    await page.route(`${COMPUTE_URL}/api/v1/jobs`, async route => {
+      if (route.request().method() !== "POST") return route.fallback();
+      const response = await route.fetch();
+      receipt = await response.json();
+      if (phase === "submission") await held;
+      await route.fulfill({ response });
+    });
+    await page.locator("#runButton").click();
+    await expect.poll(() => receipt?.id).toBeTruthy();
+    if (phase === "running") await expect(page.locator("#cancelButton")).toBeVisible();
+    if (change === "clear project") await page.locator("#projectSelect").selectOption("");
+    else await page.locator("#computeConnection").getByRole("button", { name: "Disconnect", exact: true }).click();
+    release();
+    const paired = await page.request.post(`${COMPUTE_URL}/api/v1/pair`, { data: { code: COMPUTE_TOKEN } });
+    const { token } = await paired.json();
+    await expect.poll(async () => {
+      const response = await page.request.get(`${COMPUTE_URL}/api/v1/jobs/${receipt.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      return (await response.json()).status;
+    }).toBe("succeeded");
+    await expect(page.locator("#statusText")).toContainText(change === "disconnect" ? "Connect a server" : "choose or create a project");
+    await expect(page.locator("#cancelButton")).toBeHidden();
+    await expect(page.locator("#runButton")).toBeDisabled();
+    expect(errors).toEqual([]);
+  });
+}
+
+test("a rejected submission replaces readiness and stops progress", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "Rejected submission");
+  await loadExample(page);
+  await page.route(`${COMPUTE_URL}/api/v1/jobs`, route => route.fulfill({
+    status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid_spec", message: "Movies unavailable" } }),
+  }));
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Import movies was not accepted:");
+  await expect(page.locator("#progress")).toHaveAttribute("value", "0");
+  await expect(page.locator("#cancelButton")).toBeHidden();
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
+
+test("a late cancel error cannot replace disconnected guidance", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "Disconnect during cancel");
+  await loadExample(page);
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let cancelling = false;
+  await page.route(`${COMPUTE_URL}/api/v1/jobs/*/cancel`, async route => {
+    cancelling = true;
+    await held;
+    await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid_state", message: "Job already ended" } }) });
+  });
+  await page.locator("#runButton").click();
+  await expect(page.locator("#cancelButton")).toBeVisible();
+  await page.locator("#cancelButton").click();
+  await expect.poll(() => cancelling).toBe(true);
+  await page.locator("#computeConnection").getByRole("button", { name: "Disconnect", exact: true }).click();
+  const completed = page.waitForResponse(response => response.url().endsWith("/cancel"));
+  release();
+  await completed;
+  await expect(page.locator("#statusText")).toContainText("Connect a server");
+  await expect(page.locator("#cancelButton")).toBeHidden();
+});
 
 test("a failed example download can be retried", async ({ page }) => {
   let attempts = 0;
