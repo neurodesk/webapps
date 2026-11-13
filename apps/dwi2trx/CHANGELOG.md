@@ -4,6 +4,13 @@
 
 ### Patch Changes
 
+- 83907ed: Streamline tracking now synchronises lanes with real workgroup barriers. Each GPU workgroup tracks one seed with one 32-lane subgroup, so the barriers the original kernels need are guaranteed on every GPU, including NVIDIA GPUs whose lanes are not in lockstep. Results are unchanged.
+- Updated dependencies [3ae3eb4]
+- Updated dependencies [3f0eab6]
+- Updated dependencies [9312d3a]
+  - @neurodesk/webapp-components@0.28.0
+  - @neurodesk/runtime-support@0.9.26
+  - @neurodesk/dwi2trx@0.8.20261113
 - 62d0d16: Streamline tracking now recovers from a lost GPU device: it requests a new device and reruns the interrupted seed batch, up to twice per run, and on the same GPU the output is the same as an uninterrupted run's. On GPUs that let WebGPU choose the subgroup size, such as Intel's 16- to 32-lane GPUs, the tracking kernels are compiled for exactly 32 lanes. The report records every GPU that tracked, whether its subgroup size was pinned, and how many devices were replaced.
   - @neurodesk/dwi2trx@0.8.20261113
 

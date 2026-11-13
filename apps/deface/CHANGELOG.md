@@ -1,5 +1,16 @@
 # deface
 
+## 1.4.20261113
+
+### Patch Changes
+
+- Updated dependencies [3ae3eb4]
+- Updated dependencies [3f0eab6]
+- Updated dependencies [9312d3a]
+  - @neurodesk/webapp-components@0.28.0
+  - @neurodesk/runtime-support@0.9.26
+  - @neurodesk/deface@1.4.20261113
+
 ## 1.4.20261111
 
 ### Patch Changes

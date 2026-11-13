@@ -1,5 +1,12 @@
 # @neurodesk/gliomoda
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [9312d3a]
+  - @neurodesk/synthsr@0.6.20261113
+
 ## 0.1.3
 
 ### Patch Changes

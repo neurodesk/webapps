@@ -1,5 +1,14 @@
 # @neurodesk/fastprep
 
+## 0.2.18
+
+### Patch Changes
+
+- Updated dependencies [3ae3eb4]
+- Updated dependencies [3f0eab6]
+  - @neurodesk/webapp-components@0.28.0
+  - @neurodesk/sdc@0.5.20261113
+
 ## 0.2.17
 
 ### Patch Changes

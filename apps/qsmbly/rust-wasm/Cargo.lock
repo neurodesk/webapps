@@ -926,7 +926,7 @@ dependencies = [
 
 [[package]]
 name = "qsm_wasm"
-version = "0.31.20261112"
+version = "0.31.20261113"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",

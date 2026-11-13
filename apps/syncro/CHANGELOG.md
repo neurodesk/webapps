@@ -4,6 +4,16 @@
 
 ### Patch Changes
 
+- Updated dependencies [3ae3eb4]
+- Updated dependencies [3f0eab6]
+- Updated dependencies [9312d3a]
+  - @neurodesk/webapp-components@0.28.0
+  - @neurodesk/runtime-support@0.9.26
+  - @neurodesk/synthsr@0.6.20261113
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/brain-extraction@0.5.20261113
+  - @neurodesk/syncro@0.8.20261113
+  - @neurodesk/greedy@0.9.20261113
 - b8b62ae: Leave out MindGrab model files SYNcro never loads, which makes its download about 11 MB smaller.
   - @neurodesk/syncro@0.8.20261113
 

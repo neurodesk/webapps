@@ -1,5 +1,14 @@
 # omezarr-convert
 
+## 0.1.20261113
+
+### Patch Changes
+
+- Updated dependencies [3ae3eb4]
+- Updated dependencies [3f0eab6]
+  - @neurodesk/webapp-components@0.28.0
+  - @neurodesk/omezarr-convert@0.1.20261113
+
 ## 0.1.20261111
 
 ### Minor Changes

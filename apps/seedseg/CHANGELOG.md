@@ -4,6 +4,10 @@
 
 ### Patch Changes
 
+- Updated dependencies [3ae3eb4]
+- Updated dependencies [3f0eab6]
+  - @neurodesk/webapp-components@0.28.0
+  - @neurodesk/seedseg@0.7.20261113
 - f525ce6: Merge upstream astewartau/prostate 2968f64..5629326:
 
   - web: load dicompare from its current host (astewartau.github.io/dicompare-web), worker URL included

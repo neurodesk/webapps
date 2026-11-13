@@ -4,6 +4,9 @@
 
 ### Patch Changes
 
+- Updated dependencies [3ae3eb4]
+- Updated dependencies [3f0eab6]
+  - @neurodesk/webapp-components@0.28.0
 - 39acd6c: Reject a zero or non-finite voxel spacing in the NIfTI header with a clear error before bias correction, as upstream's `seedseg_onnx.py` now does. A zero or NaN spacing was previously read as 1 mm, and an infinite one failed inside resampling with `Invalid typed array length`.
 
 ## 0.7.20261112
