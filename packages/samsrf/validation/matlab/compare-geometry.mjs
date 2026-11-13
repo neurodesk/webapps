@@ -14,7 +14,7 @@ export const CAUSAL_CASES = ['causal_gap_sweep', 'causal_gap_bisection', 'causal
 export const CAUSAL_POLYGONS = { causal_gap_sweep: 8424, causal_hole_contact: 170, causal_heldout: 600 };
 // record_geometry(..., 'polyshape-reproducers'): both rounds' specs, one case each.
 const reproducerSpec = name => JSON.parse(fs.readFileSync(new URL(name, import.meta.url), 'utf8')).cases.length;
-export const REPRODUCER_POLYGONS = { reproducer_cases: reproducerSpec('./polyshape-reproducers.json'), reproducer_round2: reproducerSpec('./polyshape-reproducers-2.json') };
+export const REPRODUCER_POLYGONS = { reproducer_cases: reproducerSpec('./polyshape-reproducers.json'), reproducer_round2: reproducerSpec('./polyshape-reproducers-2.json'), reproducer_round3: reproducerSpec('./polyshape-reproducers-3.json') };
 export const PROBE_POLYGONS = { probe_grid_sweep: 24120, probe_heldout_collinear: 1500, probe_heldout_clouds: 1500, probe_extreme_grids: 7, probe_point_clouds: 2500 };
 
 export function validateGeometry(root) {

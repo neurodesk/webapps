@@ -36,6 +36,12 @@ round nor the causal probe (which has every transform of the full clouds)
 recorded them. Predictions again come from both models before recording.
 
   python3 polyshape_reduce.py round2 GEOMETRY_HOST_DIR PATH_TO_POLYSHAPE_HULLS FIRST_REPORT.json OUT.json
+
+`round3` writes polyshape-reproducers-3.json for clouds whose second-round
+reproducer was not 1-minimal: every one-point deletion that still reproduced in
+MATLAB, and each of their one-point deletions.
+
+  python3 polyshape_reduce.py round3 GEOMETRY_HOST_DIR PATH_TO_POLYSHAPE_HULLS SECOND_REPORT.json OUT.json
 """
 import json
 import os
@@ -244,8 +250,34 @@ def round2():
     print(f'{len(specs)} cases', [(c['cloud'], len(c['reproducer'])) for c in chosen])
 
 
+def round3():
+    root, binary, second_report, out = sys.argv[2:6]
+    clouds, _ = load_clouds(root)
+    oracle = Oracle(binary)
+    second = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'polyshape-reproducers-2.json')))
+    rows = json.load(open(second_report))['rows']
+    reproducing = [second['cases'][r['case']] for r in rows if r['role'] == 'oneDeleted'
+                   and r['matlabEqualsShipped'] and not r['matlabEqualsExperimental']]
+    seen, cases = set(), []
+    for item in reproducing:
+        for role, indices in [('reproducer', item['indices'])] + [('oneDeleted', [k for k in item['indices'] if k != j]) for j in item['indices']]:
+            key = (item['cloud'], tuple(indices))
+            if key not in seen:
+                seen.add(key)
+                cases.append({'cloud': item['cloud'], 'role': role, 'indices': indices, 'reversed': 0, 'shift': 0, 'transform': 0})
+    polygons = [[clouds[c['cloud']][k - 1] for k in c['indices']] for c in cases]
+    for spec, result in zip(cases, oracle.evaluate(polygons)):
+        spec['predicted'] = {'shipped': prediction(result['production']), 'experimental': prediction(result['experimental'])}
+    with open(out, 'w') as f:
+        json.dump({'reproducers': [{'cloud': c['cloud'], 'reproducer': c['indices']} for c in reproducing], 'cases': cases}, f, indent=1)
+        f.write('\n')
+    print(f'{len(cases)} cases from {len(reproducing)} reproducers')
+
+
 if __name__ == '__main__':
-    if sys.argv[1] == 'round2':
+    if sys.argv[1] == 'round3':
+        round3()
+    elif sys.argv[1] == 'round2':
         round2()
     else:
         main()

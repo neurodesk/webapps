@@ -361,11 +361,12 @@ end
 end
 
 function cases = reproducer_cases()
-% Both rounds: the first again (an exact repeat across runs) and the second.
+% Every round: the earlier ones again (exact repeats across runs) and the latest.
 here = fileparts(mfilename('fullpath'));
 clouds = point_clouds();
 cases = {};
-for item = {{'reproducer_cases', 'polyshape-reproducers.json'}, {'reproducer_round2', 'polyshape-reproducers-2.json'}}
+for item = {{'reproducer_cases', 'polyshape-reproducers.json'}, {'reproducer_round2', 'polyshape-reproducers-2.json'}, ...
+        {'reproducer_round3', 'polyshape-reproducers-3.json'}}
     spec = jsondecode(fileread(fullfile(here, item{1}{2})));
     [polygons, parameters] = polyshape_reproducer_cases(clouds, spec);
     cases{end+1} = with_parameters(polygon_batch(item{1}{1}, polygons, true, true), parameters); %#ok<AGROW>
