@@ -1,4 +1,4 @@
-import { catalogApps } from './apps-registry.mjs';
+import { brandAttribute, catalogApps } from './apps-registry.mjs';
 
 const escape = (value) => String(value)
   .replaceAll('&', '&amp;')
@@ -27,13 +27,13 @@ export function renderHubPage(registry) {
   const { hub } = registry.site;
   const cards = registry.site.catalogs.map((catalog) => renderCatalogCard(registry, catalog)).join('');
   return `<!doctype html>
-<html lang="en" data-neurodesk-theme="dark">
+<html lang="en" data-neurodesk-theme="dark"${brandAttribute(hub.brand)}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="${escape(hub.description)}">
   <title>${escape(hub.title)}</title>
-  <link rel="icon" type="image/svg+xml" href="./${escape(hub.brand.logo)}">
+  <link rel="icon" type="image/svg+xml" href="./${escape(hub.brand.icon)}">
   <script src="./theme.js" data-neurodesk-theme-controller></script>
   <link rel="stylesheet" href="./landing.css">
 </head>

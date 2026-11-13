@@ -20,8 +20,17 @@ Pages. `sciget.org` DNS is on Cloudflare.
 
 - `site.catalogs`: one entry per catalogue, with its `id`, `host`, `hosting`
   (`pages` or `worker`), `title`, `heading`, `description`, `brand` (product
-  name, logo file in `site/`, home URL and the More Apps label) and `desktop`
+  name, logo and icon files in `site/`, `theme`, home URL and the More Apps label) and `desktop`
   (its offline suite: see [Desktop suites](#desktop-suites)).
+- `brand.theme` picks the look of the catalogue's landing page and of every app
+  page it serves: `neurodesk` (Inter, neutral greys, the logo green) or `sciget`,
+  which follows sciget.org (its greys, its orange accent, the system font stack
+  and its wordmark). A `sciget` page carries `<html data-neurodesk-brand="sciget">`
+  and `site/app-theme.css` and `site/landing.css` restate their tokens under it; a
+  Neurodesk page carries no attribute. The hub takes `site.hub.brand.theme`.
+- `brand.icon` is the browser-tab icon of the landing page and every app page;
+  `brand.logo` is the header image. SciGet's icon is sciget.org's network graph,
+  because its wordmark is unreadable at favicon size.
 - `site.hub`: the hub page's host, text and brand.
 - `catalog:` on every app: its home catalogue. Its old links redirect there, and
   other hosts' 404 pages send its path there.
@@ -214,8 +223,9 @@ attach the custom domains.
 
 ## Adding a catalogue
 
-1. Add an entry to `site.catalogs` with `hosting: worker`, and add its logo to
-   `site/` if it has a new brand.
+1. Add an entry to `site.catalogs` with `hosting: worker`, and add its logo and
+   icon to `site/` (and to `sharedSiteAssets` in `scripts/build-site.mjs`) if it
+   has a new brand.
 2. Set `catalog:` on its apps.
 3. Add its site to the `worker-sites` artifact, the `deploy-workers` and `verify-workers` matrices and the hub check in `deploy-pages.yml` (`test/catalog-site-projection.test.mjs` holds all four to the registry). The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
 4. Build, then run `node --test test/catalog-sites.test.mjs` and

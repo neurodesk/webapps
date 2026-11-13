@@ -90,7 +90,7 @@ test('theming again for another catalogue replaces every catalogue value', () =>
     siteTitle: 'MSK Webapps',
     brandName: 'SciGet',
     moreAppsLabel: 'More MSK web apps',
-    iconHref: '../sciget-logo.svg',
+    iconHref: '../sciget-icon.svg',
   };
   const themed = injectCompositeTheme(neuro, msk);
 
@@ -100,7 +100,7 @@ test('theming again for another catalogue replaces every catalogue value', () =>
   assert.match(themed, /data-app-url="https:\/\/mskapps\.sciget\.org\/example\/"/);
   assert.match(themed, /data-brand-name="SciGet"/);
   assert.match(themed, /data-more-apps-label="More MSK web apps"/);
-  assert.match(themed, /<link rel="icon" type="image\/svg\+xml" href="\.\.\/sciget-logo\.svg" data-neurodesk-app-icon>/);
+  assert.match(themed, /<link rel="icon" type="image\/svg\+xml" href="\.\.\/sciget-icon\.svg" data-neurodesk-app-icon>/);
   assert.doesNotMatch(themed, /Neurodesk Webapps|neurodesk\.org|G-4Z9774J59Y|neurodesk-logo/);
   assert.equal(injectCompositeTheme(themed, msk), themed);
 });
@@ -120,6 +120,19 @@ test('names the hosting catalogue on the page, once, and only when one hosts it'
   assert.equal(injectCompositeTheme(document, { ...metadata, catalogId: 'microscopy' }).match(/<html\b[^>]*>/)[0], microscopy.match(/<html\b[^>]*>/)[0]);
 
   assert.throws(() => injectCompositeTheme(document, { ...metadata, catalogId: '"><script>' }), /Invalid catalog id/);
+});
+
+test('marks a SciGet page with its brand, and clears it when Neurodesk hosts the page', () => {
+  const html = (themed) => themed.match(/<html\b[^>]*>/)[0];
+  const standalone = injectCompositeTheme(document, metadata);
+  assert.doesNotMatch(html(standalone), /data-neurodesk-brand/);
+
+  const sciget = injectCompositeTheme(standalone, { ...metadata, catalogId: 'msk', brandTheme: 'sciget' });
+  assert.match(html(sciget), /\sdata-neurodesk-brand="sciget"[^>]*>$/);
+  assert.equal(injectCompositeTheme(sciget, { ...metadata, catalogId: 'msk', brandTheme: 'sciget' }), sciget);
+
+  const neuro = injectCompositeTheme(sciget, { ...metadata, catalogId: 'neuro' });
+  assert.equal(html(neuro), html(injectCompositeTheme(document, { ...metadata, catalogId: 'neuro' })));
 });
 
 test('names the canonical page once, and only when given one', () => {

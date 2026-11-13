@@ -66,6 +66,14 @@ const GA4_MEASUREMENT_ID = /^G-[A-Z0-9]+$/;
 const PACKAGE_SCRIPT = /^[a-z][a-z0-9:-]*$/;
 const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 const LOGO = /^[a-z0-9][a-z0-9-]*\.svg$/;
+// The look a brand's pages take: the shared app and landing stylesheets key
+// their palette and type on `data-neurodesk-brand`.
+export const BRAND_THEMES = new Set(['neurodesk', 'sciget']);
+
+/** The `<html>` attribute of a page that takes `brand`'s look; Neurodesk's is the default and needs none. */
+export function brandAttribute(brand) {
+  return brand.theme === 'neurodesk' ? '' : ` data-neurodesk-brand="${brand.theme}"`;
+}
 const APP_ID = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
 // Where a catalogue is served: the repository's one GitHub Pages site, or an
 // assets-only Cloudflare Worker (.github/workflows/deploy-pages.yml).
@@ -81,6 +89,8 @@ function validateSiteEntry(entry, label, errors) {
   const brand = entry?.brand;
   if (typeof brand?.name !== 'string' || !brand.name.trim()) errors.push(`${label}.brand.name must be a non-empty string`);
   if (!LOGO.test(brand?.logo ?? '')) errors.push(`${label}.brand.logo must name an SVG file in site/`);
+  if (!LOGO.test(brand?.icon ?? '')) errors.push(`${label}.brand.icon must name an SVG file in site/`);
+  if (!BRAND_THEMES.has(brand?.theme)) errors.push(`${label}.brand.theme must be one of ${[...BRAND_THEMES].join(', ')}`);
   if (!/^https:\/\/\S+\/$/.test(brand?.home ?? '')) errors.push(`${label}.brand.home must be an https URL ending in /`);
   if (typeof brand?.more_apps !== 'string' || !brand.more_apps.trim()) errors.push(`${label}.brand.more_apps must be a non-empty string`);
 }

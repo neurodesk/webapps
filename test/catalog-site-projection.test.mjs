@@ -139,7 +139,7 @@ test('the hub site holds the hub page and nothing it does not load', async (t) =
   const { root, siteDist } = await fixture(t);
   const hubDir = join(root, 'dist-sites/hub');
   await projectHubSite({ siteDist, destination: hubDir, registry: full });
-  assert.deepEqual((await readdir(hubDir)).sort(), ['_headers', 'fonts', 'index.html', 'landing.css', 'sciget-logo.svg', 'theme.js']);
+  assert.deepEqual((await readdir(hubDir)).sort(), ['_headers', 'fonts', 'index.html', 'landing.css', 'sciget-icon.svg', 'sciget-logo.svg', 'theme.js']);
 });
 
 test('the Worker-hosted sites deploy as assets-only Workers on their own domains', () => {
