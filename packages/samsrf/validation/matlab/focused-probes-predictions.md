@@ -66,3 +66,31 @@ counts give the tree.
 - **H-seq.** One accumulator in index order.
 - **Other.** Neither; the tree is then read from the counts and checked on the
   held-out random products.
+
+## Amendment after run 43527633094 (written before the rerun)
+
+The Hooke-Jeeves section of run 43527633094 is void, as the control rule above
+requires: its Nelder-Mead control differed from the pinned maps on every kept
+vertex. The cause is the recorder's input, not MATLAB. It seeded the fits from
+`single(rawMaps)`, but `samsrf_revcor_prf` builds the raw maps in double
+arrays (`fXimg = zeros(...)`; x0 and y0 are double pixel coordinates and Fwhm a
+double `sqrt`), and the pinned `rawMaps` are rounded to single only when the
+Srf is saved. The loop's seeds are therefore double. That also makes the
+section's single parameters an artifact of the cast: they are no evidence for
+H1.
+
+The rerun rebuilds each vertex's double raw row as `samsrf_revcor_prf` does,
+from the pinned profile (peak index, half-maximum area) and SamSrf's pixel grid,
+with R² and Beta from the pinned row, which hold them exactly, and asserts that
+the rebuilt row rounds to the pinned single one. Predictions for the rerun:
+
+- **Control.** Nelder-Mead now reproduces every pinned map value.
+- **H1' (double parameters).** With double seeds, `[SeedParams 1 0]` is double:
+  the Hooke-Jeeves parameters are double and each error is a single value
+  stored in a double (`NewErr = Inf(...)`).
+- **H2' (the port today).** The port's Hooke-Jeeves path, which searches in
+  double with the single objective of #817, reproduces every recorded parameter
+  and R².
+
+The conv, trig and dot sections do not use these inputs; the rerun repeats them,
+and the recording that is pinned must equal run 43527633094 there.

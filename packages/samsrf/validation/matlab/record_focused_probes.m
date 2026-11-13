@@ -63,6 +63,20 @@ for host = {'ubuntu-22.04', 'ubuntu-24.04'}
             gof = gof(1:min(2, numel(gof)));
         end
         scaling = [model.Scaling_Factor reshape(model.Scaled_Param, 1, [])];
+        % samsrf_revcor_prf's pixel grid and double raw maps (fXimg, fYimg,
+        % fSimg are double arrays); the pinned rawMaps are their single copies.
+        [xc, yc] = meshgrid(linspace(-model.Scaling_Factor, model.Scaling_Factor, size(ApFrm, 2)), ...
+            linspace(-model.Scaling_Factor, model.Scaling_Factor, size(ApFrm, 1)));
+        yc = flipud(yc);
+        loopRaw = NaN(5, size(raw, 2));
+        for v = 1:size(raw, 2)
+            cM = profiles(:, v);
+            mM = max(cM);
+            gp = cM > mM / 2;
+            m = find(cM == mM, 1);
+            loopRaw(:, v) = [double(raw(1, v)); xc(m); yc(m); sqrt(mean(gp) * (model.Scaling_Factor * 2)^2); double(raw(5, v))];
+            assert(isequal(single(loopRaw(:, v)), raw(:, v)), 'Rebuilt raw row %d does not round to the pinned one', v);
+        end
         for s = 0:numel(stepSets)
             if s == 0
                 algorithm = NaN;
@@ -81,7 +95,7 @@ for host = {'ubuntu-22.04', 'ubuntu-24.04'}
                 if model.Allow_Negative_Peaks && abs(max(Rmap(:))) < abs(min(Rmap(:)))
                     Rmap = -Rmap;
                 end
-                seeds = seedFunction(raw(:, v));
+                seeds = seedFunction(loopRaw(:, v));
                 [fP, fR] = samsrf_fit2dprf(Rmap, prf, seeds, scaling, ApFrm, algorithm);
                 parameters(:, g) = double(fP(:));
                 r2(g) = double(fR);
@@ -93,7 +107,7 @@ for host = {'ubuntu-22.04', 'ubuntu-24.04'}
             id = sprintf('hj_%s_%s_%s', strrep(host{1}, '.', ''), item.id, label);
             cases{end+1} = struct('id', id, 'kind', 'hooke-jeeves', 'host', host{1}, ...
                 'pipeline', item.id, 'algorithm', label, 'steps', algorithm, ...
-                'vertices', gof, 'classes', {classes}, ...
+                'vertices', gof, 'classes', {classes}, 'loopRaw', array_file([id '_loop_raw'], loopRaw(:, gof)), ...
                 'parameters', array_file([id '_parameters'], parameters), ...
                 'r2', array_file([id '_r2'], r2), 'traces', {traces}); %#ok<AGROW>
         end
