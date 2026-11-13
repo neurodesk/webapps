@@ -37,6 +37,16 @@ $vc2019 = (Get-Item (Join-Path $work 'vc_redist_2019.x64.exe')).VersionInfo.File
 if (-not $vc2019.StartsWith('14.29.')) { throw "Expected a 14.29 Visual C++ 2019 runtime installer, got $vc2019" }
 Copy-Item (Join-Path $PSScriptRoot 'clean-windows-self-check.ps1') $work
 
+# Some Windows runner images install Docker with its service stopped.
+$service = Get-Service docker -ErrorAction SilentlyContinue
+if ($null -eq $service) { throw 'Docker is not installed on this runner; Windows containers are required' }
+if ($service.Status -ne 'Running') {
+    "Starting the $($service.Name) service ($($service.Status))"
+    Start-Service $service.Name
+    $service.WaitForStatus('Running', [TimeSpan]::FromMinutes(2))
+}
+docker version --format 'Docker {{.Server.Version}} ({{.Server.Os}})'
+if ($LASTEXITCODE -ne 0) { throw 'The Docker daemon is not reachable' }
 docker pull $image
 if ($LASTEXITCODE -ne 0) { throw "docker pull $image failed" }
 
