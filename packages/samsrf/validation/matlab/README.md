@@ -1070,11 +1070,7 @@ AMD); it does not distinguish signed zeros.
 
 #### Remaining limits
 
-- MKL's AVX-512 branch on Intel hosts is not reproduced: the Intel kernel
-  recording differs from AMD in 12,841 of 16,326 arrays, and MATLAB ignores MKL
-  branch requests. Its FPRev probes are recorded, but a port of them would be a
-  second, non-default target that nothing in the app could select, so none is
-  attempted.
+- MKL's AVX-512 branch on Intel hosts is not reproduced (next section).
 - Signed zeros of MATLAB results that MATLAB itself returns as real cannot be
   recorded through MATLAB. A MEX-level recording of `?trsm`'s own output could
   show MKL's sign there, but MATLAB's visible result has none, so it would not
@@ -1084,6 +1080,86 @@ AMD); it does not distinguish signed zeros.
   pixels and the ROI courses in the pipelines; the probe lengths) rest on the
   kernel probes and the tree model, not on recorded MATLAB outputs. Other
   MATLAB or MKL releases were not recorded.
+
+#### Intel AVX-512 and the reference host
+
+The pinned kernel recording includes one Intel Xeon 8370C host (MKL CNR
+branch `AVX512_E1`, `ubuntu-22.04-3` in `qr-kernels-reference.json`). It
+answers where Intel's arithmetic departs from the AMD reference and whether a
+second, explicit reference could be built from existing data. No new recording
+was made for this.
+
+Where Intel first departs, per design (`qr_steps` with `qr-steps.py` against
+the Intel recording; numeric comparison):
+
+| Class (designs) | Port equals Intel's `mldivide` | First differing step |
+| --- | --- | --- |
+| double real (95) | 10 | R(1,2) 54, R(1,1) 25, R(2,2) 9, v(2) 6, Q^H y 1 |
+| double complex (79) | 0 | R(1,2) 49, R(1,1) 23, v(1) 7 |
+| single real (110) | 38 | R(1,2) 87, v(2) 12, R(2,2) 4, Q^H y 4 |
+| single complex (64) | 8 | R(1,2) 41, v(1) 21, v(2) 2 |
+
+So the column update (`?gemv` inside `?geqp3`) differs first in most designs,
+`dnrm2` (R(1,1)) in 48 double designs, and the complex reflector's scaling (v(1))
+in 28 complex designs.
+
+What the existing Intel data establishes:
+
+- Every Intel tree is deterministic and independent of memory alignment (one
+  tree per length across the eight recorded offsets), as on AMD.
+- `qr-lane-models.py` fits lane-tree models to a host's FPRev probes. On the
+  AMD recording it recovers every model `lstsq.rs` implements: all four
+  `?gemv` classes, both complex `?ormqr` classes, and the real `?ormqr` groups
+  whose block equals their lane count. On Intel:
+  - `dgemv`: one model at all 49 lengths, with c(1) as element 0, 16 lanes
+    (two 8-wide registers), the remainder in power-of-two chunks (8, 4, 2, 1)
+    from lane 0, then folds with strides 8, 4, 1, 2.
+  - `cgemv` (real-v probes): one model, with 8 lanes, folds 4, 2, 1 and the
+    remainder round-robin.
+  - `sgemv`: the products go round-robin and c(1) is added last, but the lane
+    count grows with the length (2, 4, 8, 16, 32). That fits 45 of 49 lengths,
+    and none fits at 127, 128, 249 and 250.
+  - `zgemv`: no model of this family at 15 lengths.
+  - `?ormqr`: complex single fits one model in 21 of 21 column groups and
+    complex double in 18 of 21, but double only in 7 of 21 and single in none.
+- `snrm2` gives Intel's R(1,1) in all 49 non-constant single designs with the
+  AMD order. `dnrm2` does not: the AMD scaled sum gives 26 of 51 double
+  designs, and no plain or lane-wise sum of squares tried gives more than 34.
+  Intel's `dnrm2` is another algorithm, not identified.
+- FPRev probes use real ones, so they cannot see fused multiply-adds or how
+  complex products are formed. The complex v(1) differences (28 designs) are
+  such arithmetic and are not identified.
+
+Feasibility of a second reference: the summation trees are recoverable from
+the existing probes for some kernels. A faithful Intel reference would still
+need `dnrm2`, the complex reflector scaling, real `?ormqr`, `zgemv` and long
+`sgemv` identified, and then every chain gated as the AMD ones are. Probes
+cannot decide the non-tree parts. The recorded chains could, but each
+candidate would be fitted on the same 348 designs it is judged on. A held-out
+recording would then be needed before calling it a reference.
+
+Recommended reference-host policy (a proposal; the current contract is
+unchanged):
+
+- Keep one deterministic reference: MATLAB R2023b Update 11 with MKL's CNR
+  `auto` branch on the recorded AMD EPYC hosts. The port's arithmetic is fixed
+  in its code and gives the same bits on every user's machine. Choosing
+  arithmetic from the user's CPU would make results depend on hardware and
+  would still not match a MATLAB run elsewhere, since MATLAB's own results
+  differ between hosts.
+- Report agreement as "with MATLAB on the AMD reference". Intel MATLAB
+  results are a different, documented target, not a failure of the port, and
+  not covered by AMD evidence.
+- Build an Intel model only if someone needs to reproduce Intel MATLAB runs.
+  It would be an explicit, opt-in reference identifier, never a default or
+  an automatic choice, and it would need the identifications above and a
+  held-out Intel recording first.
+
+```sh
+python3 -I packages/samsrf/validation/matlab/qr-lane-models.py "$TMPDIR/samsrf-qr-kernels/ubuntu-22.04-3" "$TMPDIR/intel-lanes.json"
+cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example qr_steps -- "$TMPDIR/samsrf-qr/ubuntu-24.04/compatible" "$TMPDIR/port-steps.json"
+python3 -I packages/samsrf/validation/matlab/qr-steps.py "$TMPDIR/samsrf-qr-kernels/ubuntu-22.04-3" "$TMPDIR/port-steps.json" "$TMPDIR/intel-steps.json"
+```
 
 #### History
 
