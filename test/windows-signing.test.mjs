@@ -32,6 +32,7 @@ test('Azure signing requires complete opt-in configuration before OIDC and uses 
   assert.match(signer, /\$LASTEXITCODE -ne 0/);
   assert.match(signer, /10\.0\.26100\.4188/);
   assert.match(signer, /\$toSign = @\(\$files \| Where-Object/);
+  assert.match(signer, /\.Status -eq 'NotSigned'/);
   assert.match(signer, /-Files \(\$toSign -join ','\)/);
 });
 

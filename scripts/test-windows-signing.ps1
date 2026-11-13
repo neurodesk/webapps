@@ -14,7 +14,12 @@ function Get-ChildItem {
 function Get-AuthenticodeSignature {
     param($LiteralPath)
     $text = [IO.File]::ReadAllText($LiteralPath)
-    $status = if ($text -eq 'unsigned') { 'NotSigned' } else { 'Valid' }
+    $status = switch ($text) {
+        'unsigned' { 'NotSigned' }
+        'invalid Microsoft signature' { 'HashMismatch' }
+        'untrusted Microsoft signature' { 'NotTrusted' }
+        default { 'Valid' }
+    }
     $timestamp = if ($testState.timestamp) { [pscustomobject]@{ Thumbprint = 'fixture timestamp' } } else { $null }
     [pscustomobject]@{ Status = $status; TimeStamperCertificate = $timestamp }
 }
@@ -50,6 +55,22 @@ try {
     & (Join-Path $PSScriptRoot 'windows-signing.ps1') -FilesJson $request -Root $workRoot -Evidence $evidence
     if ($testState.signed.Count -ne 0) { throw 'Already signed files must not be signed again' }
 
+    foreach ($invalid in @('invalid Microsoft signature', 'untrusted Microsoft signature')) {
+        [IO.File]::WriteAllText($runtime, $invalid)
+        $before = (Get-FileHash $runtime).Hash
+        $rejected = $false
+        try {
+            & (Join-Path $PSScriptRoot 'windows-signing.ps1') -FilesJson $request -Root $workRoot -Evidence $evidence
+        } catch {
+            if ($_ -notmatch 'valid timestamped Authenticode signature') { throw }
+            $rejected = $true
+        }
+        if (-not $rejected) { throw 'An invalid vendor signature must fail verification' }
+        if ($testState.signed.Count -ne 0 -or (Get-FileHash $runtime).Hash -ne $before) {
+            throw 'An invalid vendor signature must never be replaced or modified'
+        }
+    }
+    [IO.File]::WriteAllText($runtime, 'Microsoft signature')
     $testState.timestamp = $false
     $rejected = $false
     try {

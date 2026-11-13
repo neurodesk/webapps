@@ -9,8 +9,9 @@ $files = @(Get-Content -Raw -LiteralPath $FilesJson | ConvertFrom-Json)
 if ($files.Count -eq 0) { throw 'No files supplied for signing' }
 Import-Module ArtifactSigning -RequiredVersion 0.1.8
 if (-not $VerifyOnly) {
-    # Keep valid vendor signatures and bytes, including Microsoft's redistributable CRT DLLs.
-    $toSign = @($files | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_).Status -ne 'Valid' })
+    # Keep vendor signatures and bytes, including Microsoft's redistributable CRT DLLs.
+    # Invalid or untrusted signatures must fail verification, never be replaced with ours.
+    $toSign = @($files | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_).Status -eq 'NotSigned' })
     # Use only the Azure CLI session established by the OIDC login action.
     if ($toSign.Count -gt 0) {
         Invoke-ArtifactSigning -Endpoint $env:AZURE_ARTIFACT_SIGNING_ENDPOINT `
