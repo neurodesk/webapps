@@ -486,8 +486,8 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   exactly and breaks cocircular ties with CGAL's symbolic perturbation, which
   gives MATLAB's `delaunay` edges on every recorded grid, ring and shuffled
   tie. `polyshape(...).convhull` follows MATLAB's fixed-point grid, even-odd
-  resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on 25,980
-  of the 26,073 original recorded polygons. The 93 nearly collinear exceptions
+  resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on 25,964
+  of the 26,057 original recorded polygons. The 93 nearly collinear exceptions
   are frozen as regression snapshots; why MATLAB keeps the vertices it keeps for
   them is not known
   ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
