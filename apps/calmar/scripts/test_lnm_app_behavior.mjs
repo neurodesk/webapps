@@ -298,6 +298,65 @@ for (const method of ['runBrainExtraction', 'runLesionSegmentation', 'runDeepIsl
   await assert.rejects(old, { name: 'AbortError' });
 }
 
+// Cancellation also ends a review that is still preparing its drawing.
+{
+  const app = makeApp();
+  app.nativeStructuralFile = { name: 'T1.nii' };
+  app.ensureNativeStructuralInfo = async () => ({});
+  app.loadViewerBaseVolume = async () => true;
+  app.maskDrawingController = { loadBrainMaskFile: async () => {}, close() {} };
+  let release;
+  app.resampleSeedMaskToNative = () => new Promise(resolve => { release = resolve; });
+  let drawingLoads = 0;
+  app.viewerLoad = async () => { drawingLoads += 1; };
+  app.beginStatus('Preparing');
+  const review = app.startLesionMaskReview({ seedFile: { name: 'seed.nii' } });
+  await waitForMicrotaskCondition(() => release, 'review seed preparation must begin');
+  app.invalidatePipeline('cancelled by the user');
+  assert.equal(app.maskReviewActive, false, 'cancelling unfinished review preparation must release its base lock immediately');
+  release(null);
+  await assert.rejects(review, { name: 'AbortError' });
+  assert.equal(drawingLoads, 0, 'cancelled review preparation must not open a drawing later');
+  assert.equal(app._preparingMaskReview, null);
+}
+
+// Download callbacks belong to the result computation that requested them.
+{
+  const app = makeApp();
+  app.selectedAtlasOptionId = 'yeo7';
+  const option = app.getAtlasOption();
+  app.overlapResult = { atlasOption: option, parcelResult: { parcels: [{ label: 1 }] } };
+  app.ensureManifest = async () => ({ connectomeAssets: [{
+    id: option.connectomeAssetId,
+    supportStatus: 'supported',
+    sourceUrl: 'https://example.test/held-connectome.bin'
+  }] });
+  const originalFetch = globalThis.fetch;
+  const originalCaches = globalThis.caches;
+  let stream;
+  globalThis.caches = undefined;
+  globalThis.fetch = async () => ({
+    ok: true,
+    headers: { get: () => '8' },
+    body: new ReadableStream({ start(controller) { stream = controller; } })
+  });
+  const progress = [];
+  app.handleWorkerProgress = (...args) => progress.push(args);
+  try {
+    const map = app.runFcNetworkMap();
+    await waitForMicrotaskCondition(() => stream, 'connectome download must begin');
+    app.clearDerivedResults();
+    stream.enqueue(new Uint8Array(8));
+    await waitMs(0);
+    stream.error(new Error('end held download'));
+    await assert.rejects(map, /end held download/);
+    assert.deepEqual(progress, [], 'a superseded download must not overwrite replacement progress');
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.caches = originalCaches;
+  }
+}
+
 // Cleanup from old work must leave a current worker and its waiters alone.
 {
   const app = makeApp();
@@ -3539,6 +3598,27 @@ for (const kind of ['structural', 'lesion']) {
 
     const nonemptyOverlap = app.overlapResult;
     {
+      const lesion = app.lesionFile;
+      let release;
+      app.lesionFile = { name: lesion.name, arrayBuffer: () => new Promise(resolve => { release = resolve; }) };
+      const overlap = app.runAtlasOverlap();
+      await waitForMicrotaskCondition(() => release, 'overlap must reach the lesion read', 100);
+      app.invalidatePipeline('cancelled overlap');
+      release(lesionAtlasBuffer);
+      await assert.rejects(overlap, { name: 'AbortError' });
+      assert.equal(app.overlapResult, nonemptyOverlap, 'cancelled overlap must not publish another result');
+      app.lesionFile = lesion;
+
+      const manifest = await app.ensureManifest();
+      const ensureManifest = app.ensureManifest;
+      app.ensureManifest = () => new Promise(resolve => { release = resolve; });
+      const map = app.runFcNetworkMap();
+      app.invalidatePipeline('cancelled network map');
+      release(manifest);
+      await assert.rejects(map, { name: 'AbortError' });
+      app.ensureManifest = ensureManifest;
+    }
+    {
       const overlapRun = app.runAtlasOverlap();
       app.clearDerivedResults();
       assert.deepEqual(await overlapRun, { stopPipeline: true },
@@ -3635,6 +3715,20 @@ for (const kind of ['structural', 'lesion']) {
 }
 
 // ---- Knowledge-base evidence: approved only, or approved + unreviewed drafts ----
+{
+  const app = makeApp();
+  let release;
+  app.ensureManifest = () => new Promise(resolve => { release = resolve; });
+  const drafts = app.handleKbEvidenceChange('drafts');
+  await app.handleKbEvidenceChange('off');
+  release({
+    kbReport: { annotationAssetId: 'approved', draftsAnnotationAssetId: 'drafts' },
+    annotationAssets: [{ id: 'drafts', supportStatus: 'supported' }]
+  });
+  await drafts;
+  assert.equal(app.kbEvidence, 'off', 'late evidence preparation must not undo a newer selection');
+}
+
 {
   const withDrafts = {
     kbReport: { annotationAssetId: 'aphasia-kb', draftsAnnotationAssetId: 'aphasia-kb-drafts' },

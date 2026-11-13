@@ -1883,11 +1883,8 @@ export class LesionNetworkMappingApp {
   beginImport(kind, assertLoadCurrent) {
     if (kind === 'mask' && !this.maskReviewActive) this.setMaskReview3DRenderEnabled(true);
     if (kind === 'mask' && this._preparingMaskReview) {
-      this._preparingMaskReview = null;
       if (this._pipelineRunning) this.endStatus('Stopped');
-      this.maskReviewActive = false;
-      this.resetViewerQueue();
-      this.refreshMaskDrawingControls();
+      this.stopPreparingMaskReview();
     }
     const turn = ++this._importTurn[kind];
     this.releaseWorkerWaits();
@@ -1908,6 +1905,13 @@ export class LesionNetworkMappingApp {
   cancelImports(...kinds) {
     for (const kind of kinds) this._importTurn[kind] += 1;
     this.releaseWorkerWaits();
+  }
+
+  stopPreparingMaskReview() {
+    this._preparingMaskReview = null;
+    this.maskReviewActive = false;
+    this.resetViewerQueue();
+    this.refreshMaskDrawingControls();
   }
 
   isCurrent(assertCurrent) {
@@ -1989,10 +1993,15 @@ export class LesionNetworkMappingApp {
   // ends with an AbortError and the status bar goes back to idle.
   invalidatePipeline(reason) {
     const preparingDiffusion = this._deepIslesRunning;
+    const preparingReview = !!this._preparingMaskReview;
     this.cancelImports('pipeline');
+    if (preparingReview) {
+      this.cancelImports('mask');
+      this.stopPreparingMaskReview();
+    }
     if (!this.maskReviewActive) this.setMaskReview3DRenderEnabled(true);
     const waiting = this._stageDataResolvers.size + this._stepCompleteResolvers.size > 0;
-    if (!this._pipelineRunning && !this.executor?.running && !this.executor?.workerInitializing && !waiting && !preparingDiffusion) return;
+    if (!this._pipelineRunning && !this.executor?.running && !this.executor?.workerInitializing && !waiting && !preparingDiffusion && !preparingReview) return;
     try {
       this.executor.cancel();
     } catch (err) {
@@ -2153,6 +2162,7 @@ export class LesionNetworkMappingApp {
   }
 
   async runAtlasOverlap({ showResults = false } = {}) {
+    const owner = this.owner('pipeline', 'mask');
     if (!this.lesionFile) {
       this.updateOutput('Drop a lesion mask before computing overlap.');
       return;
@@ -2161,12 +2171,15 @@ export class LesionNetworkMappingApp {
     const atlasOption = this.getAtlasOption();
     this.updateOutput(`Loading ${atlasSpaceName(atlasOption)} atlas...`);
     const atlas = await loadAtlasFromManifest(atlasOption.overlapAtlasAssetId, { subcorticalAssetId: atlasOption.subcorticalAtlasAssetId });
+    owner();
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Overlap');
     const overlapSpace = atlasOptionSpace(atlasOption, 'overlap');
     assertSpace(this.lesionFile, overlapSpace, 'Direct lesion overlap');
     this.updateOutput('Decoding lesion mask...');
     const lesionBuf = await this.lesionFile.arrayBuffer();
+    owner();
     const lesion = await decodeNiftiBuffer(lesionBuf);
+    owner();
 
     if (!dimsEqual(lesion.dims, atlas.dims)) {
       this.updateOutput(`Lesion dims ${lesion.dims.join('x')} do not match atlas ${atlas.dims.join('x')}. Re-register or warp the mask to the selected atlas first.`);
@@ -2199,6 +2212,7 @@ export class LesionNetworkMappingApp {
     );
     if (showResults) this.setViewerView('results');
     await this.updateDirectFunctionProfile();
+    owner();
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Overlap');
   }
 
@@ -2222,6 +2236,9 @@ export class LesionNetworkMappingApp {
    * report is already shown it is recomputed for the same lesion.
    */
   async handleKbEvidenceChange(value) {
+    const request = {};
+    this._kbEvidenceRequest = request;
+    const owner = this.owner('pipeline', 'mask');
     this.cancelKbReport();
     if (value === 'off') {
       this.kbEvidence = 'off';
@@ -2234,6 +2251,7 @@ export class LesionNetworkMappingApp {
     if (evidence === this.kbEvidence) return;
     if (evidence === 'drafts') {
       const manifest = await this.ensureManifest();
+      if (this._kbEvidenceRequest !== request || !this.isCurrent(owner)) return;
       if (!manifest?.kbReport || !kbAssetId(manifest, 'drafts')) {
         const select = document.getElementById('kbEvidenceSelect');
         if (select) {
@@ -2254,6 +2272,7 @@ export class LesionNetworkMappingApp {
       try {
         await this.runKbReport();
       } catch (error) {
+        if (this._kbEvidenceRequest !== request || !this.isCurrent(owner)) return;
         this.updateOutput(`Knowledge-base report failed: ${error.message}`, { level: 'error' });
       }
     }
@@ -3547,6 +3566,7 @@ export class LesionNetworkMappingApp {
   // seven network overlaps; Schaefer weights by parcel overlaps and can
   // lazy-load only the hit parcel channels.
   async runFcNetworkMap() {
+    const owner = this.owner('pipeline', 'mask');
     const generation = this._resultsGeneration;
     const overlap = this.overlapResult;
     if (!overlap) {
@@ -3563,6 +3583,7 @@ export class LesionNetworkMappingApp {
       return;
     }
     const manifest = await this.ensureManifest();
+    owner();
     const connectomeEntry = manifest.connectomeAssets?.find(
       asset => asset.id === atlasOption.connectomeAssetId
     );
@@ -3588,6 +3609,7 @@ export class LesionNetworkMappingApp {
     }
     const progressOptions = {
       onProgress: ({ received, total, label }) => {
+        if (!this.isCurrent(owner) || generation !== this._resultsGeneration) return;
         if (received - lastTick < 512 * 1024 && received !== total) return;
         lastTick = received;
         const mb = (received / 1048576).toFixed(1);
@@ -3607,6 +3629,7 @@ export class LesionNetworkMappingApp {
         { ...progressOptions, manifest }
       )
       : await loadConnectomeFromManifest(atlasOption.connectomeAssetId, { ...progressOptions, manifest });
+    owner();
     const { index, manifestEntry } = loadResult;
     const pack = this.decodeLoadedConnectome(loadResult, requestedLabels);
     const dims = index.shape.slice(1);
@@ -3617,6 +3640,7 @@ export class LesionNetworkMappingApp {
       atlasOption.overlapAtlasAssetId;
     const networkMapSpace = atlasVolumeSpace(atlasAssetId);
     const atlas = await loadAtlasFromManifest(atlasAssetId);
+    owner();
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Network map');
     if (!dimsEqual(dims, atlas.dims)) {
       throw new Error(
@@ -3639,6 +3663,7 @@ export class LesionNetworkMappingApp {
     }, {
       connectome: async () => ({ pack, index, reference: atlas })
     });
+    owner();
     const weights = mapped.weights;
     this.updateOutput(
       `Computing network map: weights=[${
@@ -3676,6 +3701,7 @@ export class LesionNetworkMappingApp {
 
     const mapFile = this.networkMapFile;
     await this.displayNetworkMapOnAtlasTemplate(atlas, flatAffine);
+    owner();
     if (generation !== this._resultsGeneration) {
       // A newer run may already own the network-map stage; remove only this run's overlay.
       this.removeViewerOverlay('network-map', mapFile);

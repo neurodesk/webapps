@@ -18,3 +18,5 @@ Worker waits are released on preparation failure and cancellation, including bef
 Checked viewer commits release uninserted decoded images and unused object URLs even when synchronous NiiVue insertion or configuration throws.
 
 Replacing unfinished review preparation also detaches its viewer queue, so a drawing decode that never settles cannot block a replacement review of the same subject.
+
+Cancellation releases unfinished review locks and prevents its late drawing from opening. Superseded result computations cannot publish after cancellation or overwrite replacement download progress, and late evidence metadata cannot undo a newer selection. Removed or unsuccessfully inserted checked viewer images are also released from NiiVue's URL map.

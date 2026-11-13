@@ -1506,6 +1506,31 @@ test('a failed replacement upload releases an unfinished review base lock', asyn
   expect((await loaded()).review).toBe(true);
 });
 
+test('cancelling unfinished review preparation releases its locks and viewer queue', async ({ page }) => {
+  const { choose, loaded } = await holdImports(page);
+  await choose('structural', 'T1.nii');
+  await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+  await page.evaluate(() => {
+    app.resampleSeedMaskToNative = () => new Promise(resolve => { globalThis.releaseCancelledSeed = resolve; });
+    app.beginStatus('Preparing lesion review');
+    app.progress.setCancellable(true);
+    globalThis.cancelledReview = app.startLesionMaskReview({ seedFile: new File([], 'seed.nii') })
+      .then(() => 'completed', error => error.name);
+  });
+  await page.waitForFunction(() => globalThis.releaseCancelledSeed && app.maskReviewActive);
+  await page.locator('#cancelButton').click();
+  expect((await loaded()).review).toBe(false);
+  await expect(page.locator('#statusText')).toHaveText('Cancelled');
+  await expect(page.locator('#cancelButton')).toBeHidden();
+  await page.evaluate(() => app.startLesionMaskReview({ blank: true }));
+  await drawTwoVoxels(page);
+  const drawn = (await loaded()).drawn;
+  await page.evaluate(() => globalThis.releaseCancelledSeed(null));
+  expect(await page.evaluate(() => globalThis.cancelledReview)).toBe('AbortError');
+  expect((await loaded()).drawn).toBe(drawn);
+  expect(await page.evaluate(() => [...app.nv.mediaUrlMap.keys()].every(image => app.nv.volumes.includes(image)))).toBe(true);
+});
+
 test('a drawing decode that never settles cannot block its replacement review', async ({ page }) => {
   const { choose, waiting, resume, ended, loaded, smallMask } = await holdImports(page);
   await choose('structural', 'T1.nii');
