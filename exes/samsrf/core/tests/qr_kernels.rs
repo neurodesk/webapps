@@ -159,8 +159,22 @@ fn multiple_right_hand_sides_match_matlab_on_amd() {
         let (solved, qty) = lstsq::mldivide_many_with_qty(&columns, &ys, precision);
         let id = item["id"].as_str().unwrap();
         assert!(visited.insert(id.to_string()), "duplicate multi-RHS case {id}");
+        assert_eq!(ys.len(), 8, "{id}: recorded right-hand sides");
+        let production = lstsq::mldivide_many(&columns, &ys, precision);
+        assert_eq!(production.rank, solved.rank, "{id}: diagnostic rank");
+        assert_eq!(production.pivot, solved.pivot, "{id}: diagnostic pivot");
+        assert_eq!(production.coefficients.len(), ys.len(), "{id}: production right-hand sides");
+        assert_eq!(solved.coefficients.len(), ys.len(), "{id}: diagnostic right-hand sides");
+        for (j, (actual, diagnostic)) in production.coefficients.iter().zip(&solved.coefficients).enumerate() {
+            assert_eq!(actual.len(), columns.len(), "{id}: production coefficient shape for right-hand side {j}");
+            assert_eq!(actual.iter().copied().map(bits).collect::<Vec<_>>(), diagnostic.iter().copied().map(bits).collect::<Vec<_>>(),
+                "{id}: diagnostic coefficients for right-hand side {j}");
+        }
         let recorded_qty = complex_values(root, &item["qty"]);
+        assert_eq!(recorded_qty.len(), m * ys.len(), "{id}: recorded Q^H y shape");
+        assert_eq!(qty.len(), ys.len(), "{id}: Q^H y right-hand sides");
         for (j, column) in qty.iter().enumerate() {
+            assert_eq!(column.len(), m, "{id}: Q^H y rows of right-hand side {j}");
             for (i, value) in column.iter().enumerate() {
                 assert_eq!(bits(*value), bits(recorded_qty[i + j * m]), "{id}: Q^H y row {i} of right-hand side {j}");
             }
@@ -170,7 +184,7 @@ fn multiple_right_hand_sides_match_matlab_on_amd() {
         assert_eq!(solved.coefficients.iter().flatten().count(), together.len(), "{id}: shape");
         for (index, value) in solved.coefficients.iter().flatten().enumerate() {
             let expected = together[index];
-            if stored_real {
+            if stored_real && item["complex"] == true {
                 assert!(value.re.to_bits() == expected.re.to_bits() && value.im == 0.0,
                     "{id}: coefficient {index}: {value} differs from MATLAB's real {}", expected.re);
             } else {
