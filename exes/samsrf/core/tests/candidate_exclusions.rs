@@ -480,3 +480,53 @@ const DENSE: usize = 26;
 const NEITHER: usize = 85;
 const SPLIT: usize = 84;
 const NO_SPLIT: usize = 27;
+
+// ---- gampdf with shape below 1 --------------------------------------------------
+
+/// MATLAB's `gampdf(x, a, b)` for a < 1 (numerics2, shape 0.7, scales 0.5-2, both
+/// hosts) against the identity gampdf(x, a) = gampdf(x, a + 1) a / z (z = x / b),
+/// in the operation orders below. `gampdf(x, a + 1, b)` is the identified form
+/// for shapes of at least 1 (`matlab_numerics2.rs`). None is MATLAB's: each
+/// matches about a third of the 1,216 values with x > 0.
+#[test]
+fn gampdf_below_shape_one_is_not_the_shifted_recurrence() {
+    let Some(root) = std::env::var_os("SAMSRF_MATLAB_NUMERICS2_DIR").map(PathBuf::from) else { return };
+    type Form = fn(f64, f64, f64, f64) -> f64;
+    // (name, form of g = gampdf(x, a + 1, b), x, a, b; frozen matches)
+    let forms: [(&str, Form, usize); 7] = [
+        ("g*b*a/x", |g, x, a, b| g * b * a / x, 327),
+        ("g*a/z", |g, x, a, b| g * a / (x / b), 339),
+        ("g*(a/z)", |g, x, a, b| g * (a / (x / b)), 368),
+        ("(a/z)*g", |g, x, a, b| (a / (x / b)) * g, 368),
+        ("a*g/z", |g, x, a, b| a * g / (x / b), 339),
+        ("g/z*a", |g, x, a, b| g / (x / b) * a, 342),
+        ("g*b*(a/x)", |g, x, a, b| g * b * (a / x), 379),
+    ];
+    let manifest: Value = serde_json::from_slice(&std::fs::read(root.join("manifest.json")).unwrap()).unwrap();
+    for host in manifest["hosts"].as_object().unwrap().keys() {
+        let dir = root.join(host).join("compatible");
+        let recording: Value = serde_json::from_slice(&std::fs::read(dir.join("numerics.json")).unwrap()).unwrap();
+        let mut matches = [0usize; 7];
+        let mut total = 0;
+        for case in recording["cases"].as_array().unwrap().iter().filter(|c| c["kind"] == "gampdf" && c["a"].as_f64().unwrap() < 1.0) {
+            let (a, b) = (case["a"].as_f64().unwrap(), case["b"].as_f64().unwrap());
+            let x = doubles(&dir.join(case["x"]["file"].as_str().unwrap()));
+            let matlab = doubles(&dir.join(case["gampdf"]["file"].as_str().unwrap()));
+            for (&x, &e) in x.iter().zip(&matlab) {
+                if x <= 0.0 {
+                    continue;
+                }
+                total += 1;
+                let g = m::gampdf(x, a + 1.0, b).expect("shape a + 1 >= 1 is on the identified path");
+                for (count, (_, form, _)) in matches.iter_mut().zip(&forms) {
+                    *count += usize::from(same(form(g, x, a, b), e));
+                }
+            }
+        }
+        assert_eq!(total, 1_216, "{host}");
+        for ((name, _, expected), actual) in forms.iter().zip(matches) {
+            println!("{host}: gampdf(x, a + 1, b) as {name}: {actual} of {total}");
+            assert_eq!(actual, *expected, "{host} {name}");
+        }
+    }
+}
