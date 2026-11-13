@@ -582,6 +582,7 @@ export const mountNvSlideView = (
     const pendingCount = pane.slide.pendingCount
     pane.element.dataset.pending = String(pendingCount)
     pane.element.dataset.cacheBytes = String(pane.slide.cacheBytes)
+    pane.element.dataset.tileRequests = String(pane.slide.stats.requested)
     pane.loading.value = pendingCount > 0
       ? `${pendingCount} tile${pendingCount === 1 ? '' : 's'} loading`
       : ''

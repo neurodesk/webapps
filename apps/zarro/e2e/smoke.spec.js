@@ -1370,6 +1370,7 @@ async function nvSlidePaneState(page) {
       generation: pane.dataset.generation,
       window: pane.dataset.window,
       pending: pane.dataset.pending,
+      tileRequests: pane.dataset.tileRequests,
     })),
   );
 }
@@ -1419,7 +1420,8 @@ async function setWindowLevelWidth(page, level, width) {
 // refetch a tile, and the drawn pixels must follow it.
 async function expectNvSlideWindowOnGpu(page) {
   await expect.poll(async () => (await nvSlidePaneState(page))
-    .every((pane) => pane.generation && pane.pending === "0" && pane.window))
+    .every((pane) => pane.generation && pane.pending === "0" && pane.window &&
+      Number(pane.tileRequests) > 0))
     .toBe(true);
   const before = await nvSlidePaneState(page);
   const level = await page.locator("#windowLevel").inputValue();
@@ -1444,6 +1446,8 @@ async function expectNvSlideWindowOnGpu(page) {
   const after = await nvSlidePaneState(page);
   expect(after.map((pane) => pane.generation))
     .toEqual(before.map((pane) => pane.generation));
+  expect(after.map((pane) => pane.tileRequests))
+    .toEqual(before.map((pane) => pane.tileRequests));
   expect(after.every((pane) => pane.pending === "0")).toBe(true);
 }
 
