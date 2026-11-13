@@ -65,10 +65,21 @@ SynthSeg 0.11 did on MRI scanner hosts.
 Packaging reads the import table of every `.exe`, `.dll` and `.node` file in the
 release and copies each Visual C++ runtime DLL it imports, and the DLLs those
 import, into that file's folder, where Windows looks first. The DLLs come from
-`VC_RUNTIME_DIR` or the newest `Microsoft.VC14x.CRT` redistributable folder of the
-local Visual Studio installation (found with `vswhere`), and must be at least
+`VC_RUNTIME_DIR` or the newest `Microsoft.VC143.CRT` redistributable folder of the
+local Visual Studio 2022 installation (found with `vswhere`), and must be at least
 14.40. The release then holds
 `licenses/microsoft-visual-cpp-runtime/README.txt`.
+
+Microsoft's [redistribution list](https://learn.microsoft.com/visualstudio/releases/2022/redistribution#visual-c-runtime-files)
+allows these release binaries from `VC/redist` to accompany an application,
+unmodified, subject to the [Visual Studio license terms](https://visualstudio.microsoft.com/license-terms/vs2022-ga-proenterprise/).
+The distributor must hold a valid Visual Studio license and meet its
+Distributable Code requirements, including protective terms for recipients.
+`VC_RUNTIME_DIR` must contain the release CRT from a licensed installation,
+never `debug_nonredist` or preview binaries. The Microsoft DLLs retain their
+vendor signatures during release signing and remain under Microsoft's terms,
+separate from the application's open-source license. Signature verification
+and the release manifest still cover every DLL.
 
 Two checks keep this from regressing:
 
@@ -80,7 +91,11 @@ Two checks keep this from regressing:
   `verify`. It runs the extracted release's `self-check` in Windows Server Core
   containers without a Visual C++ runtime and with the too-old 14.29 runtime,
   after a negative control that removes the release's runtime DLLs and requires
-  the self-check to fail.
+  the self-check to fail in both environments. `scripts/clean-windows-inputs.json`
+  pins the Server Core images by digest and the 14.29 installer by its versioned
+  Microsoft download URL and SHA256. The check verifies the installer hash
+  before use and rejects containers whose system runtime differs from the test
+  case. Update the image digest for a runner build when updating its base image.
 
 ## macOS installer
 

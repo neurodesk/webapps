@@ -624,6 +624,22 @@ class VisualCppRuntimeTests(unittest.TestCase):
         notice = self.root / "licenses/microsoft-visual-cpp-runtime/README.txt"
         self.assertIn("Visual Studio redistribution terms", notice.read_text(encoding="utf8"))
 
+    def test_runtime_discovery_uses_the_licensed_visual_studio_2022_redist(self):
+        program_files = self.runtime.parent / "Program Files (x86)"
+        vswhere = program_files / "Microsoft Visual Studio/Installer/vswhere.exe"
+        vswhere.parent.mkdir(parents=True)
+        vswhere.touch()
+        installation = self.runtime.parent / "Visual Studio/2022/Enterprise"
+        old = write_vc_runtime(installation / "VC/Redist/MSVC/14.40/x64/Microsoft.VC143.CRT", (14, 40, 0, 0))
+        current = write_vc_runtime(installation / "VC/Redist/MSVC/14.44/x64/Microsoft.VC143.CRT")
+        write_vc_runtime(installation / "VC/Redist/MSVC/14.51/x64/Microsoft.VC145.CRT", (14, 51, 0, 0))
+        with mock.patch.object(portable_release.subprocess, "run", return_value=mock.Mock(stdout=str(installation))) as run:
+            self.assertEqual(portable_release.find_vc_runtime({"ProgramFiles(x86)": str(program_files)}), current)
+        self.assertEqual(run.call_args.args[0], [
+            str(vswhere), "-latest", "-version", "[17.0,18.0)", "-products", "*", "-property", "installationPath",
+        ])
+        self.assertEqual(portable_release.find_vc_runtime({"VC_RUNTIME_DIR": str(old)}), old)
+
     def test_verify_rejects_a_windows_archive_without_the_runtime(self):
         target = portable_release.load_target(ROOT, "packages/topofit", "windows-x64")
         with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:

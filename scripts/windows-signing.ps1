@@ -9,17 +9,21 @@ $files = @(Get-Content -Raw -LiteralPath $FilesJson | ConvertFrom-Json)
 if ($files.Count -eq 0) { throw 'No files supplied for signing' }
 Import-Module ArtifactSigning -RequiredVersion 0.1.8
 if (-not $VerifyOnly) {
+    # Keep valid vendor signatures and bytes, including Microsoft's redistributable CRT DLLs.
+    $toSign = @($files | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_).Status -ne 'Valid' })
     # Use only the Azure CLI session established by the OIDC login action.
-    Invoke-ArtifactSigning -Endpoint $env:AZURE_ARTIFACT_SIGNING_ENDPOINT `
-        -CodeSigningAccountName $env:AZURE_ARTIFACT_SIGNING_ACCOUNT `
-        -CertificateProfileName $env:AZURE_ARTIFACT_SIGNING_PROFILE `
-        -Files ($files -join ',') -FileDigest SHA256 `
-        -TimestampRfc3161 'http://timestamp.acs.microsoft.com' -TimestampDigest SHA256 `
-        -ExcludeEnvironmentCredential:$true -ExcludeWorkloadIdentityCredential:$true `
-        -ExcludeManagedIdentityCredential:$true -ExcludeSharedTokenCacheCredential:$true `
-        -ExcludeVisualStudioCredential:$true -ExcludeVisualStudioCodeCredential:$true `
-        -ExcludeAzurePowerShellCredential:$true -ExcludeAzureDeveloperCliCredential:$true `
-        -ExcludeInteractiveBrowserCredential:$true
+    if ($toSign.Count -gt 0) {
+        Invoke-ArtifactSigning -Endpoint $env:AZURE_ARTIFACT_SIGNING_ENDPOINT `
+            -CodeSigningAccountName $env:AZURE_ARTIFACT_SIGNING_ACCOUNT `
+            -CertificateProfileName $env:AZURE_ARTIFACT_SIGNING_PROFILE `
+            -Files ($toSign -join ',') -FileDigest SHA256 `
+            -TimestampRfc3161 'http://timestamp.acs.microsoft.com' -TimestampDigest SHA256 `
+            -ExcludeEnvironmentCredential:$true -ExcludeWorkloadIdentityCredential:$true `
+            -ExcludeManagedIdentityCredential:$true -ExcludeSharedTokenCacheCredential:$true `
+            -ExcludeVisualStudioCredential:$true -ExcludeVisualStudioCodeCredential:$true `
+            -ExcludeAzurePowerShellCredential:$true -ExcludeAzureDeveloperCliCredential:$true `
+            -ExcludeInteractiveBrowserCredential:$true
+    }
 }
 # ArtifactSigning 0.1.8 uses the same SDK/client pins as the official v2 action.
 $sdk = Join-Path $env:LOCALAPPDATA 'ArtifactSigning/Microsoft.Windows.SDK.BuildTools/Microsoft.Windows.SDK.BuildTools.10.0.26100.4188'

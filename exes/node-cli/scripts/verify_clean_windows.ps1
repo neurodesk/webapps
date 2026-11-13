@@ -18,10 +18,11 @@ param([Parameter(Mandatory)][string]$Archive)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$images = @{ 17763 = 'ltsc2019'; 20348 = 'ltsc2022'; 26100 = 'ltsc2025' }
+$pins = Get-Content -Raw (Join-Path $PSScriptRoot 'clean-windows-inputs.json') | ConvertFrom-Json
 $build = [Environment]::OSVersion.Version.Build
-if (-not $images.ContainsKey($build)) { throw "No Server Core image is known for Windows build $build" }
-$image = "mcr.microsoft.com/windows/servercore:$($images[$build])"
+$imagePin = $pins.images.PSObject.Properties[[string]$build]
+if ($null -eq $imagePin) { throw "No Server Core image is known for Windows build $build" }
+$image = $imagePin.Value.image
 $vcRuntimeNames = 'msvcp140*.dll', 'vcruntime140*.dll', 'concrt140.dll', 'vccorlib140.dll'
 
 $work = Join-Path ([IO.Path]::GetTempPath()) 'clean-windows'
@@ -32,9 +33,12 @@ $release = @(Get-ChildItem (Join-Path $work 'release') -Directory)
 if ($release.Count -ne 1) { throw "Expected one folder in $Archive" }
 $name = $release[0].Name
 
-Invoke-WebRequest 'https://aka.ms/vs/16/release/vc_redist.x64.exe' -OutFile (Join-Path $work 'vc_redist_2019.x64.exe')
-$vc2019 = (Get-Item (Join-Path $work 'vc_redist_2019.x64.exe')).VersionInfo.FileVersion
-if (-not $vc2019.StartsWith('14.29.')) { throw "Expected a 14.29 Visual C++ 2019 runtime installer, got $vc2019" }
+$installerPath = Join-Path $work 'vc_redist_2019.x64.exe'
+Invoke-WebRequest $pins.vc2019.url -OutFile $installerPath
+$installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($installerHash -ne $pins.vc2019.sha256) { throw 'Visual C++ 2019 installer SHA256 mismatch' }
+$vc2019 = (Get-Item $installerPath).VersionInfo.FileVersion
+if ($vc2019 -ne $pins.vc2019.version) { throw "Expected Visual C++ $($pins.vc2019.version), got $vc2019" }
 Copy-Item (Join-Path $PSScriptRoot 'clean-windows-self-check.ps1') $work
 
 # Some Windows runner images install Docker with its service stopped.
@@ -62,6 +66,7 @@ if ($shipped.Count -gt 0) {
     Copy-Item (Join-Path $work 'release') (Join-Path $work 'control') -Recurse
     Get-ChildItem (Join-Path $work "control\$name") -Recurse -File -Include $vcRuntimeNames | Remove-Item
     Invoke-Clean 'Negative control: release without its Visual C++ runtime' 'control' @('-ExpectFailure')
+    Invoke-Clean 'Negative control: release with only the old system runtime' 'control' @('-InstallVc2019', '-ExpectFailure')
 } else {
     'The release ships no Visual C++ runtime DLLs; skipping the negative control'
 }

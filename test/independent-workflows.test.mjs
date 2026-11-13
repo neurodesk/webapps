@@ -273,6 +273,24 @@ test('portable Node command lines build on target runners and publish through on
   }
 });
 
+test('clean Windows checks use immutable inputs and verify the installer before use', async () => {
+  const directory = new URL('../exes/node-cli/scripts/', import.meta.url);
+  const pins = JSON.parse(await readFile(new URL('clean-windows-inputs.json', directory), 'utf8'));
+  assert.equal(pins.vc2019.version, '14.29.30157.0');
+  assert.match(pins.vc2019.url, /^https:\/\/download\.visualstudio\.microsoft\.com\/download\/pr\/[a-f0-9-]+\/[A-F0-9]{64}\/VC_redist\.x64\.exe$/);
+  assert.match(pins.vc2019.sha256, /^[a-f0-9]{64}$/);
+  assert.ok(pins.vc2019.url.includes(pins.vc2019.sha256.toUpperCase()));
+  assert.deepEqual(Object.keys(pins.images).sort(), ['17763', '20348', '26100']);
+  for (const pin of Object.values(pins.images)) {
+    assert.match(pin.image, /^mcr\.microsoft\.com\/windows\/servercore@sha256:[a-f0-9]{64}$/);
+  }
+  const script = await readFile(new URL('verify_clean_windows.ps1', directory), 'utf8');
+  assert.doesNotMatch(script, /aka\.ms/);
+  assert.ok(script.indexOf('Get-FileHash') < script.indexOf('docker run'));
+  assert.match(script, /\$installerHash -ne \$pins\.vc2019\.sha256/);
+  assert.match(script, /@\('-InstallVc2019', '-ExpectFailure'\)/);
+});
+
 test('manual SamSrf WASM diagnosis isolates the build without changing draft or ready checks', async () => {
   const flow = await workflow('samsrf-native');
   assert.equal(flow.on.workflow_dispatch.inputs.wasm_only.default, false);

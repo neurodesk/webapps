@@ -383,11 +383,16 @@ VC_RUNTIME_DLLS = frozenset({
     "vcruntime140_threads.dll",
 })
 MINIMUM_VC_RUNTIME = (14, 40)
-VC_RUNTIME_NOTICE = """The msvcp140*.dll, vcruntime140*.dll and concrt140.dll files next to native
+VC_RUNTIME_NOTICE = """The msvcp140*.dll, vcruntime140*.dll, concrt140.dll and vccorlib140.dll files next to native
 modules in this release are the Microsoft Visual C++ 2015-2022 runtime
 (Visual Studio 2022 redistributable, Microsoft.VC143.CRT), distributed
 app-locally under the Visual Studio redistribution terms
 (https://learn.microsoft.com/visualstudio/releases/2022/redistribution).
+Copyright Microsoft Corporation. All rights reserved.
+These proprietary Microsoft binaries retain their original signatures and
+are not covered by the application's open-source license. Their use and
+redistribution are subject to Microsoft's terms, available at:
+https://visualstudio.microsoft.com/license-terms/vs2022-ga-proenterprise/
 They let the release run on Windows without installing the Visual C++
 Redistributable and regardless of an older copy installed by other software.
 """
@@ -481,7 +486,7 @@ def vc_runtime_problems(root: pathlib.Path) -> list[str]:
 
 
 def find_vc_runtime(environment=None) -> pathlib.Path:
-    """The newest Microsoft.VC14x.CRT folder: VC_RUNTIME_DIR, or Visual Studio's redistributables."""
+    """The newest Visual Studio 2022 release CRT folder, or a licensed VC_RUNTIME_DIR override."""
     environment = os.environ if environment is None else environment
     if environment.get("VC_RUNTIME_DIR"):
         return pathlib.Path(environment["VC_RUNTIME_DIR"])
@@ -489,10 +494,10 @@ def find_vc_runtime(environment=None) -> pathlib.Path:
     if not vswhere.is_file():
         raise FileNotFoundError("vswhere.exe not found; set VC_RUNTIME_DIR to a Microsoft.VC143.CRT folder")
     installation = subprocess.run(
-        [str(vswhere), "-latest", "-products", "*", "-property", "installationPath"],
+        [str(vswhere), "-latest", "-version", "[17.0,18.0)", "-products", "*", "-property", "installationPath"],
         check=True, text=True, stdout=subprocess.PIPE,
     ).stdout.strip()
-    folders = list(pathlib.Path(installation, "VC/Redist/MSVC").glob("*/x64/Microsoft.VC14*.CRT"))
+    folders = list(pathlib.Path(installation, "VC/Redist/MSVC").glob("*/x64/Microsoft.VC143.CRT"))
     if not folders:
         raise FileNotFoundError(f"no Microsoft.VC14x.CRT redistributable under {installation}")
     return max(folders, key=lambda folder: pe_file_version((folder / "msvcp140.dll").read_bytes()) or (0, 0, 0, 0))

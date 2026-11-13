@@ -31,6 +31,8 @@ test('Azure signing requires complete opt-in configuration before OIDC and uses 
   assert.match(signer, /TimeStamperCertificate/);
   assert.match(signer, /\$LASTEXITCODE -ne 0/);
   assert.match(signer, /10\.0\.26100\.4188/);
+  assert.match(signer, /\$toSign = @\(\$files \| Where-Object/);
+  assert.match(signer, /-Files \(\$toSign -join ','\)/);
 });
 
 test('Windows producers get OIDC permission and suppress activation in pull requests', async () => {
@@ -123,6 +125,12 @@ test('mock policy runs on Windows and Linux without Azure permissions or credent
     assert.equal(steps[0].if, undefined);
   }
   assert.doesNotMatch(JSON.stringify(flow), /Azure\/login|id-token|secrets\./);
+  const vendorSignatures = flow.jobs.policy.steps.find(step => step.name === 'Test vendor signature preservation without an account');
+  assert.equal(vendorSignatures.if, "runner.os == 'Windows'");
+  assert.equal(vendorSignatures.run, './scripts/test-windows-signing.ps1');
+  for (const event of ['pull_request', 'push']) {
+    assert.ok(flow.on[event].paths.includes('scripts/test-windows-signing.ps1'));
+  }
 });
 
 // A Windows ZIP laid out as electron-builder writes it, with the mock signer's

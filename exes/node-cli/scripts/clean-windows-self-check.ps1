@@ -23,8 +23,13 @@ if ($InstallVc2019) {
 }
 $system = 'C:\Windows\System32\msvcp140.dll'
 if (Test-Path $system) {
-    "System Visual C++ runtime: msvcp140.dll $((Get-Item $system).VersionInfo.FileVersion)"
+    $version = (Get-Item $system).VersionInfo
+    "System Visual C++ runtime: msvcp140.dll $($version.FileVersion)"
+    if (-not $InstallVc2019 -or $version.FileMajorPart -ne 14 -or $version.FileMinorPart -ne 29) {
+        throw 'The container must have no Visual C++ runtime, or exactly 14.29 in the old-runtime case'
+    }
 } else {
+    if ($InstallVc2019) { throw 'The Visual C++ 2019 installer did not install msvcp140.dll' }
     'System Visual C++ runtime: none'
 }
 $executables = @(Get-ChildItem $Release -Filter *.exe -File)
