@@ -453,6 +453,21 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     'setStructural must not call runBrainExtraction; users explicitly start processing');
 }
 
+// ---- A completed base load does not authorize a replaced import's continuation ----
+for (const kind of ['structural', 'lesion']) {
+  const app = makeApp();
+  app.viewerController = { loadBaseVolume: async () => true };
+  const commit = app.commitViewerBase.bind(app);
+  app.commitViewerBase = (file) => {
+    commit(file);
+    queueMicrotask(() => app.cancelImports(kind));
+  };
+  const file = { name: `replaced-${kind}.nii` };
+  const importFile = kind === 'structural' ? app.setStructural(file) : app.setLesion(file);
+  await assert.rejects(importFile, { name: 'AbortError' }, `${kind} rechecks before reporting readiness`);
+  assert.ok(!app._messages.some(message => message.includes(`ready: ${file.name}`)), 'a replaced import stays silent');
+}
+
 // ---- Test 7a: lesion masks render with the dedicated blue colormap ----
 {
   const app = makeApp();
@@ -2772,6 +2787,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     description: 'synthetic source mask'
   }));
   const sourceBrainmaskFile = app.brainmaskFile;
+  const sourceStructuralFile = app.structuralFile;
   const mni160Buffer = writeNifti1(new Uint8Array(64), {
     dims,
     spacing: [1, 1, 1],
@@ -2835,6 +2851,25 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       [0, 0, 1, -2],
       [0, 0, 0, 1]
     ], 'prealigned brainmask header must be fixed lnm-mni160');
+
+    // A confirmation may prealign, but loses that permission when another
+    // mask review takes over, even though the subject's pipeline is current.
+    app.structuralFile = sourceStructuralFile;
+    app.brainmaskFile = sourceBrainmaskFile;
+    app.maskReviewActive = true;
+    const owner = app.owner('pipeline', 'mask');
+    const read = sourceStructuralFile.arrayBuffer.bind(sourceStructuralFile);
+    let releaseRead;
+    sourceStructuralFile.arrayBuffer = async () => {
+      await new Promise(resolve => { releaseRead = resolve; });
+      return read();
+    };
+    const alignment = app.prealignToMni160({ confirming: true, assertCurrent: owner });
+    app.beginImport('mask');
+    releaseRead();
+    await assert.rejects(alignment, { name: 'AbortError' }, 'a replaced confirmation cannot prealign the next review');
+    assert.equal(app.structuralFile, sourceStructuralFile, 'the replacement review keeps its structural image');
+    assert.equal(app.maskReviewActive, true, 'the replacement review stays open');
   } finally {
     globalThis.fetch = originalFetch;
     globalThis.caches = originalCaches;

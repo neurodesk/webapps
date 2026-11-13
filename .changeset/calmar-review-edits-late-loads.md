@@ -26,3 +26,5 @@ A `ViewerController` load given `assertCurrent` now ends as soon as its outcome 
 Failed decodes also recheck ownership when the controller resumes, before reporting an error, so a load superseded between decode completion and its continuation stays silent and rejects as superseded.
 
 A review cleared just after its drawing commits also rechecks ownership before enabling its tools or reporting readiness, so the old continuation cannot recreate a drawing in the cleared viewer.
+
+Confirming a mask also owns its review through prealignment, decoding and overlay loading. If another review replaces it while it waits, the older confirmation cannot accept its saved drawing or close the replacement's drawing and Undo history. Cleared review-start and input continuations stop before loading a wand restriction, selecting a pipeline or reporting readiness. Failure handlers for manual review and confirmation also ignore ordinary errors from a replaced review.

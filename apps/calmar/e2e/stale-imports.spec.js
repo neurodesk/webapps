@@ -1271,6 +1271,104 @@ test.describe('an import that finishes late', () => {
     });
   }
 
+  test('confirming an older drawing cannot accept and close its replacement review', async ({ page }) => {
+    const { choose, loaded, log, smallMask } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await page.evaluate(() => app.startLesionMaskReview({ blank: true }));
+    await drawTwoVoxels(page);
+    await page.evaluate(() => {
+      // Use the native grid as the fixed grid so only the confirmation's
+      // asynchronous read is held, with no model or atlas download.
+      app.prealignSamplingAffine = app.nativeStructuralInfo.affine;
+      app.fixedMni160Info = app.nativeStructuralInfo;
+      const fixed = app.ensureFixedMni160Info.bind(app);
+      app.ensureFixedMni160Info = async (...args) => {
+        const info = await fixed(...args);
+        app.ensureFixedMni160Info = fixed;
+        await new Promise(resolve => { globalThis.resumeConfirmation = resolve; });
+        return info;
+      };
+      globalThis.confirmed = app.confirmLesionDrawing().then(() => 'completed', error => error.name);
+    });
+    await page.waitForFunction(() => globalThis.resumeConfirmation);
+    await page.evaluate(bytes => app.startLesionMaskReview({ seedFile: new File([new Uint8Array(bytes)], 'replacement.nii') }), [...smallMask]);
+    await drawTwoVoxels(page);
+    await page.evaluate(() => globalThis.resumeConfirmation());
+    expect(await page.evaluate(() => globalThis.confirmed)).toBe('AbortError');
+    expect(await loaded()).toMatchObject({ review: true, drawn: 5 });
+    expect(await page.evaluate(() => ({ accepted: app.lesionMaskConfirmed, native: app.confirmedNativeLesionFile }))).toEqual({ accepted: false, native: null });
+    await page.locator('#maskUndoButton').dispatchEvent('click');
+    expect((await loaded()).drawn).toBe(3);
+    expect(await log()).not.toContain('Edited lesion mask confirmed');
+  });
+
+  test('an uploaded review cleared before its caller resumes does not report readiness', async ({ page }) => {
+    const { choose, loaded, log, smallMask } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    const outcome = await page.evaluate(async bytes => {
+      const start = app.startLesionMaskReview.bind(app);
+      app.startLesionMaskReview = async (...args) => {
+        const seed = await start(...args);
+        queueMicrotask(() => app.clearResults({ full: true }));
+        return seed;
+      };
+      return app.startUploadedLesionMaskReview(new File([new Uint8Array(bytes)], 'cleared-mask.nii'))
+        .then(() => 'completed', error => error.name);
+    }, [...smallMask]);
+    expect(outcome).toBe('AbortError');
+    expect(await loaded()).toMatchObject({ review: false, base: null, viewer: [] });
+    expect(await log()).not.toContain('Manual lesion mask ready for editing: cleared-mask.nii');
+  });
+
+  test('a review cleared after its base commits does not start a wand restriction load', async ({ page }) => {
+    const { choose, loaded } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    const result = await page.evaluate(async () => {
+      let loads = 0;
+      const load = app.maskDrawingController.loadBrainMaskFile.bind(app.maskDrawingController);
+      app.maskDrawingController.loadBrainMaskFile = (...args) => {
+        loads += 1;
+        return load(...args);
+      };
+      const commit = app.commitViewerBase.bind(app);
+      app.commitViewerBase = (...args) => {
+        commit(...args);
+        app.commitViewerBase = commit;
+        queueMicrotask(() => app.clearResults({ full: true }));
+      };
+      const outcome = await app.startLesionMaskReview({ blank: true }).then(() => 'completed', error => error.name);
+      return { loads, outcome };
+    });
+    expect(result).toEqual({ loads: 0, outcome: 'AbortError' });
+    expect(await loaded()).toMatchObject({ review: false, base: null, viewer: [] });
+  });
+
+  test('a replaced review whose drawing fails does not report a stale error', async ({ page }) => {
+    const { choose, loaded, log, smallMask } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await page.evaluate(() => app.startLesionMaskReview({ blank: true }));
+    await page.evaluate(() => {
+      const blank = app.maskDrawingController.startBlank.bind(app.maskDrawingController);
+      app.maskDrawingController.startBlank = () => {
+        app.maskDrawingController.startBlank = blank;
+        return new Promise((resolve, reject) => { globalThis.failOldDrawing = () => reject(new Error('old drawing failed')); });
+      };
+    });
+    await page.locator('#maskBlankButton').dispatchEvent('click');
+    await page.waitForFunction(() => globalThis.failOldDrawing);
+    await page.evaluate(async bytes => {
+      const replacement = app.startLesionMaskReview({ seedFile: new File([new Uint8Array(bytes)], 'replacement.nii') });
+      globalThis.failOldDrawing();
+      await replacement;
+    }, [...smallMask]);
+    expect(await loaded()).toMatchObject({ review: true, drawn: 3 });
+    expect(await log()).not.toContain('old drawing failed');
+  });
+
   test('a threshold changed during a review that fails is drawn when the review ends', async ({ page }) => {
     const { choose, waiting, resume, loaded, log, viewerIdle, image, smallMask } = await holdImports(page);
     await choose('structural', 'T1.nii');

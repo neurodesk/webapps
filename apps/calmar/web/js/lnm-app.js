@@ -492,7 +492,7 @@ export class LesionNetworkMappingApp {
     if (manualMaskBtn) {
       manualMaskBtn.addEventListener('click', () => {
         this.startLesionMaskReview({ blank: true })
-          .catch(this.reportFailure('Manual mask failed', this.owner()));
+          .catch(this.reportFailure('Manual mask failed', this.owner('pipeline', 'mask')));
       });
     }
     const manualMaskInput = document.getElementById('manualMaskFileInput');
@@ -831,7 +831,7 @@ export class LesionNetworkMappingApp {
     bindClick('maskUndoButton', () => this.maskDrawingController?.undo());
     bindClick('maskBlankButton', () => {
       this.startLesionMaskReview({ blank: true })
-        .catch(this.reportFailure('Blank mask failed', this.owner()));
+        .catch(this.reportFailure('Blank mask failed', this.owner('pipeline', 'mask')));
     });
     bindClick('maskSmoothButton', () => {
       if (!this.maskDrawingController?.smoothDrawing()) {
@@ -846,7 +846,7 @@ export class LesionNetworkMappingApp {
     });
     bindClick('confirmLesionMaskButton', () => {
       this.confirmLesionDrawing({ resumePipeline: true })
-        .catch(this.reportFailure('Confirm lesion mask failed', this.owner()));
+        .catch(this.reportFailure('Confirm lesion mask failed', this.owner('pipeline', 'mask')));
     });
     bindClick('downloadEditedLesionMaskButton', () => {
       this.downloadEditedLesionMask()
@@ -1679,7 +1679,7 @@ export class LesionNetworkMappingApp {
       : 'lesion';
   }
 
-  async renderConfirmedNativeLesionOverlay() {
+  async renderConfirmedNativeLesionOverlay(assertCurrent = this.owner('pipeline', 'mask')) {
     if (!this.confirmedNativeLesionFile || !this.viewerController?.loadOverlay) return;
     const baseFile = this.nativeStructuralFile || this.structuralFile;
     if (!baseFile) return;
@@ -1687,13 +1687,14 @@ export class LesionNetworkMappingApp {
       await this.loadViewerBaseVolume(baseFile, {
         stage: 'structural',
         visible: this.layerVisible('structural')
-      });
+      }, assertCurrent);
     }
+    assertCurrent();
     this.assertViewerOverlaySpace(this.confirmedNativeLesionFile, 'Confirmed lesion mask overlay');
     await this.loadViewerOverlay(this.confirmedNativeLesionFile, LESION_MASK_COLORMAP_ID, 0.5, {
       stage: 'segmentation',
       visible: this.layerVisible('lesion')
-    });
+    }, assertCurrent);
   }
 
   applyMaskDrawingVisibility() {
@@ -1800,6 +1801,8 @@ export class LesionNetworkMappingApp {
       // Clear results reset the viewer under this load and loads the image again itself.
       if (err.name !== 'AbortError' || !current || this.nativeStructuralFile !== file) throw err;
     }
+    assertCurrent?.();
+    if (this.nativeStructuralFile !== file) throw new DOMException('The structural image was replaced.', 'AbortError');
     this.refreshViewerLayerControls();
     this.refreshMaskDrawingControls();
     this.updateOutput(`Structural image ready: ${file.name}`);
@@ -2029,6 +2032,7 @@ export class LesionNetworkMappingApp {
       // A new structural image took over the viewer: the input itself stays.
       if (err.name !== 'AbortError' || !current) throw err;
     }
+    assertCurrent();
     this.updateOutput(`DeepISLES ${label} input ready: ${file.name}`);
     return file;
   }
@@ -2094,6 +2098,7 @@ export class LesionNetworkMappingApp {
       }
       throw err;
     }
+    assertCurrent();
     this.refreshViewerLayerControls();
     this.updateOutput(`Lesion mask ready: ${file.name}`);
     // Phase 31: a manual lesion mask without a structural T1 means the
@@ -2573,9 +2578,10 @@ export class LesionNetworkMappingApp {
     return this.nativeStructuralInfo;
   }
 
-  async ensureFixedMni160Info() {
+  async ensureFixedMni160Info(assertCurrent = this.pipelineTurn()) {
     if (this.fixedMni160Info) return this.fixedMni160Info;
     const mni160 = await loadAtlasFromManifest('lnm-mni160');
+    assertCurrent();
     this.fixedMni160Info = {
       dims: mni160.dims,
       affine: affineFromHeader(mni160.header),
@@ -3245,6 +3251,7 @@ export class LesionNetworkMappingApp {
     this.autoLesionSeedFile = null;
     this.deepIslesSeedFile = null;
     const seed = await this.startLesionMaskReview({ seedFile: file, assertCurrent });
+    assertCurrent();
     this.updateOutput(`Manual lesion mask ready for editing: ${file.name}`);
     return seed;
   }
@@ -3282,12 +3289,14 @@ export class LesionNetworkMappingApp {
       stage: 'structural',
       visible: this.layerVisible('structural')
     }, assertCurrent);
+    assertCurrent();
     const brainmaskFile = this.getBrainmaskFileForActiveViewer();
     try {
       await this.maskDrawingController.loadBrainMaskFile?.(brainmaskFile);
     } catch (err) {
       this.reportFailure('Wand brain-mask restriction unavailable', assertCurrent)(err);
     }
+    assertCurrent();
     if (brainmaskFile && this.layerVisible('brainmask')) {
       try {
         this.assertViewerOverlaySpace(brainmaskFile, 'Mask-review brain-mask overlay');
@@ -3345,17 +3354,22 @@ export class LesionNetworkMappingApp {
   }
 
   async confirmLesionDrawing({ resumePipeline = false } = {}) {
+    const assertRun = this.owner('pipeline', 'mask');
     if (!this.maskDrawingController?.hasDrawing) {
-      await this.startLesionMaskReview({ seedFile: this.autoLesionSeedFile, blank: !this.autoLesionSeedFile });
+      const review = this.startLesionMaskReview({ seedFile: this.autoLesionSeedFile, blank: !this.autoLesionSeedFile });
+      assertRun.renew();
+      await review;
+      assertRun();
     }
     const nativeFile = this.exportActiveNativeDrawingFile('lnm-lesion-edited-native.nii');
     if (!nativeFile) throw new Error('No editable lesion drawing is available.');
-    const assertRun = this.pipelineTurn();
 
     if (!this.prealignSamplingAffine || !this.fixedMni160Info) {
-      await this.prealignToMni160({ skipIfAligned: true, confirming: true });
+      await this.prealignToMni160({ skipIfAligned: true, confirming: true, assertCurrent: assertRun });
+      assertRun();
     }
-    const fixed = await this.ensureFixedMni160Info();
+    const fixed = await this.ensureFixedMni160Info(assertRun);
+    assertRun();
     const native = await decodeNiftiBuffer(await nativeFile.arrayBuffer());
     assertRun();
     this.confirmedNativeLesionFile = this.tagDecodedFileSpace(nativeFile, native, {
@@ -3390,7 +3404,7 @@ export class LesionNetworkMappingApp {
     this.setMaskReview3DRenderEnabled(true);
     this.clearDerivedResults();
     this.maskDrawingController.close({ clearDrawing: true });
-    await this.renderConfirmedNativeLesionOverlay();
+    await this.renderConfirmedNativeLesionOverlay(assertRun);
     assertRun();
     const btn = document.getElementById('downloadLesionMaskButton');
     if (btn) btn.disabled = false;
@@ -4414,12 +4428,16 @@ export class LesionNetworkMappingApp {
   // MNI160 1mm grid with the centroid placed at MNI voxel (80, 80, 96).
   // The lesion seg + lesion file are cleared because they were
   // computed in the old space; user re-runs them on the aligned grid.
-  async prealignToMni160({ skipIfAligned = false, confirming = false } = {}) {
+  async prealignToMni160({ skipIfAligned = false, confirming = false, assertCurrent } = {}) {
     if (!this.structuralFile) {
       this.updateOutput('Drop a structural T1 first.');
       return;
     }
-    const assertRun = this.pipelineTurn();
+    const assertPipeline = this.pipelineTurn();
+    const assertRun = () => {
+      assertPipeline();
+      assertCurrent?.();
+    };
     let mni160Ref = null;
     const getMni160Ref = async () => {
       if (!mni160Ref) mni160Ref = await loadAtlasFromManifest('lnm-mni160');
@@ -4466,6 +4484,7 @@ export class LesionNetworkMappingApp {
     if (!this.brainmaskFile) {
       this.updateOutput('Running brain extraction (prealign needs the brain mask)...');
       await this.runBrainExtraction();
+      assertRun();
       if (!this.brainmaskFile) {
         throw new Error('Brain extraction did not produce a mask; prealign aborted.');
       }
@@ -4571,12 +4590,13 @@ export class LesionNetworkMappingApp {
       stage: 'structural',
       visible: this.layerVisible('structural')
     }, assertRun);
+    assertRun();
     try {
       this.assertViewerOverlaySpace(this.brainmaskFile, 'Prealign brain-mask overlay');
       await this.loadViewerOverlay(this.brainmaskFile, 'green', 0.4, {
         stage: 'brainmask',
         visible: this.layerVisible('brainmask')
-      });
+      }, assertRun);
     } catch (err) {
       // Non-fatal: the overlay is cosmetic.
       this.reportFailure('Brainmask overlay re-render warning', assertRun)(err);

@@ -217,6 +217,8 @@ After awaiting a viewer decode outcome, recheck ownership before reporting a fai
 
 After awaiting a review's drawing commit, recheck its mask turn before enabling tools or reporting readiness. A clear between the commit and continuation must leave the drawing closed; `e2e/stale-imports.spec.js` covers blank and seeded reviews.
 
+Mask confirmation owns both the pipeline and mask turns through prealignment, native-mask decoding and overlay loading. Pass that ownership check into helpers and check it after awaits before saving or closing a review. Starting another review must leave its drawing and Undo intact when an older confirmation resumes. Review-start and input continuations also recheck before loading the wand restriction, selecting a pipeline or reporting readiness. Manual review and confirmation failure handlers capture the mask turn too, so an ordinary late drawing error stays silent after review replacement.
+
 ## Threaded runtime hosting
 
 Keep `ort-web` in Calmar's `app_scoped_runtime_families`. Its WASM thread workers must load within `/calmar/`, where the isolation service worker supplies the required headers. Moving them to `/_runtime/` blocks worker startup on GitHub Pages and leaves SynthStrip waiting after normalization.
