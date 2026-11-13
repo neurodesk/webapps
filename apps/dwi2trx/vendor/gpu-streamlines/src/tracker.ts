@@ -98,6 +98,32 @@ const REQUIRED_WORKGROUP_STORAGE = 20800
  *  need exactly this subgroup; another size gives wrong streamlines or loses the device. */
 const REQUIRED_SUBGROUP_SIZE = 32
 
+/** WebGPU feature that lets a compute entry point require a subgroup size. */
+const SUBGROUP_SIZE_CONTROL = 'subgroup-size-control'
+
+/** Whether `device` compiles the Boot kernels with exactly 32-lane subgroups. */
+export function pinsSubgroupSize(device: GPUDevice): boolean {
+  return device.features.has(SUBGROUP_SIZE_CONTROL)
+}
+
+/** Replacement devices requested after the GPU is lost, per run (#598). */
+export const MAX_DEVICE_RECOVERIES = 2
+
+/** Whether `device` has been lost, waiting briefly: Chromium can reject a GPU call
+ *  before it resolves `device.lost`. */
+async function confirmDeviceLost(device: GPUDevice, err: unknown): Promise<boolean> {
+  if (isDeviceLost(err)) return true
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<false>(resolve => {
+    timer = setTimeout(() => resolve(false), 250)
+  })
+  try {
+    return await Promise.race([device.lost.then(() => true), timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 function subgroupSizeError(detail: string): Error {
   return new Error(`tracking needs ${REQUIRED_SUBGROUP_SIZE}-lane GPU subgroups; this GPU ${detail}.`)
 }
@@ -140,8 +166,10 @@ export async function getTrackingDevice(): Promise<GPUDevice> {
         `support subgroups yet.`,
     )
   }
-  // Chromium reports the range its compiler may choose from; the kernel checks the
-  // size it actually got, since the range alone does not guarantee 32.
+  // Chromium reports the range its compiler may choose from. With
+  // `subgroup-size-control` the pipelines require 32 (bootShaderSource); without
+  // it the kernel checks the size it actually got, since the range alone does not
+  // guarantee 32.
   const { subgroupMinSize, subgroupMaxSize } = adapter.info
   if (
     subgroupMinSize !== undefined &&
@@ -166,9 +194,21 @@ export async function getTrackingDevice(): Promise<GPUDevice> {
         `compute workgroup storage, but the Boot kernel needs ${REQUIRED_WORKGROUP_STORAGE}.`,
     )
   }
+  const sizeControl = adapter.features.has(SUBGROUP_SIZE_CONTROL)
+  console.info(
+    '[dwi2trx] WebGPU adapter —',
+    adapter.info.vendor,
+    adapter.info.architecture,
+    '| subgroups:',
+    subgroupMinSize,
+    '-',
+    subgroupMaxSize,
+    '| pinned to 32 lanes:',
+    sizeControl,
+  )
   try {
     return await adapter.requestDevice({
-      requiredFeatures: ['subgroups'] as GPUFeatureName[],
+      requiredFeatures: (sizeControl ? ['subgroups', SUBGROUP_SIZE_CONTROL] : ['subgroups']) as GPUFeatureName[],
       requiredLimits: {
         maxStorageBuffersPerShaderStage: REQUIRED_STORAGE_BUFFERS,
         maxBindGroups: 4,
@@ -359,6 +399,7 @@ export interface TrackResult {
   lines: Float32Array[]
   truncated: boolean
   deviceLost: boolean
+  deviceRecoveries: number // GPU devices replaced after a loss; their batches were rerun
   processedSeeds: number
   totalSeeds: number
 }
@@ -383,38 +424,48 @@ const READBACK_WINDOW_BYTES = 128 * 1024 * 1024
  *
  * `shouldStop()` is polled between batches so a superseded run (a new DWI
  * dropped mid-track) stops promptly and frees its GPU buffers.
+ *
+ * When the GPU device is lost (a driver reset, #598) and `replaceDevice` is given,
+ * the static inputs are uploaded to the device it returns and the interrupted
+ * batch is rerun, up to MAX_DEVICE_RECOVERIES times per run. Batches already read
+ * back are kept, and the output is the same as an uninterrupted run's.
  */
 export async function trackStreamlines(
-  device: GPUDevice,
+  initialDevice: GPUDevice,
   inputs: TrackingInputs,
   seeds: Float32Array,
   params: TrackingParams,
   onProgress?: (done: number, total: number) => void,
   shouldStop?: () => boolean,
+  replaceDevice?: () => Promise<GPUDevice>,
 ): Promise<TrackResult> {
   const nSeedsTotal = seeds.length / 3
   const off = modelOffsets(inputs)
+  let device = initialDevice
 
-  // Static buffers (uploaded once), tracked so the finally frees them even if a
-  // later allocation or pipeline creation throws. Packed to fit 10 storage
-  // buffers/stage:
-  //   dataf  = [DWI signal | sphere_vertices]   (verts at offset dimx*dimy*dimz*dimt)
-  //   model  = [H | R | delta_b | delta_q | sampling_matrix | b0s_mask(f32)]
-  const staticBuffers: GPUBuffer[] = []
-  const stat = (b: GPUBuffer): GPUBuffer => {
-    staticBuffers.push(b)
-    return b
-  }
+  // Static buffers (uploaded once per device), tracked so the finally frees them
+  // even if a later allocation or pipeline creation throws.
+  let staticBuffers: GPUBuffer[] = []
   const out: Float32Array[] = []
   let truncated = false
   let deviceLost = false
+  let deviceRecoveries = 0
   let processedSeeds = 0
-  const maxBinding = device.limits.maxStorageBufferBindingSize
-  const maxBuffer = device.limits.maxBufferSize
-  // A storage buffer must fit both the per-binding and per-buffer GPU limits.
-  const gpuLimit = Math.min(maxBinding, maxBuffer)
+  let maxBinding = 0
 
-  try {
+  /** Upload the static inputs and build both pipelines on `device`. Packed to fit
+   *  10 storage buffers/stage:
+   *    dataf  = [DWI signal | sphere_vertices]   (verts at offset dimx*dimy*dimz*dimt)
+   *    model  = [H | R | delta_b | delta_q | sampling_matrix | b0s_mask(f32)] */
+  const prepare = () => {
+    staticBuffers = []
+    const stat = (b: GPUBuffer): GPUBuffer => {
+      staticBuffers.push(b)
+      return b
+    }
+    maxBinding = device.limits.maxStorageBufferBindingSize
+    // A storage buffer must fit both the per-binding and per-buffer GPU limits.
+    const gpuLimit = Math.min(maxBinding, device.limits.maxBufferSize)
     // Big inputs are checked (and the combined size validated) BEFORE allocating,
     // so a too-large DWI reports an actionable limit error rather than blowing up
     // in a host concat or a generic WebGPU failure.
@@ -455,7 +506,9 @@ export async function trackStreamlines(
     )
 
     // Shader module + the two Boot pipelines.
-    const module = device.createShaderModule({ code: bootShaderSource() })
+    const module = device.createShaderModule({
+      code: bootShaderSource(pinsSubgroupSize(device) ? REQUIRED_SUBGROUP_SIZE : undefined),
+    })
     const getnumPipe = device.createComputePipeline({
       layout: 'auto',
       compute: { module, entryPoint: BOOT_ENTRY_GETNUM },
@@ -464,6 +517,45 @@ export async function trackStreamlines(
       layout: 'auto',
       compute: { module, entryPoint: BOOT_ENTRY_GEN },
     })
+    return { datafBuf, metricBuf, edgesBuf, modelBuf, getnumPipe, genPipe }
+  }
+
+  let recoveryAttempts = 0
+
+  try {
+    let { datafBuf, metricBuf, edgesBuf, modelBuf, getnumPipe, genPipe } = prepare()
+
+    /** Replace the lost device and upload the static inputs to it, within
+     *  MAX_DEVICE_RECOVERIES attempts per run. A replacement lost while uploading
+     *  uses another attempt; any other failure ends the recovery. */
+    const recover = async (): Promise<'resumed' | 'stopped' | 'failed'> => {
+      while (recoveryAttempts < MAX_DEVICE_RECOVERIES) {
+        recoveryAttempts++
+        for (const b of staticBuffers) b.destroy()
+        staticBuffers = []
+        if (shouldStop?.()) return 'stopped'
+        try {
+          device = await replaceDevice!()
+        } catch (replaceErr) {
+          console.warn('[dwi2trx] no replacement GPU device:', replaceErr)
+          return 'failed'
+        }
+        if (shouldStop?.()) return 'stopped'
+        try {
+          ;({ datafBuf, metricBuf, edgesBuf, modelBuf, getnumPipe, genPipe } = prepare())
+          // Device errors surface asynchronously; check the upload reached the GPU.
+          await device.queue.onSubmittedWorkDone()
+          if (await confirmDeviceLost(device, null)) throw new Error('GPU device lost while uploading the inputs.')
+        } catch (prepareErr) {
+          console.warn('[dwi2trx] replacement GPU device failed:', prepareErr)
+          if (await confirmDeviceLost(device, prepareErr)) continue
+          return 'failed'
+        }
+        deviceRecoveries++
+        return 'resumed'
+      }
+      return 'failed'
+    }
 
     // Adaptive seed batching: start at params.chunkSize and, on an out-of-memory
     // error, halve the batch and retry the SAME seed range (down to MIN_CHUNK)
@@ -662,9 +754,22 @@ export async function trackStreamlines(
         // allocations every batch.
         chunkSize = growChunkSize(chunkSize, params.chunkSize)
       } catch (err) {
+        const lost = await confirmDeviceLost(device, err)
+        // Streams follow a seed's position in the run, so rerunning the batch on a
+        // new device of the same GPU gives the bytes the lost one would have (#598).
+        if (lost && replaceDevice) {
+          console.warn(`[dwi2trx] GPU device lost at seed ${start}; rerunning the batch on a new device.`, err)
+          const recovery = await recover()
+          if (recovery === 'resumed') continue
+          if (recovery === 'stopped') break
+          if (out.length === 0) throw err
+          truncated = true // no usable replacement — keep the batches already read back
+          deviceLost = true
+          break
+        }
         const plan = planBatchError({
           oom: isOomError(err),
-          lost: isDeviceLost(err),
+          lost,
           chunkSize,
           hasOutput: out.length > 0,
         })
@@ -674,7 +779,7 @@ export async function trackStreamlines(
         }
         if (plan === 'salvage') {
           truncated = true // at the floor / device lost — keep what we have
-          deviceLost = isDeviceLost(err)
+          deviceLost = lost
           break
         }
         throw err
@@ -685,7 +790,7 @@ export async function trackStreamlines(
   } finally {
     for (const b of staticBuffers) b.destroy()
   }
-  return { lines: out, truncated, deviceLost, processedSeeds, totalSeeds: nSeedsTotal }
+  return { lines: out, truncated, deviceLost, deviceRecoveries, processedSeeds, totalSeeds: nSeedsTotal }
 }
 
 function paramsBuffer(device: GPUDevice, bytes: ArrayBuffer): GPUBuffer {

@@ -3,352 +3,646 @@
   "repository": "neurodesk/webapps",
   "suites": {
     "neuro": {
-      "version": "0.48.20261106",
-      "revision": "af1bc1ea1a86353dd80d340b9ce353d52a9bf52f",
+      "version": "0.49.20261113",
+      "revision": "d4fad73448da67f110506cbd3d292b2037630989",
       "apps": [
         {
-          "id": "musclemap",
-          "version": "1.5.20261104"
-        },
-        {
           "id": "vesselboost",
-          "version": "0.6.20261104"
+          "version": "0.6.20261111"
         },
         {
           "id": "spinalcordtoolbox",
-          "version": "0.9.20261104"
+          "version": "0.9.20261111"
         },
         {
           "id": "calmar",
-          "version": "0.11.20261104"
+          "version": "0.12.20261112"
         },
         {
           "id": "qsmbly",
-          "version": "0.31.20261104"
-        },
-        {
-          "id": "seedseg",
-          "version": "0.7.20261104"
+          "version": "0.31.20261112"
         },
         {
           "id": "dicompare",
-          "version": "0.15.20261104"
+          "version": "0.15.20261111"
         },
         {
           "id": "deface",
-          "version": "1.4.20261104"
+          "version": "1.4.20261111"
         },
         {
           "id": "easy-mp2rage",
-          "version": "0.8.20261104"
+          "version": "0.8.20261111"
         },
         {
           "id": "niimath",
-          "version": "1.3.20261104"
+          "version": "1.3.20261111"
         },
         {
           "id": "mri2vid",
-          "version": "0.6.20261104"
+          "version": "0.6.20261111"
         },
         {
           "id": "browserqc",
-          "version": "1.6.20261104"
+          "version": "1.6.20261111"
         },
         {
           "id": "surfannotate",
-          "version": "0.6.20261104"
-        },
-        {
-          "id": "zarro",
-          "version": "0.4.20261104"
+          "version": "0.6.20261111"
         },
         {
           "id": "synthsr",
-          "version": "0.6.20261104"
+          "version": "0.6.20261111"
         },
         {
           "id": "synthseg",
-          "version": "0.11.20261104"
+          "version": "0.11.20261111"
         },
         {
           "id": "syncro",
-          "version": "0.8.20261104"
+          "version": "0.8.20261112"
         },
         {
           "id": "dwi2trx",
-          "version": "0.8.20261104"
+          "version": "0.8.20261112"
         },
         {
           "id": "edgereg",
-          "version": "0.5.20261104"
+          "version": "0.5.20261111"
         },
         {
           "id": "disconnectome",
-          "version": "0.3.20261104"
+          "version": "0.3.20261111"
         },
         {
           "id": "greedy",
-          "version": "0.8.20261104"
+          "version": "0.9.20261111"
         },
         {
           "id": "ants",
-          "version": "0.5.20261104"
+          "version": "0.5.20261111"
         },
         {
           "id": "brain2print",
-          "version": "0.5.20261104"
+          "version": "0.5.20261111"
         },
         {
           "id": "topofit",
-          "version": "0.15.20261104"
+          "version": "0.15.20261111"
         },
         {
           "id": "fireants",
-          "version": "0.4.20261104"
+          "version": "0.4.20261111"
         },
         {
           "id": "brain-extraction",
-          "version": "0.5.20261104"
-        },
-        {
-          "id": "carotid-flow",
-          "version": "0.4.20261104"
+          "version": "0.5.20261112"
         },
         {
           "id": "lcmodel",
-          "version": "0.8.20261104"
+          "version": "0.8.20261111"
         },
         {
           "id": "white-matter-lesions",
-          "version": "0.5.20261104"
+          "version": "0.5.20261111"
         },
         {
           "id": "nesvor",
-          "version": "0.3.20261104"
+          "version": "0.3.20261111"
         },
         {
           "id": "elastix",
-          "version": "0.5.20261104"
+          "version": "0.5.20261111"
         },
         {
           "id": "dicomview",
-          "version": "0.4.20261104"
+          "version": "0.4.20261111"
         },
         {
           "id": "fastprep",
-          "version": "0.2.20261104"
+          "version": "0.2.20261112"
         },
         {
           "id": "noddi",
-          "version": "0.6.20261104"
+          "version": "0.7.20261112"
         },
         {
           "id": "degibbs",
-          "version": "0.4.20261104"
+          "version": "0.4.20261111"
         },
         {
           "id": "n4",
-          "version": "0.6.20261104"
+          "version": "0.6.20261111"
         },
         {
           "id": "dcm2niix",
-          "version": "0.2.20261104"
+          "version": "0.2.20261111"
         },
         {
           "id": "dwidenoise",
-          "version": "0.4.20261104"
+          "version": "0.4.20261111"
         },
         {
           "id": "sdc",
-          "version": "0.5.20261104"
+          "version": "0.5.20261112"
         },
         {
           "id": "me-ica",
-          "version": "0.1.20261104"
+          "version": "0.1.20261111"
         },
         {
           "id": "dwicorrect",
-          "version": "0.1.20261104"
+          "version": "0.1.20261112"
         },
         {
           "id": "pipeline-builder",
-          "version": "0.2.20261104"
+          "version": "0.2.20261111"
         },
         {
           "id": "hmc",
-          "version": "0.4.20261104"
+          "version": "0.4.20261112"
         },
         {
           "id": "bison",
-          "version": "0.2.20261104"
+          "version": "0.2.20261111"
         },
         {
           "id": "ants-denoise",
-          "version": "0.1.20261104"
+          "version": "0.1.20261111"
         },
         {
           "id": "brainqcnet",
-          "version": "0.1.20261104"
+          "version": "0.1.20261111"
         },
         {
           "id": "reproin",
-          "version": "0.1.20261104"
+          "version": "0.1.20261111"
         },
         {
           "id": "samsrf",
-          "version": "0.1.20261106"
+          "version": "0.6.20261112"
         },
         {
           "id": "brainchop",
-          "version": "0.1.20261104"
+          "version": "0.1.20261111"
         },
         {
-          "id": "stardist",
-          "version": "0.0.20261105"
+          "id": "gliomoda",
+          "version": "0.1.20261111"
         },
         {
-          "id": "calcium-imaging",
-          "version": "0.0.20261105"
+          "id": "histo2mri",
+          "version": "0.1.20261111"
         }
       ],
       "downloads": [
         {
           "kind": "desktop",
           "platform": "macos-arm64",
-          "version": "0.48.20261106",
-          "bytes": 2365168685,
-          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-mac-arm64.zip.install.txt",
-          "sha256": "69f58a55405d63fed6c23ff62ce1f34a80cdc2171c99cee5e4982ba56c061adf",
+          "version": "0.49.20261113",
+          "bytes": 2259447189,
+          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-mac-arm64.zip.install.txt",
+          "sha256": "26f9fcdb975514984f4544d820c800a48ac517a6d7f475a632b5bc967b8a1e33",
           "parts": [
             {
-              "filename": "webapps-0.48.20261106-mac-arm64.zip.part01",
-              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-mac-arm64.zip.part01",
+              "filename": "webapps-0.49.20261113-mac-arm64.zip.part01",
+              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-mac-arm64.zip.part01",
               "bytes": 1900000000,
-              "sha256": "0d56e40605c19de7f33c3c97d3a5f65592c1a8d0bd9f274ba55f74c31404daba"
+              "sha256": "c8cbb146763b159764ba575712d9f8db118b0c82d1e4999373a4327fcf7995b6"
             },
             {
-              "filename": "webapps-0.48.20261106-mac-arm64.zip.part02",
-              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-mac-arm64.zip.part02",
-              "bytes": 465168685,
-              "sha256": "142a5d7a47396cc47cbaff799ebeca9c4cc8308c6adc423972fc0236ece09b6e"
+              "filename": "webapps-0.49.20261113-mac-arm64.zip.part02",
+              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-mac-arm64.zip.part02",
+              "bytes": 359447189,
+              "sha256": "cba48344b9f7b094a397d9a564bca807ea1f49bb37bb04bba962f80a8043c443"
             }
           ],
-          "archiveSha256": "e95ea5a1740ff154e1310937d052e27c9706437af252bfda6c9fa0254e8dba1f",
-          "archiveFilename": "webapps-0.48.20261106-mac-arm64.zip",
-          "command": "cat webapps-0.48.20261106-mac-arm64.zip.part01 webapps-0.48.20261106-mac-arm64.zip.part02 > webapps-0.48.20261106-mac-arm64.zip\nunzip webapps-0.48.20261106-mac-arm64.zip"
+          "archiveSha256": "1a0b28a620b165a3890a9fe00f73c8b7b11d4d7d48a5debe5903b81b1a5f9300",
+          "archiveFilename": "webapps-0.49.20261113-mac-arm64.zip",
+          "command": "cat webapps-0.49.20261113-mac-arm64.zip.part01 webapps-0.49.20261113-mac-arm64.zip.part02 > webapps-0.49.20261113-mac-arm64.zip\nunzip webapps-0.49.20261113-mac-arm64.zip"
         },
         {
           "kind": "desktop",
           "platform": "linux-x64",
-          "version": "0.48.20261106",
-          "bytes": 2393230701,
-          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-linux-x64.tar.gz.install.txt",
-          "sha256": "4fe175fb9ce93991dfa612b58dc0150d7d35eb4e9e1c6ab40195c7c31c01ca24",
+          "version": "0.49.20261113",
+          "bytes": 2284709387,
+          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-linux-x64.tar.gz.install.txt",
+          "sha256": "30f64286d865959f13635f01db8165b429833971679096b1dcff0865281d1c6e",
           "parts": [
             {
-              "filename": "webapps-0.48.20261106-linux-x64.tar.gz.part01",
-              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-linux-x64.tar.gz.part01",
+              "filename": "webapps-0.49.20261113-linux-x64.tar.gz.part01",
+              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-linux-x64.tar.gz.part01",
               "bytes": 1900000000,
-              "sha256": "c80f979d7ae629ab8615923d2fa0f051806f558336a9da3a0d141520c6d17585"
+              "sha256": "096090a220c0fba58adb54c71b2de97ff466e5a1f812096d0e35c21832bee177"
             },
             {
-              "filename": "webapps-0.48.20261106-linux-x64.tar.gz.part02",
-              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-linux-x64.tar.gz.part02",
-              "bytes": 493230701,
-              "sha256": "701358ea4dcc8f427edcb42ebd8ce51eaf818ecc88ba0d78064dbc5bf4a9b8a2"
+              "filename": "webapps-0.49.20261113-linux-x64.tar.gz.part02",
+              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-linux-x64.tar.gz.part02",
+              "bytes": 384709387,
+              "sha256": "df09a1b70f9f827cee124fbacb2758da596ebd3c3917e6e79920550586130db6"
             }
           ],
-          "archiveSha256": "7df2a496a221b81b2dcff6852e4f588b50d354a2c5201ede6ec68ec49d53cc3e",
-          "archiveFilename": "webapps-0.48.20261106-linux-x64.tar.gz",
-          "command": "cat webapps-0.48.20261106-linux-x64.tar.gz.part01 webapps-0.48.20261106-linux-x64.tar.gz.part02 > webapps-0.48.20261106-linux-x64.tar.gz\ntar -xzf webapps-0.48.20261106-linux-x64.tar.gz"
+          "archiveSha256": "c48f562d2f2b26b3198c519b9e51cac4d47bef882b05b54dec562a449b35f512",
+          "archiveFilename": "webapps-0.49.20261113-linux-x64.tar.gz",
+          "command": "cat webapps-0.49.20261113-linux-x64.tar.gz.part01 webapps-0.49.20261113-linux-x64.tar.gz.part02 > webapps-0.49.20261113-linux-x64.tar.gz\ntar -xzf webapps-0.49.20261113-linux-x64.tar.gz"
         },
         {
           "kind": "desktop",
           "platform": "windows-x64",
-          "version": "0.48.20261106",
-          "bytes": 2417433358,
-          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-win-x64.zip.install.txt",
-          "sha256": "fa1c05c488235204f1ec3086f4e7e049d35eea176dfa2e45aba878819ab1c065",
+          "version": "0.49.20261113",
+          "bytes": 2308882627,
+          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-win-x64.zip.install.txt",
+          "sha256": "0f4dd8b5be6129f113d41e1b25dc2de1e03f027ffbef9eced5da770ae03e814c",
           "parts": [
             {
-              "filename": "webapps-0.48.20261106-win-x64.zip.part01",
-              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-win-x64.zip.part01",
+              "filename": "webapps-0.49.20261113-win-x64.zip.part01",
+              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-win-x64.zip.part01",
               "bytes": 1900000000,
-              "sha256": "b83105b66c1187b0b5d72e77d33661f031b70f3f77cf0f67d8dfeb792a803b6a"
+              "sha256": "dcfe2cdc606113f71170af86514dac38c0d1444c6d750f467437fca4efffe6ee"
             },
             {
-              "filename": "webapps-0.48.20261106-win-x64.zip.part02",
-              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-win-x64.zip.part02",
-              "bytes": 517433358,
-              "sha256": "1158f16b2c69f8538be03e64c8923fd642b821ac5a4fd8ff2633c34b047b7e9f"
+              "filename": "webapps-0.49.20261113-win-x64.zip.part02",
+              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-win-x64.zip.part02",
+              "bytes": 408882627,
+              "sha256": "6c7a00b9f8652de312de737065c29a30225fd4460d44f9e5305582523295e173"
             }
           ],
-          "archiveSha256": "5c4d0e33c2a75d70cc8577510acfb1c53aa53423e684dbf89129caab8bad8513",
-          "archiveFilename": "webapps-0.48.20261106-win-x64.zip",
-          "command": "cmd /c copy /b webapps-0.48.20261106-win-x64.zip.part01+webapps-0.48.20261106-win-x64.zip.part02 webapps-0.48.20261106-win-x64.zip\nExpand-Archive webapps-0.48.20261106-win-x64.zip -DestinationPath NeurodeskWebapps"
+          "archiveSha256": "4f0d2c10047f5f830517a6837ac9aab41cc152882ea6edefab840534fe8fbc2f",
+          "archiveFilename": "webapps-0.49.20261113-win-x64.zip",
+          "command": "cmd /c copy /b webapps-0.49.20261113-win-x64.zip.part01+webapps-0.49.20261113-win-x64.zip.part02 webapps-0.49.20261113-win-x64.zip\nExpand-Archive webapps-0.49.20261113-win-x64.zip -DestinationPath NeurodeskWebapps"
         },
         {
           "kind": "container",
           "platform": "linux-x64-apptainer",
-          "version": "0.48.20261106",
-          "bytes": 2362654720,
-          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-linux-x64.sif.install.txt",
-          "sha256": "381d87be90492816cb380ab40cab851607f17e2ccc043f4f2dedb84b6355007a",
+          "version": "0.49.20261113",
+          "bytes": 2307506176,
+          "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-linux-x64.sif.install.txt",
+          "sha256": "0d71ee0f23f2ccf6d1dab31ddf4f5a35fd6cb7effa52aa1b150fdf6db6ab7c58",
           "parts": [
             {
-              "filename": "webapps-0.48.20261106-linux-x64.sif.part01",
-              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-linux-x64.sif.part01",
+              "filename": "webapps-0.49.20261113-linux-x64.sif.part01",
+              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-linux-x64.sif.part01",
               "bytes": 1900000000,
-              "sha256": "a51d73e1f8e1546c40207af872517b76779e97f7aeab47e2027f2efc6f866064"
+              "sha256": "0a79e911044bdbb89b3d23fb3740cf464bf38e14eca51f27774d1039fb773990"
             },
             {
-              "filename": "webapps-0.48.20261106-linux-x64.sif.part02",
-              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-linux-x64.sif.part02",
-              "bytes": 462654720,
-              "sha256": "29dda33e132c756c8ff50a2ff85ea0e956605d0c43a7b4be4ac1f08525321705"
+              "filename": "webapps-0.49.20261113-linux-x64.sif.part02",
+              "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-linux-x64.sif.part02",
+              "bytes": 407506176,
+              "sha256": "9eb0dd92da48dde505f9e81afaa61db2760592865754b275f70e5752c803d1d7"
             }
           ],
-          "archiveSha256": "128a417c805703e8c64195dd708695c2c8ebed1404f4663822344ccf259d5c9a",
-          "archiveFilename": "webapps-0.48.20261106-linux-x64.sif",
-          "command": "cat webapps-0.48.20261106-linux-x64.sif.part01 webapps-0.48.20261106-linux-x64.sif.part02 > webapps-0.48.20261106-linux-x64.sif\napptainer run webapps-0.48.20261106-linux-x64.sif --verify"
+          "archiveSha256": "37c0300b308f245c1406bb041ec61e6e7a99e404a3c1a9cd66856ca1117905bf",
+          "archiveFilename": "webapps-0.49.20261113-linux-x64.sif",
+          "command": "cat webapps-0.49.20261113-linux-x64.sif.part01 webapps-0.49.20261113-linux-x64.sif.part02 > webapps-0.49.20261113-linux-x64.sif\napptainer run webapps-0.49.20261113-linux-x64.sif --verify"
         }
       ],
       "models": {
         "kind": "models",
         "platform": "any",
-        "version": "0.48.20261106",
-        "bytes": 7595542184,
-        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-models.tar.gz.install.txt",
-        "sha256": "d3bfa796796c89f938d63337d0d71006071ec7145f3b4e8e3693fbfea8712c1f",
+        "version": "0.49.20261113",
+        "bytes": 4649507687,
+        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-models.tar.gz.install.txt",
+        "sha256": "c1398d4026cbe6cc1e562fe7828739408c13486f02a4880e8bc95e82e4adb908",
         "parts": [
           {
-            "filename": "webapps-0.48.20261106-models.tar.gz.part01",
-            "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-models.tar.gz.part01",
+            "filename": "webapps-0.49.20261113-models.tar.gz.part01",
+            "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-models.tar.gz.part01",
             "bytes": 1900000000,
-            "sha256": "489b13309371a6af707847e31d7a5a4a017b1795ef10650ade91b56d82daee6f"
+            "sha256": "030b53d23748096c9fb41d6cf1c5b3851da1c30fb5141ea02a009f74befb21bb"
           },
           {
-            "filename": "webapps-0.48.20261106-models.tar.gz.part02",
-            "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-models.tar.gz.part02",
+            "filename": "webapps-0.49.20261113-models.tar.gz.part02",
+            "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-models.tar.gz.part02",
             "bytes": 1900000000,
-            "sha256": "992985a07ec7919d221d8394c2710fecb29ea0ed7b41947a3f5d59307eb66b3c"
+            "sha256": "49a15e8f1e4f5757b2bc1871430c8097a438d69ea81866d59322f04c445f550f"
           },
           {
-            "filename": "webapps-0.48.20261106-models.tar.gz.part03",
-            "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-models.tar.gz.part03",
-            "bytes": 1900000000,
-            "sha256": "382df01479eb9f8916e52e9c98f0c072e8d62d2689114099f4e8b34772f8af3d"
-          },
-          {
-            "filename": "webapps-0.48.20261106-models.tar.gz.part04",
-            "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.48.20261106/webapps-0.48.20261106-models.tar.gz.part04",
-            "bytes": 1895542184,
-            "sha256": "4d35e919c28f5c499cafaac26647874b8bad108b30e60ca7c156b468b81ed98c"
+            "filename": "webapps-0.49.20261113-models.tar.gz.part03",
+            "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.49.20261113/webapps-0.49.20261113-models.tar.gz.part03",
+            "bytes": 849507687,
+            "sha256": "df5f01197c36000bfbaef24303f25a071a76e277a1d6af4cf81001f1d2747c91"
           }
         ],
-        "archiveSha256": "72508d7366052e4457c753f6d6359895e7447a44decef2b3cdb909e302a67547",
-        "archiveFilename": "webapps-0.48.20261106-models.tar.gz",
-        "command": "cat webapps-0.48.20261106-models.tar.gz.part01 webapps-0.48.20261106-models.tar.gz.part02 webapps-0.48.20261106-models.tar.gz.part03 webapps-0.48.20261106-models.tar.gz.part04 > webapps-0.48.20261106-models.tar.gz\nmkdir models\ntar -xzf webapps-0.48.20261106-models.tar.gz -C models"
+        "archiveSha256": "350d42f6abfffb8d25e800473752cb8722166cabba1c495edaefc4884e35f1c2",
+        "archiveFilename": "webapps-0.49.20261113-models.tar.gz",
+        "command": "cat webapps-0.49.20261113-models.tar.gz.part01 webapps-0.49.20261113-models.tar.gz.part02 webapps-0.49.20261113-models.tar.gz.part03 > webapps-0.49.20261113-models.tar.gz\nmkdir models\ntar -xzf webapps-0.49.20261113-models.tar.gz -C models"
+      }
+    },
+    "microscopy": {
+      "version": "0.49.20261113",
+      "revision": "d4fad73448da67f110506cbd3d292b2037630989",
+      "apps": [
+        {
+          "id": "niimath",
+          "version": "1.3.20261111"
+        },
+        {
+          "id": "mri2vid",
+          "version": "0.6.20261111"
+        },
+        {
+          "id": "zarro",
+          "version": "0.4.20261111"
+        },
+        {
+          "id": "elastix",
+          "version": "0.5.20261111"
+        },
+        {
+          "id": "stardist",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "lightsheet-atlas",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "calcium-imaging",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "spot-detection",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "neuromorph",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "stitching",
+          "version": "0.2.20261111"
+        },
+        {
+          "id": "structure-tensor",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "microscope-qc",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "microsam",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "cryo-em",
+          "version": "0.1.20261112"
+        },
+        {
+          "id": "deconvolution",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "omezarr-convert",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "histo2mri",
+          "version": "0.1.20261111"
+        }
+      ],
+      "downloads": [
+        {
+          "kind": "desktop",
+          "platform": "macos-arm64",
+          "version": "0.49.20261113",
+          "bytes": 365916242,
+          "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261113/microscopy-webapps-0.49.20261113-mac-arm64.zip",
+          "sha256": "7a0c46260e6255f49e640f5f4741224f00bc033196a3ed0b7117f43f9bfdccf0",
+          "command": "unzip microscopy-webapps-0.49.20261113-mac-arm64.zip"
+        },
+        {
+          "kind": "desktop",
+          "platform": "linux-x64",
+          "version": "0.49.20261113",
+          "bytes": 373162643,
+          "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261113/microscopy-webapps-0.49.20261113-linux-x64.tar.gz",
+          "sha256": "0a41a1436dd3c73ab93e80cc914ddac3b6d92486e4f721ef1921e7f6f51c4304",
+          "command": "tar -xzf microscopy-webapps-0.49.20261113-linux-x64.tar.gz"
+        },
+        {
+          "kind": "desktop",
+          "platform": "windows-x64",
+          "version": "0.49.20261113",
+          "bytes": 396959642,
+          "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261113/microscopy-webapps-0.49.20261113-win-x64.zip",
+          "sha256": "e8d3a9839ad15b18c43351addfe6b022b30253770d8747017ca5bf19baf91c27",
+          "command": "Expand-Archive microscopy-webapps-0.49.20261113-win-x64.zip -DestinationPath MicroscopyWebapps"
+        }
+      ],
+      "models": {
+        "kind": "models",
+        "platform": "any",
+        "version": "0.49.20261113",
+        "bytes": 48990828,
+        "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261113/microscopy-webapps-0.49.20261113-models.tar.gz",
+        "sha256": "6e14ca3d10bdce5597bdf34ca57ad26ba795948827fa3a871d9c6f54ebf5b32e",
+        "command": "mkdir models\ntar -xzf microscopy-webapps-0.49.20261113-models.tar.gz -C models"
+      }
+    },
+    "preclinical": {
+      "version": "0.49.20261113",
+      "revision": "d4fad73448da67f110506cbd3d292b2037630989",
+      "apps": [
+        {
+          "id": "qsmbly",
+          "version": "0.31.20261112"
+        },
+        {
+          "id": "dicompare",
+          "version": "0.15.20261111"
+        },
+        {
+          "id": "niimath",
+          "version": "1.3.20261111"
+        },
+        {
+          "id": "mri2vid",
+          "version": "0.6.20261111"
+        },
+        {
+          "id": "zarro",
+          "version": "0.4.20261111"
+        },
+        {
+          "id": "elastix",
+          "version": "0.5.20261111"
+        },
+        {
+          "id": "dicomview",
+          "version": "0.4.20261111"
+        },
+        {
+          "id": "degibbs",
+          "version": "0.4.20261111"
+        },
+        {
+          "id": "dcm2niix",
+          "version": "0.2.20261111"
+        },
+        {
+          "id": "dwidenoise",
+          "version": "0.4.20261111"
+        },
+        {
+          "id": "ants-denoise",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "calcium-imaging",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "neuromorph",
+          "version": "0.1.20261111"
+        },
+        {
+          "id": "stitching",
+          "version": "0.2.20261111"
+        },
+        {
+          "id": "structure-tensor",
+          "version": "0.1.20261111"
+        }
+      ],
+      "downloads": [
+        {
+          "kind": "desktop",
+          "platform": "macos-arm64",
+          "version": "0.49.20261113",
+          "bytes": 485247765,
+          "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261113/preclinical-webapps-0.49.20261113-mac-arm64.zip",
+          "sha256": "9c9296c5ff49057534278c43ad6b1b2a98b5df60f2672a6b656d7d15edfb778b",
+          "command": "unzip preclinical-webapps-0.49.20261113-mac-arm64.zip"
+        },
+        {
+          "kind": "desktop",
+          "platform": "linux-x64",
+          "version": "0.49.20261113",
+          "bytes": 491106986,
+          "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261113/preclinical-webapps-0.49.20261113-linux-x64.tar.gz",
+          "sha256": "31a0c73f5e1ef58c16e77e8d8c3426a83bc4e6e0e94afbe09eb1d36cdd84adcf",
+          "command": "tar -xzf preclinical-webapps-0.49.20261113-linux-x64.tar.gz"
+        },
+        {
+          "kind": "desktop",
+          "platform": "windows-x64",
+          "version": "0.49.20261113",
+          "bytes": 514961441,
+          "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261113/preclinical-webapps-0.49.20261113-win-x64.zip",
+          "sha256": "88dcd185fff826ee21c04927895d7043325c81c0b6cc8cc4163c22401bd60ed2",
+          "command": "Expand-Archive preclinical-webapps-0.49.20261113-win-x64.zip -DestinationPath PreclinicalWebapps"
+        }
+      ],
+      "models": {
+        "kind": "models",
+        "platform": "any",
+        "version": "0.49.20261113",
+        "bytes": 1123852274,
+        "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261113/preclinical-webapps-0.49.20261113-models.tar.gz",
+        "sha256": "41c2b1d717fe0900d137a1171d8aa3544fc8bfa3348573780e50ff2fd3e04b7a",
+        "command": "mkdir models\ntar -xzf preclinical-webapps-0.49.20261113-models.tar.gz -C models"
+      }
+    },
+    "msk": {
+      "version": "0.49.20261113",
+      "revision": "d4fad73448da67f110506cbd3d292b2037630989",
+      "apps": [
+        {
+          "id": "musclemap",
+          "version": "1.5.20261112"
+        },
+        {
+          "id": "seedseg",
+          "version": "0.7.20261112"
+        },
+        {
+          "id": "dicompare",
+          "version": "0.15.20261111"
+        },
+        {
+          "id": "niimath",
+          "version": "1.3.20261111"
+        },
+        {
+          "id": "mri2vid",
+          "version": "0.6.20261111"
+        },
+        {
+          "id": "carotid-flow",
+          "version": "0.4.20261111"
+        },
+        {
+          "id": "elastix",
+          "version": "0.5.20261111"
+        },
+        {
+          "id": "dicomview",
+          "version": "0.4.20261111"
+        },
+        {
+          "id": "dcm2niix",
+          "version": "0.2.20261111"
+        },
+        {
+          "id": "ants-denoise",
+          "version": "0.1.20261111"
+        }
+      ],
+      "downloads": [
+        {
+          "kind": "desktop",
+          "platform": "macos-arm64",
+          "version": "0.49.20261113",
+          "bytes": 378534849,
+          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-mac-arm64.zip",
+          "sha256": "032015175625a898566f6b88f66aed068c2e9a3c6c3d2a839ccbdaf0eaff43ed",
+          "command": "unzip msk-webapps-0.49.20261113-mac-arm64.zip"
+        },
+        {
+          "kind": "desktop",
+          "platform": "linux-x64",
+          "version": "0.49.20261113",
+          "bytes": 385250710,
+          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-linux-x64.tar.gz",
+          "sha256": "c2ed0fbccf63f538efc15bece4b2f8d8be5a270d91086423570a55fde6329d8b",
+          "command": "tar -xzf msk-webapps-0.49.20261113-linux-x64.tar.gz"
+        },
+        {
+          "kind": "desktop",
+          "platform": "windows-x64",
+          "version": "0.49.20261113",
+          "bytes": 409113843,
+          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-win-x64.zip",
+          "sha256": "6799f0c3c5dd1c34aaf08095190ccdcbc9b6d7be7cf8579de27b4afb13490232",
+          "command": "Expand-Archive msk-webapps-0.49.20261113-win-x64.zip -DestinationPath MSKWebapps"
+        }
+      ],
+      "models": {
+        "kind": "models",
+        "platform": "any",
+        "version": "0.49.20261113",
+        "bytes": 3757291581,
+        "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-models.tar.gz.install.txt",
+        "sha256": "5245621ff670663d0a837899609c0b7c2c9d7d011ebc179e9883fe2862d62c18",
+        "parts": [
+          {
+            "filename": "msk-webapps-0.49.20261113-models.tar.gz.part01",
+            "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-models.tar.gz.part01",
+            "bytes": 1900000000,
+            "sha256": "c636a778947eeed0543bd12cab20b5214f92ca7d89ac4cbf5c091237ff925679"
+          },
+          {
+            "filename": "msk-webapps-0.49.20261113-models.tar.gz.part02",
+            "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-models.tar.gz.part02",
+            "bytes": 1857291581,
+            "sha256": "82254101cf4bfe0bada1936c15af6cd8869597689e3c1dc1c0772970e8ce23ea"
+          }
+        ],
+        "archiveSha256": "75d57ac3241b3347e7ab5fd66a7c123c6ce67260b88a995310cbf39d9c95e134",
+        "archiveFilename": "msk-webapps-0.49.20261113-models.tar.gz",
+        "command": "cat msk-webapps-0.49.20261113-models.tar.gz.part01 msk-webapps-0.49.20261113-models.tar.gz.part02 > msk-webapps-0.49.20261113-models.tar.gz\nmkdir models\ntar -xzf msk-webapps-0.49.20261113-models.tar.gz -C models"
       }
     }
   },
