@@ -1,5 +1,11 @@
 # @neurodesk/noddi
 
+## 0.7.20261113
+
+### Patch Changes
+
+- @neurodesk/dwi2trx@0.8.20261113
+
 ## 0.7.20261112
 
 ### Patch Changes

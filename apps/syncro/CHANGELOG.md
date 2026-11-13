@@ -1,5 +1,12 @@
 # syncro
 
+## 0.8.20261113
+
+### Patch Changes
+
+- b8b62ae: Leave out MindGrab model files SYNcro never loads, which makes its download about 11 MB smaller.
+  - @neurodesk/syncro@0.8.20261113
+
 ## 0.8.20261112
 
 ### Patch Changes

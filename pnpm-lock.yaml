@@ -1745,8 +1745,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/components
       '@niivue/niivue':
-        specifier: 1.0.0-rc.14
-        version: 1.0.0-rc.14
+        specifier: 1.0.0-rc.186
+        version: 1.0.0-rc.186(@webgpu/types@0.1.71)
       zarrita:
         specifier: ^0.7.3
         version: 0.7.4
@@ -4497,6 +4497,11 @@ packages:
 
   '@niivue/niivue@1.0.0-rc.16':
     resolution: {integrity: sha512-ACDAQtuFzP7OhDEFT9iml57nyd7oqAjMAY3g1UPAt2nCmLtxK66BYF3GxBhQvKYbNyN8jCqJBMVwqAD42bLC5g==}
+
+  '@niivue/niivue@1.0.0-rc.186':
+    resolution: {integrity: sha512-AMnK3DA+/PRgdkU7YvoYamBL3yMG31c+8OxDfvuOeU4lK6utplcP6mLqj9EO1wbwf9ZIrQ6KjKEsSiibhwjrXw==}
+    peerDependencies:
+      '@webgpu/types': '>=0.1.69'
 
   '@niivue/niivue@1.0.0-rc.26':
     resolution: {integrity: sha512-nGKRQm3MaFoDmBuV/prTXGokbQTdUpx/mMXOKdbWzXUaGMXfGySmToq9Ccza2sCaOk3Zn7CSWdSdtkcZIdJHoQ==}
@@ -12233,6 +12238,15 @@ snapshots:
       gl-matrix: 3.4.4
       nifti-reader-js: 0.8.0
       zarrita: 0.7.5
+
+  '@niivue/niivue@1.0.0-rc.186(@webgpu/types@0.1.71)':
+    dependencies:
+      '@webgpu/types': 0.1.71
+      cbor-x: 1.6.4
+      clipper2-ts: 2.0.1-18
+      earcut: 3.2.3
+      gl-matrix: 3.4.4
+      nifti-reader-js: 0.8.1
 
   '@niivue/niivue@1.0.0-rc.26':
     dependencies:

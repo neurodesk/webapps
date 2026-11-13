@@ -361,7 +361,8 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 ## zarro
 
 - Uses the registry `@niivue/niivue` with no patch. Everything the old rc.11 patch provided is upstream API as of `1.0.0-rc.14` ([niivue/mono#160](https://github.com/niivue/mono/issues/160)); see `docs/architecture/zarro-niivue-streaming-integration.md` for the mapping. Do not reintroduce `patchedDependencies` or reach into NiiVue internals; ask upstream for an API instead.
-- `src/cursor_zoom.ts` stays until NiiVue exports its wheel-zoom anchor helpers or a configurable wheel step, because the Scroll zoom speed setting needs a continuous zoom. `src/nvslide_measurement.ts` stays until NVSlide scalar tiles land upstream (niivue/mono#159).
+- `src/cursor_zoom.ts` stays until NiiVue exports its wheel-zoom anchor helpers or a configurable wheel step, because the Scroll zoom speed setting needs a continuous zoom. `src/nvslide_measurement.ts` stays because NVSlide's measurements are 2D and Zarro's rulers are 3D points on a volume plane.
+- NVSlide panes take raw uint8/uint16 samples (`VolumePlaneSource.fetchTileSamples`, `raw-gray`) and window them on the GPU with `NVSlide.setChannel` (niivue/mono#159, `1.0.0-rc.186`). A window change must not rebuild a pane or refetch tiles; `e2e/smoke.spec.js` checks pane generations. Keep the local source: upstream's `VolumeSliceSource` does not scale the manifest by voxel spacing.
 
 ## Upstream apps (qsmbly, seedseg, dicompare)
 

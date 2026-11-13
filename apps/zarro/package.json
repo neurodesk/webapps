@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*",
-    "@niivue/niivue": "1.0.0-rc.14",
+    "@niivue/niivue": "1.0.0-rc.186",
     "zarrita": "^0.7.3"
   },
   "devDependencies": {

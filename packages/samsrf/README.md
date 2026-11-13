@@ -443,10 +443,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex
   powers and its final-parameter post-fit formula: with concurrent HRF fitting
   that parameter is AmpRat. Exported maps retain real components, as SamSrf
-  10.4's `samsrf_expand_srf` does. Raw optimizer cases now match the actual
+  10.4's `samsrf_expand_srf` does. Raw optimizer cases match the actual
   MATLAB recordings in both precisions, and the recorded single-precision
-  pipeline parameters and scores match exactly. Betas retain small regression
-  rounding differences, and some double-precision weak fits still differ.
+  pipeline (`pipeline_single_css`) matches every map value exactly, Beta and
+  Baseline included (`compare.mjs`). The 741-case reference's general double
+  fine-fit plateaus and other double CSS fits are diagnostic there, not gated.
   The double objective follows MATLAB R2023b stage by stage
   (`exes/samsrf/core/src/matlab_math.rs`). It uses ported fdlibm `log`, `sin` and
   `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
@@ -456,8 +457,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   parameter sequences bit for bit. With the port's own HRF, which equals MATLAB's
   kernel, the recorded 96-vertex double pipelines (original apertures and a
   nonnegative control, on MATLAB's AMD reference host) match every fitted
-  parameter, R², nR² and noise ceiling exactly; Beta and Baseline are compared
-  with the exact least-squares solution under a stated policy, not bit for bit.
+  parameter, R², nR², noise ceiling, Beta and Baseline exactly: 138 of 138 kept
+  coefficients of the original pipeline and 126 of 126 of the nonnegative one.
+  The gate still compares any differing coefficient with the exact
+  least-squares solution under a stated policy; that policy is a scale, not a
+  bound, and the bit-identical counts hold for these recorded cases only.
   The limits of each operation,
   and why MATLAB on Intel hosts gives other results, are in
   `validation/matlab/README.md#double-css-arithmetic`.
@@ -489,11 +493,14 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   exactly and breaks cocircular ties with CGAL's symbolic perturbation, which
   gives MATLAB's `delaunay` edges on every recorded grid, ring and shuffled
   tie. `polyshape(...).convhull` follows MATLAB's fixed-point grid, even-odd
-  resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on every
-  recorded polygon except 93 nearly collinear point clouds, whose crossings of
-  nearly parallel edges MATLAB resolves by snapping vertices the port does not
-  reproduce ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
-  An experimental Clipper-based model that matches more of them but not four
+  resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on 25,980
+  of the 26,073 original recorded polygons. The 93 nearly collinear exceptions
+  are frozen as regression snapshots; why MATLAB keeps the vertices it keeps for
+  them is not known
+  ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
+  Supplementary recordings expose further mismatches
+  ([supplementary census](validation/matlab/README.md#shipped-and-experimental-models-on-the-probe-recordings)).
+  An experimental Clipper-based model that matches 53 of them but not four
   that this one matches is kept out of every shipped build
   ([experimental model](validation/matlab/README.md#experimental-clipper-model-not-in-production-732-open)).
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in

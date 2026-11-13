@@ -204,6 +204,7 @@ jobs:
           SAMSRF_MATLAB_NUMERICS_DIR="$RUNNER_TEMP/samsrf-numerics" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_numerics
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-numerics2" packages/samsrf/validation/matlab/numerics2-reference.json
           SAMSRF_MATLAB_NUMERICS2_DIR="$RUNNER_TEMP/samsrf-numerics2" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_numerics2
+          SAMSRF_MATLAB_NUMERICS2_DIR="$RUNNER_TEMP/samsrf-numerics2" SAMSRF_SINGLE_KERNELS_DIR="$RUNNER_TEMP/samsrf-single-kernels" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test candidate_exclusions -- --nocapture
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-single-trig" packages/samsrf/validation/matlab/single-trig-reference.json
           SAMSRF_SINGLE_TRIG_DIR="$RUNNER_TEMP/samsrf-single-trig" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test single_trig -- --nocapture
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-pipelines" packages/samsrf/validation/matlab/css-pipelines-reference.json
