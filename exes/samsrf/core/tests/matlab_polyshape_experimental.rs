@@ -229,7 +229,56 @@ fn split_rows(all: &[[f64; 2]], counts: &[f64]) -> Vec<Vec<[f64; 2]>> {
     result
 }
 
+fn real_double_values(bytes: &[u8], descriptor: &Value) -> Vec<f64> {
+    assert_eq!(descriptor["class"], "double", "real double recording required");
+    assert_eq!(descriptor["imaginary"], "", "complex recording is not supported");
+    let count = shape(descriptor).into_iter().try_fold(1usize, |n, dimension| n.checked_mul(dimension)).unwrap();
+    assert_eq!(bytes.len(), count.checked_mul(8).unwrap(), "descriptor byte length");
+    bytes.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
+}
+
+fn assert_reproducer_parameters(values: &[f64], items: &[Value]) {
+    let roles = ["original", "minimal", "chain", "oneDeleted", "order", "scale", "reproducer"];
+    assert_eq!(values.len(), items.len() * 5, "reproducer parameter inventory");
+    for (i, item) in items.iter().enumerate() {
+        let role = roles.iter().position(|role| item["role"] == *role).expect("known reproducer role");
+        let expected = [item["cloud"].as_u64().unwrap(), role as u64,
+            item["reversed"].as_u64().unwrap(), item["shift"].as_u64().unwrap(), item["transform"].as_u64().unwrap()];
+        for (column, value) in expected.into_iter().enumerate() {
+            assert_eq!(values[i + column * items.len()].to_bits(), (value as f64).to_bits(),
+                "reproducer {i}: parameter column {column} differs from spec");
+        }
+    }
+}
+
+#[test]
+fn reproducer_descriptors_and_parameters_reject_corruption() {
+    let descriptor = json!({"class": "double", "imaginary": "", "shape": [1, 5]});
+    let values = [177.0f64, 6.0, 0.0, 2.0, 3.0];
+    let bytes: Vec<u8> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
+    let items = [json!({"cloud": 177, "role": "reproducer", "reversed": 0, "shift": 2, "transform": 3})];
+    let decoded = real_double_values(&bytes, &descriptor);
+    assert_reproducer_parameters(&decoded, &items);
+    for invalid in [&bytes[..0], &bytes[..bytes.len() - 8], &bytes[..bytes.len() - 1]] {
+        assert!(std::panic::catch_unwind(|| real_double_values(invalid, &descriptor)).is_err());
+    }
+    for (field, value) in [("class", "single"), ("imaginary", "unexpected.f64")] {
+        let mut invalid = descriptor.clone();
+        invalid[field] = json!(value);
+        assert!(std::panic::catch_unwind(|| real_double_values(&bytes, &invalid)).is_err());
+    }
+    for column in 0..5 {
+        let mut invalid = decoded.clone();
+        invalid[column] += 1.0;
+        assert!(std::panic::catch_unwind(|| assert_reproducer_parameters(&invalid, &items)).is_err());
+    }
+}
+
 fn validate_causal_case(root: &Path, case: &Value, n: usize, parameter_shape: [usize; 2]) {
+    for descriptor in case.as_object().unwrap().values().filter(|value| value.get("file").is_some()) {
+        let bytes = std::fs::read(root.join(descriptor["file"].as_str().unwrap())).unwrap();
+        real_double_values(&bytes, descriptor);
+    }
     for field in ["counts", "simplifiedCounts", "collinearCounts", "hullCounts", "regions", "warning", "error", "defaultHolesCounts", "keptHolesCounts", "fromKeptCounts", "fromDefaultCounts", "viaSimplifyCounts"] {
         assert_eq!(shape(&case[field]), [n, 1], "{}: {field} inventory", case["id"]);
         assert_eq!(array(root, &case[field]).len(), n);
@@ -576,6 +625,7 @@ fn polyshape_reproducers_match_recording() {
             let items = spec["cases"].as_array().unwrap();
             let n = items.len();
             validate_causal_case(&root, case, n, [n, 5]);
+            assert_reproducer_parameters(&array(&root, &case["parameters"]), items);
             let polygons = split_rows(&points(&array(&root, &case["points"])), &array(&root, &case["counts"]));
             let hulls = split_rows(&points(&array(&root, &case["hull"])), &array(&root, &case["hullCounts"]));
             let verdicts = frozen["verdicts"][id].as_array().unwrap();
