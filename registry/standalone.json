@@ -566,6 +566,106 @@
         "sha256": "41c2b1d717fe0900d137a1171d8aa3544fc8bfa3348573780e50ff2fd3e04b7a",
         "command": "mkdir models\ntar -xzf preclinical-webapps-0.49.20261113-models.tar.gz -C models"
       }
+    },
+    "msk": {
+      "version": "0.49.20261113",
+      "revision": "d4fad73448da67f110506cbd3d292b2037630989",
+      "apps": [
+        {
+          "id": "musclemap",
+          "version": "1.5.20261112"
+        },
+        {
+          "id": "seedseg",
+          "version": "0.7.20261112"
+        },
+        {
+          "id": "dicompare",
+          "version": "0.15.20261111"
+        },
+        {
+          "id": "niimath",
+          "version": "1.3.20261111"
+        },
+        {
+          "id": "mri2vid",
+          "version": "0.6.20261111"
+        },
+        {
+          "id": "carotid-flow",
+          "version": "0.4.20261111"
+        },
+        {
+          "id": "elastix",
+          "version": "0.5.20261111"
+        },
+        {
+          "id": "dicomview",
+          "version": "0.4.20261111"
+        },
+        {
+          "id": "dcm2niix",
+          "version": "0.2.20261111"
+        },
+        {
+          "id": "ants-denoise",
+          "version": "0.1.20261111"
+        }
+      ],
+      "downloads": [
+        {
+          "kind": "desktop",
+          "platform": "macos-arm64",
+          "version": "0.49.20261113",
+          "bytes": 378534849,
+          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-mac-arm64.zip",
+          "sha256": "032015175625a898566f6b88f66aed068c2e9a3c6c3d2a839ccbdaf0eaff43ed",
+          "command": "unzip msk-webapps-0.49.20261113-mac-arm64.zip"
+        },
+        {
+          "kind": "desktop",
+          "platform": "linux-x64",
+          "version": "0.49.20261113",
+          "bytes": 385250710,
+          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-linux-x64.tar.gz",
+          "sha256": "c2ed0fbccf63f538efc15bece4b2f8d8be5a270d91086423570a55fde6329d8b",
+          "command": "tar -xzf msk-webapps-0.49.20261113-linux-x64.tar.gz"
+        },
+        {
+          "kind": "desktop",
+          "platform": "windows-x64",
+          "version": "0.49.20261113",
+          "bytes": 409113843,
+          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-win-x64.zip",
+          "sha256": "6799f0c3c5dd1c34aaf08095190ccdcbc9b6d7be7cf8579de27b4afb13490232",
+          "command": "Expand-Archive msk-webapps-0.49.20261113-win-x64.zip -DestinationPath MSKWebapps"
+        }
+      ],
+      "models": {
+        "kind": "models",
+        "platform": "any",
+        "version": "0.49.20261113",
+        "bytes": 3757291581,
+        "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-models.tar.gz.install.txt",
+        "sha256": "5245621ff670663d0a837899609c0b7c2c9d7d011ebc179e9883fe2862d62c18",
+        "parts": [
+          {
+            "filename": "msk-webapps-0.49.20261113-models.tar.gz.part01",
+            "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-models.tar.gz.part01",
+            "bytes": 1900000000,
+            "sha256": "c636a778947eeed0543bd12cab20b5214f92ca7d89ac4cbf5c091237ff925679"
+          },
+          {
+            "filename": "msk-webapps-0.49.20261113-models.tar.gz.part02",
+            "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261113/msk-webapps-0.49.20261113-models.tar.gz.part02",
+            "bytes": 1857291581,
+            "sha256": "82254101cf4bfe0bada1936c15af6cd8869597689e3c1dc1c0772970e8ce23ea"
+          }
+        ],
+        "archiveSha256": "75d57ac3241b3347e7ab5fd66a7c123c6ce67260b88a995310cbf39d9c95e134",
+        "archiveFilename": "msk-webapps-0.49.20261113-models.tar.gz",
+        "command": "cat msk-webapps-0.49.20261113-models.tar.gz.part01 msk-webapps-0.49.20261113-models.tar.gz.part02 > msk-webapps-0.49.20261113-models.tar.gz\nmkdir models\ntar -xzf msk-webapps-0.49.20261113-models.tar.gz -C models"
+      }
     }
   },
   "apps": {
