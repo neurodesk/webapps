@@ -12,13 +12,18 @@ and streamed volume construction.
 those workarounds upstream. All of them landed on `main` and ship in
 `1.0.0-rc.14`, so Zarro now uses the registry package without a patch.
 
+Zarro now pins `1.0.0-rc.186`, the first release with GPU windowing of scalar
+slide tiles ([niivue/mono#159](https://github.com/niivue/mono/issues/159),
+closed by niivue/mono#740 and #748).
+
 ## What NiiVue owns
 
 | Behavior | Upstream API |
 | --- | --- |
 | Crosshair panning | `DRAG_MODE.crosshairPan` |
 | Cancellable volume reads | `ChunkedVolumeFetch.signal` |
-| Cancellable slide tile reads | `SlideTileSource.fetchTileBytes(..., signal)` |
+| Cancellable slide tile reads | `SlideTileSource.fetchTileSamples(..., signal)` |
+| NVSlide window on the GPU | `raw-gray` levels, `manifest.channelInfo`, `NVSlide.setChannel(0, { calMin, calMax })` |
 | Uniform detail inside the visible field of view | `NVChunkedVolume.setFocus(frac, focusBounds)` |
 | Waiting for a plan swap | `NVChunkedVolume.whenRefocusIdle()` |
 | NVSlide coarse fallback while finer tiles load | `NVSlide.visibleTiles().fallback` |
@@ -56,9 +61,19 @@ uses a fixed zoom step. Zarro's handler honors the Scroll zoom speed setting and
 line and page delta modes, and the anchor helpers it would need
 (`zoomPan2DAbout`, `screenSlicePick`) are not exported.
 
-`nvslide_measurement.ts` keeps measurement geometry for NVSlide panes. NVSlide
-scalar tiles with GPU-side windowing are still open upstream as
-[niivue/mono#159](https://github.com/niivue/mono/issues/159).
+`volume_plane_source.ts` serves one orthogonal plane of the chunked volume as
+NVSlide tiles. It returns the stored uint8 or uint16 voxels through
+`fetchTileSamples` and states one grey channel with the initial window. A
+window change calls `NVSlide.setChannel`, so the renderer re-fuses the cached
+tiles on the GPU: the pane is not rebuilt and no tile is fetched again. It stays
+local rather than using upstream's `VolumeSliceSource` because its manifest is
+scaled by the in-plane voxel spacing, so anisotropic light-sheet planes keep
+their physical aspect ratio. Upstream's manifest counts voxels.
+
+`nvslide_measurement.ts` keeps measurement geometry for NVSlide panes. It maps
+slide points to 3D millimetre coordinates on the pane's volume plane, so a ruler
+drawn in an NVSlide pane is the same measurement as in the volume viewer.
+NVSlide's own measurements are 2D distances on a slide and cannot do this.
 
 `waitForStainLayerUploads` polls the public `chunkStreamStats()`.
 `chunkStreamIdle` fires only on a busy-to-idle transition, so a wait that starts
@@ -67,6 +82,8 @@ while the stream is already idle would never resolve.
 ## Verification
 
 The Zarro unit suite covers focus planning against the upstream planner,
-mosaic cancellation, plane-source signal forwarding, stain swap ordering and
-layouts. The Playwright smoke suite covers composite loading, multi-stain level
-swaps, layouts, wheel zoom and exports against the production build.
+mosaic cancellation, plane-source signal forwarding and raw sample tiles,
+stain swap ordering and layouts. The Playwright smoke suite covers composite loading, multi-stain level
+swaps, layouts, wheel zoom and exports against the production build. Its
+uint16 NVSlide test changes the window and requires the drawn pixels to follow
+while every pane keeps its generation (no rebuild, no refetch).
