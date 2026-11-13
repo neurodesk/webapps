@@ -349,6 +349,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # NEURODESK_API_KEY allows four model requests at once (max_parallel_requests);
+      # six concurrent jobs drew rate-limit failures in 33 of 323 tests (ci run 43429989360).
+      max-parallel: 4
       matrix:
         target: [desktop, phone]
         shard: [1, 2, 3]
