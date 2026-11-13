@@ -3324,6 +3324,7 @@ export class LesionNetworkMappingApp {
           ? this.maskDrawingController.loadSeedFile(seed, onReviewBase)
           : this.maskDrawingController.startBlank(onReviewBase);
       }, { assertCurrent });
+      assertCurrent();
     } catch (err) {
       if (this.isCurrent(assertCurrent)) {
         this.maskReviewActive = false;

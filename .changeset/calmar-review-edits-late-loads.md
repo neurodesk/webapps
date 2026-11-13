@@ -24,3 +24,5 @@ A failure in work for an image that has since been replaced no longer changes th
 A `ViewerController` load given `assertCurrent` now ends as soon as its outcome is known: on the first stack member that fails, or when `assertCurrent` throws, which is asked whenever a member is decoded and whenever the viewer changes. Members decoded so far are released then, and a member that is decoded later releases itself. `assertCurrent` is called several times and must have no side effects; `replaceStage` makes an overlay take its stage's place in the commit.
 
 Failed decodes also recheck ownership when the controller resumes, before reporting an error, so a load superseded between decode completion and its continuation stays silent and rejects as superseded.
+
+A review cleared just after its drawing commits also rechecks ownership before enabling its tools or reporting readiness, so the old continuation cannot recreate a drawing in the cleared viewer.

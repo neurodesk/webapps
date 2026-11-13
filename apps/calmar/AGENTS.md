@@ -215,6 +215,8 @@ A pipeline run belongs to the structural image it started on, by the same turns 
 
 After awaiting a viewer decode outcome, recheck ownership before reporting a failure as well as before inserting images. A decode superseded before its continuation resumes must reject silently; `packages/components/test/viewer-controller.test.js` covers this for bases, overlays and stacks.
 
+After awaiting a review's drawing commit, recheck its mask turn before enabling tools or reporting readiness. A clear between the commit and continuation must leave the drawing closed; `e2e/stale-imports.spec.js` covers blank and seeded reviews.
+
 ## Threaded runtime hosting
 
 Keep `ort-web` in Calmar's `app_scoped_runtime_families`. Its WASM thread workers must load within `/calmar/`, where the isolation service worker supplies the required headers. Moving them to `/_runtime/` blocks worker startup on GitHub Pages and leaves SynthStrip waiting after normalization.

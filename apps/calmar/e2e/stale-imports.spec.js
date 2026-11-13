@@ -1245,6 +1245,32 @@ test.describe('an import that finishes late', () => {
     expect(await log()).not.toMatch(/the old threshold could not be read|failed/i);
   });
 
+  for (const blank of [true, false]) {
+    test(`a ${blank ? 'blank' : 'seeded'} review cleared just after its drawing commits stays cleared`, async ({ page }) => {
+      const { choose, loaded, log, smallMask } = await holdImports(page);
+      await choose('structural', 'T1.nii');
+      await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+      const outcome = await page.evaluate(async ({ blank, bytes }) => {
+        const method = blank ? 'createEmptyDrawing' : 'loadDrawing';
+        const commit = app.nv[method].bind(app.nv);
+        app.nv[method] = (...args) => {
+          const result = commit(...args);
+          app.nv[method] = commit;
+          // Another completed action clears the subject after this synchronous
+          // commit, before the review resumes from awaiting the drawing.
+          queueMicrotask(() => app.clearResults({ full: true }));
+          return result;
+        };
+        const seedFile = new File([new Uint8Array(bytes)], 'seed.nii');
+        return app.startLesionMaskReview({ blank, seedFile }).then(() => 'completed', error => error.name);
+      }, { blank, bytes: [...smallMask] });
+      expect(outcome).toBe('AbortError');
+      expect(await loaded()).toMatchObject({ review: false, structural: null, base: null, viewer: [] });
+      expect(await page.evaluate(() => app.nv.drawBitmap)).toBeNull();
+      expect(await log()).not.toContain('Review/edit the lesion mask');
+    });
+  }
+
   test('a threshold changed during a review that fails is drawn when the review ends', async ({ page }) => {
     const { choose, waiting, resume, loaded, log, viewerIdle, image, smallMask } = await holdImports(page);
     await choose('structural', 'T1.nii');
