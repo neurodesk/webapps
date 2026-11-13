@@ -14,3 +14,5 @@ Derive idle guidance from the current connection, project, processing step and m
 Ignore superseded output views and errors after downloading, decoding or initializing the viewer, so detached output work cannot replace the current view or footer.
 
 Ignore a completed run's delayed project snapshots and refresh errors once a newer run starts.
+
+Order overlapping requests within the same project and run through one currency guard, including errors. Preserve a newer job selection after deletion, invalidate deleted-job views and superseded downloads, and restore the committed image when NiiVue finishes a detached decode. Handle refresh failures separately from rejected submissions and observe follower failures immediately.

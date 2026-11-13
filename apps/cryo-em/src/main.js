@@ -69,6 +69,7 @@ const state = {
   tutorial: null,
   exampleActivity: null,
   notice: null,
+  noticeSelection: null,
   client: null,
   info: null,
   project: null,
@@ -79,6 +80,7 @@ const state = {
   values: Object.fromEntries(STEPS.map(step => [step.command, { inputs: {}, options: {}, profile: '' }])),
   uploads: {},
   selectedJob: null,
+  jobSelection: null,
   following: null,
   // Jobs a follower saw end: a project read from before that end still lists them as active.
   ended: new Set(),
@@ -92,7 +94,10 @@ const state = {
 // belong to the current context; changing prerequisites clears them.
 let renderedActivity = null;
 function updateState(patch, { preserveNotice = false } = {}) {
-  if (!preserveNotice) state.notice = null;
+  if (!preserveNotice) {
+    state.notice = null;
+    state.noticeSelection = {};
+  }
   Object.assign(state, patch);
   syncControls();
 }
@@ -101,9 +106,16 @@ function footerText(message) {
   return message.length > 90 ? `${message.slice(0, 89)}…` : message;
 }
 
-function currentContext() {
-  const { client, projectSelection } = state;
-  return () => client === state.client && projectSelection === state.projectSelection;
+// A response owns both its state dependencies and, where needed, its request slot.
+// Every async writer uses this guard, including failures and post-await cleanup.
+const requests = new Map();
+let pageActive = true;
+function currentContext({ keys = ['client', 'projectSelection'], channel } = {}) {
+  const snapshot = keys.map(key => state[key]);
+  const request = {};
+  if (channel) requests.set(channel, request);
+  return () => pageActive && keys.every((key, index) => state[key] === snapshot[index])
+    && (!channel || requests.get(channel) === request);
 }
 
 function renderStatus() {
@@ -177,19 +189,19 @@ function confirmAction(title, message, action) {
 // 4. Viewer: NiiVue for micrographs and maps, canvases for stacks, SVG for the FSC.
 const viewer = new NiiVue({ isDragDropEnabled: false });
 let attached = null;
-let outputRequest = null;
 let imageLoading = Promise.resolve();
+let displayedImage = null;
 
 function currentView(context) {
-  const request = {};
-  outputRequest = request;
-  return () => outputRequest === request && context();
+  const current = currentContext({ keys: [], channel: 'view' });
+  return () => current() && context();
 }
 
 function viewerReady() {
   attached ??= viewer.attachTo('gl1').then(() => {
+    if (!pageActive) return;
     viewer.isLegendVisible = false;
-    viewer.createExtensionContext().on('locationChange', event => { $('location').textContent = event.detail.string; });
+    viewer.createExtensionContext().on('locationChange', event => { if (pageActive) $('location').textContent = event.detail.string; });
   });
   return attached;
 }
@@ -204,6 +216,7 @@ function setView(view) {
 }
 
 toolbar.addEventListener('nd-view-change', ({ detail }) => {
+  requests.delete('view');
   if (!state.views[detail.value]) {
     status({ image: 'Open a micrograph or map from a job first', classes: 'Open class averages or particles from a job first', fsc: 'Open postprocess.star from a Post-processing job first' }[detail.value]);
     setView(Object.keys(state.views).find(view => view === 'image' || state.views[view]) ?? 'image');
@@ -229,8 +242,17 @@ function showMrc(mrc, label, current) {
     await viewerReady();
     if (!current()) return;
     const file = displayFile(mrc, label.replace(/[^\w.-]+/g, '_'));
-    await viewer.loadVolumes([{ url: file, name: file.name, colormap: 'gray' }]);
+    try {
+      await viewer.loadVolumes([{ url: file, name: file.name, colormap: 'gray' }]);
+    } finally {
+      // loadVolumes commits inside NiiVue after its own async decode. Restore the
+      // last committed image if this request lost ownership during that decode.
+      if (!current() && pageActive) {
+        await viewer.loadVolumes(displayedImage ? [{ url: displayedImage, name: displayedImage.name, colormap: 'gray' }] : []);
+      }
+    }
     if (!current()) return;
+    displayedImage = file;
     const volume = !mrc.stack && mrc.nz > 1;
     viewer.sliceType = volume ? SLICE_TYPE.MULTIPLANAR : SLICE_TYPE.AXIAL;
     if (volume) {
@@ -346,10 +368,7 @@ connection.addEventListener('nd-compute-change', ({ detail }) => {
   });
   if (fits) {
     log.log(`Compute server ready: ${connection.message.textContent}`, detail.state === 'simulated' ? 'warning' : 'success');
-    const current = currentContext();
-    loadProjects(recall('cryo-em.project')).catch(error => {
-      if (current()) status(`Projects unavailable: ${error.message}`, 'error');
-    });
+    void loadProjects(recall('cryo-em.project'));
   } else {
     state.jobs.clear();
     renderProjects([]);
@@ -369,25 +388,29 @@ function renderProjects(projects) {
 
 async function loadProjects(preferred = state.project?.id) {
   const client = state.client;
-  const selection = state.projectSelection;
-  const { projects } = await client.projects();
-  if (client !== state.client || selection !== state.projectSelection) return;
-  if (preferred && projects.some(project => project.id === preferred)) {
-    updateState({ project: { id: preferred } });
-    renderProjects(projects);
-    await openProject(preferred);
-  } else {
-    updateState({ project: null });
-    renderProjects(projects);
-    renderJobs();
-    renderForm();
+  const current = currentContext({ channel: 'projects' });
+  try {
+    const { projects } = await client.projects();
+    if (!current()) return;
+    if (preferred && projects.some(project => project.id === preferred)) {
+      updateState({ project: { id: preferred } });
+      renderProjects(projects);
+      await openProject(preferred);
+    } else {
+      updateState({ project: null });
+      renderProjects(projects);
+      renderJobs();
+      renderForm();
+    }
+  } catch (error) {
+    if (current()) status(`Projects unavailable: ${error.message}`, 'error');
   }
 }
 
 async function openProject(id) {
   stopFollowing();
-  const selection = {};
-  updateState({ projectSelection: selection, projectLoading: Boolean(id), project: id ? { id } : null, selectedJob: null });
+  updateState({ projectSelection: {}, projectLoading: Boolean(id), project: id ? { id } : null, selectedJob: null, jobSelection: {} });
+  const current = currentContext();
   state.jobs.clear();
   remember('cryo-em.project', id);
   syncControls();
@@ -398,17 +421,17 @@ async function openProject(id) {
       renderForm();
     }
   } catch (error) {
-    if (selection !== state.projectSelection) return;
+    if (!current()) return;
     updateState({ project: null });
     renderJobs();
     renderForm();
     status(`Project unavailable: ${error.message}`, 'error');
   } finally {
-    if (selection === state.projectSelection) {
+    if (current()) {
       updateState({ projectLoading: false }, { preserveNotice: true });
     }
   }
-  if (selection !== state.projectSelection) return;
+  if (!current()) return;
   $('jobsSection').open = Boolean(id);
   syncControls();
 }
@@ -416,30 +439,35 @@ async function openProject(id) {
 /** Re-read the project and the details (outputs) of jobs that changed. */
 async function refreshProject() {
   const client = state.client;
-  const context = currentContext();
-  const runSelection = state.runSelection;
-  const current = () => context() && runSelection === state.runSelection;
-  const project = await client.project(state.project.id);
-  if (!current()) return;
-  updateState({ project }, { preserveNotice: true });
-  await Promise.all(project.jobs.map(async job => {
-    const known = state.jobs.get(job.id);
-    if (TERMINAL.has(known?.status)) return;
-    const details = await client.job(job.id);
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'], channel: 'project' });
+  try {
+    const project = await client.project(state.project.id);
     if (!current()) return;
-    // A follower or overlapping refresh may have recorded completion during this read.
-    if (TERMINAL.has(state.jobs.get(job.id)?.status)) return;
-    state.jobs.set(job.id, { ...job, ...details });
-  }));
-  if (!current()) return;
-  // Terminal details take precedence over active snapshots, regardless of arrival order.
-  for (const job of project.jobs) job.status = state.jobs.get(job.id).status;
-  for (const id of state.jobs.keys()) if (!project.jobs.some(job => job.id === id)) state.jobs.delete(id);
-  renderJobs();
-  renderForm();
-  const active = [...project.jobs].reverse().find(job => ACTIVE.has(job.status));
-  // A refresh that started before a submission returned sees its job; the submit handler follows it.
-  if (active && !state.following && !state.submitting && !state.ended.has(active.id)) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
+    const details = await Promise.all(project.jobs.map(async job => {
+      const known = state.jobs.get(job.id);
+      if (TERMINAL.has(known?.status)) return known;
+      const detail = await client.job(job.id);
+      if (!current()) return;
+      return { ...job, ...detail };
+    }));
+    if (!current()) return;
+    // Commit the snapshot only after its job details are ready and still current.
+    for (const detail of details) {
+      // A follower may have recorded completion during this read.
+      if (!TERMINAL.has(state.jobs.get(detail.id)?.status)) state.jobs.set(detail.id, detail);
+    }
+    for (const job of project.jobs) job.status = state.jobs.get(job.id).status;
+    for (const id of state.jobs.keys()) if (!project.jobs.some(job => job.id === id)) state.jobs.delete(id);
+    updateState({ project }, { preserveNotice: true });
+    renderJobs();
+    renderForm();
+    const active = [...project.jobs].reverse().find(job => ACTIVE.has(job.status));
+    if (active && !state.following && !state.submitting && !state.ended.has(active.id)) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
+    return true;
+  } catch (error) {
+    if (current()) throw error;
+    return false;
+  }
 }
 
 $('projectSelect').addEventListener('change', event => {
@@ -447,13 +475,15 @@ $('projectSelect').addEventListener('change', event => {
 });
 
 $('createProject').addEventListener('click', async () => {
-  const current = currentContext();
   const name = $('projectName').value.trim();
   if (!name) {
     status('Name the new project first', 'error');
     $('projectName').focus();
     return;
   }
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'], channel: 'projectMutation' });
+  // A previous catalogue read must not select a project while this one is created.
+  requests.delete('projects');
   try {
     const client = state.client;
     const project = await client.createProject(name);
@@ -468,7 +498,7 @@ $('createProject').addEventListener('click', async () => {
 });
 
 $('deleteProject').addEventListener('click', async () => {
-  const current = currentContext();
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'], channel: 'projectMutation' });
   const client = state.client;
   const project = state.project;
   if (!project || !await confirmAction('Delete project', `Delete ${project.name} and every file its ${project.jobs?.length ?? 0} jobs wrote on the server? This cannot be undone.`, 'Delete project')) return;
@@ -476,7 +506,8 @@ $('deleteProject').addEventListener('click', async () => {
   try {
     await client.removeProject(project.id);
     if (!current()) return;
-    await openProject('');
+    // openProject is synchronous when clearing; do not yield before owning the list read.
+    void openProject('');
     await loadProjects(null);
   } catch (error) {
     if (!current()) return;
@@ -568,8 +599,7 @@ function primaryOutput(job) {
 }
 
 function selectJob(id, { show = false } = {}) {
-  outputRequest = null;
-  updateState({ selectedJob: id }, { preserveNotice: true });
+  updateState({ selectedJob: id, jobSelection: {} }, { preserveNotice: true });
   const job = state.jobs.get(id);
   renderJobs();
   $('outputSection').open = Boolean(job);
@@ -585,7 +615,8 @@ async function fetchOutput(id, name) {
 async function viewOutput(id, name) {
   const job = state.jobs.get(id);
   if (!job) return;
-  const current = currentView(currentContext());
+  const current = currentView(currentContext({ keys: ['client', 'projectSelection', 'runSelection', 'jobSelection'] }));
+  const footerCurrent = currentContext({ keys: ['noticeSelection'] });
   try {
     const file = await fetchOutput(id, name);
     if (!current()) return;
@@ -605,37 +636,44 @@ async function viewOutput(id, name) {
     if (!current()) return;
     $('viewerError').hidden = false;
     $('viewerError').textContent = `Cannot show ${name}: ${error.message}`;
-    status(`Cannot show ${name}: ${error.message}`, 'error');
+    if (footerCurrent()) status(`Cannot show ${name}: ${error.message}`, 'error');
   }
 }
 
 async function downloadOutput(id, name) {
-  const current = currentContext();
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection', 'jobSelection'], channel: 'download' });
+  const footerCurrent = currentContext({ keys: ['noticeSelection'] });
   try {
     const file = await fetchOutput(id, name);
     if (!current()) return;
     downloadFile(file);
-    status(`${name} downloaded`);
+    if (footerCurrent()) status(`${name} downloaded`);
   } catch (error) {
     if (!current()) return;
-    status(`Download failed: ${error.message}`, 'error');
+    if (footerCurrent()) status(`Download failed: ${error.message}`, 'error');
   }
 }
 
 $('deleteJob').addEventListener('click', async () => {
-  const current = currentContext();
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'], channel: 'jobMutation' });
+  const selected = currentContext({ keys: ['jobSelection'] });
   const client = state.client;
   const job = state.jobs.get(state.selectedJob);
   if (!job || !await confirmAction('Delete job', `Delete ${job.directory} and its files on the server? This cannot be undone.`, 'Delete job')) return;
-  if (!current()) return;
+  if (!current() || !selected()) return;
   try {
     await client.remove(job.id);
     if (!current()) return;
-    status(`${job.directory} deleted`);
-    updateState({ selectedJob: null });
-    await refreshProject();
+    if (selected()) {
+      status(`${job.directory} deleted`);
+      selectJob(null);
+    }
+    const refreshCurrent = currentContext({ keys: ['client', 'projectSelection', 'runSelection', 'jobSelection'] });
+    await refreshProject().catch(error => {
+      if (refreshCurrent()) status(`Project refresh failed: ${error.message}`, 'error');
+    });
   } catch (error) {
-    if (!current()) return;
+    if (!current() || !selected()) return;
     status(error instanceof ComputeError && error.status === 409 ? `${job.directory} cannot be deleted: ${error.message}` : `Could not delete ${job.directory}: ${error.message}`, 'error');
   }
 });
@@ -956,26 +994,31 @@ $('runButton').addEventListener('click', async () => {
   const submission = { message: `Submitting ${label}…`, cancellable: false };
   const runSelection = {};
   const client = state.client;
-  const selection = state.projectSelection;
   exampleControl.cancel();
   updateState({ submitting: submission, runSelection, exampleActivity: null });
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'] });
+  let accepted = false;
   try {
     const receipt = await client.submit(request.spec, request.files);
-    if (state.submitting !== submission) return;
+    if (!current() || state.submitting !== submission) return;
+    accepted = true;
     updateState({ submitting: null });
     log.log(`Submitted ${label}: ${JSON.stringify(request.spec)}`);
     const following = follow(receipt.id, label, runSelection);
-    await refreshProject();
-    await following;
+    await Promise.all([refreshProject(), following]);
   } catch (error) {
-    if (client !== state.client || selection !== state.projectSelection || runSelection !== state.runSelection) return;
+    if (!current()) return;
+    if (accepted) {
+      status(`Project refresh failed: ${error.message}`, 'error');
+      return;
+    }
     $('formMessage').textContent = error.message;
     $('formMessage').hidden = false;
     if (state.submitting === submission) updateState({ submitting: null });
     status(`${label} was not accepted: ${error.message}`, 'error', false);
     // The server may have created the job although no receipt arrived; a refresh follows it.
     await refreshProject().catch(() => {});
-    if (state.following) $('formMessage').hidden = true;
+    if (current() && state.following) $('formMessage').hidden = true;
   } finally {
     if (state.submitting === submission) updateState({ submitting: null }, { preserveNotice: true });
     syncControls();
@@ -990,36 +1033,39 @@ function queuedText(label, event, job) {
 
 async function follow(id, label, runSelection = {}) {
   const client = state.client;
-  const selection = state.projectSelection;
   const controller = new AbortController();
   const following = { id, controller, message: `${label}: queued`, cancellable: true };
   updateState({ following, runSelection, exampleActivity: null });
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'] });
+  const watching = () => current() && state.following === following && !controller.signal.aborted;
+  const selected = currentContext({ keys: ['jobSelection'] });
   exampleControl.cancel();
+  $('formMessage').hidden = true;
   syncControls();
   try {
     const done = await client.watch(id, {
       onStatus: event => {
-        if (controller.signal.aborted) return;
+        if (!watching()) return;
         if (event.status === 'queued') following.message = queuedText(label, event);
         else if (event.status === 'running') following.message = `${label}: running`;
         else if (event.status === 'cancelling') following.message = `${label}: cancelling…`;
         updateState({}, { preserveNotice: true });
       },
       onProgress: event => {
-        if (controller.signal.aborted) return;
+        if (!watching()) return;
         following.fraction = event.fraction;
         following.message = `${label}: ${event.stage}`;
         updateState({}, { preserveNotice: true });
       },
-      onLog: event => { if (!controller.signal.aborted) log.log(event.line, event.level); },
+      onLog: event => { if (watching()) log.log(event.line, event.level); },
     }, { signal: controller.signal });
-    if (controller.signal.aborted) return;
+    if (!watching()) return;
     state.jobs.set(id, done);
     state.ended.add(id);
     updateState({ following: null, notice: { message: `${label} finished${done.simulated ? ' (simulated)' : ''}`, success: true } });
     log.log(`${label} finished in ${done.directory}`, 'success');
   } catch (error) {
-    if (controller.signal.aborted) return;
+    if (!watching()) return;
     if (error instanceof ComputeError && error.job) {
       state.jobs.set(id, error.job);
       state.ended.add(id);
@@ -1031,22 +1077,26 @@ async function follow(id, label, runSelection = {}) {
     if (state.following === following) updateState({ following: null }, { preserveNotice: true });
     syncControls();
   }
-  if (client !== state.client || selection !== state.projectSelection || runSelection !== state.runSelection || !state.project) return;
-  await refreshProject();
-  if (client !== state.client || selection !== state.projectSelection || runSelection !== state.runSelection) return;
+  if (!current() || !state.project) return;
+  const refreshed = await refreshProject().catch(error => {
+    if (current()) status(`Project refresh failed: ${error.message}`, 'error');
+    return false;
+  });
+  if (!current() || !selected() || !refreshed) return;
   selectJob(id, { show: state.jobs.get(id)?.status === 'succeeded' });
 }
 
 $('cancelButton').addEventListener('click', async () => {
   const running = state.following;
   if (!running) return;
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection', 'following'], channel: 'cancel' });
   running.cancellable = false;
   running.message = 'Cancelling…';
   updateState({}, { preserveNotice: true });
   try {
     await state.client.cancel(running.id);
   } catch (error) {
-    if (state.following !== running) return;
+    if (!current()) return;
     running.message = `Cancel failed: ${error.message}`;
     running.cancellable = true;
     updateState({}, { preserveNotice: true });
@@ -1127,6 +1177,7 @@ registerAppAutomation({
 renderForm();
 renderJobs();
 window.addEventListener('pagehide', () => {
+  pageActive = false;
   exampleControl.destroy();
   state.following?.controller.abort();
 });

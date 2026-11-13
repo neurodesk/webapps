@@ -404,8 +404,11 @@ test("a project read from before a step ended does not follow that step again", 
   // Let the follower render the final state before the older snapshot arrives.
   await expect(page.locator("#jobList")).toContainText("Import/job001 · succeeded");
   const previousField = await page.locator("#stepForm > :first-child").elementHandle();
+  const lateResponse = page.waitForResponse(response => response.url().startsWith(COMPUTE_URL) && response.request().method() === "GET");
   releaseRead();
-  await expect.poll(() => previousField.evaluate(field => field.isConnected)).toBe(false);
+  await lateResponse;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(await previousField.evaluate(field => field.isConnected)).toBe(true);
   expect(streams).toBe(1);
   await expect(page.locator("#jobList")).toContainText("Import/job001 · succeeded");
   await expect(page.locator("#statusText")).not.toContainText("(Import/");
@@ -444,8 +447,11 @@ test("job details read before a step ended cannot replace its final details", as
   await expect(page.locator("#jobSummary")).toContainText("Import/job001 · succeeded", { timeout: STEP_TIMEOUT });
   await expect(page.locator("#resultList")).toContainText("movies.star");
   const previousField = await page.locator("#stepForm > :first-child").elementHandle();
+  const lateResponse = page.waitForResponse(response => response.url().startsWith(COMPUTE_URL) && response.request().method() === "GET");
   releaseRead();
-  await expect.poll(() => previousField.evaluate(field => field.isConnected)).toBe(false);
+  await lateResponse;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(await previousField.evaluate(field => field.isConnected)).toBe(true);
   await expect(page.locator("#jobSummary")).toContainText("Import/job001 · succeeded");
   await expect(page.locator("#resultList")).toContainText("movies.star");
   expect(streams).toBe(1);
@@ -794,4 +800,331 @@ test("a failed example download can be retried", async ({ page }) => {
   await expect(page.locator("footer#status #statusText")).toHaveText("Tutorial settings ready. Connect a server with its movies; see Standalone for setup.");
   await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
   expect(attempts).toBe(2);
+});
+
+
+for (const fails of [false, true]) {
+  test(`a superseded refresh within one run cannot replace completion (${fails ? "error" : "snapshot"})`, async ({ page }) => {
+    await connect(page);
+    const id = await createProject(page, "Same-run refresh");
+    await loadExample(page);
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    let reads = 0;
+    await page.route(`${COMPUTE_URL}/api/v1/projects/${id}`, async route => {
+      if (route.request().method() !== "GET" || ++reads !== 1) return route.fallback();
+      const response = await route.fetch();
+      await held;
+      if (fails) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid", message: "Superseded same-run refresh" } }) });
+      await route.fulfill({ response, json: { ...await response.json(), jobs: [] } });
+    });
+    await run(page, "import");
+    await expect(page.locator("#jobSummary")).toContainText("Import/job001 · succeeded");
+    const completed = page.waitForResponse(response => response.url() === `${COMPUTE_URL}/api/v1/projects/${id}`);
+    release();
+    await completed;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator("#statusText")).toContainText("Import movies finished");
+    await expect(page.locator("#jobList")).toContainText("Import/job001 · succeeded");
+    await expect(page.locator("#resultList")).toContainText("movies.star");
+    await expect(page.locator("#formMessage")).toBeHidden();
+  });
+}
+
+test("an older download error cannot replace a later download status", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "Ordered downloads");
+  await loadExample(page);
+  await run(page, "import");
+  await expect(page.locator("#resultList")).toContainText("movies.star");
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let reads = 0;
+  await page.route(`${COMPUTE_URL}/api/v1/jobs/*/outputs/*`, async route => {
+    if (++reads !== 1) return route.fallback();
+    await held;
+    await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid", message: "Obsolete download error" } }) });
+  });
+  const button = page.locator('#resultList [data-stage$="/movies.star"] .nd-download-btn');
+  await button.click();
+  await expect.poll(() => reads).toBe(1);
+  const downloaded = page.waitForEvent("download");
+  await button.click();
+  await downloaded;
+  await expect(page.locator("#statusText")).toContainText("downloaded");
+  const completed = page.waitForResponse(response => response.status() === 400 && response.url().includes("/outputs/"));
+  release();
+  await completed;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator("#statusText")).toContainText("downloaded");
+});
+
+test("an output finishing after its job was deleted cannot replace the view", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "Deleted output");
+  await loadExample(page);
+  await run(page, "import");
+  await run(page, "motioncorr");
+  await expect(page.locator("#imageLabel")).toContainText("MotionCorr/job002/Movies/");
+  const label = await page.locator("#imageLabel").textContent();
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let reading = false;
+  await page.route(`${COMPUTE_URL}/api/v1/jobs/*/outputs/*`, async route => {
+    reading = true;
+    await held;
+    await route.fulfill({ body: writeMrc({ nx: 2, ny: 2, nz: 2, data: new Float32Array(8), stack: true }) });
+  });
+  await page.locator('#resultList [data-stage$=".mrc"] .nd-view-btn').nth(1).click();
+  await expect.poll(() => reading).toBe(true);
+  await page.locator("#deleteJob").click();
+  await page.locator("#confirmDialog").getByRole("button", { name: "Delete job", exact: true }).click();
+  await expect(page.locator("#jobList")).not.toContainText("MotionCorr/job002");
+  const completed = page.waitForResponse(response => response.url().includes("/outputs/"));
+  release();
+  await completed;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator("#imageLabel")).toHaveText(label);
+});
+
+for (const fails of [false, true]) {
+  test(`an old project catalogue cannot overwrite project creation (${fails ? "error" : "snapshot"})`, async ({ page }) => {
+    const paired = await page.request.post(`${COMPUTE_URL}/api/v1/pair`, { data: { code: COMPUTE_TOKEN } });
+    const { token } = await paired.json();
+    const created = await page.request.post(`${COMPUTE_URL}/api/v1/projects`, {
+      headers: { Authorization: `Bearer ${token}` }, data: { name: "Remembered project" },
+    });
+    const remembered = await created.json();
+    await page.addInitScript(id => localStorage.setItem("cryo-em.project", id), remembered.id);
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    let reading = false;
+    await page.route(`${COMPUTE_URL}/api/v1/projects`, async route => {
+      if (route.request().method() !== "GET" || reading) return route.fallback();
+      const response = await route.fetch();
+      reading = true;
+      await held;
+      if (fails) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid", message: "Obsolete catalogue error" } }) });
+      await route.fulfill({ response });
+    });
+    await connect(page);
+    await expect.poll(() => reading).toBe(true);
+    await page.locator("#projectName").fill("Creation after catalogue");
+    // Hold creation so the old catalogue arrives while projectSelection is still unchanged.
+    let releaseCreation;
+    const creationHeld = new Promise(resolve => { releaseCreation = resolve; });
+    let creating = false;
+    await page.route(`${COMPUTE_URL}/api/v1/projects`, async route => {
+      if (route.request().method() !== "POST") return route.fallback();
+      creating = true;
+      await creationHeld;
+      await route.continue();
+    });
+    await page.locator("#createProject").click();
+    await expect.poll(() => creating).toBe(true);
+    await page.locator("#stepSelect").selectOption("motioncorr");
+    const completed = page.waitForResponse(response => response.url().endsWith("/projects") && response.request().method() === "GET");
+    release();
+    await completed;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator("#statusText")).toHaveText("No project selected · choose or create a project");
+    releaseCreation();
+    await expect(page.locator("#projectSelect option:checked")).toHaveText("Creation after catalogue");
+  });
+}
+
+test("a delayed job deletion preserves a newer job selection", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "Delete selection");
+  await loadExample(page);
+  await run(page, "import");
+  await run(page, "motioncorr");
+  await expect(page.locator("#imageLabel")).toContainText("MotionCorr/job002/Movies/");
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let deleting = false;
+  await page.route(new RegExp(`${COMPUTE_URL}/api/v1/jobs/[^/]+$`), async route => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    const response = await route.fetch();
+    deleting = true;
+    await held;
+    await route.fulfill({ response });
+  });
+  await page.locator("#deleteJob").click();
+  await page.locator("#confirmDialog").getByRole("button", { name: "Delete job", exact: true }).click();
+  await expect.poll(() => deleting).toBe(true);
+  await page.getByRole("button", { name: "View Import/job001", exact: true }).click();
+  release();
+  await expect(page.locator("#jobList")).not.toContainText("MotionCorr/job002");
+  await expect(page.locator("#jobSummary")).toContainText("Import/job001");
+  await expect(page.locator("#resultList")).toContainText("movies.star");
+});
+
+for (const fails of [false, true]) {
+  test(`a superseded project creation cannot replace newer guidance (${fails ? "error" : "success"})`, async ({ page }) => {
+    await connect(page);
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    let creating = false;
+    await page.route(`${COMPUTE_URL}/api/v1/projects`, async route => {
+      if (route.request().method() !== "POST" || creating) return route.fallback();
+      const response = await route.fetch();
+      creating = true;
+      await held;
+      if (fails) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid", message: "Obsolete creation error" } }) });
+      await route.fulfill({ response });
+    });
+    await page.locator("#projectName").fill("Old creation");
+    await page.locator("#createProject").click();
+    await expect.poll(() => creating).toBe(true);
+    let releaseNew;
+    const newHeld = new Promise(resolve => { releaseNew = resolve; });
+    let newCreating = false;
+    await page.route(`${COMPUTE_URL}/api/v1/projects`, async route => {
+      if (route.request().method() !== "POST") return route.fallback();
+      newCreating = true;
+      await newHeld;
+      await route.continue();
+    });
+    await page.locator("#projectName").fill("New creation");
+    await page.locator("#createProject").click();
+    await expect.poll(() => newCreating).toBe(true);
+    const completed = page.waitForResponse(response => response.url().endsWith("/projects") && response.request().method() === "POST");
+    release();
+    await completed;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator("#statusText")).toHaveText("No project selected · choose or create a project");
+    await expect(page.locator("#projectName")).toHaveValue("New creation");
+    await expect(page.locator("#projectSelect")).toHaveValue("");
+    releaseNew();
+    await expect(page.locator("#projectSelect option:checked")).toHaveText("New creation");
+  });
+}
+
+test("a detached NiiVue decode restores the previously displayed image", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.volumeResponses = 0;
+    const OriginalWorker = window.Worker;
+    window.Worker = class extends OriginalWorker {
+      constructor(...args) {
+        super(...args);
+        this.addEventListener("message", event => {
+          if (event.data?.volume) window.volumeResponses += 1;
+        });
+      }
+      postMessage(...args) {
+        if (window.holdImageCommit && args[0]?.url instanceof File && args[0].url.name.endsWith(".nii")) {
+          window.holdImageCommit = false;
+          window.imageCommitHeld = true;
+          window.releaseImageCommit = () => super.postMessage(...args);
+          return;
+        }
+        return super.postMessage(...args);
+      }
+    };
+  });
+  await connect(page);
+  await createProject(page, "Detached viewer load");
+  await loadExample(page);
+  await run(page, "import");
+  await run(page, "motioncorr");
+  await expect(page.locator("#imageLabel")).toContainText("MotionCorr/job002/Movies/");
+  const before = await page.locator("#gl1").screenshot();
+  const responses = await page.evaluate(() => {
+    window.holdImageCommit = true;
+    return window.volumeResponses;
+  });
+  await page.route(`${COMPUTE_URL}/api/v1/jobs/*/outputs/*`, route => route.fulfill({
+    body: writeMrc({ nx: 2, ny: 2, nz: 1, data: new Float32Array([0, 1, 2, 3]) }),
+  }));
+  await page.locator('#resultList [data-stage$=".mrc"] .nd-view-btn').nth(1).click();
+  await expect.poll(() => page.evaluate(() => window.imageCommitHeld)).toBe(true);
+  await page.locator("#computeConnection").getByRole("button", { name: "Disconnect", exact: true }).click();
+  await page.evaluate(() => window.releaseImageCommit());
+  await expect.poll(() => page.evaluate(() => window.volumeResponses)).toBe(responses + 2);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(await page.locator("#gl1").screenshot()).toEqual(before);
+  await expect(page.locator("#statusText")).toContainText("Connect a server");
+});
+
+for (const phase of ["submission refresh", "completion refresh"]) {
+  test(`a current ${phase} failure is handled without claiming submission failed`, async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await connect(page);
+    const id = await createProject(page, "Refresh error handling");
+    await loadExample(page);
+    let reads = 0;
+    const failedRead = phase === "submission refresh" ? 1 : 2;
+    await page.route(`${COMPUTE_URL}/api/v1/projects/${id}`, route => {
+      if (route.request().method() !== "GET" || ++reads !== failedRead) return route.fallback();
+      return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid", message: "Project refresh unavailable" } }) });
+    });
+    await page.locator("#runButton").click();
+    await expect(page.locator("#cancelButton")).toBeHidden({ timeout: STEP_TIMEOUT });
+    await expect(page.locator("#statusText")).toContainText(phase === "submission refresh" ? "Import movies finished" : "Project refresh failed:", { timeout: STEP_TIMEOUT });
+    await expect(page.locator("#statusText")).not.toContainText("was not accepted");
+    await expect(page.locator("#formMessage")).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+}
+
+for (const fails of [false, true]) {
+  test(`a download finishing after a step edit preserves current guidance (${fails ? "error" : "success"})`, async ({ page }) => {
+    await connect(page);
+    await createProject(page, "Download guidance");
+    await loadExample(page);
+    await run(page, "import");
+    await expect(page.locator("#resultList")).toContainText("movies.star");
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    let reading = false;
+    await page.route(`${COMPUTE_URL}/api/v1/jobs/*/outputs/*`, async route => {
+      const response = await route.fetch();
+      reading = true;
+      await held;
+      if (fails) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid", message: "Download from before the edit" } }) });
+      await route.fulfill({ response });
+    });
+    await page.locator('#resultList [data-stage$="/movies.star"] .nd-download-btn').click();
+    await expect.poll(() => reading).toBe(true);
+    await page.locator("#stepSelect").selectOption("motioncorr");
+    const completed = page.waitForResponse(response => response.url().includes("/outputs/"));
+    const downloaded = fails ? null : page.waitForEvent("download");
+    release();
+    await completed;
+    if (downloaded) await downloaded;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator("#statusText")).toHaveText("Motion correction selected · review its inputs");
+  });
+}
+
+test("a pending output cannot override a newer toolbar view selection", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "View selection currency");
+  await loadExample(page);
+  await run(page, "import");
+  await run(page, "motioncorr");
+  await expect(page.locator("#imageLabel")).toContainText("MotionCorr/job002/Movies/");
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let reads = 0;
+  await page.route(`${COMPUTE_URL}/api/v1/jobs/*/outputs/*`, async route => {
+    const reading = ++reads;
+    if (reading === 2) await held;
+    await route.fulfill({ body: writeMrc({ nx: 2, ny: 2, nz: reading === 1 ? 2 : 1, data: new Float32Array(reading === 1 ? 8 : 4), stack: reading === 1 }) });
+  });
+  const view = page.locator('#resultList [data-stage$=".mrc"] .nd-view-btn').first();
+  await view.click();
+  await expect(page.locator("#classView")).toBeVisible();
+  await page.locator("nd-viewer-toolbar").getByRole("button", { name: "Image", exact: true }).click();
+  await view.click();
+  await expect.poll(() => reads).toBe(2);
+  await page.locator("nd-viewer-toolbar").getByRole("button", { name: "Classes", exact: true }).click();
+  const completed = page.waitForResponse(response => response.url().includes("/outputs/"));
+  release();
+  await completed;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator("#classView")).toBeVisible();
+  await expect(page.locator("#gl1")).toBeHidden();
 });
