@@ -60,6 +60,17 @@ of its stage's overlay in the commit. Use it wherever a newer load can
 supersede one that is still being fetched or decoded. Pass `NVImage` to the
 constructor when NiiVue is imported as a module.
 
+`PipelineExecutor.loadVolume(inputData, payload, { assertCurrent })` and
+`executeCommand(type, data, { assertCurrent })` check ownership after worker
+initialization, immediately before state changes and dispatch. Without the
+optional check, commands retain their existing behavior. Initialization waits
+belong to a worker session and reject when that worker is cancelled or fails.
+A replacement worker cannot complete an older session's initialization wait.
+
+Checked viewer commits release uninserted images and unused object URLs in
+`finally`, including when synchronous NiiVue insertion or configuration throws.
+Images that reach the viewer keep their URL until they leave it.
+
 ## Verified downloads
 
 `fetchModel` from `@neurodesk/webapp-components/worker` downloads model and example bytes,

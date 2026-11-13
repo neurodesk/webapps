@@ -381,3 +381,22 @@ test('a stack reports the first failed member while a sibling never ends', async
     urls.restore();
   }
 });
+
+test('a synchronous stack insertion failure releases decoded siblings and unused URLs', async () => {
+  const urls = countingUrls();
+  try {
+    const { nv, decodes, viewer } = twoPhase();
+    nv.addVolume = () => { throw new Error('viewer insertion failed'); };
+    const stack = viewer.loadVolumeStack([
+      { file: file('base.nii') },
+      { file: file('overlay.nii') },
+    ], { assertCurrent: () => {} });
+    decodes.forEach(decode => decode.finish());
+    await assert.rejects(stack, /viewer insertion failed/);
+    assert.equal(viewer.decodedUrls.size, 0, 'uninserted siblings must be released');
+    assert.equal(viewer.insertedUrls.size, 0, 'failed insertions must not retain URLs');
+    assert.deepEqual(urls.revoked.sort(), ['blob:base.nii#1', 'blob:overlay.nii#2']);
+  } finally {
+    urls.restore();
+  }
+});

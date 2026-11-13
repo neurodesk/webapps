@@ -170,6 +170,17 @@ export class ViewerController {
     }
   }
 
+  // Even a synchronous insertion/configuration error must release every
+  // uninserted decoded member. Images that reached NiiVue retain their URL.
+  commitDecodedVolumes(images, commit) {
+    try {
+      return commit();
+    } finally {
+      images.forEach(image => this.discardDecodedVolume(image));
+      this.releaseUnusedObjectUrls();
+    }
+  }
+
   // What NiiVue's addVolumeFromUrl does once the image is decoded.
   insertDecodedVolume(image, file) {
     const url = this.decodedUrls.get(image);
@@ -196,9 +207,11 @@ export class ViewerController {
       this.updateOutput(`Error loading ${file.name}: ${failure.message}`);
       return false;
     }
-    this.commitBaseVolume(images[0], file, options);
-    options.onCommit?.();
-    return true;
+    return this.commitDecodedVolumes(images, () => {
+      this.commitBaseVolume(images[0], file, options);
+      options.onCommit?.();
+      return true;
+    });
   }
 
   async loadBaseVolume(file, options = {}) {
@@ -257,13 +270,15 @@ export class ViewerController {
       this.updateOutput(`Error loading viewer volumes: ${failure.message}`);
       return false;
     }
-    this.commitBaseVolume(images[0], base.file, { ...base, releaseUnusedUrls: false });
-    if (base.labelMask) this.configureSegmentationVolume(0, base.colormap || 'labels');
-    overlays.forEach((entry, index) => this.commitOverlay(images[index + 1], entry.file, configs[index]));
-    this.currentVolumeStackSignature = this.getVolumeStackSignature(entries);
-    this.releaseUnusedObjectUrls();
-    options.onCommit?.();
-    return true;
+    return this.commitDecodedVolumes(images, () => {
+      this.commitBaseVolume(images[0], base.file, { ...base, releaseUnusedUrls: false });
+      if (base.labelMask) this.configureSegmentationVolume(0, base.colormap || 'labels');
+      overlays.forEach((entry, index) => this.commitOverlay(images[index + 1], entry.file, configs[index]));
+      this.currentVolumeStackSignature = this.getVolumeStackSignature(entries);
+      this.releaseUnusedObjectUrls();
+      options.onCommit?.();
+      return true;
+    });
   }
 
   async loadVolumeStack(entries = [], options = {}) {
@@ -325,10 +340,12 @@ export class ViewerController {
       this.updateOutput(`Error loading overlay: ${failure.message}`);
       return false;
     }
-    if (config.replaceStage) this.removeVolumeForStage(config.stage);
-    this.commitOverlay(images[0], file, config);
-    config.onCommit?.();
-    return true;
+    return this.commitDecodedVolumes(images, () => {
+      if (config.replaceStage) this.removeVolumeForStage(config.stage);
+      this.commitOverlay(images[0], file, config);
+      config.onCommit?.();
+      return true;
+    });
   }
 
   commitOverlay(image, file, config) {
