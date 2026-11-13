@@ -5,13 +5,15 @@ function record_geometry(source, input, output, spmSource, mode)
 % input the extracted geometry-inputs.json archive. mode 'polyshape-probe'
 % records only the focused polyshape probes (grid-decade sweep and bisection,
 % held-out clouds, extreme grids) instead of the full geometry reference; mode
-% 'polyshape-causal' records polyshape_causal_cases.m's controlled polygons.
+% 'polyshape-causal' records polyshape_causal_cases.m's controlled polygons;
+% 'polyshape-reproducers' records the reduced reproducers in
+% polyshape-reproducers.json (polyshape_reproducer_cases.m).
 arguments
     source (1,:) char
     input (1,:) char
     output (1,:) char
     spmSource (1,:) char
-    mode (1,:) char {mustBeMember(mode, {'full', 'polyshape-probe', 'polyshape-causal'})} = 'full'
+    mode (1,:) char {mustBeMember(mode, {'full', 'polyshape-probe', 'polyshape-causal', 'polyshape-reproducers'})} = 'full'
 end
 assert(isfile(fullfile(output, 'source.json')), 'Run prepare.py first');
 assert(~isfile(fullfile(output, 'geometry.json')), 'Use a fresh output directory');
@@ -30,13 +32,15 @@ meta.functions = struct('polyshape', which('polyshape'), 'convhull', which('conv
     'delaunay', which('delaunay'), 'delaunayTriangulation', which('delaunayTriangulation'), ...
     'clusterroi', which('samsrf_clusterroi'), 'cfparam', which('samsrf_cfparam_loop'), ...
     'gifti', which('gifti'));
-if any(strcmp(mode, {'polyshape-probe', 'polyshape-causal'}))
+if any(strcmp(mode, {'polyshape-probe', 'polyshape-causal', 'polyshape-reproducers'}))
     meta.mode = mode;
     write_json('environment.json', meta);
     if strcmp(mode, 'polyshape-probe')
         cases = probe_cases();
-    else
+    elseif strcmp(mode, 'polyshape-causal')
         cases = causal_cases();
+    else
+        cases = reproducer_cases();
     end
     write_json('geometry.json', struct('mode', mode, 'cases', {cases}));
     fprintf('Recorded %d MATLAB polyshape probe cases. Port parity is not implied.\n', numel(cases));
@@ -354,6 +358,12 @@ for k = 1:numel(families)
     end
     cases{end+1} = with_parameters(polygon_batch(family.id, polygons, true, true), parameters); %#ok<AGROW>
 end
+end
+
+function cases = reproducer_cases()
+spec = jsondecode(fileread(fullfile(fileparts(mfilename('fullpath')), 'polyshape-reproducers.json')));
+[polygons, parameters] = polyshape_reproducer_cases(point_clouds(), spec);
+cases = {with_parameters(polygon_batch('reproducer_cases', polygons, true, true), parameters)};
 end
 
 function [polygons, parameters] = gap_bisection(combinations)
