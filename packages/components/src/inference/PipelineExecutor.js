@@ -87,12 +87,19 @@ export class PipelineExecutor {
 
   waitUntilReady() {
     return new Promise((resolve, reject) => {
+      const session = this.workerSession;
       const started = Date.now();
       const timeoutMs = 120000;
       const interval = setInterval(() => {
-        if (this.workerReady) {
+        if (this.workerSession !== session) {
+          clearInterval(interval);
+          reject(new DOMException('The worker was replaced.', 'AbortError'));
+        } else if (this.workerReady) {
           clearInterval(interval);
           resolve();
+        } else if (!this.workerInitializing) {
+          clearInterval(interval);
+          reject(new Error('Worker initialization failed'));
         } else if (Date.now() - started > timeoutMs) {
           clearInterval(interval);
           reject(new Error('Worker initialization timed out'));
@@ -230,8 +237,9 @@ export class PipelineExecutor {
     this.post(WorkerRequestType.LOAD, { ...payload, inputData });
   }
 
-  async loadVolume(inputData, payload = {}) {
+  async loadVolume(inputData, payload = {}, { assertCurrent } = {}) {
     await this.initialize();
+    assertCurrent?.();
     this.inputVolumeBuffer = inputData.slice(0);
     this.running = true;
     this.currentRunningStep = 'load';
@@ -260,6 +268,7 @@ export class PipelineExecutor {
 
   async executeCommand(type, data = {}, options = {}) {
     await this.initialize();
+    options.assertCurrent?.();
     const step = options.step || null;
     if (step) {
       if (options.checkpoint !== false && (!this.pendingAbortCheckpoint || this.pendingAbortCheckpoint.step !== step)) {
@@ -412,7 +421,7 @@ export class PipelineExecutor {
   }
 
   cancel() {
-    if (!this.running) return;
+    if (!this.running && !this.workerInitializing) return;
     this.updateOutput('Cancelling...');
     try {
       this.post(WorkerRequestType.CANCEL, {}, { transfer: false });
