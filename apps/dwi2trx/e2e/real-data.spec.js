@@ -108,7 +108,7 @@ test('Philips real-data crop completes tractography without losing the hardware 
   const dispatches = await page.evaluate(() => window.trackingGpuEvents.filter(event => event.kind === 'dispatch'
     && ['getNumStreamlinesBoot_k', 'genStreamlinesMergeBoot_k'].includes(event.entryPoint)));
   expect(dispatches.filter(event => event.entryPoint === 'genStreamlinesMergeBoot_k').length).toBeGreaterThan(1);
-  expect(dispatches.every(event => event.counts[0] <= 16 && event.counts[1] === 1 && event.counts[2] === 1)).toBe(true);
+  expect(dispatches.every(event => event.counts[0] <= 32 && event.counts[1] === 1 && event.counts[2] === 1)).toBe(true);
   const [artifactId, artifact] = Object.entries(snapshot.report.artifacts).find(([, artifact]) => artifact.role === 'tracts');
   const pending = page.waitForEvent('download');
   await page.evaluate(artifactId => globalThis.neurodeskAutomation.dispatch('download', { artifactId }), artifactId);

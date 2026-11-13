@@ -119,7 +119,7 @@ fn check_point_fn(
     tidx: u32, tidy: u32
 ) -> i32 {
     let rv = trilinear_interp_metric(dimx, dimy, dimz, point, tidy);
-    subgroupBarrier();
+    workgroupBarrier();
 
     if (rv != 0) {
         return OUTSIDEIMAGE;
@@ -149,7 +149,7 @@ fn peak_directions_fn(
     let odf_min_raw = sg_min_reduce_wg(samplm_nr, odf_offset, REAL_MAX, tidx);
     let odf_min = max(0.0, odf_min_raw);
 
-    subgroupBarrier();
+    workgroupBarrier();
 
     // Local maxima detection using sphere edges (atomic ops)
     for (var j = 0; j < num_edges; j += i32(THR_X_SL)) {
@@ -170,7 +170,7 @@ fn peak_directions_fn(
             }
         }
     }
-    subgroupBarrier();
+    workgroupBarrier();
 
     let comp_thres = relative_peak_thres *
         sg_max_mask_transl(samplm_nr, ind_offset, odf_offset, -odf_min, REAL_MIN, tidx);
@@ -196,7 +196,7 @@ fn peak_directions_fn(
         }
         n += i32(countOneBits(msk));
     }
-    subgroupBarrier();
+    n = workgroup_uniform_i32(n, tidx);
 
     // Sort local maxima by ODF value (descending)
     if (n > 0 && n < i32(THR_X_SL)) {
@@ -207,13 +207,13 @@ fn peak_directions_fn(
             k = wg_sh_mem[odf_offset + u32(val)];
         }
         let sorted = warp_sort_kv_dec(k, val, tidx);
-        subgroupBarrier();
+        workgroupBarrier();
 
         if (i32(tidx) < n) {
             atomicStore(&wg_sh_ind[ind_offset + tidx], sorted.val);
         }
     }
-    subgroupBarrier();
+    workgroupBarrier();
 
     // Remove similar vertices (single-threaded on lane 0)
     if (n != 0) {
@@ -252,8 +252,8 @@ fn peak_directions_fn(
             }
             n = k;
         }
-        n = i32(subgroupBroadcastFirst(u32(n)));
-        subgroupBarrier();
+        n = workgroup_uniform_i32(n, tidx);
+        workgroupBarrier();
     }
 
     return n;

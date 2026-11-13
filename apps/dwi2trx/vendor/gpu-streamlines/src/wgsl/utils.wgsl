@@ -4,6 +4,21 @@
 // Uses subgroup operations (subgroupShuffleXor, subgroupShuffleUp, etc.)
 // via the `enable subgroups;` directive prepended by the Python compiler.
 
+// ── workgroup-uniform values ────────────────────────────────────────
+// A workgroup is one 32-lane subgroup, so a value every lane agrees on (a
+// ballot count, a reduction) is uniform across the workgroup. Tint cannot
+// prove that, and workgroupBarrier() must sit in control flow it can prove
+// uniform; routing such a value through workgroupUniformLoad gives it that
+// proof. Lane 0's value is the one returned.
+var<workgroup> wg_uniform_i32: i32;
+
+fn workgroup_uniform_i32(v: i32, tidx: u32) -> i32 {
+    if (tidx == 0u) {
+        wg_uniform_i32 = v;
+    }
+    return workgroupUniformLoad(&wg_uniform_i32);
+}
+
 // ── max reduction across subgroup ──────────────────────────────────
 fn sg_max_reduce_wg(n: i32, wg_offset: u32, min_val: f32, tidx: u32) -> f32 {
     var m = min_val;
@@ -58,7 +73,7 @@ fn prefix_sum_sh(wg_offset: u32, len: i32, tidx: u32) {
         if (tidx == 0u && j != 0) {
             wg_sh_mem[wg_offset + u32(j)] += wg_sh_mem[wg_offset + u32(j - 1)];
         }
-        subgroupBarrier();
+        workgroupBarrier();
 
         var t_pmf: f32 = 0.0;
         if (j + i32(tidx) < len) {
@@ -73,6 +88,6 @@ fn prefix_sum_sh(wg_offset: u32, len: i32, tidx: u32) {
         if (j + i32(tidx) < len) {
             wg_sh_mem[wg_offset + u32(j) + tidx] = t_pmf;
         }
-        subgroupBarrier();
+        workgroupBarrier();
     }
 }

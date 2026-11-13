@@ -159,11 +159,11 @@ test('bounded dispatch windows and step budgets write the same TRX as one comman
   const bounded = await trackExample(browser, baseURL);
   expect(single.parameters.maxWorkgroupsPerDispatch).toBe(1_000_000);
   expect(single.parameters.maxStepsPerDispatch).toBe(1_000_000);
-  expect(bounded.parameters.maxWorkgroupsPerDispatch).toBe(16);
+  expect(bounded.parameters.maxWorkgroupsPerDispatch).toBe(32);
   expect(bounded.parameters.maxStepsPerDispatch).toBe(32);
   const largest = run => Math.max(...run.passes.map(({ x }) => x));
-  expect(largest(single), 'the example must need more than one 16-workgroup window').toBeGreaterThan(16);
-  expect(largest(bounded)).toBeLessThanOrEqual(16);
+  expect(largest(single), 'the example must need more than one 32-workgroup window').toBeGreaterThan(32);
+  expect(largest(bounded)).toBeLessThanOrEqual(32);
   expect(total(bounded, 'getNumStreamlinesBoot_k')).toBe(total(single, 'getNumStreamlinesBoot_k'));
   expect(total(single, 'genStreamlinesMergeBoot_k')).toBe(total(single, 'getNumStreamlinesBoot_k'));
   expect(total(bounded, 'genStreamlinesMergeBoot_k'), 'some seeds must need more than one 32-step command')

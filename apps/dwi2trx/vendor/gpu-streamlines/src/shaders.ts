@@ -40,11 +40,12 @@ const BOOT_PARTS: ReadonlyArray<readonly [string, string]> = [
 //   2. `diagnostic(off, subgroup_uniformity)` — Tint's uniformity analysis
 //      can't prove the (genuinely subgroup-uniform) reduction results feeding
 //      subgroupBroadcastFirst/Shuffle are uniform; Naga doesn't analyse this.
-//   3. strip `subgroupBarrier();` — Dawn lacks the optional `subgroup-barrier`
-//      feature. Apple's subgroup size (32) == the reduction width and executes
-//      in lockstep, so the barriers are redundant here (the reference makes the
-//      feature optional). Removing them in the reference left the streamlines
-//      statistically unchanged.
+//   3. one 32-lane row per workgroup instead of two, with workgroupBarrier()
+//      where the reference has subgroupBarrier(), which WGSL lacks (#598). The
+//      barrier then orders the row's workgroup memory on every GPU, including
+//      ones whose lanes are not in lockstep (NVIDIA Volta and later). Values the
+//      barriers branch on pass through workgroup_uniform_i32 (utils.wgsl) so
+//      Tint's uniformity analysis accepts them.
 // (globals.wgsl's REAL_MAX literal was also nudged to a representable f32.)
 //   4. with the `subgroup-size-control` feature, `@subgroup_size(32)` on both
 //      entry points: Vulkan then compiles them with requiredSubgroupSize 32 and
@@ -52,15 +53,13 @@ const BOOT_PARTS: ReadonlyArray<readonly [string, string]> = [
 const BROWSER_PREAMBLE =
   'enable subgroups;\ndiagnostic(off, subgroup_uniformity);\n'
 
-const ENTRY_ATTRIBUTE = '@compute @workgroup_size(32, 2, 1)'
+const ENTRY_ATTRIBUTE = '@compute @workgroup_size(32, 1, 1)'
 
 /** Concatenated WGSL source for the Boot/OPDT shader module (browser-adapted).
  *  `subgroupSize` pins the entry points' subgroup size; it needs a device with
  *  the `subgroup-size-control` feature. */
 export function bootShaderSource(subgroupSize?: number): string {
-  let body = BOOT_PARTS.map(([name, src]) => `// ── ${name} ──\n${src}`).join(
-    '\n',
-  ).replace(/subgroupBarrier\(\);/g, '')
+  let body = BOOT_PARTS.map(([name, src]) => `// ── ${name} ──\n${src}`).join('\n')
   if (subgroupSize === undefined) return BROWSER_PREAMBLE + body
   const entries = body.split(ENTRY_ATTRIBUTE).length - 1
   if (entries !== 2) throw new Error(`Expected 2 Boot entry points, found ${entries}.`)

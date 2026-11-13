@@ -90,9 +90,8 @@ export const DEFAULT_PARAMS: Omit<TrackingParams, 'tcThreshold'> = {
  *  from the reference's 17 — Dawn/Metal caps this at 10 in the browser). */
 const REQUIRED_STORAGE_BUFFERS = 10
 
-/** The Boot kernel's `var<workgroup>` arrays total ~20.8 KB; Dawn defaults the
- *  limit to the 16 KB spec minimum (wgpu-native defaults higher). */
-const REQUIRED_WORKGROUP_STORAGE = 20800
+/** The Boot kernel's `var<workgroup>` arrays total ~10.4 KB with one row per workgroup. */
+const REQUIRED_WORKGROUP_STORAGE = 10400
 
 /** Lanes per tidy row in the Boot kernel (THR_X_SL). Its reductions and ballots
  *  need exactly this subgroup; another size gives wrong streamlines or loses the device. */
