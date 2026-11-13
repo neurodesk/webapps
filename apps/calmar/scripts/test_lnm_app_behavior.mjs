@@ -250,6 +250,20 @@ for (const failed of [false, true]) {
   assert.equal(app._pendingMaskResume, replacement);
 }
 
+// Replacing a review also settles worker waits owned by that review.
+{
+  const app = makeApp();
+  let cancelled = 0;
+  app.executor = { running: true, cancel() { cancelled += 1; this.running = false; } };
+  app._pipelineRunning = true;
+  app._workerRun = app.owner('pipeline', 'mask');
+  const waiting = app._waitForStageData('brainmask');
+  app.beginImport('mask');
+  assert.equal(cancelled, 1, 'a superseded review worker must be cancelled before its replies are dropped');
+  await assert.rejects(waiting, { name: 'AbortError' });
+  assert.equal(app._pipelineRunning, false);
+}
+
 // ---- A handler without a check is refused, and ownership decides what it may write ----
 {
   const app = makeApp();

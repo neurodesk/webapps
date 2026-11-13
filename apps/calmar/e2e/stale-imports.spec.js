@@ -1369,6 +1369,37 @@ test.describe('an import that finishes late', () => {
     expect(await log()).not.toContain('old drawing failed');
   });
 
+  test('replacing a review settles its pending preparation worker', async ({ page }) => {
+    const { choose, loaded, smallMask, log } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await page.evaluate(async () => {
+      await app.startLesionMaskReview({ blank: true });
+      app.ensureManifest = async () => ({ modelAssets: [{
+        id: 'lnm-synthstrip', supportStatus: 'supported', sourceUrl: 'https://example.test/model.onnx'
+      }] });
+      app.executor.loadVolume = async () => true;
+      app.executor.runSynthStrip = async () => {
+        app.executor.running = true;
+        globalThis.reviewWorkerStarted = true;
+        return true;
+      };
+      app.beginStatus('Preparing review');
+      globalThis.reviewWork = app.runBrainExtraction(app.owner('pipeline', 'mask'))
+        .then(() => 'completed', error => error.name);
+    });
+    await page.waitForFunction(() => globalThis.reviewWorkerStarted);
+    await page.evaluate(bytes => app.startLesionMaskReview({ seedFile: new File([new Uint8Array(bytes)], 'replacement.nii') }), [...smallMask]);
+    expect(await page.evaluate(() => globalThis.reviewWork)).toBe('AbortError');
+    await drawTwoVoxels(page);
+    expect(await loaded()).toMatchObject({ review: true, drawn: 5 });
+    expect(await page.evaluate(() => ({ running: app._pipelineRunning, waits: app._stageDataResolvers.size + app._stepCompleteResolvers.size })))
+      .toEqual({ running: false, waits: 0 });
+    await page.locator('#maskUndoButton').dispatchEvent('click');
+    expect((await loaded()).drawn).toBe(3);
+    expect(await log()).not.toMatch(/failed/i);
+  });
+
   test('a seed-preparation failure ends the review and permits a retry', async ({ page }) => {
     const { choose, loaded, log, smallMask } = await holdImports(page);
     await choose('structural', 'T1.nii');

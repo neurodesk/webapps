@@ -1883,6 +1883,12 @@ export class LesionNetworkMappingApp {
   // through `viewerLoad`, which makes the check when the load starts and lands.
   beginImport(kind, assertLoadCurrent) {
     const turn = ++this._importTurn[kind];
+    // Review-owned worker replies will now be dropped. Settle their waits as
+    // part of replacing the review, so the abandoned pipeline can stop too.
+    const waiting = this.executor?.running || this._stageDataResolvers.size || this._stepCompleteResolvers.size;
+    if (kind === 'mask' && waiting && !this.isCurrent(this._workerRun)) {
+      this.invalidatePipeline('the lesion review changed');
+    }
     return () => {
       assertLoadCurrent?.();
       if (turn !== this._importTurn[kind]) {
