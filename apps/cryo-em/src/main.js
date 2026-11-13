@@ -276,6 +276,7 @@ connection.addEventListener('nd-compute-change', ({ detail }) => {
     state.jobs.clear();
     renderProjects([]);
     renderJobs();
+    progress.reset('Connect a server to continue; see Standalone for setup.');
   }
   syncControls();
 });
@@ -315,6 +316,7 @@ async function openProject(id) {
   }
   $('jobsSection').open = Boolean(id);
   syncControls();
+  if (!state.following) status(id ? 'Project ready · choose a processing step' : 'No project selected · choose or create a project');
 }
 
 /** Re-read the project and the details (outputs) of jobs that changed. */

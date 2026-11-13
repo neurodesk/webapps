@@ -444,6 +444,22 @@ test("tutorial guidance explains a missing server data root", async ({ page }) =
   await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
 });
 
+for (const change of ["clear project", "disconnect"]) {
+  test(`tutorial readiness is cleared after ${change}`, async ({ page }) => {
+    await connect(page);
+    await createProject(page, `Tutorial ${change}`);
+    await loadExample(page);
+    const status = page.locator("footer#status #statusText");
+    await expect(status).toContainText("Ready to import into this project");
+    if (change === "clear project") await page.locator("#projectSelect").selectOption("");
+    else await page.locator("#computeConnection").getByRole("button", { name: "Disconnect", exact: true }).click();
+    await expect(page.locator("#runButton")).toBeDisabled();
+    await expect(status).toContainText(change === "clear project" ? "choose or create a project" : "Connect a server");
+    expect((await status.textContent()).length).toBeLessThanOrEqual(90);
+    await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
+  });
+}
+
 test("a failed example download can be retried", async ({ page }) => {
   let attempts = 0;
   await page.route(example.files[0].url, route => {
