@@ -366,7 +366,7 @@ def _prune_onnx_runtime(app: pathlib.Path, target: ReleaseTarget) -> None:
         raise ValueError(f"foreign ONNX Runtime bindings remain: {foreign}")
 
 
-# The Microsoft Visual C++ 2015-2022 runtime. Windows does not ship it, and an older copy installed
+# The Microsoft Visual C++ v14 runtime. Windows does not ship it, and an older copy installed
 # by other software is not enough: ONNX Runtime 1.29 fails to initialise against msvcp140.dll
 # older than 14.40 ("A dynamic link library (DLL) initialization routine failed"). Releases
 # therefore carry it next to every binary that imports it, where the loader looks first.
@@ -384,15 +384,17 @@ VC_RUNTIME_DLLS = frozenset({
 })
 MINIMUM_VC_RUNTIME = (14, 40)
 VC_RUNTIME_NOTICE = """The msvcp140*.dll, vcruntime140*.dll, concrt140.dll and vccorlib140.dll files next to native
-modules in this release are the Microsoft Visual C++ 2015-2022 runtime
-(Visual Studio 2022 redistributable, Microsoft.VC143.CRT), distributed
+modules in this release are the Microsoft Visual C++ v14 runtime
+(Visual Studio 2022 or 2026 redistributable), distributed
 app-locally under the Visual Studio redistribution terms
-(https://learn.microsoft.com/visualstudio/releases/2022/redistribution).
+(https://learn.microsoft.com/visualstudio/releases/2022/redistribution and
+https://learn.microsoft.com/visualstudio/releases/2026/redistribution).
 Copyright Microsoft Corporation. All rights reserved.
 These proprietary Microsoft binaries retain their original signatures and
 are not covered by the application's open-source license. Their use and
 redistribution are subject to Microsoft's terms, available at:
 https://visualstudio.microsoft.com/license-terms/vs2022-ga-proenterprise/
+https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/
 They let the release run on Windows without installing the Visual C++
 Redistributable and regardless of an older copy installed by other software.
 """
@@ -486,20 +488,37 @@ def vc_runtime_problems(root: pathlib.Path) -> list[str]:
 
 
 def find_vc_runtime(environment=None) -> pathlib.Path:
-    """The newest Visual Studio 2022 release CRT folder, or a licensed VC_RUNTIME_DIR override."""
+    """The newest x64 release CRT from VS 2022 or 2026, or a licensed VC_RUNTIME_DIR override."""
     environment = os.environ if environment is None else environment
     if environment.get("VC_RUNTIME_DIR"):
         return pathlib.Path(environment["VC_RUNTIME_DIR"])
     vswhere = pathlib.Path(environment.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Microsoft Visual Studio/Installer/vswhere.exe")
     if not vswhere.is_file():
-        raise FileNotFoundError("vswhere.exe not found; set VC_RUNTIME_DIR to a Microsoft.VC143.CRT folder")
-    installation = subprocess.run(
-        [str(vswhere), "-latest", "-version", "[17.0,18.0)", "-products", "*", "-property", "installationPath"],
-        check=True, text=True, stdout=subprocess.PIPE,
-    ).stdout.strip()
-    folders = list(pathlib.Path(installation, "VC/Redist/MSVC").glob("*/x64/Microsoft.VC143.CRT"))
+        raise FileNotFoundError(f"vswhere.exe not found at {vswhere}; set VC_RUNTIME_DIR to an x64 release CRT folder")
+    component = "Microsoft.VisualStudio.Component.VC.Redist.14.Latest"
+    command = [str(vswhere), "-version", "[17.0,19.0)", "-products", "*", "-requires", component, "-property", "installationPath", "-utf8"]
+    output = subprocess.run(command, check=True, encoding="utf-8-sig", stdout=subprocess.PIPE).stdout
+    installations = [pathlib.Path(line.strip()) for line in output.lstrip("\ufeff").splitlines() if line.strip()]
+    if not installations:
+        raise FileNotFoundError(
+            f"no Visual Studio 2022 or 2026 release installation with {component}; "
+            f"query {subprocess.list2cmdline(command)} returned no installationPath; "
+            "no CRT directories searched; install the C++ redistributable component or set VC_RUNTIME_DIR"
+        )
+    folders, searched = [], []
+    for installation in installations:
+        redist = installation / "VC/Redist/MSVC"
+        for crt in ("Microsoft.VC143.CRT", "Microsoft.VC145.CRT"):
+            pattern = f"*/x64/{crt}"
+            searched.append(str(redist / pattern))
+            folders.extend(
+                folder for folder in redist.glob(pattern)
+                if re.fullmatch(r"\d+(?:\.\d+)+", folder.parent.parent.name) and (folder / "msvcp140.dll").is_file()
+            )
     if not folders:
-        raise FileNotFoundError(f"no Microsoft.VC14x.CRT redistributable under {installation}")
+        raise FileNotFoundError(
+            f"no x64 release CRT containing msvcp140.dll; searched: {', '.join(searched)}; set VC_RUNTIME_DIR"
+        )
     return max(folders, key=lambda folder: pe_file_version((folder / "msvcp140.dll").read_bytes()) or (0, 0, 0, 0))
 
 

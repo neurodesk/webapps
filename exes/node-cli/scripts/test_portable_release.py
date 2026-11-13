@@ -632,13 +632,80 @@ class VisualCppRuntimeTests(unittest.TestCase):
         installation = self.runtime.parent / "Visual Studio/2022/Enterprise"
         old = write_vc_runtime(installation / "VC/Redist/MSVC/14.40/x64/Microsoft.VC143.CRT", (14, 40, 0, 0))
         current = write_vc_runtime(installation / "VC/Redist/MSVC/14.44/x64/Microsoft.VC143.CRT")
-        write_vc_runtime(installation / "VC/Redist/MSVC/14.51/x64/Microsoft.VC145.CRT", (14, 51, 0, 0))
-        with mock.patch.object(portable_release.subprocess, "run", return_value=mock.Mock(stdout=str(installation))) as run:
+        with mock.patch.object(portable_release.subprocess, "run", return_value=mock.Mock(stdout=str(installation))):
             self.assertEqual(portable_release.find_vc_runtime({"ProgramFiles(x86)": str(program_files)}), current)
-        self.assertEqual(run.call_args.args[0], [
-            str(vswhere), "-latest", "-version", "[17.0,18.0)", "-products", "*", "-property", "installationPath",
-        ])
         self.assertEqual(portable_release.find_vc_runtime({"VC_RUNTIME_DIR": str(old)}), old)
+
+    def runtime_lookup(self, output, query=None):
+        program_files = self.runtime.parent / "Program Files (x86)"
+        vswhere = program_files / "Microsoft Visual Studio/Installer/vswhere.exe"
+        vswhere.parent.mkdir(parents=True, exist_ok=True)
+        vswhere.touch()
+        with mock.patch.object(portable_release.subprocess, "run", return_value=mock.Mock(stdout=output), side_effect=query):
+            return portable_release.find_vc_runtime({"ProgramFiles(x86)": str(program_files)})
+
+    def test_runtime_discovery_includes_the_hosted_vs2026_installation(self):
+        installation = self.runtime.parent / "Program Files/Microsoft Visual Studio/18/Enterprise"
+        current = write_vc_runtime(installation / "VC/Redist/MSVC/14.51.36231/x64/Microsoft.VC145.CRT", (14, 51, 36247, 0))
+        def query(command, **kwargs):
+            # vswhere exits successfully with no output when the version filter excludes VS 18.
+            versions = command[command.index("-version") + 1] if "-version" in command else ""
+            if versions == "[17.0,18.0)":
+                return mock.Mock(stdout="")
+            self.assertEqual(versions, "[17.0,19.0)")
+            self.assertEqual(command[command.index("-products") + 1], "*")
+            self.assertEqual(command[command.index("-requires") + 1], "Microsoft.VisualStudio.Component.VC.Redist.14.Latest")
+            self.assertNotIn("-prerelease", command)
+            self.assertNotIn("-latest", command)
+            self.assertIn("-utf8", command)
+            self.assertEqual(kwargs["encoding"], "utf-8-sig")
+            return mock.Mock(stdout=str(installation) + "\r\n")
+        self.assertEqual(self.runtime_lookup(str(installation), query=query), current)
+
+    def test_runtime_discovery_parses_bom_crlf_blank_lines_and_multiple_installations(self):
+        first = self.runtime.parent / "Visual Studio/18/Enterprise"
+        second = self.runtime.parent / "Visual Studio/2022/BuildTools"
+        write_vc_runtime(first / "VC/Redist/MSVC/14.44/x64/Microsoft.VC143.CRT")
+        current = write_vc_runtime(second / "VC/Redist/MSVC/14.9/x64/Microsoft.VC143.CRT", (14, 44, 35212, 0))
+        self.assertEqual(self.runtime_lookup(f"\ufeff{first}\r\n\r\n  {second}  \r\n"), current)
+
+    def test_runtime_discovery_empty_output_never_searches_the_working_directory(self):
+        for output in ("", " \r\n\t\n", "\ufeff\r\n"):
+            with self.subTest(output=output), mock.patch.object(pathlib.Path, "glob") as glob:
+                with self.assertRaises(FileNotFoundError) as failure:
+                    self.runtime_lookup(output)
+                message = str(failure.exception)
+                self.assertIn("vswhere.exe", message)
+                self.assertIn("no Visual Studio", message)
+                self.assertIn("Microsoft.VisualStudio.Component.VC.Redist.14.Latest", message)
+                self.assertIn("VC_RUNTIME_DIR", message)
+                glob.assert_not_called()
+
+    def test_runtime_discovery_missing_crt_reports_the_full_search_path(self):
+        installation = self.runtime.parent / "Visual Studio/18/Enterprise"
+        write_vc_runtime(installation / "VC/Redist/MSVC/14.51/arm64/Microsoft.VC145.CRT", (14, 51, 0, 0))
+        with self.assertRaises(FileNotFoundError) as failure:
+            self.runtime_lookup(str(installation))
+        message = str(failure.exception)
+        self.assertIn(str(installation / "VC/Redist/MSVC"), message)
+        self.assertIn("x64", message)
+        self.assertIn("VC_RUNTIME_DIR", message)
+
+    def test_runtime_discovery_ignores_other_architectures_debug_and_incomplete_crts(self):
+        installation = self.runtime.parent / "Visual Studio/18/BuildTools"
+        redist = installation / "VC/Redist/MSVC"
+        current = write_vc_runtime(redist / "14.51/x64/Microsoft.VC145.CRT", (14, 51, 0, 0))
+        for suffix in ("arm64/Microsoft.VC145.CRT", "x86/Microsoft.VC145.CRT", "debug_nonredist/x64/Microsoft.VC145.DebugCRT"):
+            write_vc_runtime(redist / "14.99" / suffix, (14, 99, 0, 0))
+        write_vc_runtime(redist / "14.99.preview/x64/Microsoft.VC145.CRT", (14, 99, 0, 0))
+        (redist / "14.99/x64/Microsoft.VC145.CRT").mkdir(parents=True)
+        self.assertEqual(self.runtime_lookup(str(installation)), current)
+
+    def test_runtime_discovery_missing_vswhere_reports_its_path(self):
+        program_files = self.runtime.parent / "missing installer"
+        with self.assertRaises(FileNotFoundError) as failure:
+            portable_release.find_vc_runtime({"ProgramFiles(x86)": str(program_files)})
+        self.assertIn(str(program_files / "Microsoft Visual Studio/Installer/vswhere.exe"), str(failure.exception))
 
     def test_verify_rejects_a_windows_archive_without_the_runtime(self):
         target = portable_release.load_target(ROOT, "packages/topofit", "windows-x64")
