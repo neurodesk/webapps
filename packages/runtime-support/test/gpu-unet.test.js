@@ -35,7 +35,7 @@ for (const dims of [[128,128,128],[192,224,160]]) {
   });
 }
 
-test('the full-volume SynthSeg plan fits beside the page on a 7 GB Apple runner',()=>{
+test('the full-volume SynthSeg plan uses six activation slots below 4 GiB',()=>{
   const plan=planGpuGraph([192,224,160],synthseg,{outputChannels:CLASSES,label:'SynthSeg'});
   const total=plan.slots.reduce((sum,slot)=>sum+slot.bytes,0);
   assert.equal(plan.slots.length,6);
@@ -106,4 +106,56 @@ test('Softmax stores posteriors channel-major',()=>{
   const {code}=elementShader(softmax);
   assert.match(code,new RegExp(`result\\[k\\*${voxels}u\\+i\\]=e;`));
   assert.doesNotMatch(code,/result\[i\*/);
+});
+
+test('growing free slots preserves skips, duplicate inputs, aliases and a retained graph output', () => {
+  for (let seed = 1; seed <= 128; seed++) {
+    let state = seed;
+    const random = n => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state % n; };
+    const graph = { input: 'image', output: 'head', tensors: {}, nodes: [] };
+    const names = ['image'], channels = new Map([['image', 1]]);
+    const add = (op, inputs, attrs, count) => {
+      const output = `tensor${graph.nodes.length}`;
+      graph.nodes.push({ name: output, output, op, inputs, attrs });
+      names.push(output);
+      channels.set(output, count);
+      return output;
+    };
+    let previous = 'image';
+    for (let i = 0; i < 48; i++) {
+      const count = channels.get(previous), choice = random(5);
+      if (choice === 0) {
+        previous = add('Identity', [previous], {}, count);
+      } else if (choice === 1 && count < 64) {
+        // A second read of the same tensor must not free it after the first input.
+        const other = random(2) ? previous : names[random(names.length)];
+        previous = add('Concat', [previous, other], { axis: 1 }, count + channels.get(other));
+      } else if (choice === 2) {
+        previous = add('Add', [previous, previous], {}, count);
+      } else {
+        const outputChannels = 4 * (1 + random(8)), weight = `weight${i}`;
+        graph.tensors[weight] = { dims: [outputChannels, count, 1, 1, 1] };
+        previous = add('Conv', [previous, weight], { strides: [1, 1, 1], pads: [0, 0, 0, 0, 0, 0] }, outputChannels);
+      }
+    }
+    graph.nodes.push({ name: 'head', output: 'head', op: 'Elu', inputs: [previous], attrs: { alpha: 1 } });
+    // An exported tensor stays live even when later nodes also consume it.
+    graph.nodes.push({ name: 'tail', output: 'tail', op: 'Elu', inputs: ['head'], attrs: { alpha: 1 } });
+    const plan = planGpuGraph([32, 32, 32], graph, { outputChannels: channels.get(previous) });
+    const lastUse = new Map([['head', Infinity]]);
+    plan.nodes.forEach((node, index) => {
+      for (const input of node.inputs) if (input !== 'head') lastUse.set(input, index);
+    });
+    const live = new Map([['image', 0]]);
+    for (const [index, node] of plan.nodes.entries()) {
+      assert.ok(![...live.values()].includes(node.slot), `seed ${seed}: ${node.name} overwrites a live tensor`);
+      for (const [i, input] of node.inputs.entries()) {
+        if (live.has(input)) assert.equal(node.inputSlots[i], live.get(input));
+      }
+      live.set(node.output, node.slot);
+      for (const name of live.keys()) if ((lastUse.get(name) ?? -1) <= index) live.delete(name);
+      assert.ok(plan.slots[node.slot].bytes >= node.shape.dims.reduce((a, b) => a * b, node.shape.channels * 4));
+    }
+    assert.equal(live.get('head'), plan.outputSlot);
+  }
 });
