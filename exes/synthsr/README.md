@@ -89,8 +89,11 @@ make test          # fixture parity and CLI tests on every device whose probe su
 make lint fmt
 ```
 
-Requires current stable Rust. The first build downloads pyke's static ONNX Runtime
-binaries for the host target (checksum-pinned in `ort-sys`).
+`rust-toolchain.toml` pins Rust 1.99.1 (rustup installs it on the first build):
+ort-sys 2.0.0-rc.13's build script does not handle Cargo 1.100's build directory
+layout; the file says what the next `ort` bump needs. The first build downloads
+pyke's static ONNX Runtime binaries for the host target (checksum-pinned in
+`ort-sys`).
 
 The model is `synthsr/models/synthsr-v2.onnx` in the Hugging Face dataset
 `neurodeskorg/webapps`, pinned by commit in
