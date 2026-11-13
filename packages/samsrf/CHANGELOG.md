@@ -1,11 +1,5 @@
 # @neurodesk/samsrf
 
-## 0.6.20261113
-
-### Patch Changes
-
-- Least-squares solves with several right-hand sides and a complex design now multiply by MKL's `?trsm` reciprocal of each diagonal, `(c, -d) / (c² + d²)` with exact power-of-two prescaling, instead of dividing. All 292 recorded complex 8-column MATLAB R2023b solves on the AMD reference hosts now equal MATLAB's values (20 single and 2 double before), bit for bit except imaginary zeros that MATLAB stores as real; their Q^H y already matched. Real solves and single right-hand sides are unchanged. MKL's Intel AVX-512 branch is still not reproduced.
-
 ## 0.6.20261112
 
 ### Minor Changes
