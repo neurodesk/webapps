@@ -55,10 +55,12 @@ Local changes:
   above. Output on a 32-lane GPU is unchanged.
 - `src/tracker.ts`: `trackStreamlines` takes an optional `replaceDevice`. When the
   device is lost it uploads the static inputs to the replacement and reruns the
-  interrupted batch, at most `MAX_DEVICE_RECOVERIES` (2) times per run, and reports
-  the count as `TrackResult.deviceRecoveries`. Streams follow the run-wide seed
-  index, so the output equals an uninterrupted run's; the app's hardware test
-  destroys the device mid-generation and requires the same TRX.
+  interrupted batch, within `MAX_DEVICE_RECOVERIES` (2) attempts per run, and
+  reports successful replacements as `TrackResult.deviceRecoveries`. Without a
+  working replacement it returns the batches already read back. Streams follow the
+  run-wide seed index, so on the same GPU the output equals an uninterrupted run's;
+  the app's hardware test destroys the device mid-generation and requires the same
+  TRX.
 - `src/trx.ts`: fixed local DOS timestamp (1980-01-01) for deterministic ZIP bytes;
   geometry, member order and uncompressed payload are unchanged.
 - `package.json`: include the new dispatcher and this provenance, and pin the

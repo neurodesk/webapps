@@ -520,8 +520,42 @@ export async function trackStreamlines(
     return { datafBuf, metricBuf, edgesBuf, modelBuf, getnumPipe, genPipe }
   }
 
+  let recoveryAttempts = 0
+
   try {
     let { datafBuf, metricBuf, edgesBuf, modelBuf, getnumPipe, genPipe } = prepare()
+
+    /** Replace the lost device and upload the static inputs to it, within
+     *  MAX_DEVICE_RECOVERIES attempts per run. A replacement lost while uploading
+     *  uses another attempt; any other failure ends the recovery. */
+    const recover = async (): Promise<'resumed' | 'stopped' | 'failed'> => {
+      while (recoveryAttempts < MAX_DEVICE_RECOVERIES) {
+        recoveryAttempts++
+        for (const b of staticBuffers) b.destroy()
+        staticBuffers = []
+        if (shouldStop?.()) return 'stopped'
+        try {
+          device = await replaceDevice!()
+        } catch (replaceErr) {
+          console.warn('[dwi2trx] no replacement GPU device:', replaceErr)
+          return 'failed'
+        }
+        if (shouldStop?.()) return 'stopped'
+        try {
+          ;({ datafBuf, metricBuf, edgesBuf, modelBuf, getnumPipe, genPipe } = prepare())
+          // Device errors surface asynchronously; check the upload reached the GPU.
+          await device.queue.onSubmittedWorkDone()
+          if (await confirmDeviceLost(device, null)) throw new Error('GPU device lost while uploading the inputs.')
+        } catch (prepareErr) {
+          console.warn('[dwi2trx] replacement GPU device failed:', prepareErr)
+          if (await confirmDeviceLost(device, prepareErr)) continue
+          return 'failed'
+        }
+        deviceRecoveries++
+        return 'resumed'
+      }
+      return 'failed'
+    }
 
     // Adaptive seed batching: start at params.chunkSize and, on an out-of-memory
     // error, halve the batch and retry the SAME seed range (down to MIN_CHUNK)
@@ -722,23 +756,16 @@ export async function trackStreamlines(
       } catch (err) {
         const lost = await confirmDeviceLost(device, err)
         // Streams follow a seed's position in the run, so rerunning the batch on a
-        // new device gives the bytes the lost one would have (#598).
-        if (lost && replaceDevice && deviceRecoveries < MAX_DEVICE_RECOVERIES) {
-          for (const b of staticBuffers) b.destroy()
-          staticBuffers = []
-          deviceRecoveries++
+        // new device of the same GPU gives the bytes the lost one would have (#598).
+        if (lost && replaceDevice) {
           console.warn(`[dwi2trx] GPU device lost at seed ${start}; rerunning the batch on a new device.`, err)
-          try {
-            device = await replaceDevice()
-          } catch (replaceErr) {
-            console.warn('[dwi2trx] no replacement GPU device:', replaceErr)
-            if (out.length === 0) throw err
-            truncated = true
-            deviceLost = true
-            break
-          }
-          ;({ datafBuf, metricBuf, edgesBuf, modelBuf, getnumPipe, genPipe } = prepare())
-          continue
+          const recovery = await recover()
+          if (recovery === 'resumed') continue
+          if (recovery === 'stopped') break
+          if (out.length === 0) throw err
+          truncated = true // no usable replacement — keep the batches already read back
+          deviceLost = true
+          break
         }
         const plan = planBatchError({
           oom: isOomError(err),

@@ -130,21 +130,29 @@ limits are handled as follows.
   feature, the tracker now requests it and compiles both Boot entry points with
   `@subgroup_size(32)`. On Vulkan that sets `requiredSubgroupSize` and full
   subgroups. Without the feature, the adapter check and the in-kernel layout check
-  stay the only guards. The run's provenance records the GPU vendor, its
-  architecture and whether the size was pinned (`tracking.gpu`).
+  stay the only guards. The run's provenance records, for every device that
+  tracked, the GPU vendor, its architecture and whether the size was pinned
+  (`tracking.gpus`).
 - **Device loss.** When the device is lost mid-run, the tracker requests a new
-  device, uploads the inputs again and reruns the interrupted seed batch, at most
-  twice per run. Random streams follow a seed's position in the run (#653), so the
-  rerun writes the bytes the lost device would have. The hardware test destroys the
-  tracking device during the first generation pass and requires the same TRX. The
-  run reports the count as `measurements.deviceRecoveries`. This also covers a
+  device, uploads the inputs again and reruns the interrupted seed batch. It makes
+  at most two attempts per run, including a replacement lost during the upload.
+  If no replacement works, it keeps the batches already read back, as before.
+  Random streams follow a seed's position in the run (#653), so on the same GPU
+  the rerun writes the bytes the lost device would have. A replacement on another
+  adapter, possible on a computer with two GPUs, can round differently;
+  `tracking.gpus` shows it. The hardware test destroys the tracking device during
+  the first generation pass and requires the same TRX. The run reports the count
+  as `measurements.deviceRecoveries`. This also covers a
   transient hang such as the 29 October Metal `kIOGPUCommandBufferCallbackErrorHang`,
   which has not recurred in the nightlies since #633; its cause is still unknown.
 - **Removed subgroup barriers.** WGSL has no `subgroupBarrier()`, so the kernels
   run without the barriers the CUDA original places between a lane's write to
-  workgroup memory and another lane's read. Apple, Intel and AMD GPUs execute a
-  subgroup in lockstep, so this is safe there. NVIDIA GPUs since Volta schedule
-  lanes independently, and nothing in WGSL forces them to reconverge before such a
-  read. A workgroup barrier cannot replace them, because the kernels call them in
-  control flow that differs between the two rows of a workgroup. No NVIDIA run has
-  been checked; the `tracking.gpu` provenance identifies one.
+  workgroup memory and another lane's read. The
+  [WGSL memory model](https://www.w3.org/TR/WGSL/#memory-model) gives those
+  accesses no ordering on any GPU, so correctness rests on observation: complete,
+  deterministic runs on Apple (Metal) and Intel Arc (Mesa Vulkan), whose subgroups
+  execute in lockstep. NVIDIA GPUs since Volta schedule lanes independently, so
+  they are the most likely to differ. A workgroup barrier cannot replace the
+  removed ones, because the kernels call them in control flow that differs between
+  the two rows of a workgroup. No NVIDIA or AMD run has been checked; the
+  `tracking.gpus` provenance identifies one.

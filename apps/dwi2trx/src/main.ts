@@ -1136,8 +1136,10 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       chunkSize: trackingOverride('neurodeskTrackingChunkSeeds') ?? DEFAULT_PARAMS.chunkSize,
     }
     const parameterReport = trackingParametersReport(params)
-    // Which GPU tracked, and whether its kernels were pinned to 32-lane subgroups (#598).
-    const gpu = { vendor: device.adapterInfo?.vendor ?? '', architecture: device.adapterInfo?.architecture ?? '', subgroupSizePinned: pinsSubgroupSize(device) }
+    // Every GPU device that tracked, and whether its kernels were pinned to
+    // 32-lane subgroups (#598). A replacement after a device loss adds an entry.
+    const describeGpu = (gpuDevice: GPUDevice) => ({ vendor: gpuDevice.adapterInfo?.vendor ?? '', architecture: gpuDevice.adapterInfo?.architecture ?? '', subgroupSizePinned: pinsSubgroupSize(gpuDevice) })
+    const gpus = [describeGpu(device)]
     const { lines, truncated, deviceLost, deviceRecoveries, processedSeeds } = await trackStreamlines(
       device,
       tInputs,
@@ -1157,6 +1159,7 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
         device = null
         if (seq === loadSeq) setStatus('The GPU stopped responding; resuming tracking on a new GPU device…')
         device = await getTrackingDevice()
+        gpus.push(describeGpu(device))
         return device
       },
     )
@@ -1240,7 +1243,7 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       )
     }
     signal?.throwIfAborted()
-    return { file: state.tracts, measurements: { streamlines: streamlineCount, points: totalPts, removedTooLong: tooLong, seeds: nSeeds, processedSeeds, deviceRecoveries, seedCap: MAX_SEEDS, capped, truncated, partial: capped || truncated }, provenance: { algorithm: '@dipy/gpu-streamlines', seedFa, density, maxLengthMm, parameters: parameterReport, gpu, bvecXFlipped: det3(extractAffine(header)) > 0 } }
+    return { file: state.tracts, measurements: { streamlines: streamlineCount, points: totalPts, removedTooLong: tooLong, seeds: nSeeds, processedSeeds, deviceRecoveries, seedCap: MAX_SEEDS, capped, truncated, partial: capped || truncated }, provenance: { algorithm: '@dipy/gpu-streamlines', seedFa, density, maxLengthMm, parameters: parameterReport, gpus, bvecXFlipped: det3(extractAffine(header)) > 0 } }
   } catch (err) {
     if (seq === loadSeq)
       showFailure(
