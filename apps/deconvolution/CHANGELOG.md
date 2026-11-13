@@ -1,5 +1,13 @@
 # deconvolution
 
+## 0.1.20261113
+
+### Patch Changes
+
+- 37be3c2: Refuse a computed PSF for voxels over ten Airy radii or depths of field, such as a millimetre-scale MRI, with a message instead of running WebAssembly out of memory.
+- Updated dependencies [37be3c2]
+  - @neurodesk/deconvolution@0.2.1
+
 ## 0.1.20261111
 
 ### Minor Changes
