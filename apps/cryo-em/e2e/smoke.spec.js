@@ -105,7 +105,8 @@ test("the RELION tutorial runs from import to post-processing", async ({ page })
   await expect(page.locator("#option-angpix")).toHaveValue("0.885");
   await expect(page.locator("#input-movies-pattern")).toHaveValue("*.tiff");
   await expect(page.locator("#stepForm .nd-file-info")).toContainText("24 of 25 files match");
-  await expect(page.locator("#statusText")).toHaveText("Tutorial settings filled in; 24 movies on the server. Run Import movies.");
+  await expect(page.locator("footer#status #statusText")).toHaveText("24 tutorial movies found on the server. Ready to import into this project.");
+  await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
 
   await run(page, "import");
   await page.locator("#stepSelect").selectOption("motioncorr");
@@ -416,6 +417,33 @@ test("job details read before a step ended cannot replace its final details", as
   expect(streams).toBe(1);
 });
 
+test("tutorial guidance names a missing project only in the footer", async ({ page }) => {
+  await connect(page);
+  await loadExample(page);
+  const status = page.locator("footer#status #statusText");
+  await expect(status).toHaveText("24 tutorial movies found on the server. A project is needed before importing.");
+  expect((await status.textContent()).length).toBeLessThanOrEqual(90);
+  await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await createProject(page, "Tutorial guidance");
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
+  await expect(status).not.toContainText("A project is needed");
+});
+
+test("tutorial guidance explains a missing server data root", async ({ page }) => {
+  await page.route(`${COMPUTE_URL}/api/v1/info`, async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), dataRoots: [] } });
+  });
+  await connect(page);
+  await loadExample(page);
+  const status = page.locator("footer#status #statusText");
+  await expect(status).toHaveText("Fetch movies on the server: neurodesk-compute fetch-example relion-tutorial");
+  expect((await status.textContent()).length).toBeLessThanOrEqual(90);
+  await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
+});
+
 test("a failed example download can be retried", async ({ page }) => {
   let attempts = 0;
   await page.route(example.files[0].url, route => {
@@ -429,6 +457,7 @@ test("a failed example download can be retried", async ({ page }) => {
   await picker.selectOption(example.id);
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 60000 });
   await expect(page.locator("#option-angpix")).toHaveValue("0.885");
-  await expect(page.locator("#statusText")).toHaveText("Tutorial settings filled in. Connect a server with its movies (see Standalone).");
+  await expect(page.locator("footer#status #statusText")).toHaveText("Tutorial settings ready. Connect a server with its movies; see Standalone for setup.");
+  await expect(page.locator("nd-example-selector [role=status]")).toBeHidden();
   expect(attempts).toBe(2);
 });

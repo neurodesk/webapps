@@ -920,15 +920,17 @@ const exampleControl = createExampleSelector({
     const movies = exampleMovies(parseChecksums(await checksums.text()));
     assertCurrent();
     // The movies stay on the server, so the status says what to do next.
-    let next = 'Tutorial settings filled in. Connect a server with its movies (see Standalone).';
+    let next = 'Tutorial settings ready. Connect a server with its movies; see Standalone for setup.';
     if (state.client && state.info.dataRoots?.some(root => root.id === EXAMPLE_ROOT)) {
       const listing = await state.client.entries(EXAMPLE_ROOT, EXAMPLE_SETTINGS.import.inputs.movies.path).catch(() => ({ entries: [] }));
       const present = new Set(listing.entries.map(entry => entry.name));
       const missing = movies.filter(name => !present.has(name));
       if (missing.length) throw new Error(`The server's examples root lacks ${missing.length} of the ${movies.length} tutorial movies; run neurodesk-compute fetch-example relion-tutorial`);
-      next = `Tutorial settings filled in; ${movies.length} movies on the server. ${state.project ? 'Run Import movies.' : 'Create a project, then run Import.'}`;
+      next = state.project
+        ? `${movies.length} tutorial movies found on the server. Ready to import into this project.`
+        : `${movies.length} tutorial movies found on the server. A project is needed before importing.`;
     } else if (state.client) {
-      next = 'This server lacks the tutorial movies: run neurodesk-compute fetch-example relion-tutorial';
+      next = 'Fetch movies on the server: neurodesk-compute fetch-example relion-tutorial';
     }
     assertCurrent();
     for (const [command, settings] of Object.entries(EXAMPLE_SETTINGS)) {
@@ -937,7 +939,7 @@ const exampleControl = createExampleSelector({
     }
     state.command = 'import';
     renderForm();
-    setMessage(next);
+    setMessage(next, { inline: false });
   },
 });
 $('exampleControl').append(exampleControl);
