@@ -1,14 +1,17 @@
 # SamSrf MATLAB-parity acceptance matrix (#729-#733)
 
-This file maps each acceptance criterion of issues #729 to #733 to the test or
-evidence that holds it on current `main`, its status and what remains. It was
+This file maps each acceptance criterion of issues #729 to #733 to the available
+test or evidence, its measured scope and what remains. It was
 audited on 2026-11-13 against `main` at `ef089b0a`. The issues' original
-descriptions predate most of this work; this matrix is the current reading.
+descriptions predate most of this work. This audit does not change their
+acceptance requirements or approve closing an issue.
 
 "Reference" means MATLAB R2023b Update 11 source code (SamSrf `41ed1e96`, SPM
-`03ac9473`) run on the pinned recordings' hosts. "AMD" means MKL's CNR `auto`
-branch on AMD EPYC runners; "Intel" means MKL's `AVX512_E1` branch on Intel
-Xeon runners. Every gate listed fails CI when its pinned reference is missing.
+`03ac9473`) run on the pinned recordings' hosts. "AMD" means AMD EPYC runners
+where MATLAB reports CNR `auto`;
+"Intel" means Intel Xeon runners where MATLAB reports `AVX512_E1`. These
+reported labels do not verify effective CNR or dynamic-thread controls. Every
+gate listed fails CI when its pinned reference is missing.
 Agreement is with these recordings, not a proof for other inputs, MATLAB or MKL
 releases.
 
@@ -18,8 +21,8 @@ for #729 and #730 ("Reverse-correlation port gates", "Single sin and cos",
 #732 and #733. This file only points to them.
 
 Status: **Met** (the criterion holds as written), **Met on AMD** (holds against
-the AMD reference; Intel is documented separately), **Partial** (holds for a
-stated subset) or **Open**.
+the recorded AMD subset; this does not exclude Intel from the issue),
+**Partial** (holds for a stated subset) or **Open**.
 
 ## #731 Single-precision pivoted QR (Beta, Baseline)
 
@@ -28,17 +31,18 @@ stated subset) or **Open**.
 | The recorded cases keep exact rank and zero-column decisions; coefficient gates reflect demonstrated fidelity | `qr_reference.rs`: rank of all 348 designs, MATLAB's printed tolerance for all 89 warnings; 346 coefficients bit-identical, 2 at 0 ULPs with an imaginary zero MATLAB stores as real; frozen outcomes at 0 ULPs. `matlab_reference.rs` keeps the original 146 forward cases | Met on AMD | None on AMD |
 | Constant, nearly constant, rank-deficient, full-rank, extreme-scale, mixed real/complex and imaginary-underflow cases; imaginary coefficients asserted | The 348 designs of `qr-reference.json` cover each family; `qr_reference.rs` compares real and imaginary parts and requires a real result where MATLAB's is real | Met | None |
 | Complete single Gaussian and CSS outputs; parameter and score parity does not regress | `compare.mjs` (114 required source gates, single CSS included), `css_pipeline.rs` and `compare-css.mjs` (double CSS original 138/0, nonnegative 126/0 coefficients identical/differing), `css_diagnostics.rs` (108 traces bit for bit) | Met on AMD | Single Gaussian RC/CF fits are #729's |
-| Missing references fail CI; MATLAB, BLAS and thread settings recorded; backend residuals separated from port errors | Recordings' `environment.json` and `hosts.json` are asserted (interpreter, BLAS line, CPU); `qr_kernels.rs` requires six hosts, five AMD with identical bits; every chain step equals MKL's (`every_recorded_chain_step_matches_mkl_on_amd`, 345 chains) | Met | Intel differences are characterised, not reproduced (below) |
+| Missing references fail CI; MATLAB, BLAS and thread settings recorded; backend residuals separated from port errors | Recordings' `environment.json` and `hosts.json` are asserted (interpreter, BLAS line, CPU); `qr_kernels.rs` requires six hosts, five AMD with identical bits; every chain step equals MKL's (`every_recorded_chain_step_matches_mkl_on_amd`, 345 chains) | Partial | Host metadata and finite repeats are recorded; effective backend/thread controls remain unverified under #730. Intel differences are characterised, not reproduced |
 | Before/after maximum ULP and absolute differences, and the covered domain, published without arbitrary-input claims | [Least-squares solves](matlab/README.md#least-squares-solves): acceptance checklist, finite-domain scope, history table (#773 → #795 → now) | Met | None |
 | Changeset and README say what is exact or tolerance-based | Changesets of #795, #812, #818, #822; README "Correlations and regressions" and the QR checklist | Met | None |
 
 Beyond the original criteria, all 696 recorded 8-column solves equal MATLAB's
 (404 real bit for bit; 292 complex bit for bit except 26 imaginary zeros of
-results MATLAB stores as real), and every reverse-correlation profile and
-global regression equals MATLAB's on the AMD hosts.
+results MATLAB stores as real). Recorded single-precision reverse-correlation
+profiles and global-regression residuals also equal MATLAB's on the AMD hosts.
 
-**Not covered by #731's criteria and still open:** MKL's Intel AVX-512 branch.
-See [Intel AVX-512 and the reference host](matlab/README.md#intel-avx-512-and-the-reference-host).
+**Still unresolved:** MKL's Intel AVX-512 branch. Excluding it from #731
+requires acceptance of the proposed reference-host policy; this matrix does
+not make that decision. See [Intel AVX-512 and the reference host](matlab/README.md#intel-avx-512-and-the-reference-host).
 
 ## #729 Single precision for reverse-correlation pRF and connective fields
 
@@ -59,32 +63,33 @@ See [Intel AVX-512 and the reference host](matlab/README.md#intel-avx-512-and-th
 | Regression reproduces the discrepancies before the fix and passes after; references and precision mandatory | `css_diagnostics.rs` (108 traces, every evaluation bit for bit) | Met on AMD | — |
 | Full double CSS pipelines: every parameter, R², nR², coefficients and masks, original and nonnegative apertures | `compare-css.mjs`, `css_pipeline.rs`: three 96-vertex pipelines; parameters, scores and masks bit-identical; coefficients 138/0 and 126/0 identical/differing | Met on AMD | — |
 | Single CSS gates intact | `compare.mjs` single CSS gates | Met | — |
-| Plateau ambiguity documented with objectives, predictions and repeatability | Columns 16, 17 and 82 now follow MATLAB's optimizer sequence bit for bit; repeat recordings identical | Met | — |
+| Plateau ambiguity documented with objectives, predictions and repeatability | Columns 16, 17 and 82 now follow MATLAB's optimizer sequence bit for bit; their repeat recordings are identical | Partial | General double fine-fit diagnostic cases still need objective values, predicted time courses, per-vertex parameter differences and controlled MATLAB repeatability. These three resolved traces do not cover all plateaus |
 | No widened tolerance or quota | Coefficient policy is exact equality or a stated scale, with no differing coefficient left | Met | — |
-| Pins, provenance; exact/tolerance/unsupported published | matlab/README "Double CSS arithmetic" | Met on AMD | Intel host not reproduced (stated there) |
+| Pins, provenance; exact/tolerance/unsupported published | matlab/README "Double CSS arithmetic" records pinned files, host metadata, repeat comparisons and current limits | Partial | Effective controls and cross-host reproducibility remain open, as detailed below |
+| Reference reproducibility controls explicitly owned by #730 | Requested `MKL_CBWR=COMPATIBLE` and one MKL/OpenMP thread; MATLAB reports `auto` on AMD, `AVX512_E1` on Intel and one computational thread. Repeats match within each recorded host, while hosts differ | **Partial / Open** | Effective CNR and MKL dynamic threading remain unverified (`unverifiedControls`). Establish requested versus observed controls and cross-host repeatability; identical repeats alone do not verify those controls |
 
 ## #732 Polygon exclusions and CF triangulation
 
 | Criterion | Evidence | Status | Remaining |
 | --- | --- | --- | --- |
-| Remove both polygon exclusions and pass all 253 cases plus independent boundary sweeps | Shipped model differs from MATLAB on 93 original clouds; the opt-in Clipper model on 44 original, 178 held-out and 246 causal exceptions, with four regressions | **Open** | See matlab/README "Geometry: polyshape, delaunay and real templates" (geometry track) |
+| Remove both original polygon exclusions and pass all 253 cases | `matlab_reference.rs` asserts all 253 polygons with no named skips; polygon_191 and polygon_193 pass | Met | Broader boundary/cloud coverage is separate below |
+| Independently recorded boundary sweeps and broader geometry coverage | Shipped model retains 93 exceptions among the 26,073 original-family polygons and further supplementary mismatches. The experimental, unshipped Clipper model retains 44 original, 178 held-out and 246 causal exceptions, including four regressions | **Open** | Establish a general correction without losing accepted cases. `KeepCollinearPoints` is a separate MATLAB configuration, not an observed internal stage of default `polyshape` |
 | Exact connectivity and selected regions; justified per-value tolerances | `matlab_geometry.rs`, `geometry_reference.rs` | Partial | As above |
 | Cocircular and degenerate cases with MATLAB behaviour | Probe and causal recordings | Partial | As above |
 | Full CF hull, summary and Gaussian checks on real templates | `production_template_reader_equals_matlabs_template`; CF hull/summary exact on AMD | Partial | CF Gaussian is publicly refused (#729) |
 | Provenance and hashes; missing cases fail CI | Pinned probe/causal recordings with repeats | Met | — |
-| Changeset and docs replace the exclusions with measured coverage | Exclusions remain documented as such | **Open** | — |
+| Changeset and docs replace the original exclusions with measured coverage and remaining limits | #799 removes the original named skips; #813 and #820 distinguish shipped coverage from experimental snapshots and document supplementary mismatches | Met for the documented scope | Broader geometry parity remains open; experimental agreement does not establish production acceptance |
 
 ## #733 Version-matched MATLAB Runtime reference container
 
 | Criterion | Evidence | Status | Remaining |
 | --- | --- | --- | --- |
-| Recipe executed on a licensed builder | Never executed: no MATLAB Compiler licence for R2023b Update 11 is available (matlab/README "Compiler access") | **Open, blocked** | A Compiler licence held by the user or their institution |
+| Recipe executed on a licensed builder | Attempted only up to the licence check; no compiled build completed because a MATLAB Compiler licence for R2023b Update 11 is unavailable (matlab/README "Compiler access") | **Open, blocked** | A Compiler licence held by the user or their institution |
 | Compiled-vs-source maps pass per-map gates | No compiled build exists | Open | Needs the build |
 | Runtime-only execution without a licence | Recipe and `runtime_image` dispatch written; untested | Open | Needs the build |
 | Repeated runs reproduce outputs | Source recordings repeat exactly; compiled none | Open | Needs the build |
 | Immutable digest and receipts; stock and repaired baselines separate | Stock Neurodesk 2024 image and repaired source recording are kept apart | Partial | Digest after the build |
 | Web comparison lists exact, tolerance, failing and unsupported cases | Source-level lists exist; compiled none | Open | Needs the build |
 
-The source-level MATLAB recordings stand in for the compiled reference in
-every gate above. They are evidence about MATLAB source execution, not about a
-compiled SamSrfAnalysis.
+The numerical gates above use source-level MATLAB recordings. They do not
+satisfy #733's compiled-versus-source or Runtime-only acceptance criteria.
