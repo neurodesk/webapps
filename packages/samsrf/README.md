@@ -490,11 +490,14 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   exactly and breaks cocircular ties with CGAL's symbolic perturbation, which
   gives MATLAB's `delaunay` edges on every recorded grid, ring and shuffled
   tie. `polyshape(...).convhull` follows MATLAB's fixed-point grid, even-odd
-  resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on every
-  recorded polygon except 93 nearly collinear point clouds, whose crossings of
-  nearly parallel edges MATLAB resolves by snapping vertices the port does not
-  reproduce ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
-  An experimental Clipper-based model that matches more of them but not four
+  resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on 25,980
+  of the 26,073 original recorded polygons. The 93 nearly collinear exceptions
+  are frozen as regression snapshots; why MATLAB keeps the vertices it keeps for
+  them is not known
+  ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
+  Supplementary recordings expose further mismatches
+  ([supplementary census](validation/matlab/README.md#shipped-and-experimental-models-on-the-probe-recordings)).
+  An experimental Clipper-based model that matches 53 of them but not four
   that this one matches is kept out of every shipped build
   ([experimental model](validation/matlab/README.md#experimental-clipper-model-not-in-production-732-open)).
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in

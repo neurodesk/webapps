@@ -3,7 +3,9 @@
 These checks use the compiled MATLAB application, without the Octave shims.
 The Neurodesk `v10.004_20241127` image contains an application that reports
 **SamSrf 10.003 (2024-11-04)**, running on MATLAB Runtime R2023b. The web port
-otherwise targets SamSrf 10.4, commit `41ed1e96`.
+otherwise targets SamSrf 10.4, commit `41ed1e96`. A compiled SamSrf 10.4 with
+the reference repairs has not been built: that needs a MATLAB Compiler license
+([#733 status](../matlab/README.md#building-a-matching-runtime-container)).
 
 Image:
 `ghcr.io/neurodesk/samsrfx@sha256:b4e584ce1eeb11cbe20a2012c5f8263fc9128184c0574c83c1cfabf59cc3ff16`.

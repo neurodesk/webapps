@@ -608,10 +608,22 @@ rejects additional tracked changes, and checks the SPM commit before invoking
 MATLAB Compiler. It records the MATLAB environment and resulting local image
 ID. It does not publish the image.
 
-**Status: not built.** The recipe has never been executed with MATLAB Compiler,
-and no compiled SamSrf 10.4 with these repairs was found in the SamSrf
-releases or the Neurodesk object store checked below. Nothing below is
+**Status: not built (#733).** The recipe has never been executed with MATLAB
+Compiler, and no compiled SamSrf 10.4 with these repairs was found in the
+SamSrf releases or the Neurodesk object store checked below. Nothing below is
 evidence about a compiled application until a `build` run has passed.
+
+| Step | State |
+| --- | --- |
+| Builder | Written, run only up to the license check: `licensed-host/build_and_validate.sh` and the `runtime_cli=build` dispatch. On 2026-11-12 the host driver cloned, downloaded and repaired the sources and started MATLAB, which stopped at its license check (below). No Compiler step has run. |
+| Prerequisite | A MATLAB Compiler license for R2023b Update 11: a batch token (`MLM_LICENSE_TOKEN`) for the dispatch, or a host license or `PORT@HOST` server for `licensed-host/`. None is available to this repository; the search for one is finished (table below). |
+| Compiled versus source | Pending. The compiled image and source MATLAB must run on the same host and match bit for bit (`compare_cli.py`); no compiled run exists. |
+| Publication | Pending. Only a build that passes every gate pushes `ghcr.io/neurodesk/samsrf-reference`; after that, `runtime_image=NAME@sha256:...` validates it on Runtime-only hosts, which need no license. |
+
+The source-CLI recording below ([pinned source recording](#pinned-source-recording))
+is the only CLI evidence so far. The Runtime references in
+[`validation/container`](../container/README.md) come from Neurodesk's 2024
+SamSrfX image, which reports SamSrf 10.003 and lacks the repairs.
 
 ### Compiler access, checked 2026-11-10 and 2026-11-12
 
@@ -1177,8 +1189,13 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   bit for bit, and area and centroid then lie within the forward-error bound
   of MATLAB's shoelace on untranslated vertices. 25,980 of the 26,073 recorded
   polygons agree, on both hosts, and so do all 253 polygons of the 741-case
-  reference without exclusions. The model behind it, reconstructed from these
-  recordings (`core/src/polyshape.rs`):
+  reference without exclusions. This is the shipped model: the WebAssembly
+  module, the web app and the `samsrf` command line use it, and its gate and
+  frozen baseline (`matlab_polygon_snapping.json`, 93 clouds) stay unchanged
+  until a replacement passes without regressions. Only the hull is gated:
+  SamSrf uses `polyshape` only for `convhull`, and the model's simplified
+  vertex set is neither exposed nor compared. The model, reconstructed from
+  these recordings (`core/src/polyshape.rs`):
 
   1. *Fixed-point grid.* Each axis is centred on the middle of its range,
      scaled by `10^p` with `p = 13 - floor(log10(m))` for the largest centred
@@ -1201,19 +1218,33 @@ identity; `tests/matlab_geometry.rs` is the port gate:
      retraced spikes and narrow spikes all follow from this.
 
   The 93 remaining polygons are all near-collinear clouds: points within 1e-6
-  to 1e-10 of a line in random order. Their MATLAB vertices lie 1e5 to 1e8
-  grid units from any exact intersection of the edges, so MATLAB snaps vertices
-  by up to about the tolerance when it resolves nearly parallel crossings.
-  Neither exact intersections nor Clipper 6.4.2's `IntersectPoint` (7 of 9,861
-  vertices) reproduce that. The test names these 93 cases, requires each to
-  stay near-collinear and still differ, and freezes each port hull, emptiness,
-  area and centroid bit for bit in `matlab_polygon_snapping.json`. These are
-  regression snapshots, not MATLAB ground truth. Every other polygon remains
-  gated against MATLAB.
+  to 1e-10 of a line in random order. The test names these 93 cases, requires
+  each to stay near-collinear and still differ, and freezes each port hull,
+  emptiness, area and centroid bit for bit in `matlab_polygon_snapping.json`.
+  These are regression snapshots, not MATLAB ground truth. Every other polygon
+  remains gated against MATLAB. Why these 93 differ is not known; the
+  experimental model below reproduces 53 of them and its replay narrows, but
+  does not settle, the cause.
+
+  *Historical explanation, superseded:* before the polyshape probes this
+  section attributed the 93 to MATLAB snapping vertices by up to the tolerance
+  at nearly parallel crossings, because on this model's grid MATLAB's vertices
+  lay 1e5 to 1e8 grid units from every exact intersection and Clipper's
+  `IntersectPoint` reproduced 7 of 9,861 of them. On the span grid and with
+  Clipper's whole union (experimental model below), every vertex MATLAB keeps
+  for the 2,500 clouds lies on the union wherever the recording can tell which
+  grid point it is. What differs is which vertices survive, not where they lie.
+  The polyshape probe also ruled out the largest centred offset, which step 1
+  uses, as MATLAB's grid measure. The shipped model keeps step 1 unchanged: its
+  hulls still equal MATLAB's on all 27,648 grid-probe polygons (report-only,
+  [below](#shipped-and-experimental-models-on-the-probe-recordings)).
+
   Unrepresentable grids (nonfinite centre/span/scale or scaled coordinates
   outside the integer arithmetic bound) return an empty hull before conversion.
   This prevents overflow or nontermination on extreme coordinates such as
-  1e-300; it is not a MATLAB parity claim for that unsupported domain.
+  1e-300; it is not a MATLAB parity claim for that unsupported domain. MATLAB
+  keeps a 1e-300 triangle's vertices with area 0 where this model returns an
+  empty hull.
   Intersection coordinates use exact arithmetic; face tracing still uses
   floating-point turning and parity decisions. Clipper's source revision,
   copyright, Boost license and adapted distance comparisons are recorded in
@@ -1288,8 +1319,13 @@ with changed bits, 4 carried unchanged, 4 newly differing).
 requires exactly those four. Each correction tried (rotating rings to their
 lowest input vertex, reversing them, face tracing, a non-strict first union,
 splitting holes that touch their outer ring at two vertices) resolves some of
-the four and breaks other polygons, so none is adopted. No general correction
-has been established from the current evidence.
+the four and breaks other polygons, so none is adopted. One union and clean
+pass, or three or four, instead of two, resolves none of the four either
+(tested because MATLAB's default is not idempotent). One pass loses three
+original clouds and 37 real-cloud transforms and gains two held-out
+near-collinear clouds; three or four passes lose six held-out strip pairs and
+gain one held-out cloud. No general correction has been established from the
+current evidence.
 
 Where the model cannot follow MATLAB (nonfinite centre or span,
 `log10(1.25e14 / span)` outside -22 to 38, or a Clipper sweep that fails for a
@@ -1380,6 +1416,83 @@ not idempotent, the model's replay of default boundaries differs for three of
 the seven clouds, and its rings differ from MATLAB's on replayed kept
 boundaries in 2,999 of the 10,346 controlled polygons even where the vertex sets
 and hulls agree.
+
+### What is established and what is not
+
+Established on the pinned recordings (both hosts identical):
+
+- The shipped model's hull agreement on every family listed below, and the 93
+  original clouds where it differs.
+- The experimental model's agreement, its 44 original, 178 held-out and 246
+  causal exceptions, and its four regressions against the shipped model.
+- MATLAB's grid decade follows the span rule on 27,648 probe polygons; input
+  winding does not change MATLAB's hull of the strip pairs, but their starting
+  vertex can; strips one tolerance thick merge up to 2.478 tolerances apart.
+- MATLAB's default `polyshape` is not idempotent on 932, 1607 and cloud 7, and
+  `polyshape` of its `KeepCollinearPoints` vertices differs from the default
+  on 932, 1607, 1937 and cloud 7.
+
+Not known:
+
+- Why MATLAB's default keeps the vertices it keeps for the 44 (experimental)
+  or 93 (shipped) near-collinear clouds. MATLAB's internal stages are not
+  observable through `polyshape`'s public outputs, and `KeepCollinearPoints`
+  is a separate configuration, not one of those stages.
+- Whether any model reproduces both the four clouds and the families the
+  experimental model fixes. The shipped model's hulls of the four depend on
+  the input's order, and the experimental model matches no transform of them
+  (table below).
+- MATLAB's simplified vertex sets in general. The experimental model matches
+  them for 1,904 of the 2,500 original clouds and every grid-probe polygon,
+  and the shipped model's are not compared; SamSrf uses only the hull.
+- Anything outside the recorded families, including the extreme grids where
+  both models refuse or return an empty hull.
+
+### Shipped and experimental models on the probe recordings
+
+Report-only: no gate depends on this table, and it changes no baseline.
+`core/examples/polyshape_hulls.rs` (built with the feature) counts the
+polygons whose hull vertex set equals MATLAB's exactly; the gates also bound
+area and centroid, which changes no count on the original families. Both
+hosts give the same counts.
+
+| Recording | Polygons | Shipped model | Experimental model |
+| --- | ---: | ---: | ---: |
+| Original families (`geometry-reference.json`) | 26,073 | 25,980 | 26,029 |
+| Grid sweep and bisection (probe) | 27,648 | 27,648 | 27,648 |
+| Held-out near-collinear clouds (probe) | 1,500 | 1,192 | 1,352 |
+| Held-out mixed clouds (probe) | 1,500 | 1,435 | 1,470 |
+| Extreme grids (probe) | 7 | 6 | 3, refuses 4 |
+| Strip pairs (causal) | 8,424 | 7,866 | 8,424 |
+| Sliver-width bisection (causal) | 1,152 | 954 | 1,152 |
+| Holes at one contact (causal) | 170 | 170 | 170 |
+| Held-out strip pairs (causal) | 600 | 568 | 600 |
+| Real-cloud transforms (causal) | 403 | 308 | 157 |
+
+The shipped model's one extreme-grid difference is the 1e-300 triangle; its
+match at 1e308..1.1e308 is an empty hull where MATLAB raises
+`MATLAB:polyshape:xyTooLarge`.
+
+Real-cloud transforms by source (every cyclic start, both directions, a
+translation and scales of 1e-2 and 1e2):
+
+| Source cloud | Transforms | Shipped model | Experimental model |
+| --- | ---: | ---: | ---: |
+| 7 | 75 | 75 | 75 |
+| 177 | 39 | 36 | 0 |
+| 932 | 39 | 27 | 0 |
+| 1607 | 83 | 71 | 0 |
+| 1937 | 51 | 17 | 0 |
+| 1090 | 81 | 81 | 81 |
+| held-out 1125 | 35 | 1 | 1 |
+
+The shipped model's agreement on the four regressions depends on the input's
+order too: it matches the recorded order and some other transforms, not all.
+This does not excuse the regressions. The shipped gate is the original
+recording, on which it matches all four and the experimental model none, and
+the experimental model matches no transform of any of the four.
+
+### Performance
 
 Performance, measured before the extraction (one core of a loaded builder,
 timings approximate): on the whole X001 example (6 runs, 6,587 V1-V3 vertices,
