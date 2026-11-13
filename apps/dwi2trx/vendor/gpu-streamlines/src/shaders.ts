@@ -46,15 +46,26 @@ const BOOT_PARTS: ReadonlyArray<readonly [string, string]> = [
 //      feature optional). Removing them in the reference left the streamlines
 //      statistically unchanged.
 // (globals.wgsl's REAL_MAX literal was also nudged to a representable f32.)
+//   4. with the `subgroup-size-control` feature, `@subgroup_size(32)` on both
+//      entry points: Vulkan then compiles them with requiredSubgroupSize 32 and
+//      full subgroups, so a GPU offering 8-32 lanes (Intel) cannot pick 16 (#598).
 const BROWSER_PREAMBLE =
   'enable subgroups;\ndiagnostic(off, subgroup_uniformity);\n'
 
-/** Concatenated WGSL source for the Boot/OPDT shader module (browser-adapted). */
-export function bootShaderSource(): string {
-  const body = BOOT_PARTS.map(([name, src]) => `// ── ${name} ──\n${src}`).join(
+const ENTRY_ATTRIBUTE = '@compute @workgroup_size(32, 2, 1)'
+
+/** Concatenated WGSL source for the Boot/OPDT shader module (browser-adapted).
+ *  `subgroupSize` pins the entry points' subgroup size; it needs a device with
+ *  the `subgroup-size-control` feature. */
+export function bootShaderSource(subgroupSize?: number): string {
+  let body = BOOT_PARTS.map(([name, src]) => `// ── ${name} ──\n${src}`).join(
     '\n',
-  )
-  return BROWSER_PREAMBLE + body.replace(/subgroupBarrier\(\);/g, '')
+  ).replace(/subgroupBarrier\(\);/g, '')
+  if (subgroupSize === undefined) return BROWSER_PREAMBLE + body
+  const entries = body.split(ENTRY_ATTRIBUTE).length - 1
+  if (entries !== 2) throw new Error(`Expected 2 Boot entry points, found ${entries}.`)
+  body = body.replaceAll(ENTRY_ATTRIBUTE, `@subgroup_size(${subgroupSize})\n${ENTRY_ATTRIBUTE}`)
+  return `${BROWSER_PREAMBLE}enable subgroup_size_control;\n${body}`
 }
 
 /** Boot kernel entry points (pass 1 counts streamlines, pass 2 generates them). */

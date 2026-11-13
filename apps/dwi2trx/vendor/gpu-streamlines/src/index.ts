@@ -2,6 +2,7 @@
 export {
   DEFAULT_PARAMS,
   getTrackingDevice,
+  pinsSubgroupSize,
   isOomError,
   trackStreamlines,
 } from './tracker.ts'
