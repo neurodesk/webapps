@@ -1,0 +1,5 @@
+# ort-sys rc.13 derives the runtime directory from Cargo's pre-1.100 layout.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["clippy", "rustfmt"]

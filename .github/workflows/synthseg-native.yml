@@ -56,6 +56,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
+          toolchain: '1.99.1'
           components: clippy, rustfmt
       - name: Check formatting, lint and small CPU/Metal fixture parity
         run: |
@@ -90,6 +91,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: '1.99.1'
       - name: Check release target
         id: target
         env:

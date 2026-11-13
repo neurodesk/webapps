@@ -1,0 +1,6 @@
+# ort-sys rc.13 derives the runtime directory from Cargo's pre-1.100 layout.
+# Keep local builds and browser-reference provisioning on the native CI toolchain.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["clippy", "rustfmt"]

@@ -273,6 +273,28 @@ test('portable Node command lines build on target runners and publish through on
   }
 });
 
+test('ort-sys native builds pin Cargo without changing committed WASM toolchains', async () => {
+  for (const name of ['synthsr', 'synthseg']) {
+    const toolchain = await readFile(new URL(`../exes/${name}/rust-toolchain.toml`, import.meta.url), 'utf8');
+    const channel = toolchain.match(/^channel = "([^"]+)"$/m)?.[1];
+    assert.equal(channel, '1.99.1', `${name} local and make builds avoid ort-sys rc.13's Cargo 1.100 incompatibility`);
+    const flow = await workflow(`${name}-native`);
+    for (const job of Object.values(flow.jobs)) {
+      for (const step of job.steps ?? []) {
+        if (step.uses?.startsWith('dtolnay/rust-toolchain@')) {
+          assert.equal(step.with?.toolchain, channel, `${name} CI and local toolchains agree`);
+        }
+      }
+    }
+  }
+  for (const path of ['rust-toolchain', 'rust-toolchain.toml']) {
+    await assert.rejects(readFile(new URL(`../${path}`, import.meta.url)), { code: 'ENOENT' });
+  }
+  const easy = await readFile(new URL('../packages/easy-mp2rage/scripts/build-wasm.sh', import.meta.url), 'utf8');
+  assert.match(easy, /^RUST_TOOLCHAIN=1\.98\.0$/m);
+  assert.match(easy, /^export RUSTUP_TOOLCHAIN="\$RUST_TOOLCHAIN"$/m);
+});
+
 test('clean Windows checks use immutable inputs and verify the installer before use', async () => {
   const directory = new URL('../exes/node-cli/scripts/', import.meta.url);
   const pins = JSON.parse(await readFile(new URL('clean-windows-inputs.json', directory), 'utf8'));
