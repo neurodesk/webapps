@@ -196,9 +196,10 @@ jobs:
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-polyshape-probe" packages/samsrf/validation/matlab/polyshape-probe-reference.json
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-polyshape-causal" packages/samsrf/validation/matlab/polyshape-causal-reference.json
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-polyshape-reproducers" packages/samsrf/validation/matlab/polyshape-reproducers-reference.json
           node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-polyshape-probe/ubuntu-22.04" "$RUNNER_TEMP/samsrf-polyshape-probe/ubuntu-24.04" "$RUNNER_TEMP/samsrf-polyshape-probe-hosts.json"
           node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-polyshape-causal/ubuntu-22.04" "$RUNNER_TEMP/samsrf-polyshape-causal/ubuntu-24.04" "$RUNNER_TEMP/samsrf-polyshape-causal-hosts.json"
-          SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR="$RUNNER_TEMP/samsrf-polyshape-probe" SAMSRF_MATLAB_POLYSHAPE_CAUSAL_DIR="$RUNNER_TEMP/samsrf-polyshape-causal" \
+          SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR="$RUNNER_TEMP/samsrf-polyshape-probe" SAMSRF_MATLAB_POLYSHAPE_CAUSAL_DIR="$RUNNER_TEMP/samsrf-polyshape-causal" SAMSRF_MATLAB_POLYSHAPE_REPRODUCERS_DIR="$RUNNER_TEMP/samsrf-polyshape-reproducers" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --features polyshape-experimental --test matlab_polyshape_experimental -- --nocapture
       - name: CSS trace, MATLAB arithmetic, extreme-scale and rank regression gates
         run: |
