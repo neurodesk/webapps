@@ -386,6 +386,7 @@ test('a synchronous stack insertion failure releases decoded siblings and unused
   const urls = countingUrls();
   try {
     const { nv, decodes, viewer } = twoPhase();
+    nv.mediaUrlMap = new Map();
     nv.addVolume = () => { throw new Error('viewer insertion failed'); };
     const stack = viewer.loadVolumeStack([
       { file: file('base.nii') },
@@ -395,8 +396,22 @@ test('a synchronous stack insertion failure releases decoded siblings and unused
     await assert.rejects(stack, /viewer insertion failed/);
     assert.equal(viewer.decodedUrls.size, 0, 'uninserted siblings must be released');
     assert.equal(viewer.insertedUrls.size, 0, 'failed insertions must not retain URLs');
+    assert.equal(nv.mediaUrlMap.size, 0, 'failed insertions must not retain decoded images in NiiVue');
     assert.deepEqual(urls.revoked.sort(), ['blob:base.nii#1', 'blob:overlay.nii#2']);
   } finally {
     urls.restore();
   }
+});
+
+test('replacing and clearing checked volumes releases NiiVue URL references', async () => {
+  const { nv, decodes, viewer } = twoPhase();
+  nv.mediaUrlMap = new Map();
+  for (const name of ['first.nii', 'second.nii']) {
+    const loading = viewer.loadBaseVolume(file(name), { assertCurrent: () => {} });
+    decodes.at(-1).finish();
+    await loading;
+    assert.deepEqual([...nv.mediaUrlMap.keys()], nv.volumes, 'only images still displayed may be retained');
+  }
+  viewer.clearVolumes();
+  assert.equal(nv.mediaUrlMap.size, 0, 'clearing the viewer must release decoded images');
 });

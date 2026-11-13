@@ -41,6 +41,7 @@ export class ViewerController {
     this.releaseSupersededLoads();
     for (const [image, url] of this.insertedUrls) {
       if (this.nv?.volumes?.includes(image)) continue;
+      this.nv?.mediaUrlMap?.delete(image);
       URL.revokeObjectURL(url);
       this.insertedUrls.delete(image);
     }
@@ -238,8 +239,12 @@ export class ViewerController {
 
   recordBaseVolume(file, options = {}) {
     this.currentBaseFile = this.currentFile = file;
-    this.currentOverlayFile = null; this.currentOverlayIndex = null; this.volumeStageIndices.clear();
-    this.stageVisibility.clear(); this.stageOpacity.clear(); this.volumeFiles = [file];
+    this.currentOverlayFile = null;
+    this.currentOverlayIndex = null;
+    this.volumeStageIndices.clear();
+    this.stageVisibility.clear();
+    this.stageOpacity.clear();
+    this.volumeFiles = [file];
     if (options.stage) {
       this.volumeStageIndices.set(options.stage, 0);
       this.setStageOpacity(options.stage, options.opacity ?? 1);
@@ -358,14 +363,20 @@ export class ViewerController {
     const appliedOpacity = config.opacity;
     const index = this.nv.volumes.length - 1;
     if (index > 0) {
-      if (config.scalar) this.configureScalarVolume(index, colormap, config); else this.configureSegmentationVolume(index, colormap);
-      this.nv.setOpacity?.(index, appliedOpacity); this.nv.updateGLVolume?.(); this.nv.drawScene?.();
+      if (config.scalar) this.configureScalarVolume(index, colormap, config);
+      else this.configureSegmentationVolume(index, colormap);
+      this.nv.setOpacity?.(index, appliedOpacity);
+      this.nv.updateGLVolume?.();
+      this.nv.drawScene?.();
     }
     this.volumeFiles[index] = file;
-    this.currentOverlayFile = this.currentFile = file; this.currentOverlayIndex = index > 0 ? index : null;
+    this.currentOverlayFile = this.currentFile = file;
+    this.currentOverlayIndex = index > 0 ? index : null;
     if (config.stage) {
-      this.volumeStageIndices.set(config.stage, index); this.setStageOpacity(config.stage, appliedOpacity);
-      this.setStageVisibilityState(config.stage, config.visible !== false, config.visible !== undefined); this.applyStageOpacity(config.stage);
+      this.volumeStageIndices.set(config.stage, index);
+      this.setStageOpacity(config.stage, appliedOpacity);
+      this.setStageVisibilityState(config.stage, config.visible !== false, config.visible !== undefined);
+      this.applyStageOpacity(config.stage);
     }
     this.currentVolumeStackSignature = null;
     if (config.releaseUnusedUrls !== false) this.releaseUnusedObjectUrls();
