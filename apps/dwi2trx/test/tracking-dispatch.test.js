@@ -62,8 +62,8 @@ test('physical window size preserves each logical workgroup and its original see
   for (const window of [1, 7, 16, 37]) {
     const f = gpu();
     await dispatchBootWindows(f.device, 'count', 37, [], f.parameters, undefined, window);
-    const laneIds = f.commands.flatMap(command => Array.from({ length: command.counts[0] * 64 }, (_, lane) => command.first * 64 + lane));
-    assert.deepEqual(laneIds, Array.from({ length: 37 * 64 }, (_, lane) => lane));
+    const laneIds = f.commands.flatMap(command => Array.from({ length: command.counts[0] * 32 }, (_, lane) => command.first * 32 + lane));
+    assert.deepEqual(laneIds, Array.from({ length: 37 * 32 }, (_, lane) => lane));
   }
 });
 

@@ -61,9 +61,13 @@ Local changes:
   later, #598). Values the barriers branch on (direction and peak counts, the
   interpolation and tissue results, the saved step state) pass through
   `workgroup_uniform_i32` (`utils.wgsl`), a `workgroupUniformLoad` of lane 0's value,
-  so Tint's uniformity analysis accepts the barriers. Workgroup memory halves to
-  about 10.4 KB. Seeds, Philox streams and the arithmetic are unchanged, so the TRX
-  is the same bytes.
+  so Tint's uniformity analysis accepts the barriers. Two shared-memory races go
+  too: only lane 0 writes `closest_peak_d`'s chosen direction (lanes can keep
+  different peaks on a tie), and `check_point_fn` interpolates in each lane instead
+  of every lane writing one workgroup slot. Workgroup memory halves to about
+  10.4 KB, and `trackStreamlines` refuses inputs with more than 512 volumes, sphere
+  vertices or model coefficients, which would write past it. Seeds, Philox streams
+  and the arithmetic are unchanged, so the TRX should be the same bytes.
 - `src/tracker.ts`: `trackStreamlines` takes an optional `replaceDevice`. When the
   device is lost it uploads the static inputs to the replacement and reruns the
   interrupted batch, within `MAX_DEVICE_RECOVERIES` (2) attempts per run, and

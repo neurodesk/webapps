@@ -203,3 +203,13 @@ test('a run cancelled while the replacement is requested uploads nothing to it',
   assert.equal(result.processedSeeds, CHUNK);
   assert.equal(result.deviceRecoveries, 0);
 });
+
+test('inputs larger than the kernel workgroup arrays are refused before any GPU work', async () => {
+  const device = fakeDevice('first');
+  const tooMany = { ...inputs, dims: [2, 2, 2, 513] };
+  await assert.rejects(
+    trackStreamlines(device, tooMany, new Float32Array(3 * SEEDS), params),
+    /at most 512 volumes, sphere vertices and model coefficients; this run needs 544\./,
+  );
+  assert.equal(device.buffers.length, 0);
+});

@@ -108,8 +108,6 @@ var<workgroup> wg_sh_mem: array<f32, 2048>;
 var<workgroup> wg_sh_ind: array<atomic<i32>, 512>;
 // MAX_SLINES_PER_SEED * 3 = 30
 var<workgroup> wg_dirs_sh: array<f32, 30>;
-// For check_point
-var<workgroup> wg_interp_out: array<f32, 1>;
 // Scratch for closest_peak / new direction
 var<workgroup> wg_new_dir: array<f32, 3>;
 // Set when the compiled subgroup layout differs from the one the kernel assumes
@@ -282,16 +280,22 @@ fn closest_peak_d(
 
     if (cpeak_idx >= 0) {
         let base = dirs_offset + u32(cpeak_idx) * 3u;
+        // Lanes can keep different peaks when two tie, so only lane 0 writes the
+        // scratch; the caller takes lane 0's return value (workgroup_uniform_i32).
         if (cpeak_dot >= cos_similarity) {
-            wg_new_dir[peak_offset] = wg_dirs_sh[base];
-            wg_new_dir[peak_offset + 1u] = wg_dirs_sh[base + 1u];
-            wg_new_dir[peak_offset + 2u] = wg_dirs_sh[base + 2u];
+            if (tidx == 0u) {
+                wg_new_dir[peak_offset] = wg_dirs_sh[base];
+                wg_new_dir[peak_offset + 1u] = wg_dirs_sh[base + 1u];
+                wg_new_dir[peak_offset + 2u] = wg_dirs_sh[base + 2u];
+            }
             return 1;
         }
         if (cpeak_dot <= -cos_similarity) {
-            wg_new_dir[peak_offset] = -wg_dirs_sh[base];
-            wg_new_dir[peak_offset + 1u] = -wg_dirs_sh[base + 1u];
-            wg_new_dir[peak_offset + 2u] = -wg_dirs_sh[base + 2u];
+            if (tidx == 0u) {
+                wg_new_dir[peak_offset] = -wg_dirs_sh[base];
+                wg_new_dir[peak_offset + 1u] = -wg_dirs_sh[base + 1u];
+                wg_new_dir[peak_offset + 2u] = -wg_dirs_sh[base + 2u];
+            }
             return 1;
         }
     }

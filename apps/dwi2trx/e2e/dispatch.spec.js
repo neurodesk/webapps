@@ -44,7 +44,7 @@ test('physical dispatch windows preserve the actual Boot Philox seed and lane st
     const adapter = await navigator.gpu.requestAdapter();
     const device = await adapter.requestDevice();
     const gridX = 37;
-    const bytes = gridX * 64 * 2 * 4;
+    const bytes = gridX * 32 * 2 * 4;
     const module = device.createShaderModule({ code: shader });
     const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'probe' } });
     try {
