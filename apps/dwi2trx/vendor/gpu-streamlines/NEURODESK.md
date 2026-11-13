@@ -48,6 +48,17 @@ Local changes:
   unchanged; upstream's `tracker_boot` loop became the kernel's step loop. The app's
   hardware test requires the same TRX with one unbounded command per pass and with
   the defaults, and a nightly test with 3 steps per command.
+- `src/shaders.ts`, `src/tracker.ts`: on a device with `subgroup-size-control`,
+  `getTrackingDevice` requests the feature and both entry points are compiled with
+  `@subgroup_size(32)` (Vulkan `requiredSubgroupSize` with full subgroups), so a GPU
+  that offers 16 to 32 lanes cannot run them at 16. Other devices keep the checks
+  above. Output on a 32-lane GPU is unchanged.
+- `src/tracker.ts`: `trackStreamlines` takes an optional `replaceDevice`. When the
+  device is lost it uploads the static inputs to the replacement and reruns the
+  interrupted batch, at most `MAX_DEVICE_RECOVERIES` (2) times per run, and reports
+  the count as `TrackResult.deviceRecoveries`. Streams follow the run-wide seed
+  index, so the output equals an uninterrupted run's; the app's hardware test
+  destroys the device mid-generation and requires the same TRX.
 - `src/trx.ts`: fixed local DOS timestamp (1980-01-01) for deterministic ZIP bytes;
   geometry, member order and uncompressed payload are unchanged.
 - `package.json`: include the new dispatcher and this provenance, and pin the
