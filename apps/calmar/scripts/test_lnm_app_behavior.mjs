@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as niftiModule from 'nifti-reader-js';
 import { writeNifti1 } from '../web/js/modules/nifti-writer.js';
+import { runCurrent } from '../web/js/modules/current-task.js';
 import { LESION_MASK_COLORMAP_ID } from '../web/js/app/lnm-labels.js';
 import {
   VOLUME_SPACES,
@@ -101,8 +102,35 @@ globalThis.File = class {
 const { LesionNetworkMappingApp, formatVersionLabel } =
   await import(path.join(ROOT, 'web/js/lnm-app.js'));
 
+// A stub stands for the shared ViewerController, whose loads run the caller's
+// check and then commit in one step.
+function checkThenCommit(stub) {
+  for (const [name, optionsAt] of [['loadBaseVolume', 1], ['loadOverlay', 3], ['loadVolumeStack', 1]]) {
+    const load = stub?.[name];
+    if (!load) continue;
+    stub[name] = async (...args) => {
+      const { assertCurrent, onCommit, replaceStage, ...options } = args[optionsAt] || {};
+      const recorded = [...args];
+      if (args[optionsAt]) recorded[optionsAt] = options;
+      const result = await load(...recorded);
+      assertCurrent?.();
+      if (replaceStage) stub.removeVolumeForStage?.(options.stage);
+      onCommit?.();
+      return result;
+    };
+  }
+  return stub;
+}
+
 function makeApp() {
   const app = new LesionNetworkMappingApp();
+  let viewerController = checkThenCommit(app.viewerController);
+  Object.defineProperty(app, 'viewerController', {
+    get: () => viewerController,
+    set: (stub) => {
+      viewerController = checkThenCommit(stub);
+    }
+  });
   // Capture updateOutput so we can inspect status messages without
   // dragging in ConsoleOutput's DOM dependency.
   app._messages = [];
@@ -118,6 +146,315 @@ function useMockElements(elementsById) {
 
 function waitMs(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Every suspension, including rejection into catch/finally, has the same gate.
+for (const failed of [false, true]) {
+  for (const boundary of [0, 1, 2]) {
+    const app = makeApp();
+    const writes = [];
+    let release;
+    const task = runCurrent(app.owner('mask'), (function* () {
+      try {
+        for (let index = 0; index < 3; index += 1) {
+          if (index === boundary) {
+            yield new Promise((resolve, reject) => {
+              release = () => failed ? reject(new Error('late failure')) : resolve();
+            });
+          } else yield Promise.resolve();
+          writes.push(index);
+        }
+      } catch {
+        writes.push('catch');
+      } finally {
+        writes.push('finally');
+      }
+    })());
+    await waitForMicrotaskCondition(() => release, 'the selected suspension must start');
+    app.cancelImports('mask');
+    release();
+    await assert.rejects(task, { name: 'AbortError' });
+    assert.deepEqual(writes, Array.from({ length: boundary }, (_, index) => index));
+  }
+}
+{
+  const writes = [];
+  const value = await runCurrent(() => {}, (function* () {
+    try {
+      yield Promise.reject(new Error('current failure'));
+    } catch (error) {
+      writes.push(error.message);
+    }
+    return yield Promise.resolve('completed');
+  })());
+  assert.deepEqual(writes, ['current failure']);
+  assert.equal(value, 'completed');
+}
+
+// Review ownership must reach preparation helpers, before they start worker work.
+{
+  const app = makeApp();
+  app.structuralFile = { name: 'T1.nii', arrayBuffer: async () => new ArrayBuffer(0) };
+  let releaseManifest;
+  app.ensureManifest = () => new Promise(resolve => { releaseManifest = resolve; });
+  const sent = [];
+  app.executor = {
+    loadVolume: async () => { sent.push('load'); },
+    runSynthStrip: async () => {
+      sent.push('extract');
+      app._resolveStageData('brainmask', {});
+      app._resolveStepComplete('brainmask');
+    }
+  };
+  app.maskReviewActive = true;
+  const alignment = app.prealignToMni160({ confirming: true, assertCurrent: app.owner('pipeline', 'mask') });
+  app.beginImport('mask');
+  releaseManifest({ modelAssets: [{ id: 'lnm-synthstrip', supportStatus: 'supported', sourceUrl: 'https://example.test/model.onnx' }] });
+  await assert.rejects(alignment, { name: 'AbortError' });
+  assert.deepEqual(sent, [], 'a replaced confirmation must not launch brain extraction for its successor');
+}
+
+// Failure while preparing a seed ends the current review, like drawing failure.
+{
+  const app = makeApp();
+  app.nativeStructuralFile = { name: 'T1.nii' };
+  app.ensureNativeStructuralInfo = async () => ({});
+  app.loadViewerBaseVolume = async () => true;
+  app.maskDrawingController = { loadBrainMaskFile: async () => {}, close() {} };
+  app.resampleSeedMaskToNative = async () => { throw new Error('seed preparation failed'); };
+  await assert.rejects(app.startLesionMaskReview({ seedFile: { name: 'seed.nii' } }), /seed preparation failed/);
+  assert.equal(app.maskReviewActive, false, 'failed seed preparation must release the review base lock');
+}
+
+// The asynchronous stage-to-review handoff also belongs to its original run.
+{
+  const app = makeApp();
+  let reviews = 0;
+  app.runLesionSegmentation = async () => { app.cancelImports('pipeline'); };
+  app.startLesionMaskReview = async () => { reviews += 1; };
+  await assert.rejects(app._runStage({ module: 'inference-pipeline' }), { name: 'AbortError' });
+  assert.equal(reviews, 0, 'a superseded segmentation must not start a review on the replacement subject');
+}
+
+// Top-level cancellation still resolves, without clearing a successor's pause.
+{
+  const app = makeApp();
+  app.structuralFile = { name: 'T1.nii' };
+  const replacement = { pipeline: {}, nextStageIndex: 2 };
+  app._runPipelineWithStatus = async () => {
+    app.cancelImports('pipeline');
+    app._pendingMaskResume = replacement;
+    return 'stopped';
+  };
+  assert.equal(await app.runLesionPreparation(), undefined);
+  assert.equal(app._pendingMaskResume, replacement);
+}
+
+// Replacing a review also settles worker waits owned by that review.
+{
+  const app = makeApp();
+  let cancelled = 0;
+  app.executor = { running: true, cancel() { cancelled += 1; this.running = false; } };
+  app._pipelineRunning = true;
+  app._workerRun = app.owner('pipeline', 'mask');
+  const waiting = app._waitForStageData('brainmask');
+  app.beginImport('mask');
+  assert.equal(cancelled, 1, 'a superseded review worker must be cancelled before its replies are dropped');
+  await assert.rejects(waiting, { name: 'AbortError' });
+  assert.equal(app._pipelineRunning, false);
+}
+
+// Failed preparation must release its waits even before the first worker command.
+for (const method of ['runBrainExtraction', 'runLesionSegmentation', 'runDeepIslesSegmentation']) {
+  const app = makeApp();
+  app.structuralFile = app.nativeStructuralFile = { name: 'T1.nii', arrayBuffer: async () => { throw new Error('read failed'); } };
+  app.deepIslesDwiFile = app.structuralFile;
+  app.deepIslesAdcFile = app.structuralFile;
+  app.deepIslesSeedCanReviewOnNativeT1 = async () => true;
+  app.ensureManifest = async () => ({ modelAssets: [
+    { id: 'lnm-synthstrip', supportStatus: 'supported', sourceUrl: 'https://example.test/strip.onnx' },
+    { id: 'lnm-stroke-lesion', supportStatus: 'supported', sourceUrl: 'https://example.test/stroke.onnx' },
+    { id: 'lnm-deepisles-seals-fold0', supportStatus: 'supported', sourceUrl: 'https://example.test/seals.onnx' }
+  ] });
+  await assert.rejects(app[method](), /read failed/);
+  assert.equal(app._stageDataResolvers.size, 0, `${method} must release stage waits after preparation failure`);
+  assert.equal(app._stepCompleteResolvers.size, 0, `${method} must release completion waits after preparation failure`);
+}
+
+// A replacement upload may fail before opening its own review.
+{
+  const app = makeApp();
+  app.nativeStructuralFile = { name: 'T1.nii' };
+  let release;
+  app.ensureNativeStructuralInfo = async () => ({});
+  app.loadViewerBaseVolume = async () => true;
+  app.maskDrawingController = { loadBrainMaskFile: async () => {}, close() {} };
+  app.resampleSeedMaskToNative = () => new Promise(resolve => { release = resolve; });
+  const old = app.startLesionMaskReview({ seedFile: { name: 'seed.nii' } });
+  await waitForMicrotaskCondition(() => release, 'review seed preparation must begin');
+  app.beginImport('mask');
+  assert.equal(app.maskReviewActive, false, 'superseding a preparing review must release its base lock before the next upload is decoded');
+  release(null);
+  await assert.rejects(old, { name: 'AbortError' });
+}
+
+// Cancellation also ends a review that is still preparing its drawing.
+{
+  const app = makeApp();
+  app.nativeStructuralFile = { name: 'T1.nii' };
+  app.ensureNativeStructuralInfo = async () => ({});
+  app.loadViewerBaseVolume = async () => true;
+  app.maskDrawingController = { loadBrainMaskFile: async () => {}, close() {} };
+  let release;
+  app.resampleSeedMaskToNative = () => new Promise(resolve => { release = resolve; });
+  let drawingLoads = 0;
+  app.viewerLoad = async () => { drawingLoads += 1; };
+  app.beginStatus('Preparing');
+  const review = app.startLesionMaskReview({ seedFile: { name: 'seed.nii' } });
+  await waitForMicrotaskCondition(() => release, 'review seed preparation must begin');
+  app.invalidatePipeline('cancelled by the user');
+  assert.equal(app.maskReviewActive, false, 'cancelling unfinished review preparation must release its base lock immediately');
+  release(null);
+  await assert.rejects(review, { name: 'AbortError' });
+  assert.equal(drawingLoads, 0, 'cancelled review preparation must not open a drawing later');
+  assert.equal(app._preparingMaskReview, null);
+}
+
+// Download callbacks belong to the result computation that requested them.
+{
+  const app = makeApp();
+  app.selectedAtlasOptionId = 'yeo7';
+  const option = app.getAtlasOption();
+  app.overlapResult = { atlasOption: option, parcelResult: { parcels: [{ label: 1 }] } };
+  app.ensureManifest = async () => ({ connectomeAssets: [{
+    id: option.connectomeAssetId,
+    supportStatus: 'supported',
+    sourceUrl: 'https://example.test/held-connectome.bin'
+  }] });
+  const originalFetch = globalThis.fetch;
+  const originalCaches = globalThis.caches;
+  let stream;
+  globalThis.caches = undefined;
+  globalThis.fetch = async () => ({
+    ok: true,
+    headers: { get: () => '8' },
+    body: new ReadableStream({ start(controller) { stream = controller; } })
+  });
+  const progress = [];
+  app.handleWorkerProgress = (...args) => progress.push(args);
+  try {
+    const map = app.runFcNetworkMap();
+    await waitForMicrotaskCondition(() => stream, 'connectome download must begin');
+    app.clearDerivedResults();
+    stream.enqueue(new Uint8Array(8));
+    await waitMs(0);
+    stream.error(new Error('end held download'));
+    await assert.rejects(map, /end held download/);
+    assert.deepEqual(progress, [], 'a superseded download must not overwrite replacement progress');
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.caches = originalCaches;
+  }
+}
+
+// Cleanup from old work must leave a current worker and its waiters alone.
+{
+  const app = makeApp();
+  let cancelled = 0;
+  app.executor = { running: true, cancel() { cancelled += 1; } };
+  const obsolete = app.owner('pipeline', 'mask');
+  const oldWait = app._waitForStageData('brainmask', obsolete);
+  const sharedWorker = app.owner('pipeline');
+  app._workerRun = sharedWorker;
+  app.beginImport('mask');
+  await assert.rejects(oldWait, { name: 'AbortError' });
+  const current = app.owner('pipeline', 'mask');
+  const newWait = app._waitForStageData('brainmask', current);
+  app.releaseWorkerWaits(obsolete);
+  assert.equal(cancelled, 0, 'a current shared worker remains available to the replacement review');
+  assert.equal(app._stageDataResolvers.get('brainmask').length, 1);
+  app._resolveStageData('brainmask', 'new mask');
+  assert.equal(await newWait, 'new mask');
+}
+
+// QC preparation cannot borrow a replacement subject after the template load.
+for (const method of ['renderMniRegistrationQc', 'renderCheckerboardRegistrationQc', 'renderDisplacementRegistrationQc']) {
+  const app = makeApp();
+  let release;
+  const prepared = new Promise(resolve => { release = resolve; });
+  app.registeredT1MniFile = app.displacementMagnitudeFile = { name: 'old.nii' };
+  app.ensureRegistrationTemplateFile = () => prepared;
+  app.ensureRegistrationCheckerboardFile = () => prepared;
+  let stacks = 0;
+  app.loadViewerVolumeStack = async () => { stacks += 1; };
+  const rendering = app[method]();
+  app.cancelImports('pipeline');
+  release({ name: 'template.nii' });
+  await assert.rejects(rendering, { name: 'AbortError' });
+  assert.equal(stacks, 0, `${method} must not launch a viewer load on its successor`);
+}
+
+// Supersession while a seed is prepared settles the old status without killing
+// the pipeline-owned brain-mask worker that the new review can still use.
+{
+  const app = makeApp();
+  app.nativeStructuralFile = { name: 'T1.nii' };
+  app.ensureNativeStructuralInfo = async () => ({});
+  app.loadViewerBaseVolume = async () => true;
+  app.maskDrawingController = { loadBrainMaskFile: async () => {}, close() {} };
+  let release;
+  app.resampleSeedMaskToNative = () => new Promise(resolve => { release = resolve; });
+  app.beginStatus('Preparing');
+  const old = app.startLesionMaskReview({ seedFile: { name: 'seed.nii' } });
+  await waitForMicrotaskCondition(() => release, 'seed must start');
+  app.beginImport('mask');
+  assert.equal(app._pipelineRunning, false);
+  release(null);
+  await assert.rejects(old, { name: 'AbortError' });
+}
+
+// A dispatch failure releases worker activity as well as registered waits.
+{
+  const app = makeApp();
+  const owner = app.owner('pipeline', 'mask');
+  let cancelled = 0;
+  app.executor = { running: true, cancel() { cancelled += 1; this.running = false; } };
+  app._workerRun = owner;
+  const old = app._waitForStageData('segmentation', owner);
+  app.finishWorkerTask(owner, new Error('post failed'));
+  await assert.rejects(old, { name: 'AbortError' });
+  assert.equal(cancelled, 1);
+  assert.equal(app.executor.running, false);
+  const nextOwner = app.owner('pipeline', 'mask');
+  app._workerRun = nextOwner;
+  app.executor.running = true;
+  app.finishWorkerTask(owner, new Error('late failure'));
+  assert.equal(cancelled, 1, 'old failure cleanup cannot terminate the successor worker');
+  assert.equal(app.executor.running, true);
+}
+
+// ---- A handler without a check is refused, and ownership decides what it may write ----
+{
+  const app = makeApp();
+  assert.throws(() => app.unlessSuperseded(() => {}), TypeError, 'a handler without a check is refused');
+  assert.throws(() => app.reportFailure('Load failed'), TypeError, 'a report without a check is refused');
+
+  const owner = app.owner('pipeline', 'lesion');
+  app.reportFailure('Load failed', owner)(new Error('disk'));
+  assert.deepEqual(app._messages, ['Load failed: disk'], 'a current action reports its failure');
+  app.cancelImports('pipeline');
+  app.reportFailure('Load failed', owner)(new Error('disk'));
+  let handled = 0;
+  app.unlessSuperseded(owner, () => {
+    handled += 1;
+  })(new Error('disk'));
+  assert.deepEqual(app._messages, ['Load failed: disk'], 'an ordinary error from a superseded action is not reported');
+  assert.equal(handled, 0, 'and its handler writes nothing');
+  owner.renew();
+  app.reportFailure('Load failed', owner)(new Error('again'));
+  assert.equal(app._messages.at(-1), 'Load failed: again', 'an action that replaced the subject itself still owns it');
+  app.reportFailure('Load failed', owner)(new DOMException('replaced', 'AbortError'));
+  assert.equal(app._messages.length, 2, 'an AbortError from a nested turn is not reported either');
 }
 
 // ---- One log: every message reaches the technical log once, in full, with its level ----
@@ -402,6 +739,21 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     'setStructural must not call runBrainExtraction; users explicitly start processing');
 }
 
+// ---- A completed base load does not authorize a replaced import's continuation ----
+for (const kind of ['structural', 'lesion']) {
+  const app = makeApp();
+  app.viewerController = { loadBaseVolume: async () => true };
+  const commit = app.commitViewerBase.bind(app);
+  app.commitViewerBase = (file) => {
+    commit(file);
+    queueMicrotask(() => app.cancelImports(kind));
+  };
+  const file = { name: `replaced-${kind}.nii` };
+  const importFile = kind === 'structural' ? app.setStructural(file) : app.setLesion(file);
+  await assert.rejects(importFile, { name: 'AbortError' }, `${kind} rechecks before reporting readiness`);
+  assert.ok(!app._messages.some(message => message.includes(`ready: ${file.name}`)), 'a replaced import stays silent');
+}
+
 // ---- Test 7a: lesion masks render with the dedicated blue colormap ----
 {
   const app = makeApp();
@@ -572,6 +924,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   app.nv.drawScene = () => { calls.push('draw-scene'); };
   app.viewerController = {
     clearVolumes: () => { calls.push('clear-volumes'); },
+    removeVolumeForStage: () => false,
     loadOverlay: async () => {},
     setStageVisible: (stage, visible) => { calls.push(`visible:${stage}:${visible}`); }
   };
@@ -976,6 +1329,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     app.viewerController = {
       clearVolumes: () => calls.push({ type: 'clearVolumes' }),
       getVolumeIndexForStage: () => null,
+      removeVolumeForStage: () => false,
       loadOverlay: async (file, colormap, opacity, options) => {
         calls.push({ type: 'overlay', file, colormap, opacity, options });
       }
@@ -1251,6 +1605,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   app.viewerBaseFile = app.structuralFile;
   app.viewerController = {
     loadBaseVolume: async (file, options) => { baseLoads.push({ file, options }); },
+    removeVolumeForStage: () => false,
     loadOverlay: async (file, colormap, opacity, options) => {
       overlayLoads.push({ file, colormap, opacity, options });
     }
@@ -1582,7 +1937,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   });
   const previewCalls = [];
   app.viewerController = {
-    replaceOverlayForStage: async (...args) => { previewCalls.push(args); },
+    loadOverlay: async (file, colormap, opacity, options) => { previewCalls.push([options.stage, file, colormap, opacity]); },
     removeVolumeForStage: () => {}
   };
   app.networkMapData = new Float32Array([-1.0, 0.25, 0.75, 2.0]);
@@ -1643,7 +1998,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   const originalCreateElement = globalThis.document.createElement;
   globalThis.document.createElement = tag => dom.window.document.createElement(tag);
   app.viewerController = {
-    replaceOverlayForStage: async () => {},
+    loadOverlay: async () => {},
     removeVolumeForStage: () => {}
   };
   app.networkMapData = new Float32Array([0.1, 2.0, 3.0, 4.0]);
@@ -1823,7 +2178,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   };
   const restoreDocument = useMockElements(elements);
   app.viewerController = {
-    replaceOverlayForStage: async () => {},
+    loadOverlay: async () => {},
     removeVolumeForStage: () => {}
   };
   app.networkMapData = new Float32Array([1, 2, 3, 4]);
@@ -2154,6 +2509,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   const restoreDocument = useMockElements(toggles);
   app.viewerController = {
     getVolumeIndexForStage: stage => activeStages.has(stage) ? 1 : null,
+    removeVolumeForStage: () => false,
     loadOverlay: async (file, colormap, opacity, options = {}) => {
       overlayCalls.push([file, colormap, opacity, options]);
       if (options.stage) activeStages.add(options.stage);
@@ -2250,6 +2606,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       if (stage === 'structural') return 0;
       return activeStages.has(stage) ? 1 : null;
     },
+    removeVolumeForStage: () => false,
     loadOverlay: async (file, colormap, opacity, options = {}) => {
       overlayCalls.push([file, colormap, opacity, options]);
       if (options.stage) activeStages.add(options.stage);
@@ -2303,6 +2660,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   let overlayCalls = 0;
   app.viewerController = {
     getVolumeIndexForStage: stage => stage === 'structural' ? 0 : null,
+    removeVolumeForStage: () => false,
     loadOverlay: async () => { overlayCalls += 1; }
   };
   await assert.rejects(
@@ -2715,6 +3073,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     description: 'synthetic source mask'
   }));
   const sourceBrainmaskFile = app.brainmaskFile;
+  const sourceStructuralFile = app.structuralFile;
   const mni160Buffer = writeNifti1(new Uint8Array(64), {
     dims,
     spacing: [1, 1, 1],
@@ -2778,6 +3137,25 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       [0, 0, 1, -2],
       [0, 0, 0, 1]
     ], 'prealigned brainmask header must be fixed lnm-mni160');
+
+    // A confirmation may prealign, but loses that permission when another
+    // mask review takes over, even though the subject's pipeline is current.
+    app.structuralFile = sourceStructuralFile;
+    app.brainmaskFile = sourceBrainmaskFile;
+    app.maskReviewActive = true;
+    const owner = app.owner('pipeline', 'mask');
+    const read = sourceStructuralFile.arrayBuffer.bind(sourceStructuralFile);
+    let releaseRead;
+    sourceStructuralFile.arrayBuffer = async () => {
+      await new Promise(resolve => { releaseRead = resolve; });
+      return read();
+    };
+    const alignment = app.prealignToMni160({ confirming: true, assertCurrent: owner });
+    app.beginImport('mask');
+    releaseRead();
+    await assert.rejects(alignment, { name: 'AbortError' }, 'a replaced confirmation cannot prealign the next review');
+    assert.equal(app.structuralFile, sourceStructuralFile, 'the replacement review keeps its structural image');
+    assert.equal(app.maskReviewActive, true, 'the replacement review stays open');
   } finally {
     globalThis.fetch = originalFetch;
     globalThis.caches = originalCaches;
@@ -3220,6 +3598,27 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
 
     const nonemptyOverlap = app.overlapResult;
     {
+      const lesion = app.lesionFile;
+      let release;
+      app.lesionFile = { name: lesion.name, arrayBuffer: () => new Promise(resolve => { release = resolve; }) };
+      const overlap = app.runAtlasOverlap();
+      await waitForMicrotaskCondition(() => release, 'overlap must reach the lesion read', 100);
+      app.invalidatePipeline('cancelled overlap');
+      release(lesionAtlasBuffer);
+      await assert.rejects(overlap, { name: 'AbortError' });
+      assert.equal(app.overlapResult, nonemptyOverlap, 'cancelled overlap must not publish another result');
+      app.lesionFile = lesion;
+
+      const manifest = await app.ensureManifest();
+      const ensureManifest = app.ensureManifest;
+      app.ensureManifest = () => new Promise(resolve => { release = resolve; });
+      const map = app.runFcNetworkMap();
+      app.invalidatePipeline('cancelled network map');
+      release(manifest);
+      await assert.rejects(map, { name: 'AbortError' });
+      app.ensureManifest = ensureManifest;
+    }
+    {
       const overlapRun = app.runAtlasOverlap();
       app.clearDerivedResults();
       assert.deepEqual(await overlapRun, { stopPipeline: true },
@@ -3253,7 +3652,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
             app.clearDerivedResults();
           },
           getVolumeIndexForStage: stage => (stage === 'network-map' ? stale.volumeFiles.length - 1 : null),
-          removeVolumeAtIndex: index => removed.push(stale.volumeFiles[index].name)
+          removeVolumeForStage: stage => removed.push(stale.volumeFiles[stale.getVolumeIndexForStage(stage)].name)
         };
         app.viewerController = stale;
         app.overlapResult = nonemptyOverlap;
@@ -3286,6 +3685,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     let overlayLoads = 0;
     app.viewerController = {
       loadBaseVolume: async () => { baseLoads += 1; },
+      removeVolumeForStage: () => false,
       loadOverlay: async () => { overlayLoads += 1; },
       getVolumeIndexForStage: () => null
     };
@@ -3315,6 +3715,20 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
 }
 
 // ---- Knowledge-base evidence: approved only, or approved + unreviewed drafts ----
+{
+  const app = makeApp();
+  let release;
+  app.ensureManifest = () => new Promise(resolve => { release = resolve; });
+  const drafts = app.handleKbEvidenceChange('drafts');
+  await app.handleKbEvidenceChange('off');
+  release({
+    kbReport: { annotationAssetId: 'approved', draftsAnnotationAssetId: 'drafts' },
+    annotationAssets: [{ id: 'drafts', supportStatus: 'supported' }]
+  });
+  await drafts;
+  assert.equal(app.kbEvidence, 'off', 'late evidence preparation must not undo a newer selection');
+}
+
 {
   const withDrafts = {
     kbReport: { annotationAssetId: 'aphasia-kb', draftsAnnotationAssetId: 'aphasia-kb-drafts' },

@@ -583,23 +583,25 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
     click(id);
     await new Promise(resolve => setTimeout(resolve, 0));
     element.disabled = wasDisabled;
-    assert.deepEqual(calls, expected, `#${id}`);
+    // An action that may replace the subject itself is handed its owner.
+    const seen = calls.map(call => call.map(value => (typeof value?.renew === 'function' ? 'owner' : value)));
+    assert.deepEqual(seen, expected, `#${id}`);
   };
 
-  await expectClick('runLesionPreparationButton', [['runLesionPreparation']]);
+  await expectClick('runLesionPreparationButton', [['runLesionPreparation', 'owner']]);
   await expectClick('captureReportScan', [['showScanConfirmation']]);
-  await expectClick('runFullPipelineButton', [['runReportingAnalysis']]);
+  await expectClick('runFullPipelineButton', [['runReportingAnalysis', 'owner']]);
   await expectClick('runBrainExtractionButton', [['runBrainExtraction']]);
   await expectClick('prealignToMniButton', [['prealignToMni160']]);
   app.autoLesionSeedFile = { name: 'seed.nii' };
   await expectClick('runLesionSegmentationButton', [
-    ['runLesionSegmentation'],
+    ['runLesionSegmentation', 'owner'],
     ['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]
   ]);
   // A DeepISLES seed opens review on the structural image, also from a
   // DWI grid (projected by scanner coordinates).
   await expectClick('runDeepIslesSegmentationButton', [
-    ['runDeepIslesSegmentation'],
+    ['runDeepIslesSegmentation', 'owner'],
     ['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]
   ]);
   await expectClick('startManualMaskButton', [['startLesionMaskReview', { blank: true }]]);

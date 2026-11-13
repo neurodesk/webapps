@@ -1144,7 +1144,7 @@ gh workflow run samsrf-native.yml --ref BRANCH \
 `record_geometry.m` records MATLAB's own `polyshape`, `convhull`, `delaunay`,
 `samsrf_clusterroi` and `samsrf_cfparam_loop`, 259 cases:
 
-- 7 polygon families, 26,073 polygons: thin triangles one ULP of the apex height
+- 7 polygon families, 26,057 polygons: thin triangles one ULP of the apex height
   apart across the cutoff at nine scales, three offsets, three rotations and
   three apex positions; a coarser relative sweep; 4,000 random thin triangles
   in random vertex order; a near-collinear vertex with local spacing 1 on
@@ -1187,7 +1187,7 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   MATLAB single arithmetic, left to the single-precision pipeline work.
 - **Polygons.** Emptiness is exact, the hull has exactly MATLAB's vertices,
   bit for bit, and area and centroid then lie within the forward-error bound
-  of MATLAB's shoelace on untranslated vertices. 25,980 of the 26,073 recorded
+  of MATLAB's shoelace on untranslated vertices. 25,964 of the 26,057 recorded
   polygons agree, on both hosts, and so do all 253 polygons of the 741-case
   reference without exclusions. This is the shipped model: the WebAssembly
   module, the web app and the `samsrf` command line use it, and its gate and
@@ -1305,8 +1305,8 @@ The model, reconstructed from the recordings:
 4. *Input winding.* Before the union, a ring wound negatively on the grid is
    reversed behind its first vertex (`[p0, pn-1, ..., p1]`).
 
-It gives MATLAB's hull vertices on 26,029 of the 26,073 original polygons
-(production: 25,980) and on all 253 reference polygons. The 44 that differ are
+It gives MATLAB's hull vertices on 26,013 of the 26,057 original polygons
+(production: 25,964) and on all 253 reference polygons. The 44 that differ are
 near-collinear clouds; their outcomes are frozen in
 `matlab_polygon_snapping.experimental.json` as regression snapshots, not MATLAB
 ground truth. Forty are among the production model's 93. Four (177, 932, 1607,
@@ -1458,7 +1458,7 @@ hosts give the same counts.
 
 | Recording | Polygons | Shipped model | Experimental model |
 | --- | ---: | ---: | ---: |
-| Original families (`geometry-reference.json`) | 26,073 | 25,980 | 26,029 |
+| Original families (`geometry-reference.json`) | 26,057 | 25,964 | 26,013 |
 | Grid sweep and bisection (probe) | 27,648 | 27,648 | 27,648 |
 | Held-out near-collinear clouds (probe) | 1,500 | 1,192 | 1,352 |
 | Held-out mixed clouds (probe) | 1,500 | 1,435 | 1,470 |
@@ -1468,6 +1468,29 @@ hosts give the same counts.
 | Holes at one contact (causal) | 170 | 170 | 170 |
 | Held-out strip pairs (causal) | 600 | 568 | 600 |
 | Real-cloud transforms (causal) | 403 | 308 | 157 |
+
+The original family inventories are 11,907 boundary-ULP polygons, 6,480
+relative-boundary polygons, 4,000 random thin polygons, 656 collinear-vertex
+polygons, 498 spikes, 16 degenerate polygons and 2,500 point clouds. Their sum
+is 26,057. Earlier totals overstated the inventory and both models' agreement
+by 16; the 93 shipped and 44 experimental exceptions are unchanged.
+
+To reproduce the original totals, set `geometry` to the directory extracted
+from `geometry-reference.json` and run from the repository root in Bash:
+
+```sh
+set -euo pipefail
+for model in production experimental; do
+  printf '%s: ' "$model"
+  for family in polygon_boundary_ulp polygon_boundary_relative polygon_random_thin \
+    polygon_collinear_vertex polygon_spikes polygon_degenerate polygon_point_clouds; do
+    cargo run --quiet --release --manifest-path exes/samsrf/Cargo.toml \
+      -p samsrf-core --features polyshape-experimental --example polyshape_hulls \
+      -- "${geometry:?Set geometry to the extracted recording}/ubuntu-22.04" "$family" "$model"
+  done | awk '/ hull vertex sets equal / { equal += $3; total += $5 }
+    END { printf "%d of %d hull vertex sets equal MATLAB\n", equal, total }'
+done
+```
 
 The shipped model's one extreme-grid difference is the 1e-300 triangle; its
 match at 1e308..1.1e308 is an empty hull where MATLAB raises

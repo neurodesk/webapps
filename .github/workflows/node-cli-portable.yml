@@ -147,6 +147,16 @@ jobs:
           python exes/node-cli/scripts/portable_release.py package "$PACKAGE_DIR" "$PLATFORM"
           python exes/node-cli/scripts/portable_release.py verify "$PACKAGE_DIR" "$PLATFORM"
           cat exes/node-cli/dist/*.validation.txt
+      # The runner has a current Visual C++ runtime installed, so verification there cannot see a
+      # release that depends on it (SynthSeg 0.11 failed on scanner hosts this way). Run the archive's
+      # self-check in clean Windows Server Core containers instead.
+      - name: Check the archive on clean Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = python exes/node-cli/scripts/portable_release.py artifact "$env:PACKAGE_DIR" "$env:PLATFORM"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not name the archive' }
+          ./exes/node-cli/scripts/verify_clean_windows.ps1 -Archive "exes/node-cli/dist/$name"
       # The macOS installer built here is ad hoc signed; it is uploaded for testing, never released.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

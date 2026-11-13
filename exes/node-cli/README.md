@@ -52,6 +52,61 @@ every file against `manifest.json`, runs `self-check` and then the package's
 validation script, and writes a `.validation.txt` receipt next to the archive
 in `exes/node-cli/dist/`.
 
+### Visual C++ runtime on Windows
+
+Windows releases carry the Microsoft Visual C++ v14 runtime. ONNX
+Runtime's `onnxruntime_binding.node` and `onnxruntime.dll` import
+`msvcp140.dll`, `vcruntime140.dll` and related DLLs, which Windows does not
+include. When they are missing the self-check fails with "The specified module
+could not be found"; when another program installed a copy older than 14.40 it
+fails with "A dynamic link library (DLL) initialization routine failed", as
+SynthSeg 0.11 did on MRI scanner hosts.
+
+Packaging reads the import table of every `.exe`, `.dll` and `.node` file in the
+release and copies each Visual C++ runtime DLL it imports, and the DLLs those
+import, into that file's folder, where Windows looks first. The DLLs come from
+`VC_RUNTIME_DIR` or a local Visual Studio 2022 or 2026 release installation.
+`vswhere` queries every product, including Build Tools, with the
+`Microsoft.VisualStudio.Component.VC.Redist.14.Latest` component installed.
+Packaging searches `VC/Redist/MSVC/<version>/x64/Microsoft.VC143.CRT` and
+`Microsoft.VC145.CRT`, then selects the newest DLL version, which must be at least
+14.40. Preview installations, debug runtimes and other architectures are excluded.
+An empty installation query reports the command; a missing CRT reports every
+path searched. Either error explains how to supply `VC_RUNTIME_DIR`.
+The release then holds
+`licenses/microsoft-visual-cpp-runtime/README.txt`.
+
+Microsoft's redistribution lists for
+[VS 2022](https://learn.microsoft.com/visualstudio/releases/2022/redistribution#visual-c-runtime-files) and
+[VS 2026](https://learn.microsoft.com/visualstudio/releases/2026/redistribution#visual-c-runtime-files)
+allow these release binaries from `VC/redist` to accompany an application,
+unmodified, subject to the Visual Studio license terms for
+[VS 2022](https://visualstudio.microsoft.com/license-terms/vs2022-ga-proenterprise/) or
+[VS 2026](https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/).
+The distributor must hold a valid Visual Studio license and meet its
+Distributable Code requirements, including protective terms for recipients.
+`VC_RUNTIME_DIR` must contain the release CRT from a licensed installation,
+never `debug_nonredist` or preview binaries. The Microsoft DLLs retain their
+vendor signatures during release signing and remain under Microsoft's terms,
+separate from the application's open-source license. Signature verification
+and the release manifest still cover every DLL.
+
+Two checks keep this from regressing:
+
+- `verify` rejects a Windows archive in which any binary imports a Visual C++
+  runtime DLL that is not beside it or is older than 14.40. This is a static
+  check because GitHub's Windows runners have a current runtime installed
+  system-wide, so running the release there passes either way.
+- `scripts/verify_clean_windows.ps1` runs in the portable workflow after
+  `verify`. It runs the extracted release's `self-check` in Windows Server Core
+  containers without a Visual C++ runtime and with the too-old 14.29 runtime,
+  after a negative control that removes the release's runtime DLLs and requires
+  the self-check to fail in both environments. `scripts/clean-windows-inputs.json`
+  pins the Server Core images by digest and the 14.29 installer by its versioned
+  Microsoft download URL and SHA256. The check verifies the installer hash
+  before use and rejects containers whose system runtime differs from the test
+  case. Update the image digest for a runner build when updating its base image.
+
 ## macOS installer
 
 On Apple silicon, `make` builds and verifies the package:

@@ -692,3 +692,41 @@ test('turning file actions off restores its picker and can enable file actions a
   assert.equal(control.select.querySelectorAll('option[data-action="files"]').length, 1);
   control.destroy();
 });
+
+test('an owner can replace the loaded message with its next step', async () => {
+  const statuses = [];
+  const { control, choose } = setup(async (_example, { setMessage }) => { setMessage('Settings filled in. Connect a server to run it.'); });
+  control.onStatus = (message, error) => statuses.push([message, error]);
+  choose();
+  await tick();
+  assert.equal(control.dataset.exampleState, 'ready');
+  assert.equal(control.querySelector('[role="status"]').textContent, 'Settings filled in. Connect a server to run it.');
+  assert.deepEqual(statuses.at(-1), ['Settings filled in. Connect a server to run it.', false]);
+  control.destroy();
+});
+
+test('a footer-only loaded message stays out of the sidebar and resets on retry', async () => {
+  const statuses = [];
+  let loads = 0;
+  const { control, choose } = setup(async (_example, { setMessage }) => {
+    if (++loads === 1) setMessage('Settings filled in. Connect a server to run it.', { inline: false });
+    else if (loads === 2) throw new Error('Unavailable');
+  });
+  control.onStatus = (message, error) => statuses.push([message, error]);
+  choose();
+  await tick();
+  const hint = control.querySelector('[role="status"]');
+  assert.equal(hint.hidden, true);
+  assert.equal(hint.textContent, '', 'hidden help cannot repeat stale guidance through aria-describedby');
+  assert.deepEqual(statuses.at(-1), ['Settings filled in. Connect a server to run it.', false]);
+  choose();
+  assert.equal(hint.hidden, false, 'a subsequent loading status is visible');
+  await tick();
+  assert.equal(control.dataset.exampleState, 'error');
+  assert.equal(hint.hidden, false, 'a subsequent error is visible');
+  choose();
+  await tick();
+  assert.equal(hint.hidden, false, 'the previous inline option does not leak into a retry');
+  assert.equal(hint.textContent, 'Brain MRI loaded.');
+  control.destroy();
+});
