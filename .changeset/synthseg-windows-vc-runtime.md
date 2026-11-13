@@ -7,4 +7,4 @@ The Windows command-line archive now carries the Microsoft Visual C++ runtime ne
 
 Release signing preserves valid vendor signatures and verifies every native binary. Clean Windows checks use digest-pinned images and a checksummed Microsoft installer.
 
-Native SynthSR and SynthSeg builds pin Rust 1.99.1, including local builds and browser-reference provisioning, until their ONNX Runtime build dependency supports Cargo 1.100's directory layout.
+Native SynthSR builds pin Rust 1.99.1, including local builds and browser-reference provisioning, until their ONNX Runtime build dependency supports Cargo 1.100's directory layout. SynthSeg's static native runtime is unaffected and continues to use stable Rust.
