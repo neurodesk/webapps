@@ -26,6 +26,16 @@ MATLAB is recorded on them.
 
   cargo build --release --features polyshape-experimental --example polyshape_hulls
   python3 polyshape_reduce.py GEOMETRY_HOST_DIR PATH_TO_POLYSHAPE_HULLS OUT.json
+
+`round2` writes polyshape-reproducers-2.json from the first recording's report
+(polyshape_reproducers_report.py): for each cloud, the smallest untransformed
+case on which MATLAB's hull equals the shipped model's and not the experimental
+one (the smallest measured reproducer), each of its one-point deletions, and
+its other starts, its reversal and the three transforms when neither the first
+round nor the causal probe (which has every transform of the full clouds)
+recorded them. Predictions again come from both models before recording.
+
+  python3 polyshape_reduce.py round2 GEOMETRY_HOST_DIR PATH_TO_POLYSHAPE_HULLS FIRST_REPORT.json OUT.json
 """
 import json
 import os
@@ -200,5 +210,42 @@ def main():
     print(f'{len(specs)} cases')
 
 
+def round2():
+    root, binary, first_report, out = sys.argv[2:6]
+    clouds, _ = load_clouds(root)
+    oracle = Oracle(binary)
+    first = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'polyshape-reproducers.json')))
+    rows = json.load(open(first_report))['rows']
+    polygons, specs, chosen = [], [], []
+    for cloud_id in CLOUDS:
+        candidates = [(len(first['cases'][r['case']]['indices']), r['case']) for r in rows
+                      if r['cloud'] == cloud_id and r['transform'] == 0 and r['reversed'] == 0 and r['shift'] == 0
+                      and r['matlabEqualsShipped'] and not r['matlabEqualsExperimental']]
+        size, case = min(candidates)
+        reproducer = first['cases'][case]['indices']
+        # The causal probe already recorded every transform of the full clouds.
+        recorded_orders = size == len(clouds[cloud_id]) or any(
+            c['role'] == 'order' and c['cloud'] == cloud_id and c['indices'] == reproducer for c in first['cases'])
+        chosen.append({'cloud': cloud_id, 'reproducer': reproducer, 'firstRoundCase': case})
+        cases = [('reproducer', reproducer, 0, 0, 0)]
+        cases += [('oneDeleted', [k for k in reproducer if k != j], 0, 0, 0) for j in reproducer if len(reproducer) > 3]
+        if not recorded_orders:
+            cases += [('order', reproducer, r, k, 0) for r in (0, 1) for k in range(size) if (r, k) != (0, 0)]
+            cases += [('scale', reproducer, 0, 0, t) for t in (1, 2, 3)]
+        for role, indices, reversed_, shift, transform in cases:
+            polygons.append(transformed([clouds[cloud_id][k - 1] for k in indices], reversed_, shift, transform))
+            specs.append({'cloud': cloud_id, 'role': role, 'indices': indices,
+                          'reversed': reversed_, 'shift': shift, 'transform': transform})
+    for spec, result in zip(specs, oracle.evaluate(polygons)):
+        spec['predicted'] = {'shipped': prediction(result['production']), 'experimental': prediction(result['experimental'])}
+    with open(out, 'w') as f:
+        json.dump({'reproducers': chosen, 'cases': specs}, f, indent=1)
+        f.write('\n')
+    print(f'{len(specs)} cases', [(c['cloud'], len(c['reproducer'])) for c in chosen])
+
+
 if __name__ == '__main__':
-    main()
+    if sys.argv[1] == 'round2':
+        round2()
+    else:
+        main()

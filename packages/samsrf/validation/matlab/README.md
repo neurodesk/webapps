@@ -685,6 +685,65 @@ Checked on 2026-11-12 without a license:
 
 No compiled step has run.
 
+### Operator handoff for a licensed host
+
+For someone who holds a MATLAB Compiler license for R2023b Update 11 on a
+Linux x86-64 host with Docker. Nothing here needs the repository's secrets, and
+the license never leaves that host.
+
+Needs: Docker with access to `/var/run/docker.sock`, disk for MATLAB (9.8 GB), the
+Runtime images and the work directory, network
+access to GitHub, Hugging Face and `mathworks/matlab-deps`, Python 3, git, and
+a checkout of this repository at the commit to be validated.
+
+```sh
+# 1. MATLAB R2023b Update 11, installed with mpm inside the builder's base image.
+export WORK="$TMPDIR/samsrf-compiled"           # must not exist yet
+export MATLAB_ROOT="$TMPDIR/matlab-r2023bu11"
+mpm install --release=R2023bU11 --destination="$MATLAB_ROOT" \
+  --products MATLAB MATLAB_Compiler Statistics_and_Machine_Learning_Toolbox \
+  Image_Processing_Toolbox Parallel_Computing_Toolbox
+# 2. Build and run every gate on this host; the driver stops at the first failure.
+packages/samsrf/validation/matlab/licensed-host/build_and_validate.sh \
+  "$WORK" /path/to/license.lic "$MATLAB_ROOT"   # or PORT@HOST
+```
+
+The run passed only if its last lines are `All gates passed on this host for
+local image sha256:...` and `Evidence: .../samsrf-cli`. In `$WORK/samsrf-cli`:
+
+| File | Must show |
+| --- | --- |
+| `container-build/source.json`, `provenance/source.json` | The pinned SamSrf and SPM commits and the five CLI repair hashes. |
+| `container-build/image.json` | The local image ID that the last line names. |
+| `source-repeat.json` | Source MATLAB repeated bit for bit (24 runs). |
+| `compiled-vs-source.json` | Compiled equals source MATLAB bit for bit on this host (24 runs). |
+| `compiled-repeat.json` | The compiled image repeated bit for bit. |
+| `compiled-1/receipts`, `compiled-2/receipts` | No network, read-only inputs, the image ID, input hashes unchanged. |
+| `interrupt/`, `failure/` | A prompt nonzero exit on SIGINT, and on a missing model. |
+
+Return two files and their SHA-256 through whatever channel the maintainers
+name, never with the license:
+
+```sh
+tar -C "$WORK" --exclude=samsrf-cli/bundle -czf samsrf-cli-evidence.tar.gz samsrf-cli
+docker save samsrf-reference:41ed1e96-r2023b | gzip > samsrf-reference-41ed1e96-r2023b.tar.gz
+sha256sum samsrf-cli-evidence.tar.gz samsrf-reference-41ed1e96-r2023b.tar.gz
+```
+
+A failed run is evidence too: return the evidence archive and the console log,
+from which the failing gate is clear (the driver stops at it).
+
+The maintainers then load the image, check that its ID equals
+`container-build/image.json`, push it to `ghcr.io/neurodesk/samsrf-reference`,
+record its digest beside `cli-reference.json`, and dispatch `samsrf-native`
+with `runtime_image=ghcr.io/neurodesk/samsrf-reference@sha256:...` for the
+Runtime-only check on other hosts. That last step needs no license.
+
+Checked without a license on 2026-11-13: `test_licensed_host.py`, `test_cli.py`
+and the other harness tests pass (25, Python 3.12 with
+`requirements-cli.txt`), and the driver refuses a MATLAB root other than
+23.2.0.3097123 and an existing work directory before it does anything.
+
 ### SamSrfAnalysis case matrix
 
 `cli_plan.py` defines 12 `SamSrfAnalysis` cases, each in both precisions (24

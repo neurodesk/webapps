@@ -361,9 +361,15 @@ end
 end
 
 function cases = reproducer_cases()
-spec = jsondecode(fileread(fullfile(fileparts(mfilename('fullpath')), 'polyshape-reproducers.json')));
-[polygons, parameters] = polyshape_reproducer_cases(point_clouds(), spec);
-cases = {with_parameters(polygon_batch('reproducer_cases', polygons, true, true), parameters)};
+% Both rounds: the first again (an exact repeat across runs) and the second.
+here = fileparts(mfilename('fullpath'));
+clouds = point_clouds();
+cases = {};
+for item = {{'reproducer_cases', 'polyshape-reproducers.json'}, {'reproducer_round2', 'polyshape-reproducers-2.json'}}
+    spec = jsondecode(fileread(fullfile(here, item{1}{2})));
+    [polygons, parameters] = polyshape_reproducer_cases(clouds, spec);
+    cases{end+1} = with_parameters(polygon_batch(item{1}{1}, polygons, true, true), parameters); %#ok<AGROW>
+end
 end
 
 function [polygons, parameters] = gap_bisection(combinations)

@@ -12,8 +12,9 @@ export const PROBE_CASES = ['probe_grid_sweep', 'probe_grid_bisection', 'probe_h
 // record_geometry(..., 'polyshape-causal'): polyshape_causal_cases.m's families.
 export const CAUSAL_CASES = ['causal_gap_sweep', 'causal_gap_bisection', 'causal_hole_contact', 'causal_real', 'causal_heldout'];
 export const CAUSAL_POLYGONS = { causal_gap_sweep: 8424, causal_hole_contact: 170, causal_heldout: 600 };
-// record_geometry(..., 'polyshape-reproducers'): polyshape-reproducers.json's cases.
-export const REPRODUCER_CASES = JSON.parse(fs.readFileSync(new URL('./polyshape-reproducers.json', import.meta.url), 'utf8')).cases.length;
+// record_geometry(..., 'polyshape-reproducers'): both rounds' specs, one case each.
+const reproducerSpec = name => JSON.parse(fs.readFileSync(new URL(name, import.meta.url), 'utf8')).cases.length;
+export const REPRODUCER_POLYGONS = { reproducer_cases: reproducerSpec('./polyshape-reproducers.json'), reproducer_round2: reproducerSpec('./polyshape-reproducers-2.json') };
 export const PROBE_POLYGONS = { probe_grid_sweep: 24120, probe_heldout_collinear: 1500, probe_heldout_clouds: 1500, probe_extreme_grids: 7, probe_point_clouds: 2500 };
 
 export function validateGeometry(root) {
@@ -22,11 +23,13 @@ export function validateGeometry(root) {
   for (const item of recording.cases) counts[item.kind] = (counts[item.kind] ?? 0) + 1;
   const probe = ['polyshape-probe', 'polyshape-causal', 'polyshape-reproducers'].includes(recording.mode);
   if (recording.mode === 'polyshape-reproducers') {
-    assert.deepEqual(recording.cases.map(item => item.id), ['reproducer_cases'], 'Incomplete polyshape reproducer recording');
-    const [item] = recording.cases;
-    assert.equal(item.cases, REPRODUCER_CASES, 'reproducer_cases: polygon count');
-    assert.deepEqual(item.parameters.shape, [REPRODUCER_CASES, 5], 'reproducer_cases: parameters');
-    for (const field of ['collinearVertices', 'defaultHoles', 'keptHoles', 'fromKept', 'fromDefault', 'viaSimplify']) assert.ok(item[field], `reproducer_cases: missing ${field}`);
+    assert.deepEqual(recording.cases.map(item => item.id), Object.keys(REPRODUCER_POLYGONS), 'Incomplete polyshape reproducer recording');
+    for (const item of recording.cases) {
+      const polygons = REPRODUCER_POLYGONS[item.id];
+      assert.equal(item.cases, polygons, `${item.id}: polygon count`);
+      assert.deepEqual(item.parameters.shape, [polygons, 5], `${item.id}: parameters`);
+      for (const field of ['collinearVertices', 'defaultHoles', 'keptHoles', 'fromKept', 'fromDefault', 'viaSimplify']) assert.ok(item[field], `${item.id}: missing ${field}`);
+    }
     const environment = JSON.parse(fs.readFileSync(path.join(root, 'environment.json'), 'utf8'));
     assert.equal(environment.mode, 'polyshape-reproducers', 'Reproducer provenance does not name its mode');
   } else if (recording.mode === 'polyshape-causal') {
