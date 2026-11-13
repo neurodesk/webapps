@@ -112,7 +112,9 @@ export class ViewerController {
   // settles and whenever the viewer changes (`releaseSupersededLoads`), so a
   // superseded load gives up its decoded members then. Members decoded so far
   // are released with any ending but `{ images }`, and a member that settles
-  // after the end releases itself. `assertCurrent` must have no side effects.
+  // after the end releases itself. The end also empties `decodes` and the
+  // released members, which a member that never settles would keep alive.
+  // `assertCurrent` must have no side effects.
   decodeCurrent(decodes, assertCurrent) {
     return new Promise((resolve, reject) => {
       const images = new Array(decodes.length);
@@ -121,7 +123,11 @@ export class ViewerController {
       const end = (settle, outcome) => {
         ended = true;
         this.pendingLoads.delete(load);
-        if (!outcome?.images) images.filter(Boolean).forEach(image => this.discardDecodedVolume(image));
+        if (!outcome?.images) {
+          images.filter(Boolean).forEach(image => this.discardDecodedVolume(image));
+          images.length = 0;
+        }
+        decodes.length = 0;
         settle(outcome);
       };
       const load = {

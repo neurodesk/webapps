@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { ViewerController } from '../src/viewer/ViewerController.js';
 
 function file(name) {
@@ -275,6 +277,46 @@ test('a superseded stack releases a decoded member while a sibling never ends', 
     await new Promise(resolve => setTimeout(resolve, 0));
     assert.equal(viewer.decodedUrls.size, 0, 'a member that settles later releases itself');
     assert.deepEqual(urls.revoked, ['blob:done.nii#1', 'blob:never.nii#2']);
+  } finally {
+    urls.restore();
+  }
+});
+
+test('a superseded stack lets go of a decoded image while a sibling never ends', async () => {
+  setFlagsFromString('--expose-gc');
+  const collectGarbage = runInNewContext('gc');
+  const urls = countingUrls();
+  try {
+    let decoded;
+    const viewer = new ViewerController({
+      nv: { opts: {}, volumes: [], updateGLVolume() {}, drawScene() {} },
+      NVImage: {
+        loadFromUrl: ({ name }) => {
+          if (name === 'never.nii') return new Promise(() => {});
+          const image = { name, img: new Uint8Array(1024 * 1024) };
+          decoded = new WeakRef(image);
+          return Promise.resolve(image);
+        },
+      },
+    });
+    let current = true;
+    const stack = viewer.loadVolumeStack([
+      { file: file('done.nii'), stage: 'template' },
+      { file: file('never.nii'), stage: 'map' },
+    ], {
+      assertCurrent: () => {
+        if (!current) throw new DOMException('superseded', 'AbortError');
+      },
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    current = false;
+    viewer.clearVolumes();
+    await assert.rejects(stack, { name: 'AbortError' });
+    for (let round = 0; round < 10 && decoded.deref(); round += 1) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      collectGarbage();
+    }
+    assert.ok(decoded.deref() === undefined, 'the pending sibling does not keep the decoded image alive');
   } finally {
     urls.restore();
   }
