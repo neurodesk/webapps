@@ -434,12 +434,12 @@ function stubRun(app) {
   await app.setDeepIslesInput('dwi', dwi);
   await app.setDeepIslesInput('adc', adc);
   const run = app.runDeepIslesSegmentation();
-  const outcome = run.then(() => 'resolved', err => err.message);
+  const outcome = run.then(() => 'resolved', err => err.name);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(app._deepIslesRunning, true, 'the worker is running SEALS');
   await app.setDeepIslesInput('adc', niftiFile('sub-1_adc_v2.nii', [8, 8, 8], dwiAffine));
   assert.equal(cancelled, 1, 'the old run is cancelled');
-  assert.equal(await outcome, 'DeepISLES cancelled: the ADC input changed.');
+  assert.equal(await outcome, 'AbortError', 'input replacement supersedes the old run');
   assert.equal(app._deepIslesRunning, false);
   assert.equal(app.autoLesionSeedFile, null, 'no seed from the old inputs');
 

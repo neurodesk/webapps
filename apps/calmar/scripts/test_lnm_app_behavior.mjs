@@ -264,6 +264,116 @@ for (const failed of [false, true]) {
   assert.equal(app._pipelineRunning, false);
 }
 
+// Failed preparation must release its waits even before the first worker command.
+for (const method of ['runBrainExtraction', 'runLesionSegmentation', 'runDeepIslesSegmentation']) {
+  const app = makeApp();
+  app.structuralFile = app.nativeStructuralFile = { name: 'T1.nii', arrayBuffer: async () => { throw new Error('read failed'); } };
+  app.deepIslesDwiFile = app.structuralFile;
+  app.deepIslesAdcFile = app.structuralFile;
+  app.deepIslesSeedCanReviewOnNativeT1 = async () => true;
+  app.ensureManifest = async () => ({ modelAssets: [
+    { id: 'lnm-synthstrip', supportStatus: 'supported', sourceUrl: 'https://example.test/strip.onnx' },
+    { id: 'lnm-stroke-lesion', supportStatus: 'supported', sourceUrl: 'https://example.test/stroke.onnx' },
+    { id: 'lnm-deepisles-seals-fold0', supportStatus: 'supported', sourceUrl: 'https://example.test/seals.onnx' }
+  ] });
+  await assert.rejects(app[method](), /read failed/);
+  assert.equal(app._stageDataResolvers.size, 0, `${method} must release stage waits after preparation failure`);
+  assert.equal(app._stepCompleteResolvers.size, 0, `${method} must release completion waits after preparation failure`);
+}
+
+// A replacement upload may fail before opening its own review.
+{
+  const app = makeApp();
+  app.nativeStructuralFile = { name: 'T1.nii' };
+  let release;
+  app.ensureNativeStructuralInfo = async () => ({});
+  app.loadViewerBaseVolume = async () => true;
+  app.maskDrawingController = { loadBrainMaskFile: async () => {}, close() {} };
+  app.resampleSeedMaskToNative = () => new Promise(resolve => { release = resolve; });
+  const old = app.startLesionMaskReview({ seedFile: { name: 'seed.nii' } });
+  await waitForMicrotaskCondition(() => release, 'review seed preparation must begin');
+  app.beginImport('mask');
+  assert.equal(app.maskReviewActive, false, 'superseding a preparing review must release its base lock before the next upload is decoded');
+  release(null);
+  await assert.rejects(old, { name: 'AbortError' });
+}
+
+// Cleanup from old work must leave a current worker and its waiters alone.
+{
+  const app = makeApp();
+  let cancelled = 0;
+  app.executor = { running: true, cancel() { cancelled += 1; } };
+  const obsolete = app.owner('pipeline', 'mask');
+  const oldWait = app._waitForStageData('brainmask', obsolete);
+  const sharedWorker = app.owner('pipeline');
+  app._workerRun = sharedWorker;
+  app.beginImport('mask');
+  await assert.rejects(oldWait, { name: 'AbortError' });
+  const current = app.owner('pipeline', 'mask');
+  const newWait = app._waitForStageData('brainmask', current);
+  app.releaseWorkerWaits(obsolete);
+  assert.equal(cancelled, 0, 'a current shared worker remains available to the replacement review');
+  assert.equal(app._stageDataResolvers.get('brainmask').length, 1);
+  app._resolveStageData('brainmask', 'new mask');
+  assert.equal(await newWait, 'new mask');
+}
+
+// QC preparation cannot borrow a replacement subject after the template load.
+for (const method of ['renderMniRegistrationQc', 'renderCheckerboardRegistrationQc', 'renderDisplacementRegistrationQc']) {
+  const app = makeApp();
+  let release;
+  const prepared = new Promise(resolve => { release = resolve; });
+  app.registeredT1MniFile = app.displacementMagnitudeFile = { name: 'old.nii' };
+  app.ensureRegistrationTemplateFile = () => prepared;
+  app.ensureRegistrationCheckerboardFile = () => prepared;
+  let stacks = 0;
+  app.loadViewerVolumeStack = async () => { stacks += 1; };
+  const rendering = app[method]();
+  app.cancelImports('pipeline');
+  release({ name: 'template.nii' });
+  await assert.rejects(rendering, { name: 'AbortError' });
+  assert.equal(stacks, 0, `${method} must not launch a viewer load on its successor`);
+}
+
+// Supersession while a seed is prepared settles the old status without killing
+// the pipeline-owned brain-mask worker that the new review can still use.
+{
+  const app = makeApp();
+  app.nativeStructuralFile = { name: 'T1.nii' };
+  app.ensureNativeStructuralInfo = async () => ({});
+  app.loadViewerBaseVolume = async () => true;
+  app.maskDrawingController = { loadBrainMaskFile: async () => {}, close() {} };
+  let release;
+  app.resampleSeedMaskToNative = () => new Promise(resolve => { release = resolve; });
+  app.beginStatus('Preparing');
+  const old = app.startLesionMaskReview({ seedFile: { name: 'seed.nii' } });
+  await waitForMicrotaskCondition(() => release, 'seed must start');
+  app.beginImport('mask');
+  assert.equal(app._pipelineRunning, false);
+  release(null);
+  await assert.rejects(old, { name: 'AbortError' });
+}
+
+// A dispatch failure releases worker activity as well as registered waits.
+{
+  const app = makeApp();
+  const owner = app.owner('pipeline', 'mask');
+  let cancelled = 0;
+  app.executor = { running: true, cancel() { cancelled += 1; this.running = false; } };
+  app._workerRun = owner;
+  const old = app._waitForStageData('segmentation', owner);
+  app.finishWorkerTask(owner, new Error('post failed'));
+  await assert.rejects(old, { name: 'AbortError' });
+  assert.equal(cancelled, 1);
+  assert.equal(app.executor.running, false);
+  const nextOwner = app.owner('pipeline', 'mask');
+  app._workerRun = nextOwner;
+  app.executor.running = true;
+  app.finishWorkerTask(owner, new Error('late failure'));
+  assert.equal(cancelled, 1, 'old failure cleanup cannot terminate the successor worker');
+  assert.equal(app.executor.running, true);
+}
+
 // ---- A handler without a check is refused, and ownership decides what it may write ----
 {
   const app = makeApp();

@@ -103,6 +103,13 @@ async function holdImports(page) {
   return { choose, hold, waiting, resume, ended, release, loaded, log, logLines, viewerIdle, image, smallMask };
 }
 
+const drawTwoVoxels = page => page.evaluate(() => {
+  app.nv.drawBitmap[100] = 1;
+  app.nv.drawBitmap[101] = 1;
+  app.nv.drawAddUndoBitmap();
+  app.nv.refreshDrawing(true);
+});
+
 test.describe('an import that finishes late', () => {
   test.beforeEach(() => {
     test.setTimeout(120000);
@@ -502,12 +509,7 @@ test.describe('an import that finishes late', () => {
     expect(await loaded()).toMatchObject({ structural: 'last-T1.nii', base: 'last-T1.nii', controllerBase: 'last-T1.nii', viewer: ['last-T1.nii'] });
     expect(await log()).not.toContain('input failed');
   });
-  const drawTwoVoxels = page => page.evaluate(() => {
-    app.nv.drawBitmap[100] = 1;
-    app.nv.drawBitmap[101] = 1;
-    app.nv.drawAddUndoBitmap();
-    app.nv.refreshDrawing(true);
-  });
+
 
   test('an abandoned structural image that lands during a review keeps the edits drawn since', async ({ page }) => {
     const { choose, hold, release, loaded, log, viewerIdle, smallMask } = await holdImports(page);
@@ -1450,4 +1452,80 @@ test.describe('an import that finishes late', () => {
     expect(await loaded()).toMatchObject({ review: false });
     await expect(page.locator('#layerToggleThresholdMap')).toBeChecked();
   });
+});
+
+test('cancelling abandoned automation preserves the replacement review worker', async ({ page }) => {
+  const { image } = await holdImports(page);
+  await page.locator('#neurodesk-input-transfer').setInputFiles({ name: 'automation-T1.nii', mimeType: 'application/octet-stream', buffer: image });
+  await page.evaluate(async () => {
+    await neurodeskAutomation.dispatch('adopt', { role: 'structural' });
+    app.runBrainExtraction = () => new Promise(resolve => { globalThis.releaseAutomationBrain = resolve; });
+    app.prealignToMni160 = async () => { globalThis.stalePrealign = true; };
+    await neurodeskAutomation.dispatch('start', { operation: 'prepare-lesion' });
+  });
+  await page.waitForFunction(() => globalThis.releaseAutomationBrain);
+  await page.evaluate(async () => {
+    app.beginImport('mask');
+    app._workerRun = app.owner('pipeline', 'mask');
+    app.executor.running = true;
+    app.executor.cancel = () => { globalThis.replacementWorkerCancelled = true; };
+    globalThis.replacementStatus = app.beginStatus('Replacement review');
+    app.automationProgress = globalThis.replacementProgress = () => {};
+    await neurodeskAutomation.dispatch('cancel');
+    globalThis.releaseAutomationBrain();
+  });
+  await page.waitForFunction(() => !app.ownsStatus(null));
+  // Drain the abandoned preparation's continuation and finally block.
+  await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 0)));
+  expect(await page.evaluate(() => ({
+    cancelled: !!globalThis.replacementWorkerCancelled,
+    prealigned: !!globalThis.stalePrealign,
+    ownsStatus: app.ownsStatus(globalThis.replacementStatus),
+    ownsProgress: app.automationProgress === globalThis.replacementProgress,
+    running: app.executor.running,
+  }))).toEqual({ cancelled: false, prealigned: false, ownsStatus: true, ownsProgress: true, running: true });
+});
+
+test('a failed replacement upload releases an unfinished review base lock', async ({ page }) => {
+  const { choose, loaded, log } = await holdImports(page);
+  await choose('structural', 'T1.nii');
+  await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+  await page.evaluate(() => {
+    app.resampleSeedMaskToNative = () => new Promise(resolve => { globalThis.releaseOldReviewSeed = resolve; });
+    globalThis.oldReviewOutcome = app.startLesionMaskReview({ seedFile: new File([], 'seed.nii') })
+      .then(() => 'completed', error => error.name);
+  });
+  await page.waitForFunction(() => globalThis.releaseOldReviewSeed && app.maskReviewActive);
+  await choose('manualMask', 'invalid-mask.nii', Buffer.from('invalid nifti'));
+  await expect.poll(log).toContain('Manual mask input failed');
+  expect((await loaded()).review).toBe(false);
+  expect(await page.evaluate(() => app.nv.drawBitmap)).toBeNull();
+  await page.evaluate(() => globalThis.releaseOldReviewSeed(null));
+  expect(await page.evaluate(() => globalThis.oldReviewOutcome)).toBe('AbortError');
+  await page.evaluate(() => app.startLesionMaskReview({ blank: true }));
+  expect((await loaded()).review).toBe(true);
+});
+
+test('a drawing decode that never settles cannot block its replacement review', async ({ page }) => {
+  const { choose, waiting, resume, ended, loaded, smallMask } = await holdImports(page);
+  await choose('structural', 'T1.nii');
+  await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+  await page.evaluate(() => { globalThis.holdDecodedDrawing = true; });
+  await choose('manualMask', 'held-drawing-mask.nii', smallMask);
+  // The read helper reserves the held-* prefix, so release that read first.
+  await waiting('held-drawing-mask.nii');
+  await resume('held-drawing-mask.nii');
+  await waiting('decoded-drawing');
+  await page.evaluate(() => {
+    globalThis.holdDecodedDrawing = false;
+    globalThis.replacementReview = app.startLesionMaskReview({ blank: true })
+      .then(() => { globalThis.replacementReviewReady = true; }, error => error.name);
+  });
+  await expect.poll(() => page.evaluate(() => !!globalThis.replacementReviewReady), { timeout: 5000 }).toBe(true);
+  expect((await loaded()).review).toBe(true);
+  await drawTwoVoxels(page);
+  const drawn = (await loaded()).drawn;
+  await resume('decoded-drawing');
+  expect(await ended('held-drawing-mask.nii')).toBe('AbortError');
+  expect((await loaded()).drawn).toBe(drawn);
 });

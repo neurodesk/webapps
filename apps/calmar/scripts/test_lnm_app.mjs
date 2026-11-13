@@ -68,8 +68,13 @@ const STAGE_METHODS = [
     return { result, calls: [...calls] };
   };
 
-  assert.deepEqual((await run({ module: 'brain-extraction' })).calls, [['runBrainExtraction']]);
-  assert.deepEqual((await run({ module: 'prealign' })).calls, [['prealignToMni160', { skipIfAligned: true }]]);
+  const extraction = await run({ module: 'brain-extraction' });
+  assert.equal(extraction.calls[0][0], 'runBrainExtraction');
+  assert.equal(typeof extraction.calls[0][1], 'function');
+  const alignment = await run({ module: 'prealign' });
+  assert.equal(alignment.calls[0][0], 'prealignToMni160');
+  assert.equal(alignment.calls[0][1].skipIfAligned, true);
+  assert.equal(typeof alignment.calls[0][1].assertCurrent, 'function');
 
   // Auto segmentation always hands over to mask review and pauses there.
   const segmentation = await run({ module: 'inference-pipeline' });

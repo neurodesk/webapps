@@ -631,7 +631,11 @@ function fakeFile(name) {
       'renderConfirmedNativeLesionOverlay', 'resampleSeedMaskToNative', 'ensureNativeStructuralInfo',
       'ensureFixedMni160Info', 'prealignToMni160', 'runBrainExtraction', 'loadReviewBrainMask',
       'prepareLesionReview', 'runLesionSegmentation', 'runDeepIslesSegmentation', 'prepareViewerForLesionSegmentation',
-      'runLesionPreparation', 'runFullPipeline', 'showScanConfirmation', 'resumePipelineAfterMaskConfirmation']],
+      'runLesionPreparation', 'runFullPipeline', 'showScanConfirmation', 'resumePipelineAfterMaskConfirmation',
+      'deepIslesSeedCanReviewOnNativeT1', 'ensureViewerLayerLoaded', 'projectAtlasToPatientSpace',
+      'showSubjectSpaceAtlas', 'ensureRegistrationCheckerboardFile', 'renderMniRegistrationQc',
+      'renderCheckerboardRegistrationQc', 'renderDisplacementRegistrationQc', 'renderPatientLayerStack',
+      'displayNetworkMapOnAtlasTemplate', 'runRegistration', 'applyRegistrationToLesion', 'renderAtlasThresholdPreviewOverlay']],
     [drawing, ['loadSeedFile', 'loadBrainMaskFile']]
   ]);
   for (const [text, methods] of guarded) {
