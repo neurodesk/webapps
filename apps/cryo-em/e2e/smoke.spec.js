@@ -105,7 +105,7 @@ test("the RELION tutorial runs from import to post-processing", async ({ page })
   await expect(page.locator("#option-angpix")).toHaveValue("0.885");
   await expect(page.locator("#input-movies-pattern")).toHaveValue("*.tiff");
   await expect(page.locator("#stepForm .nd-file-info")).toContainText("24 of 25 files match");
-  await expect(page.locator("#emptyState")).toHaveText("Tutorial settings filled in; 24 movies on the server. Run Import movies.");
+  await expect(page.locator("#statusText")).toHaveText("Tutorial settings filled in; 24 movies on the server. Run Import movies.");
 
   await run(page, "import");
   await page.locator("#stepSelect").selectOption("motioncorr");
@@ -421,7 +421,6 @@ test("a failed example download can be retried", async ({ page }) => {
   await picker.selectOption(example.id);
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 60000 });
   await expect(page.locator("#option-angpix")).toHaveValue("0.885");
-  await expect(page.locator("#emptyState")).toBeVisible();
-  await expect(page.locator("#emptyState")).toHaveText("Tutorial settings filled in. Connect a server with its movies (see Standalone).");
+  await expect(page.locator("#statusText")).toHaveText("Tutorial settings filled in. Connect a server with its movies (see Standalone).");
   expect(attempts).toBe(2);
 });

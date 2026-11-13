@@ -320,10 +320,12 @@ export function defineExampleSelector(view = globalThis.window) {
       const onRetry = ({ status, delay }) => {
         if (this.#active === controller) this.#status('loading', `The example host is busy (HTTP ${status}); retrying in ${Math.ceil(delay / 1000)} s…`);
       };
+      let message = `${example.label} loaded.`;
       try {
         await this.#onLoad(example, {
           signal: controller.signal,
           assertCurrent,
+          setMessage(text) { message = text; },
           async fetchFiles() {
             const files = await Promise.all(example.files.map(async asset => {
               assertCurrent();
@@ -356,7 +358,7 @@ export function defineExampleSelector(view = globalThis.window) {
         if (selection.rotation) this.#rotationIndex.set(selection.id, index + 1);
         this.dataset.exampleId = example.id;
         this.#describe(example);
-        this.#status('ready', `${example.label} loaded.`, false, { description: example.description, expectedResult: example.expectedResult });
+        this.#status('ready', message, false, { description: example.description, expectedResult: example.expectedResult });
       } catch (error) {
         if (this.#active === controller && !controller.signal.aborted) {
           controller.abort();

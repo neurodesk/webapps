@@ -692,3 +692,14 @@ test('turning file actions off restores its picker and can enable file actions a
   assert.equal(control.select.querySelectorAll('option[data-action="files"]').length, 1);
   control.destroy();
 });
+
+test('an owner can replace the loaded message with its next step', async () => {
+  const statuses = [];
+  const { control, choose } = setup(async (_example, { setMessage }) => { setMessage('Settings filled in. Connect a server to run it.'); });
+  control.onStatus = (message, error) => statuses.push([message, error]);
+  choose();
+  await tick();
+  assert.equal(control.dataset.exampleState, 'ready');
+  assert.equal(control.querySelector('[role="status"]').textContent, 'Settings filled in. Connect a server to run it.');
+  assert.deepEqual(statuses.at(-1), ['Settings filled in. Connect a server to run it.', false]);
+});

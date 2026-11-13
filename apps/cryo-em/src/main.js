@@ -915,11 +915,11 @@ const exampleControl = createExampleSelector({
   fileActions: false,
   scope: $('controls'),
   onStatus: (message, error) => status(message, error ? 'error' : 'info'),
-  onLoad: async (_example, { fetchFiles, assertCurrent }) => {
+  onLoad: async (_example, { fetchFiles, assertCurrent, setMessage }) => {
     const [checksums] = await fetchFiles();
     const movies = exampleMovies(parseChecksums(await checksums.text()));
     assertCurrent();
-    // The movies stay on the server, so the viewer says what to do next.
+    // The movies stay on the server, so the status says what to do next.
     let next = 'Tutorial settings filled in. Connect a server with its movies (see Standalone).';
     if (state.client && state.info.dataRoots?.some(root => root.id === EXAMPLE_ROOT)) {
       const listing = await state.client.entries(EXAMPLE_ROOT, EXAMPLE_SETTINGS.import.inputs.movies.path).catch(() => ({ entries: [] }));
@@ -937,7 +937,7 @@ const exampleControl = createExampleSelector({
     }
     state.command = 'import';
     renderForm();
-    $('emptyState').textContent = next;
+    setMessage(next);
   },
 });
 $('exampleControl').append(exampleControl);

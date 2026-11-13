@@ -20,6 +20,8 @@ export interface ExampleLoadContext {
   signal: AbortSignal;
   fetchFiles(): Promise<File[]>;
   assertCurrent(): void;
+  /** Replaces the "<label> loaded." status, e.g. with the next step when loading leaves nothing to view. */
+  setMessage(text: string): void;
 }
 
 export interface ExampleSelectorOptions<T extends AppExample = AppExample> {
