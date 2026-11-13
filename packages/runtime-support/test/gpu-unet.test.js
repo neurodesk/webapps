@@ -11,10 +11,13 @@ const CLASSES = 33;
 for (const dims of [[128,128,128],[192,224,160]]) {
   test(`SynthSeg plan reuses buffers without clobbering a live tensor: ${dims}`,()=>{
     const plan=planGpuGraph(dims,synthseg,{outputChannels:CLASSES,label:'SynthSeg'});
-    const live=new Map([[synthseg.input,0]]),remaining=new Map();
+    const live=new Map([[synthseg.input,0]]),remaining=new Map(),used=new Set([0]);
     for(const node of plan.nodes)for(const input of node.inputs)if(!synthseg.tensors[input] && input)remaining.set(input,(remaining.get(input)||0)+1);
     for(const node of plan.nodes) {
       assert.ok(![...live.values()].includes(node.slot),`${node.name} overwrites a live tensor`);
+      // Every slot stays allocated for the session, so a tensor that fits no free slot grows one.
+      if(!used.has(node.slot))assert.ok([...used].every(slot=>[...live.values()].includes(slot)),`${node.name} adds a slot while one is free`);
+      used.add(node.slot);
       for(let i=0;i<node.inputs.length;i++)if(live.has(node.inputs[i]))assert.equal(node.inputSlots[i],live.get(node.inputs[i]));
       assert.ok(plan.slots[node.slot].bytes>=node.shape.dims.reduce((a,b)=>a*b,4*node.shape.channels));
       live.set(node.output,node.slot);
@@ -31,6 +34,14 @@ for (const dims of [[128,128,128],[192,224,160]]) {
     assert.equal([...live.values()][0],plan.outputSlot);
   });
 }
+
+test('the full-volume SynthSeg plan fits beside the page on a 7 GB Apple runner',()=>{
+  const plan=planGpuGraph([192,224,160],synthseg,{outputChannels:CLASSES,label:'SynthSeg'});
+  const total=plan.slots.reduce((sum,slot)=>sum+slot.bytes,0);
+  assert.equal(plan.slots.length,6);
+  assert.ok(total<=4*2**30,`${(total/2**30).toFixed(2)} GiB of activation buffers`);
+  assert.equal(Math.max(...plan.slots.map(slot=>slot.bytes)),192*224*160*72*4);
+});
 
 test('SynthSR still plans to a single output channel with the same node counts',()=>{
   const plan=planGpuGraph([32,32,32],synthsr,{label:'SynthSR'});

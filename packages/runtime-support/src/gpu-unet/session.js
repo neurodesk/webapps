@@ -72,14 +72,18 @@ export function planGpuGraph(dims, graph, { outputChannels = 1, label = 'U-Net' 
   if(!tensors.has(output) || tensors.get(output).channels!==outputChannels || !same(tensors.get(output).dims,dims))throw new Error(`GPU output does not match the ${label} contract.`);
   // Assign reusable buffers by graph lifetime. Never alias an operation's input
   // and output. Skip activations survive until their decoder consumer finishes.
+  // A tensor takes the smallest free slot that holds it; when none does, the largest
+  // free slot grows instead of a new one being added. Every slot stays resident for
+  // the whole session, so this bounds the footprint: the full-volume SynthSeg plan
+  // drops from 5.3 GB to 4.0 GB, which a 7 GB Apple runner must share with the page.
   const remaining=new Map([[output,1]]);
   for(const node of nodes) for(const name of node.inputs) if(tensors.has(name)) remaining.set(name,(remaining.get(name)||0)+1);
   const slots=[{bytes:product(dims)*4}], assigned=new Map([[graph.input,0]]), free=new Set();
   for(const node of nodes) {
     const bytes=product(node.shape.dims)*node.shape.channels*4;
-    const candidates=[...free].filter(i=>slots[i].bytes>=bytes).sort((a,b)=>slots[a].bytes-slots[b].bytes);
-    const slot=candidates[0] ?? slots.length;
-    if(slot===slots.length)slots.push({bytes});else free.delete(slot);
+    const idle=[...free].sort((a,b)=>slots[b].bytes-slots[a].bytes);
+    const slot=idle.filter(i=>slots[i].bytes>=bytes).at(-1) ?? idle[0] ?? slots.length;
+    if(slot===slots.length)slots.push({bytes});else{free.delete(slot);slots[slot].bytes=Math.max(slots[slot].bytes,bytes);}
     assigned.set(node.output,slot);node.slot=slot;
     node.inputSlots=node.inputs.map(name=>assigned.get(name));
     for(const name of node.inputs) if(remaining.has(name)) {
@@ -178,7 +182,7 @@ export async function createGpuSession(bytes, dims, {
   const device=await adapter.requestDevice({requiredFeatures:timestamps?['timestamp-query']:[],requiredLimits:{
     maxBufferSize:adapter.limits.maxBufferSize,maxStorageBufferBindingSize:adapter.limits.maxStorageBufferBindingSize,
   }});
-  let failure, released=false, running=false;
+  let failure, released=false, running=false, mapped=false;
   device.lost.then(info=>{if(!released)failure=new Error(`${label} GPU device lost: ${info.message}`);});
   device.addEventListener('uncapturederror',event=>{failure=new Error(`${label} GPU error: ${event.error.message}`);});
   const createBuffer=(size,usage,label)=>device.createBuffer({size:Math.max(16,size),usage,label});
@@ -228,6 +232,7 @@ export async function createGpuSession(bytes, dims, {
     if(validation||oom)throw new Error((validation||oom).message);
     const outputBytes=product(dims)*outputChannels*4;
     const read=createBuffer(outputBytes,GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ,`${label} output readback`);
+    const unmapRead=()=>{if(mapped){mapped=false;read.unmap();}};
     const query=timestamps?device.createQuerySet({type:'timestamp',count:steps.length*2}):null;
     const querySize=steps.length*16;
     const resolve=timestamps?createBuffer(querySize,GPUBufferUsage.QUERY_RESOLVE|GPUBufferUsage.COPY_SRC,'timings'):null;
@@ -238,6 +243,9 @@ export async function createGpuSession(bytes, dims, {
         const tensor=feeds[graph.input];
         if(!tensor || tensor.type!=='float32' || !same(tensor.dims,[1,1,...dims]))throw new Error('GPU input does not match the session shape.');
         running=true;
+        // The previous output is handed out over the mapped readback; a caller that
+        // never disposed it loses its view here rather than failing the next run.
+        unmapRead();
         device.pushErrorScope('out-of-memory');device.pushErrorScope('validation');
         let result;
         let operationError;
@@ -261,17 +269,20 @@ export async function createGpuSession(bytes, dims, {
           if(query){encoder.resolveQuerySet(query,0,steps.length*2,resolve,0);encoder.copyBufferToBuffer(resolve,0,queryRead,0,querySize);}
           device.queue.submit([encoder.finish()]);
           await read.mapAsync(GPUMapMode.READ);
-          let output;
-          try{output=new Float32Array(read.getMappedRange(0,outputBytes).slice(0));}finally{read.unmap();}
+          mapped=true;
+          // The output is a view over the mapped readback, not a copy: a full-volume
+          // posterior is 0.9 GB, and the caller copies what it keeps before disposing.
+          const output=new Float32Array(read.getMappedRange(0,outputBytes));
           if(query) {
             await queryRead.mapAsync(GPUMapMode.READ);
             try{const times=new BigUint64Array(queryRead.getMappedRange());session.profile=steps.map((s,i)=>({name:s.name,op:s.op,milliseconds:Number(times[i*2+1]-times[i*2])/1e6}));}finally{queryRead.unmap();}
           }
           if(failure)throw failure;
-          result = {[graph.output]:{dims:[1,outputChannels,...dims],type:'float32',getData:async()=>output,dispose(){}}};
+          result = {[graph.output]:{dims:[1,outputChannels,...dims],type:'float32',getData:async()=>output,dispose:unmapRead}};
         } catch (error) {
           failed = true;
           operationError = error;
+          unmapRead();
         }
         // Drain both scopes even if a driver throws synchronously while popping one.
         const scopes = [];
