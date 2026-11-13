@@ -24,8 +24,13 @@ const shell = (script, cwd, environment) => execFileSync('bash', ['-e', '-o', 'p
   cwd, env: { ...process.env, ...environment }, stdio: 'pipe',
 });
 
-test('both full-catalog agent targets have isolated runners and retain the existing time and worker bounds', async () => {
+test('both full-catalog agent targets run in three shards on isolated runners and retain the existing time and worker bounds', async () => {
   assert.deepEqual(job.strategy.matrix.target, ['desktop', 'phone']);
+  assert.deepEqual(job.strategy.matrix.shard, [1, 2, 3]);
+  assert.equal(interact.env.AGENTIC_SHARD, `\${{ matrix.shard }}/${job.strategy.matrix.shard.length}`);
+  const upload = job.steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
+  assert.equal(upload.with.name, 'catalog-agent-${{ matrix.target }}-${{ matrix.shard }}');
+  assert.equal(upload.with.path, '.e2e/agent-${{ matrix.target }}-${{ matrix.shard }}/');
   assert.equal(job.strategy['fail-fast'], false);
   assert.equal(job.needs, 'composite-site');
   assert.equal(job['runs-on'], 'ubuntu-latest');
@@ -38,29 +43,48 @@ test('both full-catalog agent targets have isolated runners and retain the exist
   for (const ready of ['true', 'false', '']) {
     assert.equal(runInNewContext(job.if.replace('needs.composite-site', 'needs["composite-site"]'), { needs: { 'composite-site': { outputs: { agent_site_ready: ready } } } }), ready === 'true');
   }
-  const upload = site.steps.find(step => step.with?.name === 'agent-catalog-site-${{ github.sha }}');
+  const packaged = site.steps.find(step => step.with?.name === 'agent-catalog-site-${{ github.sha }}');
   const download = job.steps.find(step => step.uses?.startsWith('actions/download-artifact@'));
-  assert.equal(download.with.name, upload.with.name);
-  assert.equal(upload.with['if-no-files-found'], 'error');
+  assert.equal(download.with.name, packaged.with.name);
+  assert.equal(packaged.with['if-no-files-found'], 'error');
   assert.equal(site.outputs.agent_site_ready, '${{ steps.agent-site.outputs.ready }}');
   const processing = site.steps.find(step => step.run?.includes('pnpm test:e2e:pipeline'));
   assert.match(processing.if, /agentic_mode == 'pipeline'/);
   assert.match(processing.run, /--target desktop --no-cache/);
 });
 
-test('the actual agent command runs each target without dropping cases and preserves optional app selection', async t => {
+test('the actual agent command runs each target shard without dropping cases and preserves optional app selection', async t => {
   const root = await scratch(t);
   const bin = join(root, 'bin');
   await mkdir(bin);
   await writeFile(join(bin, 'pnpm'), '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.CAPTURE_ARGS, JSON.stringify(process.argv.slice(2)));\n', { mode: 0o755 });
-  for (const target of job.strategy.matrix.target) for (const selection of ['', 'niimath,hmc']) {
+  const { target: targets, shard: shards } = job.strategy.matrix;
+  for (const target of targets) for (const shard of shards) for (const selection of ['', 'niimath,hmc']) {
     const capture = join(root, 'args.json');
-    shell(interact.run, root, { PATH: `${bin}${delimiter}${process.env.PATH}`, CAPTURE_ARGS: capture, AGENTIC_TARGET: target, AGENTIC_APPS: selection });
+    shell(interact.run, root, { PATH: `${bin}${delimiter}${process.env.PATH}`, CAPTURE_ARGS: capture, AGENTIC_TARGET: target, AGENTIC_SHARD: `${shard}/${shards.length}`, AGENTIC_APPS: selection });
     assert.deepEqual(JSON.parse(await readFile(capture, 'utf8')), [
-      'test:e2e:agent', '--skip-build', '--site-dir', 'dist', '--target', target, '--output', `.e2e/agent-${target}`,
+      'test:e2e:agent', '--skip-build', '--site-dir', 'dist', '--target', target, '--shard', `${shard}/${shards.length}`, '--output', `.e2e/agent-${target}-${shard}`,
       ...(selection ? ['--app', selection] : []),
     ]);
   }
+});
+
+test('the runner hands the shard to e2e and lets a narrowed selection leave a shard empty', async t => {
+  const root = await scratch(t);
+  const bin = join(root, 'bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'pnpm'), '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.CAPTURE_ARGS, JSON.stringify(process.argv.slice(2)));\n', { mode: 0o755 });
+  const runner = new URL('../scripts/run-agentic-tests.mjs', import.meta.url).pathname;
+  const invoke = async (...flags) => {
+    const capture = join(root, 'args.json');
+    execFileSync(process.execPath, [runner, '--mode', 'agent', '--skip-build', '--site-dir', root, '--target', 'desktop', ...flags], {
+      cwd: root, env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}`, CAPTURE_ARGS: capture, NEURODESK_API_KEY: 'test-fixture-only' }, stdio: 'pipe',
+    });
+    return JSON.parse(await readFile(capture, 'utf8'));
+  };
+  assert.deepEqual(await invoke('--shard', '2/3', '--output', 'out'), ['exec', 'e2e', 'run', '--tag', 'help,example', '--target', 'desktop', '--shard', '2/3', '--pass-with-no-tests', '--output', 'out']);
+  assert.deepEqual(await invoke('--output', 'out'), ['exec', 'e2e', 'run', '--tag', 'help,example', '--target', 'desktop', '--output', 'out']);
+  assert.deepEqual(await invoke('--shard', '2/3', '--list'), ['exec', 'e2e', 'list', '--tag', 'help,example', '--target', 'desktop']);
 });
 
 test('the transferred composite is checksum-verified before use, and missing credentials do not create a partial artifact', async t => {

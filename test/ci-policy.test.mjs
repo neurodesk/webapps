@@ -105,6 +105,7 @@ test('every deterministic interface check runs before optional agent checks', ()
   assert.equal(interactions.if, "needs.composite-site.outputs.agent_site_ready == 'true'");
   assert.equal(ci.jobs['composite-site'].outputs.agent_site_ready, '${{ steps.agent-site.outputs.ready }}');
   assert.deepEqual(interactions.strategy.matrix.target, ['desktop', 'phone']);
+  assert.deepEqual(interactions.strategy.matrix.shard, [1, 2, 3]);
   assert.equal(interactions.steps.find((step) => step.run?.includes('pnpm test:e2e:agent'))['timeout-minutes'], 120);
   for (const command of ['pnpm audit:interfaces', 'pnpm test:interface-workflows', 'pnpm test:image-uploads', 'pnpm test:mobile']) {
     const index = steps.findIndex((step) => step.run === command);

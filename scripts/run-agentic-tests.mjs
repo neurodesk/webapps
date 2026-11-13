@@ -12,6 +12,7 @@ const { values } = parseArgs({ options: {
   target: { type: 'string', default: 'desktop,phone' },
   output: { type: 'string', default: '.e2e' },
   grep: { type: 'string' },
+  shard: { type: 'string' },
   'skip-build': { type: 'boolean', default: false },
   'site-dir': { type: 'string' },
   list: { type: 'boolean', default: false },
@@ -79,6 +80,8 @@ try {
   const args = ['exec', 'e2e', values.list ? 'list' : 'run', '--tag', modes.get(values.mode), '--target', values.target];
   if (values['no-cache'] && !values.list) args.push('--no-cache');
   if (values.grep) args.push('--grep', values.grep);
+  // A narrowed selection may have fewer tests than shards; an empty shard is not a failure.
+  if (values.shard && !values.list) args.push('--shard', values.shard, '--pass-with-no-tests');
   if (!values.list) args.push('--output', values.output);
   await run(args);
 } finally {
