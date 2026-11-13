@@ -80,3 +80,63 @@ test('a failed layer stops later work and retains the device-loss reason', async
   assert.equal(device.scopes, 0);
   await runner.release();
 });
+
+test('the output is a view over the mapped readback, unmapped on dispose or by the next run', async () => {
+  const { device } = recordingDevice();
+  const mappings = [];
+  let unmaps = 0;
+  const createBuffer = device.createBuffer;
+  device.createBuffer = options => {
+    const buffer = createBuffer(options);
+    if (options.label !== 'U-Net output readback') return buffer;
+    buffer.getMappedRange = (offset, size) => { const range = new ArrayBuffer(size); mappings.push(range); return range; };
+    buffer.unmap = () => { unmaps++; structuredClone(mappings.at(-1), { transfer: [mappings.at(-1)] }); };
+    return buffer;
+  };
+  const runner = await create(device);
+  const first = (await runner.run(feeds)).third;
+  assert.equal((await first.getData()).buffer, mappings[0], 'the posteriors are not copied out of the readback');
+  assert.equal(unmaps, 0);
+  const firstView = await first.getData();
+  first.dispose();
+  assert.equal(firstView.byteLength, 0);
+  await assert.rejects(first.getData(), /no longer available/);
+  first.dispose();
+  assert.equal(unmaps, 1);
+  const second = (await runner.run(feeds)).third;
+  assert.equal((await second.getData()).buffer, mappings[1]);
+  const secondView = await second.getData();
+  const third = (await runner.run(feeds)).third;
+  const thirdView = await third.getData();
+  assert.equal(secondView.byteLength, 0);
+  await assert.rejects(second.getData(), /no longer available/);
+  first.dispose();
+  second.dispose();
+  assert.equal(thirdView.byteLength, 32 ** 3 * 4);
+  assert.equal(unmaps, 2, 'a run unmaps an output its caller never disposed');
+  await runner.release();
+  assert.equal(thirdView.byteLength, 0);
+  await assert.rejects(third.getData(), /no longer available/);
+  assert.equal(unmaps, 3);
+});
+
+test('disposing a stale output cannot unmap the current run', async () => {
+  const { device } = recordingDevice();
+  let unmaps = 0;
+  const createBuffer = device.createBuffer;
+  device.createBuffer = options => {
+    const buffer = createBuffer(options);
+    if (options.label === 'U-Net output readback') buffer.unmap = () => { unmaps++; };
+    return buffer;
+  };
+  const runner = await create(device);
+  const first = (await runner.run(feeds)).third;
+  const second = (await runner.run(feeds)).third;
+  assert.equal(unmaps, 1);
+  first.dispose();
+  assert.equal(unmaps, 1);
+  assert.equal((await second.getData()).length, 32 ** 3);
+  second.dispose();
+  assert.equal(unmaps, 2);
+  await runner.release();
+});

@@ -1,5 +1,5 @@
 // Native Metal executor: the webapp's `synthsr-blocked-fp32-v1` WebGPU executor
-// (packages/synthsr/src/gpu-{conv3d,session}.js) with its WGSL translated to MSL.
+// (packages/runtime-support/src/gpu-unet/) with its WGSL translated to MSL.
 // Same NDHWC layout, same blocked FP32 implicit-GEMM Conv3D, same buffer-slot plan.
 use crate::nifti::product;
 use metal::*;
@@ -145,15 +145,19 @@ fn plan(dims: [usize; 3], graph: &Value) -> Result<(Vec<Node>, Vec<usize>, usize
     let mut free: Vec<usize> = Vec::new();
     for n in nodes.iter_mut() {
         let bytes = product(&n.dims) * n.channels * 4;
-        let mut candidates: Vec<usize> = free
+        // Match the shared WebGPU planner: smallest fitting free slot, otherwise
+        // grow the largest free slot. Allocate only while every slot is live.
+        free.sort_by_key(|&s| std::cmp::Reverse(slots[s]));
+        let candidate = free
             .iter()
-            .copied()
-            .filter(|&s| slots[s] >= bytes)
-            .collect();
-        candidates.sort_by_key(|&s| slots[s]);
-        let slot = match candidates.first() {
-            Some(&s) => {
+            .rev()
+            .find(|&&s| slots[s] >= bytes)
+            .or_else(|| free.first())
+            .copied();
+        let slot = match candidate {
+            Some(s) => {
                 free.retain(|&f| f != s);
+                slots[s] = slots[s].max(bytes);
                 s
             }
             None => {
@@ -447,6 +451,7 @@ impl Session {
         })
     }
 
+    // Native outputs own their Vec: there is no mapped WebGPU readback to unmap.
     pub fn run(&self, input: &[f32]) -> Result<Vec<f32>, String> {
         if input.len() != self.voxels {
             return Err("Metal input size mismatch.".into());
@@ -475,5 +480,51 @@ impl Session {
         }
         let out = self.slots[self.output_slot].contents().cast::<f32>();
         Ok(unsafe { std::slice::from_raw_parts(out, self.voxels) }.to_vec())
+    }
+}
+
+#[cfg(test)]
+mod planner_tests {
+    use super::*;
+
+    #[test]
+    fn full_volume_slots_preserve_every_live_tensor() {
+        let graph: Value = serde_json::from_str(GRAPH).unwrap();
+        let (nodes, slots, output_slot) = plan([192, 224, 160], &graph).unwrap();
+        let output = nodes.last().unwrap().output.clone();
+        let mut remaining = HashMap::from([(output.clone(), 1)]);
+        for node in &nodes {
+            for input in &node.inputs {
+                if !input.is_empty() && graph["tensors"].get(input).is_none() {
+                    *remaining.entry(input.clone()).or_default() += 1;
+                }
+            }
+        }
+        let mut live = HashMap::from([(graph["input"].as_str().unwrap().to_string(), 0)]);
+        for node in &nodes {
+            assert!(
+                !live.values().any(|&slot| slot == node.slot),
+                "{} overwrites a live tensor",
+                node.name
+            );
+            for (index, input) in node.inputs.iter().enumerate() {
+                if let Some(&slot) = live.get(input) {
+                    assert_eq!(node.input_slots[index], slot);
+                }
+            }
+            live.insert(node.output.clone(), node.slot);
+            for input in &node.inputs {
+                if let Some(count) = remaining.get_mut(input) {
+                    *count -= 1;
+                    if *count == 0 {
+                        live.remove(input);
+                    }
+                }
+            }
+        }
+        assert_eq!(live.len(), 1);
+        assert_eq!(live[&output], output_slot);
+        assert_eq!(slots.len(), 6);
+        assert_eq!(slots.iter().sum::<usize>(), 2859171840);
     }
 }
