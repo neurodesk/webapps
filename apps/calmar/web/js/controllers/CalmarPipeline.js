@@ -24,27 +24,27 @@ export class CalmarPipeline extends PipelineExecutor {
     }
   }
 
-  runInference(settings) {
-    return this.executeCommand('run-inference', settings, { step: 'inference', taskId: settings?.taskId || null });
+  runInference(settings, assertCurrent) {
+    return this.executeCommand('run-inference', settings, { assertCurrent, step: 'inference', taskId: settings?.taskId || null });
   }
 
-  runDeepIslesInference(settings) {
-    return this.executeCommand('run-deepisles-inference', settings, { step: 'inference', taskId: settings?.taskId || null });
+  runDeepIslesInference(settings, assertCurrent) {
+    return this.executeCommand('run-deepisles-inference', settings, { assertCurrent, step: 'inference', taskId: settings?.taskId || null });
   }
 
-  runSynthStrip(settings = {}) {
-    return this.executeCommand('run-synthstrip', settings, { step: 'brainmask', taskId: settings.modelAssetId || null });
+  runSynthStrip(settings = {}, assertCurrent) {
+    return this.executeCommand('run-synthstrip', settings, { assertCurrent, step: 'brainmask', taskId: settings.modelAssetId || null });
   }
 
-  runRegistration(settings = {}) {
-    return this.executeCommand('run-register', settings, { step: 'register', taskId: settings.modelAssetId || null });
+  runRegistration(settings = {}, assertCurrent) {
+    return this.executeCommand('run-register', settings, { assertCurrent, step: 'register', taskId: settings.modelAssetId || null });
   }
 
-  runWarpMask(settings = {}) {
-    return this.executeCommand('warp-mask', settings, { step: 'warp-mask', checkpoint: false });
+  runWarpMask(settings = {}, assertCurrent) {
+    return this.executeCommand('warp-mask', settings, { assertCurrent, step: 'warp-mask', checkpoint: false });
   }
 
-  runInverseWarpMask(settings = {}) {
-    return this.executeCommand('inverse-warp-mask', settings, { step: 'inverse-warp-mask', checkpoint: false });
+  runInverseWarpMask(settings = {}, assertCurrent) {
+    return this.executeCommand('inverse-warp-mask', settings, { assertCurrent, step: 'inverse-warp-mask', checkpoint: false });
   }
 }

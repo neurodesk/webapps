@@ -86,6 +86,28 @@ test('ignores successful, manual, pull request and unsupported workflow events',
   }
 });
 
+test('agent interaction shards retain the combined failure counts and all shard artifacts', async () => {
+  const conclusions = ['success', 'failure', 'timed_out', 'success', 'failure', 'cancelled'];
+  const jobs = ['desktop', 'phone'].flatMap((target, targetIndex) => [1, 2, 3].map(shard => ({
+    id: 500 + targetIndex * 3 + shard,
+    name: `agent-interactions (${target}, ${shard})`,
+    conclusion: conclusions[targetIndex * 3 + shard - 1],
+    steps: [],
+  })));
+  const artifacts = ['desktop', 'phone'].flatMap((target, targetIndex) => [1, 2, 3].map(shard => ({
+    id: 600 + targetIndex * 3 + shard,
+    name: `catalog-agent-${target}-${shard}`,
+    expired: false,
+  })));
+  const client = fakeClient({ jobs, artifacts });
+  await report(client);
+  const body = writes(client)[0].body.body;
+  assert.match(body, /3 failed or timed out; 1 cancelled/);
+  assert.match(body, /Coverage is incomplete/);
+  for (const job of jobs.filter(job => job.conclusion !== 'success')) assert.ok(body.replaceAll('\\', '').includes(`### ${job.name} (${job.conclusion})`));
+  for (const artifact of artifacts) assert.ok(body.includes(`[${artifact.name}]`));
+});
+
 test('cancelled tests report incomplete coverage while expected deploy cancellation stays quiet', async () => {
   const client = fakeClient({ jobs: [{ id: 456, name: 'browser', conclusion: 'cancelled' }] });
   await report(client, { conclusion: 'cancelled' });

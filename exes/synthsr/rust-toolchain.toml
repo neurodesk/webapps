@@ -1,0 +1,11 @@
+# ort-sys 2.0.0-rc.13's build script symlinks libwebgpu_dawn.dylib next to the
+# executable by walking three directories up from OUT_DIR. Cargo 1.100 nests
+# build-script output one level deeper (build/<crate>/<hash>/out), so that walk
+# ends in target/release/build and the script panics creating
+# target/release/build/examples/libwebgpu_dawn.dylib (ci run 43358974900).
+# ort-sys 2.0.0-rc.14 reads the target directory properly, but it binds ONNX
+# Runtime 1.31, and the validation report was recorded on 1.28.0; move the ort
+# pin and this toolchain together, with a re-recorded validation/report.json.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]

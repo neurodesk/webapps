@@ -68,12 +68,19 @@ const STAGE_METHODS = [
     return { result, calls: [...calls] };
   };
 
-  assert.deepEqual((await run({ module: 'brain-extraction' })).calls, [['runBrainExtraction']]);
-  assert.deepEqual((await run({ module: 'prealign' })).calls, [['prealignToMni160', { skipIfAligned: true }]]);
+  const extraction = await run({ module: 'brain-extraction' });
+  assert.equal(extraction.calls[0][0], 'runBrainExtraction');
+  assert.equal(typeof extraction.calls[0][1], 'function');
+  const alignment = await run({ module: 'prealign' });
+  assert.equal(alignment.calls[0][0], 'prealignToMni160');
+  assert.equal(alignment.calls[0][1].skipIfAligned, true);
+  assert.equal(typeof alignment.calls[0][1].assertCurrent, 'function');
 
   // Auto segmentation always hands over to mask review and pauses there.
   const segmentation = await run({ module: 'inference-pipeline' });
-  assert.deepEqual(segmentation.calls, [['runLesionSegmentation'], ['startLesionMaskReview', { seedFile: null }]]);
+  assert.equal(segmentation.calls[0][0], 'runLesionSegmentation');
+  assert.equal(typeof segmentation.calls[0][1], 'function', 'segmentation shares the review handoff owner');
+  assert.deepEqual(segmentation.calls.slice(1), [['startLesionMaskReview', { seedFile: null }]]);
   assert.deepEqual(segmentation.result, { pausedForMaskReview: true });
 
   // Registration is followed by the warp + atlas-grid bridge.
@@ -460,7 +467,8 @@ for (const [input, load] of [
   assert.ok(document.getElementById('outsideAtlasWarning').classList.contains('hidden'));
   assert.equal(document.getElementById('networkThresholdSummary').textContent, 'Run analysis first to enable thresholding.');
   assert.equal(executorCleared, 1, 'worker results are dropped too');
-  assert.deepEqual(viewer, ['remove threshold-preview', 'base T1.nii'], 'the viewer goes back to the structural image');
+  assert.deepEqual(viewer, ['remove threshold-preview', 'clearVolumes', 'base T1.nii'],
+    'the viewer is emptied at once and goes back to the structural image');
   assert.equal(app.messages.at(-1), 'Results cleared (structural retained).');
 
   viewer.length = 0;

@@ -20,6 +20,8 @@ export interface ExampleLoadContext {
   signal: AbortSignal;
   fetchFiles(): Promise<File[]>;
   assertCurrent(): void;
+  /** Replaces the loaded status. Set inline to false when onStatus routes it to the footer. */
+  setMessage(text: string, options?: { inline?: boolean }): void;
 }
 
 export interface ExampleSelectorOptions<T extends AppExample = AppExample> {

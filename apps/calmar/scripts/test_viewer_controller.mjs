@@ -11,6 +11,7 @@
 // back to the broken pattern fails immediately.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -373,11 +374,21 @@ function fakeFile(name) {
 
 // ---- Test 15: MaskDrawingController wraps NiiVue drawing calls ----
 {
-  globalThis.niivue = { PEN_TYPE: { PEN: 0, RECTANGLE: 1, ELLIPSE: 2 } };
+  const decoded = [];
+  globalThis.niivue = {
+    PEN_TYPE: { PEN: 0, RECTANGLE: 1, ELLIPSE: 2 },
+    NVImage: {
+      async loadFromUrl({ url }) {
+        decoded.push(url);
+        return { url };
+      }
+    }
+  };
   const drawBytes = new Uint8Array([1, 0, 1, 0]);
   const calls = {
     createEmptyDrawing: 0,
-    loadDrawingFromUrl: [],
+    binarize: [],
+    loadDrawing: [],
     setDrawingEnabled: [],
     setPenValue: [],
     setDrawOpacity: [],
@@ -405,8 +416,9 @@ function fakeFile(name) {
       calls.closeDrawing += 1;
       this.drawBitmap = null;
     },
-    async loadDrawingFromUrl(url, asDrawing) {
-      calls.loadDrawingFromUrl.push([url, asDrawing]);
+    binarize(image) { calls.binarize.push(image.url); },
+    loadDrawing(image) {
+      calls.loadDrawing.push(image.url);
       this.drawBitmap = new Uint8Array(8);
       return true;
     },
@@ -471,15 +483,28 @@ function fakeFile(name) {
   assert.ok(Object.is(calls.setPenValue.at(-1)[0], -0),
     'erase-cluster tool must pass NiiVue negative zero sentinel');
 
-  await controller.loadSeedFile(fakeFile('seed.nii'));
-  assert.equal(calls.loadDrawingFromUrl.length, 1,
-    'seed masks must load through NiiVue loadDrawingFromUrl');
-  assert.equal(calls.loadDrawingFromUrl[0][0], 'blob:fake-seed.nii');
-  assert.equal(calls.loadDrawingFromUrl[0][1], true);
+  await assert.rejects(controller.loadSeedFile(fakeFile('unchecked.nii')), TypeError,
+    'a drawing load requires its review owner');
+  await controller.loadSeedFile(fakeFile('seed.nii'), () => {});
+  assert.deepEqual(decoded, ['blob:fake-seed.nii'],
+    'seed masks must be decoded by NiiVue NVImage');
+  assert.deepEqual(calls.binarize, ['blob:fake-seed.nii'],
+    'seed masks must be binarized before they become the drawing');
+  assert.deepEqual(calls.loadDrawing, ['blob:fake-seed.nii'],
+    'seed masks must become the drawing through NiiVue loadDrawing');
   assert.equal(calls.setDrawColormap.at(-1), lesionDrawColormap,
     'seed drawings must pass the lesion drawing colormap object to NiiVue');
   assert.ok(messages.at(-1).includes('Editable lesion seed loaded'),
     'seed load should report an editable drawing');
+
+  nv.drawBitmap = new Uint8Array([1, 1, 0, 0, 0, 0, 0, 0]);
+  await assert.rejects(controller.loadSeedFile(fakeFile('stale.nii'), () => {
+    throw new DOMException('The mask import was replaced.', 'AbortError');
+  }), { name: 'AbortError' });
+  assert.equal(calls.loadDrawing.length, 1,
+    'a seed whose review was replaced must not reach the drawing');
+  assert.deepEqual([...nv.drawBitmap], [1, 1, 0, 0, 0, 0, 0, 0],
+    'a seed whose review was replaced must leave the open drawing as it is');
 
   controller.setPenShape('rectangle');
   assert.equal(nv.document.opts.penType, 1,
@@ -570,4 +595,59 @@ function fakeFile(name) {
     'clearDrawing close must remove the stale editable drawing overlay');
 }
 
-console.log('ViewerController OK: 15 cases (Phase 4 call-shape, drawing wrapper, overlay replace path, scalar overlays, visibility, view + stage + colormap + live opacity).');
+// ---- Test 16: the app reaches the viewer only through check-then-commit loads ----
+{
+  const source = fs.readFileSync(path.join(ROOT, 'web/js/lnm-app.js'), 'utf8');
+  const drawing = fs.readFileSync(path.join(ROOT, 'web/js/controllers/MaskDrawingController.js'), 'utf8');
+  for (const call of ['.loadVolumes(', '.addVolumeFromUrl(', '.loadDrawingFromUrl(', '.replaceOverlayForStage(', '.replaceOverlay(', '.loadSegmentationAsBase(', '.showResultAsOverlay(']) {
+    assert.ok(!source.includes(call) && !drawing.includes(call),
+      `${call} cannot be stopped once it starts: load through viewerLoad with assertCurrent`);
+  }
+  for (const [call, owner] of [['.loadBaseVolume(', 'loadViewerBaseVolume'], ['.loadOverlay(', 'loadViewerOverlay'], ['.loadVolumeStack(', 'loadViewerVolumeStack']]) {
+    assert.equal(source.split(call).length - 1, 1, `${call} is called only by ${owner}`);
+  }
+  assert.equal(source.split('.clearVolumes').length - 1, 2,
+    'the viewer is emptied only by clearViewer(), which also drops the recorded base');
+  // A handler is `reportFailure(label, check)` or `unlessSuperseded(check, handler)`:
+  // the check is what decides whether its action was superseded.
+  const forms = [
+    /\.catch\(this\.reportFailure\((?:'[^']*'|`[^`]*`|null), [\w.]+(?:\([^()]*\))?[,)]/,
+    /\.catch\(this\.unlessSuperseded\([\w.]+(?:\([^()]*\))?, /,
+    /\.catch\(\(\) => (?:\{\}|null)\)/
+  ];
+  for (const line of source.split('\n').filter(text => text.includes('.catch('))) {
+    assert.ok(forms.some(form => form.test(line)),
+      `a handler needs the check of the action it handles: "${line.trim()}"`);
+  }
+  for (const line of source.split('\n').filter(text => /this\.reportFailure\(/.test(text) && !text.includes('.catch('))) {
+    assert.match(line, /this\.reportFailure\((?:'[^']*'|`[^`]*`|null), \w+(?:, [^)]*)?\)\(err\)/,
+      `a failure reported from a catch block needs the check of its action: "${line.trim()}"`);
+  }
+
+  // Review continuations are generators driven by one ownership gate. A new
+  // suspension in any of these workflows cannot bypass it with await/then.
+  const guarded = new Map([
+    [source, ['startUploadedLesionMaskReview', 'startLesionMaskReview', 'confirmLesionDrawing',
+      'renderConfirmedNativeLesionOverlay', 'resampleSeedMaskToNative', 'ensureNativeStructuralInfo',
+      'ensureFixedMni160Info', 'prealignToMni160', 'runBrainExtraction', 'loadReviewBrainMask',
+      'prepareLesionReview', 'runLesionSegmentation', 'runDeepIslesSegmentation', 'prepareViewerForLesionSegmentation',
+      'runLesionPreparation', 'runFullPipeline', 'showScanConfirmation', 'resumePipelineAfterMaskConfirmation',
+      'deepIslesSeedCanReviewOnNativeT1', 'ensureViewerLayerLoaded', 'projectAtlasToPatientSpace',
+      'showSubjectSpaceAtlas', 'ensureRegistrationCheckerboardFile', 'renderMniRegistrationQc',
+      'renderCheckerboardRegistrationQc', 'renderDisplacementRegistrationQc', 'renderPatientLayerStack',
+      'displayNetworkMapOnAtlasTemplate', 'runRegistration', 'applyRegistrationToLesion', 'renderAtlasThresholdPreviewOverlay']],
+    [drawing, ['loadSeedFile', 'loadBrainMaskFile']]
+  ]);
+  for (const [text, methods] of guarded) {
+    for (const name of methods) {
+      const start = text.search(new RegExp(`^  (?:async )?${name}\\(`, 'm'));
+      assert.notEqual(start, -1, `${name} exists`);
+      const method = text.slice(start, text.indexOf('\n  }', start));
+      assert.match(method, /return runCurrent\(\w+, function\* \(\)/, `${name} uses the central continuation gate`);
+      assert.doesNotMatch(method, /\b(?:async|await)\b|\.(?:then|catch|finally)\(/,
+        `${name} suspends only with yield, so both success and failure check ownership`);
+    }
+  }
+}
+
+console.log('ViewerController OK: 16 cases (Phase 4 call-shape, drawing wrapper, overlay replace path, scalar overlays, visibility, view + stage + colormap + live opacity).');

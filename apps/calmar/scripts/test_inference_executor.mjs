@@ -306,3 +306,17 @@ function makeExecutor() {
 }
 
 console.log('CalmarPipeline OK: shared executor behavior covered.');
+
+// A command may lose its owner while waiting inside the executor for initialization.
+for (const method of ['loadVolume', 'runSynthStrip', 'runInference', 'runDeepIslesInference', 'runRegistration', 'runWarpMask', 'runInverseWarpMask']) {
+  const { exec, getWorker } = makeExecutor();
+  let current = true;
+  const check = () => { if (!current) throw new DOMException('replaced', 'AbortError'); };
+  const command = method === 'loadVolume'
+    ? exec.loadVolume(new Uint8Array([1]).buffer, {}, { assertCurrent: check })
+    : exec[method]({}, check);
+  current = false;
+  getWorker()._deliver({ type: 'initialized' });
+  await assert.rejects(command, { name: 'AbortError' }, `${method} must check ownership after initialization`);
+  assert.deepEqual(getWorker().posted.map(item => item.msg.type), ['init']);
+}

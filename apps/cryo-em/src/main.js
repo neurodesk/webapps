@@ -27,6 +27,7 @@ import { parseChecksums, postprocessFsc } from './star.js';
 import { fscChartSvg } from './fsc-chart.js';
 import { EXAMPLE_ROOT, EXAMPLE_SETTINGS, exampleMovies } from './example.js';
 import examples from '../examples.json';
+import { idleGuidance } from './guidance.js';
 
 const $ = id => document.getElementById(id);
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled']);
@@ -64,26 +65,84 @@ bindInfoTooltips(document);
 
 // 3. State. `values[command]` holds what the user chose; defaults fill the rest.
 const state = {
+  connectionState: 'initial',
+  tutorial: null,
+  exampleActivity: null,
+  notice: null,
+  noticeSelection: null,
   client: null,
   info: null,
   project: null,
+  projectSelection: null,
+  projectLoading: false,
   jobs: new Map(),
   command: 'import',
   values: Object.fromEntries(STEPS.map(step => [step.command, { inputs: {}, options: {}, profile: '' }])),
   uploads: {},
   selectedJob: null,
+  jobSelection: null,
   following: null,
   // Jobs a follower saw end: a project read from before that end still lists them as active.
   ended: new Set(),
   submitting: null,
+  runSelection: null,
   settingsOpen: false,
   views: { image: null, classes: null, fsc: null },
 };
 
-function status(message, level = 'info') {
-  progress.setText(message);
-  $('statusText').classList.toggle('error', level === 'error');
+// All footer writes pass through this renderer and ProgressManager. Notifications
+// belong to the current context; changing prerequisites clears them.
+let renderedActivity = null;
+function updateState(patch, { preserveNotice = false } = {}) {
+  if (!preserveNotice) {
+    state.notice = null;
+    state.noticeSelection = {};
+  }
+  Object.assign(state, patch);
+  syncControls();
+}
+
+function footerText(message) {
+  return message.length > 90 ? `${message.slice(0, 89)}…` : message;
+}
+
+// A response owns both its state dependencies and, where needed, its request slot.
+// Every async writer uses this guard, including failures and post-await cleanup.
+const requests = new Map();
+let pageActive = true;
+function currentContext({ keys = ['client', 'projectSelection'], channel } = {}) {
+  const snapshot = keys.map(key => state[key]);
+  const request = {};
+  if (channel) requests.set(channel, request);
+  return () => pageActive && keys.every((key, index) => state[key] === snapshot[index])
+    && (!channel || requests.get(channel) === request);
+}
+
+function renderStatus() {
+  const activity = state.following || state.submitting;
+  if (activity) {
+    if (renderedActivity !== activity) progress.begin(footerText(activity.message), { cancellable: activity.cancellable });
+    progress.setCancellable(activity.cancellable);
+    if (activity.fraction === undefined) progress.setText(footerText(activity.message));
+    else progress.setProgress(activity.fraction, footerText(activity.message));
+  } else {
+    const notice = state.notice || state.exampleActivity;
+    const message = footerText(notice?.message || idleGuidance(state));
+    if (notice?.success !== undefined) progress.end(message, { success: notice.success });
+    else progress.reset(message);
+  }
+  renderedActivity = activity;
+  $('statusText').classList.toggle('error', !activity && (state.notice || state.exampleActivity)?.level === 'error');
+}
+
+function status(message, level = 'info', success) {
+  updateState({ notice: { message, level, success } });
   log.log(message, level);
+}
+
+function settingsChanged(patch = {}) {
+  exampleControl.cancel();
+  updateState({ exampleActivity: null, ...patch });
 }
 
 function remember(key, value) {
@@ -130,10 +189,19 @@ function confirmAction(title, message, action) {
 // 4. Viewer: NiiVue for micrographs and maps, canvases for stacks, SVG for the FSC.
 const viewer = new NiiVue({ isDragDropEnabled: false });
 let attached = null;
+let imageLoading = Promise.resolve();
+let displayedImage = null;
+
+function currentView(context) {
+  const current = currentContext({ keys: [], channel: 'view' });
+  return () => current() && context();
+}
+
 function viewerReady() {
   attached ??= viewer.attachTo('gl1').then(() => {
+    if (!pageActive) return;
     viewer.isLegendVisible = false;
-    viewer.createExtensionContext().on('locationChange', event => { $('location').textContent = event.detail.string; });
+    viewer.createExtensionContext().on('locationChange', event => { if (pageActive) $('location').textContent = event.detail.string; });
   });
   return attached;
 }
@@ -148,6 +216,7 @@ function setView(view) {
 }
 
 toolbar.addEventListener('nd-view-change', ({ detail }) => {
+  requests.delete('view');
   if (!state.views[detail.value]) {
     status({ image: 'Open a micrograph or map from a job first', classes: 'Open class averages or particles from a job first', fsc: 'Open postprocess.star from a Post-processing job first' }[detail.value]);
     setView(Object.keys(state.views).find(view => view === 'image' || state.views[view]) ?? 'image');
@@ -167,19 +236,34 @@ function displayFile(mrc, name) {
   return new File([buffer], `${name}.nii`, { type: 'application/octet-stream' });
 }
 
-async function showMrc(mrc, label) {
-  await viewerReady();
-  const file = displayFile(mrc, label.replace(/[^\w.-]+/g, '_'));
-  await viewer.loadVolumes([{ url: file, name: file.name, colormap: 'gray' }]);
-  const volume = !mrc.stack && mrc.nz > 1;
-  viewer.sliceType = volume ? SLICE_TYPE.MULTIPLANAR : SLICE_TYPE.AXIAL;
-  if (volume) {
-    viewer.multiplanarType = MULTIPLANAR_TYPE.GRID;
-    viewer.showRender = SHOW_RENDER.ALWAYS;
-  }
-  state.views.image = `${label} · ${mrc.nx} × ${mrc.ny}${volume ? ` × ${mrc.nz}` : ''} · ${mrc.angpix.toFixed(3)} Å/px`;
-  $('viewerError').hidden = true;
-  setView('image');
+function showMrc(mrc, label, current) {
+  // NiiVue mutates one viewer: a newer load must finish after any older load.
+  imageLoading = imageLoading.catch(() => {}).then(async () => {
+    await viewerReady();
+    if (!current()) return;
+    const file = displayFile(mrc, label.replace(/[^\w.-]+/g, '_'));
+    try {
+      await viewer.loadVolumes([{ url: file, name: file.name, colormap: 'gray' }]);
+    } finally {
+      // loadVolumes commits inside NiiVue after its own async decode. Restore the
+      // last committed image if this request lost ownership during that decode.
+      if (!current() && pageActive) {
+        await viewer.loadVolumes(displayedImage ? [{ url: displayedImage, name: displayedImage.name, colormap: 'gray' }] : []);
+      }
+    }
+    if (!current()) return;
+    displayedImage = file;
+    const volume = !mrc.stack && mrc.nz > 1;
+    viewer.sliceType = volume ? SLICE_TYPE.MULTIPLANAR : SLICE_TYPE.AXIAL;
+    if (volume) {
+      viewer.multiplanarType = MULTIPLANAR_TYPE.GRID;
+      viewer.showRender = SHOW_RENDER.ALWAYS;
+    }
+    state.views.image = `${label} · ${mrc.nx} × ${mrc.ny}${volume ? ` × ${mrc.nz}` : ''} · ${mrc.angpix.toFixed(3)} Å/px`;
+    $('viewerError').hidden = true;
+    setView('image');
+  });
+  return imageLoading;
 }
 
 function showStack(mrc, label, { job, name } = {}) {
@@ -229,6 +313,7 @@ function showStack(mrc, label, { job, name } = {}) {
 
 /** Fills Class selection from the classes clicked in one iteration's averages. */
 function chooseClasses(inputs, classes) {
+  settingsChanged();
   const select = state.values.select;
   select.options.mode = 'classes';
   select.options.classes = classes;
@@ -261,18 +346,30 @@ function serverFits(serverInfo) {
     && Boolean(serverInfo.tools?.some(tool => tool.id === 'relion'));
 }
 
+function stopFollowing() {
+  state.following?.controller.abort();
+  updateState({ following: null, submitting: null, runSelection: null });
+}
+
 connection.addEventListener('nd-compute-change', ({ detail }) => {
   const ready = detail.state === 'connected' || detail.state === 'simulated';
   const fits = ready && serverFits(detail.info);
+  stopFollowing();
+
   $('serverNeeds').hidden = !ready || fits;
-  state.client = fits ? detail.client : null;
-  state.info = fits ? detail.info : null;
+  updateState({
+    connectionState: detail.state,
+    client: fits ? detail.client : null,
+    info: fits ? detail.info : null,
+    project: null,
+    projectSelection: null,
+    projectLoading: false,
+    exampleActivity: null,
+  });
   if (fits) {
     log.log(`Compute server ready: ${connection.message.textContent}`, detail.state === 'simulated' ? 'warning' : 'success');
-    progress.reset('Connected · choose or create a project');
-    loadProjects(recall('cryo-em.project')).catch(error => status(`Projects unavailable: ${error.message}`, 'error'));
-  } else if (detail.state !== 'connecting') {
-    state.project = null;
+    void loadProjects(recall('cryo-em.project'));
+  } else {
     state.jobs.clear();
     renderProjects([]);
     renderJobs();
@@ -290,29 +387,51 @@ function renderProjects(projects) {
 }
 
 async function loadProjects(preferred = state.project?.id) {
-  const { projects } = await state.client.projects();
-  if (preferred && projects.some(project => project.id === preferred)) {
-    state.project = { id: preferred };
-    renderProjects(projects);
-    await openProject(preferred);
-  } else {
-    state.project = null;
-    renderProjects(projects);
-    renderJobs();
-    renderForm();
+  const client = state.client;
+  const current = currentContext({ channel: 'projects' });
+  try {
+    const { projects } = await client.projects();
+    if (!current()) return;
+    if (preferred && projects.some(project => project.id === preferred)) {
+      updateState({ project: { id: preferred } });
+      renderProjects(projects);
+      await openProject(preferred);
+    } else {
+      updateState({ project: null });
+      renderProjects(projects);
+      renderJobs();
+      renderForm();
+    }
+  } catch (error) {
+    if (current()) status(`Projects unavailable: ${error.message}`, 'error');
   }
 }
 
 async function openProject(id) {
-  state.project = id ? { id } : null;
-  state.selectedJob = null;
+  stopFollowing();
+  updateState({ projectSelection: {}, projectLoading: Boolean(id), project: id ? { id } : null, selectedJob: null, jobSelection: {} });
+  const current = currentContext();
   state.jobs.clear();
   remember('cryo-em.project', id);
-  if (id) await refreshProject();
-  else {
+  syncControls();
+  try {
+    if (id) await refreshProject();
+    else {
+      renderJobs();
+      renderForm();
+    }
+  } catch (error) {
+    if (!current()) return;
+    updateState({ project: null });
     renderJobs();
     renderForm();
+    status(`Project unavailable: ${error.message}`, 'error');
+  } finally {
+    if (current()) {
+      updateState({ projectLoading: false }, { preserveNotice: true });
+    }
   }
+  if (!current()) return;
   $('jobsSection').open = Boolean(id);
   syncControls();
 }
@@ -320,29 +439,39 @@ async function openProject(id) {
 /** Re-read the project and the details (outputs) of jobs that changed. */
 async function refreshProject() {
   const client = state.client;
-  const project = await client.project(state.project.id);
-  if (client !== state.client || state.project?.id !== project.id) return;
-  state.project = project;
-  await Promise.all(project.jobs.map(async job => {
-    const known = state.jobs.get(job.id);
-    if (TERMINAL.has(known?.status)) return;
-    const details = await client.job(job.id);
-    // A follower or overlapping refresh may have recorded completion during this read.
-    if (TERMINAL.has(state.jobs.get(job.id)?.status)) return;
-    state.jobs.set(job.id, { ...job, ...details });
-  }));
-  // Terminal details take precedence over active snapshots, regardless of arrival order.
-  for (const job of project.jobs) job.status = state.jobs.get(job.id).status;
-  for (const id of state.jobs.keys()) if (!project.jobs.some(job => job.id === id)) state.jobs.delete(id);
-  renderJobs();
-  renderForm();
-  const active = [...project.jobs].reverse().find(job => ACTIVE.has(job.status));
-  // A refresh that started before a submission returned sees its job; the submit handler follows it.
-  if (active && !state.following && !state.submitting && !state.ended.has(active.id)) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'], channel: 'project' });
+  try {
+    const project = await client.project(state.project.id);
+    if (!current()) return;
+    const details = await Promise.all(project.jobs.map(async job => {
+      const known = state.jobs.get(job.id);
+      if (TERMINAL.has(known?.status)) return known;
+      const detail = await client.job(job.id);
+      if (!current()) return;
+      return { ...job, ...detail };
+    }));
+    if (!current()) return;
+    // Commit the snapshot only after its job details are ready and still current.
+    for (const detail of details) {
+      // A follower may have recorded completion during this read.
+      if (!TERMINAL.has(state.jobs.get(detail.id)?.status)) state.jobs.set(detail.id, detail);
+    }
+    for (const job of project.jobs) job.status = state.jobs.get(job.id).status;
+    for (const id of state.jobs.keys()) if (!project.jobs.some(job => job.id === id)) state.jobs.delete(id);
+    updateState({ project }, { preserveNotice: true });
+    renderJobs();
+    renderForm();
+    const active = [...project.jobs].reverse().find(job => ACTIVE.has(job.status));
+    if (active && !state.following && !state.submitting && !state.ended.has(active.id)) void follow(active.id, `${stepLabel(active.command)} (${active.directory})`);
+    return true;
+  } catch (error) {
+    if (current()) throw error;
+    return false;
+  }
 }
 
 $('projectSelect').addEventListener('change', event => {
-  void openProject(event.target.value).catch(error => status(`Project unavailable: ${error.message}`, 'error'));
+  void openProject(event.target.value);
 });
 
 $('createProject').addEventListener('click', async () => {
@@ -352,25 +481,36 @@ $('createProject').addEventListener('click', async () => {
     $('projectName').focus();
     return;
   }
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'], channel: 'projectMutation' });
+  // A previous catalogue read must not select a project while this one is created.
+  requests.delete('projects');
   try {
-    const project = await state.client.createProject(name);
+    const client = state.client;
+    const project = await client.createProject(name);
+    if (!current()) return;
     $('projectName').value = '';
     status(`Project ${project.name} created`);
     await loadProjects(project.id);
   } catch (error) {
+    if (!current()) return;
     status(`Could not create the project: ${error.message}`, 'error');
   }
 });
 
 $('deleteProject').addEventListener('click', async () => {
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'], channel: 'projectMutation' });
+  const client = state.client;
   const project = state.project;
   if (!project || !await confirmAction('Delete project', `Delete ${project.name} and every file its ${project.jobs?.length ?? 0} jobs wrote on the server? This cannot be undone.`, 'Delete project')) return;
+  if (!current()) return;
   try {
-    await state.client.removeProject(project.id);
-    status(`Project ${project.name} deleted`);
-    state.project = null;
+    await client.removeProject(project.id);
+    if (!current()) return;
+    // openProject is synchronous when clearing; do not yield before owning the list read.
+    void openProject('');
     await loadProjects(null);
   } catch (error) {
+    if (!current()) return;
     status(error instanceof ComputeError && error.status === 409 ? 'Wait for the running job to end before deleting the project' : `Could not delete the project: ${error.message}`, 'error');
   }
 });
@@ -459,7 +599,7 @@ function primaryOutput(job) {
 }
 
 function selectJob(id, { show = false } = {}) {
-  state.selectedJob = id;
+  updateState({ selectedJob: id, jobSelection: {} }, { preserveNotice: true });
   const job = state.jobs.get(id);
   renderJobs();
   $('outputSection').open = Boolean(job);
@@ -475,39 +615,67 @@ async function fetchOutput(id, name) {
 async function viewOutput(id, name) {
   const job = state.jobs.get(id);
   if (!job) return;
+  const current = currentView(currentContext({ keys: ['client', 'projectSelection', 'runSelection', 'jobSelection'] }));
+  const footerCurrent = currentContext({ keys: ['noticeSelection'] });
   try {
     const file = await fetchOutput(id, name);
-    if (name.endsWith('.star')) showFsc(postprocessFsc(await file.text()), name);
+    if (!current()) return;
+    if (name.endsWith('.star')) {
+      const text = await file.text();
+      if (!current()) return;
+      showFsc(postprocessFsc(text), name);
+    }
     else {
-      const mrc = readMrc(await file.arrayBuffer());
+      const buffer = await file.arrayBuffer();
+      if (!current()) return;
+      const mrc = readMrc(buffer);
       if (mrc.stack) showStack(mrc, name, { job, name });
-      else await showMrc(mrc, name);
+      else await showMrc(mrc, name, current);
     }
   } catch (error) {
+    if (!current()) return;
     $('viewerError').hidden = false;
     $('viewerError').textContent = `Cannot show ${name}: ${error.message}`;
-    status(`Cannot show ${name}: ${error.message}`, 'error');
+    if (footerCurrent()) status(`Cannot show ${name}: ${error.message}`, 'error');
   }
 }
 
 async function downloadOutput(id, name) {
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection', 'jobSelection'], channel: 'download' });
+  const footerCurrent = currentContext({ keys: ['noticeSelection'] });
   try {
-    downloadFile(await fetchOutput(id, name));
-    status(`${name} downloaded`);
+    const file = await fetchOutput(id, name);
+    if (!current()) return;
+    downloadFile(file);
+    if (footerCurrent()) status(`${name} downloaded`);
   } catch (error) {
-    status(`Download failed: ${error.message}`, 'error');
+    if (!current()) return;
+    if (footerCurrent()) status(`Download failed: ${error.message}`, 'error');
   }
 }
 
 $('deleteJob').addEventListener('click', async () => {
+  const projectCurrent = currentContext();
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'], channel: 'jobMutation' });
+  const selected = currentContext({ keys: ['jobSelection'] });
+  const client = state.client;
   const job = state.jobs.get(state.selectedJob);
   if (!job || !await confirmAction('Delete job', `Delete ${job.directory} and its files on the server? This cannot be undone.`, 'Delete job')) return;
+  if (!current() || !selected()) return;
   try {
-    await state.client.remove(job.id);
-    status(`${job.directory} deleted`);
-    state.selectedJob = null;
-    await refreshProject();
+    await client.remove(job.id);
+    // Successful deletions change this project even if another mutation or run started.
+    if (!projectCurrent()) return;
+    if (state.selectedJob === job.id) {
+      if (current()) status(`${job.directory} deleted`);
+      selectJob(null);
+    }
+    const refreshCurrent = currentContext({ keys: ['client', 'projectSelection', 'runSelection', 'jobSelection'] });
+    await refreshProject().catch(error => {
+      if (refreshCurrent()) status(`Project refresh failed: ${error.message}`, 'error');
+    });
   } catch (error) {
+    if (!current() || !selected()) return;
     status(error instanceof ComputeError && error.status === 409 ? `${job.directory} cannot be deleted: ${error.message}` : `Could not delete ${job.directory}: ${error.message}`, 'error');
   }
 });
@@ -516,7 +684,7 @@ $('deleteJob').addEventListener('click', async () => {
 const stepSelect = $('stepSelect');
 stepSelect.replaceChildren(...STEPS.map(step => new Option(step.label, step.command)));
 stepSelect.addEventListener('change', () => {
-  state.command = stepSelect.value;
+  settingsChanged({ command: stepSelect.value });
   renderForm();
 });
 
@@ -544,6 +712,7 @@ function optionControl(command, option) {
     const target = event.currentTarget;
     values[option.name] = parseOption(option, option.type === 'bool' ? target.checked : target.value);
     $('formMessage').hidden = true;
+    settingsChanged();
     if (stepForm(command, state.values[command]).controlling.has(option.name)) renderForm();
   };
   if (option.type === 'bool') {
@@ -614,6 +783,7 @@ function inputControl(command, input) {
         : choice === '@dataFile' ? { root: state.info.dataRoots[0]?.id ?? '', path: '' }
           : choice;
     $('formMessage').hidden = true;
+    settingsChanged();
     renderForm();
   });
   wrapper.append(fieldElement(id, input.label, '', input.help, select));
@@ -650,13 +820,17 @@ function rootBrowser(id, input, value, onChange) {
   pattern.type = 'text';
   pattern.id = `${id}-pattern`;
   pattern.value = current.pattern;
-  const emit = () => {
+  const emit = (changed = true) => {
     onChange(pickFile ? { root: current.root, path: current.path } : { root: current.root, path: folder, pattern: current.pattern });
     $('formMessage').hidden = true;
+    if (changed) settingsChanged();
   };
   let token = 0;
   const load = async () => {
+    const currentContextMatches = currentContext();
+    const client = state.client;
     const mine = ++token;
+    const currentListing = () => mine === token && currentContextMatches() && box.isConnected;
     where.textContent = `${current.root || 'No data root'} / ${folder || '(top)'}`;
     list.replaceChildren();
     if (!state.client) where.textContent += ' · connect to list its files';
@@ -665,15 +839,16 @@ function rootBrowser(id, input, value, onChange) {
     try {
       let cursor = null;
       do {
-        const page = await state.client.entries(current.root, folder, cursor);
+        const page = await client.entries(current.root, folder, cursor);
+        if (!currentListing()) return;
         entries = entries.concat(page.entries);
         cursor = page.next;
       } while (cursor && entries.length < 5000);
     } catch (error) {
-      if (mine === token) where.textContent = `${current.root} / ${folder}: ${error.message}`;
+      if (currentListing()) where.textContent = `${current.root} / ${folder}: ${error.message}`;
       return;
     }
-    if (mine !== token) return;
+    if (!currentListing()) return;
     const button = (text, onClick, pressed) => {
       const item = document.createElement('button');
       item.type = 'button';
@@ -709,13 +884,15 @@ function rootBrowser(id, input, value, onChange) {
     void load();
   });
   pattern.addEventListener('change', () => {
-    current.pattern = pattern.value.trim();
+    const next = pattern.value.trim();
+    if (next === current.pattern) return;
+    current.pattern = next;
     emit();
     void load();
   });
   box.append(fieldElement(rootSelect.id, `${input.label} from`, '', '', rootSelect), where, list);
   if (!pickFile) box.append(fieldElement(pattern.id, 'File pattern', '', 'Matches names in this folder: * is any run of characters, ? one character.', pattern));
-  if (value === undefined || (!pickFile && value.path === undefined)) emit();
+  if (value === undefined || (!pickFile && value.path === undefined)) emit(false);
   void load();
   return box;
 }
@@ -725,7 +902,10 @@ function profileControl(command) {
   select.id = 'profileSelect';
   select.append(new Option('Server default', ''), ...(state.info?.profiles ?? []).map(profile => new Option(`${profile.name} · ${profile.summary}`, profile.name)));
   select.value = state.values[command].profile;
-  select.addEventListener('change', () => { state.values[command].profile = select.value; });
+  select.addEventListener('change', () => {
+    state.values[command].profile = select.value;
+    settingsChanged();
+  });
   return fieldElement(select.id, 'Resources', '', 'A resource profile the server operator configured; each step has its own default.', select);
 }
 
@@ -759,7 +939,7 @@ function renderForm() {
 
 function syncControls() {
   const connected = Boolean(state.client);
-  const busy = Boolean(state.following || state.submitting);
+  const busy = Boolean(state.following || state.submitting || state.projectLoading);
   $('projectSelect').disabled = !connected;
   $('projectName').disabled = !connected;
   $('createProject').disabled = !connected;
@@ -767,6 +947,8 @@ function syncControls() {
   $('deleteJob').disabled = busy;
   $('runButton').disabled = !connected || !state.project || busy;
   $('runButton').title = !connected ? 'Connect to a compute server first' : !state.project ? 'Choose or create a project first' : busy ? 'Wait for the running job to end' : '';
+  document.querySelector('nd-example-selector')?.setDisabled(busy);
+  renderStatus();
 }
 
 /** The spec of the current step, checked by the same validation the servers apply. */
@@ -811,26 +993,36 @@ $('runButton').addEventListener('click', async () => {
   const label = stepLabel(state.command);
   // Only this submission clears its own guard: an earlier step's handler can
   // still be finishing its project refresh after this one starts.
-  const submission = {};
-  state.submitting = submission;
-  syncControls();
+  const submission = { message: `Submitting ${label}…`, cancellable: false };
+  const runSelection = {};
+  const client = state.client;
+  exampleControl.cancel();
+  updateState({ submitting: submission, runSelection, exampleActivity: null });
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'] });
+  let accepted = false;
   try {
-    const receipt = await state.client.submit(request.spec, request.files);
-    state.submitting = null;
+    const receipt = await client.submit(request.spec, request.files);
+    if (!current() || state.submitting !== submission) return;
+    accepted = true;
+    updateState({ submitting: null });
     log.log(`Submitted ${label}: ${JSON.stringify(request.spec)}`);
-    const following = follow(receipt.id, label);
-    await refreshProject();
-    await following;
+    const following = follow(receipt.id, label, runSelection);
+    await Promise.all([refreshProject(), following]);
   } catch (error) {
+    if (!current()) return;
+    if (accepted) {
+      status(`Project refresh failed: ${error.message}`, 'error');
+      return;
+    }
     $('formMessage').textContent = error.message;
     $('formMessage').hidden = false;
-    status(`${label} was not accepted: ${error.message}`, 'error');
+    if (state.submitting === submission) updateState({ submitting: null });
+    status(`${label} was not accepted: ${error.message}`, 'error', false);
     // The server may have created the job although no receipt arrived; a refresh follows it.
-    if (state.submitting === submission) state.submitting = null;
     await refreshProject().catch(() => {});
-    if (state.following) $('formMessage').hidden = true;
+    if (current() && state.following) $('formMessage').hidden = true;
   } finally {
-    if (state.submitting === submission) state.submitting = null;
+    if (state.submitting === submission) updateState({ submitting: null }, { preserveNotice: true });
     syncControls();
   }
 });
@@ -841,55 +1033,75 @@ function queuedText(label, event, job) {
   return event.position > 0 ? `${label}: queued behind ${event.position}` : `${label}: queued`;
 }
 
-async function follow(id, label) {
+async function follow(id, label, runSelection = {}) {
   const client = state.client;
   const controller = new AbortController();
-  state.following = { id, controller };
+  const following = { id, controller, message: `${label}: queued`, cancellable: true };
+  updateState({ following, runSelection, exampleActivity: null });
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'] });
+  const watching = () => current() && state.following === following && !controller.signal.aborted;
+  const selected = currentContext({ keys: ['jobSelection'] });
+  exampleControl.cancel();
+  $('formMessage').hidden = true;
   syncControls();
-  progress.begin(`${label}: queued`);
   try {
     const done = await client.watch(id, {
       onStatus: event => {
-        if (event.status === 'queued') progress.setText(queuedText(label, event));
-        else if (event.status === 'running') progress.setText(`${label}: running`);
-        else if (event.status === 'cancelling') progress.setText(`${label}: cancelling…`);
+        if (!watching()) return;
+        if (event.status === 'queued') following.message = queuedText(label, event);
+        else if (event.status === 'running') following.message = `${label}: running`;
+        else if (event.status === 'cancelling') following.message = `${label}: cancelling…`;
+        updateState({}, { preserveNotice: true });
       },
-      onProgress: event => progress.setProgress(event.fraction, `${label}: ${event.stage}`),
-      onLog: event => log.log(event.line, event.level),
+      onProgress: event => {
+        if (!watching()) return;
+        following.fraction = event.fraction;
+        following.message = `${label}: ${event.stage}`;
+        updateState({}, { preserveNotice: true });
+      },
+      onLog: event => { if (watching()) log.log(event.line, event.level); },
     }, { signal: controller.signal });
+    if (!watching()) return;
     state.jobs.set(id, done);
     state.ended.add(id);
-    progress.end(`${label} finished${done.simulated ? ' (simulated)' : ''}`);
+    updateState({ following: null, notice: { message: `${label} finished${done.simulated ? ' (simulated)' : ''}`, success: true } });
     log.log(`${label} finished in ${done.directory}`, 'success');
   } catch (error) {
-    if (controller.signal.aborted) return;
+    if (!watching()) return;
     if (error instanceof ComputeError && error.job) {
       state.jobs.set(id, error.job);
       state.ended.add(id);
     }
     const cancelled = error instanceof ComputeError && error.code === 'cancelled';
-    progress.end(cancelled ? `${label} cancelled` : `${label} failed: ${error.message}`, { success: false });
-    $('statusText').classList.toggle('error', !cancelled);
+    updateState({ following: null, notice: { message: cancelled ? `${label} cancelled` : `${label} failed: ${error.message}`, success: false, level: cancelled ? 'warning' : 'error' } });
     log.log(cancelled ? `${label} cancelled` : `${label} failed: ${error.message}`, cancelled ? 'warning' : 'error');
   } finally {
-    if (state.following?.id === id) state.following = null;
+    if (state.following === following) updateState({ following: null }, { preserveNotice: true });
     syncControls();
   }
-  if (client !== state.client || !state.project) return;
-  await refreshProject();
+  if (!current() || !state.project) return;
+  const refreshed = await refreshProject().catch(error => {
+    if (current()) status(`Project refresh failed: ${error.message}`, 'error');
+    return false;
+  });
+  if (!current() || !selected() || !refreshed) return;
   selectJob(id, { show: state.jobs.get(id)?.status === 'succeeded' });
 }
 
 $('cancelButton').addEventListener('click', async () => {
   const running = state.following;
   if (!running) return;
-  progress.setCancellable(false);
-  progress.setText('Cancelling…');
+  const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection', 'following'], channel: 'cancel' });
+  running.cancellable = false;
+  running.message = 'Cancelling…';
+  updateState({}, { preserveNotice: true });
   try {
     await state.client.cancel(running.id);
   } catch (error) {
-    status(`Cancel failed: ${error.message}`, 'error');
-    progress.setCancellable(true);
+    if (!current()) return;
+    running.message = `Cancel failed: ${error.message}`;
+    running.cancellable = true;
+    updateState({}, { preserveNotice: true });
   }
 });
 
@@ -903,8 +1115,7 @@ for (const [name, picker] of Object.entries(PICKERS)) {
     state.uploads[name] = file;
     const owner = name === 'gain' ? 'motioncorr' : state.command;
     if (state.values[owner]?.inputs) state.values[owner].inputs[name] = { part: name };
-    if (name === 'gain') state.command = 'motioncorr';
-    status(`${file.name} will be uploaded with ${stepLabel(state.command)}`);
+    settingsChanged({ command: name === 'gain' ? 'motioncorr' : state.command });
     renderForm();
   });
 }
@@ -914,30 +1125,36 @@ const exampleControl = createExampleSelector({
   examples,
   fileActions: false,
   scope: $('controls'),
-  onStatus: (message, error) => status(message, error ? 'error' : 'info'),
-  onLoad: async (_example, { fetchFiles, assertCurrent }) => {
+  onLoad: async (_example, { fetchFiles, assertCurrent, setMessage }) => {
     const [checksums] = await fetchFiles();
     const movies = exampleMovies(parseChecksums(await checksums.text()));
     assertCurrent();
-    let note = 'connect a server with the examples data root to run it';
-    if (state.client && state.info.dataRoots?.some(root => root.id === EXAMPLE_ROOT)) {
-      const listing = await state.client.entries(EXAMPLE_ROOT, EXAMPLE_SETTINGS.import.inputs.movies.path).catch(() => ({ entries: [] }));
-      const present = new Set(listing.entries.map(entry => entry.name));
-      const missing = movies.filter(name => !present.has(name));
-      if (missing.length) throw new Error(`The server's examples root lacks ${missing.length} of the ${movies.length} tutorial movies; run neurodesk-compute fetch-example relion-tutorial`);
-      note = `${movies.length} movies found on the server`;
-    } else if (state.client) {
-      note = 'this server has no examples data root; run neurodesk-compute fetch-example relion-tutorial';
+    const client = state.client;
+    let checkedClient = null;
+    if (client && state.info.dataRoots?.some(root => root.id === EXAMPLE_ROOT)) {
+      const listing = await client.entries(EXAMPLE_ROOT, EXAMPLE_SETTINGS.import.inputs.movies.path).catch(() => ({ entries: [] }));
+      assertCurrent();
+      if (client === state.client) {
+        const present = new Set(listing.entries.map(entry => entry.name));
+        const missing = movies.filter(name => !present.has(name));
+        if (missing.length) throw new Error(`Server lacks ${missing.length} tutorial movies. Run neurodesk-compute fetch-example relion-tutorial`);
+        checkedClient = client;
+      }
     }
     assertCurrent();
     for (const [command, settings] of Object.entries(EXAMPLE_SETTINGS)) {
       Object.assign(state.values[command].inputs, structuredClone(settings.inputs ?? {}));
       Object.assign(state.values[command].options, structuredClone(settings.options ?? {}));
     }
-    state.command = 'import';
+    updateState({ command: 'import', tutorial: { movies, client: checkedClient }, exampleActivity: null });
     renderForm();
-    status(`RELION tutorial settings loaded · ${note}`);
+    // Completion only signals a state change; the footer derives its own help.
+    setMessage('', { inline: false });
   },
+});
+exampleControl.addEventListener('nd-example-status', ({ detail }) => {
+  updateState({ exampleActivity: detail.state === 'loading' || detail.error
+    ? { message: detail.message, level: detail.error ? 'error' : 'info' } : null });
 });
 $('exampleControl').append(exampleControl);
 
@@ -946,11 +1163,14 @@ registerAppAutomation({
   app: APP.id,
   operations: {
     'open-map': async ({ inputs, signal }) => {
+      const current = currentView(() => !signal.aborted);
       const [file] = inputs.map;
       const mrc = readMrc(await file.arrayBuffer());
       signal.throwIfAborted();
+      if (!current()) throw new DOMException('A newer view superseded this map', 'AbortError');
       if (mrc.stack) showStack(mrc, file.name);
-      else await showMrc(mrc, file.name);
+      else await showMrc(mrc, file.name, current);
+      if (!current()) throw new DOMException('A newer view superseded this map', 'AbortError');
       return { artifacts: [], summary: { nx: mrc.nx, ny: mrc.ny, nz: mrc.nz, angpix: mrc.angpix, stack: mrc.stack } };
     },
   },
@@ -959,6 +1179,7 @@ registerAppAutomation({
 renderForm();
 renderJobs();
 window.addEventListener('pagehide', () => {
+  pageActive = false;
   exampleControl.destroy();
   state.following?.controller.abort();
 });

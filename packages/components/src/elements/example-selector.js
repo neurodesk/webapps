@@ -246,9 +246,10 @@ export function defineExampleSelector(view = globalThis.window) {
       this.#info.hidden = !text;
     }
 
-    #status(state, text, error = false, extra = {}) {
+    #status(state, text, error = false, extra = {}, inline = true) {
       this.dataset.exampleState = state;
-      this.#message.textContent = text;
+      this.#message.hidden = !inline;
+      this.#message.textContent = inline ? text : '';
       this.#onStatus?.(text, error);
       this.dispatchEvent(new view.CustomEvent('nd-example-status', {
         bubbles: true,
@@ -320,10 +321,16 @@ export function defineExampleSelector(view = globalThis.window) {
       const onRetry = ({ status, delay }) => {
         if (this.#active === controller) this.#status('loading', `The example host is busy (HTTP ${status}); retrying in ${Math.ceil(delay / 1000)} s…`);
       };
+      let message = `${example.label} loaded.`;
+      let inlineMessage = true;
       try {
         await this.#onLoad(example, {
           signal: controller.signal,
           assertCurrent,
+          setMessage(text, { inline = true } = {}) {
+            message = text;
+            inlineMessage = inline;
+          },
           async fetchFiles() {
             const files = await Promise.all(example.files.map(async asset => {
               assertCurrent();
@@ -356,7 +363,7 @@ export function defineExampleSelector(view = globalThis.window) {
         if (selection.rotation) this.#rotationIndex.set(selection.id, index + 1);
         this.dataset.exampleId = example.id;
         this.#describe(example);
-        this.#status('ready', `${example.label} loaded.`, false, { description: example.description, expectedResult: example.expectedResult });
+        this.#status('ready', message, false, { description: example.description, expectedResult: example.expectedResult }, inlineMessage);
       } catch (error) {
         if (this.#active === controller && !controller.signal.aborted) {
           controller.abort();

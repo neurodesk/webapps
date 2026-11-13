@@ -1,4 +1,14 @@
 import { installContrastRangeWand, maskToDrawingBitmap, drawingToNativeBitmap } from '@neurodesk/webapp-components/viewer';
+import { runCurrent } from '../modules/current-task.js';
+
+async function decodeSeed(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    return await globalThis.niivue.NVImage.loadFromUrl({ url });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 export class MaskDrawingController {
   constructor(options) {
@@ -86,8 +96,10 @@ export class MaskDrawingController {
     }
   }
 
-  startBlank() {
+  // `assertCurrent` runs first, in the step that creates or clears the drawing.
+  startBlank(assertCurrent) {
     if (!this.nv) throw new Error('MaskDrawingController: NiiVue instance is required');
+    assertCurrent?.();
     if (this.nv.drawBitmap && this.currentDrawingMatchesBase()) {
       this.pushManualUndoSnapshot(this.copyDrawingBitmap());
       this.drawAddUndoBitmap();
@@ -106,19 +118,21 @@ export class MaskDrawingController {
     this.updateOutput('Blank editable lesion mask ready.');
   }
 
-  async loadSeedFile(file) {
-    if (!file) throw new Error('loadSeedFile: seed file is required');
-    const url = URL.createObjectURL(file);
-    try {
-      const ok = await this.nv.loadDrawingFromUrl(url, true);
-      if (ok === false) throw new Error('NiiVue rejected the drawing mask');
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-    this.applyDrawingStyle();
-    this.nv.setDrawingEnabled?.(true);
-    this.setTool('paint');
-    this.updateOutput(`Editable lesion seed loaded: ${file.name}`);
+  // NiiVue's `loadDrawingFromUrl` cannot be stopped and replaces the open
+  // drawing and its Undo history when it lands. The seed is decoded here
+  // instead, and `assertCurrent` runs between the decode and the synchronous
+  // `loadDrawing`, so a seed whose review was replaced never reaches the drawing.
+  loadSeedFile(file, assertCurrent) {
+    return runCurrent(assertCurrent, function* () {
+      if (!file) throw new Error('loadSeedFile: seed file is required');
+      const image = yield decodeSeed(file);
+      this.nv.binarize(image);
+      if (!this.nv.loadDrawing(image)) throw new Error('NiiVue rejected the drawing mask');
+      this.applyDrawingStyle();
+      this.nv.setDrawingEnabled?.(true);
+      this.setTool('paint');
+      this.updateOutput(`Editable lesion seed loaded: ${file.name}`);
+    }.call(this));
   }
 
   setTool(tool) {
@@ -171,13 +185,15 @@ export class MaskDrawingController {
     }
   }
 
-  async loadBrainMaskFile(file) {
-    const request = this.brainMaskRequest = {};
-    this.brainMask = null;
-    if (!file) return;
-    const image = this.nv.volumes?.[0];
-    const data = await maskToDrawingBitmap(this.nv, file);
-    if (this.brainMaskRequest === request && this.nv.volumes?.[0] === image) this.brainMask = { image, data };
+  loadBrainMaskFile(file, assertCurrent) {
+    return runCurrent(assertCurrent, function* () {
+      const request = this.brainMaskRequest = {};
+      this.brainMask = null;
+      if (!file) return;
+      const image = this.nv.volumes?.[0];
+      const data = yield maskToDrawingBitmap(this.nv, file);
+      if (this.brainMaskRequest === request && this.nv.volumes?.[0] === image) this.brainMask = { image, data };
+    }.call(this));
   }
 
   setWandOptions({ tolerance = this.wandSettings.tolerance, radius = this.wandSettings.radius, singleSlice = this.wandSettings.singleSlice, brainOnly = this.wandSettings.brainOnly } = {}) {
