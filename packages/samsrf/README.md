@@ -359,9 +359,16 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   with the convex hull (`rc` without `Prf_Function`) and connective fields with
   `Fit_pRF` 0 or -1 follow MATLAB's single correlations, regressions, smoothing,
   thresholds and medians; preprocessing's `precision` option makes the global
-  signal single too. Single 2D fits are refused: `cf` Gaussians depend on
-  MATLAB's single `exp`, which is not reproduced, and `rc` fits have no
-  established bound end to end.
+  signal single too. Single `cf` Gaussian and `rc` 2D fits remain refused:
+  no end-to-end acceptance bound is established outside the recorded cases.
+  Internal raw-input CF tests match the AMD reference, but the empirical single
+  `exp`, `sin` and `cos` candidates retain discrepancies. On the whole X001
+  Benson atlases, 10 LH and 9 RH vertices have a one-ULP coordinate difference;
+  affected seed regions can change Gaussian fits. The internal evidence does
+  not enable those fits through the API, command line or app. Internally, single
+  `rc` 2D fits evaluate `samsrf_fit2dprf`'s objective and `R^2` in single as
+  MATLAB does and equal its recorded maps on the AMD host from raw runs; they
+  stay refused for the same reason.
   [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
   lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
@@ -414,25 +421,30 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   9 vertices where the port reports 0. Scalar steps follow reference LAPACK
   3.9, the version MATLAB's MKL reports. The inner products, divisions and
   multi-column back substitution follow MKL's own kernels as MATLAB runs them
-  on AMD hosts, read from MKL's summation trees (validation README, "MKL's
-  kernels"): `?gemv` inside `?geqp3`, `?ormqr` by number and position of
-  right-hand sides, `?trsv` and `?trsm`. On the 348 recorded designs every rank
-  and rank warning tolerance matches and 300 are bit-identical (every real
-  double design); the rest are within an empirical acceptance scale. MKL's
-  AVX-512 branch on Intel rounds differently, and MATLAB ignores MKL branch
-  requests, so results on Intel hosts are not reproduced. `mldivide_many`
-  solves several right-hand sides at once as MATLAB's `A \ B` does; the RC and
-  CF `[Y 1] \ X` regressions do not use it yet. Nonfinite converted inputs give
-  NaN coefficients.
+  on AMD hosts, read from MKL's summation trees and recorded chains (validation
+  README, "MKL's kernels"): `?nrm2`, `?gemv` inside `?geqp3`, `?ormqr` and
+  `?unmqr` by number and position of right-hand sides, `?trsv` and `?trsm`.
+  `?geqp3`'s column update ends each reflector at its last nonzero entry, as
+  `xLARF` does. On the 348 recorded designs every rank and rank warning
+  tolerance matches, every step of every recorded MKL chain is reproduced bit
+  for bit, 346 are bit-identical to MATLAB and the other two differ only in
+  the sign of an imaginary zero MATLAB stores as real. All 404 recorded real
+  8-column solves are bit-identical. MKL's AVX-512 branch on Intel rounds
+  differently, and MATLAB ignores MKL branch requests, so results on Intel
+  hosts are not reproduced. `mldivide_many` solves several right-hand sides
+  at once as MATLAB's `A \ B` does, which the single RC profile and global
+  regression use; complex multi-column solves are not modelled. Nonfinite
+  converted inputs give NaN coefficients.
 - **Compressive nonlinearity.** `Css_Convention: "nonnegative"` (the default)
   clips negative responses before the CSS power and uses the fitted Exponent
   for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex
   powers and its final-parameter post-fit formula: with concurrent HRF fitting
   that parameter is AmpRat. Exported maps retain real components, as SamSrf
-  10.4's `samsrf_expand_srf` does. Raw optimizer cases now match the actual
+  10.4's `samsrf_expand_srf` does. Raw optimizer cases match the actual
   MATLAB recordings in both precisions, and the recorded single-precision
-  pipeline parameters and scores match exactly. Betas retain small regression
-  rounding differences, and some double-precision weak fits still differ.
+  pipeline (`pipeline_single_css`) matches every map value exactly, Beta and
+  Baseline included (`compare.mjs`). The 741-case reference's general double
+  fine-fit plateaus and other double CSS fits are diagnostic there, not gated.
   The double objective follows MATLAB R2023b stage by stage
   (`exes/samsrf/core/src/matlab_math.rs`). It uses ported fdlibm `log`, `sin` and
   `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
@@ -442,8 +454,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   parameter sequences bit for bit. With the port's own HRF, which equals MATLAB's
   kernel, the recorded 96-vertex double pipelines (original apertures and a
   nonnegative control, on MATLAB's AMD reference host) match every fitted
-  parameter, R², nR² and noise ceiling exactly; Beta and Baseline are compared
-  with the exact least-squares solution under a stated policy, not bit for bit.
+  parameter, R², nR², noise ceiling, Beta and Baseline exactly: 138 of 138 kept
+  coefficients of the original pipeline and 126 of 126 of the nonnegative one.
+  The gate still compares any differing coefficient with the exact
+  least-squares solution under a stated policy; that policy is a scale, not a
+  bound, and the bit-identical counts hold for these recorded cases only.
   The limits of each operation,
   and why MATLAB on Intel hosts gives other results, are in
   `validation/matlab/README.md#double-css-arithmetic`.
@@ -454,9 +469,14 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected
   `rc` model fit included; `nR^2` is 0 there too.
 - **Template precision.** `readBensonTemplate` retains double scalar constants
-  until each mixed operation is rounded to single, as MATLAB does. Its sine
-  and cosine implementation can still differ from MATLAB's by a few float32
-  ULPs. Both hemispheres are covered by the actual MATLAB importer fixture.
+  until each mixed operation is rounded to single, as MATLAB does, and uses
+  empirical candidates for MATLAB's single `sin` and `cos`: fdlibm's float kernels with the x/4 term of
+  `__kernel_cosf` keeping 11 fraction bits. Every recorded MATLAB template
+  equals the reader's. Over every single angle up to 2^7 pi/2 the functions
+  differ from MATLAB's on 36,350 (`sin`) and 32,406 (`cos`) of 2,257,723,138
+  inputs, at the sine kernel's polynomial; on the whole X001 Benson
+  hemispheres that is one ULP of `x0` or `y0` on 10 (LH) and 9 (RH) vertices
+  ([single sin and cos](validation/matlab/README.md#single-sin-and-cos)).
 - **`fminsearch` stop.** SamSrf stops a fine fit when its `OutputFcn` sees a
   non-finite best value; that can only be the first value (NaN sorts last), and
   the port does the same. MATLAB's exit flag for that case is not reproduced;
@@ -474,6 +494,9 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   recorded polygon except 93 nearly collinear point clouds, whose crossings of
   nearly parallel edges MATLAB resolves by snapping vertices the port does not
   reproduce ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
+  An experimental Clipper-based model that matches more of them but not four
+  that this one matches is kept out of every shipped build
+  ([experimental model](validation/matlab/README.md#experimental-clipper-model-not-in-production-732-open)).
 - **`cf` quirks kept on purpose.** `Fwhm` sums `Srf.Area(R > mR/2)`, which in
   SamSrf indexes the first `nsvx` vertices of the hemisphere, not the seed
   vertices; the `Fit_pRF = 1` residual subtracts a column from a row and so

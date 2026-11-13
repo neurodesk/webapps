@@ -315,6 +315,171 @@
       ]
     },
     {
+      "id": "mindgrab-wasm-20260925",
+      "version": "0.1.20260925",
+      "target": "mindgrab/0.1.20260925",
+      "deduplicate": true,
+      "match_by": "sha256",
+      "reason": "Share the @brainchop/mindgrab 0.1.20260925 model binaries. Each app keeps the model modules, which MindGrab imports from assetPath and which start the pthread workers, inside its service-worker scope; a module names its binary in a static new URL. An app that declares mindgrab-20260925 keeps its MindGrab binaries.",
+      "files": [
+        {
+          "name": "brainchop-mindmap.wasm",
+          "source_app": "brain2print",
+          "source": "brainchop/0.1.20260925/brainchop-mindmap.wasm",
+          "sha256": "2f96033b81eb63f710e9f14e09f1ac2412e7b3df594319586480ad10694df3d4",
+          "consumers": [
+            "brain2print",
+            "browserqc",
+            "lcmodel"
+          ]
+        },
+        {
+          "name": "brainchop-mindmap-gl.wasm",
+          "source_app": "brain2print",
+          "source": "brainchop/0.1.20260925/brainchop-mindmap-gl.wasm",
+          "sha256": "9019877f2369bf31be375b36852a51b8b1f816f9e0fd8ad90469ce026b944d7b",
+          "consumers": [
+            "brain2print",
+            "browserqc",
+            "lcmodel"
+          ]
+        },
+        {
+          "name": "brainchop-mindmap-gpu.wasm",
+          "source_app": "brain2print",
+          "source": "brainchop/0.1.20260925/brainchop-mindmap-gpu.wasm",
+          "sha256": "0240436fc67dab13394ffc89c94fd32bc93dc87d7370f646f59f12d098d1fa75",
+          "consumers": [
+            "brain2print",
+            "browserqc",
+            "lcmodel"
+          ]
+        },
+        {
+          "name": "brainchop-mindsnap.wasm",
+          "source_app": "brain2print",
+          "source": "brainchop/0.1.20260925/brainchop-mindsnap.wasm",
+          "sha256": "d8504a8ee0fbf7f4b107e7769e48e4afcd2518bf97b9b19f845d5f207a530d97",
+          "consumers": [
+            "brain2print",
+            "browserqc"
+          ]
+        },
+        {
+          "name": "brainchop-mindsnap-gl.wasm",
+          "source_app": "brain2print",
+          "source": "brainchop/0.1.20260925/brainchop-mindsnap-gl.wasm",
+          "sha256": "a105a3909dd9490cc652ffe2ad04fdabea3398a898234af264887539ed232147",
+          "consumers": [
+            "brain2print",
+            "browserqc"
+          ]
+        },
+        {
+          "name": "brainchop-mindsnap-gpu.wasm",
+          "source_app": "brain2print",
+          "source": "brainchop/0.1.20260925/brainchop-mindsnap-gpu.wasm",
+          "sha256": "cc7ebfc137cfc7e92185bbeb042c0cc07437bffabcf6bd1dac55e999e7a121ff",
+          "consumers": [
+            "brain2print",
+            "browserqc"
+          ]
+        },
+        {
+          "name": "brainchop-16chan18cls.wasm",
+          "source_app": "brain2print",
+          "source": "brainchop/0.1.20260925/brainchop-16chan18cls.wasm",
+          "sha256": "18f7061fd16ef06e23bbb44c4b149da1f8a74d676bb4d06df4d4bcfafa7a60be",
+          "consumers": [
+            "brain2print",
+            "browserqc"
+          ]
+        },
+        {
+          "name": "brainchop-16chan18cls-gl.wasm",
+          "source_app": "brain2print",
+          "source": "brainchop/0.1.20260925/brainchop-16chan18cls-gl.wasm",
+          "sha256": "66b567db1d20a7abd661a4d0a895306c3de45747ba10832ca160ae74892efaed",
+          "consumers": [
+            "brain2print",
+            "browserqc"
+          ]
+        },
+        {
+          "name": "brainchop-16chan18cls-gpu.wasm",
+          "source_app": "brain2print",
+          "source": "brainchop/0.1.20260925/brainchop-16chan18cls-gpu.wasm",
+          "sha256": "9209c02dd2a760441137dde9e1076135dfc6eb982c43774c69e063e09a96ee7f",
+          "consumers": [
+            "brain2print",
+            "browserqc"
+          ]
+        },
+        {
+          "name": "brainchop-mindgrab.wasm",
+          "source_app": "noddi",
+          "source": "mindgrab/brainchop-mindgrab.wasm",
+          "sha256": "1aac837550ca836f069ed354742edd7ec89ee7abd7d57ffe5831435baf3311c3",
+          "consumers": [
+            "brain-extraction",
+            "dwicorrect",
+            "noddi"
+          ]
+        },
+        {
+          "name": "brainchop-mindgrab-gl.wasm",
+          "source_app": "noddi",
+          "source": "mindgrab/brainchop-mindgrab-gl.wasm",
+          "sha256": "d638db543b05ce3e8801b4aca970edc520d9632d3b34d1349f80a4de2431667e",
+          "consumers": [
+            "brain-extraction",
+            "dwicorrect",
+            "noddi"
+          ]
+        },
+        {
+          "name": "brainchop-mindgrab-gpu.wasm",
+          "source_app": "noddi",
+          "source": "mindgrab/brainchop-mindgrab-gpu.wasm",
+          "sha256": "ef5671590c9e38258beaa6c5ab90be4c830f68a684cd5cc47cb57e2aa95480d6",
+          "consumers": [
+            "brain-extraction",
+            "dwi2trx",
+            "dwicorrect",
+            "noddi"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mindgrab-wasm-20260813",
+      "version": "0.1.20260813",
+      "target": "mindgrab/0.1.20260813",
+      "deduplicate": true,
+      "match_by": "sha256",
+      "consumers": [
+        "ants",
+        "fireants",
+        "greedy",
+        "syncro"
+      ],
+      "reason": "Share the @brainchop/mindgrab 0.1.20260813 WebGPU and WebGL2 binaries. Each app keeps the model modules inside its service-worker scope, and the threaded CPU module and binary that mindgrab-cpu pins.",
+      "files": [
+        {
+          "name": "brainchop-mindgrab-gl.wasm",
+          "source_app": "ants",
+          "source": "brainchop/brainchop-mindgrab-gl.wasm",
+          "sha256": "6093374c9b01b3c16c959333154c8b3c406607604cfc9b4865cbaba53ee06e4d"
+        },
+        {
+          "name": "brainchop-mindgrab-gpu.wasm",
+          "source_app": "ants",
+          "source": "brainchop/brainchop-mindgrab-gpu.wasm",
+          "sha256": "f7ac6663f97d36c3035c9b7fc1719699886dc05a3cc937fd44bc1c9ac8296728"
+        }
+      ]
+    },
+    {
       "id": "ngff-codecs",
       "version": "0.38.0",
       "target": "ngff-codecs/0.38.0",

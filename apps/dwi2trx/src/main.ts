@@ -1062,6 +1062,7 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
   try {
     const {
       getTrackingDevice,
+      pinsSubgroupSize,
       trackStreamlines,
       DEFAULT_PARAMS,
       isOomError,
@@ -1135,7 +1136,11 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       chunkSize: trackingOverride('neurodeskTrackingChunkSeeds') ?? DEFAULT_PARAMS.chunkSize,
     }
     const parameterReport = trackingParametersReport(params)
-    const { lines, truncated, deviceLost, processedSeeds } = await trackStreamlines(
+    // Every GPU device that tracked, and whether its kernels were pinned to
+    // 32-lane subgroups (#598). A replacement after a device loss adds an entry.
+    const describeGpu = (gpuDevice: GPUDevice) => ({ vendor: gpuDevice.adapterInfo?.vendor ?? '', architecture: gpuDevice.adapterInfo?.architecture ?? '', subgroupSizePinned: pinsSubgroupSize(gpuDevice) })
+    const gpus = [describeGpu(device)]
+    const { lines, truncated, deviceLost, deviceRecoveries, processedSeeds } = await trackStreamlines(
       device,
       tInputs,
       seeds,
@@ -1148,6 +1153,15 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
           )
       },
       () => seq !== loadSeq || Boolean(signal?.aborted), // stop promptly if a new DWI was dropped mid-track
+      async () => {
+        // The lost device is already unusable; a new adapter gets a new one (#598).
+        device?.destroy()
+        device = null
+        if (seq === loadSeq) setStatus('The GPU stopped responding; resuming tracking on a new GPU device…')
+        device = await getTrackingDevice()
+        gpus.push(describeGpu(device))
+        return device
+      },
     )
     signal?.throwIfAborted()
     if (seq !== loadSeq) throw new DOMException('Input superseded', 'AbortError')
@@ -1173,6 +1187,9 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
     // Free the voxel-space lines now that the TRX is serialized — the 3D preview
     // below allocates a large cylinder mesh, and there is no need to hold both.
     lines.length = 0
+    const recoveryNote = deviceRecoveries > 0 && !deviceLost
+      ? `The GPU stopped responding ${deviceRecoveries === 1 ? 'once' : `${deviceRecoveries} times`}; the interrupted seed batch was rerun on a new GPU device.`
+      : ''
     const note = deviceLost
       ? 'The GPU stopped responding; run tracking again for the full set.'
       : truncated
@@ -1192,7 +1209,7 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
     const previewNote = stride > 1
       ? `The 3D view shows 1 in ${stride} streamlines to fit in memory; the saved TRX holds all of them.`
       : ''
-    const detail = `Mean ${meanLen} points per streamline. ${longNote && (truncated || stride > 1) ? `${longNote}. ` : ''}${previewNote} ${note}`.replace(/ +/g, ' ').trim()
+    const detail = `Mean ${meanLen} points per streamline. ${longNote && (truncated || stride > 1) ? `${longNote}. ` : ''}${previewNote} ${note} ${recoveryNote}`.replace(/ +/g, ' ').trim()
     gotoTab(3)
     shownView = null // force the tract render to load
     // The TRX is already built and saveable. The 3D preview is separate: NiiVue
@@ -1226,7 +1243,7 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
       )
     }
     signal?.throwIfAborted()
-    return { file: state.tracts, measurements: { streamlines: streamlineCount, points: totalPts, removedTooLong: tooLong, seeds: nSeeds, processedSeeds, seedCap: MAX_SEEDS, capped, truncated, partial: capped || truncated }, provenance: { algorithm: '@dipy/gpu-streamlines', seedFa, density, maxLengthMm, parameters: parameterReport, bvecXFlipped: det3(extractAffine(header)) > 0 } }
+    return { file: state.tracts, measurements: { streamlines: streamlineCount, points: totalPts, removedTooLong: tooLong, seeds: nSeeds, processedSeeds, deviceRecoveries, seedCap: MAX_SEEDS, capped, truncated, partial: capped || truncated }, provenance: { algorithm: '@dipy/gpu-streamlines', seedFa, density, maxLengthMm, parameters: parameterReport, gpus, bvecXFlipped: det3(extractAffine(header)) > 0 } }
   } catch (err) {
     if (seq === loadSeq)
       showFailure(

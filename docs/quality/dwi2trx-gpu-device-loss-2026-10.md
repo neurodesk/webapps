@@ -115,3 +115,44 @@ WGSL does not guarantee that width or the mapping from local invocation IDs to
 subgroup lane IDs ([WGSL §15.5](https://www.w3.org/TR/WGSL/#subgroups)); the bounded
 commands do not establish resolution of those portability questions. Intel/Mesa
 and full-size validation remain separate open limits.
+
+## Status after the November fixes
+
+On 11 November 2026 the full-size Philips series (67,354 seeds) tracked to
+completion on the Intel Arc 140V host with Mesa 26.2.6 and the default xe
+timeouts, after #757 bounded each generation command to 32 tracking steps per
+seed. Two runs on different builds gave the same TRX (sha256
+`b19e0cde406dee93258d03d0d7c10bf9a47d9d0e45c2d3ce79a3e81b4abede4e`). The remaining
+limits are handled as follows.
+
+- **Subgroup size.** Intel reports subgroups of 16 to 32 lanes, and nothing made
+  the compiler choose 32. When the device offers WebGPU's `subgroup-size-control`
+  feature, the tracker now requests it and compiles both Boot entry points with
+  `@subgroup_size(32)`. On Vulkan that sets `requiredSubgroupSize` and full
+  subgroups. Without the feature, the adapter check and the in-kernel layout check
+  stay the only guards. The run's provenance records, for every device that
+  tracked, the GPU vendor, its architecture and whether the size was pinned
+  (`tracking.gpus`).
+- **Device loss.** When the device is lost mid-run, the tracker requests a new
+  device, uploads the inputs again and reruns the interrupted seed batch. It makes
+  at most two attempts per run, including a replacement lost during the upload.
+  If no replacement works, it keeps the batches already read back, as before.
+  Random streams follow a seed's position in the run (#653), so on the same GPU
+  the rerun writes the bytes the lost device would have. A replacement on another
+  adapter, possible on a computer with two GPUs, can round differently;
+  `tracking.gpus` shows it. The hardware test destroys the tracking device during
+  the first generation pass and requires the same TRX. The run reports the count
+  as `measurements.deviceRecoveries`. This also covers a
+  transient hang such as the 29 October Metal `kIOGPUCommandBufferCallbackErrorHang`,
+  which has not recurred in the nightlies since #633; its cause is still unknown.
+- **Removed subgroup barriers.** WGSL has no `subgroupBarrier()`, so the kernels
+  run without the barriers the CUDA original places between a lane's write to
+  workgroup memory and another lane's read. The
+  [WGSL memory model](https://www.w3.org/TR/WGSL/#memory-model) gives those
+  accesses no ordering on any GPU, so correctness rests on observation: complete,
+  deterministic runs on Apple (Metal) and Intel Arc (Mesa Vulkan), whose subgroups
+  execute in lockstep. NVIDIA GPUs since Volta schedule lanes independently, so
+  they are the most likely to differ. A workgroup barrier cannot replace the
+  removed ones, because the kernels call them in control flow that differs between
+  the two rows of a workgroup. No NVIDIA or AMD run has been checked; the
+  `tracking.gpus` provenance identifies one.

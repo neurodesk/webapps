@@ -316,15 +316,27 @@ impl<T: Real> C<T> {
 }
 
 /// The division `?trsv` makes by a diagonal of R, as measured from MKL's
-/// `ctrsv` and `ztrsv` on AMD: complex single divides each part (Smith's
-/// algorithm with a real divisor), complex double uses (a c + b d) / (c² + d²).
-/// Where c² + d² is not a finite normal number MKL still returned the
-/// quotient (recorded at 1e155 and 1e300). The safe division also protects
-/// numerator products that overflow or flush to zero and overflowing sums.
-/// Those extensions have analytic tests, not MATLAB bit-parity evidence.
+/// `ctrsv` and `ztrsv` on AMD: (a c + b d) / (c² + d²), which `ctrsv`
+/// evaluates in double and rounds to single (its outputs, signed zeros
+/// included, equal that on every recorded complex single chain; dividing each
+/// part rounds the same but gives -0 for 0 / negative). Where c² + d² is not a
+/// finite normal number MKL still returned the quotient (recorded at 1e155
+/// and 1e300). The safe division also protects numerator products that
+/// overflow or flush to zero and overflowing sums. Those extensions have
+/// analytic tests, not MATLAB bit-parity evidence.
 fn trsv_divide<T: Real>(numerator: C<T>, divisor: C<T>, complex: bool, single: bool) -> C<T> {
-    if !complex || single {
-        return numerator.div(divisor, complex);
+    if !complex {
+        return numerator.div(divisor, false);
+    }
+    if single {
+        // Single values are exact in double, as are their products.
+        let (a, b, c, d) = (numerator.re.to_f64(), numerator.im.to_f64(), divisor.re.to_f64(), divisor.im.to_f64());
+        let denominator = c * c + d * d;
+        let (re, im) = ((a * c + b * d) / denominator, (b * c - a * d) / denominator);
+        if denominator.is_normal() && re.is_finite() && im.is_finite() {
+            return C { re: T::from_f64(re), im: T::from_f64(im) };
+        }
+        return numerator.div(divisor, true);
     }
     let (c, d) = (divisor.re, divisor.im);
     let denominator = c * c + d * d;
@@ -412,7 +424,13 @@ fn lapy3<T: Real>(x: T, y: T, z: T) -> T {
 
 /// Reference `xNRM2` (LAPACK 3.9): the scaled sum of squares, sequential.
 /// Complex entries contribute their real and then their imaginary part.
+/// When a larger entry rescales the sum, MKL's `snrm2`/`scnrm2` square the
+/// ratio first, as the Fortran `ONE + SSQ*(SCALE/ABSXI)**2` reads, while
+/// `dnrm2`/`dznrm2` multiply left to right, `(SSQ*R)*R` (measured on every
+/// recorded design of `record_qr_kernels.m` on AMD: R11 and R22 of all 174
+/// single and all 174 double designs).
 fn nrm2<T: Real>(values: &[C<T>]) -> T {
+    let single = std::mem::size_of::<T>() == 4;
     let mut scale = T::ZERO;
     let mut ssq = T::ONE;
     for value in values {
@@ -421,7 +439,7 @@ fn nrm2<T: Real>(values: &[C<T>]) -> T {
                 let a = part.abs();
                 if scale < a {
                     let r = scale / a;
-                    ssq = T::ONE + ssq * r * r;
+                    ssq = T::ONE + if single { ssq * (r * r) } else { ssq * r * r };
                     scale = a;
                 } else {
                     let r = a / scale;
@@ -503,9 +521,11 @@ struct Kernel {
     /// `?ormqr` takes `p(1)` as the first term of accumulator 0 and adds
     /// `c(1)` last; `?gemv` inside `?geqp3` starts accumulator 0 with `c(1)`.
     first_product_seeds: bool,
-    /// `zunmqr` adds the two halves of each complex product to an
-    /// accumulator separately (re += v.re c.re, then += v.im c.im) instead of
-    /// rounding the product first.
+    /// `cunmqr` and `zunmqr` sum `v.re c` and `v.im (c.im, c.re)` in two
+    /// separate sets of accumulators over the same tree and combine them at
+    /// the end, `(A.re + B.re, A.im - B.im)`, instead of rounding each complex
+    /// product. The FPRev probes cannot see this (their `v` is real, so `B` is
+    /// exactly 0); every recorded complex chain's `Q^H y` can.
     split_complex: bool,
     lanes: usize,
     block: usize,
@@ -534,7 +554,7 @@ fn rhs_kernel(complex: bool, single: bool, count: usize, index: usize) -> Kernel
     let one = match (complex, single) {
         (false, true) => kernel(true, 8, 8, &[4, 2, 1], false),
         (false, false) => kernel(true, 8, 8, &[2, 4, 1], false),
-        (true, true) => return kernel(true, 2, 2, &[1], true),
+        (true, true) => return Kernel { split_complex: true, ..kernel(true, 2, 2, &[1], true) },
         (true, false) => return Kernel { split_complex: true, ..kernel(true, 1, 1, &[], false) },
     };
     let grouped = count / 4 * 4;
@@ -553,22 +573,27 @@ fn rhs_kernel(complex: bool, single: bool, count: usize, index: usize) -> Kernel
 
 /// `w = v^H c` in `kernel`'s summation order.
 fn kernel_dot<T: Real>(kernel: Kernel, v: &[C<T>], c: &[C<T>], complex: bool) -> C<T> {
-    if complex && kernel.split_complex {
-        // Only the sequential zunmqr kernel splits products; see rhs_kernel.
-        debug_assert!(kernel.lanes == 1 && kernel.first_product_seeds);
-        let mut pairs = v.iter().zip(&c[1..]);
-        let Some((v0, c0)) = pairs.next() else { return c[0] };
-        let mut w = v0.conj().mul(*c0, true);
-        for (v, c) in pairs {
-            w = C { re: (w.re + v.re * c.re) + v.im * c.im, im: (w.im + v.re * c.im) - v.im * c.re };
-        }
-        return c[0].add(w, true);
-    }
-    let products: Vec<C<T>> = v.iter().zip(&c[1..]).map(|(v, c)| v.conj().mul(*c, complex)).collect();
-    if products.is_empty() {
+    if v.is_empty() {
         return c[0];
     }
-    let (seed, body) = if kernel.first_product_seeds { (products[0], &products[1..]) } else { (c[0], &products[..]) };
+    let pairs = v.iter().zip(&c[1..]);
+    let w = if complex && kernel.split_complex {
+        let real: Vec<C<T>> = pairs.clone().map(|(v, c)| C { re: v.re * c.re, im: v.re * c.im }).collect();
+        let imaginary: Vec<C<T>> = pairs.map(|(v, c)| C { re: v.im * c.im, im: v.im * c.re }).collect();
+        let (a, b) = (tree_sum(kernel, c[0], &real, true), tree_sum(kernel, c[0], &imaginary, true));
+        C { re: a.re + b.re, im: a.im - b.im }
+    } else {
+        let products: Vec<C<T>> = pairs.map(|(v, c)| v.conj().mul(*c, complex)).collect();
+        tree_sum(kernel, c[0], &products, complex)
+    };
+    if kernel.first_product_seeds { c[0].add(w, complex) } else { w }
+}
+
+/// The products summed in `kernel`'s tree: into `lanes` accumulators over
+/// whole blocks, combined in `strides` order, then the remaining products in
+/// sequence. Without `first_product_seeds`, accumulator 0 starts from `c0`.
+fn tree_sum<T: Real>(kernel: Kernel, c0: C<T>, products: &[C<T>], complex: bool) -> C<T> {
+    let (seed, body) = if kernel.first_product_seeds { (products[0], &products[1..]) } else { (c0, products) };
     let blocked = if kernel.mod_tail { body.len() } else { body.len() / kernel.block * kernel.block };
     let mut w = seed;
     if kernel.lanes > 1 && blocked > 0 {
@@ -596,11 +621,19 @@ fn kernel_dot<T: Real>(kernel: Kernel, v: &[C<T>], c: &[C<T>], complex: bool) ->
             w = w.add(*product, complex);
         }
     }
-    if kernel.first_product_seeds { c[0].add(w, complex) } else { w }
+    w
 }
 
 /// `xLARF` from the left with `H^H`: `c -= v (tau^H (v^H c))`, `v(1) = 1`.
-fn apply<T: Real>(kernel: Kernel, v: &[C<T>], tau: C<T>, c: &mut [C<T>], complex: bool) {
+/// With `trim`, `v` ends at its last nonzero entry (`xLARF`'s `ILADLR`), which
+/// moves the kernel's block and tail boundaries. `?geqp3` updates the next
+/// column so (every recorded R(1,2), including the 8 designs whose v ends in
+/// 8-11 zeros); `?ormqr` and `?unmqr` sum over the whole reflector (trimming
+/// there changes Q^H y in 3 recorded single designs).
+fn apply<T: Real>(kernel: Kernel, v: &[C<T>], tau: C<T>, c: &mut [C<T>], complex: bool, trim: bool) {
+    let zero = C::real(T::ZERO);
+    let last = if trim { v.iter().rposition(|value| *value != zero).map_or(0, |i| i + 1) } else { v.len() };
+    let v = &v[..last];
     let w = kernel_dot(kernel, v, c, complex);
     let t = tau.conj().mul(w, complex);
     c[0] = c[0].sub(t, complex);
@@ -666,10 +699,10 @@ fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]]) -> Solved {
         taus.push(tau);
         let v: Vec<C<T>> = a[i][i + 1..].to_vec();
         for column in &mut a[i + 1..] {
-            apply(column_kernel(complex, single), &v, tau, &mut column[i..], complex);
+            apply(column_kernel(complex, single), &v, tau, &mut column[i..], complex, true);
         }
         for (index, b) in bs.iter_mut().enumerate() {
-            apply(rhs_kernel(complex, single, count, index), &v, tau, &mut b[i..], complex);
+            apply(rhs_kernel(complex, single, count, index), &v, tau, &mut b[i..], complex, false);
         }
         // Downdate the remaining norms as xLAQP2 does.
         for j in i + 1..n {
