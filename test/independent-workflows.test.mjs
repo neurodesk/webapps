@@ -225,6 +225,15 @@ test('portable Node command lines build on target runners and publish through on
   for(const command of ['portable_release\\.py package','portable_release\\.py verify','test_portable_release\\.py','cargo test --manifest-path exes/node-cli/Cargo\\.toml','cargo clippy --manifest-path exes/node-cli/Cargo\\.toml --locked -- -D warnings','cargo fmt --manifest-path exes/node-cli/Cargo\\.toml --check']) {
     assert.match(build,new RegExp(command));
   }
+  // GitHub's Windows runners have a current Visual C++ runtime, so the archive must also pass in clean containers.
+  const portableSteps=shared.jobs.portable.steps;
+  const packaged=portableSteps.findIndex(step=>/portable_release\.py verify/.test(step.run??''));
+  const clean=portableSteps.findIndex(step=>step.name==='Check the archive on clean Windows');
+  assert.ok(packaged>=0&&clean>packaged,'clean Windows check runs after verify');
+  assert.equal(portableSteps[clean].if,"runner.os == 'Windows'");
+  assert.match(portableSteps[clean].run,/verify_clean_windows\.ps1 -Archive/);
+  const uploaded=portableSteps.findIndex(step=>step.uses?.startsWith('actions/upload-artifact@'));
+  assert.ok(clean<uploaded,'only archives that ran on clean Windows are uploaded');
   const steps=shared.jobs.release.steps;
   const target=steps.findIndex(step=>step.name==='Check release target');
   const signStep=steps.indexOf(sign);
@@ -262,6 +271,54 @@ test('portable Node command lines build on target runners and publish through on
     for(const path of ['exes/node-cli/**','.github/workflows/node-cli-portable.yml'])assert.ok(!flow.on.pull_request.paths.includes(path),`${name}: node-cli.yml gates ${path} on pull requests`);
     assert.equal(flow.jobs.portable.with.all_platforms_on_pull_request,undefined,`${name} builds linux-x64 only on pull requests`);
   }
+});
+
+test('SynthSR pins Cargo without pinning static SynthSeg or committed WASM builds', async () => {
+  const toolchain = await readFile(new URL('../exes/synthsr/rust-toolchain.toml', import.meta.url), 'utf8');
+  const channel = toolchain.match(/^channel = "([^"]+)"$/m)?.[1];
+  assert.equal(channel, '1.99.1', "SynthSR local and make builds avoid ort-sys rc.13's Cargo 1.100 incompatibility");
+  const synthsr = await workflow('synthsr-native');
+  for (const job of Object.values(synthsr.jobs)) {
+    for (const step of job.steps ?? []) {
+      if (step.uses?.startsWith('dtolnay/rust-toolchain@')) {
+        assert.equal(step.with?.toolchain, channel, 'SynthSR CI and local toolchains agree');
+      }
+    }
+  }
+  // SynthSeg's CPU/CoreML archive is static and does not hit ort-sys's dylib-copy path.
+  const synthseg = await workflow('synthseg-native');
+  for (const job of Object.values(synthseg.jobs)) {
+    for (const step of job.steps ?? []) {
+      if (step.uses?.startsWith('dtolnay/rust-toolchain@')) {
+        assert.equal(step.with?.toolchain, undefined, 'unaffected SynthSeg native builds keep stable Rust');
+      }
+    }
+  }
+  await assert.rejects(readFile(new URL('../exes/synthseg/rust-toolchain.toml', import.meta.url)), { code: 'ENOENT' });
+  for (const path of ['rust-toolchain', 'rust-toolchain.toml']) {
+    await assert.rejects(readFile(new URL(`../${path}`, import.meta.url)), { code: 'ENOENT' });
+  }
+  const easy = await readFile(new URL('../packages/easy-mp2rage/scripts/build-wasm.sh', import.meta.url), 'utf8');
+  assert.match(easy, /^RUST_TOOLCHAIN=1\.98\.0$/m);
+  assert.match(easy, /^export RUSTUP_TOOLCHAIN="\$RUST_TOOLCHAIN"$/m);
+});
+
+test('clean Windows checks use immutable inputs and verify the installer before use', async () => {
+  const directory = new URL('../exes/node-cli/scripts/', import.meta.url);
+  const pins = JSON.parse(await readFile(new URL('clean-windows-inputs.json', directory), 'utf8'));
+  assert.equal(pins.vc2019.version, '14.29.30157.0');
+  assert.match(pins.vc2019.url, /^https:\/\/download\.visualstudio\.microsoft\.com\/download\/pr\/[a-f0-9-]+\/[A-F0-9]{64}\/VC_redist\.x64\.exe$/);
+  assert.match(pins.vc2019.sha256, /^[a-f0-9]{64}$/);
+  assert.ok(pins.vc2019.url.includes(pins.vc2019.sha256.toUpperCase()));
+  assert.deepEqual(Object.keys(pins.images).sort(), ['17763', '20348', '26100']);
+  for (const pin of Object.values(pins.images)) {
+    assert.match(pin.image, /^mcr\.microsoft\.com\/windows\/servercore@sha256:[a-f0-9]{64}$/);
+  }
+  const script = await readFile(new URL('verify_clean_windows.ps1', directory), 'utf8');
+  assert.doesNotMatch(script, /aka\.ms/);
+  assert.ok(script.indexOf('Get-FileHash') < script.indexOf('docker run'));
+  assert.match(script, /\$installerHash -ne \$pins\.vc2019\.sha256/);
+  assert.match(script, /@\('-InstallVc2019', '-ExpectFailure'\)/);
 });
 
 test('manual SamSrf WASM diagnosis isolates the build without changing draft or ready checks', async () => {

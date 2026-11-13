@@ -6,6 +6,7 @@ on:
       - '.github/workflows/windows-signing-policy.yml'
       - 'scripts/lib/*windows_signing*'
       - 'scripts/windows-signing.ps1'
+      - 'scripts/test-windows-signing.ps1'
       - 'scripts/desktop/windows-signing.mjs'
       - 'test/windows-signing.test.mjs'
   push:
@@ -15,6 +16,7 @@ on:
       - '.github/workflows/windows-signing-policy.yml'
       - 'scripts/lib/*windows_signing*'
       - 'scripts/windows-signing.ps1'
+      - 'scripts/test-windows-signing.ps1'
       - 'scripts/desktop/windows-signing.mjs'
       - 'test/windows-signing.test.mjs'
 permissions:
@@ -46,3 +48,7 @@ jobs:
           $errors = $null
           [Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/windows-signing.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -ne 0) { throw ($errors | Out-String) }
+      - name: Test vendor signature preservation without an account
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-windows-signing.ps1
