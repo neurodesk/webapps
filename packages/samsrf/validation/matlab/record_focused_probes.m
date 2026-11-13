@@ -143,8 +143,8 @@ function cases = conv_boundary_cases(numerics2Dir, smoke)
 % generated inputs are the same on every host; the first folder is read.
 hosts = dir(fullfile(numerics2Dir, 'ubuntu-*'));
 assert(~isempty(hosts), 'No host folder in %s', numerics2Dir);
-dir = fullfile(numerics2Dir, hosts(1).name, 'compatible');
-recording = jsondecode(fileread(fullfile(dir, 'numerics.json')));
+folder = fullfile(numerics2Dir, hosts(1).name, 'compatible');
+recording = jsondecode(fileread(fullfile(folder, 'numerics.json')));
 list = as_cell(recording.cases);
 big = 2^60;
 cases = {};
@@ -153,13 +153,13 @@ for c = 1:numel(list)
     if ~strcmp(item.kind, 'conv') || item.isreal
         continue;
     end
-    y = read_array(dir, item.y);
+    y = read_array(folder, item.y);
     n = numel(y);
     nonzero = y ~= 0;
     if ~(4 * nnz(nonzero) < n && n > 800)
         continue;
     end
-    taps = numel(read_array(dir, item.kernel));
+    taps = numel(read_array(folder, item.kernel));
     % 0-based boundaries B, and a control region centred on 256.
     centres = [256, 512:512:n - 1];
     if smoke
@@ -213,8 +213,8 @@ end
 %% Single sin and cos by position
 
 function item = trig_position_case(trigDir, smoke)
-dir = fullfile(trigDir, 'ubuntu-22.04', 'compatible');
-recording = jsondecode(fileread(fullfile(dir, 'numerics.json')));
+folder = fullfile(trigDir, 'ubuntu-22.04', 'compatible');
+recording = jsondecode(fileread(fullfile(folder, 'numerics.json')));
 list = as_cell(recording.cases);
 trig = [];
 for c = 1:numel(list)
@@ -223,8 +223,8 @@ for c = 1:numel(list)
     end
 end
 assert(~isempty(trig), 'single_trig case missing');
-sinTable = read_array(dir, trig.sinExceptions);
-cosTable = read_array(dir, trig.cosExceptions);
+sinTable = read_array(folder, trig.sinExceptions);
+cosTable = read_array(folder, trig.cosExceptions);
 count = 256;
 if smoke
     count = 8;
