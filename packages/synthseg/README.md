@@ -192,3 +192,9 @@ WASM postprocessing 3.0 s, so postprocessing is not the bottleneck. Planned GPU 
 5.2 GB (largest 1.85 GB, the full-resolution 72-channel concat); the largest volume under a
 4 GB `maxBufferSize` is about 256×256×224. Engineering parity on named hardware, not a
 performance claim.
+
+The browser session lends mapped posterior data until output `dispose()`, the next
+`run()`, or session `release()`. Copy anything retained across those calls. The
+shared pipeline copies posteriors into WASM before disposal. Native Metal keeps
+an owned, transposed `Vec<f32>`; both native planners follow the browser's free-slot
+growth policy, while the mapped readback lifetime applies only to WebGPU.

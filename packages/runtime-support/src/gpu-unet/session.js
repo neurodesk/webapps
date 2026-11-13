@@ -72,10 +72,14 @@ export function planGpuGraph(dims, graph, { outputChannels = 1, label = 'U-Net' 
   if(!tensors.has(output) || tensors.get(output).channels!==outputChannels || !same(tensors.get(output).dims,dims))throw new Error(`GPU output does not match the ${label} contract.`);
   // Assign reusable buffers by graph lifetime. Never alias an operation's input
   // and output. Skip activations survive until their decoder consumer finishes.
+  // `free` contains only tensors whose last consumer already finished. Choose the
+  // output before decrementing this node's input counts; the exported output keeps
+  // one extra use. Growing changes capacity, never ownership. Allocate all final
+  // capacities before executing, so earlier occupants also fit the enlarged slot.
   // A tensor takes the smallest free slot that holds it; when none does, the largest
   // free slot grows instead of a new one being added. Every slot stays resident for
   // the whole session, so this bounds the footprint: the full-volume SynthSeg plan
-  // drops from 5.3 GB to 4.0 GB, which a 7 GB Apple runner must share with the page.
+  // drops from 5.16 GiB to 3.89 GiB, which a 7 GB Apple runner must share with the page.
   const remaining=new Map([[output,1]]);
   for(const node of nodes) for(const name of node.inputs) if(tensors.has(name)) remaining.set(name,(remaining.get(name)||0)+1);
   const slots=[{bytes:product(dims)*4}], assigned=new Map([[graph.input,0]]), free=new Set();
@@ -162,6 +166,10 @@ export function gpuBufferLimit(limits) {
   return Math.min(limits.maxStorageBufferBindingSize, limits.maxBufferSize);
 }
 
+/**
+ * Outputs borrow the mapped readback. Copy data to retain it beyond dispose(), the
+ * next run(), or release(); each of these detaches previously returned views.
+ */
 export async function createGpuSession(bytes, dims, {
   graph,
   outputChannels = 1,
@@ -182,7 +190,7 @@ export async function createGpuSession(bytes, dims, {
   const device=await adapter.requestDevice({requiredFeatures:timestamps?['timestamp-query']:[],requiredLimits:{
     maxBufferSize:adapter.limits.maxBufferSize,maxStorageBufferBindingSize:adapter.limits.maxStorageBufferBindingSize,
   }});
-  let failure, released=false, running=false, mapped=false;
+  let failure, released=false, running=false, mappedOutput=null;
   device.lost.then(info=>{if(!released)failure=new Error(`${label} GPU device lost: ${info.message}`);});
   device.addEventListener('uncapturederror',event=>{failure=new Error(`${label} GPU error: ${event.error.message}`);});
   const createBuffer=(size,usage,label)=>device.createBuffer({size:Math.max(16,size),usage,label});
@@ -232,7 +240,7 @@ export async function createGpuSession(bytes, dims, {
     if(validation||oom)throw new Error((validation||oom).message);
     const outputBytes=product(dims)*outputChannels*4;
     const read=createBuffer(outputBytes,GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ,`${label} output readback`);
-    const unmapRead=()=>{if(mapped){mapped=false;read.unmap();}};
+    const unmapRead=()=>{if(mappedOutput){mappedOutput=null;read.unmap();}};
     const query=timestamps?device.createQuerySet({type:'timestamp',count:steps.length*2}):null;
     const querySize=steps.length*16;
     const resolve=timestamps?createBuffer(querySize,GPUBufferUsage.QUERY_RESOLVE|GPUBufferUsage.COPY_SRC,'timings'):null;
@@ -269,7 +277,8 @@ export async function createGpuSession(bytes, dims, {
           if(query){encoder.resolveQuerySet(query,0,steps.length*2,resolve,0);encoder.copyBufferToBuffer(resolve,0,queryRead,0,querySize);}
           device.queue.submit([encoder.finish()]);
           await read.mapAsync(GPUMapMode.READ);
-          mapped=true;
+          const mapping={};
+          mappedOutput=mapping;
           // The output is a view over the mapped readback, not a copy: a full-volume
           // posterior is 0.9 GB, and the caller copies what it keeps before disposing.
           const output=new Float32Array(read.getMappedRange(0,outputBytes));
@@ -278,7 +287,15 @@ export async function createGpuSession(bytes, dims, {
             try{const times=new BigUint64Array(queryRead.getMappedRange());session.profile=steps.map((s,i)=>({name:s.name,op:s.op,milliseconds:Number(times[i*2+1]-times[i*2])/1e6}));}finally{queryRead.unmap();}
           }
           if(failure)throw failure;
-          result = {[graph.output]:{dims:[1,outputChannels,...dims],type:'float32',getData:async()=>output,dispose:unmapRead}};
+          result = {[graph.output]:{
+            dims:[1,outputChannels,...dims],
+            type:'float32',
+            async getData() {
+              if(mappedOutput!==mapping || released || failure)throw failure||new Error(`${label} GPU output is no longer available.`);
+              return output;
+            },
+            dispose(){if(mappedOutput===mapping)unmapRead();},
+          }};
         } catch (error) {
           failed = true;
           operationError = error;
@@ -296,12 +313,18 @@ export async function createGpuSession(bytes, dims, {
         running = false;
         if (failed) throw failure || operationError;
         const scopedError = scopes.find(scope => scope.error)?.error;
-        if (scopedError) throw new Error(`${label} GPU inference failed: ${scopedError.message}`);
+        if (scopedError) {
+          unmapRead();
+          throw new Error(`${label} GPU inference failed: ${scopedError.message}`);
+        }
         const rejected = scopes.find(scope => Object.hasOwn(scope, 'rejection'));
-        if (rejected) throw rejected.rejection;
+        if (rejected) {
+          unmapRead();
+          throw rejected.rejection;
+        }
         return result;
       },
-      async release(){if(!released){released=true;device.destroy();}},
+      async release(){if(!released){released=true;unmapRead();device.destroy();}},
     };
     return session;
   }catch(error){released=true;device.destroy();throw error;}

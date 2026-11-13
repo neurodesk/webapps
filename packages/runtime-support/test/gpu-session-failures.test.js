@@ -31,10 +31,19 @@ test('GPU run preserves input failure, drains both scopes and clears busy state'
 test('GPU scopes reject an otherwise successful run and both are drained', async () => {
   for (const scoped of [{ message: 'invalid dispatch' }, new Error('pop rejected'), { synchronousError: new Error('pop rejected synchronously') }]) {
     const device = fakeGpuDevice();
+    let unmaps = 0;
+    const createBuffer = device.createBuffer;
+    device.createBuffer = options => {
+      const buffer = createBuffer(options);
+      if (options.label === 'U-Net output readback') buffer.unmap = () => { unmaps++; };
+      return buffer;
+    };
     const runner = await session(device);
     device.popResults.push(scoped);
     await assert.rejects(runner.run(feeds(async () => new Float32Array(32 ** 3))), /invalid dispatch|pop rejected/);
     assert.equal(device.scopes, 0);
     assert.equal(device.popped, 4);
+    assert.equal(unmaps, 1, 'a rejected run must not leave an inaccessible output mapped');
+    await runner.release();
   }
 });
