@@ -10,3 +10,7 @@ Refresh the footer when the server disconnects or the selected project changes s
 Invalidate late project, tutorial and job responses when their context changes. Show submission progress immediately, keep Run disabled while opening a project and prevent example loading from replacing a running job's status.
 
 Derive idle guidance from the current connection, project, processing step and movie selection. Restore tutorial readiness when its selection is restored, cancel superseded example imports, and ignore project mutations that finish after leaving their context. Render footer state in one place through ProgressManager and keep its messages within 90 characters.
+
+Ignore superseded output views and errors after downloading, decoding or initializing the viewer, so detached output work cannot replace the current view or footer.
+
+Ignore a completed run's delayed project snapshots and refresh errors once a newer run starts.

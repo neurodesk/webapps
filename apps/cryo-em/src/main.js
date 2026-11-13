@@ -83,6 +83,7 @@ const state = {
   // Jobs a follower saw end: a project read from before that end still lists them as active.
   ended: new Set(),
   submitting: null,
+  runSelection: null,
   settingsOpen: false,
   views: { image: null, classes: null, fsc: null },
 };
@@ -176,6 +177,15 @@ function confirmAction(title, message, action) {
 // 4. Viewer: NiiVue for micrographs and maps, canvases for stacks, SVG for the FSC.
 const viewer = new NiiVue({ isDragDropEnabled: false });
 let attached = null;
+let outputRequest = null;
+let imageLoading = Promise.resolve();
+
+function currentView(context) {
+  const request = {};
+  outputRequest = request;
+  return () => outputRequest === request && context();
+}
+
 function viewerReady() {
   attached ??= viewer.attachTo('gl1').then(() => {
     viewer.isLegendVisible = false;
@@ -213,19 +223,25 @@ function displayFile(mrc, name) {
   return new File([buffer], `${name}.nii`, { type: 'application/octet-stream' });
 }
 
-async function showMrc(mrc, label) {
-  await viewerReady();
-  const file = displayFile(mrc, label.replace(/[^\w.-]+/g, '_'));
-  await viewer.loadVolumes([{ url: file, name: file.name, colormap: 'gray' }]);
-  const volume = !mrc.stack && mrc.nz > 1;
-  viewer.sliceType = volume ? SLICE_TYPE.MULTIPLANAR : SLICE_TYPE.AXIAL;
-  if (volume) {
-    viewer.multiplanarType = MULTIPLANAR_TYPE.GRID;
-    viewer.showRender = SHOW_RENDER.ALWAYS;
-  }
-  state.views.image = `${label} · ${mrc.nx} × ${mrc.ny}${volume ? ` × ${mrc.nz}` : ''} · ${mrc.angpix.toFixed(3)} Å/px`;
-  $('viewerError').hidden = true;
-  setView('image');
+function showMrc(mrc, label, current) {
+  // NiiVue mutates one viewer: a newer load must finish after any older load.
+  imageLoading = imageLoading.catch(() => {}).then(async () => {
+    await viewerReady();
+    if (!current()) return;
+    const file = displayFile(mrc, label.replace(/[^\w.-]+/g, '_'));
+    await viewer.loadVolumes([{ url: file, name: file.name, colormap: 'gray' }]);
+    if (!current()) return;
+    const volume = !mrc.stack && mrc.nz > 1;
+    viewer.sliceType = volume ? SLICE_TYPE.MULTIPLANAR : SLICE_TYPE.AXIAL;
+    if (volume) {
+      viewer.multiplanarType = MULTIPLANAR_TYPE.GRID;
+      viewer.showRender = SHOW_RENDER.ALWAYS;
+    }
+    state.views.image = `${label} · ${mrc.nx} × ${mrc.ny}${volume ? ` × ${mrc.nz}` : ''} · ${mrc.angpix.toFixed(3)} Å/px`;
+    $('viewerError').hidden = true;
+    setView('image');
+  });
+  return imageLoading;
 }
 
 function showStack(mrc, label, { job, name } = {}) {
@@ -310,7 +326,7 @@ function serverFits(serverInfo) {
 
 function stopFollowing() {
   state.following?.controller.abort();
-  updateState({ following: null, submitting: null });
+  updateState({ following: null, submitting: null, runSelection: null });
 }
 
 connection.addEventListener('nd-compute-change', ({ detail }) => {
@@ -400,20 +416,22 @@ async function openProject(id) {
 /** Re-read the project and the details (outputs) of jobs that changed. */
 async function refreshProject() {
   const client = state.client;
-  const selection = state.projectSelection;
+  const context = currentContext();
+  const runSelection = state.runSelection;
+  const current = () => context() && runSelection === state.runSelection;
   const project = await client.project(state.project.id);
-  if (client !== state.client || selection !== state.projectSelection) return;
+  if (!current()) return;
   updateState({ project }, { preserveNotice: true });
   await Promise.all(project.jobs.map(async job => {
     const known = state.jobs.get(job.id);
     if (TERMINAL.has(known?.status)) return;
     const details = await client.job(job.id);
-    if (client !== state.client || selection !== state.projectSelection) return;
+    if (!current()) return;
     // A follower or overlapping refresh may have recorded completion during this read.
     if (TERMINAL.has(state.jobs.get(job.id)?.status)) return;
     state.jobs.set(job.id, { ...job, ...details });
   }));
-  if (client !== state.client || selection !== state.projectSelection) return;
+  if (!current()) return;
   // Terminal details take precedence over active snapshots, regardless of arrival order.
   for (const job of project.jobs) job.status = state.jobs.get(job.id).status;
   for (const id of state.jobs.keys()) if (!project.jobs.some(job => job.id === id)) state.jobs.delete(id);
@@ -550,6 +568,7 @@ function primaryOutput(job) {
 }
 
 function selectJob(id, { show = false } = {}) {
+  outputRequest = null;
   updateState({ selectedJob: id }, { preserveNotice: true });
   const job = state.jobs.get(id);
   renderJobs();
@@ -566,15 +585,21 @@ async function fetchOutput(id, name) {
 async function viewOutput(id, name) {
   const job = state.jobs.get(id);
   if (!job) return;
-  const current = currentContext();
+  const current = currentView(currentContext());
   try {
     const file = await fetchOutput(id, name);
     if (!current()) return;
-    if (name.endsWith('.star')) showFsc(postprocessFsc(await file.text()), name);
+    if (name.endsWith('.star')) {
+      const text = await file.text();
+      if (!current()) return;
+      showFsc(postprocessFsc(text), name);
+    }
     else {
-      const mrc = readMrc(await file.arrayBuffer());
+      const buffer = await file.arrayBuffer();
+      if (!current()) return;
+      const mrc = readMrc(buffer);
       if (mrc.stack) showStack(mrc, name, { job, name });
-      else await showMrc(mrc, name);
+      else await showMrc(mrc, name, current);
     }
   } catch (error) {
     if (!current()) return;
@@ -929,20 +954,21 @@ $('runButton').addEventListener('click', async () => {
   // Only this submission clears its own guard: an earlier step's handler can
   // still be finishing its project refresh after this one starts.
   const submission = { message: `Submitting ${label}…`, cancellable: false };
+  const runSelection = {};
   const client = state.client;
   const selection = state.projectSelection;
   exampleControl.cancel();
-  updateState({ submitting: submission, exampleActivity: null });
+  updateState({ submitting: submission, runSelection, exampleActivity: null });
   try {
     const receipt = await client.submit(request.spec, request.files);
     if (state.submitting !== submission) return;
     updateState({ submitting: null });
     log.log(`Submitted ${label}: ${JSON.stringify(request.spec)}`);
-    const following = follow(receipt.id, label);
+    const following = follow(receipt.id, label, runSelection);
     await refreshProject();
     await following;
   } catch (error) {
-    if (client !== state.client || selection !== state.projectSelection) return;
+    if (client !== state.client || selection !== state.projectSelection || runSelection !== state.runSelection) return;
     $('formMessage').textContent = error.message;
     $('formMessage').hidden = false;
     if (state.submitting === submission) updateState({ submitting: null });
@@ -962,12 +988,12 @@ function queuedText(label, event, job) {
   return event.position > 0 ? `${label}: queued behind ${event.position}` : `${label}: queued`;
 }
 
-async function follow(id, label) {
+async function follow(id, label, runSelection = {}) {
   const client = state.client;
   const selection = state.projectSelection;
   const controller = new AbortController();
   const following = { id, controller, message: `${label}: queued`, cancellable: true };
-  updateState({ following, exampleActivity: null });
+  updateState({ following, runSelection, exampleActivity: null });
   exampleControl.cancel();
   syncControls();
   try {
@@ -1005,9 +1031,9 @@ async function follow(id, label) {
     if (state.following === following) updateState({ following: null }, { preserveNotice: true });
     syncControls();
   }
-  if (client !== state.client || selection !== state.projectSelection || !state.project) return;
+  if (client !== state.client || selection !== state.projectSelection || runSelection !== state.runSelection || !state.project) return;
   await refreshProject();
-  if (client !== state.client || selection !== state.projectSelection) return;
+  if (client !== state.client || selection !== state.projectSelection || runSelection !== state.runSelection) return;
   selectJob(id, { show: state.jobs.get(id)?.status === 'succeeded' });
 }
 
@@ -1085,11 +1111,14 @@ registerAppAutomation({
   app: APP.id,
   operations: {
     'open-map': async ({ inputs, signal }) => {
+      const current = currentView(() => !signal.aborted);
       const [file] = inputs.map;
       const mrc = readMrc(await file.arrayBuffer());
       signal.throwIfAborted();
+      if (!current()) throw new DOMException('A newer view superseded this map', 'AbortError');
       if (mrc.stack) showStack(mrc, file.name);
-      else await showMrc(mrc, file.name);
+      else await showMrc(mrc, file.name, current);
+      if (!current()) throw new DOMException('A newer view superseded this map', 'AbortError');
       return { artifacts: [], summary: { nx: mrc.nx, ny: mrc.ny, nz: mrc.nz, angpix: mrc.angpix, stack: mrc.stack } };
     },
   },

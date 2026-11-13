@@ -6,6 +6,7 @@ import { test, expect } from "@playwright/test";
 import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { COMPUTE_PORT, COMPUTE_TOKEN, E2E_ROOT } from "../playwright.config.js";
+import { writeMrc } from "../../../test-utils/relion-simulator.mjs";
 
 const [example] = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const COMPUTE_URL = `http://127.0.0.1:${COMPUTE_PORT}`;
@@ -273,6 +274,36 @@ test("a finishing step's late refresh does not reopen Run while the next step is
   await expect(page.locator("#runButton")).toBeEnabled({ timeout: STEP_TIMEOUT });
   expect(submissions).toBe(2);
 });
+
+for (const refreshFails of [false, true]) {
+  test(`an older run's final refresh cannot replace a newer completion (${refreshFails ? "error" : "success"})`, async ({ page }) => {
+    test.setTimeout(120000);
+    await connect(page);
+    const projectId = await createProject(page, "Superseded run refresh");
+    await loadExample(page);
+    let projectReads = 0;
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    await page.route(`${COMPUTE_URL}/api/v1/projects/${projectId}`, async route => {
+      if (route.request().method() !== "GET" || ++projectReads !== 2) return route.fallback();
+      const response = await route.fetch();
+      await held;
+      if (refreshFails) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid", message: "Obsolete refresh error" } }) });
+      await route.fulfill({ response });
+    });
+    await run(page, "import");
+    await expect.poll(() => projectReads).toBe(2);
+    await run(page, "import");
+    await expect(page.locator("#jobSummary")).toContainText("Import/job002 · succeeded");
+    const completed = page.waitForResponse(`${COMPUTE_URL}/api/v1/projects/${projectId}`);
+    release();
+    await completed;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator("#jobSummary")).toContainText("Import/job002 · succeeded");
+    await expect(page.locator("#statusText")).toContainText("Import movies finished");
+    await expect(page.locator("#formMessage")).toBeHidden();
+  });
+}
 
 test("a refresh that sees a just-submitted job leaves following it to the submit", async ({ page }) => {
   test.setTimeout(120000);
@@ -683,6 +714,68 @@ test("a late cancel error cannot replace disconnected guidance", async ({ page }
   await completed;
   await expect(page.locator("#statusText")).toContainText("Connect a server");
   await expect(page.locator("#cancelButton")).toBeHidden();
+});
+
+test("a superseded output error cannot replace the latest view or footer", async ({ page }) => {
+  test.setTimeout(120000);
+  await connect(page);
+  await createProject(page, "Superseded output");
+  await loadExample(page);
+  await run(page, "import");
+  await run(page, "motioncorr");
+  await expect(page.locator("#imageLabel")).toContainText("MotionCorr/job002/Movies/");
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let reads = 0;
+  await page.route(`${COMPUTE_URL}/api/v1/jobs/*/outputs/*`, async route => {
+    if (++reads !== 1) return route.fallback();
+    await held;
+    await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid", message: "Obsolete output error" } }) });
+  });
+  const view = page.locator('#resultList [data-stage$=".mrc"] .nd-view-btn').first();
+  await view.click();
+  await expect.poll(() => reads).toBe(1);
+  const latest = page.waitForResponse(response => response.url().includes("/outputs/") && response.ok());
+  await view.click();
+  await latest;
+  const obsolete = page.waitForResponse(response => response.status() === 400 && response.url().includes("/outputs/"));
+  release();
+  await obsolete;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator("#viewerError")).toBeHidden();
+  await expect(page.locator("#statusText")).not.toContainText("Obsolete output error");
+});
+
+test("output decoding finishing after disconnect cannot replace the view", async ({ page }) => {
+  test.setTimeout(120000);
+  await connect(page);
+  await createProject(page, "Detached decoding");
+  await loadExample(page);
+  await run(page, "import");
+  await run(page, "motioncorr");
+  await expect(page.locator("#imageLabel")).toContainText("MotionCorr/job002/Movies/");
+  const previousLabel = await page.locator("#imageLabel").textContent();
+  // A stack renders synchronously after decoding, so completion needs no GPU timing assumption.
+  const stack = writeMrc({ nx: 2, ny: 2, nz: 2, data: new Float32Array(8), stack: true });
+  await page.route(`${COMPUTE_URL}/api/v1/jobs/*/outputs/*`, route => route.fulfill({ body: stack }));
+  await page.evaluate(() => {
+    const original = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = async function () {
+      File.prototype.arrayBuffer = original;
+      const bytes = await original.call(this);
+      window.decodingHeld = true;
+      await new Promise(resolve => { window.releaseDecoding = resolve; });
+      return bytes;
+    };
+  });
+  await page.locator('#resultList [data-stage$=".mrc"] .nd-view-btn').nth(1).click();
+  await expect.poll(() => page.evaluate(() => window.decodingHeld)).toBe(true);
+  await page.locator("#computeConnection").getByRole("button", { name: "Disconnect", exact: true }).click();
+  await page.evaluate(() => window.releaseDecoding());
+  // Let the decode continuation and NiiVue's rendering complete before inspecting the view.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator("#imageLabel")).toHaveText(previousLabel);
+  await expect(page.locator("#statusText")).toContainText("Connect a server");
 });
 
 test("a failed example download can be retried", async ({ page }) => {
