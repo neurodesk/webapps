@@ -483,7 +483,9 @@ function fakeFile(name) {
   assert.ok(Object.is(calls.setPenValue.at(-1)[0], -0),
     'erase-cluster tool must pass NiiVue negative zero sentinel');
 
-  await controller.loadSeedFile(fakeFile('seed.nii'));
+  await assert.rejects(controller.loadSeedFile(fakeFile('unchecked.nii')), TypeError,
+    'a drawing load requires its review owner');
+  await controller.loadSeedFile(fakeFile('seed.nii'), () => {});
   assert.deepEqual(decoded, ['blob:fake-seed.nii'],
     'seed masks must be decoded by NiiVue NVImage');
   assert.deepEqual(calls.binarize, ['blob:fake-seed.nii'],
@@ -620,6 +622,27 @@ function fakeFile(name) {
   for (const line of source.split('\n').filter(text => /this\.reportFailure\(/.test(text) && !text.includes('.catch('))) {
     assert.match(line, /this\.reportFailure\((?:'[^']*'|`[^`]*`|null), \w+(?:, [^)]*)?\)\(err\)/,
       `a failure reported from a catch block needs the check of its action: "${line.trim()}"`);
+  }
+
+  // Review continuations are generators driven by one ownership gate. A new
+  // suspension in any of these workflows cannot bypass it with await/then.
+  const guarded = new Map([
+    [source, ['startUploadedLesionMaskReview', 'startLesionMaskReview', 'confirmLesionDrawing',
+      'renderConfirmedNativeLesionOverlay', 'resampleSeedMaskToNative', 'ensureNativeStructuralInfo',
+      'ensureFixedMni160Info', 'prealignToMni160', 'runBrainExtraction', 'loadReviewBrainMask',
+      'prepareLesionReview', 'runLesionSegmentation', 'runDeepIslesSegmentation', 'prepareViewerForLesionSegmentation',
+      'runLesionPreparation', 'runFullPipeline', 'showScanConfirmation', 'resumePipelineAfterMaskConfirmation']],
+    [drawing, ['loadSeedFile', 'loadBrainMaskFile']]
+  ]);
+  for (const [text, methods] of guarded) {
+    for (const name of methods) {
+      const start = text.search(new RegExp(`^  (?:async )?${name}\\(`, 'm'));
+      assert.notEqual(start, -1, `${name} exists`);
+      const method = text.slice(start, text.indexOf('\n  }', start));
+      assert.match(method, /return runCurrent\(\w+, function\* \(\)/, `${name} uses the central continuation gate`);
+      assert.doesNotMatch(method, /\b(?:async|await)\b|\.(?:then|catch|finally)\(/,
+        `${name} suspends only with yield, so both success and failure check ownership`);
+    }
   }
 }
 

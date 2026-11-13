@@ -73,7 +73,9 @@ const STAGE_METHODS = [
 
   // Auto segmentation always hands over to mask review and pauses there.
   const segmentation = await run({ module: 'inference-pipeline' });
-  assert.deepEqual(segmentation.calls, [['runLesionSegmentation'], ['startLesionMaskReview', { seedFile: null }]]);
+  assert.equal(segmentation.calls[0][0], 'runLesionSegmentation');
+  assert.equal(typeof segmentation.calls[0][1], 'function', 'segmentation shares the review handoff owner');
+  assert.deepEqual(segmentation.calls.slice(1), [['startLesionMaskReview', { seedFile: null }]]);
   assert.deepEqual(segmentation.result, { pausedForMaskReview: true });
 
   // Registration is followed by the warp + atlas-grid bridge.

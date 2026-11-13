@@ -595,7 +595,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   await expectClick('prealignToMniButton', [['prealignToMni160']]);
   app.autoLesionSeedFile = { name: 'seed.nii' };
   await expectClick('runLesionSegmentationButton', [
-    ['runLesionSegmentation'],
+    ['runLesionSegmentation', 'owner'],
     ['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]
   ]);
   // A DeepISLES seed opens review on the structural image, also from a

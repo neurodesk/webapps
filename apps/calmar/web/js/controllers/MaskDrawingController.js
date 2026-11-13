@@ -1,4 +1,14 @@
 import { installContrastRangeWand, maskToDrawingBitmap, drawingToNativeBitmap } from '@neurodesk/webapp-components/viewer';
+import { runCurrent } from '../modules/current-task.js';
+
+async function decodeSeed(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    return await globalThis.niivue.NVImage.loadFromUrl({ url });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 export class MaskDrawingController {
   constructor(options) {
@@ -112,22 +122,17 @@ export class MaskDrawingController {
   // drawing and its Undo history when it lands. The seed is decoded here
   // instead, and `assertCurrent` runs between the decode and the synchronous
   // `loadDrawing`, so a seed whose review was replaced never reaches the drawing.
-  async loadSeedFile(file, assertCurrent) {
-    if (!file) throw new Error('loadSeedFile: seed file is required');
-    const url = URL.createObjectURL(file);
-    let image;
-    try {
-      image = await globalThis.niivue.NVImage.loadFromUrl({ url });
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-    assertCurrent?.();
-    this.nv.binarize(image);
-    if (!this.nv.loadDrawing(image)) throw new Error('NiiVue rejected the drawing mask');
-    this.applyDrawingStyle();
-    this.nv.setDrawingEnabled?.(true);
-    this.setTool('paint');
-    this.updateOutput(`Editable lesion seed loaded: ${file.name}`);
+  loadSeedFile(file, assertCurrent) {
+    return runCurrent(assertCurrent, function* () {
+      if (!file) throw new Error('loadSeedFile: seed file is required');
+      const image = yield decodeSeed(file);
+      this.nv.binarize(image);
+      if (!this.nv.loadDrawing(image)) throw new Error('NiiVue rejected the drawing mask');
+      this.applyDrawingStyle();
+      this.nv.setDrawingEnabled?.(true);
+      this.setTool('paint');
+      this.updateOutput(`Editable lesion seed loaded: ${file.name}`);
+    }.call(this));
   }
 
   setTool(tool) {
@@ -180,13 +185,15 @@ export class MaskDrawingController {
     }
   }
 
-  async loadBrainMaskFile(file) {
-    const request = this.brainMaskRequest = {};
-    this.brainMask = null;
-    if (!file) return;
-    const image = this.nv.volumes?.[0];
-    const data = await maskToDrawingBitmap(this.nv, file);
-    if (this.brainMaskRequest === request && this.nv.volumes?.[0] === image) this.brainMask = { image, data };
+  loadBrainMaskFile(file, assertCurrent) {
+    return runCurrent(assertCurrent, function* () {
+      const request = this.brainMaskRequest = {};
+      this.brainMask = null;
+      if (!file) return;
+      const image = this.nv.volumes?.[0];
+      const data = yield maskToDrawingBitmap(this.nv, file);
+      if (this.brainMaskRequest === request && this.nv.volumes?.[0] === image) this.brainMask = { image, data };
+    }.call(this));
   }
 
   setWandOptions({ tolerance = this.wandSettings.tolerance, radius = this.wandSettings.radius, singleSlice = this.wandSettings.singleSlice, brainOnly = this.wandSettings.brainOnly } = {}) {

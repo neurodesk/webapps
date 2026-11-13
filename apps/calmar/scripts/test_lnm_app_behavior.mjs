@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as niftiModule from 'nifti-reader-js';
 import { writeNifti1 } from '../web/js/modules/nifti-writer.js';
+import { runCurrent } from '../web/js/modules/current-task.js';
 import { LESION_MASK_COLORMAP_ID } from '../web/js/app/lnm-labels.js';
 import {
   VOLUME_SPACES,
@@ -145,6 +146,108 @@ function useMockElements(elementsById) {
 
 function waitMs(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Every suspension, including rejection into catch/finally, has the same gate.
+for (const failed of [false, true]) {
+  for (const boundary of [0, 1, 2]) {
+    const app = makeApp();
+    const writes = [];
+    let release;
+    const task = runCurrent(app.owner('mask'), (function* () {
+      try {
+        for (let index = 0; index < 3; index += 1) {
+          if (index === boundary) {
+            yield new Promise((resolve, reject) => {
+              release = () => failed ? reject(new Error('late failure')) : resolve();
+            });
+          } else yield Promise.resolve();
+          writes.push(index);
+        }
+      } catch {
+        writes.push('catch');
+      } finally {
+        writes.push('finally');
+      }
+    })());
+    await waitForMicrotaskCondition(() => release, 'the selected suspension must start');
+    app.cancelImports('mask');
+    release();
+    await assert.rejects(task, { name: 'AbortError' });
+    assert.deepEqual(writes, Array.from({ length: boundary }, (_, index) => index));
+  }
+}
+{
+  const writes = [];
+  const value = await runCurrent(() => {}, (function* () {
+    try {
+      yield Promise.reject(new Error('current failure'));
+    } catch (error) {
+      writes.push(error.message);
+    }
+    return yield Promise.resolve('completed');
+  })());
+  assert.deepEqual(writes, ['current failure']);
+  assert.equal(value, 'completed');
+}
+
+// Review ownership must reach preparation helpers, before they start worker work.
+{
+  const app = makeApp();
+  app.structuralFile = { name: 'T1.nii', arrayBuffer: async () => new ArrayBuffer(0) };
+  let releaseManifest;
+  app.ensureManifest = () => new Promise(resolve => { releaseManifest = resolve; });
+  const sent = [];
+  app.executor = {
+    loadVolume: async () => { sent.push('load'); },
+    runSynthStrip: async () => {
+      sent.push('extract');
+      app._resolveStageData('brainmask', {});
+      app._resolveStepComplete('brainmask');
+    }
+  };
+  app.maskReviewActive = true;
+  const alignment = app.prealignToMni160({ confirming: true, assertCurrent: app.owner('pipeline', 'mask') });
+  app.beginImport('mask');
+  releaseManifest({ modelAssets: [{ id: 'lnm-synthstrip', supportStatus: 'supported', sourceUrl: 'https://example.test/model.onnx' }] });
+  await assert.rejects(alignment, { name: 'AbortError' });
+  assert.deepEqual(sent, [], 'a replaced confirmation must not launch brain extraction for its successor');
+}
+
+// Failure while preparing a seed ends the current review, like drawing failure.
+{
+  const app = makeApp();
+  app.nativeStructuralFile = { name: 'T1.nii' };
+  app.ensureNativeStructuralInfo = async () => ({});
+  app.loadViewerBaseVolume = async () => true;
+  app.maskDrawingController = { loadBrainMaskFile: async () => {}, close() {} };
+  app.resampleSeedMaskToNative = async () => { throw new Error('seed preparation failed'); };
+  await assert.rejects(app.startLesionMaskReview({ seedFile: { name: 'seed.nii' } }), /seed preparation failed/);
+  assert.equal(app.maskReviewActive, false, 'failed seed preparation must release the review base lock');
+}
+
+// The asynchronous stage-to-review handoff also belongs to its original run.
+{
+  const app = makeApp();
+  let reviews = 0;
+  app.runLesionSegmentation = async () => { app.cancelImports('pipeline'); };
+  app.startLesionMaskReview = async () => { reviews += 1; };
+  await assert.rejects(app._runStage({ module: 'inference-pipeline' }), { name: 'AbortError' });
+  assert.equal(reviews, 0, 'a superseded segmentation must not start a review on the replacement subject');
+}
+
+// Top-level cancellation still resolves, without clearing a successor's pause.
+{
+  const app = makeApp();
+  app.structuralFile = { name: 'T1.nii' };
+  const replacement = { pipeline: {}, nextStageIndex: 2 };
+  app._runPipelineWithStatus = async () => {
+    app.cancelImports('pipeline');
+    app._pendingMaskResume = replacement;
+    return 'stopped';
+  };
+  assert.equal(await app.runLesionPreparation(), undefined);
+  assert.equal(app._pendingMaskResume, replacement);
 }
 
 // ---- A handler without a check is refused, and ownership decides what it may write ----

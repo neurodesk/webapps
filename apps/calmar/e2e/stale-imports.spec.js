@@ -717,11 +717,11 @@ test.describe('an import that finishes late', () => {
     await brainMaskFromWorker(page, image);
     await page.evaluate(() => {
       const restrict = app.maskDrawingController.loadBrainMaskFile.bind(app.maskDrawingController);
-      app.maskDrawingController.loadBrainMaskFile = async (file) => {
+      app.maskDrawingController.loadBrainMaskFile = async (...args) => {
         await new Promise((resolve) => {
           globalThis.releaseImport.wand = resolve;
         });
-        return restrict(file);
+        return restrict(...args);
       };
     });
     await page.locator('#startManualMaskButton').dispatchEvent('click');
@@ -1367,6 +1367,26 @@ test.describe('an import that finishes late', () => {
     }, [...smallMask]);
     expect(await loaded()).toMatchObject({ review: true, drawn: 3 });
     expect(await log()).not.toContain('old drawing failed');
+  });
+
+  test('a seed-preparation failure ends the review and permits a retry', async ({ page }) => {
+    const { choose, loaded, log, smallMask } = await holdImports(page);
+    await choose('structural', 'T1.nii');
+    await expect.poll(async () => (await loaded()).base).toBe('T1.nii');
+    await page.evaluate(() => {
+      const resample = app.resampleSeedMaskToNative.bind(app);
+      app.resampleSeedMaskToNative = async () => {
+        app.resampleSeedMaskToNative = resample;
+        throw new Error('seed preparation failed');
+      };
+    });
+    await choose('manualMask', 'mask.nii', smallMask);
+    await expect.poll(log).toContain('seed preparation failed');
+    expect(await loaded()).toMatchObject({ review: false, drawn: 0 });
+    expect(await page.evaluate(() => app.nv.drawBitmap)).toBeNull();
+    await page.evaluate(() => app.startLesionMaskReview({ blank: true }));
+    await drawTwoVoxels(page);
+    expect(await loaded()).toMatchObject({ review: true, drawn: 2 });
   });
 
   test('a threshold changed during a review that fails is drawn when the review ends', async ({ page }) => {
