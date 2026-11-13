@@ -91,19 +91,22 @@ fn port_fit(root: &Path, case: &Value, steps: Option<&[f64]>) -> revcor_prf::Pre
     revcor_prf::Prepared::new(&rc, &apertures, &resolved, volumes).unwrap()
 }
 
-/// The control reproduces the pinned maps; then, per Hooke-Jeeves probe, how many
-/// fitted vertices the port's current path gets wrong, and the recorded classes.
+/// Each Hooke-Jeeves probe starts from the loop's double raw rows. The control
+/// reproduces the pinned maps, and the port's Hooke-Jeeves path reproduces every
+/// fitted parameter and R² (the amended predictions; the first run's section is void).
 #[test]
 fn hooke_jeeves_probes() {
     let Some(root) = root() else { return };
     let revcor = PathBuf::from(std::env::var_os("SAMSRF_REVCOR_REFERENCE_DIR").expect("set SAMSRF_REVCOR_REFERENCE_DIR"));
     for (recording_host, cpu, dir, cases) in recordings(&root) {
+        let (mut checked, mut traces) = (0, 0);
         for case in cases.iter().filter(|c| c["kind"] == "hooke-jeeves") {
             let (profile_host, pipeline) = (case["host"].as_str().unwrap(), case["pipeline"].as_str().unwrap());
             let (pinned_root, pinned) = pinned_case(&revcor, profile_host, pipeline);
             let vertices: Vec<usize> = numbers(&case["vertices"]).iter().map(|v| *v as usize - 1).collect();
             let parameters = doubles(&dir, &case["parameters"]);
             let r2 = doubles(&dir, &case["r2"]);
+            let loop_raw = doubles(&dir, &case["loopRaw"]);
             let rows = parameters.len() / vertices.len().max(1);
             let classes: Vec<String> = as_list(&case["classes"]).iter().map(|c| c.as_str().unwrap().to_string()).collect();
             let steps = numbers(&case["steps"]);
@@ -123,7 +126,9 @@ fn hooke_jeeves_probes() {
                 if control {
                     against_saved += usize::from((0..rows + 1).any(|r| !same(f64::from(kept[r] as f32), saved[v * saved_rows + r])));
                 }
-                let raw_row: [f64; 5] = std::array::from_fn(|r| raw[v * 5 + r]);
+                // The loop's double raw row, which rounds to the pinned single one.
+                let raw_row: [f64; 5] = std::array::from_fn(|r| loop_raw[g * 5 + r]);
+                assert!((0..5).all(|r| same(f64::from(raw_row[r] as f32), raw[v * 5 + r])), "{} vertex {v}", case["id"]);
                 let port = prepared.fit_model(&raw_row, &profiles[v * pixels..(v + 1) * pixels]).unwrap();
                 fitted += usize::from(keep);
                 port_differs += usize::from((0..rows + 1).any(|r| !same(f64::from(port[r] as f32), f64::from(kept[r] as f32))));
@@ -136,11 +141,26 @@ fn hooke_jeeves_probes() {
                 classes.iter().collect::<std::collections::BTreeSet<_>>(),
                 if control { format!("control differs from the pinned maps on {against_saved}; ") } else { String::new() }
             );
+            // Control and H2' (amendment): MATLAB's Nelder-Mead gives the pinned maps,
+            // and the port's Hooke-Jeeves path gives MATLAB's parameters and R².
+            assert_eq!(against_saved, 0, "{recording_host} {}", case["id"]);
+            assert_eq!(port_differs, 0, "{recording_host} {}", case["id"]);
+            // H1': double parameters and seeds, single R² (classes of fP, fR, seeds).
+            assert!(classes.iter().all(|c| c == "double,single,double"), "{recording_host} {}", case["id"]);
+            checked += 1;
             for trace in as_list(&case["traces"]) {
-                let evaluations = trace["evaluations"].as_array().map_or(0, Vec::len);
-                println!("    trace: {evaluations} evaluations, parameters {}, errors {}, equals samsrf_fit2dprf {}", trace["parameterClass"], trace["errorClass"], trace["equalsFit2dprf"]);
+                let evaluations = as_list(&trace["evaluations"]);
+                println!("    trace: {} evaluations, parameters {}, errors {}, equals samsrf_fit2dprf {}", evaluations.len(), trace["parameterClass"], trace["errorClass"], trace["equalsFit2dprf"]);
+                // The logged search is samsrf_fit2dprf's; each error is a single value
+                // (the last column is isa(R, 'single')) that the search keeps in a double.
+                assert_eq!((trace["parameterClass"].as_str(), trace["errorClass"].as_str()), (Some("double"), Some("double")));
+                assert_eq!(trace["equalsFit2dprf"], true);
+                assert!(!evaluations.is_empty() && evaluations.iter().all(|row| numbers(row).last() == Some(&1.0)));
+                traces += 1;
             }
         }
+        // Three pipelines from each pin host, a control and two step sets each.
+        assert_eq!((checked, traces), (18, 24), "{recording_host}");
     }
 }
 
@@ -193,8 +213,11 @@ fn conv_512_probes() {
                 control_differs += differing;
             }
             println!("{host} ({cpu}) {}: {count} pairs, {differing} counts differ from H-seq", case["id"].as_str().unwrap());
+            // H-seq holds in every region: H-split and H-tile are rejected.
+            assert_eq!(differing, 0, "{host} {}", case["id"]);
         }
         println!("{host}: {regions} regions; the control regions differ on {control_differs}");
+        assert_eq!(regions, 24, "{host}");
     }
 }
 
@@ -239,10 +262,26 @@ fn trig_position_probe() {
             }
         }
         println!("{host} ({cpu}): {n} inputs, {offsets} offsets: {summary:?}");
+        // H0: the value does not depend on the call shape or the element's position.
+        assert_eq!((n, offsets), (768, 33), "{host}");
+        assert!(summary.values().all(|&count| count == 0), "{host}: {summary:?}");
     }
 }
 
 // ---- dot-short -------------------------------------------------------------------
+
+/// The tree the fingerprints give for 2-24 elements: adjacent products summed in
+/// pairs from the end, the pair sums added in index order after the first element
+/// when the count is odd; products and sums rounded separately, no fused step.
+fn pairs_then_sequential(x: &[f64], y: &[f64]) -> f64 {
+    let n = x.len();
+    let (mut total, start) = if n % 2 == 1 { (Some(x[0] * y[0]), 1) } else { (None, 0) };
+    for i in (start..n).step_by(2) {
+        let pair = x[i] * y[i] + x[i + 1] * y[i + 1];
+        total = Some(total.map_or(pair, |t| t + pair));
+    }
+    total.unwrap_or(0.0)
+}
 
 #[test]
 fn dot_short_probe() {
@@ -252,25 +291,35 @@ fn dot_short_probe() {
         let case = cases.iter().find(|c| c["kind"] == "dot-short").unwrap();
         for (fingerprint, held) in as_list(&case["fingerprints"]).iter().zip(as_list(&case["heldOut"])) {
             let n = fingerprint["n"].as_f64().unwrap() as usize;
-            let pairs: Vec<Vec<f64>> = as_list(&fingerprint["pairs"]).iter().map(numbers).collect();
+            // jsonencode writes a k x 2 matrix as k rows, and a 1 x 2 one as a flat pair.
+            let pairs: Vec<Vec<f64>> = numbers(&fingerprint["pairs"]).chunks(2).map(<[f64]>::to_vec).collect();
             let counts = numbers(&fingerprint["counts"]);
-            let (mut mkl, mut sequential) = (0, 0);
+            let (mut mkl, mut sequential, mut tree) = (0, 0, 0);
             for (pair, &count) in pairs.iter().zip(&counts) {
                 let x = vec![1.0; n];
                 let mut y = vec![1.0; n];
                 y[pair[0] as usize - 1] = big;
                 y[pair[1] as usize - 1] = -big;
                 mkl += usize::from(!same(m::ddot(&x, &y), count));
+                tree += usize::from(!same(pairs_then_sequential(&x, &y), count));
                 sequential += usize::from(!same(x.iter().zip(&y).fold(0.0, |s, (a, b)| a.mul_add(*b, s)), count) && !same(x.iter().zip(&y).fold(0.0, |s, (a, b)| s + a * b), count));
             }
-            let x: Vec<Vec<f64>> = as_list(&held["x"]).iter().map(numbers).collect();
-            let y: Vec<Vec<f64>> = as_list(&held["y"]).iter().map(numbers).collect();
             let dots = numbers(&held["dots"]);
-            // jsonencode writes an n x draws matrix as n rows of draws.
             let draws = dots.len();
-            let column = |rows: &[Vec<f64>], d: usize| -> Vec<f64> { rows.iter().map(|row| row[d]).collect() };
+            // jsonencode writes an n x draws matrix as n rows of draws: row-major.
+            let (x, y) = (numbers(&held["x"]), numbers(&held["y"]));
+            assert_eq!((x.len(), y.len()), (n * draws, n * draws));
+            let column = |values: &[f64], d: usize| -> Vec<f64> { (0..n).map(|i| values[i * draws + d]).collect() };
             let held_mkl = (0..draws).filter(|&d| !same(m::ddot(&column(&x, d), &column(&y, d)), dots[d])).count();
-            println!("{host} ({cpu}) n = {n}: {} pairs; H-mkl differs on {mkl}, H-seq on {sequential}; held-out ddot differs on {held_mkl} of {draws}", pairs.len());
+            let held_tree = (0..draws).filter(|&d| !same(pairs_then_sequential(&column(&x, d), &column(&y, d)), dots[d])).count();
+            println!("{host} ({cpu}) n = {n}: {} pairs; H-mkl differs on {mkl}, H-seq on {sequential}, the pair tree on {tree}; held-out: ddot differs on {held_mkl}, the pair tree on {held_tree} of {draws}", pairs.len());
+            assert_eq!((pairs.len(), draws), (n * (n - 1) / 2, 50), "{host} n = {n}");
+            // Neither prediction holds from 8 elements on; the tree read from the
+            // counts reproduces every count and every held-out product.
+            assert_eq!((tree, held_tree), (0, 0), "{host} n = {n}");
+            if n >= 8 {
+                assert!(mkl > 0 && sequential > 0, "{host} n = {n}");
+            }
         }
     }
 }

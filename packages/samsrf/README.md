@@ -367,8 +367,10 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   affected seed regions can change Gaussian fits. The internal evidence does
   not enable those fits through the API, command line or app. Internally, single
   `rc` 2D fits evaluate `samsrf_fit2dprf`'s objective and `R^2` in single as
-  MATLAB does and equal its recorded maps on the AMD host from raw runs; they
-  stay refused for the same reason.
+  MATLAB does and equal its recorded maps on the AMD host from raw runs. With
+  `Hooke_Jeeves_Steps` they also give MATLAB's parameters and `R^2` on the
+  same three cases' profiles (focused probes). They stay refused for the same
+  reason.
   [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
   lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-
@@ -402,7 +404,9 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
 - **gampdf.** For shapes of at least 1, which every HRF uses, `gampdf` is
   Loader's saddle-point form as MATLAB evaluates it (`stirlerr`, `bd0`), and the
   de Haas and SPM kernels equal MATLAB's bit for bit. Shapes below 1 keep the
-  closed form with `lgamma`, which differs from MATLAB by a few ULP. The formula
+  closed form with `lgamma`, which differs from MATLAB by a few ULP; the
+  recurrence through shape `a + 1` was tested in seven operation orders and is
+  not MATLAB's either. The formula
   was identified from MATLAB's recorded densities; see `validation/matlab/README.md`.
 - **Old-school HRF.** An `hrf_*` file is turned into one kernel. Since
   26/08/2026, `samsrf_fit_prf`'s fine fit would mistake that kernel's row
@@ -452,7 +456,10 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   (`exes/samsrf/core/src/matlab_math.rs`). It uses ported fdlibm `log`, `sin` and
   `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
   response, its `conv` and the MKL dot products and norms inside `corr` are
-  empirical models, checked on recorded inputs.
+  empirical models, checked on recorded inputs. MATLAB's real `x'*y` adds
+  products in pairs up to at least 24 elements and uses MKL's blocked kernel
+  from 64; the port uses the blocked kernel throughout, so CSS correlations
+  over fewer than 64 volumes can differ in the last bit.
   All 108 recorded CSS optimizer traces (54 double, 54 single) follow MATLAB's
   parameter sequences bit for bit. With the port's own HRF, which equals MATLAB's
   kernel, the recorded 96-vertex double pipelines (original apertures and a
