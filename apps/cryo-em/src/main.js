@@ -655,6 +655,7 @@ async function downloadOutput(id, name) {
 }
 
 $('deleteJob').addEventListener('click', async () => {
+  const projectCurrent = currentContext();
   const current = currentContext({ keys: ['client', 'projectSelection', 'runSelection'], channel: 'jobMutation' });
   const selected = currentContext({ keys: ['jobSelection'] });
   const client = state.client;
@@ -663,9 +664,10 @@ $('deleteJob').addEventListener('click', async () => {
   if (!current() || !selected()) return;
   try {
     await client.remove(job.id);
-    if (!current()) return;
-    if (selected()) {
-      status(`${job.directory} deleted`);
+    // Successful deletions change this project even if another mutation or run started.
+    if (!projectCurrent()) return;
+    if (state.selectedJob === job.id) {
+      if (current()) status(`${job.directory} deleted`);
       selectJob(null);
     }
     const refreshCurrent = currentContext({ keys: ['client', 'projectSelection', 'runSelection', 'jobSelection'] });

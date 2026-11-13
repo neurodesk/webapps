@@ -960,6 +960,93 @@ test("a delayed job deletion preserves a newer job selection", async ({ page }) 
   await expect(page.locator("#resultList")).toContainText("movies.star");
 });
 
+test("deletion invalidates outputs after leaving and reselecting the deleted job", async ({ page }) => {
+  await connect(page);
+  await createProject(page, "Reselected deletion");
+  await loadExample(page);
+  await run(page, "import");
+  await run(page, "motioncorr");
+  await expect(page.locator("#imageLabel")).toContainText("MotionCorr/job002/Movies/");
+  const label = await page.locator("#imageLabel").textContent();
+  let releaseDeletion;
+  const deletionHeld = new Promise(resolve => {
+    releaseDeletion = resolve;
+  });
+  let deleting = false;
+  await page.route(new RegExp(`${COMPUTE_URL}/api/v1/jobs/[^/]+$`), async route => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    const response = await route.fetch();
+    deleting = true;
+    await deletionHeld;
+    await route.fulfill({ response });
+  });
+  await page.locator("#deleteJob").click();
+  await page.locator("#confirmDialog").getByRole("button", { name: "Delete job", exact: true }).click();
+  await expect.poll(() => deleting).toBe(true);
+  await page.getByRole("button", { name: "View Import/job001", exact: true }).click();
+  await page.getByRole("button", { name: "View MotionCorr/job002", exact: true }).click();
+  let releaseOutput;
+  const outputHeld = new Promise(resolve => {
+    releaseOutput = resolve;
+  });
+  let reading = false;
+  await page.route(`${COMPUTE_URL}/api/v1/jobs/*/outputs/*`, async route => {
+    reading = true;
+    await outputHeld;
+    await route.fulfill({ body: writeMrc({ nx: 2, ny: 2, nz: 2, data: new Float32Array(8), stack: true }) });
+  });
+  await page.locator('#resultList [data-stage$=".mrc"] .nd-view-btn').nth(1).click();
+  await expect.poll(() => reading).toBe(true);
+  releaseDeletion();
+  await expect(page.locator("#jobList")).not.toContainText("MotionCorr/job002");
+  const completed = page.waitForResponse(response => response.url().includes("/outputs/"));
+  releaseOutput();
+  await completed;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator("#imageLabel")).toHaveText(label);
+  await expect(page.locator("#classView")).toBeHidden();
+});
+
+for (const action of ["deletion", "run"]) {
+  test(`a job deletion finishing after a newer ${action} still reconciles the project`, async ({ page }) => {
+    await connect(page);
+    await createProject(page, "Overlapping deletions");
+    await loadExample(page);
+    await run(page, "import");
+    await run(page, "import");
+    await expect(page.locator("#jobSummary")).toContainText("Import/job002");
+    let release;
+    const held = new Promise(resolve => {
+      release = resolve;
+    });
+    let deleting = false;
+    await page.route(new RegExp(`${COMPUTE_URL}/api/v1/jobs/[^/]+$`), async route => {
+      if (route.request().method() !== "DELETE" || deleting) return route.fallback();
+      deleting = true;
+      await held;
+      await route.continue();
+    });
+    await page.locator("#deleteJob").click();
+    await page.locator("#confirmDialog").getByRole("button", { name: "Delete job", exact: true }).click();
+    await expect.poll(() => deleting).toBe(true);
+    if (action === "deletion") {
+      await page.getByRole("button", { name: "View Import/job001", exact: true }).click();
+      await page.locator("#deleteJob").click();
+      await page.locator("#confirmDialog").getByRole("button", { name: "Delete job", exact: true }).click();
+      await expect(page.locator("#jobList")).not.toContainText("Import/job001");
+    } else {
+      await run(page, "import");
+      await expect(page.locator("#jobSummary")).toContainText("Import/job003");
+    }
+    const notice = await page.locator("#statusText").textContent();
+    const completed = page.waitForResponse(response => response.request().method() === "DELETE");
+    release();
+    await completed;
+    await expect(page.locator("#jobList")).not.toContainText("Import/job002");
+    await expect(page.locator("#statusText")).toHaveText(notice);
+  });
+}
+
 for (const fails of [false, true]) {
   test(`a superseded project creation cannot replace newer guidance (${fails ? "error" : "success"})`, async ({ page }) => {
     await connect(page);

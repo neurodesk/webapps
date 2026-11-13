@@ -16,3 +16,5 @@ Ignore superseded output views and errors after downloading, decoding or initial
 Ignore a completed run's delayed project snapshots and refresh errors once a newer run starts.
 
 Order overlapping requests within the same project and run through one currency guard, including errors. Preserve a newer job selection after deletion, invalidate deleted-job views and superseded downloads, and restore the committed image when NiiVue finishes a detached decode. Handle refresh failures separately from rejected submissions and observe follower failures immediately.
+
+Invalidate a deleted job's output work even when the user left and reselected that job while its deletion was pending. Reconcile successful deletions after newer mutations or runs without overwriting their guidance.
