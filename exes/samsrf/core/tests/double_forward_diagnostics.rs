@@ -18,7 +18,8 @@
 //!
 //! It does not count differing vertices: a map is either exact everywhere or held
 //! to the ceiling everywhere.
-use samsrf_core::{css, expr::AnonymousFunction, hrf, job, mat, model, prf, precision::Precision, timeseries::TimeSeries};
+use num_complex::Complex64;
+use samsrf_core::{css, expr::AnonymousFunction, hrf, job, mat, model, optim, prf, precision::Precision, timeseries::TimeSeries};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
@@ -220,7 +221,8 @@ fn double_forward_pipelines_match_matlab() {
             // samsrf_normr2 zeroes R^2 where the noise ceiling is not positive.
             let r2 = if values.iter().any(|n| n == "Noise Ceiling") && port("Noise Ceiling", v) <= 0.0 { 0.0 } else { 1.0 - objective };
             assert_eq!(r2.to_bits(), matlab("R^2", v).to_bits(), "{id}: vertex {v}: R^2 is 1 - the objective at MATLAB's parameters");
-            arithmetic.push(json!({"vertex": v, "predictionMaxRel": prediction_rel, "objective": objective, "plainObjective": plain_objective, "objectiveDifference": objective - plain_objective}));
+            let prediction_max_abs = ordered.iter().fold(0.0f64, |m, x| m.max(x.abs()));
+            arithmetic.push(json!({"vertex": v, "predictionMaxAbs": prediction_max_abs, "predictionMaxRel": prediction_rel, "objective": objective, "plainObjective": plain_objective, "objectiveDifference": objective - plain_objective}));
         }
         let historical: Vec<Value> = HISTORICAL.iter().filter(|(case, _, _)| *case == id).map(|&(_, v, class)| {
             historical_checked += 1;
@@ -232,4 +234,80 @@ fn double_forward_pipelines_match_matlab() {
     if let Some(path) = std::env::var_os("SAMSRF_DOUBLE_FORWARD_REPORT") {
         std::fs::write(path, serde_json::to_string_pretty(&report).unwrap() + "\n").unwrap();
     }
+}
+
+/// MATLAB's recorded `fminsearch` runs of the double non-CSS objective with a fixed
+/// HRF kernel, from the optimizer cases of the same pin (20 + 6 fits). Each trace
+/// row is one objective evaluation: the parameters, then the objective's real and
+/// imaginary parts. The pin's third double non-CSS optimizer case,
+/// `fit_double_fitted_hrf`, fits the HRF with the pRF: its kernels come from
+/// `hrf::doublegamma` at every evaluation, which this change does not touch, and
+/// `matlab_reference.rs` keeps its endpoint gate.
+const TRACED: [(&str, usize); 2] = [("fit_double_gaussian", 20), ("fit_double_custom_hrf", 6)];
+const FITTED_HRF: &str = "fit_double_fitted_hrf";
+
+#[test]
+fn double_objective_follows_matlabs_fminsearch_evaluation_by_evaluation() {
+    let Some(root) = std::env::var_os("SAMSRF_MATLAB_REFERENCE_DIR").map(PathBuf::from) else { return };
+    let reference: Value = serde_json::from_slice(&std::fs::read(root.join("reference.json")).unwrap()).unwrap();
+    let cases = reference["cases"].as_array().unwrap();
+    let mut recorded: Vec<&str> = cases.iter()
+        .filter(|c| c["kind"] == "fit" && c["precision"] == "double" && c["css"] == false)
+        .map(|c| c["id"].as_str().unwrap())
+        .collect();
+    recorded.sort_unstable();
+    let mut expected_ids: Vec<&str> = TRACED.iter().map(|(id, _)| *id).chain([FITTED_HRF]).collect();
+    expected_ids.sort_unstable();
+    assert_eq!(recorded, expected_ids, "double non-CSS optimizer cases in the pin");
+    let fitted_hrf = cases.iter().find(|c| c["id"] == FITTED_HRF).unwrap();
+    assert_eq!(fitted_hrf["hrf"]["shape"], json!([1, 1]), "{FITTED_HRF} fits the HRF");
+    let apertures = mat::read_apertures(&std::fs::read(root.join("fit-apertures.mat")).unwrap()).unwrap();
+    let xy = apertures.scaled_xy(9.5);
+    let function = AnonymousFunction::parse("@(P,XY)prf_gaussian_rf(P(1),P(2),P(3),XY)").unwrap();
+    let mut evaluations_checked = 0;
+    for (id, fits) in TRACED {
+        let case = cases.iter().find(|c| c["id"] == id).unwrap();
+        assert_eq!(case["nonnegativeApertures"], false, "{id}");
+        let parameters = case["seeds"]["shape"][0].as_u64().unwrap() as usize;
+        let seeds = array(&root, &case["seeds"]);
+        let volumes = case["observations"]["shape"][0].as_u64().unwrap() as usize;
+        let observations = array(&root, &case["observations"]);
+        let kernel = array(&root, &case["hrf"]);
+        assert!(kernel.len() > 1, "{id}: a fixed HRF kernel");
+        let hrf = hrf::ErrfunHrf::Kernel(kernel);
+        let objectives = array(&root, &case["objective"]);
+        let fitted = array(&root, &case["parameters"]);
+        let traces = case["traces"].as_array().unwrap();
+        assert_eq!((seeds.len(), traces.len(), objectives.len()), (fits * parameters, fits, fits), "{id}: fits");
+        for (fit, trace) in traces.iter().enumerate() {
+            let rows = trace["shape"][0].as_u64().unwrap() as usize;
+            assert_eq!(trace["shape"][1].as_u64().unwrap() as usize, parameters + 2, "{id} fit {fit}: trace columns");
+            let recorded = array(&root, trace);
+            let at = |row: usize, column: usize| recorded[column * rows + row];
+            let y = &observations[fit * volumes..(fit + 1) * volumes];
+            let mut evaluated: Vec<(Vec<f64>, Complex64)> = Vec::new();
+            let result = optim::fminsearch(
+                |p| {
+                    let value = prf::errfun_with_convention(&function, &apertures, &xy, &hrf, p, y, 1, false, Precision::Double, css::Convention::Samsrf).unwrap();
+                    evaluated.push((p.to_vec(), value));
+                    value
+                },
+                &seeds[fit * parameters..(fit + 1) * parameters],
+                &optim::FminsearchOptions::default(),
+            );
+            assert_eq!(evaluated.len(), rows, "{id} fit {fit}: evaluations");
+            for (row, (p, value)) in evaluated.iter().enumerate() {
+                for (column, actual) in p.iter().enumerate() {
+                    assert_eq!(actual.to_bits(), at(row, column).to_bits(), "{id} fit {fit} evaluation {row} parameter {column}");
+                }
+                assert_eq!((value.re.to_bits(), value.im.to_bits()), (at(row, parameters).to_bits(), at(row, parameters + 1).to_bits()), "{id} fit {fit} evaluation {row}: objective {value} != {}", at(row, parameters));
+            }
+            for (column, actual) in result.x.iter().enumerate() {
+                assert_eq!(actual.to_bits(), fitted[fit * parameters + column].to_bits(), "{id} fit {fit}: fitted parameter {column}");
+            }
+            assert_eq!(result.fval.re.to_bits(), objectives[fit].to_bits(), "{id} fit {fit}: final objective");
+            evaluations_checked += rows;
+        }
+    }
+    assert_eq!(evaluations_checked, 3186, "recorded evaluations replayed");
 }
