@@ -126,6 +126,14 @@ test('registry validation rejects a description too long for the app bar', async
   await assert.rejects(loadAppsRegistry(path), /description must be at most 60 characters/);
 });
 
+test('registry validation rejects a brand theme the stylesheets do not define', async () => {
+  const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+  raw.site.catalogs[1].brand.theme = 'starlight';
+  const path = join(await mkdtemp(join(tmpdir(), 'apps-registry-')), 'apps.yml');
+  await writeFile(path, stringify(raw));
+  await assert.rejects(loadAppsRegistry(path), /catalog msk\.brand\.theme must be one of neurodesk, sciget/);
+});
+
 test('registry validation rejects a non-boolean ci.browser_test', async () => {
   const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
   raw.apps[0].ci.browser_test = 'sometimes';
@@ -290,10 +298,11 @@ test('every app belongs to exactly one declared catalogue', async () => {
   );
 });
 
-test('every catalogue and the hub name a logo the site ships', async () => {
+test('every catalogue and the hub name a logo and an icon the site ships', async () => {
   const registry = await loadAppsRegistry();
   for (const entry of [registry.site.hub, ...registry.site.catalogs]) {
     await access(join(repoRoot, 'site', entry.brand.logo));
+    await access(join(repoRoot, 'site', entry.brand.icon));
   }
 });
 
@@ -337,6 +346,7 @@ test('registry rejects duplicate catalogue hosts and ids, and catalogues without
     [raw => { raw.site.catalogs[1].hosting = 'netlify'; }, /hosting for catalog msk must be one of: pages, worker/],
     [raw => { delete raw.site.hub; }, /site\.hub\.host must be a host name/],
     [raw => { raw.site.catalogs[1].brand.logo = '../secret.svg'; }, /catalog msk\.brand\.logo must name an SVG file/],
+    [raw => { delete raw.site.catalogs[1].brand.icon; }, /catalog msk\.brand\.icon must name an SVG file/],
     [raw => { raw.site.catalogs = []; }, /site\.catalogs must be a non-empty array/],
   ];
   for (const [mutate, message] of cases) {

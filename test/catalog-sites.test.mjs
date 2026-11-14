@@ -142,7 +142,7 @@ test('the all-app assembly still holds every app the suites are projected from',
 
 test('the hub holds only the hub page and what it loads', async () => {
   const hub = join(sites, HUB_SITE);
-  assert.deepEqual((await readdir(hub)).sort(), ['_headers', 'fonts', 'index.html', 'landing.css', registry.site.hub.brand.logo, 'theme.js'].sort());
+  assert.deepEqual((await readdir(hub)).sort(), ['_headers', 'fonts', 'index.html', 'landing.css', registry.site.hub.brand.logo, registry.site.hub.brand.icon, 'theme.js'].sort());
   const html = await readFile(join(hub, 'index.html'), 'utf8');
   for (const reference of references(html, join(hub, 'index.html'))) assert.ok(await exists(join(hub, reference)), reference);
   for (const catalog of registry.site.catalogs) assert.match(html, new RegExp(`href="https://${catalog.host.replaceAll('.', '\\.')}/"`));

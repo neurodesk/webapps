@@ -104,6 +104,69 @@
   --nd-color-primary-glow: rgb(70 125 37 / 12%);
 }
 
+/* SciGet's catalogues follow sciget.org (Astro Starlight): its greys, its
+   orange accent (#d97706, #b85c00 on light) and the system font stack. */
+:root[data-neurodesk-app][data-neurodesk-brand="sciget"]:not([data-neurodesk-theme="light"]) {
+  --nd-brand-page: #17181c;
+  --nd-brand-primary: #d97706;
+  --nd-brand-menu: #23262f;
+  --nd-brand-selection: #3a2410;
+  --nd-brand-accent-background: #2b2117;
+  --nd-brand-selected: #b85c00;
+  --nd-brand-hover: #f0a04b;
+  --nd-brand-primary-hover: #e8891a;
+  --nd-brand-light: #ffd0a3;
+  --nd-brand-unselected: #2a2d36;
+  --nd-brand-pale: #17181c;
+  --nd-brand-surface: #23262f;
+  --nd-brand-text: #edeef3;
+  --nd-brand-text-muted: #c1c3c8;
+  --nd-brand-text-dim: #888c96;
+  --nd-brand-action-text: #17181c;
+  --nd-brand-menu-text: #edeef3;
+  --nd-brand-border: #353841;
+  --nd-brand-border-strong: #555962;
+  --nd-brand-console-surface: #17181c;
+  --nd-brand-console-header: #23262f;
+  --nd-brand-console-text: #c1c3c8;
+  --nd-brand-console-time: #888c96;
+  --nd-brand-focus: #d97706;
+  --nd-color-primary-glow: rgb(217 119 6 / 18%);
+}
+
+:root[data-neurodesk-app][data-neurodesk-brand="sciget"][data-neurodesk-theme="light"] {
+  /* sciget.org's light accent; white text on it is 4.6:1. */
+  --nd-brand-page: #ffffff;
+  --nd-brand-primary: #b85c00;
+  --nd-brand-menu: #ffffff;
+  --nd-brand-selection: #ffe0c3;
+  --nd-brand-accent-background: #fff3e6;
+  --nd-brand-selected: #b85c00;
+  --nd-brand-hover: #8a4500;
+  --nd-brand-primary-hover: #9a4d00;
+  --nd-brand-light: #8a4500;
+  --nd-brand-unselected: #edeef3;
+  --nd-brand-pale: #ffffff;
+  --nd-brand-surface: #f6f7f9;
+  --nd-brand-text: #17181c;
+  --nd-brand-text-muted: #353841;
+  --nd-brand-text-dim: #555962;
+  --nd-brand-action-text: #ffffff;
+  --nd-brand-menu-text: #17181c;
+  --nd-brand-border: #dcdee3;
+  --nd-brand-border-strong: #c1c3c8;
+  --nd-brand-console-surface: #ffffff;
+  --nd-brand-console-header: #f6f7f9;
+  --nd-brand-console-text: #17181c;
+  --nd-brand-console-time: #555962;
+  --nd-brand-focus: #b85c00;
+  --nd-color-primary-glow: rgb(184 92 0 / 12%);
+}
+
+:root[data-neurodesk-app][data-neurodesk-brand="sciget"] {
+  --nd-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif;
+}
+
 /* Dicompare's Tailwind theme consumes raw RGB triplets. */
 :root[data-neurodesk-shell="react"] {
   color-scheme: dark;
@@ -145,6 +208,46 @@
   --color-brand-500: 70 125 37;
   --color-brand-600: 59 108 30;
   --color-brand-700: 47 87 24;
+}
+
+:root[data-neurodesk-shell="react"][data-neurodesk-brand="sciget"]:not([data-neurodesk-theme="light"]) {
+  --color-surface: 23 24 28;
+  --color-surface-primary: 35 38 47;
+  --color-surface-secondary: 42 45 54;
+  --color-surface-hover: 53 56 65;
+  --color-surface-alt: 29 31 37;
+  --color-text-primary: 237 238 243;
+  --color-text-secondary: 193 195 200;
+  --color-text-tertiary: 255 208 163;
+  --color-text-muted: 136 140 150;
+  --color-text-inverted: 23 24 28;
+  --color-border: 53 56 65;
+  --color-border-secondary: 85 89 98;
+  --color-brand-50: 43 33 23;
+  --color-brand-100: 58 36 16;
+  --color-brand-500: 217 119 6;
+  --color-brand-600: 184 92 0;
+  --color-brand-700: 138 69 0;
+}
+
+:root[data-neurodesk-shell="react"][data-neurodesk-brand="sciget"][data-neurodesk-theme="light"] {
+  --color-surface: 255 255 255;
+  --color-surface-primary: 246 247 249;
+  --color-surface-secondary: 237 238 243;
+  --color-surface-hover: 255 243 230;
+  --color-surface-alt: 246 247 249;
+  --color-text-primary: 23 24 28;
+  --color-text-secondary: 53 56 65;
+  --color-text-tertiary: 53 56 65;
+  --color-text-muted: 85 89 98;
+  --color-text-inverted: 255 255 255;
+  --color-border: 220 222 227;
+  --color-border-secondary: 193 195 200;
+  --color-brand-50: 255 243 230;
+  --color-brand-100: 255 224 195;
+  --color-brand-500: 184 92 0;
+  --color-brand-600: 154 77 0;
+  --color-brand-700: 138 69 0;
 }
 
 /* Older non-React apps use light-palette role names for surfaces and text.

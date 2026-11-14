@@ -12,6 +12,8 @@ site:
     brand:
       name: SciGet
       logo: sciget-logo.svg
+      icon: sciget-icon.svg
+      theme: sciget
       home: https://webapps.sciget.org/
       more_apps: More SciGet web apps
   # Every app has one home catalogue (its `catalog:`); `also_in:` lists other
@@ -28,6 +30,8 @@ site:
       brand:
         name: Neurodesk
         logo: neurodesk-logo.svg
+        icon: neurodesk-logo.svg
+        theme: neurodesk
         home: https://neurodesk.org/
         more_apps: More Neurodesk web apps
       desktop:
@@ -44,6 +48,8 @@ site:
       brand:
         name: SciGet
         logo: sciget-logo.svg
+        icon: sciget-icon.svg
+        theme: sciget
         home: https://webapps.sciget.org/
         more_apps: More MSK web apps
       desktop:
@@ -60,6 +66,8 @@ site:
       brand:
         name: SciGet
         logo: sciget-logo.svg
+        icon: sciget-icon.svg
+        theme: sciget
         home: https://webapps.sciget.org/
         more_apps: More microscopy web apps
       desktop:
@@ -76,6 +84,8 @@ site:
       brand:
         name: SciGet
         logo: sciget-logo.svg
+        icon: sciget-icon.svg
+        theme: sciget
         home: https://webapps.sciget.org/
         more_apps: More preclinical web apps
       desktop:
