@@ -42,6 +42,14 @@ reproducer was not 1-minimal: every one-point deletion that still reproduced in
 MATLAB, and each of their one-point deletions.
 
   python3 polyshape_reduce.py round3 GEOMETRY_HOST_DIR PATH_TO_POLYSHAPE_HULLS SECOND_REPORT.json OUT.json
+
+`lookahead` continues one cloud's reduction from recorded verdicts alone
+(exes/samsrf/core/tests/matlab_polyshape_reproducers.json, never a model): the
+frontier is every recorded untransformed reproducer of the smallest recorded
+size, and the round records every subset that deletes 1 to DEPTH points from a
+frontier member and was not recorded before, as role 'reduction'.
+
+  python3 polyshape_reduce.py lookahead GEOMETRY_HOST_DIR PATH_TO_POLYSHAPE_HULLS CLOUD DEPTH OUT.json
 """
 import json
 import os
@@ -274,8 +282,98 @@ def round3():
     print(f'{len(cases)} cases from {len(reproducing)} reproducers')
 
 
+SPECS = [('reproducer_cases', 'polyshape-reproducers.json'), ('reproducer_round2', 'polyshape-reproducers-2.json'),
+         ('reproducer_round3', 'polyshape-reproducers-3.json'), ('reproducer_round4', 'polyshape-reproducers-4.json'),
+         ('reproducer_round5', 'polyshape-reproducers-5.json')]
+
+
+def recorded_cases(cloud_id):
+    """(indices, verdict) of every recorded untransformed case of one cloud, from
+    the spec files and the frozen verdicts of the recordings."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    frozen = json.load(open(os.path.join(here, '..', '..', '..', '..', 'exes', 'samsrf', 'core', 'tests', 'matlab_polyshape_reproducers.json')))
+    result = []
+    for case_id, name in SPECS:
+        path = os.path.join(here, name)
+        if case_id not in frozen['verdicts']:
+            continue
+        spec = json.load(open(path))
+        verdicts = frozen['verdicts'][case_id]
+        if isinstance(verdicts, str):
+            verdicts = [(int(d) >> 1 == 1, int(d) & 1 == 1) for d in verdicts]
+        items = expand(spec) if 'masks' in spec else spec['cases']
+        assert len(verdicts) == len(items), case_id
+        for item, verdict in zip(items, verdicts):
+            if item['cloud'] == cloud_id and item['transform'] == 0 and item['reversed'] == 0 and item['shift'] == 0:
+                result.append((tuple(item['indices']), tuple(verdict)))
+    return result
+
+
+def prediction_bytes(model):
+    """One model's predicted hull as bytes for the round digest: 0 for an empty
+    hull, else 1, then the sorted vertex bits, the area bits and the centroid bits,
+    each as little-endian u64."""
+    if model is None:
+        return b'\x00'
+    assert 'error' not in model, model
+    out = bytearray(b'\x01')
+    for x, y in sorted((to_bits(x), to_bits(y)) for x, y in model['hull']):
+        out += struct.pack('<QQ', x, y)
+    out += struct.pack('<Q', to_bits(model['area']))
+    out += struct.pack('<QQ', *(to_bits(v) for v in model['centroid']))
+    return bytes(out)
+
+
+def expand(spec):
+    """The cases of a compact round (bitmasks of 1-based indices into one cloud)."""
+    return [{'cloud': spec['cloud'], 'role': spec['role'], 'indices': [k + 1 for k in range(64) if mask >> k & 1],
+             'reversed': 0, 'shift': 0, 'transform': 0} for mask in spec['masks']]
+
+
+def predictions_digest(cases, results):
+    """SHA-256 over every case's shipped then experimental prediction_bytes."""
+    import hashlib
+    digest = hashlib.sha256()
+    for result in results:
+        digest.update(prediction_bytes(result['production']))
+        digest.update(prediction_bytes(result['experimental']))
+    return digest.hexdigest()
+
+
+def lookahead():
+    import itertools
+    root, binary, cloud_id, depth, out = sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), sys.argv[6]
+    clouds, _ = load_clouds(root)
+    oracle = Oracle(binary)
+    recorded = recorded_cases(cloud_id)
+    reproducing = [indices for indices, verdict in recorded if verdict == (True, False)]
+    size = min(map(len, reproducing))
+    frontier = sorted(set(r for r in reproducing if len(r) == size))
+    seen = set(indices for indices, _ in recorded)
+    subsets = set()
+    for member in frontier:
+        for d in range(1, depth + 1):
+            for dropped in itertools.combinations(member, d):
+                indices = tuple(k for k in member if k not in dropped)
+                if len(indices) >= 3 and indices not in seen:
+                    subsets.add(indices)
+    ordered = sorted(subsets, key=lambda c: (-len(c), c))
+    spec = {'cloud': cloud_id, 'role': 'reduction', 'depth': depth, 'frontier': [list(m) for m in frontier],
+            'masks': [sum(1 << (k - 1) for k in c) for c in ordered]}
+    cases = expand(spec)
+    assert [tuple(c['indices']) for c in cases] == ordered
+    results = oracle.evaluate([[clouds[cloud_id][k - 1] for k in c['indices']] for c in cases])
+    spec['predictionsSha256'] = predictions_digest(cases, results)
+    with open(out, 'w') as f:
+        json.dump(spec, f, separators=(',', ':'))
+        f.write('\n')
+    print(f'{len(cases)} cases from a frontier of {len(frontier)} {size}-point reproducers; predictions {spec["predictionsSha256"]}')
+
+
 if __name__ == '__main__':
-    if sys.argv[1] == 'round3':
+    if sys.argv[1] == 'lookahead':
+        lookahead()
+    elif sys.argv[1] == 'round3':
         round3()
     elif sys.argv[1] == 'round2':
         round2()

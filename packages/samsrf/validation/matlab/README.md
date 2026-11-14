@@ -1943,55 +1943,113 @@ models' hulls for every candidate were committed before MATLAB recorded it:
 - `polyshape-reproducers-2.json` (80 cases), first in run
   [43525037841](https://github.com/neurodesk/webapps/actions/runs/43525037841):
   each cloud's smallest measured reproducer and its one-point deletions.
-- `polyshape-reproducers-3.json` (51 cases), in run
+- `polyshape-reproducers-3.json` (51 cases), first in run
   [43526041360](https://github.com/neurodesk/webapps/actions/runs/43526041360):
   cloud 932's 17-point reproducers and their one-point deletions.
+- `polyshape-reproducers-4.json` (12,873 cases), first in run
+  [43564016762](https://github.com/neurodesk/webapps/actions/runs/43564016762):
+  every order-preserving subset that deletes 1 to 4 points from one of 932's
+  nine 16-point reproducers. Its frontier came from recorded verdicts only.
+- `polyshape-reproducers-5.json` (12,897 cases), in run
+  [43564536819](https://github.com/neurodesk/webapps/actions/runs/43564536819):
+  every subset that deletes 1 or 2 points from one of round 4's 302 twelve-point
+  reproducers.
+
+Rounds 4 and 5 are compact. They store bitmasks of indices into cloud 932, and
+a `predictionsSha256` over both models' predicted hull bytes, committed with
+the decision rules (`polyshape-reproducers-{4,5}-predictions.md`) before each
+was first recorded. The models are not MATLAB oracles: the shipped model's
+predictions failed on many reductions.
 
 `polyshape-reproducers-reference.json` pins the last run, which records all
-three batches (HF commit 82d191c05d5a26d6152b82ccdb500e8b88f80071, SHA-256
-`73631b967a4845788cbf4f9a8ce046472f5694367a36035300f8cab57f12aadd`, recorder
-commit f621f15cd5170c1b9ce24754f54e2a81e964ccf6).
+five batches (HF commit f9ef22a7039e1a2c6dc8b6bf1d65b670ac81b9c1, SHA-256
+`bbc79ab5cac68a3e83ef4d9cb72d9cc8ce3e4f6bbad4c61434c0cd4524fc48ef`,
+11,701,576 bytes, recorder commit b81c50424c8b73776cb4aafb5859d84890490998).
 - Both hosts passed an exact same-host repeat.
-- Their 72 arrays are byte-identical, on an Intel Xeon Platinum 8573C and an
-  AMD EPYC 7763 that report different MKL branches.
-- The first two batches equal the earlier runs bit for bit.
+- Their 120 arrays are byte-identical, on an Intel Xeon Platinum 8573C and an
+  AMD EPYC 9V74 that report different MKL branches.
+- Every earlier batch equals its first recording bit for bit. Round 4's runs
+  ran on an AMD EPYC 9V74 and an Intel Xeon 6975P-C, and round 1-3's on an
+  Intel 8573C and an AMD EPYC 7763; all agreed.
 - The full-cloud controls reproduce the original recording's verdicts.
 
 The proxy failed often. Of the reductions it predicted, MATLAB agreed with the
 shipped model and not the experimental one only for some. On several, MATLAB
 matched the experimental model, or neither model: both are wrong there. The
-smallest measured reproducers, where MATLAB's hull equals the shipped model's
-and not the experimental one:
+smallest recorded 1-minimal reproducers, where MATLAB's hull equals the shipped
+model's and not the experimental one:
 
-| Cloud | Points | 1-minimal in MATLAB | Experimental area / CF sigma error | MATLAB default: regions, holes, rings (kept) | `polyshape` of kept / of default = default |
-| --- | ---: | --- | --- | --- | --- |
-| 177 | 6 of 18 | yes | +6.5 % / +3.2 % | 2, 0, 2 (3) | yes / yes |
-| 932 | 16 of 18 | not established | -7.7 % / -3.9 % | 1, 1, 2 (18) | no / no |
-| 1607 | 8 of 40 | yes | -2.9 % / -1.5 % | 5, 1, 6 (7) | no / no |
-| 1937 | 8 of 24 | yes | -24.4 % / -13.0 % | 1, 0, 1 (4) | no / yes |
+| Cloud | Points | 1-minimal in MATLAB | Experimental area / CF sigma error | MATLAB default: regions, holes, rings (kept) | Experimental output: rings | `polyshape` of kept / of default = default |
+| --- | ---: | --- | --- | --- | --- | --- |
+| 177 | 6 of 18 | yes | +6.5 % / +3.2 % | 2, 0, 2 (3) | 3 | yes / yes |
+| 932 | 11 of 18 | yes | -56.3 % / -33.9 % | 2, 1, 3 (10) | 3, no hole | no / no |
+| 1607 | 8 of 40 | yes | -2.9 % / -1.5 % | 5, 1, 6 (7) | 6, no hole | no / no |
+| 1937 | 8 of 24 | yes | -24.4 % / -13.0 % | 1, 0, 1 (4) | 1, other vertices | no / yes |
 
 1-minimal means that every one-point deletion was recorded and none still
-reproduces. For 932 each recording round removed one point. Nine 16-point sets
-reproduce and their deletions were not recorded, so 932's minimum is open.
+reproduces. For cloud 932, rounds 4 and 5 certify eight 11-point, two 12-point
+and two 13-point 1-minimal reproducers. They also hold 662 ten-point
+reproducers whose deletions were not recorded, so the smallest reproducer of
+932 is not known: 932 is at most 10 points and has 1-minimal reproducers of 11.
+Rounds stopped there by the budget pre-registered for round 5. Of the 25,849 distinct
+untransformed subsets of 932 recorded, MATLAB matched the shipped model and not
+the experimental one in 1,658, the experimental model and not the shipped one
+in 10,537, both in 4,099, and neither in 9,555. Smaller reductions often defeat both models, so
+the shipped model is not a usable MATLAB oracle for this cloud.
+
+Topology at the corresponding public outputs (MATLAB's default against the
+experimental model's final output): the ring counts agree for 932, 1607 and
+1937. For 177, MATLAB has one region fewer. MATLAB's default has a hole in 932
+and 1607 where its `KeepCollinearPoints` output has none and the experimental
+model has none either: all its output rings on these four inputs have the
+same orientation.
 
 `polyshape_regression_reproducers.m` holds the four as exact hex doubles with
 MATLAB's and the experimental hull rows. On all four, MATLAB's hull vertices
 are input points:
 
-- 177, 932 and 1607: the experimental model puts another input point on the
-  hull.
+- 177, 1607 and the 932 reproducer: the experimental model puts another input
+  point on the hull, or leaves one out (932's experimental hull has three of
+  MATLAB's four vertices).
 - 1937: it replaces the extreme input point (0.99963, 2.99927) with a crossing
   of two edges. Its first clean leaves one ring of its four union rings, and
   MATLAB's default keeps the region that reaches that point.
 
 The 177 reproducer is idempotent and its `KeepCollinearPoints` shape rebuilds
 the default, so the regression does not need non-idempotence or a kept/default
-difference. The winding rule changes none of the 244 recorded hulls.
-`polyshape_reproducers_match_recording` (experimental gate, both hosts) holds
-three things: every recorded polygon to the spec, both models to the hulls
-predicted before recording, and MATLAB's per-case verdicts to
-`matlab_polyshape_reproducers.json`. It also requires the four smallest
-reproducers to keep reproducing.
+difference. On it, the difference is one ring. MATLAB's default drops the
+4-vertex `KeepCollinearPoints` ring through input points 4 and 5. The
+experimental model cleans the same ring, as Clipper's union returns it, to a
+triangle and keeps it. Clipper's `CleanPolygon` empties that ring for 6 of its
+8 start and direction choices, and keeps a triangle only when it starts at
+input point 5, where the union's ring starts. This is the start dependence
+already documented; no start rule tested reproduces MATLAB generally. The
+winding rule changes none of the 244 hulls of rounds 1 to 3.
+`polyshape_reproducers_match_recording` (experimental gate, both hosts, 26,014
+cases each) holds:
+- every recorded polygon to the spec, and every descriptor to its class,
+  realness and byte length;
+- both models to the hulls predicted before recording, per case for rounds 1
+  to 3 and through the committed digest for rounds 4 and 5;
+- MATLAB's per-case verdicts to `matlab_polyshape_reproducers.json`;
+- the smallest measured reproducers keeping on reproducing;
+- each listed 1-minimal reproducer (all four clouds) reproducing, with every
+  one-point deletion recorded and none still reproducing.
+
+A flipped verdict, a changed digest, a grid change and a non-minimal
+reproducer listed as 1-minimal each make it fail.
+
+Two more premises suggested by the reproducers, written down before running
+them on 2026-11-14, are rejected:
+- MATLAB merging distinct vertices of different rings that lie within the
+  tolerance. On all four reproducers, no two distinct union vertices are within
+  20 tolerances of each other, so there is nothing to merge.
+- An effective near-collinear threshold of sqrt(2) tolerances. 177's dropped
+  ring is 1.26 tolerances thick at its thinnest and 1607's thinnest kept ring
+  1.63, which that threshold would separate. Applied to the near-collinear test
+  alone or to both clean tests, it fixes 177 but not 932, 1607 or 1937. It also
+  loses 6,474 of the 11,907 one-ULP thin triangles and most other families, so
+  the vertex threshold is the tolerance itself.
 
 ### What is established and what is not
 
@@ -2007,8 +2065,9 @@ Established on the pinned recordings (both hosts identical):
 - MATLAB's default `polyshape` is not idempotent on 932, 1607 and cloud 7, and
   `polyshape` of its `KeepCollinearPoints` vertices differs from the default
   on 932, 1607, 1937 and cloud 7.
-- Reproducers of 6, 16, 8 and 8 points (above), with exact inputs, MATLAB's
-  outputs on two hosts and both models' predictions made before recording.
+- 1-minimal reproducers of 6, 11, 8 and 8 points (above), with exact inputs,
+  MATLAB's outputs on two hosts and both models' predictions made before
+  recording.
 
 Not known:
 
