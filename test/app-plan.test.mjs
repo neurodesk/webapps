@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -854,6 +854,105 @@ test('missing, renamed and reusable CI jobs trigger a visible full-coverage fall
       assert.deepEqual(JSON.parse(output.gpu_apps), createAppPlan(registry).gpuApps);
     }
   }
+});
+
+// A ready pull request whose change selects every app, run through the CLI with
+// a `gh` stub that answers from `state`: its live labels, its branch's ci runs
+// (filtered by the query's `created>=`), each run's job count, and an optional
+// call to fail.
+async function budgetFixture(t) {
+  const { root } = await plannerFixture(t);
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '--quiet');
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'base');
+  // A change to ci.yml selects every app; the draft plan keeps none.
+  await writeFile(join(root, '.github/workflows/ci.yml'), `${await readFile(join(root, '.github/workflows/ci.yml'), 'utf8')}# change\n`);
+  git('commit', '--quiet', '-am', 'head');
+  const bin = join(root, 'stub-bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'gh'), `#!/usr/bin/env node
+const { readFileSync } = require('node:fs');
+const state = JSON.parse(readFileSync(process.env.GH_STUB_STATE, 'utf8'));
+const args = process.argv.slice(2);
+const path = args.find((arg) => arg.startsWith('repos/'));
+const fail = (what) => { process.stderr.write('HTTP 403: ' + what + ' refused'); process.exit(1); };
+if (/\\/pulls\\/\\d+$/.test(path)) {
+  if (state.fail === 'labels') fail('labels');
+  console.log(JSON.stringify(state.labels));
+} else if (path.includes('/workflows/ci.yml/runs?')) {
+  if (state.fail === 'runs') fail('runs');
+  const since = Date.parse(new URL('https://x/' + path).searchParams.get('created').slice(2));
+  for (const run of state.runs) if (Date.parse(run.created_at) >= since) console.log(JSON.stringify(run));
+} else if (/\\/runs\\/\\d+\\/jobs/.test(path)) {
+  if (state.fail === 'jobs') fail('jobs');
+  console.log(state.jobs[/\\/runs\\/(\\d+)\\//.exec(path)[1]] ?? 0);
+} else fail('unexpected ' + path);
+`);
+  await chmod(join(bin, 'gh'), 0o755);
+  // gh is a CommonJS script beside an ESM package.json.
+  await writeFile(join(bin, 'package.json'), JSON.stringify({ type: 'commonjs' }));
+  await writeFile(join(root, 'event.json'), JSON.stringify({ pull_request: {
+    number: 827, labels: [{ name: 'full-ci' }], head: { ref: 'feature', repo: { full_name: 'neurodesk/webapps' } }, base: { repo: { full_name: 'neurodesk/webapps' } },
+  } }));
+  const hoursAgo = (hours) => new Date(Date.now() - hours * 3600e3).toISOString().replace(/\.\d+Z$/, 'Z');
+  let id = 100;
+  const ciRun = (fields = {}) => ({
+    id: id++, name: 'ci', event: 'pull_request', status: 'completed', conclusion: 'cancelled', head_branch: 'feature', head_sha: 'a'.repeat(40),
+    created_at: hoursAgo(2), run_started_at: hoursAgo(2), updated_at: hoursAgo(1.5), pull_requests: [827], head_repository: 'neurodesk/webapps', ...fields,
+  });
+  const plan = async (state) => {
+    await writeFile(join(root, 'state.json'), JSON.stringify(state));
+    const outputFile = join(root, `output-${id++}`);
+    const result = spawnSync(process.execPath, ['scripts/app-plan.mjs', '--base', 'HEAD~1', '--head', 'HEAD'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env, PATH: `${bin}:${process.env.PATH}`, GH_STUB_STATE: join(root, 'state.json'), GITHUB_OUTPUT: outputFile,
+        GITHUB_EVENT_NAME: 'pull_request', CI_DRAFT: 'false', GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_RUN_ID: '1', GITHUB_REPOSITORY: 'neurodesk/webapps',
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const outputs = Object.fromEntries((await readFile(outputFile, 'utf8')).trim().split('\n').map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+    return { outputs, stderr: result.stderr };
+  };
+  return { ciRun, hoursAgo, plan };
+}
+
+test('a ready pull request over its whole-catalogue budget is planned as a draft and marked withheld', async (t) => {
+  const { ciRun, plan } = await budgetFixture(t);
+  const runs = [ciRun(), ciRun({ conclusion: 'success' })];
+  const { outputs, stderr } = await plan({ labels: [], runs, jobs: Object.fromEntries(runs.map((run) => [run.id, 140])) });
+  assert.equal(outputs.withheld, 'true', stderr);
+  assert.equal(outputs.all_apps, 'false');
+  assert.equal(outputs.has_site, 'false');
+  assert.equal(outputs.has_apps, 'false');
+  assert.match(stderr, /#827 already started 2 whole-catalogue ci runs in 24 hours \(budget 2\)/);
+  assert.match(stderr, /add the full-ci label and use "Re-run all jobs"/);
+});
+
+test('the whole-catalogue budget keeps the full plan when it cannot justify withholding it', async (t) => {
+  const { ciRun, hoursAgo, plan } = await budgetFixture(t);
+  const full = (outputs, label) => {
+    assert.equal(outputs.withheld, 'false', label);
+    assert.equal(outputs.all_apps, 'true', label);
+    assert.equal(outputs.has_site, 'true', label);
+  };
+  const spent = [ciRun(), ciRun()];
+  const jobs = Object.fromEntries(spent.map((run) => [run.id, 140]));
+  // The label is read live: the event payload already lists full-ci, so only the API answer counts.
+  full((await plan({ labels: ['full-ci'], runs: spent, jobs })).outputs, 'live full-ci label');
+  for (const fail of ['labels', 'runs', 'jobs']) {
+    const { outputs, stderr } = await plan({ labels: [], runs: spent, jobs, fail });
+    full(outputs, `failed ${fail} lookup`);
+    assert.match(stderr, /keeping the full plan because the budget check failed/);
+  }
+  const old = [ciRun({ created_at: hoursAgo(25), run_started_at: hoursAgo(25), updated_at: hoursAgo(24.5) }), ciRun()];
+  full((await plan({ labels: [], runs: old, jobs: Object.fromEntries(old.map((run) => [run.id, 140])) })).outputs, 'a run older than 24 hours');
+  const fork = [ciRun({ pull_requests: [], head_repository: 'ada/webapps' }), ciRun()];
+  full((await plan({ labels: [], runs: fork, jobs: Object.fromEntries(fork.map((run) => [run.id, 140])) })).outputs, 'a fork branch of the same name');
+  const partial = [ciRun(), ciRun()];
+  full((await plan({ labels: [], runs: partial, jobs: { [partial[0].id]: 140, [partial[1].id]: 35 } })).outputs, 'a partial run');
 });
 
 test('unrelated workflow parsing errors remain fatal', async (t) => {
