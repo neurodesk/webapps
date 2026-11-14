@@ -1148,7 +1148,7 @@ others (see the fixed-point model below). CF checks from identical profiles isol
 estimation, and do not establish full single-precision CF pipeline parity.
 
 General double-precision fine-fit plateaus (diagnosed in
-[Double forward fine fits](#double-forward-fine-fits-diagnostic-730)) and the
+[Double forward fine fits](#double-forward-fine-fits-730)) and the
 remaining double CSS fits are diagnostic cases in this comparator; single reverse-correlation and CF
 arithmetic is gated separately (`revcor_reference.rs`, below). Every map value
 of the recorded single CSS pipeline, Beta and Baseline included, now equals
@@ -1156,74 +1156,138 @@ MATLAB's; the gate keeps its per-value least-squares tolerance for coefficients.
 A successful source gate does not assert the diagnostic paths, arbitrary-input
 parity, or a rebuilt container.
 
-## Double forward fine fits (diagnostic, #730)
+## Double forward fine fits (#730)
 
-The 741-case pin records nine double forward (non-CSS) Gaussian pipelines that
-no acceptance gate compares: the coarse and fine fits of X001 LH (averaged and
-concatenated) and RH and of the analyzePRF participant, and the thresholds
-case. `double_forward_diagnostics.rs` runs each natively from MATLAB's
-preprocessed courses and classifies every vertex:
+The 741-case pin, recorded on an AMD host (MKL CNR `auto`), holds nine double
+forward (non-CSS) Gaussian pipelines that `compare.mjs` does not compare: the
+coarse and fine fits of X001 LH (averaged and concatenated) and RH and of the
+analyzePRF participant, and the thresholds case. `double_forward_diagnostics.rs`
+runs each natively from MATLAB's preprocessed courses. Since 0.6.20261114 it is a
+gate (the file kept its name):
 
-| Case | Vertices | Rounding only (count) | Plateau (vertices) | Acceptance (vertices) | Different optimum (vertices) |
-| --- | --- | --- | --- | --- | --- |
-| LH averaged, coarse | 96 | 95 | | | |
-| LH averaged, fine | 96 | 56 | 4 | 2 | |
-| thresholds (LH averaged, fine) | 96 | 30 | 4 | 2 | |
-| LH concatenated, coarse | 96 | 95 | | | |
-| LH concatenated, fine | 96 | 46 | 2, 4, 23 | 81 | |
-| RH averaged, coarse | 76 | 76 | | | |
-| RH averaged, fine | 76 | 35 | 17, 46 | 29, 58 | 75 |
-| analyzePRF, coarse | 10 | 10 | | | |
-| analyzePRF, fine | 10 | 8 | 6 | | |
+- x0, y0, Sigma and the noise ceiling equal MATLAB's bit for bit at every vertex
+  of every case, so every keep and reject decision is MATLAB's. With fine fits,
+  R² and nR² do too.
+- Every map's zero and NaN masks equal MATLAB's.
+- Beta, Baseline and the coarse-only cases' R² and nR² stay within
+  `1e-12 * max(1, abs(MATLAB value))`; infinities fail. This ceiling is for these
+  recordings, not a general error bound.
+- `HISTORICAL` lists the 14 case/vertex entries that differed before (below); each
+  is now among the exact vertices.
 
-Vertex numbers are zero-based fixture positions. There are eight plateau,
-five acceptance and one different-optimum case/vertex entries. A vertex
-appearing in two pipelines counts twice. The other vertices are bit-identical
-or meet the rounding diagnostic below. The classes are:
+No map is gated by a count of differing vertices: it is exact everywhere or held
+to the ceiling everywhere. Measured on the pin (`SAMSRF_DOUBLE_FORWARD_REPORT`):
 
-- **Rounding:** x0, y0 and Sigma have MATLAB's bits, R² is within 1e-12,
-  and every finite map, including Beta and Baseline, differs by at most
-  `1e-12 * max(1, abs(MATLAB value))`. Every zero and NaN mask equals MATLAB's;
-  infinities fail. This diagnostic ceiling is not a general numerical bound.
-- **Plateau:** both kept a fit, at different parameters, with R² within 1e-9.
-  The port's own objective is the same at both endpoints to 3e-11 relative at
-  vertex 17 and to 1.2e-13 or less elsewhere. This establishes nearly equal
-  endpoint objectives under port arithmetic, not MATLAB-side equivalence or
-  global optimality. Every one has a small Sigma (0.005 to 0.041), far below the
-  coarse grid's smallest (1.19), where the prediction barely depends on it.
-- **Acceptance:** one side kept the fit and the other zeroed it. In four
-  case/vertex entries the port keeps a fit MATLAB rejected (R² 0.74 in two
-  pipelines, 0.41 and 0.58), and once the reverse
-  (vertex 58). `samsrf_fit_prf` zeroes a fit whose Sigma is not positive or
-  whose position is beyond twice the scaling factor. Its objective depends on
-  Sigma only through Sigma², so on these sub-pixel plateaus the search can end
-  on either side of zero.
-- **Different optimum (vertex 75):** both kept a fit, but MATLAB's endpoint
-  (Sigma 0.064 at the edge of the field) gives an all-zero prediction under the
-  port's arithmetic, where MATLAB reports R² 0.043 and the port 0.44 at its own
-  endpoint.
+| Case | Vertices | Volumes | Kept fine fits | Beta bit-different | Baseline bit-different | R² bit-different |
+| --- | --- | --- | --- | --- | --- | --- |
+| LH averaged, coarse | 96 | 250 | — | 69 | 72 | 82 (≤ 1.9e-15) |
+| LH averaged, fine | 96 | 250 | 59 | 37 | 47 | 0 |
+| thresholds (LH averaged, fine) | 96 | 250 | 32 | 20 | 27 | 0 |
+| LH concatenated, coarse | 96 | 1500 | — | 69 | 87 | 88 (≤ 3.1e-15) |
+| LH concatenated, fine | 96 | 1500 | 49 | 33 | 45 | 0 |
+| RH averaged, coarse | 76 | 250 | — | 51 | 60 | 72 (≤ 1.1e-15) |
+| RH averaged, fine | 76 | 250 | 40 | 19 | 30 | 0 |
+| analyzePRF, coarse (downsampling 2) | 10 | 600 | — | 9 | 9 | 10 (≤ 1.2e-15) |
+| analyzePRF, fine (downsampling 2) | 10 | 600 | 9 | 6 | 8 | 0 |
 
-Which operation separates the paths. The CSS objective follows MATLAB stage by
-stage (`css_diagnostics.rs` holds 108 traces bit for bit). The double non-CSS
-objective did not: `prf::errfun_with_convention` convolves with a plain
-sequential sum and correlates with `pearson`, not with MATLAB's recorded
-`conv` and `corr` orders (`matlab_math::convolve_real`, `css::objective`),
-although MATLAB's `prf_errfun` computes the same stages with and without CSS.
-Hypothesis H1: last-bit objective differences steer `fminsearch` apart on
-these near-flat objectives. A local test, routing the double non-CSS objective
-through those two existing functions and changing nothing else, removed every
-plateau, acceptance and optimum difference in all nine cases. Every fine fit
-then has MATLAB's parameter bits; only the rounding-only class remains (Beta,
-Baseline and R² last bits, which the export still computes with the plain sums).
-It added about 16% to the run time of these nine pipelines. The same local
-test, rerun after #841 changed `matlab_math`'s dot-product order, still left
-only the rounding class.
+Beta and Baseline differ by at most 1.2e-15 and 3.2e-14 relative. They remain
+because the export still solves them on a prediction convolved with plain sums,
+and the coarse fit's R² comes from the search grid's plain correlation; neither
+is the objective, and this change leaves both alone.
 
-That change is not in production: it touches the objective that the double
-forward fits, the CLI and the app share, so it is left to a separate production
-change with its own release. Until it lands, these cases stay diagnostic: they do not show that double fine fits match
-MATLAB in general, and MATLAB's own repeats of these pipelines on other hosts
-were not recorded.
+### MATLAB's optimizer, evaluation by evaluation
+
+The pin also records MATLAB's `fminsearch` runs of the double non-CSS objective
+(`kind: "fit"`): every evaluated parameter vector and objective value of 20 fits
+with SamSrf's HRF, 6 with a custom HRF kernel and 6 that fit the HRF with the pRF.
+`double_objective_follows_matlabs_fminsearch_evaluation_by_evaluation` replays the
+26 fixed-kernel fits through the port's `fminsearch` and requires MATLAB's number
+of evaluations and the bits of every parameter vector, objective value and
+endpoint: 3,186 evaluations. With the previous objective, only 272 of those
+3,186 objective values equalled MATLAB's at MATLAB's own parameters.
+
+The six fitted-HRF fits are not in that gate. At MATLAB's own parameters the
+objective equals MATLAB's at 8,058 of 9,418 evaluations (1,523 before); the
+first difference comes after 15 to 35 identical evaluations, and the largest is
+136 ULP.
+Their kernel comes from `hrf::doublegamma` at every evaluation, a stage this
+change does not touch and MATLAB's kernels for these evaluations were not
+recorded, so the cause is not identified. `matlab_reference.rs` keeps their
+endpoint gate (1e-12 parameters, 1e-9 objective).
+
+### Why the operation order removes the divergence
+
+`prf_errfun` builds the prediction, convolves it with the HRF
+(`prf_convolve_hrf`, MATLAB's `conv`), correlates it with the data (`corr`) and
+returns `1 - R^2`; with CSS it first raises the prediction to the exponent, and
+nothing else changes. The port's CSS objective already followed MATLAB's `conv`
+and `corr` operation orders (`matlab_math::convolve_real`, `css::objective`,
+108 CSS optimizer traces bit for bit). Its double non-CSS objective did not: it
+convolved with a plain sequential sum and correlated with `pearson`. The fix
+routes that one branch through the same two functions; at exponent 1 the CSS
+objective and the non-CSS objective are now the same bits by construction
+(`double_objective_without_css_is_the_css_objective_at_exponent_one`).
+
+`fminsearch` is deterministic: from the same seed, the same objective bits at
+every evaluation give the same simplex steps and the same endpoint. Two
+differences broke that:
+
+1. **Summation order.** At the kept fine fits' endpoints the two orders give
+   predictions up to 2.6e-13 apart (relative) and objectives up to 4e-15 apart;
+   the objective differed at 152 of the 189 kept fine fits (one of them NaN,
+   below). On the near-flat
+   objectives of sub-pixel Sigma (0.005 to 0.041, against the grid's smallest
+   1.19), such last-bit differences decide simplex comparisons, so the search
+   took other steps and ended elsewhere on the plateau, or on the other side of
+   Sigma = 0, which `samsrf_fit_prf` rejects.
+2. **Underflow (the former different optimum, RH vertex 75).** MATLAB's
+   endpoint, Sigma 0.064 at the edge of the field, predicts a time course whose
+   largest value is 4.3e-317, a subnormal number. `pearson` squares its deviations, which underflow to
+   zero, and returns NaN; `corr`'s `nrm2` rescales before squaring and gives
+   MATLAB's R² 0.043. With NaN there, the port's search could not follow
+   MATLAB's into that region and ended elsewhere (R² 0.44).
+
+What this shows: on these recordings, with this objective, the port evaluates
+what MATLAB evaluates. What it does not show: MATLAB's internal `conv` and `corr`
+algorithms. `convolve_real`, `ddot` and `nrm2` are empirical models checked on
+recorded inputs on AMD hosts
+([Double CSS arithmetic](#double-css-arithmetic), [arithmetic order](#arithmetic-order-729-730)).
+MKL's Intel AVX-512 branch sums `x'*y` of 51 or more elements in another tree,
+and Intel `corr` differs at shorter lengths too, so this agreement is not
+claimed for Intel hosts. These nine pipelines and the optimizer traces were
+recorded once, on one AMD host; MATLAB's repeats of them on other hosts were not
+recorded. Agreement covers these recordings: Gaussian pRFs with Nelder-Mead
+fine fits, fixed kernels, downsampling 1 and 2. Hooke-Jeeves fine fits of the
+double non-CSS objective and other pRF functions have no MATLAB recording.
+
+Run time, same data and method: natively and single-threaded on one 8-core x86
+machine, `Job::run` on the five fine-fit pipelines took 66.3 s against 55.9 s
+with the previous objective (median of three runs each, +19 %; +12 % to +23 %
+per case); the coarse-only cases are unaffected. The searches also make
+different numbers of evaluations, so this is not the cost of one evaluation,
+and other machines, WebAssembly and other inputs will differ.
+
+### Before 0.6.20261114 (historical diagnosis)
+
+The previous objective left 14 case/vertex entries differing. Vertex numbers are
+zero-based fixture positions; a vertex in two pipelines counts twice.
+
+| Case | Plateau (vertices) | Acceptance (vertices) | Different optimum (vertices) |
+| --- | --- | --- | --- |
+| LH averaged, fine | 4 | 2 | |
+| thresholds (LH averaged, fine) | 4 | 2 | |
+| LH concatenated, fine | 2, 4, 23 | 81 | |
+| RH averaged, fine | 17, 46 | 29, 58 | 75 |
+| analyzePRF, fine | 6 | | |
+
+- **Plateau:** both kept a fit, at different parameters, with R² within 1e-9;
+  the old objective was the same at both endpoints to 3e-11 relative or better.
+- **Acceptance:** one side kept the fit and the other zeroed it (four times the
+  port kept a fit MATLAB rejected, once the reverse at vertex 58).
+- **Different optimum (vertex 75):** both kept a fit, with R² 0.043 (MATLAB) and
+  0.44 (port).
+
+Every other vertex already had MATLAB's parameter bits, with R² within 1e-12.
 
 ```sh
 SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-reference" SAMSRF_DOUBLE_FORWARD_REPORT="$TMPDIR/double-forward.json" \

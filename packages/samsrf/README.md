@@ -450,10 +450,19 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   10.4's `samsrf_expand_srf` does. Raw optimizer cases match the actual
   MATLAB recordings in both precisions, and the recorded single-precision
   pipeline (`pipeline_single_css`) matches every map value exactly, Beta and
-  Baseline included (`compare.mjs`). The 741-case reference's general double
-  fine-fit plateaus and other double CSS fits are diagnostic there, not gated.
+  Baseline included (`compare.mjs`). Other double CSS fits of the 741-case
+  reference are diagnostic there, not gated.
   The double objective follows MATLAB R2023b stage by stage
-  (`exes/samsrf/core/src/matlab_math.rs`). It uses ported fdlibm `log`, `sin` and
+  (`exes/samsrf/core/src/matlab_math.rs`), with and without CSS. Before
+  0.6.20261114 the double objective without CSS convolved with plain sums and
+  correlated with an unscaled Pearson formula, which moved Nelder-Mead fine fits
+  on flat objectives (14 vertices of the 741-case reference's nine double
+  forward pipelines). Those pipelines now match MATLAB's parameters, R², nR²,
+  noise ceiling and masks bit for bit, and 3,186 recorded optimizer evaluations
+  with fixed kernels equal MATLAB's
+  ([double forward fine fits](validation/matlab/README.md#double-forward-fine-fits-730));
+  Beta and Baseline stay within a 1e-12 relative ceiling, and fits that also
+  fit the HRF still differ from MATLAB's evaluations in the last bits. It uses ported fdlibm `log`, `sin` and
   `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
   response, its `conv` and the MKL dot products and norms inside `corr` are
   empirical models, checked on recorded inputs. MATLAB's real `x'*y` adds
