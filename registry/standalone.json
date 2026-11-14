@@ -2227,8 +2227,8 @@
           "platform": "linux-x64",
           "version": "0.2.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-linux-x64.tar.gz",
-          "sha256": "25e4c60fa6146a03fe288c56b03bd72bc0feda4ba01ac3fd604f1c7278a1dba1",
-          "bytes": 143372457,
+          "sha256": "32c67311c7549d498555ef8a1e3a7a91a74a319e0e386aa77df4e141eaed884c",
+          "bytes": 143372270,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
           "command": "tar -xzf bison-0.2.20261111-linux-x64.tar.gz\n./bison-0.2.20261111-linux-x64/bison --t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results"
@@ -2238,8 +2238,8 @@
           "platform": "macos-arm64",
           "version": "0.2.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-macos-arm64.pkg",
-          "sha256": "ebb3ba4646a27e4a68f3ebefb44b591d1c2d9e09a5ae94dd41e0ff17e8639aca",
-          "bytes": 145572665,
+          "sha256": "5b5a121ff5d9b9f571811c5e216dd6fb367399e0e2ccfedd102009effd5324ac",
+          "bytes": 145574456,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg bison-0.2.20261111-macos-arm64.pkg -target /\nbison self-check\nbison --t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results"
@@ -2249,8 +2249,8 @@
           "platform": "windows-x64",
           "version": "0.2.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-windows-x64.zip",
-          "sha256": "b7913fc76871019abaf7327caf504b6f3c629a37f40e1ab4447234900ab6f97c",
-          "bytes": 146364040,
+          "sha256": "74f09881bdc11f5cea0361bcc4f4a3ef3f1f8e0a8771d753e0f6c0b94f51e485",
+          "bytes": 146366151,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\bison-0.2.20261111-windows-x64.zip -DestinationPath .\n.\\bison-0.2.20261111-windows-x64\\bison.exe --t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results"
