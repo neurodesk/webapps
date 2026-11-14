@@ -640,6 +640,44 @@ fn frozen_verdicts(value: &Value, n: usize, id: &str) -> Vec<[bool; 2]> {
     verdicts
 }
 
+// These are the selected smallest recorded 1-minimal certificates, not all
+// certified subsets or a claim of global minimality. Keep their identities fixed
+// so dropping or duplicating a certificate cannot weaken the deletion checks.
+fn assert_minimal_certificate_inventory(actual: &Value) {
+    let expected = json!({
+        "177": [[1, 2, 3, 4, 5, 6]],
+        "932": [
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 17],
+            [1, 2, 3, 4, 5, 6, 8, 10, 11, 12, 17],
+            [1, 2, 3, 4, 5, 6, 10, 11, 13, 14, 17],
+            [1, 2, 3, 4, 5, 6, 10, 13, 14, 15, 16],
+            [1, 2, 4, 5, 7, 8, 9, 10, 12, 15, 16],
+            [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 17],
+            [2, 3, 4, 5, 6, 8, 10, 11, 13, 14, 18],
+            [3, 4, 5, 6, 9, 11, 12, 14, 15, 17, 18]
+        ],
+        "1607": [[3, 4, 5, 13, 15, 17, 19, 20]],
+        "1937": [[2, 3, 13, 14, 15, 16, 17, 18]]
+    });
+    assert_eq!(actual, &expected, "complete nonempty 1-minimal certificate inventory");
+}
+
+#[test]
+fn minimal_certificate_inventory_rejects_missing_and_duplicate_certificates() {
+    let frozen: Value = serde_json::from_str(include_str!("matlab_polyshape_reproducers.json")).unwrap();
+    let inventory = &frozen["oneMinimal"];
+    assert_minimal_certificate_inventory(inventory);
+    let mut empty = inventory.clone();
+    empty["932"] = json!([]);
+    let mut missing = inventory.clone();
+    missing["932"].as_array_mut().unwrap().pop();
+    let mut duplicate = inventory.clone();
+    duplicate["932"][1] = duplicate["932"][0].clone();
+    for invalid in [empty, missing, duplicate] {
+        assert!(std::panic::catch_unwind(|| assert_minimal_certificate_inventory(&invalid)).is_err());
+    }
+}
+
 /// The reduced reproducers of the four regressions, on both hosts. Every recorded
 /// polygon is the spec's (indices into the full clouds the first batch records as
 /// controls, then the transform). Both models still give the hulls predicted
@@ -722,6 +760,7 @@ fn polyshape_reproducers_match_recording() {
         assert_eq!(untransformed(cloud, &smallest["indices"]), Some([true, false]), "cloud {cloud}: smallest reproducer no longer reproduces");
     }
     assert_eq!(frozen["smallest"].as_object().unwrap().keys().map(|k| k.parse::<usize>().unwrap()).collect::<BTreeSet<_>>(), REGRESSIONS.into_iter().collect());
+    assert_minimal_certificate_inventory(&frozen["oneMinimal"]);
     for (cloud, minimal) in frozen["oneMinimal"].as_object().unwrap() {
         for indices in minimal.as_array().unwrap() {
             assert_eq!(untransformed(cloud, indices), Some([true, false]), "cloud {cloud} {indices}: listed 1-minimal reproducer does not reproduce");

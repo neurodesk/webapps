@@ -1769,8 +1769,8 @@ five batches (HF commit f9ef22a7039e1a2c6dc8b6bf1d65b670ac81b9c1, SHA-256
 The proxy failed often. Of the reductions it predicted, MATLAB agreed with the
 shipped model and not the experimental one only for some. On several, MATLAB
 matched the experimental model, or neither model: both are wrong there. The
-smallest measured reproducers, where MATLAB's hull equals the shipped model's
-and not the experimental one:
+smallest recorded 1-minimal reproducers, where MATLAB's hull equals the shipped
+model's and not the experimental one:
 
 | Cloud | Points | 1-minimal in MATLAB | Experimental area / CF sigma error | MATLAB default: regions, holes, rings (kept) | Experimental output: rings | `polyshape` of kept / of default = default |
 | --- | ---: | --- | --- | --- | --- | --- |
