@@ -457,9 +457,14 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
   response, its `conv` and the MKL dot products and norms inside `corr` are
   empirical models, checked on recorded inputs. MATLAB's real `x'*y` adds
-  products in pairs up to at least 24 elements and uses MKL's blocked kernel
-  from 64; the port uses the blocked kernel throughout, so CSS correlations
-  over fewer than 64 volumes can differ in the last bit.
+  adjacent products in pairs below 51 elements and calls MKL's `ddot` from 51;
+  the port does the same (since 0.6.20261114; before, it used MKL's kernel at
+  every length, so CSS correlations over fewer than 51 volumes could differ in
+  the last bit). On MATLAB's AMD hosts every recorded product from 2 to 1,000
+  elements and every recorded `corr` objective from 25 to 250 elements equal
+  the port's. MKL's Intel AVX-512 branch sums 51 or more elements in another
+  tree, and Intel `corr` differs at shorter lengths too
+  ([arithmetic order](validation/matlab/README.md#arithmetic-order-729-730)).
   All 108 recorded CSS optimizer traces (54 double, 54 single) follow MATLAB's
   parameter sequences bit for bit. With the port's own HRF, which equals MATLAB's
   kernel, the recorded 96-vertex double pipelines (original apertures and a
