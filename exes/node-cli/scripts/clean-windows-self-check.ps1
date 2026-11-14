@@ -6,7 +6,12 @@ Run a portable release's self-check inside a clean Windows Server Core container
 Runs inside the container started by verify_clean_windows.ps1, with the extracted release at
 -Release. Server Core has no Visual C++ runtime; -InstallVc2019 first installs the Visual C++
 2015-2019 runtime 14.29 from C:\clean\vc_redist_2019.x64.exe, which is too old for ONNX Runtime
-1.29. -ExpectFailure is the negative control: the self-check must fail to load a native module.
+1.29. -ExpectFailure is the negative control: the self-check must fail to load a native module, as
+Node's ERR_DLOPEN_FAILED, the Windows loader's "The specified module could not be found" or "A
+dynamic link library (DLL) initialization routine failed" (launchers print only the message), or a
+child process's 0xC0000135 (STATUS_DLL_NOT_FOUND). With -InstallVc2019 an access violation
+(0xC0000005) also counts: binaries built against the 14.40 runtime can crash on the older
+msvcp140.dll instead of failing to load. Any other failure, or success, fails the check.
 #>
 param(
     [Parameter(Mandatory)][string]$Release,
@@ -41,10 +46,16 @@ $output = & $executables[0].FullName self-check 2>&1 | Out-String
 $code = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
 $output.Trim()
+$exit = '{0} (0x{1:X8})' -f $code, $code
 if ($ExpectFailure) {
     if ($code -eq 0) { throw 'Negative control passed: this container provides a Visual C++ runtime and cannot detect a missing one' }
-    if ($output -notmatch 'ERR_DLOPEN_FAILED') { throw "Negative control failed for another reason (exit $code)" }
-    "Negative control failed as expected (exit $code)"
+    if ($output -match 'ERR_DLOPEN_FAILED|The specified module could not be found|initialization routine failed|0xC0000135') {
+        "Negative control failed as expected: a native module did not load (exit $exit)"
+    } elseif ($InstallVc2019 -and $code -eq -1073741819) {
+        "Negative control failed as expected: the old runtime crashed with an access violation (exit $exit)"
+    } else {
+        throw "Negative control failed for another reason (exit $exit)"
+    }
 } elseif ($code -ne 0) {
-    throw "self-check failed with exit code $code"
+    throw "self-check failed with exit code $exit"
 }

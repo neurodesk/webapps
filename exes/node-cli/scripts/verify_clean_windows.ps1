@@ -8,10 +8,13 @@ verify` there cannot notice a release that depends on it. This script extracts t
 its self-check in Windows Server Core containers matching the runner's Windows build:
 
 1. Negative control (when the release ships Visual C++ runtime DLLs): with those DLLs removed,
-   self-check must fail with ERR_DLOPEN_FAILED, proving the container lacks a usable runtime.
+   self-check must fail to load a native module, proving the container lacks a usable runtime.
+   When the release has ONNX Runtime's Node binding, it must also fail with only the old 14.29
+   runtime installed, which that binding cannot use: it fails to initialize or crashes
+   (clean-windows-self-check.ps1 lists the accepted signatures). Other native code, such as
+   QSMbly's QSMxT, runs on 14.29, so this second control is skipped for releases without it.
 2. Without any Visual C++ runtime installed.
-3. With the Visual C++ 2015-2019 runtime 14.29 installed, which ONNX Runtime 1.29 cannot use
-   ("A dynamic link library (DLL) initialization routine failed").
+3. With the Visual C++ 2015-2019 runtime 14.29 installed.
 #>
 param([Parameter(Mandatory)][string]$Archive)
 
@@ -66,7 +69,12 @@ if ($shipped.Count -gt 0) {
     Copy-Item (Join-Path $work 'release') (Join-Path $work 'control') -Recurse
     Get-ChildItem (Join-Path $work "control\$name") -Recurse -File -Include $vcRuntimeNames | Remove-Item
     Invoke-Clean 'Negative control: release without its Visual C++ runtime' 'control' @('-ExpectFailure')
-    Invoke-Clean 'Negative control: release with only the old system runtime' 'control' @('-InstallVc2019', '-ExpectFailure')
+    $binding = @(Get-ChildItem (Join-Path $work "control\$name") -Recurse -File -Filter 'onnxruntime_binding.node')
+    if ($binding.Count -gt 0) {
+        Invoke-Clean 'Negative control: release with only the old system runtime' 'control' @('-InstallVc2019', '-ExpectFailure')
+    } else {
+        'The release has no ONNX Runtime Node binding, which is what needs a runtime newer than 14.29; skipping the old-runtime negative control'
+    }
 } else {
     'The release ships no Visual C++ runtime DLLs; skipping the negative control'
 }
