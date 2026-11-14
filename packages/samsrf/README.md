@@ -403,7 +403,10 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   value). `Read_FreeSurfer` reads six `%n` fields per row.
 - **gampdf.** For shapes of at least 1, which every HRF uses, `gampdf` is
   Loader's saddle-point form as MATLAB evaluates it (`stirlerr`, `bd0`), and the
-  de Haas and SPM kernels equal MATLAB's bit for bit. Shapes below 1 keep the
+  de Haas and SPM kernels equal MATLAB's bit for bit. Its normaliser takes
+  `log(2π)` and `log(k)` separately, as MATLAB does (since 0.6.20261114;
+  `log(2πk)` differed by up to 63 ULP for about one non-half-integer shape in ten,
+  which fitted HRFs reach). Shapes below 1 keep the
   closed form with `lgamma`, which differs from MATLAB by a few ULP; the
   recurrence through shape `a + 1` was tested in seven operation orders and is
   not MATLAB's either. The formula
