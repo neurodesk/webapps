@@ -368,9 +368,9 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   not enable those fits through the API, command line or app. Internally, single
   `rc` 2D fits evaluate `samsrf_fit2dprf`'s objective and `R^2` in single as
   MATLAB does and equal its recorded maps on the AMD host from raw runs. With
-  `Hooke_Jeeves_Steps` they also give MATLAB's parameters and `R^2` on the
-  same three cases' profiles (focused probes). They stay refused for the same
-  reason.
+  `Hooke_Jeeves_Steps` on the same three cases' profiles they keep and reject
+  the same fits as MATLAB and give each kept fit's parameters and `R^2` bit for
+  bit (focused probes). They stay refused for the same reason.
   [validation/matlab/README.md](validation/matlab/README.md#reverse-correlation-port-gates)
   lists the limits and the remaining MKL differences. It does not promise
   bit parity: MATLAB's BLAS backend, coarse matrix products and the final GLM can differ by single-

@@ -592,10 +592,11 @@ FreeBSD's mask and the port's give different outputs on 268 (`sin`) and 238
 (`cos`) inputs, and MATLAB agrees with the port's on all of them. Of the five
 other masks tested, none does better than the port's. These results reject
 candidates; they do not identify MATLAB's implementation, and the sine kernel's
-residual is unexplained. The [focused probes](#focused-probes-729-730) show it
-does not depend on how the function is called: scalars, every position in an
-array and whole arrays give the recorded value at 256 exception inputs of each
-function.
+residual is unexplained. In the [focused probes](#focused-probes-729-730),
+scalar calls, each of 33 positions in an array and whole-array calls all give
+the recorded value at 256 sampled exception inputs of each function and 256
+controls. That excludes a position effect for those inputs and call shapes,
+not every vector-kernel explanation.
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-single-trig" packages/samsrf/validation/matlab/single-trig-reference.json
@@ -618,23 +619,33 @@ was committed before the rerun. `focused-probes-reference.json` pins the rerun
 ([43528858771](https://github.com/neurodesk/webapps/actions/runs/43528858771),
 recorder commit `5170ab0aaa9a1317296c095178742597800ac7c9`) on an Intel Xeon
 Platinum 8573C (`ubuntu-22.04`, CNR `AVX512_E1`) and an AMD EPYC 7763
-(`ubuntu-24.04`, CNR `auto`). Each host ran the probes twice in fresh processes;
-the workflow requires the repeat to be identical, and every array outside the
-Hooke-Jeeves section equals the first run's, which used an AMD EPYC 9V45 and an
-Intel Xeon Platinum 8573C. `focused_probes.rs` freezes the results:
+(`ubuntu-24.04`, CNR `auto`). Each host ran the probes twice in fresh processes,
+and the recording workflow required the repeat to be identical; the archive
+keeps both processes. When the pin was made (not in a test), every array outside
+the Hooke-Jeeves section also equalled the first run's, which used an AMD EPYC
+9V45 and an Intel Xeon Platinum 8573C.
+
+`focused_probes.rs` reads only the first process of each host, through a checked
+boundary: both hosts and exactly the recorder's 44 cases (ids, kinds, pipelines,
+algorithms, step sets, conv sources and centres rebuilt from the recorder's
+rules), each array's class (`double`, `single` or `uint32`), realness, shape and
+exact byte count, integral indices and dimensions, and a NaN policy per field.
+The `refuses_*` tests run without data and check that malformed recordings fail.
+The results it freezes:
 
 | Probe | Recorded | Prediction confirmed | Rejected |
 | --- | --- | --- | --- |
-| Hooke-Jeeves | the three single RC 2D cases of each pin host, from that host's profiles: a Nelder-Mead control and step sets `[0.1 0.1 0.1]` and `[0.05 0.05 0.02]`, with two logged searches per fit | Control: the pinned maps, on both recording hosts. H1': parameters and seeds double, `R^2` single; each logged error is a single value the search keeps in a double. H2': the port's Hooke-Jeeves path gives every parameter and `R^2` of the 39 vertices per step set and pin host, 43 of which pass the keep rule over both step sets | H1 and H3 (single parameters): an artifact of the first run's single seeds |
-| conv near 512 | 24 regions per host: sparse complex courses of 1,000-2,000 samples, 33 ones taps, a ±2^60 pair at every window position within 15 below to 14 above 256 (control) and each multiple of 512 | H-seq: every output adds the nonzero samples of its window in index order (`convolve_complex`'s sparse path), in every region | H-split, H-tile |
-| trig position | 256 `sin` and 256 `cos` exception inputs and 256 controls, called as scalars, at each of 33 offsets in an array, and as one array | H0: every call gives the recorded value | H-position: the residual is not a vector-kernel effect |
+| Hooke-Jeeves | the three single RC 2D cases of each pin host, from that host's profiles: a Nelder-Mead control and step sets `[0.1 0.1 0.1]` and `[0.05 0.05 0.02]`, with two logged searches per fit | Control: the pinned maps, on both recording hosts. H1': parameters and seeds double, `R^2` single; each logged error is a single value the search keeps in a double. H2': per pin host, 78 fits (39 vertices × 2 step sets); MATLAB's keep rule keeps 43 (30 distinct vertices) and rejects 35. For each kept fit the port gives `R^2` and every parameter bit for bit in double; it rejects the same 35. The rejected fits' parameters are not compared, because `fit_model` returns NaN for them | H1 and H3 (single parameters): an artifact of the first run's single seeds |
+| conv near 512 | 24 regions per host: sparse complex courses of 1,000-2,000 samples, 33 ones taps, a ±2^60 pair at every window position within 15 below to 14 above 256 (control) and each multiple of 512 | H-seq for these probes: each count equals `convolve_complex`'s sparse path, which adds the window's nonzero samples in index order, in every region | H-split, H-tile, as orders of these ones-kernel patterns |
+| trig position | 256 `sin` and 256 `cos` exception inputs and 256 controls, called as scalars, at each of 33 offsets in an array, and as one array | H0: every call gives the recorded value | H-position, for these inputs and call shapes |
 | dot, 2-24 elements | the pair fingerprint of every pair for each length, and 50 held-out random products per length | Other: the tree read from the counts | H-mkl (the port's `ddot`), H-seq |
 
 The short dot tree adds adjacent products in pairs from the end, then the pair
 sums in index order after the first product when the length is odd; products
-and sums are rounded separately (an FMA in either pair fails the held-out
-products). It reproduces every count and all 1,150 held-out products on both
-hosts of both runs. The earlier BLAS recording agrees: its one product per
+and sums are rounded separately (an FMA in either product of a pair fails some
+held-out products, which the test checks). It reproduces every count and all
+1,150 held-out products on both hosts of the pinned run; the first run's dot
+arrays were the same. The earlier BLAS recording agrees: its one product per
 length matches this tree for 1-20 and 33 elements, and MKL's blocked kernel,
 which the port's `ddot` follows, matches the AMD host at 64, 250 and 1,000 but
 not this tree. At 20 and 33 both trees give that recording's value, which is how
@@ -646,15 +657,20 @@ located first, and is a production change with its own release.
 
 What the probes leave open:
 
-- **conv near 512.** With the order fixed, the 111 differing parts in the 10
-  sparse complex courses longer than 800 samples are not a summation-order
-  effect. Which products MATLAB fuses (or does not) there is untested; a
-  per-product fusion fingerprint, a product whose rounding shows only when it is
-  not fused, would test it.
-- **sin and cos.** The residual is in the scalar function itself. No candidate
-  kernel reproduces it ([single sin and cos](#single-sin-and-cos)).
-- **Hooke-Jeeves.** The evidence is 43 kept fits per pin host in three cases of
-  one subject; single RC 2D fits stay refused.
+- **conv near 512.** The fingerprints use a ones kernel and the pinned courses'
+  nonzero patterns at the probed windows. They show index-order accumulation for
+  those patterns, not for the original weighted inputs, so they do not exclude a
+  summation-order change there. The 111 differing parts in the 10 sparse complex
+  courses longer than 800 samples remain unexplained; a per-product fusion
+  fingerprint (a product whose rounding shows only when it is not fused) is one
+  untested hypothesis.
+- **sin and cos.** No position effect appears at the 768 sampled inputs, 33
+  positions and the three call shapes. Other vector-kernel explanations are not
+  excluded, and no candidate kernel reproduces the residual
+  ([single sin and cos](#single-sin-and-cos)).
+- **Hooke-Jeeves.** The evidence is 43 kept and 35 rejected fits per pin host in
+  three cases of one subject; nothing bounds other inputs. Single RC 2D fits stay
+  refused.
 
 The probes in CI's numerics step:
 
@@ -680,8 +696,9 @@ maps cannot change. Seeds Benson V1 (6,645 vertices, 5 affected) and V2
 targets (92 and 106): with the V1 seed, the hull fit changes on 1 target
 (`Surround`, by 1.9e-6) and the smoothed Gaussian fit on 1 (`Sigma` by 1.2e-4,
 `x0` by 1.1e-4); with V2 only the Gaussian fit changes, on 1 target (`y0` by
-5.4e-5); the summary mode never changes. This is one subject, one hemisphere and
-sampled targets.
+5.4e-5); the summary mode never changes. The test compares the port with
+itself on one subject's left hemisphere, two seeds and sampled targets; it is no
+general bound on the effect.
 
 ## Building a matching Runtime container
 
@@ -1805,9 +1822,10 @@ and of sparse courses of 300-2,000 samples.
   sparse path to equal `convolve_complex` at every output. A recording that
   fingerprints the summation tree around 512 (FPRev's pair method, as
   `record_gemv_order.m` does for `y' * A`) would distinguish the hypotheses;
-  the [focused probes](#focused-probes-729-730) made it: every output adds the
-  window's nonzero samples in index order, so the split and tile hypotheses are
-  rejected and the residual is not the summation order.
+  the [focused probes](#focused-probes-729-730) made one with a ones kernel on
+  these courses' nonzero patterns. There every output adds the window's nonzero
+  samples in index order, so the split and tile hypotheses are rejected for those
+  patterns; a summation-order change on the weighted inputs is not excluded.
 
 None of the six closed-form candidates matches `gampdf` anywhere it matters, and
 the identified formula was fitted on these probes. A bit-for-bit match on probes
