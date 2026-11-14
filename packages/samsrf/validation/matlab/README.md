@@ -2025,16 +2025,19 @@ the decision rules (`polyshape-reproducers-{4,5}-predictions.md`) before each
 was first recorded. The models are not MATLAB oracles: the shipped model's
 predictions failed on many reductions.
 
-`polyshape-reproducers-reference.json` pins the last run, which records all
-five batches (HF commit f9ef22a7039e1a2c6dc8b6bf1d65b670ac81b9c1, SHA-256
-`bbc79ab5cac68a3e83ef4d9cb72d9cc8ce3e4f6bbad4c61434c0cd4524fc48ef`,
-11,701,576 bytes, recorder commit b81c50424c8b73776cb4aafb5859d84890490998).
-- Both hosts passed an exact same-host repeat.
-- Their 120 arrays are byte-identical, on an Intel Xeon Platinum 8573C and an
-  AMD EPYC 9V74 that report different MKL branches.
-- Every earlier batch equals its first recording bit for bit. Round 4's runs
-  ran on an AMD EPYC 9V74 and an Intel Xeon 6975P-C, and round 1-3's on an
-  Intel 8573C and an AMD EPYC 7763; all agreed.
+`polyshape-reproducers-reference.json` pins run
+[43590132739](https://github.com/neurodesk/webapps/actions/runs/43590132739),
+which records rounds 1 to 6 (HF commit
+077795cc9f53fc52670f11f2f7e2cb473bc67691, SHA-256
+`0a82c839b47d064e4375aeceb6aef8569a6e92bcbea1b47089966383f60ca05d`,
+12,067,976 bytes, recorder commit 72e621ba5a502c1ff79c5abc7d451f3678125fd0).
+- Both hosts passed an exact same-host repeat, and their 144 arrays are
+  byte-identical. Both runner labels received AMD EPYC 7763 CPUs in that run.
+- Every earlier batch equals its first recording bit for bit. Those recordings
+  ran on different CPU pairs and agreed:
+  - rounds 1-3: Intel 8573C and AMD EPYC 7763;
+  - round 4: AMD EPYC 9V74 and Intel Xeon 6975P-C;
+  - round 5: Intel 8573C and AMD EPYC 9V74.
 - The full-cloud controls reproduce the original recording's verdicts.
 
 The proxy failed often. Of the reductions it predicted, MATLAB agreed with the
@@ -2115,6 +2118,78 @@ them on 2026-11-14, are rejected:
   loses 6,474 of the 11,907 one-ULP thin triangles and most other families, so
   the vertex threshold is the tolerance itself.
 
+### Perturbation sweeps of the 177 reproducer (round 6)
+
+On cloud 177's 6-point reproducer, MATLAB's default drops the sliver ring
+through input points 4 and 5 and two crossings. Clipper's `CleanPolygon`
+empties it from 6 of 8 start and direction choices, and the experimental model,
+which starts where the union does, keeps it. Round 6
+(`polyshape-reproducers-6.json`, 1,212 cases) replaces one coordinate of point
+4 or 5 in steps of 0.05 tolerance from -2.5 to +2.5. Each sweep is recorded as
+drawn, translated, and scaled by 1e2, the last two as held-out copies.
+
+The hypotheses, controls, decision rules, stop criteria and a two-recording
+budget were committed before the first recording
+(`polyshape-reproducers-6-predictions.md`, commit 72e621ba5). The per-case
+predictions, of whether point 4 is a vertex of the default output, were:
+
+- H_X, the experimental model;
+- H_I, start-independent cleaning: the ring survives only if every start and
+  direction keeps it;
+- H_B, a region-level (thickness or area) criterion, which predicts
+  transitions where no clean regime changes.
+
+Results (both hosts identical):
+
+| Sweep | Regimes by step (MATLAB / H_X / H_I survival) |
+| --- | --- |
+| point 5, y | -2.50: 0/0/0; -0.20: 0/1/0; +0.70: 0/0/0; +1.05: 1/1/1 |
+| point 5, x | -2.50: 1/1/1; -0.50: 0/0/0; -0.30: 0/1/0; +0.15: 0/0/0; +2.15: 1/1/1 |
+| point 4, y | -2.50: 1/1/1; -1.90: 0/1/0; +1.70: 0/0/0 |
+| point 4, x | -2.50: 1/1/1; -2.45: 0/0/0; -0.80: 0/1/0; +1.00: 1/1/1 |
+
+- H_I predicts MATLAB on all 1,212 cases, including both held-out copies.
+  Every transition MATLAB shows falls on a step where the clean regime of
+  Clipper's `CleanPolygon` changes.
+- H_X is refuted on 405 cases, exactly where the clean depends on its start.
+- H_B is not supported: there is no transition inside a regime where H_I is
+  constant.
+- MATLAB's hull equals the shipped model's on 1,200 cases and the experimental
+  model's on 807.
+
+The evidence is local. On this ring, MATLAB behaves as vertex-level cleaning
+with Clipper's tolerance and comparisons whose result does not depend on where
+the ring starts. It does not show how MATLAB achieves that, or that it does
+this on every ring.
+
+The general form, H_I*, was tested on every earlier recording with
+predictions written first. Each union ring is dropped if any start or
+direction of the clean empties it, and otherwise cleaned as before. It fixes
+original cloud 177 but not 932, 1607 or 1937. It newly loses accepted cases:
+- 3 original clouds;
+- 12 held-out near-collinear clouds and 3 held-out mixed clouds;
+- 5 held-out causal strip pairs;
+- 243 reproducer-round cases.
+
+H_I* is therefore rejected as a model, and the experimental model is
+unchanged. The pre-registered follow-up on hole formation in 932 and 1607
+needed a rule that predicts holes. H_I only removes rings, so the round stopped
+after one recording.
+
+Also rejected this round, locally: cleaning the input ring before the union.
+It fixes 177 and 1937, loses 55 original clouds and hundreds of probe, causal
+and reproducer cases, and leaves 932 and 1607.
+
+`polyshape_reproducers_match_recording` holds round 6 too:
+- every polygon rebuilt from the spec;
+- the predictions digest;
+- the frozen hull verdicts;
+- MATLAB's survival of point 4 equal to H_I on every case, and different from
+  H_X on exactly 405.
+
+A flipped H_I prediction, a changed perturbation value and a flipped verdict
+each make it fail.
+
 ### What is established and what is not
 
 Established on the pinned recordings (both hosts identical):
@@ -2129,6 +2204,9 @@ Established on the pinned recordings (both hosts identical):
 - MATLAB's default `polyshape` is not idempotent on 932, 1607 and cloud 7, and
   `polyshape` of its `KeepCollinearPoints` vertices differs from the default
   on 932, 1607, 1937 and cloud 7.
+- On 177's sliver ring, MATLAB's drop/keep follows start-independent
+  vertex cleaning across 1,212 perturbations and two held-out copies, while
+  that rule applied to every ring loses accepted cases elsewhere.
 - 1-minimal reproducers of 6, 11, 8 and 8 points (above), with exact inputs,
   MATLAB's outputs on two hosts and both models' predictions made before
   recording.

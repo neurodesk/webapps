@@ -20,6 +20,7 @@ shows where none of the clean regimes change would point to a region-level
 criterion instead of vertex-level cleaning.
 
   python3 polyshape_perturbation.py spec GEOMETRY_HOST_DIR PATH_TO_POLYSHAPE_HULLS PATH_TO_POLYSHAPE_STAGES OUT.json
+  python3 polyshape_perturbation.py report RECORDING_HOST_DIR PATH_TO_POLYSHAPE_HULLS REPORT.json
 """
 import json
 import math
@@ -127,6 +128,82 @@ def main_spec():
     print(f'{len(perturbations)} cases; H_X and H_I differ on {differ}; predictions {spec["predictionsSha256"]}')
 
 
+def main_report():
+    import numpy as np
+    from polyshape_reduce import hull_set
+    root, hulls, out = sys.argv[2:5]
+    spec = json.load(open(os.path.join(HERE, 'polyshape-reproducers-6.json')))
+    recording = json.load(open(os.path.join(root, 'geometry.json')))
+    case = next(c for c in recording['cases'] if c['id'] == 'reproducer_round6')
+    original = next(c for c in recording['cases'] if c['id'] == 'reproducer_cases')
+
+    def read(descriptor):
+        assert descriptor['class'] == 'double' and descriptor['imaginary'] == ''
+        values = np.fromfile(os.path.join(root, descriptor['file']), dtype='<f8')
+        shape = descriptor['shape']
+        assert values.size == int(np.prod(shape))
+        return values.reshape(shape[::-1]).T if len(shape) == 2 else values
+
+    def split(c, field, counts):
+        rows, result, offset = read(c[field]), [], 0
+        for n in read(c[counts]).ravel():
+            assert n == int(n) and n >= 0
+            result.append(rows[offset:offset + int(n)])
+            offset += int(n)
+        assert offset == len(rows), field
+        return result
+
+    # Cloud 177 as the first batch's full-cloud control recorded it.
+    first = json.load(open(os.path.join(HERE, 'polyshape-reproducers.json')))
+    control = next(k for k, c in enumerate(first['cases']) if c['cloud'] == CLOUD and c['role'] == 'original')
+    cloud = [tuple(map(float, r)) for r in split(original, 'points', 'counts')[control]]
+    polygons = split(case, 'points', 'counts')
+    n = len(spec['perturbations'])
+    assert len(polygons) == n
+    expected = cases_of(spec, cloud)
+    for i in range(n):
+        assert [tuple(map(float, r)) for r in polygons[i]] == expected[i], f'case {i}: polygon differs from the spec'
+    results = Oracle(hulls).evaluate(expected)
+    assert predictions_digest(expected, results) == spec['predictionsSha256'], 'predictions differ from the committed digest'
+    default = split(case, 'simplified', 'simplifiedCounts')
+    kept = split(case, 'collinearVertices', 'collinearCounts')
+    matlab_hulls = split(case, 'hull', 'hullCounts')
+    holes = split(case, 'defaultHoles', 'defaultHolesCounts')
+    rows = []
+    for i, item in enumerate(spec['perturbations']):
+        point4 = expected[i][3]
+        vertices = {tuple(map(float, r)) for r in default[i] if not np.isnan(r[0])}
+        kept_vertices = {tuple(map(float, r)) for r in kept[i] if not np.isnan(r[0])}
+        hull = frozenset(tuple(map(float, r)) for r in matlab_hulls[i])
+        rows.append({
+            'case': i, 'point': item['point'], 'axis': item['axis'], 'step': item['step'], 'transform': item['transform'],
+            'survives': point4 in vertices, 'keptHasPoint4': point4 in kept_vertices,
+            'H_X': spec['predictSurvival']['H_X'][i] == '1', 'H_I': spec['predictSurvival']['H_I'][i] == '1',
+            'hullShipped': hull == hull_set(results[i]['production']), 'hullExperimental': hull == hull_set(results[i]['experimental']),
+            'defaultRings': int(len(holes[i])), 'defaultHoles': int(np.sum(holes[i])),
+        })
+    summary = {}
+    for name in ('H_X', 'H_I'):
+        summary[name] = sum(r['survives'] == r[name] for r in rows)
+    summary['hullShipped'] = sum(r['hullShipped'] for r in rows)
+    summary['hullExperimental'] = sum(r['hullExperimental'] for r in rows)
+    summary['cases'] = n
+    json.dump({'summary': summary, 'rows': rows}, open(out, 'w'), indent=0)
+    print(summary)
+    for sweep in SWEEPS:
+        for transform in TRANSFORMS:
+            seq = [r for r in rows if (r['point'], r['axis']) == sweep and r['transform'] == transform]
+            line, prev = [], None
+            for r in seq:
+                key = (r['survives'], r['H_X'], r['H_I'])
+                if key != prev:
+                    line.append(f"{r['step']:+.2f}:M{int(r['survives'])}X{int(r['H_X'])}I{int(r['H_I'])}")
+                    prev = key
+            print(f'point {sweep[0]} axis {sweep[1]} transform {transform}: ' + ' '.join(line))
+
+
 if __name__ == '__main__':
     if sys.argv[1] == 'spec':
         main_spec()
+    elif sys.argv[1] == 'report':
+        main_report()
