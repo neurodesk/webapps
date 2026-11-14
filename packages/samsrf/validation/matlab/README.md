@@ -37,8 +37,12 @@ workflow saves the request environment before MATLAB starts. MATLAB can alter
 these variables during startup, so the recorder retains its process environment
 separately and sets and checks MATLAB's computational thread limit with
 `maxNumCompThreads(1)` and records the reported BLAS branch and CPU.
-The effective MKL branch and dynamic-thread setting are still unverified;
-`environment.json` lists these explicitly. A successful recording is not a
+The `controls_only` receipts ([Requested and effective MKL controls](#requested-and-effective-mkl-controls-730))
+show that MKL ignores the branch request and runs each CPU's automatic branch
+(`AUTO` on AMD, `AVX512_E1` on Intel), and that `MKL_NUM_THREADS` never reaches
+MATLAB's environment. MKL's own thread count and dynamic setting could not be
+read (its thread functions do not resolve in MATLAB's process). The older
+recordings' `environment.json` still lists them as unverified. A successful recording is not a
 verified cross-host reproducibility result. This matters even with an identical MATLAB release:
 [run 42199010165](https://github.com/neurodesk/webapps/actions/runs/42199010165)
 reported CNR `auto`, while
@@ -1143,13 +1147,152 @@ Polygons `polygon_191` and `polygon_193`, once excluded, now pass with the
 others (see the fixed-point model below). CF checks from identical profiles isolate parameter
 estimation, and do not establish full single-precision CF pipeline parity.
 
-General double-precision fine-fit plateaus and the remaining double CSS fits
-are diagnostic cases in this comparator; single reverse-correlation and CF
+General double-precision fine-fit plateaus (diagnosed in
+[Double forward fine fits](#double-forward-fine-fits-diagnostic-730)) and the
+remaining double CSS fits are diagnostic cases in this comparator; single reverse-correlation and CF
 arithmetic is gated separately (`revcor_reference.rs`, below). Every map value
 of the recorded single CSS pipeline, Beta and Baseline included, now equals
 MATLAB's; the gate keeps its per-value least-squares tolerance for coefficients.
 A successful source gate does not assert the diagnostic paths, arbitrary-input
 parity, or a rebuilt container.
+
+## Double forward fine fits (diagnostic, #730)
+
+The 741-case pin records nine double forward (non-CSS) Gaussian pipelines that
+no acceptance gate compares: the coarse and fine fits of X001 LH (averaged and
+concatenated) and RH and of the analyzePRF participant, and the thresholds
+case. `double_forward_diagnostics.rs` runs each natively from MATLAB's
+preprocessed courses and classifies every vertex:
+
+| Case | Vertices | Rounding only (count) | Plateau (vertices) | Acceptance (vertices) | Different optimum (vertices) |
+| --- | --- | --- | --- | --- | --- |
+| LH averaged, coarse | 96 | 95 | | | |
+| LH averaged, fine | 96 | 56 | 4 | 2 | |
+| thresholds (LH averaged, fine) | 96 | 30 | 4 | 2 | |
+| LH concatenated, coarse | 96 | 95 | | | |
+| LH concatenated, fine | 96 | 46 | 2, 4, 23 | 81 | |
+| RH averaged, coarse | 76 | 76 | | | |
+| RH averaged, fine | 76 | 35 | 17, 46 | 29, 58 | 75 |
+| analyzePRF, coarse | 10 | 10 | | | |
+| analyzePRF, fine | 10 | 8 | 6 | | |
+
+Vertex numbers are zero-based fixture positions. There are eight plateau,
+five acceptance and one different-optimum case/vertex entries. A vertex
+appearing in two pipelines counts twice. The other vertices are bit-identical
+or meet the rounding diagnostic below. The classes are:
+
+- **Rounding:** x0, y0 and Sigma have MATLAB's bits, R² is within 1e-12,
+  and every finite map, including Beta and Baseline, differs by at most
+  `1e-12 * max(1, abs(MATLAB value))`. Every zero and NaN mask equals MATLAB's;
+  infinities fail. This diagnostic ceiling is not a general numerical bound.
+- **Plateau:** both kept a fit, at different parameters, with R² within 1e-9.
+  The port's own objective is the same at both endpoints to 3e-11 relative at
+  vertex 17 and to 1.2e-13 or less elsewhere. This establishes nearly equal
+  endpoint objectives under port arithmetic, not MATLAB-side equivalence or
+  global optimality. Every one has a small Sigma (0.005 to 0.041), far below the
+  coarse grid's smallest (1.19), where the prediction barely depends on it.
+- **Acceptance:** one side kept the fit and the other zeroed it. In four
+  case/vertex entries the port keeps a fit MATLAB rejected (R² 0.74 in two
+  pipelines, 0.41 and 0.58), and once the reverse
+  (vertex 58). `samsrf_fit_prf` zeroes a fit whose Sigma is not positive or
+  whose position is beyond twice the scaling factor. Its objective depends on
+  Sigma only through Sigma², so on these sub-pixel plateaus the search can end
+  on either side of zero.
+- **Different optimum (vertex 75):** both kept a fit, but MATLAB's endpoint
+  (Sigma 0.064 at the edge of the field) gives an all-zero prediction under the
+  port's arithmetic, where MATLAB reports R² 0.043 and the port 0.44 at its own
+  endpoint.
+
+Which operation separates the paths. The CSS objective follows MATLAB stage by
+stage (`css_diagnostics.rs` holds 108 traces bit for bit). The double non-CSS
+objective did not: `prf::errfun_with_convention` convolves with a plain
+sequential sum and correlates with `pearson`, not with MATLAB's recorded
+`conv` and `corr` orders (`matlab_math::convolve_real`, `css::objective`),
+although MATLAB's `prf_errfun` computes the same stages with and without CSS.
+Hypothesis H1: last-bit objective differences steer `fminsearch` apart on
+these near-flat objectives. A local test, routing the double non-CSS objective
+through those two existing functions and changing nothing else, removed every
+plateau, acceptance and optimum difference in all nine cases. Every fine fit
+then has MATLAB's parameter bits; only the rounding-only class remains (Beta,
+Baseline and R² last bits, which the export still computes with the plain sums).
+It added about 16% to the run time of these nine pipelines. The same local
+test, rerun after #841 changed `matlab_math`'s dot-product order, still left
+only the rounding class.
+
+That change is not in production: it touches the objective that the double
+forward fits, the CLI and the app share, so it is left to a separate production
+change with its own release. Until it lands, these cases stay diagnostic: they do not show that double fine fits match
+MATLAB in general, and MATLAB's own repeats of these pipelines on other hosts
+were not recorded.
+
+```sh
+SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-reference" SAMSRF_DOUBLE_FORWARD_REPORT="$TMPDIR/double-forward.json" \
+  cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test double_forward_diagnostics
+```
+
+## Requested and effective MKL controls (#730)
+
+The recorders set `MKL_CBWR=COMPATIBLE`, `MKL_NUM_THREADS=1`,
+`OMP_NUM_THREADS=1`, `MKL_DYNAMIC=FALSE` and `OMP_DYNAMIC=FALSE`, and call
+`maxNumCompThreads(1)`. Those are requests. `controls_only` records what MKL
+reports from inside MATLAB. The design and competing predictions were committed
+first ([controls-preregistration.md](controls-preregistration.md), commit
+`b74f636e9`).
+
+- `mkl_controls.c` calls oneMKL's support functions on the MKL MATLAB loaded,
+  one control per call. The first dispatch (run 43565576247) crashed MATLAB in
+  all six jobs before any receipt: it called `mkl_cbwr_get`, MKL's Fortran
+  interface, with a C argument. The fixed recorder (`2e043aee`) calls the C
+  names.
+- [Run 43565932237](https://github.com/neurodesk/webapps/actions/runs/43565932237)
+  ran three requests (`documented`, `none`, `contrast`) on both runner labels,
+  twice per host. `controls-reference.json` pins the receipts (HF commit
+  `f0c0b4af`).
+- `analyse-controls.py` (CI) requires every file with its hash, the
+  environment each MATLAB saw, identical receipts at start, after
+  `maxNumCompThreads(1)` and after a BLAS call, identical repeats, and
+  `dgemv`/`sgemv` trees equal to the pinned kernel recording's trees for the
+  same CPU vendor.
+
+| Job | CPU | MKL branch (`MKL_CBWR_Get`) | `MKL_CBWR_Get_Auto_Branch` | OpenMP threads, dynamic |
+| --- | --- | --- | --- | --- |
+| ubuntu-22.04 documented | Intel Xeon 8370C | 14 (`AVX512_E1`) | 14 | 1, 0 |
+| ubuntu-22.04 none | AMD EPYC 9V45 | 2 (`AUTO`) | 2 | 1, 0 |
+| ubuntu-22.04 contrast | Intel Xeon 8573C | 14 | 14 | 1, 1 |
+| ubuntu-24.04 documented | AMD EPYC 7763 | 2 | 2 | 1, 0 |
+| ubuntu-24.04 none | AMD EPYC 7763 | 2 | 2 | 1, 0 |
+| ubuntu-24.04 contrast | Intel Xeon 6975P-C | 14 | 14 | 1, 1 |
+
+What this establishes:
+
+- **CNR branch.** MKL runs its CPU's own branch whatever is requested: `AUTO` (2)
+  on AMD and `AVX512_E1` (14) on Intel, equal to `MKL_CBWR_Get_Auto_Branch`.
+  `COMPATIBLE` (3) and `AVX2` (10) never take effect. Predictions C1-B and C2-B
+  are refuted. C1-A predicted `AUTO` on every host and holds only on AMD. C3-A
+  predicted `AVX2` as AMD's auto branch, but MKL reports `AUTO` there. No AMD
+  host drew the `contrast` request, so on AMD only `documented` and `none` were
+  observed.
+- **The branch decides the arithmetic.** On every process the summation trees
+  equal the pinned trees of its vendor, across three Intel models and two AMD
+  models, under all three requests (E1-A). Every repeat equals its first
+  process (R1-A).
+- **Threads.** `maxNumCompThreads` was 1 in every process before and after the
+  call. OpenMP reports one thread under every request, including
+  `OMP_NUM_THREADS=4`. `omp_get_dynamic` follows `OMP_DYNAMIC` (1 under
+  `contrast`), with no effect at one thread. `MKL_NUM_THREADS` never reaches
+  MATLAB's environment: the workflow set it, and `getenv` returned nothing in
+  all twelve processes.
+- **Unavailable.** Neither MKL's C nor its Fortran thread functions
+  (`MKL_Get_Max_Threads`, `MKL_Get_Dynamic`) resolve in MATLAB's process (S1-B),
+  so MKL's own thread count and dynamic adjustment remain unobserved (T1 and T2
+  undecided). The MATLAB computational limit, OpenMP query and deterministic
+  trees do not establish MKL's actual thread count or dynamic setting.
+
+So the reference recordings ran each CPU's automatic branch, and the
+`MKL_CBWR` request in the recorders is ineffective. MATLAB on Intel and AMD
+hosts therefore uses different arithmetic by design, which is why Intel
+results differ. Choosing one of them as the reference remains a proposal for
+the maintainers (see "Intel AVX-512 and the reference host").
 
 ## Least-squares solves
 
