@@ -1,5 +1,43 @@
 # @neurodesk/webapp-components
 
+## 0.28.0
+
+### Minor Changes
+
+- 3ae3eb4: CALMaR preserves the drawing and Undo history of an open lesion-mask review when a superseded image, seed or viewer stack finishes loading. Superseded loads are decoded away from NiiVue and refused before insertion, so they cannot replace the review's image or drawing. Late failures also leave replacement inputs, layers and results untouched.
+
+  `ViewerController.loadBaseVolume`, `loadOverlay` and `loadVolumeStack` accept `assertCurrent` for two-phase loading. The controller checks ownership immediately before synchronously inserting and recording decoded images, ending with `onCommit`. Each decode owns its object URL. Failed or superseded stacks release decoded members without waiting for pending members. `replaceStage` replaces an overlay during the commit. Calls without `assertCurrent` retain their previous behavior.
+
+  Start over and Clear results release the viewer queue immediately, even when an older decode never settles. A partial clear reloads the retained input and preserves layer visibility. Repeated layer loads and threshold previews keep one tracked overlay per stage.
+
+  An open mask review keeps its native image and grid. Registration QC, subject-atlas and blend controls stay disabled until review ends; prealignment is refused unless confirmation requests it. Deferred threshold previews resume when the review ends. A failed review releases its base lock and can be retried, including failures during seed preparation.
+
+  Review preparation and confirmation now run through one ownership gate before every asynchronous continuation, including failure handlers. Replaced reviews cannot enable drawing tools, publish wand restrictions, launch preparation work, save an old drawing or open a review on a replacement subject. The same owner follows nested prealignment, segmentation, viewer preparation and worker commands. Replacing a review cancels its preparation worker and settles pending waits.
+
+  Worker waits are released on preparation failure and cancellation, including before dispatch and during initialization. Commands recheck ownership after initialization, and initialization waits cannot borrow readiness from a replacement worker. Replacing unfinished review preparation releases its base and render locks immediately. Cleanup removes only its own waits and preserves a still-current shared worker. QC, layer, patient-atlas and automation preparation continuations keep their original owner through rendering.
+
+  Checked viewer commits release uninserted decoded images and unused object URLs even when synchronous NiiVue insertion or configuration throws.
+
+  Replacing unfinished review preparation also detaches its viewer queue, so a drawing decode that never settles cannot block a replacement review of the same subject.
+
+  Cancellation releases unfinished review locks and prevents its late drawing from opening. Superseded result computations cannot publish after cancellation or overwrite replacement download progress, and late evidence metadata cannot undo a newer selection. Removed or unsuccessfully inserted checked viewer images are also released from NiiVue's URL map.
+
+- 3f0eab6: Loading the RELION tutorial example in Cryo-EM now shows the next step only in the status bar (connect a server with the movies, choose a project or import) instead of only "…loaded.". An example selector's `onLoad` can replace its loaded message through the new `setMessage` context call and hide its inline copy when routing it to the footer.
+
+  Refresh the footer when the server disconnects or the selected project changes so tutorial readiness cannot outlive its prerequisites.
+
+  Invalidate late project, tutorial and job responses when their context changes. Show submission progress immediately, keep Run disabled while opening a project and prevent example loading from replacing a running job's status.
+
+  Derive idle guidance from the current connection, project, processing step and movie selection. Restore tutorial readiness when its selection is restored, cancel superseded example imports, and ignore project mutations that finish after leaving their context. Render footer state in one place through ProgressManager and keep its messages within 90 characters.
+
+  Ignore superseded output views and errors after downloading, decoding or initializing the viewer, so detached output work cannot replace the current view or footer.
+
+  Ignore a completed run's delayed project snapshots and refresh errors once a newer run starts.
+
+  Order overlapping requests within the same project and run through one currency guard, including errors. Preserve a newer job selection after deletion, invalidate deleted-job views and superseded downloads, and restore the committed image when NiiVue finishes a detached decode. Handle refresh failures separately from rejected submissions and observe follower failures immediately.
+
+  Invalidate a deleted job's output work even when the user left and reselected that job while its deletion was pending. Reconcile successful deletions after newer mutations or runs without overwriting their guidance.
+
 ## 0.27.0
 
 ### Minor Changes

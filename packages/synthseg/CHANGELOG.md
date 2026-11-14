@@ -1,5 +1,25 @@
 # @neurodesk/synthseg
 
+## 0.11.20261113
+
+### Patch Changes
+
+- 9312d3a: Cut the WebGPU U-Net's memory footprint to reduce the risk of a full-volume SynthSeg run stalling into Metal's command-buffer watchdog on a 7 GB Apple runner: the planner grows a free activation slot instead of adding one (the 192×224×160 plan drops from 5.16 GiB to 3.89 GiB of buffers, every shader and byte unchanged), and the output is handed out over the mapped readback instead of a 0.9 GB copy.
+
+  Keep the native Metal activation planners in sync, and bind mapped-output disposal to its own run so a stale result cannot invalidate newer output. Released outputs reject reads; error scopes and session release unmap retained data.
+
+- 1a6838c: The Windows command-line archive now carries the Microsoft Visual C++ runtime next to ONNX Runtime. Without it, `synthseg.exe` failed on Windows machines that lack the Visual C++ Redistributable ("The specified module could not be found") or have a copy older than 14.40 ("A dynamic link library (DLL) initialization routine failed"), such as MRI scanner hosts. Every Windows portable archive is now also checked in clean Windows Server Core containers before release.
+
+  Release signing preserves valid vendor signatures and verifies every native binary. Clean Windows checks use digest-pinned images and a checksummed Microsoft installer.
+
+  Runtime discovery supports the VS 2022 and VS 2026 release CRT layouts on GitHub-hosted Windows runners. Missing installations and CRT files report the query or paths searched and the `VC_RUNTIME_DIR` override.
+
+  Native SynthSR builds pin Rust 1.99.1, including local builds and browser-reference provisioning, until their ONNX Runtime build dependency supports Cargo 1.100's directory layout. SynthSeg's static native runtime is unaffected and continues to use stable Rust.
+
+- Updated dependencies [3ae3eb4]
+- Updated dependencies [3f0eab6]
+  - @neurodesk/webapp-components@0.28.0
+
 ## 0.11.20261111
 
 ### Patch Changes

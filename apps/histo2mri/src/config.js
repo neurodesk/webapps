@@ -6,7 +6,7 @@ import { MAX_VOLUME_OUTPUT_BYTES } from "./core/outputs.js";
 export const APP = Object.freeze({
   id: "histo2mri",
   title: automation.title,
-  version: "0.1.20261111",
+  version: "0.1.20261113",
 });
 
 const NIFTI = /\.nii(\.gz)?$/i;

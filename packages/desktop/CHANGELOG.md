@@ -1,5 +1,14 @@
 # @neurodesk/desktop
 
+## 0.49.20261113
+
+### Patch Changes
+
+- 3fb1c8a: Update the desktop MCP server dependency to `@modelcontextprotocol/server` 2.3.1. The desktop MCP server runs over stdio only.
+- Updated dependencies [3ae3eb4]
+- Updated dependencies [3f0eab6]
+  - @neurodesk/webapp-components@0.28.0
+
 ## 0.49.20261112
 
 ### Patch Changes
