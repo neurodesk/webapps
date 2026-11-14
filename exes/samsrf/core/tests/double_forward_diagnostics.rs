@@ -74,6 +74,7 @@ fn array(root: &Path, descriptor: &Value) -> Vec<f64> {
 /// One map value against MATLAB's: bit equality for exact maps, else the same
 /// zero and NaN masks and the rounding ceiling.
 fn assert_map(exact: bool, actual: f64, expected: f64, context: &str) {
+    assert!(!actual.is_infinite() && !expected.is_infinite(), "{context}: infinite map");
     if exact {
         assert_eq!(actual.to_bits(), expected.to_bits(), "{context}: {actual} is not MATLAB's {expected}");
         return;
@@ -101,6 +102,8 @@ fn map_checks_reject_wrong_values_and_masks() {
         (false, 0.0, 1e-15),
         (false, f64::NAN, 1.0),
         (false, f64::INFINITY, f64::INFINITY),
+        (true, f64::INFINITY, f64::INFINITY),
+        (true, f64::NEG_INFINITY, f64::NEG_INFINITY),
         (true, 1.0 + f64::EPSILON, 1.0),
         (true, 0.0, -0.0),
         (true, 0.5, f64::NAN),
