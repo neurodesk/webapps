@@ -2170,35 +2170,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.5.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261112/sdc-0.5.20261112-linux-x64.tar.gz",
-          "sha256": "11d0d0f42f860fb19cbd8e5fa9df3299bf1cfdc94658e923c5515841cfaacb3e",
-          "bytes": 111918002,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261112/sdc-0.5.20261112-linux-x64.tar.gz.validation.txt",
+          "version": "0.5.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261113/sdc-0.5.20261113-linux-x64.tar.gz",
+          "sha256": "fe78d9ee2b3ca9e8286dd69ad2a3bf777bab058ede4bb7e46d46d66d1426dd2f",
+          "bytes": 111918690,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261113/sdc-0.5.20261113-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf sdc-0.5.20261112-linux-x64.tar.gz\n./sdc-0.5.20261112-linux-x64/sdc sub-01_dir-AP_dwi.nii.gz results --t1w sub-01_T1w.nii.gz"
+          "command": "tar -xzf sdc-0.5.20261113-linux-x64.tar.gz\n./sdc-0.5.20261113-linux-x64/sdc sub-01_dir-AP_dwi.nii.gz results --t1w sub-01_T1w.nii.gz"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.5.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261112/sdc-0.5.20261112-macos-arm64.pkg",
-          "sha256": "19c018f247801eae1f36d451c8c8d5249fc4608e158ee77ce70b7ca52b2aab64",
-          "bytes": 105666942,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261112/sdc-0.5.20261112-macos-arm64.pkg.validation.txt",
+          "version": "0.5.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261113/sdc-0.5.20261113-macos-arm64.pkg",
+          "sha256": "c5133f1b1bac56a35507015a1b8d5e3db0fccee17ae88d00f9779209e48bf992",
+          "bytes": 105666930,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261113/sdc-0.5.20261113-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg sdc-0.5.20261112-macos-arm64.pkg -target /\nsdc self-check\nsdc sub-01_dir-AP_dwi.nii.gz results --t1w sub-01_T1w.nii.gz"
+          "command": "sudo installer -pkg sdc-0.5.20261113-macos-arm64.pkg -target /\nsdc self-check\nsdc sub-01_dir-AP_dwi.nii.gz results --t1w sub-01_T1w.nii.gz"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.5.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261112/sdc-0.5.20261112-windows-x64.zip",
-          "sha256": "e816222cd6a1a643ef102923200a49ddf527258e1a726606df4128500ea214bb",
-          "bytes": 103614063,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261112/sdc-0.5.20261112-windows-x64.zip.validation.txt",
+          "version": "0.5.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261113/sdc-0.5.20261113-windows-x64.zip",
+          "sha256": "8ccaacdc058a77b8b7c176afa7f30c4278f3a52145bb415dedb7fb787271cdfe",
+          "bytes": 103616176,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/sdc-v0.5.20261113/sdc-0.5.20261113-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\sdc-0.5.20261112-windows-x64.zip -DestinationPath .\n.\\sdc-0.5.20261112-windows-x64\\sdc.exe sub-01_dir-AP_dwi.nii.gz results --t1w sub-01_T1w.nii.gz"
+          "command": "Expand-Archive -Path .\\sdc-0.5.20261113-windows-x64.zip -DestinationPath .\n.\\sdc-0.5.20261113-windows-x64\\sdc.exe sub-01_dir-AP_dwi.nii.gz results --t1w sub-01_T1w.nii.gz"
         }
       ],
       "containers": []
