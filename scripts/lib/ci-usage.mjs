@@ -86,6 +86,32 @@ export function summarizeUsage(runs, jobCounts = new Map(), now = undefined) {
   };
 }
 
+// The label that restores the full plan to a pull request over its budget.
+export const FULL_CI_LABEL = 'full-ci';
+
+// Whether a run belongs to a pull request ({ number, repository, branch }).
+// GitHub lists the pull request on a run of its own repository while it is
+// open; a fork's runs, and runs whose list GitHub left empty, are matched by
+// head repository and branch, as pullRequestOf groups them.
+export function ofPullRequest(run, { number, repository, branch }) {
+  if (run.pull_requests?.length) return run.pull_requests.includes(number);
+  return run.head_repository === repository && run.head_branch === branch;
+}
+
+// Whether a ready pull request's `ci` run withholds the whole-catalogue plan.
+// It counts exactly the runs the daily report counts (largeRunCandidates and
+// LARGE_RUN_JOBS), in the 24 hours before the run rather than in a UTC day,
+// and withholds once the earlier ones fill the budget, so the report never
+// flags a pull request the gate let through. `runs` are the head branch's `ci`
+// pull request runs and `jobCounts` maps their ids to job counts.
+export function fullPlanDecision({ runs, jobCounts, pullRequest, runId, labels, now, budget = BUDGETS.largeRunsPerPullRequest }) {
+  if (labels.includes(FULL_CI_LABEL)) return { withheld: false, reason: `the ${FULL_CI_LABEL} label restores the full plan` };
+  const spent = largeRunCandidates(runs, now)
+    .filter((run) => run.id !== runId && ofPullRequest(run, pullRequest) && (jobCounts.get(run.id) ?? 0) >= LARGE_RUN_JOBS);
+  if (spent.length < budget) return { withheld: false, reason: `${spent.length} of ${budget} whole-catalogue runs used in 24 hours` };
+  return { withheld: true, reason: `#${pullRequest.number} already started ${spent.length} whole-catalogue ci runs in 24 hours (budget ${budget})` };
+}
+
 // One sentence per exceeded budget; empty when the day stayed inside all of them.
 export function budgetFindings(usage, budgets = BUDGETS) {
   const findings = [];

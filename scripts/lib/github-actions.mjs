@@ -37,8 +37,12 @@ export function listRuns({ workflow = 'ci.yml', since, event, branch, limit = 10
 // Completed and running runs of every workflow created in [since, until), as
 // the fields a usage report reads. The API returns at most 1,000 runs per
 // query, so the range is read in two-hour windows.
+// A run as the usage report reads it: pull requests as numbers, the head
+// repository as its full name (scripts/lib/ci-usage.mjs, pullRequestOf).
+const RUN_FIELDS = '{id, name, event, status, conclusion, head_branch, head_sha, created_at, run_started_at, updated_at, pull_requests: [.pull_requests[].number], head_repository: .head_repository.full_name}';
+
 export async function listAllRuns({ since, until, windowHours = 2 }) {
-  const fields = '{id, name, event, status, conclusion, head_branch, head_sha, created_at, run_started_at, updated_at, pull_requests: [.pull_requests[].number], head_repository: .head_repository.full_name}';
+  const fields = RUN_FIELDS;
   const stamp = (time) => new Date(time).toISOString().replace(/\.\d+Z$/, 'Z');
   const runs = new Map();
   for (let from = since.getTime(); from < until.getTime(); from += windowHours * 3600e3) {
@@ -47,6 +51,20 @@ export async function listAllRuns({ since, until, windowHours = 2 }) {
     for (const run of await paginated(`repos/${REPOSITORY}/actions/runs?${query}`, `.workflow_runs[] | ${fields} | @json`)) runs.set(run.id, run);
   }
   return [...runs.values()];
+}
+
+// The `ci` pull request runs of one head branch created at or after `since`,
+// in the usage report's shape. Forks share branch names; pullRequestOf tells
+// their runs apart.
+export function listPullRequestRuns({ branch, since }) {
+  const query = new URLSearchParams({ per_page: '100', event: 'pull_request', branch, created: `>=${new Date(since).toISOString().replace(/\.\d+Z$/, 'Z')}` });
+  return paginated(`repos/${REPOSITORY}/actions/workflows/ci.yml/runs?${query}`, `.workflow_runs[] | ${RUN_FIELDS} | @json`);
+}
+
+// The names of a pull request's labels as they are now, not as the event that
+// started the run saw them, so a re-run sees a label added since.
+export async function pullRequestLabels(number) {
+  return JSON.parse(await gh(['api', `repos/${REPOSITORY}/pulls/${number}`, '--jq', '[.labels[].name]']));
 }
 
 // How many jobs a run's latest attempt has.

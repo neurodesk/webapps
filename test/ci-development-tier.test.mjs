@@ -80,6 +80,17 @@ test('main CI can finish while PR pushes cancel their predecessors', async () =>
   assert.equal(evaluate(plan.env.CI_DRAFT, { event_name: 'pull_request', event: { pull_request: { draft: true } } }), true);
 });
 
+test('a ready pull request over its whole-catalogue budget fails instead of passing on the draft plan', async () => {
+  const flow = await workflow('ci.yml');
+  const plan = flow.jobs['app-plan'];
+  assert.equal(plan.permissions['pull-requests'], 'read');
+  assert.equal(plan.outputs.withheld, '${{ steps.plan.outputs.withheld }}');
+  const job = flow.jobs['full-plan-withheld'];
+  assert.deepEqual([job.needs].flat(), ['app-plan']);
+  assert.equal(job.if, "needs.app-plan.outputs.withheld == 'true'");
+  assert.match(job.steps.at(-1).run, /Re-run all jobs[\s\S]*\nexit 1|Re-run all jobs[\s\S]*exit 1/);
+});
+
 test('returning to draft cancels the prior run without starting CI jobs', async () => {
   const flow = await workflow('ci.yml');
   assert.ok(flow.on.pull_request.types.includes('converted_to_draft'));
