@@ -458,11 +458,13 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   correlated with an unscaled Pearson formula, which moved Nelder-Mead fine fits
   on flat objectives (14 vertices of the 741-case reference's nine double
   forward pipelines). Those pipelines now match MATLAB's parameters, R², nR²,
-  noise ceiling and masks bit for bit, and 3,186 recorded optimizer evaluations
-  with fixed kernels equal MATLAB's
+  noise ceiling and masks bit for bit, and all 12,604 recorded optimizer
+  evaluations equal MATLAB's, including fits of the HRF
   ([double forward fine fits](validation/matlab/README.md#double-forward-fine-fits-730));
-  Beta and Baseline stay within a 1e-12 relative ceiling, and fits that also
-  fit the HRF still differ from MATLAB's evaluations in the last bits. It uses ported fdlibm `log`, `sin` and
+  Beta and Baseline stay within a 1e-12 relative ceiling. `gampdf`'s normaliser
+  takes `log(2π)` and `log(k)` separately, as MATLAB does: since 0.6.20261114
+  fitted HRF kernels equal MATLAB's on both recorded hosts
+  ([fitted-HRF kernels](validation/matlab/README.md#fitted-hrf-kernels-730)). It uses ported fdlibm `log`, `sin` and
   `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
   response, its `conv` and the MKL dot products and norms inside `corr` are
   empirical models, checked on recorded inputs. MATLAB's real `x'*y` adds
