@@ -17,7 +17,7 @@ const reproducerSpec = name => {
   const spec = JSON.parse(fs.readFileSync(new URL(name, import.meta.url), 'utf8'));
   return (spec.masks ?? spec.cases).length;
 };
-export const REPRODUCER_POLYGONS = { reproducer_cases: reproducerSpec('./polyshape-reproducers.json'), reproducer_round2: reproducerSpec('./polyshape-reproducers-2.json'), reproducer_round3: reproducerSpec('./polyshape-reproducers-3.json'), reproducer_round4: reproducerSpec('./polyshape-reproducers-4.json') };
+export const REPRODUCER_POLYGONS = { reproducer_cases: reproducerSpec('./polyshape-reproducers.json'), reproducer_round2: reproducerSpec('./polyshape-reproducers-2.json'), reproducer_round3: reproducerSpec('./polyshape-reproducers-3.json'), reproducer_round4: reproducerSpec('./polyshape-reproducers-4.json'), reproducer_round5: reproducerSpec('./polyshape-reproducers-5.json') };
 export const PROBE_POLYGONS = { probe_grid_sweep: 24120, probe_heldout_collinear: 1500, probe_heldout_clouds: 1500, probe_extreme_grids: 7, probe_point_clouds: 2500 };
 
 export function validateGeometry(root) {

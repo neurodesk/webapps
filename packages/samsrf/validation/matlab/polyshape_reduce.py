@@ -299,8 +299,11 @@ def recorded_cases(cloud_id):
             continue
         spec = json.load(open(path))
         verdicts = frozen['verdicts'][case_id]
-        assert len(verdicts) == len(spec['cases']), case_id
-        for item, verdict in zip(spec['cases'], verdicts):
+        if isinstance(verdicts, str):
+            verdicts = [(int(d) >> 1 == 1, int(d) & 1 == 1) for d in verdicts]
+        items = expand(spec) if 'masks' in spec else spec['cases']
+        assert len(verdicts) == len(items), case_id
+        for item, verdict in zip(items, verdicts):
             if item['cloud'] == cloud_id and item['transform'] == 0 and item['reversed'] == 0 and item['shift'] == 0:
                 result.append((tuple(item['indices']), tuple(verdict)))
     return result

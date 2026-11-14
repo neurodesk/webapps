@@ -10,7 +10,7 @@ witness is on MATLAB's hull; and the experimental model's area and CF sigma
 error against MATLAB's hull. Evidence, not a gate. It refuses a recording whose
 polygons differ from the spec's.
 
-  python3 polyshape_reproducers_report.py HOST_DIR reproducer_cases|reproducer_round2|reproducer_round3|reproducer_round4 REPORT.json [PATH_TO_POLYSHAPE_HULLS]
+  python3 polyshape_reproducers_report.py HOST_DIR reproducer_cases|reproducer_round2|reproducer_round3|reproducer_round4|reproducer_round5 REPORT.json [PATH_TO_POLYSHAPE_HULLS]
 """
 import collections
 import json
@@ -35,7 +35,8 @@ def from_bits(value):
 def main():
     root, case_id, out = sys.argv[1:4]
     spec_file = {'reproducer_cases': 'polyshape-reproducers.json', 'reproducer_round2': 'polyshape-reproducers-2.json',
-                 'reproducer_round3': 'polyshape-reproducers-3.json', 'reproducer_round4': 'polyshape-reproducers-4.json'}[case_id]
+                 'reproducer_round3': 'polyshape-reproducers-3.json', 'reproducer_round4': 'polyshape-reproducers-4.json',
+                 'reproducer_round5': 'polyshape-reproducers-5.json'}[case_id]
     spec = json.load(open(os.path.join(HERE, spec_file)))
     compact = 'masks' in spec
     if compact:
