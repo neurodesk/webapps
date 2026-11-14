@@ -37,8 +37,12 @@ workflow saves the request environment before MATLAB starts. MATLAB can alter
 these variables during startup, so the recorder retains its process environment
 separately and sets and checks MATLAB's computational thread limit with
 `maxNumCompThreads(1)` and records the reported BLAS branch and CPU.
-The effective MKL branch and dynamic-thread setting are still unverified;
-`environment.json` lists these explicitly. A successful recording is not a
+The `controls_only` receipts ([Requested and effective MKL controls](#requested-and-effective-mkl-controls-730))
+show that MKL ignores the branch request and runs each CPU's automatic branch
+(`AUTO` on AMD, `AVX512_E1` on Intel), and that `MKL_NUM_THREADS` never reaches
+MATLAB's environment. MKL's own thread count and dynamic setting could not be
+read (its thread functions do not resolve in MATLAB's process). The older
+recordings' `environment.json` still lists them as unverified. A successful recording is not a
 verified cross-host reproducibility result. This matters even with an identical MATLAB release:
 [run 42199010165](https://github.com/neurodesk/webapps/actions/runs/42199010165)
 reported CNR `auto`, while
@@ -1155,6 +1159,71 @@ were not recorded.
 SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-reference" SAMSRF_DOUBLE_FORWARD_REPORT="$TMPDIR/double-forward.json" \
   cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test double_forward_diagnostics
 ```
+
+## Requested and effective MKL controls (#730)
+
+The recorders set `MKL_CBWR=COMPATIBLE`, `MKL_NUM_THREADS=1`,
+`OMP_NUM_THREADS=1`, `MKL_DYNAMIC=FALSE` and `OMP_DYNAMIC=FALSE`, and call
+`maxNumCompThreads(1)`. Those are requests. `controls_only` records what MKL
+reports from inside MATLAB. The design and competing predictions were committed
+first ([controls-preregistration.md](controls-preregistration.md), commit
+`b74f636e9`).
+
+- `mkl_controls.c` calls oneMKL's support functions on the MKL MATLAB loaded,
+  one control per call. The first dispatch (run 43565576247) crashed MATLAB in
+  all six jobs before any receipt: it called `mkl_cbwr_get`, MKL's Fortran
+  interface, with a C argument. The fixed recorder (`2e043aee`) calls the C
+  names.
+- [Run 43565932237](https://github.com/neurodesk/webapps/actions/runs/43565932237)
+  ran three requests (`documented`, `none`, `contrast`) on both runner labels,
+  twice per host. `controls-reference.json` pins the receipts (HF commit
+  `f0c0b4af`).
+- `analyse-controls.py` (CI) requires every file with its hash, the
+  environment each MATLAB saw, identical receipts at start, after
+  `maxNumCompThreads(1)` and after a BLAS call, identical repeats, and
+  `dgemv`/`sgemv` trees equal to the pinned kernel recording's trees for the
+  same CPU vendor.
+
+| Job | CPU | MKL branch (`MKL_CBWR_Get`) | `MKL_CBWR_Get_Auto_Branch` | OpenMP threads, dynamic |
+| --- | --- | --- | --- | --- |
+| ubuntu-22.04 documented | Intel Xeon 8370C | 14 (`AVX512_E1`) | 14 | 1, 0 |
+| ubuntu-22.04 none | AMD EPYC 9V45 | 2 (`AUTO`) | 2 | 1, 0 |
+| ubuntu-22.04 contrast | Intel Xeon 8573C | 14 | 14 | 1, 1 |
+| ubuntu-24.04 documented | AMD EPYC 7763 | 2 | 2 | 1, 0 |
+| ubuntu-24.04 none | AMD EPYC 7763 | 2 | 2 | 1, 0 |
+| ubuntu-24.04 contrast | Intel Xeon 6975P-C | 14 | 14 | 1, 1 |
+
+What this establishes:
+
+- **CNR branch.** MKL runs its CPU's own branch whatever is requested: `AUTO` (2)
+  on AMD and `AVX512_E1` (14) on Intel, equal to `MKL_CBWR_Get_Auto_Branch`.
+  `COMPATIBLE` (3) and `AVX2` (10) never take effect. Predictions C1-B and C2-B
+  are refuted. C1-A predicted `AUTO` on every host and holds only on AMD. C3-A
+  predicted `AVX2` as AMD's auto branch, but MKL reports `AUTO` there. No AMD
+  host drew the `contrast` request, so on AMD only `documented` and `none` were
+  observed.
+- **The branch decides the arithmetic.** On every process the summation trees
+  equal the pinned trees of its vendor, across three Intel models and two AMD
+  models, under all three requests (E1-A). Every repeat equals its first
+  process (R1-A).
+- **Threads.** `maxNumCompThreads` was 1 in every process before and after the
+  call. OpenMP reports one thread under every request, including
+  `OMP_NUM_THREADS=4`. `omp_get_dynamic` follows `OMP_DYNAMIC` (1 under
+  `contrast`), with no effect at one thread. `MKL_NUM_THREADS` never reaches
+  MATLAB's environment: the workflow set it, and `getenv` returned nothing in
+  all twelve processes.
+- **Unavailable.** Neither MKL's C nor its Fortran thread functions
+  (`MKL_Get_Max_Threads`, `MKL_Get_Dynamic`) resolve in MATLAB's process (S1-B),
+  so MKL's own thread count and dynamic adjustment remain unobserved (T1 and T2
+  undecided). That MKL ran one thread rests on `maxNumCompThreads`, OpenMP's
+  one thread and the deterministic, request-independent trees, not on an MKL
+  receipt.
+
+So the reference recordings ran each CPU's automatic branch, and the
+`MKL_CBWR` request in the recorders is ineffective. MATLAB on Intel and AMD
+hosts therefore uses different arithmetic by design, which is why Intel
+results differ. Choosing one of them as the reference remains a proposal for
+the maintainers (see "Intel AVX-512 and the reference host").
 
 ## Least-squares solves
 

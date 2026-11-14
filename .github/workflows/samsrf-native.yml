@@ -237,6 +237,8 @@ jobs:
           SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_REPORT="$RUNNER_TEMP/samsrf-qr-port.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_reference -- --nocapture
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-qr-kernels" packages/samsrf/validation/matlab/qr-kernels-reference.json
           SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_KERNELS_DIR="$RUNNER_TEMP/samsrf-qr-kernels" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_kernels -- --nocapture
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-controls" packages/samsrf/validation/matlab/controls-reference.json
+          python3 -I packages/samsrf/validation/matlab/analyse-controls.py "$RUNNER_TEMP/samsrf-controls" "$RUNNER_TEMP/samsrf-qr-kernels"
           python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$RUNNER_TEMP/samsrf-qr-reference/ubuntu-24.04/compatible" "$RUNNER_TEMP/samsrf-qr-port.json" "$RUNNER_TEMP/samsrf-qr-accuracy.json"
       - name: Retain the full CSS comparison including remaining differences
         if: always()

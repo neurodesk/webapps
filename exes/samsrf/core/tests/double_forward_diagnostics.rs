@@ -24,7 +24,10 @@ use std::path::{Path, PathBuf};
 
 /// Every non-rounding vertex of each case, as of #730's plateau diagnosis
 /// (zero-based fixture vertices, not cortical vertex IDs).
-const EXPECTED: [(&str, usize, &[(usize, &str)]); 9] = [
+/// A case, its vertex count and its diagnosed (vertex, class) pairs.
+type Diagnosed = (&'static str, usize, &'static [(usize, &'static str)]);
+
+const EXPECTED: [Diagnosed; 9] = [
     ("pipeline_double_x001_lh_average1_coarse1", 96, &[]),
     ("pipeline_double_x001_lh_average1_coarse0", 96, &[(2, "acceptance"), (4, "plateau")]),
     ("pipeline_double_thresholds", 96, &[(2, "acceptance"), (4, "plateau")]),
