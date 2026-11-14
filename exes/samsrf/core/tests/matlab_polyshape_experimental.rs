@@ -238,7 +238,7 @@ fn real_double_values(bytes: &[u8], descriptor: &Value) -> Vec<f64> {
 }
 
 fn assert_reproducer_parameters(values: &[f64], items: &[Value]) {
-    let roles = ["original", "minimal", "chain", "oneDeleted", "order", "scale", "reproducer"];
+    let roles = ["original", "minimal", "chain", "oneDeleted", "order", "scale", "reproducer", "reduction"];
     assert_eq!(values.len(), items.len() * 5, "reproducer parameter inventory");
     for (i, item) in items.iter().enumerate() {
         let role = roles.iter().position(|role| item["role"] == *role).expect("known reproducer role");
@@ -596,40 +596,93 @@ fn transformed(points: &[[f64; 2]], reversed: bool, shift: usize, transform: u64
     }).collect()
 }
 
+/// A compact round's cases (polyshape_reduce.py `expand`): one bitmask of 1-based
+/// indices into cloud `spec["cloud"]` per case, untransformed.
+fn expand_compact(spec: &Value) -> Vec<Value> {
+    spec["masks"].as_array().unwrap().iter().map(|mask| {
+        let mask = mask.as_u64().unwrap();
+        assert!(mask > 0 && mask < 1 << 53, "invalid reduction mask");
+        let indices: Vec<u64> = (0..53).filter(|k| mask >> k & 1 == 1).map(|k| k + 1).collect();
+        json!({"cloud": spec["cloud"], "role": spec["role"], "indices": indices, "reversed": 0, "shift": 0, "transform": 0})
+    }).collect()
+}
+
+/// polyshape_reduce.py's `prediction_bytes`: 0 for an empty hull, else 1, the
+/// sorted vertex bits, the area bits and the centroid bits, little-endian u64.
+fn prediction_bytes(hull: Option<&Hull>) -> Vec<u8> {
+    let Some(hull) = hull else { return vec![0] };
+    let mut vertices: Vec<[u64; 2]> = hull.vertices.iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect();
+    vertices.sort();
+    let mut bytes = vec![1];
+    for [x, y] in vertices {
+        bytes.extend(x.to_le_bytes());
+        bytes.extend(y.to_le_bytes());
+    }
+    bytes.extend(hull.area().to_bits().to_le_bytes());
+    for value in hull.centroid() {
+        bytes.extend(value.to_bits().to_le_bytes());
+    }
+    bytes
+}
+
+/// A frozen verdict: `[equals shipped, equals experimental]`, stored as a pair or,
+/// for compact rounds, as one digit `2 * shipped + experimental` per case.
+fn frozen_verdicts(value: &Value, n: usize, id: &str) -> Vec<[bool; 2]> {
+    let verdicts: Vec<[bool; 2]> = match value {
+        Value::String(digits) => digits.chars().map(|d| {
+            let d = d.to_digit(10).filter(|d| *d < 4).unwrap_or_else(|| panic!("{id}: invalid verdict digit"));
+            [d >> 1 == 1, d & 1 == 1]
+        }).collect(),
+        Value::Array(pairs) => pairs.iter().map(|pair| [pair[0].as_bool().unwrap(), pair[1].as_bool().unwrap()]).collect(),
+        _ => panic!("{id}: missing frozen verdicts"),
+    };
+    assert_eq!(verdicts.len(), n, "{id}: frozen verdict inventory");
+    verdicts
+}
+
 /// The reduced reproducers of the four regressions, on both hosts. Every recorded
 /// polygon is the spec's (indices into the full clouds the first batch records as
-/// controls, then the transform); both models still give the hulls predicted
-/// before the recording (polyshape-reproducers*.json); MATLAB's verdicts per case
-/// (hull equals the shipped model's, the experimental model's) equal the frozen
-/// matlab_polyshape_reproducers.json; and the smallest measured reproducers
-/// (177: 6 points, 932: 16, 1607: 8, 1937: 8) still have MATLAB's hull equal to the
-/// shipped model's and not the experimental one. A fix of the experimental model
-/// changes the predictions and fails here: re-derive the predictions and verdicts
-/// from the pinned recording, never from the model under test.
+/// controls, then the transform). Both models still give the hulls predicted
+/// before the recording: per case in polyshape-reproducers{,-2,-3}.json, and by
+/// the committed `predictionsSha256` of each compact round (-4, -5). MATLAB's
+/// verdicts per case (hull equals the shipped model's, the experimental model's)
+/// equal the frozen matlab_polyshape_reproducers.json. The smallest measured
+/// reproducers still reproduce, and each listed 1-minimal reproducer reproduces
+/// while every one of its one-point deletions is recorded and does not. A fix of
+/// the experimental model changes the predictions and fails here: re-derive the
+/// predictions and verdicts from the pinned recording, never from the model under
+/// test.
 #[test]
 fn polyshape_reproducers_match_recording() {
     let hosts = reproducer_hosts();
     if hosts.is_empty() {
         return;
     }
-    let specs: [(&str, Value); 3] = [
+    let specs: [(&str, Value); 5] = [
         ("reproducer_cases", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers.json")).unwrap()),
         ("reproducer_round2", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-2.json")).unwrap()),
         ("reproducer_round3", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-3.json")).unwrap()),
+        ("reproducer_round4", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-4.json")).unwrap()),
+        ("reproducer_round5", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-5.json")).unwrap()),
     ];
+    let rounds: Vec<(&str, Vec<Value>, bool)> = specs.iter().map(|(id, spec)| match spec.get("masks") {
+        Some(_) => (*id, expand_compact(spec), true),
+        None => (*id, spec["cases"].as_array().unwrap().clone(), false),
+    }).collect();
     let frozen: Value = serde_json::from_str(include_str!("matlab_polyshape_reproducers.json")).unwrap();
+    let verdicts: std::collections::BTreeMap<&str, Vec<[bool; 2]>> = rounds.iter().map(|(id, items, _)| (*id, frozen_verdicts(&frozen["verdicts"][*id], items.len(), id))).collect();
     for (root, cases) in hosts {
-        assert_eq!(cases.iter().map(|c| c["id"].as_str().unwrap()).collect::<Vec<_>>(), specs.iter().map(|s| s.0).collect::<Vec<_>>(), "{}: reproducer inventory", root.display());
+        assert_eq!(cases.iter().map(|c| c["id"].as_str().unwrap()).collect::<Vec<_>>(), rounds.iter().map(|r| r.0).collect::<Vec<_>>(), "{}: reproducer inventory", root.display());
         let mut clouds: std::collections::BTreeMap<u64, Vec<[f64; 2]>> = Default::default();
-        for (case, (id, spec)) in cases.iter().zip(&specs) {
-            let items = spec["cases"].as_array().unwrap();
+        for (case, ((id, items, compact), (_, spec))) in cases.iter().zip(rounds.iter().zip(&specs)) {
             let n = items.len();
+            assert!(n > 0, "{id}: empty round");
             validate_causal_case(&root, case, n, [n, 5]);
             assert_reproducer_parameters(&array(&root, &case["parameters"]), items);
             let polygons = split_rows(&points(&array(&root, &case["points"])), &array(&root, &case["counts"]));
             let hulls = split_rows(&points(&array(&root, &case["hull"])), &array(&root, &case["hullCounts"]));
-            let verdicts = frozen["verdicts"][id].as_array().unwrap();
-            assert_eq!(verdicts.len(), n, "{id}: frozen verdict inventory");
+            assert_eq!((polygons.len(), hulls.len()), (n, n), "{id}: polygon inventory");
+            let mut digest = <sha2::Sha256 as sha2::Digest>::new();
             for (i, item) in items.iter().enumerate() {
                 let at = format!("{} {id} {i}", root.display());
                 let cloud = item["cloud"].as_u64().unwrap();
@@ -642,20 +695,44 @@ fn polyshape_reproducers_match_recording() {
                 assert_eq!(polygons[i].iter().map(|p| p.map(f64::to_bits)).collect::<Vec<_>>(), expected.iter().map(|p| p.map(f64::to_bits)).collect::<Vec<_>>(), "{at}: polygon differs from the spec");
                 let shipped = Hull::of_polygon(&polygons[i]);
                 let experimental = hull_of_polygon(&polygons[i]).unwrap_or_else(|e| panic!("{at}: {e}"));
-                assert_eq!(predicted_bits(shipped.as_ref()), item["predicted"]["shipped"], "{at}: shipped model changed since the prediction");
-                assert_eq!(predicted_bits(experimental.as_ref()), item["predicted"]["experimental"], "{at}: experimental model changed since the prediction");
+                if *compact {
+                    sha2::Digest::update(&mut digest, prediction_bytes(shipped.as_ref()));
+                    sha2::Digest::update(&mut digest, prediction_bytes(experimental.as_ref()));
+                } else {
+                    assert_eq!(predicted_bits(shipped.as_ref()), item["predicted"]["shipped"], "{at}: shipped model changed since the prediction");
+                    assert_eq!(predicted_bits(experimental.as_ref()), item["predicted"]["experimental"], "{at}: experimental model changed since the prediction");
+                }
                 let matlab = sorted_vertices(&hulls[i]);
                 let same = |hull: &Option<Hull>| sorted_vertices(hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[])) == matlab;
-                assert_eq!(json!([same(&shipped), same(&experimental)]), verdicts[i], "{at}: MATLAB verdict differs from the frozen one");
+                assert_eq!([same(&shipped), same(&experimental)], verdicts[id][i], "{at}: MATLAB verdict differs from the frozen one");
+            }
+            if *compact {
+                let hex: String = sha2::Digest::finalize(digest).iter().map(|b| format!("{b:02x}")).collect();
+                assert_eq!(hex, spec["predictionsSha256"].as_str().unwrap(), "{id}: a model changed since the committed predictions");
             }
         }
-        for (cloud, smallest) in frozen["smallest"].as_object().unwrap() {
-            let (round, indices) = (smallest["round"].as_str().unwrap(), &smallest["indices"]);
-            let spec = &specs.iter().find(|s| s.0 == round).unwrap().1;
-            let i = spec["cases"].as_array().unwrap().iter().position(|c| c["cloud"].as_u64().unwrap().to_string() == *cloud && &c["indices"] == indices && c["transform"] == 0 && c["reversed"] == 0 && c["shift"] == 0).unwrap();
-            assert_eq!(frozen["verdicts"][round][i], json!([true, false]), "cloud {cloud}: smallest reproducer no longer reproduces");
-        }
-        assert_eq!(frozen["smallest"].as_object().unwrap().keys().map(|k| k.parse::<usize>().unwrap()).collect::<BTreeSet<_>>(), REGRESSIONS.into_iter().collect());
-        println!("{}: {} reproducer cases checked", root.file_name().unwrap().to_string_lossy(), specs.iter().map(|s| s.1["cases"].as_array().unwrap().len()).sum::<usize>());
+        println!("{}: {} reproducer cases checked", root.file_name().unwrap().to_string_lossy(), rounds.iter().map(|r| r.1.len()).sum::<usize>());
     }
+    // Look a recorded untransformed case up by cloud and indices.
+    let untransformed = |cloud: &str, indices: &Value| -> Option<[bool; 2]> {
+        rounds.iter().find_map(|(id, items, _)| items.iter().position(|c| c["cloud"].as_u64().unwrap().to_string() == cloud && &c["indices"] == indices
+            && c["transform"] == 0 && c["reversed"] == 0 && c["shift"] == 0).map(|i| verdicts[id][i]))
+    };
+    for (cloud, smallest) in frozen["smallest"].as_object().unwrap() {
+        assert_eq!(untransformed(cloud, &smallest["indices"]), Some([true, false]), "cloud {cloud}: smallest reproducer no longer reproduces");
+    }
+    assert_eq!(frozen["smallest"].as_object().unwrap().keys().map(|k| k.parse::<usize>().unwrap()).collect::<BTreeSet<_>>(), REGRESSIONS.into_iter().collect());
+    for (cloud, minimal) in frozen["oneMinimal"].as_object().unwrap() {
+        for indices in minimal.as_array().unwrap() {
+            assert_eq!(untransformed(cloud, indices), Some([true, false]), "cloud {cloud} {indices}: listed 1-minimal reproducer does not reproduce");
+            let members = indices.as_array().unwrap();
+            assert!(members.len() > 3, "cloud {cloud}: a 1-minimal reproducer needs deletions with three points");
+            for j in 0..members.len() {
+                let deleted: Vec<Value> = members.iter().enumerate().filter(|(k, _)| *k != j).map(|(_, v)| v.clone()).collect();
+                let verdict = untransformed(cloud, &Value::Array(deleted)).unwrap_or_else(|| panic!("cloud {cloud} {indices}: deletion {j} not recorded"));
+                assert_ne!(verdict, [true, false], "cloud {cloud} {indices}: deletion {j} still reproduces");
+            }
+        }
+    }
+    assert_eq!(frozen["oneMinimal"].as_object().unwrap().keys().map(|k| k.parse::<usize>().unwrap()).collect::<BTreeSet<_>>(), REGRESSIONS.into_iter().collect(), "a 1-minimal reproducer for every regression");
 }
