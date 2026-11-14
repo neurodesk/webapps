@@ -1215,12 +1215,13 @@ through those two existing functions and changing nothing else, removed every
 plateau, acceptance and optimum difference in all nine cases. Every fine fit
 then has MATLAB's parameter bits; only the rounding-only class remains (Beta,
 Baseline and R² last bits, which the export still computes with the plain sums).
-It added about 16% to the run time of these nine pipelines.
+It added about 16% to the run time of these nine pipelines. The same local
+test, rerun after #841 changed `matlab_math`'s dot-product order, still left
+only the rounding class.
 
 That change is not in production: it touches the objective that the double
-forward fits, the CLI and the app share, and it would call the convolution
-model another track maintains. It is reported for coordination. Until it lands,
-these cases stay diagnostic: they do not show that double fine fits match
+forward fits, the CLI and the app share, so it is left to a separate production
+change with its own release. Until it lands, these cases stay diagnostic: they do not show that double fine fits match
 MATLAB in general, and MATLAB's own repeats of these pipelines on other hosts
 were not recorded.
 
