@@ -739,8 +739,9 @@ jobs:
           name: samsrf-controls-${{ matrix.host }}-${{ matrix.request }}
           path: |
             ${{ runner.temp }}/samsrf-controls/*/controls.json
+            ${{ runner.temp }}/samsrf-controls/*/controls-partial.json
             ${{ runner.temp }}/samsrf-controls/*/*.f64
-          if-no-files-found: error
+          if-no-files-found: warn
 
   runtime-cli:
     if: github.event_name == 'workflow_dispatch' && (inputs.runtime_cli == 'source' || inputs.runtime_cli == 'build')

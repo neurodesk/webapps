@@ -19,21 +19,31 @@ for k = 1:numel(names)
     requested.(names{k}) = getenv(names{k});
 end
 mklPath = fullfile(matlabroot,'bin',computer('arch'),'mkl.so');
-receipts = struct();
-receipts.atStart = mkl_controls(mklPath);
-threadsBefore = maxNumCompThreads;
-maxNumCompThreads(1);
-threadsAfter = maxNumCompThreads;
-receipts.afterThreadLimit = mkl_controls(mklPath);
-% One BLAS call, so a lazily initialised MKL has initialised.
-x = ones(64,1); %#ok<NASGU>
-y = x' * x; %#ok<NASGU>
-receipts.afterBlasCall = mkl_controls(mklPath);
 [status, cpu] = system('lscpu');
 assert(status == 0, 'Cannot record CPU provenance');
 maps = fileread('/proc/self/maps');
 lines = splitlines(maps);
 libraries = unique(regexp(strjoin(lines(contains(lines, {'mkl','iomp','gomp','blas','lapack'})), newline), '/\S+', 'match'));
+partial = struct('request',request,'requested',requested,'matlab',version, ...
+    'blas',version('-blas'),'lapack',version('-lapack'),'mklPath',mklPath, ...
+    'libraries',{libraries},'cpu',cpu, ...
+    'githubRun',getenv('GITHUB_RUN_ID'),'githubAttempt',getenv('GITHUB_RUN_ATTEMPT'), ...
+    'receipts',struct());
+% Each control is read by its own MEX call, and the partial receipt is
+% written before every call: a crash leaves what was observed and names the
+% call that failed (lastControl).
+threadsBefore = maxNumCompThreads;
+partial.maxNumCompThreadsBefore = threadsBefore;
+partial.receipts.atStart = read_controls(mklPath, 'atStart', partial);
+maxNumCompThreads(1);
+threadsAfter = maxNumCompThreads;
+partial.maxNumCompThreadsAfter = threadsAfter;
+partial.receipts.afterThreadLimit = read_controls(mklPath, 'afterThreadLimit', partial);
+% One BLAS call, so a lazily initialised MKL has initialised.
+x = ones(64,1); %#ok<NASGU>
+y = x' * x; %#ok<NASGU>
+partial.receipts.afterBlasCall = read_controls(mklPath, 'afterBlasCall', partial);
+receipts = partial.receipts;
 probes = {};
 big = 2^70;
 for cls = {'double','single'}
@@ -55,6 +65,24 @@ file = fopen('controls.json','w');
 fprintf(file, '%s\n', jsonencode(result, 'PrettyPrint', true));
 fclose(file);
 fprintf('Recorded MKL controls under request %s\n', request);
+end
+
+function out = read_controls(mklPath, stage, partial)
+controls = {'cbwrBranch','cbwrAutoBranch','mklMaxThreads','mklDynamic','ompMaxThreads','ompDynamic','version'};
+out = struct();
+for k = 1:numel(controls)
+    partial.receipts.(stage) = out;
+    partial.lastControl = [stage '.' controls{k}];
+    write_json('controls-partial.json', partial);
+    [value, symbol] = mkl_controls(mklPath, controls{k});
+    out.(controls{k}) = struct('value', value, 'symbol', symbol);
+end
+end
+
+function write_json(name, value)
+file = fopen(name, 'w');
+fprintf(file, '%s\n', jsonencode(value, 'PrettyPrint', true));
+fclose(file);
 end
 
 function write_array(name, value)

@@ -1079,13 +1079,82 @@ Polygons `polygon_191` and `polygon_193`, once excluded, now pass with the
 others (see the fixed-point model below). CF checks from identical profiles isolate parameter
 estimation, and do not establish full single-precision CF pipeline parity.
 
-General double-precision fine-fit plateaus and the remaining double CSS fits
-are diagnostic cases in this comparator; single reverse-correlation and CF
+General double-precision fine-fit plateaus (diagnosed in
+[Double forward fine fits](#double-forward-fine-fits-diagnostic-730)) and the
+remaining double CSS fits are diagnostic cases in this comparator; single reverse-correlation and CF
 arithmetic is gated separately (`revcor_reference.rs`, below). Every map value
 of the recorded single CSS pipeline, Beta and Baseline included, now equals
 MATLAB's; the gate keeps its per-value least-squares tolerance for coefficients.
 A successful source gate does not assert the diagnostic paths, arbitrary-input
 parity, or a rebuilt container.
+
+## Double forward fine fits (diagnostic, #730)
+
+The 741-case pin records nine double forward (non-CSS) Gaussian pipelines that
+no acceptance gate compares: the coarse and fine fits of X001 LH (averaged and
+concatenated) and RH and of the analyzePRF participant, and the thresholds
+case. `double_forward_diagnostics.rs` runs each natively from MATLAB's
+preprocessed courses and classifies every vertex:
+
+| Case | Vertices | Rounding only (count) | Plateau (vertices) | Acceptance (vertices) | Different optimum (vertices) |
+| --- | --- | --- | --- | --- | --- |
+| LH averaged, coarse | 96 | 95 | | | |
+| LH averaged, fine | 96 | 56 | 4 | 2 | |
+| thresholds (LH averaged, fine) | 96 | 30 | 4 | 2 | |
+| LH concatenated, coarse | 96 | 95 | | | |
+| LH concatenated, fine | 96 | 46 | 2, 4, 23 | 81 | |
+| RH averaged, coarse | 76 | 76 | | | |
+| RH averaged, fine | 76 | 35 | 17, 46 | 29, 58 | 75 |
+| analyzePRF, coarse | 10 | 10 | | | |
+| analyzePRF, fine | 10 | 8 | 6 | | |
+
+Vertex numbers are zero-based fixture positions. The other vertices are
+bit-identical. The classes are:
+
+- **Rounding only:** x0, y0 and Sigma have MATLAB's bits, R² is within 1e-12,
+  and Beta, Baseline and R² differ in the last bits. Every zero and NaN mask
+  equals MATLAB's.
+- **Plateau:** both kept a fit, at different parameters, with R² within 1e-9.
+  The port's own objective is the same at both endpoints to 3e-11 relative at
+  vertex 17 and to 1.2e-13 or less elsewhere. These are equivalent minima, not a
+  failed search. Every one has a small Sigma (0.005 to 0.041), far below the
+  coarse grid's smallest (1.19), where the prediction barely depends on it.
+- **Acceptance:** one side kept the fit and the other zeroed it. Three times the
+  port keeps a fit MATLAB rejected (R² 0.74, 0.41, 0.58), and once the reverse
+  (vertex 58). `samsrf_fit_prf` zeroes a fit whose Sigma is not positive or
+  whose position is beyond twice the scaling factor. Its objective depends on
+  Sigma only through Sigma², so on these sub-pixel plateaus the search can end
+  on either side of zero.
+- **Different optimum (vertex 75):** both kept a fit, but MATLAB's endpoint
+  (Sigma 0.064 at the edge of the field) gives an all-zero prediction under the
+  port's arithmetic, where MATLAB reports R² 0.043 and the port 0.44 at its own
+  endpoint.
+
+Which operation separates the paths. The CSS objective follows MATLAB stage by
+stage (`css_diagnostics.rs` holds 108 traces bit for bit). The double non-CSS
+objective did not: `prf::errfun_with_convention` convolves with a plain
+sequential sum and correlates with `pearson`, not with MATLAB's recorded
+`conv` and `corr` orders (`matlab_math::convolve_real`, `css::objective`),
+although MATLAB's `prf_errfun` computes the same stages with and without CSS.
+Hypothesis H1: last-bit objective differences steer `fminsearch` apart on
+these near-flat objectives. A local test, routing the double non-CSS objective
+through those two existing functions and changing nothing else, removed every
+plateau, acceptance and optimum difference in all nine cases. Every fine fit
+then has MATLAB's parameter bits; only the rounding-only class remains (Beta,
+Baseline and R² last bits, which the export still computes with the plain sums).
+It added about 16% to the run time of these nine pipelines.
+
+That change is not in production: it touches the objective that the double
+forward fits, the CLI and the app share, and it would call the convolution
+model another track maintains. It is reported for coordination. Until it lands,
+these cases stay diagnostic: they do not show that double fine fits match
+MATLAB in general, and MATLAB's own repeats of these pipelines on other hosts
+were not recorded.
+
+```sh
+SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-reference" SAMSRF_DOUBLE_FORWARD_REPORT="$TMPDIR/double-forward.json" \
+  cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test double_forward_diagnostics
+```
 
 ## Least-squares solves
 
