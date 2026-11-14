@@ -1385,35 +1385,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.8.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-linux-x64.tar.gz",
-          "sha256": "85e2aa32ddd74d7cb8fbbfe4965b1df882543df14e7c9a4476066c78c1afede4",
-          "bytes": 55861099,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-linux-x64.tar.gz.validation.txt",
+          "version": "0.8.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-linux-x64.tar.gz",
+          "sha256": "283d834b76009846a0e02ad07b38e369e4546ff3e5f91f65e69e7f8eb3cc9ff5",
+          "bytes": 55862282,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf dwi2trx-0.8.20261112-linux-x64.tar.gz\n./dwi2trx-0.8.20261112-linux-x64/dwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "tar -xzf dwi2trx-0.8.20261113-linux-x64.tar.gz\n./dwi2trx-0.8.20261113-linux-x64/dwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.8.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-macos-arm64.pkg",
-          "sha256": "079dfed958ffa0aa13d830eace8d280d0c8b8c0de2f35256fc9723f8c880b887",
-          "bytes": 49569998,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-macos-arm64.pkg.validation.txt",
+          "version": "0.8.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-macos-arm64.pkg",
+          "sha256": "e92fd8d1395844282a764f02e48071efec91c4c7042c35268ad270e5aaeef78c",
+          "bytes": 49570860,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg dwi2trx-0.8.20261112-macos-arm64.pkg -target /\ndwi2trx self-check\ndwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "sudo installer -pkg dwi2trx-0.8.20261113-macos-arm64.pkg -target /\ndwi2trx self-check\ndwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.8.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-windows-x64.zip",
-          "sha256": "34b35e890313ec5a07ebf7e9b40ebdfdd00266e7b34b0063296cd692157e7dec",
-          "bytes": 46626615,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-windows-x64.zip.validation.txt",
+          "version": "0.8.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-windows-x64.zip",
+          "sha256": "dfee13d6f8571fea514b68e30936bdbfbdb78c89d27875cb8a61f43b4897f4aa",
+          "bytes": 46628724,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\dwi2trx-0.8.20261112-windows-x64.zip -DestinationPath .\n.\\dwi2trx-0.8.20261112-windows-x64\\dwi2trx.exe dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "Expand-Archive -Path .\\dwi2trx-0.8.20261113-windows-x64.zip -DestinationPath .\n.\\dwi2trx-0.8.20261113-windows-x64\\dwi2trx.exe dwi.nii.gz dwi.bval dwi.bvec results"
         }
       ],
       "containers": []
