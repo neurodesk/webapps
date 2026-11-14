@@ -101,7 +101,8 @@ Two checks keep this from regressing:
   `verify`. It runs the extracted release's `self-check` in Windows Server Core
   containers without a Visual C++ runtime and with the too-old 14.29 runtime,
   after a negative control that removes the release's runtime DLLs and requires
-  the self-check to fail in both environments. `scripts/clean-windows-inputs.json`
+  the self-check to fail without a runtime and, when the release has ONNX
+  Runtime's Node binding, with the 14.29 runtime (QSMbly's QSMxT runs on it). `scripts/clean-windows-inputs.json`
   pins the Server Core images by digest and the 14.29 installer by its versioned
   Microsoft download URL and SHA256. The check verifies the installer hash
   before use and rejects containers whose system runtime differs from the test

@@ -329,6 +329,7 @@ test('the clean Windows negative control accepts each way a missing runtime was 
   // Outputs seen in the clean Server Core container on 13-14 November 2026.
   assert.match("Error: The specified module could not be found.\r\n\\\\?\\C:\\x\\onnxruntime_binding.node\r\n  code: 'ERR_DLOPEN_FAILED'", loaderFailure);
   assert.match('syncro.exe : The specified module could not be found.\r\n\\\\?\\C:\\x\\onnxruntime_binding.node', loaderFailure);
+  assert.match('syncro.exe : A dynamic link library (DLL) initialization routine failed.', loaderFailure);
   // packages/qsmbly/test/node.test.js pins this message for a child that could not load a DLL.
   assert.match('qsmbly.exe : QSMxT --version failed (exit 3221225781 (0xC0000135)): no output', loaderFailure);
   assert.doesNotMatch('Error: Cannot find module ./model.json', loaderFailure);
@@ -336,6 +337,10 @@ test('the clean Windows negative control accepts each way a missing runtime was 
   // The access violation counts only on the old runtime, and success never does.
   assert.match(check, /elseif \(\$InstallVc2019 -and \$code -eq -1073741819\)/);
   assert.ok(check.indexOf("if ($code -eq 0) { throw 'Negative control passed") < check.indexOf('$output -match'));
+  // QSMxT runs on the 14.29 runtime; only ONNX Runtime's Node binding is known not to.
+  const verify = await readFile(new URL('../exes/node-cli/scripts/verify_clean_windows.ps1', import.meta.url), 'utf8');
+  const binding = verify.indexOf("-Filter 'onnxruntime_binding.node'");
+  assert.ok(binding > 0 && binding < verify.indexOf("@('-InstallVc2019', '-ExpectFailure')"));
 });
 
 test('manual SamSrf WASM diagnosis isolates the build without changing draft or ready checks', async () => {
