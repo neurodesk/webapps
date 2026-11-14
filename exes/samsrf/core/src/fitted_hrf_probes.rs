@@ -5,6 +5,9 @@
 //! SAMSRF_FITTED_HRF_DIR is the extracted fitted-hrf-reference.json pack and
 //! SAMSRF_MATLAB_REFERENCE_DIR the 741-case pin whose traces it replays.
 //! SAMSRF_FITTED_HRF_REPORT writes the per-stage counts as JSON.
+// Stage arrays are indexed in parallel by sample and evaluation.
+#![allow(clippy::needless_range_loop)]
+
 use super::{deviance, exp, gammaln, log, stirlerr};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -175,6 +178,7 @@ fn sha256(bytes: &[u8]) -> String {
 
 /// Compare one recorded gamma's per-sample parts (rows `samples`, one column per
 /// evaluation or pair) with the port, on MATLAB's own inputs at every stage.
+#[allow(clippy::too_many_arguments)]
 fn compare_parts(dir: &Path, parts: &Value, x_of: &dyn Fn(usize) -> Vec<f64>, a_of: &dyn Fn(usize) -> f64, b_of: &dyn Fn(usize) -> f64, density: &(Vec<f64>, usize), density_scalar: &(Vec<f64>, usize), tallies: &mut BTreeMap<&'static str, Tally>) {
     let (scalars, shape) = read(dir, &parts["scalars"]);
     let columns = shape[1];
