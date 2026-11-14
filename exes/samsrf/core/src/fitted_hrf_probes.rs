@@ -18,6 +18,129 @@ const PROCESSES: [&str; 2] = ["first", "repeat"];
 const FIRST_DIVERGENCE: [usize; 6] = [16, 15, 15, 35, 16, 16];
 const DISCOVERY: [usize; 3] = [0, 1, 2];
 
+const STAGE_ARRAYS: [(&str, usize); 5] = [("rfp", 10000), ("yp", 250), ("hrf", 33), ("conv", 282), ("cy", 250)];
+
+fn require_stage_inventory(record: &Value) {
+    let fits = record["traces"].as_array().expect("recorded traces");
+    assert_eq!(fits.len(), FIRST_DIVERGENCE.len(), "six fitted-HRF traces");
+    for (f, fit) in fits.iter().enumerate() {
+        assert_eq!(fit["fit"], json!(f), "fit identity");
+        let first = FIRST_DIVERGENCE[f];
+        let expected: Vec<usize> = [0, 1, 2].into_iter().chain(first - 2..=first + 2).collect();
+        let stages = fit["stages"].as_array().expect("recorded stages");
+        let actual: Vec<u64> = stages.iter().map(|s| s["evaluation"].as_u64().expect("integral stage evaluation")).collect();
+        assert_eq!(actual, expected.iter().map(|&e| e as u64).collect::<Vec<_>>(), "fit {f}: preregistered stage indices, once each and in order");
+        for (stage, e) in stages.iter().zip(expected) {
+            for (name, rows) in STAGE_ARRAYS {
+                let descriptor = &stage[name];
+                assert_eq!(descriptor, &json!({
+                    "file": format!("fit{f}_eval{e}_{name}.f64"),
+                    "shape": [rows, 1], "class": "double", "imaginary": ""
+                }), "fit {f} evaluation {e}: {name} descriptor");
+            }
+            for field in ["r", "err", "errfun"] {
+                assert!(stage[field].as_f64().expect("numeric stage result").is_finite(), "fit {f} evaluation {e}: finite {field}");
+            }
+        }
+    }
+}
+
+fn require_repeat_record(first: &Value, repeat: &Value) {
+    require_stage_inventory(first);
+    // CPU frequency metadata can vary between processes; numerical records cannot.
+    for field in ["traces", "heldOut"] {
+        assert!(serde_json::to_vec(&first[field]).unwrap() == serde_json::to_vec(&repeat[field]).unwrap(), "fresh-process {field}, including stage descriptors and scalar results, must agree");
+    }
+}
+
+fn checked_record(pack: &Path, label: &str) -> Value {
+    let load = |process| serde_json::from_slice::<Value>(&std::fs::read(pack.join(label).join(process).join("fitted-hrf.json")).unwrap()).unwrap();
+    let first = load("first");
+    let repeat = load("repeat");
+    require_repeat_record(&first, &repeat);
+    // Reading every stage also enforces the declared payload byte counts.
+    for process in PROCESSES {
+        let dir = pack.join(label).join(process);
+        for fit in first["traces"].as_array().unwrap() {
+            for stage in fit["stages"].as_array().unwrap() {
+                for (name, _) in STAGE_ARRAYS {
+                    let _ = read(&dir, &stage[name]);
+                }
+            }
+        }
+    }
+    first
+}
+
+fn stage_record_for_test() -> Value {
+    let indices = [
+        [0, 1, 2, 14, 15, 16, 17, 18],
+        [0, 1, 2, 13, 14, 15, 16, 17],
+        [0, 1, 2, 13, 14, 15, 16, 17],
+        [0, 1, 2, 33, 34, 35, 36, 37],
+        [0, 1, 2, 14, 15, 16, 17, 18],
+        [0, 1, 2, 14, 15, 16, 17, 18],
+    ];
+    json!({"traces": indices.iter().enumerate().map(|(f, indices)| {
+        json!({"fit": f, "stages": indices.iter().map(|e| {
+            let mut stage = json!({"evaluation": e, "r": 0.5, "err": 0.75, "errfun": 0.75});
+            for (name, rows) in STAGE_ARRAYS {
+                stage[name] = json!({"file": format!("fit{f}_eval{e}_{name}.f64"), "shape": [rows, 1], "class": "double", "imaginary": ""});
+            }
+            stage
+        }).collect::<Vec<_>>()})
+    }).collect::<Vec<_>>()})
+}
+
+#[test]
+fn stage_inventory_rejects_missing_duplicate_and_reordered_evaluations() {
+    let valid = stage_record_for_test();
+    require_stage_inventory(&valid);
+    for f in 0..6 {
+        for mutation in 0..5 {
+            let mut changed = valid.clone();
+            let stages = changed["traces"][f]["stages"].as_array_mut().unwrap();
+            match mutation {
+                0 => stages.clear(),
+                1 => { stages.pop(); }
+                2 => stages[7] = stages[6].clone(),
+                3 => stages.swap(3, 4),
+                _ => stages[3]["evaluation"] = json!(14.5),
+            }
+            assert!(std::panic::catch_unwind(|| require_stage_inventory(&changed)).is_err(), "fit {f}, mutation {mutation}");
+        }
+    }
+}
+
+#[test]
+fn stage_inventory_rejects_invalid_descriptors() {
+    let valid = stage_record_for_test();
+    for (field, value) in [
+        ("class", json!("single")),
+        ("imaginary", json!("imag.f64")),
+        ("shape", json!([1, 10000])),
+        ("shape", json!([10000.5, 1])),
+        ("file", json!("fit0_eval1_rfp.f64")),
+    ] {
+        let mut changed = valid.clone();
+        changed["traces"][0]["stages"][0]["rfp"][field] = value;
+        assert!(std::panic::catch_unwind(|| require_stage_inventory(&changed)).is_err(), "{field}");
+    }
+}
+
+#[test]
+fn stage_inventory_rejects_inconsistent_repeat_records() {
+    let valid = stage_record_for_test();
+    require_repeat_record(&valid, &valid);
+    let mut missing = valid.clone();
+    missing["traces"][0]["stages"] = json!([]);
+    let mut different = valid.clone();
+    different["traces"][0]["stages"][0]["errfun"] = json!(0.5);
+    for repeat in [missing, different] {
+        assert!(std::panic::catch_unwind(|| require_repeat_record(&valid, &repeat)).is_err());
+    }
+}
+
 fn read(root: &Path, descriptor: &Value) -> (Vec<f64>, Vec<usize>) {
     let name = descriptor["file"].as_str().unwrap();
     assert_eq!(Path::new(name).file_name().unwrap(), name, "{name}");
@@ -140,7 +263,7 @@ fn fitted_hrf_probes_inventory() {
         for name in &names {
             assert_eq!(std::fs::read(first.join(name)).unwrap(), std::fs::read(repeat.join(name)).unwrap(), "{label}: {name:?} differs between processes");
         }
-        let record: Value = serde_json::from_slice(&std::fs::read(first.join("fitted-hrf.json")).unwrap()).unwrap();
+        let record = checked_record(&pack, label);
         assert!(record["environment"]["matlab"].as_str().unwrap().starts_with("23.2.0.3097123"), "{label}: MATLAB R2023b Update 11");
         let fits = record["traces"].as_array().unwrap();
         assert_eq!(fits.len(), 6, "{label}: traces");
@@ -226,7 +349,7 @@ fn fitted_hrf_probes_report() {
     let mut report = serde_json::Map::new();
     for label in LABELS {
         let dir = pack.join(label).join(PROCESSES[0]);
-        let record: Value = serde_json::from_slice(&std::fs::read(dir.join("fitted-hrf.json")).unwrap()).unwrap();
+        let record = checked_record(&pack, label);
         let cpu = record["environment"]["cpu"].as_str().unwrap_or("");
         let vendor = if cpu.contains("AuthenticAMD") { "AMD" } else if cpu.contains("GenuineIntel") { "Intel" } else { "unknown" };
         let mut sets = serde_json::Map::new();
@@ -351,7 +474,7 @@ fn fitted_hrf_probes_match_the_port() {
     let mut host_arrays: BTreeMap<&str, Vec<Vec<f64>>> = BTreeMap::new();
     for label in LABELS {
         let dir = pack.join(label).join("first");
-        let record: Value = serde_json::from_slice(&std::fs::read(dir.join("fitted-hrf.json")).unwrap()).unwrap();
+        let record = checked_record(&pack, label);
         let vendor = run["hosts"][label]["vendor"].as_str().unwrap();
         let mut densities = Vec::new();
         for (f, fit) in record["traces"].as_array().unwrap().iter().enumerate() {

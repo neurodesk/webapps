@@ -1341,14 +1341,20 @@ non-half-integer shape below 15, do not distinguish the two forms.
 `matlab_math::gampdf` now uses that normaliser. No constant or threshold was
 fitted: it is one operation order in the existing formula. `fitted_hrf_probes`
 (test-only, `exes/samsrf/core/src/fitted_hrf_probes.rs`) requires, on both hosts,
-every recorded kernel and density (vector, per sample and generated) and the
-`prf_errfun` stages around each first divergence to equal the port's, MATLAB's
+every recorded kernel and density (vector, per sample and generated), receptive-field
+profile, unconvolved prediction and retained convolution output to equal the port's, MATLAB's
 densities and kernels to be identical across the hosts, and, on the AMD host,
 MATLAB's `err` to equal the pin and the port's objective at every evaluation. It
 also requires the old normaliser to differ from the new one on this data, and
 fails on a changed byte, a missing or extra file, and a one-ULP change to a
 recorded density. With the old normaliser restored, it fails at fit 0's kernel
 (4 ULP) and the trace gate at fit 0, evaluation 16.
+Each fit must contain all eight preregistered stage indices exactly once and in
+order, with the specified real-double descriptors, shapes and payload lengths.
+The first and repeat numerical records must agree, including stage descriptors
+and scalar results; changing CPU-frequency metadata is separate. Rejection
+tests cover missing, duplicate and reordered stages, invalid descriptors and
+inconsistent repeat records.
 
 What this does not show: MATLAB's `gampdf` source, which was not read. The
 agreement is with these recordings: shapes 1.5 to 20 and scales 0.5 to 3, on
