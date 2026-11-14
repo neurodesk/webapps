@@ -1112,19 +1112,24 @@ preprocessed courses and classifies every vertex:
 | analyzePRF, coarse | 10 | 10 | | | |
 | analyzePRF, fine | 10 | 8 | 6 | | |
 
-Vertex numbers are zero-based fixture positions. The other vertices are
-bit-identical. The classes are:
+Vertex numbers are zero-based fixture positions. There are eight plateau,
+five acceptance and one different-optimum case/vertex entries. A vertex
+appearing in two pipelines counts twice. The other vertices are bit-identical
+or meet the rounding diagnostic below. The classes are:
 
-- **Rounding only:** x0, y0 and Sigma have MATLAB's bits, R² is within 1e-12,
-  and Beta, Baseline and R² differ in the last bits. Every zero and NaN mask
-  equals MATLAB's.
+- **Rounding:** x0, y0 and Sigma have MATLAB's bits, R² is within 1e-12,
+  and every finite map, including Beta and Baseline, differs by at most
+  `1e-12 * max(1, abs(MATLAB value))`. Every zero and NaN mask equals MATLAB's;
+  infinities fail. This diagnostic ceiling is not a general numerical bound.
 - **Plateau:** both kept a fit, at different parameters, with R² within 1e-9.
   The port's own objective is the same at both endpoints to 3e-11 relative at
-  vertex 17 and to 1.2e-13 or less elsewhere. These are equivalent minima, not a
-  failed search. Every one has a small Sigma (0.005 to 0.041), far below the
+  vertex 17 and to 1.2e-13 or less elsewhere. This establishes nearly equal
+  endpoint objectives under port arithmetic, not MATLAB-side equivalence or
+  global optimality. Every one has a small Sigma (0.005 to 0.041), far below the
   coarse grid's smallest (1.19), where the prediction barely depends on it.
-- **Acceptance:** one side kept the fit and the other zeroed it. Three times the
-  port keeps a fit MATLAB rejected (R² 0.74, 0.41, 0.58), and once the reverse
+- **Acceptance:** one side kept the fit and the other zeroed it. In four
+  case/vertex entries the port keeps a fit MATLAB rejected (R² 0.74 in two
+  pipelines, 0.41 and 0.58), and once the reverse
   (vertex 58). `samsrf_fit_prf` zeroes a fit whose Sigma is not positive or
   whose position is beyond twice the scaling factor. Its objective depends on
   Sigma only through Sigma², so on these sub-pixel plateaus the search can end
@@ -1215,9 +1220,8 @@ What this establishes:
 - **Unavailable.** Neither MKL's C nor its Fortran thread functions
   (`MKL_Get_Max_Threads`, `MKL_Get_Dynamic`) resolve in MATLAB's process (S1-B),
   so MKL's own thread count and dynamic adjustment remain unobserved (T1 and T2
-  undecided). That MKL ran one thread rests on `maxNumCompThreads`, OpenMP's
-  one thread and the deterministic, request-independent trees, not on an MKL
-  receipt.
+  undecided). The MATLAB computational limit, OpenMP query and deterministic
+  trees do not establish MKL's actual thread count or dynamic setting.
 
 So the reference recordings ran each CPU's automatic branch, and the
 `MKL_CBWR` request in the recorders is ineffective. MATLAB on Intel and AMD

@@ -7,12 +7,14 @@
 //! Its purpose is to keep the diagnosis exact and reviewable, not to accept the
 //! differences. It requires every case, shape, map name and the HRF bits; zero
 //! and NaN masks equal to MATLAB's wherever the parameters are equal; and the
-//! committed vertex-to-class map below. Any change, better or worse, fails until
-//! the map is reviewed and updated.
+//! committed vertex-to-class map below. A changed classification, better or
+//! worse, fails until the class map is reviewed and updated. Rounding-class
+//! map values must remain within the explicit diagnostic ceiling.
 //!
 //! Classes:
 //! - `rounding`: x0, y0 and Sigma have MATLAB's bits and R^2 is within 1e-12
-//!   (Beta, Baseline and R^2 may differ in the last bits);
+//!   with every finite map within 1e-12 * max(1, abs(MATLAB value));
+//!   this is a diagnostic ceiling, not a general error bound;
 //! - `plateau`: both kept a fit with different parameters and R^2 within 1e-9;
 //!   the port's own objective (`prf::errfun_with_convention`) is then equal at
 //!   both endpoints to 1e-10 relative;
@@ -46,6 +48,25 @@ fn array(root: &Path, descriptor: &Value) -> Vec<f64> {
     let count: usize = descriptor["shape"].as_array().unwrap().iter().map(|n| n.as_u64().unwrap() as usize).product();
     assert_eq!(bytes.len(), count * 8, "{name}");
     bytes.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
+}
+
+fn assert_rounding_map(actual: f64, expected: f64, context: &str) {
+    assert_eq!((actual == 0.0, actual.is_nan()), (expected == 0.0, expected.is_nan()), "{context}: zero/NaN mask");
+    if expected.is_nan() {
+        return;
+    }
+    assert!(actual.is_finite() && expected.is_finite(), "{context}: nonfinite map");
+    let limit = 1e-12 * expected.abs().max(1.0);
+    assert!((actual - expected).abs() <= limit, "{context}: map differs beyond rounding ceiling: {actual} vs {expected}, limit {limit}");
+}
+
+#[test]
+fn rounding_rejects_wrong_coefficients_and_masks() {
+    assert_rounding_map(1.0 + f64::EPSILON, 1.0, "Beta");
+    assert_rounding_map(f64::NAN, f64::NAN, "rejected");
+    for (actual, expected) in [(1.0, 1e6), (2.0, 3.0), (0.0, 1e-15), (f64::NAN, 1.0), (f64::INFINITY, f64::INFINITY)] {
+        assert!(std::panic::catch_unwind(|| assert_rounding_map(actual, expected, "mutated map")).is_err());
+    }
 }
 
 #[test]
@@ -124,12 +145,8 @@ fn double_forward_pipelines_keep_their_diagnosed_classes() {
             let (pr2, mr2) = (port("R^2", v), matlab("R^2", v));
             let identical = values.iter().all(|n| port(n, v).to_bits() == matlab(n, v).to_bits());
             let class = if identical || (same_parameters && (pr2 - mr2).abs() <= 1e-12) {
-                if !identical {
-                    // Same fit: every map keeps MATLAB's zero and NaN masks.
-                    for n in &values {
-                        let (a, e) = (port(n, v), matlab(n, v));
-                        assert_eq!((a == 0.0, a.is_nan()), (e == 0.0, e.is_nan()), "{id}: vertex {v} {n} mask: {a} vs {e}");
-                    }
+                for n in &values {
+                    assert_rounding_map(port(n, v), matlab(n, v), &format!("{id}: vertex {v} {n}"));
                 }
                 continue;
             } else if kept(&port) != kept(&matlab) {
