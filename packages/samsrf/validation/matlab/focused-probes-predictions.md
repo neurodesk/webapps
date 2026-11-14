@@ -1,0 +1,96 @@
+# Focused probes: predictions
+
+Written before `record_focused_probes.m` was first run on MATLAB. Each section of
+the recorder answers one question. The competing predictions below are fixed
+here, so the recording can confirm or reject them; it cannot change them.
+
+## hooke-jeeves
+
+Question: what does `samsrf_fit2dprf` do with `Hooke_Jeeves_Steps` on single
+reverse-correlation profiles, and does the port's Hooke-Jeeves path reproduce it?
+
+- **Control.** With `FitParam = NaN` (Nelder-Mead), every fitted parameter and
+  R² equals the pinned saved maps (`revcor-reference.json`) for that host's
+  profiles, before the loop's sign and keep rules. If not, the recorder's
+  inputs are not the loop's, and the section is void.
+- **H1 (single parameters).** `samsrf_fit2dprf` passes `[SeedParams 1 0]`
+  without `double(...)` to `samsrf_hookejeeves`. `SeedParams` come from single
+  `Raw_Data`, so the returned parameters and the errors are single (`classes`
+  reads `single,single,single`), and every logged evaluation's error is single.
+- **H2 (the port today).** The port's Hooke-Jeeves path searches in double. It
+  differs from MATLAB on most fitted vertices.
+- **H3 (a single model).** Searching in single, with `prf_gaussian_rf` and the
+  objective in single arithmetic (single `exp`, single differences and
+  `sum_single`), reproduces every recorded parameter and R², and the logged
+  evaluation sequence.
+
+H1 and H3 together would justify a port change; H1 alone would not.
+
+## conv-512
+
+Question: how does MATLAB sum a sparse complex `conv` output within 15 below to
+14 above a multiple of 512? Kernel all ones, 33 taps; the probed pair holds
+±2^60 and every other nonzero sample of the pinned pattern is 1, so each output
+counts the ones outside the smallest subtree that holds the pair.
+
+- **H-seq (the port's sparse path).** Every output adds the nonzero samples of
+  its window in index order: the count is the number of nonzero samples after
+  the later of the pair.
+- **H-split.** The sum restarts at an input index s (two partial sums added at
+  the end). A pair straddling s gives 0.
+- **H-tile.** Outputs are produced in tiles of 512, with the tile's own order:
+  outputs near the boundary differ from H-seq; the control centre (256) does not.
+
+The control region, centred on 256 and away from every boundary, follows H-seq
+under every hypothesis; a difference there voids the section.
+
+## trig-position
+
+Question: does MATLAB's single `sin` or `cos` depend on where an element sits in
+the array (a vector kernel for the body and a scalar one for the tail)?
+
+- **H0 (position-invariant).** Scalar calls, every offset of a 33-element array,
+  and the whole input array all give the recorded MATLAB value: the exception
+  table's value for exception inputs, and the port's for controls.
+- **H-position.** Scalar calls, or some offsets, give the port's value at
+  exception inputs (the fdlibm-float candidate), and only the vector body
+  differs. The residual would then be a vector kernel's, not the candidate's.
+
+## dot-short
+
+Question: in what order does MATLAB's real `x'*y` add 2-24 products? The pair
+counts give the tree.
+
+- **H-mkl (the port's `ddot` for 20 or more elements).** Four two-lane registers
+  over blocks of eight, then pairs, then the last element.
+- **H-seq.** One accumulator in index order.
+- **Other.** Neither; the tree is then read from the counts and checked on the
+  held-out random products.
+
+## Amendment after run 43527633094 (written before the rerun)
+
+The Hooke-Jeeves section of run 43527633094 is void, as the control rule above
+requires: its Nelder-Mead control differed from the pinned maps on every kept
+vertex. The cause is the recorder's input, not MATLAB. It seeded the fits from
+`single(rawMaps)`, but `samsrf_revcor_prf` builds the raw maps in double
+arrays (`fXimg = zeros(...)`; x0 and y0 are double pixel coordinates and Fwhm a
+double `sqrt`), and the pinned `rawMaps` are rounded to single only when the
+Srf is saved. The loop's seeds are therefore double. That also makes the
+section's single parameters an artifact of the cast: they are no evidence for
+H1.
+
+The rerun rebuilds each vertex's double raw row as `samsrf_revcor_prf` does,
+from the pinned profile (peak index, half-maximum area) and SamSrf's pixel grid,
+with R² and Beta from the pinned row, which hold them exactly, and asserts that
+the rebuilt row rounds to the pinned single one. Predictions for the rerun:
+
+- **Control.** Nelder-Mead now reproduces every pinned map value.
+- **H1' (double parameters).** With double seeds, `[SeedParams 1 0]` is double:
+  the Hooke-Jeeves parameters are double and each error is a single value
+  stored in a double (`NewErr = Inf(...)`).
+- **H2' (the port today).** The port's Hooke-Jeeves path, which searches in
+  double with the single objective of #817, reproduces every recorded parameter
+  and R².
+
+The conv, trig and dot sections do not use these inputs; the rerun repeats them,
+and the recording that is pinned must equal run 43527633094 there.
