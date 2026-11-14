@@ -229,7 +229,56 @@ fn split_rows(all: &[[f64; 2]], counts: &[f64]) -> Vec<Vec<[f64; 2]>> {
     result
 }
 
+fn real_double_values(bytes: &[u8], descriptor: &Value) -> Vec<f64> {
+    assert_eq!(descriptor["class"], "double", "real double recording required");
+    assert_eq!(descriptor["imaginary"], "", "complex recording is not supported");
+    let count = shape(descriptor).into_iter().try_fold(1usize, |n, dimension| n.checked_mul(dimension)).unwrap();
+    assert_eq!(bytes.len(), count.checked_mul(8).unwrap(), "descriptor byte length");
+    bytes.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
+}
+
+fn assert_reproducer_parameters(values: &[f64], items: &[Value]) {
+    let roles = ["original", "minimal", "chain", "oneDeleted", "order", "scale", "reproducer"];
+    assert_eq!(values.len(), items.len() * 5, "reproducer parameter inventory");
+    for (i, item) in items.iter().enumerate() {
+        let role = roles.iter().position(|role| item["role"] == *role).expect("known reproducer role");
+        let expected = [item["cloud"].as_u64().unwrap(), role as u64,
+            item["reversed"].as_u64().unwrap(), item["shift"].as_u64().unwrap(), item["transform"].as_u64().unwrap()];
+        for (column, value) in expected.into_iter().enumerate() {
+            assert_eq!(values[i + column * items.len()].to_bits(), (value as f64).to_bits(),
+                "reproducer {i}: parameter column {column} differs from spec");
+        }
+    }
+}
+
+#[test]
+fn reproducer_descriptors_and_parameters_reject_corruption() {
+    let descriptor = json!({"class": "double", "imaginary": "", "shape": [1, 5]});
+    let values = [177.0f64, 6.0, 0.0, 2.0, 3.0];
+    let bytes: Vec<u8> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
+    let items = [json!({"cloud": 177, "role": "reproducer", "reversed": 0, "shift": 2, "transform": 3})];
+    let decoded = real_double_values(&bytes, &descriptor);
+    assert_reproducer_parameters(&decoded, &items);
+    for invalid in [&bytes[..0], &bytes[..bytes.len() - 8], &bytes[..bytes.len() - 1]] {
+        assert!(std::panic::catch_unwind(|| real_double_values(invalid, &descriptor)).is_err());
+    }
+    for (field, value) in [("class", "single"), ("imaginary", "unexpected.f64")] {
+        let mut invalid = descriptor.clone();
+        invalid[field] = json!(value);
+        assert!(std::panic::catch_unwind(|| real_double_values(&bytes, &invalid)).is_err());
+    }
+    for column in 0..5 {
+        let mut invalid = decoded.clone();
+        invalid[column] += 1.0;
+        assert!(std::panic::catch_unwind(|| assert_reproducer_parameters(&invalid, &items)).is_err());
+    }
+}
+
 fn validate_causal_case(root: &Path, case: &Value, n: usize, parameter_shape: [usize; 2]) {
+    for descriptor in case.as_object().unwrap().values().filter(|value| value.get("file").is_some()) {
+        let bytes = std::fs::read(root.join(descriptor["file"].as_str().unwrap())).unwrap();
+        real_double_values(&bytes, descriptor);
+    }
     for field in ["counts", "simplifiedCounts", "collinearCounts", "hullCounts", "regions", "warning", "error", "defaultHolesCounts", "keptHolesCounts", "fromKeptCounts", "fromDefaultCounts", "viaSimplifyCounts"] {
         assert_eq!(shape(&case[field]), [n, 1], "{}: {field} inventory", case["id"]);
         assert_eq!(array(root, &case[field]).len(), n);
@@ -504,3 +553,109 @@ fn polyshape_causal_matches_matlab() {
     }
 }
 
+
+/// The reproducer recording (record_geometry.m 'polyshape-reproducers', pinned by
+/// polyshape-reproducers-reference.json): SAMSRF_MATLAB_POLYSHAPE_REPRODUCERS_DIR.
+fn reproducer_hosts() -> Vec<(PathBuf, Vec<Value>)> {
+    let Some(root) = std::env::var_os("SAMSRF_MATLAB_POLYSHAPE_REPRODUCERS_DIR").map(PathBuf::from) else { return Vec::new() };
+    ["ubuntu-22.04", "ubuntu-24.04"].iter().map(|host| {
+        let dir = root.join(host);
+        let cases = load(&dir, "geometry.json");
+        (dir, cases)
+    }).collect()
+}
+
+/// A model's hull as polyshape_reduce.py's `prediction` writes it: sorted IEEE
+/// bits of the vertices, area and centroid, or `{"empty": true}`.
+fn predicted_bits(hull: Option<&Hull>) -> Value {
+    match hull {
+        None => json!({"empty": true}),
+        Some(hull) => {
+            let mut vertices: Vec<[u64; 2]> = hull.vertices.iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect();
+            vertices.sort();
+            json!({"hull": vertices, "area": hull.area().to_bits(), "centroid": hull.centroid().map(f64::to_bits)})
+        }
+    }
+}
+
+/// record_geometry.m's transforms of a reproducer (polyshape_reduce.py's
+/// `transformed`): flipud, circshift by -shift, then +[0.37 -1.21], *1e-2 or *1e2.
+fn transformed(points: &[[f64; 2]], reversed: bool, shift: usize, transform: u64) -> Vec<[f64; 2]> {
+    let mut q = points.to_vec();
+    if reversed {
+        q.reverse();
+    }
+    let len = q.len().max(1);
+    q.rotate_left(shift % len);
+    q.iter().map(|&[x, y]| match transform {
+        0 => [x, y],
+        1 => [x + 0.37, y + -1.21],
+        2 => [x * 1e-2, y * 1e-2],
+        3 => [x * 1e2, y * 1e2],
+        _ => unreachable!(),
+    }).collect()
+}
+
+/// The reduced reproducers of the four regressions, on both hosts. Every recorded
+/// polygon is the spec's (indices into the full clouds the first batch records as
+/// controls, then the transform); both models still give the hulls predicted
+/// before the recording (polyshape-reproducers*.json); MATLAB's verdicts per case
+/// (hull equals the shipped model's, the experimental model's) equal the frozen
+/// matlab_polyshape_reproducers.json; and the smallest measured reproducers
+/// (177: 6 points, 932: 16, 1607: 8, 1937: 8) still have MATLAB's hull equal to the
+/// shipped model's and not the experimental one. A fix of the experimental model
+/// changes the predictions and fails here: re-derive the predictions and verdicts
+/// from the pinned recording, never from the model under test.
+#[test]
+fn polyshape_reproducers_match_recording() {
+    let hosts = reproducer_hosts();
+    if hosts.is_empty() {
+        return;
+    }
+    let specs: [(&str, Value); 3] = [
+        ("reproducer_cases", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers.json")).unwrap()),
+        ("reproducer_round2", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-2.json")).unwrap()),
+        ("reproducer_round3", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-3.json")).unwrap()),
+    ];
+    let frozen: Value = serde_json::from_str(include_str!("matlab_polyshape_reproducers.json")).unwrap();
+    for (root, cases) in hosts {
+        assert_eq!(cases.iter().map(|c| c["id"].as_str().unwrap()).collect::<Vec<_>>(), specs.iter().map(|s| s.0).collect::<Vec<_>>(), "{}: reproducer inventory", root.display());
+        let mut clouds: std::collections::BTreeMap<u64, Vec<[f64; 2]>> = Default::default();
+        for (case, (id, spec)) in cases.iter().zip(&specs) {
+            let items = spec["cases"].as_array().unwrap();
+            let n = items.len();
+            validate_causal_case(&root, case, n, [n, 5]);
+            assert_reproducer_parameters(&array(&root, &case["parameters"]), items);
+            let polygons = split_rows(&points(&array(&root, &case["points"])), &array(&root, &case["counts"]));
+            let hulls = split_rows(&points(&array(&root, &case["hull"])), &array(&root, &case["hullCounts"]));
+            let verdicts = frozen["verdicts"][id].as_array().unwrap();
+            assert_eq!(verdicts.len(), n, "{id}: frozen verdict inventory");
+            for (i, item) in items.iter().enumerate() {
+                let at = format!("{} {id} {i}", root.display());
+                let cloud = item["cloud"].as_u64().unwrap();
+                if item["role"] == "original" {
+                    clouds.insert(cloud, polygons[i].clone());
+                }
+                let full = &clouds[&cloud];
+                let indices: Vec<usize> = item["indices"].as_array().unwrap().iter().map(|k| k.as_u64().unwrap() as usize - 1).collect();
+                let expected = transformed(&indices.iter().map(|&k| full[k]).collect::<Vec<_>>(), item["reversed"].as_u64() == Some(1), item["shift"].as_u64().unwrap() as usize, item["transform"].as_u64().unwrap());
+                assert_eq!(polygons[i].iter().map(|p| p.map(f64::to_bits)).collect::<Vec<_>>(), expected.iter().map(|p| p.map(f64::to_bits)).collect::<Vec<_>>(), "{at}: polygon differs from the spec");
+                let shipped = Hull::of_polygon(&polygons[i]);
+                let experimental = hull_of_polygon(&polygons[i]).unwrap_or_else(|e| panic!("{at}: {e}"));
+                assert_eq!(predicted_bits(shipped.as_ref()), item["predicted"]["shipped"], "{at}: shipped model changed since the prediction");
+                assert_eq!(predicted_bits(experimental.as_ref()), item["predicted"]["experimental"], "{at}: experimental model changed since the prediction");
+                let matlab = sorted_vertices(&hulls[i]);
+                let same = |hull: &Option<Hull>| sorted_vertices(hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[])) == matlab;
+                assert_eq!(json!([same(&shipped), same(&experimental)]), verdicts[i], "{at}: MATLAB verdict differs from the frozen one");
+            }
+        }
+        for (cloud, smallest) in frozen["smallest"].as_object().unwrap() {
+            let (round, indices) = (smallest["round"].as_str().unwrap(), &smallest["indices"]);
+            let spec = &specs.iter().find(|s| s.0 == round).unwrap().1;
+            let i = spec["cases"].as_array().unwrap().iter().position(|c| c["cloud"].as_u64().unwrap().to_string() == *cloud && &c["indices"] == indices && c["transform"] == 0 && c["reversed"] == 0 && c["shift"] == 0).unwrap();
+            assert_eq!(frozen["verdicts"][round][i], json!([true, false]), "cloud {cloud}: smallest reproducer no longer reproduces");
+        }
+        assert_eq!(frozen["smallest"].as_object().unwrap().keys().map(|k| k.parse::<usize>().unwrap()).collect::<BTreeSet<_>>(), REGRESSIONS.into_iter().collect());
+        println!("{}: {} reproducer cases checked", root.file_name().unwrap().to_string_lossy(), specs.iter().map(|s| s.1["cases"].as_array().unwrap().len()).sum::<usize>());
+    }
+}

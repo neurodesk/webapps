@@ -685,6 +685,65 @@ Checked on 2026-11-12 without a license:
 
 No compiled step has run.
 
+### Operator handoff for a licensed host
+
+For someone who holds a MATLAB Compiler license for R2023b Update 11 on a
+Linux x86-64 host with Docker. Nothing here needs the repository's secrets, and
+the license never leaves that host.
+
+Needs: Docker with access to `/var/run/docker.sock`, disk for MATLAB (9.8 GB), the
+Runtime images and the work directory, network
+access to GitHub, Hugging Face and `mathworks/matlab-deps`, Python 3, git, and
+a checkout of this repository at the commit to be validated.
+
+```sh
+# 1. MATLAB R2023b Update 11, installed with mpm inside the builder's base image.
+export WORK="$TMPDIR/samsrf-compiled"           # must not exist yet
+export MATLAB_ROOT="$TMPDIR/matlab-r2023bu11"
+mpm install --release=R2023bU11 --destination="$MATLAB_ROOT" \
+  --products MATLAB MATLAB_Compiler Statistics_and_Machine_Learning_Toolbox \
+  Image_Processing_Toolbox Parallel_Computing_Toolbox
+# 2. Build and run every gate on this host; the driver stops at the first failure.
+packages/samsrf/validation/matlab/licensed-host/build_and_validate.sh \
+  "$WORK" /path/to/license.lic "$MATLAB_ROOT"   # or PORT@HOST
+```
+
+The run passed only if its last lines are `All gates passed on this host for
+local image sha256:...` and `Evidence: .../samsrf-cli`. In `$WORK/samsrf-cli`:
+
+| File | Must show |
+| --- | --- |
+| `container-build/source.json`, `provenance/source.json` | The pinned SamSrf and SPM commits and the five CLI repair hashes. |
+| `container-build/image.json` | The local image ID that the last line names. |
+| `source-repeat.json` | Source MATLAB repeated bit for bit (24 runs). |
+| `compiled-vs-source.json` | Compiled equals source MATLAB bit for bit on this host (24 runs). |
+| `compiled-repeat.json` | The compiled image repeated bit for bit. |
+| `compiled-1/receipts`, `compiled-2/receipts` | No network, read-only inputs, the image ID, input hashes unchanged. |
+| `interrupt/`, `failure/` | A prompt nonzero exit on SIGINT, and on a missing model. |
+
+Return two files and their SHA-256 through whatever channel the maintainers
+name, never with the license:
+
+```sh
+tar -C "$WORK" --exclude=samsrf-cli/bundle -czf samsrf-cli-evidence.tar.gz samsrf-cli
+docker save samsrf-reference:41ed1e96-r2023b | gzip > samsrf-reference-41ed1e96-r2023b.tar.gz
+sha256sum samsrf-cli-evidence.tar.gz samsrf-reference-41ed1e96-r2023b.tar.gz
+```
+
+A failed run is evidence too: return the evidence archive and the console log,
+from which the failing gate is clear (the driver stops at it).
+
+The maintainers then load the image, check that its ID equals
+`container-build/image.json`, push it to `ghcr.io/neurodesk/samsrf-reference`,
+record its digest beside `cli-reference.json`, and dispatch `samsrf-native`
+with `runtime_image=ghcr.io/neurodesk/samsrf-reference@sha256:...` for the
+Runtime-only check on other hosts. That last step needs no license.
+
+Checked without a license on 2026-11-13: `test_licensed_host.py`, `test_cli.py`
+and the other harness tests pass (25, Python 3.12 with
+`requirements-cli.txt`), and the driver refuses a MATLAB root other than
+23.2.0.3097123 and an existing work directory before it does anything.
+
 ### SamSrfAnalysis case matrix
 
 `cli_plan.py` defines 12 `SamSrfAnalysis` cases, each in both precisions (24
@@ -1452,8 +1511,17 @@ pass, or three or four, instead of two, resolves none of the four either
 (tested because MATLAB's default is not idempotent). One pass loses three
 original clouds and 37 real-cloud transforms and gains two held-out
 near-collinear clouds; three or four passes lose six held-out strip pairs and
-gain one held-out cloud. No general correction has been established from the
-current evidence.
+gain one held-out cloud. Two structural hypotheses tested on 2026-11-13,
+with predictions written before running them, are rejected too:
+
+- Clipper's `PreserveCollinear` option, which in 6.4.2 only keeps input
+  vertices exactly collinear with and between their neighbours. None of the
+  four clouds has such a vertex on the grid, so it cannot change them.
+- Keeping a union ring that the clean would delete entirely. It fixes none of
+  the four, and loses 129 original clouds, 459 held-out probe clouds and 407
+  causal polygons.
+
+No general correction has been established from the current evidence.
 
 Where the model cannot follow MATLAB (nonfinite centre or span,
 `log10(1.25e14 / span)` outside -22 to 38, or a Clipper sweep that fails for a
@@ -1545,6 +1613,73 @@ the seven clouds, and its rings differ from MATLAB's on replayed kept
 boundaries in 2,999 of the 10,346 controlled polygons even where the vertex sets
 and hulls agree.
 
+### Reduced reproducers of the four regressions
+
+`polyshape_reduce.py` reduces each of the four clouds by deleting points,
+keeping their order (SamSrf passes clusters in breadth-first order). A
+reduction is kept while the witness input points still separate the models:
+on the full cloud, MATLAB's and the experimental hull disagree about whether
+those points are hull vertices, and the shipped model, which equals MATLAB
+there, must still agree with MATLAB on them. That is only a prediction. Both
+models' hulls for every candidate were committed before MATLAB recorded it:
+
+- `polyshape-reproducers.json` (113 cases), recorded first in run
+  [43523651415](https://github.com/neurodesk/webapps/actions/runs/43523651415):
+  the full clouds as controls, each reduction, every one-point deletion of the
+  smallest, and its other starts, reversal, translation and two scales.
+- `polyshape-reproducers-2.json` (80 cases), first in run
+  [43525037841](https://github.com/neurodesk/webapps/actions/runs/43525037841):
+  each cloud's smallest measured reproducer and its one-point deletions.
+- `polyshape-reproducers-3.json` (51 cases), in run
+  [43526041360](https://github.com/neurodesk/webapps/actions/runs/43526041360):
+  cloud 932's 17-point reproducers and their one-point deletions.
+
+`polyshape-reproducers-reference.json` pins the last run, which records all
+three batches (HF commit 82d191c05d5a26d6152b82ccdb500e8b88f80071, SHA-256
+`73631b967a4845788cbf4f9a8ce046472f5694367a36035300f8cab57f12aadd`, recorder
+commit f621f15cd5170c1b9ce24754f54e2a81e964ccf6).
+- Both hosts passed an exact same-host repeat.
+- Their 72 arrays are byte-identical, on an Intel Xeon Platinum 8573C and an
+  AMD EPYC 7763 that report different MKL branches.
+- The first two batches equal the earlier runs bit for bit.
+- The full-cloud controls reproduce the original recording's verdicts.
+
+The proxy failed often. Of the reductions it predicted, MATLAB agreed with the
+shipped model and not the experimental one only for some. On several, MATLAB
+matched the experimental model, or neither model: both are wrong there. The
+smallest measured reproducers, where MATLAB's hull equals the shipped model's
+and not the experimental one:
+
+| Cloud | Points | 1-minimal in MATLAB | Experimental area / CF sigma error | MATLAB default: regions, holes, rings (kept) | `polyshape` of kept / of default = default |
+| --- | ---: | --- | --- | --- | --- |
+| 177 | 6 of 18 | yes | +6.5 % / +3.2 % | 2, 0, 2 (3) | yes / yes |
+| 932 | 16 of 18 | not established | -7.7 % / -3.9 % | 1, 1, 2 (18) | no / no |
+| 1607 | 8 of 40 | yes | -2.9 % / -1.5 % | 5, 1, 6 (7) | no / no |
+| 1937 | 8 of 24 | yes | -24.4 % / -13.0 % | 1, 0, 1 (4) | no / yes |
+
+1-minimal means that every one-point deletion was recorded and none still
+reproduces. For 932 each recording round removed one point. Nine 16-point sets
+reproduce and their deletions were not recorded, so 932's minimum is open.
+
+`polyshape_regression_reproducers.m` holds the four as exact hex doubles with
+MATLAB's and the experimental hull rows. On all four, MATLAB's hull vertices
+are input points:
+
+- 177, 932 and 1607: the experimental model puts another input point on the
+  hull.
+- 1937: it replaces the extreme input point (0.99963, 2.99927) with a crossing
+  of two edges. Its first clean leaves one ring of its four union rings, and
+  MATLAB's default keeps the region that reaches that point.
+
+The 177 reproducer is idempotent and its `KeepCollinearPoints` shape rebuilds
+the default, so the regression does not need non-idempotence or a kept/default
+difference. The winding rule changes none of the 244 recorded hulls.
+`polyshape_reproducers_match_recording` (experimental gate, both hosts) holds
+three things: every recorded polygon to the spec, both models to the hulls
+predicted before recording, and MATLAB's per-case verdicts to
+`matlab_polyshape_reproducers.json`. It also requires the four smallest
+reproducers to keep reproducing.
+
 ### What is established and what is not
 
 Established on the pinned recordings (both hosts identical):
@@ -1559,6 +1694,8 @@ Established on the pinned recordings (both hosts identical):
 - MATLAB's default `polyshape` is not idempotent on 932, 1607 and cloud 7, and
   `polyshape` of its `KeepCollinearPoints` vertices differs from the default
   on 932, 1607, 1937 and cloud 7.
+- Reproducers of 6, 16, 8 and 8 points (above), with exact inputs, MATLAB's
+  outputs on two hosts and both models' predictions made before recording.
 
 Not known:
 
