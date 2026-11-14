@@ -488,9 +488,38 @@ pub fn convolve_complex(y: &[Complex64], kernel: &[f64], downsampling: usize) ->
         .collect()
 }
 
-/// MKL `ddot`: four two-lane registers over blocks of eight, then pairs and a last
-/// element into the first register.
+/// The shortest real `x'*y` that MATLAB hands to MKL's `ddot`. Recorded on AMD and
+/// Intel hosts at every length from 2 to 80 and at held-out lengths to 1,000
+/// (`arithmetic-order-reference.json`).
+pub const DDOT_MKL_MIN_LENGTH: usize = 51;
+
+/// MATLAB's real `x'*y` of two vectors: `ddot_pairs` below
+/// [`DDOT_MKL_MIN_LENGTH`] elements, MKL's `ddot` (`ddot_mkl`) from it on.
 pub fn ddot(x: &[f64], y: &[f64]) -> f64 {
+    if x.len().min(y.len()) < DDOT_MKL_MIN_LENGTH {
+        ddot_pairs(x, y)
+    } else {
+        ddot_mkl(x, y)
+    }
+}
+
+/// MATLAB's own short `x'*y`: adjacent products summed in pairs from the end, the
+/// pair sums added in index order after the first product when the length is
+/// odd. Products and sums are rounded separately (no fused step).
+pub fn ddot_pairs(x: &[f64], y: &[f64]) -> f64 {
+    let n = x.len().min(y.len());
+    let (mut total, start) = if n % 2 == 1 { (x[0] * y[0], 1) } else { (0.0, 0) };
+    for i in (start..n).step_by(2) {
+        let pair = x[i] * y[i] + x[i + 1] * y[i + 1];
+        total = if i == 0 { pair } else { total + pair };
+    }
+    total
+}
+
+/// MKL `ddot` as MATLAB's AMD hosts run it (CNR branch `auto`): four two-lane
+/// registers over blocks of eight, then pairs and a last element into the first
+/// register. MKL's AVX-512 branch on Intel hosts sums in another tree.
+pub fn ddot_mkl(x: &[f64], y: &[f64]) -> f64 {
     let n = x.len().min(y.len());
     let mut r = [[0.0f64; 2]; 4];
     let mut i = 0;
@@ -820,7 +849,19 @@ mod tests {
         let y = vec![1.0; 11];
         let r0 = ((x[0] + x[8]) + x[10], (x[1] + x[9]));
         let expected = (((r0.0 + x[2]) + x[4]) + x[6]) + (((r0.1 + x[3]) + x[5]) + x[7]);
-        assert_eq!(ddot(&x, &y).to_bits(), expected.to_bits());
+        assert_eq!(ddot_mkl(&x, &y).to_bits(), expected.to_bits());
+        // MATLAB's own tree for the same 11 elements, which `ddot` uses below 51.
+        let pairs = ((((x[0] + (x[1] + x[2])) + (x[3] + x[4])) + (x[5] + x[6])) + (x[7] + x[8])) + (x[9] + x[10]);
+        assert_eq!(ddot_pairs(&x, &y).to_bits(), pairs.to_bits());
+        assert_eq!(ddot(&x, &y).to_bits(), pairs.to_bits());
+        // Values whose two trees differ: 1 + 2^53 rounds away the 1 in the pair tree.
+        let big = 2f64.powi(53);
+        let z = [1.0, big, 1.0, -big, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+        assert_eq!((ddot(&z, &y), ddot_pairs(&z, &y), ddot_mkl(&z, &y)), (7.0, 7.0, 8.0));
+        let long: Vec<f64> = (0..DDOT_MKL_MIN_LENGTH).map(|i| 1.0 + i as f64 * 1e-9).collect();
+        let ones = vec![1.0; long.len()];
+        assert_eq!(ddot(&long, &ones).to_bits(), ddot_mkl(&long, &ones).to_bits());
+        assert_eq!(ddot_pairs(&[], &[]), 0.0);
         assert_eq!(nrm2([3.0, 4.0]), 5.0);
         assert_eq!(nrm2([0.0, 0.0]), 0.0);
     }

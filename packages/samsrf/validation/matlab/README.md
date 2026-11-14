@@ -649,11 +649,9 @@ arrays were the same. The earlier BLAS recording agrees: its one product per
 length matches this tree for 1-20 and 33 elements, and MKL's blocked kernel,
 which the port's `ddot` follows, matches the AMD host at 64, 250 and 1,000 but
 not this tree. At 20 and 33 both trees give that recording's value, which is how
-`matlab_numerics.rs` came to gate `ddot` from 20 elements. So MATLAB switches
-between 25 and 63 elements, at a length no recording has located. The port's `ddot` feeds the
-double CSS `corr` over time courses; courses shorter than 64 volumes can
-therefore differ from MATLAB in the last bit. Changing `ddot` needs the switch
-located first, and is a production change with its own release.
+`matlab_numerics.rs` came to gate `ddot` from 20 elements. The
+[arithmetic-order probes](#arithmetic-order-729-730) then located the switch at
+51 elements, and the port's `ddot` follows both trees since 0.6.20261114.
 
 What the probes leave open:
 
@@ -705,6 +703,72 @@ targets (92 and 106): with the V1 seed, the hull fit changes on 1 target
 5.4e-5); the summary mode never changes. The test compares the port with
 itself on one subject's left hemisphere, two seeds and sampled targets; it is no
 general bound on the effect.
+
+## Arithmetic order (#729, #730)
+
+`record_arithmetic_order.m` records three questions whose predictions and holdout
+design were committed first in
+[`arithmetic-order-predictions.md`](arithmetic-order-predictions.md), with the
+results appended there. `arithmetic-order-reference.json` pins
+[run 43564031333](https://github.com/neurodesk/webapps/actions/runs/43564031333)
+(recorder commit `36a91f2653a1c4ce40d628a9fd8ddf006eebe24f`) on an AMD EPYC 9V74
+(`ubuntu-22.04`, CNR `auto`) and an Intel Xeon 6975P-C (`ubuntu-24.04`,
+`AVX512_E1`). Each host recorded twice in fresh processes and the repeats were
+identical. `arithmetic_order.rs` reads the recording through the checked boundary
+(`tests/support/checked.rs`): the exact host CPUs and MKL branches of the pinned
+run, the recorder's 164 cases, every array's class, shape and byte count, and, for
+the conv section, each course's nonzero pattern, values and kernel against its
+numerics2 source.
+
+**Real `x'*y`.** FPRev pair fingerprints at every pair for every length from 2 to
+80 and at 300 sampled pairs for 96, 100, 127, 128, 129, 200, 250, 256 and 1,000
+elements, and 50 random products per length (draws 26-50 held out):
+
+| Lengths | Both hosts | AMD host | Intel host |
+| --- | --- | --- | --- |
+| 2-50 | MATLAB's pair tree: every fingerprint and draw; arrays identical | | |
+| 51-80, held out to 1,000 | | MKL's `ddot` as the port models it: every fingerprint and draw | another tree (pairs 32 apart) at every length |
+
+Products and sums are rounded separately in both trees. Before this change the
+port used MKL's kernel at every length: on the AMD host it missed fingerprints at
+every length from 3 to 50, and the pair tree misses them at every length from 51.
+Since 0.6.20261114 `matlab_math::ddot` uses `ddot_pairs` below
+`DDOT_MKL_MIN_LENGTH` (51) and `ddot_mkl` from it. The BLAS cases of
+`matlab_numerics.rs` (1-20, 33, 64, 250 and 1,000 elements) are now gated at every
+length.
+
+**`corr`.** SamSrf's double CSS objective, `1 - corr(x, y)^2`, on 20
+time-course-like pairs at each of 25-80, 96, 100, 128 and 250 elements. On the
+AMD host the previous port missed 223 of the 1,200 objectives; with the new `ddot`
+all 1,200 equal MATLAB's. On the Intel host 786 differed before and 747 after,
+also below 51 elements, where the dot product is the same on both hosts; another
+operation in Intel's `corr` (not identified) depends on the host.
+
+**Weighted sparse complex `conv`.** The 10 pinned sparse complex courses longer
+than 800 samples, each with its original values and 24 sets of random values on
+the same nonzero positions and kernel (draws 17-24 held out), and six generated
+held-out courses (1,100, 1,536, 2,048 and 2,600 samples with 33 taps; 1,600 with
+17 and 65). Both hosts recorded identical outputs. Of 750,312 kept output parts,
+the port's sparse path differs on 4,993, all within 16 below to 14 above a
+multiple of 512 or within 16 of the end of a course whose length is a multiple of
+512. For every differing output, one fusion mask in index order reproduces every
+draw, so the difference is which products are fused, not the values. The masks fit
+one rule on every 33-tap course, including the held-out draws and the four
+held-out 33-tap courses: products of the last 16 inputs before a multiple B of 512
+are rounded and then added for outputs B - 16 to B - 1, and products of inputs
+before B - 16 for outputs from B on. The 17- and 65-tap courses reject it (98 and
+159 parts). The gate keeps that rule as a test-only evaluator; production is
+unchanged, because SamSrf's kernels have other lengths at other repetition times.
+What decides the boundary for other kernel lengths is open; a recording with more
+tap counts and more draws per course would test candidates. The 65-tap masks are
+not unique with 8 draws.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-arithmetic-order" packages/samsrf/validation/matlab/arithmetic-order-reference.json
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics2" packages/samsrf/validation/matlab/numerics2-reference.json
+SAMSRF_ARITHMETIC_ORDER_DIR="$TMPDIR/samsrf-arithmetic-order" SAMSRF_MATLAB_NUMERICS2_DIR="$TMPDIR/samsrf-numerics2" \
+  cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test arithmetic_order -- --nocapture
+```
 
 ## Building a matching Runtime container
 
@@ -1987,7 +2051,7 @@ results. A model is established only for the inputs below.
 | Negative-base power | Empirical | (-x)^e = (-x)^trunc(e) × exp(f log x)(cos fπ + i sin fπ), integer part by right-to-left binary exponentiation; complex products recover infinities as C99 Annex G (libgcc `__muldc3`) does; i·sqrt(x) for f = 1/2; e < 0 is Smith's reciprocal, a real division when the power is real, and a correctly signed real infinity when it underflowed to zero | all 13,776 probe values with their NaN/Inf masks |
 | `conv` | Empirical | the shorter vector slides over the longer one (a kernel at least as long as the course swaps roles). Kernels of fewer than 9 taps: one ascending accumulator, unfused for courses of at most 16 samples and fused otherwise. Fused multiply-adds; nonzero samples scattered in order when fewer than a quarter are nonzero; otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; the kept (first n) outputs of 288 + 1,308 probe convolutions |
 | `gampdf`, `a ≥ 1` | Empirical | Loader's saddle point as MATLAB evaluates it: `exp((-log(2πk)/2 - stirlerr(k)) - bd0(k, x/b)) / b` with `k = a - 1`; `stirlerr` from a table at half-integers up to 15, Cody's `gammaln` elsewhere below 15 and the Stirling series above; `bd0` by its series near the mode, `x log(x/np) + np - x` away from it; `exp(-x/b)/b` for `a = 1` | 9,760 probe densities per host; out of sample, all six TRs' HRF kernels of the first recording and the pipeline's recorded kernel |
-| `corr` | Empirical | `x'*y` reproduced by MKL 2021.3 `ddot`/`zdotc` kernels, norms by `dnrm2`/`dznrm2` (reference-BLAS scaled sums), `dot/‖x‖/‖y‖`, then values beyond 1 in magnitude divided by their magnitude | every recorded objective; AMD probe kernels |
+| `corr` | Empirical | real `x'*y` by MATLAB's pair tree below 51 elements and MKL 2021.3 `ddot` from 51, complex by `zdotc`, norms by `dnrm2`/`dznrm2` (reference-BLAS scaled sums), `dot/‖x‖/‖y‖`, then values beyond 1 in magnitude divided by their magnitude | every recorded objective; AMD probe kernels |
 
 `css_diagnostics.rs` requires all 108 traces (54 double, 54 single; both seeds and
 nonnegative controls) to reproduce MATLAB's raw prediction, power, convolution
@@ -2052,8 +2116,8 @@ shows agreement, not MATLAB's internal code. The out-of-sample checks are the
 first recording's kernels at TR 0.5-3 (TR 2.5 and 3 were never used in fitting)
 and the recorded pipeline kernel, all equal bit for bit.
 
-Real `x'*y` of 8-19 elements takes another MATLAB path; the
-[focused probes](#focused-probes-729-730) identify it for 2-24 elements. The
+Real `x'*y` below 51 elements takes MATLAB's own pair tree, which the port
+follows since 0.6.20261114 ([arithmetic order](#arithmetic-order-729-730)). The
 recorded `conv_complex_n1000_nnz244` case has eight differing outputs, beginning
 at sample 498, whose imaginary component is `0.2720763362077453` in the port and
 `0.2720763362077454` in MATLAB.
@@ -2176,8 +2240,8 @@ What remains:
   at a first-order scale and does not bound them. Other inputs, and MATLAB's
   AVX-512 host, are not covered.
 - `gampdf` with shape below 1, the zero signs, and sparse complex convolutions
-  longer than 800 samples. Real `x'*y` of 2-24 elements is identified (focused
-  probes) but the port does not use that order yet.
+  longer than 800 samples (a 33-tap rule is identified but not general; see
+  [arithmetic order](#arithmetic-order-729-730)).
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics" packages/samsrf/validation/matlab/numerics-reference.json

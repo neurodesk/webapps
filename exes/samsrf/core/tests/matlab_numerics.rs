@@ -165,9 +165,9 @@ fn hrf_kernels_match_matlab_at_six_trs() {
     assert_eq!(checked, 12);
 }
 
-/// MKL's SSE2 kernels on the AMD host. Up to at least 24 elements MATLAB's real
-/// `x'*y` adds products in pairs instead (`focused_probes.rs`); this recording's
-/// products of 20 and 33 elements happen to fit both trees, and MKL's alone from 64.
+/// MKL's SSE2 kernels on the AMD host, and MATLAB's real `x'*y` at every recorded
+/// length: its own pair tree below 51 elements and MKL's `ddot` from 51
+/// (`arithmetic_order.rs` identifies the switch).
 #[test]
 fn dot_products_and_norms_match_mkl_on_the_amd_reference_host() {
     let Some(root) = root() else { return };
@@ -176,9 +176,7 @@ fn dot_products_and_norms_match_mkl_on_the_amd_reference_host() {
     for case in cases.values().filter(|case| case["kind"] == "blas") {
         let (x, y, z) = (real(&dir, &case["x"]), real(&dir, &case["y"]), complex(&dir, &case["z"]));
         let n = x.len();
-        if n >= 20 {
-            assert!(same(m::ddot(&x, &y), real(&dir, &case["dot"])[0]), "ddot n={n}");
-        }
+        assert!(same(m::ddot(&x, &y), real(&dir, &case["dot"])[0]), "ddot n={n}");
         let dot = complex(&dir, &case["complexDot"])[0];
         let actual = m::zdotc_real(&z, &y);
         assert!(same(actual.re, dot.re) && same(actual.im, dot.im), "zdotc n={n}");
