@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import appManifest from '../../../models/qsmbly.manifest.json' with { type: 'json' };
-import { EXAMPLE_ASSETS, MODEL_ASSETS, QSMXT, ensureModels, ensureNativeModelDirectory, nativeModelAssets, qsmxtEnvironment, parseQsmxtVersion, runQsmxt } from '../src/node.js';
+import { EXAMPLE_ASSETS, MODEL_ASSETS, QSMXT, ensureModels, ensureNativeModelDirectory, nativeModelAssets, qsmxtEnvironment, qsmxtFailure, parseQsmxtVersion, runQsmxt } from '../src/node.js';
 import { verifyNativeExamples, verifyNativeWeights } from '../src/native-registry.js';
 
 const bin = fileURLToPath(new URL('../bin/qsmbly.js', import.meta.url));
@@ -284,4 +284,10 @@ test('native version parsing accepts published release banners and rejects unrec
     version: '11.0.0', sourceCommit: undefined, qsmCore: 'v0.41.0', deepLearning: true,
   });
   assert.equal(parseQsmxtVersion('qsmxt 0.0.0 (rev unknown)\n').version, undefined);
+});
+
+test('a failed QSMxT version check reports how the process ended', () => {
+  assert.equal(qsmxtFailure({ status: 3221225781, signal: null, stderr: '' }), 'QSMxT --version failed (exit 3221225781 (0xC0000135)): no output');
+  assert.equal(qsmxtFailure({ status: 2, signal: null, stderr: 'bad flag\n' }), 'QSMxT --version failed (exit 2 (0x00000002)): bad flag');
+  assert.equal(qsmxtFailure({ status: null, signal: 'SIGKILL', stderr: '' }), 'QSMxT --version failed (signal SIGKILL): no output');
 });

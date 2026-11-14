@@ -158,8 +158,17 @@ export function qsmxtEnvironment({ modelDir = defaultCacheDir(), environment = p
 export function qsmxtVersion(executable = qsmxtExecutable()) {
   const result = spawnSync(executable, ['--version'], { encoding: 'utf8' });
   if (result.error) throw new Error(`Cannot start QSMxT at ${executable}: ${result.error.message}`);
-  if (result.status !== 0) throw new Error(`QSMxT --version failed: ${result.stderr}`);
+  if (result.status !== 0) throw new Error(qsmxtFailure(result));
   return parseQsmxtVersion(result.stdout);
+}
+
+// Windows reports a native crash or a missing DLL as an NTSTATUS exit code
+// (0xC0000135 when a DLL is missing) and often writes nothing to stderr.
+export function qsmxtFailure({ status, signal, stderr }) {
+  const exit = status === null
+    ? `signal ${signal}`
+    : `exit ${status} (0x${(status >>> 0).toString(16).toUpperCase().padStart(8, '0')})`;
+  return `QSMxT --version failed (${exit}): ${stderr?.trim() || 'no output'}`;
 }
 
 export function parseQsmxtVersion(output) {
