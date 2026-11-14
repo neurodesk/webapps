@@ -107,3 +107,35 @@ Each host records twice in fresh MATLAB processes; the workflow requires the
 repeat to be identical. Cross-host differences are reported for every section.
 The runner's CPU is whatever GitHub assigns; the AMD host is the reference for
 MKL-backed results, as for every other MKL gate.
+
+## Results of run 43564031333 (recorder 36a91f26)
+
+Pinned in `arithmetic-order-reference.json`. Hosts: AMD EPYC 9V74
+(`ubuntu-22.04`, MKL CNR `auto`) and Intel Xeon 6975P-C (`ubuntu-24.04`,
+`AVX512_E1`). Each host's repeat was identical to its first process.
+`arithmetic_order.rs` freezes the results.
+
+- **dot-order: H-switch confirmed, T = 51.** From 2 to 50 elements every
+  fingerprint and all 50 draws follow the pair tree on both hosts. From 51 on,
+  every fingerprint, identification draw and held-out draw on the AMD host follows
+  the port's MKL model, at 51-80 and at every held-out length to 1,000. H-pair and
+  H-other are rejected. Unfused arithmetic holds in both regimes. On the Intel
+  host, from 51 on every length follows another tree (MKL's AVX-512 branch, with
+  pairs 32 elements apart). That is a host difference; the arrays of 2-50 elements
+  are identical on both hosts. The decision rule is met: `ddot` uses the pair tree
+  below 51 elements and the MKL model from 51.
+- **corr: H-corr confirmed on the AMD host.** With that `ddot`, all 1,200
+  recorded objectives equal the port's; the previous `ddot` missed 223. On the Intel host 747 differ, including
+  lengths below 51, so `corr` uses another host-dependent operation besides the dot
+  product there; it is not identified.
+- **conv-weighted: no rule adopted.** C-control is rejected as worded:
+  differences also occur 16 below a multiple of 512, and within 16 of the end of
+  a course whose length is a multiple of 512. C-consistent holds: for every
+  differing output one fusion mask in index order reproduces every draw. The masks
+  fit one rule on every 33-tap course, identification and held-out draws and the
+  four held-out 33-tap courses: products of the last 16 inputs before a multiple
+  B of 512 are rounded and then added for outputs in B - 16 to B - 1, and products
+  of inputs before B - 16 for outputs from B on. The held-out 17- and 65-tap
+  courses reject it (98 and 159 parts), so it is not adopted. SamSrf's kernels
+  have other lengths at other repetition times, so a 33-tap rule is not general.
+  Both hosts recorded identical conv arrays.
