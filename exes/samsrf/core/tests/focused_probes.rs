@@ -6,7 +6,8 @@
 //! Data: `SAMSRF_FOCUSED_PROBES_DIR` (the recording: `manifest.json` and one
 //! folder per host with `compatible` and `repeat` processes), with
 //! `SAMSRF_REVCOR_REFERENCE_DIR` (the pinned single RC profiles the Hooke-Jeeves
-//! section fitted) and `SAMSRF_SINGLE_TRIG_DIR` (MATLAB's recorded sin and cos).
+//! section fitted), `SAMSRF_MATLAB_NUMERICS2_DIR` (the original complex courses),
+//! and `SAMSRF_SINGLE_TRIG_DIR` (MATLAB's recorded sin and cos).
 //! Without the first, the fixture tests return; the `refuses_*` tests always run.
 //!
 //! Everything read from the recording passes the checked boundary below before it
@@ -20,6 +21,7 @@ use samsrf_core::model::{self, AnalysisKind, Model};
 use samsrf_core::precision::{cos_single, sin_single, Precision};
 use samsrf_core::revcor_prf;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
@@ -723,12 +725,52 @@ fn conv_pairs(nonzero: &[usize], first: usize, last: usize) -> Vec<(usize, usize
     pairs
 }
 
+/// Recover the recorder's nonzero pattern from the separately pinned original
+/// complex course, rather than allowing the probe to define its own coverage.
+fn conv_source_pattern(dir: &Path, source: &Value, n: usize) -> Vec<usize> {
+    assert_eq!(source["kind"], "conv");
+    assert_eq!(source["isreal"], false);
+    let mut real = source["y"].clone();
+    let imaginary_file = text(&real, "imaginary").unwrap().to_string();
+    assert!(!imaginary_file.is_empty());
+    real["imaginary"] = json!("");
+    let mut imaginary = real.clone();
+    imaginary["file"] = json!(imaginary_file);
+    let re = array(dir, &real, Class::Double, &[Some(n), Some(1)], Nan::Refused).unwrap();
+    let im = array(
+        dir,
+        &imaginary,
+        Class::Double,
+        &[Some(n), Some(1)],
+        Nan::Refused,
+    )
+    .unwrap();
+    array(
+        dir,
+        &source["kernel"],
+        Class::Double,
+        &[Some(CONV_TAPS), Some(1)],
+        Nan::Refused,
+    )
+    .unwrap();
+    (0..n)
+        .filter(|&i| re.values[i] != 0.0 || im.values[i] != 0.0)
+        .collect()
+}
+
 /// Every pair probe's counts equal the port's `convolve_complex` on the same course
 /// (H-seq), in every region; the control regions (centre 256) included.
 #[test]
 fn conv_512_probes() {
     let Some(recordings) = fixture() else { return };
     let big = 2f64.powi(60);
+    let source_dir = PathBuf::from(
+        std::env::var_os("SAMSRF_MATLAB_NUMERICS2_DIR").expect("set SAMSRF_MATLAB_NUMERICS2_DIR"),
+    )
+    .join("ubuntu-22.04")
+    .join("compatible");
+    let source_recording = read_json(&source_dir.join("numerics.json")).unwrap();
+    let source_cases = source_recording["cases"].as_array().expect("source cases");
     for Recording {
         host,
         cpu,
@@ -747,11 +789,17 @@ fn conv_512_probes() {
                 .map(|&k| integer(k, 0, n - 1).unwrap())
                 .collect();
             assert_eq!(recorded, outputs, "{}", spec.id);
+            let sources: Vec<&Value> = source_cases
+                .iter()
+                .filter(|c| c["id"] == spec.source)
+                .collect();
+            assert_eq!(sources.len(), 1, "{} source inventory", spec.id);
+            let source_pattern = conv_source_pattern(&source_dir, sources[0], n);
             let nonzero = array(
                 dir,
                 &case["nonzero"],
                 Class::Double,
-                &[None, Some(1)],
+                &[Some(source_pattern.len()), Some(1)],
                 Nan::Refused,
             )
             .unwrap();
@@ -765,7 +813,12 @@ fn conv_512_probes() {
                 "{}",
                 spec.id
             );
-            let expected = conv_pairs(&nonzero, first, last);
+            assert_eq!(
+                nonzero, source_pattern,
+                "{} original source pattern",
+                spec.id
+            );
+            let expected = conv_pairs(&source_pattern, first, last);
             let count = expected.len();
             let pairs = array(
                 dir,
@@ -839,6 +892,44 @@ fn conv_512_probes() {
 
 // ---- trig-position ---------------------------------------------------------------
 
+/// `round(linspace(1, rows, 256))` in the recorder, converted to zero-based
+/// indices. The denominator is odd, so no midpoint tie needs a rounding rule.
+fn selected_exceptions(inputs: &[u32]) -> Vec<u32> {
+    assert!(inputs.len() >= 256);
+    (0..256)
+        .map(|i| inputs[(i * (inputs.len() - 1) + 127) / 255])
+        .collect()
+}
+
+fn check_trig_inputs(input: &[u32], sin: &[u32], cos: &[u32]) -> Checked<()> {
+    if input.len() != 768
+        || input[..256] != selected_exceptions(sin)
+        || input[256..512] != selected_exceptions(cos)
+    {
+        return Err(
+            "trig inputs differ from the recorder's deterministic exception selections".into(),
+        );
+    }
+    let controls = &input[512..];
+    if controls.iter().copied().collect::<BTreeSet<_>>().len() != 256
+        || controls.iter().any(|b| sin.contains(b) || cos.contains(b))
+    {
+        return Err("trig controls must be distinct non-exception inputs".into());
+    }
+    // Frozen input inventory from rng(7291, 'twister') and randi in the recorder,
+    // not an output/parity expectation. Verified on both processes of both hosts.
+    let mut digest = Sha256::new();
+    for b in controls {
+        digest.update(b.to_le_bytes());
+    }
+    if format!("{:x}", digest.finalize())
+        != "fdde1b91e7338c3e48cc1e983972166bfeca8b0ca2ece42e15aa21c63f59d24a"
+    {
+        return Err("trig random-control inventory changed".into());
+    }
+    Ok(())
+}
+
 #[test]
 fn trig_position_probe() {
     let Some(recordings) = fixture() else { return };
@@ -854,12 +945,12 @@ fn trig_position_probe() {
         .find(|c| c["id"] == "single_trig")
         .expect("single_trig")
         .clone();
-    let table = |key: &str| -> HashMap<u32, u32> {
+    let table = |key: &str, expected_rows: usize| -> (Vec<u32>, HashMap<u32, u32>) {
         let words = array(
             &trig_dir,
             &single[key],
             Class::Uint32,
-            &[None, Some(2)],
+            &[Some(expected_rows), Some(2)],
             Nan::Refused,
         )
         .unwrap();
@@ -867,9 +958,10 @@ fn trig_position_probe() {
         let words = words.words();
         let table: HashMap<u32, u32> = (0..rows).map(|i| (words[i], words[rows + i])).collect();
         assert_eq!(table.len(), rows, "{key}: repeated input");
-        table
+        (words[..rows].to_vec(), table)
     };
-    let (sin_table, cos_table) = (table("sinExceptions"), table("cosExceptions"));
+    let (sin_inputs, sin_table) = table("sinExceptions", 36_350);
+    let (cos_inputs, cos_table) = table("cosExceptions", 32_406);
     const GROUP: usize = 256;
     const OFFSETS: usize = 33;
     for Recording {
@@ -899,23 +991,7 @@ fn trig_position_probe() {
             .words()
         };
         let input = words("input", 1);
-        // The recorder's groups: sin exceptions, cos exceptions, then controls in neither table.
-        assert!(
-            input[..GROUP].iter().all(|b| sin_table.contains_key(b)),
-            "{host}"
-        );
-        assert!(
-            input[GROUP..2 * GROUP]
-                .iter()
-                .all(|b| cos_table.contains_key(b)),
-            "{host}"
-        );
-        assert!(
-            input[2 * GROUP..]
-                .iter()
-                .all(|b| !sin_table.contains_key(b) && !cos_table.contains_key(b)),
-            "{host}"
-        );
+        check_trig_inputs(&input, &sin_inputs, &cos_inputs).unwrap();
         let (scalar_sin, scalar_cos, array_sin, array_cos) = (
             words("scalarSin", 1),
             words("scalarCos", 1),

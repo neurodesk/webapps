@@ -672,13 +672,19 @@ What the probes leave open:
   three cases of one subject; nothing bounds other inputs. Single RC 2D fits stay
   refused.
 
+The convolution gate derives each region's nonzero pattern from its original
+complex course in the numerics2 pin. The trig gate reconstructs the recorder's
+exception selections and freezes the random-control input inventory, so empty
+regions or repeated inputs cannot silently replace the recorded coverage.
+
 The probes in CI's numerics step:
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-focused-probes" packages/samsrf/validation/matlab/focused-probes-reference.json
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-revcor-reference" packages/samsrf/validation/matlab/revcor-reference.json
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics2" packages/samsrf/validation/matlab/numerics2-reference.json
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-single-trig" packages/samsrf/validation/matlab/single-trig-reference.json
-SAMSRF_FOCUSED_PROBES_DIR="$TMPDIR/samsrf-focused-probes" SAMSRF_REVCOR_REFERENCE_DIR="$TMPDIR/samsrf-revcor-reference" SAMSRF_SINGLE_TRIG_DIR="$TMPDIR/samsrf-single-trig" \
+SAMSRF_FOCUSED_PROBES_DIR="$TMPDIR/samsrf-focused-probes" SAMSRF_MATLAB_NUMERICS2_DIR="$TMPDIR/samsrf-numerics2" SAMSRF_REVCOR_REFERENCE_DIR="$TMPDIR/samsrf-revcor-reference" SAMSRF_SINGLE_TRIG_DIR="$TMPDIR/samsrf-single-trig" \
   cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test focused_probes -- --nocapture
 ```
 
