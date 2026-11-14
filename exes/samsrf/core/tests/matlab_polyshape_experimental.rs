@@ -238,7 +238,7 @@ fn real_double_values(bytes: &[u8], descriptor: &Value) -> Vec<f64> {
 }
 
 fn assert_reproducer_parameters(values: &[f64], items: &[Value]) {
-    let roles = ["original", "minimal", "chain", "oneDeleted", "order", "scale", "reproducer", "reduction"];
+    let roles = ["original", "minimal", "chain", "oneDeleted", "order", "scale", "reproducer", "reduction", "perturbation"];
     assert_eq!(values.len(), items.len() * 5, "reproducer parameter inventory");
     for (i, item) in items.iter().enumerate() {
         let role = roles.iter().position(|role| item["role"] == *role).expect("known reproducer role");
@@ -607,6 +607,17 @@ fn expand_compact(spec: &Value) -> Vec<Value> {
     }).collect()
 }
 
+/// A perturbation round's cases (polyshape_perturbation.py `cases_of`): the
+/// reproducer `spec["indices"]` with one coordinate replaced by an exact double,
+/// then transformed.
+fn expand_perturbations(spec: &Value) -> Vec<Value> {
+    spec["perturbations"].as_array().unwrap().iter().map(|item| {
+        let value = u64::from_str_radix(item["value"].as_str().unwrap(), 16).unwrap();
+        json!({"cloud": spec["cloud"], "role": spec["role"], "indices": spec["indices"], "reversed": 0, "shift": 0,
+            "transform": item["transform"], "perturb": {"point": item["point"], "axis": item["axis"], "value": value}})
+    }).collect()
+}
+
 /// polyshape_reduce.py's `prediction_bytes`: 0 for an empty hull, else 1, the
 /// sorted vertex bits, the area bits and the centroid bits, little-endian u64.
 fn prediction_bytes(hull: Option<&Hull>) -> Vec<u8> {
@@ -696,16 +707,22 @@ fn polyshape_reproducers_match_recording() {
     if hosts.is_empty() {
         return;
     }
-    let specs: [(&str, Value); 5] = [
+    let specs: [(&str, Value); 6] = [
         ("reproducer_cases", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers.json")).unwrap()),
         ("reproducer_round2", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-2.json")).unwrap()),
         ("reproducer_round3", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-3.json")).unwrap()),
         ("reproducer_round4", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-4.json")).unwrap()),
         ("reproducer_round5", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-5.json")).unwrap()),
+        ("reproducer_round6", serde_json::from_str(include_str!("../../../../packages/samsrf/validation/matlab/polyshape-reproducers-6.json")).unwrap()),
     ];
-    let rounds: Vec<(&str, Vec<Value>, bool)> = specs.iter().map(|(id, spec)| match spec.get("masks") {
-        Some(_) => (*id, expand_compact(spec), true),
-        None => (*id, spec["cases"].as_array().unwrap().clone(), false),
+    let rounds: Vec<(&str, Vec<Value>, bool)> = specs.iter().map(|(id, spec)| {
+        if spec.get("perturbations").is_some() {
+            (*id, expand_perturbations(spec), true)
+        } else if spec.get("masks").is_some() {
+            (*id, expand_compact(spec), true)
+        } else {
+            (*id, spec["cases"].as_array().unwrap().clone(), false)
+        }
     }).collect();
     let frozen: Value = serde_json::from_str(include_str!("matlab_polyshape_reproducers.json")).unwrap();
     let verdicts: std::collections::BTreeMap<&str, Vec<[bool; 2]>> = rounds.iter().map(|(id, items, _)| (*id, frozen_verdicts(&frozen["verdicts"][*id], items.len(), id))).collect();
@@ -729,7 +746,14 @@ fn polyshape_reproducers_match_recording() {
                 }
                 let full = &clouds[&cloud];
                 let indices: Vec<usize> = item["indices"].as_array().unwrap().iter().map(|k| k.as_u64().unwrap() as usize - 1).collect();
-                let expected = transformed(&indices.iter().map(|&k| full[k]).collect::<Vec<_>>(), item["reversed"].as_u64() == Some(1), item["shift"].as_u64().unwrap() as usize, item["transform"].as_u64().unwrap());
+                let mut base: Vec<[f64; 2]> = indices.iter().map(|&k| full[k]).collect();
+                if let Some(perturb) = item.get("perturb") {
+                    let point = perturb["point"].as_u64().unwrap() as usize - 1;
+                    let axis = perturb["axis"].as_u64().unwrap() as usize;
+                    assert!(point < base.len() && axis < 2, "{at}: perturbation outside the reproducer");
+                    base[point][axis] = f64::from_bits(perturb["value"].as_u64().unwrap());
+                }
+                let expected = transformed(&base, item["reversed"].as_u64() == Some(1), item["shift"].as_u64().unwrap() as usize, item["transform"].as_u64().unwrap());
                 assert_eq!(polygons[i].iter().map(|p| p.map(f64::to_bits)).collect::<Vec<_>>(), expected.iter().map(|p| p.map(f64::to_bits)).collect::<Vec<_>>(), "{at}: polygon differs from the spec");
                 let shipped = Hull::of_polygon(&polygons[i]);
                 let experimental = hull_of_polygon(&polygons[i]).unwrap_or_else(|e| panic!("{at}: {e}"));
@@ -744,6 +768,23 @@ fn polyshape_reproducers_match_recording() {
                 let same = |hull: &Option<Hull>| sorted_vertices(hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[])) == matlab;
                 assert_eq!([same(&shipped), same(&experimental)], verdicts[id][i], "{at}: MATLAB verdict differs from the frozen one");
             }
+            if let Some(predicted) = spec.get("predictSurvival") {
+                // Round 6: whether input point 4 (as perturbed) is a vertex of MATLAB's
+                // default polyshape equals start-independent cleaning (H_I) on every
+                // case and differs from the experimental model (H_X) on exactly 405.
+                let defaults = split_rows(&points(&array(&root, &case["simplified"])), &array(&root, &case["simplifiedCounts"]));
+                assert_eq!(defaults.len(), n, "{id}: default inventory");
+                let (h_i, h_x) = (predicted["H_I"].as_str().unwrap().as_bytes(), predicted["H_X"].as_str().unwrap().as_bytes());
+                assert_eq!((h_i.len(), h_x.len()), (n, n), "{id}: survival prediction inventory");
+                let mut differs_from_x = 0;
+                for i in 0..n {
+                    let point4 = polygons[i][3];
+                    let survives = defaults[i].iter().any(|v| v[0].to_bits() == point4[0].to_bits() && v[1].to_bits() == point4[1].to_bits());
+                    assert_eq!(survives, h_i[i] == b'1', "{} {id} {i}: MATLAB's survival of point 4 differs from H_I", root.display());
+                    differs_from_x += usize::from(survives != (h_x[i] == b'1'));
+                }
+                assert_eq!(differs_from_x, 405, "{id}: H_X refutations");
+            }
             if *compact {
                 let hex: String = sha2::Digest::finalize(digest).iter().map(|b| format!("{b:02x}")).collect();
                 assert_eq!(hex, spec["predictionsSha256"].as_str().unwrap(), "{id}: a model changed since the committed predictions");
@@ -754,7 +795,7 @@ fn polyshape_reproducers_match_recording() {
     // Look a recorded untransformed case up by cloud and indices.
     let untransformed = |cloud: &str, indices: &Value| -> Option<[bool; 2]> {
         rounds.iter().find_map(|(id, items, _)| items.iter().position(|c| c["cloud"].as_u64().unwrap().to_string() == cloud && &c["indices"] == indices
-            && c["transform"] == 0 && c["reversed"] == 0 && c["shift"] == 0).map(|i| verdicts[id][i]))
+            && c["transform"] == 0 && c["reversed"] == 0 && c["shift"] == 0 && c.get("perturb").is_none()).map(|i| verdicts[id][i]))
     };
     for (cloud, smallest) in frozen["smallest"].as_object().unwrap() {
         assert_eq!(untransformed(cloud, &smallest["indices"]), Some([true, false]), "cloud {cloud}: smallest reproducer no longer reproduces");
