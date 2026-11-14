@@ -104,6 +104,10 @@ on:
         description: With record_matlab, record the arithmetic-order probes (x'*y at 2-1000 elements, corr, weighted sparse complex conv)
         type: boolean
         default: false
+      fitted_hrf:
+        description: With record_matlab, record the fitted-HRF probes at the pinned trace parameters (fitted-hrf-predictions.md)
+        type: boolean
+        default: false
       controls_only:
         description: Record the MKL controls in effect inside MATLAB under three environment requests (controls-preregistration.md)
         type: boolean
@@ -399,8 +403,8 @@ jobs:
       - name: Prepare verified inputs and declared source repairs
         if: '!inputs.qr_only && !inputs.qr_kernels'
         run: |
-          if [ "$(printf '%s\n' '${{ inputs.revcor_only }}' '${{ inputs.diagnostics_only }}' '${{ inputs.geometry_only }}' '${{ inputs.numerics_only }}' '${{ inputs.css_pipelines_only }}' '${{ inputs.kernels_only }}' '${{ inputs.gemv_order }}' '${{ inputs.focused_probes }}' '${{ inputs.arithmetic_order }}' | grep -c true)" -gt 1 ]; then
-            echo 'Choose at most one of revcor_only, diagnostics_only, geometry_only, numerics_only, css_pipelines_only, kernels_only, gemv_order, focused_probes and arithmetic_order.' >&2
+          if [ "$(printf '%s\n' '${{ inputs.revcor_only }}' '${{ inputs.diagnostics_only }}' '${{ inputs.geometry_only }}' '${{ inputs.numerics_only }}' '${{ inputs.css_pipelines_only }}' '${{ inputs.kernels_only }}' '${{ inputs.gemv_order }}' '${{ inputs.focused_probes }}' '${{ inputs.arithmetic_order }}' '${{ inputs.fitted_hrf }}' | grep -c true)" -gt 1 ]; then
+            echo 'Choose at most one of revcor_only, diagnostics_only, geometry_only, numerics_only, css_pipelines_only, kernels_only, gemv_order, focused_probes, arithmetic_order and fitted_hrf.' >&2
             exit 1
           fi
           if [ '${{ inputs.geometry_probe }}' = true ] && [ '${{ inputs.geometry_only }}' != true ]; then
@@ -446,7 +450,7 @@ jobs:
       - name: Fetch the pinned CSS regressions replayed by the least-squares recording
         if: inputs.qr_only
         run: |
-          if [ '${{ inputs.record_matlab }}' = true ] || [ '${{ inputs.revcor_only }}' = true ] || [ '${{ inputs.diagnostics_only }}' = true ] || [ '${{ inputs.geometry_only }}' = true ] || [ '${{ inputs.numerics_only }}' = true ] || [ '${{ inputs.css_pipelines_only }}' = true ] || [ '${{ inputs.kernels_only }}' = true ] || [ '${{ inputs.gemv_order }}' = true ] || [ '${{ inputs.focused_probes }}' = true ] || [ '${{ inputs.arithmetic_order }}' = true ]; then
+          if [ '${{ inputs.record_matlab }}' = true ] || [ '${{ inputs.revcor_only }}' = true ] || [ '${{ inputs.diagnostics_only }}' = true ] || [ '${{ inputs.geometry_only }}' = true ] || [ '${{ inputs.numerics_only }}' = true ] || [ '${{ inputs.css_pipelines_only }}' = true ] || [ '${{ inputs.kernels_only }}' = true ] || [ '${{ inputs.gemv_order }}' = true ] || [ '${{ inputs.focused_probes }}' = true ] || [ '${{ inputs.arithmetic_order }}' = true ] || [ '${{ inputs.fitted_hrf }}' = true ]; then
             echo 'qr_only records least-squares solves alone.' >&2
             exit 1
           fi
@@ -489,7 +493,7 @@ jobs:
         if: inputs.geometry_only
         run: node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"
       - name: Record numerical intermediates and fitted maps
-        if: '!inputs.diagnostics_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.geometry_only && !inputs.numerics_only && !inputs.css_pipelines_only && !inputs.kernels_only && !inputs.gemv_order && !inputs.focused_probes && !inputs.arithmetic_order'
+        if: '!inputs.diagnostics_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.geometry_only && !inputs.numerics_only && !inputs.css_pipelines_only && !inputs.kernels_only && !inputs.gemv_order && !inputs.focused_probes && !inputs.arithmetic_order && !inputs.fitted_hrf'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); matrixInput=fullfile(getenv('RUNNER_TEMP'),'samsrf-matrix-input'); reverseCorrelationOnly=strcmp('${{ inputs.revcor_only }}','true'); if ~reverseCorrelationOnly && strcmp('${{ inputs.include_matrix }}','false'), matrixInput=''; end; record_reference(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),matrixInput,fullfile(pwd,'reference-spm'),reverseCorrelationOnly,false,reverseCorrelationOnly && strcmp('${{ inputs.revcor_edges }}','true'))
@@ -670,6 +674,37 @@ jobs:
           for name in arrays:
               assert (first / name).read_bytes() == (repeat / name).read_bytes(), name
           print(f'{len(arrays)} arrays and every case equal in a new process')
+          PY
+      - name: Fetch the pinned fitted-HRF traces
+        if: inputs.fitted_hrf
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-source-reference" packages/samsrf/validation/matlab/reference.json
+          mkdir "$RUNNER_TEMP/samsrf-matlab-repeat"
+          cp "$RUNNER_TEMP/samsrf-matlab/source.json" "$RUNNER_TEMP/samsrf-matlab-repeat/source.json"
+          python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab-repeat"
+      - name: Record the fitted-HRF probes
+        if: inputs.fitted_hrf
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); t = getenv('RUNNER_TEMP'); record_fitted_hrf(fullfile(pwd,'reference-source'),fullfile(t,'samsrf-input'),fullfile(t,'samsrf-source-reference'),fullfile(t,'samsrf-matlab'))
+      - name: Repeat the fitted-HRF probes in a new MATLAB process
+        if: inputs.fitted_hrf
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); t = getenv('RUNNER_TEMP'); record_fitted_hrf(fullfile(pwd,'reference-source'),fullfile(t,'samsrf-input'),fullfile(t,'samsrf-source-reference'),fullfile(t,'samsrf-matlab-repeat'))
+      - name: Require an exact same-host repeat of the fitted-HRF probes
+        if: inputs.fitted_hrf
+        run: |
+          python3 - "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" <<'PY'
+          import json, pathlib, sys
+          first, repeat = (pathlib.Path(p) for p in sys.argv[1:])
+          load = lambda root: {k: v for k, v in json.loads((root / 'fitted-hrf.json').read_text()).items() if k != 'environment'}
+          assert load(first) == load(repeat), 'fitted-HRF records differ between processes'
+          arrays = sorted(p.name for p in first.glob('*.f64'))
+          assert arrays and arrays == sorted(p.name for p in repeat.glob('*.f64')), 'array files differ'
+          for name in arrays:
+              assert (first / name).read_bytes() == (repeat / name).read_bytes(), name
+          print(f'{len(arrays)} arrays and every record equal in a new process')
           PY
       - name: Record MATLAB arithmetic on generated inputs
         if: inputs.numerics_only
