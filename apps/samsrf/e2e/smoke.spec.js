@@ -351,8 +351,8 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   expect(report.provenance.model.Scaling_Factor).toBe(9.5);
 });
 
-test("MATLAB single precision RC and CF downloads equal the package's in-process jobs", async ({ page }, testInfo) => {
-  test.setTimeout(1800000);
+/** Run each (analysis, precision) in the app on part of the example and require every downloaded map to equal the package's in-process job. */
+async function downloadsEqualInProcessJobs(page, testInfo, runs) {
   const byName = (name) => example.files.find(file => file.name === name);
   const file = async (name) => {
     const path = local ? join(local, name) : testInfo.outputPath(name);
@@ -367,21 +367,21 @@ test("MATLAB single precision RC and CF downloads equal the package's in-process
     surfaces: [await file("lh.white"), await file("lh.area")], template: [await file("lh_benson.gii")], seed: [await file("lh.V1_seed.label")],
   };
   await page.goto("/");
-  const roles = { rc: ["runs", "apertures", "roi", "surfaces"], cf: ["runs", "roi", "surfaces", "template", "seed"] };
-  const inputs = readAnalysisInputs({
-    runs: paths.runs, roi, seed: paths.seed[0], apertures: paths.apertures[0], template: paths.template[0],
-    white: paths.surfaces[0], area: paths.surfaces[1], hemisphere: "lh", precision: "single",
-  });
-  for (const [analysis, outcome] of [["rc", RUNS.rc.outcome], ["cf", RUNS.cf.outcome]]) {
+  const roles = { prf: ["runs", "apertures", "roi", "surfaces"], rc: ["runs", "apertures", "roi", "surfaces"], cf: ["runs", "roi", "surfaces", "template", "seed"] };
+  for (const [analysis, precision] of runs) {
+    const inputs = readAnalysisInputs({
+      runs: paths.runs, roi, seed: paths.seed[0], apertures: paths.apertures[0], template: paths.template[0],
+      white: paths.surfaces[0], area: paths.surfaces[1], hemisphere: "lh", precision,
+    });
     await page.locator("#analysis").selectOption(analysis);
     for (const role of roles[analysis]) await page.locator(`#${role}Input`).setInputFiles(paths[role]);
     await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
-    await page.locator("#dataPrecision").selectOption("single");
+    await page.locator("#dataPrecision").selectOption(precision);
     const model = JSON.parse(await page.locator("#modelJson").inputValue());
-    expect(model.Data_Precision).toBe("single");
+    expect(model.Data_Precision).toBe(precision);
     await expect(page.locator("#runButton")).toBeEnabled();
     await page.locator("#runButton").click();
-    await expect(page.locator("#statusText")).toContainText(outcome, { timeout: 1500000 });
+    await expect(page.locator("#statusText")).toContainText(RUNS[analysis].outcome, { timeout: 1500000 });
     const zipped = page.waitForEvent("download");
     await page.locator("#downloadAll").click();
     const entries = unzipSync(readFileSync(await (await zipped).path()));
@@ -401,6 +401,16 @@ test("MATLAB single precision RC and CF downloads equal the package's in-process
     const r2 = giftiMap(entries[`${prefix}_r^2.gii`]);
     expect(r2.filter(value => value > 0).length, `${analysis}: vertices with R² > 0`).toBeGreaterThan(0);
   }
+}
+
+test("MATLAB single precision RC and CF downloads equal the package's in-process jobs", async ({ page }, testInfo) => {
+  test.setTimeout(1800000);
+  await downloadsEqualInProcessJobs(page, testInfo, [["rc", "single"], ["cf", "single"]]);
+});
+
+test("double pRF downloads equal the package's in-process job", async ({ page }, testInfo) => {
+  test.setTimeout(1800000);
+  await downloadsEqualInProcessJobs(page, testInfo, [["prf", "double"]]);
 });
 
 test("MATLAB fit settings round-trip through JSON and remain in collapsed settings", async ({ page }) => {

@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- Compute the double-precision pRF objective without CSS in MATLAB R2023b's `conv` and `corr` operation orders, as the CSS objective already did. The plain sums and unscaled Pearson correlation it used before moved Nelder-Mead fine fits on flat objectives: 14 vertices of the nine recorded double forward pipelines ended elsewhere on a plateau, were kept where MATLAB rejected them (or the reverse), or reached another optimum. On MATLAB's AMD reference recording, those pipelines now match every x0, y0, Sigma, noise ceiling and zero/NaN mask bit for bit, and every fine fit's R² and nR²; Beta, Baseline and coarse-only R² stay within a 1e-12 relative ceiling. All 3,186 recorded optimizer evaluations with fixed HRF kernels equal MATLAB's. Fits that also fit the HRF still differ from MATLAB in the last bits after their first 15-35 evaluations. Single precision, both CSS conventions and the refused single RC 2D and CF Gaussian fits are unchanged; MKL's Intel AVX-512 branch is not reproduced.
 - 796bc2d: Follow MATLAB R2023b's real `x'*y` at every length: adjacent products summed in pairs below 51 elements and MKL's `ddot` from 51. Double CSS fits on fewer than 51 volumes could differ from MATLAB in the last bit; all 1,200 recorded `corr` objectives at 25-250 elements now equal MATLAB's on the AMD reference host (223 differed before). MKL's Intel AVX-512 branch remains a documented host difference.
 
 ## 0.6.20261113

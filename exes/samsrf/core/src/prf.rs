@@ -444,6 +444,13 @@ pub fn errfun_with_convention(
             return Ok(crate::css::objective(&yp, observed, precision));
         }
         compress(&mut yp, exponent);
+    } else if precision == Precision::Double {
+        // prf_errfun without CSS: prf_convolve_hrf's conv, corr and 1 - R^2, in the
+        // operation orders the CSS objective already reproduces. MATLAB's code is
+        // the same with and without CSS; only the real prediction differs.
+        let yp = crate::matlab_math::convolve_real(&yp, &kernel, downsampling);
+        let yp: Vec<Complex64> = yp.into_iter().map(|value| Complex64::new(value, 0.0)).collect();
+        return Ok(crate::css::objective(&yp, observed, precision));
     }
     let yp = crate::hrf::convolve(&yp, &kernel, downsampling);
     Ok(Complex64::new(
@@ -709,6 +716,112 @@ mod tests {
         }
         let error = errfun(&function, &apertures, &apertures.xy, &hrf, &[0.3, -0.2, 0.5], &observed, 1, false).unwrap_err();
         assert!(matches!(error, Error::Shape(_)), "{error}");
+    }
+
+    /// A sweep over a 4 x 3 grid with `frames` apertures.
+    fn sweep(frames: usize) -> Apertures {
+        let xy: Vec<[f64; 2]> = (0..12).map(|i| [(i % 4) as f64 - 1.5, (i / 4) as f64 - 1.0]).collect();
+        let frames = (0..frames)
+            .map(|t| {
+                let mut indices = vec![(t % 12) as u32, ((5 * t + 3) % 12) as u32];
+                indices.sort_unstable();
+                indices.dedup();
+                let values = vec![1.0; indices.len()];
+                Frame { indices, values }
+            })
+            .collect();
+        Apertures { width: 4, height: 3, frames, xy, conditions: None }
+    }
+
+    fn course(volumes: usize) -> Vec<f64> {
+        (0..volumes).map(|t| ((t * 7919) % 101) as f64 / 13.0 + (t as f64 * 0.37).sin()).collect()
+    }
+
+    fn gaussian() -> AnonymousFunction {
+        AnonymousFunction::parse("@(P,ApWidth) prf_gaussian_rf(P(1), P(2), P(3), ApWidth)").unwrap()
+    }
+
+    fn double_errfun(apertures: &Apertures, kernel: &[f64], p: &[f64], observed: &[f64], downsampling: usize, css: bool, convention: crate::css::Convention) -> num_complex::Complex64 {
+        errfun_with_convention(&gaussian(), apertures, &apertures.xy, &ErrfunHrf::Kernel(kernel.to_vec()), p, observed, downsampling, css, Precision::Double, convention).unwrap()
+    }
+
+    #[test]
+    fn double_objective_without_css_is_the_css_objective_at_exponent_one() {
+        // prf_errfun runs the same conv, corr and 1 - R^2 with and without CSS, and
+        // Yp.^1 is Yp: the double objective must equal the MATLAB-ordered CSS
+        // objective at P = 1, for short and long courses (pairwise and MKL dot
+        // products, few- and many-tap convolutions), kernels longer than the course
+        // and downsampling.
+        use crate::css::Convention;
+        for (frames, kernel, downsampling) in [
+            (12, crate::hrf::de_haas(1.0), 1),
+            (120, crate::hrf::de_haas(1.0), 1),
+            (120, crate::hrf::de_haas(1.0), 2),
+            (240, crate::hrf::de_haas(2.0), 3),
+            (6, crate::hrf::de_haas(1.0), 1),
+            (40, vec![0.5, 0.25, 0.125], 1),
+            (40, vec![1.0], 1),
+        ] {
+            let apertures = sweep(frames);
+            let observed = course(frames.div_ceil(downsampling));
+            for p in [[0.3, -0.2, 0.8], [-1.0, 0.5, 2.5], [0.0, 0.0, 0.05]] {
+                let plain = double_errfun(&apertures, &kernel, &p, &observed, downsampling, false, Convention::Samsrf);
+                let css = double_errfun(&apertures, &kernel, &[p[0], p[1], p[2], 1.0], &observed, downsampling, true, Convention::Samsrf);
+                assert_eq!((plain.re.to_bits(), plain.im), (css.re.to_bits(), 0.0), "{frames} frames, {} taps, downsampling {downsampling}, {p:?}", kernel.len());
+                let nonnegative = double_errfun(&apertures, &kernel, &p, &observed, downsampling, false, Convention::Nonnegative);
+                assert_eq!(plain.re.to_bits(), nonnegative.re.to_bits(), "the CSS convention does not apply without CSS");
+                assert!(plain.re.is_finite() && (0.0..=1.0).contains(&plain.re), "{}", plain.re);
+            }
+        }
+    }
+
+    #[test]
+    fn double_objective_keeps_nan_for_degenerate_courses_and_never_goes_negative() {
+        use crate::css::Convention;
+        let apertures = sweep(60);
+        let kernel = crate::hrf::de_haas(1.0);
+        let p = [0.3, -0.2, 0.8];
+        let observed = course(60);
+        let nan = |observed: &[f64], p: &[f64]| double_errfun(&apertures, &kernel, p, observed, 1, false, Convention::Samsrf).re.is_nan();
+        assert!(nan(&[2.5; 60], &p), "constant observed course");
+        assert!(nan(&[0.0; 60], &p), "zero observed course");
+        let mut gap = observed.clone();
+        gap[17] = f64::NAN;
+        assert!(nan(&gap, &p), "NaN in the observed course");
+        let mut infinite = observed.clone();
+        infinite[3] = f64::INFINITY;
+        assert!(nan(&infinite, &p), "infinity in the observed course");
+        assert!(nan(&observed[..59], &p), "observed course shorter than the prediction");
+        assert!(nan(&observed, &[1e6, 1e6, 0.5]), "pRF outside the apertures predicts a constant zero course");
+        // A perfect linear fit: corr's magnitude clamp keeps 1 - R^2 at or above 0.
+        let prediction = crate::matlab_math::convolve_real(&predict_timecourse(&profile_for(&apertures, &p), &apertures), &kernel, 1);
+        let fitted: Vec<f64> = prediction.iter().map(|v| 3.0 * v - 7.0).collect();
+        let e = double_errfun(&apertures, &kernel, &p, &fitted, 1, false, Convention::Samsrf).re;
+        assert!((0.0..=4.0 * f64::EPSILON).contains(&e), "{e}");
+    }
+
+    fn profile_for(apertures: &Apertures, p: &[f64]) -> Vec<f64> {
+        let mut data: Vec<f64> = apertures.xy.iter().map(|q| q[0]).collect();
+        data.extend(apertures.xy.iter().map(|q| q[1]));
+        gaussian().evaluate(&[Value::column(p.to_vec()), Value { rows: apertures.xy.len(), cols: 2, data }]).unwrap().data
+    }
+
+    #[test]
+    fn single_precision_and_nonnegative_css_objectives_are_unchanged() {
+        use crate::css::Convention;
+        let apertures = sweep(120);
+        let kernel = crate::hrf::de_haas(1.0);
+        let observed = course(120);
+        let p = [0.3, -0.2, 0.8];
+        let raw = predict_timecourse(&profile_for(&apertures, &p), &apertures);
+        let single = errfun_with_convention(&gaussian(), &apertures, &apertures.xy, &ErrfunHrf::Kernel(kernel.clone()), &p, &observed, 1, false, Precision::Single, Convention::Samsrf).unwrap();
+        let r = precision::correlation_single(&crate::hrf::convolve(&raw, &kernel, 1), &observed, false);
+        assert_eq!(single.re.to_bits(), f64::from(1.0f32 - r * r).to_bits());
+        let mut compressed = raw.clone();
+        compress(&mut compressed, 0.7);
+        let r = pearson(&crate::hrf::convolve(&compressed, &kernel, 1), &observed);
+        let nonnegative = double_errfun(&apertures, &kernel, &[p[0], p[1], p[2], 0.7], &observed, 1, true, Convention::Nonnegative);
+        assert_eq!(nonnegative.re.to_bits(), (1.0 - r * r).to_bits());
     }
 
     #[test]
