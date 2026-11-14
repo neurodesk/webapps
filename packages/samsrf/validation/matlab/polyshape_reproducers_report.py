@@ -10,7 +10,7 @@ witness is on MATLAB's hull; and the experimental model's area and CF sigma
 error against MATLAB's hull. Evidence, not a gate. It refuses a recording whose
 polygons differ from the spec's.
 
-  python3 polyshape_reproducers_report.py HOST_DIR reproducer_cases|reproducer_round2|reproducer_round3 REPORT.json
+  python3 polyshape_reproducers_report.py HOST_DIR reproducer_cases|reproducer_round2|reproducer_round3|reproducer_round4 REPORT.json [PATH_TO_POLYSHAPE_HULLS]
 """
 import collections
 import json
@@ -23,9 +23,9 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from polyshape_reduce import transformed  # noqa: E402
+from polyshape_reduce import Oracle, expand, prediction, predictions_digest, transformed  # noqa: E402
 
-ROLES = ['original', 'minimal', 'chain', 'oneDeleted', 'order', 'scale', 'reproducer']
+ROLES = ['original', 'minimal', 'chain', 'oneDeleted', 'order', 'scale', 'reproducer', 'reduction']
 
 
 def from_bits(value):
@@ -35,8 +35,11 @@ def from_bits(value):
 def main():
     root, case_id, out = sys.argv[1:4]
     spec_file = {'reproducer_cases': 'polyshape-reproducers.json', 'reproducer_round2': 'polyshape-reproducers-2.json',
-                 'reproducer_round3': 'polyshape-reproducers-3.json'}[case_id]
+                 'reproducer_round3': 'polyshape-reproducers-3.json', 'reproducer_round4': 'polyshape-reproducers-4.json'}[case_id]
     spec = json.load(open(os.path.join(HERE, spec_file)))
+    compact = 'masks' in spec
+    if compact:
+        spec['cases'] = expand(spec)
     first = json.load(open(os.path.join(HERE, 'polyshape-reproducers.json')))
     recording = json.load(open(os.path.join(root, 'geometry.json')))
     assert recording['mode'] == 'polyshape-reproducers'
@@ -81,6 +84,14 @@ def main():
         return canon(rings(a)) == canon(rings(b))
 
     polygons = split('points', 'counts')
+    if compact:
+        # A compact round commits only a digest of both models' predictions:
+        # regenerate them (polyshape_hulls --oracle, argument 4) and check it.
+        oracle = Oracle(sys.argv[4])
+        results = oracle.evaluate([[tuple(map(float, r)) for r in p] for p in polygons])
+        assert predictions_digest(spec['cases'], results) == spec['predictionsSha256'], 'predictions differ from the committed digest'
+        for item, result in zip(spec['cases'], results):
+            item['predicted'] = {'shipped': prediction(result['production']), 'experimental': prediction(result['experimental'])}
     default = split('simplified', 'simplifiedCounts')
     kept = split('collinearVertices', 'collinearCounts')
     hulls = split('hull', 'hullCounts')

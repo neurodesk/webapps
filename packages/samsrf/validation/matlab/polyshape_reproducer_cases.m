@@ -1,18 +1,29 @@
 function [polygons, parameters] = polyshape_reproducer_cases(originalClouds, spec)
 % The reduced reproducers of the four point clouds the experimental polyshape
-% model regresses (#732), from polyshape-reproducers.json or
-% polyshape-reproducers-2.json (written by
+% model regresses (#732), from polyshape-reproducers*.json (written by
 % polyshape_reduce.py with both models' predictions before this recording).
 % Each case takes 1-based indices into a point_clouds() cloud (0-based id), then
 % flipud when reversed, circshift by -shift, and transform 1 (+[0.37 -1.21]),
 % 2 (*1e-2) or 3 (*1e2), as polyshape_reduce.py's transformed() does.
 % parameters: [cloud role reversed shift transform], role 0 original, 1 minimal,
 % 2 chain, 3 oneDeleted, 4 order, 5 scale, 6 reproducer (the second round's
-% smallest measured reproducer, polyshape-reproducers-2.json).
-roles = {'original', 'minimal', 'chain', 'oneDeleted', 'order', 'scale', 'reproducer'};
-cases = spec.cases;
-if ~iscell(cases)
-    cases = num2cell(cases);
+% smallest measured reproducer, polyshape-reproducers-2.json), 7 reduction (a
+% compact round, polyshape-reproducers-4.json and later: spec.masks holds one
+% bitmask of 1-based indices into cloud spec.cloud per case, untransformed).
+roles = {'original', 'minimal', 'chain', 'oneDeleted', 'order', 'scale', 'reproducer', 'reduction'};
+if isfield(spec, 'masks')
+    masks = spec.masks(:);
+    assert(all(masks == floor(masks) & masks > 0 & masks < 2^53), 'invalid reduction mask');
+    cases = cell(numel(masks), 1);
+    for i = 1:numel(masks)
+        cases{i} = struct('cloud', spec.cloud, 'role', spec.role, ...
+            'indices', find(bitget(masks(i), 1:53)), 'reversed', 0, 'shift', 0, 'transform', 0);
+    end
+else
+    cases = spec.cases;
+    if ~iscell(cases)
+        cases = num2cell(cases);
+    end
 end
 polygons = cell(1, numel(cases));
 parameters = zeros(numel(cases), 5);
