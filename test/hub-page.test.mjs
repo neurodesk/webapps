@@ -17,5 +17,7 @@ test('the hub shows one card per catalogue with its title, description, app coun
     assert.equal(card.querySelector('.app-card__category').textContent, `${catalogApps(registry, catalog).length} apps`);
   }
   assert.equal(document.title, registry.site.hub.title);
+  assert.equal(document.querySelector('link[rel="icon"]').getAttribute('href'), `./${registry.site.hub.brand.icon}`);
+  assert.equal(document.documentElement.dataset.neurodeskBrand, 'sciget', 'the hub follows sciget.org');
   assert.equal(document.querySelectorAll('[data-app-card]').length, 0, 'the hub hosts no apps');
 });

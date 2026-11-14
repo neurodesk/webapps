@@ -113,3 +113,43 @@ test('top-bar hosts keep their fallback content until the shared bar exists', ()
   assert.match(css, /\[data-neurodesk-top-bar-host\]:has\(> \.nd-app-bar\)\s*>\s*:not\(\.nd-app-bar\)\s*\{[^}]*display:\s*none\s*!important/s);
   assert.doesNotMatch(css, /\[data-neurodesk-top-bar-host\]\s*>\s*:not\(\.nd-app-bar\)\s*\{[^}]*display:\s*none\s*!important/s);
 });
+
+// SciGet's palette restates every token it changes; the rest keep Neurodesk's
+// value for the same light or dark mode.
+function scigetToken(name, mode) {
+  const selector = mode === 'light'
+    ? /:root\[data-neurodesk-app\]\[data-neurodesk-brand="sciget"\]\[data-neurodesk-theme="light"\]\s*\{([^}]*)\}/
+    : /:root\[data-neurodesk-app\]\[data-neurodesk-brand="sciget"\]:not\(\[data-neurodesk-theme="light"\]\)\s*\{([^}]*)\}/;
+  const block = css.match(selector);
+  assert.ok(block, `missing the SciGet ${mode} palette block`);
+  const match = block[1].match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i'));
+  if (match) return match[1].toLowerCase();
+  return mode === 'light' ? lightToken(name) : token(name);
+}
+
+test('SciGet pages take sciget.org\'s orange accent and greys, at WCAG AA contrast', () => {
+  assert.equal(scigetToken('nd-brand-primary', 'dark'), '#d97706');
+  assert.equal(scigetToken('nd-brand-page', 'dark'), '#17181c');
+  assert.equal(scigetToken('nd-brand-surface', 'dark'), '#23262f');
+  assert.equal(scigetToken('nd-brand-primary', 'light'), '#b85c00');
+  assert.equal(scigetToken('nd-brand-page', 'light'), '#ffffff');
+  assert.match(css, /:root\[data-neurodesk-app\]\[data-neurodesk-brand="sciget"\]\s*\{[^}]*--nd-font-ui:\s*-apple-system/);
+  const pairs = [
+    ['nd-brand-text', 'nd-brand-surface'],
+    ['nd-brand-text-muted', 'nd-brand-surface'],
+    ['nd-brand-action-text', 'nd-brand-primary'],
+    ['nd-brand-menu-text', 'nd-brand-menu'],
+    ['nd-brand-primary', 'nd-brand-menu'],
+    ['nd-brand-light', 'nd-brand-surface'],
+    ['nd-brand-text-dim', 'nd-brand-pale'],
+    ['nd-brand-success', 'nd-brand-surface'],
+    ['nd-brand-console-text', 'nd-brand-console-surface'],
+    ['nd-brand-console-time', 'nd-brand-console-surface'],
+  ];
+  for (const mode of ['dark', 'light']) {
+    for (const [foreground, background] of pairs) {
+      const ratio = contrast(scigetToken(foreground, mode), scigetToken(background, mode));
+      assert.ok(ratio >= 4.5, `SciGet ${mode} ${foreground} on ${background}: ${ratio.toFixed(2)} < 4.5`);
+    }
+  }
+});

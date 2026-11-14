@@ -785,6 +785,65 @@ Checked on 2026-11-12 without a license:
 
 No compiled step has run.
 
+### Operator handoff for a licensed host
+
+For someone who holds a MATLAB Compiler license for R2023b Update 11 on a
+Linux x86-64 host with Docker. Nothing here needs the repository's secrets, and
+the license never leaves that host.
+
+Needs: Docker with access to `/var/run/docker.sock`, disk for MATLAB (9.8 GB), the
+Runtime images and the work directory, network
+access to GitHub, Hugging Face and `mathworks/matlab-deps`, Python 3, git, and
+a checkout of this repository at the commit to be validated.
+
+```sh
+# 1. MATLAB R2023b Update 11, installed with mpm inside the builder's base image.
+export WORK="$TMPDIR/samsrf-compiled"           # must not exist yet
+export MATLAB_ROOT="$TMPDIR/matlab-r2023bu11"
+mpm install --release=R2023bU11 --destination="$MATLAB_ROOT" \
+  --products MATLAB MATLAB_Compiler Statistics_and_Machine_Learning_Toolbox \
+  Image_Processing_Toolbox Parallel_Computing_Toolbox
+# 2. Build and run every gate on this host; the driver stops at the first failure.
+packages/samsrf/validation/matlab/licensed-host/build_and_validate.sh \
+  "$WORK" /path/to/license.lic "$MATLAB_ROOT"   # or PORT@HOST
+```
+
+The run passed only if its last lines are `All gates passed on this host for
+local image sha256:...` and `Evidence: .../samsrf-cli`. In `$WORK/samsrf-cli`:
+
+| File | Must show |
+| --- | --- |
+| `container-build/source.json`, `provenance/source.json` | The pinned SamSrf and SPM commits and the five CLI repair hashes. |
+| `container-build/image.json` | The local image ID that the last line names. |
+| `source-repeat.json` | Source MATLAB repeated bit for bit (24 runs). |
+| `compiled-vs-source.json` | Compiled equals source MATLAB bit for bit on this host (24 runs). |
+| `compiled-repeat.json` | The compiled image repeated bit for bit. |
+| `compiled-1/receipts`, `compiled-2/receipts` | No network, read-only inputs, the image ID, input hashes unchanged. |
+| `interrupt/`, `failure/` | A prompt nonzero exit on SIGINT, and on a missing model. |
+
+Return two files and their SHA-256 through whatever channel the maintainers
+name, never with the license:
+
+```sh
+tar -C "$WORK" --exclude=samsrf-cli/bundle -czf samsrf-cli-evidence.tar.gz samsrf-cli
+docker save samsrf-reference:41ed1e96-r2023b | gzip > samsrf-reference-41ed1e96-r2023b.tar.gz
+sha256sum samsrf-cli-evidence.tar.gz samsrf-reference-41ed1e96-r2023b.tar.gz
+```
+
+A failed run is evidence too: return the evidence archive and the console log,
+from which the failing gate is clear (the driver stops at it).
+
+The maintainers then load the image, check that its ID equals
+`container-build/image.json`, push it to `ghcr.io/neurodesk/samsrf-reference`,
+record its digest beside `cli-reference.json`, and dispatch `samsrf-native`
+with `runtime_image=ghcr.io/neurodesk/samsrf-reference@sha256:...` for the
+Runtime-only check on other hosts. That last step needs no license.
+
+Checked without a license on 2026-11-13: `test_licensed_host.py`, `test_cli.py`
+and the other harness tests pass (25, Python 3.12 with
+`requirements-cli.txt`), and the driver refuses a MATLAB root other than
+23.2.0.3097123 and an existing work directory before it does anything.
+
 ### SamSrfAnalysis case matrix
 
 `cli_plan.py` defines 12 `SamSrfAnalysis` cases, each in both precisions (24
@@ -1170,11 +1229,7 @@ AMD); it does not distinguish signed zeros.
 
 #### Remaining limits
 
-- MKL's AVX-512 branch on Intel hosts is not reproduced: the Intel kernel
-  recording differs from AMD in 12,841 of 16,326 arrays, and MATLAB ignores MKL
-  branch requests. Its FPRev probes are recorded, but a port of them would be a
-  second, non-default target that nothing in the app could select, so none is
-  attempted.
+- MKL's AVX-512 branch on Intel hosts is not reproduced (next section).
 - Signed zeros of MATLAB results that MATLAB itself returns as real cannot be
   recorded through MATLAB. A MEX-level recording of `?trsm`'s own output could
   show MKL's sign there, but MATLAB's visible result has none, so it would not
@@ -1184,6 +1239,86 @@ AMD); it does not distinguish signed zeros.
   pixels and the ROI courses in the pipelines; the probe lengths) rest on the
   kernel probes and the tree model, not on recorded MATLAB outputs. Other
   MATLAB or MKL releases were not recorded.
+
+#### Intel AVX-512 and the reference host
+
+The pinned kernel recording includes one Intel Xeon 8370C host (MKL CNR
+branch `AVX512_E1`, `ubuntu-22.04-3` in `qr-kernels-reference.json`). It
+answers where Intel's arithmetic departs from the AMD reference and whether a
+second, explicit reference could be built from existing data. No new recording
+was made for this.
+
+Where Intel first departs, per design (`qr_steps` with `qr-steps.py` against
+the Intel recording; numeric comparison):
+
+| Class (designs) | Port equals Intel's `mldivide` | First differing step |
+| --- | --- | --- |
+| double real (95) | 10 | R(1,2) 54, R(1,1) 25, R(2,2) 9, v(2) 6, Q^H y 1 |
+| double complex (79) | 0 | R(1,2) 49, R(1,1) 23, v(1) 7 |
+| single real (110) | 38 | R(1,2) 87, v(2) 12, R(2,2) 4, Q^H y 4 |
+| single complex (64) | 8 | R(1,2) 41, v(1) 21, v(2) 2 |
+
+So the column update (`?gemv` inside `?geqp3`) differs first in most designs,
+`dnrm2` (R(1,1)) in 48 double designs, and the complex reflector's scaling (v(1))
+in 28 complex designs.
+
+What the existing Intel data establishes:
+
+- Every Intel tree is deterministic and independent of memory alignment (one
+  tree per length across the eight recorded offsets), as on AMD.
+- `qr-lane-models.py` fits lane-tree models to a host's FPRev probes. On the
+  AMD recording it recovers every model `lstsq.rs` implements: all four
+  `?gemv` classes, both complex `?ormqr` classes, and the real `?ormqr` groups
+  whose block equals their lane count. On Intel:
+  - `dgemv`: one model at all 49 lengths, with c(1) as element 0, 16 lanes
+    (two 8-wide registers), the remainder in power-of-two chunks (8, 4, 2, 1)
+    from lane 0, then folds with strides 8, 4, 1, 2.
+  - `cgemv` (real-v probes): one model, with 8 lanes, folds 4, 2, 1 and the
+    remainder round-robin.
+  - `sgemv`: the products go round-robin and c(1) is added last, but the lane
+    count grows with the length (2, 4, 8, 16, 32). That fits 45 of 49 lengths,
+    and none fits at 127, 128, 249 and 250.
+  - `zgemv`: no model of this family at 15 lengths.
+  - `?ormqr`: complex single fits one model in 21 of 21 column groups and
+    complex double in 18 of 21, but double only in 7 of 21 and single in none.
+- `snrm2` gives Intel's R(1,1) in all 49 non-constant single designs with the
+  AMD order. `dnrm2` does not: the AMD scaled sum gives 26 of 51 double
+  designs, and no plain or lane-wise sum of squares tried gives more than 34.
+  Intel's `dnrm2` is another algorithm, not identified.
+- FPRev probes use real ones, so they cannot see fused multiply-adds or how
+  complex products are formed. The complex v(1) differences (28 designs) are
+  such arithmetic and are not identified.
+
+Feasibility of a second reference: the summation trees are recoverable from
+the existing probes for some kernels. A faithful Intel reference would still
+need `dnrm2`, the complex reflector scaling, real `?ormqr`, `zgemv` and long
+`sgemv` identified, and then every chain gated as the AMD ones are. Probes
+cannot decide the non-tree parts. The recorded chains could, but each
+candidate would be fitted on the same 348 designs it is judged on. A held-out
+recording would then be needed before calling it a reference.
+
+Recommended reference-host policy (a proposal; the current contract is
+unchanged):
+
+- Keep one deterministic reference: MATLAB R2023b Update 11 with MKL's CNR
+  `auto` branch on the recorded AMD EPYC hosts. The port's arithmetic is fixed
+  in its code and gives the same bits on every user's machine. Choosing
+  arithmetic from the user's CPU would make results depend on hardware and
+  would still not match a MATLAB run elsewhere, since MATLAB's own results
+  differ between hosts.
+- Report agreement as "with MATLAB on the AMD reference". Intel MATLAB
+  results are a different, documented target, not a failure of the port, and
+  not covered by AMD evidence.
+- Build an Intel model only if someone needs to reproduce Intel MATLAB runs.
+  It would be an explicit, opt-in reference identifier, never a default or
+  an automatic choice, and it would need the identifications above and a
+  held-out Intel recording first.
+
+```sh
+python3 -I packages/samsrf/validation/matlab/qr-lane-models.py "$TMPDIR/samsrf-qr-kernels/ubuntu-22.04-3" "$TMPDIR/intel-lanes.json"
+cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example qr_steps -- "$TMPDIR/samsrf-qr/ubuntu-24.04/compatible" "$TMPDIR/port-steps.json"
+python3 -I packages/samsrf/validation/matlab/qr-steps.py "$TMPDIR/samsrf-qr-kernels/ubuntu-22.04-3" "$TMPDIR/port-steps.json" "$TMPDIR/intel-steps.json"
+```
 
 #### History
 
@@ -1476,8 +1611,17 @@ pass, or three or four, instead of two, resolves none of the four either
 (tested because MATLAB's default is not idempotent). One pass loses three
 original clouds and 37 real-cloud transforms and gains two held-out
 near-collinear clouds; three or four passes lose six held-out strip pairs and
-gain one held-out cloud. No general correction has been established from the
-current evidence.
+gain one held-out cloud. Two structural hypotheses tested on 2026-11-13,
+with predictions written before running them, are rejected too:
+
+- Clipper's `PreserveCollinear` option, which in 6.4.2 only keeps input
+  vertices exactly collinear with and between their neighbours. None of the
+  four clouds has such a vertex on the grid, so it cannot change them.
+- Keeping a union ring that the clean would delete entirely. It fixes none of
+  the four, and loses 129 original clouds, 459 held-out probe clouds and 407
+  causal polygons.
+
+No general correction has been established from the current evidence.
 
 Where the model cannot follow MATLAB (nonfinite centre or span,
 `log10(1.25e14 / span)` outside -22 to 38, or a Clipper sweep that fails for a
@@ -1569,6 +1713,73 @@ the seven clouds, and its rings differ from MATLAB's on replayed kept
 boundaries in 2,999 of the 10,346 controlled polygons even where the vertex sets
 and hulls agree.
 
+### Reduced reproducers of the four regressions
+
+`polyshape_reduce.py` reduces each of the four clouds by deleting points,
+keeping their order (SamSrf passes clusters in breadth-first order). A
+reduction is kept while the witness input points still separate the models:
+on the full cloud, MATLAB's and the experimental hull disagree about whether
+those points are hull vertices, and the shipped model, which equals MATLAB
+there, must still agree with MATLAB on them. That is only a prediction. Both
+models' hulls for every candidate were committed before MATLAB recorded it:
+
+- `polyshape-reproducers.json` (113 cases), recorded first in run
+  [43523651415](https://github.com/neurodesk/webapps/actions/runs/43523651415):
+  the full clouds as controls, each reduction, every one-point deletion of the
+  smallest, and its other starts, reversal, translation and two scales.
+- `polyshape-reproducers-2.json` (80 cases), first in run
+  [43525037841](https://github.com/neurodesk/webapps/actions/runs/43525037841):
+  each cloud's smallest measured reproducer and its one-point deletions.
+- `polyshape-reproducers-3.json` (51 cases), in run
+  [43526041360](https://github.com/neurodesk/webapps/actions/runs/43526041360):
+  cloud 932's 17-point reproducers and their one-point deletions.
+
+`polyshape-reproducers-reference.json` pins the last run, which records all
+three batches (HF commit 82d191c05d5a26d6152b82ccdb500e8b88f80071, SHA-256
+`73631b967a4845788cbf4f9a8ce046472f5694367a36035300f8cab57f12aadd`, recorder
+commit f621f15cd5170c1b9ce24754f54e2a81e964ccf6).
+- Both hosts passed an exact same-host repeat.
+- Their 72 arrays are byte-identical, on an Intel Xeon Platinum 8573C and an
+  AMD EPYC 7763 that report different MKL branches.
+- The first two batches equal the earlier runs bit for bit.
+- The full-cloud controls reproduce the original recording's verdicts.
+
+The proxy failed often. Of the reductions it predicted, MATLAB agreed with the
+shipped model and not the experimental one only for some. On several, MATLAB
+matched the experimental model, or neither model: both are wrong there. The
+smallest measured reproducers, where MATLAB's hull equals the shipped model's
+and not the experimental one:
+
+| Cloud | Points | 1-minimal in MATLAB | Experimental area / CF sigma error | MATLAB default: regions, holes, rings (kept) | `polyshape` of kept / of default = default |
+| --- | ---: | --- | --- | --- | --- |
+| 177 | 6 of 18 | yes | +6.5 % / +3.2 % | 2, 0, 2 (3) | yes / yes |
+| 932 | 16 of 18 | not established | -7.7 % / -3.9 % | 1, 1, 2 (18) | no / no |
+| 1607 | 8 of 40 | yes | -2.9 % / -1.5 % | 5, 1, 6 (7) | no / no |
+| 1937 | 8 of 24 | yes | -24.4 % / -13.0 % | 1, 0, 1 (4) | no / yes |
+
+1-minimal means that every one-point deletion was recorded and none still
+reproduces. For 932 each recording round removed one point. Nine 16-point sets
+reproduce and their deletions were not recorded, so 932's minimum is open.
+
+`polyshape_regression_reproducers.m` holds the four as exact hex doubles with
+MATLAB's and the experimental hull rows. On all four, MATLAB's hull vertices
+are input points:
+
+- 177, 932 and 1607: the experimental model puts another input point on the
+  hull.
+- 1937: it replaces the extreme input point (0.99963, 2.99927) with a crossing
+  of two edges. Its first clean leaves one ring of its four union rings, and
+  MATLAB's default keeps the region that reaches that point.
+
+The 177 reproducer is idempotent and its `KeepCollinearPoints` shape rebuilds
+the default, so the regression does not need non-idempotence or a kept/default
+difference. The winding rule changes none of the 244 recorded hulls.
+`polyshape_reproducers_match_recording` (experimental gate, both hosts) holds
+three things: every recorded polygon to the spec, both models to the hulls
+predicted before recording, and MATLAB's per-case verdicts to
+`matlab_polyshape_reproducers.json`. It also requires the four smallest
+reproducers to keep reproducing.
+
 ### What is established and what is not
 
 Established on the pinned recordings (both hosts identical):
@@ -1583,6 +1794,8 @@ Established on the pinned recordings (both hosts identical):
 - MATLAB's default `polyshape` is not idempotent on 932, 1607 and cloud 7, and
   `polyshape` of its `KeepCollinearPoints` vertices differs from the default
   on 932, 1607, 1937 and cloud 7.
+- Reproducers of 6, 16, 8 and 8 points (above), with exact inputs, MATLAB's
+  outputs on two hosts and both models' predictions made before recording.
 
 Not known:
 

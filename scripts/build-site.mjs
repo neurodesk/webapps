@@ -41,6 +41,7 @@ const sharedSiteAssets = [
   ['analytics.js', join(repoRoot, 'packages', 'analytics', 'src', 'index.js')],
   ['neurodesk-logo.svg', join(repoRoot, 'site', 'neurodesk-logo.svg')],
   ['sciget-logo.svg', join(repoRoot, 'site', 'sciget-logo.svg')],
+  ['sciget-icon.svg', join(repoRoot, 'site', 'sciget-icon.svg')],
   ['fonts', join(repoRoot, 'site', 'fonts')],
 ];
 await rm(siteDist, { recursive: true, force: true });

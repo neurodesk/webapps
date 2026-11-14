@@ -229,7 +229,13 @@ try {
   }
   await landing.close();
 
+  // Each app takes the look of its home catalogue's brand (site/app-theme.css).
+  const brandPalettes = {
+    neurodesk: { name: 'Neurodesk', dark: '#6ba442', light: '#467d25', pages: ['rgb(13, 14, 13)', 'rgb(20, 21, 20)'], menu: 'rgb(28, 29, 28)' },
+    sciget: { name: 'SciGet', dark: '#d97706', light: '#b85c00', pages: ['rgb(23, 24, 28)'], menu: 'rgb(35, 38, 47)' },
+  };
   for (const app of appsUnderTest) {
+    const palette = brandPalettes[findCatalog(registry, app.catalog).brand.theme];
     const page = await browser.newPage();
     await page.context().route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
       (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
@@ -380,11 +386,11 @@ try {
     if (themeState.appId !== app.id) failures.push(`${app.id}: document theme identity is ${themeState.appId ?? 'missing'}`);
     if (themeState.theme !== 'dark') failures.push(`${app.id}: document dark-theme identity is ${themeState.theme ?? 'missing'}`);
     if (themeState.colorScheme !== 'dark') failures.push(`${app.id}: browser color scheme is ${themeState.colorScheme || 'missing'}`);
-    if (themeState.brandPrimary !== '#6ba442') failures.push(`${app.id}: Neurodesk dark-theme tokens were not applied`);
-    if (!['rgb(13, 14, 13)', 'rgb(20, 21, 20)'].includes(themeState.pageBackground)) {
+    if (themeState.brandPrimary !== palette.dark) failures.push(`${app.id}: ${palette.name} dark-theme tokens were not applied`);
+    if (!palette.pages.includes(themeState.pageBackground)) {
       failures.push(`${app.id}: page background is outside the dark palette: ${themeState.pageBackground}`);
     }
-    if (darkStartPage && !['rgb(13, 14, 13)', 'rgb(20, 21, 20)', 'rgb(28, 29, 28)'].includes(darkStartPage)) {
+    if (darkStartPage && ![...palette.pages, palette.menu].includes(darkStartPage)) {
       failures.push(`${app.id}: start page background is outside the dark palette: ${darkStartPage}`);
     }
     for (const { selector, foreground, background, ratio } of darkStartPageContrast) {
@@ -418,8 +424,8 @@ try {
       if (lightThemeState.theme !== 'light' || lightThemeState.colorScheme !== 'light') {
         failures.push(`${app.id}: theme toggle did not apply the light color scheme`);
       }
-      if (lightThemeState.brandPrimary !== '#467d25') {
-        failures.push(`${app.id}: Neurodesk light-theme tokens were not applied`);
+      if (lightThemeState.brandPrimary !== palette.light) {
+        failures.push(`${app.id}: ${palette.name} light-theme tokens were not applied`);
       }
       await appThemeToggle.click();
     }

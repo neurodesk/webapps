@@ -24,6 +24,7 @@ export const SHARED_ROOT_FILES = [
   'analytics.js',
   'neurodesk-logo.svg',
   'sciget-logo.svg',
+  'sciget-icon.svg',
   'fonts',
   'landing.css',
   'landing.js',
@@ -77,8 +78,9 @@ export function hostedThemeOptions({ registry, information, app, version, siteAp
     canonical: appUrl(registry, app),
     siteTitle: catalog.title,
     brandName: catalog.brand.name,
+    brandTheme: catalog.brand.theme,
     moreAppsLabel: catalog.brand.more_apps,
-    iconHref: `../${catalog.brand.logo}`,
+    iconHref: `../${catalog.brand.icon}`,
     information: appInformationPayload(information, app.id, siteAppIds),
     standaloneHref: '../standalone.json',
     componentsHref: '../shell-adapters/components/',
@@ -230,11 +232,12 @@ export async function projectCatalogSite({ repoRoot, siteDist, destination, regi
   return { apps: siteAppIds, families: families.map((family) => posix(relative(siteDist, family))) };
 }
 
-/** webapps.sciget.org: the hub page, its stylesheet, theme controller, fonts and logo. */
+/** webapps.sciget.org: the hub page, its stylesheet, theme controller, fonts, logo and icon. */
 export async function projectHubSite({ siteDist, destination, registry }) {
   await rm(destination, { recursive: true, force: true });
   await mkdir(destination, { recursive: true });
-  for (const name of ['landing.css', 'theme.js', 'fonts', registry.site.hub.brand.logo]) {
+  const { logo, icon } = registry.site.hub.brand;
+  for (const name of new Set(['landing.css', 'theme.js', 'fonts', logo, icon])) {
     await cp(join(siteDist, name), join(destination, name), { recursive: true });
   }
   await writeFile(join(destination, 'index.html'), renderHubPage(registry));

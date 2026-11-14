@@ -4,12 +4,51 @@
 //! exactly, and which do not. For `causal_real` it also counts per source cloud
 //! (parameter column 1). Evidence, not a gate.
 //!   cargo run --release --features polyshape-experimental --example polyshape_hulls -- HOST_DIR CASE_ID production|experimental
+//! `--oracle` instead reads a JSON list of polygons (lists of [x, y] as IEEE-754 bit
+//! patterns, u64, because serde_json's default float parser is not correctly
+//! rounded) from stdin and
+//! writes both models' hull vertices, area and centroid for each, and the
+//! experimental model's stages in grid units (the reducer in
+//! packages/samsrf/validation/matlab/polyshape_reduce.py uses it):
+//!   cargo run --release --features polyshape-experimental --example polyshape_hulls -- --oracle
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+fn describe(hull: Option<samsrf_core::geometry::Hull>) -> Value {
+    match hull {
+        None => serde_json::json!(null),
+        Some(h) => serde_json::json!({"hull": h.vertices, "area": h.area(), "centroid": h.centroid()}),
+    }
+}
+
+fn oracle() {
+    let bits: Vec<Vec<[u64; 2]>> = serde_json::from_reader(std::io::stdin()).unwrap();
+    let polygons: Vec<Vec<[f64; 2]>> = bits.iter().map(|p| p.iter().map(|q| q.map(f64::from_bits)).collect()).collect();
+    let results: Vec<Value> = polygons.iter().map(|p| {
+        let experimental = match samsrf_core::experimental::hull_of_polygon(p) {
+            Ok(hull) => describe(hull),
+            Err(e) => serde_json::json!({"error": e.to_string()}),
+        };
+        let stages = match samsrf_core::experimental::polyshape_stages(p) {
+            Ok(Some((centre, scale, tolerance, ring, [first_union, first_clean, second_union, second_clean], hull, _))) => serde_json::json!({
+                "centre": centre, "scale": scale, "tolerance": tolerance, "ring": ring,
+                "firstUnion": first_union, "firstClean": first_clean, "secondUnion": second_union, "secondClean": second_clean, "hull": hull,
+            }),
+            Ok(None) => serde_json::json!(null),
+            Err(e) => serde_json::json!({"error": e.to_string()}),
+        };
+        serde_json::json!({"production": describe(samsrf_core::geometry::Hull::of_polygon(p)), "experimental": experimental, "experimentalStages": stages})
+    }).collect();
+    serde_json::to_writer(std::io::stdout(), &results).unwrap();
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--oracle") {
+        oracle();
+        return;
+    }
     assert_eq!(
         args.len(),
         4,

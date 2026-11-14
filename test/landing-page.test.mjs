@@ -92,7 +92,9 @@ test('each catalogue lists only its own apps under its own brand', async () => {
     assert.equal(document.title, catalog.title);
     assert.equal(document.querySelector('h1').textContent, catalog.heading);
     assert.equal(document.querySelector('.brand img').getAttribute('src'), `./${catalog.brand.logo}`);
+    assert.equal(document.querySelector('link[rel="icon"]').getAttribute('href'), `./${catalog.brand.icon}`);
     assert.equal(document.querySelector('.brand').getAttribute('href'), catalog.brand.home);
+    assert.equal(document.documentElement.dataset.neurodeskBrand, catalog.brand.theme === 'neurodesk' ? undefined : catalog.brand.theme, `${id} takes its brand's look`);
     const hub = `a[href="https://${registry.site.hub.host}/"]`;
     assert.ok(document.querySelector(`.site-nav ${hub}`), 'the top bar links to the hub');
     assert.ok(document.querySelector(`.site-footer ${hub}`), 'the footer links to the hub');

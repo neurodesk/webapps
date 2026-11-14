@@ -1,4 +1,4 @@
-import { ANATOMY, HARDWARE, INPUT_FORMATS, MODALITIES, appCatalogIds, appUrl, findCatalog, primaryCatalog } from './apps-registry.mjs';
+import { ANATOMY, HARDWARE, INPUT_FORMATS, MODALITIES, appCatalogIds, appUrl, brandAttribute, findCatalog, primaryCatalog } from './apps-registry.mjs';
 
 const escape = (value) => String(value)
   .replaceAll('&', '&amp;')
@@ -174,13 +174,14 @@ export function renderLandingPage(registry, standalone, catalog = primaryCatalog
         <a href="./surf/">Go surfing</a>` : '';
 
   return `<!doctype html>
-<html lang="en" data-neurodesk-theme="dark">
+<html lang="en" data-neurodesk-theme="dark"${brandAttribute(brand)}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="${escape(catalog.description)}">
   <meta name="neurodesk-ga4-measurement-id" content="${escape(registry.site.analytics.measurement_id)}">
   <title>${escape(catalog.title)}</title>
+  <link rel="icon" type="image/svg+xml" href="./${escape(brand.icon)}">
   <script src="./theme.js" data-neurodesk-theme-controller></script>
   <link rel="stylesheet" href="./landing.css">
   <script type="module" src="./landing.js"></script>

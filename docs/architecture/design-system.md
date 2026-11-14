@@ -95,6 +95,11 @@ Light uses `#467d25`, because the logo green is only 3:1 on white. `--nd-color-o
 is the label colour on a primary fill. `test/design-system.test.mjs` holds both themes to
 AA: text 7:1, muted and dim text 4.5:1 on every surface, primary labels 4.5:1.
 
+Apps served by a SciGet catalogue take sciget.org's look instead: its greys, its orange
+accent (`#d97706` on dark, `#b85c00` on light) and the system font stack. The theme
+restates the brand tokens under `data-neurodesk-brand="sciget"`, which the catalogue's
+`brand.theme` sets ([catalogue sites](catalogue-sites.md)). Apps write no brand-specific CSS.
+
 ## Layout rules
 
 - The sidebar is a column of sections. The first section is input (open) and

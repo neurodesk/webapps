@@ -22,6 +22,7 @@ function escapeAttribute(value) {
 export const DEFAULT_BRAND = Object.freeze({
   siteTitle: 'Neurodesk Webapps',
   brandName: 'Neurodesk',
+  brandTheme: 'neurodesk',
   moreAppsLabel: 'More Neurodesk web apps',
 });
 
@@ -50,6 +51,7 @@ export function injectCompositeTheme(html, {
   iconHref = '../neurodesk-logo.svg',
   siteTitle = DEFAULT_BRAND.siteTitle,
   brandName = DEFAULT_BRAND.brandName,
+  brandTheme = DEFAULT_BRAND.brandTheme,
   moreAppsLabel = DEFAULT_BRAND.moreAppsLabel,
   catalogId,
   information,
@@ -61,7 +63,7 @@ export function injectCompositeTheme(html, {
   if (typeof href !== 'string' || !href.trim()) throw new Error('Theme href must be a non-empty string');
   for (const [label, value] of Object.entries({
     title, description, version, shell, measurementId, themeHref, shellHref, analyticsHref, moreAppsHref, iconHref,
-    siteTitle, brandName, moreAppsLabel,
+    siteTitle, brandName, brandTheme, moreAppsLabel,
   })) {
     if (typeof value !== 'string' || !value.trim()) {
       throw new Error(`${label} must be a non-empty string`);
@@ -137,6 +139,15 @@ export function injectCompositeTheme(html, {
         : tag.replace(/^<html\b/i, `<html${attribute}`)
     ));
   }
+
+  // A brand other than Neurodesk restyles the page through the shared app theme. Every
+  // run sets or clears it, so the catalogue that hosts the page decides it.
+  themed = themed.replace(/<html\b[^>]*>/i, (tag) => {
+    const bare = tag.replace(/\sdata-neurodesk-brand="[^"]*"/i, '');
+    return brandTheme === DEFAULT_BRAND.brandTheme
+      ? bare
+      : bare.replace(/>$/, ` data-neurodesk-brand="${escapeAttribute(brandTheme)}">`);
+  });
 
   if (!/data-neurodesk-theme-controller(?:\s|=|>)/i.test(themed)) {
     themed = themed.replace(
