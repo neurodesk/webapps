@@ -165,8 +165,9 @@ fn hrf_kernels_match_matlab_at_six_trs() {
     assert_eq!(checked, 12);
 }
 
-/// MKL's SSE2 kernels on the AMD host. MATLAB's real `x'*y` takes another path
-/// for 8-19 elements, shorter than any SamSrf time course.
+/// MKL's SSE2 kernels on the AMD host. Up to at least 24 elements MATLAB's real
+/// `x'*y` adds products in pairs instead (`focused_probes.rs`); this recording's
+/// products of 20 and 33 elements happen to fit both trees, and MKL's alone from 64.
 #[test]
 fn dot_products_and_norms_match_mkl_on_the_amd_reference_host() {
     let Some(root) = root() else { return };

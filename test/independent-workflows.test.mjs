@@ -258,7 +258,7 @@ test('portable Node command lines build on target runners and publish through on
     const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
     // A release with a macOS installer is published only by signing it.
     const publishInput=installer?'sign_release':'publish_release';
-    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'geometry_probe', 'geometry_causal', 'geometry_reproducers', 'revcor_only', 'revcor_edges', 'wasm_only', 'qr_only', 'qr_kernels', 'numerics_only', 'css_pipelines_only', 'kernels_only', 'gemv_order', 'runtime_cli', 'runtime_image'] : [];
+    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'geometry_probe', 'geometry_causal', 'geometry_reproducers', 'revcor_only', 'revcor_edges', 'wasm_only', 'qr_only', 'qr_kernels', 'numerics_only', 'css_pipelines_only', 'kernels_only', 'gemv_order', 'focused_probes', 'runtime_cli', 'runtime_image'] : [];
     assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs), [publishInput, ...referenceInputs], name);
     assert.equal(flow.jobs.portable.with.publish_release,`\${{ github.event_name == 'workflow_dispatch' && inputs.${publishInput} }}`,name);
     assert.equal(flow.jobs.portable.with.sign_release,installer?"${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}":undefined,name);

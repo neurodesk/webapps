@@ -54,7 +54,7 @@ not make that decision. See [Intel AVX-512 and the reference host](matlab/README
 | Missing references fail CI; immutable pins | `Expected` case counts in `revcor_reference.rs`; HF commit pins with SHA-256 | Met | None |
 | Upstream execution limits documented (mismatched `Rdim`) | matlab/README "Raw-input reverse-correlation matrix" | Met | None |
 | Changeset, API/CLI tests, browser checks, coverage docs | `cli.test.js` (single rc writes the in-process job, refuses single 2D fits), `api.test.js`, SamSrf e2e | Met for the supported subset | — |
-| Single RC 2D and single CF Gaussian fits | Internal gates only: three RC 2D cases and twelve CF Gaussian cases equal MATLAB's on AMD | **Partial: publicly refused** | No general acceptance bound: Hooke-Jeeves unrecorded, 18 single `exp` inputs and 19 atlas vertices differ, Intel maps differ. Owned by the numerical track |
+| Single RC 2D and single CF Gaussian fits | Internal gates only: three RC 2D cases and twelve CF Gaussian cases equal MATLAB's on AMD. [Focused probes](matlab/README.md#focused-probes-729-730) also record Hooke–Jeeves for the three single RC 2D cases: per profile host, all 43 retained fits of 78 match parameter/R² bits and all 35 rejection masks agree, on both recording hosts | **Partial: publicly refused** | Hooke–Jeeves evidence covers one subject; rejected pre-mask parameters are not compared. No general acceptance bound: 18 single `exp` inputs and 19 atlas vertices differ, Intel maps differ. Owned by the numerical track |
 
 ## #730 Double-precision CSS fits
 
