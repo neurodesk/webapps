@@ -100,6 +100,10 @@ on:
         description: With record_matlab, record the focused probes (Hooke-Jeeves on pinned RC profiles, conv near 512, trig position, short dot products)
         type: boolean
         default: false
+      controls_only:
+        description: Record the MKL controls in effect inside MATLAB under three environment requests (controls-preregistration.md)
+        type: boolean
+        default: false
       runtime_cli:
         description: SamSrfAnalysis CLI matrix (source runs it twice in public MATLAB; build needs the MLM_LICENSE_TOKEN secret for MATLAB Compiler)
         type: choice
@@ -114,12 +118,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: samsrf-native-${{ github.ref }}${{ (inputs.record_matlab || inputs.revcor_only || inputs.qr_only || inputs.qr_kernels || (inputs.runtime_cli || 'none') != 'none' || inputs.runtime_image) && '-matlab' || '' }}
+  group: samsrf-native-${{ github.ref }}${{ (inputs.record_matlab || inputs.revcor_only || inputs.qr_only || inputs.qr_kernels || inputs.controls_only || (inputs.runtime_cli || 'none') != 'none' || inputs.runtime_image) && '-matlab' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.controls_only && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -174,6 +178,7 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           node packages/samsrf/validation/matlab/compare.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-matrix-input"
           SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_reference
+          SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test double_forward_diagnostics
       - name: Reverse-correlation pRF and connective-field raw pipeline gates (both MATLAB hosts)
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-revcor-reference" packages/samsrf/validation/matlab/revcor-reference.json
@@ -254,7 +259,7 @@ jobs:
           if-no-files-found: ignore
 
   wasm-source:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -318,7 +323,7 @@ jobs:
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
 
   recorder-smoke:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.wasm_only && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -688,6 +693,55 @@ jobs:
   # runs the same matrix on the same host and must reproduce source MATLAB bit for
   # bit before it is published. Compiler is a transformation product: it needs a
   # MathWorks batch licensing token in the MLM_LICENSE_TOKEN secret.
+  matlab-controls:
+    if: github.event_name == 'workflow_dispatch' && inputs.controls_only
+    name: record MKL controls in MATLAB (${{ matrix.host }} ${{ matrix.request }})
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [ubuntu-22.04, ubuntu-24.04]
+        request: [documented, none, contrast]
+    runs-on: ${{ matrix.host }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Refuse combination with other recordings
+        run: |
+          if [ '${{ inputs.record_matlab }}' = true ] || [ '${{ inputs.revcor_only }}' = true ] || [ '${{ inputs.qr_only }}' = true ] || [ '${{ inputs.qr_kernels }}' = true ]; then
+            echo 'controls_only records the MKL controls alone.' >&2
+            exit 1
+          fi
+      - name: Set the requested environment
+        run: |
+          case '${{ matrix.request }}' in
+            documented) printf '%s\n' MKL_CBWR=COMPATIBLE MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_DYNAMIC=FALSE OMP_DYNAMIC=FALSE >> "$GITHUB_ENV" ;;
+            contrast) printf '%s\n' MKL_CBWR=AVX2 MKL_NUM_THREADS=4 OMP_NUM_THREADS=4 MKL_DYNAMIC=TRUE OMP_DYNAMIC=TRUE >> "$GITHUB_ENV" ;;
+            none) ;;
+          esac
+      - name: Set up real MATLAB
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3
+        with:
+          release: R2023bU11
+      - name: Record the controls
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_controls(fullfile(getenv('RUNNER_TEMP'),'samsrf-controls','first'),'${{ matrix.request }}')
+      - name: Repeat in a new MATLAB process on this host
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_controls(fullfile(getenv('RUNNER_TEMP'),'samsrf-controls','repeat'),'${{ matrix.request }}')
+      - name: Retain the receipts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-controls-${{ matrix.host }}-${{ matrix.request }}
+          path: |
+            ${{ runner.temp }}/samsrf-controls/*/controls.json
+            ${{ runner.temp }}/samsrf-controls/*/*.f64
+          if-no-files-found: error
+
   runtime-cli:
     if: github.event_name == 'workflow_dispatch' && (inputs.runtime_cli == 'source' || inputs.runtime_cli == 'build')
     name: SamSrfAnalysis CLI ${{ inputs.runtime_cli }} (${{ matrix.host }})
