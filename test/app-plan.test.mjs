@@ -816,7 +816,7 @@ async function plannerFixture(t) {
   for (const path of ['scripts/lib', 'registry', '.github/workflows']) {
     await mkdir(join(root, path), { recursive: true });
   }
-  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/module-closure.mjs', 'scripts/lib/shared-module-users.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/tested-base.mjs', 'scripts/lib/standalone.mjs', 'scripts/lib/app-information.mjs', 'registry/apps.yml']) {
+  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/module-closure.mjs', 'scripts/lib/shared-module-users.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/tested-base.mjs', 'scripts/lib/ci-usage.mjs', 'scripts/lib/github-actions.mjs', 'scripts/lib/standalone.mjs', 'scripts/lib/app-information.mjs', 'registry/apps.yml']) {
     await copyFile(join(repoRoot, path), join(root, path));
   }
   await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: {} }));

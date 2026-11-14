@@ -39,8 +39,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Reads main's finished ci runs to find the last tested commit.
+      # Reads main's finished ci runs to find the last tested commit, and a
+      # ready pull request's earlier runs for its whole-catalogue budget.
       actions: read
+      # Reads the pull request's labels (full-ci restores a withheld plan).
+      pull-requests: read
     outputs:
       apps: ${{ steps.plan.outputs.apps }}
       has_apps: ${{ steps.plan.outputs.has_apps }}
@@ -50,6 +53,7 @@ jobs:
       has_gpu_apps: ${{ steps.plan.outputs.has_gpu_apps }}
       all_apps: ${{ steps.plan.outputs.all_apps }}
       has_site: ${{ steps.plan.outputs.has_site }}
+      withheld: ${{ steps.plan.outputs.withheld }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -72,6 +76,18 @@ jobs:
           CI_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/app-plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  full-plan-withheld:
+    # A ready pull request over its whole-catalogue budget ran the draft plan.
+    # Fail so the run never reads as the complete affected-app check.
+    needs: app-plan
+    if: needs.app-plan.outputs.withheld == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report the withheld plan
+        run: |
+          echo "::error title=Full plan withheld::This ready pull request already used its whole-catalogue ci runs in the last 24 hours, so this run tested only the apps it edits. Convert it to draft while iterating. To test every app at this head, add the full-ci label and use Re-run all jobs (Re-run failed jobs keeps this plan)."
+          exit 1
 
   workspace-contracts:
     if: github.event.action != 'converted_to_draft'

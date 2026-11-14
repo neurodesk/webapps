@@ -13,7 +13,9 @@ composite checks, and path-selected native/reference suites. Reopening also
 refreshes the checks. Converting a PR back to draft cancels the previous PR
 run without starting CI test jobs on the unchanged head. GitHub prevents merging
 a draft PR. Before merging a ready PR, verify the full checks on its current
-head; this change does not configure repository branch protection.
+head; this change does not configure repository branch protection. A ready PR
+that has already used its whole-catalogue runs gets the draft plan and a
+failing `full-plan-withheld` job instead ([enforcement](#enforcement-in-ci)).
 
 ## Pull request gate for shared path filters
 
@@ -120,6 +122,27 @@ them. Run the report for
 any day with `node scripts/ci-usage-report.mjs --until <ISO time>`. Change a
 budget only with the measurement that justifies it.
 
+### Enforcement in CI
+
+The report fires the next morning, after the runners are spent: on 13 November
+2026 one pull request started seven whole-catalogue runs, six of them cancelled
+by its next push, and agents bypassed the draft rule by converting to draft,
+pushing and marking ready within ten seconds. So `scripts/app-plan.mjs` also
+applies the per-pull-request budget when it plans a ready pull request's run.
+
+When the complete plan would select every app and the draft plan would select
+fewer, it counts the pull request's earlier `ci` runs from the last 24 hours
+exactly as the report does (`fullPlanDecision` in `scripts/lib/ci-usage.mjs`),
+whatever event started them, `ready_for_review` included. Once they fill the
+budget, the run uses the draft plan, skips the composite site, and its
+`full-plan-withheld` job fails, so a withheld run never reads as the complete
+affected-app check. The window is rolling rather than the report's UTC day.
+
+To test every app at that head, add the `full-ci` label and use **Re-run all
+jobs** on the run; the planner reads the labels when it runs, so no new trigger
+is needed. **Re-run failed jobs** keeps the withheld plan. A failure to read the
+runs or labels keeps the full plan.
+
 ## Module-level selection in the component package
 
 Every app depends on `packages/components`, so a change anywhere in it used
@@ -221,7 +244,8 @@ CI events and Pages used 511. These are execution usage, not billed minutes.
 
 Full-catalog PR runs sampled at 554–608 Linux minutes. Draft tiers reduce how
 often that cost is incurred during iteration, but only if work is kept in
-draft. Ready PRs retain full coverage on every update. No numerical saving is
+draft. Ready PRs retain full coverage on every update until they reach the
+whole-catalogue budget. No numerical saving is
 claimed until comparable post-change runs are measured. Shadow replay checks
 the unchanged ready-PR planner; draft omissions are intentional, not oracle
 misses that should be silently ignored.

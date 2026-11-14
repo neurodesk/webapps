@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-import { appendFile } from 'node:fs/promises';
+import { appendFile, readFile } from 'node:fs/promises';
 import { createAppPlan, changedManifests, changedPathsFromGit } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
+import { FULL_CI_LABEL, fullPlanDecision, largeRunCandidates } from './lib/ci-usage.mjs';
+import { jobCount, listPullRequestRuns, mapLimited, pullRequestLabels } from './lib/github-actions.mjs';
 import { resolveTestedBase, TESTED_BASE } from './lib/tested-base.mjs';
 import { loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
 
@@ -45,7 +47,45 @@ try {
   console.error(`App planner: selecting the full catalog and site because ${fallbackReason}`);
 }
 const draft = process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.CI_DRAFT === 'true';
-const plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft });
+let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft });
+
+// A ready pull request that has used its whole-catalogue runs gets the draft
+// plan, and the `full-plan-withheld` job fails so the run is never green.
+async function budgetDecision(pullRequest) {
+  const now = new Date().toISOString();
+  const labels = await pullRequestLabels(pullRequest.number);
+  if (labels.includes(FULL_CI_LABEL)) return fullPlanDecision({ runs: [], jobCounts: new Map(), pullRequest, labels, now });
+  const runs = await listPullRequestRuns({ branch: pullRequest.branch, since: new Date(Date.parse(now) - 24 * 3600e3) });
+  const candidates = largeRunCandidates(runs, now);
+  const counts = await mapLimited(candidates, 6, (run) => jobCount(run.id));
+  return fullPlanDecision({
+    runs,
+    jobCounts: new Map(candidates.map((run, index) => [run.id, counts[index]])),
+    pullRequest,
+    runId: Number(process.env.GITHUB_RUN_ID),
+    labels,
+    now,
+  });
+}
+
+let withheld = '';
+if (process.env.GITHUB_EVENT_NAME === 'pull_request' && !draft && plan.allApps && process.env.GITHUB_EVENT_PATH) {
+  const draftPlan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft: true });
+  if (draftPlan.selected.length < plan.selected.length) {
+    try {
+      const event = JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH, 'utf8')).pull_request;
+      const decision = await budgetDecision({ number: event.number, repository: event.head.repo?.full_name, branch: event.head.ref });
+      console.error(`App planner budget: ${decision.reason}`);
+      if (decision.withheld) {
+        withheld = decision.reason;
+        plan = draftPlan;
+      }
+    } catch (error) {
+      // The budget saves runner time; it never withholds coverage it cannot justify.
+      console.error(`App planner budget: keeping the full plan because the budget check failed: ${error.message}`);
+    }
+  }
+}
 const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test' }] };
 const fallback = (fallbackReason || (plan.reasons.fallback ?? '')).replace(/\s+/g, ' ');
 // A wide change gives every app the same long list; keep the outputs small.
@@ -71,7 +111,8 @@ const outputs = {
   has_gpu_apps: String(plan.gpuApps.include.length > 0),
   has_release_apps: String(plan.releaseApps.include.length > 0),
   all_apps: String(plan.allApps),
-  has_site: String(plan.site),
+  has_site: String(plan.site && !withheld),
+  withheld: String(Boolean(withheld)),
   fallback_reason: fallback,
   selection_reasons: JSON.stringify(reasons),
 };
@@ -80,11 +121,16 @@ const outputs = {
 const summary = fallback && !draft
   ? [`Full catalog and site selected: ${fallback}`]
   : [
-    `Selected ${plan.selected.length} of ${registry.apps.length} apps; site build ${draft ? 'deferred until ready' : plan.site ? 'runs' : 'skipped'}.`,
+    `Selected ${plan.selected.length} of ${registry.apps.length} apps; site build ${draft || withheld ? 'deferred until ready' : plan.site ? 'runs' : 'skipped'}.`,
     ...Object.entries(reasons.apps).map(([app, list]) => `- ${app}: ${list.join('; ')}`),
     ...reasons.site.map((reason) => `- site: ${reason}`),
   ];
 if (draft) summary.unshift('Draft feedback only: shared dependency coverage runs on ready_for_review and every subsequent ready PR push.');
+const withheldAdvice = `Full plan withheld: ${withheld}. This run tests only the apps the pull request edits. Convert the pull request to draft while iterating; to test every app at this head, add the ${FULL_CI_LABEL} label and use "Re-run all jobs" on this run.`;
+if (withheld) {
+  summary.unshift(withheldAdvice);
+  if (process.env.GITHUB_ACTIONS) console.log(`::warning title=Full plan withheld::${withheldAdvice}`);
+}
 console.error(summary.join('\n'));
 if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `## App plan\n\n${summary.join('\n')}\n`);
 
