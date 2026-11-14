@@ -1335,35 +1335,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.8.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261112/syncro-0.8.20261112-linux-x64.tar.gz",
-          "sha256": "128a2f550831230f3f82db0693c3ff0d54bae0dd9890d6ccdd4df61140679ca9",
-          "bytes": 126379134,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261112/syncro-0.8.20261112-linux-x64.tar.gz.validation.txt",
+          "version": "0.8.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261113/syncro-0.8.20261113-linux-x64.tar.gz",
+          "sha256": "c9ae1adc5028650df25b5c8ae70a182c902cd5a348c540aae9f9daeb9bef0647",
+          "bytes": 126379576,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261113/syncro-0.8.20261113-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf syncro-0.8.20261112-linux-x64.tar.gz\n./syncro-0.8.20261112-linux-x64/syncro input.nii.gz results --threads 4"
+          "command": "tar -xzf syncro-0.8.20261113-linux-x64.tar.gz\n./syncro-0.8.20261113-linux-x64/syncro input.nii.gz results --threads 4"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.8.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261112/syncro-0.8.20261112-macos-arm64.pkg",
-          "sha256": "0b0addca0f2595e350e7157544a146a4b34483dddf2d366805ef8dea224911b6",
-          "bytes": 127748840,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261112/syncro-0.8.20261112-macos-arm64.pkg.validation.txt",
+          "version": "0.8.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261113/syncro-0.8.20261113-macos-arm64.pkg",
+          "sha256": "cf178bd9121e6a72a3d7d7a1d54b7e305a63d6154c135949e98c2f8894e2387f",
+          "bytes": 127749561,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261113/syncro-0.8.20261113-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg syncro-0.8.20261112-macos-arm64.pkg -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4"
+          "command": "sudo installer -pkg syncro-0.8.20261113-macos-arm64.pkg -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.8.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261112/syncro-0.8.20261112-windows-x64.zip",
-          "sha256": "35bdb1e1cc30e051b0076883996b74832412bfb41a13b611029cbbf15a09fa47",
-          "bytes": 127247854,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261112/syncro-0.8.20261112-windows-x64.zip.validation.txt",
+          "version": "0.8.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261113/syncro-0.8.20261113-windows-x64.zip",
+          "sha256": "3f01335b14c6f5cbe6837d09b0c802c085a25c94e8af9c16315072d3eb7868fb",
+          "bytes": 127249966,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.8.20261113/syncro-0.8.20261113-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\syncro-0.8.20261112-windows-x64.zip -DestinationPath .\n.\\syncro-0.8.20261112-windows-x64\\syncro.exe input.nii.gz results --threads 4"
+          "command": "Expand-Archive -Path .\\syncro-0.8.20261113-windows-x64.zip -DestinationPath .\n.\\syncro-0.8.20261113-windows-x64\\syncro.exe input.nii.gz results --threads 4"
         }
       ],
       "containers": [
@@ -1385,35 +1385,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.8.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-linux-x64.tar.gz",
-          "sha256": "85e2aa32ddd74d7cb8fbbfe4965b1df882543df14e7c9a4476066c78c1afede4",
-          "bytes": 55861099,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-linux-x64.tar.gz.validation.txt",
+          "version": "0.8.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-linux-x64.tar.gz",
+          "sha256": "283d834b76009846a0e02ad07b38e369e4546ff3e5f91f65e69e7f8eb3cc9ff5",
+          "bytes": 55862282,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf dwi2trx-0.8.20261112-linux-x64.tar.gz\n./dwi2trx-0.8.20261112-linux-x64/dwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "tar -xzf dwi2trx-0.8.20261113-linux-x64.tar.gz\n./dwi2trx-0.8.20261113-linux-x64/dwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.8.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-macos-arm64.pkg",
-          "sha256": "079dfed958ffa0aa13d830eace8d280d0c8b8c0de2f35256fc9723f8c880b887",
-          "bytes": 49569998,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-macos-arm64.pkg.validation.txt",
+          "version": "0.8.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-macos-arm64.pkg",
+          "sha256": "e92fd8d1395844282a764f02e48071efec91c4c7042c35268ad270e5aaeef78c",
+          "bytes": 49570860,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg dwi2trx-0.8.20261112-macos-arm64.pkg -target /\ndwi2trx self-check\ndwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "sudo installer -pkg dwi2trx-0.8.20261113-macos-arm64.pkg -target /\ndwi2trx self-check\ndwi2trx dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.8.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-windows-x64.zip",
-          "sha256": "34b35e890313ec5a07ebf7e9b40ebdfdd00266e7b34b0063296cd692157e7dec",
-          "bytes": 46626615,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261112/dwi2trx-0.8.20261112-windows-x64.zip.validation.txt",
+          "version": "0.8.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-windows-x64.zip",
+          "sha256": "dfee13d6f8571fea514b68e30936bdbfbdb78c89d27875cb8a61f43b4897f4aa",
+          "bytes": 46628724,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dwi2trx-v0.8.20261113/dwi2trx-0.8.20261113-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\dwi2trx-0.8.20261112-windows-x64.zip -DestinationPath .\n.\\dwi2trx-0.8.20261112-windows-x64\\dwi2trx.exe dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "Expand-Archive -Path .\\dwi2trx-0.8.20261113-windows-x64.zip -DestinationPath .\n.\\dwi2trx-0.8.20261113-windows-x64\\dwi2trx.exe dwi.nii.gz dwi.bval dwi.bvec results"
         }
       ],
       "containers": []
@@ -1992,35 +1992,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.7.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261112/noddi-0.7.20261112-linux-x64.tar.gz",
-          "sha256": "4362de3242dcdc24880d7a4d4c36c826f2bd7529268891c98e6b46fa579169ea",
-          "bytes": 56030592,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261112/noddi-0.7.20261112-linux-x64.tar.gz.validation.txt",
+          "version": "0.7.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-linux-x64.tar.gz",
+          "sha256": "3f5312f827cdc6e0f45107017cd0fbef55f8a9562f2d4180293acab57ca6e948",
+          "bytes": 56032864,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf noddi-0.7.20261112-linux-x64.tar.gz\n./noddi-0.7.20261112-linux-x64/noddi dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "tar -xzf noddi-0.7.20261113-linux-x64.tar.gz\n./noddi-0.7.20261113-linux-x64/noddi dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.7.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261112/noddi-0.7.20261112-macos-arm64.pkg",
-          "sha256": "eb9e41bd12e63088f4add8798a805e830835316f1bc0e0997d6ed5ebf5ae8b57",
-          "bytes": 49742962,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261112/noddi-0.7.20261112-macos-arm64.pkg.validation.txt",
+          "version": "0.7.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-macos-arm64.pkg",
+          "sha256": "b1e768061e322b6f1c0231f87a1a7e21583fe3ce04ae824860bdaa7d439c4bd8",
+          "bytes": 49743174,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg noddi-0.7.20261112-macos-arm64.pkg -target /\nnoddi self-check\nnoddi dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "sudo installer -pkg noddi-0.7.20261113-macos-arm64.pkg -target /\nnoddi self-check\nnoddi dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.7.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261112/noddi-0.7.20261112-windows-x64.zip",
-          "sha256": "3f08b93ea4bc32b341cb1f66f9183f8722c7c0bea6641047de303f3a0f354162",
-          "bytes": 46810410,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261112/noddi-0.7.20261112-windows-x64.zip.validation.txt",
+          "version": "0.7.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-windows-x64.zip",
+          "sha256": "9f999f2323b9cf653799bea139e0ed2222c44fa398f8874c611e9869afc84004",
+          "bytes": 46812529,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\noddi-0.7.20261112-windows-x64.zip -DestinationPath .\n.\\noddi-0.7.20261112-windows-x64\\noddi.exe dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "Expand-Archive -Path .\\noddi-0.7.20261113-windows-x64.zip -DestinationPath .\n.\\noddi-0.7.20261113-windows-x64\\noddi.exe dwi.nii.gz dwi.bval dwi.bvec results"
         }
       ],
       "containers": []
@@ -2035,8 +2035,8 @@
           "platform": "linux-x64",
           "version": "0.4.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-linux-x64.tar.gz",
-          "sha256": "c20ed7e1fbbda4c903b21497b4196a6925dd5761da98f41f2e088626291edd99",
-          "bytes": 47644919,
+          "sha256": "890356c8788096dafc1fc867806be26c9d77565100af267d085812ee5a2b4ef4",
+          "bytes": 47647208,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
           "command": "tar -xzf degibbs-0.4.20261111-linux-x64.tar.gz\n./degibbs-0.4.20261111-linux-x64/degibbs sub-01_dwi.nii.gz results"
@@ -2046,8 +2046,8 @@
           "platform": "macos-arm64",
           "version": "0.4.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-macos-arm64.pkg",
-          "sha256": "052aff6f4319398e76278e505be4e9a9c5a8ce7282d8478bb946895b3bccb580",
-          "bytes": 41359391,
+          "sha256": "4ff48e61e98a935fc923a4c13cc03ab560c043b5f674dc80cea5b239f53c2e4d",
+          "bytes": 41360044,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg degibbs-0.4.20261111-macos-arm64.pkg -target /\ndegibbs self-check\ndegibbs sub-01_dwi.nii.gz results"
@@ -2057,8 +2057,8 @@
           "platform": "windows-x64",
           "version": "0.4.20261111",
           "url": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-windows-x64.zip",
-          "sha256": "2336f9a1953e4f46ba7e7c0dd9532601f8d026183db45fdb68eafab775481fd5",
-          "bytes": 38401067,
+          "sha256": "778f1312727d24e091b16430a78116434e1db8814170b403dccb0ffe899ac913",
+          "bytes": 38403177,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/degibbs-v0.4.20261111/degibbs-0.4.20261111-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\degibbs-0.4.20261111-windows-x64.zip -DestinationPath .\n.\\degibbs-0.4.20261111-windows-x64\\degibbs.exe sub-01_dwi.nii.gz results"
@@ -2266,35 +2266,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.4.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261112/hmc-0.4.20261112-linux-x64.tar.gz",
-          "sha256": "101fc7cd1710686db9b8b2a513107f6fd16612c44e359bea04b4faef6c192378",
-          "bytes": 59872871,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261112/hmc-0.4.20261112-linux-x64.tar.gz.validation.txt",
+          "version": "0.4.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-linux-x64.tar.gz",
+          "sha256": "6a0f7c23472b823e6a3bcd5812de3dddcec259488beb7a6dac19d1bfd92e3821",
+          "bytes": 59873348,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf hmc-0.4.20261112-linux-x64.tar.gz\n./hmc-0.4.20261112-linux-x64/hmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
+          "command": "tar -xzf hmc-0.4.20261113-linux-x64.tar.gz\n./hmc-0.4.20261113-linux-x64/hmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.4.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261112/hmc-0.4.20261112-macos-arm64.pkg",
-          "sha256": "b78f881658e458a41060b5ebcf356fe9e64373d36e958522086cff725e8bdc48",
-          "bytes": 53614026,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261112/hmc-0.4.20261112-macos-arm64.pkg.validation.txt",
+          "version": "0.4.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-macos-arm64.pkg",
+          "sha256": "ebb2b3274776bb543093bbb360abe3c428ff598892766c5d1bd073ab0684803e",
+          "bytes": 53614587,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg hmc-0.4.20261112-macos-arm64.pkg -target /\nhmc self-check\nhmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
+          "command": "sudo installer -pkg hmc-0.4.20261113-macos-arm64.pkg -target /\nhmc self-check\nhmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.4.20261112",
-          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261112/hmc-0.4.20261112-windows-x64.zip",
-          "sha256": "482f8e36a784864489b4e6921c8f5dc177c01cf2104c29280442c85dfe81aeae",
-          "bytes": 50680354,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261112/hmc-0.4.20261112-windows-x64.zip.validation.txt",
+          "version": "0.4.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-windows-x64.zip",
+          "sha256": "6bad2efdc2005efd1d3556c7b726c3e3bc0a81462cdbc324338bba0d9ea53b8d",
+          "bytes": 50682470,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\hmc-0.4.20261112-windows-x64.zip -DestinationPath .\n.\\hmc-0.4.20261112-windows-x64\\hmc.exe sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
+          "command": "Expand-Archive -Path .\\hmc-0.4.20261113-windows-x64.zip -DestinationPath .\n.\\hmc-0.4.20261113-windows-x64\\hmc.exe sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
         }
       ],
       "containers": []
@@ -2398,35 +2398,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-linux-x64.tar.gz",
-          "sha256": "8df4b59b09251bcf29449575ffd8ee3be4bec48a2ac84e0d500925033fcc604a",
-          "bytes": 43642513,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-linux-x64.tar.gz.validation.txt",
+          "version": "0.6.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.6.20261113/samsrf-0.6.20261113-linux-x64.tar.gz",
+          "sha256": "2b3fa8c6d7f74bb0a7e573a7a04a04ef75855197b2e1ce702311491349f89458",
+          "bytes": 43675488,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.6.20261113/samsrf-0.6.20261113-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf samsrf-0.5.20261111-linux-x64.tar.gz\n./samsrf-0.5.20261111-linux-x64/samsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
+          "command": "tar -xzf samsrf-0.6.20261113-linux-x64.tar.gz\n./samsrf-0.6.20261113-linux-x64/samsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-macos-arm64.pkg",
-          "sha256": "cde72b65506e63b7121b95129bd97374a7b66178d1ee40d59efa5dc34c3839e4",
-          "bytes": 37088406,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-macos-arm64.pkg.validation.txt",
+          "version": "0.6.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.6.20261113/samsrf-0.6.20261113-macos-arm64.pkg",
+          "sha256": "398da82d52d7bae6ed2b037bde028a3b64aa29597b3c3e83eb898c11fe526ef3",
+          "bytes": 37123177,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.6.20261113/samsrf-0.6.20261113-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg samsrf-0.5.20261111-macos-arm64.pkg -target /\nsamsrf self-check\nsamsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
+          "command": "sudo installer -pkg samsrf-0.6.20261113-macos-arm64.pkg -target /\nsamsrf self-check\nsamsrf rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-windows-x64.zip",
-          "sha256": "16ff1a187d48e27b6ec4be898ce043109e1b9e37a572018052a5c688f7bce11d",
-          "bytes": 33298521,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.5.20261111/samsrf-0.5.20261111-windows-x64.zip.validation.txt",
+          "version": "0.6.20261113",
+          "url": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.6.20261113/samsrf-0.6.20261113-windows-x64.zip",
+          "sha256": "017d92ead81a774a9c61799b742d7626044e747dde7e3f142825d6641abc2b7f",
+          "bytes": 33342503,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/samsrf-v0.6.20261113/samsrf-0.6.20261113-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\samsrf-0.5.20261111-windows-x64.zip -DestinationPath .\n.\\samsrf-0.5.20261111-windows-x64\\samsrf.exe rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
+          "command": "Expand-Archive -Path .\\samsrf-0.6.20261113-windows-x64.zip -DestinationPath .\n.\\samsrf-0.6.20261113-windows-x64\\samsrf.exe rc model.json results --runs run1.gii run2.gii --apertures aps_Bars.mat"
         }
       ],
       "containers": []
