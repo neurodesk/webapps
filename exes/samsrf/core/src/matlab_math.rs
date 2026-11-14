@@ -756,18 +756,16 @@ fn deviance(x: f64, np: f64) -> f64 {
 }
 
 /// The Poisson density at a real `k >= 0`, exp(-stirlerr(k) - deviance(k, z)) /
-/// sqrt(2 pi k), with the normalisation inside the exponent as MATLAB evaluates it.
+/// sqrt(2 pi k), with the normalisation inside the exponent as MATLAB evaluates it:
+/// `-(log(2 pi) + log(k)) / 2`, the two logarithms taken separately. Taking
+/// `log(2 pi k)` instead differs by an ULP or two for about one shape in ten that
+/// is not a half-integer (validation/matlab/README.md#fitted-hrf-kernels-730).
 fn poisson_raw(k: f64, z: f64) -> f64 {
     if k == 0.0 {
         return exp(-z);
     }
-    let normalisation = 2.0 * std::f64::consts::PI * k;
-    let log_normalisation = if normalisation.is_finite() {
-        log(normalisation)
-    } else {
-        log(2.0 * std::f64::consts::PI) + log(k)
-    };
-    exp((-0.5 * log_normalisation - stirlerr(k)) - deviance(k, z))
+    let normalisation = -0.5 * (log(2.0 * std::f64::consts::PI) + log(k));
+    exp((normalisation - stirlerr(k)) - deviance(k, z))
 }
 
 /// MATLAB's `gampdf(x, a, b)` for a shape `a >= 1`, which covers every SamSrf HRF.
@@ -787,6 +785,10 @@ pub fn gampdf(x: f64, a: f64, b: f64) -> Option<f64> {
     }
     Some(poisson_raw(a - 1.0, z) / b)
 }
+
+#[cfg(test)]
+#[path = "fitted_hrf_probes.rs"]
+mod fitted_hrf_probes;
 
 #[cfg(test)]
 mod tests {
