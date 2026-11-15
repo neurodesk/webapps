@@ -1659,6 +1659,6 @@ test('a dispatched run tests what its branch changed since it left main, in the 
   // On main itself there is nothing between it and its merge base: it plans from the tested base, like a push.
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   const onMain = plan();
-  assert.match(onMain.stderr, /last successful ci run on main is unknown|no successful ci run on main/);
+  assert.match(onMain.stderr, /last finished ci run on main is unknown|no successful ci run on main/);
   assert.equal(onMain.outputs.all_apps, 'true');
 });
