@@ -118,8 +118,9 @@ export function fullPlanRun(jobs = []) {
 // Whether a ready pull request's next run withholds its complete plan. It
 // counts the pull request's full-plan runs that did work in the 24 hours
 // before, cancelled ones too, and withholds once they fill the budget. Every
-// whole-catalogue run is a full-plan run, so the daily report never flags a
-// pull request this let through. `runs` are the head branch's `ci` pull request
+// whole-catalogue run that ran 100 jobs is a full-plan run; the daily report
+// counts listed jobs, skipped ones included, so it can still flag a run just
+// over the line that this did not count. `runs` are the head branch's `ci` pull request
 // runs and `jobs` maps their ids to their jobs ({ name, conclusion }). `runId` (the
 // deciding run) and runs of `excludeHead` (the commit being tested) are not
 // counted.
