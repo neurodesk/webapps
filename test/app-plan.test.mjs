@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
 import { AUTOMATION_CATALOG_READERS, createAppPlan, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
-import { carriedApps, testedBase } from '../scripts/lib/tested-base.mjs';
+import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
@@ -1120,6 +1120,30 @@ test('a failed run carries the apps whose jobs did not pass, and nothing it cann
   assert.deepEqual([...carried.keys()], ['calmar', 'synthsr', 'niimath']);
   assert.deepEqual(unattributed, []);
   assert.deepEqual(carriedApps([{ name: 'app-plan', conclusion: 'failure' }, { name: 'a-new-job', conclusion: 'cancelled' }]).unattributed, ['app-plan', 'a-new-job']);
+  // An id the registry does not know (a reordered matrix) and an unfinished job are tied to no app.
+  const known = new Set(['calmar']);
+  assert.deepEqual(carriedApps([{ name: 'browser-e2e (apps/calmar, calmar)', conclusion: 'failure' }], known).unattributed, ['browser-e2e (apps/calmar, calmar)']);
+  assert.deepEqual(carriedApps([{ name: 'browser-e2e (calmar, apps/calmar)', conclusion: null }], known).unattributed, ['browser-e2e (calmar, apps/calmar) (not finished)']);
+  assert.deepEqual([...carriedApps([{ name: 'browser-e2e (calmar, apps/calmar)', conclusion: 'failure' }], known).carried.keys()], ['calmar']);
+});
+
+// carriedApps reads a failed run's jobs by name: every ci job must be one it knows.
+test('every ci job is the plan, a per-app job named by its app, or one a push or the nightly runs again', async () => {
+  const ci = parse(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
+  const known = new Set(['app-plan', ...APP_JOBS, ...RERUN_JOBS, ...NIGHTLY_JOBS]);
+  for (const id of Object.keys(ci.jobs)) assert.ok(known.has(id), `${id} is a job carriedApps cannot place`);
+  const outputs = { 'app-tests': 'apps', 'browser-e2e': 'browser_apps', 'browser-e2e-gpu': 'gpu_apps' };
+  for (const id of APP_JOBS) {
+    const job = ci.jobs[id];
+    assert.equal(job.name, undefined, `${id} is named by its matrix`);
+    // A job it waited for could fail and skip it unexpanded, leaving nothing to carry.
+    assert.equal(job.needs, 'app-plan', `${id} waits only for the plan`);
+    assert.equal(job.strategy.matrix, `\${{ fromJSON(needs.app-plan.outputs.${outputs[id]}) }}`);
+    assert.equal(job.strategy['fail-fast'], false, `${id} runs every app when one fails`);
+  }
+  // The matrix's first value, which names the job, is the app id.
+  const plan = createAppPlan(await loadAppsRegistry(), ['apps/synthseg/src/main.js'], await graph);
+  for (const matrix of [plan.apps, plan.browserApps, plan.gpuApps]) assert.equal(Object.keys(matrix.include[0])[0], 'app');
 });
 
 test('a push run tests the merges whose own runs were cancelled, and falls back without a green base', async (t) => {
@@ -1144,7 +1168,7 @@ test('a push run tests the merges whose own runs were cancelled, and falls back 
   let status = 200;
   const server = createServer((request, response) => {
     const listed = request.url.startsWith('/repos/neurodesk/webapps/actions/workflows/ci.yml/runs?branch=main&status=completed');
-    const run = request.url.match(/^\/repos\/neurodesk\/webapps\/actions\/runs\/(\d+)\/jobs\?filter=latest/)?.[1];
+    const run = request.url.match(/^\/repos\/neurodesk\/webapps\/actions\/runs\/(\d+)\/attempts\/1\/jobs\?/)?.[1];
     response.writeHead(listed || jobs[run] ? status : 404, { 'content-type': 'application/json' });
     response.end(JSON.stringify(listed ? { workflow_runs: runs } : { jobs: jobs[run] ?? [] }));
   });
@@ -1189,7 +1213,7 @@ test('a push run tests the merges whose own runs were cancelled, and falls back 
   ] };
   const carried = await plan();
   assert.deepEqual(JSON.parse(carried.selected_ids), sorted(['calmar', 'zarro']));
-  assert.match(carried.stderr, new RegExp(`base ${before} is the head of the last failure ci run on main \\(push run 3\\); it failed for calmar, which is selected again`));
+  assert.match(carried.stderr, new RegExp(`base ${before} is the head of the last failed ci run on main \\(push run 3\\); it failed for calmar, which is selected again`));
   assert.match(carried.stderr, /- calmar: failed in the base run \(browser-e2e \(calmar/);
   // A failure no app owns (the plan itself) falls back to the last green run.
   jobs = { 3: [{ name: 'app-plan', conclusion: 'failure' }] };

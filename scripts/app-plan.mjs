@@ -16,8 +16,9 @@ function option(name) {
 const registry = await loadAppsRegistry();
 const head = option('--head') || 'HEAD';
 let base = option('--base');
-// `--base last-success`: diff from the last commit ci finished green on the
-// branch, so merges whose own push run was cancelled are still tested.
+// `--base last-success`: diff from the last commit a ci run finished on the
+// branch (resolveCiBase), so merges whose own push run was cancelled are still
+// tested, and select again the apps a failed run there left untested.
 let baseFallback = '';
 // Apps a failed run on main left untested at the base (resolveCiBase).
 let carried = new Map();
@@ -35,7 +36,7 @@ if (base === 'merge-base') {
   }
 }
 if (base === TESTED_BASE) {
-  const tested = await resolveCiBase({ head, branch: option('--branch') || 'main', cwd: repoRoot });
+  const tested = await resolveCiBase({ head, branch: option('--branch') || 'main', cwd: repoRoot, appIds: new Set(registry.apps.map((app) => app.id)) });
   console.error(`App planner: ${tested.reason}`);
   base = tested.base;
   carried = tested.carried;

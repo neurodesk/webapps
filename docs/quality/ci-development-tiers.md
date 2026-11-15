@@ -259,8 +259,12 @@ push also selects the apps whose `app-tests` or browser jobs did not pass
 there (`resolveCiBase`, `carriedApps`): on 13 November 2026 synthsr's GPU job
 failed for 7 hours, and each push in that time tested all 63 apps from the
 last green run; replayed, the second of them selects synthsr alone. A failed
-job that belongs to no app, such as the plan itself, sends the push back to
-the last green run. PR pushes cancel earlier runs
+job that belongs to no app, such as the plan itself, a job of that attempt
+that has not finished, or an app id the registry does not know sends the push
+back to the last green run. A carried app runs all its jobs again, but a push
+leaves out `@slow` tests, so an app a nightly failed in a `@slow` test is
+retested in full only by the next nightly. Jobs only the nightly runs
+(`agent-interactions`) are not carried: the nightly runs them again. PR pushes cancel earlier runs
 of the same PR. Schedule and manual runs keep their separate concurrency
 groups, and native release/signing conditions are unchanged.
 

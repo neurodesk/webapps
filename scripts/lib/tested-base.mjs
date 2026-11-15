@@ -3,8 +3,9 @@ import { execFileSync } from 'node:child_process';
 // Push runs on main supersede each other, so a merge whose own run was
 // cancelled is tested by no later run that diffs only from its own `before`.
 // The base for a push is instead the newest commit a `ci` run on the branch
-// finished green: the diff from there covers every merge not yet tested,
-// however many runs in a row were cancelled.
+// finished on (resolveCiBase; the workflow gate's sweep asks for green runs):
+// the diff from there covers every merge not yet tested, however many runs in
+// a row were cancelled.
 export const TESTED_BASE = 'last-success';
 
 // Pull request runs test a head against an older main, and a fork's pull
@@ -33,37 +34,49 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
     candidates.set(run.head_sha, run);
   }
   if (!candidates.size) {
-    return { base: null, reason: `no successful ${workflow} run on ${branch} has a head that is an ancestor of ${head}` };
+    const outcome = conclusions.length === 1 && conclusions[0] === 'success' ? 'successful' : 'finished';
+    return { base: null, reason: `no ${outcome} ${workflow} run on ${branch} has a head that is an ancestor of ${head}` };
   }
   const [base, run] = [...candidates].reduce((best, entry) => (git.distance(entry[0], head) < git.distance(best[0], head) ? entry : best));
-  const outcome = run.conclusion === 'success' ? 'successful' : run.conclusion;
+  const outcome = run.conclusion === 'success' ? 'successful' : 'failed';
   return { base, run, reason: `base ${base} is the head of the last ${outcome} ${workflow} run on ${branch} (${run.event} run ${run.id})` };
 }
 
 // A run that failed tested every app it selected; only those whose jobs did
-// not pass are untested at its head. `jobs` ({ name, conclusion }) are its
-// latest attempt's. Jobs every push runs again, whatever its plan, need no
-// carrying; any other failed job (the plan itself) cannot be tied to an app.
-const APP_JOB = /^(?:app-tests|browser-e2e|browser-e2e-gpu) \(([^,)]+)[,)]/;
-const RERUN_JOBS = new Set(['workspace-contracts', 'composite-site', 'homepage-easter-egg', 'example-cache-retention', 'agent-interactions', 'full-plan', 'full-plan-withheld']);
-const UNFINISHED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);
-export function carriedApps(jobs) {
+// not pass are untested at its head. `jobs` ({ name, conclusion }) are the
+// listed attempt's, and `appIds` the registry's. The per-app jobs are named by
+// their matrix, whose first value is the app id (matrixEntry). Jobs every push
+// runs again whatever its plan, and jobs only the nightly runs (which tests
+// every app), need no carrying. Any other failed job (the plan itself), a job
+// that has not finished, or an app id the registry does not know cannot be
+// tied to an app. test/app-plan.test.mjs holds ci.yml to these job lists.
+export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
+export const RERUN_JOBS = ['workspace-contracts', 'composite-site', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
+export const NIGHTLY_JOBS = ['agent-interactions'];
+const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);
+const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);
+const PASSED = new Set(['success', 'skipped', 'neutral']);
+export function carriedApps(jobs, appIds) {
   const carried = new Map();
   const unattributed = [];
   for (const job of jobs) {
-    if (!UNFINISHED.has(job.conclusion)) continue;
+    if (PASSED.has(job.conclusion)) continue;
     const app = job.name.match(APP_JOB)?.[1];
-    if (app) carried.set(app, [...(carried.get(app) ?? []), job.name]);
-    else if (!RERUN_JOBS.has(job.name.replace(/ \(.*$/, ''))) unattributed.push(job.name);
+    const base = job.name.replace(/ \(.*$/, '');
+    if (!UNPASSED.has(job.conclusion)) unattributed.push(`${job.name} (not finished)`);
+    else if (app && (!appIds || appIds.has(app))) carried.set(app, [...(carried.get(app) ?? []), job.name]);
+    else if (app || ![...RERUN_JOBS, ...NIGHTLY_JOBS].includes(base)) unattributed.push(job.name);
   }
   return { carried, unattributed };
 }
 
-// The jobs of a run's latest attempt, from the Actions API.
-async function runJobs({ repository, runId, token, apiUrl = 'https://api.github.com', fetchImpl = fetch }) {
+// The jobs of one attempt of a run, from the Actions API: the attempt the run
+// listing reported, so a re-run started since cannot answer with its own
+// unfinished jobs.
+async function runJobs({ repository, runId, attempt, token, apiUrl = 'https://api.github.com', fetchImpl = fetch }) {
   const jobs = [];
   for (let page = 1; ; page++) {
-    const response = await fetchImpl(`${apiUrl}/repos/${repository}/actions/runs/${runId}/jobs?filter=latest&per_page=50&page=${page}`, {
+    const response = await fetchImpl(`${apiUrl}/repos/${repository}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=50&page=${page}`, {
       headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`, 'x-github-api-version': '2022-11-28' },
       signal: AbortSignal.timeout(30_000),
     });
@@ -79,7 +92,7 @@ async function runJobs({ repository, runId, token, apiUrl = 'https://api.github.
 // only the apps whose jobs failed are untested at its head, so they are
 // selected again instead of every app since the last green run. When a failed
 // job cannot be tied to an app, the base is the last green run as before.
-export async function resolveCiBase({ head, branch = 'main', cwd, env = process.env, fetchImpl }) {
+export async function resolveCiBase({ head, branch = 'main', cwd, env = process.env, fetchImpl, appIds }) {
   const git = gitAncestry(cwd);
   const sha = git.resolve(head);
   if (!sha) return { base: null, carried: new Map(), reason: `${head} is not a commit in this checkout` };
@@ -91,10 +104,14 @@ export async function resolveCiBase({ head, branch = 'main', cwd, env = process.
     runs = await successfulRuns({ repository, workflow: 'ci.yml', branch, token, apiUrl: env.GITHUB_API_URL, fetchImpl, status: 'completed' });
     finished = testedBase({ runs, head: sha, branch, git, conclusions: ['success', 'failure'] });
     if (finished.run?.conclusion !== 'failure') return { ...finished, carried: new Map() };
-    const { carried, unattributed } = carriedApps(await runJobs({ repository, runId: finished.run.id, token, apiUrl: env.GITHUB_API_URL, fetchImpl }));
+    const jobs = await runJobs({ repository, runId: finished.run.id, attempt: finished.run.run_attempt ?? 1, token, apiUrl: env.GITHUB_API_URL, fetchImpl });
+    const { carried, unattributed } = carriedApps(jobs, appIds);
     if (!unattributed.length) {
       const apps = [...carried.keys()];
-      return { ...finished, carried, reason: `${finished.reason}; it failed for ${apps.length ? apps.join(', ') : 'jobs every push runs again'}, which ${apps.length === 1 ? 'is' : 'are'} selected again` };
+      const why = apps.length
+        ? `it failed for ${apps.join(', ')}, which ${apps.length === 1 ? 'is' : 'are'} selected again (without @slow tests on a push)`
+        : 'it failed only in jobs every push runs again or only the nightly runs';
+      return { ...finished, carried, reason: `${finished.reason}; ${why}` };
     }
     const green = testedBase({ runs, head: sha, branch, git });
     return { ...green, carried: new Map(), reason: `${green.reason}; the nearest finished run failed in ${unattributed.slice(0, 3).join(', ')}, which no app owns` };
