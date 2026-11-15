@@ -120,6 +120,9 @@ test('the budget counts only this pull request\'s earlier full-plan runs', () =>
   });
   const mine = (fields = {}) => run({ head_repository: 'neurodesk/webapps', pull_requests: [827], ...fields });
   assert.equal(decide([mine({ names: draftTier }), mine({ names: wholeCatalogue.slice(1) })]).withheld, false, 'draft-tier runs, whose marker was skipped, and runs that withheld the plan');
+  // A run cancelled while planning lists the marker as cancelled; a run cancelled later had a successful marker.
+  const cancelledPlanning = [{ name: 'app-plan', conclusion: 'cancelled' }, { name: FULL_PLAN_JOB, conclusion: 'cancelled' }];
+  assert.equal(decide([mine({ conclusion: 'cancelled', names: cancelledPlanning }), mine({ conclusion: 'cancelled', names: cancelledPlanning })]).withheld, false, 'runs cancelled while planning');
   const skippedCatalogue = [...wholeCatalogue.slice(1), { name: 'full-plan-withheld', conclusion: 'skipped' }];
   assert.equal(decide([mine({ names: skippedCatalogue }), mine({ names: skippedCatalogue })]).withheld, false, 'skipped jobs do not make a run whole-catalogue');
   assert.equal(decide([mine({ names: undefined }), mine({ names: wholeCatalogue })]).withheld, true);

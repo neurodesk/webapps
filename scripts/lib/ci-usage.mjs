@@ -107,12 +107,14 @@ export function ofPullRequest(run, { number, repository, branch }) {
 export const FULL_PLAN_JOB = 'full-plan';
 
 // Whether a run with these jobs ({ name, conclusion }) tested its pull
-// request's complete plan: it ran the marker, or, like runs from before the
-// marker, most of the catalogue. GitHub lists a job its `if` skipped too, so
-// a skipped job counts for neither.
+// request's complete plan: its marker succeeded, or, like runs from before the
+// marker, it ran most of the catalogue. GitHub lists a job its `if` skipped,
+// and a job a run cancelled before it started, too: the marker counts only
+// once it succeeded, which it does right after the plan, so a run cancelled
+// while planning never counts and one cancelled later still does.
 export function fullPlanRun(jobs = []) {
   const ran = jobs.filter((job) => job.conclusion !== 'skipped');
-  return ran.some((job) => job.name === FULL_PLAN_JOB) || ran.length >= LARGE_RUN_JOBS;
+  return ran.some((job) => job.name === FULL_PLAN_JOB && job.conclusion === 'success') || ran.length >= LARGE_RUN_JOBS;
 }
 
 // Whether a ready pull request's next run withholds its complete plan. It

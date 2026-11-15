@@ -170,8 +170,10 @@ workflows skip at the same commits ([gate](#pull-request-gate-for-shared-path-fi
 The window is rolling rather than the report's UTC day.
 
 To test every app at that head, add the `full-ci` label and use **Re-run all
-jobs** on the run and on each native workflow whose gate failed; the planner
-and the gate read the labels when they run, so no new trigger is needed. **Re-run failed jobs** keeps the withheld plan. The label stays until
+jobs** on the run and **Re-run failed jobs** on each native workflow whose gate
+failed (that re-runs the gate and what waits for it); the planner and the gate
+read the labels when they run, so no new trigger is needed. Pushing a new
+commit after adding the label also starts every check again. **Re-run failed jobs** keeps the withheld plan. The label stays until
 someone removes it, and every later push then gets the full plan again, so
 remove it once the head you will merge has passed. A failure to read the runs
 or labels keeps the full plan.
