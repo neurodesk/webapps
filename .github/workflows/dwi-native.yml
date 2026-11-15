@@ -173,6 +173,7 @@ jobs:
           name: hmc-native-float-gate
           path: ${{ runner.temp }}/hmc-gp/*.json
           if-no-files-found: warn
+          retention-days: 7
 
   sdc-field-fit-reference:
     needs: gate

@@ -132,6 +132,7 @@ jobs:
           path: offline-resources.tar.gz
           compression-level: 0
           if-no-files-found: error
+          retention-days: 1
       - name: Build the platform-independent model pack
         run: |
           node scripts/desktop/without-models.mjs
@@ -142,6 +143,7 @@ jobs:
           path: packages/desktop/release/github/
           compression-level: 0
           if-no-files-found: error
+          retention-days: 1
 
   desktop:
     needs: [bundle, assemble]
@@ -264,6 +266,7 @@ jobs:
             packages/desktop/release/github/
           compression-level: 0
           if-no-files-found: error
+          retention-days: 1
 
   models-offline:
     needs: [bundle, assemble]
@@ -327,6 +330,7 @@ jobs:
           path: reports/
           compression-level: 0
           if-no-files-found: error
+          retention-days: 1
 
   publish:
     needs: [bundle, assemble, desktop, models-offline]

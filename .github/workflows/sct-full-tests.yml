@@ -46,3 +46,4 @@ jobs:
         with:
           name: sct-full-test-log
           path: ${{ runner.temp }}/sct-full-tests.log
+          retention-days: 7

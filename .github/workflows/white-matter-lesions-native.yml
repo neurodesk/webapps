@@ -118,3 +118,4 @@ jobs:
           name: flames-memory-${{ matrix.browser }}
           path: ${{ runner.temp }}/flames-memory/
           if-no-files-found: error
+          retention-days: 7

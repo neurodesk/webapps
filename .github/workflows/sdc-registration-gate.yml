@@ -125,6 +125,7 @@ jobs:
             ${{ runner.temp }}/replay/wasm-calls.jsonl
             ${{ runner.temp }}/replay/driver.log
           if-no-files-found: warn
+          retention-days: 7
 
   pipeline:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
@@ -170,3 +171,4 @@ jobs:
           name: sdc-pipeline-gate
           path: ${{ runner.temp }}/sdc-pipeline/*/report.json
           if-no-files-found: warn
+          retention-days: 7

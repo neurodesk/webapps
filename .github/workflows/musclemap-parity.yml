@@ -116,3 +116,4 @@ jobs:
         with:
           name: musclemap-parity-${{ matrix.backend }}
           path: ${{ runner.temp }}/musclemap-reports/*.json
+          retention-days: 7

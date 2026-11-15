@@ -172,7 +172,7 @@ jobs:
             exes/node-cli/dist/*-${{ matrix.platform }}-adhoc.pkg.sha256
             exes/node-cli/dist/*-${{ matrix.platform }}-adhoc.pkg.validation.txt
           if-no-files-found: error
-          retention-days: 7
+          retention-days: ${{ runner.os == 'macOS' && 3 || 1 }}
 
   release:
     if: inputs.publish_release

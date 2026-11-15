@@ -114,6 +114,7 @@ jobs:
             exes/compute-server/dist/*.sha256
             exes/compute-server/dist/*.json
           if-no-files-found: error
+          retention-days: 7
 
   draft-release:
     if: github.event_name == 'workflow_dispatch' && inputs.draft_release
