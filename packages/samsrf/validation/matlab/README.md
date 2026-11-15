@@ -776,8 +776,8 @@ SAMSRF_ARITHMETIC_ORDER_DIR="$TMPDIR/samsrf-arithmetic-order" SAMSRF_MATLAB_NUME
 Two pre-registered recordings
 ([`conv-boundary-predictions.md`](conv-boundary-predictions.md): the rules, the
 designs, the decision criteria and every amendment, each committed before the data
-it depends on was read) settle which products MATLAB R2023b's sparse `conv` rounds
-before adding them. Each recording writes a discovery file and a held-out file;
+it depends on was read) support the adopted empirical rule for which products
+MATLAB R2023b's sparse `conv` rounds before adding them. Each recording writes a discovery file and a held-out file;
 the held-out file was opened only after the rule was frozen from discovery.
 
 | Pin | Run | Hosts | Discovery | Held out |
@@ -813,6 +813,16 @@ kernel from 65 to 258 taps), and placed the real threshold strictly above 16 KiB
 The law frozen from it reproduces every kept part of all 12 held-out courses on
 both hosts. A block law that grows to the largest power of two below a quarter of
 the full output gives the same blocks on every recorded course.
+
+**Identification limits.** The complex threshold is not distinguished among full
+output lengths 1,023–1,026; the implementation starts above 1,024. The recordings
+also do not distinguish the block laws when the full output is exactly eight
+blocks. Discriminating probes would use a 33-tap kernel at those four complex
+lengths, plus complex length 4,096 and real length 8,192, with values that make
+the competing fusion predictions differ. The twelve final held-out courses
+still need an AMD replay: agreement on earlier AMD courses does not supply that
+missing confirmation. These limits do not establish MATLAB's internal algorithm
+or parity on arbitrary inputs.
 
 | Courses (at least 9 taps) | Parts compared | Previous port misses | Now |
 | --- | --- | --- | --- |
