@@ -120,7 +120,8 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch, sleep
         !(location.hostname.endsWith('.blob.core.windows.net') || location.hostname.endsWith('.actions.githubusercontent.com'))) {
         throw new Error('Rejected unexpected log download host');
       }
-      response = await fetchImpl(location.href, { redirect: 'error', signal: AbortSignal.timeout(30000) });
+      // The timeout also covers reading the body: allow a large log a second per MiB beyond the first 30 s.
+      response = await fetchImpl(location.href, { redirect: 'error', signal: AbortSignal.timeout(30000 + logLimit / 1024) });
     }
     if (!response.ok) throw Object.assign(new Error(`GitHub API ${method} ${path.split('?')[0]} returned ${response.status}`), { status: response.status });
     if (!logs) return response.status === 204 ? null : response.json();
