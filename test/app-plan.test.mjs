@@ -1690,7 +1690,7 @@ test('a dispatched run tests what its branch changed since it left main, in the 
 test('an app runs its @heavy browser tests only when the change edits it, a failed run left it untested or the run is full', async () => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
-  const heavy = (plan) => Object.fromEntries([...plan.browserApps.include, ...plan.gpuApps.include].map(({ app, heavy_tests: run }) => [app, run]));
+  const heavy = (plan) => Object.fromEntries(plan.browserApps.include.map(({ app, heavy_tests: run }) => [app, run]));
   // A shared component every app loads reaches sdc and synthseg only through shared code.
   const shared = createAppPlan(registry, ['packages/components/src/styles/imaging-workspace.css'], workspace);
   assert.equal(heavy(shared).sdc, false);
@@ -1703,7 +1703,11 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
   // A failed run on main carried it, or the run is full.
   assert.equal(heavy(createAppPlan(registry, ['packages/components/src/styles/imaging-workspace.css'], workspace, new Map(), { carried: new Map([['sdc', ['browser-e2e (sdc)']]]) })).sdc, true);
   assert.ok(Object.values(heavy(createAppPlan(registry, [], workspace))).every(Boolean));
-  // Release bookkeeping in the app's own directory is not an edit.
+  // Release bookkeeping in the app's own directory is not an edit, and a diff of only bookkeeping is no full run.
   const changelog = heavy(createAppPlan(registry, ['packages/components/src/styles/imaging-workspace.css', 'apps/sdc/CHANGELOG.md'], workspace));
   assert.equal(changelog.sdc, false);
+  const onlyBookkeeping = createAppPlan(registry, ['apps/sdc/CHANGELOG.md'], workspace, new Map(), { carried: new Map([['synthseg', ['browser-e2e (synthseg)']]]) });
+  assert.deepEqual(heavy(onlyBookkeeping), { synthseg: true });
+  // The tag is measured in the CPU job; the macOS GPU job runs every test.
+  assert.ok(createAppPlan(registry, ['apps/sdc/src/main.js'], workspace).gpuApps.include.every((entry) => !('heavy_tests' in entry)));
 });

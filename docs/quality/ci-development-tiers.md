@@ -190,8 +190,11 @@ minutes in tests, and 22 tests over 4 minutes spent 211 of them: SDC's SyN run
 white-matter-lesions five-fold ensemble 14, both BISON examples 25, four
 SynthSeg fixture runs 33. Most are their app's reference parity check.
 
-Tests over 5 minutes are tagged `@heavy` (14 tests, 177 of those minutes). On
-pull requests and pushes to main they run only for an app the change edits:
+Tests over 5 minutes are tagged `@heavy` (14 tests, 177 of those minutes; also
+NODDI's reference 11, CALMaR's SOOP example 10.4, white-matter-lesions'
+per-fold downloads 5.8 and N4's reference 5.2). The next slowest test took
+4.6 minutes. On pull requests and pushes to main, in the CPU job, they run only
+for an app the change edits:
 its `apps/`, `packages/` or `exes/` directory or its model manifest, release
 bookkeeping aside, or an app a failed run on main left untested. An app a
 change reaches only through shared code, such as a `packages/runtime-support`
@@ -199,8 +202,13 @@ edit or a `ci.yml` change, leaves them to the nightly run, so a shared change
 that breaks only such a path is found the next night rather than before merge.
 The planner marks each browser matrix entry with `heavy_tests`, and the jobs
 set `NEURODESK_E2E_SKIP_HEAVY`, which `e2eTier` turns into a `grepInvert`.
-Dispatched, nightly and release runs include every test. To run them before
-merging a shared change, dispatch `ci` on the branch.
+A whole-catalogue plan for a change the planner could not narrow, such as a
+`ci.yml` edit, counts as shared. Only a plan with no diff at all (the nightly,
+a dispatch of every app, an unknown base) is a full run. The macOS GPU job
+runs every test, since the threshold is a CPU measurement: SynthSeg's four
+`@heavy` tests take 12 to 25 seconds on Metal. Dispatched, nightly and release
+runs include every test. To run them before merging a shared change, dispatch
+`ci` on the branch.
 
 ## Module-level selection in the component package
 

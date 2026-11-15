@@ -91,7 +91,7 @@ test('the pull request tier collects no-CSF SynthStrip inference', () => {
 });
 
 for (const app of ['brain2print', 'white-matter-lesions', 'lcmodel', 'synthseg']) {
-  test(`the pull request tier retains every completed scientific path in ${app}`, () => {
+  test(`the pull request tier's @slow filter retains every completed scientific path in ${app}`, () => {
     const collect = (tier) => JSON.parse(execFileSync(process.execPath, [
       join(repoRoot, 'node_modules/@playwright/test/cli.js'),
       'test', '--list', '--reporter=json',
@@ -116,10 +116,21 @@ for (const app of ['brain2print', 'white-matter-lesions', 'lcmodel', 'synthseg']
 test('an app reached only through shared code leaves its @heavy tests to the nightly run', async () => {
   const ci = YAML.parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
   const flag = "${{ !matrix.heavy_tests && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}";
-  for (const job of ['browser-e2e', 'browser-e2e-gpu']) {
-    const step = ci.jobs[job].steps.find((entry) => entry.run === 'pnpm --filter ${{ matrix.app }} test:e2e');
-    assert.equal(step.env.NEURODESK_E2E_SKIP_HEAVY, flag, job);
-  }
+  const step = (job) => ci.jobs[job].steps.find((entry) => entry.run === 'pnpm --filter ${{ matrix.app }} test:e2e');
+  assert.equal(step('browser-e2e').env.NEURODESK_E2E_SKIP_HEAVY, flag);
+  // @heavy is measured in the CPU job; on Metal the same tests can take seconds.
+  assert.equal(step('browser-e2e-gpu').env.NEURODESK_E2E_SKIP_HEAVY, undefined);
   const release = await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8');
   assert.doesNotMatch(release, /NEURODESK_E2E_SKIP_HEAVY/, 'releases run every test');
+});
+
+// With both filters on, white-matter-lesions still completes its automation run on one fold.
+test('the shared-change tier keeps a completed white-matter-lesions run', () => {
+  const listed = execFileSync(process.execPath, [join(repoRoot, 'node_modules/@playwright/test/cli.js'), 'test', '--list'], {
+    cwd: join(repoRoot, 'apps', 'white-matter-lesions'),
+    encoding: 'utf8',
+    env: { ...process.env, TMPDIR: process.env.TMPDIR || tmpdir(), NEURODESK_E2E_SKIP_SLOW: '1', NEURODESK_E2E_SKIP_HEAVY: '1', PW_TEST_REPORTER: '' },
+  });
+  assert.match(listed, /automation segments the MS example with 1 fold\(s\) on the input grid/);
+  assert.doesNotMatch(listed, /with 5 fold\(s\)/);
 });

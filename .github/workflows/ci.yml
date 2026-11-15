@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "affected: the apps the branch changes since it left main (main: since the last green run); all: every app; gpu: only the macOS GPU suite of the affected apps; site: only the composite site and agentic checks"
+        description: "affected: the apps the branch changes since it left main (main: like a push, since the last finished run); all: every app; gpu: only the macOS GPU suite of the affected apps; site: only the composite site and agentic checks"
         type: choice
         options: [affected, all, gpu, site]
         default: affected
@@ -75,8 +75,8 @@ jobs:
       - name: Generate affected app plan
         id: plan
         env:
-          # Pending pushes coalesce; compare with the last completed green run
-          # so every intervening merge is covered. A dispatch diffs from where
+          # Pending pushes coalesce; compare with the last finished run (and
+          # the apps it failed) so every intervening merge is covered. A dispatch diffs from where
           # its branch left main unless its scope is all; the nightly tests all.
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && 'last-success' || github.event_name == 'workflow_dispatch' && inputs.scope != 'all' && 'merge-base' || '' }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
@@ -597,7 +597,6 @@ jobs:
       - name: Test ${{ matrix.app }} on the hardware GPU
         env:
           NEURODESK_E2E_PREBUILT: '1'
-          NEURODESK_E2E_SKIP_HEAVY: ${{ !matrix.heavy_tests && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}
         run: pnpm --filter ${{ matrix.app }} test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()
