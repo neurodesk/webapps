@@ -42,6 +42,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      pull-requests: read
     with:
       workflow: node-drivers
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BUDGETS, budgetFindings, FULL_CI_LABEL, fullPlanDecision, largeRunCandidates, LARGE_RUN_JOBS, summarizeUsage, usageMarkdown } from '../scripts/lib/ci-usage.mjs';
+import { BUDGETS, budgetFindings, FULL_CI_LABEL, FULL_PLAN_JOB, fullPlanDecision, fullPlanRun, largeRunCandidates, LARGE_RUN_JOBS, summarizeUsage, usageMarkdown } from '../scripts/lib/ci-usage.mjs';
 
 let next = 1;
 const run = (fields) => {
@@ -81,36 +81,51 @@ test('the report lists the runs behind each finding', () => {
   assert.match(usageMarkdown(usageOf([]), [], { since: 'a', until: 'b' }), /### Inside every budget/);
 });
 
-test('a ready pull request gets the full plan until its earlier whole-catalogue runs fill the budget', () => {
+// A run's jobs: a partial full plan runs the marker; a whole-catalogue run, from before the marker, many jobs.
+// GitHub lists a job its `if` skipped too: a draft run lists the marker as skipped.
+const ran = (names) => names.map((name) => ({ name, conclusion: 'success' }));
+const marked = ran(['app-plan', FULL_PLAN_JOB, 'app-tests (calmar)']);
+const wholeCatalogue = ran(Array.from({ length: LARGE_RUN_JOBS }, (_, index) => `browser-e2e (${index})`));
+const draftTier = [...ran(['app-plan', 'app-tests (calmar)', 'browser-e2e (calmar)']), { name: FULL_PLAN_JOB, conclusion: 'skipped' }];
+
+test('a ready pull request gets the full plan until its earlier full-plan runs fill the budget', () => {
   const now = '2026-11-10T12:00:00Z';
-  const mine = (fields = {}) => run({ head_repository: 'neurodesk/webapps', pull_requests: [827], ...fields });
+  const mine = (fields = {}) => run({ head_repository: 'neurodesk/webapps', pull_requests: [814], ...fields });
   const decide = (runs, fields = {}) => fullPlanDecision({
     runs,
-    jobCounts: new Map(runs.map((each) => [each.id, each.jobs ?? LARGE_RUN_JOBS])),
-    pullRequest: { number: 827, repository: 'neurodesk/webapps', branch: 'feature' },
+    jobs: new Map(runs.map((each) => [each.id, each.names ?? marked])),
+    pullRequest: { number: 814, repository: 'neurodesk/webapps', branch: 'feature' },
     runId: fields.runId ?? -1,
     labels: fields.labels ?? [],
     now,
   });
-  const allowed = Array.from({ length: BUDGETS.largeRunsPerPullRequest - 1 }, () => mine());
+  const allowed = Array.from({ length: BUDGETS.fullPlansPerPullRequest - 1 }, () => mine());
   assert.equal(decide(allowed).withheld, false);
-  // Runs started by ready_for_review count, and a run cancelled by the next push still used its runners.
-  const spent = [...allowed, mine({ conclusion: 'cancelled' })];
+  // A partial plan counts as much as a whole-catalogue one, and a run cancelled by the next push still used its runners.
+  const spent = [...allowed, mine({ conclusion: 'cancelled', names: wholeCatalogue })];
   const decision = decide(spent);
   assert.equal(decision.withheld, true);
-  assert.match(decision.reason, /^#827 already started 2 whole-catalogue ci runs in 24 hours \(budget 2\)$/);
-  // The report then never sees more than the budget for this pull request.
+  assert.match(decision.reason, /^#814 already started 2 full-plan ci runs in 24 hours \(budget 2\)$/);
+  // Whole-catalogue runs are full-plan runs, so the report never sees more than the budget for this pull request.
+  assert.ok(fullPlanRun(wholeCatalogue));
+  assert.ok(BUDGETS.fullPlansPerPullRequest <= BUDGETS.largeRunsPerPullRequest);
   assert.deepEqual(budgetFindings(usageOf(spent)), []);
   assert.equal(decide(spent, { labels: ['bug', FULL_CI_LABEL] }).withheld, false);
 });
 
-test('the budget counts only this pull request\'s earlier whole-catalogue runs', () => {
+test('the budget counts only this pull request\'s earlier full-plan runs', () => {
   const now = '2026-11-10T12:00:00Z';
-  const decide = (runs, runId = -1) => fullPlanDecision({
-    runs, jobCounts: new Map(runs.map((each) => [each.id, each.jobs ?? LARGE_RUN_JOBS])), pullRequest: { number: 827, repository: 'neurodesk/webapps', branch: 'feature' }, runId, labels: [], now,
+  const decide = (runs, { runId = -1, excludeHead } = {}) => fullPlanDecision({
+    runs, jobs: new Map(runs.map((each) => [each.id, each.names ?? marked])), pullRequest: { number: 827, repository: 'neurodesk/webapps', branch: 'feature' }, runId, excludeHead, labels: [], now,
   });
   const mine = (fields = {}) => run({ head_repository: 'neurodesk/webapps', pull_requests: [827], ...fields });
-  assert.equal(decide([mine({ jobs: LARGE_RUN_JOBS - 1 }), mine({ jobs: 9 })]).withheld, false, 'draft-tier and partial runs');
+  assert.equal(decide([mine({ names: draftTier }), mine({ names: wholeCatalogue.slice(1) })]).withheld, false, 'draft-tier runs, whose marker was skipped, and runs that withheld the plan');
+  // A run cancelled while planning lists the marker as cancelled; a run cancelled later had a successful marker.
+  const cancelledPlanning = [{ name: 'app-plan', conclusion: 'cancelled' }, { name: FULL_PLAN_JOB, conclusion: 'cancelled' }];
+  assert.equal(decide([mine({ conclusion: 'cancelled', names: cancelledPlanning }), mine({ conclusion: 'cancelled', names: cancelledPlanning })]).withheld, false, 'runs cancelled while planning');
+  const skippedCatalogue = [...wholeCatalogue.slice(1), { name: 'full-plan-withheld', conclusion: 'skipped' }];
+  assert.equal(decide([mine({ names: skippedCatalogue }), mine({ names: skippedCatalogue })]).withheld, false, 'skipped jobs do not make a run whole-catalogue');
+  assert.equal(decide([mine({ names: undefined }), mine({ names: wholeCatalogue })]).withheld, true);
   assert.equal(decide([mine({ minutes: 1 }), mine({ conclusion: 'skipped' })]).withheld, false, 'runs that did no work');
   assert.equal(decide([mine({ pull_requests: [826] }), mine({ pull_requests: [826] })]).withheld, false, 'another pull request');
   // A fork's runs list no pull request; its branch name alone does not make them this pull request's.
@@ -119,5 +134,9 @@ test('the budget counts only this pull request\'s earlier whole-catalogue runs',
   // GitHub empties the list on a merged pull request's runs; the head branch still ties them to it.
   assert.equal(decide([mine({ pull_requests: [] }), mine({ pull_requests: [] })]).withheld, true, 'runs listing no pull request');
   const current = mine();
-  assert.equal(decide([mine(), current], current.id).withheld, false, 'the run deciding is not one of its earlier runs');
+  assert.equal(decide([mine(), current], { runId: current.id }).withheld, false, 'the run deciding is not one of its earlier runs');
+  // A native workflow's gate leaves out every ci run of the commit it tests, so it never withholds where ci does not.
+  const tested = mine();
+  assert.equal(decide([mine(), tested, mine({ head_sha: tested.head_sha })], { excludeHead: tested.head_sha }).withheld, false, 'runs of the commit being tested');
+  assert.equal(decide([mine(), tested], { runId: tested.id + 1 }).withheld, true);
 });

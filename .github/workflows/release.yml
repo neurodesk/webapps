@@ -46,7 +46,7 @@ jobs:
           BASE_SHA: ${{ inputs.base_sha }}
         run: |
           if [[ "$APPS" == "affected" ]]; then
-            node scripts/app-plan.mjs --base "${BASE_SHA:-HEAD~1}" --head HEAD
+            node scripts/app-plan.mjs --release --base "${BASE_SHA:-HEAD~1}" --head HEAD
           else
             node scripts/app-plan.mjs --only "$APPS"
           fi

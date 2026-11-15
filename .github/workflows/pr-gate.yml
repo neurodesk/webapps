@@ -1,16 +1,20 @@
 name: pr-gate
 
-# Decides whether a path-filtered workflow has to run for a ready pull request
-# or for its nightly sweep. GitHub matches `paths` against the whole pull
-# request on every push, so a filter on a shared tree starts suites the change
-# never reaches. Callers keep those filters for pull requests and make their
-# entry jobs wait for this decision (scripts/lib/workflow-gate.mjs). A push to
-# main starts a caller only for its own paths; its schedule is the sweep, which
-# runs it when a shared path changed on main since the caller last finished
-# green there. The job
-# always finishes, so the jobs after a caller's entry jobs keep their default
-# conditions: a draft answers false and a push or a dispatch true, both without
-# a checkout.
+# Decides whether a path-filtered workflow has to run for a ready pull request,
+# a push to main or its nightly sweep. GitHub matches `paths` against the whole
+# pull request on every push, so a filter on a shared tree starts suites the
+# change never reaches. Callers keep those filters for pull requests and make
+# their entry jobs wait for this decision (scripts/lib/workflow-gate.mjs). A
+# ready pull request over its full-plan budget fails the gate where its ci run
+# withholds the full plan too. A push to main starts a caller only for its own
+# paths, and runs it unless they are only release bookkeeping; its schedule is
+# the sweep, which runs it when a shared path changed on main since the caller
+# last finished green there. A push and the sweep each also ask the other's
+# question, since either can skip and still finish green. The job finishes
+# unless the budget withholds the suite, so the jobs after a caller's entry
+# jobs keep their default conditions: a draft answers false and a dispatch
+# true, both without a checkout. A withheld suite fails its gate instead of
+# reading as green.
 
 on:
   workflow_call:
@@ -24,11 +28,13 @@ on:
         description: "'true' when the pull request, or main since the last sweep, reaches what the workflow tests"
         value: ${{ jobs.decide.outputs.run }}
 
-# The sweep asks the Actions API where the calling workflow last finished green.
-# A caller's gate job grants the same two permissions.
+# The sweep and a push ask the Actions API where the calling workflow last
+# finished green, and a pull request reads its ci runs and labels for the
+# budget. A caller's gate job grants the same three permissions.
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 
 jobs:
   decide:
@@ -37,7 +43,7 @@ jobs:
     outputs:
       run: ${{ steps.event.outputs.run || steps.decide.outputs.run }}
     steps:
-      - name: Answer for drafts, pushes and dispatches
+      - name: Answer for drafts and dispatches
         id: event
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -47,7 +53,7 @@ jobs:
             if [ "$DRAFT" = true ]; then
               echo "run=false" >> "$GITHUB_OUTPUT"
             fi
-          elif [ "$EVENT_NAME" != schedule ]; then
+          elif [ "$EVENT_NAME" != schedule ] && [ "$EVENT_NAME" != push ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -79,6 +85,8 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = schedule ]; then
             node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --sweep --head "$HEAD_SHA"
+          elif [ "$EVENT_NAME" = push ]; then
+            node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --push --head "$HEAD_SHA"
           else
             node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --base "$BASE_SHA" --head "$HEAD_SHA"
           fi

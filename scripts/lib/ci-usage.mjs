@@ -14,6 +14,10 @@
 export const BUDGETS = Object.freeze({
   // Whole-catalogue `ci` runs one pull request may start in the window.
   largeRunsPerPullRequest: 2,
+  // Full-plan `ci` runs one ready pull request may start in 24 hours before
+  // its runs get the draft plan (fullPlanDecision): the run on ready and one
+  // round of fixes.
+  fullPlansPerPullRequest: 2,
   // Whole-catalogue pull request `ci` runs over all pull requests: five pull
   // requests at their own budget, the most that merged in one day when the
   // planner was replayed over 60 merged pull requests in November 2026.
@@ -98,18 +102,36 @@ export function ofPullRequest(run, { number, repository, branch }) {
   return run.head_repository === repository && run.head_branch === branch;
 }
 
-// Whether a ready pull request's `ci` run withholds the whole-catalogue plan.
-// It counts exactly the runs the daily report counts (largeRunCandidates and
-// LARGE_RUN_JOBS), in the 24 hours before the run rather than in a UTC day,
-// and withholds once the earlier ones fill the budget, so the report never
-// flags a pull request the gate let through. `runs` are the head branch's `ci`
-// pull request runs and `jobCounts` maps their ids to job counts.
-export function fullPlanDecision({ runs, jobCounts, pullRequest, runId, labels, now, budget = BUDGETS.largeRunsPerPullRequest }) {
+// The marker job a `ci` run starts when it tests a ready pull request's
+// complete plan where the draft plan would test less (.github/workflows/ci.yml).
+export const FULL_PLAN_JOB = 'full-plan';
+
+// Whether a run with these jobs ({ name, conclusion }) tested its pull
+// request's complete plan: its marker succeeded, or, like runs from before the
+// marker, it ran most of the catalogue. GitHub lists a job its `if` skipped,
+// and a job a run cancelled before it started, too: the marker counts only
+// once it succeeded, which it does right after the plan, so a run cancelled
+// while planning never counts and one cancelled later still does.
+export function fullPlanRun(jobs = []) {
+  const ran = jobs.filter((job) => job.conclusion !== 'skipped');
+  return ran.some((job) => job.name === FULL_PLAN_JOB && job.conclusion === 'success') || ran.length >= LARGE_RUN_JOBS;
+}
+
+// Whether a ready pull request's next run withholds its complete plan. It
+// counts the pull request's full-plan runs that did work in the 24 hours
+// before, cancelled ones too, and withholds once they fill the budget. Every
+// whole-catalogue run that ran 100 jobs is a full-plan run; the daily report
+// counts listed jobs, skipped ones included, so it can still flag a run just
+// over the line that this did not count. `runs` are the head branch's `ci` pull request
+// runs and `jobs` maps their ids to their jobs ({ name, conclusion }). `runId` (the
+// deciding run) and runs of `excludeHead` (the commit being tested) are not
+// counted.
+export function fullPlanDecision({ runs, jobs, pullRequest, runId, excludeHead, labels, now, budget = BUDGETS.fullPlansPerPullRequest }) {
   if (labels.includes(FULL_CI_LABEL)) return { withheld: false, reason: `the ${FULL_CI_LABEL} label restores the full plan` };
   const spent = largeRunCandidates(runs, now)
-    .filter((run) => run.id !== runId && ofPullRequest(run, pullRequest) && (jobCounts.get(run.id) ?? 0) >= LARGE_RUN_JOBS);
-  if (spent.length < budget) return { withheld: false, reason: `${spent.length} of ${budget} whole-catalogue runs used in 24 hours` };
-  return { withheld: true, reason: `#${pullRequest.number} already started ${spent.length} whole-catalogue ci runs in 24 hours (budget ${budget})` };
+    .filter((run) => run.id !== runId && run.head_sha !== excludeHead && ofPullRequest(run, pullRequest) && fullPlanRun(jobs.get(run.id)));
+  if (spent.length < budget) return { withheld: false, reason: `${spent.length} of ${budget} full-plan runs used in 24 hours` };
+  return { withheld: true, reason: `#${pullRequest.number} already started ${spent.length} full-plan ci runs in 24 hours (budget ${budget})` };
 }
 
 // One sentence per exceeded budget; empty when the day stayed inside all of them.

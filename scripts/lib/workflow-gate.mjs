@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { selectAffectedApps, standaloneImpact } from './app-plan.mjs';
+import { createAppPlan, selectAffectedApps, standaloneImpact } from './app-plan.mjs';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
-import { moduleClosure, onlyAddsExports, onlyBumpsVersion, packageSources } from './module-closure.mjs';
+import { moduleClosure, onlyAddsExports, packageSources } from './module-closure.mjs';
+import { releaseBookkeeping } from './release-bookkeeping.mjs';
 import { reachableFrom } from './workspace-graph.mjs';
 
 // Whether a path-filtered workflow has to run for a pull request.
@@ -81,16 +82,21 @@ const UNFOLLOWED_SCRIPT = /^(?:scripts|test-utils|test)\/.*\.(?:py|sh|ps1)$/;
 const PACKAGER = 'node-cli-portable';
 const RELEASE_SPEC = /^packages\/[^/]+\/release\.json$/;
 
-export function decideWorkflow({ flow, calledFlows = [], changedPaths, registry, graph, manifests = new Map(), root }) {
+export function decideWorkflow({ flow, calledFlows = [], changedPaths: allPaths, registry, graph, manifests = new Map(), root }) {
   const run = (reason) => ({ run: true, reason });
   const filters = flow?.on?.pull_request?.paths;
   if (!Array.isArray(filters)) return run('the workflow has no pull request path filter');
   if (filters.some((filter) => filter.startsWith('!'))) return run('the workflow excludes paths, which the gate does not analyse');
-  if (!changedPaths.length) return run('the changed paths are unknown');
+  if (!allPaths.length) return run('the changed paths are unknown');
 
   const patterns = filters.map((filter) => ({ filter, shared: isSharedFilter(filter), glob: pathGlob(filter) }));
+  if (!allPaths.some((path) => patterns.some(({ glob }) => glob.test(path)))) {
+    return run('no changed path matches a filter, so the diff GitHub matched is not the one read here');
+  }
+  // A release's changelogs and version bumps change nothing a workflow tests.
+  const changedPaths = allPaths.filter((path) => !releaseBookkeeping(path, manifests));
   const matched = changedPaths.filter((path) => patterns.some(({ glob }) => glob.test(path)));
-  if (!matched.length) return run('no changed path matches a filter, so the diff GitHub matched is not the one read here');
+  if (!matched.length) return { run: false, reason: 'only release bookkeeping (changelogs and version bumps) matches its filters' };
   for (const path of matched) {
     const own = patterns.find(({ shared, glob }) => !shared && glob.test(path));
     if (own) return run(`${path} matches ${own.filter}`);
@@ -154,18 +160,16 @@ export function decideWorkflow({ flow, calledFlows = [], changedPaths, registry,
   };
 }
 
-const CHANGELOG = /(?:^|\/)CHANGELOG\.md$/;
 const STANDALONE = 'registry/standalone.json';
 
-// What a release leaves on main without changing what a workflow builds: a
-// changelog, a manifest that only gained a version, and the download catalog's
-// entries for other apps. Returns why the path is inert, or null.
-function releaseBookkeeping(path, { manifests, registry, apps }) {
-  if (CHANGELOG.test(path)) return 'a changelog';
+// What a release leaves on main without changing what a workflow builds:
+// changelogs and version bumps (release-bookkeeping.mjs), and the download
+// catalog's entries for other apps. Returns why the path is inert, or null.
+function bookkeepingFor(path, { manifests, registry, apps }) {
+  const reason = releaseBookkeeping(path, manifests);
+  if (reason) return reason;
   const manifest = manifests.get(path);
-  if (!manifest) return null;
-  if (WORKSPACE_MANIFEST.test(path) && onlyBumpsVersion(manifest)) return 'only its version changed';
-  if (path === STANDALONE && registry && apps.length) {
+  if (path === STANDALONE && manifest && registry && apps.length) {
     const impact = standaloneImpact(manifest, registry);
     if (!impact.shared && !impact.changed.some((id) => apps.includes(id))) return `no entry of ${apps.join(', ')} changed`;
   }
@@ -186,7 +190,7 @@ export function sweepWorkflow({ flow, changedPaths, manifests = new Map(), regis
   for (const path of changedPaths) {
     const hit = shared.find(({ glob }) => glob.test(path));
     if (!hit) continue;
-    if (releaseBookkeeping(path, { manifests, registry, apps })) {
+    if (bookkeepingFor(path, { manifests, registry, apps })) {
       inert += 1;
       continue;
     }
@@ -194,4 +198,61 @@ export function sweepWorkflow({ flow, changedPaths, manifests = new Map(), regis
   }
   const bookkeeping = inert ? ` (${inert} release bookkeeping ${inert === 1 ? 'file' : 'files'} aside)` : '';
   return { run: false, reason: `no path under a shared filter changed on main since the last sweep${bookkeeping}` };
+}
+
+// The workflow's own paths on main: whether a path under its `push` filter
+// changed beyond release bookkeeping. `known: false` when that cannot tell:
+// no push filter, or no changed path under it.
+export function pushWorkflow({ flow, changedPaths, manifests = new Map(), registry }) {
+  const filters = flow?.on?.push?.paths;
+  if (!Array.isArray(filters)) return { run: true, known: false, reason: 'the workflow has no push path filter' };
+  if (filters.some((filter) => filter.startsWith('!'))) return { run: true, known: true, reason: 'the workflow excludes paths, which the gate does not analyse' };
+  const globs = filters.map((filter) => ({ filter, glob: pathGlob(filter) }));
+  const apps = registry ? workflowApps(filters, registry) : [];
+  const matched = changedPaths.filter((path) => globs.some(({ glob }) => glob.test(path)));
+  if (!matched.length) return { run: true, known: false, reason: 'no changed path matches a push filter' };
+  for (const path of matched) {
+    if (bookkeepingFor(path, { manifests, registry, apps })) continue;
+    const { filter } = globs.find(({ glob }) => glob.test(path));
+    return { run: true, known: true, reason: `${path} matches ${filter}` };
+  }
+  return { run: false, known: true, reason: `only release bookkeeping changed under its push filters (${matched.slice(0, 5).join(', ')}${matched.length > 5 ? `, and ${matched.length - 5} more` : ''})` };
+}
+
+// A push to main or the nightly sweep. Both read `changedPaths`, what main
+// gained since the workflow last finished green there by a push or a sweep.
+// Either can skip and still finish green, which moves that base for the
+// other, so each asks both questions: did one of its own paths change beyond
+// release bookkeeping (what a push starts it for, and what a failed or
+// cancelled push left untested), or did a path under a shared pull request
+// filter change (what the sweep is for)? A push whose range matches none of
+// its push filters is not one the reading explains, so it runs.
+export function mainWorkflow({ flow, changedPaths, manifests = new Map(), registry, event }) {
+  const own = pushWorkflow({ flow, changedPaths, manifests, registry });
+  if (own.run && (own.known || event === 'push')) return { run: true, reason: own.reason };
+  const shared = sweepWorkflow({ flow, changedPaths, manifests, registry });
+  if (shared.run) return shared;
+  return { run: false, reason: own.known ? `${own.reason}; ${shared.reason}` : shared.reason };
+}
+
+// A ready pull request over its full-plan budget gets what a draft gets, but
+// only where its `ci` run withholds the full plan too, which is where the
+// draft plan tests fewer apps. The answer is `withheld`: the gate then fails,
+// as ci's `full-plan-withheld` does, so a skipped suite never reads as green
+// and re-running the workflow after adding `full-ci` runs it. `budget()`
+// answers like fullPlanBudget (full-plan-budget.mjs); a check that fails runs
+// the workflow.
+export async function budgetedDecision(decision, { registry, graph, changedPaths, manifests = new Map(), budget, log = console.error }) {
+  if (!decision.run) return decision;
+  const full = createAppPlan(registry, changedPaths, graph, manifests);
+  const draft = createAppPlan(registry, changedPaths, graph, manifests, { draft: true });
+  if (draft.selected.length >= full.selected.length) return decision;
+  try {
+    const verdict = await budget();
+    if (!verdict.withheld) return decision;
+    return { run: false, withheld: true, reason: `${verdict.reason}, and its ci run withholds the full plan too; add the full-ci label, then re-run all jobs of ci and of this workflow` };
+  } catch (error) {
+    log(`running because the budget check failed: ${error.message}`);
+    return decision;
+  }
 }

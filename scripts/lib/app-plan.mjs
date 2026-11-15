@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { parse } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
+import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
 import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
 import { validateAppInformation } from './app-information.mjs';
 import { validateStandalone } from './standalone.mjs';
@@ -213,7 +214,9 @@ function changedRootScripts(manifest) {
 // `reasons.fallback` says why the whole catalog was selected; otherwise
 // `reasons.apps` maps each selected app, and `reasons.site` the site build, to
 // the changes that selected it.
-export function selectAffectedApps(registry, changedPaths = [], graph = null, manifests = new Map()) {
+// With `release`, a version bump selects what it reaches: release.yml picks
+// the apps to publish from the version changes themselves.
+export function selectAffectedApps(registry, changedPaths = [], graph = null, manifests = new Map(), { release = false } = {}) {
   const everything = (fallback) => ({ apps: registry.apps, site: true, reasons: { fallback, apps: {}, site: [] } });
   if (!changedPaths.length) return everything('no changed paths: no base revision, an unreadable diff, or a full run');
 
@@ -223,6 +226,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const site = graph && reachableFrom(graph, SITE);
   const appReasons = new Map();
   const siteReasons = [];
+  const bookkeeping = [];
   let fallback = null;
   const select = (appId, reason) => appReasons.set(appId, [...(appReasons.get(appId) ?? []), reason]);
   const shared = (reason) => {
@@ -240,6 +244,11 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   };
 
   for (const path of changedPaths) {
+    // A release's changelogs and version bumps change no behaviour; workspace-contracts checks them.
+    if (!release && releaseBookkeeping(path, manifests)) {
+      bookkeeping.push(path);
+      continue;
+    }
     const appId = path.match(/^apps\/([^/]+)\//)?.[1] ?? path.match(MODEL_MANIFEST)?.[1];
     if (appIds.has(appId)) {
       select(appId, path);
@@ -388,18 +397,19 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     shared(graph ? `${path}: no rule classifies it` : `${path}: there is no workspace graph to find its users`);
   }
 
-  if (fallback) return everything(fallback);
+  if (fallback) return { ...everything(fallback), bookkeeping };
   if (appReasons.has('qsmbly')) select('brain-extraction', 'qsmbly is selected and Brain extraction ships its runtime');
   const apps = registry.apps.filter((app) => appReasons.has(app.id));
   return {
     apps,
     site: siteReasons.length > 0,
     reasons: { fallback: null, apps: Object.fromEntries(apps.map((app) => [app.id, appReasons.get(app.id)])), site: siteReasons },
+    bookkeeping,
   };
 }
 
-export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false } = {}) {
-  const affected = selectAffectedApps(registry, changedPaths, graph, manifests);
+export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false } = {}) {
+  const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release });
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
   // dependency plan, including shared-code changes, at their current head.
   const selected = draft && changedPaths.length
@@ -419,6 +429,7 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
     allApps: selected.length === registry.apps.length,
     site: site || selected.length > 0,
     reasons: Object.freeze(reasons),
+    bookkeeping: Object.freeze([...(affected.bookkeeping ?? [])]),
   });
 }
 
@@ -443,7 +454,7 @@ const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\
 // out and counts as an ordinary code change.
 export function changedManifests({ base, head = 'HEAD', cwd, changedPaths }) {
   const manifests = new Map();
-  const paths = new Set(changedPaths.filter((path) => MANIFEST.test(path)));
+  const paths = new Set(changedPaths.filter((path) => MANIFEST.test(path) || EMBEDDED_VERSION_FILES.has(path)));
   if (changedPaths.includes('package.json')) paths.add(LOCKFILE);
   if (!paths.size) return manifests;
   const show = (args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 });

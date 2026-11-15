@@ -542,13 +542,18 @@ test('a push to main plans from the last green main run, so superseded merges ar
   const ci = await workflow('ci');
   const job = ci.jobs['app-plan'];
   const step = job.steps.find((candidate) => candidate.id === 'plan');
-  const evaluate = (value, github) => value.replace(/\$\{\{(.*?)\}\}/g, (_, expression) => runInNewContext(expression, { github }));
+  const evaluate = (value, github, inputs = {}) => value.replace(/\$\{\{(.*?)\}\}/g, (_, expression) => runInNewContext(expression, { github, inputs }));
   const push = { event_name: 'push', event: { before: 'previous' }, sha: 'head' };
   const pullRequest = { event_name: 'pull_request', event: { pull_request: { base: { sha: 'base' }, head: { sha: 'head' } } } };
   assert.equal(evaluate(step.env.BASE_SHA, push), 'last-success');
   assert.equal(evaluate(step.env.BASE_SHA, pullRequest), 'base');
-  for (const event_name of ['schedule', 'workflow_dispatch']) assert.equal(evaluate(step.env.BASE_SHA, { event_name, event: {} }), '');
+  assert.equal(evaluate(step.env.BASE_SHA, { event_name: 'schedule', event: {} }), '');
+  // A dispatch tests what its branch changed since it left main, unless its scope is all.
+  for (const scope of ['affected', 'gpu', 'site']) assert.equal(evaluate(step.env.BASE_SHA, { event_name: 'workflow_dispatch', event: {} }, { scope }), 'merge-base', scope);
+  assert.equal(evaluate(step.env.BASE_SHA, { event_name: 'workflow_dispatch', event: {} }, { scope: 'all' }), '');
   assert.match(step.run, /--base "\$BASE_SHA"/);
+  assert.match(step.run, /--scope "\$SCOPE"/);
+  assert.equal(step.env.SCOPE, '${{ inputs.scope }}');
   assert.equal(step.env.GITHUB_TOKEN, '${{ github.token }}');
   assert.equal(job.permissions.actions, 'read');
   assert.equal(job.steps.find((candidate) => candidate.uses?.startsWith('actions/checkout'))?.with?.['fetch-depth'], 0);
