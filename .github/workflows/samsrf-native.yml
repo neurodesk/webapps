@@ -138,8 +138,21 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Release bookkeeping (changelogs, version bumps) runs this workflow neither
+  # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
+  # The dispatch-only jobs below do not wait for it.
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    with:
+      workflow: samsrf-native
+
   test:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.controls_only && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.controls_only && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -287,7 +300,8 @@ jobs:
           if-no-files-found: ignore
 
   wasm-source:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:
@@ -351,7 +365,8 @@ jobs:
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
 
   recorder-smoke:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || (!inputs.wasm_only && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || (!inputs.wasm_only && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

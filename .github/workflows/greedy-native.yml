@@ -57,8 +57,20 @@ env:
   ONNXRUNTIME_NODE_INSTALL: skip
 
 jobs:
+  # Release bookkeeping (changelogs, version bumps) runs this workflow neither
+  # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    with:
+      workflow: greedy-native
+
   wasm-single:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: committed single-threaded WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -87,7 +99,8 @@ jobs:
           if-no-files-found: ignore
 
   native:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -156,7 +169,8 @@ jobs:
   # data-free; this job fetches the pinned data and runs them by name, so a
   # missing download fails rather than skips.
   whole-head-reference:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     env:

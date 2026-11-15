@@ -242,19 +242,29 @@ test('the shared packages are never a workflow\'s own', () => {
   assert.deepEqual(ownedPackages(['packages/components/**', 'packages/runtime-support/**', 'packages/elastix/**', 'packages/missing/**'], repoRoot), ['packages/elastix']);
 });
 
-test('every workflow with a shared pull request filter waits for the gate', async () => {
+// A whole app, package or exes directory under a push filter receives every
+// release's version bump and changelog.
+const RELEASED_TREE = /^(?:apps|packages|exes)\/[^/*]+\/\*\*$/;
+
+test('every workflow with a shared pull request filter, or a released tree under its push filter, waits for the gate', async () => {
   const files = (await readdir(new URL('../.github/workflows/', import.meta.url))).filter((name) => name.endsWith('.yml')).sort();
   let gated = 0;
+  let released = 0;
   for (const file of files) {
     const flow = YAML.parse(await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8'));
     const filters = flow.on?.pull_request?.paths ?? [];
-    if (!filters.some(isSharedFilter)) {
-      assert.ok(!flow.jobs.gate, `${file} has no shared filter for the gate to decide`);
+    const shared = filters.some(isSharedFilter);
+    const releases = (flow.on?.push?.paths ?? []).some((filter) => RELEASED_TREE.test(filter));
+    if (!shared && !releases) {
+      assert.ok(!flow.jobs.gate, `${file} has nothing for the gate to decide`);
       continue;
     }
     gated++;
+    if (!shared) released++;
     // With nothing to follow, the gate would skip every shared change.
-    assert.ok(ownedPackages(filters, repoRoot).length || workflowApps(filters, registry).length || workflowScripts(flow).length, `${file}: the gate can follow an owned package, an app or a script`);
+    if (shared) assert.ok(ownedPackages(filters, repoRoot).length || workflowApps(filters, registry).length || workflowScripts(flow).length, `${file}: the gate can follow an owned package, an app or a script`);
+    // Without ready_for_review, a draft's skipped run would never be followed by one.
+    if (flow.on?.pull_request) assert.ok(flow.on.pull_request.types?.includes('ready_for_review'), `${file}: a pull request marked ready starts it`);
     assert.equal(flow.jobs.gate?.uses, './.github/workflows/pr-gate.yml', `${file} filters on shared paths, so it calls the gate`);
     assert.deepEqual(flow.jobs.gate.permissions, { contents: 'read', actions: 'read', 'pull-requests': 'read' }, `${file}: the sweep and pushes read this workflow's runs, pull requests their labels`);
     for (const [id, job] of Object.entries(flow.jobs)) {
@@ -263,7 +273,8 @@ test('every workflow with a shared pull request filter waits for the gate', asyn
       assert.match(String(job.if), /^github\.event_name == 'workflow_dispatch' && /, `${file}: entry job ${id} waits for the gate`);
     }
   }
-  assert.ok(gated > 20);
+  assert.ok(gated > 40);
+  assert.ok(released > 10);
 });
 
 test('a push to main starts a gated workflow only for its own paths, and a nightly sweep covers the shared ones', async () => {
@@ -271,7 +282,8 @@ test('a push to main starts a gated workflow only for its own paths, and a night
   const crons = [];
   for (const file of files) {
     const flow = YAML.parse(await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8'));
-    if (!flow.jobs.gate || !flow.on.push) continue;
+    // Workflows gated only for release bookkeeping have no shared filter to sweep.
+    if (!flow.jobs.gate || !flow.on.push || !flow.on.pull_request.paths.some(isSharedFilter)) continue;
     const pulls = flow.on.pull_request.paths;
     const pushes = flow.on.push.paths;
     // A shared filter on push starts every native suite for every merge.
@@ -434,6 +446,12 @@ test('a skipped push or sweep never moves the base past a change the other would
   assert.equal(onMain('schedule', []).run, false, 'nothing changed since the last green run');
   assert.equal(onMain('schedule', ['docs/readme.md']).run, false);
   assert.equal(onMain('push', ['docs/readme.md']).run, true);
+  // A workflow without a shared pull request filter keeps a plain nightly run; its pushes still skip release bookkeeping.
+  const neuroflow = await real('neuroflow');
+  assert.equal(mainWorkflow({ flow: neuroflow, changedPaths: [], registry, event: 'schedule' }).run, true);
+  const appsRelease = new Map([versionBump('apps/n4/package.json')]);
+  assert.equal(mainWorkflow({ flow: neuroflow, changedPaths: ['apps/n4/package.json', 'apps/n4/CHANGELOG.md'], manifests: appsRelease, registry, event: 'push' }).run, false);
+  assert.equal(mainWorkflow({ flow: neuroflow, changedPaths: ['apps/n4/src/main.js'], registry, event: 'push' }).run, true);
 });
 
 test('a ready pull request over its full-plan budget skips a gated workflow only where ci withholds too', async () => {
