@@ -1,5 +1,5 @@
 import { FULL_CI_LABEL, fullPlanDecision, largeRunCandidates } from './ci-usage.mjs';
-import { jobNames, listPullRequestRuns, mapLimited, pullRequestLabels } from './github-actions.mjs';
+import { jobOutcomes, listPullRequestRuns, mapLimited, pullRequestLabels } from './github-actions.mjs';
 
 // The pull request a `pull_request` event names, as fullPlanDecision matches runs.
 export function eventPullRequest(event) {
@@ -14,13 +14,13 @@ export function eventPullRequest(event) {
 // withholds only where that commit's `ci` run withholds too.
 export async function fullPlanBudget({ pullRequest, runId, excludeHead, now = new Date().toISOString() }) {
   const labels = await pullRequestLabels(pullRequest.number);
-  if (labels.includes(FULL_CI_LABEL)) return fullPlanDecision({ runs: [], jobNames: new Map(), pullRequest, labels, now });
+  if (labels.includes(FULL_CI_LABEL)) return fullPlanDecision({ runs: [], jobs: new Map(), pullRequest, labels, now });
   const runs = await listPullRequestRuns({ branch: pullRequest.branch, since: new Date(Date.parse(now) - 24 * 3600e3) });
   const candidates = largeRunCandidates(runs, now).filter((run) => run.id !== runId && run.head_sha !== excludeHead);
-  const names = await mapLimited(candidates, 6, (run) => jobNames(run.id));
+  const outcomes = await mapLimited(candidates, 6, (run) => jobOutcomes(run.id));
   return fullPlanDecision({
     runs,
-    jobNames: new Map(candidates.map((run, index) => [run.id, names[index]])),
+    jobs: new Map(candidates.map((run, index) => [run.id, outcomes[index]])),
     pullRequest,
     runId,
     excludeHead,

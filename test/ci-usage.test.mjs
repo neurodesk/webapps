@@ -81,17 +81,19 @@ test('the report lists the runs behind each finding', () => {
   assert.match(usageMarkdown(usageOf([]), [], { since: 'a', until: 'b' }), /### Inside every budget/);
 });
 
-// A run's job names: a partial full plan runs the marker; a whole-catalogue run, from before the marker, many jobs.
-const marked = ['app-plan', FULL_PLAN_JOB, 'app-tests (calmar)'];
-const wholeCatalogue = Array.from({ length: LARGE_RUN_JOBS }, (_, index) => `browser-e2e (${index})`);
-const draftTier = ['app-plan', 'app-tests (calmar)', 'browser-e2e (calmar)'];
+// A run's jobs: a partial full plan runs the marker; a whole-catalogue run, from before the marker, many jobs.
+// GitHub lists a job its `if` skipped too: a draft run lists the marker as skipped.
+const ran = (names) => names.map((name) => ({ name, conclusion: 'success' }));
+const marked = ran(['app-plan', FULL_PLAN_JOB, 'app-tests (calmar)']);
+const wholeCatalogue = ran(Array.from({ length: LARGE_RUN_JOBS }, (_, index) => `browser-e2e (${index})`));
+const draftTier = [...ran(['app-plan', 'app-tests (calmar)', 'browser-e2e (calmar)']), { name: FULL_PLAN_JOB, conclusion: 'skipped' }];
 
 test('a ready pull request gets the full plan until its earlier full-plan runs fill the budget', () => {
   const now = '2026-11-10T12:00:00Z';
   const mine = (fields = {}) => run({ head_repository: 'neurodesk/webapps', pull_requests: [814], ...fields });
   const decide = (runs, fields = {}) => fullPlanDecision({
     runs,
-    jobNames: new Map(runs.map((each) => [each.id, each.names ?? marked])),
+    jobs: new Map(runs.map((each) => [each.id, each.names ?? marked])),
     pullRequest: { number: 814, repository: 'neurodesk/webapps', branch: 'feature' },
     runId: fields.runId ?? -1,
     labels: fields.labels ?? [],
@@ -114,10 +116,12 @@ test('a ready pull request gets the full plan until its earlier full-plan runs f
 test('the budget counts only this pull request\'s earlier full-plan runs', () => {
   const now = '2026-11-10T12:00:00Z';
   const decide = (runs, { runId = -1, excludeHead } = {}) => fullPlanDecision({
-    runs, jobNames: new Map(runs.map((each) => [each.id, each.names ?? marked])), pullRequest: { number: 827, repository: 'neurodesk/webapps', branch: 'feature' }, runId, excludeHead, labels: [], now,
+    runs, jobs: new Map(runs.map((each) => [each.id, each.names ?? marked])), pullRequest: { number: 827, repository: 'neurodesk/webapps', branch: 'feature' }, runId, excludeHead, labels: [], now,
   });
   const mine = (fields = {}) => run({ head_repository: 'neurodesk/webapps', pull_requests: [827], ...fields });
-  assert.equal(decide([mine({ names: draftTier }), mine({ names: wholeCatalogue.slice(1) })]).withheld, false, 'draft-tier runs and runs that withheld the plan');
+  assert.equal(decide([mine({ names: draftTier }), mine({ names: wholeCatalogue.slice(1) })]).withheld, false, 'draft-tier runs, whose marker was skipped, and runs that withheld the plan');
+  const skippedCatalogue = [...wholeCatalogue.slice(1), { name: 'full-plan-withheld', conclusion: 'skipped' }];
+  assert.equal(decide([mine({ names: skippedCatalogue }), mine({ names: skippedCatalogue })]).withheld, false, 'skipped jobs do not make a run whole-catalogue');
   assert.equal(decide([mine({ names: undefined }), mine({ names: wholeCatalogue })]).withheld, true);
   assert.equal(decide([mine({ minutes: 1 }), mine({ conclusion: 'skipped' })]).withheld, false, 'runs that did no work');
   assert.equal(decide([mine({ pull_requests: [826] }), mine({ pull_requests: [826] })]).withheld, false, 'another pull request');

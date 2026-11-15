@@ -9,7 +9,7 @@ import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { commandLineClosure, moduleClosure, onlyAddsExports, onlyBumpsVersion } from '../scripts/lib/module-closure.mjs';
 import { testedBase } from '../scripts/lib/tested-base.mjs';
-import { budgetedDecision, calledWorkflows, decideWorkflow, isSharedFilter, ownedPackages, pushWorkflow, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
+import { budgetedDecision, calledWorkflows, decideWorkflow, isSharedFilter, mainWorkflow, ownedPackages, pushWorkflow, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
 // The pull request gate skips a native suite only when no changed file can
@@ -404,18 +404,36 @@ test('a pull request that only releases runs no gated workflow, even for its own
   assert.equal((await decideReal('elastix-native', elastixReleasePaths)).run, true);
 });
 
-test('a push to main runs a gated workflow unless its push filters matched only release bookkeeping', async () => {
+test('a gated workflow\'s own paths on main ask only whether more than release bookkeeping changed', async () => {
   const flow = await real('elastix-native');
   const push = (changedPaths, manifests = elastixRelease) => pushWorkflow({ flow, changedPaths, manifests, registry });
   assert.equal(push(elastixReleasePaths).run, false);
   assert.match(push(elastixReleasePaths).reason, /^only release bookkeeping changed under its push filters \(packages\/elastix\/package\.json/);
-  // Shared paths outside the push filters are the sweep's, not this push's.
+  // Shared paths outside the push filters are mainWorkflow's second question, not this one.
   assert.equal(push([...elastixReleasePaths, 'packages/components/src/ui.js']).run, false);
-  assert.deepEqual(push([...elastixReleasePaths, 'apps/elastix/src/main.js']), { run: true, reason: 'apps/elastix/src/main.js matches apps/elastix/**' });
+  assert.deepEqual(push([...elastixReleasePaths, 'apps/elastix/src/main.js']), { run: true, known: true, reason: 'apps/elastix/src/main.js matches apps/elastix/**' });
   assert.equal(push(elastixReleasePaths, new Map()).run, true, 'a manifest without its texts is code');
   assert.equal(push(['docs/readme.md']).run, true, 'a range that matches no push filter is not what started the run');
   assert.equal(pushWorkflow({ flow: { on: { push: {} } }, changedPaths: ['a'], registry }).run, true);
   assert.equal(pushWorkflow({ flow: { on: { push: { paths: ['apps/**', '!apps/x/**'] } } }, changedPaths: ['apps/y/CHANGELOG.md'], registry }).run, true);
+});
+
+// A push and the sweep both diff from the last green push or sweep, and a
+// skipped run is green, so each must also ask the other's question.
+test('a skipped push or sweep never moves the base past a change the other would test', async () => {
+  const flow = await real('elastix-native');
+  const onMain = (event, changedPaths, manifests = elastixRelease) => mainWorkflow({ flow, changedPaths, manifests, registry, event });
+  const tiff = 'packages/components/src/file-io/tiff.js';
+  // A shared change merged before a release: the release push must run, or the sweep would start after it.
+  assert.deepEqual(onMain('push', [tiff, ...elastixReleasePaths]).run, true);
+  assert.match(onMain('push', [tiff, ...elastixReleasePaths]).reason, /tiff\.js changed on main/);
+  assert.equal(onMain('push', elastixReleasePaths).run, false);
+  // An own change whose push run failed or was cancelled: the sweep runs, or a later release push would skip past it.
+  assert.deepEqual(onMain('schedule', ['apps/elastix/src/main.js']), { run: true, reason: 'apps/elastix/src/main.js matches apps/elastix/**' });
+  assert.equal(onMain('schedule', elastixReleasePaths).run, false);
+  assert.equal(onMain('schedule', []).run, false, 'nothing changed since the last green run');
+  assert.equal(onMain('schedule', ['docs/readme.md']).run, false);
+  assert.equal(onMain('push', ['docs/readme.md']).run, true);
 });
 
 test('a ready pull request over its full-plan budget skips a gated workflow only where ci withholds too', async () => {
@@ -427,6 +445,7 @@ test('a ready pull request over its full-plan budget skips a gated workflow only
   const spent = () => ({ withheld: true, reason: '#814 already started 2 full-plan ci runs in 24 hours (budget 2)' });
   const withheld = await gate(runs, shared, spent);
   assert.equal(withheld.run, false);
+  assert.equal(withheld.withheld, true, 'a withheld suite fails its gate instead of reading as green');
   assert.match(withheld.reason, /^#814 already started 2 full-plan ci runs in 24 hours \(budget 2\), and its ci run withholds the full plan too; add the full-ci label/);
   assert.deepEqual(await gate(runs, shared, () => ({ withheld: false, reason: '1 of 2' })), runs);
   assert.deepEqual(await gate(runs, shared, () => { throw new Error('HTTP 403'); }), runs, 'a failed check runs the workflow');

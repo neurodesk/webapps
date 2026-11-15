@@ -106,22 +106,27 @@ export function ofPullRequest(run, { number, repository, branch }) {
 // complete plan where the draft plan would test less (.github/workflows/ci.yml).
 export const FULL_PLAN_JOB = 'full-plan';
 
-// Whether a run with these job names tested its pull request's complete plan:
-// it ran the marker, or, like runs from before the marker, most of the catalogue.
-export const fullPlanRun = (jobNames = []) => jobNames.includes(FULL_PLAN_JOB) || jobNames.length >= LARGE_RUN_JOBS;
+// Whether a run with these jobs ({ name, conclusion }) tested its pull
+// request's complete plan: it ran the marker, or, like runs from before the
+// marker, most of the catalogue. GitHub lists a job its `if` skipped too, so
+// a skipped job counts for neither.
+export function fullPlanRun(jobs = []) {
+  const ran = jobs.filter((job) => job.conclusion !== 'skipped');
+  return ran.some((job) => job.name === FULL_PLAN_JOB) || ran.length >= LARGE_RUN_JOBS;
+}
 
 // Whether a ready pull request's next run withholds its complete plan. It
 // counts the pull request's full-plan runs that did work in the 24 hours
 // before, cancelled ones too, and withholds once they fill the budget. Every
 // whole-catalogue run is a full-plan run, so the daily report never flags a
 // pull request this let through. `runs` are the head branch's `ci` pull request
-// runs and `jobNames` maps their ids to the names of their jobs. `runId` (the
+// runs and `jobs` maps their ids to their jobs ({ name, conclusion }). `runId` (the
 // deciding run) and runs of `excludeHead` (the commit being tested) are not
 // counted.
-export function fullPlanDecision({ runs, jobNames, pullRequest, runId, excludeHead, labels, now, budget = BUDGETS.fullPlansPerPullRequest }) {
+export function fullPlanDecision({ runs, jobs, pullRequest, runId, excludeHead, labels, now, budget = BUDGETS.fullPlansPerPullRequest }) {
   if (labels.includes(FULL_CI_LABEL)) return { withheld: false, reason: `the ${FULL_CI_LABEL} label restores the full plan` };
   const spent = largeRunCandidates(runs, now)
-    .filter((run) => run.id !== runId && run.head_sha !== excludeHead && ofPullRequest(run, pullRequest) && fullPlanRun(jobNames.get(run.id)));
+    .filter((run) => run.id !== runId && run.head_sha !== excludeHead && ofPullRequest(run, pullRequest) && fullPlanRun(jobs.get(run.id)));
   if (spent.length < budget) return { withheld: false, reason: `${spent.length} of ${budget} full-plan runs used in 24 hours` };
   return { withheld: true, reason: `#${pullRequest.number} already started ${spent.length} full-plan ci runs in 24 hours (budget ${budget})` };
 }

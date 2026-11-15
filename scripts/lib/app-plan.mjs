@@ -214,7 +214,9 @@ function changedRootScripts(manifest) {
 // `reasons.fallback` says why the whole catalog was selected; otherwise
 // `reasons.apps` maps each selected app, and `reasons.site` the site build, to
 // the changes that selected it.
-export function selectAffectedApps(registry, changedPaths = [], graph = null, manifests = new Map()) {
+// With `release`, a version bump selects what it reaches: release.yml picks
+// the apps to publish from the version changes themselves.
+export function selectAffectedApps(registry, changedPaths = [], graph = null, manifests = new Map(), { release = false } = {}) {
   const everything = (fallback) => ({ apps: registry.apps, site: true, reasons: { fallback, apps: {}, site: [] } });
   if (!changedPaths.length) return everything('no changed paths: no base revision, an unreadable diff, or a full run');
 
@@ -243,7 +245,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
 
   for (const path of changedPaths) {
     // A release's changelogs and version bumps change no behaviour; workspace-contracts checks them.
-    if (releaseBookkeeping(path, manifests)) {
+    if (!release && releaseBookkeeping(path, manifests)) {
       bookkeeping.push(path);
       continue;
     }
@@ -406,8 +408,8 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   };
 }
 
-export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false } = {}) {
-  const affected = selectAffectedApps(registry, changedPaths, graph, manifests);
+export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false } = {}) {
+  const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release });
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
   // dependency plan, including shared-code changes, at their current head.
   const selected = draft && changedPaths.length

@@ -891,7 +891,7 @@ if (/\\/pulls\\/\\d+$/.test(path)) {
   for (const run of state.runs) if (Date.parse(run.created_at) >= since) console.log(JSON.stringify(run));
 } else if (/\\/runs\\/\\d+\\/jobs/.test(path)) {
   if (state.fail === 'jobs') fail('jobs');
-  for (const name of state.jobs[/\\/runs\\/(\\d+)\\//.exec(path)[1]] ?? []) console.log(JSON.stringify(name));
+  for (const job of state.jobs[/\\/runs\\/(\\d+)\\//.exec(path)[1]] ?? []) console.log(JSON.stringify(job));
 } else fail('unexpected ' + path);
 `);
   await chmod(join(bin, 'gh'), 0o755);
@@ -924,11 +924,12 @@ if (/\\/pulls\\/\\d+$/.test(path)) {
   return { ciRun, hoursAgo, plan };
 }
 
-// Job names of a whole-catalogue run from before the marker, of a full-plan
-// run, and of a run that tested only the draft plan.
-const wholeCatalogue = Array.from({ length: 140 }, (_, index) => `browser-e2e (${index})`);
-const markedRun = ['app-plan', 'full-plan', 'app-tests (calmar)'];
-const draftRun = Array.from({ length: 35 }, (_, index) => `app-tests (${index})`);
+// Jobs of a whole-catalogue run from before the marker, of a full-plan run,
+// and of a run that tested only the draft plan, which lists the marker as skipped.
+const ran = (names) => names.map((name) => ({ name, conclusion: 'success' }));
+const wholeCatalogue = ran(Array.from({ length: 140 }, (_, index) => `browser-e2e (${index})`));
+const markedRun = ran(['app-plan', 'full-plan', 'app-tests (calmar)']);
+const draftRun = [...ran(Array.from({ length: 35 }, (_, index) => `app-tests (${index})`)), { name: 'full-plan', conclusion: 'skipped' }];
 
 test('a ready pull request over its full-plan budget is planned as a draft and marked withheld', async (t) => {
   const { ciRun, plan } = await budgetFixture(t);
@@ -1572,6 +1573,16 @@ test('release bookkeeping selects nothing, even in shared packages', async () =>
   assert.ok(createAppPlan(registry, release, workspace, dependency).allApps);
   // Without both texts a manifest is an ordinary code change.
   assert.ok(createAppPlan(registry, ['packages/components/package.json'], workspace).allApps);
+  // release.yml publishes the apps a release's version bumps reach.
+  const published = createAppPlan(registry, release, workspace, manifests, { release: true });
+  assert.ok(published.allApps);
+  assert.deepEqual(published.bookkeeping, []);
+});
+
+test('release.yml plans the apps to publish with version bumps counting', async () => {
+  const flow = parse(await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
+  const step = flow.jobs['app-plan'].steps.find((candidate) => candidate.id === 'plan');
+  assert.match(step.run, /node scripts\/app-plan\.mjs --release --base "\$\{BASE_SHA:-HEAD~1\}" --head HEAD/);
 });
 
 test('a dispatched run tests what its branch changed since it left main, in the scope it asks for', async (t) => {

@@ -61,7 +61,10 @@ try {
   console.error(`App planner: selecting the full catalog and site because ${fallbackReason}`);
 }
 const draft = process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.CI_DRAFT === 'true';
-let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft });
+// `--release` (release.yml): the apps to publish are the ones the version
+// bumps reach, so release bookkeeping counts.
+const release = process.argv.includes('--release');
+let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft, release });
 
 // A ready pull request that has used its full-plan runs gets the draft plan,
 // and the `full-plan-withheld` job fails so the run is never green. A run that

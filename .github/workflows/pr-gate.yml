@@ -5,13 +5,16 @@ name: pr-gate
 # pull request on every push, so a filter on a shared tree starts suites the
 # change never reaches. Callers keep those filters for pull requests and make
 # their entry jobs wait for this decision (scripts/lib/workflow-gate.mjs). A
-# ready pull request over its full-plan budget answers false where its ci run
+# ready pull request over its full-plan budget fails the gate where its ci run
 # withholds the full plan too. A push to main starts a caller only for its own
 # paths, and runs it unless they are only release bookkeeping; its schedule is
 # the sweep, which runs it when a shared path changed on main since the caller
-# last finished green there. The job always finishes, so the jobs after a
-# caller's entry jobs keep their default conditions: a draft answers false and
-# a dispatch true, both without a checkout.
+# last finished green there. A push and the sweep each also ask the other's
+# question, since either can skip and still finish green. The job finishes
+# unless the budget withholds the suite, so the jobs after a caller's entry
+# jobs keep their default conditions: a draft answers false and a dispatch
+# true, both without a checkout. A withheld suite fails its gate instead of
+# reading as green.
 
 on:
   workflow_call:

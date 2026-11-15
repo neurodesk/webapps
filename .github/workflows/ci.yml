@@ -104,7 +104,7 @@ jobs:
     steps:
       - name: Report the withheld plan
         run: |
-          echo "::error title=Full plan withheld::This ready pull request already used its full-plan ci runs in the last 24 hours, so this run tested only the apps it edits. Convert it to draft while iterating. To test every app at this head, add the full-ci label and use Re-run all jobs (Re-run failed jobs keeps this plan)."
+          echo "::error title=Full plan withheld::This ready pull request already used its full-plan ci runs in the last 24 hours, so this run tested only the apps it edits, and its gated native workflows failed their gate. Convert it to draft while iterating. To test every app at this head, add the full-ci label and use Re-run all jobs on this run and on each native workflow whose gate failed (Re-run failed jobs keeps this plan)."
           exit 1
 
   workspace-contracts:

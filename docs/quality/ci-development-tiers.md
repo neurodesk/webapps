@@ -52,10 +52,11 @@ Every workflow with such a filter now starts with a `gate` job that calls
 
 The gate answers `false` for a draft and `true` for a dispatch without a
 checkout. A ready pull request over its full-plan budget
-([enforcement](#enforcement-in-ci)) answers `false` where the shared change
-gives `ci` a full plan wider than its draft plan, because there its `ci` run
-withholds the plan too and fails `full-plan-withheld`
-(`budgetedDecision`); a check that fails runs the workflow. The job always finishes: a skipped gate would skip every
+([enforcement](#enforcement-in-ci)) fails the gate, even for the workflow's
+own paths, as a draft would skip it, where the change gives `ci` a full plan
+wider than its draft plan: there its `ci` run withholds the plan too and fails
+`full-plan-withheld` (`budgetedDecision`). The gate fails rather than skips so
+that the suite never reads as green; a check that fails runs the workflow. The job always finishes: a skipped gate would skip every
 job after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and
 fails when a workflow adds a shared filter without the gate.
 
@@ -72,11 +73,18 @@ shared push filters, about 5,200 runner minutes in one day.
 A release still matched those own paths: on 13 November 2026 two release
 merges (#835, #826) re-ran 24 and 15 native workflows on every OS, 1,368
 runner minutes, for version bumps and changelogs whose release dispatches then
-built the same packages. So the gate decides pushes too (`pushWorkflow`): the
+built the same packages. So the gate decides pushes too (`mainWorkflow`): the
 workflow runs unless every path under its `push` filter that changed since it
 last finished green on main, by a push or a sweep, is release bookkeeping
-(below). Without such a run, or when no changed path matches a filter, it
+(below). A skipped push still finishes green and moves the base the sweep
+reads, and a skipped sweep the base the next push reads, so each also asks
+the other's question: a push runs when a path under a shared pull request
+filter changed, and the sweep runs when one of the workflow's own paths
+changed beyond bookkeeping (a merge whose push run failed or was cancelled).
+Without a green run, or when no changed path matches a push filter, a push
 runs. The 15 native workflows without a gate still run on every match.
+`release.yml` plans with `--release`, so its version bumps still select the
+apps to publish.
 
 Shared paths reach a gated workflow on main through its nightly sweep. Each
 has one `schedule`, and for that event the gate runs the workflow when a path
@@ -162,8 +170,8 @@ workflows skip at the same commits ([gate](#pull-request-gate-for-shared-path-fi
 The window is rolling rather than the report's UTC day.
 
 To test every app at that head, add the `full-ci` label and use **Re-run all
-jobs** on the run; the planner reads the labels when it runs, so no new trigger
-is needed. **Re-run failed jobs** keeps the withheld plan. The label stays until
+jobs** on the run and on each native workflow whose gate failed; the planner
+and the gate read the labels when they run, so no new trigger is needed. **Re-run failed jobs** keeps the withheld plan. The label stays until
 someone removes it, and every later push then gets the full plan again, so
 remove it once the head you will merge has passed. A failure to read the runs
 or labels keeps the full plan.
@@ -232,7 +240,8 @@ A manual `ci` run plans like a pull request: `gh workflow run ci --ref
 <branch>` tests the apps the branch changed since it left main (on main,
 since the last green run). `-f scope=gpu` runs only the macOS GPU suite of
 those apps, `-f scope=site` only the composite site and its agentic checks
-(with `agentic_mode`), and `-f scope=all` every app. On 13 November 2026 all
+(with `agentic_mode`), and `-f scope=all` every app. Like a pull request,
+`affected` builds the composite site only when its plan needs it. On 13 November 2026 all
 three manual runs tested every app (3,037 runner minutes) to reach the GPU
 suite or the agentic checks. A dispatch no longer moves the tested base main's
 pushes diff from, since its scope can leave apps out.
