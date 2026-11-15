@@ -35,7 +35,7 @@ async function download(page, index) {
 // Holds each run to validation/browser-reference.json and attaches its measurements, which a
 // re-recording copies into that file. browser-memory.mjs measures resident memory separately.
 for (const folds of [1, 5]) {
-  test(`automation segments the MS example with ${folds} fold(s) on the input grid, falling back from a failed WebGPU`, async ({ page }, testInfo) => {
+  test(`automation segments the MS example with ${folds} fold(s) on the input grid, falling back from a failed WebGPU`, { tag: folds === 5 ? '@heavy' : [] }, async ({ page }, testInfo) => {
     test.setTimeout(folds * 20 * 60 * 1000);
     // The page sees an adapter, so Automatic picks WebGPU; the worker has none, so its session fails.
     await page.addInitScript(() => {
@@ -129,7 +129,7 @@ test("automation reports a failed model download and leaves the run available", 
   await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(1);
 });
 
-test("the ensemble downloads each fold after inference of the previous fold", async ({ page }) => {
+test("the ensemble downloads each fold after inference of the previous fold", { tag: '@heavy' }, async ({ page }) => {
   test.setTimeout(20 * 60 * 1000);
   const secondFold = manifest.base_url + manifest.assets[1].filename;
   await page.context().route(secondFold, (route) => route.fulfill({ status: 503, body: "" }));

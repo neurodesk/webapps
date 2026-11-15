@@ -312,7 +312,7 @@ test('records the WebGPU adapter and planned buffer limits', async ({ page }) =>
 
 if (!probeOnly) {
   for (const mode of ['fast', 'default']) {
-    test(`segments the small fixture in ${mode} mode against the FreeSurfer golden`, async ({ page }) => {
+    test(`segments the small fixture in ${mode} mode against the FreeSurfer golden`, { tag: '@heavy' }, async ({ page }) => {
       test.setTimeout(1800000);
       await checkCase(page, {
         input: `${fixtures}/small.nii.gz`,
@@ -324,7 +324,7 @@ if (!probeOnly) {
     });
   }
 
-  test('segments and downloads labels on a chosen coarser grid', async ({ page }) => {
+  test('segments and downloads labels on a chosen coarser grid', { tag: '@heavy' }, async ({ page }) => {
     test.setTimeout(1800000);
     await page.goto('./');
     await page.locator('#exampleSelect').selectOption({ index: 1 });
@@ -360,7 +360,7 @@ if (!probeOnly) {
     await expect(page.locator('#volumeReport')).toContainText('The 1 mm reference norms have not been validated for this grid.');
   });
 
-  test('an automation run keeps the declared 1 mm grid when the form holds a coarser one', async ({ page }) => {
+  test('an automation run keeps the declared 1 mm grid when the form holds a coarser one', { tag: '@heavy' }, async ({ page }) => {
     test.setTimeout(1800000);
     const dispatch = (command, request = {}) => page.evaluate(({ command, request }) => globalThis.neurodeskAutomation.dispatch(command, request), { command, request });
     await page.goto('./');

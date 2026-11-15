@@ -182,6 +182,34 @@ someone removes it, and every later push then gets the full plan again, so
 remove it once the head you will merge has passed. A failure to read the runs
 or labels keeps the full plan.
 
+## Heavy browser tests
+
+In a whole-catalogue run on 15 November 2026 the CPU browser jobs spent 359
+minutes in tests, and 22 tests over 4 minutes spent 211 of them: SDC's SyN run
+36, GlioMODA's mirrored run 21, FireANTs' SyN reference 16, the
+white-matter-lesions five-fold ensemble 14, both BISON examples 25, four
+SynthSeg fixture runs 33. Most are their app's reference parity check.
+
+Tests over 5 minutes are tagged `@heavy` (14 tests, 177 of those minutes; also
+NODDI's reference 11, CALMaR's SOOP example 10.4, white-matter-lesions'
+per-fold downloads 5.8 and N4's reference 5.2). The next slowest test took
+4.6 minutes. On pull requests and pushes to main, in the CPU job, they run only
+for an app the change edits:
+its `apps/`, `packages/` or `exes/` directory or its model manifest, release
+bookkeeping aside, or an app a failed run on main left untested. An app a
+change reaches only through shared code, such as a `packages/runtime-support`
+edit or a `ci.yml` change, leaves them to the nightly run, so a shared change
+that breaks only such a path is found the next night rather than before merge.
+The planner marks each browser matrix entry with `heavy_tests`, and the jobs
+set `NEURODESK_E2E_SKIP_HEAVY`, which `e2eTier` turns into a `grepInvert`.
+A whole-catalogue plan for a change the planner could not narrow, such as a
+`ci.yml` edit, counts as shared. Only a plan with no diff at all (the nightly,
+a dispatch of every app, an unknown base) is a full run. The macOS GPU job
+runs every test, since the threshold is a CPU measurement: SynthSeg's four
+`@heavy` tests take 12 to 25 seconds on Metal. Dispatched, nightly and release
+runs include every test. To run them before merging a shared change, dispatch
+`ci` on the branch.
+
 ## Module-level selection in the component package
 
 Every app depends on `packages/components`, so a change anywhere in it used
@@ -244,7 +272,7 @@ run during draft feedback.
 
 A manual `ci` run plans like a pull request: `gh workflow run ci --ref
 <branch>` tests the apps the branch changed since it left main (on main,
-since the last green run). `-f scope=gpu` runs only the macOS GPU suite of
+since the last finished run, as a push does). `-f scope=gpu` runs only the macOS GPU suite of
 those apps, `-f scope=site` only the composite site and its agentic checks
 (with `agentic_mode`), and `-f scope=all` every app. Like a pull request,
 `affected` builds the composite site only when its plan needs it. On 13 November 2026 all

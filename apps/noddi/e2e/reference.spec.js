@@ -52,7 +52,7 @@ async function runCase(context, roles, parameters) {
   return { report, outputs, seconds };
 }
 
-test("every reference case in the web app matches the browser reference", async ({ context, browser }) => {
+test("every reference case in the web app matches the browser reference", { tag: '@heavy' }, async ({ context, browser }) => {
   test.skip(mode !== "check" && mode !== "write", "set NODDI_BROWSER_REFERENCE=check or write");
   test.setTimeout(20 * 60_000);
   const inputs = await caseInputs();

@@ -151,6 +151,19 @@ function shardedEntries(app) {
   return Array.from({ length: total }, (_, index) => ({ ...matrixEntry(app), shard: total > 1 ? `${index + 1}/${total}` : '' }));
 }
 
+// Whether a plan runs an app's @heavy CPU browser tests: when the change edits
+// the app itself (`edited`: its app, package or exes directory or model
+// manifest, release bookkeeping aside), when a failed run on main left it
+// untested, or when the plan has no diff at all (a full run: the nightly, a
+// dispatch of every app, an unknown base). An app reached only through shared
+// code leaves them to the nightly run, also when the planner selected every
+// app for a change it could not narrow (ci.yml, an unresolved lockfile).
+function editsApp(app, changedPaths, edited, carried) {
+  if (!changedPaths.length || carried.has(app.id)) return true;
+  return edited.some((path) => [`apps/${app.id}/`, `packages/${app.id}/`, `exes/${app.id}/`].some((prefix) => path.startsWith(prefix))
+    || path === `models/${app.id}.manifest.json`);
+}
+
 function matrixEntry(app) {
   const toolchains = new Set(app.ci.toolchains);
   return {
@@ -412,7 +425,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   };
 }
 
-export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried } = {}) {
+export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map() } = {}) {
   const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release, carried });
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
   // dependency plan, including shared-code changes, at their current head.
@@ -421,13 +434,15 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
     : affected.apps;
   const { site, reasons } = affected;
   const releasable = selected.filter((app) => app.ci.release);
+  const edited = changedPaths.filter((path) => !(affected.bookkeeping ?? []).includes(path));
+  const heavy = (entry) => ({ ...entry, heavy_tests: editsApp(registry.apps.find((app) => app.id === entry.app), changedPaths, edited, carried) });
   const browserTested = selected.filter((app) => app.ci.browser_test);
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
   return Object.freeze({
     changedPaths: Object.freeze([...changedPaths]),
     selected: Object.freeze(selected),
     apps: Object.freeze({ include: Object.freeze(selected.map(matrixEntry)) }),
-    browserApps: Object.freeze({ include: Object.freeze(browserTested.flatMap(shardedEntries)) }),
+    browserApps: Object.freeze({ include: Object.freeze(browserTested.flatMap(shardedEntries).map(heavy)) }),
     gpuApps: Object.freeze({ include: Object.freeze(gpuTested.map(matrixEntry)) }),
     releaseApps: Object.freeze({ include: Object.freeze(releasable.map(matrixEntry)) }),
     allApps: selected.length === registry.apps.length,

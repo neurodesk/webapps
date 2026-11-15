@@ -12,7 +12,7 @@ const minutes = 60_000;
 test.describe.configure({ mode: "serial" });
 
 for (const transform of TRANSFORMS) {
-  test(`web app ${transform} registration of the pinned example matches the browser reference`, { tag: transform === 'syn' ? [] : '@slow' }, async ({ page, browser }) => {
+  test(`web app ${transform} registration of the pinned example matches the browser reference`, { tag: transform === 'syn' ? '@heavy' : '@slow' }, async ({ page, browser }) => {
     test.skip(mode !== "check" && mode !== "write", "set FIREANTS_BROWSER_REFERENCE=check or write");
     test.setTimeout(90 * minutes);
     const example = await pinnedExample();

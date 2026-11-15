@@ -108,7 +108,7 @@ const scoped = {
   releaseApps: ['gpu', 'site'].includes(scope) ? none : plan.releaseApps,
   site: scope === 'site' || (scope !== 'gpu' && plan.site && !withheld),
 };
-const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test' }] };
+const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test', heavy_tests: false }] };
 const fallback = (fallbackReason || (plan.reasons.fallback ?? '')).replace(/\s+/g, ' ');
 // A wide change gives every app the same long list; keep the outputs small.
 const REASONS_SHOWN = 10;
