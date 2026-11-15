@@ -377,8 +377,9 @@ fn exp_ln2_splits_differ_from_matlab_as_recorded() {
 
 // ---- Sparse complex conv near multiples of 512 --------------------------------
 
-/// One output of the port's complex conv paths (`matlab_math::convolve_complex`):
-/// the sparse sum over nonzero samples, or the dense two-lane, eight-block sum.
+/// One output of the port's complex conv paths before the sparse boundary rule:
+/// the sparse sum over nonzero samples, every product fused, or the dense
+/// two-lane, eight-block sum.
 fn conv_output(signal: &[f64], taps: &[f64], nonzero: &[bool], k: usize, dense: bool, split: Option<usize>) -> f64 {
     let first = k + 1 - taps.len().min(k + 1);
     if let Some(s) = split {
@@ -413,11 +414,14 @@ fn conv_output(signal: &[f64], taps: &[f64], nonzero: &[bool], k: usize, dense: 
     sum
 }
 
-/// The sparse complex courses longer than 800 samples on the AMD host. Output index
-/// k is 0-based into `conv(y, kernel)` (MATLAB's index k + 1); only the first
-/// numel(y) outputs are compared, as `matlab_numerics2.rs` does. For each part
-/// (real or imaginary) that differs from MATLAB: whether the port's dense path or
-/// a two-way split of the sparse sum at some index reproduces it.
+/// The sparse complex courses longer than 800 samples on the AMD host, against the
+/// port's previous sparse model (every product fused), which missed 111 parts.
+/// Output index k is 0-based into `conv(y, kernel)` (MATLAB's index k + 1); only
+/// the first numel(y) outputs are compared, as `matlab_numerics2.rs` does. For each
+/// part that differs from MATLAB: whether the dense path or a two-way split of the
+/// sparse sum at some index reproduces it (neither is the explanation; the sparse
+/// boundary rule of `conv_boundary.rs` is). Production now equals MATLAB at every
+/// output of these courses.
 #[test]
 fn sparse_complex_conv_residual_lies_near_multiples_of_512() {
     let Some(root) = std::env::var_os("SAMSRF_MATLAB_NUMERICS2_DIR").map(PathBuf::from) else { return };
@@ -447,8 +451,7 @@ fn sparse_complex_conv_residual_lies_near_multiples_of_512() {
         let y: Vec<Complex64> = yr.iter().zip(&yi).map(|(&re, &im)| Complex64::new(re, im)).collect();
         let production = m::convolve_complex(&y, &kernel, 1);
         for k in 0..n {
-            // The reconstruction is the production port.
-            assert!(same(production[k].re, conv_output(&yr, &kernel, &nonzero, k, false, None)) && same(production[k].im, conv_output(&yi, &kernel, &nonzero, k, false, None)), "reconstruction at k = {k}");
+            assert!(same(production[k].re, er[k]) && same(production[k].im, ei[k]), "production at k = {k}");
             let mut differs = false;
             for (signal, expected) in [(&yr, er[k]), (&yi, ei[k])] {
                 if same(conv_output(signal, &kernel, &nonzero, k, false, None), expected) {

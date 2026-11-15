@@ -395,7 +395,8 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
 /// - K < 9: one accumulator over taps in order, unfused when the longer vector has
 ///   at most 16 samples and with fused multiply-adds otherwise.
 /// - K >= 9, fewer than a quarter of the longer vector's samples nonzero: the
-///   nonzero samples scattered in order with fused multiply-adds.
+///   nonzero samples scattered in order, each product fused into the running sum
+///   or rounded and then added as `sparse_product_unfused` decides.
 /// - Otherwise fused multiply-adds over input blocks of `block` samples, the
 ///   earliest first, and within a block over taps grouped by `tap % lanes`. A final
 ///   partial block is grouped the same way in whole vectors of `2 * lanes` samples;
@@ -403,9 +404,39 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
 ///
 /// Real vectors use 4 lanes and 24-sample blocks, complex vectors 2 lanes and
 /// 8-sample blocks. Every output was checked against MATLAB for 9-1000-sample
-/// courses with 1-129-tap kernels and sparse courses; sparse complex courses longer
-/// than 800 samples differ at a few outputs near multiples of 512
-/// (validation/matlab/README.md#double-css-arithmetic).
+/// courses with 1-129-tap kernels, and sparse courses of 300-6,000 samples with
+/// 9-300 taps (validation/matlab/README.md#sparse-conv-blocks).
+/// Whether MATLAB's sparse `conv` rounds the product of input `i` and output `k`
+/// before adding it, instead of fusing it into the running sum. `n` is the course
+/// length, `taps` the kernel length (at least 9) and `element_bytes` 8 for real and
+/// 16 for complex courses. Kernels of at most 16 taps are unfused at every product.
+/// Longer kernels are unfused only near block boundaries, and only when the full
+/// output (`n + taps - 1` elements) takes more than 16 KiB: the block holds 8 KiB of
+/// output, doubled until the full output spans at most 8 blocks; the last 16 outputs
+/// before a boundary B leave the products of the last 16 inputs before B unfused,
+/// and outputs from B on leave the products of the 16 inputs from B - (taps - 1)
+/// unfused. Recorded in conv-boundary-reference.json and conv-blocks-reference.json
+/// (`conv_boundary.rs`); found from discovery courses and confirmed on held-out ones.
+fn sparse_product_unfused(i: usize, k: usize, n: usize, taps: usize, element_bytes: usize) -> bool {
+    if taps <= 16 {
+        return true;
+    }
+    let full = n + taps - 1;
+    if full * element_bytes <= 16 * 1024 {
+        return false;
+    }
+    let mut block = 8 * 1024 / element_bytes;
+    while full.div_ceil(block) > 8 {
+        block *= 2;
+    }
+    if k % block >= block - 16 {
+        return i + 16 >= (k / block + 1) * block;
+    }
+    let boundary = k / block * block;
+    // i lies in [boundary - (taps - 1), boundary - (taps - 1) + 16).
+    k >= block && (boundary..boundary + 16).contains(&(i + taps - 1))
+}
+
 fn convolve_prefix(parts: &[&[f64]], kernel: &[f64], lanes: usize, block: usize) -> Vec<Vec<f64>> {
     let n = parts[0].len();
     let swapped = kernel.len() >= n;
@@ -436,9 +467,11 @@ fn convolve_prefix(parts: &[&[f64]], kernel: &[f64], lanes: usize, block: usize)
                         return sum;
                     }
                     if sparse {
+                        let element_bytes = 8 * parts.len();
                         for i in first..=k {
                             if nonzero_at(i) {
-                                sum = signal[i].mul_add(taps[k - i], sum);
+                                let unfused = !swapped && sparse_product_unfused(i, k, length, taps.len(), element_bytes);
+                                sum = if unfused { sum + signal[i] * taps[k - i] } else { signal[i].mul_add(taps[k - i], sum) };
                             }
                         }
                         return sum;
@@ -843,6 +876,25 @@ mod tests {
         order.sort_by_key(|&j| ((k - j) / 24, j % 4, j));
         let expected = order.iter().fold(0.0f64, |s, &j| y[k - j].mul_add(kernel[j], s));
         assert_eq!(out[k].to_bits(), expected.to_bits());
+    }
+
+    #[test]
+    fn sparse_products_are_unfused_only_where_matlab_rounds_them() {
+        let complex = |i, k, n, taps| sparse_product_unfused(i, k, n, taps, 16);
+        let real = |i, k, n, taps| sparse_product_unfused(i, k, n, taps, 8);
+        // Kernels of at most 16 taps: every product, whatever the length.
+        assert!(complex(3, 10, 40, 16) && real(3, 10, 40, 9));
+        // At most 16 KiB of full output (1,024 complex or 2,048 real elements): none.
+        assert!(!complex(497, 500, 992, 33) && complex(497, 500, 993, 33));
+        assert!(!real(1017, 1020, 2016, 33) && real(1017, 1020, 2017, 33));
+        // Before a boundary: the last 16 inputs before it, for the last 16 outputs.
+        assert!(complex(496, 500, 1000, 33) && !complex(495, 500, 1000, 33) && !complex(497, 495, 1000, 33));
+        // From the boundary on: the 16 inputs from B - (taps - 1).
+        assert!(complex(480, 512, 1000, 33) && complex(495, 520, 1000, 33) && !complex(496, 520, 1000, 33) && !complex(479, 512, 1000, 33));
+        // Real courses have 1,024-element blocks: nothing at 512, the same windows at 1,024.
+        assert!(!real(500, 505, 4096, 33) && real(1010, 1015, 4096, 33));
+        // The block doubles until the full output spans at most 8 blocks.
+        assert!(complex(500, 505, 3000, 129) && !complex(500, 505, 4096, 129) && complex(1010, 1015, 4096, 129));
     }
 
     #[test]

@@ -661,11 +661,9 @@ What the probes leave open:
 
 - **conv near 512.** The fingerprints use a ones kernel and the pinned courses'
   nonzero patterns at the probed windows. They show index-order accumulation for
-  those patterns, not for the original weighted inputs, so they do not exclude a
-  summation-order change there. The 111 differing parts in the 10 sparse complex
-  courses longer than 800 samples remain unexplained; a per-product fusion
-  fingerprint (a product whose rounding shows only when it is not fused) is one
-  untested hypothesis.
+  those patterns, not for the original weighted inputs. The 111 differing parts
+  were later explained by which products are fused
+  ([sparse conv blocks](#sparse-conv-blocks-730)).
 - **sin and cos.** No position effect appears at the 768 sampled inputs, 33
   positions and the three call shapes. Other vector-kernel explanations are not
   excluded, and no candidate kernel reproduces the residual
@@ -761,17 +759,96 @@ one rule on every 33-tap course, including the held-out draws and the four
 held-out 33-tap courses: products of the last 16 inputs before a multiple B of 512
 are rounded and then added for outputs B - 16 to B - 1, and products of inputs
 before B - 16 for outputs from B on. The 17- and 65-tap courses reject it (98 and
-159 parts). The gate keeps that rule as a test-only evaluator; production is
-unchanged, because SamSrf's kernels have other lengths at other repetition times.
-What decides the boundary for other kernel lengths is open; a recording with more
-tap counts and more draws per course would test candidates. The 65-tap masks are
-not unique with 8 draws.
+159 parts). The gate keeps that rule as a test-only evaluator. The general rule,
+found and held out in two later recordings, is in
+[sparse conv blocks](#sparse-conv-blocks-730); with it the port equals MATLAB
+on all 750,312 parts of this section.
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-arithmetic-order" packages/samsrf/validation/matlab/arithmetic-order-reference.json
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics2" packages/samsrf/validation/matlab/numerics2-reference.json
 SAMSRF_ARITHMETIC_ORDER_DIR="$TMPDIR/samsrf-arithmetic-order" SAMSRF_MATLAB_NUMERICS2_DIR="$TMPDIR/samsrf-numerics2" \
   cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test arithmetic_order -- --nocapture
+```
+
+## Sparse conv blocks (#730)
+
+Two pre-registered recordings
+([`conv-boundary-predictions.md`](conv-boundary-predictions.md): the rules, the
+designs, the decision criteria and every amendment, each committed before the data
+it depends on was read) support the adopted empirical rule for which products
+MATLAB R2023b's sparse `conv` rounds before adding them. Each recording writes a discovery file and a held-out file;
+the held-out file was opened only after the rule was frozen from discovery.
+
+| Pin | Run | Hosts | Discovery | Held out |
+| --- | --- | --- | --- | --- |
+| `conv-boundary-reference.json` | [43678512524](https://github.com/neurodesk/webapps/actions/runs/43678512524) | AMD EPYC 9V74 (CNR `auto`), Intel Xeon 6975P-C (`AVX512_E1`) | 32 courses: 820-1,530 samples, 9-33 taps, a real and a dense control | 14 courses: 845-4,096 samples, 10-129 taps |
+| `conv-blocks-reference.json` | [43679359744](https://github.com/neurodesk/webapps/actions/runs/43679359744) | Intel Xeon Platinum 8573C, Intel Xeon 6975P-C (both `AVX512_E1`) | 39 courses: 4,096 samples with 65-258 taps, 1,900-2,000 with 129, real 2,010-4,096, and 3-8 taps | 12 courses: 900-6,000 samples, 13-300 taps, 7 complex and 5 real |
+
+Every course has 12 draws of random values on fixed nonzero positions (24% of the
+samples). Each host recorded twice; every repeat was identical, and in each
+recording both hosts recorded identical arrays. GitHub assigned no AMD host to the
+second recording; MATLAB's `conv` is not an MKL call, and its arrays were identical
+on AMD and Intel hosts in every recording that had both (96, 276 arrays).
+
+**The rule** (`matlab_math::sparse_product_unfused`, since 0.6.20261115). For a
+course of n samples with fewer than a quarter nonzero and a kernel of T >= 9 taps,
+products of the sparse sum are fused into the running sum, except:
+
+- for T <= 16, every product is rounded and then added;
+- when the full output (n + T - 1 elements) takes more than 16 KiB, near the
+  boundaries B of blocks that hold 8 KiB of output (512 complex or 1,024 real
+  elements), doubled until the full output spans at most 8 blocks: for the 16
+  outputs before B, the products of the 16 inputs before B; for outputs from B on,
+  the products of the 16 inputs from B - (T - 1).
+
+**How it was found.** The first discovery file decided that boundaries depend on
+the full output, not the course length (995 samples with 33 taps show them, 1,000
+with 17 do not), that they apply at a course end even when B lies past it, and
+that 9-15-tap kernels are unfused everywhere. The rule frozen from it reproduced 13
+of the 14 held-out courses and missed 398 parts of the 4,096-sample, 129-tap
+course, so it was rejected. The second discovery file showed the block growing
+with the course, not the kernel (at 4,096 samples a 1,024-element block fits every
+kernel from 65 to 258 taps), and placed the real threshold strictly above 16 KiB.
+The law frozen from it reproduces every kept part of all 12 held-out courses on
+both hosts. A block law that grows to the largest power of two below a quarter of
+the full output gives the same blocks on every recorded course.
+
+**Identification limits.** The complex threshold is not distinguished among full
+output lengths 1,023–1,026; the implementation starts above 1,024. The recordings
+also do not distinguish the block laws when the full output is exactly eight
+blocks. Discriminating probes would use a 33-tap kernel at those four complex
+lengths, plus complex length 4,096 and real length 8,192, with values that make
+the competing fusion predictions differ. The twelve final held-out courses
+still need an AMD replay: agreement on earlier AMD courses does not supply that
+missing confirmation. These limits do not establish MATLAB's internal algorithm
+or parity on arbitrary inputs.
+
+| Courses (at least 9 taps) | Parts compared | Previous port misses | Now |
+| --- | --- | --- | --- |
+| First recording, discovery (31 sparse) | 756,912 | 30,399 | 0 |
+| First recording, held out (14) | 643,296 | 63,460 | 0 |
+| Second recording, discovery (33) | 2,939,472 | 12,023 | 0 |
+| Second recording, held out (12) | 1,142,400 | 15,552 | 0 |
+| arithmetic-order weighted conv (16) | 750,312 | 4,993 | 0 |
+| numerics and numerics2 sparse complex longer than 800 samples | | 47 and 111 | 0 |
+
+The previous port fused every product. `conv_boundary.rs` also keeps, as negative
+controls, the rule rejected by the first held-out file (398 parts of its 129-tap
+course) and the previous model (the counts above).
+
+**Outside the rule.** Kernels of fewer than 9 taps on long sparse courses (3, 5
+and 8 taps, complex 1,100 and real 2,100 samples) are also unfused at every
+product, but this was recorded only as discovery and reported, as pre-registered;
+the port keeps its path for them and misses 13,851 of their parts. The dense
+complex control (60% nonzero) matches the port's dense path. Kernels as long as the
+course (where MATLAB slides the course over the kernel) are not covered.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-conv-boundary" packages/samsrf/validation/matlab/conv-boundary-reference.json
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-conv-blocks" packages/samsrf/validation/matlab/conv-blocks-reference.json
+SAMSRF_CONV_BOUNDARY_DIR="$TMPDIR/samsrf-conv-boundary" SAMSRF_CONV_BLOCKS_DIR="$TMPDIR/samsrf-conv-blocks" \
+  cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test conv_boundary -- --nocapture
 ```
 
 ## Building a matching Runtime container
@@ -2563,7 +2640,7 @@ results. A model is established only for the inputs below.
 | pRF profile `exp`, `.^`, `log`, `sin`, `cos` | Ported source | fdlibm 5.3 from https://netlib.org/fdlibm/: `e_log.c` 1.3, `k_sin.c` 1.3, `k_cos.c` 1.3, `s_sin.c` 1.3, `s_cos.c` 1.3, `e_rem_pio2.c` 1.4 (SCCS 95/01/18), ported. `libm` 0.2.16 `exp`/`pow` matched `e_exp.c` 1.6/`e_pow.c` 1.5 (SCCS 04/04/22) on every value tested | 35,200 probe values on both hosts |
 | Raw prediction | Empirical | the existing four-lane `mean` | every recorded raw prediction |
 | Negative-base power | Empirical | (-x)^e = (-x)^trunc(e) × exp(f log x)(cos fπ + i sin fπ), integer part by right-to-left binary exponentiation; complex products recover infinities as C99 Annex G (libgcc `__muldc3`) does; i·sqrt(x) for f = 1/2; e < 0 is Smith's reciprocal, a real division when the power is real, and a correctly signed real infinity when it underflowed to zero | all 13,776 probe values with their NaN/Inf masks |
-| `conv` | Empirical | the shorter vector slides over the longer one (a kernel at least as long as the course swaps roles). Kernels of fewer than 9 taps: one ascending accumulator, unfused for courses of at most 16 samples and fused otherwise. Fused multiply-adds; nonzero samples scattered in order when fewer than a quarter are nonzero; otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; the kept (first n) outputs of 288 + 1,308 probe convolutions |
+| `conv` | Empirical | the shorter vector slides over the longer one (a kernel at least as long as the course swaps roles). Kernels of fewer than 9 taps: one ascending accumulator, unfused for courses of at most 16 samples and fused otherwise. When fewer than a quarter of the samples are nonzero (kernels of 9 taps or more), they are scattered in order, with each product fused or rounded and then added by the [block rule](#sparse-conv-blocks-730); otherwise fused multiply-adds over otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; the kept (first n) outputs of 294 + 1,318 probe convolutions; 105 pre-registered sparse courses (`conv_boundary.rs`) |
 | `gampdf`, `a ≥ 1` | Empirical | Loader's saddle point as MATLAB evaluates it: `exp((-(log(2π) + log(k))/2 - stirlerr(k)) - bd0(k, x/b)) / b` with `k = a - 1` (the two logarithms separately since 0.6.20261114, [fitted-HRF kernels](#fitted-hrf-kernels-730)); `stirlerr` from a table at half-integers up to 15, Cody's `gammaln` elsewhere below 15 and the Stirling series above; `bd0` by its series near the mode, `x log(x/np) + np - x` away from it; `exp(-x/b)/b` for `a = 1` | 9,760 probe densities per host; out of sample, all six TRs' HRF kernels of the first recording and the pipeline's recorded kernel |
 | `corr` | Empirical | real `x'*y` by MATLAB's pair tree below 51 elements and MKL 2021.3 `ddot` from 51, complex by `zdotc`, norms by `dnrm2`/`dznrm2` (reference-BLAS scaled sums), `dot/‖x‖/‖y‖`, then values beyond 1 in magnitude divided by their magnitude | every recorded objective; AMD probe kernels |
 
@@ -2585,8 +2662,9 @@ process with `MKL_CBWR=AUTO`. `matlab_numerics.rs` checks:
 - every negative-base power, including its NaN and infinite parts. The sign of
   a zero part differs in 2,440 of 27,552 parts; no rule tried (product order,
   FMA, true sign) reproduces MATLAB's zero signs;
-- every output SamSrf keeps (the first n) for all 288 convolutions of 1-129-tap
-  kernels, dense and sparse, except the 6 sparse complex courses of 1,000 samples;
+- every output SamSrf keeps (the first n) for all 294 convolutions of 1-129-tap
+  kernels, dense and sparse (the 6 sparse complex courses of 1,000 samples since
+  the [sparse conv block rule](#sparse-conv-blocks-730));
 - the HRF kernels (gamma densities, SPM canonical, de Haas) at six TRs, both hosts;
 - MKL dot products and norms on the AMD host;
 - the reproducibility results below, real and imaginary arrays.
@@ -2605,10 +2683,10 @@ and of sparse courses of 300-2,000 samples.
   `gampdf`. The 1,220 densities with shape below 1 are declined: there MATLAB's
   formula is not reproduced, and the port keeps the closed form. No HRF uses
   such a shape;
-- the kept outputs of every convolution (1,308) except 95 outputs in the 10
-  sparse complex courses longer than 800 samples, which differ by one ULP near multiples of 512 samples. That
-  path is not established; `matlab_numerics.rs` excludes complex sparse courses of
-  1,000 samples or more for the same reason. `candidate_exclusions.rs`
+- the kept outputs of every convolution (1,318), including the 10 sparse complex
+  courses longer than 800 samples, whose 95 outputs differed by one ULP near
+  multiples of 512 before the [sparse conv block rule](#sparse-conv-blocks-730).
+  `candidate_exclusions.rs`
   (`sparse_complex_conv_residual_lies_near_multiples_of_512`) localises them on
   the AMD host. With k the 0-based index into `conv(y, kernel)` (MATLAB's
   k + 1) and only the first numel(y) outputs compared, every one of the 95 lies
@@ -2753,9 +2831,7 @@ What remains:
   stays in the gate for any coefficient that differs; it compares exact errors
   at a first-order scale and does not bound them. Other inputs, and MATLAB's
   AVX-512 host, are not covered.
-- `gampdf` with shape below 1, the zero signs, and sparse complex convolutions
-  longer than 800 samples (a 33-tap rule is identified but not general; see
-  [arithmetic order](#arithmetic-order-729-730)).
+- `gampdf` with shape below 1 and the zero signs.
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-numerics" packages/samsrf/validation/matlab/numerics-reference.json

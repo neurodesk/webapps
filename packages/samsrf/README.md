@@ -470,7 +470,14 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   ([fitted-HRF kernels](validation/matlab/README.md#fitted-hrf-kernels-730)). It uses ported fdlibm `log`, `sin` and
   `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
   response, its `conv` and the MKL dot products and norms inside `corr` are
-  empirical models, checked on recorded inputs. MATLAB's real `x'*y` adds
+  empirical models, checked on recorded inputs. For a sparse prediction (fewer
+  than a quarter of its samples nonzero) and an HRF of 9 taps or more, MATLAB's
+  `conv` rounds some products before adding them: every product for kernels of
+  at most 16 taps, and products near 8 KiB block boundaries when the convolution
+  is longer than 16 KiB. The port does the same since 0.6.20261115, found and held
+  out in two pre-registered recordings
+  ([sparse conv blocks](validation/matlab/README.md#sparse-conv-blocks-730)); before,
+  it fused every product. MATLAB's real `x'*y` adds
   adjacent products in pairs below 51 elements and calls MKL's `ddot` from 51;
   the port does the same (since 0.6.20261114; before, it used MKL's kernel at
   every length, so CSS correlations over fewer than 51 volumes could differ in

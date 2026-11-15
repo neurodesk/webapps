@@ -81,16 +81,16 @@ fn gampdf_matches_every_recorded_value_with_shape_at_least_one() {
 }
 
 /// Every output of conv for 9-65-sample courses with 2-33-tap kernels, real and
-/// complex, and sparse courses of 300-2000 samples. Sparse complex courses longer
-/// than 800 samples are outside the model: MATLAB orders a few outputs near
-/// multiples of 512 differently. Their count is part of the evidence.
+/// complex, and sparse courses of 300-2000 samples, the 10 sparse complex courses
+/// longer than 800 samples included (95 outputs differed before the sparse
+/// boundary rule of `conv_boundary.rs`).
 #[test]
 fn short_and_sparse_convolutions_match_matlab() {
-    const EXPECTED: (usize, usize, usize) = (1_308, 10, 95);
+    const EXPECTED: (usize, usize) = (1_308, 10);
     let Some((root, amd, intel)) = hosts() else { return };
     for host in [&amd, &intel] {
         let (dir, cases) = cases(&root, host);
-        let (mut checked, mut outside, mut outside_differing) = (0, 0, 0);
+        let (mut checked, mut long_sparse_complex) = (0, 0);
         for (id, case) in cases.iter().filter(|(_, case)| case["kind"] == "conv") {
             let y = complex(&dir, &case["y"]);
             let kernel = real(&dir, &case["kernel"]);
@@ -103,15 +103,14 @@ fn short_and_sparse_convolutions_match_matlab() {
             };
             let differing = (0..y.len()).filter(|&k| !(same(actual[k].re, expected[k].re) && same(actual[k].im, expected[k].im))).count();
             let sparse = 4 * y.iter().filter(|v| v.re != 0.0 || v.im != 0.0).count() < y.len();
-            if case["isreal"] == false && sparse && y.len() > 800 {
-                outside += 1;
-                outside_differing += differing;
-                continue;
-            }
             assert_eq!(differing, 0, "{host} {id}");
-            checked += 1;
+            if case["isreal"] == false && sparse && y.len() > 800 {
+                long_sparse_complex += 1;
+            } else {
+                checked += 1;
+            }
         }
-        eprintln!("{host}: {checked} convolutions exact; {outside} outside the model with {outside_differing} differing outputs");
-        assert_eq!((checked, outside, outside_differing), EXPECTED, "{host}");
+        eprintln!("{host}: {checked} convolutions and {long_sparse_complex} long sparse complex ones exact");
+        assert_eq!((checked, long_sparse_complex), EXPECTED, "{host}");
     }
 }

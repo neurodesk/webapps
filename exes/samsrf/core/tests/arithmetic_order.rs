@@ -576,13 +576,13 @@ fn tile_rule(values: &[f64], nonzero: &[usize], kernel: &[f64], k: usize) -> f64
     sum
 }
 
-/// The port's sparse path against every kept output of every draw: the counts of
-/// differing parts are frozen, all within 16 below to 14 above a multiple of 512
-/// or within 16 of a course end at a multiple of 512. The 33-tap rule fits every
-/// 33-tap course (identification, held-out draws and held-out courses) and fails
-/// on the 17- and 65-tap courses, so it is not adopted. Both hosts are identical.
+/// The port's sparse path against every kept output of every draw: equal to
+/// MATLAB's on every course since the sparse boundary rule (`conv_boundary.rs`);
+/// the previous fused model missed 4,993 parts here. The 33-tap rule this recording
+/// first suggested fits every 33-tap course and fails on the 17- and 65-tap courses
+/// (the reason it was not adopted). Both hosts are identical.
 #[test]
-fn weighted_conv_residual_is_documented() {
+fn weighted_conv_matches_matlab() {
     let Some(recordings) = fixture() else { return };
     let mut by_host = Vec::new();
     for Recording {
@@ -619,7 +619,7 @@ fn weighted_conv_residual_is_documented() {
                     "{id}"
                 );
             }
-            let (mut port, mut rule, mut outside) = (0, 0, Vec::new());
+            let (mut port, mut rule) = (0, 0);
             for (values, outputs) in c.values.iter().zip(&c.outputs) {
                 let mut course = vec![Complex64::new(0.0, 0.0); c.n];
                 for (&i, &v) in c.nonzero.iter().zip(values) {
@@ -632,23 +632,13 @@ fn weighted_conv_residual_is_documented() {
                         (ours[k].re, outputs[k].re, &re),
                         (ours[k].im, outputs[k].im, &im),
                     ] {
-                        if !same(ours, theirs) {
-                            port += 1;
-                            let near = (k + 16 >= 512 && (k + 16) % 512 <= 30)
-                                || (c.n.is_multiple_of(512) && k + 16 >= c.n);
-                            if !near {
-                                outside.push(k);
-                            }
-                        }
+                        port += usize::from(!same(ours, theirs));
                         rule +=
                             usize::from(!same(tile_rule(values, &c.nonzero, &c.kernel, k), theirs));
                     }
                 }
             }
-            assert!(
-                outside.is_empty(),
-                "{host} {id}: differences away from 512 at {outside:?}"
-            );
+            assert_eq!(port, 0, "{host} {id}");
             assert!(c.taps == 33 || rule > 0, "{host} {id}");
             if c.taps == 33 {
                 assert_eq!(rule, 0, "{host} {id}: the 33-tap rule misses {rule}");
@@ -658,7 +648,7 @@ fn weighted_conv_residual_is_documented() {
         }
         let (port, rule): (usize, usize) = (port_parts.values().sum(), rule_parts.values().sum());
         println!("{host} ({cpu}): the port differs on {port} parts, the 33-tap rule on {rule} ({rule_parts:?})");
-        assert_eq!((port, rule), (4993, 257), "{host}");
+        assert_eq!((port, rule), (0, 257), "{host}");
         by_host.push((port_parts, rule_parts));
     }
     assert!(by_host.windows(2).all(|w| w[0] == w[1]), "the hosts differ");
