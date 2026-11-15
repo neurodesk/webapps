@@ -7,8 +7,8 @@ site:
   hub:
     host: webapps.sciget.org
     title: SciGet Webapps
-    heading: Run Scientific Imaging Tools in Your Browser
-    description: Imaging tools that run locally in your browser, grouped by field.
+    heading: Run Scientific Software in Your Browser
+    description: Scientific software that runs locally in your browser, grouped by field.
     brand:
       name: SciGet
       logo: sciget-logo.svg

@@ -52,7 +52,7 @@ export function renderHubPage(registry) {
   </header>
 
   <main>
-    <section class="hero" aria-labelledby="page-title">
+    <section class="hero hero--hub" aria-labelledby="page-title">
       <div class="hero__copy">
         <p class="eyebrow">${escape(hub.title)}</p>
         <h1 id="page-title">${escape(hub.heading)}</h1>
@@ -60,7 +60,7 @@ export function renderHubPage(registry) {
       </div>
     </section>
 
-    <div class="catalog" aria-label="Catalogues">
+    <div class="catalog catalog--hub" aria-label="Catalogues">
       <section class="category-section" aria-labelledby="heading-catalogues">
         <header class="category-section__header">
           <div>
@@ -75,7 +75,7 @@ export function renderHubPage(registry) {
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p><strong>${escape(hub.title)}</strong><span>Open, local-first imaging tools that run in your browser.</span></p>
+      <p><strong>${escape(hub.title)}</strong><span>Open, local-first scientific software that runs in your browser.</span></p>
       <nav aria-label="Footer navigation">
         <a href="https://lightniing.org/">lightNIIng</a>
         <a href="https://github.com/neurodesk/webapps">View source</a>
