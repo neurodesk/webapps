@@ -504,6 +504,8 @@ jobs:
         env:
           NEURODESK_E2E_PREBUILT: '1'
           NEURODESK_E2E_SHARD: ${{ matrix.shard }}
+          # An app reached only through shared code leaves its @heavy tests to the nightly run.
+          NEURODESK_E2E_SKIP_HEAVY: ${{ !matrix.heavy_tests && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}
         run: pnpm --filter ${{ matrix.app }} test:e2e
       # A failed test's error-context.md holds the page's accessibility snapshot, so
       # the status text behind a wrong example state or empty file info survives the run.
@@ -595,6 +597,7 @@ jobs:
       - name: Test ${{ matrix.app }} on the hardware GPU
         env:
           NEURODESK_E2E_PREBUILT: '1'
+          NEURODESK_E2E_SKIP_HEAVY: ${{ !matrix.heavy_tests && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}
         run: pnpm --filter ${{ matrix.app }} test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()

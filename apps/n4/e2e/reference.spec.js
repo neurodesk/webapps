@@ -37,7 +37,7 @@ async function correctInApp(page, example, maskPath) {
   return { report: snapshot.report, outputs, seconds: Math.round((performance.now() - started) / 1000) };
 }
 
-test("every pinned example in the web app matches the browser reference", async ({ page, browser }) => {
+test("every pinned example in the web app matches the browser reference", { tag: '@heavy' }, async ({ page, browser }) => {
   test.skip(mode !== "check" && mode !== "write", "set N4_BROWSER_REFERENCE=check or write");
   test.setTimeout(20 * 60_000);
   const examples = await pinnedExamples();

@@ -182,6 +182,26 @@ someone removes it, and every later push then gets the full plan again, so
 remove it once the head you will merge has passed. A failure to read the runs
 or labels keeps the full plan.
 
+## Heavy browser tests
+
+In a whole-catalogue run on 15 November 2026 the CPU browser jobs spent 359
+minutes in tests, and 22 tests over 4 minutes spent 211 of them: SDC's SyN run
+36, GlioMODA's mirrored run 21, FireANTs' SyN reference 16, the
+white-matter-lesions five-fold ensemble 14, both BISON examples 25, four
+SynthSeg fixture runs 33. Most are their app's reference parity check.
+
+Tests over 5 minutes are tagged `@heavy` (14 tests, 177 of those minutes). On
+pull requests and pushes to main they run only for an app the change edits:
+its `apps/`, `packages/` or `exes/` directory or its model manifest, release
+bookkeeping aside, or an app a failed run on main left untested. An app a
+change reaches only through shared code, such as a `packages/runtime-support`
+edit or a `ci.yml` change, leaves them to the nightly run, so a shared change
+that breaks only such a path is found the next night rather than before merge.
+The planner marks each browser matrix entry with `heavy_tests`, and the jobs
+set `NEURODESK_E2E_SKIP_HEAVY`, which `e2eTier` turns into a `grepInvert`.
+Dispatched, nightly and release runs include every test. To run them before
+merging a shared change, dispatch `ci` on the branch.
+
 ## Module-level selection in the component package
 
 Every app depends on `packages/components`, so a change anywhere in it used

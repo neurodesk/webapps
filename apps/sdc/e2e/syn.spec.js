@@ -138,7 +138,7 @@ test("a SyN-SDC run after a failed prior download can run again and be cancelled
   await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
 });
 
-test("SyN-SDC on the example writes the Node pipeline's outputs", async ({ page }) => {
+test("SyN-SDC on the example writes the Node pipeline's outputs", { tag: '@heavy' }, async ({ page }) => {
   test.skip(!process.env.SDC_EXAMPLE_DIR, "set SDC_EXAMPLE_DIR (node scripts/e2e-test-data.mjs sdc --cpu)");
   test.setTimeout(4 * HOUR);
   await routeExample(page.context(), exampleUrls);

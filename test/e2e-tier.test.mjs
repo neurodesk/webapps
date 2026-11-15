@@ -14,11 +14,11 @@ async function* specFiles(dir) {
   }
 }
 
-test('every app with @slow tests applies the pull request tier in its Playwright config', async () => {
+test('every app with @slow or @heavy tests applies the pull request tier in its Playwright config', async () => {
   for (const app of await readdir(join(repoRoot, 'apps'))) {
     let tagged = false;
     for await (const file of specFiles(join(repoRoot, 'apps', app))) {
-      if ((await readFile(file, 'utf8')).includes("'@slow'")) tagged = true;
+      if (/'@(?:slow|heavy)'/.test(await readFile(file, 'utf8'))) tagged = true;
     }
     if (!tagged) continue;
     const configs = (await readdir(join(repoRoot, 'apps', app))).filter((name) => /^playwright\.config\./.test(name));
@@ -41,9 +41,11 @@ test('ci skips @slow repeats on pull requests and pushes and logs every test dur
 
 test('the CI environment selects the slow-test filter and the Playwright shard', async () => {
   const { execFileSync } = await import('node:child_process');
-  const tier = (env) => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', "const { e2eTier } = await import('./test-utils/e2e-tier.mjs'); console.log(JSON.stringify({ ...e2eTier, grepInvert: e2eTier.grepInvert?.source }))"], { cwd: repoRoot, env: { ...process.env, NEURODESK_E2E_SKIP_SLOW: '', NEURODESK_E2E_SHARD: '', ...env }, encoding: 'utf8' }));
+  const tier = (env) => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', "const { e2eTier } = await import('./test-utils/e2e-tier.mjs'); console.log(JSON.stringify({ ...e2eTier, grepInvert: e2eTier.grepInvert?.source }))"], { cwd: repoRoot, env: { ...process.env, NEURODESK_E2E_SKIP_SLOW: '', NEURODESK_E2E_SKIP_HEAVY: '', NEURODESK_E2E_SHARD: '', ...env }, encoding: 'utf8' }));
   assert.deepEqual(tier({}), {});
   assert.deepEqual(tier({ NEURODESK_E2E_SKIP_SLOW: '1', NEURODESK_E2E_SHARD: '2/3' }), { grepInvert: '@slow', shard: { current: 2, total: 3 } });
+  assert.deepEqual(tier({ NEURODESK_E2E_SKIP_HEAVY: '1' }), { grepInvert: '@heavy' });
+  assert.deepEqual(tier({ NEURODESK_E2E_SKIP_SLOW: '1', NEURODESK_E2E_SKIP_HEAVY: '1' }), { grepInvert: '@slow|@heavy' });
 });
 
 test('browser-e2e passes each job its shard and skips the examples smoke rebuild', async () => {
@@ -110,3 +112,14 @@ for (const app of ['brain2print', 'white-matter-lesions', 'lcmodel', 'synthseg']
     assert.deepEqual(pullRequest.suites, full.suites);
   });
 }
+
+test('an app reached only through shared code leaves its @heavy tests to the nightly run', async () => {
+  const ci = YAML.parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
+  const flag = "${{ !matrix.heavy_tests && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}";
+  for (const job of ['browser-e2e', 'browser-e2e-gpu']) {
+    const step = ci.jobs[job].steps.find((entry) => entry.run === 'pnpm --filter ${{ matrix.app }} test:e2e');
+    assert.equal(step.env.NEURODESK_E2E_SKIP_HEAVY, flag, job);
+  }
+  const release = await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8');
+  assert.doesNotMatch(release, /NEURODESK_E2E_SKIP_HEAVY/, 'releases run every test');
+});

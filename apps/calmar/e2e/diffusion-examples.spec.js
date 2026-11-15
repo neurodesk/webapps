@@ -5,7 +5,7 @@ const examples = JSON.parse(await readFile(new URL('../examples.json', import.me
 for (const id of ['stroke-dwi-adc-soop', 'stroke-dwi-adc-isles2022']) {
   const example = examples.find(item => item.id === id);
   // SOOP is the untagged completed DWI+ADC path with this model, options and 3D geometry.
-  test(`${example.label} produces a downloadable native lesion candidate`, { tag: id === 'stroke-dwi-adc-isles2022' ? '@slow' : [] }, async ({ page }) => {
+  test(`${example.label} produces a downloadable native lesion candidate`, { tag: id === 'stroke-dwi-adc-isles2022' ? '@slow' : '@heavy' }, async ({ page }) => {
     // SEALS uses CPU inference; hosted runners can be much slower than a workstation.
     test.setTimeout(1800000);
     await page.goto('/');

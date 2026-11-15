@@ -61,7 +61,7 @@ async function runExample(page, example, status) {
   await expect(page.locator("#statusText")).toHaveText(status, { timeout: RUN_TIMEOUT - 600000 });
 }
 
-test("the T1 example segments into 8 classes on the T1 grid, and a second run cancels", async ({ page }) => {
+test("the T1 example segments into 8 classes on the T1 grid, and a second run cancels", { tag: '@heavy' }, async ({ page }) => {
   test.setTimeout(RUN_TIMEOUT);
   await runExample(page, examples[0], "Segmentation complete · 8 classes");
   await expect(page.locator("#classLegend .nd-legend-item")).toHaveCount(8);
@@ -76,7 +76,7 @@ test("the T1 example segments into 8 classes on the T1 grid, and a second run ca
   await expect(page.locator("#resultList .nd-download-btn")).toHaveCount(1);
 });
 
-test("the T1 + FLAIR example segments into 9 classes, with white matter hyperintensities", async ({ page }) => {
+test("the T1 + FLAIR example segments into 9 classes, with white matter hyperintensities", { tag: '@heavy' }, async ({ page }) => {
   test.setTimeout(RUN_TIMEOUT);
   await runExample(page, examples[1], "Segmentation complete · 9 classes with WMH");
   await expect(page.locator("#classLegend .nd-legend-item")).toHaveCount(9);
