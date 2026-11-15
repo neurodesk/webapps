@@ -18,20 +18,24 @@ const run = {
 const macJob = { id: 11, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] };
 const linuxJob = { id: 12, name: 'portable / linux-x64', conclusion: 'failure', labels: ['ubuntu-latest'] };
 
-function fakeClient({ jobs = [macJob, linuxJob], logs = { 11: AGREEMENT, 12: AGREEMENT }, issues = [], comments = [] } = {}) {
+function fakeClient({ jobs = [macJob, linuxJob], logs = { 11: AGREEMENT, 12: AGREEMENT }, truncated = false, issues = [], issuesAfter, comments = [] } = {}) {
   const calls = [];
+  let listed = 0;
   return {
     calls,
     async list(path) {
       calls.push({ path });
       if (path.includes('/jobs')) return jobs;
-      if (path.startsWith('/issues?')) return issues.map(issue => ({ user: { login: 'github-actions[bot]' }, ...issue }));
+      if (path.startsWith('/issues?')) return (listed++ && issuesAfter ? issuesAfter : issues).map(issue => ({ user: { login: 'github-actions[bot]' }, ...issue }));
       if (path.endsWith('/comments')) return comments.map(comment => ({ user: { login: 'github-actions[bot]' }, ...comment }));
       throw new Error(`Unexpected list ${path}`);
     },
     async request(path, options = {}) {
       calls.push({ path, ...options });
-      if (options.logs) return { text: logs[path.match(/jobs\/(\d+)/)[1]], truncated: false };
+      if (options.logs) {
+        assert.equal(options.logLimit, 64 * 1024 * 1024, 'reads far enough for a whole macOS release log');
+        return { text: logs[path.match(/jobs\/(\d+)/)[1]], truncated };
+      }
       return { number: 9 };
     },
   };
@@ -54,7 +58,8 @@ test('the alert watches every workflow that notarizes, from a trusted checkout',
   assert.deepEqual(workflow.on.workflow_run.workflows, NOTARIZING_WORKFLOWS);
   assert.deepEqual(workflow.on.workflow_run.types, ['completed']);
   assert.equal(workflow.on.workflow_run.branches, undefined, 'release dispatches run on tags');
-  assert.match(workflow.jobs.alert.if, /conclusion == 'failure'/);
+  assert.match(workflow.jobs.alert.if, /conclusion == 'failure' \|\| github\.event\.workflow_run\.conclusion == 'timed_out'/);
+  assert.equal(workflow.concurrency, undefined, 'a concurrency group drops pending alerts');
   assert.match(workflow.jobs.alert.if, /event != 'pull_request'/);
   assert.equal(workflow.jobs.alert.steps[0].with.ref, '${{ github.event.repository.default_branch }}');
   assert.equal(workflow.jobs.alert.steps[0].with['persist-credentials'], false);
@@ -87,15 +92,24 @@ test('a refused notarization opens an issue assigned to the owner, reading only 
 test('later failures comment on the open issue, reopen a closed one and never repeat an attempt', async () => {
   const open = fakeClient({ issues: [{ number: 5, state: 'open', body: `${ALERT_MARKER}\nold` }] });
   assert.deepEqual(await alert(open, { run_attempt: 2 }), { issue: 5, updated: true });
-  assert.deepEqual(writes(open).map(call => [call.path, call.method]), [['/issues/5/comments', 'POST']]);
-  assert.ok(writes(open)[0].body.body.startsWith('<!-- notarization-run:43435308021:attempt:2 -->'));
+  assert.deepEqual(writes(open).map(call => [call.path, call.method, call.body.assignees]), [['/issues/5/assignees', 'POST', [NOTARIZATION_OWNER]], ['/issues/5/comments', 'POST', undefined]]);
+  assert.ok(writes(open)[1].body.body.startsWith('<!-- notarization-run:43435308021:attempt:2 -->'));
 
   const closed = fakeClient({ issues: [{ number: 5, state: 'closed', body: `${ALERT_MARKER}\nold` }] });
   await alert(closed);
   assert.deepEqual(writes(closed).map(call => [call.path, call.method, call.body.state, call.body.assignees]), [
-    ['/issues/5', 'PATCH', 'open', [NOTARIZATION_OWNER]],
+    ['/issues/5', 'PATCH', 'open', undefined],
+    ['/issues/5/assignees', 'POST', undefined, [NOTARIZATION_OWNER]],
     ['/issues/5/comments', 'POST', undefined, undefined],
   ]);
+
+  // Two failures that finish together both open an issue; the newer one merges into the older.
+  const raced = fakeClient({ issuesAfter: [{ number: 9, state: 'open', body: `${ALERT_MARKER}\nmine` }, { number: 8, state: 'open', body: `${ALERT_MARKER}\ntheirs` }] });
+  assert.deepEqual(await alert(raced), { issue: 8, updated: true });
+  assert.deepEqual(writes(raced).map(call => [call.path, call.method, call.body.state]), [
+    ['/issues', 'POST', undefined], ['/issues/8/comments', 'POST', undefined], ['/issues/9/comments', 'POST', undefined], ['/issues/9', 'PATCH', 'closed'],
+  ]);
+  assert.match(writes(raced)[1].body.body, /^<!-- notarization-run:43435308021:attempt:1 -->/);
 
   const repeated = fakeClient({ issues: [{ number: 5, state: 'open', body: `${ALERT_MARKER}\nold` }], comments: [{ body: '<!-- notarization-run:43435308021:attempt:1 -->\nseen' }] });
   assert.deepEqual(await alert(repeated), { issue: 5, duplicate: true });
@@ -103,6 +117,14 @@ test('later failures comment on the open issue, reopen a closed one and never re
 
   const other = fakeClient({ issues: [{ number: 6, state: 'open', body: '<!-- nightly-workflow:1 -->\nother' }] });
   assert.deepEqual(await alert(other), { issue: 9, created: true });
+});
+
+test('a timed-out notarization is a failure too, and a log longer than the alert reads is reported', async () => {
+  const hung = fakeClient({ jobs: [{ ...macJob, conclusion: 'timed_out' }] });
+  assert.deepEqual(await alert(hung, { conclusion: 'timed_out' }), { issue: 9, created: true });
+  const long = fakeClient({ logs: { 11: 'build output' }, truncated: true });
+  assert.deepEqual(await alert(long), { skipped: 'No notarization failure in the part of the logs read', incomplete: ['portable / release'] });
+  assert.deepEqual(writes(long), []);
 });
 
 test('other failures, pull requests and unrelated workflows raise nothing', async () => {

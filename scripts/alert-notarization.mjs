@@ -9,6 +9,7 @@ try {
   const client = createGitHubClient({ token, repository });
   const event = JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH, 'utf8'));
   const result = await alertNotarization({ run: event.workflow_run, repository, client });
+  if (result.incomplete) console.log(`::warning title=Notarization alert::Logs of ${result.incomplete.join(', ')} were longer than the alert reads; check them for a notarization failure.`);
   const summary = `Notarization alert: ${JSON.stringify(result)}\n`;
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary);

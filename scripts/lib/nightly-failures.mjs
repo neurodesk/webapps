@@ -106,7 +106,7 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch, sleep
       }
     }
   }
-  async function send(path, { method = 'GET', body, logs = false }) {
+  async function send(path, { method = 'GET', body, logs = false, logLimit = LOG_LIMIT }) {
     let response = await fetchImpl(`${base}${path}`, {
       method,
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
@@ -133,10 +133,10 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch, sleep
       while (true) {
         const chunk = await reader.read();
         if (chunk.done) break;
-        const remaining = LOG_LIMIT - size;
+        const remaining = logLimit - size;
         text += decoder.decode(chunk.value.subarray(0, remaining), { stream: true });
         size += chunk.value.length;
-        if (size >= LOG_LIMIT) {
+        if (size >= logLimit) {
           truncated = true;
           await reader.cancel();
           break;

@@ -49,7 +49,8 @@ export const NOTARIZATION_OWNER = 'stebo85';
 export const ALERT_MARKER = '<!-- apple-notarization-alert -->';
 
 // What notarytool and @electron/notarize print when Apple refuses: an expired agreement or bad credentials
-// (HTTP 401/403 from the notary service) or a rejected submission.
+// (HTTP 401/403 from the notary service) or a rejected submission. A Developer ID certificate or keychain
+// failure before notarization is not one of these.
 const SIGNATURES = [
   /required agreement is missing or has expired/i,
   /Failed to notarize via notarytool/,
@@ -74,20 +75,31 @@ function text(value, limit = 500) {
   return sanitize(value, limit).replace(/[\r\n]/g, ' ').replace(/[\\`*_{}[\]()!|#]/g, '\\$&');
 }
 
+// A notarization error is printed near the end of a job's log, after the
+// whole build: read far enough for the largest macOS release logs.
+const LOG_LIMIT = 64 * 1024 * 1024;
+const FAILED = new Set(['failure', 'timed_out']);
+
 export async function alertNotarization({ run, repository, client, owner = NOTARIZATION_OWNER }) {
-  if (run.status !== 'completed' || run.conclusion !== 'failure') return { skipped: 'Run did not fail' };
+  if (run.status !== 'completed' || !FAILED.has(run.conclusion)) return { skipped: 'Run did not fail' };
   if (run.event === 'pull_request' || !NOTARIZING_WORKFLOWS.includes(run.name)) return { skipped: 'Run does not notarize' };
   const runId = numeric(run.id);
   const attempt = numeric(run.run_attempt ?? 1);
   const jobs = await client.list(`/actions/runs/${runId}/attempts/${attempt}/jobs`, 'jobs');
-  const candidates = jobs.filter(job => job.conclusion === 'failure' && (job.labels ?? []).some(label => /macos/i.test(label)));
+  const candidates = jobs.filter(job => FAILED.has(job.conclusion) && (job.labels ?? []).some(label => /macos/i.test(label)));
   const failures = [];
+  const incomplete = [];
   for (const job of candidates) {
-    const logs = await client.request(`/actions/jobs/${numeric(job.id)}/logs`, { logs: true });
+    const logs = await client.request(`/actions/jobs/${numeric(job.id)}/logs`, { logs: true, logLimit: LOG_LIMIT });
     const detail = notaryFailure(logs.text);
     if (detail) failures.push({ job, detail });
+    else if (logs.truncated) incomplete.push(job.name);
   }
-  if (!failures.length) return { skipped: 'No notarization failure in the failed macOS jobs' };
+  if (!failures.length) {
+    return incomplete.length
+      ? { skipped: 'No notarization failure in the part of the logs read', incomplete }
+      : { skipped: 'No notarization failure in the failed macOS jobs' };
+  }
   const attemptMarker = `<!-- notarization-run:${runId}:attempt:${attempt} -->`;
   const runUrl = `https://github.com/${repository}/actions/runs/${runId}/attempts/${attempt}`;
   const report = [attemptMarker,
@@ -96,20 +108,28 @@ export async function alertNotarization({ run, repository, client, owner = NOTAR
     'An expired agreement (HTTP 403) is renewed by the Account Holder at https://developer.apple.com/account; check the Apple ID and app-specific password secrets for HTTP 401.',
     `After fixing it, rerun the failed jobs: \`gh run rerun ${runId} --failed --repo ${repository}\`. Release dispatches publish when their release job passes.`,
   ].join('\n');
-  const issues = await client.list('/issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=desc');
-  const issue = issues.find(issue => !issue.pull_request && issue.user?.login === 'github-actions[bot]' && issue.body?.startsWith(ALERT_MARKER));
+  const alerts = async () => (await client.list('/issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=desc'))
+    .filter(issue => !issue.pull_request && issue.user?.login === 'github-actions[bot]' && issue.body?.startsWith(ALERT_MARKER));
+  const issue = (await alerts())[0];
   if (!issue) {
     const created = await client.request('/issues', { method: 'POST', body: {
       title: 'Apple notarization is failing', body: `${ALERT_MARKER}\n${report}`, assignees: [owner],
     } });
-    return { issue: created.number, created: true };
+    // Failures that finish together each find no issue; the oldest open one keeps the reports.
+    const older = (await alerts()).filter(other => other.state === 'open' && other.number < created.number).sort((a, b) => a.number - b.number)[0];
+    if (!older) return { issue: created.number, created: true };
+    await client.request(`/issues/${numeric(older.number)}/comments`, { method: 'POST', body: { body: report } });
+    await client.request(`/issues/${numeric(created.number)}/comments`, { method: 'POST', body: { body: `Duplicate of #${numeric(older.number)}, which has this report.` } });
+    await client.request(`/issues/${numeric(created.number)}`, { method: 'PATCH', body: { state: 'closed', state_reason: 'duplicate' } });
+    return { issue: older.number, updated: true };
   }
   const number = numeric(issue.number);
   const comments = issue.body.includes(attemptMarker) ? [] : await client.list(`/issues/${number}/comments`);
   if (issue.body.includes(attemptMarker) || comments.some(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(attemptMarker))) {
     return { issue: issue.number, duplicate: true };
   }
-  if (issue.state === 'closed') await client.request(`/issues/${number}`, { method: 'PATCH', body: { state: 'open', assignees: [owner] } });
+  if (issue.state === 'closed') await client.request(`/issues/${number}`, { method: 'PATCH', body: { state: 'open' } });
+  await client.request(`/issues/${number}/assignees`, { method: 'POST', body: { assignees: [owner] } });
   await client.request(`/issues/${number}/comments`, { method: 'POST', body: { body: report } });
   return { issue: issue.number, updated: true };
 }

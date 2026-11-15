@@ -50,14 +50,13 @@ permissions:
   actions: read
   issues: write
 
-concurrency:
-  group: apple-notarization-alert
-  cancel-in-progress: false
-
+# No concurrency group: GitHub keeps one pending run per group and drops the
+# rest, which would lose alerts when many releases fail together. Runs that
+# race to open the issue merge into the oldest one.
 jobs:
   alert:
     # Pull request runs never notarize. Release dispatches run on tags, so there is no branch filter.
-    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository
+    if: (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out') && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
