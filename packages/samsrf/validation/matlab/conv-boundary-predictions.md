@@ -205,3 +205,42 @@ Decision: production adopts the rule, for complex and, separately, for real
 courses, only if the law frozen from discovery reproduces every kept part of every
 held-out course of that kind on the reference host, and every pin and gate stays as
 it is. A kind that fails stays unchanged. No third recording is made this round.
+
+## Amendment after the discovery file of run 43679359744 (its held-out file not opened)
+
+Run [43679359744](https://github.com/neurodesk/webapps/actions/runs/43679359744)
+(recorder commit `2dd31721705e126c03f57a16e795427b881232f7`) recorded on two Intel
+hosts: a Xeon Platinum 8573C (`ubuntu-22.04`) and a Xeon 6975P-C (`ubuntu-24.04`),
+both `AVX512_E1`. GitHub assigned no AMD host. Each host's repeat was identical.
+Only `conv-blocks-discovery.json` has been read.
+
+- **Block law: L4 and L4+ are rejected.** At 4,096 samples a period of 1,024
+  complex elements fits every tap count from 65 to 258; at 1,900-2,000 samples
+  the 129-tap courses fit 512. The block length follows the course, not the
+  kernel (L-x).
+- **The frozen law, L-blocks.** With s the element size (16 bytes complex, 8
+  real), the base block b = 8,192 / s, and the full output length f = n + T - 1:
+  boundaries exist when f s > 16,384 (strictly: the real course with f = 2,048
+  has none, f = 2,072 has them; the complex threshold lies in 1,023-1,026 and
+  this puts it at 1,025). The block length P is b doubled until f spans at most
+  8 blocks (ceil(f / P) <= 8). The before-B and after-B windows are those of the
+  first amendment, with P in place of 512. Kernels of 9-16 taps are unfused at
+  every product (S-always).
+- "P is the largest power of two <= f / 4, at least b" gives the same P on every
+  recorded and held-out course; it differs only where f is 8 P exactly. No
+  recorded course separates the two, and L-blocks is the choice.
+- L-blocks reproduces every kept part of every sparse course with at least 9
+  taps in this discovery file, in both files of the first recording (including
+  the 4,096-sample, 129-tap course the first rule missed), in the
+  arithmetic-order pin and in the numerics and numerics2 pins. The port misses
+  128,027 parts of those courses.
+- **Kernels of fewer than 9 taps** (3, 5 and 8 taps, complex 1,100 and real 2,100
+  samples): every product after the first is unfused, as for 9-16 taps; the
+  port's fused model misses 1,026-5,329 parts per course. Reported only, as
+  pre-registered; the port keeps its path for them.
+
+The held-out file decides adoption for complex and real courses separately, on
+these two Intel hosts. The reference-host part of the decision criterion cannot
+be met by this recording; the conv arrays of the two earlier recordings were
+identical on an AMD and an Intel host (96 and 276 arrays), which is the evidence
+that bears on it, and it is reported with the result.
