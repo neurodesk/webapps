@@ -36,3 +36,4 @@ jobs:
             ${{ runner.temp }}/n4-build/wasm/n4-bias.wasm
             ${{ runner.temp }}/n4-build/wasm/n4-bias.mjs
           if-no-files-found: ignore
+          retention-days: 7

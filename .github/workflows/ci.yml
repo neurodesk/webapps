@@ -311,6 +311,7 @@ jobs:
           name: interface-audit
           path: interface-artifacts/
           if-no-files-found: ignore
+          retention-days: 7
       - name: Check phone and tablet layouts and touch navigation
         run: pnpm test:mobile
       - name: Package the built catalog for agent interactions

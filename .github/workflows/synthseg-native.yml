@@ -74,6 +74,7 @@ jobs:
             exes/synthseg/validation/report.json
             exes/synthseg/dist/*-adhoc.pkg
           if-no-files-found: error
+          retention-days: 7
 
   release:
     if: github.event_name == 'workflow_dispatch' && inputs.sign_release
@@ -128,6 +129,7 @@ jobs:
             exes/synthseg/dist/*.pkg
             exes/synthseg/dist/*.sha256
             exes/synthseg/dist/*.validation.txt
+          retention-days: 7
       - name: Attach verified release assets
         env:
           GH_TOKEN: ${{ github.token }}

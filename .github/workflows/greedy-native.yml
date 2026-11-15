@@ -85,6 +85,7 @@ jobs:
           name: wasm-single-rebuild
           path: ${{ runner.temp }}/wasm-single-rebuild
           if-no-files-found: ignore
+          retention-days: 7
 
   native:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
@@ -145,11 +146,13 @@ jobs:
           name: greedy-${{ matrix.platform }}
           path: exes/greedy/dist/
           if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: greedy-native-npm-${{ matrix.platform }}
           path: packages/greedy/native/
           if-no-files-found: error
+          retention-days: 7
 
   # The whole-head regression gates for issue #623 (cli/tests/workflows.rs, the
   # tests named *whole_head*) are #[ignore] so the matrix job's default run stays
@@ -219,6 +222,7 @@ jobs:
           name: greedy-npm-tarball
           path: exes/greedy/dist/*.tgz*
           if-no-files-found: error
+          retention-days: 7
 
   npm-test:
     needs: npm
@@ -266,6 +270,7 @@ jobs:
           name: greedy-npm-validation-${{ runner.os }}
           path: ${{ runner.temp }}/greedy-npm-*.validation.txt
           if-no-files-found: error
+          retention-days: 7
 
   macos-sign:
     if: github.event_name == 'workflow_dispatch' && inputs.sign_release
@@ -313,11 +318,13 @@ jobs:
           name: greedy-signed-macos
           path: exes/greedy/dist/
           if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: greedy-signed-npm-macos
           path: packages/greedy/native/
           if-no-files-found: error
+          retention-days: 7
 
   release:
     if: github.event_name == 'workflow_dispatch' && inputs.sign_release

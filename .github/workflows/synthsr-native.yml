@@ -117,6 +117,7 @@ jobs:
             exes/synthsr/dist/synthsr-*-${{ matrix.platform }}.tar.gz.sha256
             exes/synthsr/dist/synthsr-*-${{ matrix.platform }}.tar.gz.validation.txt
           if-no-files-found: error
+          retention-days: 7
 
   macos:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
@@ -141,6 +142,7 @@ jobs:
           name: synthsr-macos-arm64-test-installer
           path: exes/synthsr/dist/*-adhoc.pkg
           if-no-files-found: error
+          retention-days: 7
 
   release:
     if: github.event_name == 'workflow_dispatch' && inputs.sign_release
@@ -203,6 +205,7 @@ jobs:
             exes/synthsr/dist/*.sha256
             exes/synthsr/dist/*.validation.txt
             exes/synthsr/dist/portable/
+          retention-days: 7
       - name: Attach verified release assets
         env:
           GH_TOKEN: ${{ github.token }}

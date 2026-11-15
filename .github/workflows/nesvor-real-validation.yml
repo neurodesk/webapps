@@ -45,3 +45,4 @@ jobs:
           name: nesvor-scientific-validation
           path: ${{ runner.temp }}/nesvor-scientific-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: warn
+          retention-days: 7
