@@ -12,7 +12,7 @@
 //! rounded) from stdin and
 //! writes both models' hull vertices, area and centroid for each, and the
 //! experimental model's stages in grid units, and each rule variant's hull and hole
-//! count (the reducer in
+//! count and final rings (the reducer in
 //! packages/samsrf/validation/matlab/polyshape_reduce.py uses it):
 //!   cargo run --release --features polyshape-experimental --example polyshape_hulls -- --oracle
 use serde_json::Value;
@@ -58,7 +58,11 @@ fn oracle() {
         for name in ["experimental", "h-merge", "h-merge-single", "h-start", "h-merge-start"] {
             let hypothesis = hypothesis_of(name).unwrap_or_default();
             variants.insert(name.into(), match samsrf_core::experimental::hull_of_polygon_with(p, hypothesis) {
-                Ok((hull, holes)) => serde_json::json!({"hull": describe(hull), "holes": holes}),
+                Ok((hull, holes)) => {
+                    let rings = samsrf_core::experimental::final_rings_with(p, hypothesis).unwrap_or_default();
+                    let rings: Vec<Value> = rings.into_iter().map(|(hole, vertices)| serde_json::json!({"hole": hole, "vertices": vertices})).collect();
+                    serde_json::json!({"hull": describe(hull), "holes": holes, "rings": rings})
+                }
                 Err(e) => serde_json::json!({"error": e.to_string()}),
             });
         }

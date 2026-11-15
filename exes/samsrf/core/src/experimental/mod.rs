@@ -21,7 +21,7 @@ pub fn hull_of_polygon(points: &[[f64; 2]]) -> Result<Option<Hull>> {
     Ok(polyshape_vertices(points)?.1)
 }
 
-pub use polyshape::Hypothesis;
+pub use polyshape::{FinalRing, Hypothesis};
 
 /// `hull_of_polygon` under a diagnostic rule variant, with the number of holes
 /// (negatively wound rings) in the model's final output.
@@ -32,6 +32,12 @@ pub fn hull_of_polygon_with(points: &[[f64; 2]], hypothesis: Hypothesis) -> Resu
     let simplified = polyshape::simplify_with(points, hypothesis).map_err(|failure| Error::Shape(format!("polyshape: {failure:?}")))?;
     let hull = simplified.hull.map(|vertices| Hull { vertices }).filter(|hull| hull.area() > 0.0);
     Ok((hull, holes))
+}
+
+/// The model's final rings under a rule variant, in input coordinates, each with
+/// whether it is a hole (negatively wound).
+pub fn final_rings_with(points: &[[f64; 2]], hypothesis: Hypothesis) -> Result<Vec<polyshape::FinalRing>> {
+    polyshape::final_rings_with(points, hypothesis).map_err(|failure| Error::Shape(format!("polyshape: {failure:?}")))
 }
 
 fn doubled_area(ring: &[(i64, i64)]) -> i128 {
