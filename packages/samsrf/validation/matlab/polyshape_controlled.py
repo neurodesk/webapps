@@ -229,6 +229,90 @@ def main_spec():
     print('cases with a predicted hole:', holes)
 
 
+def main_report():
+    """Applies polyshape-reproducers-7-predictions.md's comparison to a recording."""
+    import collections
+    import numpy as np
+    root, hulls, out = sys.argv[2:5]
+    spec = json.load(open(os.path.join(HERE, 'polyshape-reproducers-7.json')))
+    recording = json.load(open(os.path.join(root, 'geometry.json')))
+    case = next(c for c in recording['cases'] if c['id'] == 'reproducer_round7')
+
+    def read(descriptor):
+        assert descriptor['class'] == 'double' and descriptor['imaginary'] == ''
+        values = np.fromfile(os.path.join(root, descriptor['file']), dtype='<f8')
+        shape = descriptor['shape']
+        assert values.size == int(np.prod(shape)) and np.all(np.isfinite(values[~np.isnan(values)]))
+        return values.reshape(shape[::-1]).T if len(shape) == 2 else values
+
+    def split(field, counts):
+        rows, result, offset = read(case[field]), [], 0
+        for n in read(case[counts]).ravel():
+            assert n == int(n) and n >= 0
+            result.append(rows[offset:offset + int(n)])
+            offset += int(n)
+        assert offset == len(rows), field
+        return result
+
+    base = [(sh['identity'], sh['family'], sh['parameters'], [(from_bits(int(x, 16)), from_bits(int(y, 16))) for x, y in sh['points']]) for sh in spec['shapes']]
+    cases = spec['cases']
+    polygons = [case_points(base, c) for c in cases]
+    recorded = split('points', 'counts')
+    assert len(recorded) == len(cases) == 592
+    for i, poly in enumerate(polygons):
+        assert [tuple(map(float, r)) for r in recorded[i]] == poly, f'case {i}: polygon differs from the spec'
+    predictions = predict(Oracle(hulls), polygons)
+    assert digest(predictions) == spec['predictionsSha256'], 'predictions differ from the committed digest'
+    defaults = split('simplified', 'simplifiedCounts')
+    flags = split('defaultHoles', 'defaultHolesCounts')
+    matlab_hulls = split('hull', 'hullCounts')
+    rows = []
+    tally = collections.defaultdict(collections.Counter)
+    for i, c in enumerate(cases):
+        identity, family, parameters, _ = base[c['shape']]
+        boundaries, current = [], []
+        for r in defaults[i]:
+            if np.isnan(r[0]):
+                if current:
+                    boundaries.append(current)
+                current = []
+            else:
+                current.append([to_bits(float(r[0])), to_bits(float(r[1]))])
+        if current:
+            boundaries.append(current)
+        holes = [bool(h) for h in np.asarray(flags[i]).ravel()]
+        assert len(holes) == len(boundaries), f'case {i}: hole flags and boundaries differ in number'
+        matlab_rings = sorted([h, sorted(b)] for h, b in zip(holes, boundaries))
+        matlab_hull = sorted([to_bits(float(x)), to_bits(float(y))] for x, y in matlab_hulls[i])
+        topology = (sum(not h for h in holes), sum(holes))
+        row = {'case': i, 'identity': identity, 'family': family, 'variant': c['variant'], 'heldout': c['heldout'],
+               'matlabTopology': topology, 'matlabHullEqualsShipped': matlab_hull == predictions[i]['shipped'],
+               'matlabHullEqualsExperimental': matlab_hull == predictions[i]['experimental'].get('hull')}
+        for m in MODELS:
+            q = predictions[i][m]
+            if 'error' in q:
+                row[m] = False
+                continue
+            model_topology = (sum(not r[0] for r in q['rings']), sum(r[0] for r in q['rings']))
+            hull_ok = q['hull'] == matlab_hull
+            if family == 'reproducer':
+                row[m] = hull_ok and model_topology == topology
+            else:
+                row[m] = hull_ok and q['rings'] == matlab_rings
+            row[m + 'Topology'] = model_topology
+        rows.append(row)
+        split_name = 'heldout' if c['heldout'] else 'discovery'
+        tally[(family, split_name)]['cases'] += 1
+        tally[(family, split_name)][f"matlab {topology[0]}s{topology[1]}h"] += 1
+        for m in MODELS:
+            tally[(family, split_name)][m] += row[m]
+    json.dump({'rows': rows, 'tally': {f'{f}/{s}': dict(t) for (f, s), t in tally.items()}}, open(out, 'w'), indent=0)
+    for (f, s), t in sorted(tally.items()):
+        print(f'{f:10s} {s:9s} cases {t["cases"]:3d}', ' '.join(f'{m}={t[m]}' for m in MODELS), {k: v for k, v in t.items() if k.startswith('matlab')})
+
+
 if __name__ == '__main__':
     if sys.argv[1] == 'spec':
         main_spec()
+    elif sys.argv[1] == 'report':
+        main_report()

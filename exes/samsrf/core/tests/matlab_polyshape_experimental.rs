@@ -631,8 +631,36 @@ fn expand_controlled(spec: &Value) -> Vec<Value> {
         let shape = item["shape"].as_u64().unwrap() as usize;
         assert!(shape < shapes.len(), "controlled case outside the shape inventory");
         json!({"cloud": shape, "role": spec["role"], "reversed": item["reversed"], "shift": item["shift"],
-            "transform": item["transform"], "points": shapes[shape]})
+            "transform": item["transform"], "points": shapes[shape], "family": spec["shapes"][shape]["family"]})
     }).collect()
+}
+
+/// The pre-registered agreement of a model with MATLAB on a controlled case
+/// (polyshape-reproducers-7-predictions.md): equal hull vertex sets, and equal
+/// multisets of (hole flag, vertex set) of the rings, or for the reproducer
+/// controls equal numbers of solid and hole rings. As a digit: 4 * experimental
+/// + 2 * H_M + H_M1.
+fn controlled_agreement(polygon: &[[f64; 2]], family: &str, matlab_rings: &[(bool, Vec<[u64; 2]>)], matlab_hull: &[[u64; 2]]) -> u8 {
+    use samsrf_core::experimental::{final_rings_with, hull_of_polygon_with, Hypothesis};
+    let bits = |vertices: &[[f64; 2]]| -> Vec<[u64; 2]> {
+        let mut v: Vec<[u64; 2]> = vertices.iter().map(|p| p.map(f64::to_bits)).collect();
+        v.sort();
+        v
+    };
+    let topology = |rings: &[(bool, Vec<[u64; 2]>)]| (rings.iter().filter(|r| !r.0).count(), rings.iter().filter(|r| r.0).count());
+    let mut digit = 0;
+    for (weight, hypothesis) in [(4, Hypothesis::default()), (2, Hypothesis { merge_touching: true, ..Hypothesis::default() }),
+        (1, Hypothesis { merge_touching: true, single_contact: true, ..Hypothesis::default() })] {
+        let (Ok((hull, _)), Ok(rings)) = (hull_of_polygon_with(polygon, hypothesis), final_rings_with(polygon, hypothesis)) else { continue };
+        let mut rings: Vec<(bool, Vec<[u64; 2]>)> = rings.into_iter().map(|(hole, v)| (hole, bits(&v))).collect();
+        rings.sort();
+        let hull_ok = hull.map(|h| bits(&h.vertices)).unwrap_or_default() == matlab_hull;
+        let rings_ok = if family == "reproducer" { topology(&rings) == topology(matlab_rings) } else { rings == matlab_rings };
+        if hull_ok && rings_ok {
+            digit += weight;
+        }
+    }
+    digit
 }
 
 /// polyshape_controlled.py's `pairs_bytes`: u32 count, then sorted (x, y) bits.
@@ -835,6 +863,55 @@ fn polyshape_reproducers_match_recording() {
                 let matlab = sorted_vertices(&hulls[i]);
                 let same = |hull: &Option<Hull>| sorted_vertices(hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[])) == matlab;
                 assert_eq!([same(&shipped), same(&experimental)], verdicts[id][i], "{at}: MATLAB verdict differs from the frozen one");
+            }
+            if spec.get("shapes").is_some() {
+                // Round 7: MATLAB's default rings (NaN-separated boundaries with their
+                // ishole flags) against each model, as pre-registered.
+                let defaults = split_rows(&points(&array(&root, &case["simplified"])), &array(&root, &case["simplifiedCounts"]));
+                let flags = split_rows(&array(&root, &case["defaultHoles"]).iter().map(|&v| [v, 0.0]).collect::<Vec<_>>(), &array(&root, &case["defaultHolesCounts"]));
+                assert_eq!((defaults.len(), flags.len()), (n, n), "{id}: default and hole-flag inventories");
+                let agreement = frozen["controlledAgreement"].as_str().unwrap().as_bytes();
+                assert_eq!(agreement.len(), n, "{id}: frozen agreement inventory");
+                let mut by_family: std::collections::BTreeMap<String, [usize; 4]> = Default::default();
+                for (i, item) in items.iter().enumerate() {
+                    let mut boundaries: Vec<Vec<[u64; 2]>> = vec![Vec::new()];
+                    for v in &defaults[i] {
+                        if v[0].is_nan() {
+                            boundaries.push(Vec::new());
+                        } else {
+                            assert!(v[0].is_finite() && v[1].is_finite(), "{id} {i}: nonfinite default vertex");
+                            boundaries.last_mut().unwrap().push(v.map(f64::to_bits));
+                        }
+                    }
+                    boundaries.retain(|b| !b.is_empty());
+                    let holes: Vec<bool> = flags[i].iter().map(|f| {
+                        assert!(f[0] == 0.0 || f[0] == 1.0, "{id} {i}: hole flags must be binary");
+                        f[0] == 1.0
+                    }).collect();
+                    assert_eq!(holes.len(), boundaries.len(), "{id} {i}: hole flags and boundaries differ in number");
+                    let mut matlab_rings: Vec<(bool, Vec<[u64; 2]>)> = holes.into_iter().zip(boundaries).map(|(h, mut b)| {
+                        b.sort();
+                        (h, b)
+                    }).collect();
+                    matlab_rings.sort();
+                    let mut matlab_hull: Vec<[u64; 2]> = hulls[i].iter().map(|p| p.map(f64::to_bits)).collect();
+                    matlab_hull.sort();
+                    let family = item["family"].as_str().unwrap();
+                    let digit = controlled_agreement(&polygons[i], family, &matlab_rings, &matlab_hull);
+                    assert_eq!(digit, agreement[i] - b'0', "{} {id} {i}: agreement with MATLAB differs from the frozen one", root.display());
+                    let tally = by_family.entry(family.to_string()).or_default();
+                    tally[0] += 1;
+                    tally[1] += usize::from(digit & 4 != 0);
+                    tally[2] += usize::from(digit & 2 != 0);
+                    tally[3] += usize::from(digit & 1 != 0);
+                }
+                // Family inventory: [cases, experimental, H_M, H_M1 agreements].
+                assert_eq!(by_family.keys().map(String::as_str).collect::<Vec<_>>(), ["filled", "gapped", "lens", "pinwheel", "reproducer"], "{id}: family inventory");
+                assert_eq!(by_family["pinwheel"], [288, 288, 0, 0], "{id}: pinwheels keep k separate tips without a hole, as the experimental model does");
+                assert_eq!(by_family["filled"], [32, 32, 32, 32], "{id}: filled controls");
+                assert_eq!(by_family["reproducer"], [8, 0, 0, 0], "{id}: no model gives the reproducers' topology");
+                assert_eq!(by_family["lens"][0], 72, "{id}: lens inventory");
+                assert_eq!(by_family["gapped"][0], 192, "{id}: gapped inventory");
             }
             if let Some(predicted) = spec.get("predictSurvival") {
                 // Round 6: whether input point 4 (as perturbed) is a vertex of MATLAB's
