@@ -272,7 +272,7 @@ run during draft feedback.
 
 A manual `ci` run plans like a pull request: `gh workflow run ci --ref
 <branch>` tests the apps the branch changed since it left main (on main,
-since the last green run). `-f scope=gpu` runs only the macOS GPU suite of
+since the last finished run, as a push does). `-f scope=gpu` runs only the macOS GPU suite of
 those apps, `-f scope=site` only the composite site and its agentic checks
 (with `agentic_mode`), and `-f scope=all` every app. Like a pull request,
 `affected` builds the composite site only when its plan needs it. On 13 November 2026 all
