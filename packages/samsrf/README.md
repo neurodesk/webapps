@@ -471,13 +471,16 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   `cos` with `libm` `exp` and `pow`. MATLAB's complex power of a negative
   response, its `conv` and the MKL dot products and norms inside `corr` are
   empirical models, checked on recorded inputs. For a sparse prediction (fewer
-  than a quarter of its samples nonzero) and an HRF of 9 taps or more, MATLAB's
-  `conv` rounds some products before adding them: every product for kernels of
-  at most 16 taps, and products near 8 KiB block boundaries when the convolution
-  is longer than 16 KiB. The port does the same since 0.6.20261115, found and held
-  out in two pre-registered recordings
-  ([sparse conv blocks](validation/matlab/README.md#sparse-conv-blocks-730)); before,
-  it fused every product. MATLAB's real `x'*y` adds
+  than a quarter of its samples nonzero), MATLAB's `conv` rounds some products
+  before adding them: every product for kernels of at most 16 taps, and
+  products near 8 KiB block boundaries when the convolution is longer than
+  16 KiB. The port does the same since 0.6.20261115, found and held out in three
+  pre-registered recordings
+  ([sparse conv blocks](validation/matlab/README.md#sparse-conv-blocks-730));
+  before, it fused every product of kernels of 9 taps or more, and summed sparse
+  courses with 2-8-tap kernels in kernel order with fused products. The third
+  recording added those short kernels and doubled the block for a convolution of
+  exactly 8 blocks; its release kept the date version. MATLAB's real `x'*y` adds
   adjacent products in pairs below 51 elements and calls MKL's `ddot` from 51;
   the port does the same (since 0.6.20261114; before, it used MKL's kernel at
   every length, so CSS correlations over fewer than 51 volumes could differ in

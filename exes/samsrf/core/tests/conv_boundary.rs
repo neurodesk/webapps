@@ -391,8 +391,10 @@ fn first_rule(n: usize, taps: usize) -> impl Fn(usize, usize) -> bool {
 
 /// Every course of both recordings on every host. Production equals MATLAB at every
 /// kept part of every sparse course with at least 9 taps, discovery and held out;
-/// the previous fused model misses the frozen counts. Kernels of fewer than 9 taps
-/// and the dense control are outside the rule and frozen as they are.
+/// the previous fused model misses the frozen counts. The 3-, 5- and 8-tap courses,
+/// discovery for the short-kernel rule held out in `conv_gaps.rs`, are equal since
+/// it (every product unfused; the previous path missed 13,851 parts); the dense
+/// control matches the dense path.
 #[test]
 fn sparse_conv_follows_the_block_rule() {
     let recordings = [
@@ -423,6 +425,7 @@ fn sparse_conv_follows_the_block_rule() {
                                 0,
                                 "{host} {id}: not every product unfused"
                             );
+                            assert_eq!(production, 0, "{host} {id}");
                         }
                         continue;
                     }
@@ -471,11 +474,9 @@ fn sparse_conv_follows_the_block_rule() {
 
 /// Parts the port's dense path misses on the dense control (reported, no rule).
 const DENSE_CONTROL: usize = 0;
-/// Parts the port's path for kernels of fewer than 9 taps misses on the 3-, 5- and
-/// 8-tap courses. They are outside the rule: there every product after the first
-/// is unfused, which the test checks, but that path is reported only, as
-/// pre-registered.
-const SHORT_KERNELS: usize = 13_851;
+/// Parts production misses on the 3-, 5- and 8-tap courses (13,851 before the
+/// short-kernel rule).
+const SHORT_KERNELS: usize = 0;
 
 /// The two hosts of each recording hold identical arrays (one AMD and one Intel host
 /// in the first, two Intel hosts in the second).
