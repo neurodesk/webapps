@@ -25,28 +25,53 @@ FAMILIES = [('causal', c) for c in ('causal_gap_sweep', 'causal_gap_bisection', 
 
 
 def family(root, case_id, oracle):
-    recording = json.load(open(os.path.join(root, 'geometry.json')))
-    case = next(c for c in recording['cases'] if c['id'] == case_id)
+    with open(os.path.join(root, 'geometry.json')) as source:
+        recording = json.load(source)
+    matches = [c for c in recording['cases'] if c['id'] == case_id]
+    if len(matches) != 1:
+        raise ValueError(f'{case_id}: expected exactly one case')
+    case = matches[0]
 
-    def read(descriptor):
-        assert descriptor['class'] == 'double' and descriptor['imaginary'] == ''
-        values = np.fromfile(os.path.join(root, descriptor['file']), dtype='<f8')
+    def read(field, columns):
+        descriptor = case[field]
+        if descriptor['class'] != 'double' or descriptor['imaginary'] != '':
+            raise ValueError(f'{field}: expected real double data')
         shape = descriptor['shape']
-        assert values.size == int(np.prod(shape))
-        return values.reshape(shape[::-1]).T if len(shape) == 2 else values
+        if (not isinstance(shape, list) or len(shape) != 2
+                or any(type(n) is not int or n < 0 for n in shape)
+                or shape[1] != columns):
+            raise ValueError(f'{field}: expected a matrix with {columns} columns')
+        filename = descriptor['file']
+        if not filename or os.path.basename(filename) != filename:
+            raise ValueError(f'{field}: expected a bare file name')
+        path = os.path.join(root, filename)
+        if os.path.getsize(path) != shape[0] * shape[1] * 8:
+            raise ValueError(f'{field}: byte count does not match shape')
+        values = np.fromfile(path, dtype='<f8')
+        if not np.all(np.isfinite(values)):
+            raise ValueError(f'{field}: expected finite values')
+        return values.reshape(shape[::-1]).T
 
-    def split(field, counts):
-        rows, out, offset = read(case[field]), [], 0
-        for n in read(case[counts]).ravel():
-            assert n == int(n) and n >= 0
+    def split(field, counts, columns):
+        rows, out, offset = read(field, columns), [], 0
+        if field == 'defaultHoles' and not np.all((rows == 0) | (rows == 1)):
+            raise ValueError('defaultHoles: expected binary hole flags')
+        for n in read(counts, 1).ravel():
+            if n != int(n) or n < 0:
+                raise ValueError(f'{counts}: expected nonnegative integer counts')
             out.append(rows[offset:offset + int(n)])
             offset += int(n)
-        assert offset == len(rows), field
+        if offset != len(rows):
+            raise ValueError(f'{field}: counts do not consume all rows')
         return out
 
-    polygons = [[tuple(map(float, r)) for r in p] for p in split('points', 'counts')]
-    matlab = [int(np.sum(h)) for h in split('defaultHoles', 'defaultHolesCounts')]
+    polygons = [[tuple(map(float, r)) for r in p] for p in split('points', 'counts', 2)]
+    matlab = [int(np.sum(h)) for h in split('defaultHoles', 'defaultHolesCounts', 1)]
+    if len(matlab) != len(polygons):
+        raise ValueError(f'{case_id}: expected {len(polygons)} hole annotations, got {len(matlab)}')
     results = oracle.evaluate(polygons)
+    if len(results) != len(polygons):
+        raise ValueError(f'{case_id}: expected {len(polygons)} oracle results, got {len(results)}')
     counts = collections.Counter()
     for m, result in zip(matlab, results):
         counts['polygons'] += 1
@@ -66,7 +91,8 @@ def main():
     for kind, case_id in FAMILIES:
         report[case_id] = family(causal if kind == 'causal' else reproducers, case_id, oracle)
         print(case_id, report[case_id])
-    json.dump(report, open(out, 'w'), indent=1)
+    with open(out, 'w') as destination:
+        json.dump(report, destination, indent=1)
 
 
 if __name__ == '__main__':

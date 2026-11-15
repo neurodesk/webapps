@@ -2336,11 +2336,13 @@ holes where MATLAB has none):
 
 What this establishes:
 
-- **Recall:** voids enclosed by touching union rings account for most of
-  MATLAB's holes. H_M puts a hole wherever MATLAB has one on all 251 causal
-  transforms that have holes, and on 3,534 of round 4's 3,852.
-- **Over-prediction:** MATLAB keeps only some of those voids as holes, and the
-  merged rules over-predict holes heavily.
+- **Hole presence:** H_M produces at least one hole on all 251 causal
+  transforms where MATLAB has a hole, and on 3,534 of round 4's 3,852.
+  These are presence comparisons, not matched hole boundaries. On the causal
+  real-cloud family, H_M matches the exact hole count on only 51 of 403 cases.
+- **Over-prediction:** the merged rules also produce holes on many polygons
+  where MATLAB has none. Counts alone do not establish which geometric voids
+  correspond to MATLAB's holes or explain MATLAB's internal operations.
 - **The experimental model** produces holes MATLAB does not show: on 2,790
   strip pairs it keeps the enclosed sliver as a hole.
 
@@ -2348,8 +2350,10 @@ H_M1 recovers 177, 932 and 1937 and all of round 6. It restores the strip
 pairs, but still loses near-collinear clouds and reproducer cases, so it is
 rejected like H_M. The experimental model is unchanged.
 
-**The open question** is which enclosed voids MATLAB keeps as holes, and when
-it merges touching rings rather than cleaning them apart. A controlled
+**The open question** is whether a rule for touching regions and enclosed
+voids can predict MATLAB's hole boundaries as well as their counts. Merging
+touching rings before cleaning remains a hypothesis, supported by the specific
+932/1607 boundary correspondences above, not an observed MATLAB operation. A controlled
 experiment would use shapes whose voids are bounded by k regions touching at
 single vertices (star polygons and their one-vertex perturbations), with the
 void's size swept across the tolerance, and two-vertex contacts as controls.
