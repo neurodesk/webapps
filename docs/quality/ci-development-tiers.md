@@ -82,7 +82,11 @@ the other's question: a push runs when a path under a shared pull request
 filter changed, and the sweep runs when one of the workflow's own paths
 changed beyond bookkeeping (a merge whose push run failed or was cancelled).
 Without a green run, or when no changed path matches a push filter, a push
-runs. The 15 native workflows without a gate still run on every match.
+runs. Every workflow whose `push` filter covers a whole app, package or
+`exes/` directory, where each release writes its bumps and changelogs, calls
+the gate too, even without a shared pull request filter; for those the
+schedule (NeuroFlow, the SDC registration gate) stays a plain nightly run,
+since there is nothing to sweep.
 `release.yml` plans with `--release`, so its version bumps still select the
 apps to publish.
 
@@ -249,8 +253,14 @@ suite or the agentic checks. A dispatch no longer moves the tested base main's
 pushes diff from, since its scope can leave apps out.
 
 Main CI lets a running push finish while GitHub replaces older pending pushes
-with the newest pending push. The next run still compares against the last
-green main run, covering accumulated merges. PR pushes cancel earlier runs
+with the newest pending push. The next run compares against the nearest
+finished main run, covering accumulated merges. When that run failed, the
+push also selects the apps whose `app-tests` or browser jobs did not pass
+there (`resolveCiBase`, `carriedApps`): on 13 November 2026 synthsr's GPU job
+failed for 7 hours, and each push in that time tested all 63 apps from the
+last green run; replayed, the second of them selects synthsr alone. A failed
+job that belongs to no app, such as the plan itself, sends the push back to
+the last green run. PR pushes cancel earlier runs
 of the same PR. Schedule and manual runs keep their separate concurrency
 groups, and native release/signing conditions are unchanged.
 

@@ -215,8 +215,9 @@ function changedRootScripts(manifest) {
 // `reasons.apps` maps each selected app, and `reasons.site` the site build, to
 // the changes that selected it.
 // With `release`, a version bump selects what it reaches: release.yml picks
-// the apps to publish from the version changes themselves.
-export function selectAffectedApps(registry, changedPaths = [], graph = null, manifests = new Map(), { release = false } = {}) {
+// the apps to publish from the version changes themselves. `carried` maps app
+// ids a failed run on main left untested to the jobs that failed there.
+export function selectAffectedApps(registry, changedPaths = [], graph = null, manifests = new Map(), { release = false, carried = new Map() } = {}) {
   const everything = (fallback) => ({ apps: registry.apps, site: true, reasons: { fallback, apps: {}, site: [] } });
   if (!changedPaths.length) return everything('no changed paths: no base revision, an unreadable diff, or a full run');
 
@@ -398,6 +399,9 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   }
 
   if (fallback) return { ...everything(fallback), bookkeeping };
+  for (const [id, jobs] of carried) {
+    if (appIds.has(id)) select(id, `failed in the base run (${jobs.join(', ')})`);
+  }
   if (appReasons.has('qsmbly')) select('brain-extraction', 'qsmbly is selected and Brain extraction ships its runtime');
   const apps = registry.apps.filter((app) => appReasons.has(app.id));
   return {
@@ -408,8 +412,8 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   };
 }
 
-export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false } = {}) {
-  const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release });
+export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried } = {}) {
+  const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release, carried });
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
   // dependency plan, including shared-code changes, at their current head.
   const selected = draft && changedPaths.length
