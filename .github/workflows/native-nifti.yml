@@ -2,6 +2,7 @@ name: native-nifti
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - '.github/workflows/native-nifti.yml'
       - '.github/actions/setup-wasm-opt/**'
@@ -44,7 +45,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Release bookkeeping (changelogs, version bumps) runs this workflow neither
+  # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    with:
+      workflow: native-nifti
+
   core:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -70,6 +84,8 @@ jobs:
           cargo test --locked --release --manifest-path test-utils/native-nifti/Cargo.toml
 
   wasm:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

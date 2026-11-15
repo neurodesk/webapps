@@ -5,7 +5,7 @@ import { createAppPlan, changedManifests, changedPathsFromGit } from './lib/app-
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { FULL_CI_LABEL } from './lib/ci-usage.mjs';
 import { eventPullRequest, fullPlanBudget } from './lib/full-plan-budget.mjs';
-import { resolveTestedBase, TESTED_BASE } from './lib/tested-base.mjs';
+import { resolveCiBase, TESTED_BASE } from './lib/tested-base.mjs';
 import { loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
 
 function option(name) {
@@ -16,9 +16,12 @@ function option(name) {
 const registry = await loadAppsRegistry();
 const head = option('--head') || 'HEAD';
 let base = option('--base');
-// `--base last-success`: diff from the last commit ci finished green on the
-// branch, so merges whose own push run was cancelled are still tested.
+// `--base last-success`: diff from the last commit a ci run finished on the
+// branch (resolveCiBase), so merges whose own push run was cancelled are still
+// tested, and select again the apps a failed run there left untested.
 let baseFallback = '';
+// Apps a failed run on main left untested at the base (resolveCiBase).
+let carried = new Map();
 // `--base merge-base` (a dispatched run): diff a branch from where it left
 // main; a commit already on main diffs from the tested base like a push.
 if (base === 'merge-base') {
@@ -33,9 +36,10 @@ if (base === 'merge-base') {
   }
 }
 if (base === TESTED_BASE) {
-  const tested = await resolveTestedBase({ head, branch: option('--branch') || 'main', cwd: repoRoot });
+  const tested = await resolveCiBase({ head, branch: option('--branch') || 'main', cwd: repoRoot, appIds: new Set(registry.apps.map((app) => app.id)) });
   console.error(`App planner: ${tested.reason}`);
   base = tested.base;
+  carried = tested.carried;
   if (!base) baseFallback = tested.reason;
 }
 let changedPaths = process.argv.includes('--all') || baseFallback
@@ -64,7 +68,7 @@ const draft = process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.CI
 // `--release` (release.yml): the apps to publish are the ones the version
 // bumps reach, so release bookkeeping counts.
 const release = process.argv.includes('--release');
-let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft, release });
+let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft, release, carried });
 
 // A ready pull request that has used its full-plan runs gets the draft plan,
 // and the `full-plan-withheld` job fails so the run is never green. A run that

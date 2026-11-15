@@ -350,7 +350,7 @@ test('manual SamSrf WASM diagnosis isolates the build without changing draft or 
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const draft of [false, true]) {
       for (const only of [false, true]) {
-        const context = { github: { event_name: event, event: { pull_request: { draft } } }, inputs: { wasm_only: only, record_matlab: false } };
+        const context = { github: { event_name: event, event: { pull_request: { draft } } }, inputs: { wasm_only: only, record_matlab: false } , needs: { gate: { outputs: { run: String(event !== 'pull_request' || !draft) } } } };
         const runs = event !== 'pull_request' || !draft;
         assert.equal(runInNewContext(flow.jobs['wasm-source'].if, context), runs);
         for (const name of ['test', 'recorder-smoke']) {
@@ -399,7 +399,7 @@ test('manual SamSrf MATLAB recording uses pinned source and cannot publish relea
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const only of [false, true]) {
       for (const revcor of [false, true]) {
-        const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { record_matlab: only, revcor_only: revcor, sign_release: true } };
+        const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { record_matlab: only, revcor_only: revcor, sign_release: true } , needs: { gate: { outputs: { run: 'true' } } } };
         assert.equal(runInNewContext(recording.if, context), event === 'workflow_dispatch' && (only || revcor));
         for (const name of ['test', 'wasm-source']) {
           assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !(only || revcor));
@@ -420,7 +420,7 @@ test('manual SamSrf least-squares kernel probe runs MATLAB alone on more runners
   assert.ok(recording.steps.some(step => step.if === 'inputs.qr_kernels' && /record_qr_kernels\(/.test(step.with?.command ?? '')));
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const only of [false, true]) {
-      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { qr_kernels: only, qr_only: false, record_matlab: false, revcor_only: false, diagnostics_only: false } };
+      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { qr_kernels: only, qr_only: false, record_matlab: false, revcor_only: false, diagnostics_only: false } , needs: { gate: { outputs: { run: 'true' } } } };
       assert.equal(runInNewContext(recording.if, context), event === 'workflow_dispatch' && only);
       for (const name of ['test', 'wasm-source']) {
         assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !only, name);
@@ -444,7 +444,7 @@ test('manual SamSrf least-squares recording runs MATLAB alone under several MKL 
   assert.ok(recording.steps.some(step => step.if === 'inputs.qr_only' && /compare-qr-backends\.mjs/.test(step.run ?? '')));
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const only of [false, true]) {
-      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { qr_only: only, record_matlab: false, revcor_only: false, diagnostics_only: false } };
+      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { qr_only: only, record_matlab: false, revcor_only: false, diagnostics_only: false } , needs: { gate: { outputs: { run: 'true' } } } };
       assert.equal(runInNewContext(recording.if, context), event === 'workflow_dispatch' && only);
       for (const name of ['test', 'wasm-source']) {
         assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !only, name);
@@ -487,7 +487,7 @@ test('the SamSrf Runtime reference builds only with a Compiler token and is vali
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const mode of ['none', 'source', 'build']) {
       for (const image of ['', 'ghcr.io/neurodesk/samsrf-reference@sha256:' + '0'.repeat(64)]) {
-        const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: event === 'workflow_dispatch' ? { runtime_cli: mode, runtime_image: image, wasm_only: false } : {} };
+        const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: event === 'workflow_dispatch' ? { runtime_cli: mode, runtime_image: image, wasm_only: false } : {} , needs: { gate: { outputs: { run: 'true' } } } };
         const dispatch = event === 'workflow_dispatch';
         assert.equal(runInNewContext(cli.if, context), dispatch && mode !== 'none');
         assert.equal(runInNewContext(runtime.if, context), dispatch && image !== '');

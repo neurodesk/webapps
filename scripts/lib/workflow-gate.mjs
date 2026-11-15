@@ -227,7 +227,13 @@ export function pushWorkflow({ flow, changedPaths, manifests = new Map(), regist
 // cancelled push left untested), or did a path under a shared pull request
 // filter change (what the sweep is for)? A push whose range matches none of
 // its push filters is not one the reading explains, so it runs.
+// A workflow gated only so that release bookkeeping does not start it has no
+// shared pull request filter: its schedule is a plain nightly run, not a sweep.
 export function mainWorkflow({ flow, changedPaths, manifests = new Map(), registry, event }) {
+  const pulls = flow?.on?.pull_request?.paths;
+  if (event === 'schedule' && Array.isArray(pulls) && !pulls.some(isSharedFilter)) {
+    return { run: true, reason: 'its schedule is a nightly run of everything, not a sweep: it has no shared pull request filter' };
+  }
   const own = pushWorkflow({ flow, changedPaths, manifests, registry });
   if (own.run && (own.known || event === 'push')) return { run: true, reason: own.reason };
   const shared = sweepWorkflow({ flow, changedPaths, manifests, registry });

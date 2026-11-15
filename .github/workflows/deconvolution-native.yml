@@ -32,8 +32,20 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Release bookkeeping (changelogs, version bumps) runs this workflow neither
+  # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    with:
+      workflow: deconvolution-native
+
   test:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: core tests and package tests
     runs-on: ubuntu-24.04
     steps:
@@ -60,7 +72,8 @@ jobs:
         run: node --test packages/deconvolution/test/*.test.js
 
   wasm-source:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
     steps:

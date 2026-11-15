@@ -140,11 +140,12 @@ test('returning to draft cancels the prior run without starting CI jobs', async 
 
 test('NeuroFlow and the SDC registration gate start for a pull request only on their own paths', async () => {
   // Both take hours of runner time. A shared change reaches them nightly, and the SDC gate on main.
+  // Their gate only sets release bookkeeping aside; with no shared filter, their nightly run is not a sweep.
   for (const file of ['neuroflow.yml', 'sdc-registration-gate.yml']) {
     const flow = await workflow(file);
     const own = flow.on.pull_request.paths;
     assert.deepEqual(own.filter(isSharedFilter), [], `${file} filters pull requests on shared paths`);
-    assert.equal(flow.jobs.gate, undefined, file);
+    assert.equal(flow.jobs.gate.uses, './.github/workflows/pr-gate.yml', file);
     const push = flow.on.push.paths;
     const covers = push.map(pathGlob);
     // A nested file each pull request filter matches, which a push filter has to match too.
