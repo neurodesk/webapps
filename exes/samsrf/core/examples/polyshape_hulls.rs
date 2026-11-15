@@ -3,12 +3,16 @@
 //! model (`Hull::of_polygon`) or the experimental Clipper model reproduces
 //! exactly, and which do not. For `causal_real` it also counts per source cloud
 //! (parameter column 1). Evidence, not a gate.
-//!   cargo run --release --features polyshape-experimental --example polyshape_hulls -- HOST_DIR CASE_ID production|experimental
+//!   cargo run --release --features polyshape-experimental --example polyshape_hulls -- HOST_DIR CASE_ID MODEL
+//! MODEL is production, experimental, or a diagnostic rule variant of the
+//! experimental model (`experimental::Hypothesis`): h-merge, h-merge-single, h-start
+//! or h-merge-start.
 //! `--oracle` instead reads a JSON list of polygons (lists of [x, y] as IEEE-754 bit
 //! patterns, u64, because serde_json's default float parser is not correctly
 //! rounded) from stdin and
 //! writes both models' hull vertices, area and centroid for each, and the
-//! experimental model's stages in grid units (the reducer in
+//! experimental model's stages in grid units, and each rule variant's hull and hole
+//! count (the reducer in
 //! packages/samsrf/validation/matlab/polyshape_reduce.py uses it):
 //!   cargo run --release --features polyshape-experimental --example polyshape_hulls -- --oracle
 use serde_json::Value;
@@ -19,6 +23,18 @@ fn describe(hull: Option<samsrf_core::geometry::Hull>) -> Value {
     match hull {
         None => serde_json::json!(null),
         Some(h) => serde_json::json!({"hull": h.vertices, "area": h.area(), "centroid": h.centroid()}),
+    }
+}
+
+/// The diagnostic rule variants of the experimental model (#732).
+fn hypothesis_of(model: &str) -> Option<samsrf_core::experimental::Hypothesis> {
+    use samsrf_core::experimental::Hypothesis;
+    match model {
+        "h-merge" => Some(Hypothesis { merge_touching: true, ..Hypothesis::default() }),
+        "h-merge-single" => Some(Hypothesis { merge_touching: true, single_contact: true, ..Hypothesis::default() }),
+        "h-start" => Some(Hypothesis { start_independent: true, ..Hypothesis::default() }),
+        "h-merge-start" => Some(Hypothesis { merge_touching: true, start_independent: true, ..Hypothesis::default() }),
+        _ => None,
     }
 }
 
@@ -38,7 +54,15 @@ fn oracle() {
             Ok(None) => serde_json::json!(null),
             Err(e) => serde_json::json!({"error": e.to_string()}),
         };
-        serde_json::json!({"production": describe(samsrf_core::geometry::Hull::of_polygon(p)), "experimental": experimental, "experimentalStages": stages})
+        let mut variants = serde_json::Map::new();
+        for name in ["experimental", "h-merge", "h-merge-single", "h-start", "h-merge-start"] {
+            let hypothesis = hypothesis_of(name).unwrap_or_default();
+            variants.insert(name.into(), match samsrf_core::experimental::hull_of_polygon_with(p, hypothesis) {
+                Ok((hull, holes)) => serde_json::json!({"hull": describe(hull), "holes": holes}),
+                Err(e) => serde_json::json!({"error": e.to_string()}),
+            });
+        }
+        serde_json::json!({"production": describe(samsrf_core::geometry::Hull::of_polygon(p)), "experimental": experimental, "experimentalStages": stages, "variants": variants})
     }).collect();
     serde_json::to_writer(std::io::stdout(), &results).unwrap();
 }
@@ -56,8 +80,8 @@ fn main() {
     );
     let (root, id, model) = (Path::new(&args[1]), args[2].as_str(), args[3].as_str());
     assert!(
-        model == "production" || model == "experimental",
-        "model must be production or experimental"
+        model == "production" || model == "experimental" || hypothesis_of(model).is_some(),
+        "model must be production, experimental, h-merge, h-merge-single, h-start or h-merge-start"
     );
     let meta: Value =
         serde_json::from_slice(&std::fs::read(root.join("geometry.json")).unwrap()).unwrap();
@@ -140,7 +164,16 @@ fn main() {
     let mut differing = Vec::new();
     let mut errors = 0;
     for (i, polygon) in polygons.iter().enumerate() {
-        let hull = if model == "experimental" {
+        let hull = if let Some(hypothesis) = hypothesis_of(model) {
+            match samsrf_core::experimental::hull_of_polygon_with(polygon, hypothesis) {
+                Ok((hull, _)) => hull,
+                Err(_) => {
+                    errors += 1;
+                    differing.push(i);
+                    continue;
+                }
+            }
+        } else if model == "experimental" {
             match samsrf_core::experimental::hull_of_polygon(polygon) {
                 Ok(hull) => hull,
                 Err(_) => {
