@@ -2267,6 +2267,95 @@ and reproducer cases, and leaves 932 and 1607.
 A flipped H_I prediction, a changed perturbation value and a flipped verdict
 each make it fail.
 
+### Hole formation in the 932 and 1607 reproducers (existing recordings only)
+
+MATLAB's default output for the 1-minimal reproducers of 932 and 1607 has a
+hole. Neither its `KeepCollinearPoints` output nor the experimental model has
+one. This round used the pinned recordings only and spent none of its
+two-recording budget. No rule below was clear enough to justify a focused
+recording.
+
+**What the geometry shows** (`core/examples/polyshape_hulls.rs --oracle`, and
+the experimental model's first-union rings, with crossings labelled by position):
+
+- **1607:** three union rings touch pairwise at single crossings, x4, x10 and
+  x7, and enclose an unfilled triangle. One of them is a sliver that the
+  experimental clean removes on its own, which opens the void. MATLAB's default
+  equals the result of merging the three rings first:
+  - the cleaned outer boundary of the merged rings, [p2, x3, x4, x5, x6, p3],
+    is MATLAB's solid ring;
+  - the cleaned void, [p5, x7, x4], is MATLAB's hole.
+- **932:** MATLAB's hole [x2, x3, x4] is the cleaned void enclosed by four
+  touching union rings. Its solid triangle [p3, p7, p4] is the cleaned outline
+  of the merged touching set.
+
+**Rules tested.** Each is an opt-in `experimental::Hypothesis` variant, so the
+experimental model's default output is unchanged, and each was written down
+before it ran:
+
+- H_M merges every connected set of touching union rings, by tracing their
+  boundary (taking the most clockwise turn at a touch vertex) and cleaning the
+  merged outer and void cycles.
+- H_M1 merges only across contacts of rings that share exactly one vertex. In
+  the strip pairs, where two rings share two vertices, MATLAB follows per-ring
+  cleaning.
+- H_N1 uses Clipper's own non-strict union (StrictSimple off in all four places
+  it acts) followed by the existing clean and a strict second union. It was
+  tested as a scratch change and is not kept as a variant.
+
+Exact hull vertex sets equal to MATLAB's:
+
+| Recording | Experimental model | H_M | H_M1 |
+| --- | ---: | ---: | ---: |
+| Original clouds | 2,456 / 2,500 | 2,424 | 2,425 |
+| Of the four regressions, still different | 177, 932, 1607, 1937 | 1607 | 1607 |
+| Held-out near-collinear / mixed | 1,352 / 1,470 | 1,235 / 1,450 | 1,234 / 1,450 |
+| Strip pairs / bisection | 8,424 / 1,152 | 8,214 / 1,149 | 8,424 / 1,152 |
+| Causal real-cloud transforms / held-out strips | 157 / 600 | 286 / 582 | 286 / 600 |
+| Reproducer rounds 1-6 | 54 / 21 / 12 / 6,335 / 8,278 / 807 | 43 / - / - / 2,638 / 6,052 / 1,212 | 41 / 42 / 12 / 2,699 / 5,924 / 1,212 |
+
+The families not listed match fully under H_M1. H_M also matches the one-ULP and
+random thin triangles, the collinear-vertex and spike families, the grid sweep
+and the hole contacts; it was not run on the relative sweep, the degenerate
+inputs or the grid bisection.
+
+H_N1 reproduces neither reproducer's hole. On 1607 it gives MATLAB's ring count
+but no hole; on 932 it gives two rings and no hole, where MATLAB has a hole.
+
+Hole counts against MATLAB's per-boundary hole flags
+(`polyshape_hole_census.py`; equal / with holes where MATLAB has holes / with
+holes where MATLAB has none):
+
+| Recording (polygons, with MATLAB holes) | Experimental model | H_M | H_M1 |
+| --- | --- | --- | --- |
+| Strip pairs (8,424, 0) | 5,634 / 0 / 2,790 | 4,714 / 0 / 3,710 | 5,634 / 0 / 2,790 |
+| Bisection (1,152, 0) | 615 / 0 / 537 | 609 / 0 / 543 | 615 / 0 / 537 |
+| Causal real-cloud transforms (403, 251) | 111 / 212 / 61 | 51 / 251 / 101 | 51 / 251 / 101 |
+| Reproducer round 4 (12,873, 3,852) | 9,372 / 845 / 224 | 4,537 / 3,534 / 6,321 | 5,132 / 3,136 / 5,629 |
+| Reproducer round 5 (12,897, 3,412) | 9,777 / 957 / 469 | 6,949 / 3,049 / 4,838 | 7,487 / 2,494 / 3,828 |
+
+What this establishes:
+
+- **Recall:** voids enclosed by touching union rings account for most of
+  MATLAB's holes. H_M puts a hole wherever MATLAB has one on all 251 causal
+  transforms that have holes, and on 3,534 of round 4's 3,852.
+- **Over-prediction:** MATLAB keeps only some of those voids as holes, and the
+  merged rules over-predict holes heavily.
+- **The experimental model** produces holes MATLAB does not show: on 2,790
+  strip pairs it keeps the enclosed sliver as a hole.
+
+H_M1 recovers 177, 932 and 1937 and all of round 6. It restores the strip
+pairs, but still loses near-collinear clouds and reproducer cases, so it is
+rejected like H_M. The experimental model is unchanged.
+
+**The open question** is which enclosed voids MATLAB keeps as holes, and when
+it merges touching rings rather than cleaning them apart. A controlled
+experiment would use shapes whose voids are bounded by k regions touching at
+single vertices (star polygons and their one-vertex perturbations), with the
+void's size swept across the tolerance, and two-vertex contacts as controls.
+It would need its own pre-registration; its predictions under H_M1 and under
+the experimental model would come from the committed variants.
+
 ### What is established and what is not
 
 Established on the pinned recordings (both hosts identical):

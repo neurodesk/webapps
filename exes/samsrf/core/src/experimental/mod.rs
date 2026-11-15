@@ -21,6 +21,26 @@ pub fn hull_of_polygon(points: &[[f64; 2]]) -> Result<Option<Hull>> {
     Ok(polyshape_vertices(points)?.1)
 }
 
+pub use polyshape::Hypothesis;
+
+/// `hull_of_polygon` under a diagnostic rule variant, with the number of holes
+/// (negatively wound rings) in the model's final output.
+pub fn hull_of_polygon_with(points: &[[f64; 2]], hypothesis: Hypothesis) -> Result<(Option<Hull>, usize)> {
+    let stages = polyshape::stages_of_boundaries_with(std::slice::from_ref(&points.to_vec()), hypothesis)
+        .map_err(|failure| Error::Shape(format!("polyshape: {failure:?}")))?;
+    let holes = stages.as_ref().map_or(0, |s| s.second_clean.iter().filter(|ring| doubled_area(ring) < 0).count());
+    let simplified = polyshape::simplify_with(points, hypothesis).map_err(|failure| Error::Shape(format!("polyshape: {failure:?}")))?;
+    let hull = simplified.hull.map(|vertices| Hull { vertices }).filter(|hull| hull.area() > 0.0);
+    Ok((hull, holes))
+}
+
+fn doubled_area(ring: &[(i64, i64)]) -> i128 {
+    (0..ring.len()).map(|i| {
+        let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+        a.0 as i128 * b.1 as i128 - b.0 as i128 * a.1 as i128
+    }).sum()
+}
+
 /// MATLAB's `polyshape(points).Vertices` as a set (the model does not reproduce
 /// their ring order), and `hull_of_polygon(points)`.
 pub fn polyshape_vertices(points: &[[f64; 2]]) -> Result<(Vec<[f64; 2]>, Option<Hull>)> {
