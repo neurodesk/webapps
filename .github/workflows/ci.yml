@@ -9,6 +9,11 @@ on:
     - cron: '23 3 * * *'
   workflow_dispatch:
     inputs:
+      scope:
+        description: "affected: the apps the branch changes since it left main (main: since the last green run); all: every app; gpu: only the macOS GPU suite of the affected apps; site: only the composite site and agentic checks"
+        type: choice
+        options: [affected, all, gpu, site]
+        default: affected
       agentic_mode:
         description: Optional agentic checks to run after building the catalog
         type: choice
@@ -54,6 +59,7 @@ jobs:
       all_apps: ${{ steps.plan.outputs.all_apps }}
       has_site: ${{ steps.plan.outputs.has_site }}
       withheld: ${{ steps.plan.outputs.withheld }}
+      full_plan: ${{ steps.plan.outputs.full_plan }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -70,15 +76,27 @@ jobs:
         id: plan
         env:
           # Pending pushes coalesce; compare with the last completed green run
-          # so every intervening merge is covered.
-          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && 'last-success' || '' }}
+          # so every intervening merge is covered. A dispatch diffs from where
+          # its branch left main unless its scope is all; the nightly tests all.
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && 'last-success' || github.event_name == 'workflow_dispatch' && inputs.scope != 'all' && 'merge-base' || '' }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           CI_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
+          SCOPE: ${{ inputs.scope }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/app-plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
+        run: node scripts/app-plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --scope "$SCOPE"
+
+  full-plan:
+    # Marks a ready pull request's run that tests its complete plan where the
+    # draft plan would test less: the planner's budget counts these runs.
+    needs: app-plan
+    if: needs.app-plan.outputs.full_plan == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record a full-plan run
+        run: echo "This run tests the pull request's complete affected-app plan."
 
   full-plan-withheld:
-    # A ready pull request over its whole-catalogue budget ran the draft plan.
+    # A ready pull request over its full-plan budget ran the draft plan.
     # Fail so the run never reads as the complete affected-app check.
     needs: app-plan
     if: needs.app-plan.outputs.withheld == 'true'
@@ -86,11 +104,11 @@ jobs:
     steps:
       - name: Report the withheld plan
         run: |
-          echo "::error title=Full plan withheld::This ready pull request already used its whole-catalogue ci runs in the last 24 hours, so this run tested only the apps it edits. Convert it to draft while iterating. To test every app at this head, add the full-ci label and use Re-run all jobs (Re-run failed jobs keeps this plan)."
+          echo "::error title=Full plan withheld::This ready pull request already used its full-plan ci runs in the last 24 hours, so this run tested only the apps it edits. Convert it to draft while iterating. To test every app at this head, add the full-ci label and use Re-run all jobs (Re-run failed jobs keeps this plan)."
           exit 1
 
   workspace-contracts:
-    if: github.event.action != 'converted_to_draft'
+    if: github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && inputs.scope != 'site'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -189,8 +207,9 @@ jobs:
     needs: app-plan
     # App-scoped changes can break composite assembly (runtime-store rewrites,
     # artifact budgets), so any PR that selects at least one app runs the
-    # composite checks; only docs-only changes skip them.
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'pull_request' || needs.app-plan.outputs.has_site == 'true')
+    # composite checks; only docs-only changes skip them. A dispatch follows
+    # its plan too, so its gpu scope skips them.
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')
     runs-on: ubuntu-latest
     outputs:
       agent_site_ready: ${{ steps.agent-site.outputs.ready }}
@@ -586,7 +605,7 @@ jobs:
           retention-days: 7
 
   homepage-easter-egg:
-    if: github.event.action != 'converted_to_draft'
+    if: github.event.action != 'converted_to_draft' && inputs.scope != 'gpu'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

@@ -190,10 +190,15 @@ function manifest(before, after) {
   return { before: JSON.stringify(before), after: JSON.stringify(after) };
 }
 
-test('a package version bump selects the apps that use the package, since builds embed versions', async () => {
+// Builds embed versions, but only as the version: no test compares one with a
+// committed reference, and workspace-contracts checks that every copy agrees.
+// The nightly run still builds every app at the new version.
+test('a package version bump is release bookkeeping and selects no app', async () => {
   const registry = await loadAppsRegistry();
   const manifests = new Map([['packages/synthsr/package.json', manifest({ name: 'x', version: '1.0.0' }, { name: 'x', version: '1.1.0' })]]);
-  assert.ok(createAppPlan(registry, ['packages/synthsr/package.json'], await graph, manifests).selected.some((app) => app.id === 'synthsr'));
+  assert.deepEqual(createAppPlan(registry, ['packages/synthsr/package.json'], await graph, manifests).selected, []);
+  const dependency = new Map([['packages/synthsr/package.json', manifest({ name: 'x', version: '1.0.0' }, { name: 'x', version: '1.1.0', dependencies: { a: '1' } })]]);
+  assert.ok(createAppPlan(registry, ['packages/synthsr/package.json'], await graph, dependency).selected.some((app) => app.id === 'synthsr'));
 });
 
 test('root test files app e2e scripts run select those apps', async () => {
@@ -652,7 +657,7 @@ test('a root-relative path joined onto a computed repository root selects its ap
 
 test('ci.yml runs the composite site build on pull requests that need it', async () => {
   const ci = parse(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
-  assert.equal(ci.jobs['composite-site'].if, "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'pull_request' || needs.app-plan.outputs.has_site == 'true')");
+  assert.equal(ci.jobs['composite-site'].if, "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')");
   assert.equal(ci.jobs['app-plan'].outputs.has_site, '${{ steps.plan.outputs.has_site }}');
 });
 
@@ -816,7 +821,7 @@ async function plannerFixture(t) {
   for (const path of ['scripts/lib', 'registry', '.github/workflows']) {
     await mkdir(join(root, path), { recursive: true });
   }
-  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/module-closure.mjs', 'scripts/lib/shared-module-users.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/tested-base.mjs', 'scripts/lib/ci-usage.mjs', 'scripts/lib/github-actions.mjs', 'scripts/lib/standalone.mjs', 'scripts/lib/app-information.mjs', 'registry/apps.yml']) {
+  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/module-closure.mjs', 'scripts/lib/shared-module-users.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/tested-base.mjs', 'scripts/lib/ci-usage.mjs', 'scripts/lib/github-actions.mjs', 'scripts/lib/full-plan-budget.mjs', 'scripts/lib/release-bookkeeping.mjs', 'scripts/lib/embedded-version-sites.mjs', 'scripts/lib/standalone.mjs', 'scripts/lib/app-information.mjs', 'registry/apps.yml']) {
     await copyFile(join(repoRoot, path), join(root, path));
   }
   await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: {} }));
@@ -858,7 +863,7 @@ test('missing, renamed and reusable CI jobs trigger a visible full-coverage fall
 
 // A ready pull request whose change selects every app, run through the CLI with
 // a `gh` stub that answers from `state`: its live labels, its branch's ci runs
-// (filtered by the query's `created>=`), each run's job count, and an optional
+// (filtered by the query's `created>=`), each run's job names, and an optional
 // call to fail.
 async function budgetFixture(t) {
   const { root } = await plannerFixture(t);
@@ -886,14 +891,14 @@ if (/\\/pulls\\/\\d+$/.test(path)) {
   for (const run of state.runs) if (Date.parse(run.created_at) >= since) console.log(JSON.stringify(run));
 } else if (/\\/runs\\/\\d+\\/jobs/.test(path)) {
   if (state.fail === 'jobs') fail('jobs');
-  console.log(state.jobs[/\\/runs\\/(\\d+)\\//.exec(path)[1]] ?? 0);
+  for (const name of state.jobs[/\\/runs\\/(\\d+)\\//.exec(path)[1]] ?? []) console.log(JSON.stringify(name));
 } else fail('unexpected ' + path);
 `);
   await chmod(join(bin, 'gh'), 0o755);
   // gh is a CommonJS script beside an ESM package.json.
   await writeFile(join(bin, 'package.json'), JSON.stringify({ type: 'commonjs' }));
   await writeFile(join(root, 'event.json'), JSON.stringify({ pull_request: {
-    number: 827, labels: [{ name: 'full-ci' }], head: { ref: 'feature', repo: { full_name: 'neurodesk/webapps' } }, base: { repo: { full_name: 'neurodesk/webapps' } },
+    number: 827, labels: [{ name: 'full-ci' }], head: { ref: 'feature', sha: 'b'.repeat(40), repo: { full_name: 'neurodesk/webapps' } }, base: { repo: { full_name: 'neurodesk/webapps' } },
   } }));
   const hoursAgo = (hours) => new Date(Date.now() - hours * 3600e3).toISOString().replace(/\.\d+Z$/, 'Z');
   let id = 100;
@@ -919,27 +924,35 @@ if (/\\/pulls\\/\\d+$/.test(path)) {
   return { ciRun, hoursAgo, plan };
 }
 
-test('a ready pull request over its whole-catalogue budget is planned as a draft and marked withheld', async (t) => {
+// Job names of a whole-catalogue run from before the marker, of a full-plan
+// run, and of a run that tested only the draft plan.
+const wholeCatalogue = Array.from({ length: 140 }, (_, index) => `browser-e2e (${index})`);
+const markedRun = ['app-plan', 'full-plan', 'app-tests (calmar)'];
+const draftRun = Array.from({ length: 35 }, (_, index) => `app-tests (${index})`);
+
+test('a ready pull request over its full-plan budget is planned as a draft and marked withheld', async (t) => {
   const { ciRun, plan } = await budgetFixture(t);
   const runs = [ciRun(), ciRun({ conclusion: 'success' })];
-  const { outputs, stderr } = await plan({ labels: [], runs, jobs: Object.fromEntries(runs.map((run) => [run.id, 140])) });
+  const { outputs, stderr } = await plan({ labels: [], runs, jobs: { [runs[0].id]: wholeCatalogue, [runs[1].id]: markedRun } });
   assert.equal(outputs.withheld, 'true', stderr);
+  assert.equal(outputs.full_plan, 'false', 'a withheld run is not a full-plan run');
   assert.equal(outputs.all_apps, 'false');
   assert.equal(outputs.has_site, 'false');
   assert.equal(outputs.has_apps, 'false');
-  assert.match(stderr, /#827 already started 2 whole-catalogue ci runs in 24 hours \(budget 2\)/);
+  assert.match(stderr, /#827 already started 2 full-plan ci runs in 24 hours \(budget 2\)/);
   assert.match(stderr, /add the full-ci label and use "Re-run all jobs"/);
 });
 
-test('the whole-catalogue budget keeps the full plan when it cannot justify withholding it', async (t) => {
+test('the full-plan budget keeps the full plan when it cannot justify withholding it', async (t) => {
   const { ciRun, hoursAgo, plan } = await budgetFixture(t);
   const full = (outputs, label) => {
     assert.equal(outputs.withheld, 'false', label);
+    assert.equal(outputs.full_plan, 'true', label);
     assert.equal(outputs.all_apps, 'true', label);
     assert.equal(outputs.has_site, 'true', label);
   };
   const spent = [ciRun(), ciRun()];
-  const jobs = Object.fromEntries(spent.map((run) => [run.id, 140]));
+  const jobs = Object.fromEntries(spent.map((run) => [run.id, markedRun]));
   // The label is read live: the event payload already lists full-ci, so only the API answer counts.
   full((await plan({ labels: ['full-ci'], runs: spent, jobs })).outputs, 'live full-ci label');
   for (const fail of ['labels', 'runs', 'jobs']) {
@@ -948,11 +961,11 @@ test('the whole-catalogue budget keeps the full plan when it cannot justify with
     assert.match(stderr, /keeping the full plan because the budget check failed/);
   }
   const old = [ciRun({ created_at: hoursAgo(25), run_started_at: hoursAgo(25), updated_at: hoursAgo(24.5) }), ciRun()];
-  full((await plan({ labels: [], runs: old, jobs: Object.fromEntries(old.map((run) => [run.id, 140])) })).outputs, 'a run older than 24 hours');
+  full((await plan({ labels: [], runs: old, jobs: Object.fromEntries(old.map((run) => [run.id, wholeCatalogue])) })).outputs, 'a run older than 24 hours');
   const fork = [ciRun({ pull_requests: [], head_repository: 'ada/webapps' }), ciRun()];
-  full((await plan({ labels: [], runs: fork, jobs: Object.fromEntries(fork.map((run) => [run.id, 140])) })).outputs, 'a fork branch of the same name');
-  const partial = [ciRun(), ciRun()];
-  full((await plan({ labels: [], runs: partial, jobs: { [partial[0].id]: 140, [partial[1].id]: 35 } })).outputs, 'a partial run');
+  full((await plan({ labels: [], runs: fork, jobs: Object.fromEntries(fork.map((run) => [run.id, markedRun])) })).outputs, 'a fork branch of the same name');
+  const draftTier = [ciRun(), ciRun()];
+  full((await plan({ labels: [], runs: draftTier, jobs: { [draftTier[0].id]: markedRun, [draftTier[1].id]: draftRun } })).outputs, 'a draft-tier run');
 });
 
 test('unrelated workflow parsing errors remain fatal', async (t) => {
@@ -1523,4 +1536,76 @@ test('the shell and its tests read only their own app entry of the standalone ca
   for (const [file, pattern] of [['site/app-shell.js', /catalog\.(?!apps\[metadata\.id\])/], ['test-utils/standalone-dialog.mjs', /catalog\.(?!apps\[id\])/]]) {
     assert.doesNotMatch(await readFile(join(repoRoot, file), 'utf8'), pattern, `${file} reads more than its own entry`);
   }
+});
+
+// What `pnpm release` writes: changelogs, version-only manifests and the
+// embedded version strings. None of it selects an app or the site build.
+test('release bookkeeping selects nothing, even in shared packages', async () => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  const text = async (path) => readFile(join(repoRoot, path), 'utf8');
+  const bump = async (path, edit = (manifest) => manifest) => {
+    const before = await text(path);
+    return [path, { before, after: JSON.stringify(edit({ ...JSON.parse(before), version: '9.9.20991231' }), null, 2) }];
+  };
+  const config = 'apps/n4/src/config.js';
+  const configBefore = await text(config);
+  const versioned = configBefore.replace(/(version: ")[^"]+(")/, '$19.9.20991231$2');
+  assert.notEqual(versioned, configBefore);
+  const manifests = new Map([
+    await bump('packages/components/package.json'),
+    await bump('packages/runtime-support/package.json'),
+    await bump('apps/n4/package.json'),
+    [config, { before: configBefore, after: versioned }],
+  ]);
+  const release = [...manifests.keys(), 'packages/components/CHANGELOG.md', 'apps/n4/CHANGELOG.md', '.changeset/n4-fix.md'];
+  const plan = createAppPlan(registry, release, workspace, manifests);
+  assert.deepEqual(plan.selected, []);
+  assert.equal(plan.site, false);
+  assert.equal(plan.reasons.fallback, null);
+  assert.deepEqual([...plan.bookkeeping].sort(), release.filter((path) => !path.startsWith('.changeset/')).sort());
+
+  // Anything beyond the version keeps its usual reach.
+  const code = new Map([...manifests, [config, { before: configBefore, after: `${versioned}// changed\n` }]]);
+  assert.deepEqual(createAppPlan(registry, release, workspace, code).selected.map((app) => app.id), ['n4']);
+  const dependency = new Map([...manifests, await bump('packages/components/package.json', (manifest) => ({ ...manifest, dependencies: { ...manifest.dependencies, added: '1.0.0' } }))]);
+  assert.ok(createAppPlan(registry, release, workspace, dependency).allApps);
+  // Without both texts a manifest is an ordinary code change.
+  assert.ok(createAppPlan(registry, ['packages/components/package.json'], workspace).allApps);
+});
+
+test('a dispatched run tests what its branch changed since it left main, in the scope it asks for', async (t) => {
+  const { root, run } = await plannerFixture(t);
+  const registry = await loadAppsRegistry();
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '--quiet');
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'main');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const gpuApp = registry.apps.find((app) => app.ci.hardware_gpu && app.ci.browser_test);
+  await mkdir(join(root, 'apps', gpuApp.id), { recursive: true });
+  await writeFile(join(root, 'apps', gpuApp.id, 'main.js'), '// branch change\n');
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'branch');
+  const plan = (...args) => {
+    const result = run('--base', 'merge-base', '--head', 'HEAD', ...args);
+    assert.equal(result.status, 0, result.stderr);
+    return { outputs: JSON.parse(result.stdout), stderr: result.stderr };
+  };
+  const affected = plan();
+  assert.deepEqual(JSON.parse(affected.outputs.selected_ids), [gpuApp.id]);
+  assert.match(affected.stderr, /is where HEAD left main/);
+  assert.equal(affected.outputs.has_apps, 'true');
+  assert.equal(affected.outputs.has_gpu_apps, 'true');
+  const gpu = plan('--scope', 'gpu').outputs;
+  assert.deepEqual([gpu.has_apps, gpu.has_browser_apps, gpu.has_release_apps, gpu.has_site, gpu.has_gpu_apps], ['false', 'false', 'false', 'false', 'true']);
+  assert.deepEqual(JSON.parse(gpu.gpu_apps).include.map(({ app }) => app), [gpuApp.id]);
+  const site = plan('--scope', 'site').outputs;
+  assert.deepEqual([site.has_apps, site.has_browser_apps, site.has_gpu_apps, site.has_site], ['false', 'false', 'false', 'true']);
+  assert.notEqual(run('--base', 'merge-base', '--head', 'HEAD', '--scope', 'everything').status, 0);
+  // On main itself there is nothing between it and its merge base: it plans from the tested base, like a push.
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const onMain = plan();
+  assert.match(onMain.stderr, /last successful ci run on main is unknown|no successful ci run on main/);
+  assert.equal(onMain.outputs.all_apps, 'true');
 });

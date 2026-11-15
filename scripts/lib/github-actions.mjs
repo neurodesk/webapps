@@ -72,6 +72,11 @@ export async function jobCount(runId) {
   return Number(await gh(['api', `repos/${REPOSITORY}/actions/runs/${runId}/jobs?per_page=1&filter=latest`, '--jq', '.total_count']));
 }
 
+// The names of a run's latest attempt's jobs, in pages of 30 (see listJobs).
+export function jobNames(runId) {
+  return paginated(`repos/${REPOSITORY}/actions/runs/${runId}/jobs?per_page=30&filter=latest`, '.jobs[].name | @json');
+}
+
 // The jobs of a run's latest attempt. Pages of 100 jobs fail with a steady
 // HTTP 502 for some full-catalog runs; pages of 30 do not.
 export function listJobs(runId) {

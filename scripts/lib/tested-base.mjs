@@ -9,7 +9,9 @@ export const TESTED_BASE = 'last-success';
 
 // Pull request runs test a head against an older main, and a fork's pull
 // request can come from a branch named main; neither tested the branch itself.
-const BRANCH_EVENTS = new Set(['push', 'schedule', 'workflow_dispatch']);
+// A dispatch can test part of the plan (its gpu or site scope), so it does not
+// count either.
+const BRANCH_EVENTS = new Set(['push', 'schedule']);
 
 // Of `runs` (GitHub workflow runs), the head of the green branch run nearest
 // to `head`, or why there is none. `git.isAncestor(a, b)` and

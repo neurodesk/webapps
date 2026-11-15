@@ -5,15 +5,19 @@
 // failure to decide runs the workflow.
 //
 //   node scripts/workflow-gate.mjs --workflow elastix-native --base <sha> --head <sha>
+//   node scripts/workflow-gate.mjs --workflow elastix-native --push --head <sha>
 //   node scripts/workflow-gate.mjs --workflow elastix-native --sweep --head <sha>
 //
-// --sweep needs GITHUB_REPOSITORY and a GITHUB_TOKEN that can read Actions runs.
+// --push and --sweep need GITHUB_REPOSITORY and a GITHUB_TOKEN that can read
+// Actions runs. In a ready pull request's run (GITHUB_EVENT_NAME and
+// GITHUB_EVENT_PATH), the token also reads the pull request's labels.
 import { appendFile, readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
 import { changedManifests, changedPathsFromGit } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
+import { eventPullRequest, fullPlanBudget } from './lib/full-plan-budget.mjs';
 import { resolveTestedBase } from './lib/tested-base.mjs';
-import { calledWorkflows, decideWorkflow, sweepWorkflow } from './lib/workflow-gate.mjs';
+import { budgetedDecision, calledWorkflows, decideWorkflow, pushWorkflow, sweepWorkflow } from './lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from './lib/workspace-graph.mjs';
 
 function option(name) {
@@ -22,7 +26,7 @@ function option(name) {
 }
 
 const name = option('--workflow');
-if (!name || !/^[\w-]+$/.test(name)) throw new Error('Usage: workflow-gate.mjs --workflow <name> (--base <sha> | --sweep) --head <sha>');
+if (!name || !/^[\w-]+$/.test(name)) throw new Error('Usage: workflow-gate.mjs --workflow <name> (--base <sha> | --push | --sweep) --head <sha>');
 const head = option('--head') || 'HEAD';
 
 // The sweep reads what main gained since this workflow last finished green on
@@ -37,15 +41,32 @@ async function sweep(flow) {
   return sweepWorkflow({ flow, changedPaths, manifests, registry: await loadAppsRegistry() });
 }
 
+// A push reads what main gained since this workflow last finished green on it
+// by an earlier push or a sweep, so a skipped or cancelled run hides nothing.
+async function push(flow) {
+  const tested = await resolveTestedBase({ head, workflow: `${name}.yml`, cwd: repoRoot, events: new Set(['push', 'schedule']) });
+  if (!tested.base) return { run: true, reason: tested.reason };
+  const changedPaths = changedPathsFromGit({ base: tested.base, head, cwd: repoRoot });
+  const manifests = changedManifests({ base: tested.base, head, cwd: repoRoot, changedPaths });
+  return pushWorkflow({ flow, changedPaths, manifests, registry: await loadAppsRegistry() });
+}
+
 async function decide(flow, read) {
   if (process.argv.includes('--sweep')) return sweep(flow);
+  if (process.argv.includes('--push')) return push(flow);
   const base = option('--base');
   const calledFlows = await Promise.all(calledWorkflows(flow).map(read));
   const changedPaths = changedPathsFromGit({ base, head, cwd: repoRoot });
   const manifests = changedManifests({ base, head, cwd: repoRoot, changedPaths });
   const registry = await loadAppsRegistry();
   const graph = await loadConservativeWorkspaceGraph(repoRoot);
-  return decideWorkflow({ flow, calledFlows, changedPaths, registry, graph, manifests, root: repoRoot });
+  const decision = decideWorkflow({ flow, calledFlows, changedPaths, registry, graph, manifests, root: repoRoot });
+  if (process.env.GITHUB_EVENT_NAME !== 'pull_request' || !process.env.GITHUB_EVENT_PATH) return decision;
+  const budget = async () => {
+    const pullRequest = eventPullRequest(JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH, 'utf8')));
+    return fullPlanBudget({ pullRequest, excludeHead: pullRequest.head });
+  };
+  return budgetedDecision(decision, { registry, graph, changedPaths, manifests, budget, log: (message) => console.error(`${name}: ${message}`) });
 }
 
 let decision;

@@ -50,8 +50,12 @@ Every workflow with such a filter now starts with a `gate` job that calls
 - When it cannot decide (no diff, an unreadable lockfile, a script error) it
   runs.
 
-The gate answers `false` for a draft and `true` for a push or a dispatch
-without a checkout. The job always finishes: a skipped gate would skip every
+The gate answers `false` for a draft and `true` for a dispatch without a
+checkout. A ready pull request over its full-plan budget
+([enforcement](#enforcement-in-ci)) answers `false` where the shared change
+gives `ci` a full plan wider than its draft plan, because there its `ci` run
+withholds the plan too and fails `full-plan-withheld`
+(`budgetedDecision`); a check that fails runs the workflow. The job always finishes: a skipped gate would skip every
 job after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and
 fails when a workflow adds a shared filter without the gate.
 
@@ -64,6 +68,15 @@ A gated workflow's `push` filter lists only its own paths, so a merge starts
 the native suites it changed and no others. On 10 November 2026 three merges
 each started 25 to 37 native workflows on Linux, macOS and Windows through
 shared push filters, about 5,200 runner minutes in one day.
+
+A release still matched those own paths: on 13 November 2026 two release
+merges (#835, #826) re-ran 24 and 15 native workflows on every OS, 1,368
+runner minutes, for version bumps and changelogs whose release dispatches then
+built the same packages. So the gate decides pushes too (`pushWorkflow`): the
+workflow runs unless every path under its `push` filter that changed since it
+last finished green on main, by a push or a sweep, is release bookkeeping
+(below). Without such a run, or when no changed path matches a filter, it
+runs. The 15 native workflows without a gate still run on every match.
 
 Shared paths reach a gated workflow on main through its nightly sweep. Each
 has one `schedule`, and for that event the gate runs the workflow when a path
@@ -78,8 +91,13 @@ only. A night without such a change costs each workflow one gate job.
 
 Release bookkeeping is left aside, because every release writes it into the
 shared packages: a `CHANGELOG.md`, a workspace `package.json` whose only
-change is its `version`, and, for a workflow that builds registry apps, a
-valid `registry/standalone.json` in which none of their entries changed.
+change is its `version`, a version-only change at an `EMBEDDED_VERSION_SITES`
+site (`scripts/lib/release-bookkeeping.mjs`) and, for a workflow that builds
+registry apps, a valid `registry/standalone.json` in which none of their
+entries changed. The same rule, without the download catalog part, keeps the
+app planner from selecting apps for a release and the pull request gate from
+running a workflow for one: before it, a version bump of
+`packages/components` selected all 63 apps.
 Replayed over the releases of 3, 8 and 11 November 2026, such a release ran
 27 of the 29 scheduled gated workflows before this rule and 1 after it
 (`hmc-native`, for a generated source file the same release changed). The
@@ -130,13 +148,18 @@ by its next push, and agents bypassed the draft rule by converting to draft,
 pushing and marking ready within ten seconds. So `scripts/app-plan.mjs` also
 applies the per-pull-request budget when it plans a ready pull request's run.
 
-When the complete plan would select every app and the draft plan would select
-fewer, it counts the pull request's earlier `ci` runs from the last 24 hours
-exactly as the report does (`fullPlanDecision` in `scripts/lib/ci-usage.mjs`),
-whatever event started them, `ready_for_review` included. Once they fill the
-budget, the run uses the draft plan, skips the composite site, and its
-`full-plan-withheld` job fails, so a withheld run never reads as the complete
-affected-app check. The window is rolling rather than the report's UTC day.
+When the complete plan would select more apps than the draft plan, the run
+starts the `full-plan` marker job, and the planner counts the pull request's
+earlier full-plan runs from the last 24 hours (`fullPlanDecision` in
+`scripts/lib/ci-usage.mjs`): runs that started the marker, and whole-catalogue
+runs, whatever event started them, `ready_for_review` and cancelled runs
+included. A partial plan counts as much as a whole-catalogue one: on
+13 November 2026 one pull request ran its 14 selected apps nine times. Once
+the runs fill the budget of 2, the run uses the draft plan, skips the
+composite site, and its `full-plan-withheld` job fails, so a withheld run never
+reads as the complete affected-app check. The pull request's gated native
+workflows skip at the same commits ([gate](#pull-request-gate-for-shared-path-filters)).
+The window is rolling rather than the report's UTC day.
 
 To test every app at that head, add the `full-ci` label and use **Re-run all
 jobs** on the run; the planner reads the labels when it runs, so no new trigger
@@ -204,6 +227,15 @@ No label or previous successful commit opts a new commit out of testing.
 The existing wide-PR macOS GPU policy remains: full-catalog GPU validation
 runs on main, nightly, or manual dispatch. Directly selected GPU apps still
 run during draft feedback.
+
+A manual `ci` run plans like a pull request: `gh workflow run ci --ref
+<branch>` tests the apps the branch changed since it left main (on main,
+since the last green run). `-f scope=gpu` runs only the macOS GPU suite of
+those apps, `-f scope=site` only the composite site and its agentic checks
+(with `agentic_mode`), and `-f scope=all` every app. On 13 November 2026 all
+three manual runs tested every app (3,037 runner minutes) to reach the GPU
+suite or the agentic checks. A dispatch no longer moves the tested base main's
+pushes diff from, since its scope can leave apps out.
 
 Main CI lets a running push finish while GitHub replaces older pending pushes
 with the newest pending push. The next run still compares against the last

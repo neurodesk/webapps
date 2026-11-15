@@ -9,7 +9,7 @@ import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { commandLineClosure, moduleClosure, onlyAddsExports, onlyBumpsVersion } from '../scripts/lib/module-closure.mjs';
 import { testedBase } from '../scripts/lib/tested-base.mjs';
-import { calledWorkflows, decideWorkflow, isSharedFilter, ownedPackages, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
+import { budgetedDecision, calledWorkflows, decideWorkflow, isSharedFilter, ownedPackages, pushWorkflow, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
 // The pull request gate skips a native suite only when no changed file can
@@ -180,7 +180,9 @@ test('a dependency manifest that only gains exports does not run its importers',
   assert.equal(decide(paths, [manifest], text((after) => { after.exports[existing] = './src/elsewhere.js'; })).run, true);
   assert.equal(decide(paths, [manifest], text((after) => { delete after.exports[existing]; })).run, true);
   assert.equal(decide(paths, [manifest], text((after) => { after.dependencies = { ...after.dependencies, added: '1.0.0' }; })).run, true);
-  assert.equal(decide(paths, [manifest], text((after) => { after.version = '9.9.20991231'; })).run, true);
+  // A version bump is release bookkeeping, which no workflow tests.
+  assert.equal(decide(paths, [manifest], text((after) => { after.version = '9.9.20991231'; })).run, false);
+  assert.equal(decide(paths, [manifest], text((after) => { after.version = '9.9.20991231'; after.dependencies = { ...after.dependencies, added: '1.0.0' }; })).run, true);
   // Without both texts the change is an ordinary code change.
   assert.equal(decide(paths, [manifest]).run, true);
 });
@@ -254,7 +256,7 @@ test('every workflow with a shared pull request filter waits for the gate', asyn
     // With nothing to follow, the gate would skip every shared change.
     assert.ok(ownedPackages(filters, repoRoot).length || workflowApps(filters, registry).length || workflowScripts(flow).length, `${file}: the gate can follow an owned package, an app or a script`);
     assert.equal(flow.jobs.gate?.uses, './.github/workflows/pr-gate.yml', `${file} filters on shared paths, so it calls the gate`);
-    assert.deepEqual(flow.jobs.gate.permissions, { contents: 'read', actions: 'read' }, `${file}: the sweep reads this workflow's runs`);
+    assert.deepEqual(flow.jobs.gate.permissions, { contents: 'read', actions: 'read', 'pull-requests': 'read' }, `${file}: the sweep and pushes read this workflow's runs, pull requests their labels`);
     for (const [id, job] of Object.entries(flow.jobs)) {
       if (id === 'gate' || job.needs) continue;
       // An entry job that does not wait is one no pull request starts.
@@ -352,11 +354,11 @@ test('the sweep starts from the last merge or sweep that finished green, however
   assert.match(sweepBase([]).reason, /no successful hmc-native run on main/);
 });
 
-test('the gate answers drafts, pushes and dispatches without a checkout, and decides ready pull requests and sweeps', async () => {
+test('the gate answers drafts and dispatches without a checkout, and decides ready pull requests, pushes and sweeps', async () => {
   const flow = YAML.parse(await readFile(new URL('../.github/workflows/pr-gate.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(flow.on), ['workflow_call']);
-  // The sweep reads the caller's runs; a caller cannot be granted more than its gate job passes on.
-  assert.deepEqual(flow.permissions, { contents: 'read', actions: 'read' });
+  // The sweep and pushes read the caller's runs and a pull request its labels; a caller cannot be granted more than its gate job passes on.
+  assert.deepEqual(flow.permissions, { contents: 'read', actions: 'read', 'pull-requests': 'read' });
   const job = flow.jobs.decide;
   assert.equal(job.if, undefined, 'a skipped gate would skip every job after the entry jobs');
   assert.equal(job.outputs.run, '${{ steps.event.outputs.run || steps.decide.outputs.run }}');
@@ -370,6 +372,7 @@ test('the gate answers drafts, pushes and dispatches without a checkout, and dec
   const decideStep = rest.find((step) => step.id === 'decide');
   assert.match(decideStep.run, /node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --base "\$BASE_SHA" --head "\$HEAD_SHA"/);
   assert.match(decideStep.run, /"\$EVENT_NAME" = schedule \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --sweep --head "\$HEAD_SHA"/);
+  assert.match(decideStep.run, /"\$EVENT_NAME" = push \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --push --head "\$HEAD_SHA"/);
   assert.equal(decideStep.env.GITHUB_TOKEN, '${{ github.token }}');
   assert.equal(decideStep.env.HEAD_SHA, '${{ github.event.pull_request.head.sha || github.sha }}');
   assert.equal(decideStep.env.WORKFLOW, '${{ inputs.workflow }}');
@@ -379,8 +382,58 @@ test('the gate answers drafts, pushes and dispatches without a checkout, and dec
     execFileSync('bash', ['-e', '-c', event.run], { env: { ...process.env, EVENT_NAME, DRAFT, GITHUB_OUTPUT: output } });
     return readFileSync(output, { encoding: 'utf8', flag: 'a+' }).trim();
   };
-  for (const name of ['push', 'workflow_dispatch']) assert.equal(answer(name, ''), 'run=true', name);
-  assert.equal(answer('schedule', ''), '');
+  assert.equal(answer('workflow_dispatch', ''), 'run=true');
+  for (const name of ['push', 'schedule']) assert.equal(answer(name, ''), '', name);
   assert.equal(answer('pull_request', 'true'), 'run=false');
   assert.equal(answer('pull_request', 'false'), '');
+});
+
+// What a release leaves in a workflow's own package and app: version-only manifests and changelogs.
+const versionBump = (path) => {
+  const before = readFileSync(join(repoRoot, path), 'utf8');
+  return [path, { before, after: JSON.stringify({ ...JSON.parse(before), version: '9.9.20991231' }, null, 2) }];
+};
+const elastixRelease = new Map([versionBump('packages/elastix/package.json'), versionBump('apps/elastix/package.json')]);
+const elastixReleasePaths = ['packages/elastix/package.json', 'packages/elastix/CHANGELOG.md', 'apps/elastix/package.json', 'apps/elastix/CHANGELOG.md', '.changeset/elastix-fix.md'];
+
+test('a pull request that only releases runs no gated workflow, even for its own package', async () => {
+  const released = await decideReal('elastix-native', elastixReleasePaths, elastixRelease);
+  assert.deepEqual(released, { run: false, reason: 'only release bookkeeping (changelogs and version bumps) matches its filters' });
+  assert.equal((await decideReal('elastix-native', [...elastixReleasePaths, 'packages/elastix/src/presets.js'], elastixRelease)).run, true);
+  // Without the manifest texts a manifest change is code.
+  assert.equal((await decideReal('elastix-native', elastixReleasePaths)).run, true);
+});
+
+test('a push to main runs a gated workflow unless its push filters matched only release bookkeeping', async () => {
+  const flow = await real('elastix-native');
+  const push = (changedPaths, manifests = elastixRelease) => pushWorkflow({ flow, changedPaths, manifests, registry });
+  assert.equal(push(elastixReleasePaths).run, false);
+  assert.match(push(elastixReleasePaths).reason, /^only release bookkeeping changed under its push filters \(packages\/elastix\/package\.json/);
+  // Shared paths outside the push filters are the sweep's, not this push's.
+  assert.equal(push([...elastixReleasePaths, 'packages/components/src/ui.js']).run, false);
+  assert.deepEqual(push([...elastixReleasePaths, 'apps/elastix/src/main.js']), { run: true, reason: 'apps/elastix/src/main.js matches apps/elastix/**' });
+  assert.equal(push(elastixReleasePaths, new Map()).run, true, 'a manifest without its texts is code');
+  assert.equal(push(['docs/readme.md']).run, true, 'a range that matches no push filter is not what started the run');
+  assert.equal(pushWorkflow({ flow: { on: { push: {} } }, changedPaths: ['a'], registry }).run, true);
+  assert.equal(pushWorkflow({ flow: { on: { push: { paths: ['apps/**', '!apps/x/**'] } } }, changedPaths: ['apps/y/CHANGELOG.md'], registry }).run, true);
+});
+
+test('a ready pull request over its full-plan budget skips a gated workflow only where ci withholds too', async () => {
+  const shared = ['packages/components/src/styles/imaging-workspace.css'];
+  const own = ['apps/elastix/src/main.js'];
+  const runs = { run: true, reason: 'reaches it' };
+  let asked = 0;
+  const gate = (decision, changedPaths, budget) => budgetedDecision(decision, { registry, graph, changedPaths, budget: async () => { asked++; return budget(); }, log: () => {} });
+  const spent = () => ({ withheld: true, reason: '#814 already started 2 full-plan ci runs in 24 hours (budget 2)' });
+  const withheld = await gate(runs, shared, spent);
+  assert.equal(withheld.run, false);
+  assert.match(withheld.reason, /^#814 already started 2 full-plan ci runs in 24 hours \(budget 2\), and its ci run withholds the full plan too; add the full-ci label/);
+  assert.deepEqual(await gate(runs, shared, () => ({ withheld: false, reason: '1 of 2' })), runs);
+  assert.deepEqual(await gate(runs, shared, () => { throw new Error('HTTP 403'); }), runs, 'a failed check runs the workflow');
+  asked = 0;
+  // Where the draft plan is the full plan, ci never withholds, so neither does the gate.
+  assert.deepEqual(await gate(runs, own, spent), runs);
+  const skipped = { run: false, reason: 'does not reach it' };
+  assert.deepEqual(await gate(skipped, shared, spent), skipped);
+  assert.equal(asked, 0);
 });

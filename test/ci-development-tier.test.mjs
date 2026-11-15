@@ -26,7 +26,7 @@ test('draft feedback selects direct app edits; ready PRs retain shared coverage'
   assert.equal(createAppPlan(registry, [], null, new Map(), { draft: true }).selected.length, registry.apps.length, 'unknown diff fails open to complete coverage');
 });
 
-test('ready and updated PRs run deferred native jobs; push and dispatch retain their gates', async () => {
+test('ready and updated PRs run deferred native jobs; pushes and dispatches keep their entry jobs', async () => {
   let guarded = 0;
   let gated = 0;
   for (const file of await readdir(new URL('../.github/workflows', import.meta.url))) {
@@ -36,7 +36,7 @@ test('ready and updated PRs run deferred native jobs; push and dispatch retain t
     if (usesGate) {
       gated++;
       // The gate always finishes, so jobs after the entry jobs keep their default conditions.
-      assert.deepEqual(flow.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+      assert.deepEqual(flow.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
     }
     if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
       for (const [id, job] of Object.entries(flow.jobs)) {
@@ -80,7 +80,7 @@ test('main CI can finish while PR pushes cancel their predecessors', async () =>
   assert.equal(evaluate(plan.env.CI_DRAFT, { event_name: 'pull_request', event: { pull_request: { draft: true } } }), true);
 });
 
-test('a ready pull request over its whole-catalogue budget fails instead of passing on the draft plan', async () => {
+test('a ready pull request over its full-plan budget fails instead of passing on the draft plan', async () => {
   const flow = await workflow('ci.yml');
   const plan = flow.jobs['app-plan'];
   assert.equal(plan.permissions['pull-requests'], 'read');
@@ -89,6 +89,34 @@ test('a ready pull request over its whole-catalogue budget fails instead of pass
   assert.deepEqual([job.needs].flat(), ['app-plan']);
   assert.equal(job.if, "needs.app-plan.outputs.withheld == 'true'");
   assert.match(job.steps.at(-1).run, /Re-run all jobs[\s\S]*\nexit 1|Re-run all jobs[\s\S]*exit 1/);
+  // The budget counts the runs that start the marker job (FULL_PLAN_JOB in scripts/lib/ci-usage.mjs).
+  assert.equal(plan.outputs.full_plan, '${{ steps.plan.outputs.full_plan }}');
+  const marker = flow.jobs['full-plan'];
+  assert.deepEqual([marker.needs].flat(), ['app-plan']);
+  assert.equal(marker.if, "needs.app-plan.outputs.full_plan == 'true'");
+});
+
+test('a dispatched run asks for its scope and only the jobs of that scope start', async () => {
+  const flow = await workflow('ci.yml');
+  const scope = flow.on.workflow_dispatch.inputs.scope;
+  assert.deepEqual(scope.options, ['affected', 'all', 'gpu', 'site']);
+  assert.equal(scope.default, 'affected');
+  const dispatch = { event_name: 'workflow_dispatch', event: {} };
+  const condition = (id) => flow.jobs[id].if.replaceAll('needs.app-plan', "needs['app-plan']");
+  const starts = (id, inputs, outputs = {}) => evaluate(condition(id), dispatch, inputs, { 'app-plan': { outputs: { has_site: 'true', has_gpu_apps: 'true', ...outputs } } });
+  for (const id of ['workspace-contracts', 'homepage-easter-egg']) {
+    assert.equal(starts(id, { scope: 'affected' }), true, id);
+    assert.equal(starts(id, { scope: 'gpu' }), false, id);
+  }
+  assert.equal(starts('workspace-contracts', { scope: 'site' }), false);
+  assert.equal(starts('homepage-easter-egg', { scope: 'site' }), true);
+  // The plan decides the site build of a dispatch (has_site is false for the gpu scope); pushes and the nightly always build it.
+  assert.equal(starts('composite-site', { scope: 'gpu' }, { has_site: 'false' }), false);
+  assert.equal(starts('composite-site', { scope: 'site' }), true);
+  for (const event_name of ['push', 'schedule']) {
+    assert.equal(evaluate(condition('composite-site'), { event_name, event: {} }, {}, { 'app-plan': { outputs: { has_site: 'false' } } }), true, event_name);
+  }
+  assert.equal(starts('browser-e2e-gpu', { scope: 'gpu' }, { all_apps: 'true' }), true);
 });
 
 test('returning to draft cancels the prior run without starting CI jobs', async () => {
