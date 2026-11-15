@@ -793,14 +793,18 @@ on AMD and Intel hosts in every recording that had both (96, 276 arrays).
 
 **The rule** (`matlab_math::sparse_product_unfused`, since 0.6.20261115). For a
 course of n samples with fewer than a quarter nonzero and a kernel of T >= 9 taps,
-products of the sparse sum are fused into the running sum, except:
+or of 2-8 taps shorter than the course, the nonzero samples are summed in input
+order, each product fused into the running sum, except:
 
 - for T <= 16, every product is rounded and then added;
-- when the full output (n + T - 1 elements) takes more than 16 KiB, near the
-  boundaries B of blocks that hold 8 KiB of output (512 complex or 1,024 real
-  elements), doubled until the full output spans at most 8 blocks: for the 16
-  outputs before B, the products of the 16 inputs before B; for outputs from B on,
-  the products of the 16 inputs from B - (T - 1).
+- when the full output (f = n + T - 1 elements) takes more than 16 KiB (f >= 1,025
+  complex or 2,049 real), near the boundaries B of blocks that hold 8 KiB of output
+  (512 complex or 1,024 real elements), the block doubled while f spans 8 blocks
+  or more: for the 16 outputs before B, the products of the 16 inputs before B;
+  for outputs from B on, the products of the 16 inputs from B - (T - 1).
+
+The short-kernel part (2-8 taps) and the block doubling at exactly 8 blocks come
+from the third recording ([remaining gaps](#remaining-gaps-730)).
 
 **How it was found.** The first discovery file decided that boundaries depend on
 the full output, not the course length (995 samples with 33 taps show them, 1,000
@@ -814,15 +818,11 @@ The law frozen from it reproduces every kept part of all 12 held-out courses on
 both hosts. A block law that grows to the largest power of two below a quarter of
 the full output gives the same blocks on every recorded course.
 
-**Identification limits.** The complex threshold is not distinguished among full
-output lengths 1,023–1,026; the implementation starts above 1,024. The recordings
-also do not distinguish the block laws when the full output is exactly eight
-blocks. Discriminating probes would use a 33-tap kernel at those four complex
-lengths, plus complex length 4,096 and real length 8,192, with values that make
-the competing fusion predictions differ. The twelve final held-out courses
-still need an AMD replay: agreement on earlier AMD courses does not supply that
-missing confirmation. These limits do not establish MATLAB's internal algorithm
-or parity on arbitrary inputs.
+**Identification limits.** These two recordings left the complex threshold
+undistinguished among full output lengths 1,023-1,026 and the block law undecided
+at exactly eight blocks, and their final held-out courses had no AMD replay. The
+third recording ([remaining gaps](#remaining-gaps-730)) settles all three. None of
+this establishes MATLAB's internal algorithm or parity on arbitrary inputs.
 
 | Courses (at least 9 taps) | Parts compared | Previous port misses | Now |
 | --- | --- | --- | --- |
@@ -837,18 +837,65 @@ The previous port fused every product. `conv_boundary.rs` also keeps, as negativ
 controls, the rule rejected by the first held-out file (398 parts of its 129-tap
 course) and the previous model (the counts above).
 
-**Outside the rule.** Kernels of fewer than 9 taps on long sparse courses (3, 5
-and 8 taps, complex 1,100 and real 2,100 samples) are also unfused at every
-product, but this was recorded only as discovery and reported, as pre-registered;
-the port keeps its path for them and misses 13,851 of their parts. The dense
-complex control (60% nonzero) matches the port's dense path. Kernels as long as the
-course (where MATLAB slides the course over the kernel) are not covered.
+**Outside the rule.** The 3-, 5- and 8-tap courses of the second recording (13,851
+parts the previous short-kernel path missed) were discovery for the short-kernel
+rule, which the third recording held out. The dense complex control (60% nonzero)
+matches the port's dense path. Kernels as long as the course (where MATLAB slides
+the course over the kernel) are not covered.
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-conv-boundary" packages/samsrf/validation/matlab/conv-boundary-reference.json
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-conv-blocks" packages/samsrf/validation/matlab/conv-blocks-reference.json
 SAMSRF_CONV_BOUNDARY_DIR="$TMPDIR/samsrf-conv-boundary" SAMSRF_CONV_BLOCKS_DIR="$TMPDIR/samsrf-conv-blocks" \
   cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test conv_boundary -- --nocapture
+```
+
+### Remaining gaps (#730)
+
+[`conv-gaps-predictions.md`](conv-gaps-predictions.md) pre-registered three
+questions, each in its own file, before `record_conv_gaps.m` ran.
+`conv-gaps-reference.json` pins
+[run 43697799526](https://github.com/neurodesk/webapps/actions/runs/43697799526)
+(recorder commit `b62621d4f0fa6137e5b199b7d97c9d2c05ca0494`) on two AMD hosts: an
+EPYC 7763 (`ubuntu-22.04`) and an EPYC 9V74 (`ubuntu-24.04`), both CNR `auto`. Each
+recorded twice with identical repeats, and both recorded identical arrays (294).
+The boundary and short-kernel inputs come from a Park-Miller stream that
+[`conv_gaps_design.py`](conv_gaps_design.py) and `conv_gaps.rs` regenerate; every
+candidate was evaluated on them before the run.
+
+- **A, AMD replay.** The 12 held-out courses of the second recording, regenerated
+  with its generator: on both AMD hosts all 72 arrays (inputs and outputs) equal
+  that recording's Intel arrays byte for byte, and the port reproduces every kept
+  part.
+- **B, threshold and block length.** The frozen threshold holds: courses with full
+  outputs of 1,023 and 1,024 complex elements (33 and 17 taps) and 2,048 real
+  elements show no boundaries, 1,025 and 2,049 do; each competing threshold misses
+  59-164 parts where the design predicted. The frozen block form at exactly 8 blocks
+  (keep P when f = 8P) is **rejected**: on the deciding course (complex, f = 4,096,
+  33 taps) it misses 434 parts and on both confirming courses (complex 65 taps,
+  411; real f = 8,192, 251), while doubling the block there misses none. Production
+  doubles it since this recording; on every other recorded course the two forms
+  agree.
+- **C, kernels of 2-8 taps.** On 12 held-out sparse courses (2, 4, 5, 6 and 7 taps;
+  40-2,500 samples, complex and real, including SamSrf-sized courses of 250-400
+  samples) every product after the first is rounded and then added in input order,
+  as the second recording's discovery courses showed. The same unfused products
+  in kernel order miss 74-1,393 parts and the previous path (kernel order, fused)
+  16-3,766. The two dense controls follow the previous path, which production
+  keeps for dense courses. Production follows the rule for sparse courses since
+  this recording.
+
+| Courses (third recording) | Previous port misses | Now |
+| --- | --- | --- |
+| A, replay (12) | 0 | 0 |
+| B, boundary (23) | 434 + 411 + 251 at f = 8P | 0 |
+| C, short kernels, sparse (12) / dense (2) | 16-3,766 per course / 0 | 0 / 0 |
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-conv-gaps" packages/samsrf/validation/matlab/conv-gaps-reference.json
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-conv-blocks" packages/samsrf/validation/matlab/conv-blocks-reference.json
+SAMSRF_CONV_GAPS_DIR="$TMPDIR/samsrf-conv-gaps" SAMSRF_CONV_BLOCKS_DIR="$TMPDIR/samsrf-conv-blocks" \
+  cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test conv_gaps -- --nocapture
 ```
 
 ## Building a matching Runtime container
@@ -2640,7 +2687,7 @@ results. A model is established only for the inputs below.
 | pRF profile `exp`, `.^`, `log`, `sin`, `cos` | Ported source | fdlibm 5.3 from https://netlib.org/fdlibm/: `e_log.c` 1.3, `k_sin.c` 1.3, `k_cos.c` 1.3, `s_sin.c` 1.3, `s_cos.c` 1.3, `e_rem_pio2.c` 1.4 (SCCS 95/01/18), ported. `libm` 0.2.16 `exp`/`pow` matched `e_exp.c` 1.6/`e_pow.c` 1.5 (SCCS 04/04/22) on every value tested | 35,200 probe values on both hosts |
 | Raw prediction | Empirical | the existing four-lane `mean` | every recorded raw prediction |
 | Negative-base power | Empirical | (-x)^e = (-x)^trunc(e) × exp(f log x)(cos fπ + i sin fπ), integer part by right-to-left binary exponentiation; complex products recover infinities as C99 Annex G (libgcc `__muldc3`) does; i·sqrt(x) for f = 1/2; e < 0 is Smith's reciprocal, a real division when the power is real, and a correctly signed real infinity when it underflowed to zero | all 13,776 probe values with their NaN/Inf masks |
-| `conv` | Empirical | the shorter vector slides over the longer one (a kernel at least as long as the course swaps roles). Kernels of fewer than 9 taps: one ascending accumulator, unfused for courses of at most 16 samples and fused otherwise. When fewer than a quarter of the samples are nonzero (kernels of 9 taps or more), they are scattered in order, with each product fused or rounded and then added by the [block rule](#sparse-conv-blocks-730); otherwise fused multiply-adds over otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; the kept (first n) outputs of 294 + 1,318 probe convolutions; 105 pre-registered sparse courses (`conv_boundary.rs`) |
+| `conv` | Empirical | the shorter vector slides over the longer one (a kernel at least as long as the course swaps roles). When fewer than a quarter of the samples are nonzero (kernels of 9 taps or more, or of 2-8 taps shorter than the course), they are scattered in order, with each product fused or rounded and then added by the [block rule](#sparse-conv-blocks-730). Otherwise, kernels of fewer than 9 taps: one ascending accumulator, unfused for courses of at most 16 samples and fused otherwise; and longer kernels: fused multiply-adds over blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; the kept (first n) outputs of 294 + 1,318 probe convolutions; 105 pre-registered sparse courses (`conv_boundary.rs`) |
 | `gampdf`, `a ≥ 1` | Empirical | Loader's saddle point as MATLAB evaluates it: `exp((-(log(2π) + log(k))/2 - stirlerr(k)) - bd0(k, x/b)) / b` with `k = a - 1` (the two logarithms separately since 0.6.20261114, [fitted-HRF kernels](#fitted-hrf-kernels-730)); `stirlerr` from a table at half-integers up to 15, Cody's `gammaln` elsewhere below 15 and the Stirling series above; `bd0` by its series near the mode, `x log(x/np) + np - x` away from it; `exp(-x/b)/b` for `a = 1` | 9,760 probe densities per host; out of sample, all six TRs' HRF kernels of the first recording and the pipeline's recorded kernel |
 | `corr` | Empirical | real `x'*y` by MATLAB's pair tree below 51 elements and MKL 2021.3 `ddot` from 51, complex by `zdotc`, norms by `dnrm2`/`dznrm2` (reference-BLAS scaled sums), `dot/‖x‖/‖y‖`, then values beyond 1 in magnitude divided by their magnitude | every recorded objective; AMD probe kernels |
 

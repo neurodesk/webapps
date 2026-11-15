@@ -122,3 +122,27 @@ course they agree too).
 - At most two dispatches this round. Every production change, if any, needs all
   existing numerical, CSS, QR, forward/fitted-HRF, reverse-correlation and browser
   gates to stay as they are.
+
+## Results of run 43697799526 (recorder b62621d4)
+
+Both hosts were AMD: an EPYC 7763 (`ubuntu-22.04`) and an EPYC 9V74 (`ubuntu-24.04`),
+both CNR `auto`. Each repeat was identical, and the two hosts recorded identical
+arrays (294). One dispatch was enough; no retry was made. `conv_gaps.rs` freezes
+the results.
+
+- **A: confirmed on AMD.** All 72 replayed arrays (12 courses, inputs and outputs)
+  equal the conv-blocks held-out arrays recorded on two Intel hosts, byte for byte,
+  on both AMD hosts, and the port reproduces every kept part.
+- **B: the threshold is confirmed; the block form is not.** Every course follows a
+  complex threshold of 1,025 and a real one of 2,049: the f = 1,023 and 1,024 courses
+  (33 and 17 taps) and the real f = 2,048 course show no boundary, and each competing
+  threshold misses exactly the parts the table above predicted. At exactly 8 blocks
+  the frozen L is rejected: the deciding course (complex, f = 4,096, 33 taps) follows
+  S/A, and both confirming courses (complex 65 taps; real f = 8,192) agree with it,
+  so by the decision rule production adopts S/A. L misses 434, 411 and 251 parts
+  there; S/A misses none on any course.
+- **C: R-short is confirmed.** It reproduces every kept part of all 12 sparse
+  held-out courses. R-tap misses up to 1,393 parts per course (none for 2 taps and the
+  40-sample course, as predicted) and R-port 16-3,766; the dense controls follow
+  R-port. By the decision rule production follows R-short for sparse courses of 2-8
+  taps shorter than the course; dense courses keep R-port.

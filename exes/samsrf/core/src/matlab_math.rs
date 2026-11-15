@@ -392,11 +392,12 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
 /// The first `y.len()` outputs of MATLAB's `conv(y, kernel)`. MATLAB slides the
 /// shorter vector over the longer one (the kernel over `y` unless the kernel is at
 /// least as long), and picks its arithmetic from the sliding vector's length K:
-/// - K < 9: one accumulator over taps in order, unfused when the longer vector has
-///   at most 16 samples and with fused multiply-adds otherwise.
-/// - K >= 9, fewer than a quarter of the longer vector's samples nonzero: the
-///   nonzero samples scattered in order, each product fused into the running sum
-///   or rounded and then added as `sparse_product_unfused` decides.
+/// - Fewer than a quarter of the longer vector's samples nonzero, and K >= 9 or the
+///   kernel shorter than `y`: the nonzero samples scattered in order, each product
+///   fused into the running sum or rounded and then added as
+///   `sparse_product_unfused` decides (every product, for K <= 16).
+/// - Otherwise, K < 9: one accumulator over taps in order, unfused when the longer
+///   vector has at most 16 samples and with fused multiply-adds otherwise.
 /// - Otherwise fused multiply-adds over input blocks of `block` samples, the
 ///   earliest first, and within a block over taps grouped by `tap % lanes`. A final
 ///   partial block is grouped the same way in whole vectors of `2 * lanes` samples;
@@ -408,11 +409,13 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
 /// 9-300 taps (validation/matlab/README.md#sparse-conv-blocks).
 /// Whether MATLAB's sparse `conv` rounds the product of input `i` and output `k`
 /// before adding it, instead of fusing it into the running sum. `n` is the course
-/// length, `taps` the kernel length (at least 9) and `element_bytes` 8 for real and
-/// 16 for complex courses. Kernels of at most 16 taps are unfused at every product.
+/// length, `taps` the kernel length and `element_bytes` 8 for real and 16 for complex
+/// courses. Kernels of at most 16 taps are unfused at every product (2-8 taps held
+/// out in conv-gaps-reference.json, `conv_gaps.rs`).
 /// Longer kernels are unfused only near block boundaries, and only when the full
 /// output (`n + taps - 1` elements) takes more than 16 KiB: the block holds 8 KiB of
-/// output, doubled until the full output spans at most 8 blocks; the last 16 outputs
+/// output, doubled while the full output spans 8 blocks or more (a full output of
+/// exactly 8 blocks doubles it: conv-gaps-reference.json); the last 16 outputs
 /// before a boundary B leave the products of the last 16 inputs before B unfused,
 /// and outputs from B on leave the products of the 16 inputs from B - (taps - 1)
 /// unfused. Recorded in conv-boundary-reference.json and conv-blocks-reference.json
@@ -426,7 +429,7 @@ fn sparse_product_unfused(i: usize, k: usize, n: usize, taps: usize, element_byt
         return false;
     }
     let mut block = 8 * 1024 / element_bytes;
-    while full.div_ceil(block) > 8 {
+    while full >= 8 * block {
         block *= 2;
     }
     if k % block >= block - 16 {
@@ -460,19 +463,19 @@ fn convolve_prefix(parts: &[&[f64]], kernel: &[f64], lanes: usize, block: usize)
                     let count = taps.len().min(k + 1);
                     let first = k + 1 - count;
                     let mut sum = 0.0f64;
-                    if taps.len() < 9 {
-                        for (j, tap) in taps.iter().enumerate().take(count) {
-                            sum = if length <= 16 { sum + signal[k - j] * tap } else { signal[k - j].mul_add(*tap, sum) };
-                        }
-                        return sum;
-                    }
-                    if sparse {
+                    if sparse && (taps.len() >= 9 || !swapped) {
                         let element_bytes = 8 * parts.len();
                         for i in first..=k {
                             if nonzero_at(i) {
                                 let unfused = !swapped && sparse_product_unfused(i, k, length, taps.len(), element_bytes);
                                 sum = if unfused { sum + signal[i] * taps[k - i] } else { signal[i].mul_add(taps[k - i], sum) };
                             }
+                        }
+                        return sum;
+                    }
+                    if taps.len() < 9 {
+                        for (j, tap) in taps.iter().enumerate().take(count) {
+                            sum = if length <= 16 { sum + signal[k - j] * tap } else { signal[k - j].mul_add(*tap, sum) };
                         }
                         return sum;
                     }
@@ -893,8 +896,10 @@ mod tests {
         assert!(complex(480, 512, 1000, 33) && complex(495, 520, 1000, 33) && !complex(496, 520, 1000, 33) && !complex(479, 512, 1000, 33));
         // Real courses have 1,024-element blocks: nothing at 512, the same windows at 1,024.
         assert!(!real(500, 505, 4096, 33) && real(1010, 1015, 4096, 33));
-        // The block doubles until the full output spans at most 8 blocks.
+        // The block doubles while the full output spans 8 blocks or more.
         assert!(complex(500, 505, 3000, 129) && !complex(500, 505, 4096, 129) && complex(1010, 1015, 4096, 129));
+        assert!(complex(500, 505, 4063, 33) && !complex(500, 505, 4064, 33) && complex(1010, 1015, 4064, 33));
+        assert!(real(1010, 1015, 8159, 33) && !real(1010, 1015, 8160, 33) && real(2033, 2035, 8160, 33) && !real(2031, 2035, 8160, 33));
     }
 
     #[test]
