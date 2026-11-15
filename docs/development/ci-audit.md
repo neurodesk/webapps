@@ -76,7 +76,6 @@ For read-only verification, set `GH_TOKEN` or `GITHUB_TOKEN` and
 `node scripts/report-nightly-failure.mjs --run-id RUN_ID --dry-run`.
 This renders a report without creating or changing an issue.
 
-
 ## Apple notarization alerts
 
 `notarization-alert.yml` watches every workflow that notarizes macOS packages
@@ -93,6 +92,7 @@ warns when a log was longer. A Developer ID certificate or keychain failure
 before notarization is not detected. Close the issue after renewing the agreement and rerunning the
 failed jobs. `test/notarization-alert.test.mjs` fails when a workflow that
 notarizes is missing from the list.
+
 ## Boundaries
 
 Existing `@slow` tags identify repeated coverage, not permission to remove unique
