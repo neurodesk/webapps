@@ -100,3 +100,56 @@ Each host records twice in fresh MATLAB processes, and the workflow requires the
 repeat to be identical. The CPUs and MKL branches that GitHub assigns are
 recorded as they are. The conv arrays of the arithmetic-order pin were identical
 on an AMD and an Intel host; cross-host agreement here is reported, not assumed.
+
+## Amendment after the discovery file of run 43678512524 (held-out file not opened)
+
+Run [43678512524](https://github.com/neurodesk/webapps/actions/runs/43678512524)
+(recorder commit `37d70dbba37733bb893b0f64a8fd78b86521bc0d`) recorded on an AMD
+EPYC 9V74 (`ubuntu-22.04`, CNR `auto`) and an Intel Xeon 6975P-C
+(`ubuntu-24.04`, `AVX512_E1`); each host's repeat was identical. Only
+`conv-boundary-discovery.json` and its `d_` arrays have been read, on the AMD
+host.
+
+What the discovery file decides:
+
+- **Q1: L-full, in bytes.** Courses whose full output n + T - 1 has at most 1,022
+  complex elements show no boundary; courses with 1,026 or more do (995
+  samples with 33 taps does, 1,000 with 17 does not, so L-n is rejected). The
+  real sparse control (2,048 samples, 33 taps, full output 2,080) shows
+  boundaries, but at 1,024 and 2,048 only, while the numerics2 real course of
+  2,000 samples (full output 2,032) shows none. One statement fits both kinds:
+  boundaries exist when the full output takes at least 16 KiB (1,024 complex or
+  2,048 real elements), and B is a multiple of 8 KiB of output (512 complex or
+  1,024 real elements). The complex threshold is pinned only to 1,023-1,026
+  elements; 1,024 is the choice, and no held-out course separates the others.
+- **Q2: E-all.** The before-B part applies also when B is past the course end
+  (1,010, 1,020 and 1,530 samples need it).
+- **Short kernels (new).** For 9-15 taps every product after the first is
+  unfused, at every output, not only near B: the port's model misses 5,883 to
+  8,999 parts of those courses and this one misses none. Q3 and Q4 are therefore
+  moot for them.
+- **Q5** is untested by discovery beyond 2,048 samples.
+
+The frozen rule (`conv_boundary_rule`): for a sparse course (fewer than a quarter
+nonzero) and a kernel of T >= 9 taps, with s the element size (16 bytes complex,
+8 real), P = 8,192 / s and active = (n + T - 1) s >= 16,384, the product of input
+i to output k is rounded and then added (not fused) when:
+
+- T <= 16, and active (variant S-active) or always (variant S-always); or
+- active, k mod P >= P - 16 and i >= B - 16 with B = (floor(k / P) + 1) P; or
+- active, k >= P and B - (T - 1) <= i < B - (T - 1) + 16 with B = floor(k / P) P.
+
+It reproduces every part of all 31 sparse discovery courses and of every sparse
+course of the numerics, numerics2 and arithmetic-order pins with at least 9
+taps; the port misses 47, 111 and 4,993 parts of those pins.
+
+The held-out file decides S-active against S-always: its 845- and 960-sample
+courses with 13 taps are below the threshold, where only S-always unfuses them.
+Every other held-out course is predicted the same by both variants. Adoption
+then follows the criteria above, with these limits fixed now:
+
+- the held-out set has no real course, so the real part of the rule rests on one
+  discovery course and the numerics pins. Production adopts it for real courses
+  only after a second, pre-registered recording with held-out real courses;
+- kernels of fewer than 9 taps and dense courses are outside the rule and stay
+  as they are.
