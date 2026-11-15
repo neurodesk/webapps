@@ -153,3 +153,55 @@ then follows the criteria above, with these limits fixed now:
   only after a second, pre-registered recording with held-out real courses;
 - kernels of fewer than 9 taps and dense courses are outside the rule and stay
   as they are.
+
+## Held-out results of run 43678512524, and the second recording (pre-registered)
+
+The held-out file was opened after the commit above. Both hosts give the same
+counts. S-always is chosen: the 845- and 960-sample 13-tap courses, below the
+threshold, are unfused at every product (6,207 and 7,216 parts S-active misses).
+With S-always the frozen rule reproduces every kept part of 13 of the 14 held-out
+courses (10-97 taps, 915-3,100 samples, boundaries up to 3,072, ends at 1,536 and
+3,072), where the port misses up to 15,219 parts per course. It misses 398 parts
+of the 4,096-sample, 129-tap course (the port misses 563): all at outputs just
+before 512, 1,536, 2,560 and 3,584, and three after 1,536. **The frozen rule is
+therefore rejected, and production is not changed on this recording.**
+
+Seen after that rejection (so it is discovery now): with a period of 1,024
+elements instead of 512 the 129-tap course has no missed part. The block length
+seems to grow with the kernel. The second and last recording of this round
+(`record_conv_blocks.m`) tests that, under these rules:
+
+- **Block law.** P(T) for complex courses is 512 for T up to some T*, in
+  98-129, and 1,024 above it, doubling again past some later length; the
+  candidates are P = the smallest power of two >= 512 with P > 4(T - 1) (L4) and
+  with P >= 4T (L4+), which differ only at T - 1 = 128, and "another law" (L-x).
+  For real courses: P_real = 2 P (8 KiB per block in both), or not.
+- **Threshold.** Boundaries exist when the full output has at least 2P elements
+  (16 KiB at P = 512 complex or 1,024 real), or not.
+- **Kernels of fewer than 9 taps** (3, 5 and 8 taps, long sparse courses):
+  recorded and reported only, because the port uses another path for them; no
+  rule for them is tested or adopted.
+
+Discovery (`conv-blocks-discovery.json`, `d2_` arrays, 12 draws):
+
+- complex, 4,096 samples: every tap count from 120 to 131, and 65, 97, 105, 113,
+  145, 193, 255, 256, 257 and 258;
+- complex near the 2P threshold for 129 taps: 1,900, 1,920 and 2,000 samples
+  (full outputs 2,028, 2,048 and 2,128);
+- real, 4,096 samples: 17, 33, 65, 129 and 257 taps; and real near the threshold
+  with 33 taps: 2,010, 2,016 and 2,040 samples (full outputs 2,042, 2,047 and
+  2,072);
+- 3, 5 and 8 taps, 1,100 samples complex and 2,100 real.
+
+Held out (`conv-blocks-heldout.json`, `h2_` arrays, other seeds), opened only after
+the law is frozen in a commit from discovery alone:
+
+- complex: 100 taps, 3,000 samples; 140 taps, 5,000; 200 taps, 4,500; 300 taps,
+  6,000; 129 taps, 2,600; 25 taps, 6,000; 13 taps, 900;
+- real: 21 taps, 3,000; 49 taps, 4,100; 97 taps, 5,000; 140 taps, 6,000; 13 taps,
+  1,500.
+
+Decision: production adopts the rule, for complex and, separately, for real
+courses, only if the law frozen from discovery reproduces every kept part of every
+held-out course of that kind on the reference host, and every pin and gate stays as
+it is. A kind that fails stays unchanged. No third recording is made this round.
