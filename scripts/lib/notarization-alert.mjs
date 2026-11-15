@@ -110,7 +110,10 @@ export async function alertNotarization({ run, repository, client, owner = NOTAR
   ].join('\n');
   const alerts = async () => (await client.list('/issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=desc'))
     .filter(issue => !issue.pull_request && issue.user?.login === 'github-actions[bot]' && issue.body?.startsWith(ALERT_MARKER));
-  const issue = (await alerts())[0];
+  // The canonical issue: the oldest open one, else the newest closed one that is not a merged duplicate.
+  const all = await alerts();
+  const issue = all.filter(each => each.state === 'open').sort((a, b) => a.number - b.number)[0]
+    ?? all.find(each => each.state_reason !== 'duplicate');
   if (!issue) {
     const created = await client.request('/issues', { method: 'POST', body: {
       title: 'Apple notarization is failing', body: `${ALERT_MARKER}\n${report}`, assignees: [owner],

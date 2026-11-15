@@ -111,6 +111,15 @@ test('later failures comment on the open issue, reopen a closed one and never re
   ]);
   assert.match(writes(raced)[1].body.body, /^<!-- notarization-run:43435308021:attempt:1 -->/);
 
+  // The next failure reports to the older issue, never reopening the merged duplicate.
+  const afterRace = fakeClient({ issues: [{ number: 9, state: 'closed', state_reason: 'duplicate', body: `${ALERT_MARKER}\nmine` }, { number: 8, state: 'open', body: `${ALERT_MARKER}\ntheirs` }] });
+  assert.deepEqual(await alert(afterRace, { run_attempt: 3 }), { issue: 8, updated: true });
+  assert.deepEqual(writes(afterRace).map(call => [call.path, call.method]), [['/issues/8/assignees', 'POST'], ['/issues/8/comments', 'POST']]);
+  // Once the owner closed the issue, a later failure reopens it, not the duplicate.
+  const resolved = fakeClient({ issues: [{ number: 9, state: 'closed', state_reason: 'duplicate', body: `${ALERT_MARKER}\nmine` }, { number: 8, state: 'closed', state_reason: 'completed', body: `${ALERT_MARKER}\ntheirs` }] });
+  assert.deepEqual(await alert(resolved, { run_attempt: 3 }), { issue: 8, updated: true });
+  assert.deepEqual(writes(resolved)[0], { path: '/issues/8', method: 'PATCH', body: { state: 'open' } });
+
   const repeated = fakeClient({ issues: [{ number: 5, state: 'open', body: `${ALERT_MARKER}\nold` }], comments: [{ body: '<!-- notarization-run:43435308021:attempt:1 -->\nseen' }] });
   assert.deepEqual(await alert(repeated), { issue: 5, duplicate: true });
   assert.deepEqual(writes(repeated), []);
