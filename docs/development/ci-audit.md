@@ -76,6 +76,23 @@ For read-only verification, set `GH_TOKEN` or `GITHUB_TOKEN` and
 `node scripts/report-nightly-failure.mjs --run-id RUN_ID --dry-run`.
 This renders a report without creating or changing an issue.
 
+## Apple notarization alerts
+
+`notarization-alert.yml` watches every workflow that notarizes macOS packages
+(`NOTARIZING_WORKFLOWS` in `scripts/lib/notarization-alert.mjs`), on any branch
+or tag, release dispatches included, but not pull requests. When a failed run's
+failed macOS job log shows Apple refusing a notarization (an expired agreement or
+bad credentials from the notary service, HTTP 401 or 403, or a submission whose
+status is Invalid or Rejected), it opens the issue "Apple notarization is
+failing" assigned to the account owner, or comments on it, reopens it and
+assigns the owner again, once per run attempt. It has no concurrency group, so
+a burst of failed releases loses no alert; runs that race to open the issue
+merge into the oldest. It reads up to 64 MiB of each failed macOS job's log and
+warns when a log was longer. A Developer ID certificate or keychain failure
+before notarization is not detected. Close the issue after renewing the agreement and rerunning the
+failed jobs. `test/notarization-alert.test.mjs` fails when a workflow that
+notarizes is missing from the list.
+
 ## Boundaries
 
 Existing `@slow` tags identify repeated coverage, not permission to remove unique
