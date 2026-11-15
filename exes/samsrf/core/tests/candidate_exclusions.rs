@@ -487,20 +487,23 @@ const NO_SPLIT: usize = 27;
 /// hosts) against the identity gampdf(x, a) = gampdf(x, a + 1) a / z (z = x / b),
 /// in the operation orders below. `gampdf(x, a + 1, b)` is the identified form
 /// for shapes of at least 1 (`matlab_numerics2.rs`). None is MATLAB's: each
-/// matches about a third of the 1,216 values with x > 0.
+/// matches a third to two fifths of the 1,216 values with x > 0. The counts rose
+/// (from 327-379) when that form's normaliser took log(2 pi) and log(k)
+/// separately (fitted-HRF kernels), which changed some gampdf(x, 1.7, b) in the
+/// last bits; MATLAB's densities at shape 1.7 were not recorded.
 #[test]
 fn gampdf_below_shape_one_is_not_the_shifted_recurrence() {
     let Some(root) = std::env::var_os("SAMSRF_MATLAB_NUMERICS2_DIR").map(PathBuf::from) else { return };
     type Form = fn(f64, f64, f64, f64) -> f64;
     // (name, form of g = gampdf(x, a + 1, b), x, a, b; frozen matches)
     let forms: [(&str, Form, usize); 7] = [
-        ("g*b*a/x", |g, x, a, b| g * b * a / x, 327),
-        ("g*a/z", |g, x, a, b| g * a / (x / b), 339),
-        ("g*(a/z)", |g, x, a, b| g * (a / (x / b)), 368),
-        ("(a/z)*g", |g, x, a, b| (a / (x / b)) * g, 368),
-        ("a*g/z", |g, x, a, b| a * g / (x / b), 339),
-        ("g/z*a", |g, x, a, b| g / (x / b) * a, 342),
-        ("g*b*(a/x)", |g, x, a, b| g * b * (a / x), 379),
+        ("g*b*a/x", |g, x, a, b| g * b * a / x, 402),
+        ("g*a/z", |g, x, a, b| g * a / (x / b), 411),
+        ("g*(a/z)", |g, x, a, b| g * (a / (x / b)), 459),
+        ("(a/z)*g", |g, x, a, b| (a / (x / b)) * g, 459),
+        ("a*g/z", |g, x, a, b| a * g / (x / b), 411),
+        ("g/z*a", |g, x, a, b| g / (x / b) * a, 403),
+        ("g*b*(a/x)", |g, x, a, b| g * b * (a / x), 464),
     ];
     let manifest: Value = serde_json::from_slice(&std::fs::read(root.join("manifest.json")).unwrap()).unwrap();
     for host in manifest["hosts"].as_object().unwrap().keys() {

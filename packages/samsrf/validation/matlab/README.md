@@ -1200,20 +1200,14 @@ is the objective, and this change leaves both alone.
 The pin also records MATLAB's `fminsearch` runs of the double non-CSS objective
 (`kind: "fit"`): every evaluated parameter vector and objective value of 20 fits
 with SamSrf's HRF, 6 with a custom HRF kernel and 6 that fit the HRF with the pRF.
-`double_objective_follows_matlabs_fminsearch_evaluation_by_evaluation` replays the
-26 fixed-kernel fits through the port's `fminsearch` and requires MATLAB's number
-of evaluations and the bits of every parameter vector, objective value and
-endpoint: 3,186 evaluations. With the previous objective, only 272 of those
-3,186 objective values equalled MATLAB's at MATLAB's own parameters.
-
-The six fitted-HRF fits are not in that gate. At MATLAB's own parameters the
-objective equals MATLAB's at 8,058 of 9,418 evaluations (1,523 before); the
-first difference comes after 15 to 35 identical evaluations, and the largest is
-136 ULP.
-Their kernel comes from `hrf::doublegamma` at every evaluation, a stage this
-change does not touch and MATLAB's kernels for these evaluations were not
-recorded, so the cause is not identified. `matlab_reference.rs` keeps their
-endpoint gate (1e-12 parameters, 1e-9 objective).
+`double_objective_follows_matlabs_fminsearch_evaluation_by_evaluation` replays all
+32 fits through the port's `fminsearch` and requires MATLAB's number of
+evaluations and the bits of every parameter vector, objective value and endpoint:
+12,604 evaluations. With the plain-sum objective, only 272 of the 3,186
+fixed-kernel objective values equalled MATLAB's at MATLAB's own parameters. The
+six fitted-HRF fits joined the gate in 0.6.20261114, after their kernel was traced
+to `gampdf`'s normaliser ([fitted-HRF kernels](#fitted-hrf-kernels-730)); before,
+they first diverged after 15 to 35 identical evaluations.
 
 ### Why the operation order removes the divergence
 
@@ -1293,6 +1287,89 @@ Every other vertex already had MATLAB's parameter bits, with R² within 1e-12.
 SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-reference" SAMSRF_DOUBLE_FORWARD_REPORT="$TMPDIR/double-forward.json" \
   cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test double_forward_diagnostics
 ```
+
+## Fitted-HRF kernels (#730)
+
+Fitting the HRF with the pRF (`Hrf = -1`) makes `prf_errfun` build a kernel
+from the last five parameters at every evaluation:
+`samsrf_doublegamma(1, P(end-4:end))`, that is
+`gampdf(T, P1/P3, P3) - gampdf(T, P2/P4, P4) / P5` on `T = 0:32`. The pin's six
+such fits (`fit_double_fitted_hrf`, 9,418 evaluations) first diverged from
+MATLAB after 15 to 35 identical evaluations, while every fixed-kernel fit
+matched. The design and competing predictions were committed before the
+recording ([fitted-hrf-predictions.md](fitted-hrf-predictions.md), `dc41f25b`).
+
+`record_fitted_hrf.m` ([run 43590490083](https://github.com/neurodesk/webapps/actions/runs/43590490083),
+recorder `be136fdf`) replays every evaluation at the pinned parameters on an AMD
+EPYC 7763 (`ubuntu-22.04`, MKL CNR `auto`, the same CPU model as the 741-case
+pin) and an Intel Xeon Platinum 8573C (`ubuntu-24.04`, `AVX512_E1`), each twice
+in fresh MATLAB processes with identical results. It records `samsrf_doublegamma`'s
+stages, MATLAB's `gampdf` as a vector and per sample, the port's `gampdf`
+algorithm evaluated by MATLAB with MATLAB's `log`, `exp` and `gammaln`,
+`prf_errfun`'s `err`, `prf_errfun`'s stages around each first divergence, and
+200 generated held-out shape and scale pairs. `fitted-hrf-reference.json` pins
+the pack (HF commit `87189e75`, SHA-256 `020e6f8c…4491`, 181,111,493 bytes;
+`run.json` lists all 1,624 files with SHA-256 and byte counts).
+
+| Prediction | Outcome |
+| --- | --- |
+| H0, the trace is not reproducible | Refuted: on the AMD host MATLAB's `err` equals the pinned trace at all 9,418 evaluations, and repeats are identical. The Intel host differs at 7,481 (its `corr` tree, [arithmetic order](#arithmetic-order-729-730)) |
+| H1, the kernel is the first stage to differ | Supported: the kernel first differs at evaluation 15 in five traces and 26 in the sixth, never after the objective; `g1 - g2`, `g2raw / P5` and the shape and scale divisions equal MATLAB's |
+| H1a, `gammaln` | Refuted: it differs at 42 of 18,836 shapes, all half-integers (`k` 5 or 15), where `stirlerr` uses its table instead (gated) |
+| H1b, `log` or `exp` | Refuted: `log(k)`, `log(2 pi k)` and `exp` on MATLAB's own arguments equal MATLAB's everywhere, and MATLAB's vector and scalar `exp` and `gampdf` agree |
+| H1c, MATLAB's `gampdf` is not the port's formula | Supported: the port's algorithm evaluated by MATLAB with MATLAB's primitives differs from MATLAB's `gampdf` at 48,554 of 621,588 trace densities (up to 63 ULP), and at 1,141 of 14,600 generated ones, identically on both hosts |
+| H2, a later stage | Not reached: with the corrected kernel every recorded stage matches |
+| H3, host | MATLAB's densities and kernels are the same bits on AMD and Intel |
+
+Which part of the formula. All 50 half-integer shapes of the discovery traces
+(1,600 samples) matched; every other shape could differ, on both sides of
+`k = 15` and on both `bd0` branches. For each discovery shape, one value of the
+constant term `c` reproduces all 32 nonzero samples as `exp(c - bd0(k, x/b)) / b`
+with the port's own `bd0` and `exp`, and it lies within two ULPs of the port's
+`-log(2 pi k)/2 - stirlerr(k)`. Correctly rounded `stirlerr` (60 digits)
+reproduced far fewer shapes (1,115 of 8,293 below 15) than the port's, so MATLAB is
+not more accurate. Among operation orders of the two terms, only taking
+`log(2 pi)` and `log(k)` separately, `-(log(2 pi) + log(k))/2`, reproduced every
+discovery shape (9,338 of 9,338). Every other combination tried, with
+`-log(2 pi k)/2`, `-log(2 (pi k))` or `-log(sqrt(2 pi k))`, five
+re-associations of `stirlerr`'s `gammaln` formula, or six or seven Stirling
+terms above 15, reproduced 2,873 to 9,040. Chosen on traces 1-3
+alone, it then reproduced the held-out traces 4-6 (9,498 of 9,498 shapes) and
+every generated held-out density. The 9,760 numerics2 densities, which cover one
+non-half-integer shape below 15, do not distinguish the two forms.
+
+`matlab_math::gampdf` now uses that normaliser. No constant or threshold was
+fitted: it is one operation order in the existing formula. `fitted_hrf_probes`
+(test-only, `exes/samsrf/core/src/fitted_hrf_probes.rs`) requires, on both hosts,
+every recorded kernel and density (vector, per sample and generated), receptive-field
+profile, unconvolved prediction and retained convolution output to equal the port's, MATLAB's
+densities and kernels to be identical across the hosts, and, on the AMD host,
+MATLAB's `err` to equal the pin and the port's objective at every evaluation. It
+also requires the old normaliser to differ from the new one on this data, and
+fails on a changed byte, a missing or extra file, and a one-ULP change to a
+recorded density. With the old normaliser restored, it fails at fit 0's kernel
+(4 ULP) and the trace gate at fit 0, evaluation 16.
+Each fit must contain all eight preregistered stage indices exactly once and in
+order, with the specified real-double descriptors, shapes and payload lengths.
+The first and repeat numerical records must agree, including stage descriptors
+and scalar results; changing CPU-frequency metadata is separate. Rejection
+tests cover missing, duplicate and reordered stages, invalid descriptors and
+inconsistent repeat records.
+
+What this does not show: MATLAB's `gampdf` source, which was not read. The
+agreement is with these recordings: shapes 1.5 to 20 and scales 0.5 to 3, on
+two hosts. Shapes below 1 keep the closed form ([below](#double-css-arithmetic)).
+The Intel host's objective differs through `corr`, not the kernel.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-fitted-hrf" packages/samsrf/validation/matlab/fitted-hrf-reference.json
+SAMSRF_FITTED_HRF_DIR="$TMPDIR/samsrf-fitted-hrf" SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-reference" \
+  cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --lib fitted_hrf_probes
+```
+
+To record again: dispatch `samsrf-native` with `record_matlab`, `include_matrix=false`
+and `fitted_hrf`, then `python3 -I packages/samsrf/validation/matlab/pack_fitted_hrf.py`
+on the downloaded artifacts.
 
 ## Requested and effective MKL controls (#730)
 
@@ -2394,7 +2471,7 @@ results. A model is established only for the inputs below.
 | Raw prediction | Empirical | the existing four-lane `mean` | every recorded raw prediction |
 | Negative-base power | Empirical | (-x)^e = (-x)^trunc(e) × exp(f log x)(cos fπ + i sin fπ), integer part by right-to-left binary exponentiation; complex products recover infinities as C99 Annex G (libgcc `__muldc3`) does; i·sqrt(x) for f = 1/2; e < 0 is Smith's reciprocal, a real division when the power is real, and a correctly signed real infinity when it underflowed to zero | all 13,776 probe values with their NaN/Inf masks |
 | `conv` | Empirical | the shorter vector slides over the longer one (a kernel at least as long as the course swaps roles). Kernels of fewer than 9 taps: one ascending accumulator, unfused for courses of at most 16 samples and fused otherwise. Fused multiply-adds; nonzero samples scattered in order when fewer than a quarter are nonzero; otherwise blocks of 24 input samples (8 for complex) with taps in `tap % 4` (`% 2`) order. A final partial block is grouped in whole vectors of 8 (4) samples, and its last samples follow in input order | every recorded prediction; the kept (first n) outputs of 288 + 1,308 probe convolutions |
-| `gampdf`, `a ≥ 1` | Empirical | Loader's saddle point as MATLAB evaluates it: `exp((-log(2πk)/2 - stirlerr(k)) - bd0(k, x/b)) / b` with `k = a - 1`; `stirlerr` from a table at half-integers up to 15, Cody's `gammaln` elsewhere below 15 and the Stirling series above; `bd0` by its series near the mode, `x log(x/np) + np - x` away from it; `exp(-x/b)/b` for `a = 1` | 9,760 probe densities per host; out of sample, all six TRs' HRF kernels of the first recording and the pipeline's recorded kernel |
+| `gampdf`, `a ≥ 1` | Empirical | Loader's saddle point as MATLAB evaluates it: `exp((-(log(2π) + log(k))/2 - stirlerr(k)) - bd0(k, x/b)) / b` with `k = a - 1` (the two logarithms separately since 0.6.20261114, [fitted-HRF kernels](#fitted-hrf-kernels-730)); `stirlerr` from a table at half-integers up to 15, Cody's `gammaln` elsewhere below 15 and the Stirling series above; `bd0` by its series near the mode, `x log(x/np) + np - x` away from it; `exp(-x/b)/b` for `a = 1` | 9,760 probe densities per host; out of sample, all six TRs' HRF kernels of the first recording and the pipeline's recorded kernel |
 | `corr` | Empirical | real `x'*y` by MATLAB's pair tree below 51 elements and MKL 2021.3 `ddot` from 51, complex by `zdotc`, norms by `dnrm2`/`dznrm2` (reference-BLAS scaled sums), `dot/‖x‖/‖y‖`, then values beyond 1 in magnitude divided by their magnitude | every recorded objective; AMD probe kernels |
 
 `css_diagnostics.rs` requires all 108 traces (54 double, 54 single; both seeds and

@@ -239,15 +239,13 @@ fn double_forward_pipelines_match_matlab() {
     }
 }
 
-/// MATLAB's recorded `fminsearch` runs of the double non-CSS objective with a fixed
-/// HRF kernel, from the optimizer cases of the same pin (20 + 6 fits). Each trace
-/// row is one objective evaluation: the parameters, then the objective's real and
-/// imaginary parts. The pin's third double non-CSS optimizer case,
-/// `fit_double_fitted_hrf`, fits the HRF with the pRF: its kernels come from
-/// `hrf::doublegamma` at every evaluation, which this change does not touch, and
-/// `matlab_reference.rs` keeps its endpoint gate.
-const TRACED: [(&str, usize); 2] = [("fit_double_gaussian", 20), ("fit_double_custom_hrf", 6)];
-const FITTED_HRF: &str = "fit_double_fitted_hrf";
+/// MATLAB's recorded `fminsearch` runs of the double non-CSS objective, the
+/// optimizer cases of the same pin: SamSrf's HRF (20 fits), a custom kernel (6) and
+/// the HRF fitted with the pRF (6; `Hrf = -1`, so `samsrf_doublegamma` builds a
+/// kernel from the last five parameters at every evaluation). Each trace row is one
+/// objective evaluation: the parameters, then the objective's real and imaginary
+/// parts.
+const TRACED: [(&str, usize); 3] = [("fit_double_gaussian", 20), ("fit_double_custom_hrf", 6), ("fit_double_fitted_hrf", 6)];
 
 #[test]
 fn double_objective_follows_matlabs_fminsearch_evaluation_by_evaluation() {
@@ -259,11 +257,9 @@ fn double_objective_follows_matlabs_fminsearch_evaluation_by_evaluation() {
         .map(|c| c["id"].as_str().unwrap())
         .collect();
     recorded.sort_unstable();
-    let mut expected_ids: Vec<&str> = TRACED.iter().map(|(id, _)| *id).chain([FITTED_HRF]).collect();
+    let mut expected_ids: Vec<&str> = TRACED.iter().map(|(id, _)| *id).collect();
     expected_ids.sort_unstable();
     assert_eq!(recorded, expected_ids, "double non-CSS optimizer cases in the pin");
-    let fitted_hrf = cases.iter().find(|c| c["id"] == FITTED_HRF).unwrap();
-    assert_eq!(fitted_hrf["hrf"]["shape"], json!([1, 1]), "{FITTED_HRF} fits the HRF");
     let apertures = mat::read_apertures(&std::fs::read(root.join("fit-apertures.mat")).unwrap()).unwrap();
     let xy = apertures.scaled_xy(9.5);
     let function = AnonymousFunction::parse("@(P,XY)prf_gaussian_rf(P(1),P(2),P(3),XY)").unwrap();
@@ -276,8 +272,13 @@ fn double_objective_follows_matlabs_fminsearch_evaluation_by_evaluation() {
         let volumes = case["observations"]["shape"][0].as_u64().unwrap() as usize;
         let observations = array(&root, &case["observations"]);
         let kernel = array(&root, &case["hrf"]);
-        assert!(kernel.len() > 1, "{id}: a fixed HRF kernel");
-        let hrf = hrf::ErrfunHrf::Kernel(kernel);
+        // prf_errfun fits the HRF when Hrf is a negative scalar, with TR = -Hrf.
+        let hrf = if kernel.len() == 1 {
+            assert!(kernel[0] < 0.0, "{id}: a scalar Hrf asks for a fitted HRF");
+            hrf::ErrfunHrf::Fit { tr: -kernel[0] }
+        } else {
+            hrf::ErrfunHrf::Kernel(kernel)
+        };
         let objectives = array(&root, &case["objective"]);
         let fitted = array(&root, &case["parameters"]);
         let traces = case["traces"].as_array().unwrap();
@@ -312,5 +313,5 @@ fn double_objective_follows_matlabs_fminsearch_evaluation_by_evaluation() {
             evaluations_checked += rows;
         }
     }
-    assert_eq!(evaluations_checked, 3186, "recorded evaluations replayed");
+    assert_eq!(evaluations_checked, 12604, "recorded evaluations replayed");
 }
