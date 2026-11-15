@@ -34,6 +34,7 @@ committed in the spec before the first recording.
   python3 polyshape_controlled.py spec GEOMETRY_HOST_DIR PATH_TO_POLYSHAPE_HULLS OUT.json
   python3 polyshape_controlled.py report RECORDING_HOST_DIR PATH_TO_POLYSHAPE_HULLS REPORT.json
 """
+import argparse
 import hashlib
 import json
 import math
@@ -205,8 +206,7 @@ def digest(predictions):
     return h.hexdigest()
 
 
-def main_spec():
-    root, hulls, out = sys.argv[2:5]
+def main_spec(root, hulls, out):
     clouds, _ = load_clouds(root)
     base, cases = build(clouds)
     predictions = predict(Oracle(hulls), [case_points(base, c) for c in cases])
@@ -229,11 +229,10 @@ def main_spec():
     print('cases with a predicted hole:', holes)
 
 
-def main_report():
+def main_report(root, hulls, out):
     """Applies polyshape-reproducers-7-predictions.md's comparison to a recording."""
     import collections
     import numpy as np
-    root, hulls, out = sys.argv[2:5]
     spec = json.load(open(os.path.join(HERE, 'polyshape-reproducers-7.json')))
     recording = json.load(open(os.path.join(root, 'geometry.json')))
     case = next(c for c in recording['cases'] if c['id'] == 'reproducer_round7')
@@ -311,8 +310,18 @@ def main_report():
         print(f'{f:10s} {s:9s} cases {t["cases"]:3d}', ' '.join(f'{m}={t[m]}' for m in MODELS), {k: v for k, v in t.items() if k.startswith('matlab')})
 
 
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Generate controlled polygon predictions or compare a recording.')
+    parser.add_argument('command', choices=('spec', 'report'))
+    parser.add_argument('root', help='Geometry host directory for spec; recording host directory for report')
+    parser.add_argument('hulls', help='Path to the polyshape_hulls executable')
+    parser.add_argument('out', help='Output JSON path')
+    args = parser.parse_args(argv)
+    if args.command == 'spec':
+        main_spec(args.root, args.hulls, args.out)
+    else:
+        main_report(args.root, args.hulls, args.out)
+
+
 if __name__ == '__main__':
-    if sys.argv[1] == 'spec':
-        main_spec()
-    elif sys.argv[1] == 'report':
-        main_report()
+    main()

@@ -2484,8 +2484,9 @@ Results:
 
 - **H_M and H_M1 are rejected.** On every pinwheel, at every void size,
   rotation, start, direction, translation and scale, MATLAB keeps the k tips as
-  separate solids and reports no hole, ring for ring and bit for bit as the
-  experimental model does. MATLAB therefore does not merge regions merely
+  separate solids and reports no hole. Each ring's hole flag and vertex set
+  match the experimental model bit for bit. This comparison does not check
+  edge connectivity or boundary order. MATLAB therefore does not merge regions merely
   because they touch at single vertices around a void. The touching-ring
   account of the 932 and 1607 holes, which their geometry suggested, does not
   hold as a general rule.
@@ -2506,6 +2507,8 @@ single vertices alone, since the pinwheels touch that way and keep no hole.
 - every case rebuilt from the exact base shapes, with unique identities;
 - the predictions digest;
 - MATLAB's hole flags read as binary, one per boundary;
+- an independent frozen digest of MATLAB's ring membership, hole flags and
+  hull vertex bits, with case, ring and vertex counts separating the records;
 - each model's frozen agreement, per case;
 - the family inventory: pinwheels 288 / 288 / 0 / 0, filled 32 for all
   models, reproducers 0 for all.
@@ -2516,7 +2519,7 @@ digest without a recording. Each of the following makes the gate fail:
 - duplicating a case;
 - duplicating a shape identity;
 - changing one recorded boundary vertex by one ULP with the ring counts
-  unchanged;
+  unchanged, including a case where all three models already disagree;
 - flipping a frozen agreement;
 - changing the prediction digest.
 

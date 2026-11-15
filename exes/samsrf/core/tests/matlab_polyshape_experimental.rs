@@ -776,6 +776,29 @@ fn minimal_certificate_inventory_rejects_missing_and_duplicate_certificates() {
     }
 }
 
+/// Canonical ring membership, hole flags and hull vertices, independent of any
+/// model's agreement. Inputs are sorted by bits; edge order is not represented.
+fn recorded_observable_bytes(rings: &[(bool, Vec<[u64; 2]>)], hull: &[[u64; 2]]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&(rings.len() as u64).to_le_bytes());
+    for (hole, vertices) in rings {
+        bytes.push(u8::from(*hole));
+        bytes.extend_from_slice(&(vertices.len() as u64).to_le_bytes());
+        for vertex in vertices {
+            for coordinate in vertex {
+                bytes.extend_from_slice(&coordinate.to_le_bytes());
+            }
+        }
+    }
+    bytes.extend_from_slice(&(hull.len() as u64).to_le_bytes());
+    for vertex in hull {
+        for coordinate in vertex {
+            bytes.extend_from_slice(&coordinate.to_le_bytes());
+        }
+    }
+    bytes
+}
+
 /// The reduced reproducers of the four regressions, on both hosts. Every recorded
 /// polygon is the spec's (indices into the full clouds the first batch records as
 /// controls, then the transform). Both models still give the hulls predicted
@@ -872,6 +895,8 @@ fn polyshape_reproducers_match_recording() {
                 assert_eq!((defaults.len(), flags.len()), (n, n), "{id}: default and hole-flag inventories");
                 let agreement = frozen["controlledAgreement"].as_str().unwrap().as_bytes();
                 assert_eq!(agreement.len(), n, "{id}: frozen agreement inventory");
+                let mut recorded_digest = <sha2::Sha256 as sha2::Digest>::new();
+                sha2::Digest::update(&mut recorded_digest, (n as u64).to_le_bytes());
                 let mut by_family: std::collections::BTreeMap<String, [usize; 4]> = Default::default();
                 for (i, item) in items.iter().enumerate() {
                     let mut boundaries: Vec<Vec<[u64; 2]>> = vec![Vec::new()];
@@ -896,6 +921,7 @@ fn polyshape_reproducers_match_recording() {
                     matlab_rings.sort();
                     let mut matlab_hull: Vec<[u64; 2]> = hulls[i].iter().map(|p| p.map(f64::to_bits)).collect();
                     matlab_hull.sort();
+                    sha2::Digest::update(&mut recorded_digest, recorded_observable_bytes(&matlab_rings, &matlab_hull));
                     let family = item["family"].as_str().unwrap();
                     let digit = controlled_agreement(&polygons[i], family, &matlab_rings, &matlab_hull);
                     assert_eq!(digit, agreement[i] - b'0', "{} {id} {i}: agreement with MATLAB differs from the frozen one", root.display());
@@ -905,6 +931,8 @@ fn polyshape_reproducers_match_recording() {
                     tally[2] += usize::from(digit & 2 != 0);
                     tally[3] += usize::from(digit & 1 != 0);
                 }
+                let recorded_hex: String = sha2::Digest::finalize(recorded_digest).iter().map(|b| format!("{b:02x}")).collect();
+                assert_eq!(recorded_hex, frozen["controlledRecordedSha256"].as_str().unwrap(), "{} {id}: recorded ring membership, hole flags or hull vertices changed", root.display());
                 // Family inventory: [cases, experimental, H_M, H_M1 agreements].
                 assert_eq!(by_family.keys().map(String::as_str).collect::<Vec<_>>(), ["filled", "gapped", "lens", "pinwheel", "reproducer"], "{id}: family inventory");
                 assert_eq!(by_family["pinwheel"], [288, 288, 0, 0], "{id}: pinwheels keep k separate tips without a hole, as the experimental model does");
