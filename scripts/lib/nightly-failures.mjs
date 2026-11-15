@@ -258,7 +258,7 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
     if (artifacts.length > listed) lines.push(`${artifacts.length - listed} more artifacts are available on the run page.`);
   } catch (error) { lines.push(`Artifact listing unavailable: ${plain(error.message)}.`); }
   lines.push('', '### Reproduce and rerun', `Check out commit ${plain(run.head_sha)} and use the commands and environment from the failed workflow steps. Some scheduled checks require credentials, reference data, or hardware.`,
-    `Open the [run](${runUrl}) and choose **Re-run failed jobs** after fixing the cause, or use:`, '', '```sh', `gh run rerun ${runId} --failed --repo ${repository}`, '```', '', 'Reruns create a new attempt and a separate report. A manual workflow dispatch is not a scheduled run and is not reported here.', '', 'Log excerpts are bounded and redact common credentials. GitHub masking remains the primary secret protection.');
+    `Open the [run](${runUrl}) and choose **Re-run failed jobs** after fixing the cause, or use:`, '', '```sh', `gh run rerun ${runId} --failed --repo ${repository}`, '```', '', 'Artifacts that jobs hand to later jobs expire after one day; after that, re-run all jobs instead. Reruns create a new attempt and a separate report. A manual workflow dispatch is not a scheduled run and is not reported here.', '', 'Log excerpts are bounded and redact common credentials. GitHub masking remains the primary secret protection.');
   const body = lines.join('\n');
   if (body.length > BODY_LIMIT) throw new Error('Failure report exceeded the issue body budget');
   const title = `Scheduled workflow: ${run.name} requires attention`;
