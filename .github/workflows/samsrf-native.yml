@@ -243,6 +243,10 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-arithmetic-order" packages/samsrf/validation/matlab/arithmetic-order-reference.json
           SAMSRF_ARITHMETIC_ORDER_DIR="$RUNNER_TEMP/samsrf-arithmetic-order" SAMSRF_MATLAB_NUMERICS2_DIR="$RUNNER_TEMP/samsrf-numerics2" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test arithmetic_order -- --nocapture
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-conv-boundary" packages/samsrf/validation/matlab/conv-boundary-reference.json
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-conv-blocks" packages/samsrf/validation/matlab/conv-blocks-reference.json
+          SAMSRF_CONV_BOUNDARY_DIR="$RUNNER_TEMP/samsrf-conv-boundary" SAMSRF_CONV_BLOCKS_DIR="$RUNNER_TEMP/samsrf-conv-blocks" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test conv_boundary -- --nocapture
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-fitted-hrf" packages/samsrf/validation/matlab/fitted-hrf-reference.json
           SAMSRF_FITTED_HRF_DIR="$RUNNER_TEMP/samsrf-fitted-hrf" SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --lib fitted_hrf_probes -- --nocapture

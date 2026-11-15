@@ -244,3 +244,14 @@ these two Intel hosts. The reference-host part of the decision criterion cannot
 be met by this recording; the conv arrays of the two earlier recordings were
 identical on an AMD and an Intel host (96 and 276 arrays), which is the evidence
 that bears on it, and it is reported with the result.
+
+## Held-out results of run 43679359744
+
+The held-out file was opened after the commit above. L-blocks reproduces every
+kept part of all 12 held-out courses (7 complex, 5 real; 13-300 taps; 900-6,000
+samples) on both hosts, which recorded identical arrays; the previous port misses
+15,552 of those parts. The rule is adopted for complex and real courses, as
+`matlab_math::sparse_product_unfused`, with the limits written above: kernels of
+fewer than 9 taps and dense courses are unchanged, and the held-out evidence of the
+second recording comes from two Intel hosts. `conv_boundary.rs` gates both
+recordings.

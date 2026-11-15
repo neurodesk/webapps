@@ -98,9 +98,8 @@ fn negative_base_powers_match_every_matlab_result() {
 }
 
 /// Every output SamSrf keeps, for every recorded course and kernel length (1-129
-/// taps, 16-1000 samples, dense and sparse). Not covered (validation/matlab/README.md):
-/// sparse complex courses of 1000 samples, where a few outputs near output 512
-/// differ by one ULP.
+/// taps, 16-1000 samples, dense and sparse), the sparse complex courses of 1000
+/// samples included since the sparse boundary rule (`conv_boundary.rs`).
 #[test]
 fn convolution_matches_matlab_for_every_recorded_length() {
     let Some(root) = root() else { return };
@@ -110,10 +109,6 @@ fn convolution_matches_matlab_for_every_recorded_length() {
         let y = complex(&dir, &case["y"]);
         let kernel = real(&dir, &case["kernel"]);
         let expected = complex(&dir, &case["result"]);
-        let sparse = 4 * y.iter().filter(|v| v.re != 0.0 || v.im != 0.0).count() < y.len();
-        if case["isreal"] == false && sparse && y.len() >= 1000 {
-            continue;
-        }
         let actual: Vec<Complex64> = if case["isreal"] == true {
             let re: Vec<f64> = y.iter().map(|v| v.re).collect();
             m::convolve_real(&re, &kernel, 1).into_iter().map(|v| Complex64::new(v, 0.0)).collect()
@@ -125,7 +120,7 @@ fn convolution_matches_matlab_for_every_recorded_length() {
         }
         checked += 1;
     }
-    assert_eq!(checked, 288, "convolutions");
+    assert_eq!(checked, 294, "convolutions");
 }
 
 /// The HRF kernels at six TRs: `gampdf`, both double-gamma kernels and the scaled
