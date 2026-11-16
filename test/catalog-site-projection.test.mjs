@@ -81,7 +81,7 @@ test('a catalogue site holds its own apps and only the runtime families they rea
   const mskPayload = JSON.parse(mskDicomview.match(/data-neurodesk-app-information>([\s\S]*?)<\/script>/)[1]);
   assert.deepEqual(mskPayload.catalog.map(({ id }) => id).sort(), ['dicomview', 'musclemap']);
   const msHtml = await readFile(join(mskDir, 'musclemap/index.html'), 'utf8');
-  assert.match(msHtml, /<title>MuscleMap \| MSK Webapps<\/title>/);
+  assert.match(msHtml, /<title>MuscleMap \| Musculoskeletal Webapps<\/title>/);
   assert.match(msHtml, /data-brand-name="SciGet"/);
   await assert.rejects(access(join(mskDir, '.nojekyll')), { code: 'ENOENT' });
   await assert.rejects(access(join(mskDir, 'surf')), { code: 'ENOENT' });
