@@ -101,3 +101,12 @@ lowest-then-leftmost vertex) goes through the whole model again, on the grid of
 its own span, with Clipper's union deciding where the clean starts. Predictions:
 it keeps at least the 253 ring-equal gains and recovers at least half of the 27
 ring-equal losses. Decision: same rule; any lost hull rejects it.
+
+## H_G2 outcome
+
+H_G2 gains 396 hulls and loses 23 (round 4 -8, round 5 -13, reproducer case 28,
+held-out near-collinear cloud 490). None of the 23 had rings equal to MATLAB's;
+among polygons whose rings equal MATLAB's it fixes 259 hulls, loses none and
+leaves 6. The first prediction holds (253 ring-equal gains kept), the second
+holds (none of H_G's 27 ring-equal losses remain). By the decision rule it is
+rejected, because it loses accepted hulls; the experimental model is unchanged.
