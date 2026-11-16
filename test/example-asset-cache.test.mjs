@@ -6,7 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { OFFLINE_AUDIT_APPS, auditedExampleFiles, auditedRuntimeFiles, exampleCachePath, fillExampleCache, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from '../scripts/lib/example-asset-cache.mjs';
+import { OFFLINE_AUDIT_APPS, absentZarrKey, auditedExampleFiles, auditedOfflineFiles, exampleCachePath, fillExampleCache, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from '../scripts/lib/example-asset-cache.mjs';
+import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
+import { loadAppExamples } from '../scripts/lib/app-examples.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
 const url = 'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1234567890123456789012345678901234567890/scan.nii';
@@ -294,7 +296,7 @@ test('the audit caches the first example of each app, the one it imports', () =>
 test('an offline app\'s audit files are the runtime its lock entry pins, and no other app has any', async () => {
   const lock = JSON.parse(await readFile(new URL('../registry/offline-assets.lock.json', import.meta.url), 'utf8'));
   assert.ok(OFFLINE_AUDIT_APPS.includes('dicompare'));
-  const urls = auditedRuntimeFiles({ id: 'dicompare' }, lock).map(file => file.url);
+  const urls = auditedOfflineFiles({ id: 'dicompare' }, lock).map(file => file.url);
   // What the hosted page fetched from other hosts on 2026-11-12, by kind.
   for (const expected of [
     'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.asm.wasm',
@@ -309,7 +311,44 @@ test('an offline app\'s audit files are the runtime its lock entry pins, and no 
     assert.match(url, /^https:\/\/(cdn\.jsdelivr\.net\/pyodide\/v\d+\.\d+\.\d+\/|files\.pythonhosted\.org\/packages\/[a-f0-9]{2}\/[a-f0-9]{2}\/[a-f0-9]{60}\/)/, `${url} is immutable`);
   }
   assert.ok(urls.every(url => lock.assets[url].kind !== 'example'), 'examples are listed by auditedExampleFiles');
-  assert.deepEqual(auditedRuntimeFiles({ id: 'neuromorph' }, lock), []);
+  assert.deepEqual(auditedOfflineFiles({ id: 'neuromorph' }, lock), []);
+});
+
+test('each offline app\'s audit files hold what its page fetched from other hosts, and none of its models', async () => {
+  const lock = JSON.parse(await readFile(new URL('../registry/offline-assets.lock.json', import.meta.url), 'utf8'));
+  // What each page fetched from other hosts in the audit on 2026-11-16, besides its example.
+  const fetched = {
+    deface: [
+      'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/templates/avg152T1.nii.gz',
+      'https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/deface/avg152T1mask.nii.gz',
+    ],
+    disconnectome: ['https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz'],
+    qsmbly: ['https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.js', 'https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.css'],
+    surfannotate: ['https://fonts.gstatic.com/s/pontanosans/v19/qFdD35GdgYR8EzR6oBLDHa3axT8N.woff2'],
+    zarro: [],
+  };
+  for (const [id, expected] of Object.entries(fetched)) {
+    assert.ok(OFFLINE_AUDIT_APPS.includes(id), `${id} runs offline in the audit`);
+    const urls = auditedOfflineFiles({ id }, lock).map(file => file.url);
+    for (const url of expected) assert.ok(urls.includes(url), `${url} is cached for ${id}`);
+    for (const url of urls) assert.match(lock.assets[url].sha256, /^[a-f0-9]{64}$/, url);
+  }
+  const models = auditedOfflineFiles({ id: 'qsmbly' }, lock).filter(file => lock.assets[file.url].kind === 'model');
+  assert.deepEqual(models, [], 'a run loads QSMbly\'s models; the audit does not run one');
+  const disconnectome = auditedOfflineFiles({ id: 'disconnectome' }, lock).map(file => lock.assets[file.url].kind);
+  assert.deepEqual(disconnectome, ['example-template'], 'atlases and tract geometry load with a query, not with the page');
+});
+
+test('an unlisted Zarr metadata key under a pinned example store is absent, and nothing else is', async () => {
+  const { apps } = await loadAppsRegistry();
+  const examples = await loadAppExamples(apps.find(app => app.id === 'zarro'));
+  const root = examples[0].sourceUrl;
+  for (const key of ['.zmetadata', 'zarr.json', '0/.zattrs', '3/.zattrs']) assert.equal(absentZarrKey(examples, `${root}${key}`), true, key);
+  for (const key of ['.zattrs', '.zgroup', '0/.zarray']) assert.equal(absentZarrKey(examples, `${root}${key}`), false, `${key} is in the store`);
+  assert.equal(absentZarrKey(examples, `${root}0/0.0.0.0.1`), false, 'a chunk is not a metadata probe');
+  assert.equal(absentZarrKey(examples, `${root.replace(/[0-9a-f]{40}/, 'main')}zarr.json`), false, 'another revision is not the pinned store');
+  assert.equal(absentZarrKey([{ sourceUrl: root, files: [{ role: 'image', url: `${root}scan.nii` }] }], `${root}zarr.json`), false, 'only a Zarr example is a store');
+  assert.equal(absentZarrKey([], `${root}zarr.json`), false);
 });
 
 test('the index answer for a project offers only its locked wheel, with its hash and no metadata shortcut', () => {

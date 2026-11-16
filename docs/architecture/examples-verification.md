@@ -77,8 +77,9 @@ rerun to named registered apps.
 A local `pnpm audit:interfaces` uses the network unless `EXAMPLE_ASSET_CACHE`
 is set. CI's `composite-site` job always sets it. Before the audit,
 `node scripts/fetch-example-cache.mjs <directory> --prune` brings the directory
-to the files the audit imports: the first example of each app and the runtime
-of the offline apps, 361 files and 1.75 GB for 63 apps on 2026-11-12. It keeps entries that match the lock,
+to the files the audit imports: the first example of each app and the pinned
+files the offline apps' pages load, 374 files and 1.75 GB for 63 apps on
+2026-11-16. It keeps entries that match the lock,
 downloads the rest with retries, checks each download against the lock's
 SHA-256 and size before renaming it into place, and fails with the URL of a
 file it cannot get. A retry waits the whole time a `Retry-After` header names.
@@ -100,19 +101,42 @@ service worker fetched and the page then cancelled is not counted a second time
 `externalRequestLog` lists each of those requests with its URL, outcome,
 transferred body size and duration.
 
-The apps in `OFFLINE_AUDIT_APPS` (`scripts/lib/example-asset-cache.mjs`), now
-dicompare, run in cache mode without any request to another host. The cache
-also holds their runtime as the offline lock pins it (kinds `runtime`,
-`python-runtime` and `python-wheel`: Pyodide 0.27.0, its packages and the five
-PyPI wheels, 37 files and 143 MB), checked like the examples. micropip resolves
-`dicompare` through PyPI's simple index, which changes with every release and
-cannot be pinned, so the audit answers each index request from the lock: the
-project's one locked wheel with its SHA-256. The hosted app resolves live and
-on 2026-11-12 installed tabulate 0.10.0 and nibabel 5.5.0 where the lock pins
-0.9.0 and 5.3.3; the audit installs the locked ones, as the desktop bundle
-does. For such an app any other request to another host is refused, and the
-app fails with its URL. Other apps still load models and runtimes from other
-hosts.
+The apps in `OFFLINE_AUDIT_APPS` (`scripts/lib/example-asset-cache.mjs`),
+dicompare, Deface, Disconnectome, QSMbly, SurfAnnotate and ZARRo, run in cache
+mode without any request to another host. The cache also holds what the
+offline lock pins for them and their page loads before a run, checked like the
+examples: lock kinds `runtime`, `python-runtime`, `python-wheel`,
+`runtime-cdn`, `font`, `example-template` and `example-or-support-data`. For
+dicompare that is Pyodide 0.27.0, its packages and the five PyPI wheels (37
+files and 143 MB, the same files QSMbly's lock entry lists); for the other five
+apps it adds 13 files and 4.0 MB: QSMbly's Tagify script and stylesheet and its
+Inter fonts, SurfAnnotate's Pontano Sans font, and Deface's avg152T1 template,
+face mask and support image. Disconnectome's MNI template is already in the
+cache as the first example of ANTs, Elastix, Greedy and FireANTs. Models (QSMbly's 1.2 GB of ONNX weights), Disconnectome's atlases and
+tract geometry load only when a method runs, which the audit does not do, so
+the cache leaves them out.
+
+Before this change, on 2026-11-16, the five apps sent 15 requests at each
+width to other hosts: ZARRo 6, Deface 4, QSMbly 2, Disconnectome 2 and
+SurfAnnotate 1. Deface's and Disconnectome's templates had gone to Hugging
+Face and on to its storage CDN. ZARRo's six were metadata keys its Zarr reader
+probes for (`.zmetadata`, `zarr.json` and each level's `.zattrs`), which the
+pinned example store does not have; Hugging Face answers each with 404. An
+example store is pinned to a commit and its files list is the whole store, so
+the audit answers a metadata key under the store's root that the list lacks
+with 404 itself, as the desktop bundle answers a URL it does not hold
+(`absentZarrKey`). QSMbly loads dicompare from webapps.neurodesk.org only for
+its dicompare report, which the audit does not open; that request would be
+refused.
+
+micropip resolves `dicompare` through PyPI's simple index, which changes with
+every release and cannot be pinned, so the audit answers each index request
+from the lock: the project's one locked wheel with its SHA-256. The hosted app
+resolves live and on 2026-11-12 installed tabulate 0.10.0 and nibabel 5.5.0
+where the lock pins 0.9.0 and 5.3.3; the audit installs the locked ones, as
+the desktop bundle does. For an offline app any other request to another host
+is refused, and the app fails with its URL. Other apps still load models and
+runtimes from other hosts.
 
 One app at one width has 420 s (`AUDIT_DEADLINE_MS`). Past that the audit
 closes the page and fails the app with every request still open and how long

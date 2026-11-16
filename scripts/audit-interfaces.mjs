@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppExamples } from './lib/app-examples.mjs';
-import { OFFLINE_AUDIT_APPS, auditedExampleFiles, auditedRuntimeFiles, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from './lib/example-asset-cache.mjs';
+import { OFFLINE_AUDIT_APPS, absentZarrKey, auditedExampleFiles, auditedOfflineFiles, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from './lib/example-asset-cache.mjs';
 import { refuseOtherHostWebSockets, trackExternalRequests } from './lib/external-requests.mjs';
 import { startDeadline, trackPendingRequests } from './lib/pending-requests.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
@@ -27,12 +27,12 @@ const results = [];
 try {
   for (const app of selected) {
     const examples = await loadAppExamples(app);
-    // With the cache, an offline app's runtime comes from it too and nothing may leave for another host.
+    // With the cache, what an offline app's page loads comes from it too and nothing may leave for another host.
     const offline = Boolean(cacheDirectory) && OFFLINE_AUDIT_APPS.includes(app.id);
-    const runtimeFiles = offline ? auditedRuntimeFiles(app, assetLock) : [];
-    const indexAnswers = pythonIndexAnswers(runtimeFiles, assetLock?.assets);
+    const offlineFiles = offline ? auditedOfflineFiles(app, assetLock) : [];
+    const indexAnswers = pythonIndexAnswers(offlineFiles, assetLock?.assets);
     const cachedExamples = cacheDirectory
-      ? await loadVerifiedExampleCache([...auditedExampleFiles(examples), ...runtimeFiles], { directory: cacheDirectory, assets: assetLock.assets })
+      ? await loadVerifiedExampleCache([...auditedExampleFiles(examples), ...offlineFiles], { directory: cacheDirectory, assets: assetLock.assets })
       : null;
     const cacheRedirects = new Map();
     for (const [url, asset] of cachedExamples ?? []) {
@@ -64,6 +64,9 @@ try {
             const index = indexAnswers.get(pythonIndexProject(url));
             if (index) {
               return route.fulfill({ body: index, contentType: 'application/vnd.pypi.simple.v1+json', headers: { 'access-control-allow-origin': '*' } });
+            }
+            if (absentZarrKey(examples, url)) {
+              return route.fulfill({ status: 404, body: '', headers: { 'access-control-allow-origin': '*' } });
             }
             refused.push(url);
             return route.abort('blockedbyclient');
