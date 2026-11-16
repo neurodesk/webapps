@@ -15,14 +15,16 @@
 // A run the engine refuses is written as refused with its message. It is never a pass.
 import { createHash } from 'node:crypto';
 import { cpus } from 'node:os';
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as samsrf from '../../src/node.js';
 
 const INPUT = '/input';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-function treeHashes(root) {
+/** SHA-256 of every file under root, by POSIX relative path, sorted. */
+export function treeHashes(root) {
   const hashes = {};
   const visit = (directory) => {
     for (const name of readdirSync(directory).sort()) {
@@ -103,9 +105,13 @@ function runOne(run, bundle, directory) {
     const { maps } = samsrf.runJob(job, 1);
     const prefix = `${translated.options.hemisphere}_${job.modelName}${job.outSuffix}`;
     mkdirSync(directory, { recursive: true });
-    for (const { name, bytes } of samsrf.exportGiis(maps, prefix, null, translated.model.Export_Convention)) {
+    const files = samsrf.exportGiis(maps, prefix, null, translated.model.Export_Convention);
+    for (const { name, bytes } of files) {
       writeFileSync(join(directory, name), bytes);
     }
+    record.files = files.map(({ name }) => name);
+    // The analysed ROI in label order, 0-based; MATLAB's Srf.Roi is the same list, 1-based.
+    record.roi = Array.from(inputs.roi ?? []);
     const data = Float64Array.from(maps.data);
     writeFileSync(join(directory, 'maps.f64'), new Uint8Array(data.buffer));
     Object.assign(record, {
@@ -126,6 +132,16 @@ function runOne(run, bundle, directory) {
   return record;
 }
 
+/** Same-file test for the entry module, through symbolic links (a checkout under /home may resolve to /storage). */
+export function isEntry(moduleUrl, argv1) {
+  if (!argv1) return false;
+  try {
+    return realpathSync(fileURLToPath(moduleUrl)) === realpathSync(argv1);
+  } catch {
+    return false;
+  }
+}
+
 function main([planPath, bundle, manifestPath, output, ...rest]) {
   if (!output || rest.length) throw new Error('Usage: node run_web_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT');
   if (existsSync(output)) throw new Error(`${output} must not exist`);
@@ -138,6 +154,7 @@ function main([planPath, bundle, manifestPath, output, ...rest]) {
   mkdirSync(output);
   const wasm = new URL('../../wasm/samsrf_wasm_bg.wasm', import.meta.url);
   const environment = {
+    runner: 'node',
     engine: 'web app WebAssembly module, Node',
     packageVersion: JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version,
     core: samsrf.version(),
@@ -161,4 +178,4 @@ function main([planPath, bundle, manifestPath, output, ...rest]) {
   writeFileSync(join(output, 'runs.json'), `${JSON.stringify(runs.map(({ id, status, message, seconds, mapsSha256 }) => ({ id, status, message, seconds, mapsSha256 })), null, 2)}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main(process.argv.slice(2));
+if (isEntry(import.meta.url, process.argv[1])) main(process.argv.slice(2));

@@ -1075,21 +1075,35 @@ jobs:
           docker push "$target"
           docker image inspect "$target" --format '{{json .RepoDigests}}' > "$RUNNER_TEMP/samsrf-cli/container-build/published.json"
           cat "$RUNNER_TEMP/samsrf-cli/container-build/published.json"
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
-      - name: Web engine against MATLAB on this host (report; refusals and unsupported runs listed)
+          cache: pnpm
+      - name: Install the pinned Playwright and its Chromium
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: |
+          pnpm install --frozen-lockfile --filter @neurodesk/samsrf
+          pnpm --filter @neurodesk/samsrf exec playwright install --with-deps chromium
+      - name: Web engine (Node and Chromium) against MATLAB on this host (report; refusals and unsupported runs listed)
         env:
           RUNTIME_CLI: ${{ inputs.runtime_cli }}
-          HOST: ${{ matrix.host }}
         run: |
           cli="$RUNNER_TEMP/samsrf-cli"
           matlab="packages/samsrf/validation/matlab"
+          python="$RUNNER_TEMP/samsrf-cli-venv/bin/python"
           node "$matlab/run_web_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/web-1"
-          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/web-1" "$cli/source-1" "source MATLAB on $HOST" "$cli/web-vs-source.json"
-          if [ "$RUNTIME_CLI" = build ]; then
-            "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/web-1" "$cli/compiled-1" "compiled image on $HOST" "$cli/web-vs-compiled.json"
-          fi
+          node "$matlab/run_browser_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/browser-1"
+          status=0
+          for web in web-1 browser-1; do
+            # Source receipts do not record the bundle; the report says so.
+            "$python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/$web" "$cli/source-1" "$cli/$web-vs-source.json" --expect source --allow-unattested-source-inputs || status=1
+            if [ "$RUNTIME_CLI" = build ]; then
+              "$python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/$web" "$cli/compiled-1" "$cli/$web-vs-compiled.json" --expect compiled-runtime || status=1
+            fi
+          done
+          exit "$status"
       - name: Retain plan, bundle, receipts, outputs and comparisons
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -1142,15 +1156,29 @@ jobs:
         run: |
           cli="$RUNNER_TEMP/samsrf-cli"
           "$RUNNER_TEMP/samsrf-cli-venv/bin/python" packages/samsrf/validation/matlab/compare_cli.py "$cli/plan.json" "$cli/source-1" "$cli/runtime-1" "$cli/runtime-vs-pinned-source.json" || echo 'Cross-host differences recorded; the same-host gate is in the build job.'
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
-      - name: Web engine against the Runtime-only image on this host (report)
+          cache: pnpm
+      - name: Install the pinned Playwright and its Chromium
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: |
+          pnpm install --frozen-lockfile --filter @neurodesk/samsrf
+          pnpm --filter @neurodesk/samsrf exec playwright install --with-deps chromium
+      - name: Web engine (Node and Chromium) against the Runtime-only image on this host (report)
         run: |
           cli="$RUNNER_TEMP/samsrf-cli"
           matlab="packages/samsrf/validation/matlab"
+          python="$RUNNER_TEMP/samsrf-cli-venv/bin/python"
           node "$matlab/run_web_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/web-1"
-          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/web-1" "$cli/runtime-1" "compiled image $IMAGE, Runtime only, ubuntu-24.04" "$cli/web-vs-runtime.json"
+          node "$matlab/run_browser_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/browser-1"
+          status=0
+          for web in web-1 browser-1; do
+            "$python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/$web" "$cli/runtime-1" "$cli/$web-vs-runtime.json" --expect compiled-runtime || status=1
+          done
+          exit "$status"
       - name: Retain receipts, outputs and comparisons
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

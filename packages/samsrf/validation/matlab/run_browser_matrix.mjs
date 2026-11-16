@@ -2,8 +2,14 @@
 // Runs cli_plan.py's matrix in Chromium through the web app's own engine module
 // (apps/samsrf/src/engine.js: createJob, runShard, mergeShards), from the bundle's file
 // bytes as the app reads dropped files. Writes run_web_matrix.mjs's layout, so
-// compare_web_cli.py reads either: per run <id>.web.json, the downloaded GIfTIs and
-// maps.f64, the double map rows of the app's own createJob spec run in the page.
+// compare_web_cli.py reads either: per run <id>.web.json, the GIfTIs mergeShards
+// exported and maps.f64.
+//
+// maps.f64 holds the double map rows of the same computation: the shard bytes that
+// runShard returned and mergeShards exported are merged once more, and the GIfTIs
+// exported from that merge must equal mergeShards's files byte for byte, or the run
+// fails. This is an engine-module harness served from source; it does not exercise
+// the production Vite bundle or the app's interface.
 //
 // Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT
 //
@@ -13,9 +19,10 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, normalize, relative, sep } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { webRun } from './run_web_matrix.mjs';
+import { treeHashes, webRun } from './run_web_matrix.mjs';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -27,7 +34,7 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>SamSrf matrix</title>
 "@neurodesk/samsrf/inputs":"/repo/packages/samsrf/src/inputs.js"}}</script>
 <script type="module">
 import * as engine from '/repo/apps/samsrf/src/engine.js';
-import { createJob, init } from '@neurodesk/samsrf';
+import { createJob, exportGiis, init } from '@neurodesk/samsrf';
 const bytes = async (path) => new Uint8Array(await (await fetch(path)).arrayBuffer());
 const named = async (file) => file && { name: file.name, bytes: await bytes(file.url) };
 window.runCase = async (request) => {
@@ -43,16 +50,18 @@ window.runCase = async (request) => {
   const job = await engine.createJob(inputs);
   const shard = await engine.runShard(job, 0, job.units, () => {});
   const result = await engine.mergeShards(job, [shard]);
-  // The double map rows of the same spec, as the app's worker holds them before export.
+  // Merge the same shard bytes again to keep the double rows mergeShards rounds to float32.
   await init();
   const handle = createJob(job.spec);
   let maps;
-  try { maps = handle.merge([handle.run(0, handle.vertexCount)]).maps; } finally { handle.free(); }
+  try { maps = handle.merge([shard]).maps; } finally { handle.free(); }
   const hex = (array) => Array.from(array, (value) => value.toString(16).padStart(2, '0')).join('');
+  const replay = new Map(exportGiis(maps, job.outName, null, job.exportConvention).map(({ name, bytes }) => [name, hex(bytes)]));
+  const files = result.files.map(({ name, bytes }) => ({ name, hex: hex(bytes) }));
+  const replayEqualsExport = replay.size === files.length && files.every(({ name, hex: bytes }) => replay.get(name) === bytes);
   return {
-    outName: result.outName, summary: job.summary,
-    files: result.files.map(({ name, bytes }) => ({ name, hex: hex(bytes) })),
-    values: maps.values, vertices: maps.vertices,
+    outName: result.outName, summary: job.summary, files, replayEqualsExport,
+    values: maps.values, vertices: maps.vertices, roi: Array.from(job.spec.roi ?? []),
     data: hex(new Uint8Array(Float64Array.from(maps.data).buffer)),
   };
 };
@@ -101,9 +110,8 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
   if (!output || rest.length) throw new Error('Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT');
   if (existsSync(output)) throw new Error(`${output} must not exist`);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  for (const [path, hash] of Object.entries(manifest)) {
-    if (sha256(readFileSync(join(bundle, path))) !== hash) throw new Error(`The bundle differs from its recorded SHA-256 hashes: ${path}`);
-  }
+  const sorted = (object) => JSON.stringify(Object.fromEntries(Object.entries(object).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
+  if (sorted(treeHashes(bundle)) !== sorted(manifest)) throw new Error('The bundle differs from its recorded SHA-256 hashes');
   const plan = JSON.parse(readFileSync(planPath, 'utf8'));
   mkdirSync(output);
   const server = await serve(bundle);
@@ -115,7 +123,9 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     await page.waitForFunction(() => window.ready === true);
     const environment = {
-      engine: 'web app engine module (apps/samsrf/src/engine.js) in Chromium',
+      runner: 'browser',
+      engine: 'web app engine module (apps/samsrf/src/engine.js, served from source) in Chromium; not the production bundle or interface',
+      playwright: JSON.parse(readFileSync(createRequire(import.meta.url).resolve('playwright/package.json'), 'utf8')).version,
       browser: `chromium ${browser.version()}`,
       userAgent: await page.evaluate(() => navigator.userAgent),
       hardwareConcurrency: await page.evaluate(() => navigator.hardwareConcurrency),
@@ -133,12 +143,16 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
       const record = { id: run.id, precision: run.precision, algorithm: run.algorithm };
       try {
         const result = await page.evaluate((item) => window.runCase(item), request(run, bundle));
+        if (!result.replayEqualsExport) throw new Error('the replayed merge does not reproduce the exported GIfTIs');
         const directory = join(output, run.id);
         mkdirSync(directory);
         for (const { name, hex } of result.files) writeFileSync(join(directory, name), Buffer.from(hex, 'hex'));
         const data = Buffer.from(result.data, 'hex');
         writeFileSync(join(directory, 'maps.f64'), data);
-        Object.assign(record, { status: 'succeeded', prefix: result.outName, values: result.values, vertices: result.vertices, summary: result.summary, mapsSha256: sha256(data) });
+        Object.assign(record, {
+          status: 'succeeded', prefix: result.outName, values: result.values, vertices: result.vertices, roi: result.roi,
+          files: result.files.map(({ name }) => name), replayEqualsExport: true, summary: result.summary, mapsSha256: sha256(data),
+        });
       } catch (error) {
         const message = error.message.replace(/^page\.evaluate: (Error: )?/, '').split('\n')[0];
         record.status = /is not supported by this port/.test(message) ? 'refused'

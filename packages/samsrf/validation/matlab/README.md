@@ -935,7 +935,7 @@ SamSrfX image, which reports SamSrf 10.003 and lacks the repairs.
 | Neurodesk organisation | No organisation secret holds a MATLAB token (only `AUTOCOMMIT_FOR_NEUROCOMMAND`, `NEURODESK_GITHUB_TOKEN_ISSUE_AUTOMATION` and `RCLONE_CONFIG` are visible). `neurocontainers`' `build-matlab-standalone.yml` expects a `MATLAB_BATCH_LICENSE_TOKEN` secret that does not exist; its only run failed and it has never compiled anything. |
 | Upstream distribution | SamSrf's changelog says `SamSrfAnalysis` was made "for use in NeuroDesk", and Neurodesk distributes the builds. A full listing of the Neurodesk `build` container (46 objects) on 2026-11-12 found only the 2024 SamSrf zips and a 2024 `SamSrfX.zip`. No public build of 10.4 was found. |
 | Institutional license | Many Campus-Wide Licenses include MATLAB Compiler for staff at no personal cost. Whether one covers this user, and on which machines, is for the user and their institution to confirm. Activation needs the user's MathWorks account, so only the user can take this route. |
-| Institutional license server, checked 2026-11-16 | The user authorised a network license server at their institution (`SERVER <host> ANY 27000`, `USE_SERVER`), held only in an untracked file outside the repository. Its name resolves to a private 10.x address. From this build host (a cloud VM routed through its public gateway, with no VPN interface) TCP 27000 timed out twice, and MATLAB 23.2.0.3097123 in the builder container stopped with License Manager Error -15 (`-15,570`, system error 115, `Feature: MATLAB`). MATLAB never started, so MATLAB Compiler entitlement was not checked. The route needs a host on that institution's network or VPN, with port 27000 and the vendor daemon's port (`ANY` in the file, so dynamic) reachable. |
+| Institutional license server, checked 2026-11-16 | The user authorised a network license server at their institution, given as `SERVER <host> ANY 27000` and `USE_SERVER` and kept in an untracked file outside the repository. In a `SERVER` line, `ANY` is the host ID field and 27000 the license manager's port. The file has no `DAEMON` (vendor) line, so it does not state the MathWorks vendor daemon's port; MathWorks documents fixing that port with `port=` on the `DAEMON` line of the server's license file. From this repository's cloud build host the name resolves to a private 10.x address, TCP 27000 timed out twice, and MATLAB 23.2.0.3097123 stopped with License Manager Error -15 (`-15,570`, system error 115, `Feature: MATLAB`) before any product check. A GitHub Actions runner linked to that network reaches TCP 27000; a separate maintainer worker on that route is installing R2023b Update 11 to check a MATLAB Compiler checkout before building. MATLAB Compiler entitlement and the vendor daemon's reachability are not yet observed. |
 | MATLAB Runtime | Free, and not a compiler. The [R2023b Update 11 installer](https://ssd.mathworks.com/supportfiles/downloads/R2023b/Release/11/deployment_files/installer/complete/glnxa64/MATLAB_Runtime_R2023b_Update_11_glnxa64.zip) (4,834,714,979 bytes) is public. `containers.mathworks.com/matlab-runtime` has `r2023b-update-1` to `-9` tags and a moving `r2023b` tag. The Runtime executes a compiled archive; it cannot build one. |
 
 Building therefore needs a MATLAB Compiler license for R2023b Update 11, as a
@@ -1020,7 +1020,7 @@ local image sha256:...` and `Evidence: .../samsrf-cli`. In `$WORK/samsrf-cli`:
 | `compiled-repeat.json` | The compiled image repeated bit for bit. |
 | `compiled-1/receipts`, `compiled-2/receipts` | No network, read-only inputs, the image ID, input hashes unchanged. |
 | `interrupt/`, `failure/` | A prompt nonzero exit on SIGINT, and on a missing model. |
-| `web-1/`, `web-vs-source.json`, `web-vs-compiled.json` | The web engine on the same bundle, held against both executions on this host ([web engine against the CLI matrix](#web-engine-against-the-cli-matrix)). This is a report: it lists exact, differing, refused and unsupported runs, and the driver fails only on missing results or a failed run. |
+| `web-1/`, `web-1-vs-source.json`, `web-1-vs-compiled.json` | The web engine (Node) on the same bundle, held against both executions on this host ([web engine against the CLI matrix](#web-engine-against-the-cli-matrix)). It lists exact, differing, refused and unsupported runs; the driver fails on inventory errors and failed runs, not on differing values. The Chromium run is a separate step on the returned evidence. |
 
 The archive keeps `bundle/` (11 MB) because the web engine and the maintainers'
 browser run read those exact input bytes.
@@ -1044,7 +1044,7 @@ with `runtime_image=ghcr.io/neurodesk/samsrf-reference@sha256:...` for the
 Runtime-only check on other hosts. That last step needs no license.
 
 Checked without a license on 2026-11-13, and again on 2026-11-16 with
-`test_web_cli.py`: all 46 harness tests in this directory pass (Python 3.12
+`test_web_cli.py`: all 62 harness tests in this directory pass (Python 3.12
 with `requirements-cli.txt`, none skipped), and the driver refuses a MATLAB root other than
 23.2.0.3097123 and an existing work directory before it does anything.
 
@@ -1203,13 +1203,25 @@ when licensing through a batch token. Then follow the `build` steps in
 ### Web engine against the CLI matrix
 
 `run_web_matrix.mjs` runs the 24 `cli_plan.py` runs through the web app's
-WebAssembly module (Node, one thread) on the same read-only bundle, after
-checking every bundle file against `bundle-sha256.json`.
-`run_browser_matrix.mjs` runs them in Chromium through the app's own
-`apps/samsrf/src/engine.js` (`createJob`, `runShard`, `mergeShards`) from the
-bundle's file bytes, as the app reads dropped files. Both write one layout, and
-`compare_web_cli.py` holds either against one MATLAB execution: source
-(`source-1`) or compiled (`compiled-1`, `runtime-1`).
+WebAssembly module (Node, one thread) on the read-only bundle, after checking
+that the bundle's file tree equals `bundle-sha256.json`. Its entry check follows
+symbolic links, so a checkout reached through a linked path runs instead of
+exiting silently.
+
+`run_browser_matrix.mjs` runs the same runs in Chromium (Playwright 1.64.0, a
+devDependency of this package) through the app's own `apps/samsrf/src/engine.js`
+(`createJob`, `runShard`, `mergeShards`), from the bundle's file bytes as the
+app reads dropped files. This is an engine-module harness served from source:
+it does not exercise the production Vite bundle or the app's interface.
+`mergeShards` rounds the maps to float32 for display, so the runner merges the
+same shard bytes once more to keep the double rows (`maps.f64`). The GIfTIs
+exported from that merge must equal the files `mergeShards` exported, byte for
+byte (`replayEqualsExport`), or the run fails.
+
+Both runners write one layout: per run the record (`files`, ROI, labels,
+vertex count, `mapsSha256`), the exported GIfTIs and `maps.f64`, plus an
+environment that names the runner and the SHA-256 of the plan file, the bundle
+manifest and the WebAssembly module.
 
 Each run's model is the CLI model plus `Data_Precision`, which carries the
 precision that `def_64bit` selects for MATLAB. Bundle paths replace `/input`,
@@ -1219,30 +1231,89 @@ API as a kernel (`hrf.oldSchool` of the file's `fP`). The app's interface has no
 subject-HRF route, so the browser runner records those four runs as
 `unsupported`.
 
-For every map in the run's contract (`compare_cli.expected_results`) the
-comparator checks two things bitwise:
+```sh
+compare_web_cli.py PLAN BUNDLE_SHA256 WEB_ROOT MATLAB_ROOT REPORT \
+  --expect source|compiled-runtime [--allow-unattested-source-inputs]
+```
+
+`compare_web_cli.py` holds one web execution against one MATLAB execution.
+Which MATLAB execution it is comes from its receipts, not from the caller, and
+`--expect` must agree with them. It refuses before reading any value when:
+
+- the plan is not `cli_plan.py`'s matrix, is empty or repeats a run;
+- a plan model is not the bundle manifest's model file;
+- the web execution names another plan or bundle manifest;
+- a MATLAB receipt is missing, extra, of another execution kind, or ran
+  another argv;
+- a compiled execution lacks an image ID (`sha256:...`), or its
+  `receipts/inputs.json` differs from the manifest.
+
+Source receipts do not record the bundle. A source comparison therefore needs
+`--allow-unattested-source-inputs`, and its report says the inputs are
+unattested.
+
+For each run that succeeded on both sides, every map in the run's contract
+(`compare_cli.expected_results`) is compared bitwise twice:
 
 - MATLAB's `Srf.Data` column over `Srf.Roi`, against the web value cast to
-  MATLAB's class. The cast must be exact, so a single run's web values must
-  already be float32.
+  MATLAB's class. The cast must be exact.
 - The exported GIfTI over every vertex.
 
-A map is `exact` only if both agree bit for bit, including nonfinite values
-and the sign of zero. A complex `Srf.Data` makes a map differ wherever its
-imaginary part is nonzero. Otherwise the map `differs`, and the report gives
-the differing vertices, how many of them differ only in the sign of zero, the
-largest absolute, relative and ULP differences, and whether the nonfinite and
-zero masks agree. No tolerance is applied, and refused, unsupported and failed
-runs never count as agreement. Missing results and failed runs exit nonzero.
-`test_web_cli.py` covers this with negative controls: one ULP that the float32
-GIfTI hides, a signed zero, a NaN, an imaginary part, a refusal, an
-unsupported run, a failure, a missing map and a single run whose web value is
-not a float32.
+Before that comparison, the run's inventory must hold, or the run is an
+`inventory-error`:
 
-The `runtime_cli` build job, the `runtime_image` job and
-`licensed-host/build_and_validate.sh` run it against every MATLAB execution
-they make. The build job runs it after publication, so a web difference never
-blocks a validated image.
+- `Srf.Roi` must be unique, finite integers in 1..vertices, one per row, and in
+  the same order as the web ROI;
+- both GIfTIs must hold one float32 array over every vertex;
+- `maps.f64` must have exactly 8 x maps x vertices bytes and match its hash;
+- the labels and the files on each side must match the contract.
+
+A map is `exact` only if both comparisons agree bit for bit, including
+nonfinite values and the sign of zero, and MATLAB's imaginary part is zero.
+Otherwise it `differs`. The report then gives the differing vertices, how many
+differ only in the sign of zero, the largest absolute, relative and ULP
+differences, and whether the masks agree. ULPs count +0 and -0 as one ordinal,
+so the smallest subnormals of opposite sign are 2 apart; `signedZeroOnly`
+counts the sign-of-zero differences.
+
+A run is `refused` only where the engine is expected to refuse (single RC with
+a fitted profile, single CF Gaussian), and `unsupported` only for the browser's
+subject-HRF runs, in both cases with MATLAB succeeding. Any other combination
+is `failed`, with both sides' statuses kept. The polar angle and eccentricity
+GIfTIs that the web exports and SamSrfAnalysis does not are checked for shape
+and listed as not compared. MATLAB-only files are listed the same way. No
+tolerance is applied. Failed and inventory-error runs exit nonzero.
+
+`test_web_cli.py` (24 tests) builds full-provenance fixtures and covers each
+refusal and inventory rule with a negative control:
+
+- one ULP that the float32 GIfTI hides, a signed zero, a NaN and an imaginary
+  part;
+- ULPs across zero in both precisions;
+- a MATLAB failure behind a web refusal, and unexpected web statuses;
+- an extra `maps.f64` byte, a duplicate, zero, out-of-range or fractional ROI,
+  empty and one-vertex GIfTIs, and corrupt or extra files;
+- a stale plan or bundle hash and a model changed to TR 999;
+- source receipts presented as compiled, and malformed compiled receipts.
+
+Eight comparator mutations (the earlier ULP mapping, the ROI, argv, kind and
+GIfTI-length checks, MATLAB failures and truncation) each fail the suite.
+
+The `runtime_cli` and `runtime_image` jobs run both runners and the comparator
+against every MATLAB execution they make. The build job runs them after
+publication, so a web difference never blocks a validated image.
+`licensed-host/build_and_validate.sh` runs the Node runner offline in a pinned
+image. Its Chromium run is an open gate: it needs this repository's pnpm
+install, and the maintainers run it on the returned evidence:
+
+```sh
+pnpm install --frozen-lockfile --filter @neurodesk/samsrf
+pnpm --filter @neurodesk/samsrf exec playwright install chromium
+m=packages/samsrf/validation/matlab; e=samsrf-cli   # the extracted evidence
+node $m/run_browser_matrix.mjs $e/plan.json $e/bundle $e/bundle-sha256.json $e/browser-1
+python3 $m/compare_web_cli.py $e/plan.json $e/bundle-sha256.json $e/browser-1 $e/compiled-1 \
+  browser-1-vs-compiled.json --expect compiled-runtime
+```
 
 **Interim result against source MATLAB (not the compiled image).** The pinned
 source recording ([run 42928350417](#pinned-source-recording)) was compared on
@@ -1250,9 +1321,15 @@ source recording ([run 42928350417](#pinned-source-recording)) was compared on
 `f069b06b0473a4538353063b5acda52c8da4351e812ed870e6dc177132a90f9f`, run on an
 AMD EPYC-Milan host, under Node 24.19.0 and in `node@sha256:7702d8aa…` (Node
 22.23.4), and in Chromium 156.0.8078.4. The two Node runs gave identical
-`maps.f64` and GIfTIs. Chromium, through the app's engine, gave the same
-`maps.f64` and all 176 GIfTIs byte for byte for its 18 succeeded runs. Each
-cell gives the maps that are exact:
+`maps.f64` and GIfTIs. The strict comparator was rerun on fresh runs, each on
+the bundle of the host it is compared with (the hosts' bundles differ only in
+MAT-file timestamps), with the source inputs reported as unattested.
+
+On both bundles, Chromium (through the app's engine, with the replayed merge
+equal to the export) gave the same `maps.f64` and all 176 GIfTIs byte for byte
+for its 18 succeeded runs. Not compared: the polar angle and eccentricity
+GIfTIs that the web exports and SamSrfAnalysis does not, 44 files in Node and
+36 in the browser. Each cell gives the maps that are exact:
 
 | Run | Node vs AMD | Browser vs AMD | Node vs Intel | Browser vs Intel |
 | --- | --- | --- | --- | --- |
