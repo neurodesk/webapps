@@ -447,6 +447,51 @@ fn single_rc_profiles_stay_within_single_rounding() {
     failures.assert_none();
 }
 
+/// `[Y ones] \\ X` in double, every pixel in one solve as MATLAB does: every recorded
+/// double profile is bit-identical to MATLAB's on the AMD hosts (8,400 values per
+/// matrix case, 7,200 per edge case). The Intel AVX-512 host is counted, not gated.
+#[test]
+fn double_rc_profiles_equal_matlab_on_amd_hosts() {
+    let Some(hosts) = hosts() else { return; };
+    let mut failures = Failures::default();
+    let (mut amd_cases, mut amd_values) = (0usize, 0usize);
+    for host in &hosts {
+        for case in pipelines(host, "revcor").filter(|c| !single(c)) {
+            let prepared = rc_prepared(host, case);
+            let y = array(&host.root, &case["savedCourses"]);
+            let volumes = shape(&case["savedCourses"])[0];
+            let profiles = array(&host.root, &case["profiles"]);
+            let raw = array(&host.root, &case["rawMaps"]);
+            let pixels = shape(&case["profiles"])[0];
+            let (mut identical, mut compared) = (0usize, 0usize);
+            for (i, course) in y.chunks(volumes).enumerate() {
+                let mut actual = prepared.profile(course);
+                let expected = &profiles[i * pixels..(i + 1) * pixels];
+                if raw[i * 5..i * 5 + 5].iter().all(|&e| e == 0.0) && expected.iter().all(|&e| e == 0.0) {
+                    continue;
+                }
+                if raw[i * 5 + 4] < 0.0 {
+                    actual.iter_mut().for_each(|value| *value = -*value);
+                }
+                for (p, (&a, &e)) in actual.iter().zip(expected).enumerate() {
+                    identical += usize::from(same(a, e));
+                    compared += 1;
+                    if !intel(host) {
+                        failures.check(same(a, e), || format!("{} {}: vertex {i} pixel {p}: {a} vs {e}", host.name, case["id"]));
+                    }
+                }
+            }
+            if !intel(host) {
+                amd_cases += 1;
+                amd_values += compared;
+            }
+            println!("{} {}: double profile {identical}/{compared} identical", host.name, case["id"]);
+        }
+    }
+    assert_eq!((amd_cases, amd_values), (13, 9 * 8_400 + 4 * 7_200), "AMD double RC inventory");
+    failures.assert_none();
+}
+
 /// `samsrf_removenoise` on the ROI: MATLAB's single residuals differ between hosts by
 /// up to 5.2 x 2^-24 of a course's peak; its single QR is not reproduced bit for bit.
 /// Limits are relative to the input course, which sets the residual's rounding.

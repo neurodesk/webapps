@@ -299,9 +299,11 @@ profile values from 6.44 to 3.20, with 30% of profile entries and 54% of
 residuals bit-identical. With the multi-RHS solves (#808) and MKL's `snrm2`
 order (#812), every single profile entry and residual is now bit-identical on
 the AMD host (above); the AVX-512 host keeps the limits. The rounding-only
-courses stay, because MATLAB's residual there is rounding the port does not have. Double courses with variance keep the
-centred solve, within 1e-12 of MATLAB on every recorded case; a constant double
-course goes through `mldivide` for its rank rule. `corr`'s dot product follows MKL's CNR `auto` order
+courses stay, because MATLAB's residual there is rounding the port does not have. Double profiles are
+one `[Y ones] \\ X` over every pixel as well since 0.6.20261116: every double
+profile of the matrix and edge recordings is bit-identical on their AMD hosts
+(`double_rc_profiles_equal_matlab_on_amd_hosts`; the centred solve it replaced
+matched 1,533-1,815 of 8,400 per case). `corr`'s dot product follows MKL's CNR `auto` order
 exactly (all 189 matrix `R^2` values on that host); the AVX-512 order was not
 identified (best candidate, 16 lanes x 4 accumulators with FMA: 145 of 189).
 
@@ -1475,6 +1477,85 @@ of the recorded single CSS pipeline, Beta and Baseline included, now equals
 MATLAB's; the gate keeps its per-value least-squares tolerance for coefficients.
 A successful source gate does not assert the diagnostic paths, arbitrary-input
 parity, or a rebuilt container.
+
+## Double detrend and z-score
+
+#866's web-versus-SamSrfAnalysis comparison found the earliest difference of the
+double pipelines in `samsrf_gii2srf`'s preprocessing: up to 1.2e-14 in 95% of the
+values of `Srf.Y`. It is reproduced from the pinned SamSrfAnalysis recording
+(`cli-reference.json`, run 42928350417; AMD EPYC 9V74 with MKL CNR `auto`, Intel
+Xeon Platinum 8573C with `AVX512_E1`). MATLAB R2023b converts every run to double,
+then for each run:
+
+- `detrend(Data)` subtracts `a * (a \\ Data)` with `a = [linspace(0,1,n)' ones]`
+  (the column order is immaterial: pivoting takes the ones column first). The
+  solve is one QR for every vertex of the run, and MKL's `?ormqr` rounds each
+  vertex by its place among them (`lstsq::DoubleDesign`). The fit is `a1*c1 +
+  a2*c2` with each product rounded. Searched over seven time scalings, both
+  column orders, one solve per vertex or one for all, five residual orders and
+  two `zscore` forms, only this combination reproduces the courses (5,250 of
+  5,250 on one case; the port before matched 227).
+- `zscore` with MATLAB's `mean` and `sum`.
+- `nanmean(Data, 3)` sums the runs in order. The port used to sum odd and even
+  runs separately when the noise ceiling was wanted, a last-bit difference in
+  2,124 of 5,250 averaged values.
+
+`cli_preprocess.rs` drives `RunAccumulator` on the recording's own GIfTI runs
+and compares `Srf.Y`, which `extract_cli_courses.py` writes from the MAT files.
+On the AMD host every double and single value of the 22 runs whose `Srf.Y` is
+this stage's output equals MATLAB's (168,000 of 168,000; 86,876 before). The two
+connective-field runs with global-signal correction and smoothing save `Srf.Y`
+after `samsrf_removenoise` and smoothing and are counted, not compared. On the
+Intel host 88,033 of 168,000 are identical: its MKL orders the double solve
+differently, and AMD and Intel MATLAB themselves differ in 5,051 of 5,165
+values, so one output cannot equal both. Not recorded: MATLAB on a constant
+non-zero raw course, where the port leaves a QR rounding residual that `zscore`
+scales to unit variance. MATLAB
+equivalence for this behavior remains unverified; all-zero courses stay zero.
+Also unrecorded are runs whose vertex count is not a multiple of four on this path.
+
+With the courses exact, the Node package API using the committed WASM was
+compared against the AMD source execution of the 24-run matrix. The copied
+`run_web_matrix.mjs` and `compare_web_cli.py` match #866 at `dd36baa32`.
+Recomparison with the corrected comparator at `d12064c9a` preserves the final
+11-run, 119-map result. This is not a browser or production UI comparison;
+the Node runner also accepts custom HRFs unavailable through the app interface.
+
+| Change | Exact runs | Exact maps (of 168) |
+| --- | --- | --- |
+| `main` (#866's report) | 6 | 77 |
+| detrend, z-score, run order | 6 | 93 |
+| `corr` order for the noise ceiling | 6 | 105 |
+| MATLAB `conv` for every HRF convolution | 11 | 115 |
+| one QR for double RC profiles, `corr` order for RC `R^2` | 11 | 119 |
+
+The two refused single fits stay refused. What still differs, earliest stage first:
+
+- double convex-hull RC centroids: from MATLAB's own profile, `x0` and `y0` of
+  `polyshape.centroid` differ by 1-3 ULP (one by 38 ULP); areas are exact.
+  This is geometry (#732).
+- double RC Gaussian and CF Gaussian fits: `samsrf_fit2dprf`'s `errfun`
+  (`sum(Ds(:).^2)`) and `R^2` now use the modelled MATLAB `sum` and `mean`
+  orders in the double port. The fits still differ; the first optimizer
+  divergence requires a MATLAB trace to locate.
+- double CF profiles: `corr(Y, X)` forms `y' * X` with MKL's `dgemv`. Fitted on
+  the 18 unsmoothed double CF cases of the reverse-correlation recording, full
+  blocks of four columns use two accumulators with element 0 seeding the first,
+  combined then the tail in order (1,728 of 1,728 values, and 304 of 304 on the
+  held-out edge cases); the remaining columns' kernel is not identified (best of
+  the families tried, 153 of 216). An FPRev recording of double `y' * A`, as
+  `record_gemv_order.m` made for single, would decide it.
+- double global-signal regression (`samsrf_removenoise`) still solves normal
+  equations, where MATLAB solves `[X ones] \\ Y`.
+- CSS through SamSrfAnalysis: MATLAB saves a complex `Srf.Data`.
+- every Intel host.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-cli" packages/samsrf/validation/matlab/cli-reference.json
+python3 -I packages/samsrf/validation/matlab/extract_cli_courses.py "$TMPDIR/samsrf-cli" "$TMPDIR/samsrf-cli-courses"
+SAMSRF_CLI_REFERENCE_DIR="$TMPDIR/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$TMPDIR/samsrf-cli-courses" \
+  cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cli_preprocess -- --nocapture
+```
 
 ## Double forward fine fits (#730)
 

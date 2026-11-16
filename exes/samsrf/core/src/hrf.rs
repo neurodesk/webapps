@@ -115,17 +115,11 @@ pub fn gampdf(x: f64, a: f64, b: f64) -> f64 {
     ((a - 1.0) * x.ln() - x / b - libm::lgamma(a) - a * b.ln()).exp()
 }
 
-/// `prf_convolve_hrf(Y, Hrf, Downsampling)`: full convolution truncated to `y.len()`,
-/// then every `downsampling`-th sample from the first when `downsampling > 1`.
+/// `prf_convolve_hrf(Y, Hrf, Downsampling)`: `conv(Y, Hrf)` truncated to `y.len()`, then
+/// every `downsampling`-th sample from the first when `downsampling > 1`, in MATLAB's
+/// `conv` arithmetic (`matlab_math::convolve_real`).
 pub fn convolve(y: &[f64], hrf: &[f64], downsampling: usize) -> Vec<f64> {
-    let step = downsampling.max(1);
-    (0..y.len())
-        .step_by(step)
-        .map(|k| {
-            let terms = hrf.len().min(k + 1);
-            (0..terms).map(|j| y[k - j] * hrf[j]).sum()
-        })
-        .collect()
+    crate::matlab_math::convolve_real(y, hrf, downsampling.max(1))
 }
 
 /// What `prf_errfun` receives as `Hrf`: a kernel, or the negative TR that tells it
