@@ -19,13 +19,27 @@ export function auditedExampleFiles(examples) {
 }
 
 // Apps the audit must run without any request to another host. For these it also needs
-// the runtime the offline lock pins for the desktop bundle, not only the example.
-export const OFFLINE_AUDIT_APPS = ['dicompare'];
-const RUNTIME_KINDS = new Set(['runtime', 'python-runtime', 'python-wheel']);
+// what the offline lock pins for the desktop bundle and the page loads before a run:
+// runtimes, fonts and the templates and support data an example is shown or checked against.
+// Models, atlases and tract geometry load only when a method runs, which the audit does not do.
+export const OFFLINE_AUDIT_APPS = ['dicompare', 'zarro', 'deface', 'disconnectome', 'qsmbly', 'surfannotate'];
+const OFFLINE_KINDS = new Set(['runtime', 'python-runtime', 'python-wheel', 'runtime-cdn', 'font', 'example-template', 'example-or-support-data']);
 
-export function auditedRuntimeFiles(app, lock) {
+export function auditedOfflineFiles(app, lock) {
   if (!OFFLINE_AUDIT_APPS.includes(app.id)) return [];
-  return (lock.apps[app.id] ?? []).filter(url => RUNTIME_KINDS.has(lock.assets[url]?.kind)).map(url => ({ url }));
+  return (lock.apps[app.id] ?? []).filter(url => OFFLINE_KINDS.has(lock.assets[url]?.kind)).map(url => ({ url }));
+}
+
+const ZARR_METADATA_KEY = /\/(?:zarr\.json|\.zattrs|\.zgroup|\.zarray|\.zmetadata)$/;
+
+// A Zarr reader probes for metadata keys a store may lack and reads a 404 as "absent".
+// An example store is pinned to a commit and its files list is the whole store, so a
+// metadata key under its root that the list lacks does not exist there, and the audit
+// answers it with 404, as the desktop bundle answers any URL it does not hold.
+export function absentZarrKey(examples, url) {
+  const [example] = examples;
+  if (!example?.sourceUrl || !example.files.some(file => file.role === 'zarr')) return false;
+  return url.startsWith(example.sourceUrl) && ZARR_METADATA_KEY.test(url) && !example.files.some(file => file.url === url);
 }
 
 const pythonProject = name => name.toLowerCase().replace(/[-_.]+/g, '-');

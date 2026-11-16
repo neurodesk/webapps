@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Fills the directory the interface audit reads with EXAMPLE_ASSET_CACHE:
 //   node scripts/fetch-example-cache.mjs [directory] [--prune]
-// It holds each app's first example and, for the apps the audit runs offline, their pinned runtime.
+// It holds each app's first example and, for the apps the audit runs offline, the pinned files their page loads.
 // SMOKE_APPS restricts it to the apps the audit would then run. --prune removes
 // every entry the selected apps do not use, so it needs the whole catalogue.
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppExamples } from './lib/app-examples.mjs';
-import { auditedExampleFiles, auditedRuntimeFiles, fillExampleCache } from './lib/example-asset-cache.mjs';
+import { auditedExampleFiles, auditedOfflineFiles, fillExampleCache } from './lib/example-asset-cache.mjs';
 
 const args = process.argv.slice(2);
 const prune = args.includes('--prune');
@@ -22,7 +22,7 @@ if (prune && requested.size) throw new Error('--prune would delete the other app
 const lock = JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.lock.json'), 'utf8'));
 const { assets } = lock;
 const files = [];
-for (const app of selected) files.push(...auditedExampleFiles(await loadAppExamples(app)), ...auditedRuntimeFiles(app, lock));
+for (const app of selected) files.push(...auditedExampleFiles(await loadAppExamples(app)), ...auditedOfflineFiles(app, lock));
 const megabytes = bytes => (bytes / 1e6).toFixed(1);
 const summary = await fillExampleCache(files, {
   directory,
