@@ -80,9 +80,14 @@ fn predictions_are_written_before_the_recording() {
     std::fs::write(out.join("gamma-predictions.json"), serde_json::to_string_pretty(&cases).unwrap()).unwrap();
 }
 
-fn recorded(dir: &Path, descriptor: &Value, len: usize) -> Vec<f64> {
+fn validate_descriptor(descriptor: &Value, len: usize) {
+    assert_eq!(descriptor["imaginary"], "", "gamma arrays must be real");
     assert_eq!(descriptor["shape"], json!([1, len]), "{}", descriptor["file"]);
     assert_eq!(descriptor["class"], "double");
+}
+
+fn recorded(dir: &Path, descriptor: &Value, len: usize) -> Vec<f64> {
+    validate_descriptor(descriptor, len);
     let bytes = std::fs::read(dir.join(descriptor["file"].as_str().unwrap())).unwrap();
     assert_eq!(bytes.len(), 8 * len);
     bytes.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
@@ -129,4 +134,15 @@ fn small_shapes_against_the_recording() {
         report.insert(host, json!({ "tallies": tallies, "candidateMisses": misses }));
     }
     println!("{}", serde_json::to_string_pretty(&report).unwrap());
+}
+
+#[test]
+fn refuses_wrong_array_representation() {
+    let valid = json!({"file": "values.f64", "shape": [1, 2], "class": "double", "imaginary": ""});
+    validate_descriptor(&valid, 2);
+    for (field, value) in [("class", "single"), ("imaginary", "imaginary.f64")] {
+        let mut wrong = valid.clone();
+        wrong[field] = json!(value);
+        assert!(std::panic::catch_unwind(|| validate_descriptor(&wrong, 2)).is_err());
+    }
 }

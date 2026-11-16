@@ -492,6 +492,44 @@ fn double_rc_profiles_equal_matlab_on_amd_hosts() {
     failures.assert_none();
 }
 
+fn double_cf_ids(matrix: bool) -> Vec<String> {
+    let datasets: &[&str] = if matrix {
+        &["revcor_double_x001_lh_average1", "revcor_double_x001_lh_average0", "revcor_double_x001_rh_average1"]
+    } else {
+        &["edges_double_x001_lh"]
+    };
+    let modes: &[i32] = if matrix { &[0, -1, 1] } else { &[0, -1] };
+    let mut ids = Vec::new();
+    for dataset in datasets {
+        for global in [0, 1] {
+            for mode in modes {
+                ids.push(format!("{dataset}_cf_mode{mode}_smooth0_global{global}"));
+            }
+        }
+    }
+    ids.sort();
+    ids
+}
+
+fn validate_double_cf_ids(mut ids: Vec<String>, matrix: bool) {
+    ids.sort();
+    assert_eq!(ids, double_cf_ids(matrix), "complete unique double CF case identities");
+}
+
+#[test]
+fn refuses_missing_or_duplicate_double_cf_cases() {
+    for matrix in [false, true] {
+        let ids = double_cf_ids(matrix);
+        validate_double_cf_ids(ids.clone(), matrix);
+        let mut duplicated = ids.clone();
+        duplicated[1] = duplicated[0].clone();
+        assert!(std::panic::catch_unwind(|| validate_double_cf_ids(duplicated, matrix)).is_err());
+        let mut missing = ids;
+        missing.pop();
+        assert!(std::panic::catch_unwind(|| validate_double_cf_ids(missing, matrix)).is_err());
+    }
+}
+
 /// Unsmoothed double `corr(Y, X)`: MATLAB's `mean`, `norm` and `y' * A`
 /// (`lstsq::gemv_t_double`, record_constants_gamma_gemv.m) make every profile
 /// bit-identical to MATLAB's on the AMD hosts. The Intel AVX-512 host is counted, not gated.
@@ -501,10 +539,10 @@ fn double_cf_profiles_equal_matlab_on_amd_hosts() {
     let mut failures = Failures::default();
     let (mut amd_cases, mut amd_values) = (0usize, 0usize);
     for host in &hosts {
-        for case in pipelines(host, "cf").filter(|c| !single(c) && parse(c).is_ok()) {
-            if case["mapReplayModel"]["Smoothing"].as_f64().unwrap_or(0.0) != 0.0 {
-                continue;
-            }
+        let cases: Vec<_> = pipelines(host, "cf").filter(|c| !single(c) && parse(c).is_ok()
+            && c["mapReplayModel"]["Smoothing"].as_f64().unwrap() == 0.0).collect();
+        validate_double_cf_ids(cases.iter().map(|c| c["id"].as_str().unwrap().to_string()).collect(), host.expected.cases == MATRIX.cases);
+        for case in cases {
             let prepared = cf_prepared(host, case, &template_maps(host, case));
             let y = array(&host.root, &case["savedCourses"]);
             let volumes = shape(&case["savedCourses"])[0];
@@ -861,7 +899,7 @@ fn cf_from_raw_files_equals_the_run_on_matlabs_courses() {
     let mut tally = Tally::default();
     let mut gaussian_amd = 0;
     // The edge recording edits its courses, so only the matrix starts from raw files.
-    for host in hosts.iter().filter(|host| std::ptr::eq(host.expected, &MATRIX)) {
+    for host in hosts.iter().filter(|host| host.expected.cases == MATRIX.cases) {
         for case in pipelines(host, "cf").filter(|c| single(c)) {
             let id = case["id"].as_str().unwrap();
             let gaussian = single_gaussian_cf(case);
@@ -962,7 +1000,7 @@ fn single_gaussian_cf_from_matlabs_courses_equals_the_amd_host() {
     let Some(hosts) = hosts() else { return; };
     let mut failures = Failures::default();
     let mut gated = 0;
-    for host in hosts.iter().filter(|host| std::ptr::eq(host.expected, &MATRIX)) {
+    for host in hosts.iter().filter(|host| host.expected.cases == MATRIX.cases) {
         for case in pipelines(host, "cf").filter(|c| single_gaussian_cf(c)) {
             let id = case["id"].as_str().unwrap();
             let global = case["mapReplayModel"]["Global_Signal_Correction"] != false;
@@ -1096,7 +1134,7 @@ fn single_rc_2d_end_to_end_equals_the_amd_host() {
     let input = PathBuf::from(std::env::var_os("SAMSRF_MATRIX_INPUT_DIR").expect("set SAMSRF_MATRIX_INPUT_DIR with SAMSRF_REVCOR_REFERENCE_DIR"));
     let mut failures = Failures::default();
     let mut gated = 0;
-    for host in hosts.iter().filter(|host| std::ptr::eq(host.expected, &MATRIX)) {
+    for host in hosts.iter().filter(|host| host.expected.cases == MATRIX.cases) {
         for case in pipelines(host, "revcor").filter(|c| single_rc_fit(c)) {
             let id = case["id"].as_str().unwrap();
             let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());

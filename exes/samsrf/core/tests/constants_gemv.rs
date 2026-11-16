@@ -399,10 +399,15 @@ fn predictions_are_written_before_the_recording() {
 
 // ---- gate -----------------------------------------------------------------------------
 
-fn recorded(dir: &Path, descriptor: &Value, shape: &[usize]) -> Vec<f64> {
+fn validate_descriptor(descriptor: &Value, shape: &[usize], class: &str) {
+    assert_eq!(descriptor["class"], class, "MATLAB array class");
     let found: Vec<usize> = descriptor["shape"].as_array().unwrap().iter().map(|d| d.as_u64().unwrap() as usize).collect();
     assert_eq!(found, shape, "{}", descriptor["file"]);
     assert_eq!(descriptor["imaginary"], "", "{}", descriptor["file"]);
+}
+
+fn recorded(dir: &Path, descriptor: &Value, shape: &[usize], class: &str) -> Vec<f64> {
+    validate_descriptor(descriptor, shape, class);
     let bytes = std::fs::read(dir.join(descriptor["file"].as_str().unwrap())).unwrap();
     assert_eq!(bytes.len(), 8 * shape.iter().product::<usize>(), "{}", descriptor["file"]);
     bytes.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
@@ -453,8 +458,8 @@ fn constants_and_gemv_against_the_recording() {
             assert_eq!(case["id"], port.id.as_str(), "{host}: direct order");
             assert_eq!(case["input"], port.input.as_str(), "{host} {}: input", port.id);
             let n = case["n"].as_u64().unwrap() as usize;
-            let d = recorded(&dir, &case["detrend"], &[n, 1]);
-            let z = recorded(&dir, &case["zscore"], &[n, 1]);
+            let d = recorded(&dir, &case["detrend"], &[n, 1], "double");
+            let z = recorded(&dir, &case["zscore"], &[n, 1], "double");
             let constant = (1..=8).contains(&port.kind) || port.kind == 15;
             for (i, name) in MODELS.iter().enumerate() {
                 for (stage, mine, theirs) in [("detrend", &port.models[i].0, &d), ("zscore", &port.models[i].1, &z)] {
@@ -475,9 +480,9 @@ fn constants_and_gemv_against_the_recording() {
             assert_eq!(case["positions"], json!(port.positions), "{host} {}: positions", port.id);
             assert_eq!(case["kinds"], json!(port.kinds), "{host} {}: kinds", port.id);
             let count = port.positions.len();
-            let courses = recorded(&dir, &case["courses"], &[250, count]);
-            let ceiling = recorded(&dir, &case["noiseCeiling"], &[1, count]);
-            let global = recorded(&dir, &case["globalSignal"], &[250, 1]);
+            let courses = recorded(&dir, &case["courses"], &[250, count], if port.single { "single" } else { "double" });
+            let ceiling = recorded(&dir, &case["noiseCeiling"], &[1, count], if port.single { "single" } else { "double" });
+            let global = recorded(&dir, &case["globalSignal"], &[250, 1], if port.single { "single" } else { "double" });
             for (i, name) in MODELS.iter().enumerate() {
                 for (part, mine, theirs) in [("courses", &port.models[i].0, &courses), ("noise ceiling", &port.models[i].1, &ceiling)] {
                     let entry = tallies.entry(format!("pipeline {part} {name}")).or_default();
@@ -496,11 +501,11 @@ fn constants_and_gemv_against_the_recording() {
         for (case, &(n, mm)) in recorded_gemv.iter().zip(&GEMV_SHAPES) {
             assert_eq!(case["id"], format!("gemv_n{n}_m{mm}").as_str());
             let p = pairs(n).len();
-            let counts = recorded(&dir, &case["counts"], &[p, mm]);
-            let ys = recorded(&dir, &case["ys"], &[n, 100]);
-            let a_s = recorded(&dir, &case["As"], &[n, mm * 100]);
-            let products = recorded(&dir, &case["products"], &[100, mm]);
-            let recorded_pairs = recorded(&dir, &case["pairs"], &[p, 2]);
+            let counts = recorded(&dir, &case["counts"], &[p, mm], "double");
+            let ys = recorded(&dir, &case["ys"], &[n, 100], "double");
+            let a_s = recorded(&dir, &case["As"], &[n, mm * 100], "double");
+            let products = recorded(&dir, &case["products"], &[100, mm], "double");
+            let recorded_pairs = recorded(&dir, &case["pairs"], &[p, 2], "double");
             assert!(pairs(n).iter().enumerate().all(|(i, &(a, b))| recorded_pairs[i] == (a + 1) as f64 && recorded_pairs[p + i] == (b + 1) as f64));
             for (name, f) in GEMV_MODELS {
                 let fprev = fprev_counts(f, n, mm);
@@ -574,5 +579,19 @@ fn require_amd_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>) {
     }
     for (name, _) in GEMV_MODELS.iter().skip(1) {
         misses(&format!("gemv fprev leftover {name}"));
+    }
+}
+
+#[test]
+fn refuses_wrong_array_representation() {
+    for class in ["double", "single"] {
+        let valid = json!({"file": "values.f64", "shape": [2, 1], "class": class, "imaginary": ""});
+        validate_descriptor(&valid, &[2, 1], class);
+        let mut wrong = valid.clone();
+        wrong["class"] = json!(if class == "double" { "single" } else { "double" });
+        assert!(std::panic::catch_unwind(|| validate_descriptor(&wrong, &[2, 1], class)).is_err());
+        wrong = valid;
+        wrong["imaginary"] = json!("imaginary.f64");
+        assert!(std::panic::catch_unwind(|| validate_descriptor(&wrong, &[2, 1], class)).is_err());
     }
 }

@@ -129,8 +129,10 @@ processes recorded identical arrays (3,111 each), so one dispatch was enough.
   every direct value (255,495 detrended and 255,495 z-scored, constants, ramps,
   near-constants and the one- and two-sample courses included) and every pipeline
   course (141,000) and noise ceiling (564) in both precisions. A constant non-zero
-  raw course becomes rounding noise with unit variance and a finite noise ceiling
-  in MATLAB too. M2 (constants become zero) misses 58,000 pipeline values and 232
+  raw course can become unit-variance rounding noise when QR leaves a varying
+  residual. This is not universal: constant 3 at one-based positions 2004–2007
+  and 134258 in `pipeline_V134260_double` and `_single` remains zero with NaN
+  ceilings, and the port reproduces those outcomes too. M2 (constants become zero) misses 58,000 pipeline values and 232
   noise ceilings; M0 (`main`) misses more. One prediction failed: the global signal,
   `nanmean(Srf.Data, 2)` over every vertex, equals MATLAB's in 15 of 2,000 values
   (relative error up to 2.7e-13 in double, 9.9e-5 in single). Its input courses are

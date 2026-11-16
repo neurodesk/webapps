@@ -392,9 +392,9 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   rounds each vertex by its place among them, and the port solves vertex `v` of
   `n` in that order. On the AMD host of the pinned SamSrfAnalysis recording every
   preprocessed course equals MATLAB's (validation README, "Double detrend and
-  z-score"). A constant non-zero course keeps the QR's rounding residual, which
-  `zscore` then scales to unit variance, and its noise ceiling is a number:
-  MATLAB does the same on its AMD host, recorded on constant, ramp and
+  z-score"). A constant non-zero course can retain a varying QR rounding residual, which
+  `zscore` scales to unit variance. Other recorded constant courses remain zero
+  with NaN noise ceilings. The port matches the AMD recording on constant, ramp and
   near-constant raw courses at every leftover position and through
   `samsrf_gii2srf` (`validation/matlab/constants-gamma-gemv-predictions.md`).
   All-zero courses stay zero.

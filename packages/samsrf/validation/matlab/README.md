@@ -1511,8 +1511,11 @@ differently, and AMD and Intel MATLAB themselves differ in 5,051 of 5,165
 values, so one output cannot equal both. Constant, ramp and near-constant raw
 courses, one- and two-sample courses and runs of 134,257-134,259 vertices (every
 leftover position) were recorded later (`constants-gamma-gemv-predictions.md`,
-run 43882331042): on the AMD host the port gives every value, and a constant
-non-zero course is rounding noise with unit variance in MATLAB too. All-zero
+run 43882331042): on the AMD host the port matches every recorded selected
+course value and noise ceiling. A constant non-zero course can become unit-variance
+noise when QR leaves a varying residual; other recorded constants remain zero
+with NaN ceilings. Direct arithmetic was tested in double at lengths 1, 2, 3, 37
+and 250; the full pipeline was tested in both precisions at 250 samples. All-zero
 courses stay zero. That run's global signal (`nanmean(Srf.Data, 2)` over every
 vertex) matched in 15 of 2,000 values; its across-vertex order is not MATLAB's.
 
