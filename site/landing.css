@@ -371,6 +371,11 @@ h1 {
 
 .catalog { padding: 1.5rem 0 3rem; }
 
+/* The hub has no search panel overlapping the hero, so it drops the room kept for one. */
+.hero--hub { padding-bottom: clamp(3rem, 5vw, 4rem); }
+.catalog--hub { padding-top: 0; }
+.catalog--hub .category-section { padding-top: clamp(2rem, 4vw, 2.75rem); border-bottom: 0; }
+
 .category-section { padding: clamp(3.5rem, 7vw, 5.5rem) 0; border-bottom: 1px solid var(--line); }
 .category-section[hidden], .app-card[hidden] { display: none; }
 
