@@ -12,10 +12,11 @@
 //! `nanmean(Data, 2)` across all vertices needs.
 //!
 //! Memory while averaging: 10 bytes per kept vertex and volume (an f64 sum and a u16
-//! count), twice that with the noise ceiling (odd and even runs are summed separately and
-//! the overall mean is their combined sum), plus 10 bytes per vertex and volume of the
-//! whole hemisphere for the global signal unless every vertex is kept already. For
-//! 134 260 vertices x 250 volumes that is 336 MB, 671 MB with the noise ceiling.
+//! count), three times that with the noise ceiling (every run, the odd runs and the even
+//! runs are summed separately: the mean adds the runs in order, as `nanmean(Data, 3)`
+//! does), plus 10 bytes per vertex and volume of the whole hemisphere for the global
+//! signal unless every vertex is kept already. For 134 260 vertices x 250 volumes that
+//! is 336 MB, 1 GB with the noise ceiling.
 //! Concatenating keeps 8 bytes per kept vertex and volume of every run.
 
 use crate::error::{Error, Result};
@@ -91,15 +92,9 @@ impl NanSum {
         }
     }
 
-    /// The mean over every part: `sum / count`, NaN where no part had a value.
-    fn mean(parts: &[NanSum]) -> Vec<f64> {
-        (0..parts[0].sum.len())
-            .map(|i| {
-                let sum: f64 = parts.iter().map(|part| part.sum[i]).sum();
-                let count: u32 = parts.iter().map(|part| u32::from(part.count[i])).sum();
-                sum / f64::from(count)
-            })
-            .collect()
+    /// `sum / count`, NaN where no run had a value.
+    fn mean(&self) -> Vec<f64> {
+        self.sum.iter().zip(&self.count).map(|(&sum, &count)| sum / f64::from(count)).collect()
     }
 }
 
@@ -144,7 +139,7 @@ impl VolumeMean {
 
 #[derive(Debug)]
 enum Combined {
-    /// One part, or the odd and even runs when the noise ceiling is wanted.
+    /// Every run, then the odd and the even runs when the noise ceiling is wanted.
     Average(Vec<NanSum>),
     /// The kept courses of each run, vertex-major.
     Concatenate(Vec<Vec<f64>>),
@@ -205,13 +200,19 @@ impl RunAccumulator {
         } else {
             Normalise::None
         };
+        let detrender = (normalise != Normalise::None).then(|| Detrender::new(volumes, self.total_vertices));
         let course_of = |vertex: usize| {
             let mut course: Vec<f64> = run
                 .course(vertex)
                 .iter()
                 .map(|&value| f64::from(value))
                 .collect();
-            normalise_course(&mut course, normalise);
+            if let Some(detrender) = &detrender {
+                detrender.apply(&mut course, vertex);
+                if normalise == Normalise::DetrendZscore {
+                    zscore(&mut course);
+                }
+            }
             course
         };
         let kept_count = self.kept.len(self.total_vertices);
@@ -232,8 +233,10 @@ impl RunAccumulator {
             if is_kept {
                 match self.combined.as_mut() {
                     Some(Combined::Average(parts)) => {
-                        let part = half.min(parts.len() - 1);
-                        parts[part].add(position * volumes, &course);
+                        parts[0].add(position * volumes, &course);
+                        if parts.len() == 3 {
+                            parts[1 + half].add(position * volumes, &course);
+                        }
                     }
                     Some(Combined::Concatenate(_)) => concatenated.extend_from_slice(&course),
                     None => unreachable!("start() sets the combination"),
@@ -304,7 +307,7 @@ impl RunAccumulator {
             } => Combined::Average(vec![NanSum::new(kept_values)]),
             Combine::Average {
                 noise_ceiling: true,
-            } => Combined::Average(vec![NanSum::new(kept_values), NanSum::new(kept_values)]),
+            } => Combined::Average((0..3).map(|_| NanSum::new(kept_values)).collect()),
             Combine::Concatenate => Combined::Concatenate(Vec::new()),
         });
         let every_vertex_kept = self.kept.len(self.total_vertices) == self.total_vertices;
@@ -327,10 +330,10 @@ impl RunAccumulator {
         let kept_count = self.kept.len(self.total_vertices);
         let (data, noise_ceiling) = match combined {
             Combined::Average(parts) => {
-                let mean = NanSum::mean(&parts);
-                let ceiling = (parts.len() == 2 && self.runs >= 2).then(|| {
-                    let odd = NanSum::mean(&parts[..1]);
-                    let even = NanSum::mean(&parts[1..]);
+                let mean = parts[0].mean();
+                let ceiling = (parts.len() == 3 && self.runs >= 2).then(|| {
+                    let odd = parts[1].mean();
+                    let even = parts[2].mean();
                     (0..kept_count)
                         .map(|position| {
                             let range = position * volumes..(position + 1) * volumes;
@@ -364,7 +367,7 @@ impl RunAccumulator {
             GlobalSignal::PerRun(signal) => Some(signal),
             GlobalSignal::FromCombined => Some(mean_across_vertices(&data, self.options.precision)),
             GlobalSignal::AllVertices(sums) => {
-                let means = NanSum::mean(&[sums]);
+                let means = sums.mean();
                 let all = TimeSeries {
                     volumes,
                     vertices: self.total_vertices,
@@ -384,17 +387,6 @@ impl RunAccumulator {
     }
 }
 
-fn normalise_course(course: &mut [f64], normalise: Normalise) {
-    match normalise {
-        Normalise::None => {}
-        Normalise::Detrend => detrend(course),
-        Normalise::DetrendZscore => {
-            detrend(course);
-            zscore(course);
-        }
-    }
-}
-
 /// `nanmean(Data, 2)`: per volume, the mean of the non-NaN values across vertices.
 fn mean_across_vertices(data: &TimeSeries, precision: Precision) -> Vec<f64> {
     let mut across = VolumeMean::new(data.volumes, precision);
@@ -408,45 +400,63 @@ fn mean(x: &[f64]) -> f64 {
     x.iter().sum::<f64>() / x.len() as f64
 }
 
-/// MATLAB `detrend(x)`: subtracts the least-squares straight line. In place.
-///
-/// MATLAB solves the fit by QR on `[1 t]`; here the normal equations on the centred time
-/// `t - (n + 1) / 2`, which are diagonal: intercept = mean, slope = `sum(tc .* x) / sum(tc.^2)`.
-/// Results agree with Octave's QR to rounding (about 1e-15 of the course's scale). A NaN
-/// anywhere makes the whole course NaN, as `\` does.
-pub fn detrend(x: &mut [f64]) {
-    let n = x.len();
-    if n == 0 {
-        return;
+/// MATLAB `detrend` of a volumes x vertices run: `x - a*(a\\x)` with
+/// `a = [linspace(0, 1, n)' ones(n, 1)]`, solved for every vertex at once. MKL's
+/// `?ormqr` rounds each vertex's `Q' x` by its place among all of them, so a vertex
+/// is solved as right-hand side `index` of `count`; the fit `a1*c1 + a2*c2` is
+/// rounded per product. This reproduces every double `Srf.Y` value of the pinned
+/// SamSrfAnalysis recording on its AMD host (validation/matlab/README.md#double-detrend-and-z-score).
+/// A course with a NaN or infinity becomes NaN, as `\\` does for that column.
+pub struct Detrender {
+    design: crate::lstsq::DoubleDesign,
+    time: Vec<f64>,
+    count: usize,
+}
+
+impl Detrender {
+    /// The fit for runs of `volumes` samples with `count` vertices. `volumes >= 2`.
+    pub fn new(volumes: usize, count: usize) -> Self {
+        let last = (volumes - 1) as f64;
+        let time: Vec<f64> = (0..volumes).map(|i| i as f64 / last).collect();
+        let ones = vec![1.0; volumes];
+        Detrender { design: crate::lstsq::DoubleDesign::new(&[&time, &ones]), time, count }
     }
-    let intercept = mean(x);
-    let centre = (n as f64 + 1.0) / 2.0;
-    let mut cross = 0.0;
-    let mut squares = 0.0;
-    for (i, &value) in x.iter().enumerate() {
-        let tc = (i + 1) as f64 - centre;
-        cross += tc * value;
-        squares += tc * tc;
-    }
-    let slope = if n > 1 { cross / squares } else { 0.0 };
-    for (i, value) in x.iter_mut().enumerate() {
-        let tc = (i + 1) as f64 - centre;
-        *value -= intercept + slope * tc;
+
+    /// Detrends vertex `index`'s course in place.
+    pub fn apply(&self, course: &mut [f64], index: usize) {
+        if course.iter().any(|value| !value.is_finite()) {
+            course.fill(f64::NAN);
+            return;
+        }
+        let coefficients = self.design.solve(course, self.count, index);
+        let (slope, intercept) = (coefficients[0], coefficients[1]);
+        for (value, &t) in course.iter_mut().zip(&self.time) {
+            *value -= t * slope + intercept;
+        }
     }
 }
 
-/// MATLAB `zscore(x)`: `(x - mean) / std` with the `n - 1` standard deviation. A zero
-/// standard deviation is replaced by 1, as MATLAB and Octave do, so a constant course
-/// (the medial wall's zeros) becomes all zeros, not NaN. A NaN makes the course NaN. In place.
+/// MATLAB `detrend` of one course (a column vector), in place. Courses of fewer
+/// than two samples are left as they are.
+pub fn detrend(x: &mut [f64]) {
+    if x.len() > 1 {
+        Detrender::new(x.len(), 1).apply(x, 0);
+    }
+}
+
+/// MATLAB `zscore(x)`: `(x - mean) / std` with MATLAB's `mean` and `sum` and the
+/// `n - 1` standard deviation. A zero standard deviation is replaced by 1, as MATLAB
+/// and Octave do, so a constant course (the medial wall's zeros) becomes all zeros,
+/// not NaN. A NaN makes the course NaN. In place.
 pub fn zscore(x: &mut [f64]) {
     let n = x.len();
     if n == 0 {
         return;
     }
-    let mu = mean(x);
-    let squares: f64 = x.iter().map(|value| (value - mu) * (value - mu)).sum();
+    let mu = crate::precision::mean_double(x);
+    let squares: Vec<f64> = x.iter().map(|value| (value - mu) * (value - mu)).collect();
     let sigma = if n > 1 {
-        (squares / (n - 1) as f64).sqrt()
+        (crate::matlab_math::sum(&squares) / (n - 1) as f64).sqrt()
     } else {
         0.0
     };
